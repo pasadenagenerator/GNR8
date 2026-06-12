@@ -12,8 +12,10 @@ import {
 } from '@/gnr8/multipage-import/operator-summary-read-model'
 import {
   buildOriginalMirrorFidelityProjection,
+  buildReconstructionReadinessProjection,
   getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary,
   type OriginalMirrorFidelityProjection,
+  type ReconstructionReadinessProjection,
 } from '@/gnr8/site/evidence-capture-baseline-read-model'
 import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
 
@@ -289,6 +291,7 @@ export type SiteWorkspaceReadModel = {
   }
   multiPageImport: MultiPageImportOperatorSummary
   originalMirrorFidelity: OriginalMirrorFidelityProjection
+  reconstructionReadiness: ReconstructionReadinessProjection
   actions: {
     currentStatus: 'idle' | 'running' | 'completed' | 'failed'
     lastAction: {
@@ -3031,9 +3034,11 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     previewValidation: latestImportPreviewValidationPayload,
     previewDiagnostics: resolvedPreview.previewRuntimeSummary?.previewDiagnostics ?? resolvedPreviewDiagnostics,
   })
-  const originalMirrorFidelity = buildOriginalMirrorFidelityProjection(
-    getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary(latestImportRuntimeRow?.import_provenance_summary ?? null),
+  const evidenceCaptureBaselineArtifact = getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary(
+    latestImportRuntimeRow?.import_provenance_summary ?? null,
   )
+  const originalMirrorFidelity = buildOriginalMirrorFidelityProjection(evidenceCaptureBaselineArtifact)
+  const reconstructionReadiness = buildReconstructionReadinessProjection(evidenceCaptureBaselineArtifact)
   const diagnosticsSummary = Array.from(
     new Set([
       ...structureRows.flatMap((row) => row.keyDiagnostics),
@@ -3144,6 +3149,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     },
     multiPageImport: multiPageImportOperatorSummary,
     originalMirrorFidelity,
+    reconstructionReadiness,
     actions: {
       currentStatus: normalizedSiteActions.find((action) => action.status === 'running')?.status ?? (lastAction?.status ?? 'idle'),
       lastAction: {
@@ -3278,5 +3284,6 @@ export const __siteWorkspaceReadModelTestUtils = {
   parseRawPreviewValidationEvidence,
   resolveLatestRawPreviewValidationEvidence,
   buildOriginalMirrorFidelityProjection,
+  buildReconstructionReadinessProjection,
   getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary,
 }

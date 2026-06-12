@@ -7,6 +7,7 @@ import {
   resolveSelectedRuntimeVersionIdForWorkspace,
 } from '@/gnr8/site/site-workspace-read-model'
 import { buildEvidenceCaptureBaselineArtifact } from '@/gnr8/architecture/evidence-capture-baseline-artifact'
+import { classifyCaptureLimitation } from '@/gnr8/architecture/importer-architecture-split-contract'
 
 const AGENCY_ID = '00000000-0000-4000-8000-000000000011'
 const CLIENT_ID = '00000000-0000-4000-8000-000000000101'
@@ -81,6 +82,27 @@ function runtimeSummaryFixture(input: {
   }
 }
 
+function reconstructionBaselineFixture(input?: {
+  renderedDom?: boolean
+  renderedHtml?: string | null
+}) {
+  return buildEvidenceCaptureBaselineArtifact({
+    siteVersionId: 'runtime-site-version-readiness',
+    sourceUrl: 'https://example.com/',
+    finalUrl: 'https://example.com/',
+    routePath: '/',
+    renderedHtml: input?.renderedHtml ?? '<html><body><main>Ready</main></body></html>',
+    importProvenanceSummary: runtimeSummaryFixture({
+      requestId: 'readiness-import-run',
+      sourceMode: input?.renderedDom === false ? 'raw_html_fallback' : 'rendered_dom',
+      renderedCaptureStatus: input?.renderedDom === false ? 'failed' : 'partial',
+      renderedDomQuality: input?.renderedDom === false ? 'unusable' : 'strong',
+      nodeCount: input?.renderedDom === false ? 0 : 24,
+      screenshotCount: 0,
+    }),
+  })
+}
+
 test('assertSiteWorkspaceScope allows site in resolved client and agency scope', () => {
   assert.doesNotThrow(() => {
     assertSiteWorkspaceScope({
@@ -102,6 +124,67 @@ test('assertSiteWorkspaceScope allows site in resolved client and agency scope',
       expectedSiteId: SITE_ID,
     })
   })
+})
+
+test('reconstruction readiness projection reports NOT_READY when no baseline artifact exists', () => {
+  const projection = __siteWorkspaceReadModelTestUtils.buildReconstructionReadinessProjection(null)
+
+  assert.equal(projection.readinessLevel, 'NOT_READY')
+  assert.equal(projection.readinessSummary, 'No Evidence Capture baseline artifact is available.')
+  assert.equal(projection.blockerCount, 1)
+  assert.equal(projection.blockers[0]?.id, 'missing_evidence_capture_baseline')
+})
+
+test('reconstruction readiness projection reports rendered DOM blockers from baseline evidence', () => {
+  const projection = __siteWorkspaceReadModelTestUtils.buildReconstructionReadinessProjection(
+    reconstructionBaselineFixture({ renderedDom: false, renderedHtml: null }),
+  )
+
+  assert.equal(projection.readinessLevel, 'NOT_READY')
+  assert.ok(projection.blockers.some((blocker) => blocker.id === 'missing_rendered_dom'))
+  assert.ok(projection.requiredEvidenceMissing.includes('renderedDomRef'))
+  assert.ok(projection.nextRecommendedCaptureExpansion.includes('rendered DOM'))
+})
+
+test('reconstruction readiness projection reaches MINIMUM_READY with minimum handoff fields', () => {
+  const projection = __siteWorkspaceReadModelTestUtils.buildReconstructionReadinessProjection(
+    reconstructionBaselineFixture(),
+  )
+
+  assert.equal(projection.readinessLevel, 'MINIMUM_READY')
+  assert.equal(projection.blockerCount, 0)
+  assert.deepEqual(projection.requiredEvidenceMissing, [])
+})
+
+test('reconstruction readiness projection does not block MINIMUM_READY on missing optional evidence', () => {
+  const projection = __siteWorkspaceReadModelTestUtils.buildReconstructionReadinessProjection(
+    reconstructionBaselineFixture(),
+  )
+
+  assert.equal(projection.readinessLevel, 'MINIMUM_READY')
+  assert.ok(projection.optionalEvidenceMissing.includes('screenshots'))
+  assert.ok(projection.optionalEvidenceMissing.includes('network'))
+  assert.ok(projection.nextRecommendedCaptureExpansion.includes('screenshot evidence'))
+  assert.ok(projection.nextRecommendedCaptureExpansion.includes('network inventory'))
+})
+
+test('reconstruction readiness projection preserves blocker fidelity limitation as NOT_READY', () => {
+  const artifact = reconstructionBaselineFixture()
+  artifact.evidence.fidelityLimitations.push(
+    classifyCaptureLimitation({
+      type: 'unknown_runtime_behavior',
+      affectedLayer: 'evidence_capture',
+      severity: 'blocker',
+      explanation: 'Runtime behavior is unresolved.',
+      recommendedNextLayer: 'manual_review',
+    }),
+  )
+
+  const projection = __siteWorkspaceReadModelTestUtils.buildReconstructionReadinessProjection(artifact)
+
+  assert.equal(projection.readinessLevel, 'NOT_READY')
+  assert.ok(projection.requiredEvidenceMissing.includes('noBlockerFidelityLimitations'))
+  assert.ok(projection.blockers.some((blocker) => blocker.id === 'blocker_fidelity_limitation'))
 })
 
 test('assertSiteWorkspaceScope fails closed when site leaks across client scope', () => {

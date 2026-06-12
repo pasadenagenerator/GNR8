@@ -10,6 +10,20 @@ import {
   type FidelityLimitationSeverity,
   type KnownFidelityLimitation,
 } from "@/gnr8/architecture/importer-architecture-split-contract";
+import {
+  normalizeEvidenceCaptureToReconstructionInput,
+} from "@/gnr8/architecture/reconstruction-input-normalizer";
+import {
+  evaluateEvidenceCaptureReconstructionReadiness,
+  summarizeReadinessEvaluation,
+  type EvidenceCaptureReadinessOptionalEvidence,
+  type EvidenceCaptureReadinessRequiredField,
+} from "@/gnr8/architecture/reconstruction-readiness-evaluation";
+import type {
+  ReconstructionBlocker,
+  ReconstructionConfidenceInputDefinition,
+  ReconstructionReadinessLevel,
+} from "@/gnr8/architecture/reconstruction-input-contract";
 
 export type OriginalMirrorFidelityBadge = "HIGH" | "MEDIUM" | "LOW";
 export type OriginalMirrorReconstructionReadiness = "READY" | "PARTIAL" | "NOT_READY";
@@ -59,6 +73,27 @@ export type OriginalMirrorFidelityProjection = {
   diagnostics: string[];
 };
 
+export type ReconstructionReadinessProjectionBlocker = ReconstructionBlocker | {
+  id: "missing_evidence_capture_baseline";
+  title: string;
+  description: string;
+  severity: "blocker";
+  remediationHint: string;
+};
+
+export type ReconstructionReadinessProjection = {
+  readinessLevel: ReconstructionReadinessLevel;
+  readinessSummary: string;
+  blockerCount: number;
+  blockers: ReconstructionReadinessProjectionBlocker[];
+  requiredEvidencePresent: EvidenceCaptureReadinessRequiredField[];
+  requiredEvidenceMissing: EvidenceCaptureReadinessRequiredField[];
+  optionalEvidencePresent: EvidenceCaptureReadinessOptionalEvidence[];
+  optionalEvidenceMissing: EvidenceCaptureReadinessOptionalEvidence[];
+  confidenceInputs: readonly ReconstructionConfidenceInputDefinition[];
+  nextRecommendedCaptureExpansion: string[];
+};
+
 const LIMITATION_CATEGORY_ORDER: OriginalMirrorLimitationCategory[] = [
   "Capture",
   "Styles",
@@ -78,6 +113,8 @@ const EMPTY_SUMMARY: OriginalMirrorFidelitySummary = {
   partialPercentage: 0,
   missingPercentage: 100,
 };
+
+const NO_BASELINE_READINESS_SUMMARY = "No Evidence Capture baseline artifact is available.";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -432,6 +469,94 @@ export function buildOriginalMirrorFidelityProjection(
     limitationsByCategory: groupLimitations(limitations),
     routeLimitations: buildRouteLimitations(artifact),
     diagnostics: ["ORIGINAL_MIRROR_FIDELITY_DERIVED_FROM_EVIDENCE_CAPTURE_BASELINE"],
+  };
+}
+
+function requiredEvidenceRecommendation(field: EvidenceCaptureReadinessRequiredField): string {
+  const recommendations: Record<EvidenceCaptureReadinessRequiredField, string> = {
+    evidenceArtifactStatus: "successful evidence capture status",
+    sourceUrl: "source URL",
+    routeIdentity: "route identity",
+    renderedDomRef: "rendered DOM",
+    renderedHtmlHash: "rendered HTML hash",
+    renderStatus: "render status",
+    routeCaptureStatus: "route capture status",
+    noBlockerFidelityLimitations: "blocking fidelity limitation evidence",
+  };
+  return recommendations[field];
+}
+
+function optionalEvidenceRecommendation(field: EvidenceCaptureReadinessOptionalEvidence): string {
+  const recommendations: Record<EvidenceCaptureReadinessOptionalEvidence, string> = {
+    rawHtmlRef: "raw HTML",
+    screenshots: "screenshot evidence",
+    fullPageScreenshotRef: "full-page screenshot",
+    computedStyles: "computed style samples",
+    fonts: "font inventory",
+    layout: "layout boxes",
+    network: "network inventory",
+    scriptRuntime: "runtime mutation summary",
+    media: "media inventory",
+    widgets: "widget runtime evidence",
+    fidelityLimitations: "normalized fidelity limitations",
+  };
+  return recommendations[field];
+}
+
+function buildNextRecommendedCaptureExpansion(input: {
+  requiredEvidenceMissing: EvidenceCaptureReadinessRequiredField[];
+  optionalEvidenceMissing: EvidenceCaptureReadinessOptionalEvidence[];
+}): string[] {
+  return [
+    ...input.requiredEvidenceMissing.map(requiredEvidenceRecommendation),
+    ...input.optionalEvidenceMissing.map(optionalEvidenceRecommendation),
+  ].filter((value, index, values) => values.indexOf(value) === index);
+}
+
+export function buildReconstructionReadinessProjection(
+  artifact: EvidenceCaptureBaselineArtifactRecord | null,
+): ReconstructionReadinessProjection {
+  if (!artifact) {
+    return {
+      readinessLevel: "NOT_READY",
+      readinessSummary: NO_BASELINE_READINESS_SUMMARY,
+      blockerCount: 1,
+      blockers: [
+        {
+          id: "missing_evidence_capture_baseline",
+          title: "Evidence Capture baseline missing",
+          description: NO_BASELINE_READINESS_SUMMARY,
+          severity: "blocker",
+          remediationHint: "Capture and persist an Evidence Capture baseline before evaluating reconstruction readiness.",
+        },
+      ],
+      requiredEvidencePresent: [],
+      requiredEvidenceMissing: [],
+      optionalEvidencePresent: [],
+      optionalEvidenceMissing: [],
+      confidenceInputs: [],
+      nextRecommendedCaptureExpansion: ["Evidence Capture baseline artifact"],
+    };
+  }
+
+  const normalizedInput = normalizeEvidenceCaptureToReconstructionInput(artifact);
+  const evaluation = evaluateEvidenceCaptureReconstructionReadiness(artifact.evidence);
+  const summary = summarizeReadinessEvaluation(evaluation);
+
+  return {
+    readinessLevel: summary.readinessLevel,
+    readinessSummary: summary.explanation,
+    blockerCount: summary.blockerCount,
+    blockers: evaluation.blockers,
+    requiredEvidencePresent: summary.requiredFieldsPresent,
+    requiredEvidenceMissing: summary.requiredFieldsMissing,
+    optionalEvidencePresent: summary.optionalEvidencePresent,
+    optionalEvidenceMissing: summary.optionalEvidenceMissing,
+    confidenceInputs: normalizedInput.confidenceInputs,
+    nextRecommendedCaptureExpansion: buildNextRecommendedCaptureExpansion({
+      requiredEvidenceMissing: summary.requiredFieldsMissing,
+      optionalEvidenceMissing: summary.optionalEvidenceMissing,
+    }),
   };
 }
 

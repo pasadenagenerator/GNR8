@@ -45,15 +45,22 @@ Phase 7D is COMPLETE through 7D-9.
 Phase 7D introduced no runtime behavior changes.
 Phase 7D introduced no import logic changes.
 
-Phase 7F-1 defines the Importer Architecture Split between Evidence Capture, Original Mirror, and AI Reconstruction.
+Phase 7F completes Importer Architecture Evolution through 7F-10. The architecture direction is now Evidence Capture -> Original Mirror -> Reconstruction.
 
-Phase 7F-1 is COMPLETE as an architecture-boundary/documentation pass.
+Phase 7F is COMPLETE through 7F-10 as documentation, contracts, read-model, and read-only surface work.
+
+Completed Phase 7F architectural foundations:
+- Evidence Capture baseline: current capture evidence is persisted as `evidence_capture_baseline`, with coverage counts, persisted refs, current partial gaps, and normalized baseline evidence for downstream projections.
+- Original Mirror fidelity projection: Site Workspace exposes `Original Mirror Fidelity` from the persisted baseline, including coverage status, fidelity badge, known limitations, and route-level limitations when available.
+- Reconstruction readiness projection: Site Workspace exposes `Reconstruction Readiness` from the persisted baseline, using deterministic readiness levels, blockers, required/optional evidence, confidence inputs, and next capture-expansion recommendations.
+
+Phase 7F does not implement reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, reconstruction publishing, importer behavior changes, capture behavior changes, preview behavior changes, route changes, API changes, or DB schema changes.
 
 Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Multi-Page Raw Preview Correctness + Observability -> Phase 7F Importer Architecture Split -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Multi-Page Raw Preview Correctness + Observability -> Phase 7F Importer Architecture Evolution -> Phase 7F-11 Reconstruction Planning Gate -> Billing
 
 ## Completed Reality Checks
 
@@ -664,14 +671,14 @@ Status:
 - Phase 7D COMPLETE through 7D-9.
 
 Next recommended phase:
-- Phase 7F-1 — Importer Architecture Split.
+- Phase 7F-11 — Reconstruction Planning Gate.
 
-### Phase 7F — Importer Architecture Split
+### Phase 7F — Importer Architecture Evolution
 
-#### Phase 7F-1 — Evidence Capture vs Original Mirror vs AI Reconstruction
+#### Phase 7F Completion — Evidence Capture vs Original Mirror vs Reconstruction
 
 Status:
-- COMPLETE.
+- COMPLETE through 7F-10.
 
 Architecture doc:
 - `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`
@@ -682,7 +689,14 @@ Type scaffolding:
 Defined layers:
 - Evidence Capture Layer: captures source-site browser evidence and produces evidence artifacts only.
 - Original Mirror Layer: read-only, non-semantic, non-AI source mirror labeled `Original Mirror Preview`.
-- AI Reconstruction Layer: GNR8-native editable reconstruction from evidence labeled `GNR8 Reconstruction Preview`.
+- Reconstruction Layer: future GNR8-native editable reconstruction from evidence labeled `GNR8 Reconstruction Preview` when implemented.
+
+Completed foundations:
+- Evidence Capture baseline persisted as `evidence_capture_baseline`.
+- Original Mirror Fidelity projection from the persisted baseline.
+- Reconstruction Readiness projection from the persisted baseline.
+- Deterministic readiness evaluation and minimum handoff normalization.
+- Evidence Capture enrichment helpers for baseline vs enriched readiness comparison.
 
 Required terminology:
 - Evidence Capture
@@ -697,13 +711,19 @@ Recorded unresolved cases:
 - Mono/Maver map rendering likely requires evidence capture plus widget reconstruction.
 - Dongle showed source-reference preservation risk.
 - DB lifecycle issue was fixed before this phase.
-- Raw preview should not be the long-term reconstruction foundation.
+- Evidence Capture is the foundation for future Reconstruction.
+- Raw preview remains useful for route-level inspection and Original Mirror behavior.
 
 Boundaries preserved:
 - no ViroiDoc fix
 - no Maver/Mono map fix
-- no Servo
-- no AI generation
+- no active Servo provider
+- no AI reconstruction
+- no reconstruction execution
+- no React/block generation
+- no reconstruction workers
+- no reconstruction approvals
+- no reconstruction publishing
 - no preview renderer rewrite
 - no import-limit changes
 - no script-policy changes
@@ -723,7 +743,7 @@ Completed:
 - Phase 7B
 - Phase 7C
 - Phase 7D
-- Phase 7F-1
+- Phase 7F through 7F-10
 
 Hosting Operations MVP complete.
 Hosting Hardening complete.
@@ -731,16 +751,13 @@ Phase 6 complete.
 Phase 7B complete.
 Phase 7C complete.
 Phase 7D complete through 7D-9.
-Phase 7F-1 complete as architecture boundary and type scaffolding.
+Phase 7F complete through 7F-10 as importer architecture evolution.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 7F-2 — Evidence Capture Artifact Contract
-- Phase 7F-3 — Original Mirror Status / Known Limitations UI
-- Phase 7F-4 — Reconstruction Input Contract
-- Phase 7F-5 — First AI Reconstruction Spike from Evidence
+- Phase 7F-11 — Reconstruction Planning Gate
 - Billing Reality Check
 
 ### Optional Runtime UX

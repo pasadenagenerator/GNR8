@@ -148,6 +148,7 @@ function renderOverviewContent(props: {
       {renderMultiPageImportOperatorContent(readModel)}
 
       {renderOriginalMirrorFidelity(readModel)}
+      {renderReconstructionReadiness(readModel)}
 
       <section style={sectionCardStyle()}>
         <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Pipeline Summary</h3>
@@ -319,6 +320,109 @@ function badgeStyle(value: 'HIGH' | 'MEDIUM' | 'LOW'): CSSProperties {
     fontWeight: 800,
     letterSpacing: 0,
   }
+}
+
+function reconstructionReadinessBadgeStyle(value: 'NOT_READY' | 'MINIMUM_READY' | 'RECOMMENDED' | 'HIGH_CONFIDENCE'): CSSProperties {
+  const colors =
+    value === 'HIGH_CONFIDENCE'
+      ? { border: '#bbf7d0', background: '#f0fdf4', text: '#166534' }
+      : value === 'RECOMMENDED'
+        ? { border: '#bfdbfe', background: '#eff6ff', text: '#1d4ed8' }
+        : value === 'MINIMUM_READY'
+          ? { border: '#fde68a', background: '#fffbeb', text: '#92400e' }
+          : { border: '#fecaca', background: '#fff5f5', text: '#991b1b' }
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    width: 'fit-content',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    background: colors.background,
+    color: colors.text,
+    padding: '3px 7px',
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0,
+  }
+}
+
+function renderInlineList(items: string[]): string {
+  return items.length > 0 ? items.join(' · ') : 'none'
+}
+
+function renderReconstructionReadiness(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {
+  if (!readModel) return null
+  const readiness = readModel.reconstructionReadiness
+
+  return (
+    <section style={sectionCardStyle()}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <h3 style={{ margin: 0, fontSize: 15, color: '#0f172a' }}>Reconstruction Readiness</h3>
+        <span style={reconstructionReadinessBadgeStyle(readiness.readinessLevel)}>{readiness.readinessLevel}</span>
+      </div>
+      <div style={{ marginTop: 10, display: 'grid', gap: 10, fontSize: 12, color: '#334155' }}>
+        <div style={{ fontSize: 13 }}>{readiness.readinessSummary}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
+          <div style={compactMetricStyle()}>
+            <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Readiness Level</div>
+            <div style={{ color: '#0f172a', fontSize: 14, fontWeight: 800, marginTop: 4 }}>{readiness.readinessLevel}</div>
+          </div>
+          <div style={compactMetricStyle()}>
+            <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Blocker Count</div>
+            <div style={{ color: '#0f172a', fontSize: 14, fontWeight: 800, marginTop: 4 }}>{readiness.blockerCount}</div>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, color: '#0f172a' }}>Blockers</div>
+          {readiness.blockers.length > 0 ? (
+            <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+              {readiness.blockers.map((blocker) => (
+                <li key={blocker.id}>
+                  <strong>{blocker.title}</strong> ({blocker.severity}): {blocker.description}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div style={{ marginTop: 4, color: '#64748b' }}>none</div>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+          <div>
+            <div style={{ fontWeight: 800, color: '#0f172a' }}>Required Evidence Present</div>
+            <div style={{ marginTop: 4 }}>{renderInlineList(readiness.requiredEvidencePresent)}</div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, color: '#0f172a' }}>Required Evidence Missing</div>
+            <div style={{ marginTop: 4 }}>{renderInlineList(readiness.requiredEvidenceMissing)}</div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, color: '#0f172a' }}>Optional Evidence Present</div>
+            <div style={{ marginTop: 4 }}>{renderInlineList(readiness.optionalEvidencePresent)}</div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, color: '#0f172a' }}>Optional Evidence Missing</div>
+            <div style={{ marginTop: 4 }}>{renderInlineList(readiness.optionalEvidenceMissing)}</div>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, color: '#0f172a' }}>Confidence Inputs</div>
+          <div style={{ marginTop: 4 }}>
+            {readiness.confidenceInputs.length > 0
+              ? readiness.confidenceInputs.map((input) => `${input.kind}: ${input.description}`).join(' · ')
+              : 'none'}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, color: '#0f172a' }}>Next Recommended Capture Expansion</div>
+          <div style={{ marginTop: 4 }}>{renderInlineList(readiness.nextRecommendedCaptureExpansion)}</div>
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function renderOriginalMirrorFidelity(readModel: Awaited<ReturnType<typeof getSiteWorkspaceReadModelForPage>>): ReactNode {

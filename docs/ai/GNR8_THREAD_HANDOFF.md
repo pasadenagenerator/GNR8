@@ -2,36 +2,52 @@
 
 This is the first file every new ChatGPT/Codex thread should read.
 
-## Current Active Track: Phase 7F — Importer Architecture Split / Evidence-to-Reconstruction Boundary
+## Active Track
+
+Importer Architecture Evolution
+
+Current status:
+- 7F complete through 7F-10.
+
+Next phase:
+- 7F-11 Reconstruction Planning Gate.
+
+Current architecture direction:
+- Evidence Capture -> Original Mirror -> Reconstruction.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-9 — Reconstruction Readiness Re-Evaluation.
+- Phase 7F-10 — Reconstruction Readiness Surface.
 - Status: COMPLETE.
-- Evaluation/readiness-only architecture pass.
-- No importer behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, persistence behavior, route discovery, rendering, or database schema was changed.
+- Documentation/readiness-surface closure for the completed importer architecture foundation.
+- No importer behavior, capture behavior, Original Mirror behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, route discovery, API, rendering, persistence, or database schema was changed by this documentation closure.
+- Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
+- Original Mirror Fidelity doc: `docs/architecture/ORIGINAL_MIRROR_LIMITATIONS_SURFACE.md`.
 - Reconstruction input contract doc: `docs/architecture/RECONSTRUCTION_INPUT_CONTRACT.md`.
 - Reconstruction input contract code: `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
 - Capture expansion plan doc: `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
-- 7F-9 readiness evaluator code: `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts`.
+- Minimum handoff normalizer code: `apps/platform/gnr8/architecture/reconstruction-input-normalizer.ts`.
+- Readiness evaluator code: `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts`.
+- Original Mirror Fidelity and Reconstruction Readiness read model: `apps/platform/gnr8/site/evidence-capture-baseline-read-model.ts`.
 - Evidence Capture coverage against `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
 - Current foundation: raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
 - Highest-value gaps: rendered layout geometry, browser network inventory, script/runtime observation, media/widget evidence, and normalized fidelity limitations.
 - Readiness levels are now deterministic: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE`.
-- Current Reconstruction Readiness: `NOT_READY`.
+- Reconstruction Readiness is now surfaced read-only in Site Workspace from the persisted Evidence Capture baseline.
+- Original Mirror Fidelity is now surfaced read-only in Site Workspace from the persisted Evidence Capture baseline.
 - Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
 - P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
 - 7F-9 comparison confirms that baseline evidence missing rendered DOM remains `NOT_READY`, while 7F-8-enriched rendered DOM ref, rendered HTML hash, and route identity can reach `MINIMUM_READY` when no blocker fidelity limitation remains.
 - Optional evidence such as fonts and widgets improves deterministic summaries but cannot override missing required fields or blocker fidelity limitations.
-- No reconstruction execution exists yet. No AI generation, React/block generation, semantic reconstruction, preview mutation, capture behavior change, browser instrumentation, new screenshots, route discovery change, asset rewriting change, script policy change, public rendering change, Servo integration, or DB schema change exists in 7F-9.
+- No reconstruction execution exists yet. No AI reconstruction, React/block generation, semantic reconstruction, preview mutation, capture behavior change, browser instrumentation, new screenshots, route discovery change, asset rewriting change, script policy change, public rendering change, Servo integration, API change, or DB schema change exists in 7F.
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended implementation phase: Phase 7F-10 — Read-Only Readiness Surface Planning. Decide how to expose the deterministic 7F-9 summary for future operator/API use without enabling reconstruction execution.
+- Next recommended implementation phase: Phase 7F-11 — Reconstruction Planning Gate.
 
 Production smoke-test:
 - completed successfully.
@@ -70,15 +86,16 @@ Phase 7D production Viroidoc verification:
 - raw multi-page preview links are separated from transformed preview
 - transformed preview remains semantic/fallback and is not the source of truth for route-level inspection
 
-Phase 7F-1 architecture boundary:
+Phase 7F importer architecture evolution:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
 - Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
-- AI Reconstruction produces GNR8-native editable output labeled `GNR8 Reconstruction Preview`.
+- Reconstruction is the future GNR8-native editable output layer labeled `GNR8 Reconstruction Preview` when implemented.
+- Phase 7F is complete through 7F-10: architecture split, Evidence Capture contract/audit/baseline persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, capture expansion planning, minimum handoff normalization, enrichment, readiness evaluation, and readiness surface.
 - ViroiDoc blog/news duplication is not solved by raw preview patching.
 - Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
 - Dongle showed source-reference preservation risk.
 - DB lifecycle issue was fixed before this phase.
-- Raw preview remains useful for route-level inspection and mirror behavior, but is not the long-term reconstruction foundation.
+- Raw preview remains useful for route-level inspection and Original Mirror behavior, but Evidence Capture is the foundation for future Reconstruction.
 
 Phase 7F-2.5 evidence capture inventory:
 - The full `EvidenceCaptureArtifact` object is not emitted today.
@@ -106,7 +123,12 @@ Phase 7F-9 reconstruction readiness re-evaluation:
 - Missing rendered DOM and blocker fidelity limitations keep readiness at `NOT_READY`.
 - Optional fonts/widgets improve summary evidence only; they do not bypass blockers.
 - No reconstruction execution exists yet.
-- Next recommended phase: Phase 7F-10 — Read-Only Readiness Surface Planning.
+
+Phase 7F-10 reconstruction readiness surface:
+- Site Workspace exposes read-only `Reconstruction Readiness` from the persisted Evidence Capture baseline.
+- Site Workspace exposes read-only `Original Mirror Fidelity` from the same baseline.
+- The surface does not trigger reconstruction, approve reconstruction, mutate preview behavior, change capture behavior, or create new evidence.
+- Next recommended phase: Phase 7F-11 — Reconstruction Planning Gate.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -235,7 +257,7 @@ Latest completed migration capabilities:
 - raw preview link rewrite verification
 - root route assembly as `root_entry` from `index.html`
 - raw/transformed preview boundary clarification
-- importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
+- importer architecture split into Evidence Capture, Original Mirror, and Reconstruction
 - evidence capture inventory audit baseline and coverage matrix
 - reconstruction input contract, readiness model, blocker model, and future candidate contract
 
@@ -326,24 +348,19 @@ Phase 7D completion notes:
 - No runtime behavior was changed.
 - No import logic was changed.
 
-Phase 7F-1 completion notes:
-- Phase 7F-1 is COMPLETE as an architecture-boundary/documentation pass.
+Phase 7F completion notes:
+- Phase 7F is COMPLETE through 7F-10 as importer architecture evolution.
 - Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Type scaffolding: `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`.
 - Required terminology: Evidence Capture, Capture Provider, Original Mirror Preview, GNR8 Reconstruction Preview, Known Fidelity Limitation, Reconstruction Candidate.
-- No ViroiDoc fix, Maver/Mono map fix, Servo integration, AI generation, preview renderer rewrite, import-limit change, or script-policy change was included.
+- No ViroiDoc fix, Maver/Mono map fix, active Servo provider, AI reconstruction, reconstruction execution, React/block generation, preview renderer rewrite, import-limit change, or script-policy change was included.
 
 Current critical path:
-- Phase 7F-2 — Evidence Capture Artifact Contract
-- Phase 7F-3 — Original Mirror Status / Known Limitations UI
-- Phase 7F-4 — Original Mirror Known Limitations Surface
-- Phase 7F-5 — Reconstruction Input Contract
-- Phase 7F-6 — Capture Expansion Planning
-- Phase 7F-7 — Minimum Evidence Handoff Normalization
+- Phase 7F-11 — Reconstruction Planning Gate
 - Billing
 
 Next recommended milestone:
-- Phase 7F-7 — Minimum Evidence Handoff Normalization.
+- Phase 7F-11 — Reconstruction Planning Gate.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -383,7 +400,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7F-7 — Minimum Evidence Handoff Normalization.
+- Phase 7F-11 — Reconstruction Planning Gate.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -1286,30 +1303,19 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 7F — Importer Architecture Split / Evidence-to-Reconstruction Boundary.
+Active phase: Phase 7F-11 — Reconstruction Planning Gate.
 
-Practical next phase:
-1. 7F-2: define the Evidence Capture Artifact Contract.
-2. 7F-3: add Original Mirror status and Known Fidelity Limitation UI.
-3. 7F-4: define the Reconstruction Input Contract.
-4. 7F-5: run the first bounded AI Reconstruction spike from evidence.
-5. Preserve operator workflow and observability.
-
-Phase 7F-1 boundary now recorded:
+Phase 7F importer architecture evolution is complete through 7F-10:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
 - Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
-- AI Reconstruction produces GNR8-native editable output labeled `GNR8 Reconstruction Preview`.
-- Raw preview remains useful for route-level inspection and mirror behavior, but is not the long-term reconstruction foundation.
-- ViroiDoc blog/news duplication is not solved by raw preview patching.
-- Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
-- Dongle showed source-reference preservation risk.
-- DB lifecycle issue was fixed before this phase.
-- No public activation changes.
-- No CMS changes.
-- No commerce work.
-- No preview renderer rewrite, script-policy change, import-limit change, Servo integration, or AI generation was included in 7F-1.
+- Reconstruction is the future GNR8-native editable output layer labeled `GNR8 Reconstruction Preview` when implemented.
+- Evidence Capture is the foundation for future Reconstruction.
+- Raw preview remains useful for route-level inspection and Original Mirror behavior.
+- Chrome / Playwright is the primary capture provider.
+- Servo is research only.
+- No reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, or reconstruction publishing exists yet.
 
-Phase 7F-4 Original Mirror Known Limitations Surface is complete:
+Original Mirror Fidelity surface is complete:
 - read-model projection: `apps/platform/gnr8/site/evidence-capture-baseline-read-model.ts`
 - workspace threading: `apps/platform/gnr8/site/site-workspace-read-model.ts`
 - operator UI: Site Workspace overview section titled `Original Mirror Fidelity`
@@ -1322,7 +1328,15 @@ Phase 7F-4 Original Mirror Known Limitations Surface is complete:
 - limitation categories: Capture, Styles, Layout, Runtime, Assets, Maps / Widgets
 - route-level fidelity support: displayed only when route-specific known fidelity limitations already exist in the persisted artifact
 - behavior boundary: no capture/importer/provider/Playwright/preview/reconstruction/route-discovery/asset/script/persistence/public-rendering changes
-- recommended next milestone: Phase 7F-5 Reconstruction Input Contract / bounded reconstruction readiness handoff, still without changing Original Mirror behavior
+
+Reconstruction Readiness surface is complete:
+- read-model projection: `apps/platform/gnr8/site/evidence-capture-baseline-read-model.ts`
+- evaluator: `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts`
+- input normalizer: `apps/platform/gnr8/architecture/reconstruction-input-normalizer.ts`
+- operator UI: Site Workspace overview section titled `Reconstruction Readiness`
+- readiness levels: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`
+- behavior boundary: read-only projection only; no reconstruction execution or approval
+- recommended next milestone: Phase 7F-11 Reconstruction Planning Gate
 
 ## G) How Next Thread Should Behave
 

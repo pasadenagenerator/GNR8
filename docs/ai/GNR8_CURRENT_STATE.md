@@ -32,26 +32,29 @@ Phase 7C has no architectural blockers.
 Discovery expansion is operational.
 Phase 7D — Multi-Page Raw Preview Correctness + Observability is COMPLETE through 7D-9.
 Phase 7D has no runtime behavior changes outstanding.
-Phase 7F-1 — Importer Architecture Split is COMPLETE as an architecture-boundary/documentation pass.
-Importer architecture now separates Evidence Capture, Original Mirror, and AI Reconstruction.
-Phase 7F-2.5 — Evidence Capture Inventory Audit is COMPLETE as an architecture-only audit.
-Evidence Capture coverage against `importer-architecture-split-contract.ts` is: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
-Current capture foundation includes raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
-Current high-value gaps are rendered layout geometry, browser network inventory, script/runtime observation, full media/widget evidence, and normalized `KnownFidelityLimitation[]`.
-Architecture recommendation from the audit: an intermediate Capture Expansion phase is required before treating Phase 7F-3 as full reconstruction-grade Evidence Capture persistence. A narrower Phase 7F-3 can persist only the current evidence set if explicitly scoped that way.
-Phase 7F-5 — Reconstruction Input Contract is COMPLETE as a contract-only architecture pass.
-Reconstruction readiness levels are now deterministic: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE`.
-The reconstruction input boundary is documented in `docs/architecture/RECONSTRUCTION_INPUT_CONTRACT.md` and implemented as pure contracts/helpers in `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
-Current Reconstruction Readiness remains `NOT_READY`.
-Phase 7F-6 — Capture Expansion Planning is COMPLETE as an architecture-only plan.
-The Capture Expansion Plan is documented in `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
-Phase 7F-6 separates the P0 `MINIMUM_READY` gate from P1/P2 reconstruction-quality evidence. P0 requires only normalized route-level handoff fields: full evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and normalized blocker fidelity limitations.
-Phase 7F-9 — Reconstruction Readiness Re-Evaluation is COMPLETE as an evaluation/readiness-only pass.
-The 7F-9 helper evaluates `EvidenceCaptureArtifact` readiness, compares baseline vs 7F-8-enriched evidence, and emits a deterministic summary safe for future UI/API use.
-7F-9 confirms that a baseline missing rendered DOM remains `NOT_READY`, while enriched rendered DOM ref, rendered HTML hash, and route identity can explicitly move readiness to `MINIMUM_READY` when no blocker fidelity limitation remains.
-Optional enrichment such as fonts and widgets improves readiness summaries but does not override missing required fields or blocker fidelity limitations.
-No reconstruction execution, AI generation, React/block generation, preview change, capture behavior change, route discovery change, asset rewriting change, script policy change, public rendering change, or DB schema change exists in 7F-9.
-Recommended next implementation phase: Phase 7F-10 — Read-Only Readiness Surface Planning. It should decide whether and where to expose the deterministic 7F-9 summary without enabling reconstruction execution.
+Phase 7F — Importer Architecture Evolution is COMPLETE through 7F-10.
+Importer architecture direction is now Evidence Capture -> Original Mirror -> Reconstruction.
+Phase 7F completed the architecture split, Evidence Capture artifact contract, inventory audit, baseline artifact persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, Capture Expansion Planning, Minimum Evidence Handoff Normalization, Evidence Capture enrichment layer, Reconstruction Readiness evaluation, and Reconstruction Readiness surface.
+No reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, reconstruction publishing, capture behavior change, preview behavior change, route discovery change, asset rewriting change, script policy change, public rendering change, API change, or DB schema change exists in Phase 7F.
+Recommended next implementation phase: Phase 7F-11 — Reconstruction Planning Gate. Do not start reconstruction execution without a separate explicit phase.
+
+## Current Importer Architecture
+
+Evidence Capture Layer:
+- Implemented: Evidence Capture contracts, inventory audit, persisted `evidence_capture_baseline`, baseline coverage projection, Minimum Evidence Handoff Normalization, and enrichment helpers for readiness comparison.
+- Partially implemented: current persisted evidence includes raw HTML, rendered DOM refs where available, viewport/full-page screenshots where available, computed style samples where available, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
+- Future: broader browser network inventory, rendered layout geometry, script/runtime observation, rich media and widget inventories, and additional normalized fidelity limitation evidence.
+- Provider strategy: Chrome / Playwright is the primary capture provider. Servo is research only, not an active provider, not a fallback provider, and not required for Reconstruction Readiness.
+
+Original Mirror Layer:
+- Implemented: Original Mirror Preview boundary, Original Mirror Fidelity projection, operator-facing coverage summary, fidelity badge, readiness state, known limitations, and route-level limitations when persisted route evidence exists.
+- Partially implemented: Original Mirror Fidelity explains the current persisted baseline and its limitations; it does not remediate capture gaps or change rendering.
+- Future: richer limitation evidence as Evidence Capture expands.
+
+Reconstruction Layer:
+- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, and Site Workspace Reconstruction Readiness projection.
+- Partially implemented: evidence can be normalized and evaluated for readiness, and enriched evidence can be compared with baseline evidence.
+- Future: reconstruction execution, AI reconstruction, GNR8 React/block generation, editable content model generation, design token generation, reconstruction workers, approvals, and publishing.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -209,7 +212,7 @@ Current migration runtime capabilities:
 - raw preview link rewrite verification
 - root route assembly as `root_entry` from `index.html`
 - raw multi-page preview links separated from transformed preview
-- importer architecture split into Evidence Capture, Original Mirror, and AI Reconstruction
+- importer architecture split into Evidence Capture, Original Mirror, and Reconstruction
 - evidence capture inventory audit baseline documented
 - current evidence coverage measured as 16 supported, 33 partial, and 17 missing contract fields
 - reconstruction input contract boundary documented
@@ -311,7 +314,7 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Next active phase:
-- PHASE 7F — IMPORTER ARCHITECTURE SPLIT / EVIDENCE-TO-RECONSTRUCTION BOUNDARY.
+- Phase 7F-11 — Reconstruction Planning Gate.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
@@ -340,10 +343,10 @@ Boundary:
 - No CMS changes.
 - No commerce work.
 
-## Phase 7F-1 Importer Architecture Split
+## Phase 7F Importer Architecture Evolution
 
 Status:
-- COMPLETE as architecture boundary and minimal type scaffolding.
+- COMPLETE through 7F-10.
 
 Canonical architecture doc:
 - `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`
@@ -354,31 +357,44 @@ Type scaffolding:
 Layer split:
 - Evidence Capture Layer captures source-site evidence as a browser/user sees it.
 - Original Mirror Layer provides a read-only, non-semantic, non-AI mirror/archive preview labeled `Original Mirror Preview`.
-- AI Reconstruction Layer creates GNR8-native editable output from evidence and is labeled `GNR8 Reconstruction Preview`.
+- Reconstruction Layer will create future GNR8-native editable output from evidence and is labeled `GNR8 Reconstruction Preview` when implemented.
+
+Completed:
+- Architecture Split.
+- Evidence Capture Artifact Contract.
+- Evidence Capture Inventory Audit.
+- Current Evidence Capture Baseline persistence as `evidence_capture_baseline`.
+- Original Mirror Fidelity surface.
+- Reconstruction Input Contract.
+- Capture Expansion Planning.
+- Minimum Evidence Handoff Normalization.
+- Evidence Capture Enrichment.
+- Reconstruction Readiness Evaluation.
+- Reconstruction Readiness Surface.
 
 Explicit unresolved cases:
 - ViroiDoc blog/news duplication is not solved by raw preview patching.
 - Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
 - Dongle showed source-reference preservation risk in importer/mirror behavior.
 - DB lifecycle issue was fixed before this phase.
-- Raw preview remains useful for route inspection and mirror behavior, but should not be the long-term reconstruction foundation.
+- Raw preview remains useful for route inspection and Original Mirror behavior, but Evidence Capture is the foundation for future Reconstruction.
 
 Not included:
 - no ViroiDoc fix
 - no Maver/Mono map fix
-- no Servo
-- no AI generation
+- no active Servo provider
+- no AI reconstruction
+- no reconstruction execution
+- no React/block generation
+- no reconstruction workers
+- no reconstruction approvals
+- no reconstruction publishing
 - no preview renderer rewrite
 - no import-limit changes
 - no script-policy changes
 
-Next recommended importer phases:
-- 7F-2: Evidence Capture Artifact Contract
-- 7F-3: Original Mirror Status / Known Limitations UI
-- 7F-4: Original Mirror Known Limitations Surface
-- 7F-5: Reconstruction Input Contract
-- 7F-6: Capture Expansion Planning
-- 7F-7: Minimum Evidence Handoff Normalization
+Next recommended importer phase:
+- 7F-11: Reconstruction Planning Gate
 
 ## Production Validation
 
@@ -441,12 +457,7 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 7F-2 — Evidence Capture Artifact Contract
-- Phase 7F-3 — Original Mirror Status / Known Limitations UI
-- Phase 7F-4 — Original Mirror Known Limitations Surface
-- Phase 7F-5 — Reconstruction Input Contract
-- Phase 7F-6 — Capture Expansion Planning
-- Phase 7F-7 — Minimum Evidence Handoff Normalization
+- Phase 7F-11 — Reconstruction Planning Gate
 - Billing
 
 Current Hosting Operations status:
@@ -456,16 +467,15 @@ Current Hosting Operations status:
 - Phase 7B is complete.
 - Phase 7C is complete.
 - Phase 7D is complete through 7D-9.
-- Phase 7F-1 is complete as architecture boundary and type scaffolding.
+- Phase 7F is complete through 7F-10 as importer architecture evolution.
 
 Next recommended milestone:
-- Phase 7F-2 — Evidence Capture Artifact Contract
+- Phase 7F-11 — Reconstruction Planning Gate
 
 Phase 7F recommended focus:
-- Define the Evidence Capture Artifact Contract.
-- Add Original Mirror status and Known Fidelity Limitation UI.
-- Define the Reconstruction Input Contract.
+- Preserve the Evidence Capture -> Original Mirror -> Reconstruction boundary.
 - Keep Original Mirror Preview separate from GNR8 Reconstruction Preview.
+- Use Reconstruction Readiness as the gate before planning any reconstruction execution.
 
 ## Bootstrap Runtime State (2026-06-03)
 
@@ -529,8 +539,8 @@ Current migration platform continuation:
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
-- Phase 7F-1 — Importer Architecture Split is complete.
-- Phase 7F-2 — Evidence Capture Artifact Contract is the next recommended phase.
+- Phase 7F — Importer Architecture Evolution is complete through 7F-10.
+- Phase 7F-11 — Reconstruction Planning Gate is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -608,8 +618,8 @@ Current migration platform continuation:
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
-- Phase 7F-1 — Importer Architecture Split is complete.
-- Phase 7F-2 — Evidence Capture Artifact Contract is the next recommended phase.
+- Phase 7F — Importer Architecture Evolution is complete through 7F-10.
+- Phase 7F-11 — Reconstruction Planning Gate is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
@@ -4686,7 +4696,7 @@ Required production env flag:
 
 ## Execution Boundaries (Current)
 
-- Phase 7F-4 Original Mirror Known Limitations Surface is implemented as diagnostics/read-model/UI/docs only.
+- Phase 7F-4 Original Mirror Fidelity Surface is implemented as diagnostics/read-model/UI/docs only.
 - `evidence_capture_baseline` now drives an operator-visible Original Mirror Fidelity projection with capture status, coverage status, evidence counts/percentages, deterministic `HIGH`/`MEDIUM`/`LOW` badge, readiness state, grouped known limitations, and route-level limitations when persisted route evidence exists.
 - Readiness states are `READY`, `PARTIAL`, and `NOT_READY`; `NOT_READY` applies when the baseline artifact is missing, rendered capture is missing, or any blocker limitation is present.
 - Limitation categories surfaced: Capture, Styles, Layout, Runtime, Assets, Maps / Widgets.

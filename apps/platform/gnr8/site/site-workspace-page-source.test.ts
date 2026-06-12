@@ -54,3 +54,21 @@ test('Site Workspace labels import version metadata and preview modes distinctly
   assert.equal(source.includes('Preview Mode Warning'), true)
   assert.equal(source.includes('Open Public/Published Preview'), true)
 })
+
+test('Site Workspace source exposes Reconstruction Readiness labels', async () => {
+  const source = await readFile(PAGE_FILE, 'utf8')
+
+  assert.equal(source.includes('Reconstruction Readiness'), true)
+  assert.equal(source.includes('Readiness Level'), true)
+  assert.equal(source.includes('Blocker Count'), true)
+  assert.equal(source.includes('Required Evidence Present'), true)
+  assert.equal(source.includes('Required Evidence Missing'), true)
+  assert.equal(source.includes('Optional Evidence Present'), true)
+  assert.equal(source.includes('Optional Evidence Missing'), true)
+  assert.equal(source.includes('Confidence Inputs'), true)
+  assert.equal(source.includes('Next Recommended Capture Expansion'), true)
+  assert.equal(source.includes('NOT_READY'), true)
+  assert.equal(source.includes('MINIMUM_READY'), true)
+  assert.equal(source.includes('RECOMMENDED'), true)
+  assert.equal(source.includes('HIGH_CONFIDENCE'), true)
+})
