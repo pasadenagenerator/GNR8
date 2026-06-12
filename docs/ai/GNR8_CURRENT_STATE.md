@@ -43,7 +43,10 @@ Phase 7F-5 — Reconstruction Input Contract is COMPLETE as a contract-only arch
 Reconstruction readiness levels are now deterministic: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE`.
 The reconstruction input boundary is documented in `docs/architecture/RECONSTRUCTION_INPUT_CONTRACT.md` and implemented as pure contracts/helpers in `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
 Current Reconstruction Readiness remains `NOT_READY`.
-Phase 7F-6 should focus Capture Expansion first on the missing minimum handoff fields: full evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and normalized blocker fidelity limitations.
+Phase 7F-6 — Capture Expansion Planning is COMPLETE as an architecture-only plan.
+The Capture Expansion Plan is documented in `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
+Phase 7F-6 separates the P0 `MINIMUM_READY` gate from P1/P2 reconstruction-quality evidence. P0 requires only normalized route-level handoff fields: full evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and normalized blocker fidelity limitations.
+Recommended next implementation phase: Phase 7F-7 — Minimum Evidence Handoff Normalization. It should normalize existing capture surfaces into a route-level `EvidenceCaptureArtifact` and evaluate readiness without changing importer behavior, preview behavior, Original Mirror behavior, reconstruction behavior, route discovery, asset rewriting, script policy, public rendering, or browser runtime behavior.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
@@ -367,8 +370,10 @@ Not included:
 Next recommended importer phases:
 - 7F-2: Evidence Capture Artifact Contract
 - 7F-3: Original Mirror Status / Known Limitations UI
-- 7F-4: Reconstruction Input Contract
-- 7F-5: First AI Reconstruction Spike from Evidence
+- 7F-4: Original Mirror Known Limitations Surface
+- 7F-5: Reconstruction Input Contract
+- 7F-6: Capture Expansion Planning
+- 7F-7: Minimum Evidence Handoff Normalization
 
 ## Production Validation
 
@@ -435,7 +440,8 @@ Remaining critical path:
 - Phase 7F-3 — Original Mirror Status / Known Limitations UI
 - Phase 7F-4 — Original Mirror Known Limitations Surface
 - Phase 7F-5 — Reconstruction Input Contract
-- Phase 7F-6 — First AI Reconstruction Spike from Evidence
+- Phase 7F-6 — Capture Expansion Planning
+- Phase 7F-7 — Minimum Evidence Handoff Normalization
 - Billing
 
 Current Hosting Operations status:

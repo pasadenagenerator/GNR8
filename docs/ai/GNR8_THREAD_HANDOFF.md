@@ -9,20 +9,25 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-5 — Reconstruction Input Contract.
+- Phase 7F-6 — Capture Expansion Planning.
 - Status: COMPLETE.
-- Contract-only architecture pass.
+- Architecture-only planning pass.
 - No importer behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, persistence behavior, route discovery, rendering, or database schema was changed.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
 - Reconstruction input contract doc: `docs/architecture/RECONSTRUCTION_INPUT_CONTRACT.md`.
 - Reconstruction input contract code: `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
+- Capture expansion plan doc: `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
 - Evidence Capture coverage against `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
 - Current foundation: raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
 - Highest-value gaps: rendered layout geometry, browser network inventory, script/runtime observation, media/widget evidence, and normalized fidelity limitations.
 - Readiness levels are now deterministic: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE`.
 - Current Reconstruction Readiness: `NOT_READY`.
-- Required minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
-- Recommendation: Phase 7F-6 should be Capture Expansion Planning focused first on the missing minimum handoff fields, then on layout geometry, browser network inventory, runtime observation, media/widget inventory, font source evidence, and normalized limitations.
+- Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
+- P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
+- Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
+- Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
+- Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
+- Next recommended implementation phase: Phase 7F-7 — Minimum Evidence Handoff Normalization. Normalize existing capture surfaces into a route-level `EvidenceCaptureArtifact` and evaluate deterministic readiness without adding new capture behavior.
 
 Production smoke-test:
 - completed successfully.
@@ -84,7 +89,13 @@ Phase 7F-5 reconstruction input contract:
 - Unsupported evidence must never shape reconstruction: contract metadata, provider/run metadata, response headers, inline script signatures, route priority, and raw file paths.
 - Explicit blockers are capture unavailable, capture failed, missing source URL, missing route identity, missing rendered DOM, render failed, and blocker fidelity limitation.
 - Confidence inputs are defined but not calculated: DOM, asset, font, layout, widget, media, network, runtime, visual reference, and fidelity limitation completeness.
-- Next recommended phase: Phase 7F-6 — Capture Expansion Planning.
+
+Phase 7F-6 capture expansion planning:
+- `docs/architecture/CAPTURE_EXPANSION_PLAN.md` defines the smallest capture expansion path from `NOT_READY` to `MINIMUM_READY`.
+- P0 is Minimum Evidence Handoff Normalization from existing capture surfaces.
+- P1/P2 expands reconstruction quality with settled DOM, screenshots, computed styles, layout boxes, fonts, failed/blocked requests, widget inventories, console summaries, mutation summaries, media evidence, and broader network evidence.
+- Chrome / Playwright remains the only active provider.
+- Next recommended phase: Phase 7F-7 — Minimum Evidence Handoff Normalization.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -316,11 +327,12 @@ Current critical path:
 - Phase 7F-3 — Original Mirror Status / Known Limitations UI
 - Phase 7F-4 — Original Mirror Known Limitations Surface
 - Phase 7F-5 — Reconstruction Input Contract
-- Phase 7F-6 — First AI Reconstruction Spike from Evidence
+- Phase 7F-6 — Capture Expansion Planning
+- Phase 7F-7 — Minimum Evidence Handoff Normalization
 - Billing
 
 Next recommended milestone:
-- Phase 7F-2 — Evidence Capture Artifact Contract.
+- Phase 7F-7 — Minimum Evidence Handoff Normalization.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -360,7 +372,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7F-2 — Evidence Capture Artifact Contract.
+- Phase 7F-7 — Minimum Evidence Handoff Normalization.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
