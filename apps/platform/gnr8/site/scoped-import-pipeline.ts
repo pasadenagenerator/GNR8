@@ -3708,8 +3708,8 @@ export async function runScopedImportPipeline(input: {
       sourceUrl: input.sourceUrl,
       finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
       routePath: '/',
-      renderedHtml: persistedCaptureEvidence.renderedDomHtml,
-      computedStyleSamples: renderedStyleSamples,
+      renderedHtml: undefined,
+      computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
       importProvenanceSummary,
       rawImportArtifact: {
         artifactId: rawImportArtifact.artifactId,

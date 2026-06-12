@@ -9,14 +9,15 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-6 — Capture Expansion Planning.
+- Phase 7F-9 — Reconstruction Readiness Re-Evaluation.
 - Status: COMPLETE.
-- Architecture-only planning pass.
+- Evaluation/readiness-only architecture pass.
 - No importer behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, persistence behavior, route discovery, rendering, or database schema was changed.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
 - Reconstruction input contract doc: `docs/architecture/RECONSTRUCTION_INPUT_CONTRACT.md`.
 - Reconstruction input contract code: `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
 - Capture expansion plan doc: `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
+- 7F-9 readiness evaluator code: `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts`.
 - Evidence Capture coverage against `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
 - Current foundation: raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
 - Highest-value gaps: rendered layout geometry, browser network inventory, script/runtime observation, media/widget evidence, and normalized fidelity limitations.
@@ -24,10 +25,13 @@ Latest completed milestone:
 - Current Reconstruction Readiness: `NOT_READY`.
 - Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
 - P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
+- 7F-9 comparison confirms that baseline evidence missing rendered DOM remains `NOT_READY`, while 7F-8-enriched rendered DOM ref, rendered HTML hash, and route identity can reach `MINIMUM_READY` when no blocker fidelity limitation remains.
+- Optional evidence such as fonts and widgets improves deterministic summaries but cannot override missing required fields or blocker fidelity limitations.
+- No reconstruction execution exists yet. No AI generation, React/block generation, semantic reconstruction, preview mutation, capture behavior change, browser instrumentation, new screenshots, route discovery change, asset rewriting change, script policy change, public rendering change, Servo integration, or DB schema change exists in 7F-9.
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended implementation phase: Phase 7F-7 — Minimum Evidence Handoff Normalization. Normalize existing capture surfaces into a route-level `EvidenceCaptureArtifact` and evaluate deterministic readiness without adding new capture behavior.
+- Next recommended implementation phase: Phase 7F-10 — Read-Only Readiness Surface Planning. Decide how to expose the deterministic 7F-9 summary for future operator/API use without enabling reconstruction execution.
 
 Production smoke-test:
 - completed successfully.
@@ -95,7 +99,14 @@ Phase 7F-6 capture expansion planning:
 - P0 is Minimum Evidence Handoff Normalization from existing capture surfaces.
 - P1/P2 expands reconstruction quality with settled DOM, screenshots, computed styles, layout boxes, fonts, failed/blocked requests, widget inventories, console summaries, mutation summaries, media evidence, and broader network evidence.
 - Chrome / Playwright remains the only active provider.
-- Next recommended phase: Phase 7F-7 — Minimum Evidence Handoff Normalization.
+
+Phase 7F-9 reconstruction readiness re-evaluation:
+- `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts` adds deterministic evaluation, baseline/enriched comparison, and summary helpers.
+- Enriched rendered DOM ref, rendered HTML hash, and route identity can resolve the minimum handoff blocker set and reach `MINIMUM_READY`.
+- Missing rendered DOM and blocker fidelity limitations keep readiness at `NOT_READY`.
+- Optional fonts/widgets improve summary evidence only; they do not bypass blockers.
+- No reconstruction execution exists yet.
+- Next recommended phase: Phase 7F-10 — Read-Only Readiness Surface Planning.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`

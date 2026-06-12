@@ -46,7 +46,12 @@ Current Reconstruction Readiness remains `NOT_READY`.
 Phase 7F-6 — Capture Expansion Planning is COMPLETE as an architecture-only plan.
 The Capture Expansion Plan is documented in `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
 Phase 7F-6 separates the P0 `MINIMUM_READY` gate from P1/P2 reconstruction-quality evidence. P0 requires only normalized route-level handoff fields: full evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and normalized blocker fidelity limitations.
-Recommended next implementation phase: Phase 7F-7 — Minimum Evidence Handoff Normalization. It should normalize existing capture surfaces into a route-level `EvidenceCaptureArtifact` and evaluate readiness without changing importer behavior, preview behavior, Original Mirror behavior, reconstruction behavior, route discovery, asset rewriting, script policy, public rendering, or browser runtime behavior.
+Phase 7F-9 — Reconstruction Readiness Re-Evaluation is COMPLETE as an evaluation/readiness-only pass.
+The 7F-9 helper evaluates `EvidenceCaptureArtifact` readiness, compares baseline vs 7F-8-enriched evidence, and emits a deterministic summary safe for future UI/API use.
+7F-9 confirms that a baseline missing rendered DOM remains `NOT_READY`, while enriched rendered DOM ref, rendered HTML hash, and route identity can explicitly move readiness to `MINIMUM_READY` when no blocker fidelity limitation remains.
+Optional enrichment such as fonts and widgets improves readiness summaries but does not override missing required fields or blocker fidelity limitations.
+No reconstruction execution, AI generation, React/block generation, preview change, capture behavior change, route discovery change, asset rewriting change, script policy change, public rendering change, or DB schema change exists in 7F-9.
+Recommended next implementation phase: Phase 7F-10 — Read-Only Readiness Surface Planning. It should decide whether and where to expose the deterministic 7F-9 summary without enabling reconstruction execution.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
 Phase 6C-A — Readiness & Domain Operations MVP is complete.
