@@ -30,8 +30,10 @@ test("candidate review package creation preserves contract-only review shape", (
   const reviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-1",
     discoveryPackageId: "candidate-discovery-package-1",
+    planningPackageId: "planning-package-1",
     siteVersionId: "site-version-1",
     routeScope,
+    readinessLevel: "HIGH_CONFIDENCE",
     reviewStatus: "approved",
     candidateReviews: [approvedHeroReview],
     reviewerRef: "operator-1",
@@ -43,8 +45,10 @@ test("candidate review package creation preserves contract-only review shape", (
   assert.equal(reviewPackage.contractVersion, "7F-13");
   assert.equal(reviewPackage.reviewPackageId, "candidate-review-package-1");
   assert.equal(reviewPackage.discoveryPackageId, "candidate-discovery-package-1");
+  assert.equal(reviewPackage.planningPackageId, "planning-package-1");
   assert.equal(reviewPackage.siteVersionId, "site-version-1");
   assert.deepEqual(reviewPackage.routeScope, routeScope);
+  assert.equal(reviewPackage.readinessLevel, "HIGH_CONFIDENCE");
   assert.equal(reviewPackage.reviewStatus, "approved");
   assert.deepEqual(reviewPackage.candidateReviews, [approvedHeroReview]);
   assert.equal(reviewPackage.reviewerRef, "operator-1");
@@ -55,8 +59,10 @@ test("candidate review package defaults remain pending and unreviewed", () => {
   const reviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-2",
     discoveryPackageId: "candidate-discovery-package-2",
+    planningPackageId: "planning-package-2",
     siteVersionId: "site-version-2",
     routeScope,
+    readinessLevel: "MINIMUM_READY",
   });
 
   assert.equal(reviewPackage.reviewStatus, "pending");

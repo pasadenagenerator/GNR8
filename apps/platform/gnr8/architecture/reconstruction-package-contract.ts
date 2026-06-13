@@ -9,6 +9,7 @@
  */
 
 import type { ReconstructionPlanningRouteScope } from "./reconstruction-planning-contract";
+import type { ReconstructionReadinessLevel } from "./reconstruction-input-contract";
 import type {
   ReconstructionCandidateConfidenceLevel,
   ReconstructionCandidateType,
@@ -94,6 +95,7 @@ export type ReconstructionPackage = {
   planningPackageId: string;
   siteVersionId: string;
   routeScope: ReconstructionPlanningRouteScope;
+  readinessLevel: ReconstructionReadinessLevel;
   packageStatus: ReconstructionPackageStatus;
   approvedCandidates: ApprovedReconstructionCandidate[];
   deferredCandidates: PackagedReviewedReconstructionCandidate[];
@@ -107,6 +109,11 @@ export type ReconstructionPackage = {
 
 export type CreateReconstructionPackageFromReviewOptions = {
   reconstructionPackageId?: string;
+  /**
+   * Compatibility override for older review-package fixtures. Current review
+   * packages carry planningPackageId directly so the control-plane chain can
+   * link backward without synthetic IDs.
+   */
   planningPackageId?: string;
   createdAt?: string;
   reconstructionInstructions?: Partial<Pick<ReconstructionPackageInstructions, "notes">>;
@@ -285,9 +292,10 @@ export function createReconstructionPackageFromReview(
     reviewPackageId: reviewPackage.reviewPackageId,
     discoveryPackageId: reviewPackage.discoveryPackageId,
     planningPackageId:
-      options.planningPackageId ?? `${reviewPackage.discoveryPackageId}:planning-package-ref`,
+      options.planningPackageId ?? reviewPackage.planningPackageId,
     siteVersionId: reviewPackage.siteVersionId,
     routeScope: reviewPackage.routeScope,
+    readinessLevel: reviewPackage.readinessLevel,
     packageStatus,
     approvedCandidates,
     deferredCandidates,

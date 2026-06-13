@@ -54,8 +54,10 @@ export type ReconstructionCandidateReviewPackage = {
   contractVersion: typeof RECONSTRUCTION_CANDIDATE_REVIEW_CONTRACT_VERSION;
   reviewPackageId: string;
   discoveryPackageId: string;
+  planningPackageId: string;
   siteVersionId: string;
   routeScope: ReconstructionPlanningRouteScope;
+  readinessLevel: ReconstructionReadinessLevel;
   reviewStatus: ReconstructionCandidateReviewPackageStatus;
   candidateReviews: ReconstructionCandidateReviewItem[];
   reviewerRef: string | null;
@@ -102,8 +104,10 @@ export type ReconstructionCandidateReviewSummary = {
 export type CreateReconstructionCandidateReviewPackageInput = {
   reviewPackageId: string;
   discoveryPackageId: string;
+  planningPackageId: string;
   siteVersionId: string;
   routeScope: ReconstructionPlanningRouteScope;
+  readinessLevel: ReconstructionReadinessLevel;
   reviewStatus?: ReconstructionCandidateReviewPackageStatus;
   candidateReviews?: ReconstructionCandidateReviewItem[];
   reviewerRef?: string | null;
@@ -119,8 +123,10 @@ export function createReconstructionCandidateReviewPackage(
     contractVersion: RECONSTRUCTION_CANDIDATE_REVIEW_CONTRACT_VERSION,
     reviewPackageId: input.reviewPackageId,
     discoveryPackageId: input.discoveryPackageId,
+    planningPackageId: input.planningPackageId,
     siteVersionId: input.siteVersionId,
     routeScope: input.routeScope,
+    readinessLevel: input.readinessLevel,
     reviewStatus: input.reviewStatus ?? "pending",
     candidateReviews: input.candidateReviews ?? [],
     reviewerRef: input.reviewerRef ?? null,

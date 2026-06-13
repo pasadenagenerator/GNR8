@@ -45,14 +45,15 @@ Phase 7D is COMPLETE through 7D-9.
 Phase 7D introduced no runtime behavior changes.
 Phase 7D introduced no import logic changes.
 
-Phase 7F completes Importer Architecture Evolution through 7F-10. The architecture direction is now Evidence Capture -> Original Mirror -> Reconstruction.
+Phase 7F completes Importer Architecture Evolution through 7F-15. The architecture direction is now Evidence Capture -> Original Mirror -> Reconstruction.
 
-Phase 7F is COMPLETE through 7F-10 as documentation, contracts, read-model, and read-only surface work.
+Phase 7F is COMPLETE through 7F-15 as documentation, contracts, read-model, read-only surface work, and control-plane closure.
 
 Completed Phase 7F architectural foundations:
 - Evidence Capture baseline: current capture evidence is persisted as `evidence_capture_baseline`, with coverage counts, persisted refs, current partial gaps, and normalized baseline evidence for downstream projections.
 - Original Mirror fidelity projection: Site Workspace exposes `Original Mirror Fidelity` from the persisted baseline, including coverage status, fidelity badge, known limitations, and route-level limitations when available.
 - Reconstruction readiness projection: Site Workspace exposes `Reconstruction Readiness` from the persisted baseline, using deterministic readiness levels, blockers, required/optional evidence, confidence inputs, and next capture-expansion recommendations.
+- Reconstruction control plane: Planning Gate, Candidate Discovery, Candidate Review, and Reconstruction Package contracts are complete as metadata-only handoffs, with `docs/architecture/RECONSTRUCTION_CONTROL_PLANE.md` documenting the full chain and marking Future Dry Run, Future Reconstruction, and Future Publish as not implemented.
 
 Phase 7F does not implement reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, reconstruction publishing, importer behavior changes, capture behavior changes, preview behavior changes, route changes, API changes, or DB schema changes.
 
@@ -60,7 +61,7 @@ Website OS runtime expansion remains paused.
 
 ## Critical Path
 
-Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Multi-Page Raw Preview Correctness + Observability -> Phase 7F Importer Architecture Evolution -> Phase 7F-11 Reconstruction Planning Gate -> Billing
+Import -> CMS -> Renderer -> Durable Jobs -> Durable Batches -> Batch Execution -> Batch Execution Observability -> Command Center -> Hosting Operations -> Hosting Hardening -> Multi-Page Import MVP -> Discovery Expansion -> Multi-Page Raw Preview Correctness + Observability -> Phase 7F Importer Architecture Evolution -> Phase 8A-0 Dry-Run Boundary Planning -> Billing
 
 ## Completed Reality Checks
 
@@ -678,7 +679,7 @@ Next recommended phase:
 #### Phase 7F Completion — Evidence Capture vs Original Mirror vs Reconstruction
 
 Status:
-- COMPLETE through 7F-10.
+- COMPLETE through 7F-15.
 
 Architecture doc:
 - `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`
@@ -697,6 +698,11 @@ Completed foundations:
 - Reconstruction Readiness projection from the persisted baseline.
 - Deterministic readiness evaluation and minimum handoff normalization.
 - Evidence Capture enrichment helpers for baseline vs enriched readiness comparison.
+- Reconstruction Planning Gate.
+- Reconstruction Candidate Discovery Contract.
+- Reconstruction Candidate Review Contract.
+- Reconstruction Package Contract.
+- Reconstruction Control Plane Closure.
 
 Required terminology:
 - Evidence Capture
@@ -743,7 +749,7 @@ Completed:
 - Phase 7B
 - Phase 7C
 - Phase 7D
-- Phase 7F through 7F-10
+- Phase 7F through 7F-15
 
 Hosting Operations MVP complete.
 Hosting Hardening complete.
@@ -751,13 +757,13 @@ Phase 6 complete.
 Phase 7B complete.
 Phase 7C complete.
 Phase 7D complete through 7D-9.
-Phase 7F complete through 7F-10 as importer architecture evolution.
+Phase 7F complete through 7F-15 as importer architecture evolution and reconstruction control-plane closure.
 
 ## Current Remaining Work
 
 ### Near-term
 
-- Phase 7F-11 — Reconstruction Planning Gate
+- Phase 8A-0 — Dry-Run Boundary Planning
 - Billing Reality Check
 
 ### Optional Runtime UX

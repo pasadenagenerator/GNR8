@@ -63,8 +63,10 @@ Input fields carried forward:
 
 - `reviewPackageId`
 - `discoveryPackageId`
+- `planningPackageId`
 - `siteVersionId`
 - `routeScope`
+- `readinessLevel`
 - `reviewStatus`
 - `candidateReviews`
 - `notes`
@@ -82,6 +84,7 @@ Future Candidate Review may produce a metadata-only reconstruction package:
 - `planningPackageId`
 - `siteVersionId`
 - `routeScope`
+- `readinessLevel`
 - `packageStatus`
 - `approvedCandidates`
 - `deferredCandidates`
@@ -166,6 +169,7 @@ The Phase 7F-14 builder does not return `ready_for_future_execution`. That value
 
 Builder behavior:
 
+- review, discovery, planning, site version, route-scope, and readiness lineage is preserved from Candidate Review metadata
 - approved review items become `approvedCandidates`
 - deferred decisions become `deferredCandidates`
 - unsupported decisions become `unsupportedCandidates`

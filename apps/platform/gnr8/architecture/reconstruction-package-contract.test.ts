@@ -33,8 +33,10 @@ test("reconstruction package creation preserves review lineage and contract-only
   const reviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-1",
     discoveryPackageId: "candidate-discovery-package-1",
+    planningPackageId: "planning-package-from-review-1",
     siteVersionId: "site-version-1",
     routeScope,
+    readinessLevel: "HIGH_CONFIDENCE",
     reviewStatus: "approved",
     candidateReviews: [approvedHeroReview],
     reviewedAt: "2026-06-13T10:00:00.000Z",
@@ -54,6 +56,7 @@ test("reconstruction package creation preserves review lineage and contract-only
   assert.equal(reconstructionPackage.planningPackageId, "planning-package-1");
   assert.equal(reconstructionPackage.siteVersionId, "site-version-1");
   assert.deepEqual(reconstructionPackage.routeScope, routeScope);
+  assert.equal(reconstructionPackage.readinessLevel, "HIGH_CONFIDENCE");
   assert.equal(reconstructionPackage.packageStatus, "ready_for_reconstruction");
   assert.equal(reconstructionPackage.executionReadiness, "ready_for_dry_run");
   assert.equal(reconstructionPackage.reconstructionInstructions.executionAllowed, false);
@@ -88,8 +91,10 @@ test("approved review items become approved reconstruction candidates", () => {
   const reviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-2",
     discoveryPackageId: "candidate-discovery-package-2",
+    planningPackageId: "planning-package-2",
     siteVersionId: "site-version-2",
     routeScope,
+    readinessLevel: "RECOMMENDED",
     reviewStatus: "approved",
     candidateReviews: [
       approvedHeroReview,
@@ -135,8 +140,10 @@ test("deferred and unsupported review items map into separate package buckets", 
   const reviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-3",
     discoveryPackageId: "candidate-discovery-package-3",
+    planningPackageId: "planning-package-3",
     siteVersionId: "site-version-3",
     routeScope,
+    readinessLevel: "MINIMUM_READY",
     reviewStatus: "partially_reviewed",
     candidateReviews: [
       {
@@ -172,8 +179,10 @@ test("needs_more_evidence review forces package status and execution readiness t
   const reviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-4",
     discoveryPackageId: "candidate-discovery-package-4",
+    planningPackageId: "planning-package-4",
     siteVersionId: "site-version-4",
     routeScope,
+    readinessLevel: "MINIMUM_READY",
     reviewStatus: "needs_more_evidence",
     candidateReviews: [
       approvedHeroReview,
@@ -207,8 +216,10 @@ test("execution readiness requires approved candidates and no blocker limitation
   const noApprovedReviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-5",
     discoveryPackageId: "candidate-discovery-package-5",
+    planningPackageId: "planning-package-5",
     siteVersionId: "site-version-5",
     routeScope,
+    readinessLevel: "MINIMUM_READY",
     reviewStatus: "rejected",
     candidateReviews: [
       {
@@ -221,8 +232,10 @@ test("execution readiness requires approved candidates and no blocker limitation
   const readyReviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-6",
     discoveryPackageId: "candidate-discovery-package-6",
+    planningPackageId: "planning-package-6",
     siteVersionId: "site-version-6",
     routeScope,
+    readinessLevel: "HIGH_CONFIDENCE",
     reviewStatus: "approved",
     candidateReviews: [approvedHeroReview],
   });
@@ -241,8 +254,10 @@ test("summary helper reports counts, status, readiness, blockers, and limitation
   const reviewPackage = createReconstructionCandidateReviewPackage({
     reviewPackageId: "candidate-review-package-7",
     discoveryPackageId: "candidate-discovery-package-7",
+    planningPackageId: "planning-package-7",
     siteVersionId: "site-version-7",
     routeScope,
+    readinessLevel: "RECOMMENDED",
     reviewStatus: "needs_more_evidence",
     notes: ["Rejected candidates are not packaged for reconstruction."],
     candidateReviews: [
@@ -281,4 +296,48 @@ test("summary helper reports counts, status, readiness, blockers, and limitation
   assert.equal(summary.executionReadiness, "not_ready");
   assert.equal(summary.blockerCount, 2);
   assert.equal(summary.limitationCount, 4);
+});
+
+test("reconstruction package links backward through review, discovery, and planning IDs", () => {
+  const reviewPackage = createReconstructionCandidateReviewPackage({
+    reviewPackageId: "candidate-review-package-linkage",
+    discoveryPackageId: "candidate-discovery-package-linkage",
+    planningPackageId: "planning-package-linkage",
+    siteVersionId: "site-version-linkage",
+    routeScope,
+    readinessLevel: "HIGH_CONFIDENCE",
+    reviewStatus: "approved",
+    candidateReviews: [approvedHeroReview],
+  });
+
+  const reconstructionPackage = createReconstructionPackageFromReview(reviewPackage, {
+    reconstructionPackageId: "reconstruction-package-linkage",
+  });
+
+  assert.equal(reconstructionPackage.reviewPackageId, reviewPackage.reviewPackageId);
+  assert.equal(reconstructionPackage.discoveryPackageId, reviewPackage.discoveryPackageId);
+  assert.equal(reconstructionPackage.planningPackageId, reviewPackage.planningPackageId);
+  assert.equal(reconstructionPackage.siteVersionId, reviewPackage.siteVersionId);
+  assert.deepEqual(reconstructionPackage.routeScope, reviewPackage.routeScope);
+  assert.equal(reconstructionPackage.readinessLevel, reviewPackage.readinessLevel);
+});
+
+test("current reconstruction package builder never enables future execution", () => {
+  const readyReviewPackage = createReconstructionCandidateReviewPackage({
+    reviewPackageId: "candidate-review-package-future-execution",
+    discoveryPackageId: "candidate-discovery-package-future-execution",
+    planningPackageId: "planning-package-future-execution",
+    siteVersionId: "site-version-future-execution",
+    routeScope,
+    readinessLevel: "HIGH_CONFIDENCE",
+    reviewStatus: "approved",
+    candidateReviews: [approvedHeroReview],
+  });
+
+  const reconstructionPackage = createReconstructionPackageFromReview(readyReviewPackage);
+
+  assert.equal(reconstructionPackage.executionReadiness, "ready_for_dry_run");
+  assert.notEqual(reconstructionPackage.executionReadiness, "ready_for_future_execution");
+  assert.equal(reconstructionPackage.reconstructionInstructions.executionAllowed, false);
+  assert.equal(reconstructionPackage.reconstructionInstructions.outputGenerationAllowed, false);
 });

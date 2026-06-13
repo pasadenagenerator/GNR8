@@ -56,6 +56,8 @@ Not added:
 
 Candidate Review consumes only completed Candidate Discovery package metadata:
 
+- `discoveryPackageId`
+- `planningPackageId`
 - `discoveryStatus`
 - `candidateCount`
 - `readinessLevel`
@@ -72,7 +74,7 @@ Eligibility rules:
 | `discovery_complete` | `0` | not eligible |
 | `discovery_complete` | `> 0` | eligible |
 
-Readiness level is carried as contract metadata. Phase 7F-13 does not recalculate readiness.
+Readiness level is carried as contract metadata for eligibility. The Review Package preserves `discoveryPackageId`, `planningPackageId`, and `readinessLevel` so the later Reconstruction Package can link backward through the control plane without recalculating readiness. Phase 7F-13 does not recalculate readiness.
 
 ## Outputs
 
@@ -80,8 +82,10 @@ Future Candidate Review may produce a metadata-only review package:
 
 - `reviewPackageId`
 - `discoveryPackageId`
+- `planningPackageId`
 - `siteVersionId`
 - `routeScope`
+- `readinessLevel`
 - `reviewStatus`
 - `candidateReviews`
 - `reviewerRef`
