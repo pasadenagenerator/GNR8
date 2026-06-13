@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-12
+2026-06-13
 
 ## Migration Platform MVP Buildout
 
@@ -32,11 +32,12 @@ Phase 7C has no architectural blockers.
 Discovery expansion is operational.
 Phase 7D — Multi-Page Raw Preview Correctness + Observability is COMPLETE through 7D-9.
 Phase 7D has no runtime behavior changes outstanding.
-Phase 7F — Importer Architecture Evolution is COMPLETE through 7F-10.
+Phase 7F — Importer Architecture Evolution is COMPLETE through 7F-11.
 Importer architecture direction is now Evidence Capture -> Original Mirror -> Reconstruction.
-Phase 7F completed the architecture split, Evidence Capture artifact contract, inventory audit, baseline artifact persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, Capture Expansion Planning, Minimum Evidence Handoff Normalization, Evidence Capture enrichment layer, Reconstruction Readiness evaluation, and Reconstruction Readiness surface.
+Phase 7F completed the architecture split, Evidence Capture artifact contract, inventory audit, baseline artifact persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, Capture Expansion Planning, Minimum Evidence Handoff Normalization, Evidence Capture enrichment layer, Reconstruction Readiness evaluation, Reconstruction Readiness surface, and Reconstruction Planning Gate.
 No reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, reconstruction publishing, capture behavior change, preview behavior change, route discovery change, asset rewriting change, script policy change, public rendering change, API change, or DB schema change exists in Phase 7F.
-Recommended next implementation phase: Phase 7F-11 — Reconstruction Planning Gate. Do not start reconstruction execution without a separate explicit phase.
+Current Phase: Phase 7F-11 — Reconstruction Planning Gate.
+Next Phase: Phase 7F-12 — Reconstruction Candidate Discovery Contract. Do not start reconstruction execution without a separate explicit phase.
 
 ## Current Importer Architecture
 
@@ -52,8 +53,8 @@ Original Mirror Layer:
 - Future: richer limitation evidence as Evidence Capture expands.
 
 Reconstruction Layer:
-- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, and Site Workspace Reconstruction Readiness projection.
-- Partially implemented: evidence can be normalized and evaluated for readiness, and enriched evidence can be compared with baseline evidence.
+- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, and metadata-only Reconstruction Planning Gate.
+- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, and readiness can be evaluated for planning eligibility.
 - Future: reconstruction execution, AI reconstruction, GNR8 React/block generation, editable content model generation, design token generation, reconstruction workers, approvals, and publishing.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
@@ -313,8 +314,11 @@ Explicitly not yet implemented:
 - production multi-page serving
 - dynamic content extraction
 
-Next active phase:
+Current Phase:
 - Phase 7F-11 — Reconstruction Planning Gate.
+
+Next Phase:
+- Phase 7F-12 — Reconstruction Candidate Discovery Contract.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
@@ -346,7 +350,7 @@ Boundary:
 ## Phase 7F Importer Architecture Evolution
 
 Status:
-- COMPLETE through 7F-10.
+- COMPLETE through 7F-11.
 
 Canonical architecture doc:
 - `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`
@@ -371,6 +375,7 @@ Completed:
 - Evidence Capture Enrichment.
 - Reconstruction Readiness Evaluation.
 - Reconstruction Readiness Surface.
+- Reconstruction Planning Gate.
 
 Explicit unresolved cases:
 - ViroiDoc blog/news duplication is not solved by raw preview patching.
@@ -394,7 +399,7 @@ Not included:
 - no script-policy changes
 
 Next recommended importer phase:
-- 7F-11: Reconstruction Planning Gate
+- 7F-12: Reconstruction Candidate Discovery Contract
 
 ## Production Validation
 
@@ -457,7 +462,7 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 7F-11 — Reconstruction Planning Gate
+- Phase 7F-12 — Reconstruction Candidate Discovery Contract
 - Billing
 
 Current Hosting Operations status:
@@ -467,10 +472,10 @@ Current Hosting Operations status:
 - Phase 7B is complete.
 - Phase 7C is complete.
 - Phase 7D is complete through 7D-9.
-- Phase 7F is complete through 7F-10 as importer architecture evolution.
+- Phase 7F is complete through 7F-11 as importer architecture evolution.
 
 Next recommended milestone:
-- Phase 7F-11 — Reconstruction Planning Gate
+- Phase 7F-12 — Reconstruction Candidate Discovery Contract
 
 Phase 7F recommended focus:
 - Preserve the Evidence Capture -> Original Mirror -> Reconstruction boundary.
@@ -539,8 +544,8 @@ Current migration platform continuation:
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
-- Phase 7F — Importer Architecture Evolution is complete through 7F-10.
-- Phase 7F-11 — Reconstruction Planning Gate is the next recommended phase.
+- Phase 7F — Importer Architecture Evolution is complete through 7F-11.
+- Phase 7F-12 — Reconstruction Candidate Discovery Contract is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -618,8 +623,8 @@ Current migration platform continuation:
 - Phase 7B — Multi-Page Import MVP is complete.
 - Phase 7C — Discovery Expansion is complete.
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
-- Phase 7F — Importer Architecture Evolution is complete through 7F-10.
-- Phase 7F-11 — Reconstruction Planning Gate is the next recommended phase.
+- Phase 7F — Importer Architecture Evolution is complete through 7F-11.
+- Phase 7F-12 — Reconstruction Candidate Discovery Contract is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
