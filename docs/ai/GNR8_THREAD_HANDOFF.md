@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 7F complete through 7F-13.
+- 7F complete through 7F-14.
 
 Current Phase:
-- 7F-13 Reconstruction Candidate Review Contract.
+- 7F-14 Reconstruction Package Contract.
 
 Next Phase:
-- 7F-14 Reconstruction Package Contract.
+- 7F-15 Reconstruction Control Plane Closure.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,9 +23,9 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-13 — Reconstruction Candidate Review Contract.
+- Phase 7F-14 — Reconstruction Package Contract.
 - Status: COMPLETE.
-- Metadata-only candidate review contract closure for determining whether a completed discovered candidate package is eligible for future human review.
+- Metadata-only reconstruction package contract closure for determining whether reviewed candidate metadata is ready for future dry-run reconstruction.
 - No importer behavior, capture behavior, Original Mirror behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, route discovery, API, rendering, persistence, or database schema was changed by this documentation closure.
 - Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
@@ -38,6 +38,8 @@ Latest completed milestone:
 - Reconstruction candidate discovery contract code: `apps/platform/gnr8/architecture/reconstruction-candidate-discovery-contract.ts`.
 - Reconstruction candidate review contract doc: `docs/architecture/RECONSTRUCTION_CANDIDATE_REVIEW_CONTRACT.md`.
 - Reconstruction candidate review contract code: `apps/platform/gnr8/architecture/reconstruction-candidate-review-contract.ts`.
+- Reconstruction package contract doc: `docs/architecture/RECONSTRUCTION_PACKAGE_CONTRACT.md`.
+- Reconstruction package contract code: `apps/platform/gnr8/architecture/reconstruction-package-contract.ts`.
 - Capture expansion plan doc: `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
 - Minimum handoff normalizer code: `apps/platform/gnr8/architecture/reconstruction-input-normalizer.ts`.
 - Readiness evaluator code: `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts`.
@@ -52,6 +54,7 @@ Latest completed milestone:
 - Reconstruction Planning Package and Reconstruction Candidate contracts exist only as planning metadata. They do not generate React, blocks, workers, approvals, persisted reconstruction, or publishing artifacts.
 - Reconstruction Candidate Discovery Contract now defines the future discovery package shape, normalized candidate taxonomy, evidence traceability shape, confidence model, discovery status values, and deterministic discovery eligibility from Planning Gate readiness only.
 - Reconstruction Candidate Review Contract now defines the future human review package shape, candidate review item shape, review decisions, review package statuses, deterministic review eligibility from completed discovery metadata, and decision summary behavior.
+- Reconstruction Package Contract now defines the reviewed candidate handoff package, approved candidate shape, reconstruction intent values, package statuses, execution readiness values, deterministic package builder behavior, and package summary behavior.
 - Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
 - P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
 - 7F-9 comparison confirms that baseline evidence missing rendered DOM remains `NOT_READY`, while 7F-8-enriched rendered DOM ref, rendered HTML hash, and route identity can reach `MINIMUM_READY` when no blocker fidelity limitation remains.
@@ -60,7 +63,7 @@ Latest completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended implementation phase: Phase 7F-14 — Reconstruction Package Contract.
+- Next recommended implementation phase: Phase 7F-15 — Reconstruction Control Plane Closure.
 
 Production smoke-test:
 - completed successfully.
@@ -103,7 +106,7 @@ Phase 7F importer architecture evolution:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
 - Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
 - Reconstruction is the future GNR8-native editable output layer labeled `GNR8 Reconstruction Preview` when implemented.
-- Phase 7F is complete through 7F-13: architecture split, Evidence Capture contract/audit/baseline persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, capture expansion planning, minimum handoff normalization, enrichment, readiness evaluation, readiness surface, planning gate, candidate discovery contract, and candidate review contract.
+- Phase 7F is complete through 7F-14: architecture split, Evidence Capture contract/audit/baseline persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, capture expansion planning, minimum handoff normalization, enrichment, readiness evaluation, readiness surface, planning gate, candidate discovery contract, candidate review contract, and reconstruction package contract.
 - ViroiDoc blog/news duplication is not solved by raw preview patching.
 - Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
 - Dongle showed source-reference preservation risk.
@@ -161,7 +164,17 @@ Phase 7F-13 reconstruction candidate review contract:
 - Review decisions are `approved`, `rejected`, `needs_more_evidence`, `defer`, and `unsupported`.
 - Package statuses are `pending`, `partially_reviewed`, `approved`, `rejected`, and `needs_more_evidence`.
 - Candidate review, review persistence, approval execution, reconstruction execution, AI reconstruction, React/block generation, workers, and publishing remain NOT IMPLEMENTED YET.
-- Next recommended phase: Phase 7F-14 — Reconstruction Package Contract.
+- Next recommended phase: Phase 7F-14 — Reconstruction Package Contract is complete; continue with Phase 7F-15 — Reconstruction Control Plane Closure.
+
+Phase 7F-14 reconstruction package contract:
+- `apps/platform/gnr8/architecture/reconstruction-package-contract.ts` defines metadata-only `ReconstructionPackage`, `ApprovedReconstructionCandidate`, reconstruction intent values, package statuses, execution readiness values, package creation from Candidate Review metadata, and package summary behavior.
+- `docs/architecture/RECONSTRUCTION_PACKAGE_CONTRACT.md` documents the Evidence Capture -> Readiness -> Planning Gate -> Candidate Discovery -> Candidate Review -> Reconstruction Package boundary.
+- Reconstruction intent values are `recreate_as_native_block`, `preserve_as_embed`, `preserve_as_external_widget`, `convert_to_runtime_provider`, `defer`, and `unsupported`.
+- Package statuses are `draft`, `ready_for_reconstruction`, `needs_more_evidence`, `blocked`, and `archived`.
+- Execution readiness values are `not_ready`, `ready_for_dry_run`, and `ready_for_future_execution`; Phase 7F-14 never enables future execution and the builder only reaches `ready_for_dry_run` when approved candidates exist with no blocker limitations.
+- Approved review items become approved candidates; deferred decisions become deferred candidates; unsupported decisions become unsupported candidates; rejected decisions are excluded from candidate buckets but counted in limitations/notes; `needs_more_evidence` forces package status `needs_more_evidence`.
+- Future Dry Run, reconstruction execution, approval execution, AI reconstruction, React/block generation, workers, persistence, and publishing remain NOT IMPLEMENTED YET.
+- Next recommended phase: Phase 7F-15 — Reconstruction Control Plane Closure.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -382,18 +395,18 @@ Phase 7D completion notes:
 - No import logic was changed.
 
 Phase 7F completion notes:
-- Phase 7F is COMPLETE through 7F-13 as importer architecture evolution.
+- Phase 7F is COMPLETE through 7F-14 as importer architecture evolution.
 - Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Type scaffolding: `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`.
 - Required terminology: Evidence Capture, Capture Provider, Original Mirror Preview, GNR8 Reconstruction Preview, Known Fidelity Limitation, Reconstruction Candidate.
 - No ViroiDoc fix, Maver/Mono map fix, active Servo provider, AI reconstruction, reconstruction execution, React/block generation, preview renderer rewrite, import-limit change, or script-policy change was included.
 
 Current critical path:
-- Phase 7F-14 — Reconstruction Package Contract
+- Phase 7F-15 — Reconstruction Control Plane Closure
 - Billing
 
 Next recommended milestone:
-- Phase 7F-14 — Reconstruction Package Contract.
+- Phase 7F-15 — Reconstruction Control Plane Closure.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -433,7 +446,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7F-14 — Reconstruction Package Contract.
+- Phase 7F-15 — Reconstruction Control Plane Closure.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -1336,9 +1349,9 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 7F-13 — Reconstruction Candidate Review Contract.
+Active phase: Phase 7F-14 — Reconstruction Package Contract.
 
-Phase 7F importer architecture evolution is complete through 7F-13:
+Phase 7F importer architecture evolution is complete through 7F-14:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
 - Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
 - Reconstruction is the future GNR8-native editable output layer labeled `GNR8 Reconstruction Preview` when implemented.
@@ -1395,7 +1408,16 @@ Reconstruction Candidate Review Contract is complete:
 - review decisions: `approved`, `rejected`, `needs_more_evidence`, `defer`, `unsupported`
 - package statuses: `pending`, `partially_reviewed`, `approved`, `rejected`, `needs_more_evidence`
 - behavior boundary: metadata-only review contract; no candidate review execution, review persistence, approval execution, reconstruction execution, AI reconstruction, React/block generation, workers, or publishing
-- recommended next milestone: Phase 7F-14 Reconstruction Package Contract
+
+Reconstruction Package Contract is complete:
+- package contract: `apps/platform/gnr8/architecture/reconstruction-package-contract.ts`
+- documentation: `docs/architecture/RECONSTRUCTION_PACKAGE_CONTRACT.md`
+- reconstruction intents: `recreate_as_native_block`, `preserve_as_embed`, `preserve_as_external_widget`, `convert_to_runtime_provider`, `defer`, `unsupported`
+- package statuses: `draft`, `ready_for_reconstruction`, `needs_more_evidence`, `blocked`, `archived`
+- execution readiness: `not_ready`, `ready_for_dry_run`, `ready_for_future_execution`
+- builder behavior: approved review items become approved candidates; deferred and unsupported decisions are separated; rejected decisions are excluded from candidate buckets but counted in limitations/notes; `needs_more_evidence` forces package status `needs_more_evidence`
+- behavior boundary: metadata-only package contract; no dry-run, approval execution, reconstruction execution, AI reconstruction, React/block generation, workers, persistence, or publishing
+- recommended next milestone: Phase 7F-15 Reconstruction Control Plane Closure
 
 ## G) How Next Thread Should Behave
 
