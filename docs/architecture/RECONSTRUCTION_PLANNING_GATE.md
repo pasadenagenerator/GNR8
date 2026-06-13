@@ -90,15 +90,20 @@ Planning eligibility is deterministic:
 Candidate types:
 
 - `page`
-- `section`
-- `component`
-- `widget`
 - `navigation`
+- `hero`
+- `section`
 - `content_collection`
-- `form`
+- `article_listing`
+- `article_detail`
+- `card_group`
 - `gallery`
+- `form`
 - `map`
+- `widget`
 - `footer`
+- `layout_region`
+- `design_token_group`
 - `unknown`
 
 ## Future Flow

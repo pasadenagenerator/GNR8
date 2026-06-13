@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 7F complete through 7F-11.
+- 7F complete through 7F-12.
 
 Current Phase:
-- 7F-11 Reconstruction Planning Gate.
+- 7F-12 Reconstruction Candidate Discovery Contract.
 
 Next Phase:
-- 7F-12 Reconstruction Candidate Discovery Contract.
+- 7F-13 Reconstruction Candidate Review Contract.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,9 +23,9 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-11 — Reconstruction Planning Gate.
+- Phase 7F-12 — Reconstruction Candidate Discovery Contract.
 - Status: COMPLETE.
-- Metadata-only planning gate closure for determining whether a site is eligible to enter reconstruction planning.
+- Metadata-only candidate discovery contract closure for determining whether a planning-eligible site is eligible for future candidate discovery.
 - No importer behavior, capture behavior, Original Mirror behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, route discovery, API, rendering, persistence, or database schema was changed by this documentation closure.
 - Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
@@ -34,6 +34,8 @@ Latest completed milestone:
 - Reconstruction input contract code: `apps/platform/gnr8/architecture/reconstruction-input-contract.ts`.
 - Reconstruction planning gate doc: `docs/architecture/RECONSTRUCTION_PLANNING_GATE.md`.
 - Reconstruction planning contract code: `apps/platform/gnr8/architecture/reconstruction-planning-contract.ts`.
+- Reconstruction candidate discovery contract doc: `docs/architecture/RECONSTRUCTION_CANDIDATE_DISCOVERY_CONTRACT.md`.
+- Reconstruction candidate discovery contract code: `apps/platform/gnr8/architecture/reconstruction-candidate-discovery-contract.ts`.
 - Capture expansion plan doc: `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
 - Minimum handoff normalizer code: `apps/platform/gnr8/architecture/reconstruction-input-normalizer.ts`.
 - Readiness evaluator code: `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts`.
@@ -46,6 +48,7 @@ Latest completed milestone:
 - Original Mirror Fidelity is now surfaced read-only in Site Workspace from the persisted Evidence Capture baseline.
 - Reconstruction Planning Gate now defines metadata-only planning eligibility: `NOT_READY` is not eligible; `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE` are eligible.
 - Reconstruction Planning Package and Reconstruction Candidate contracts exist only as planning metadata. They do not generate React, blocks, workers, approvals, persisted reconstruction, or publishing artifacts.
+- Reconstruction Candidate Discovery Contract now defines the future discovery package shape, normalized candidate taxonomy, evidence traceability shape, confidence model, discovery status values, and deterministic discovery eligibility from Planning Gate readiness only.
 - Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
 - P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
 - 7F-9 comparison confirms that baseline evidence missing rendered DOM remains `NOT_READY`, while 7F-8-enriched rendered DOM ref, rendered HTML hash, and route identity can reach `MINIMUM_READY` when no blocker fidelity limitation remains.
@@ -54,7 +57,7 @@ Latest completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended implementation phase: Phase 7F-12 — Reconstruction Candidate Discovery Contract.
+- Next recommended implementation phase: Phase 7F-13 — Reconstruction Candidate Review Contract.
 
 Production smoke-test:
 - completed successfully.
@@ -97,7 +100,7 @@ Phase 7F importer architecture evolution:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
 - Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
 - Reconstruction is the future GNR8-native editable output layer labeled `GNR8 Reconstruction Preview` when implemented.
-- Phase 7F is complete through 7F-11: architecture split, Evidence Capture contract/audit/baseline persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, capture expansion planning, minimum handoff normalization, enrichment, readiness evaluation, readiness surface, and planning gate.
+- Phase 7F is complete through 7F-12: architecture split, Evidence Capture contract/audit/baseline persistence, Original Mirror Fidelity surface, Reconstruction Input Contract, capture expansion planning, minimum handoff normalization, enrichment, readiness evaluation, readiness surface, planning gate, and candidate discovery contract.
 - ViroiDoc blog/news duplication is not solved by raw preview patching.
 - Mono/Maver map behavior likely requires evidence capture plus widget reconstruction.
 - Dongle showed source-reference preservation risk.
@@ -141,7 +144,13 @@ Phase 7F-11 reconstruction planning gate:
 - `docs/architecture/RECONSTRUCTION_PLANNING_GATE.md` documents the Evidence Capture -> Original Mirror -> Readiness -> Planning Gate boundary.
 - Eligibility is deterministic from existing Reconstruction Readiness only: `NOT_READY` is not eligible; `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE` are eligible.
 - Everything after Planning Gate remains NOT IMPLEMENTED YET: candidate discovery, semantic extraction, AI reconstruction, React/block generation, reconstruction workers, reconstruction persistence, approval execution, and publishing.
-- Next recommended phase: Phase 7F-12 — Reconstruction Candidate Discovery Contract.
+
+Phase 7F-12 reconstruction candidate discovery contract:
+- `apps/platform/gnr8/architecture/reconstruction-candidate-discovery-contract.ts` defines metadata-only `ReconstructionCandidateDiscoveryPackage`, normalized candidate types, evidence traceability, confidence shape, discovery statuses, and discovery eligibility.
+- `docs/architecture/RECONSTRUCTION_CANDIDATE_DISCOVERY_CONTRACT.md` documents the Evidence Capture -> Readiness -> Planning Gate -> Candidate Discovery boundary.
+- Discovery eligibility is deterministic from Planning Gate readiness only: `NOT_READY` is not eligible; `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE` are eligible.
+- Current discovery status is `contract_only`; candidate discovery, review, execution, persistence, AI reconstruction, React/block generation, workers, approvals, and publishing remain NOT IMPLEMENTED YET.
+- Next recommended phase: Phase 7F-13 — Reconstruction Candidate Review Contract.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -362,18 +371,18 @@ Phase 7D completion notes:
 - No import logic was changed.
 
 Phase 7F completion notes:
-- Phase 7F is COMPLETE through 7F-11 as importer architecture evolution.
+- Phase 7F is COMPLETE through 7F-12 as importer architecture evolution.
 - Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Type scaffolding: `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`.
 - Required terminology: Evidence Capture, Capture Provider, Original Mirror Preview, GNR8 Reconstruction Preview, Known Fidelity Limitation, Reconstruction Candidate.
 - No ViroiDoc fix, Maver/Mono map fix, active Servo provider, AI reconstruction, reconstruction execution, React/block generation, preview renderer rewrite, import-limit change, or script-policy change was included.
 
 Current critical path:
-- Phase 7F-12 — Reconstruction Candidate Discovery Contract
+- Phase 7F-13 — Reconstruction Candidate Review Contract
 - Billing
 
 Next recommended milestone:
-- Phase 7F-12 — Reconstruction Candidate Discovery Contract.
+- Phase 7F-13 — Reconstruction Candidate Review Contract.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -413,7 +422,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 7F-12 — Reconstruction Candidate Discovery Contract.
+- Phase 7F-13 — Reconstruction Candidate Review Contract.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -1316,9 +1325,9 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 7F-11 — Reconstruction Planning Gate.
+Active phase: Phase 7F-12 — Reconstruction Candidate Discovery Contract.
 
-Phase 7F importer architecture evolution is complete through 7F-11:
+Phase 7F importer architecture evolution is complete through 7F-12:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
 - Original Mirror provides a read-only, non-semantic, non-AI preview/archive labeled `Original Mirror Preview`.
 - Reconstruction is the future GNR8-native editable output layer labeled `GNR8 Reconstruction Preview` when implemented.
@@ -1357,7 +1366,16 @@ Reconstruction Planning Gate is complete:
 - review states: `pending`, `approved`, `rejected`, `needs_more_evidence`
 - confidence states: `LOW`, `MEDIUM`, `HIGH`
 - behavior boundary: metadata-only planning contract; no candidate discovery, generation, worker, approval execution, persistence, or publishing
-- recommended next milestone: Phase 7F-12 Reconstruction Candidate Discovery Contract
+
+Reconstruction Candidate Discovery Contract is complete:
+- discovery contract: `apps/platform/gnr8/architecture/reconstruction-candidate-discovery-contract.ts`
+- documentation: `docs/architecture/RECONSTRUCTION_CANDIDATE_DISCOVERY_CONTRACT.md`
+- eligibility: `NOT_READY` is not eligible; `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE` are eligible
+- discovery statuses: `not_started`, `contract_only`, `discovery_ready`, `discovery_complete`
+- current discovery status: `contract_only`
+- confidence states: `LOW`, `MEDIUM`, `HIGH`
+- behavior boundary: metadata-only discovery contract; no candidate generation, semantic extraction, worker, approval execution, persistence, reconstruction execution, or publishing
+- recommended next milestone: Phase 7F-13 Reconstruction Candidate Review Contract
 
 ## G) How Next Thread Should Behave
 

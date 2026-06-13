@@ -110,15 +110,20 @@ test("reconstruction planning confidence states are stable", () => {
 test("reconstruction candidate types are stable", () => {
   assert.deepEqual(RECONSTRUCTION_CANDIDATE_TYPES, [
     "page",
-    "section",
-    "component",
-    "widget",
     "navigation",
+    "hero",
+    "section",
     "content_collection",
-    "form",
+    "article_listing",
+    "article_detail",
+    "card_group",
     "gallery",
+    "form",
     "map",
+    "widget",
     "footer",
+    "layout_region",
+    "design_token_group",
     "unknown",
   ]);
 });
