@@ -55,6 +55,12 @@ export type EvidenceCaptureBaselineGeometrySummary = {
   };
 };
 
+export type EvidenceCaptureBaselineSectionSummary = {
+  sectionEvidenceCaptured: boolean;
+  sectionCount: number;
+  sectionTypesPresent: string[];
+};
+
 export type OriginalMirrorKnownLimitation = {
   id: string;
   category: OriginalMirrorLimitationCategory;
@@ -505,6 +511,24 @@ export function buildEvidenceCaptureBaselineGeometrySummary(
       width: artifact.summaries.layoutGeometry?.viewportWidth ?? null,
       height: artifact.summaries.layoutGeometry?.viewportHeight ?? null,
     },
+  };
+}
+
+export function buildEvidenceCaptureBaselineSectionSummary(
+  artifact: EvidenceCaptureBaselineArtifactRecord | null,
+): EvidenceCaptureBaselineSectionSummary {
+  if (!artifact) {
+    return {
+      sectionEvidenceCaptured: false,
+      sectionCount: 0,
+      sectionTypesPresent: [],
+    };
+  }
+
+  return {
+    sectionEvidenceCaptured: artifact.summaries.sectionBoundary?.sectionEvidenceCaptured === true,
+    sectionCount: artifact.summaries.sectionBoundary?.sectionCount ?? 0,
+    sectionTypesPresent: artifact.summaries.sectionBoundary?.sectionTypesPresent ?? [],
   };
 }
 

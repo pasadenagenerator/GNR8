@@ -25,7 +25,7 @@ Route model readiness needs route-scoped evidence. A route path in any of the ne
 
 Navigation model readiness needs explicit navigation items. Layout or section evidence can identify that navigation likely exists, but explicit `NavigationEvidence.navigationItems` is the contract required to mark navigation model support as ready.
 
-Section model readiness needs geometry, boundaries, and runtime stability context. Geometry alone says where regions are. Section boundary evidence says what those regions likely are. Runtime mutation evidence says whether those regions were observed in a stable or changing DOM.
+Section model readiness needs geometry and deterministic boundaries. Geometry alone says where regions are. Section boundary evidence says what those regions likely are. Runtime mutation evidence remains a later stability context input, but it is not required for the section model to report boundary evidence as ready.
 
 ## Boundary Diagram
 
@@ -62,19 +62,19 @@ The readiness helper returns `READY`, `PARTIAL`, or `MISSING` for route, navigat
 ## Implemented
 
 - Layout Geometry Capture
+- Section Boundary Capture
 
 ## Still Missing
 
-- Section Boundary Capture
 - Navigation Capture
 - Runtime Mutation Capture
 
 ## Current Result
 
-Phase 8A-6 implements the first real Evidence Capture expansion slice: deterministic `LayoutGeometryEvidence` for rendered pages. Captured geometry includes route path, viewport dimensions, document height, and major structural regions (`body`, `main`, `header`, `nav`, `footer`, `aside`, and `section`) with selectors, roles, bounding boxes, and child counts.
+Phase 8A-8 implements deterministic `SectionBoundaryEvidence` from existing `LayoutGeometryEvidence` and rendered DOM structure. Section evidence classifies existing rendered regions as `hero`, `navigation`, `content`, `sidebar`, `footer`, `gallery`, `form`, `map`, or `unknown` using reproducible DOM/geometry rules only.
 
-Layout geometry is persisted inside the existing Evidence Capture baseline artifact and exposed through the baseline read path as summary-only geometry presence, region count, and viewport size. Section inference, navigation extraction, runtime mutation capture, reconstruction execution, dry-run execution, AI generation, React generation, block generation, publishing behavior, and database schema changes remain out of scope.
+Layout geometry and section boundary evidence are persisted inside the existing Evidence Capture baseline artifact. The baseline read path exposes summary-only geometry presence and summary-only section evidence presence, count, and types present. Navigation extraction, runtime mutation capture, reconstruction execution, dry-run execution, AI generation, React generation, block generation, publishing behavior, and database schema changes remain out of scope.
 
 Recommended next phase:
 
-- Phase 8A-7 - Dry Run Readiness Re-Assessment
+- Phase 8A-9 - Dry Run Readiness Re-Assessment

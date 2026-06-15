@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8A-6 Layout Geometry Capture is complete.
+- 8A-8 Section Boundary Capture is complete.
 
 Current Phase:
-- Phase 8A-6 Layout Geometry Capture is complete.
+- Phase 8A-8 Section Boundary Capture is complete.
 
 Next Phase:
-- Phase 8A-7 Dry Run Readiness Re-Assessment.
+- Phase 8A-9 Dry Run Readiness Re-Assessment.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,30 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8A-8 — Section Boundary Capture.
+- Status: COMPLETE.
+- Implemented deterministic `SectionBoundaryEvidence` from existing `LayoutGeometryEvidence` and rendered DOM structure.
+- Classification is limited to `hero`, `navigation`, `content`, `sidebar`, `footer`, `gallery`, `form`, `map`, and `unknown`.
+- Persists section boundary evidence inside the existing Evidence Capture baseline artifact under `captureExpansionEvidence.sectionBoundaryEvidence`.
+- Exposes summary-only section evidence presence, count, and types present.
+- Updates `evaluateCaptureExpansionReadiness(...)` so Section Model is READY when section boundary evidence exists. Route Model remains READY from route/geometry evidence, and Navigation Model behavior is unchanged.
+- Remaining blockers: no navigation extraction, no runtime mutation evidence, no candidate discovery execution, no candidate review execution, no simulation/reconstruction execution, no generated outputs, and no publishing path.
+- Recommended next phase: Phase 8A-9 — Dry Run Readiness Re-Assessment.
+- No importer behavior, Original Mirror behavior, preview behavior, navigation extraction, runtime mutation capture, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, publishing behavior, LLM call, generated output, database schema change, new persistence table, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8A-7 — Dry Run Readiness Re-Assessment.
+- Status: COMPLETE.
+- Reassessed first Dry Run readiness after Phase 8A-6 layout geometry capture.
+- Updated conceptual Dry Run readiness from 68/100 to 72/100.
+- Updated execution Dry Run readiness from 58/100 to 63/100.
+- Feasibility remains: route model feasible; navigation model risky; section model risky but improved by real geometry substrate; content model risky; block model not_ready; design token model not_ready.
+- Layout geometry impact: real persisted major-region geometry improves route planning, gives section planning a partial substrate, and enables section boundary capture as the next slice.
+- Remaining blockers: no section boundary evidence, no navigation extraction, no runtime mutation evidence, no candidate discovery execution, no candidate review execution, no simulation/reconstruction execution, no generated outputs, and no publishing path.
+- Recommended next phase: Phase 8A-8 — Section Boundary Capture.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, persistence schema, worker execution, publishing behavior, LLM call, generated output, database write, navigation capture, runtime mutation capture, or section boundary capture was added.
+
+Earlier completed milestone:
 - Phase 8A-6 — Layout Geometry Capture.
 - Status: COMPLETE.
 - Implemented the first real Evidence Capture expansion slice: deterministic `LayoutGeometryEvidence` capture for rendered pages.
@@ -58,7 +82,7 @@ Latest completed milestone:
 - Original Mirror Fidelity and Reconstruction Readiness read model: `apps/platform/gnr8/site/evidence-capture-baseline-read-model.ts`.
 - Evidence Capture coverage against `apps/platform/gnr8/architecture/importer-architecture-split-contract.ts`: Supported Now 16/66 fields (24.2%), Partial 33/66 fields (50.0%), Missing 17/66 fields (25.8%).
 - Current foundation: raw HTML, rendered DOM, viewport/full-page screenshots, computed style samples, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
-- Highest-value gaps: rendered layout geometry, browser network inventory, script/runtime observation, media/widget evidence, and normalized fidelity limitations.
+- Highest-value gaps: section boundary evidence, navigation extraction, runtime mutation evidence, browser network inventory, media/widget evidence, and normalized fidelity limitations.
 - Readiness levels are now deterministic: `NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, and `HIGH_CONFIDENCE`.
 - Reconstruction Readiness is now surfaced read-only in Site Workspace from the persisted Evidence Capture baseline.
 - Original Mirror Fidelity is now surfaced read-only in Site Workspace from the persisted Evidence Capture baseline.
@@ -82,7 +106,7 @@ Latest completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8A-7 — Dry Run Readiness Re-Assessment.
+- Next recommended major phase: Phase 8A-9 — Dry Run Readiness Re-Assessment.
 
 Production smoke-test:
 - completed successfully.
@@ -270,6 +294,28 @@ Phase 8A-6 layout geometry capture:
 - `evaluateCaptureExpansionReadiness(...)` treats layout geometry as route-model ready evidence and section-model partial evidence when section boundary evidence is absent. Navigation readiness is unchanged.
 - Section boundary capture, navigation capture, runtime mutation capture, dry-run execution, reconstruction execution, AI generation, React generation, block generation, candidate discovery execution, candidate review execution, publishing behavior, LLM calls, and database schema changes remain NOT IMPLEMENTED.
 - Recommended next major phase: Phase 8A-7 — Dry Run Readiness Re-Assessment.
+
+Phase 8A-7 dry-run readiness re-assessment after layout geometry:
+- `docs/architecture/SIMULATION_READINESS_REVIEW.md` now includes the post-8A-6 reassessment.
+- Previous conceptual score: 68/100.
+- Previous execution score: 58/100.
+- Updated conceptual score: 72/100.
+- Updated execution score: 63/100.
+- Feasibility: route model feasible; navigation model risky; section model risky but improved by the persisted geometry substrate; block model not_ready; content model risky; design token model not_ready.
+- Evidence implementation: layout geometry now has a contract, capture implementation, persistence through `rendered/layout-geometry.json` and the baseline artifact, and readiness helper usage.
+- Geometry impact: route planning has real viewport/document/major-region evidence; section planning has a partial substrate; section boundary capture is now the correct next slice.
+- Remaining blockers: no section boundary evidence, no navigation extraction, no runtime mutation evidence, no candidate discovery execution, no candidate review execution, no simulation/reconstruction execution, no generated outputs, and no publishing path.
+- Recommended next major phase: Phase 8A-8 — Section Boundary Capture.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, persistence schema, worker execution, publishing behavior, LLM call, generated output, database write, navigation capture, runtime mutation capture, or section boundary capture was changed.
+
+Phase 8A-8 section boundary capture:
+- `apps/platform/gnr8/architecture/section-boundary-capture.ts` adds deterministic section boundary classification from existing layout geometry plus rendered DOM structure.
+- Allowed section types remain limited to `hero`, `navigation`, `content`, `sidebar`, `footer`, `gallery`, `form`, `map`, and `unknown`.
+- `apps/platform/gnr8/architecture/evidence-capture-baseline-artifact.ts` stores section boundary evidence under `captureExpansionEvidence.sectionBoundaryEvidence` in the existing Evidence Capture baseline artifact.
+- `apps/platform/gnr8/site/evidence-capture-baseline-read-model.ts` exposes summary-only section evidence: `sectionEvidenceCaptured`, `sectionCount`, and `sectionTypesPresent`.
+- `evaluateCaptureExpansionReadiness(...)` now marks Section Model READY when section boundary evidence exists. Route Model remains READY from route/geometry evidence, and Navigation Model behavior is unchanged.
+- Navigation extraction, runtime mutation capture, dry-run execution, reconstruction execution, AI generation, React generation, block generation, candidate discovery execution, candidate review execution, publishing behavior, LLM calls, generated outputs, and database schema changes remain NOT IMPLEMENTED.
+- Recommended next major phase: Phase 8A-9 — Dry Run Readiness Re-Assessment.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -1536,6 +1582,8 @@ Reconstruction Dry Run Boundary is complete:
 - capture expansion for first Dry Run: Phase 8A-4 completed contract-only layout geometry, section boundary, navigation, and runtime mutation evidence shapes
 - dry-run readiness re-assessment: Phase 8A-5 completed with conceptual readiness 68/100, execution readiness 58/100, and recommended Phase 8A-6 Layout Geometry Capture first
 - layout geometry capture: Phase 8A-6 completed deterministic rendered major-region geometry capture, baseline persistence, read-model summary, and readiness integration; recommended next milestone Phase 8A-7 Dry Run Readiness Re-Assessment
+- post-geometry dry-run readiness re-assessment: Phase 8A-7 completed with conceptual readiness 72/100, execution readiness 63/100, route model feasible, section model improved but still risky, and recommended Phase 8A-8 Section Boundary Capture
+- section boundary capture: Phase 8A-8 completed deterministic section evidence classification, baseline artifact persistence, summary-only read model, and readiness integration; recommended next milestone Phase 8A-9 Dry Run Readiness Re-Assessment
 
 ## G) How Next Thread Should Behave
 

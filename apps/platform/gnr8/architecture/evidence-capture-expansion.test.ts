@@ -8,7 +8,10 @@ import {
   normalizeCapturedRouteIdentity,
 } from "./evidence-capture-expansion";
 import { buildEvidenceCaptureBaselineArtifact } from "./evidence-capture-baseline-artifact";
-import { buildEvidenceCaptureBaselineGeometrySummary } from "../site/evidence-capture-baseline-read-model";
+import {
+  buildEvidenceCaptureBaselineGeometrySummary,
+  buildEvidenceCaptureBaselineSectionSummary,
+} from "../site/evidence-capture-baseline-read-model";
 import type { RuntimeImportProvenanceSummary } from "../runtime/types";
 
 function provenance(): RuntimeImportProvenanceSummary {
@@ -225,12 +228,12 @@ test("CASE 14 Deterministic enrichment", () => {
   assert.equal(left.evidence.widgets.forms.length, 1);
 });
 
-test("CASE 15 Layout geometry persists in baseline artifact and read model", () => {
+test("CASE 15 Layout geometry and section boundaries persist in baseline artifact and read model", () => {
   const artifact = buildEvidenceCaptureBaselineArtifact({
     sourceUrl: "https://example.com/",
     finalUrl: "https://example.com/",
     routePath: "/",
-    renderedHtml: "<main><h1>Hello</h1></main>",
+    renderedHtml: "<!doctype html><html><body><main><section><h1>Hello</h1></section></main></body></html>",
     importProvenanceSummary: provenance(),
     layoutGeometryEvidence: [
       {
@@ -249,6 +252,14 @@ test("CASE 15 Layout geometry persists in baseline artifact and read model", () 
             childCount: 1,
           },
           {
+            regionId: "layout-region-hero",
+            tagName: "section",
+            role: null,
+            selector: "body > main:nth-of-type(1) > section:nth-of-type(1)",
+            boundingBox: { x: 0, y: 96, width: 1366, height: 500 },
+            childCount: 1,
+          },
+          {
             regionId: "layout-region-link",
             tagName: "a",
             role: null,
@@ -262,17 +273,24 @@ test("CASE 15 Layout geometry persists in baseline artifact and read model", () 
   });
   const geometry = artifact.captureExpansionEvidence.layoutGeometryEvidence[0]!;
   const summary = buildEvidenceCaptureBaselineGeometrySummary(artifact);
+  const sectionSummary = buildEvidenceCaptureBaselineSectionSummary(artifact);
 
   assert.equal(artifact.persistedRefs.layoutGeometryRef?.uri, "/tmp/run/rendered/layout-geometry.json");
   assert.equal(geometry.routePath, "/");
-  assert.deepEqual(geometry.regions.map((region) => region.tagName), ["main"]);
+  assert.deepEqual(geometry.regions.map((region) => region.tagName), ["main", "section"]);
   assert.deepEqual(summary, {
     geometryCaptured: true,
-    regionCount: 1,
+    regionCount: 2,
     viewport: {
       width: 1366,
       height: 768,
     },
   });
-  assert.equal(artifact.evidence.layout.aboveFoldRegions.length, 1);
+  assert.deepEqual(sectionSummary, {
+    sectionEvidenceCaptured: true,
+    sectionCount: 2,
+    sectionTypesPresent: ["content", "hero"],
+  });
+  assert.equal(artifact.captureExpansionEvidence.sectionBoundaryEvidence.some((evidence) => evidence.regionType === "hero"), true);
+  assert.equal(artifact.evidence.layout.aboveFoldRegions.length, 2);
 });

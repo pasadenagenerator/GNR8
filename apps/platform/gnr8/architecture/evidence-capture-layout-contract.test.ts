@@ -220,3 +220,42 @@ test("readiness helper reports ready for route, navigation, and section when evi
   assert.equal(result.evidenceTypesPresent.navigation, true);
   assert.equal(result.evidenceTypesPresent.runtimeMutation, true);
 });
+
+test("readiness helper reports section ready when section boundary evidence exists without runtime mutation evidence", () => {
+  const result = evaluateCaptureExpansionReadiness({
+    layoutGeometryEvidence: [
+      {
+        routePath: "/",
+        viewportWidth: 1366,
+        viewportHeight: 768,
+        documentHeight: 1800,
+        regions: [
+          {
+            regionId: "hero-region",
+            tagName: "section",
+            role: null,
+            selector: "main > section.hero",
+            boundingBox: box,
+            childCount: 3,
+          },
+        ],
+        capturedAt: "2026-06-15T10:00:00.000Z",
+      },
+    ],
+    sectionBoundaryEvidence: [
+      {
+        sectionId: "section-hero",
+        routePath: "/",
+        selector: "main > section.hero",
+        boundingBox: box,
+        regionType: "hero",
+        confidenceLevel: "HIGH",
+      },
+    ],
+  });
+
+  assert.equal(result.routeModel, "READY");
+  assert.equal(result.navigationModel, "MISSING");
+  assert.equal(result.sectionModel, "READY");
+  assert.equal(result.evidenceTypesPresent.runtimeMutation, false);
+});

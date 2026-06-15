@@ -17,7 +17,8 @@ import {
   normalizeCapturedRouteIdentity,
 } from "./evidence-capture-expansion";
 import { createLayoutGeometryEvidence } from "./layout-geometry-capture";
-import type { LayoutGeometryEvidence } from "./evidence-capture-layout-contract";
+import { createSectionBoundaryEvidence } from "./section-boundary-capture";
+import type { LayoutGeometryEvidence, SectionBoundaryEvidence } from "./evidence-capture-layout-contract";
 
 export const EVIDENCE_CAPTURE_BASELINE_ARTIFACT_KIND = "evidence_capture_baseline" as const;
 export const EVIDENCE_CAPTURE_BASELINE_COVERAGE_SOURCE = "phase_7f_2_5_inventory_audit" as const;
@@ -58,6 +59,7 @@ export type EvidenceCaptureBaselineArtifactRecord = {
   evidence: EvidenceCaptureArtifact;
   captureExpansionEvidence: {
     layoutGeometryEvidence: LayoutGeometryEvidence[];
+    sectionBoundaryEvidence: SectionBoundaryEvidence[];
   };
   persistedRefs: {
     rawHtmlRef: EvidenceArtifactRef | null;
@@ -83,6 +85,11 @@ export type EvidenceCaptureBaselineArtifactRecord = {
       regionCount: number;
       viewportWidth: number | null;
       viewportHeight: number | null;
+    };
+    sectionBoundary: {
+      sectionEvidenceCaptured: boolean;
+      sectionCount: number;
+      sectionTypesPresent: SectionBoundaryEvidence["regionType"][];
     };
     assetInventory: {
       persistedAssetCount: number | null;
@@ -383,6 +390,10 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
     )
     .filter((evidence) => evidence.regions.length > 0);
   const firstLayoutGeometry = layoutGeometryEvidence[0] ?? null;
+  const sectionBoundaryEvidence = createSectionBoundaryEvidence({
+    layoutGeometryEvidence,
+    renderedHtml: input.renderedHtml,
+  });
   if (firstLayoutGeometry) {
     artifact.rendered.viewport = {
       width: firstLayoutGeometry.viewportWidth,
@@ -550,6 +561,7 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
     evidence: artifact,
     captureExpansionEvidence: {
       layoutGeometryEvidence,
+      sectionBoundaryEvidence,
     },
     persistedRefs: {
       rawHtmlRef,
@@ -583,6 +595,11 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
         regionCount: layoutGeometryEvidence.reduce((count, evidence) => count + evidence.regions.length, 0),
         viewportWidth: firstLayoutGeometry?.viewportWidth ?? null,
         viewportHeight: firstLayoutGeometry?.viewportHeight ?? null,
+      },
+      sectionBoundary: {
+        sectionEvidenceCaptured: sectionBoundaryEvidence.length > 0,
+        sectionCount: sectionBoundaryEvidence.length,
+        sectionTypesPresent: [...new Set(sectionBoundaryEvidence.map((evidence) => evidence.regionType))].sort(),
       },
       assetInventory: {
         persistedAssetCount: numberOrNull(input.rawImportArtifact?.metadata?.assetSummary?.persistedAssetCount),

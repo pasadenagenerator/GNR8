@@ -26,7 +26,7 @@ Reviewed sources:
 
 ## Executive Answer
 
-The control plane is ready to plan a first Dry Run, but the current captured evidence is not yet ready for a meaningful first Dry Run execution.
+The control plane is ready to plan a first Dry Run, and Phase 8A-6 materially improved captured evidence by adding real persisted layout geometry. The current evidence is still not ready for meaningful first Dry Run execution.
 
 The system can produce:
 
@@ -38,7 +38,7 @@ The system cannot yet execute a Dry Run, and the evidence available to a future 
 
 Recommended next phase:
 
-- Phase 8A-4 - Capture Expansion For First Dry Run
+- Phase 8A-8 - Section Boundary Capture
 
 ## Post 8A-4 Re-Assessment
 
@@ -70,7 +70,7 @@ Explanation:
 | content model | risky | Rendered DOM and raw HTML can support limited content extraction planning, but there is still no executed candidate discovery, content review, or persisted generated content boundary. |
 | design token model | not_ready | Computed styles remain partial, and 8A-4 did not add token candidate contracts, style usage counts, loaded font confidence, or layout-context-aware token extraction. |
 
-### Implementation Gap Matrix
+### Post 8A-4 Implementation Gap Matrix
 
 | Evidence Type | Contract Exists | Capture Implemented | Persisted | Used By Readiness | Gap |
 |---|---|---|---|---|---|
@@ -90,6 +90,83 @@ Recommended path:
 Rationale:
 
 Layout geometry is the substrate for the other new evidence types. Section boundaries need rendered boxes before they can be reconstruction-grade. Navigation can be more reliable when nav candidates are tied to rendered geometry. Runtime mutation evidence is important, but it is most useful after there is a stable geometry snapshot to compare against. A first layout geometry slice should stay narrow: route-scoped viewport/document dimensions, bounded key regions, selectors, and screenshot-aligned metadata, without simulation, reconstruction, generated output, or publishing behavior.
+
+## Post 8A-6 Re-Assessment
+
+Phase 8A-6 improved Dry Run readiness at the evidence-availability level by adding real persisted layout geometry for rendered major structural regions.
+
+Previous 8A-5 scores:
+
+- Conceptual Dry Run Readiness: 68/100
+- Execution Dry Run Readiness: 58/100
+
+Updated scores after 8A-6:
+
+| Readiness Type | Score | Assessment |
+|---|---:|---|
+| Conceptual Dry Run Readiness | 72/100 | Higher because the layout-geometry contract is no longer only a planned shape. The system now has a concrete route-scoped geometry substrate for later section boundary, navigation, and block grouping work. |
+| Execution Dry Run Readiness | 63/100 | Higher because rendered major-region geometry is captured, persisted as `rendered/layout-geometry.json`, attached to the baseline artifact, and used by capture-expansion readiness. It remains below limited-execution readiness because section boundaries, navigation extraction, runtime mutation evidence, candidate discovery execution, and candidate review execution are still absent. |
+
+Explanation:
+
+8A-6 converts the highest-value missing evidence slice from contract-only to real persisted evidence. This materially improves the route model and gives the section model a partial geometric substrate. The gain is intentionally bounded: captured geometry covers major structural regions only and does not infer section boundaries, classify navigation structure, observe runtime mutations, discover candidates, execute simulation, or generate reconstruction outputs.
+
+### Post 8A-6 Evidence Implementation Matrix
+
+| Evidence Type | Contract Exists | Capture Implemented | Persisted | Used By Readiness | Remaining Gap |
+|---|---|---|---|---|---|
+| layout geometry | yes | yes | yes | yes | Capture is limited to route-scoped viewport/document dimensions and major structural regions. It does not yet provide section boundary classification, repeated-region clustering, sticky/fixed classification, multi-breakpoint behavior, or runtime stability context. |
+| section boundary evidence | yes | no | no | contract-level helper only | Implement section boundary extraction from rendered geometry, classify section region types, assign confidence, and attach evidence refs. |
+| navigation evidence | yes | no | no | contract-level helper only | Implement navigation extraction for labels, hrefs, ordering, counts, source refs, and eventually sticky/fixed/multi-breakpoint behavior. |
+| runtime mutation evidence | yes | no | no | contract-level helper only | Implement bounded runtime observation for mutation presence, counts, broad mutation types, affected selectors, and stability summary. |
+
+### Post 8A-6 Feasibility Matrix
+
+| Target Model | Feasibility | Rationale |
+|---|---|---|
+| route model | feasible | Route-scoped geometry now exists and is persisted with viewport/document dimensions and major region refs, so route-level planning has a real rendered layout substrate. |
+| navigation model | risky | Navigation layout may be visible inside captured `nav` or `header` regions, but there is still no navigation extraction, item ordering model, href/label evidence, sticky/fixed behavior, or multi-breakpoint nav behavior. |
+| section model | risky | The section model improved from ungrounded risky toward partial because major rendered boxes now exist. It remains risky until section boundary evidence classifies regions, assigns confidence, and ties sections to stable evidence refs. |
+| block model | not_ready | Geometry helps future grouping, but block-quality planning still needs section boundaries, media/widget classification, candidate discovery execution, and reviewed reconstruction intent. |
+| content model | risky | Rendered DOM, raw HTML, and geometry can support better context for experimental extraction, but there is still no executed candidate discovery, content review, or durable generated content boundary. |
+| design token model | not_ready | Geometry does not solve token extraction. Computed style samples remain partial and still lack broad usage counts, roles, loaded font confidence, and layout-context-aware token candidates. |
+
+### Dry Run Readiness Impact
+
+Improved because of geometry:
+
+- The route model now has persisted rendered viewport/document dimensions and major structural region boxes.
+- Section planning can now start from real rendered boxes instead of only raw/semantic hints.
+- Future section boundary capture has the substrate it needs for region classification and evidence refs.
+- Future block grouping can use region geometry once section boundaries and candidate review exist.
+- Readiness helpers can distinguish layout geometry presence from missing section boundary and navigation evidence.
+
+Did not improve:
+
+- Navigation extraction did not change.
+- Section boundary classification did not change.
+- Runtime mutation observation did not change.
+- Candidate discovery and candidate review still do not execute.
+- Dry Run, simulation, reconstruction, AI generation, React generation, block generation, worker execution, persistence schema, and publishing behavior did not change.
+- Design token readiness did not materially improve.
+
+Remaining blockers:
+
+- No section boundary evidence.
+- No navigation evidence extraction.
+- No runtime mutation evidence.
+- No candidate discovery execution.
+- No candidate review execution or persisted reviewed reconstruction intent.
+- No reconstruction execution, simulation execution, generated outputs, or publishing path.
+- Layout geometry is single-slice major-region evidence only; above-fold extraction, repeated regions, sticky/fixed behavior, and multi-breakpoint geometry remain missing.
+
+Recommended next phase:
+
+- Phase 8A-8 - Section Boundary Capture
+
+Rationale:
+
+Section Boundary Capture is the best next implementation slice because layout geometry now exists as the substrate. It should convert rendered region boxes into classified section boundary evidence with confidence and evidence refs, without adding navigation capture, runtime mutation capture, simulation, reconstruction execution, generated output, database writes, or publishing behavior.
 
 ## Simulation Readiness Audit
 
@@ -115,7 +192,7 @@ Layout geometry is the substrate for the other new evidence types. Section bound
 | rendered HTML hash | PARTIAL | Integrity anchor for rendered DOM evidence. | HIGH |
 | screenshots | PARTIAL | Visual reference for layout review, ordering, media, and fidelity checks. | MEDIUM |
 | computed styles | PARTIAL | Input for color, type, spacing, radius, shadow, and surface inference. | MEDIUM |
-| layout geometry | MISSING | Core evidence for section boundaries, block grouping, above-fold content, and responsive layout. | CRITICAL |
+| layout geometry | PARTIAL | Real persisted major-region geometry now supports route layout context and future section boundary capture. It does not yet include above-fold extraction, repeated-region clustering, sticky/fixed classification, or multi-breakpoint behavior. | HIGH |
 | font inventory | PARTIAL | Improves typography fidelity and missing-font diagnosis. | MEDIUM |
 | widget inventory | PARTIAL | Distinguishes maps, galleries, forms, videos, cookie banners, overlays, and chat widgets from reconstructable source content. | HIGH |
 | network inventory | PARTIAL | Explains missing assets, third-party dependencies, blocked resources, and widget limitations. | HIGH |
@@ -130,18 +207,18 @@ Layout geometry is the substrate for the other new evidence types. Section bound
 
 | Target Model | Feasibility | Rationale |
 |---|---|---|
-| route model | feasible | Source URL, route discovery, route priority, and route provenance exist, although route identity still needs durable normalization per route. |
-| navigation model | risky | Route discovery and navigation provenance exist, but rendered navigation layout, sticky/fixed nav geometry, and multi-breakpoint behavior are incomplete. |
-| section model | risky | Raw/semantic section hints exist, but rendered section geometry, above-fold regions, and repeated-region evidence are missing. |
-| block model | not_ready | Block-quality grouping needs layout boxes, widget/media inventory, section boundaries, and reviewed candidates. Current data would overfit DOM structure. |
-| content model | risky | Rendered DOM and raw HTML can support experimental extraction, but there is no executed candidate discovery, content review, or durable generated model boundary. |
-| design token model | not_ready | Computed style samples and style signals exist, but loaded font sources, broad style coverage, usage counts, layout context, and contract-shaped token candidates are incomplete. |
+| route model | feasible | Source URL, route discovery, route priority, route provenance, and persisted major-region layout geometry make route-level planning feasible. |
+| navigation model | risky | Route discovery and navigation provenance exist, and some nav regions may now have geometry, but there is no extracted navigation item model, sticky/fixed behavior, or multi-breakpoint behavior. |
+| section model | risky | Rendered major-region geometry now gives section planning a partial substrate, but classified section boundary evidence, above-fold regions, repeated-region evidence, and runtime stability remain missing. |
+| block model | not_ready | Block-quality grouping needs layout boxes plus section boundaries, widget/media inventory, candidate discovery execution, and reviewed candidates. Current data would still overfit DOM structure. |
+| content model | risky | Rendered DOM, raw HTML, and geometry can support experimental extraction context, but there is no executed candidate discovery, content review, or durable generated model boundary. |
+| design token model | not_ready | Computed style samples and style signals exist, but loaded font sources, broad style coverage, usage counts, layout-context-aware token extraction, and contract-shaped token candidates are incomplete. |
 
 ## Gap Analysis
 
 ### Critical Gaps
 
-- No reconstruction-grade rendered layout geometry: bounding boxes, above-fold regions, repeated regions, sticky/fixed elements, and basic key-element layout refs are missing.
+- No section boundary evidence: rendered major-region geometry exists, but the system does not yet classify section regions, assign confidence, or attach section evidence refs.
 - No runtime mutation evidence: late content, lazy-load behavior, duplicate insertions, post-render nodes, and unstable DOM signals are missing.
 - Minimum route-level handoff is not guaranteed for every captured route: artifact status, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and blocker limitations still need deterministic normalization.
 - No candidate discovery execution exists, so Dry Run would lack real discovered candidates unless supplied by contract-only metadata.
@@ -152,7 +229,7 @@ Layout geometry is the substrate for the other new evidence types. Section bound
 - Widget inventory is incomplete for maps, galleries, forms, videos, accessibility overlays, cookie banners, and chat widgets.
 - Media inventory lacks enough rendered dimensions, background selector hints, video refs, and missing-media selector evidence.
 - Font evidence lacks loaded font source inventory and missing font source classification.
-- Section evidence is not yet grounded in rendered geometry and evidence refs.
+- Section evidence can now be grounded in rendered geometry, but section boundary capture has not yet created classified section refs.
 - Design token evidence is not yet contract-shaped with usage counts, roles, and evidence refs.
 
 ### Nice-To-Have Gaps
@@ -171,12 +248,12 @@ Layout geometry is the substrate for the other new evidence types. Section bound
 The evidence that would most improve first Dry Run quality is:
 
 1. Normalized minimum handoff evidence for each route.
-2. Basic rendered layout boxes for key elements.
-3. Browser-level failed and blocked request summaries.
-4. Widget and iframe inventory.
-5. Rendered media inventory with dimensions and selector hints.
-6. Loaded and missing font inventory.
-7. Runtime mutation summary.
+2. Section boundary evidence derived from persisted layout geometry.
+3. Navigation extraction with labels, hrefs, ordering, source refs, and layout context.
+4. Runtime mutation summary.
+5. Browser-level failed and blocked request summaries.
+6. Widget and iframe inventory.
+7. Rendered media inventory with dimensions and selector hints.
 
 ## Recommended Capture Expansion
 
@@ -221,7 +298,7 @@ Improves confidence after the first execution path is viable:
 
 ## Readiness Score
 
-Dry Run Readiness score: 58/100.
+Dry Run Readiness score: 63/100.
 
 Deterministic calculation:
 
@@ -230,10 +307,10 @@ Deterministic calculation:
 | Control-plane contract completeness | 25 | 24 | Planning Gate, Discovery, Review, Package, Dry Run Package, and Simulation Plan contracts exist and validate metadata boundaries. |
 | Safety boundary clarity | 15 | 15 | Current contracts explicitly prohibit execution, generated outputs, workers, database writes, runtime writes, and publishing. |
 | Minimum evidence handoff readiness | 20 | 8 | Required evidence mostly exists somewhere, but not reliably normalized into durable route-level reconstruction handoff artifacts. |
-| Optional evidence usefulness | 20 | 6 | Screenshots, computed styles, media, widgets, and network evidence are partial; layout geometry and mutation evidence are missing. |
+| Optional evidence usefulness | 20 | 9 | Screenshots, computed styles, media, widgets, and network evidence are partial; major-region layout geometry is now persisted, while mutation evidence remains missing. |
 | Candidate/review/package practical availability | 10 | 3 | Contract shapes exist, but discovery/review execution and persistence do not exist. |
-| First-model feasibility | 10 | 2 | Route model is feasible, navigation/section/content are risky, and block/design token models are not ready. |
-| Total | 100 | 58 | Contract readiness is strong; evidence readiness is below execution threshold. |
+| First-model feasibility | 10 | 4 | Route model is feasible, section support has a partial geometry substrate, navigation/content remain risky, and block/design token models are not ready. |
+| Total | 100 | 63 | Contract readiness is strong and evidence readiness improved, but the system remains below the limited-execution threshold. |
 
 Interpretation:
 
@@ -253,10 +330,10 @@ Current decision:
 - Do not generate React.
 - Do not generate blocks.
 - Do not implement reconstruction execution.
-- Do not implement capture expansion in this phase.
+- Do not implement additional capture expansion in this phase.
 
 Recommended next phase:
 
-- Phase 8A-4 - Capture Expansion For First Dry Run
+- Phase 8A-8 - Section Boundary Capture
 
-Phase 8A-4 should focus on P0 minimum handoff normalization plus the smallest P1 evidence bundle that makes route, navigation, section, content, and early visual-token simulation meaningfully inspectable.
+Phase 8A-8 should use the newly persisted layout geometry as substrate for classified section boundary evidence with confidence and evidence refs. It should not add navigation capture, runtime mutation capture, simulation, reconstruction execution, generated outputs, database writes, or publishing behavior.

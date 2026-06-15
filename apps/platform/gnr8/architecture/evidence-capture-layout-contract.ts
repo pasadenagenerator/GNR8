@@ -207,9 +207,9 @@ export function evaluateCaptureExpansionReadiness(
       ? "PARTIAL"
       : "MISSING";
 
-  const sectionModel: CaptureExpansionReadinessStatus = layoutGeometry && sectionBoundaries && runtimeMutation
+  const sectionModel: CaptureExpansionReadinessStatus = sectionBoundaries
     ? "READY"
-    : layoutGeometry || sectionBoundaries || runtimeMutation
+    : layoutGeometry || runtimeMutation
       ? "PARTIAL"
       : "MISSING";
 
