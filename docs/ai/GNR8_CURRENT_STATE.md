@@ -47,13 +47,21 @@ Phase 8A-2 — Dry Run Simulation Planning Contract is COMPLETE.
 Phase 8A-2 defines the deterministic `ReconstructionSimulationPlan` contract for what a future dry run would attempt to simulate. Planned Dry Run Packages create `planStatus = planned` with a fixed ordered planned step list. Blocked Dry Run Packages create `planStatus = blocked` with blockers and no planned steps.
 Phase 8A-2 adds `createReconstructionSimulationPlan(...)` and `validateReconstructionSimulationPlan(...)` for contract-only planning. Simulation Plan status values are `not_started`, `planned`, and `blocked`; no running, executed, completed, complete, or simulated plan states exist.
 No simulation execution, dry-run execution, reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, reconstruction publishing, capture behavior change, preview behavior change, route discovery change, asset rewriting change, script policy change, public rendering change, API change, database write, generated output, simulation artifact production, or DB schema change exists in Phase 8A-2.
-Current Phase: Phase 8A-2 — Dry Run Simulation Planning Contract is complete.
-Next recommended major phase: Phase 8A-3 — Dry Run Simulation Readiness Review. Do not execute Dry Run, simulation, reconstruction, AI generation, React generation, block generation, workers, runtime writes, or publishing without a separate explicit phase.
+Phase 8A-3 — Simulation Readiness Review is COMPLETE.
+Phase 8A-3 audits whether the current Evidence Capture foundation and Reconstruction Control Plane contain enough information to support a meaningful first Dry Run. Result: the control plane is ready to plan a Dry Run, but current captured evidence is not yet ready for meaningful Dry Run execution.
+Phase 8A-3 creates `docs/architecture/SIMULATION_READINESS_REVIEW.md` with the readiness audit, evidence coverage matrix, first-model feasibility assessment, gap analysis, recommended capture expansion, and deterministic Dry Run Readiness score.
+Dry Run Readiness score is 58/100. Current state is contract-planning-ready, not execution-ready. Critical gaps are minimum route-level handoff normalization, rendered layout geometry, runtime mutation evidence, and actual candidate discovery/review availability.
+Phase 8A-4 — Capture Expansion For First Dry Run is COMPLETE.
+Phase 8A-4 adds contract-only evidence shapes for layout geometry, section boundaries, navigation evidence, and runtime mutation evidence, plus `evaluateCaptureExpansionReadiness(...)` for `READY` / `PARTIAL` / `MISSING` support checks across route, navigation, and section models.
+Phase 8A-4 creates `docs/architecture/CAPTURE_EXPANSION_FOR_FIRST_DRY_RUN.md` and `apps/platform/gnr8/architecture/evidence-capture-layout-contract.ts`.
+No importer behavior, capture behavior, Original Mirror behavior, candidate discovery behavior, candidate review behavior, reconstruction execution, dry-run execution, simulation execution, AI generation, React generation, block generation, publishing behavior, API behavior, database write, or DB schema change exists in Phase 8A-4.
+Current Phase: Phase 8A-4 — Capture Expansion For First Dry Run is complete.
+Next recommended major phase: Phase 8A-5 — Dry Run Readiness Re-Assessment. Do not execute Dry Run, simulation, reconstruction, AI generation, React generation, block generation, workers, runtime writes, or publishing without a separate explicit phase.
 
 ## Current Importer Architecture
 
 Evidence Capture Layer:
-- Implemented: Evidence Capture contracts, inventory audit, persisted `evidence_capture_baseline`, baseline coverage projection, Minimum Evidence Handoff Normalization, and enrichment helpers for readiness comparison.
+- Implemented: Evidence Capture contracts, inventory audit, persisted `evidence_capture_baseline`, baseline coverage projection, Minimum Evidence Handoff Normalization, enrichment helpers for readiness comparison, and Phase 8A-4 contract-only capture expansion shapes for layout geometry, section boundaries, navigation evidence, and runtime mutation evidence.
 - Partially implemented: current persisted evidence includes raw HTML, rendered DOM refs where available, viewport/full-page screenshots where available, computed style samples where available, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
 - Future: broader browser network inventory, rendered layout geometry, script/runtime observation, rich media and widget inventories, and additional normalized fidelity limitation evidence.
 - Provider strategy: Chrome / Playwright is the primary capture provider. Servo is research only, not an active provider, not a fallback provider, and not required for Reconstruction Readiness.
@@ -64,8 +72,8 @@ Original Mirror Layer:
 - Future: richer limitation evidence as Evidence Capture expands.
 
 Reconstruction Layer:
-- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, metadata-only Dry Run Boundary Contract, dry-run package contract validation, and deterministic Dry Run Simulation Plan contract.
-- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, a Reconstruction Package can be evaluated for future Dry Run eligibility, an approved Reconstruction Package can produce a valid planned Dry Run Package contract without execution, and a planned Dry Run Package can produce a deterministic Simulation Plan without simulation execution.
+- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, metadata-only Dry Run Boundary Contract, dry-run package contract validation, deterministic Dry Run Simulation Plan contract, and Simulation Readiness Review.
+- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, capture-expansion evidence can be evaluated for route/navigation/section model support, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, a Reconstruction Package can be evaluated for future Dry Run eligibility, an approved Reconstruction Package can produce a valid planned Dry Run Package contract without execution, and a planned Dry Run Package can produce a deterministic Simulation Plan without simulation execution. The current state is ready for contract planning but not ready for meaningful Dry Run execution until reassessed.
 - Future: reconstruction execution, AI reconstruction, GNR8 React/block generation, editable content model generation, design token generation, reconstruction workers, approvals, and publishing.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
@@ -328,10 +336,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8A-2 — Dry Run Simulation Planning Contract is complete.
+- Phase 8A-4 — Capture Expansion For First Dry Run is complete.
 
 Next Phase:
-- Phase 8A-3 — Dry Run Simulation Readiness Review.
+- Phase 8A-5 — Dry Run Readiness Re-Assessment.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
@@ -569,7 +577,9 @@ Current migration platform continuation:
 - Phase 8A-0 — Dry Run Boundary Planning is complete.
 - Phase 8A-1 — First Dry Run Contract Validation is complete.
 - Phase 8A-2 — Dry Run Simulation Planning Contract is complete.
-- Phase 8A-3 — Dry Run Simulation Readiness Review is the next recommended phase.
+- Phase 8A-3 — Simulation Readiness Review is complete.
+- Phase 8A-4 — Capture Expansion For First Dry Run is complete.
+- Phase 8A-5 — Dry Run Readiness Re-Assessment is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -651,7 +661,9 @@ Current migration platform continuation:
 - Phase 8A-0 — Dry Run Boundary Planning is complete.
 - Phase 8A-1 — First Dry Run Contract Validation is complete.
 - Phase 8A-2 — Dry Run Simulation Planning Contract is complete.
-- Phase 8A-3 — Dry Run Simulation Readiness Review is the next recommended phase.
+- Phase 8A-3 — Simulation Readiness Review is complete.
+- Phase 8A-4 — Capture Expansion For First Dry Run is complete.
+- Phase 8A-5 — Dry Run Readiness Re-Assessment is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)
@@ -3589,7 +3601,7 @@ Credential Reference Registry Preview milestone is now implemented and validated
 - no provider execution
 - no writes
 
-## Current Phase
+## Historical Provider Phase Snapshot
 Provider Governance Cockpit v1 / Section Ordering Pass milestone (Provider Fleet has been consolidated into a coherent governance-first cockpit on `/gnr8/admin/providers`; UI/read-model only; no runtime/API changes; no provider execution; no writes; no secret resolution; no AI model calls).
 
 Provider Fleet Category Summary Cards milestone is now implemented and validated (Provider Fleet now includes a `Provider Category Summary` section with category-level operator cards for total providers, connected providers, preview/read-model capabilities count, and execution status across the global provider taxonomy; current execution state remains blocked; UI/read-model/docs only; no runtime/provider/API/write/queue/worker/model-call changes).
