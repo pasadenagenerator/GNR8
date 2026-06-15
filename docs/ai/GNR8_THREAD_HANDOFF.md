@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 7F complete through 7F-15.
+- 8A-0 Dry Run Boundary Planning is complete.
 
 Current Phase:
-- 7F-15 Reconstruction Control Plane Closure is complete.
+- Phase 8A-0 Dry Run Boundary Planning is complete.
 
 Next Phase:
-- Phase 8A-0 Dry-Run Boundary Planning, or Phase 8A First Reconstruction Dry-Run Design if the dry-run boundary is accepted as sufficiently explicit.
+- Phase 8A-1 First Dry Run Contract Validation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,10 +23,10 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 7F-15 — Reconstruction Control Plane Closure.
+- Phase 8A-0 — Dry Run Boundary Planning.
 - Status: COMPLETE.
-- Deterministic control-plane closure from Evidence Capture to Reconstruction Package, including status taxonomy, ID handoff audit, boundary rules, and future dry-run entry point.
-- No importer behavior, capture behavior, Original Mirror behavior, preview behavior, reconstruction behavior, worker behavior, Playwright behavior, route discovery, API, rendering, persistence, or database schema was changed by this contract/documentation closure.
+- Deterministic contract boundary from Reconstruction Package to future Dry Run, including dry-run package shape, dry-run and simulation status models, generated output type shapes, boundary rules, human approval boundary, and `evaluateDryRunEligibility(...)`.
+- No importer behavior, capture behavior, Original Mirror behavior, preview behavior, candidate discovery behavior, candidate review behavior, reconstruction behavior, dry-run execution, worker behavior, Playwright behavior, route discovery, API, rendering, persistence, database write, database schema, AI generation, React generation, block generation, runtime content write, domain/DNS behavior, or publishing behavior was changed.
 - Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Reconstruction control-plane closure doc: `docs/architecture/RECONSTRUCTION_CONTROL_PLANE.md`.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
@@ -41,6 +41,8 @@ Latest completed milestone:
 - Reconstruction candidate review contract code: `apps/platform/gnr8/architecture/reconstruction-candidate-review-contract.ts`.
 - Reconstruction package contract doc: `docs/architecture/RECONSTRUCTION_PACKAGE_CONTRACT.md`.
 - Reconstruction package contract code: `apps/platform/gnr8/architecture/reconstruction-package-contract.ts`.
+- Reconstruction dry-run boundary doc: `docs/architecture/RECONSTRUCTION_DRY_RUN_BOUNDARY.md`.
+- Reconstruction dry-run boundary contract code: `apps/platform/gnr8/architecture/reconstruction-dry-run-contract.ts`.
 - Capture expansion plan doc: `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
 - Minimum handoff normalizer code: `apps/platform/gnr8/architecture/reconstruction-input-normalizer.ts`.
 - Readiness evaluator code: `apps/platform/gnr8/architecture/reconstruction-readiness-evaluation.ts`.
@@ -56,7 +58,8 @@ Latest completed milestone:
 - Reconstruction Candidate Discovery Contract now defines the future discovery package shape, normalized candidate taxonomy, evidence traceability shape, confidence model, discovery status values, and deterministic discovery eligibility from Planning Gate readiness only.
 - Reconstruction Candidate Review Contract now defines the future human review package shape, candidate review item shape, review decisions, review package statuses, deterministic review eligibility from completed discovery metadata, and decision summary behavior.
 - Reconstruction Package Contract now defines the reviewed candidate handoff package, approved candidate shape, reconstruction intent values, package statuses, execution readiness values, deterministic package builder behavior, and package summary behavior.
-- Reconstruction Control Plane Closure now documents the complete Evidence Capture -> Original Mirror Fidelity -> Reconstruction Readiness -> Planning Gate -> Candidate Discovery -> Candidate Review -> Reconstruction Package chain and marks Future Dry Run, Future Reconstruction, and Future Publish as NOT IMPLEMENTED YET.
+- Reconstruction Control Plane Closure documents the complete Evidence Capture -> Original Mirror Fidelity -> Reconstruction Readiness -> Planning Gate -> Candidate Discovery -> Candidate Review -> Reconstruction Package chain and marks Future Dry Run, Future Reconstruction, and Future Publish as NOT IMPLEMENTED YET.
+- Reconstruction Dry Run Boundary now defines the future Dry Run contract boundary and deterministic eligibility from `ReconstructionPackage.executionReadiness` / `ReconstructionPackage.packageStatus`.
 - Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
 - P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
 - 7F-9 comparison confirms that baseline evidence missing rendered DOM remains `NOT_READY`, while 7F-8-enriched rendered DOM ref, rendered HTML hash, and route identity can reach `MINIMUM_READY` when no blocker fidelity limitation remains.
@@ -65,7 +68,7 @@ Latest completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8A-0 — Dry-Run Boundary Planning, or Phase 8A — First Reconstruction Dry-Run Design if the dry-run boundary is accepted as sufficiently explicit.
+- Next recommended major phase: Phase 8A-1 — First Dry Run Contract Validation.
 
 Production smoke-test:
 - completed successfully.
@@ -166,7 +169,7 @@ Phase 7F-13 reconstruction candidate review contract:
 - Review decisions are `approved`, `rejected`, `needs_more_evidence`, `defer`, and `unsupported`.
 - Package statuses are `pending`, `partially_reviewed`, `approved`, `rejected`, and `needs_more_evidence`.
 - Candidate review, review persistence, approval execution, reconstruction execution, AI reconstruction, React/block generation, workers, and publishing remain NOT IMPLEMENTED YET.
-- Next recommended phase: Phase 7F-14 and 7F-15 are complete; continue with Phase 8A-0 — Dry-Run Boundary Planning.
+- Next recommended phase: Phase 8A-1 — First Dry Run Contract Validation.
 
 Phase 7F-14 reconstruction package contract:
 - `apps/platform/gnr8/architecture/reconstruction-package-contract.ts` defines metadata-only `ReconstructionPackage`, `ApprovedReconstructionCandidate`, reconstruction intent values, package statuses, execution readiness values, package creation from Candidate Review metadata, and package summary behavior.
@@ -177,14 +180,24 @@ Phase 7F-14 reconstruction package contract:
 - Execution readiness values are `not_ready`, `ready_for_dry_run`, and `ready_for_future_execution`; Phase 7F-14 never enables future execution and the builder only reaches `ready_for_dry_run` when approved candidates exist with no blocker limitations.
 - Approved review items become approved candidates; deferred decisions become deferred candidates; unsupported decisions become unsupported candidates; rejected decisions are excluded from candidate buckets but counted in limitations/notes; `needs_more_evidence` forces package status `needs_more_evidence`.
 - Future Dry Run, reconstruction execution, approval execution, AI reconstruction, React/block generation, workers, persistence, and publishing remain NOT IMPLEMENTED YET.
-- Next recommended phase: Phase 7F-15 — Reconstruction Control Plane Closure is complete; continue with Phase 8A-0 — Dry-Run Boundary Planning, or Phase 8A — First Reconstruction Dry-Run Design if proceeding directly is accepted.
+- Next recommended phase: Phase 8A-1 — First Dry Run Contract Validation.
 
 Phase 7F-15 reconstruction control-plane closure:
 - `docs/architecture/RECONSTRUCTION_CONTROL_PLANE.md` is the canonical closure document for the deterministic Evidence Capture -> Reconstruction Package control plane.
 - Contract chain audit result: IDs now link backward through Review, Discovery, and Planning; `siteVersionId`, `routeScope`, and `readinessLevel` are preserved from Planning through Package; readiness remains deterministic and is not recalculated by Review or Package; blockers/limitations remain layer-scoped; status fields are field-qualified.
 - Status taxonomy result: Evidence Capture uses `status`; Original Mirror uses mirror status plus fidelity badge/readiness; Reconstruction uses `readinessLevel`; Planning and Review use `reviewStatus`; Discovery uses `discoveryStatus`; Package uses `packageStatus`; execution gating uses `executionReadiness`.
 - Future Dry Run, Future Reconstruction, Future Publish, dry-run execution, reconstruction execution, approval execution, AI generation, React/block generation, workers, persistence, and publishing remain NOT IMPLEMENTED YET.
-- Recommended next major phase: Phase 8A-0 — Dry-Run Boundary Planning. Phase 8A — First Reconstruction Dry-Run Design is the alternative if the boundary is accepted as sufficiently explicit.
+- Recommended next major phase: Phase 8A-1 — First Dry Run Contract Validation.
+
+Phase 8A-0 dry-run boundary planning:
+- `apps/platform/gnr8/architecture/reconstruction-dry-run-contract.ts` defines metadata-only `ReconstructionDryRunPackage`, dry-run status values, simulation status values, generated output type values, boundary rules, and dry-run eligibility from Reconstruction Package metadata.
+- `docs/architecture/RECONSTRUCTION_DRY_RUN_BOUNDARY.md` documents the Reconstruction Package -> Dry Run boundary, allowed inputs, informational outputs, restrictions, safety guarantees, approval requirements, and future flow.
+- Dry Run MAY read Reconstruction Package, Evidence Capture artifacts, Reconstruction Candidates, and Review decisions, and may produce simulation artifacts.
+- Dry Run MUST NOT publish, modify the source site, modify production content, execute migrations, create live websites, modify domains, modify DNS, or write runtime content.
+- Eligibility rules: `ready_for_dry_run` is eligible; `not_ready`, `needs_more_evidence`, and `blocked` are not eligible.
+- Dry Run output is informational and is not approved output. Future approval remains required.
+- Dry-run execution, reconstruction execution, AI generation, React/block generation, workers, runtime writes, database writes, domain/DNS changes, and publishing remain NOT IMPLEMENTED YET.
+- Recommended next major phase: Phase 8A-1 — First Dry Run Contract Validation.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -411,12 +424,18 @@ Phase 7F completion notes:
 - Required terminology: Evidence Capture, Capture Provider, Original Mirror Preview, GNR8 Reconstruction Preview, Known Fidelity Limitation, Reconstruction Candidate.
 - No ViroiDoc fix, Maver/Mono map fix, active Servo provider, AI reconstruction, reconstruction execution, React/block generation, preview renderer rewrite, import-limit change, or script-policy change was included.
 
+Phase 8A-0 completion notes:
+- Phase 8A-0 is COMPLETE as Dry Run Boundary Planning.
+- Canonical dry-run boundary doc: `docs/architecture/RECONSTRUCTION_DRY_RUN_BOUNDARY.md`.
+- Dry-run boundary contract: `apps/platform/gnr8/architecture/reconstruction-dry-run-contract.ts`.
+- No dry-run execution, reconstruction execution, AI generation, React/block generation, runtime writes, database writes, domain/DNS changes, workers, or publishing was included.
+
 Current critical path:
-- Phase 8A-0 — Dry-Run Boundary Planning
+- Phase 8A-1 — First Dry Run Contract Validation
 - Billing
 
 Next recommended milestone:
-- Phase 8A-0 — Dry-Run Boundary Planning.
+- Phase 8A-1 — First Dry Run Contract Validation.
 
 Explicit exclusions still in force:
 - no Website OS runtime expansion
@@ -456,7 +475,7 @@ Dedicated pause note:
 - Future continuation point: Execution Artifact Runtime family.
 - Execution Artifact Runtime family is not currently part of the migration-critical path.
 Next migration platform milestone:
-- Phase 8A-0 — Dry-Run Boundary Planning.
+- Phase 8A-1 — First Dry Run Contract Validation.
 - Phase 5A completed Command Center integration for migration batches; execution remains operator-driven and queue/worker orchestration does not exist yet.
 - Phase 6A completed read-only hosting operations observability for Command Center; hosting overview/detail are operational and production smoke-tested.
 - Phase 6B completed Hosting Operations workflow review.
@@ -1359,7 +1378,7 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 7F-15 — Reconstruction Control Plane Closure is complete.
+Active phase: Phase 8A-0 — Dry Run Boundary Planning is complete.
 
 Phase 7F importer architecture evolution is complete through 7F-15:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
@@ -1426,8 +1445,17 @@ Reconstruction Package Contract is complete:
 - package statuses: `draft`, `ready_for_reconstruction`, `needs_more_evidence`, `blocked`, `archived`
 - execution readiness: `not_ready`, `ready_for_dry_run`, `ready_for_future_execution`
 - builder behavior: approved review items become approved candidates; deferred and unsupported decisions are separated; rejected decisions are excluded from candidate buckets but counted in limitations/notes; `needs_more_evidence` forces package status `needs_more_evidence`
-- behavior boundary: metadata-only package contract; no dry-run, approval execution, reconstruction execution, AI reconstruction, React/block generation, workers, persistence, or publishing
-- recommended next milestone: Phase 8A-0 Dry-Run Boundary Planning
+- behavior boundary: metadata-only package contract; no dry-run execution, approval execution, reconstruction execution, AI reconstruction, React/block generation, workers, persistence, or publishing
+
+Reconstruction Dry Run Boundary is complete:
+- dry-run contract: `apps/platform/gnr8/architecture/reconstruction-dry-run-contract.ts`
+- documentation: `docs/architecture/RECONSTRUCTION_DRY_RUN_BOUNDARY.md`
+- dry-run statuses: `not_started`, `planned`, `simulation_ready`, `simulated`, `blocked`
+- simulation statuses: `unavailable`, `pending`, `complete`, `failed`
+- generated output types: `route_model`, `section_model`, `block_model`, `content_model`, `design_token_model`, `navigation_model`, `unknown`
+- eligibility: `ready_for_dry_run` is eligible; `not_ready`, `needs_more_evidence`, and `blocked` are not eligible
+- behavior boundary: metadata-only dry-run boundary; no dry-run execution, reconstruction execution, AI generation, React/block generation, workers, persistence, runtime writes, domain/DNS changes, or publishing
+- recommended next milestone: Phase 8A-1 First Dry Run Contract Validation
 
 ## G) How Next Thread Should Behave
 
