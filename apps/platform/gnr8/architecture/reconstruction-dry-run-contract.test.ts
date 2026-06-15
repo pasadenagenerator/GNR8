@@ -7,10 +7,14 @@ import {
   RECONSTRUCTION_DRY_RUN_MUST_NOT_RULES,
   RECONSTRUCTION_DRY_RUN_STATUSES,
   RECONSTRUCTION_GENERATED_OUTPUT_TYPES,
+  RECONSTRUCTION_SIMULATION_PLAN_STATUSES,
+  RECONSTRUCTION_SIMULATION_STEP_TYPES,
   RECONSTRUCTION_SIMULATION_STATUSES,
   createReconstructionDryRunPackage,
+  createReconstructionSimulationPlan,
   evaluateDryRunEligibility,
   validateReconstructionDryRunPackage,
+  validateReconstructionSimulationPlan,
   type ReconstructionGeneratedOutput,
 } from "./reconstruction-dry-run-contract";
 import {
@@ -361,4 +365,212 @@ test("dry run boundary rules are explicit and approval-gated", () => {
     outputApprovalState: "informational_only",
     futureApprovalRequired: true,
   });
+});
+
+test("planned dry run creates planned simulation plan", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage(), {
+    dryRunId: "dry-run-package-simulation-plan",
+    createdAt: "2026-06-15T10:20:00.000Z",
+  });
+
+  const simulationPlan = createReconstructionSimulationPlan(dryRunPackage, {
+    simulationPlanId: "simulation-plan-1",
+  });
+
+  assert.equal(simulationPlan.simulationPlanId, "simulation-plan-1");
+  assert.equal(simulationPlan.dryRunId, dryRunPackage.dryRunId);
+  assert.equal(
+    simulationPlan.reconstructionPackageId,
+    dryRunPackage.reconstructionPackageId,
+  );
+  assert.equal(simulationPlan.siteVersionId, dryRunPackage.siteVersionId);
+  assert.deepEqual(simulationPlan.routeScope, dryRunPackage.routeScope);
+  assert.equal(simulationPlan.planStatus, "planned");
+  assert.equal(simulationPlan.plannedSteps.length, RECONSTRUCTION_SIMULATION_STEP_TYPES.length);
+  assert.equal(simulationPlan.requiredInputs.length > 0, true);
+  assert.equal(simulationPlan.expectedOutputs.length, simulationPlan.plannedSteps.length);
+  assert.deepEqual(simulationPlan.blockers, []);
+  assert.equal(simulationPlan.createdAt, dryRunPackage.createdAt);
+  assert.deepEqual(validateReconstructionSimulationPlan(simulationPlan), {
+    valid: true,
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("blocked dry run creates blocked simulation plan", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(notReadyReconstructionPackage(), {
+    dryRunId: "dry-run-package-blocked-simulation-plan",
+  });
+
+  const simulationPlan = createReconstructionSimulationPlan(dryRunPackage);
+
+  assert.equal(simulationPlan.planStatus, "blocked");
+  assert.deepEqual(simulationPlan.plannedSteps, []);
+  assert.deepEqual(simulationPlan.expectedOutputs, []);
+  assert.equal(simulationPlan.blockers.length > 0, true);
+  assert.deepEqual(simulationPlan.blockers, dryRunPackage.blockers);
+  assert.deepEqual(validateReconstructionSimulationPlan(simulationPlan), {
+    valid: true,
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("planned simulation steps are deterministic", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage(), {
+    dryRunId: "dry-run-package-deterministic-simulation-plan",
+  });
+
+  const firstPlan = createReconstructionSimulationPlan(dryRunPackage);
+  const secondPlan = createReconstructionSimulationPlan(dryRunPackage);
+
+  assert.deepEqual(firstPlan, secondPlan);
+  assert.deepEqual(
+    firstPlan.plannedSteps.map((step) => step.stepType),
+    [
+      "validate_package",
+      "load_evidence",
+      "map_candidates",
+      "plan_route_model",
+      "plan_section_model",
+      "plan_block_model",
+      "plan_content_model",
+      "plan_design_tokens",
+      "plan_navigation",
+      "produce_simulation_summary",
+    ],
+  );
+  assert.deepEqual(firstPlan.plannedSteps.map((step) => step.status), [
+    "planned",
+    "planned",
+    "planned",
+    "planned",
+    "planned",
+    "planned",
+    "planned",
+    "planned",
+    "planned",
+    "planned",
+  ]);
+});
+
+test("simulation plan validation catches missing IDs", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage());
+  const simulationPlan = createReconstructionSimulationPlan(dryRunPackage);
+
+  const result = validateReconstructionSimulationPlan({
+    ...simulationPlan,
+    simulationPlanId: "",
+    dryRunId: "",
+    reconstructionPackageId: "",
+    siteVersionId: "",
+    routeScope: null,
+  });
+
+  assert.equal(result.valid, false);
+  assert.equal(result.errors.includes("simulationPlanId is required"), true);
+  assert.equal(result.errors.includes("dryRunId is required"), true);
+  assert.equal(result.errors.includes("reconstructionPackageId is required"), true);
+  assert.equal(result.errors.includes("siteVersionId is required"), true);
+  assert.equal(result.errors.includes("routeScope is required"), true);
+});
+
+test("simulation plan validation catches blocked plan without blockers", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(notReadyReconstructionPackage());
+  const simulationPlan = createReconstructionSimulationPlan(dryRunPackage);
+
+  const result = validateReconstructionSimulationPlan({
+    ...simulationPlan,
+    blockers: [],
+  });
+
+  assert.equal(result.valid, false);
+  assert.equal(
+    result.errors.includes("blocked simulation plans must include blockers"),
+    true,
+  );
+});
+
+test("simulation plan builder does not produce outputs or artifacts", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage());
+  const simulationPlan = createReconstructionSimulationPlan(dryRunPackage);
+
+  assert.equal("generatedOutputs" in simulationPlan, false);
+  assert.equal("simulationArtifacts" in simulationPlan, false);
+  assert.equal(
+    simulationPlan.expectedOutputs.every(
+      (expectedOutput) => expectedOutput.outputState === "planned_descriptor",
+    ),
+    true,
+  );
+});
+
+test("simulation plan validation rejects executed states and generated output shapes", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage());
+  const simulationPlan = createReconstructionSimulationPlan(dryRunPackage);
+
+  const result = validateReconstructionSimulationPlan({
+    ...simulationPlan,
+    planStatus: "completed",
+    plannedSteps: [
+      {
+        ...simulationPlan.plannedSteps[0],
+        status: "running",
+        expectedOutputs: [
+          {
+            ...simulationPlan.plannedSteps[0].expectedOutputs[0],
+            outputState: "generated",
+            generationState: "simulation_placeholder",
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.valid, false);
+  assert.equal(
+    result.errors.includes(
+      "planStatus must not be an executed, running, completed, or simulated state",
+    ),
+    true,
+  );
+  assert.equal(
+    result.errors.includes(
+      "plannedSteps[0].status must not be an executed, running, completed, or simulated state",
+    ),
+    true,
+  );
+  assert.equal(
+    result.errors.includes(
+      "plannedSteps[0].expectedOutputs[0].outputState must be planned_descriptor",
+    ),
+    true,
+  );
+  assert.equal(
+    result.errors.includes(
+      "plannedSteps[0].expectedOutputs[0] must not include generationState",
+    ),
+    true,
+  );
+});
+
+test("simulation plan status constants are stable and planning-only", () => {
+  assert.deepEqual(RECONSTRUCTION_SIMULATION_PLAN_STATUSES, [
+    "not_started",
+    "planned",
+    "blocked",
+  ]);
+  assert.deepEqual(RECONSTRUCTION_SIMULATION_STEP_TYPES, [
+    "validate_package",
+    "load_evidence",
+    "map_candidates",
+    "plan_route_model",
+    "plan_section_model",
+    "plan_block_model",
+    "plan_content_model",
+    "plan_design_tokens",
+    "plan_navigation",
+    "produce_simulation_summary",
+  ]);
 });

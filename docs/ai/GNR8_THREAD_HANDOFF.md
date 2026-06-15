@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8A-1 First Dry Run Contract Validation is complete.
+- 8A-2 Dry Run Simulation Planning Contract is complete.
 
 Current Phase:
-- Phase 8A-1 First Dry Run Contract Validation is complete.
+- Phase 8A-2 Dry Run Simulation Planning Contract is complete.
 
 Next Phase:
-- Phase 8A-2 Dry Run Simulation Planning Contract.
+- Phase 8A-3 Dry Run Simulation Readiness Review.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,10 +23,10 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 8A-1 — First Dry Run Contract Validation.
+- Phase 8A-2 — Dry Run Simulation Planning Contract.
 - Status: COMPLETE.
-- Deterministic contract validation from approved Reconstruction Package to planned Dry Run Package, including `createReconstructionDryRunPackage(...)`, `validateReconstructionDryRunPackage(...)`, planned/blocked creation rules, blocker requirements, generated-output safety checks, simulation safety checks, and future approval gating.
-- No importer behavior, capture behavior, Original Mirror behavior, preview behavior, candidate discovery behavior, candidate review behavior, reconstruction behavior, dry-run execution, worker behavior, Playwright behavior, route discovery, API, rendering, persistence, database write, database schema, AI generation, React generation, block generation, runtime content write, domain/DNS behavior, or publishing behavior was changed.
+- Deterministic Simulation Plan contract from planned or blocked Dry Run Package metadata, including `createReconstructionSimulationPlan(...)`, `validateReconstructionSimulationPlan(...)`, planned/blocked plan creation rules, deterministic planned step ordering, blocker requirements, planned descriptor validation, generated-output safety checks, simulation-artifact safety checks, and no executed/completed/running plan states.
+- No importer behavior, capture behavior, Original Mirror behavior, preview behavior, candidate discovery behavior, candidate review behavior, reconstruction behavior, simulation execution, dry-run execution, worker behavior, Playwright behavior, route discovery, API, rendering, persistence, database write, database schema, AI generation, React generation, block generation, runtime content write, domain/DNS behavior, or publishing behavior was changed.
 - Canonical architecture doc: `docs/architecture/IMPORTER_ARCHITECTURE_SPLIT.md`.
 - Reconstruction control-plane closure doc: `docs/architecture/RECONSTRUCTION_CONTROL_PLANE.md`.
 - Audit doc: `docs/architecture/EVIDENCE_CAPTURE_INVENTORY_AUDIT.md`.
@@ -59,7 +59,7 @@ Latest completed milestone:
 - Reconstruction Candidate Review Contract now defines the future human review package shape, candidate review item shape, review decisions, review package statuses, deterministic review eligibility from completed discovery metadata, and decision summary behavior.
 - Reconstruction Package Contract now defines the reviewed candidate handoff package, approved candidate shape, reconstruction intent values, package statuses, execution readiness values, deterministic package builder behavior, and package summary behavior.
 - Reconstruction Control Plane Closure documents the complete Evidence Capture -> Original Mirror Fidelity -> Reconstruction Readiness -> Planning Gate -> Candidate Discovery -> Candidate Review -> Reconstruction Package chain and marks Future Dry Run, Future Reconstruction, and Future Publish as NOT IMPLEMENTED YET.
-- Reconstruction Dry Run Boundary now defines the future Dry Run contract boundary, deterministic eligibility from `ReconstructionPackage.executionReadiness` / `ReconstructionPackage.packageStatus`, dry-run package creation, and dry-run package validation.
+- Reconstruction Dry Run Boundary now defines the future Dry Run contract boundary, deterministic eligibility from `ReconstructionPackage.executionReadiness` / `ReconstructionPackage.packageStatus`, dry-run package creation, dry-run package validation, deterministic Simulation Plan creation, and Simulation Plan validation.
 - Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
 - P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
 - 7F-9 comparison confirms that baseline evidence missing rendered DOM remains `NOT_READY`, while 7F-8-enriched rendered DOM ref, rendered HTML hash, and route identity can reach `MINIMUM_READY` when no blocker fidelity limitation remains.
@@ -68,7 +68,7 @@ Latest completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8A-2 — Dry Run Simulation Planning Contract.
+- Next recommended major phase: Phase 8A-3 — Dry Run Simulation Readiness Review.
 
 Production smoke-test:
 - completed successfully.
@@ -206,7 +206,16 @@ Phase 8A-1 first dry-run contract validation:
 - `validateReconstructionDryRunPackage(...)` checks required IDs, route scope, status values, blocked-package blockers, empty generated outputs, empty simulation artifacts, non-simulated package status, non-complete simulation status, informational-only output, and future approval required.
 - The builder does not accept status, simulation status, simulation artifact, blocker, or generated output overrides.
 - Dry-run execution, reconstruction execution, AI generation, React/block generation, workers, runtime writes, database writes, domain/DNS changes, and publishing remain NOT IMPLEMENTED YET.
-- Recommended next major phase: Phase 8A-2 — Dry Run Simulation Planning Contract.
+
+Phase 8A-2 dry-run simulation planning contract:
+- `apps/platform/gnr8/architecture/reconstruction-dry-run-contract.ts` now builds a metadata-only `ReconstructionSimulationPlan` from a `ReconstructionDryRunPackage`.
+- Planned Dry Run Packages create `planStatus = planned` with deterministic planned steps.
+- Blocked Dry Run Packages create `planStatus = blocked` with blockers and no planned steps.
+- Planned step types are `validate_package`, `load_evidence`, `map_candidates`, `plan_route_model`, `plan_section_model`, `plan_block_model`, `plan_content_model`, `plan_design_tokens`, `plan_navigation`, and `produce_simulation_summary`.
+- `validateReconstructionSimulationPlan(...)` checks required IDs, route scope, planned-package steps, blocked-plan blockers, planning-only status values, planned descriptor expected outputs, and rejects generated output shapes, simulation artifacts, and executed/running/completed/simulated states.
+- Simulation Plan statuses are only `not_started`, `planned`, and `blocked`.
+- Simulation execution, dry-run execution, reconstruction execution, AI generation, React/block generation, workers, runtime writes, database writes, domain/DNS changes, and publishing remain NOT IMPLEMENTED YET.
+- Recommended next major phase: Phase 8A-3 — Dry Run Simulation Readiness Review.
 
 Dedicated progress doc:
 - `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
@@ -1387,7 +1396,7 @@ Hard boundaries remain:
 
 ## F) Current Active Implementation Phase
 
-Active phase: Phase 8A-1 — First Dry Run Contract Validation is complete.
+Active phase: Phase 8A-2 — Dry Run Simulation Planning Contract is complete.
 
 Phase 7F importer architecture evolution is complete through 7F-15:
 - Evidence Capture captures source-site evidence as a browser/user sees it.
@@ -1461,12 +1470,15 @@ Reconstruction Dry Run Boundary is complete:
 - documentation: `docs/architecture/RECONSTRUCTION_DRY_RUN_BOUNDARY.md`
 - dry-run statuses: `not_started`, `planned`, `simulation_ready`, `simulated`, `blocked`
 - simulation statuses: `unavailable`, `pending`, `complete`, `failed`
+- simulation plan statuses: `not_started`, `planned`, `blocked`
 - generated output types: `route_model`, `section_model`, `block_model`, `content_model`, `design_token_model`, `navigation_model`, `unknown`
 - eligibility: `ready_for_dry_run` is eligible; `not_ready`, `needs_more_evidence`, and `blocked` are not eligible
 - package creation: ready packages become planned/pending with no outputs or blockers; not-ready packages become blocked/unavailable with blockers
 - validation: required IDs, route scope, empty generated outputs, empty simulation artifacts, blocked-package blockers, non-simulated status, non-complete simulation status, and future approval gating
-- behavior boundary: metadata-only dry-run boundary and validation; no dry-run execution, reconstruction execution, AI generation, React/block generation, workers, persistence, runtime writes, domain/DNS changes, or publishing
-- recommended next milestone: Phase 8A-2 Dry Run Simulation Planning Contract
+- simulation plan creation: planned dry runs become planned Simulation Plans with deterministic steps; blocked dry runs become blocked Simulation Plans with blockers
+- simulation plan validation: required IDs, route scope, planned steps for planned plans, blockers for blocked plans, planning-only statuses, planned descriptor outputs, no generated output shapes, and no simulation artifacts
+- behavior boundary: metadata-only dry-run boundary, validation, and simulation planning; no simulation execution, dry-run execution, reconstruction execution, AI generation, React/block generation, workers, persistence, runtime writes, domain/DNS changes, or publishing
+- recommended next milestone: Phase 8A-3 Dry Run Simulation Readiness Review
 
 ## G) How Next Thread Should Behave
 

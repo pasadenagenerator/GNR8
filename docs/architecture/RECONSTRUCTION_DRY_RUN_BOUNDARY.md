@@ -4,11 +4,17 @@
 
 Phase 8A-1 defines the deterministic contract boundary between an approved Reconstruction Package and a future Reconstruction Dry Run package.
 
+Phase 8A-2 extends that boundary with a deterministic Simulation Plan contract. The Simulation Plan answers what a future dry run would attempt to simulate, without executing simulation.
+
 The contract answers one question:
 
 > Can the control plane produce a valid planned Dry Run Package from reviewed reconstruction candidates?
 
-This phase does not perform dry-run execution, reconstruction execution, AI generation, React generation, block generation, runtime content writes, worker dispatch, migration execution, domain changes, DNS changes, live website creation, approval execution, or publishing.
+8A-2 asks:
+
+> What would a dry run attempt to simulate?
+
+These phases do not perform dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, runtime content writes, worker dispatch, migration execution, domain changes, DNS changes, live website creation, approval execution, or publishing.
 
 Canonical TypeScript contract:
 
@@ -39,6 +45,21 @@ The boundary contract preserves:
 - `generatedOutputs`
 - `createdAt`
 
+The 8A-2 Simulation Plan contract preserves:
+
+- `simulationPlanId`
+- `dryRunId`
+- `reconstructionPackageId`
+- `siteVersionId`
+- `routeScope`
+- `planStatus`
+- `plannedSteps`
+- `requiredInputs`
+- `expectedOutputs`
+- `limitations`
+- `blockers`
+- `createdAt`
+
 ## Outputs
 
 A future Dry Run may produce simulation artifacts only.
@@ -56,6 +77,8 @@ Allowed generated output shape types:
 These output types are metadata shapes for future simulated outputs. They are not generated React, generated blocks, generated content, persisted runtime content, publishable artifacts, or approved reconstruction output.
 
 At dry-run package creation time, `generatedOutputs` is always an empty array. No generated outputs are required or produced by the 8A-1 builder.
+
+At simulation-plan creation time, `expectedOutputs` contains only planned descriptors. These descriptors are not generated outputs, simulation artifacts, React, blocks, editable content, persisted data, publishable artifacts, or approved reconstruction output.
 
 ## Status Models
 
@@ -76,6 +99,14 @@ Allowed `ReconstructionSimulationStatus` values:
 
 These statuses describe only a future dry-run boundary. They do not authorize reconstruction execution, publishing, worker dispatch, persistence, AI calls, React generation, or block generation.
 
+Allowed `ReconstructionSimulationPlanStatus` values:
+
+- `not_started`
+- `planned`
+- `blocked`
+
+Simulation Plan status has no `running`, `executed`, `completed`, `complete`, or `simulated` state.
+
 ## Package Creation Rules
 
 `createReconstructionDryRunPackage(...)` consumes a `ReconstructionPackage` and returns a metadata-only `ReconstructionDryRunPackage`.
@@ -93,6 +124,48 @@ Deterministic creation rules:
 - The builder never creates generated outputs.
 
 The builder does not accept status, simulation status, simulation artifact, blocker, or generated output overrides.
+
+## Simulation Plan Boundary
+
+`createReconstructionSimulationPlan(...)` consumes a `ReconstructionDryRunPackage` and returns a metadata-only `ReconstructionSimulationPlan`.
+
+Deterministic creation rules:
+
+- A planned Dry Run Package creates `planStatus = planned`.
+- A planned Simulation Plan includes deterministic planned steps.
+- A blocked Dry Run Package creates `planStatus = blocked`.
+- A blocked Simulation Plan carries blockers from the Dry Run Package.
+- A blocked Simulation Plan does not create planned steps.
+- The builder never creates generated outputs.
+- The builder never creates simulation artifacts.
+- The builder never executes simulation, reconstruction, AI generation, React generation, block generation, persistence, workers, or publishing.
+
+## Planned Step Model
+
+Allowed `ReconstructionSimulationStep.stepType` values:
+
+- `validate_package`
+- `load_evidence`
+- `map_candidates`
+- `plan_route_model`
+- `plan_section_model`
+- `plan_block_model`
+- `plan_content_model`
+- `plan_design_tokens`
+- `plan_navigation`
+- `produce_simulation_summary`
+
+Each planned step includes:
+
+- `stepId`
+- `stepType`
+- `status`
+- `requiredInputs`
+- `expectedOutputs`
+- `blockers`
+- `notes`
+
+For planned Simulation Plans, each step starts with `status = planned`. Step expected outputs are planned descriptors only and do not represent generated output or simulation artifacts.
 
 ## Eligibility
 
@@ -133,6 +206,29 @@ Validation checks:
 - output remains informational only.
 - future approval remains required.
 
+`validateReconstructionSimulationPlan(...)` validates the planning-only Simulation Plan contract and returns:
+
+- `valid`
+- `errors`
+- `warnings`
+
+Simulation Plan validation checks:
+
+- `simulationPlanId` exists.
+- `dryRunId` exists.
+- `reconstructionPackageId` exists.
+- `siteVersionId` exists.
+- `routeScope` exists.
+- `planStatus` is one of `not_started`, `planned`, or `blocked`.
+- planned Simulation Plans include planned steps.
+- blocked Simulation Plans include blockers.
+- each planned step has a known step type.
+- each step status is planning-only.
+- expected outputs are planned descriptors only.
+- generated output shapes are rejected.
+- simulation artifacts are rejected.
+- executed, running, completed, complete, and simulated states are rejected.
+
 ## Restrictions
 
 Dry Run MAY:
@@ -158,6 +254,8 @@ Dry Run MUST NOT:
 
 Phase 8A-1 adds only deterministic contracts, package creation, package validation, tests, and documentation.
 
+Phase 8A-2 adds only deterministic Simulation Plan contracts, Simulation Plan creation, Simulation Plan validation, tests, and documentation.
+
 Safety guarantees:
 
 - no importer behavior changes
@@ -167,6 +265,7 @@ Safety guarantees:
 - no candidate discovery behavior changes
 - no candidate review behavior changes
 - no dry-run execution
+- no simulation execution
 - no reconstruction execution
 - no AI generation
 - no React generation
@@ -176,8 +275,10 @@ Safety guarantees:
 - no publishing behavior changes
 - no database writes
 - no generated outputs
+- no simulation artifacts
 - no package can be marked `simulated` by the builder
 - no package can be marked `complete` by the builder
+- no Simulation Plan can be marked running, executed, completed, complete, or simulated by the builder
 - future execution remains disabled and approval-gated
 
 ## Approval Requirements
@@ -217,10 +318,15 @@ Current implemented boundary:
 - Reconstruction Package can be evaluated for future Dry Run eligibility.
 - Reconstruction Package can be converted into a planned or blocked Dry Run Package contract.
 - Dry Run Package contract can be validated without executing a dry run.
+- Dry Run Package can be converted into a planned or blocked Simulation Plan contract.
+- Simulation Plan contract can be validated without executing simulation.
+- A planned Dry Run has a deterministic Simulation Plan.
 
-NOT IMPLEMENTED YET after Dry Run:
+NOT IMPLEMENTED YET after 8A-2:
 
 - Dry Run execution
+- simulation execution
+- simulation artifact production
 - Future Approval
 - Future Reconstruction
 - Future Publish

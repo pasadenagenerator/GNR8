@@ -1,11 +1,12 @@
 /**
- * Phase 8A-1 reconstruction dry-run boundary contract.
+ * Phase 8A reconstruction dry-run boundary contract.
  *
  * This module defines the deterministic metadata boundary between a
- * Reconstruction Package and a future Reconstruction Dry Run. It does not
- * execute a dry run, execute reconstruction, call AI systems, generate React,
- * generate blocks, persist reconstruction, dispatch workers, create live
- * websites, modify domains or DNS, write runtime content, or publish anything.
+ * Reconstruction Package, a future Reconstruction Dry Run, and a planning-only
+ * Simulation Plan. It does not execute a dry run, execute simulation, execute
+ * reconstruction, call AI systems, generate React, generate blocks, persist
+ * reconstruction, dispatch workers, create live websites, modify domains or
+ * DNS, write runtime content, or publish anything.
  */
 
 import type {
@@ -143,6 +144,89 @@ export type ReconstructionDryRunPackage = {
   createdAt: string;
 };
 
+export const RECONSTRUCTION_SIMULATION_PLAN_STATUSES = [
+  "not_started",
+  "planned",
+  "blocked",
+] as const;
+export type ReconstructionSimulationPlanStatus =
+  (typeof RECONSTRUCTION_SIMULATION_PLAN_STATUSES)[number];
+
+export const RECONSTRUCTION_SIMULATION_STEP_TYPES = [
+  "validate_package",
+  "load_evidence",
+  "map_candidates",
+  "plan_route_model",
+  "plan_section_model",
+  "plan_block_model",
+  "plan_content_model",
+  "plan_design_tokens",
+  "plan_navigation",
+  "produce_simulation_summary",
+] as const;
+export type ReconstructionSimulationStepType =
+  (typeof RECONSTRUCTION_SIMULATION_STEP_TYPES)[number];
+
+export const RECONSTRUCTION_SIMULATION_EXPECTED_OUTPUT_DESCRIPTOR_TYPES = [
+  "package_validation_descriptor",
+  "evidence_loading_descriptor",
+  "candidate_mapping_descriptor",
+  "route_model_descriptor",
+  "section_model_descriptor",
+  "block_model_descriptor",
+  "content_model_descriptor",
+  "design_token_descriptor",
+  "navigation_descriptor",
+  "simulation_summary_descriptor",
+] as const;
+export type ReconstructionSimulationExpectedOutputDescriptorType =
+  (typeof RECONSTRUCTION_SIMULATION_EXPECTED_OUTPUT_DESCRIPTOR_TYPES)[number];
+
+export type ReconstructionSimulationRequiredInput = {
+  inputId: string;
+  inputType:
+    | "dry_run_package"
+    | "reconstruction_package"
+    | "route_scope"
+    | "evidence_capture_artifacts"
+    | "reconstruction_candidates"
+    | "review_decisions";
+  sourceRef: string | null;
+  description: string;
+};
+
+export type ReconstructionSimulationExpectedOutputDescriptor = {
+  outputId: string;
+  descriptorType: ReconstructionSimulationExpectedOutputDescriptorType;
+  outputState: "planned_descriptor";
+  description: string;
+};
+
+export type ReconstructionSimulationStep = {
+  stepId: string;
+  stepType: ReconstructionSimulationStepType;
+  status: ReconstructionSimulationPlanStatus;
+  requiredInputs: ReconstructionSimulationRequiredInput[];
+  expectedOutputs: ReconstructionSimulationExpectedOutputDescriptor[];
+  blockers: ReconstructionDryRunBlocker[];
+  notes: string[];
+};
+
+export type ReconstructionSimulationPlan = {
+  simulationPlanId: string;
+  dryRunId: string;
+  reconstructionPackageId: string;
+  siteVersionId: string;
+  routeScope: ReconstructionPlanningRouteScope;
+  planStatus: ReconstructionSimulationPlanStatus;
+  plannedSteps: ReconstructionSimulationStep[];
+  requiredInputs: ReconstructionSimulationRequiredInput[];
+  expectedOutputs: ReconstructionSimulationExpectedOutputDescriptor[];
+  limitations: ReconstructionDryRunLimitation[];
+  blockers: ReconstructionDryRunBlocker[];
+  createdAt: string;
+};
+
 export type ReconstructionDryRunEligibilityReason =
   | "ready_for_dry_run"
   | "not_ready"
@@ -163,6 +247,17 @@ export type CreateReconstructionDryRunPackageOptions = {
 };
 
 export type ReconstructionDryRunPackageValidationResult = {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+};
+
+export type CreateReconstructionSimulationPlanOptions = {
+  simulationPlanId?: string;
+  createdAt?: string;
+};
+
+export type ReconstructionSimulationPlanValidationResult = {
   valid: boolean;
   errors: string[];
   warnings: string[];
@@ -297,6 +392,196 @@ export function createReconstructionDryRunPackage(
   };
 }
 
+const BASE_SIMULATION_PLAN_REQUIRED_INPUTS = [
+  {
+    inputType: "dry_run_package",
+    description: "Dry Run Package metadata that gates future simulation planning.",
+  },
+  {
+    inputType: "reconstruction_package",
+    description: "Approved Reconstruction Package metadata referenced by the Dry Run Package.",
+  },
+  {
+    inputType: "route_scope",
+    description: "Route scope carried from the Reconstruction Package.",
+  },
+  {
+    inputType: "evidence_capture_artifacts",
+    description: "Evidence Capture artifact references available to future simulation.",
+  },
+  {
+    inputType: "reconstruction_candidates",
+    description: "Reviewed Reconstruction Candidate references available to future simulation.",
+  },
+  {
+    inputType: "review_decisions",
+    description: "Candidate Review decision metadata available to future simulation.",
+  },
+] as const satisfies readonly {
+  inputType: ReconstructionSimulationRequiredInput["inputType"];
+  description: string;
+}[];
+
+const SIMULATION_STEP_DEFINITIONS = [
+  {
+    stepType: "validate_package",
+    inputTypes: ["dry_run_package", "reconstruction_package"],
+    descriptorType: "package_validation_descriptor",
+    outputDescription: "Planned descriptor for package validation checks.",
+    notes: ["Plans validation of package metadata only."],
+  },
+  {
+    stepType: "load_evidence",
+    inputTypes: ["evidence_capture_artifacts", "route_scope"],
+    descriptorType: "evidence_loading_descriptor",
+    outputDescription: "Planned descriptor for evidence references that would be loaded.",
+    notes: ["Plans evidence reference loading without reading or transforming evidence."],
+  },
+  {
+    stepType: "map_candidates",
+    inputTypes: ["reconstruction_candidates", "review_decisions"],
+    descriptorType: "candidate_mapping_descriptor",
+    outputDescription: "Planned descriptor for mapping approved candidates to route scope.",
+    notes: ["Plans candidate mapping without executing reconstruction."],
+  },
+  {
+    stepType: "plan_route_model",
+    inputTypes: ["route_scope", "reconstruction_candidates"],
+    descriptorType: "route_model_descriptor",
+    outputDescription: "Planned descriptor for a future route model simulation target.",
+    notes: ["Plans route model shape only; no route model is generated."],
+  },
+  {
+    stepType: "plan_section_model",
+    inputTypes: ["evidence_capture_artifacts", "reconstruction_candidates"],
+    descriptorType: "section_model_descriptor",
+    outputDescription: "Planned descriptor for future section model simulation targets.",
+    notes: ["Plans section model shape only; no section model is generated."],
+  },
+  {
+    stepType: "plan_block_model",
+    inputTypes: ["evidence_capture_artifacts", "reconstruction_candidates"],
+    descriptorType: "block_model_descriptor",
+    outputDescription: "Planned descriptor for future block model simulation targets.",
+    notes: ["Plans block model shape only; no block model is generated."],
+  },
+  {
+    stepType: "plan_content_model",
+    inputTypes: ["evidence_capture_artifacts", "review_decisions"],
+    descriptorType: "content_model_descriptor",
+    outputDescription: "Planned descriptor for future content model simulation targets.",
+    notes: ["Plans content model shape only; no content model is generated."],
+  },
+  {
+    stepType: "plan_design_tokens",
+    inputTypes: ["evidence_capture_artifacts", "review_decisions"],
+    descriptorType: "design_token_descriptor",
+    outputDescription: "Planned descriptor for future design token simulation targets.",
+    notes: ["Plans design token shape only; no design tokens are generated."],
+  },
+  {
+    stepType: "plan_navigation",
+    inputTypes: ["route_scope", "evidence_capture_artifacts"],
+    descriptorType: "navigation_descriptor",
+    outputDescription: "Planned descriptor for future navigation model simulation targets.",
+    notes: ["Plans navigation shape only; no navigation model is generated."],
+  },
+  {
+    stepType: "produce_simulation_summary",
+    inputTypes: ["dry_run_package", "route_scope", "review_decisions"],
+    descriptorType: "simulation_summary_descriptor",
+    outputDescription: "Planned descriptor for a future simulation summary.",
+    notes: ["Plans summary shape only; no simulation summary artifact is produced."],
+  },
+] as const satisfies readonly {
+  stepType: ReconstructionSimulationStepType;
+  inputTypes: readonly ReconstructionSimulationRequiredInput["inputType"][];
+  descriptorType: ReconstructionSimulationExpectedOutputDescriptorType;
+  outputDescription: string;
+  notes: readonly string[];
+}[];
+
+function simulationPlanRequiredInputs(
+  dryRunPackage: ReconstructionDryRunPackage,
+): ReconstructionSimulationRequiredInput[] {
+  return BASE_SIMULATION_PLAN_REQUIRED_INPUTS.map((input) => ({
+    inputId: `${dryRunPackage.dryRunId}:input:${input.inputType}`,
+    inputType: input.inputType,
+    sourceRef:
+      input.inputType === "dry_run_package"
+        ? dryRunPackage.dryRunId
+        : dryRunPackage.reconstructionPackageId,
+    description: input.description,
+  }));
+}
+
+function inputsForStep(
+  allInputs: ReconstructionSimulationRequiredInput[],
+  inputTypes: readonly ReconstructionSimulationRequiredInput["inputType"][],
+): ReconstructionSimulationRequiredInput[] {
+  return inputTypes
+    .map((inputType) => allInputs.find((input) => input.inputType === inputType))
+    .filter((input): input is ReconstructionSimulationRequiredInput => Boolean(input));
+}
+
+function createPlannedSimulationSteps(
+  dryRunPackage: ReconstructionDryRunPackage,
+  allInputs: ReconstructionSimulationRequiredInput[],
+): ReconstructionSimulationStep[] {
+  return SIMULATION_STEP_DEFINITIONS.map((definition, index) => {
+    const stepNumber = String(index + 1).padStart(2, "0");
+    const stepId = `${dryRunPackage.dryRunId}:simulation-step-${stepNumber}:${definition.stepType}`;
+
+    return {
+      stepId,
+      stepType: definition.stepType,
+      status: "planned",
+      requiredInputs: inputsForStep(allInputs, definition.inputTypes),
+      expectedOutputs: [
+        {
+          outputId: `${stepId}:expected-output`,
+          descriptorType: definition.descriptorType,
+          outputState: "planned_descriptor",
+          description: definition.outputDescription,
+        },
+      ],
+      blockers: [],
+      notes: [...definition.notes],
+    };
+  });
+}
+
+export function createReconstructionSimulationPlan(
+  dryRunPackage: ReconstructionDryRunPackage,
+  options: CreateReconstructionSimulationPlanOptions = {},
+): ReconstructionSimulationPlan {
+  const planStatus: ReconstructionSimulationPlanStatus =
+    dryRunPackage.status === "planned"
+      ? "planned"
+      : dryRunPackage.status === "blocked"
+        ? "blocked"
+        : "not_started";
+  const requiredInputs = simulationPlanRequiredInputs(dryRunPackage);
+  const plannedSteps =
+    planStatus === "planned" ? createPlannedSimulationSteps(dryRunPackage, requiredInputs) : [];
+
+  return {
+    simulationPlanId:
+      options.simulationPlanId ?? `${dryRunPackage.dryRunId}:simulation-plan`,
+    dryRunId: dryRunPackage.dryRunId,
+    reconstructionPackageId: dryRunPackage.reconstructionPackageId,
+    siteVersionId: dryRunPackage.siteVersionId,
+    routeScope: dryRunPackage.routeScope,
+    planStatus,
+    plannedSteps,
+    requiredInputs,
+    expectedOutputs: plannedSteps.flatMap((step) => step.expectedOutputs),
+    limitations: [...dryRunPackage.limitations],
+    blockers: planStatus === "blocked" ? [...dryRunPackage.blockers] : [],
+    createdAt: options.createdAt ?? dryRunPackage.createdAt,
+  };
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -317,6 +602,87 @@ function isKnownSimulationStatus(value: unknown): value is ReconstructionSimulat
     typeof value === "string" &&
     RECONSTRUCTION_SIMULATION_STATUSES.includes(value as ReconstructionSimulationStatus)
   );
+}
+
+function isKnownSimulationPlanStatus(
+  value: unknown,
+): value is ReconstructionSimulationPlanStatus {
+  return (
+    typeof value === "string" &&
+    RECONSTRUCTION_SIMULATION_PLAN_STATUSES.includes(
+      value as ReconstructionSimulationPlanStatus,
+    )
+  );
+}
+
+function isKnownSimulationStepType(
+  value: unknown,
+): value is ReconstructionSimulationStepType {
+  return (
+    typeof value === "string" &&
+    RECONSTRUCTION_SIMULATION_STEP_TYPES.includes(value as ReconstructionSimulationStepType)
+  );
+}
+
+function isKnownExpectedOutputDescriptorType(
+  value: unknown,
+): value is ReconstructionSimulationExpectedOutputDescriptorType {
+  return (
+    typeof value === "string" &&
+    RECONSTRUCTION_SIMULATION_EXPECTED_OUTPUT_DESCRIPTOR_TYPES.includes(
+      value as ReconstructionSimulationExpectedOutputDescriptorType,
+    )
+  );
+}
+
+function isExecutionState(value: unknown): boolean {
+  return (
+    value === "running" ||
+    value === "executed" ||
+    value === "completed" ||
+    value === "complete" ||
+    value === "simulated"
+  );
+}
+
+function validateExpectedOutputDescriptors(
+  expectedOutputs: unknown,
+  path: string,
+  errors: string[],
+): void {
+  if (!Array.isArray(expectedOutputs)) {
+    errors.push(`${path} must be an array`);
+    return;
+  }
+
+  for (const [index, expectedOutput] of expectedOutputs.entries()) {
+    const outputPath = `${path}[${index}]`;
+
+    if (!isObject(expectedOutput)) {
+      errors.push(`${outputPath} must be an object`);
+      continue;
+    }
+
+    if (!hasNonEmptyString(expectedOutput.outputId)) {
+      errors.push(`${outputPath}.outputId is required`);
+    }
+
+    if (!isKnownExpectedOutputDescriptorType(expectedOutput.descriptorType)) {
+      errors.push(`${outputPath}.descriptorType must be a known planned descriptor type`);
+    }
+
+    if (expectedOutput.outputState !== "planned_descriptor") {
+      errors.push(`${outputPath}.outputState must be planned_descriptor`);
+    }
+
+    if ("generationState" in expectedOutput) {
+      errors.push(`${outputPath} must not include generationState`);
+    }
+
+    if ("artifactId" in expectedOutput) {
+      errors.push(`${outputPath} must not include artifactId`);
+    }
+  }
 }
 
 export function validateReconstructionDryRunPackage(
@@ -407,6 +773,138 @@ export function validateReconstructionDryRunPackage(
     if (dryRunPackage.boundary.futureApprovalRequired !== true) {
       errors.push("boundary futureApprovalRequired must remain true");
     }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+export function validateReconstructionSimulationPlan(
+  simulationPlan: unknown,
+): ReconstructionSimulationPlanValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!isObject(simulationPlan)) {
+    return {
+      valid: false,
+      errors: ["simulation plan must be an object"],
+      warnings,
+    };
+  }
+
+  if (!hasNonEmptyString(simulationPlan.simulationPlanId)) {
+    errors.push("simulationPlanId is required");
+  }
+
+  if (!hasNonEmptyString(simulationPlan.dryRunId)) {
+    errors.push("dryRunId is required");
+  }
+
+  if (!hasNonEmptyString(simulationPlan.reconstructionPackageId)) {
+    errors.push("reconstructionPackageId is required");
+  }
+
+  if (!hasNonEmptyString(simulationPlan.siteVersionId)) {
+    errors.push("siteVersionId is required");
+  }
+
+  if (!isObject(simulationPlan.routeScope)) {
+    errors.push("routeScope is required");
+  }
+
+  if (isExecutionState(simulationPlan.planStatus)) {
+    errors.push("planStatus must not be an executed, running, completed, or simulated state");
+  }
+
+  if (!isKnownSimulationPlanStatus(simulationPlan.planStatus)) {
+    errors.push("planStatus must be a known ReconstructionSimulationPlanStatus");
+  }
+
+  if (!Array.isArray(simulationPlan.plannedSteps)) {
+    errors.push("plannedSteps must be an array");
+  } else {
+    if (simulationPlan.planStatus === "planned" && simulationPlan.plannedSteps.length === 0) {
+      errors.push("planned simulation plans must include planned steps");
+    }
+
+    for (const [index, step] of simulationPlan.plannedSteps.entries()) {
+      const stepPath = `plannedSteps[${index}]`;
+
+      if (!isObject(step)) {
+        errors.push(`${stepPath} must be an object`);
+        continue;
+      }
+
+      if (!hasNonEmptyString(step.stepId)) {
+        errors.push(`${stepPath}.stepId is required`);
+      }
+
+      if (!isKnownSimulationStepType(step.stepType)) {
+        errors.push(`${stepPath}.stepType must be a known ReconstructionSimulationStepType`);
+      }
+
+      if (isExecutionState(step.status)) {
+        errors.push(
+          `${stepPath}.status must not be an executed, running, completed, or simulated state`,
+        );
+      }
+
+      if (!isKnownSimulationPlanStatus(step.status)) {
+        errors.push(`${stepPath}.status must be a known ReconstructionSimulationPlanStatus`);
+      }
+
+      if (!Array.isArray(step.requiredInputs)) {
+        errors.push(`${stepPath}.requiredInputs must be an array`);
+      }
+
+      validateExpectedOutputDescriptors(
+        step.expectedOutputs,
+        `${stepPath}.expectedOutputs`,
+        errors,
+      );
+
+      if (!Array.isArray(step.blockers)) {
+        errors.push(`${stepPath}.blockers must be an array`);
+      }
+
+      if (!Array.isArray(step.notes)) {
+        errors.push(`${stepPath}.notes must be an array`);
+      }
+    }
+  }
+
+  if (!Array.isArray(simulationPlan.requiredInputs)) {
+    errors.push("requiredInputs must be an array");
+  }
+
+  validateExpectedOutputDescriptors(simulationPlan.expectedOutputs, "expectedOutputs", errors);
+
+  if (!Array.isArray(simulationPlan.blockers)) {
+    errors.push("blockers must be an array");
+  } else if (simulationPlan.planStatus === "blocked" && simulationPlan.blockers.length === 0) {
+    errors.push("blocked simulation plans must include blockers");
+  }
+
+  if (!Array.isArray(simulationPlan.limitations)) {
+    errors.push("limitations must be an array");
+  }
+
+  if (
+    Array.isArray((simulationPlan as { generatedOutputs?: unknown }).generatedOutputs) &&
+    (simulationPlan as { generatedOutputs: unknown[] }).generatedOutputs.length > 0
+  ) {
+    errors.push("simulation plans must not include generatedOutputs");
+  }
+
+  if (
+    Array.isArray((simulationPlan as { simulationArtifacts?: unknown }).simulationArtifacts) &&
+    (simulationPlan as { simulationArtifacts: unknown[] }).simulationArtifacts.length > 0
+  ) {
+    errors.push("simulation plans must not include simulationArtifacts");
   }
 
   return {
