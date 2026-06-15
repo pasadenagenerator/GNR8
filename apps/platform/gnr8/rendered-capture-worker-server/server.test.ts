@@ -52,6 +52,7 @@ async function startServer(input?: {
       },
       artifacts: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       diagnostics: [],
       qualitySummary: {
         renderedDomQuality: "strong",

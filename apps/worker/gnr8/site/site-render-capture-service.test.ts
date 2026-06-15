@@ -113,6 +113,25 @@ test('runSiteRenderCapture persists rendered evidence and patches runtime proven
           },
         ],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [
+          {
+            routePath: '/',
+            viewportWidth: 1366,
+            viewportHeight: 768,
+            documentHeight: 1600,
+            capturedAt: '2026-06-15T10:00:00.000Z',
+            regions: [
+              {
+                regionId: 'layout-region-main',
+                tagName: 'main',
+                role: 'main',
+                selector: 'body > main:nth-of-type(1)',
+                boundingBox: { x: 0, y: 80, width: 1366, height: 700 },
+                childCount: 2,
+              },
+            ],
+          },
+        ],
         renderedObservedAssetUrls: [],
         diagnostics: [{ code: 'CAPTURE_JOB_COMPLETED', severity: 'info', message: 'ok' }],
       }),
@@ -128,10 +147,14 @@ test('runSiteRenderCapture persists rendered evidence and patches runtime proven
   assert.equal(result.failureReason, null)
   assert.equal(fs.existsSync(path.resolve(root, 'rendered', 'rendered-dom.html')), true)
   assert.equal(fs.existsSync(path.resolve(root, 'rendered', 'computed-styles.json')), true)
+  assert.equal(fs.existsSync(path.resolve(root, 'rendered', 'layout-geometry.json')), true)
   assert.equal(fs.existsSync(path.resolve(root, 'acquisition-evidence.json')), true)
   assert.equal(persistedSummary?.sourceMode, 'rendered_dom')
   assert.equal(persistedSummary?.renderedCaptureStatus, 'available')
   assert.equal(persistedSummary?.captureEvidence.renderedDomPath?.endsWith('/rendered/rendered-dom.html'), true)
+  assert.equal(persistedSummary?.captureEvidence.layoutGeometryPath?.endsWith('/rendered/layout-geometry.json'), true)
+  assert.equal(persistedSummary?.evidenceCaptureBaselineArtifact?.captureExpansionEvidence.layoutGeometryEvidence[0]?.regions.length, 1)
+  assert.equal(persistedSummary?.evidenceCaptureBaselineArtifact?.summaries.layoutGeometry.geometryCaptured, true)
 })
 
 test('runSiteRenderCapture keeps screenshot-only evidence as rendered_dom truth', async () => {
@@ -229,6 +252,7 @@ test('runSiteRenderCapture keeps screenshot-only evidence as rendered_dom truth'
           },
         ],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics: [{ code: 'RENDERED_CAPTURE_SCREENSHOT_ONLY', severity: 'warning', message: 'screenshot only' }],
       }),
@@ -327,6 +351,7 @@ test('runSiteRenderCapture marks empty success as failed capture truth', async (
         documents: [],
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics: [{ code: 'CAPTURE_JOB_COMPLETED', severity: 'info', message: 'worker completed' }],
       }),
@@ -425,6 +450,7 @@ test('runSiteRenderCapture marks missing worker config as deterministic failure 
         documents: [],
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics: [{ code: 'CAPTURE_WORKER_NOT_CONFIGURED', severity: 'warning', message: 'worker config missing' }],
       }),
@@ -523,6 +549,7 @@ test('runSiteRenderCapture marks unreachable worker as deterministic failure tru
         documents: [],
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics: [
           { code: 'CAPTURE_WORKER_TIMEOUT', severity: 'warning', message: 'timed out' },
@@ -629,6 +656,7 @@ test('runSiteRenderCapture keeps non-zero DOM length as usable evidence', async 
         ],
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics: [{ code: 'CAPTURE_WORKER_EMPTY_RENDER_RESULT', severity: 'warning', message: 'empty result' }],
       }),

@@ -16,6 +16,8 @@ import {
   extractWidgetInventory,
   normalizeCapturedRouteIdentity,
 } from "./evidence-capture-expansion";
+import { createLayoutGeometryEvidence } from "./layout-geometry-capture";
+import type { LayoutGeometryEvidence } from "./evidence-capture-layout-contract";
 
 export const EVIDENCE_CAPTURE_BASELINE_ARTIFACT_KIND = "evidence_capture_baseline" as const;
 export const EVIDENCE_CAPTURE_BASELINE_COVERAGE_SOURCE = "phase_7f_2_5_inventory_audit" as const;
@@ -54,10 +56,14 @@ export type EvidenceCaptureBaselineArtifactRecord = {
   coverage: EvidenceCaptureBaselineCoverage;
   fieldAvailability: EvidenceCaptureBaselineFieldAvailability;
   evidence: EvidenceCaptureArtifact;
+  captureExpansionEvidence: {
+    layoutGeometryEvidence: LayoutGeometryEvidence[];
+  };
   persistedRefs: {
     rawHtmlRef: EvidenceArtifactRef | null;
     renderedDomRef: EvidenceArtifactRef | null;
     computedStyleRef: EvidenceArtifactRef | null;
+    layoutGeometryRef: EvidenceArtifactRef | null;
     screenshotRefs: EvidenceArtifactRef[];
     acquisitionEvidenceRef: EvidenceArtifactRef | null;
     renderedCaptureManifestRef: EvidenceArtifactRef | null;
@@ -72,6 +78,12 @@ export type EvidenceCaptureBaselineArtifactRecord = {
     renderedDomLength: number | null;
     screenshotCount: number;
     computedStyleSampleCount: number;
+    layoutGeometry: {
+      geometryCaptured: boolean;
+      regionCount: number;
+      viewportWidth: number | null;
+      viewportHeight: number | null;
+    };
     assetInventory: {
       persistedAssetCount: number | null;
       externalFallbackAssetCount: number | null;
@@ -253,6 +265,7 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
   captureProvider?: CaptureProvider;
   renderedHtml?: string | null;
   computedStyleSamples?: unknown[] | null;
+  layoutGeometryEvidence?: LayoutGeometryEvidence[] | null;
   importProvenanceSummary: RuntimeImportProvenanceSummary;
   rawImportArtifact?: {
     artifactId?: string | null;
@@ -325,6 +338,11 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
       : null;
   const renderedDomRef = refFromPath({ id: "rendered_dom", path: summary.captureEvidence.renderedDomPath, mediaType: "text/html" });
   const computedStyleRef = refFromPath({ id: "computed_styles", path: summary.captureEvidence.computedStylesPath, mediaType: "application/json" });
+  const layoutGeometryRef = refFromPath({
+    id: "layout_geometry",
+    path: summary.captureEvidence.layoutGeometryPath,
+    mediaType: "application/json",
+  });
   const screenshotRefs = summary.captureEvidence.screenshotPaths
     .map((shot, index) => refFromPath({ id: `screenshot_${index + 1}`, path: shot, mediaType: "image/png" }))
     .filter((ref): ref is EvidenceArtifactRef => ref !== null);
@@ -351,6 +369,52 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
   });
   artifact.network.assetClassifications = [];
   artifact.route.rawFilePath = optionalText(input.rawImportArtifact?.entryHtmlPath);
+
+  const layoutGeometryEvidence = (input.layoutGeometryEvidence ?? [])
+    .map((evidence) =>
+      createLayoutGeometryEvidence({
+        routePath,
+        viewportWidth: evidence.viewportWidth,
+        viewportHeight: evidence.viewportHeight,
+        documentHeight: evidence.documentHeight,
+        capturedAt: evidence.capturedAt || capturedAt,
+        regions: evidence.regions,
+      }),
+    )
+    .filter((evidence) => evidence.regions.length > 0);
+  const firstLayoutGeometry = layoutGeometryEvidence[0] ?? null;
+  if (firstLayoutGeometry) {
+    artifact.rendered.viewport = {
+      width: firstLayoutGeometry.viewportWidth,
+      height: firstLayoutGeometry.viewportHeight,
+      deviceScaleFactor: null,
+      isMobile: false,
+    };
+    artifact.layout.viewportBreakpoints = [artifact.rendered.viewport];
+    artifact.layout.aboveFoldRegions = firstLayoutGeometry.regions.map((region) => ({
+      id: region.regionId,
+      selectorHint: region.selector,
+      roleHint: region.role ?? region.tagName,
+      x: region.boundingBox.x,
+      y: region.boundingBox.y,
+      width: region.boundingBox.width,
+      height: region.boundingBox.height,
+      evidenceRefIds: [region.regionId],
+    }));
+    artifact.layout.routeLevelStructuralHints = firstLayoutGeometry.regions
+      .filter((region) => region.tagName !== "body" && region.tagName !== "section")
+      .map((region) => ({
+        hint:
+          region.tagName === "main"
+            ? ("main_content" as const)
+            : region.tagName === "aside"
+              ? ("sidebar" as const)
+              : (region.tagName as "header" | "footer" | "nav"),
+        selectorHint: region.selector,
+        confidence: 1,
+        evidenceRefIds: [region.regionId],
+      }));
+  }
 
   const fontInventory = extractLoadedFontInventory({
     renderedHtml: input.renderedHtml,
@@ -461,6 +525,9 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
     }));
 
   const { labels, fidelityLimitations } = buildBaselineLimitations(summary);
+  const limitationLabels = firstLayoutGeometry
+    ? labels.filter((label) => label !== "missing_layout_boxes")
+    : labels;
   artifact.fidelityLimitations = fidelityLimitations;
 
   return {
@@ -481,10 +548,14 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
     coverage: BASELINE_COVERAGE,
     fieldAvailability: FIELD_AVAILABILITY,
     evidence: artifact,
+    captureExpansionEvidence: {
+      layoutGeometryEvidence,
+    },
     persistedRefs: {
       rawHtmlRef,
       renderedDomRef,
       computedStyleRef,
+      layoutGeometryRef,
       screenshotRefs,
       acquisitionEvidenceRef: refFromPath({
         id: "acquisition_evidence",
@@ -507,6 +578,12 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
       renderedDomLength: numberOrNull(summary.renderedCapture.domLength),
       screenshotCount: summary.screenshotCount,
       computedStyleSampleCount: summary.computedStyleSampleCount,
+      layoutGeometry: {
+        geometryCaptured: layoutGeometryEvidence.length > 0,
+        regionCount: layoutGeometryEvidence.reduce((count, evidence) => count + evidence.regions.length, 0),
+        viewportWidth: firstLayoutGeometry?.viewportWidth ?? null,
+        viewportHeight: firstLayoutGeometry?.viewportHeight ?? null,
+      },
       assetInventory: {
         persistedAssetCount: numberOrNull(input.rawImportArtifact?.metadata?.assetSummary?.persistedAssetCount),
         externalFallbackAssetCount: numberOrNull(input.rawImportArtifact?.metadata?.assetSummary?.externalFallbackAssetCount),
@@ -525,7 +602,7 @@ export function buildEvidenceCaptureBaselineArtifact(input: {
         reason: summary.sourceMode === "raw_html_fallback" ? summary.renderedCapture.execution.failureCode ?? "rendered_capture_unusable" : null,
       },
     },
-    limitations: labels,
+    limitations: limitationLabels,
     fidelityLimitations,
   };
 }
@@ -539,6 +616,7 @@ export function attachEvidenceCaptureBaselineArtifact(input: {
   capturedAt?: string | null;
   renderedHtml?: string | null;
   computedStyleSamples?: unknown[] | null;
+  layoutGeometryEvidence?: LayoutGeometryEvidence[] | null;
   importProvenanceSummary: RuntimeImportProvenanceSummary;
   rawImportArtifact?: Parameters<typeof buildEvidenceCaptureBaselineArtifact>[0]["rawImportArtifact"];
 }): RuntimeImportProvenanceSummary {

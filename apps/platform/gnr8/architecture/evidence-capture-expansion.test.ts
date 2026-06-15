@@ -8,6 +8,7 @@ import {
   normalizeCapturedRouteIdentity,
 } from "./evidence-capture-expansion";
 import { buildEvidenceCaptureBaselineArtifact } from "./evidence-capture-baseline-artifact";
+import { buildEvidenceCaptureBaselineGeometrySummary } from "../site/evidence-capture-baseline-read-model";
 import type { RuntimeImportProvenanceSummary } from "../runtime/types";
 
 function provenance(): RuntimeImportProvenanceSummary {
@@ -60,6 +61,7 @@ function provenance(): RuntimeImportProvenanceSummary {
       acquisitionEvidencePath: "/tmp/run/acquisition-evidence.json",
       renderedDomPath: "/tmp/run/rendered/dom.html",
       computedStylesPath: "/tmp/run/rendered/computed-styles.json",
+      layoutGeometryPath: "/tmp/run/rendered/layout-geometry.json",
       renderedViewportScreenshotPath: null,
       renderedFullpageScreenshotPath: null,
       screenshotPaths: [],
@@ -221,4 +223,56 @@ test("CASE 14 Deterministic enrichment", () => {
   assert.equal(left.evidence.computedStyle.fontsDetected.some((font) => font.providerClassification === "google_fonts"), true);
   assert.equal(left.evidence.widgets.inventory.some((widget) => widget.type === "map"), true);
   assert.equal(left.evidence.widgets.forms.length, 1);
+});
+
+test("CASE 15 Layout geometry persists in baseline artifact and read model", () => {
+  const artifact = buildEvidenceCaptureBaselineArtifact({
+    sourceUrl: "https://example.com/",
+    finalUrl: "https://example.com/",
+    routePath: "/",
+    renderedHtml: "<main><h1>Hello</h1></main>",
+    importProvenanceSummary: provenance(),
+    layoutGeometryEvidence: [
+      {
+        routePath: "/source-route",
+        viewportWidth: 1366,
+        viewportHeight: 768,
+        documentHeight: 1800,
+        capturedAt: "2026-06-15T10:00:00.000Z",
+        regions: [
+          {
+            regionId: "layout-region-main",
+            tagName: "main",
+            role: "main",
+            selector: "body > main:nth-of-type(1)",
+            boundingBox: { x: 0, y: 72, width: 1366, height: 600 },
+            childCount: 1,
+          },
+          {
+            regionId: "layout-region-link",
+            tagName: "a",
+            role: null,
+            selector: "a",
+            boundingBox: { x: 24, y: 100, width: 40, height: 20 },
+            childCount: 0,
+          },
+        ],
+      },
+    ],
+  });
+  const geometry = artifact.captureExpansionEvidence.layoutGeometryEvidence[0]!;
+  const summary = buildEvidenceCaptureBaselineGeometrySummary(artifact);
+
+  assert.equal(artifact.persistedRefs.layoutGeometryRef?.uri, "/tmp/run/rendered/layout-geometry.json");
+  assert.equal(geometry.routePath, "/");
+  assert.deepEqual(geometry.regions.map((region) => region.tagName), ["main"]);
+  assert.deepEqual(summary, {
+    geometryCaptured: true,
+    regionCount: 1,
+    viewport: {
+      width: 1366,
+      height: 768,
+    },
+  });
+  assert.equal(artifact.evidence.layout.aboveFoldRegions.length, 1);
 });

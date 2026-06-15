@@ -294,6 +294,7 @@ function createTemplateSnapshot(input: {
       documents: [],
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {

@@ -46,6 +46,15 @@ export type OriginalMirrorFidelitySummary = {
   missingPercentage: number;
 };
 
+export type EvidenceCaptureBaselineGeometrySummary = {
+  geometryCaptured: boolean;
+  regionCount: number;
+  viewport: {
+    width: number | null;
+    height: number | null;
+  };
+};
+
 export type OriginalMirrorKnownLimitation = {
   id: string;
   category: OriginalMirrorLimitationCategory;
@@ -194,6 +203,7 @@ function addUniqueLimitations(
 
 function buildKnownLimitations(artifact: EvidenceCaptureBaselineArtifactRecord): OriginalMirrorKnownLimitation[] {
   const limitations: OriginalMirrorKnownLimitation[] = [];
+  const geometryCaptured = artifact.summaries.layoutGeometry?.geometryCaptured === true;
   const add = (item: OriginalMirrorKnownLimitation, condition: boolean) => {
     if (condition) limitations.push(item);
   };
@@ -269,7 +279,8 @@ function buildKnownLimitations(artifact: EvidenceCaptureBaselineArtifactRecord):
       title: "Layout boxes unavailable",
       description: "Browser layout box extraction is unavailable in the persisted baseline evidence.",
     }),
-    hasLimitationLabel(artifact, "missing_layout_boxes") || hasField(artifact, "layoutBoxExtraction") || artifact.evidence.layout.layoutBoxRefs.length === 0,
+    !geometryCaptured &&
+      (hasLimitationLabel(artifact, "missing_layout_boxes") || hasField(artifact, "layoutBoxExtraction") || artifact.evidence.layout.layoutBoxRefs.length === 0),
   );
   add(
     knownLimitation({
@@ -279,10 +290,11 @@ function buildKnownLimitations(artifact: EvidenceCaptureBaselineArtifactRecord):
       title: "Layout regions unavailable",
       description: "Above-fold, repeated-region, and route-level layout region evidence is not available for this baseline.",
     }),
-    hasField(artifact, "layoutEvidence") ||
-      (artifact.evidence.layout.aboveFoldRegions.length === 0 &&
-        artifact.evidence.layout.repeatedRegions.length === 0 &&
-        artifact.evidence.layout.routeLevelStructuralHints.length === 0),
+    !geometryCaptured &&
+      (hasField(artifact, "layoutEvidence") ||
+        (artifact.evidence.layout.aboveFoldRegions.length === 0 &&
+          artifact.evidence.layout.repeatedRegions.length === 0 &&
+          artifact.evidence.layout.routeLevelStructuralHints.length === 0)),
   );
   add(
     knownLimitation({
@@ -469,6 +481,30 @@ export function buildOriginalMirrorFidelityProjection(
     limitationsByCategory: groupLimitations(limitations),
     routeLimitations: buildRouteLimitations(artifact),
     diagnostics: ["ORIGINAL_MIRROR_FIDELITY_DERIVED_FROM_EVIDENCE_CAPTURE_BASELINE"],
+  };
+}
+
+export function buildEvidenceCaptureBaselineGeometrySummary(
+  artifact: EvidenceCaptureBaselineArtifactRecord | null,
+): EvidenceCaptureBaselineGeometrySummary {
+  if (!artifact) {
+    return {
+      geometryCaptured: false,
+      regionCount: 0,
+      viewport: {
+        width: null,
+        height: null,
+      },
+    };
+  }
+
+  return {
+    geometryCaptured: artifact.summaries.layoutGeometry?.geometryCaptured === true,
+    regionCount: artifact.summaries.layoutGeometry?.regionCount ?? 0,
+    viewport: {
+      width: artifact.summaries.layoutGeometry?.viewportWidth ?? null,
+      height: artifact.summaries.layoutGeometry?.viewportHeight ?? null,
+    },
   };
 }
 

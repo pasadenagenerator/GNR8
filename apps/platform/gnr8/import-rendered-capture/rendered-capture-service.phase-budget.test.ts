@@ -107,6 +107,7 @@ test("runRenderedCapture preserves partial artifacts when later phase timeout is
         },
       ],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
@@ -144,6 +145,7 @@ test("runRenderedCapture upgrades unavailable to partial when browser artifacts 
       },
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [],
     }),
@@ -164,6 +166,7 @@ test("runRenderedCapture keeps unavailable when no browser artifacts exist", asy
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [],
     }),
@@ -184,6 +187,7 @@ test("runRenderedCapture preserves unsupported classification from runtime diagn
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
@@ -210,6 +214,7 @@ test("runRenderedCapture downgrades available to failed when no rendered evidenc
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [],
     }),
@@ -254,6 +259,7 @@ test("runRenderedCapture keeps partial when at least one rendered evidence artif
           },
         },
       ],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [],
     }),

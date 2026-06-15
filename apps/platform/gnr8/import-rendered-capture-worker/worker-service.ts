@@ -406,6 +406,7 @@ export async function executeRenderedCaptureWorkerRequest(input: {
       environment: resolveEnvironmentTruth(result),
       artifacts,
       computedStyleSamples: result.computedStyleSamples,
+      layoutGeometryEvidence: result.layoutGeometryEvidence,
       diagnostics: mergedDiagnostics,
       qualitySummary: {
         renderedDomQuality: result.sourceMode === "rendered_dom" ? (status === "available" ? "strong" : "weak") : "unusable",
@@ -459,6 +460,7 @@ export async function executeRenderedCaptureWorkerRequest(input: {
       },
       artifacts: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       diagnostics: failedDiagnostics,
       qualitySummary: {
         renderedDomQuality: "unusable",

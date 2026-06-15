@@ -192,6 +192,7 @@ test("rendered capture unavailable falls back to raw_html and preserves raw resp
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
@@ -309,6 +310,7 @@ test("worker-backed rendered capture success selects rendered_dom and materializ
           },
         },
       ],
+      layoutGeometryEvidence: [],
       diagnostics: [
         {
           code: "CAPTURE_WORKER_REQUEST_STARTED",
@@ -414,6 +416,7 @@ test("worker-backed success with shared-storage artifact URIs is accepted and do
         },
       ],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       diagnostics: [],
       qualitySummary: {
         renderedDomQuality: "strong",
@@ -475,6 +478,7 @@ test("worker-backed failure degrades explicitly to raw_html_fallback", async () 
       },
       artifacts: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       diagnostics: [
         {
           code: "CAPTURE_WORKER_UNAVAILABLE",
@@ -544,6 +548,7 @@ test("fresh successful run is isolated from stale fallback diagnostics and evide
       },
       artifacts: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       diagnostics: [
         { code: "CAPTURE_WORKER_HTTP_ERROR", severity: "warning", message: "http error" },
         { code: "CAPTURE_WORKER_UNAVAILABLE", severity: "warning", message: "worker unavailable" },
@@ -630,6 +635,7 @@ test("fresh successful run is isolated from stale fallback diagnostics and evide
           },
         },
       ],
+      layoutGeometryEvidence: [],
       diagnostics: [
         { code: "CAPTURE_WORKER_RENDERED_DOM_USED", severity: "info", message: "accepted" },
         { code: "DOM_SERIALIZATION_SUCCEEDED", severity: "info", message: "dom ok" },
@@ -693,6 +699,7 @@ test("worker execution failure is distinguished from worker-unavailable transpor
       },
       artifacts: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       diagnostics: [
         {
           code: "CAPTURE_WORKER_EXECUTION_FAILED",
@@ -754,6 +761,7 @@ test("environment-not-supported diagnostic path remains explicit and fallback st
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
@@ -867,6 +875,7 @@ test("rendered capture contract is persisted and rendered_dom becomes primary sn
           },
         },
       ],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: ["https://rendered-primary.example.com/app.css"],
       diagnostics: [
         {
@@ -959,6 +968,7 @@ test("rendered capture failure emits diagnostics and still returns snapshot outp
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
@@ -1001,6 +1011,7 @@ test("weak rendered DOM snapshot remains rendered_dom source with degraded fidel
       },
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [],
     }),
@@ -1033,6 +1044,7 @@ test("entry fetch recovers via normalized URL candidate (www/non-www fallback)",
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [{ code: "RENDERED_CAPTURE_UNAVAILABLE", severity: "warning", message: "mock unavailable" }],
     }),
@@ -1070,6 +1082,7 @@ test("entry fetch timeout is classified and succeeds on bounded retry", async ()
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [{ code: "RENDERED_CAPTURE_UNAVAILABLE", severity: "warning", message: "mock unavailable" }],
     }),
@@ -1102,6 +1115,7 @@ test("rendered capture weak-then-recovered path is preserved in diagnostics", as
       },
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
@@ -1142,6 +1156,7 @@ test("rendered capture hard failure surfaces explicit navigation diagnostics", a
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [
         {
@@ -1199,6 +1214,7 @@ test("screenshot-only rendered capture is persisted as partial with coherent scr
         },
       ],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [{ code: "RENDERED_CAPTURE_SCREENSHOT_ONLY", severity: "warning", message: "screenshot only" }],
     }),
@@ -1258,6 +1274,7 @@ test("style sampling failure is diagnosed explicitly and capture remains partial
         },
       ],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [{ code: "RENDERED_CAPTURE_STYLE_SAMPLING_FAILED", severity: "warning", message: "style extraction failed" }],
     }),
@@ -1292,6 +1309,7 @@ test("no-usable-source hard fails when rendered and raw HTML are both unusable",
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [{ code: "RENDERED_CAPTURE_UNAVAILABLE", severity: "warning", message: "mock unavailable" }],
     }),
@@ -1377,6 +1395,7 @@ test("pipeline succeeds when rendered capture is unavailable and reports raw_htm
         document: null,
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics: [
           {

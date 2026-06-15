@@ -173,6 +173,9 @@ export function mapWorkerResponseToRenderedCaptureResult(input: {
   }
 
   const computedStyleSamples = Array.isArray(input.response.computedStyleSamples) ? input.response.computedStyleSamples : [];
+  const layoutGeometryEvidence = Array.isArray(input.response.layoutGeometryEvidence)
+    ? input.response.layoutGeometryEvidence
+    : [];
 
   const mappedStatus: RenderedCaptureResult["status"] =
     input.response.status === "unsupported"
@@ -193,6 +196,7 @@ export function mapWorkerResponseToRenderedCaptureResult(input: {
     documents,
     screenshots,
     computedStyleSamples,
+    layoutGeometryEvidence,
     renderedObservedAssetUrls: [],
     diagnostics,
   };

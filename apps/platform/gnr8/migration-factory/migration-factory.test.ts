@@ -184,6 +184,7 @@ function createMockSnapshotImporter(input: {
             : [],
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics: [],
       },

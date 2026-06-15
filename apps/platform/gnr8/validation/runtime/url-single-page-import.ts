@@ -1794,6 +1794,7 @@ function ensureRenderedCaptureArtifacts(input: {
 }): {
   renderedDomPathAbs: string;
   computedStylesPathAbs: string;
+  layoutGeometryPathAbs: string;
   viewportScreenshotPathAbs: string | null;
   fullpageScreenshotPathAbs: string | null;
   renderedDomCanonicalPathAbs: string;
@@ -1807,6 +1808,7 @@ function ensureRenderedCaptureArtifacts(input: {
   const renderedDomPathAbs = path.resolve(renderedDirAbs, "rendered-dom.html");
   const renderedDomCanonicalPathAbs = path.resolve(renderedDirAbs, "dom.html");
   const computedStylesPathAbs = path.resolve(renderedDirAbs, "computed-styles.json");
+  const layoutGeometryPathAbs = path.resolve(renderedDirAbs, "layout-geometry.json");
   const renderedScreenshotCanonicalPathAbs = path.resolve(renderedDirAbs, "screenshot.png");
   const renderedMetadataPathAbs = path.resolve(renderedDirAbs, "metadata.json");
   const viewportScreenshotPathAbs = path.resolve(screenshotDirAbs, "viewport.png");
@@ -1831,6 +1833,7 @@ function ensureRenderedCaptureArtifacts(input: {
     samples: input.renderedCapture.computedStyleSamples,
     diagnostics: input.renderedCapture.diagnostics.map((diag) => diag.code),
   } as unknown as JsonValue);
+  writeJsonStable(layoutGeometryPathAbs, input.renderedCapture.layoutGeometryEvidence as unknown as JsonValue);
 
   const viewportShot = input.renderedCapture.screenshots.find((shot) => shot.captureType === "desktop_viewport");
   const fullpageShot = input.renderedCapture.screenshots.find((shot) => shot.captureType === "desktop_fullpage");
@@ -1883,6 +1886,7 @@ function ensureRenderedCaptureArtifacts(input: {
           domSize: renderedHtml.trim().length,
           screenshotCount,
           computedStyleSampleCount: input.renderedCapture.computedStyleSamples.length,
+          layoutRegionCount: input.renderedCapture.layoutGeometryEvidence.reduce((count, evidence) => count + evidence.regions.length, 0),
         },
       }),
     );
@@ -1916,6 +1920,7 @@ function ensureRenderedCaptureArtifacts(input: {
         details: {
           renderedDomPathAbs,
           computedStylesPathAbs,
+          layoutGeometryPathAbs,
           viewportScreenshotPathAbs,
           fullpageScreenshotPathAbs,
         },
@@ -1926,6 +1931,7 @@ function ensureRenderedCaptureArtifacts(input: {
   return {
     renderedDomPathAbs,
     computedStylesPathAbs,
+    layoutGeometryPathAbs,
     viewportScreenshotPathAbs: viewportCaptured ? viewportScreenshotPathAbs : null,
     fullpageScreenshotPathAbs: fullPageCaptured ? fullpageScreenshotPathAbs : null,
     renderedDomCanonicalPathAbs,
@@ -1963,6 +1969,19 @@ function buildRenderedCaptureManifest(input: {
       totalSamples: 10,
       validSamples: input.renderedCapture.computedStyleSamples.length,
       coverage: Number((input.renderedCapture.computedStyleSamples.length / 10).toFixed(3)),
+    },
+    layoutGeometrySummary: {
+      geometryCaptured: input.renderedCapture.layoutGeometryEvidence.length > 0,
+      regionCount: input.renderedCapture.layoutGeometryEvidence.reduce((count, evidence) => count + evidence.regions.length, 0),
+      viewport: input.renderedCapture.layoutGeometryEvidence[0]
+        ? {
+            width: input.renderedCapture.layoutGeometryEvidence[0].viewportWidth,
+            height: input.renderedCapture.layoutGeometryEvidence[0].viewportHeight,
+          }
+        : {
+            width: null,
+            height: null,
+          },
     },
     screenshotSummary: {
       viewportCaptured: input.viewportCaptured,
@@ -3112,6 +3131,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       documents: [],
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics: [],
     };
@@ -3294,6 +3314,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     documents: [],
     screenshots: [],
     computedStyleSamples: [],
+    layoutGeometryEvidence: [],
     renderedObservedAssetUrls: [],
     diagnostics: [],
   };
@@ -3305,6 +3326,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
   let workerEnabled = true;
   let renderedDomPathAbs: string | null = null;
   let computedStylesPathAbs: string | null = null;
+  let layoutGeometryPathAbs: string | null = null;
   let viewportScreenshotPathAbs: string | null = null;
   let fullpageScreenshotPathAbs: string | null = null;
 
@@ -3803,6 +3825,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     });
     renderedDomPathAbs = ensured.renderedDomPathAbs;
     computedStylesPathAbs = ensured.computedStylesPathAbs;
+    layoutGeometryPathAbs = ensured.layoutGeometryPathAbs;
     viewportScreenshotPathAbs = ensured.viewportScreenshotPathAbs;
     fullpageScreenshotPathAbs = ensured.fullpageScreenshotPathAbs;
   }
@@ -4987,6 +5010,20 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       renderedArtifacts: {
         renderedDomPathAbs,
         computedStylesPathAbs,
+        layoutGeometryPathAbs,
+      },
+      layoutGeometry: {
+        geometryCaptured: renderedCapture.layoutGeometryEvidence.length > 0,
+        regionCount: renderedCapture.layoutGeometryEvidence.reduce((count, evidence) => count + evidence.regions.length, 0),
+        viewport: renderedCapture.layoutGeometryEvidence[0]
+          ? {
+              width: renderedCapture.layoutGeometryEvidence[0].viewportWidth,
+              height: renderedCapture.layoutGeometryEvidence[0].viewportHeight,
+            }
+          : {
+              width: null,
+              height: null,
+            },
       },
       styleSampleCoverage: Number((renderedCapture.computedStyleSamples.length / 10).toFixed(3)),
       readinessStates: renderedCapture.documents.map((doc) => doc.readinessState),

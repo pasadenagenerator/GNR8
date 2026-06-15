@@ -195,9 +195,9 @@ export function evaluateCaptureExpansionReadiness(
   const navigationRegion = hasNavigationRegion(input);
   const runtimeMutation = hasRuntimeMutationEvidence(input);
 
-  const routeModel: CaptureExpansionReadinessStatus = routePaths
+  const routeModel: CaptureExpansionReadinessStatus = routePaths || layoutGeometry
     ? "READY"
-    : layoutGeometry || sectionBoundaries || navigation || runtimeMutation
+    : sectionBoundaries || navigation || runtimeMutation
       ? "PARTIAL"
       : "MISSING";
 

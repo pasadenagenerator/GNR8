@@ -40,6 +40,57 @@ Recommended next phase:
 
 - Phase 8A-4 - Capture Expansion For First Dry Run
 
+## Post 8A-4 Re-Assessment
+
+Phase 8A-4 improved Dry Run readiness at the contract and roadmap level, not at the execution level.
+
+Previous 8A-3 score:
+
+- Dry Run Readiness: 58/100
+
+Updated scores after 8A-4:
+
+| Readiness Type | Score | Assessment |
+|---|---:|---|
+| Conceptual Dry Run Readiness | 68/100 | Higher because the missing evidence shapes for layout geometry, section boundaries, navigation evidence, and runtime mutation evidence are now explicitly defined. The roadmap can now name the required inputs, evaluate their presence, and explain which route/navigation/section model inputs are missing. |
+| Execution Dry Run Readiness | 58/100 | Still limited because capture implementation does not yet populate the new evidence shapes. No browser layout capture, section boundary extraction, navigation extraction, runtime mutation observation, persistence, candidate discovery execution, or simulation execution was added in 8A-4. |
+
+Explanation:
+
+8A-4 turns several former unknowns into contract-level known gaps. That improves planning quality, scoring clarity, and implementation sequencing. It does not materially improve the evidence available to a future Dry Run executor because the contracts are not yet populated by Evidence Capture and are not persisted as part of the current capture artifacts.
+
+### Post 8A-4 Feasibility Matrix
+
+| Target Model | Feasibility | Rationale |
+|---|---|---|
+| route model | feasible | Route-scoped evidence can now be represented through the new capture-expansion contracts, and earlier source URL / route identity evidence already makes route planning possible. Execution still depends on populated route-level evidence. |
+| navigation model | risky | Navigation evidence now has a contract, but capture does not yet extract navigation items, ordering, source evidence refs, sticky/fixed behavior, or multi-breakpoint layout. |
+| section model | risky | Section boundary and layout geometry contracts now define the needed inputs, but capture does not yet produce rendered section boxes or runtime-stability context. |
+| block model | not_ready | Block-quality planning still needs populated layout geometry, section boundaries, media/widget classification, candidate discovery execution, and reviewed reconstruction intent. |
+| content model | risky | Rendered DOM and raw HTML can support limited content extraction planning, but there is still no executed candidate discovery, content review, or persisted generated content boundary. |
+| design token model | not_ready | Computed styles remain partial, and 8A-4 did not add token candidate contracts, style usage counts, loaded font confidence, or layout-context-aware token extraction. |
+
+### Implementation Gap Matrix
+
+| Evidence Type | Contract Exists | Capture Implemented | Persisted | Used By Readiness | Gap |
+|---|---|---|---|---|---|
+| layout geometry | yes | no | no | contract-level helper only | Implement browser capture of bounded regions, viewport/document dimensions, key selectors, and route-scoped geometry refs. |
+| section boundary evidence | yes | no | no | contract-level helper only | Implement section boundary extraction from rendered geometry, classify section region types, assign confidence, and attach evidence refs. |
+| navigation evidence | yes | no | no | contract-level helper only | Implement navigation extraction for labels, hrefs, ordering, counts, source refs, and eventually sticky/fixed/multi-breakpoint behavior. |
+| runtime mutation evidence | yes | no | no | contract-level helper only | Implement bounded runtime observation for mutation presence, counts, broad mutation types, affected selectors, and stability summary. |
+
+### Recommended 8A-6 Path
+
+Phase 8A-6 should implement layout geometry capture first.
+
+Recommended path:
+
+- A. layout geometry capture first
+
+Rationale:
+
+Layout geometry is the substrate for the other new evidence types. Section boundaries need rendered boxes before they can be reconstruction-grade. Navigation can be more reliable when nav candidates are tied to rendered geometry. Runtime mutation evidence is important, but it is most useful after there is a stable geometry snapshot to compare against. A first layout geometry slice should stay narrow: route-scoped viewport/document dimensions, bounded key regions, selectors, and screenshot-aligned metadata, without simulation, reconstruction, generated output, or publishing behavior.
+
 ## Simulation Readiness Audit
 
 | Area | Status | Assessment | Dry Run Implication |

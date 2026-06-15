@@ -4,6 +4,7 @@ import type {
   RenderedCaptureReadinessPolicy,
   RenderedCaptureViewport,
 } from "../import-rendered-capture/rendered-capture-contract";
+import type { LayoutGeometryEvidence } from "../architecture/evidence-capture-layout-contract";
 
 export const RENDERED_CAPTURE_WORKER_CONTRACT_VERSION = "1.0.0" as const;
 
@@ -105,6 +106,7 @@ export type RenderedCaptureWorkerResponse = {
   environment: RenderedCaptureWorkerEnvironmentTruth;
   artifacts: RenderedCaptureWorkerArtifactRef[];
   computedStyleSamples: ComputedStyleSample[];
+  layoutGeometryEvidence?: LayoutGeometryEvidence[];
   diagnostics: RenderedCaptureDiagnostic[];
   qualitySummary: RenderedCaptureWorkerQualitySummary;
   failure: {

@@ -300,6 +300,7 @@ export type RuntimeImportProvenanceSummary = {
     acquisitionEvidencePath: string | null;
     renderedDomPath: string | null;
     computedStylesPath: string | null;
+    layoutGeometryPath?: string | null;
     renderedViewportScreenshotPath: string | null;
     renderedFullpageScreenshotPath: string | null;
     screenshotPaths: string[];

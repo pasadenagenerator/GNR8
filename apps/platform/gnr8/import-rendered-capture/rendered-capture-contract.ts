@@ -1,3 +1,5 @@
+import type { LayoutGeometryEvidence } from "../architecture/evidence-capture-layout-contract";
+
 export const RENDERED_CAPTURE_FOUNDATION_VERSION = "1.0.0" as const;
 
 export type CaptureSourceMode = "raw_html" | "rendered_dom";
@@ -169,6 +171,7 @@ export type RenderedCaptureResult = {
   documents: RenderedDocumentSnapshot[];
   screenshots: RenderedScreenshotArtifact[];
   computedStyleSamples: ComputedStyleSample[];
+  layoutGeometryEvidence: LayoutGeometryEvidence[];
   renderedObservedAssetUrls: string[];
   diagnostics: RenderedCaptureDiagnostic[];
 };
@@ -214,6 +217,7 @@ export type RenderedCaptureExecutorResult = {
   document: RenderedCaptureExecutorDocument | null;
   screenshots: RenderedCaptureExecutorScreenshot[];
   computedStyleSamples: ComputedStyleSample[];
+  layoutGeometryEvidence: LayoutGeometryEvidence[];
   renderedObservedAssetUrls: string[];
   diagnostics: RenderedCaptureDiagnostic[];
 };

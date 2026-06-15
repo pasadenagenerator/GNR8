@@ -59,10 +59,22 @@ The future Dry Run can read these evidence types as inputs after capture impleme
 
 The readiness helper returns `READY`, `PARTIAL`, or `MISSING` for route, navigation, and section model support. It is a presence helper, not a scoring engine and not a permission to execute a Dry Run.
 
+## Implemented
+
+- Layout Geometry Capture
+
+## Still Missing
+
+- Section Boundary Capture
+- Navigation Capture
+- Runtime Mutation Capture
+
 ## Current Result
 
-Phase 8A-4 creates the contracts required to describe layout geometry, section boundaries, navigation structure, and runtime mutation evidence without implementing capture, Dry Run, AI, reconstruction, React generation, block generation, or publishing.
+Phase 8A-6 implements the first real Evidence Capture expansion slice: deterministic `LayoutGeometryEvidence` for rendered pages. Captured geometry includes route path, viewport dimensions, document height, and major structural regions (`body`, `main`, `header`, `nav`, `footer`, `aside`, and `section`) with selectors, roles, bounding boxes, and child counts.
+
+Layout geometry is persisted inside the existing Evidence Capture baseline artifact and exposed through the baseline read path as summary-only geometry presence, region count, and viewport size. Section inference, navigation extraction, runtime mutation capture, reconstruction execution, dry-run execution, AI generation, React generation, block generation, publishing behavior, and database schema changes remain out of scope.
 
 Recommended next phase:
 
-- Phase 8A-5 - Dry Run Readiness Re-Assessment
+- Phase 8A-7 - Dry Run Readiness Re-Assessment

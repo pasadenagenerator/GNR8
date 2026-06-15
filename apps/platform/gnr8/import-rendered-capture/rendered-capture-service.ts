@@ -20,6 +20,8 @@ import {
   type PlaywrightLaunchFailureCode,
 } from "./playwright-launch-probe";
 import { resolveBrowserRuntimeSelection } from "./browser-runtime";
+import { createLayoutGeometryEvidence } from "../architecture/layout-geometry-capture";
+import type { LayoutGeometryEvidence } from "../architecture/evidence-capture-layout-contract";
 
 export const DEFAULT_RENDERED_CAPTURE_VIEWPORT: RenderedCaptureViewport = {
   width: 1366,
@@ -225,6 +227,16 @@ type StyleSamplingResult = {
   styleSamplingFailed: boolean;
   styleSamplingError: string | null;
 };
+
+function routePathFromUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "file:") return "/";
+    return url.pathname || "/";
+  } catch {
+    return "/";
+  }
+}
 
 type PostNavigationPhaseName =
   | "stabilization"
@@ -715,6 +727,103 @@ async function captureComputedStyles(page: any): Promise<StyleSamplingResult> {
   };
 }
 
+async function captureLayoutGeometry(input: {
+  page: any;
+  routePath: string;
+  capturedAt: string;
+}): Promise<LayoutGeometryEvidence | null> {
+  const raw = await input.page.evaluate(() => {
+    const majorSelector = "body, main, header, nav, footer, aside, section";
+
+    function safeIdent(value: string): string {
+      if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(value);
+      return value.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+    }
+
+    function nthOfType(el: Element): number {
+      let index = 1;
+      let sibling = el.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName === el.tagName) index += 1;
+        sibling = sibling.previousElementSibling;
+      }
+      return index;
+    }
+
+    function selectorFor(el: Element): string {
+      const tag = el.tagName.toLowerCase();
+      if (tag === "body") return "body";
+      const id = el.getAttribute("id");
+      if (id) return `${tag}#${safeIdent(id)}`;
+
+      const segments: string[] = [];
+      let current: Element | null = el;
+      while (current && current instanceof HTMLElement && current.tagName.toLowerCase() !== "html") {
+        const currentTag = current.tagName.toLowerCase();
+        if (currentTag === "body") {
+          segments.unshift("body");
+          break;
+        }
+        const currentId = current.getAttribute("id");
+        if (currentId) {
+          segments.unshift(`${currentTag}#${safeIdent(currentId)}`);
+          break;
+        }
+        segments.unshift(`${currentTag}:nth-of-type(${nthOfType(current)})`);
+        current = current.parentElement;
+      }
+      return segments.join(" > ");
+    }
+
+    const documentElement = document.documentElement;
+    const body = document.body;
+    const documentHeight = Math.max(
+      documentElement?.scrollHeight ?? 0,
+      body?.scrollHeight ?? 0,
+      documentElement?.offsetHeight ?? 0,
+      body?.offsetHeight ?? 0,
+      window.innerHeight,
+    );
+
+    const regions = Array.from(document.querySelectorAll(majorSelector))
+      .filter((node): node is HTMLElement => node instanceof HTMLElement)
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          regionId: "",
+          tagName: el.tagName.toLowerCase(),
+          role: el.getAttribute("role"),
+          selector: selectorFor(el),
+          boundingBox: {
+            x: rect.left + window.scrollX,
+            y: rect.top + window.scrollY,
+            width: rect.width,
+            height: rect.height,
+          },
+          childCount: el.children.length,
+        };
+      });
+
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentHeight,
+      regions,
+    };
+  });
+
+  const evidence = createLayoutGeometryEvidence({
+    routePath: input.routePath,
+    viewportWidth: raw.viewportWidth,
+    viewportHeight: raw.viewportHeight,
+    documentHeight: raw.documentHeight,
+    capturedAt: input.capturedAt,
+    regions: raw.regions,
+  });
+
+  return evidence.regions.length > 0 ? evidence : null;
+}
+
 async function waitForReadinessPass(input: {
   page: any;
   diagnostics: RenderedCaptureDiagnostic[];
@@ -855,6 +964,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics,
     };
@@ -893,6 +1003,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics,
     };
@@ -956,6 +1067,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics,
     };
@@ -1056,6 +1168,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics,
     };
@@ -1217,6 +1330,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           document: null,
           screenshots: [],
           computedStyleSamples: [],
+          layoutGeometryEvidence: [],
           renderedObservedAssetUrls: [],
           diagnostics,
         };
@@ -1368,6 +1482,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         document: null,
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics,
       };
@@ -1436,6 +1551,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           document: null,
           screenshots: [],
           computedStyleSamples: [],
+          layoutGeometryEvidence: [],
           renderedObservedAssetUrls: [],
           diagnostics,
         };
@@ -1514,6 +1630,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         document: null,
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics,
       };
@@ -1580,6 +1697,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         document: null,
         screenshots: [],
         computedStyleSamples: [],
+        layoutGeometryEvidence: [],
         renderedObservedAssetUrls: [],
         diagnostics,
       };
@@ -1849,6 +1967,17 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       selectedReadinessState = "timeout_partial";
     }
     const finalizedObservedAssets = assetManifestPhase.value ?? [];
+    let layoutGeometryEvidence: LayoutGeometryEvidence[] = [];
+    try {
+      const layoutGeometry = await captureLayoutGeometry({
+        page,
+        routePath: routePathFromUrl(typeof page.url === "function" ? page.url() : input.sourceUrl),
+        capturedAt: new Date(0).toISOString(),
+      });
+      layoutGeometryEvidence = layoutGeometry ? [layoutGeometry] : [];
+    } catch {
+      layoutGeometryEvidence = [];
+    }
 
     const selectedDom = selectedDomCapture;
     const domHtml = selectedDom?.html.trim() ?? "";
@@ -1970,6 +2099,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
           document,
           screenshots,
           computedStyleSamples,
+          layoutGeometryEvidence,
           renderedObservedAssetUrls: finalizedObservedAssets,
         };
       },
@@ -1985,6 +2115,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
         document: null,
         screenshots,
         computedStyleSamples,
+        layoutGeometryEvidence,
         renderedObservedAssetUrls: finalizedObservedAssets,
         diagnostics,
       };
@@ -2006,6 +2137,7 @@ async function defaultRenderedCaptureExecutor(input: RenderedCaptureExecutorInpu
       document: null,
       screenshots: [],
       computedStyleSamples: [],
+      layoutGeometryEvidence: [],
       renderedObservedAssetUrls: [],
       diagnostics,
     };
@@ -2104,6 +2236,7 @@ export async function runRenderedCapture(input: {
     documents,
     screenshots,
     computedStyleSamples,
+    layoutGeometryEvidence: [...result.layoutGeometryEvidence],
     renderedObservedAssetUrls: uniqueSortedStrings(result.renderedObservedAssetUrls),
     diagnostics: [...result.diagnostics],
   };

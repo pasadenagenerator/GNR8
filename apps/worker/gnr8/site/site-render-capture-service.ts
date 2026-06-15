@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import type { RenderedCaptureDiagnostic, RenderedCaptureResult } from '@/gnr8/import-rendered-capture/rendered-capture-contract'
+import type { LayoutGeometryEvidence } from '@/gnr8/architecture/evidence-capture-layout-contract'
 import { resolveRenderedCaptureWorkerClientConfigFromEnv } from '@/gnr8/import-rendered-capture-worker/worker-config'
 import { attachEvidenceCaptureBaselineArtifact } from '@/gnr8/architecture/evidence-capture-baseline-artifact'
 import { getSuperadminPool } from '@/src/superadmin/db'
@@ -19,6 +20,7 @@ type RenderedEvidencePaths = {
   snapshotRootDirAbs: string
   renderedDomPath: string | null
   computedStylesPath: string | null
+  layoutGeometryPath: string | null
   renderedCaptureManifestPath: string
   acquisitionEvidencePath: string
   viewportScreenshotPath: string | null
@@ -27,6 +29,7 @@ type RenderedEvidencePaths = {
   domLength: number
   domNodeCount: number
   computedStyleSampleCount: number
+  layoutGeometryEvidence: LayoutGeometryEvidence[]
 }
 
 type RenderedCapturePersistResult = {
@@ -196,6 +199,7 @@ function persistRenderedEvidence(input: {
   screenshotViewportPathAbs: string | null
   screenshotFullpagePathAbs: string | null
   computedStyleSamples: unknown[]
+  layoutGeometryEvidence: LayoutGeometryEvidence[]
 }): RenderedEvidencePaths {
   const renderedDirAbs = path.resolve(input.snapshotRootDirAbs, 'rendered')
   const screenshotsDirAbs = path.resolve(renderedDirAbs, 'screenshots')
@@ -206,6 +210,9 @@ function persistRenderedEvidence(input: {
 
   const computedStylesPath = path.resolve(renderedDirAbs, 'computed-styles.json')
   fs.writeFileSync(computedStylesPath, `${JSON.stringify(input.computedStyleSamples, null, 2)}\n`, 'utf8')
+
+  const layoutGeometryPath = path.resolve(renderedDirAbs, 'layout-geometry.json')
+  fs.writeFileSync(layoutGeometryPath, `${JSON.stringify(input.layoutGeometryEvidence, null, 2)}\n`, 'utf8')
 
   let viewportScreenshotPath: string | null = null
   const screenshotViewportPathAbs = input.screenshotViewportPathAbs
@@ -231,6 +238,7 @@ function persistRenderedEvidence(input: {
         status: input.renderedCaptureStatus,
         renderedDomPath,
         computedStylesPath,
+        layoutGeometryPath,
         screenshotPaths,
         diagnostics: input.diagnostics,
       },
@@ -251,6 +259,7 @@ function persistRenderedEvidence(input: {
         renderedCaptureStatus: input.renderedCaptureStatus,
         renderedDomPath,
         computedStylesPath,
+        layoutGeometryPath,
         screenshotPaths,
         domNodeCount,
       },
@@ -264,6 +273,7 @@ function persistRenderedEvidence(input: {
     snapshotRootDirAbs: input.snapshotRootDirAbs,
     renderedDomPath,
     computedStylesPath,
+    layoutGeometryPath,
     renderedCaptureManifestPath,
     acquisitionEvidencePath,
     viewportScreenshotPath,
@@ -272,6 +282,7 @@ function persistRenderedEvidence(input: {
     domLength: normalizeText(input.renderedDomHtml).length,
     domNodeCount,
     computedStyleSampleCount: input.computedStyleSamples.length,
+    layoutGeometryEvidence: input.layoutGeometryEvidence,
   }
 }
 
@@ -362,6 +373,7 @@ function withPatchedProvenanceSummary(input: {
       acquisitionEvidencePath: input.evidence.acquisitionEvidencePath,
       renderedDomPath: input.evidence.renderedDomPath,
       computedStylesPath: input.evidence.computedStylesPath,
+      layoutGeometryPath: input.evidence.layoutGeometryPath,
       renderedViewportScreenshotPath: input.evidence.viewportScreenshotPath,
       renderedFullpageScreenshotPath: input.evidence.fullpageScreenshotPath,
       screenshotPaths: input.evidence.screenshotPaths,
@@ -380,6 +392,7 @@ function withPatchedProvenanceSummary(input: {
     sourceUrl: existing?.evidenceCaptureBaselineArtifact?.sourceUrl ?? '',
     finalUrl: existing?.evidenceCaptureBaselineArtifact?.finalUrl ?? null,
     routePath: existing?.evidenceCaptureBaselineArtifact?.routePath ?? '/',
+    layoutGeometryEvidence: input.evidence.layoutGeometryEvidence,
     importProvenanceSummary: nextSummary,
     rawImportArtifact: existing?.evidenceCaptureBaselineArtifact
       ? {
@@ -558,6 +571,7 @@ export async function runSiteRenderCapture(input: {
       screenshotFullpagePathAbs:
         captureResult.screenshots.find((entry) => entry.captureType === 'desktop_fullpage')?.filePathAbs ?? null,
       computedStyleSamples: captureResult.computedStyleSamples,
+      layoutGeometryEvidence: captureResult.layoutGeometryEvidence,
     })
     const renderedDomQuality = toRenderableDomQuality({
       domHtml: renderedDomHtml,
@@ -576,9 +590,11 @@ export async function runSiteRenderCapture(input: {
     const renderedDomPath = evidence.renderedDomPath
     const computedStylesPath = evidence.computedStylesPath
     const acquisitionEvidencePath = evidence.acquisitionEvidencePath
+    const layoutGeometryPath = evidence.layoutGeometryPath
     const renderedDomExists = renderedDomPath !== null ? fs.existsSync(renderedDomPath) : false
     const computedStylesExists = computedStylesPath !== null ? fs.existsSync(computedStylesPath) : false
     const acquisitionEvidenceExists = acquisitionEvidencePath !== null ? fs.existsSync(acquisitionEvidencePath) : false
+    const layoutGeometryExists = layoutGeometryPath !== null ? fs.existsSync(layoutGeometryPath) : false
 
     console.info('[site-render-worker] SITE_RENDER_CAPTURE_PERSISTED_EVIDENCE', {
       siteId: input.siteId,
@@ -589,10 +605,13 @@ export async function runSiteRenderCapture(input: {
       renderedDomNodeCount: evidence.domNodeCount,
       computedStylesExists,
       acquisitionEvidenceExists,
+      layoutGeometryExists,
+      layoutRegionCount: evidence.layoutGeometryEvidence.reduce((count, item) => count + item.regions.length, 0),
       screenshotCount: evidence.screenshotPaths.length,
       evidenceRefs: {
         renderedDomPath,
         computedStylesPath,
+        layoutGeometryPath,
         acquisitionEvidencePath,
         renderedCaptureManifestPath: evidence.renderedCaptureManifestPath,
         screenshotPaths: evidence.screenshotPaths,
@@ -630,6 +649,7 @@ export async function runSiteRenderCapture(input: {
         captureEvidence: {
           renderedDomPath: updatedSummary.captureEvidence.renderedDomPath,
           computedStylesPath: updatedSummary.captureEvidence.computedStylesPath,
+          layoutGeometryPath: updatedSummary.captureEvidence.layoutGeometryPath,
           acquisitionEvidencePath: updatedSummary.captureEvidence.acquisitionEvidencePath,
           renderedCaptureManifestPath: updatedSummary.captureEvidence.renderedCaptureManifestPath,
           screenshotPaths: updatedSummary.captureEvidence.screenshotPaths,
