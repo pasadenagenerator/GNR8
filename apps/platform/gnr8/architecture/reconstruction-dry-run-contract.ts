@@ -1,5 +1,5 @@
 /**
- * Phase 8A-0 reconstruction dry-run boundary contract.
+ * Phase 8A-1 reconstruction dry-run boundary contract.
  *
  * This module defines the deterministic metadata boundary between a
  * Reconstruction Package and a future Reconstruction Dry Run. It does not
@@ -15,7 +15,7 @@ import type {
 } from "./reconstruction-package-contract";
 import type { ReconstructionPlanningRouteScope } from "./reconstruction-planning-contract";
 
-export const RECONSTRUCTION_DRY_RUN_CONTRACT_VERSION = "8A-0" as const;
+export const RECONSTRUCTION_DRY_RUN_CONTRACT_VERSION = "8A-1" as const;
 
 export const RECONSTRUCTION_DRY_RUN_STATUSES = [
   "not_started",
@@ -132,7 +132,7 @@ export type ReconstructionDryRunPackage = {
   siteVersionId: string;
   routeScope: ReconstructionPlanningRouteScope;
   packageStatus: ReconstructionPackageStatus;
-  executionStatus: ReconstructionDryRunStatus;
+  status: ReconstructionDryRunStatus;
   simulationStatus: ReconstructionSimulationStatus;
   simulationArtifacts: ReconstructionSimulationArtifact[];
   limitations: ReconstructionDryRunLimitation[];
@@ -160,13 +160,12 @@ export type ReconstructionDryRunEligibility = {
 export type CreateReconstructionDryRunPackageOptions = {
   dryRunId?: string;
   createdAt?: string;
-  executionStatus?: ReconstructionDryRunStatus;
-  simulationStatus?: ReconstructionSimulationStatus;
-  simulationArtifacts?: ReconstructionSimulationArtifact[];
-  limitations?: ReconstructionDryRunLimitation[];
-  warnings?: ReconstructionDryRunWarning[];
-  blockers?: ReconstructionDryRunBlocker[];
-  generatedOutputs?: ReconstructionGeneratedOutput[];
+};
+
+export type ReconstructionDryRunPackageValidationResult = {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 };
 
 export function evaluateDryRunEligibility(
@@ -216,11 +215,61 @@ export function evaluateDryRunEligibility(
   };
 }
 
+function blockersForIneligiblePackage(
+  reconstructionPackage: ReconstructionPackage,
+  eligibility: ReconstructionDryRunEligibility,
+): ReconstructionDryRunBlocker[] {
+  const blockers: ReconstructionDryRunBlocker[] = [];
+
+  if (reconstructionPackage.packageStatus === "needs_more_evidence") {
+    blockers.push({
+      blockerId: `${reconstructionPackage.reconstructionPackageId}:needs-more-evidence`,
+      sourceRef: reconstructionPackage.reconstructionPackageId,
+      message: "Reconstruction Package needs more evidence before dry-run package planning.",
+    });
+  }
+
+  if (reconstructionPackage.packageStatus === "blocked") {
+    blockers.push({
+      blockerId: `${reconstructionPackage.reconstructionPackageId}:package-blocked`,
+      sourceRef: reconstructionPackage.reconstructionPackageId,
+      message: "Reconstruction Package is blocked before dry-run package planning.",
+    });
+  }
+
+  if (reconstructionPackage.executionReadiness === "not_ready") {
+    blockers.push({
+      blockerId: `${reconstructionPackage.reconstructionPackageId}:execution-not-ready`,
+      sourceRef: reconstructionPackage.reconstructionPackageId,
+      message: "Reconstruction Package executionReadiness is not_ready.",
+    });
+  }
+
+  if (reconstructionPackage.executionReadiness === "ready_for_future_execution") {
+    blockers.push({
+      blockerId: `${reconstructionPackage.reconstructionPackageId}:outside-dry-run-boundary`,
+      sourceRef: reconstructionPackage.reconstructionPackageId,
+      message: "Reconstruction Package is outside the dry-run-only boundary.",
+    });
+  }
+
+  if (blockers.length === 0) {
+    blockers.push({
+      blockerId: `${reconstructionPackage.reconstructionPackageId}:${eligibility.reason}`,
+      sourceRef: reconstructionPackage.reconstructionPackageId,
+      message: `Reconstruction Package is not eligible for dry-run package planning: ${eligibility.reason}.`,
+    });
+  }
+
+  return blockers;
+}
+
 export function createReconstructionDryRunPackage(
   reconstructionPackage: ReconstructionPackage,
   options: CreateReconstructionDryRunPackageOptions = {},
 ): ReconstructionDryRunPackage {
   const eligibility = evaluateDryRunEligibility(reconstructionPackage);
+  const planned = eligibility.eligible;
 
   return {
     kind: "reconstruction_dry_run_package_v1",
@@ -231,15 +280,138 @@ export function createReconstructionDryRunPackage(
     siteVersionId: reconstructionPackage.siteVersionId,
     routeScope: reconstructionPackage.routeScope,
     packageStatus: reconstructionPackage.packageStatus,
-    executionStatus:
-      options.executionStatus ?? (eligibility.eligible ? "planned" : "blocked"),
-    simulationStatus: options.simulationStatus ?? "unavailable",
-    simulationArtifacts: options.simulationArtifacts ?? [],
-    limitations: options.limitations ?? [],
-    warnings: options.warnings ?? [],
-    blockers: options.blockers ?? [],
-    generatedOutputs: options.generatedOutputs ?? [],
+    status: planned ? "planned" : "blocked",
+    simulationStatus: planned ? "pending" : "unavailable",
+    simulationArtifacts: [],
+    limitations: reconstructionPackage.limitations.map((limitation) => ({
+      limitationId: limitation.limitationId,
+      severity: limitation.severity,
+      sourceRef: limitation.sourceCandidateId,
+      message: limitation.message,
+    })),
+    warnings: [],
+    blockers: planned ? [] : blockersForIneligiblePackage(reconstructionPackage, eligibility),
+    generatedOutputs: [],
     boundary: RECONSTRUCTION_DRY_RUN_BOUNDARY,
     createdAt: options.createdAt ?? reconstructionPackage.createdAt,
+  };
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function hasNonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isKnownDryRunStatus(value: unknown): value is ReconstructionDryRunStatus {
+  return (
+    typeof value === "string" &&
+    RECONSTRUCTION_DRY_RUN_STATUSES.includes(value as ReconstructionDryRunStatus)
+  );
+}
+
+function isKnownSimulationStatus(value: unknown): value is ReconstructionSimulationStatus {
+  return (
+    typeof value === "string" &&
+    RECONSTRUCTION_SIMULATION_STATUSES.includes(value as ReconstructionSimulationStatus)
+  );
+}
+
+export function validateReconstructionDryRunPackage(
+  dryRunPackage: unknown,
+): ReconstructionDryRunPackageValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!isObject(dryRunPackage)) {
+    return {
+      valid: false,
+      errors: ["dry-run package must be an object"],
+      warnings,
+    };
+  }
+
+  if (dryRunPackage.kind !== "reconstruction_dry_run_package_v1") {
+    warnings.push("kind should be reconstruction_dry_run_package_v1");
+  }
+
+  if (dryRunPackage.contractVersion !== RECONSTRUCTION_DRY_RUN_CONTRACT_VERSION) {
+    warnings.push(`contractVersion should be ${RECONSTRUCTION_DRY_RUN_CONTRACT_VERSION}`);
+  }
+
+  if (!hasNonEmptyString(dryRunPackage.dryRunId)) {
+    errors.push("dryRunId is required");
+  }
+
+  if (!hasNonEmptyString(dryRunPackage.reconstructionPackageId)) {
+    errors.push("reconstructionPackageId is required");
+  }
+
+  if (!hasNonEmptyString(dryRunPackage.siteVersionId)) {
+    errors.push("siteVersionId is required");
+  }
+
+  if (!isObject(dryRunPackage.routeScope)) {
+    errors.push("routeScope is required");
+  }
+
+  if (!isKnownDryRunStatus(dryRunPackage.status)) {
+    errors.push("status must be a known ReconstructionDryRunStatus");
+  }
+
+  if (dryRunPackage.status === "simulated") {
+    errors.push("builder-created dry-run packages must not be marked simulated");
+  }
+
+  if (!isKnownSimulationStatus(dryRunPackage.simulationStatus)) {
+    errors.push("simulationStatus must be a known ReconstructionSimulationStatus");
+  }
+
+  if (dryRunPackage.simulationStatus === "complete") {
+    errors.push("builder-created dry-run packages must not mark simulation complete");
+  }
+
+  if (!Array.isArray(dryRunPackage.blockers)) {
+    errors.push("blockers must be an array");
+  } else if (dryRunPackage.status === "blocked" && dryRunPackage.blockers.length === 0) {
+    errors.push("blocked dry-run packages must include blockers");
+  }
+
+  if (!Array.isArray(dryRunPackage.generatedOutputs)) {
+    errors.push("generatedOutputs must be an array");
+  } else if (dryRunPackage.generatedOutputs.length > 0) {
+    errors.push("generatedOutputs must be empty at dry-run package creation time");
+  }
+
+  if (dryRunPackage.status === "planned" && Array.isArray(dryRunPackage.generatedOutputs)) {
+    if (dryRunPackage.generatedOutputs.length > 0) {
+      errors.push("planned dry-run packages must not have generated outputs");
+    }
+  }
+
+  if (!Array.isArray(dryRunPackage.simulationArtifacts)) {
+    errors.push("simulationArtifacts must be an array");
+  } else if (dryRunPackage.simulationArtifacts.length > 0) {
+    errors.push("simulationArtifacts must be empty before dry-run execution exists");
+  }
+
+  if (!isObject(dryRunPackage.boundary)) {
+    errors.push("boundary is required");
+  } else {
+    if (dryRunPackage.boundary.outputApprovalState !== "informational_only") {
+      errors.push("boundary outputApprovalState must remain informational_only");
+    }
+
+    if (dryRunPackage.boundary.futureApprovalRequired !== true) {
+      errors.push("boundary futureApprovalRequired must remain true");
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
   };
 }

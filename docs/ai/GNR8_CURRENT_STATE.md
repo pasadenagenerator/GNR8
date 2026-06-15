@@ -39,8 +39,12 @@ No reconstruction execution, AI reconstruction, React/block generation, reconstr
 Phase 8A-0 — Dry Run Boundary Planning is COMPLETE.
 Phase 8A-0 defined the deterministic boundary between Reconstruction Package and a future Dry Run, including dry-run package shape, status models, generated output shape types, boundary rules, human approval requirements, and dry-run eligibility evaluation.
 No dry-run execution, reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, reconstruction publishing, capture behavior change, preview behavior change, route discovery change, asset rewriting change, script policy change, public rendering change, API change, database write, or DB schema change exists in Phase 8A-0.
-Current Phase: Phase 8A-0 — Dry Run Boundary Planning is complete.
-Next recommended major phase: Phase 8A-1 — First Dry Run Contract Validation. Do not execute Dry Run, reconstruction, AI generation, React generation, block generation, workers, runtime writes, or publishing without a separate explicit phase.
+Phase 8A-1 — First Dry Run Contract Validation is COMPLETE.
+Phase 8A-1 validates that an approved Reconstruction Package can produce a valid planned Dry Run Package contract. Ready packages create `status = planned`, `simulationStatus = pending`, `generatedOutputs = []`, and no blockers. Not-ready packages create `status = blocked`, `simulationStatus = unavailable`, and blockers explaining why.
+Phase 8A-1 adds `validateReconstructionDryRunPackage(...)` for creation-time contract validation, including required IDs, route scope, blocked-package blockers, empty generated outputs, non-simulated status, non-complete simulation status, informational-only output, and future approval gating.
+No dry-run execution, reconstruction execution, AI reconstruction, React/block generation, reconstruction workers, reconstruction approvals, reconstruction publishing, capture behavior change, preview behavior change, route discovery change, asset rewriting change, script policy change, public rendering change, API change, database write, or DB schema change exists in Phase 8A-1.
+Current Phase: Phase 8A-1 — First Dry Run Contract Validation is complete.
+Next recommended major phase: Phase 8A-2 — Dry Run Simulation Planning Contract. Do not execute Dry Run, reconstruction, AI generation, React generation, block generation, workers, runtime writes, or publishing without a separate explicit phase.
 
 ## Current Importer Architecture
 
@@ -56,8 +60,8 @@ Original Mirror Layer:
 - Future: richer limitation evidence as Evidence Capture expands.
 
 Reconstruction Layer:
-- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, and metadata-only Dry Run Boundary Contract.
-- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, and a Reconstruction Package can be evaluated for future Dry Run eligibility.
+- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, metadata-only Dry Run Boundary Contract, and dry-run package contract validation.
+- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, a Reconstruction Package can be evaluated for future Dry Run eligibility, and an approved Reconstruction Package can produce a valid planned Dry Run Package contract without execution.
 - Future: reconstruction execution, AI reconstruction, GNR8 React/block generation, editable content model generation, design token generation, reconstruction workers, approvals, and publishing.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
@@ -223,6 +227,7 @@ Current migration runtime capabilities:
 - deterministic reconstruction readiness model defined
 - current reconstruction readiness remains NOT_READY
 - reconstruction control-plane closure documented through Future Dry Run boundary
+- dry-run package contract builder and validator
 - importer architecture terminology:
   - Evidence Capture
   - Capture Provider
@@ -319,10 +324,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8A-0 — Dry Run Boundary Planning is complete.
+- Phase 8A-1 — First Dry Run Contract Validation is complete.
 
 Next Phase:
-- Phase 8A-1 — First Dry Run Contract Validation.
+- Phase 8A-2 — Dry Run Simulation Planning Contract.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
@@ -385,6 +390,7 @@ Completed:
 - Reconstruction Package Contract.
 - Reconstruction Control Plane Closure.
 - Dry Run Boundary Contract.
+- First Dry Run Contract Validation.
 
 Explicit unresolved cases:
 - ViroiDoc blog/news duplication is not solved by raw preview patching.
@@ -408,7 +414,7 @@ Not included:
 - no script-policy changes
 
 Next recommended major phase:
-- 8A-1: First Dry Run Contract Validation.
+- 8A-2: Dry Run Simulation Planning Contract.
 
 ## Production Validation
 
@@ -471,7 +477,7 @@ Execution boundary:
 - unattended orchestration does not exist yet
 
 Remaining critical path:
-- Phase 8A-1 — First Dry Run Contract Validation
+- Phase 8A-2 — Dry Run Simulation Planning Contract
 - Billing
 
 Current Hosting Operations status:
@@ -483,9 +489,10 @@ Current Hosting Operations status:
 - Phase 7D is complete through 7D-9.
 - Phase 7F is complete through 7F-15 as importer architecture evolution and reconstruction control-plane closure.
 - Phase 8A-0 is complete as dry-run boundary planning.
+- Phase 8A-1 is complete as first dry-run contract validation.
 
 Next recommended milestone:
-- Phase 8A-1 — First Dry Run Contract Validation
+- Phase 8A-2 — Dry Run Simulation Planning Contract
 
 Phase 7F recommended focus:
 - Preserve the Evidence Capture -> Original Mirror -> Reconstruction boundary.
@@ -556,7 +563,8 @@ Current migration platform continuation:
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
 - Phase 7F — Importer Architecture Evolution is complete through 7F-15.
 - Phase 8A-0 — Dry Run Boundary Planning is complete.
-- Phase 8A-1 — First Dry Run Contract Validation is the next recommended phase.
+- Phase 8A-1 — First Dry Run Contract Validation is complete.
+- Phase 8A-2 — Dry Run Simulation Planning Contract is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -636,7 +644,8 @@ Current migration platform continuation:
 - Phase 7D — Multi-Page Raw Preview Correctness + Observability is complete through 7D-9.
 - Phase 7F — Importer Architecture Evolution is complete through 7F-15.
 - Phase 8A-0 — Dry Run Boundary Planning is complete.
-- Phase 8A-1 — First Dry Run Contract Validation is the next recommended phase.
+- Phase 8A-1 — First Dry Run Contract Validation is complete.
+- Phase 8A-2 — Dry Run Simulation Planning Contract is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

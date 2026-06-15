@@ -10,6 +10,7 @@ import {
   RECONSTRUCTION_SIMULATION_STATUSES,
   createReconstructionDryRunPackage,
   evaluateDryRunEligibility,
+  validateReconstructionDryRunPackage,
   type ReconstructionGeneratedOutput,
 } from "./reconstruction-dry-run-contract";
 import {
@@ -102,7 +103,7 @@ function needsMoreEvidenceReconstructionPackage(): ReconstructionPackage {
   });
 }
 
-test("dry run package creation preserves reconstruction package lineage and does not simulate", () => {
+test("ready package creates planned dry-run package", () => {
   const reconstructionPackage = readyReconstructionPackage();
 
   const dryRunPackage = createReconstructionDryRunPackage(reconstructionPackage, {
@@ -111,7 +112,7 @@ test("dry run package creation preserves reconstruction package lineage and does
   });
 
   assert.equal(dryRunPackage.kind, "reconstruction_dry_run_package_v1");
-  assert.equal(dryRunPackage.contractVersion, "8A-0");
+  assert.equal(dryRunPackage.contractVersion, "8A-1");
   assert.equal(dryRunPackage.dryRunId, "dry-run-package-1");
   assert.equal(
     dryRunPackage.reconstructionPackageId,
@@ -120,13 +121,127 @@ test("dry run package creation preserves reconstruction package lineage and does
   assert.equal(dryRunPackage.siteVersionId, reconstructionPackage.siteVersionId);
   assert.deepEqual(dryRunPackage.routeScope, reconstructionPackage.routeScope);
   assert.equal(dryRunPackage.packageStatus, reconstructionPackage.packageStatus);
-  assert.equal(dryRunPackage.executionStatus, "planned");
-  assert.equal(dryRunPackage.simulationStatus, "unavailable");
+  assert.equal(dryRunPackage.status, "planned");
+  assert.equal(dryRunPackage.simulationStatus, "pending");
   assert.deepEqual(dryRunPackage.simulationArtifacts, []);
   assert.deepEqual(dryRunPackage.generatedOutputs, []);
+  assert.deepEqual(dryRunPackage.blockers, []);
   assert.equal(dryRunPackage.boundary.outputApprovalState, "informational_only");
   assert.equal(dryRunPackage.boundary.futureApprovalRequired, true);
   assert.equal(dryRunPackage.createdAt, "2026-06-15T10:15:00.000Z");
+});
+
+test("not-ready package creates blocked dry-run package with blockers", () => {
+  const reconstructionPackage = notReadyReconstructionPackage();
+
+  const dryRunPackage = createReconstructionDryRunPackage(reconstructionPackage, {
+    dryRunId: "dry-run-package-blocked",
+  });
+
+  assert.equal(dryRunPackage.status, "blocked");
+  assert.equal(dryRunPackage.simulationStatus, "unavailable");
+  assert.equal(dryRunPackage.generatedOutputs.length, 0);
+  assert.equal(dryRunPackage.simulationArtifacts.length, 0);
+  assert.equal(dryRunPackage.blockers.length > 0, true);
+  assert.equal(
+    dryRunPackage.blockers.some((blocker) =>
+      blocker.message.includes("executionReadiness is not_ready"),
+    ),
+    true,
+  );
+});
+
+test("blocked package includes blockers explaining why", () => {
+  const blockedPackage: ReconstructionPackage = {
+    ...readyReconstructionPackage(),
+    packageStatus: "blocked",
+    executionReadiness: "not_ready",
+  };
+
+  const dryRunPackage = createReconstructionDryRunPackage(blockedPackage);
+
+  assert.equal(dryRunPackage.status, "blocked");
+  assert.equal(
+    dryRunPackage.blockers.some((blocker) => blocker.blockerId.endsWith(":package-blocked")),
+    true,
+  );
+  assert.equal(
+    dryRunPackage.blockers.some((blocker) => blocker.blockerId.endsWith(":execution-not-ready")),
+    true,
+  );
+});
+
+test("planned package validates successfully", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage());
+
+  const result = validateReconstructionDryRunPackage(dryRunPackage);
+
+  assert.deepEqual(result, {
+    valid: true,
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("builder never creates generated outputs", () => {
+  const readyDryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage());
+  const blockedDryRunPackage = createReconstructionDryRunPackage(notReadyReconstructionPackage());
+
+  assert.deepEqual(readyDryRunPackage.generatedOutputs, []);
+  assert.deepEqual(blockedDryRunPackage.generatedOutputs, []);
+});
+
+test("builder never marks simulation complete or package simulated", () => {
+  const readyDryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage());
+  const blockedDryRunPackage = createReconstructionDryRunPackage(notReadyReconstructionPackage());
+
+  assert.notEqual(readyDryRunPackage.status, "simulated");
+  assert.notEqual(blockedDryRunPackage.status, "simulated");
+  assert.notEqual(readyDryRunPackage.simulationStatus, "complete");
+  assert.notEqual(blockedDryRunPackage.simulationStatus, "complete");
+});
+
+test("validation catches malformed package", () => {
+  const malformedPackage = {
+    ...createReconstructionDryRunPackage(readyReconstructionPackage()),
+    dryRunId: "",
+    reconstructionPackageId: "",
+    siteVersionId: "",
+    routeScope: null,
+    status: "planned",
+    simulationStatus: "complete",
+    generatedOutputs: [
+      {
+        outputId: "should-not-exist",
+        outputType: "route_model",
+        sourceCandidateId: "candidate-home-hero",
+        sourceRoute: "/",
+        evidenceRefs: [],
+        description: "Malformed generated output.",
+        generationState: "simulation_placeholder",
+      },
+    ],
+  };
+
+  const result = validateReconstructionDryRunPackage(malformedPackage);
+
+  assert.equal(result.valid, false);
+  assert.equal(result.errors.includes("dryRunId is required"), true);
+  assert.equal(result.errors.includes("reconstructionPackageId is required"), true);
+  assert.equal(result.errors.includes("siteVersionId is required"), true);
+  assert.equal(result.errors.includes("routeScope is required"), true);
+  assert.equal(
+    result.errors.includes("builder-created dry-run packages must not mark simulation complete"),
+    true,
+  );
+  assert.equal(
+    result.errors.includes("generatedOutputs must be empty at dry-run package creation time"),
+    true,
+  );
+  assert.equal(
+    result.errors.includes("planned dry-run packages must not have generated outputs"),
+    true,
+  );
 });
 
 test("dry run status constants are stable", () => {
@@ -168,6 +283,17 @@ test("generated output type constants are stable and represent shape only", () =
 
   assert.equal(placeholderOutput.outputType, "route_model");
   assert.equal(placeholderOutput.generationState, "simulation_placeholder");
+});
+
+test("validation allows no generated outputs at creation time", () => {
+  const dryRunPackage = createReconstructionDryRunPackage(readyReconstructionPackage());
+
+  const result = validateReconstructionDryRunPackage({
+    ...dryRunPackage,
+    generatedOutputs: [],
+  });
+
+  assert.equal(result.valid, true);
 });
 
 test("eligibility helper maps ready_for_dry_run to eligible", () => {
