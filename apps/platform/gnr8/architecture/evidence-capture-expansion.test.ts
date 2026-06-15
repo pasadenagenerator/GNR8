@@ -7,9 +7,11 @@ import {
   extractWidgetInventory,
   normalizeCapturedRouteIdentity,
 } from "./evidence-capture-expansion";
+import { evaluateCaptureExpansionReadiness } from "./evidence-capture-layout-contract";
 import { buildEvidenceCaptureBaselineArtifact } from "./evidence-capture-baseline-artifact";
 import {
   buildEvidenceCaptureBaselineGeometrySummary,
+  buildEvidenceCaptureBaselineNavigationSummary,
   buildEvidenceCaptureBaselineSectionSummary,
 } from "../site/evidence-capture-baseline-read-model";
 import type { RuntimeImportProvenanceSummary } from "../runtime/types";
@@ -228,12 +230,12 @@ test("CASE 14 Deterministic enrichment", () => {
   assert.equal(left.evidence.widgets.forms.length, 1);
 });
 
-test("CASE 15 Layout geometry and section boundaries persist in baseline artifact and read model", () => {
+test("CASE 15 Layout geometry, section boundaries, and navigation persist in baseline artifact and read model", () => {
   const artifact = buildEvidenceCaptureBaselineArtifact({
     sourceUrl: "https://example.com/",
     finalUrl: "https://example.com/",
     routePath: "/",
-    renderedHtml: "<!doctype html><html><body><main><section><h1>Hello</h1></section></main></body></html>",
+    renderedHtml: "<!doctype html><html><body><header><nav><a href=\"/\">Home</a><a href=\"/contact\">Contact</a></nav></header><main><section><h1>Hello</h1></section></main></body></html>",
     importProvenanceSummary: provenance(),
     layoutGeometryEvidence: [
       {
@@ -243,6 +245,14 @@ test("CASE 15 Layout geometry and section boundaries persist in baseline artifac
         documentHeight: 1800,
         capturedAt: "2026-06-15T10:00:00.000Z",
         regions: [
+          {
+            regionId: "layout-region-nav",
+            tagName: "nav",
+            role: "navigation",
+            selector: "body > header:nth-of-type(1) > nav:nth-of-type(1)",
+            boundingBox: { x: 0, y: 0, width: 1366, height: 72 },
+            childCount: 2,
+          },
           {
             regionId: "layout-region-main",
             tagName: "main",
@@ -274,13 +284,14 @@ test("CASE 15 Layout geometry and section boundaries persist in baseline artifac
   const geometry = artifact.captureExpansionEvidence.layoutGeometryEvidence[0]!;
   const summary = buildEvidenceCaptureBaselineGeometrySummary(artifact);
   const sectionSummary = buildEvidenceCaptureBaselineSectionSummary(artifact);
+  const navigationSummary = buildEvidenceCaptureBaselineNavigationSummary(artifact);
 
   assert.equal(artifact.persistedRefs.layoutGeometryRef?.uri, "/tmp/run/rendered/layout-geometry.json");
   assert.equal(geometry.routePath, "/");
-  assert.deepEqual(geometry.regions.map((region) => region.tagName), ["main", "section"]);
+  assert.deepEqual(geometry.regions.map((region) => region.tagName), ["nav", "main", "section"]);
   assert.deepEqual(summary, {
     geometryCaptured: true,
-    regionCount: 2,
+    regionCount: 3,
     viewport: {
       width: 1366,
       height: 768,
@@ -288,9 +299,30 @@ test("CASE 15 Layout geometry and section boundaries persist in baseline artifac
   });
   assert.deepEqual(sectionSummary, {
     sectionEvidenceCaptured: true,
-    sectionCount: 2,
-    sectionTypesPresent: ["content", "hero"],
+    sectionCount: 3,
+    sectionTypesPresent: ["content", "hero", "navigation"],
   });
+  assert.deepEqual(navigationSummary, {
+    navigationCaptured: true,
+    navigationItemCount: 2,
+    navigationRoutesDiscovered: 2,
+  });
+  assert.deepEqual(
+    evaluateCaptureExpansionReadiness(artifact.captureExpansionEvidence),
+    {
+      routeModel: "READY",
+      navigationModel: "READY",
+      sectionModel: "READY",
+      evidenceTypesPresent: {
+        routePaths: true,
+        layoutGeometry: true,
+        sectionBoundaries: true,
+        navigation: true,
+        runtimeMutation: false,
+      },
+    },
+  );
   assert.equal(artifact.captureExpansionEvidence.sectionBoundaryEvidence.some((evidence) => evidence.regionType === "hero"), true);
-  assert.equal(artifact.evidence.layout.aboveFoldRegions.length, 2);
+  assert.deepEqual(artifact.captureExpansionEvidence.navigationEvidence[0]?.navigationItems.map((item) => item.confidenceLevel), ["HIGH", "HIGH"]);
+  assert.equal(artifact.evidence.layout.aboveFoldRegions.length, 3);
 });

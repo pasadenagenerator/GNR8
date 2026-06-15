@@ -63,18 +63,18 @@ The readiness helper returns `READY`, `PARTIAL`, or `MISSING` for route, navigat
 
 - Layout Geometry Capture
 - Section Boundary Capture
+- Navigation Capture
 
 ## Still Missing
 
-- Navigation Capture
 - Runtime Mutation Capture
 
 ## Current Result
 
-Phase 8A-8 implements deterministic `SectionBoundaryEvidence` from existing `LayoutGeometryEvidence` and rendered DOM structure. Section evidence classifies existing rendered regions as `hero`, `navigation`, `content`, `sidebar`, `footer`, `gallery`, `form`, `map`, or `unknown` using reproducible DOM/geometry rules only.
+Phase 8A-10 implements deterministic `NavigationEvidence` from rendered DOM links, existing `LayoutGeometryEvidence`, and existing `SectionBoundaryEvidence`. Navigation capture records labels, hrefs, stable positions, allowed confidence levels, counts, and source evidence refs using reproducible DOM and evidence rules only.
 
-Layout geometry and section boundary evidence are persisted inside the existing Evidence Capture baseline artifact. The baseline read path exposes summary-only geometry presence and summary-only section evidence presence, count, and types present. Navigation extraction, runtime mutation capture, reconstruction execution, dry-run execution, AI generation, React generation, block generation, publishing behavior, and database schema changes remain out of scope.
+Layout geometry, section boundary evidence, and navigation evidence are persisted inside the existing Evidence Capture baseline artifact. The baseline read path exposes summary-only geometry presence, summary-only section evidence presence/count/types, and summary-only navigation presence/item count/discovered route count. Runtime mutation capture, reconstruction execution, dry-run execution, AI generation, React generation, block generation, publishing behavior, and database schema changes remain out of scope.
 
 Recommended next phase:
 
-- Phase 8A-9 - Dry Run Readiness Re-Assessment
+- Phase 8A-11 - Dry Run Readiness Re-Assessment

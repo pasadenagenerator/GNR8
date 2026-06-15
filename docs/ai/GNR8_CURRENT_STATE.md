@@ -71,15 +71,23 @@ Phase 8A-8 — Section Boundary Capture is COMPLETE.
 Phase 8A-8 implements deterministic `SectionBoundaryEvidence` from existing `LayoutGeometryEvidence` plus rendered DOM structure. Evidence is classified into allowed region types only: `hero`, `navigation`, `content`, `sidebar`, `footer`, `gallery`, `form`, `map`, and `unknown`.
 Phase 8A-8 persists section boundary evidence inside the existing Evidence Capture baseline artifact under `captureExpansionEvidence.sectionBoundaryEvidence`, exposes summary-only section evidence presence/count/types, and updates capture-expansion readiness so the Section Model is READY when section boundary evidence exists. Route Model remains READY from route/geometry evidence, and Navigation Model behavior is unchanged.
 No importer behavior, Original Mirror behavior, preview behavior, navigation extraction, runtime mutation capture, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, publishing behavior, LLM call, generated output, database schema change, new persistence table, or publishing logic exists in Phase 8A-8.
-Current Phase: Phase 8A-8 — Section Boundary Capture is complete.
-Next recommended major phase: Phase 8A-9 — Dry Run Readiness Re-Assessment. Do not execute Dry Run, simulation, reconstruction, AI generation, React generation, block generation, workers, runtime writes, or publishing without a separate explicit phase.
+Phase 8A-9 — Dry Run Readiness Re-Assessment is COMPLETE.
+Phase 8A-9 updates `docs/architecture/SIMULATION_READINESS_REVIEW.md` with the post-8A-8 assessment. Result: conceptual Dry Run readiness improved from 72/100 to 77/100, and execution Dry Run readiness improved from 63/100 to 68/100 because real persisted section boundary evidence now exists and is used by readiness. Route Model remains READY, Section Model is READY, Navigation Model remains RISKY, Block Model remains NOT_READY, and Design Token Model remains NOT_READY.
+Phase 8A-9 recommends Phase 8A-10 — Navigation Capture because route and section evidence are now ready while explicit navigation labels, hrefs, ordering, counts, confidence, source refs, and layout context are still missing.
+No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, persistence schema, worker execution, publishing behavior, LLM call, capture implementation, navigation capture, runtime mutation capture, generated output, database write, or publishing logic exists in Phase 8A-9.
+Phase 8A-10 — Navigation Capture is COMPLETE.
+Phase 8A-10 implements deterministic `NavigationEvidence` from the existing rendered DOM, `LayoutGeometryEvidence`, and `SectionBoundaryEvidence`. Navigation items include label, href, stable position, and `LOW` / `MEDIUM` / `HIGH` confidence only.
+Phase 8A-10 persists navigation evidence inside the existing Evidence Capture baseline artifact under `captureExpansionEvidence.navigationEvidence`, exposes summary-only navigation presence/item count/discovered route count, and keeps `evaluateCaptureExpansionReadiness(...)` at Navigation Model READY when real `NavigationEvidence` exists.
+No importer behavior, Original Mirror behavior, preview behavior, section boundary capture, runtime mutation capture, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, publishing behavior, LLM call, generated output, database schema change, new persistence table, or publishing logic exists in Phase 8A-10.
+Current Phase: Phase 8A-10 — Navigation Capture is complete.
+Next recommended major phase: Phase 8A-11 — Dry Run Readiness Re-Assessment. Do not execute Dry Run, simulation, reconstruction, AI generation, React generation, block generation, workers, runtime writes, or publishing without a separate explicit phase.
 
 ## Current Importer Architecture
 
 Evidence Capture Layer:
-- Implemented: Evidence Capture contracts, inventory audit, persisted `evidence_capture_baseline`, baseline coverage projection, Minimum Evidence Handoff Normalization, enrichment helpers for readiness comparison, Phase 8A-4 contract-only capture expansion shapes for layout geometry, section boundaries, navigation evidence, and runtime mutation evidence, Phase 8A-6 deterministic layout geometry capture for rendered major structural regions, Phase 8A-7 post-geometry Dry Run readiness reassessment, and Phase 8A-8 deterministic section boundary capture.
-- Partially implemented: current persisted evidence includes raw HTML, rendered DOM refs where available, viewport/full-page screenshots where available, computed style samples where available, rendered layout geometry where available, deterministic section boundary evidence where geometry exists, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
-- Future: navigation capture, runtime mutation capture, broader browser network inventory, script/runtime observation, rich media and widget inventories, and additional normalized fidelity limitation evidence.
+- Implemented: Evidence Capture contracts, inventory audit, persisted `evidence_capture_baseline`, baseline coverage projection, Minimum Evidence Handoff Normalization, enrichment helpers for readiness comparison, Phase 8A-4 contract-only capture expansion shapes for layout geometry, section boundaries, navigation evidence, and runtime mutation evidence, Phase 8A-6 deterministic layout geometry capture for rendered major structural regions, Phase 8A-7 post-geometry Dry Run readiness reassessment, Phase 8A-8 deterministic section boundary capture, Phase 8A-9 post-section-boundary Dry Run readiness reassessment, and Phase 8A-10 deterministic navigation capture.
+- Partially implemented: current persisted evidence includes raw HTML, rendered DOM refs where available, viewport/full-page screenshots where available, computed style samples where available, rendered layout geometry where available, deterministic section boundary evidence where geometry exists, deterministic navigation evidence where rendered navigation links exist, direct asset fetch manifests, acquisition evidence, diagnostics, worker job state, worker health, and multi-page route discovery evidence.
+- Future: runtime mutation capture, broader browser network inventory, script/runtime observation, rich media and widget inventories, and additional normalized fidelity limitation evidence.
 - Provider strategy: Chrome / Playwright is the primary capture provider. Servo is research only, not an active provider, not a fallback provider, and not required for Reconstruction Readiness.
 
 Original Mirror Layer:
@@ -88,8 +96,8 @@ Original Mirror Layer:
 - Future: richer limitation evidence as Evidence Capture expands.
 
 Reconstruction Layer:
-- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, metadata-only Dry Run Boundary Contract, dry-run package contract validation, deterministic Dry Run Simulation Plan contract, Simulation Readiness Review, post-8A-4 Dry Run readiness reassessment, post-8A-6 Dry Run readiness reassessment, and capture-expansion readiness integration for section boundary evidence.
-- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, capture-expansion evidence can be evaluated for route/navigation/section model support, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, a Reconstruction Package can be evaluated for future Dry Run eligibility, an approved Reconstruction Package can produce a valid planned Dry Run Package contract without execution, and a planned Dry Run Package can produce a deterministic Simulation Plan without simulation execution. The current state now has real layout geometry evidence and deterministic section boundary evidence, but is still not ready for meaningful Dry Run execution until navigation and runtime mutation evidence are reassessed and/or populated.
+- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, metadata-only Dry Run Boundary Contract, dry-run package contract validation, deterministic Dry Run Simulation Plan contract, Simulation Readiness Review, post-8A-4 Dry Run readiness reassessment, post-8A-6 Dry Run readiness reassessment, post-8A-8 Dry Run readiness reassessment, and capture-expansion readiness integration for section boundary and navigation evidence.
+- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, capture-expansion evidence can be evaluated for route/navigation/section model support, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, a Reconstruction Package can be evaluated for future Dry Run eligibility, an approved Reconstruction Package can produce a valid planned Dry Run Package contract without execution, and a planned Dry Run Package can produce a deterministic Simulation Plan without simulation execution. The current state now has real layout geometry evidence, deterministic section boundary evidence, and deterministic navigation evidence, but is still not ready for meaningful Dry Run execution until runtime mutation evidence is reassessed and/or populated.
 - Future: reconstruction execution, AI reconstruction, GNR8 React/block generation, editable content model generation, design token generation, reconstruction workers, approvals, and publishing.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
@@ -352,10 +360,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8A-8 — Section Boundary Capture is complete.
+- Phase 8A-10 — Navigation Capture is complete.
 
 Next Phase:
-- Phase 8A-9 — Dry Run Readiness Re-Assessment.
+- Phase 8A-11 — Dry Run Readiness Re-Assessment.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
@@ -442,7 +450,7 @@ Not included:
 - no script-policy changes
 
 Next recommended major phase:
-- 8A-2: Dry Run Simulation Planning Contract.
+- 8A-11: Dry Run Readiness Re-Assessment.
 
 ## Production Validation
 
@@ -599,7 +607,9 @@ Current migration platform continuation:
 - Phase 8A-6 — Layout Geometry Capture is complete.
 - Phase 8A-7 — Dry Run Readiness Re-Assessment is complete.
 - Phase 8A-8 — Section Boundary Capture is complete.
-- Phase 8A-9 — Dry Run Readiness Re-Assessment is the next recommended phase.
+- Phase 8A-9 — Dry Run Readiness Re-Assessment is complete.
+- Phase 8A-10 — Navigation Capture is complete.
+- Phase 8A-11 — Dry Run Readiness Re-Assessment is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -687,7 +697,9 @@ Current migration platform continuation:
 - Phase 8A-6 — Layout Geometry Capture is complete.
 - Phase 8A-7 — Dry Run Readiness Re-Assessment is complete.
 - Phase 8A-8 — Section Boundary Capture is complete.
-- Phase 8A-9 — Dry Run Readiness Re-Assessment is the next recommended phase.
+- Phase 8A-9 — Dry Run Readiness Re-Assessment is complete.
+- Phase 8A-10 — Navigation Capture is complete.
+- Phase 8A-11 — Dry Run Readiness Re-Assessment is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

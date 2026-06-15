@@ -61,6 +61,12 @@ export type EvidenceCaptureBaselineSectionSummary = {
   sectionTypesPresent: string[];
 };
 
+export type EvidenceCaptureBaselineNavigationSummary = {
+  navigationCaptured: boolean;
+  navigationItemCount: number;
+  navigationRoutesDiscovered: number;
+};
+
 export type OriginalMirrorKnownLimitation = {
   id: string;
   category: OriginalMirrorLimitationCategory;
@@ -529,6 +535,24 @@ export function buildEvidenceCaptureBaselineSectionSummary(
     sectionEvidenceCaptured: artifact.summaries.sectionBoundary?.sectionEvidenceCaptured === true,
     sectionCount: artifact.summaries.sectionBoundary?.sectionCount ?? 0,
     sectionTypesPresent: artifact.summaries.sectionBoundary?.sectionTypesPresent ?? [],
+  };
+}
+
+export function buildEvidenceCaptureBaselineNavigationSummary(
+  artifact: EvidenceCaptureBaselineArtifactRecord | null,
+): EvidenceCaptureBaselineNavigationSummary {
+  if (!artifact) {
+    return {
+      navigationCaptured: false,
+      navigationItemCount: 0,
+      navigationRoutesDiscovered: 0,
+    };
+  }
+
+  return {
+    navigationCaptured: artifact.summaries.navigation?.navigationCaptured === true,
+    navigationItemCount: artifact.summaries.navigation?.navigationItemCount ?? 0,
+    navigationRoutesDiscovered: artifact.summaries.navigation?.navigationRoutesDiscovered ?? 0,
   };
 }
 

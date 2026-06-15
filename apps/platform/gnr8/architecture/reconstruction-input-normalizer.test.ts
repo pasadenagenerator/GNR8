@@ -76,10 +76,16 @@ function baselineArtifact(
       missingUnavailable: [],
     },
     evidence,
+    captureExpansionEvidence: {
+      layoutGeometryEvidence: [],
+      sectionBoundaryEvidence: [],
+      navigationEvidence: [],
+    },
     persistedRefs: {
       rawHtmlRef: null,
       renderedDomRef: evidence.rendered.renderedDomRef,
       computedStyleRef: null,
+      layoutGeometryRef: null,
       screenshotRefs: [],
       acquisitionEvidenceRef: null,
       renderedCaptureManifestRef: null,
@@ -94,6 +100,22 @@ function baselineArtifact(
       renderedDomLength: null,
       screenshotCount: 0,
       computedStyleSampleCount: 0,
+      layoutGeometry: {
+        geometryCaptured: false,
+        regionCount: 0,
+        viewportWidth: null,
+        viewportHeight: null,
+      },
+      sectionBoundary: {
+        sectionEvidenceCaptured: false,
+        sectionCount: 0,
+        sectionTypesPresent: [],
+      },
+      navigation: {
+        navigationCaptured: false,
+        navigationItemCount: 0,
+        navigationRoutesDiscovered: 0,
+      },
       assetInventory: {
         persistedAssetCount: null,
         externalFallbackAssetCount: null,
