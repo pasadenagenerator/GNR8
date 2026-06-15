@@ -26,7 +26,7 @@ Reviewed sources:
 
 ## Executive Answer
 
-The control plane is ready to plan a first Dry Run. Phase 8A-6 materially improved captured evidence by adding real persisted layout geometry, and Phase 8A-8 added deterministic persisted section boundary evidence. The current evidence is now strong enough for route and section model planning, but it is still not ready for meaningful first Dry Run execution.
+The control plane is ready to plan a first Dry Run. Phase 8A-6 materially improved captured evidence by adding real persisted layout geometry, Phase 8A-8 added deterministic persisted section boundary evidence, and Phase 8A-10 added deterministic persisted navigation evidence. The current evidence is now strong enough for route, navigation, and section model planning, and it is strong enough to design a first limited static Dry Run. It is still not ready for meaningful broad Dry Run execution.
 
 The system can produce:
 
@@ -34,11 +34,11 @@ The system can produce:
 - Dry Run Package metadata
 - Simulation Plan metadata
 
-The system cannot yet execute a Dry Run, and the evidence available to a future executor is still too thin for reliable navigation, block, content, and design token simulation.
+The system cannot yet execute a Dry Run, and the evidence available to a future executor is still too thin for reliable runtime-stable, block, content, and design token simulation.
 
 Recommended next phase:
 
-- Phase 8A-10 - Navigation Capture
+- Phase 8A-12 - First Limited Dry Run Design
 
 ## Post 8A-4 Re-Assessment
 
@@ -245,6 +245,82 @@ Rationale:
 
 Navigation Capture is the highest-value next slice because route and section inputs are now ready, while the navigation model is still risky for lack of explicit labels, hrefs, ordering, counts, source refs, and layout context. Runtime Mutation Capture is still important, but navigation evidence is more directly required to make first Dry Run route relationships, menus, and cross-route structure inspectable before simulation or reconstruction execution.
 
+## Post 8A-10 Re-Assessment
+
+Phase 8A-10 improved Dry Run readiness at the model-planning level by adding deterministic persisted `NavigationEvidence` from the existing rendered DOM, `LayoutGeometryEvidence`, and `SectionBoundaryEvidence`.
+
+Previous 8A-9 scores:
+
+- Conceptual Dry Run Readiness: 77/100
+- Execution Dry Run Readiness: 68/100
+
+Updated scores after 8A-10:
+
+| Readiness Type | Score | Assessment |
+|---|---:|---|
+| Conceptual Dry Run Readiness | 82/100 | Higher because the route, section, and navigation model inputs are now implemented evidence rather than inferred or contract-only shapes. The control plane can reason about route structure, rendered sections, and navigation relationships from persisted baseline evidence. |
+| Execution Dry Run Readiness | 73/100 | Higher because navigation evidence is now captured, persisted in the existing Evidence Capture baseline artifact, exposed through summary-only read paths, and used by capture-expansion readiness. It remains high-risk because runtime mutation evidence, candidate discovery execution, candidate review execution, simulation execution, and reconstruction execution are still absent. |
+
+Explanation:
+
+8A-10 closes the largest remaining first-model planning gap. A future first limited Dry Run can now be designed around persisted route, section, and navigation evidence rather than guessing navigation from DOM or section hints. This makes a narrow static dry-run design viable. It does not make broad Dry Run execution ready: runtime stability remains unknown, no candidate discovery or review execution exists, and there is still no simulation, reconstruction, generated output, worker, database-write, or publishing path.
+
+### Post 8A-10 Evidence Coverage Matrix
+
+| Evidence Type | Contract Exists | Capture Implemented | Persisted | Used By Readiness | Status |
+|---|---|---|---|---|---|
+| layout geometry | yes | yes | yes | yes | READY |
+| section boundaries | yes | yes | yes | yes | READY |
+| navigation evidence | yes | yes | yes | yes | READY |
+| runtime mutation evidence | yes | no | no | yes, as presence/stability context | MISSING |
+
+### Post 8A-10 Feasibility Matrix
+
+| Target Model | Feasibility | Rationale |
+|---|---|---|
+| route model | feasible | Route-scoped evidence, rendered layout geometry, section evidence, and navigation-discovered routes give route-level planning a persisted rendered substrate. |
+| navigation model | feasible | `NavigationEvidence` now provides persisted labels, hrefs, stable positions, confidence, and route relationships. Sticky/fixed behavior, interaction states, and multi-breakpoint navigation remain future refinements. |
+| section model | feasible | Section boundary evidence still provides classified rendered regions with selectors, boxes, region types, and confidence, now with better navigation disambiguation from explicit navigation evidence. |
+| block model | not_ready | Block-quality planning still needs candidate discovery execution, reviewed reconstruction intent, media/widget classification, and block/content mapping boundaries. Route, section, and navigation evidence provide upstream context but do not choose or generate blocks. |
+| content model | risky | Rendered DOM, raw HTML, geometry, sections, and navigation evidence provide better extraction context, but there is no executed candidate discovery, content review, or durable generated content model boundary. |
+| design token model | not_ready | Navigation evidence does not solve token extraction. Computed style samples remain partial and still lack broad usage counts, roles, loaded font confidence, and layout-context-aware token candidates. |
+
+### Navigation Impact Analysis
+
+Improved because of `NavigationEvidence`:
+
+- Navigation Model readiness can now be credited from real evidence rather than inferred navigation-like layout or section regions.
+- Route relationships are more inspectable through persisted labels, hrefs, stable positions, confidence, item counts, and discovered route counts.
+- Section planning can better distinguish navigation regions from content sections.
+- A first limited Dry Run can now be designed around explicit route, section, and navigation inputs.
+- Readiness scoring can separate runtime-stability risk from navigation-model availability.
+
+Did not improve:
+
+- Runtime mutation observation did not change.
+- Candidate discovery and candidate review still do not execute.
+- Block, content, and design token generation remain out of scope.
+- Sticky/fixed navigation behavior, menu interaction states, hover/open states, and multi-breakpoint navigation behavior remain incomplete.
+- Dry Run, simulation, reconstruction, AI generation, React generation, block generation, worker execution, database writes, and publishing behavior did not change.
+
+Remaining blockers:
+
+- No runtime mutation evidence.
+- No candidate discovery execution.
+- No candidate review execution or persisted reviewed reconstruction intent.
+- No reconstruction execution, simulation execution, generated outputs, or publishing path.
+- No block model generation or block mapping boundary.
+- No design token model generation or high-confidence token candidate inventory.
+- Layout, section, and navigation evidence remain single-slice evidence, without multi-breakpoint behavior, sticky/fixed classification, interaction-state capture, repeated-region clustering, or runtime stability context.
+
+Recommended next phase:
+
+- B. First Limited Dry Run Design
+
+Rationale:
+
+Navigation capture makes the first limited Dry Run design viable because the route, section, and navigation models now have persisted evidence and readiness integration. Runtime Mutation Capture is still required before meaningful or broad Dry Run execution, especially for dynamic sites, lazy-loaded content, client-rendered navigation changes, duplicate insertions, and unstable DOM behavior. However, it is no longer required before designing the first limited static Dry Run boundary. The next phase should define the narrow route scope, evidence prerequisites, candidate discovery expectations, allowed static assumptions, explicit runtime-mutation exclusions, and stop conditions before any execution implementation is attempted.
+
 ## Simulation Readiness Audit
 
 | Area | Status | Assessment | Dry Run Implication |
@@ -265,16 +341,16 @@ Navigation Capture is the highest-value next slice because route and section inp
 |---|---|---|---|---|---|
 | layout geometry | yes | yes | yes | yes | READY |
 | section boundaries | yes | yes | yes | yes | READY |
-| navigation evidence | yes | no | no | yes, when supplied | MISSING |
+| navigation evidence | yes | yes | yes | yes | READY |
 | runtime mutation evidence | yes | no | no | yes, as presence/stability context | MISSING |
 
 ## First Dry Run Feasibility
 
 | Target Model | Feasibility | Rationale |
 |---|---|---|
-| route model | feasible | Source URL, route discovery, route priority, route provenance, and persisted major-region layout geometry make route-level planning feasible. |
-| navigation model | risky | Route discovery and navigation-like regions exist, but there is no extracted navigation item model, href/label ordering, source refs, sticky/fixed behavior, or multi-breakpoint behavior. |
-| section model | feasible | Persisted section boundary evidence now provides classified selectors, boxes, region types, and confidence for rendered sections. |
+| route model | feasible | Source URL, route discovery, route priority, route provenance, persisted major-region layout geometry, section boundaries, and navigation-discovered route relationships make route-level planning feasible. |
+| navigation model | feasible | Persisted `NavigationEvidence` now provides item labels, hrefs, stable positions, confidence, and discovered route counts. Sticky/fixed behavior, interaction states, and multi-breakpoint behavior remain future refinements. |
+| section model | feasible | Persisted section boundary evidence now provides classified selectors, boxes, region types, and confidence for rendered sections, with explicit navigation evidence improving navigation/content disambiguation. |
 | block model | not_ready | Block-quality grouping needs section evidence plus widget/media classification, candidate discovery execution, reviewed reconstruction intent, and block/content mapping boundaries. Current data would still overfit DOM structure. |
 | content model | risky | Rendered DOM, raw HTML, geometry, and section boundaries can support experimental extraction context, but there is no executed candidate discovery, content review, or durable generated model boundary. |
 | design token model | not_ready | Computed style samples and style signals exist, but loaded font sources, broad style coverage, usage counts, layout-context-aware token extraction, and contract-shaped token candidates are incomplete. |
@@ -283,7 +359,6 @@ Navigation Capture is the highest-value next slice because route and section inp
 
 ### Critical Gaps
 
-- No navigation evidence extraction: navigation-like regions can be detected, but explicit items, labels, hrefs, ordering, and source refs are missing.
 - No runtime mutation evidence: late content, lazy-load behavior, duplicate insertions, post-render nodes, and unstable DOM signals are missing.
 - Minimum route-level handoff is not guaranteed for every captured route: artifact status, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and blocker limitations still need deterministic normalization.
 - No candidate discovery execution exists, so Dry Run would lack real discovered candidates unless supplied by contract-only metadata.
@@ -313,8 +388,8 @@ Navigation Capture is the highest-value next slice because route and section inp
 The evidence that would most improve first Dry Run quality is:
 
 1. Normalized minimum handoff evidence for each route.
-2. Navigation extraction with labels, hrefs, ordering, source refs, and layout context.
-3. Runtime mutation summary.
+2. Runtime mutation summary.
+3. Candidate discovery execution over route, section, and navigation evidence.
 4. Browser-level failed and blocked request summaries.
 5. Widget and iframe inventory.
 6. Rendered media inventory with dimensions and selector hints.
@@ -339,7 +414,7 @@ Required before first meaningful Dry Run execution:
 
 Required to make first Dry Run output useful rather than merely eligible:
 
-- Implement Navigation Capture for labels, hrefs, ordering, counts, confidence, source refs, and layout context.
+- Use persisted Navigation Evidence for labels, hrefs, ordering, counts, confidence, discovered route counts, and layout context in the first limited Dry Run design.
 - Extend layout geometry beyond major structural regions for headings, CTAs, images, cards, forms, maps, galleries, and footer detail.
 - Persist screenshot refs with viewport metadata.
 - Add browser-level failed and blocked request summaries.
@@ -364,7 +439,7 @@ Improves confidence after the first execution path is viable:
 
 ## Readiness Score
 
-Dry Run Readiness score: 68/100.
+Dry Run Readiness score: 73/100.
 
 Deterministic calculation:
 
@@ -373,10 +448,10 @@ Deterministic calculation:
 | Control-plane contract completeness | 25 | 24 | Planning Gate, Discovery, Review, Package, Dry Run Package, and Simulation Plan contracts exist and validate metadata boundaries. |
 | Safety boundary clarity | 15 | 15 | Current contracts explicitly prohibit execution, generated outputs, workers, database writes, runtime writes, and publishing. |
 | Minimum evidence handoff readiness | 20 | 8 | Required evidence mostly exists somewhere, but not reliably normalized into durable route-level reconstruction handoff artifacts. |
-| Optional evidence usefulness | 20 | 12 | Screenshots, computed styles, media, widgets, and network evidence are partial; major-region layout geometry and section boundary evidence are now persisted, while navigation and mutation evidence remain missing. |
+| Optional evidence usefulness | 20 | 15 | Screenshots, computed styles, media, widgets, and network evidence are partial; major-region layout geometry, section boundary evidence, and navigation evidence are now persisted, while runtime mutation evidence remains missing. |
 | Candidate/review/package practical availability | 10 | 3 | Contract shapes exist, but discovery/review execution and persistence do not exist. |
-| First-model feasibility | 10 | 6 | Route and section models are feasible, navigation/content remain risky, and block/design token models are not ready. |
-| Total | 100 | 68 | Contract readiness is strong and evidence readiness improved enough for limited first-model planning, but execution remains high risk. |
+| First-model feasibility | 10 | 8 | Route, navigation, and section models are feasible; content remains risky; and block/design token models are not ready. |
+| Total | 100 | 73 | Contract readiness is strong and evidence readiness is now enough for first limited static Dry Run design, but execution remains high risk. |
 
 Interpretation:
 
@@ -385,13 +460,14 @@ Interpretation:
 - 65-79: limited first execution possible with high risk.
 - 80-100: meaningful first Dry Run execution readiness.
 
-The current score falls in the limited-first-execution-possible-with-high-risk band. This is not approval to execute a Dry Run; it means the next evidence slice should target the remaining model gap with the highest impact.
+The current score falls in the limited-first-execution-possible-with-high-risk band. This is not approval to execute a Dry Run; it means a first limited Dry Run design is now viable, with runtime mutation evidence and candidate discovery/review execution still gating meaningful execution.
 
 ## Readiness Decision
 
 Current decision:
 
-- Do not execute a Dry Run yet.
+- Do not execute a broad or meaningful Dry Run yet.
+- First limited static Dry Run design is now viable.
 - Do not add AI generation.
 - Do not generate React.
 - Do not generate blocks.
@@ -400,6 +476,6 @@ Current decision:
 
 Recommended next phase:
 
-- Phase 8A-10 - Navigation Capture
+- Phase 8A-12 - First Limited Dry Run Design
 
-Phase 8A-10 should add deterministic Navigation Capture for explicit navigation labels, hrefs, ordering, counts, confidence, source evidence refs, and layout context. It should not add runtime mutation capture, simulation, reconstruction execution, AI generation, React generation, block generation, generated outputs, database writes, or publishing behavior.
+Phase 8A-12 should define the first limited static Dry Run design using persisted route, layout geometry, section boundary, and navigation evidence. It should specify narrow scope, evidence prerequisites, static-site assumptions, explicit exclusions for runtime mutation-dependent pages, candidate discovery expectations, stop conditions, and validation gates. It should not add runtime mutation capture, simulation execution, reconstruction execution, AI generation, React generation, block generation, generated outputs, database writes, or publishing behavior.

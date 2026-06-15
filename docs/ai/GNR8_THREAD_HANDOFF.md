@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8A-10 Navigation Capture is complete.
+- 8B-1 First Limited Dry Run Contract is complete.
 
 Current Phase:
-- Phase 8A-10 Navigation Capture is complete.
+- Phase 8B-1 First Limited Dry Run Contract is complete.
 
 Next Phase:
-- Phase 8A-11 Dry Run Readiness Re-Assessment.
+- Phase 8B-2 First Limited Dry Run Builder Design.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,46 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-1 — First Limited Dry Run Contract.
+- Status: COMPLETE.
+- Created `apps/platform/gnr8/architecture/first-limited-dry-run-contract.ts`.
+- Defined the formal `FirstLimitedDryRunOutput` contract for Route Model, Navigation Model, and Section Model only.
+- Defined `LimitedDryRunRouteModel`, `LimitedDryRunNavigationModel`, and `LimitedDryRunSectionModel`.
+- Output status values are `planned`, `valid`, `invalid`, and `blocked`; no executed, completed, or published statuses exist.
+- Added `validateFirstLimitedDryRunOutput(...)` to reject forbidden output payloads including Block Model, Content Model, Design Token Model, React output, CMS bindings, publishing artifacts, and generated output containers.
+- Added `createEmptyFirstLimitedDryRunOutput(...)`, which carries IDs, route scope, limitations, and created timestamp from `ReconstructionDryRunPackage`, initializes status as `planned`, creates no route/navigation/section models, and does not execute simulation.
+- Recommended next phase: Phase 8B-2 — First Limited Dry Run Builder Design.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, database write, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8B-0 — First Limited Dry Run Design.
+- Status: COMPLETE.
+- Created `docs/architecture/FIRST_LIMITED_DRY_RUN_DESIGN.md`.
+- Defined the first useful limited Dry Run output scope as Route Model, Navigation Model, and Section Model only.
+- Allowed inputs are Evidence Capture baseline, `LayoutGeometryEvidence`, `SectionBoundaryEvidence`, `NavigationEvidence`, `ReconstructionPackage`, `ReconstructionDryRunPackage`, and `ReconstructionSimulationPlan`.
+- Forbidden outputs are Block Model, Content Model, Design Token Model, React, GNR8 blocks, CMS bindings, CMS/content models, publishing artifacts, generated site output, editable blocks, rewritten content, reconstruction workers, runtime mutations, and database writes.
+- Output model design is documentation-only for `LimitedDryRunRouteModel`, `LimitedDryRunNavigationModel`, and `LimitedDryRunSectionModel`; no TypeScript types, schema changes, generated artifacts, or runtime behavior were added.
+- Success means route list, navigation item list, ordered section list per route, evidence traceability, and limitations where confidence is low.
+- Failure means no route identity, no source URL, no section evidence, no navigation evidence, contradictory evidence, blocker limitations, insufficient evidence refs, unresolved section order, route-scope mismatch, or navigation hrefs that cannot be tied to captured routes/source URLs.
+- Recommended first target is a static marketing site with a small route set, visible navigation, clear sections, stable source capture, and no heavy ecommerce, complex app runtime, login/cookie-gated content, or widget-dominated primary experience.
+- Recommended next phase: Phase 8B-1 — First Limited Dry Run Contract.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture implementation, runtime mutation capture, candidate discovery execution, candidate review execution, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, database write, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8A-11 — Dry Run Readiness Re-Assessment.
+- Status: COMPLETE.
+- Reassessed first Dry Run readiness after Phase 8A-10 navigation capture.
+- Updated conceptual Dry Run readiness from 77/100 to 82/100.
+- Updated execution Dry Run readiness from 68/100 to 73/100.
+- Feasibility is now: route model feasible; navigation model feasible; section model feasible; content model risky; block model not_ready; design token model not_ready.
+- Evidence coverage: layout geometry, section boundaries, and navigation evidence are READY; runtime mutation evidence remains MISSING.
+- Navigation impact: explicit persisted navigation labels, hrefs, stable positions, confidence, item counts, and discovered route counts make route relationships and navigation model planning inspectable. Navigation capture does not add runtime mutation evidence, candidate discovery/review execution, simulation, reconstruction, generated outputs, block/design token generation, or publishing.
+- Conclusion: navigation capture makes first limited static Dry Run design viable. Runtime Mutation Capture is still required before meaningful or broad Dry Run execution, but it is not required before designing the first limited static Dry Run boundary.
+- Remaining blockers: no runtime mutation evidence, no candidate discovery execution, no candidate review execution, no simulation/reconstruction execution, no generated outputs, no block/design token generation, and no publishing path.
+- Recommended next phase: Phase 8B-0 — First Limited Dry Run Design.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, persistence schema, worker execution, publishing behavior, LLM call, capture implementation, runtime mutation capture, generated output, database write, or publishing logic was added.
+
+Previous completed milestone:
 - Phase 8A-10 — Navigation Capture.
 - Status: COMPLETE.
 - Implemented deterministic `NavigationEvidence` from existing rendered DOM, `LayoutGeometryEvidence`, and `SectionBoundaryEvidence`.
@@ -35,7 +75,7 @@ Latest completed milestone:
 - Recommended next phase: Phase 8A-11 — Dry Run Readiness Re-Assessment.
 - No importer behavior, Original Mirror behavior, preview behavior, section boundary capture, runtime mutation capture, candidate discovery behavior, candidate review behavior, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, publishing behavior, LLM call, generated output, database schema change, new persistence table, or publishing logic was added.
 
-Previous completed milestone:
+Earlier completed milestone:
 - Phase 8A-9 — Dry Run Readiness Re-Assessment.
 - Status: COMPLETE.
 - Reassessed first Dry Run readiness after Phase 8A-8 section boundary capture.
@@ -100,6 +140,7 @@ Earlier completed milestone:
 - Reconstruction dry-run boundary doc: `docs/architecture/RECONSTRUCTION_DRY_RUN_BOUNDARY.md`.
 - Simulation readiness review doc: `docs/architecture/SIMULATION_READINESS_REVIEW.md`.
 - Capture expansion for first Dry Run doc: `docs/architecture/CAPTURE_EXPANSION_FOR_FIRST_DRY_RUN.md`.
+- First limited Dry Run design doc: `docs/architecture/FIRST_LIMITED_DRY_RUN_DESIGN.md`.
 - Reconstruction dry-run boundary contract code: `apps/platform/gnr8/architecture/reconstruction-dry-run-contract.ts`.
 - Capture expansion layout contract code: `apps/platform/gnr8/architecture/evidence-capture-layout-contract.ts`.
 - Capture expansion plan doc: `docs/architecture/CAPTURE_EXPANSION_PLAN.md`.
@@ -126,6 +167,8 @@ Earlier completed milestone:
 - Phase 8A-8 implements deterministic section boundary capture from persisted layout geometry.
 - Phase 8A-9 reassesses the post-section-boundary state: conceptual readiness is 77/100, execution readiness is 68/100, route and section models are feasible, navigation and content models remain risky, and block/design token models remain not_ready.
 - Phase 8A-10 implements deterministic navigation capture from rendered DOM links plus existing layout and section evidence.
+- Phase 8A-11 reassesses the post-navigation state: conceptual readiness is 82/100, execution readiness is 73/100, route/navigation/section models are feasible, content remains risky, block/design token models remain not_ready, and first limited static Dry Run design is viable.
+- Phase 8B-0 defines the first limited Dry Run design: Route Model, Navigation Model, and Section Model only, with documentation-only output shapes, input boundaries, success/failure criteria, human review boundary, and recommended first target site type.
 - Evidence coverage summary: layout geometry, section boundaries, and navigation evidence are ready; runtime mutation evidence is missing; route identity, rendered DOM, rendered HTML hash, screenshots, computed styles, fonts, widgets, network, media, design-token, and multi-route evidence remain partial.
 - Required P0 minimum handoff evidence: evidence artifact status, source URL, route identity, rendered DOM ref, rendered HTML hash, render status, route capture status, and no blocker fidelity limitation.
 - P1/P2 evidence remains required for useful and high-confidence reconstruction, but not for `MINIMUM_READY`: settled DOM snapshot, screenshot refs, computed style samples, loaded font inventory, basic layout boxes, failed/blocked browser requests, iframe/embed/widget inventory, console summaries, runtime mutation summaries, media evidence, and broader network evidence.
@@ -135,7 +178,7 @@ Earlier completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8A-11 — Dry Run Readiness Re-Assessment.
+- Next recommended major phase: Phase 8B-2 — First Limited Dry Run Builder Design.
 
 Production smoke-test:
 - completed successfully.
@@ -1639,6 +1682,8 @@ Reconstruction Dry Run Boundary is complete:
 - section boundary capture: Phase 8A-8 completed deterministic section evidence classification, baseline artifact persistence, summary-only read model, and readiness integration; recommended next milestone Phase 8A-9 Dry Run Readiness Re-Assessment
 - post-section-boundary dry-run readiness re-assessment: Phase 8A-9 completed with conceptual readiness 77/100, execution readiness 68/100, route model feasible, section model feasible, navigation model risky, block model not_ready, design token model not_ready, and recommended Phase 8A-10 Navigation Capture
 - navigation capture: Phase 8A-10 completed deterministic navigation extraction, baseline artifact persistence, summary-only read model, and readiness integration; recommended next milestone Phase 8A-11 Dry Run Readiness Re-Assessment
+- first limited dry-run design: Phase 8B-0 completed documentation-only scope for Route Model, Navigation Model, and Section Model only; recommended next milestone Phase 8B-1 First Limited Dry Run Contract
+- first limited dry-run contract: Phase 8B-1 completed TypeScript contracts for `FirstLimitedDryRunOutput`, `LimitedDryRunRouteModel`, `LimitedDryRunNavigationModel`, and `LimitedDryRunSectionModel`; recommended next milestone Phase 8B-2 First Limited Dry Run Builder Design
 
 ## G) How Next Thread Should Behave
 
