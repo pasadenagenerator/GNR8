@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-1 First Limited Dry Run Contract is complete.
+- 8B-3 First Limited Dry Run Builder Implementation is complete.
 
 Current Phase:
-- Phase 8B-1 First Limited Dry Run Contract is complete.
+- Phase 8B-3 First Limited Dry Run Builder Implementation is complete.
 
 Next Phase:
-- Phase 8B-2 First Limited Dry Run Builder Design.
+- Phase 8B-4 First Limited Dry Run Builder Re-Assessment.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,34 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-3 — First Limited Dry Run Builder Implementation.
+- Status: COMPLETE.
+- Created `apps/platform/gnr8/architecture/first-limited-dry-run-builder.ts`.
+- Added `buildFirstLimitedDryRunOutput(...)`, a pure deterministic builder that accepts `ReconstructionDryRunPackage` plus Evidence Capture baseline and/or capture expansion evidence.
+- Builds only `LimitedDryRunRouteModel`, `LimitedDryRunNavigationModel`, and `LimitedDryRunSectionModel` inside `FirstLimitedDryRunOutput`.
+- Route models use only explicit `dryRunPackage.routeScope.routes`, captured Evidence Capture baseline source URLs, emitted section refs, emitted navigation refs, and propagated limitation refs. The builder does not infer routes from navigation hrefs or evidence outside route scope.
+- Navigation models use only `NavigationEvidence`, preserving labels, hrefs, confidence, deterministic item ordering, evidence refs, and deterministic dedupe by normalized label plus href when duplicates are present.
+- Section models use only `SectionBoundaryEvidence` and `LayoutGeometryEvidence` for traceability/consistency. The builder preserves section ID, route path, region type, selector, bounding box, confidence, evidence refs, and limitation refs, and does not recompute bounding boxes.
+- Propagates dry-run package limitations and deterministic missing navigation evidence, missing section evidence, missing source URL, and route/evidence mismatch limitations.
+- Builder output is validated with `validateFirstLimitedDryRunOutput(...)`.
+- Recommended next phase: Phase 8B-4 — First Limited Dry Run Builder Re-Assessment.
+- No importer behavior, Evidence Capture capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run execution runtime, simulation execution runtime, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, database write, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8B-2 — First Limited Dry Run Builder Design.
+- Status: COMPLETE.
+- Created `docs/architecture/FIRST_LIMITED_DRY_RUN_BUILDER_DESIGN.md`.
+- Defined exact deterministic mapping rules for creating `LimitedDryRunRouteModel`, `LimitedDryRunNavigationModel`, and `LimitedDryRunSectionModel` from existing Evidence Capture baseline data, `LayoutGeometryEvidence`, `SectionBoundaryEvidence`, and `NavigationEvidence`.
+- Route model mapping uses only explicit dry-run route scope route identities, captured source URLs, section refs, navigation refs, route limitation refs, and conservative aggregate confidence. It does not create routes from navigation hrefs or source-site crawling.
+- Navigation model mapping uses `NavigationEvidence` only, with deterministic confidence propagation, duplicate handling, item ordering, rewritten contiguous positions after dedupe, evidence refs, and limitation refs.
+- Section model mapping uses `SectionBoundaryEvidence` and `LayoutGeometryEvidence`, with deterministic section ordering, exact selector copying, exact section boundary bounding box copying, confidence propagation, layout geometry used only for traceability/consistency checks, and limitation propagation.
+- Defined limitation flow from Evidence Capture, section evidence, navigation evidence, and existing dry-run package limitations into `FirstLimitedDryRunOutput.limitations`.
+- Defined traceability rules for `sourceEvidenceRefs`, `limitationRefs`, top-level `evidenceRefs`, and the Phase 8B-1 route model contract's indirect source traceability through `sectionRefs`, `navigationRefs`, and top-level refs.
+- Defined determinism rules: same input equals same output, with no randomness, no AI, no live network reads, no preview reads, no Original Mirror product-truth reads, no selector generation, no bounding box recomputation, and no inference outside existing evidence.
+- Recommended next phase: Phase 8B-3 — First Limited Dry Run Builder Implementation.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, database write, generated route model output, generated navigation model output, generated section model output, or publishing logic was added.
+
+Previous completed milestone:
 - Phase 8B-1 — First Limited Dry Run Contract.
 - Status: COMPLETE.
 - Created `apps/platform/gnr8/architecture/first-limited-dry-run-contract.ts`.
@@ -178,7 +206,7 @@ Earlier completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8B-2 — First Limited Dry Run Builder Design.
+- Next recommended major phase: Phase 8B-4 — First Limited Dry Run Builder Re-Assessment.
 
 Production smoke-test:
 - completed successfully.
@@ -1684,6 +1712,8 @@ Reconstruction Dry Run Boundary is complete:
 - navigation capture: Phase 8A-10 completed deterministic navigation extraction, baseline artifact persistence, summary-only read model, and readiness integration; recommended next milestone Phase 8A-11 Dry Run Readiness Re-Assessment
 - first limited dry-run design: Phase 8B-0 completed documentation-only scope for Route Model, Navigation Model, and Section Model only; recommended next milestone Phase 8B-1 First Limited Dry Run Contract
 - first limited dry-run contract: Phase 8B-1 completed TypeScript contracts for `FirstLimitedDryRunOutput`, `LimitedDryRunRouteModel`, `LimitedDryRunNavigationModel`, and `LimitedDryRunSectionModel`; recommended next milestone Phase 8B-2 First Limited Dry Run Builder Design
+- first limited dry-run builder design: Phase 8B-2 completed deterministic mapping design for Route, Navigation, and Section Models only; recommended next milestone Phase 8B-3 First Limited Dry Run Builder Implementation
+- first limited dry-run builder implementation: Phase 8B-3 completed `buildFirstLimitedDryRunOutput(...)` for deterministic Route, Navigation, and Section Models from existing evidence only; recommended next milestone Phase 8B-4 First Limited Dry Run Builder Re-Assessment
 
 ## G) How Next Thread Should Behave
 
