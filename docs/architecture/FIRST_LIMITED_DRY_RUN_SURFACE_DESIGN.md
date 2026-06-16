@@ -4,6 +4,9 @@
 
 Phase 8B-8 designs the read-only operator surface for persisted `FirstLimitedDryRunOutput` artifacts.
 
+Phase 8B-10 verifies the implemented surface as the read-only inspection end of
+the admin-only diagnostic chain.
+
 This phase answers:
 
 > What should an operator see after a limited dry-run output has been created?
@@ -291,6 +294,18 @@ The next implementation phase should not:
 - Empty states for no output, invalid latest output, blocked latest output, no route models, and outputs with limitations.
 - Superadmin-only page access using existing admin page guard patterns.
 
+## 8B-10 Verification
+
+Verified:
+
+- a superadmin-triggered persisted artifact can be read back and projected through `loadLatestFirstLimitedDryRunSurfaceProjection(...)`
+- the projection reports route, navigation, and section model counts from the persisted output
+- the projection exposes Route Model, Navigation Model, and Section Model details for read-only inspection
+- the dedicated admin page source contains the expected read-only labels for overview, diagnostics, route models, navigation models, section models, and limitations
+- the page source contains no form, button, input, textarea, or select controls
+- the page source contains no trigger, rebuild, approve, publish, edit, AI, generated output, or React-output action language
+- forbidden generated output fields remain absent from the persisted output inspected by the surface
+
 ## Still Missing
 
 - Trigger UI
@@ -303,6 +318,6 @@ The next implementation phase should not:
 
 Recommended next phase:
 
-- Phase 8B-10 - First Limited Dry Run End-to-End Admin Verification
+- Phase 8B-11 - First Limited Dry Run Re-Assessment / Next Safe Boundary
 
-8B-10 should verify the read-only surface end to end against real persisted artifacts. It should not add publish controls, approve controls, reconstruction controls, AI controls, edit controls, trigger controls, worker jobs, queues, public/client access, tenant-admin access, CMS mutation, generated output, or publishing.
+8B-11 should reassess whether the diagnostic flow is ready for a narrowly scoped next step, or whether more Evidence Capture/reconstruction readiness work is required first. It should not add publish controls, approve controls, reconstruction controls, AI controls, edit controls, trigger controls, worker jobs, queues, public/client access, tenant-admin access, CMS mutation, generated output, or publishing without a separate explicit implementation phase.

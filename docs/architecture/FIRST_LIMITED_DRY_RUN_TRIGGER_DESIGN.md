@@ -6,6 +6,9 @@ Phase 8B-6 designed the admin-only trigger boundary for creating and persisting 
 
 Phase 8B-7 implements the admin-only API trigger.
 
+Phase 8B-10 verifies the trigger as part of the complete admin-only diagnostic
+chain from API call to persisted artifact to read-only admin inspection.
+
 This phase answers:
 
 > How should an authorized operator trigger the limited dry-run builder safely?
@@ -27,10 +30,10 @@ Implemented:
 - persistence as `first_limited_dry_run_output`
 - idempotent reuse of the latest equivalent artifact, with append only when the rebuilt output differs
 - metadata-only API response
+- 8B-10 integration-style verification that a superadmin trigger creates an artifact, an equivalent second trigger reuses it, and changed Evidence Capture input appends a new artifact
 
 Still missing:
 
-- UI surface
 - approval workflow
 - worker execution
 - public/client access
@@ -194,7 +197,28 @@ Rules:
 - if the newly built output differs because the underlying Evidence Capture baseline or dry-run package changed, append a new artifact and advance the latest pointer
 - explicit versioning or forced replacement is out of scope for the first implementation
 
+8B-10 verification result:
+
+- first equivalent call persists one `first_limited_dry_run_output` artifact
+- second equivalent call returns the same artifact ref with `idempotencyResult = "reused"` and does not write again
+- changed navigation evidence rebuilds a different output, appends a second artifact, and the read-only surface projection resolves the changed model
+
 Equivalence should compare the normalized `FirstLimitedDryRunOutput` payload, including IDs, route scope, model arrays, limitations, evidence refs, status, and validation-relevant fields. It should not depend on persistence timestamps.
+
+## 8B-10 Verification
+
+Verified:
+
+- superadmin API trigger creates persisted output from an Evidence Capture baseline and matching `ReconstructionDryRunPackage`
+- persisted artifact can be loaded with `loadLatestFirstLimitedDryRunOutput(...)`
+- trigger response contains metadata only and excludes Route/Navigation/Section Model arrays and full output payloads
+- unauthorized requests fail before persistence
+- forbidden request fields including `force`, `routeScope`, `generatedOutputs`, and `reactOutput` are rejected
+- forbidden generated output fields remain absent from persisted `FirstLimitedDryRunOutput`
+- equivalent trigger calls reuse the latest artifact
+- changed evidence creates a new latest artifact when the rebuilt output differs
+
+No new trigger behavior, API routes, UI controls, dry-run execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, worker execution, persistence schema, or publishing behavior was added for this verification.
 
 ## Auditability
 
@@ -311,3 +335,9 @@ Post 8B-7 recommended next phase:
 - Phase 8B-9 - Read-Only First Limited Dry Run Surface Implementation
 
 8B-9 should implement the read-only operator surface designed in `docs/architecture/FIRST_LIMITED_DRY_RUN_SURFACE_DESIGN.md`. It should read persisted output only and still avoid trigger execution from the display surface, public/client access, tenant-admin access, publish controls, approval controls, reconstruction controls, AI controls, edit controls, worker jobs, queues, CMS mutation, domain/DNS changes, and publishing.
+
+Post 8B-10 recommended next phase:
+
+- Phase 8B-11 - First Limited Dry Run Re-Assessment / Next Safe Boundary
+
+8B-11 should reassess the verified diagnostic flow before any new implementation phase. It should not add trigger behavior, UI controls, public/client access, tenant-admin access, publish controls, approval controls, reconstruction controls, AI controls, edit controls, worker jobs, queues, CMS mutation, domain/DNS changes, generated output, or publishing without a separate explicit phase.
