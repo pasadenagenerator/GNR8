@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-3 First Limited Dry Run Builder Implementation is complete.
+- 8B-5 First Limited Dry Run Output Persistence is complete.
 
 Current Phase:
-- Phase 8B-3 First Limited Dry Run Builder Implementation is complete.
+- Phase 8B-5 First Limited Dry Run Output Persistence is complete.
 
 Next Phase:
-- Phase 8B-4 First Limited Dry Run Builder Re-Assessment.
+- Phase 8B-6 Admin-Only First Limited Dry Run Trigger Design.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,33 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-5 — First Limited Dry Run Output Persistence.
+- Status: COMPLETE.
+- Created `apps/platform/gnr8/architecture/first-limited-dry-run-output-persistence.ts`.
+- Added `persistFirstLimitedDryRunOutput(...)` for validated persistence of `FirstLimitedDryRunOutput` as artifact kind `first_limited_dry_run_output`.
+- Added `loadLatestFirstLimitedDryRunOutput(...)` for latest persisted output readback by `siteVersionId` and optional `dryRunId`.
+- Storage uses existing runtime site-version `import_provenance_summary`, under `firstLimitedDryRunOutputArtifacts` and `latestFirstLimitedDryRunOutputArtifact`; no new DB table was added.
+- Validation runs before write via `validateFirstLimitedDryRunOutput(...)`; forbidden generated output shapes and mismatched `siteVersionId`/`dryRunId` are rejected before persistence.
+- Persisted artifact metadata preserves validation result and diagnostics.
+- Recommended next phase: Phase 8B-6 — Admin-Only First Limited Dry Run Trigger Design.
+- No importer behavior, Evidence Capture capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run runtime execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, worker execution, runtime API, UI surface, approval workflow, publishing behavior, generated React, generated GNR8 blocks, CMS bindings, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8B-4 — First Limited Dry Run Builder Re-Assessment.
+- Status: COMPLETE.
+- Updated `docs/architecture/SIMULATION_READINESS_REVIEW.md` with the post-8B-3 reassessment.
+- Updated `docs/architecture/FIRST_LIMITED_DRY_RUN_DESIGN.md` with implemented and still-missing status.
+- Previous conceptual Dry Run readiness: 82/100.
+- Previous execution Dry Run readiness: 73/100.
+- Updated conceptual Dry Run readiness: 86/100.
+- Updated execution Dry Run readiness: 77/100.
+- Feasibility remains route model feasible, navigation model feasible, section model feasible, content model risky, block model not_ready, and design token model not_ready.
+- Runtime readiness: contract, builder, and validation are implemented; persistence, API trigger, UI display, worker execution, approval, and publish remain missing.
+- Conclusion: the deterministic builder is sufficient to justify moving toward a controlled runtime dry-run surface, but persistence should come before API/runtime trigger or UI exposure.
+- Recommended next phase: Phase 8B-5 — First Limited Dry Run Output Persistence.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run runtime execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, database write, runtime API, UI surface, approval workflow, or publishing logic was added.
+
+Previous completed milestone:
 - Phase 8B-3 — First Limited Dry Run Builder Implementation.
 - Status: COMPLETE.
 - Created `apps/platform/gnr8/architecture/first-limited-dry-run-builder.ts`.
@@ -206,7 +233,7 @@ Earlier completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8B-4 — First Limited Dry Run Builder Re-Assessment.
+- Next recommended major phase: Phase 8B-5 — First Limited Dry Run Output Persistence.
 
 Production smoke-test:
 - completed successfully.
@@ -1714,6 +1741,8 @@ Reconstruction Dry Run Boundary is complete:
 - first limited dry-run contract: Phase 8B-1 completed TypeScript contracts for `FirstLimitedDryRunOutput`, `LimitedDryRunRouteModel`, `LimitedDryRunNavigationModel`, and `LimitedDryRunSectionModel`; recommended next milestone Phase 8B-2 First Limited Dry Run Builder Design
 - first limited dry-run builder design: Phase 8B-2 completed deterministic mapping design for Route, Navigation, and Section Models only; recommended next milestone Phase 8B-3 First Limited Dry Run Builder Implementation
 - first limited dry-run builder implementation: Phase 8B-3 completed `buildFirstLimitedDryRunOutput(...)` for deterministic Route, Navigation, and Section Models from existing evidence only; recommended next milestone Phase 8B-4 First Limited Dry Run Builder Re-Assessment
+- first limited dry-run builder re-assessment: Phase 8B-4 completed post-builder reassessment with conceptual readiness 86/100, execution readiness 77/100, and recommended next milestone Phase 8B-5 First Limited Dry Run Output Persistence
+- first limited dry-run output persistence: Phase 8B-5 completed durable provenance artifact persistence and latest-output readback for validated `FirstLimitedDryRunOutput`; recommended next milestone Phase 8B-6 Admin-Only First Limited Dry Run Trigger Design
 
 ## G) How Next Thread Should Behave
 

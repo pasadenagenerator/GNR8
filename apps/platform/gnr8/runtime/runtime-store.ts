@@ -3347,7 +3347,7 @@ export async function getSiteVersion(siteVersionId: string, options: RuntimeStor
 export async function setSiteVersionImportProvenanceSummary(input: {
   siteVersionId: string;
   importProvenanceSummary: RuntimeImportProvenanceSummary;
-}): Promise<{ affectedRows: number }> {
+}, options: RuntimeStoreDbOptions = {}): Promise<{ affectedRows: number }> {
   return withTx(async (client) => {
     const updated = await client.query<{ id: string }>(
       `
@@ -3362,7 +3362,7 @@ export async function setSiteVersionImportProvenanceSummary(input: {
       throw new Error(`Runtime site version not found for provenance write: ${input.siteVersionId}`);
     }
     return { affectedRows: updated.rowCount ?? 0 };
-  });
+  }, options);
 }
 
 export async function materializePageMigrationGovernanceForSiteVersion(input: {

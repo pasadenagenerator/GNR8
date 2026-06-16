@@ -479,3 +479,58 @@ Recommended next phase:
 - Phase 8A-12 - First Limited Dry Run Design
 
 Phase 8A-12 should define the first limited static Dry Run design using persisted route, layout geometry, section boundary, and navigation evidence. It should specify narrow scope, evidence prerequisites, static-site assumptions, explicit exclusions for runtime mutation-dependent pages, candidate discovery expectations, stop conditions, and validation gates. It should not add runtime mutation capture, simulation execution, reconstruction execution, AI generation, React generation, block generation, generated outputs, database writes, or publishing behavior.
+
+## Post 8B-3 Re-Assessment
+
+Phase 8B-3 improved first limited Dry Run readiness at the deterministic builder level by implementing `buildFirstLimitedDryRunOutput(...)` for Route Model, Navigation Model, and Section Model only.
+
+Previous 8A-11 scores:
+
+- Conceptual Dry Run Readiness: 82/100
+- Execution Dry Run Readiness: 73/100
+
+Updated scores after 8B-3:
+
+| Readiness Type | Score | Assessment |
+|---|---:|---|
+| Conceptual Dry Run Readiness | 86/100 | Higher because the first limited Dry Run is no longer only a design and contract boundary. It now has a deterministic builder that maps approved dry-run package scope and existing Evidence Capture baseline evidence into reviewable route, navigation, and section models with validation and limitations. |
+| Execution Dry Run Readiness | 77/100 | Higher because a pure builder can now produce valid limited output in existing builder tests without AI, runtime mutation, database writes, workers, publishing, or generated site output. It remains below broad execution readiness because persistence, runtime/API trigger, operator surface, approval flow, sample real-site run, runtime mutation evidence, and candidate discovery/review execution are still missing. |
+
+Explanation:
+
+8B-3 answers the core static-builder question positively: the deterministic builder is sufficient to justify moving toward a controlled runtime dry-run surface. The next surface should remain narrow and non-publishing. The immediate gap is durability and reviewability, not model construction. A runtime/API trigger or UI surface would be premature until the limited output has a persistence boundary.
+
+### Post 8B-3 Feasibility Matrix
+
+| Target Model | Feasibility | Rationale |
+|---|---|---|
+| route model | feasible | The builder creates route models from explicit dry-run route scope and captured source URLs only, with section/navigation refs and propagated limitations. |
+| navigation model | feasible | The builder consumes persisted `NavigationEvidence` for labels, hrefs, stable positions, confidence, source refs, deterministic ordering, and dedupe. |
+| section model | feasible | The builder consumes `SectionBoundaryEvidence` and preserves selectors, bounding boxes, region types, confidence, source refs, and limitations without recomputing geometry. |
+| content model | risky | Existing rendered DOM and section context can support later exploration, but the first limited builder deliberately excludes generated content models, candidate discovery execution, and reviewed content boundaries. |
+| block model | not_ready | Block modeling still needs candidate discovery execution, reviewed reconstruction intent, media/widget classification, block/content mapping, and a later generation boundary. |
+| design token model | not_ready | Design token modeling still lacks token candidate contracts, loaded font confidence, broad style usage counts, role mapping, and layout-context-aware token extraction. |
+
+### Runtime Readiness Matrix
+
+| Capability | Status | Gap |
+|---|---|---|
+| contract | implemented | None for the first limited Route/Navigation/Section output boundary. |
+| builder | implemented | Needs persistence before it can become a controlled runtime artifact. |
+| validation | implemented | Validation exists for allowed output shape and forbidden output containers; runtime validation wiring is still absent. |
+| persistence | missing | No durable storage exists for first limited dry-run outputs. |
+| API trigger | missing | No admin or runtime trigger exists for invoking the builder. |
+| UI display | missing | No operator or Site Workspace surface exists for inspecting output. |
+| worker execution | missing | No worker job should exist yet; worker execution remains out of scope. |
+| approval | missing | No approval workflow exists for dry-run outputs. |
+| publish | missing | Publishing remains forbidden and out of scope. |
+
+### Next Step Recommendation
+
+Recommended next phase:
+
+- A. Add persistence for first limited dry-run outputs
+
+Rationale:
+
+Persistence is the smallest controlled step after the builder. It would make the deterministic output durable and reviewable without introducing API/runtime triggers, UI surface area, workers, approval execution, publishing, AI, React/block/content/design-token generation, or runtime mutation capture. API and UI work should follow only after the output has a narrow storage boundary.

@@ -300,3 +300,24 @@ Recommended next phase:
 - Phase 8B-2 - First Limited Dry Run Builder Design
 
 8B-2 should design how a future builder will populate the limited outputs above. It should still avoid execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema changes, workers, and publishing.
+
+## Post 8B-5 Implementation Status
+
+Implemented:
+
+- `FirstLimitedDryRunOutput` contract
+- deterministic builder
+- validation
+- limitation propagation
+- output persistence
+
+Still missing:
+
+- API trigger
+- UI display
+- worker execution
+- approval workflow
+
+Assessment:
+
+The first limited Dry Run design can now store and retrieve a validated deterministic `FirstLimitedDryRunOutput` as a durable provenance artifact using artifact kind `first_limited_dry_run_output`. The output remains Route Model, Navigation Model, and Section Model only. Block Model, Content Model, Design Token Model, React, GNR8 blocks, generated site output, runtime/API triggers, UI display, workers, approvals, and publishing remain outside this design.

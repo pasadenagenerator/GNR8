@@ -16,6 +16,7 @@ import type { SiteTree, SiteTreeSummary } from "@/gnr8/site-tree";
 import type { FamilyHandoffModel, TemplateFamiliesSummary } from "@/gnr8/family-mode";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "@/gnr8/import-semantic/semantic-import-engine";
 import type { EvidenceCaptureBaselineArtifactRecord } from "@/gnr8/architecture/evidence-capture-baseline-artifact";
+import type { FirstLimitedDryRunOutputArtifactRecord } from "@/gnr8/architecture/first-limited-dry-run-output-persistence";
 
 export const RENDERER_COMPATIBILITY_VERSION = "gnr8-renderer-v1" as const;
 
@@ -364,6 +365,8 @@ export type RuntimeImportProvenanceSummary = {
     families: FamilyHandoffModel | null;
   } | null;
   evidenceCaptureBaselineArtifact?: EvidenceCaptureBaselineArtifactRecord | null;
+  firstLimitedDryRunOutputArtifacts?: FirstLimitedDryRunOutputArtifactRecord[];
+  latestFirstLimitedDryRunOutputArtifact?: FirstLimitedDryRunOutputArtifactRecord | null;
 };
 
 export type StyleTokenRecord = Record<string, string>;
