@@ -16,7 +16,7 @@ It does not implement a UI button, worker job, queue execution, dry-run worker r
 
 Implemented:
 
-- admin-only API trigger at `app/api/gnr8/admin/first-limited-dry-run/route.ts`
+- admin-only API trigger at `apps/platform/app/api/gnr8/admin/first-limited-dry-run/route.ts`
 - superadmin-only access control through the existing server-side superadmin guard pattern
 - request validation for required `siteVersionId` and `dryRunId`
 - deterministic rejection of `routeScope`, `force`, evidence payloads, generated outputs, and other extra request fields
@@ -238,10 +238,76 @@ It must not show controls that publish, approve reconstruction, edit CMS content
 
 This phase does not implement that surface. It only defines the boundary a later implementation must respect.
 
+## Post 8B-7 Re-Assessment
+
+Phase 8B-7 implemented the API trigger described by this design.
+
+Implemented:
+
+- superadmin-only POST trigger at `apps/platform/app/api/gnr8/admin/first-limited-dry-run/route.ts`
+- fail-closed request validation for required `siteVersionId` and `dryRunId`
+- deterministic rejection of `routeScope`, `force`, evidence payloads, generated outputs, and all extra request fields
+- runtime site-version loading behind the superadmin boundary
+- latest Evidence Capture baseline loading from persisted site-version provenance
+- matching `ReconstructionDryRunPackage` lookup from persisted site-version provenance
+- deterministic `buildFirstLimitedDryRunOutput(...)` execution for Route Model, Navigation Model, and Section Model only
+- `validateFirstLimitedDryRunOutput(...)` before persistence
+- persistence as artifact kind `first_limited_dry_run_output`
+- latest-equivalent idempotency with `idempotencyResult` of `reused` or `created`
+- metadata-only success response with artifact ref, output status, validation result, model counts, limitations counts, blocker limitation count, idempotency result, and diagnostics
+
+Still missing:
+
+- read-only Site Workspace/Admin surface for persisted `first_limited_dry_run_output`
+- operator inspection model for artifact metadata, validation, diagnostics, limitations, and route/navigation/section models
+- route, navigation, and section display sections
+- empty states for missing, invalid, blocked, evidence-missing, no-route, and limitations-present cases
+- UI access wiring for the surface
+- approval workflow
+- dry-run worker execution
+- simulation execution
+- reconstruction execution
+- AI generation
+- React generation
+- GNR8 block generation
+- content generation
+- design token generation
+- publishing
+- public/client-user access
+- tenant-admin access
+
+Safety boundaries still intact:
+
+- no importer behavior changes
+- no Evidence Capture behavior changes
+- no Original Mirror behavior changes
+- no preview behavior changes
+- no capture behavior changes
+- no candidate discovery execution
+- no candidate review execution
+- no dry-run worker execution
+- no simulation execution
+- no reconstruction execution
+- no AI, LLM, React, block, content, or design-token generation
+- no persistence schema changes beyond the existing provenance artifact shape
+- no worker jobs or queues
+- no publish, approve, edit, CMS binding, route-scope override, or force control
+- no public, client-user, or tenant-admin access
+
+Assessment:
+
+The API-only trigger is sufficient for the next UI design phase because it can create or reuse a validated persisted `FirstLimitedDryRunOutput` and returns the exact metadata needed for a read-only operator summary. The next surface should read from the persisted latest artifact, not rebuild output, not call the trigger implicitly, and not introduce execution controls. The UI can therefore be designed as an artifact inspection surface around the existing persisted output contract.
+
 ## Recommended Next Phase
 
-Recommended next phase:
+Historical 8B-6 recommended next phase:
 
 - Phase 8B-8 - Admin Trigger Re-Assessment / Read-Only Surface Design
 
 8B-8 should reassess the implemented admin-only trigger and design a read-only operator surface. It should still avoid public/client access, UI publish controls, approval execution, AI generation, React generation, block generation, content generation, design token generation, worker jobs, queue execution, reconstruction execution, simulation execution, CMS mutation, domain/DNS changes, and publishing.
+
+Post 8B-7 recommended next phase:
+
+- Phase 8B-9 - Read-Only First Limited Dry Run Surface Implementation
+
+8B-9 should implement the read-only operator surface designed in `docs/architecture/FIRST_LIMITED_DRY_RUN_SURFACE_DESIGN.md`. It should read persisted output only and still avoid trigger execution from the display surface, public/client access, tenant-admin access, publish controls, approval controls, reconstruction controls, AI controls, edit controls, worker jobs, queues, CMS mutation, domain/DNS changes, and publishing.

@@ -335,3 +335,47 @@ The first limited Dry Run design can now store and retrieve a validated determin
 Recommended next phase:
 
 - Phase 8B-7 - Admin-Only First Limited Dry Run Trigger Implementation
+
+## Post 8B-8 Design Status
+
+Implemented:
+
+- `FirstLimitedDryRunOutput` contract
+- deterministic builder
+- validation
+- limitation propagation
+- output persistence as artifact kind `first_limited_dry_run_output`
+- superadmin-only API trigger
+- trigger idempotency with `reused` / `created` metadata
+- metadata-only trigger response
+
+Designed:
+
+- read-only operator surface titled "First Limited Dry Run"
+- artifact summary display for artifact status, output status, validation status, idempotency result, model counts, limitations counts, blocker limitation count, and diagnostics
+- Route Model display for `routePath`, `sourceUrl`, section count, navigation refs, confidence, and limitations
+- Navigation Model display for item count, labels, hrefs, confidence, and evidence refs
+- Section Model display for ordered sections, region type, selector, bounding box, confidence, evidence refs, and limitations
+- empty states for no output, invalid output, blocked output, evidence missing, no route models, and limitations present
+- safety constraints for a read-only superadmin/admin-only surface with no publish, approve, reconstruction, AI, edit, trigger, worker, queue, CMS, or generation controls
+
+Still missing:
+
+- UI implementation
+- read-only artifact read surface in the application
+- navigation/linking to the surface
+- public/client access
+- tenant-admin access
+- approval workflow
+- worker execution
+- simulation execution
+- reconstruction execution
+- publishing
+
+Assessment:
+
+The first limited Dry Run now has a persisted output artifact and an admin-only trigger that can create or reuse it. Phase 8B-8 defines the operator inspection model needed to view that artifact safely without expanding the output boundary. The output remains Route Model, Navigation Model, and Section Model only. Block Model, Content Model, Design Token Model, React, GNR8 blocks, generated site output, CMS bindings, approvals, reconstruction execution, worker execution, and publishing remain outside this design.
+
+Recommended next phase:
+
+- Phase 8B-9 - Read-Only First Limited Dry Run Surface Implementation

@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-7 Admin-Only First Limited Dry Run Trigger Implementation is complete.
+- 8B-9 Read-Only First Limited Dry Run Surface Implementation is complete.
 
 Current Phase:
-- Phase 8B-7 Admin-Only First Limited Dry Run Trigger Implementation is complete.
+- Phase 8B-9 Read-Only First Limited Dry Run Surface Implementation is complete.
 
 Next Phase:
-- Phase 8B-8 Admin Trigger Re-Assessment / Read-Only Surface Design.
+- Phase 8B-10 First Limited Dry Run End-to-End Admin Verification.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,10 +23,40 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-9 — Read-Only First Limited Dry Run Surface Implementation.
+- Status: COMPLETE.
+- Created `apps/platform/gnr8/architecture/first-limited-dry-run-surface-projection.ts`.
+- Created `apps/platform/app/gnr8/admin/first-limited-dry-run/[siteVersionId]/page.tsx`.
+- Added `loadLatestFirstLimitedDryRunSurfaceProjection(...)`, a defensive read-model projection over persisted `first_limited_dry_run_output` artifacts.
+- Projection metadata includes artifact ref/kind, dry-run id, site-version id, output status, validation status, route/navigation/section counts, limitations count, blocker limitations count, diagnostics, created time, persisted time, and Route/Navigation/Section Model arrays.
+- The page is dedicated, read-only, superadmin-only, and titled "First Limited Dry Run".
+- The page displays Overview, Route Models, Navigation Models, Section Models, Limitations, diagnostics, and empty states for no output, invalid latest output, blocked latest output, no route models, and output limitations.
+- Added focused source/projection tests for page labels, missing forbidden controls/phrases, empty states, and safe projection parsing.
+- Updated `docs/architecture/FIRST_LIMITED_DRY_RUN_SURFACE_DESIGN.md`, `docs/ai/GNR8_CURRENT_STATE.md`, and this handoff.
+- Recommended next phase: Phase 8B-10 — First Limited Dry Run End-to-End Admin Verification.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run execution logic, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, publishing behavior, trigger UI, approval workflow, worker jobs, queues, public/client access, tenant-admin access, generated React, generated GNR8 blocks, CMS bindings, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8B-8 — Admin Trigger Re-Assessment / Read-Only Surface Design.
+- Status: COMPLETE.
+- Updated `docs/architecture/FIRST_LIMITED_DRY_RUN_TRIGGER_DESIGN.md` with the post-8B-7 reassessment.
+- Created `docs/architecture/FIRST_LIMITED_DRY_RUN_SURFACE_DESIGN.md`.
+- Reassessment: the 8B-7 API-only trigger is sufficient for the next UI phase because it can create or reuse a validated persisted `first_limited_dry_run_output` and returns the metadata needed for read-only inspection.
+- Recommended UI location: dedicated admin dry-run page titled "First Limited Dry Run".
+- Surface summary should display artifact status, output status, validation status, idempotency result, route/navigation/section model counts, limitations count, blocker limitations count, diagnostics, artifact refs, output id, site version id, dry-run id, reconstruction package id, created time, persisted time, and evidence ref count.
+- Route Models display `routePath`, `sourceUrl`, section count, navigation refs, confidence, and limitations.
+- Navigation Models display item count, labels, hrefs, confidence, evidence refs, and ordered item details.
+- Section Models display ordered sections by route, region type, selector, bounding box, confidence, evidence refs, and limitations.
+- Empty states are defined for no dry-run output yet, latest output invalid, latest output blocked, evidence missing, output exists but has no route models, and output exists but has limitations.
+- Safety constraints: read-only, initially superadmin/admin-only, no publish controls, no approve controls, no reconstruction controls, no AI controls, no edit controls, no trigger controls, no route-scope controls, no force/rebuild controls, no worker jobs, no queues, no CMS bindings, no public/client-user access, no tenant-admin access, no generated React, no generated GNR8 blocks, no generated content, no design token generation, and no publishing logic.
+- Recommended next phase: Phase 8B-9 — Read-Only First Limited Dry Run Surface Implementation.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run worker execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, publishing behavior, worker jobs, queues, UI implementation, new API route, approval workflow, public/client access, tenant-admin access, generated React, generated GNR8 blocks, CMS bindings, or publishing logic was added.
+
+Earlier completed milestone:
 - Phase 8B-7 — Admin-Only First Limited Dry Run Trigger Implementation.
 - Status: COMPLETE.
-- Created `app/api/gnr8/admin/first-limited-dry-run/route.ts`.
-- Created `app/api/gnr8/admin/first-limited-dry-run/first-limited-dry-run-route-handlers.ts`.
+- Created `apps/platform/app/api/gnr8/admin/first-limited-dry-run/route.ts`.
+- Created `apps/platform/app/api/gnr8/admin/first-limited-dry-run/first-limited-dry-run-route-handlers.ts`.
 - Added a superadmin-only POST API trigger for deterministic first limited dry-run output generation and persistence.
 - Request contract accepts only `siteVersionId` and `dryRunId`; `routeScope`, `force`, evidence payloads, generated outputs, and other extra request fields are rejected deterministically.
 - Trigger flow loads the runtime site version, latest Evidence Capture baseline, and matching `ReconstructionDryRunPackage`; runs `buildFirstLimitedDryRunOutput(...)`; validates with `validateFirstLimitedDryRunOutput(...)`; persists valid output as `first_limited_dry_run_output`; and returns metadata only.
@@ -262,7 +292,7 @@ Earlier completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8B-8 — Admin Trigger Re-Assessment / Read-Only Surface Design.
+- Next recommended major phase: Phase 8B-9 — Read-Only First Limited Dry Run Surface Implementation.
 
 Production smoke-test:
 - completed successfully.
@@ -1774,6 +1804,8 @@ Reconstruction Dry Run Boundary is complete:
 - first limited dry-run output persistence: Phase 8B-5 completed durable provenance artifact persistence and latest-output readback for validated `FirstLimitedDryRunOutput`; recommended next milestone Phase 8B-6 Admin-Only First Limited Dry Run Trigger Design
 - first limited dry-run trigger design: Phase 8B-6 completed superadmin-only trigger boundary design, request/response contract, deterministic failures, idempotency, and auditability; recommended next milestone Phase 8B-7 Admin-Only First Limited Dry Run Trigger Implementation
 - first limited dry-run trigger implementation: Phase 8B-7 completed the superadmin-only POST API trigger, metadata-only response, validation-before-persistence, and idempotent latest-artifact reuse; recommended next milestone Phase 8B-8 Admin Trigger Re-Assessment / Read-Only Surface Design
+- first limited dry-run surface design: Phase 8B-8 completed post-trigger reassessment and designed the read-only operator surface for persisted First Limited Dry Run outputs; recommended next milestone Phase 8B-9 Read-Only First Limited Dry Run Surface Implementation
+- first limited dry-run surface implementation: Phase 8B-9 completed the dedicated read-only superadmin page and defensive persisted-output projection; recommended next milestone Phase 8B-10 First Limited Dry Run End-to-End Admin Verification
 
 ## G) How Next Thread Should Behave
 
