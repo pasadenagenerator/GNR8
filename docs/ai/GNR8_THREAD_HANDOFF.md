@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-5 First Limited Dry Run Output Persistence is complete.
+- 8B-7 Admin-Only First Limited Dry Run Trigger Implementation is complete.
 
 Current Phase:
-- Phase 8B-5 First Limited Dry Run Output Persistence is complete.
+- Phase 8B-7 Admin-Only First Limited Dry Run Trigger Implementation is complete.
 
 Next Phase:
-- Phase 8B-6 Admin-Only First Limited Dry Run Trigger Design.
+- Phase 8B-8 Admin Trigger Re-Assessment / Read-Only Surface Design.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,35 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-7 — Admin-Only First Limited Dry Run Trigger Implementation.
+- Status: COMPLETE.
+- Created `app/api/gnr8/admin/first-limited-dry-run/route.ts`.
+- Created `app/api/gnr8/admin/first-limited-dry-run/first-limited-dry-run-route-handlers.ts`.
+- Added a superadmin-only POST API trigger for deterministic first limited dry-run output generation and persistence.
+- Request contract accepts only `siteVersionId` and `dryRunId`; `routeScope`, `force`, evidence payloads, generated outputs, and other extra request fields are rejected deterministically.
+- Trigger flow loads the runtime site version, latest Evidence Capture baseline, and matching `ReconstructionDryRunPackage`; runs `buildFirstLimitedDryRunOutput(...)`; validates with `validateFirstLimitedDryRunOutput(...)`; persists valid output as `first_limited_dry_run_output`; and returns metadata only.
+- Idempotency reuses the latest equivalent artifact for the same `siteVersionId` and `dryRunId`; a new artifact is appended only when the rebuilt output differs.
+- Response metadata includes `artifactRef`, `artifactKind`, `outputStatus`, validation, route/navigation/section model counts, limitations counts, blocker limitation count, `idempotencyResult`, and diagnostics.
+- Added focused API tests for unauthorized access, missing IDs, forbidden fields, missing baseline, missing dry-run package, valid persistence, idempotent reuse, invalid builder output non-persistence, metadata-only response, and generated-output request rejection.
+- Recommended next phase: Phase 8B-8 — Admin Trigger Re-Assessment / Read-Only Surface Design.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, candidate discovery execution, candidate review execution, dry-run worker execution, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, publishing behavior, worker jobs, queues, UI button, approval workflow, public/client access, tenant-admin access, generated React, generated GNR8 blocks, CMS bindings, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8B-6 — Admin-Only First Limited Dry Run Trigger Design.
+- Status: COMPLETE.
+- Created `docs/architecture/FIRST_LIMITED_DRY_RUN_TRIGGER_DESIGN.md`.
+- Defined the superadmin-only trigger boundary for creating and persisting a `FirstLimitedDryRunOutput`.
+- Trigger may load the latest Evidence Capture baseline, load the matching `ReconstructionDryRunPackage`, run the deterministic builder, validate output, persist a valid artifact, and return artifact metadata and model counts.
+- Access control is fail-closed, superadmin-only, server-side, with no public access, no client-user access, and no tenant-admin access yet.
+- Input contract requires `siteVersionId` and `dryRunId`; `routeScope` override and `force` are forbidden for the first implementation.
+- Output contract returns `ok`, artifact reference metadata, output status, validation status, model counts, limitations counts, and deterministic diagnostics.
+- Failure cases are deterministic: unauthorized, missing IDs, forbidden overrides, missing dry-run package, site-version mismatch, missing Evidence Capture baseline, invalid builder output, validation failure, and persistence failure.
+- Idempotency strategy is deterministic append with latest pointer: reuse the latest artifact when the newly built output is equivalent, append a new artifact only when the output differs, and keep explicit versioning/force out of scope.
+- Auditability fields include `triggeredBy`, `triggeredAt`, input refs, validation result, artifact ref, output status, model counts, limitations count, blocker limitations count, and idempotency result.
+- Recommended next phase: Phase 8B-7 — Admin-Only First Limited Dry Run Trigger Implementation.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, dry-run execution runtime, simulation execution runtime, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, API route, UI button, queue execution, publishing behavior, source content mutation, domain/DNS mutation, CMS mutation, generated React, generated GNR8 blocks, CMS bindings, or publishing logic was added.
+
+Previous completed milestone:
 - Phase 8B-5 — First Limited Dry Run Output Persistence.
 - Status: COMPLETE.
 - Created `apps/platform/gnr8/architecture/first-limited-dry-run-output-persistence.ts`.
@@ -233,7 +262,7 @@ Earlier completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8B-5 — First Limited Dry Run Output Persistence.
+- Next recommended major phase: Phase 8B-8 — Admin Trigger Re-Assessment / Read-Only Surface Design.
 
 Production smoke-test:
 - completed successfully.
@@ -1743,6 +1772,8 @@ Reconstruction Dry Run Boundary is complete:
 - first limited dry-run builder implementation: Phase 8B-3 completed `buildFirstLimitedDryRunOutput(...)` for deterministic Route, Navigation, and Section Models from existing evidence only; recommended next milestone Phase 8B-4 First Limited Dry Run Builder Re-Assessment
 - first limited dry-run builder re-assessment: Phase 8B-4 completed post-builder reassessment with conceptual readiness 86/100, execution readiness 77/100, and recommended next milestone Phase 8B-5 First Limited Dry Run Output Persistence
 - first limited dry-run output persistence: Phase 8B-5 completed durable provenance artifact persistence and latest-output readback for validated `FirstLimitedDryRunOutput`; recommended next milestone Phase 8B-6 Admin-Only First Limited Dry Run Trigger Design
+- first limited dry-run trigger design: Phase 8B-6 completed superadmin-only trigger boundary design, request/response contract, deterministic failures, idempotency, and auditability; recommended next milestone Phase 8B-7 Admin-Only First Limited Dry Run Trigger Implementation
+- first limited dry-run trigger implementation: Phase 8B-7 completed the superadmin-only POST API trigger, metadata-only response, validation-before-persistence, and idempotent latest-artifact reuse; recommended next milestone Phase 8B-8 Admin Trigger Re-Assessment / Read-Only Surface Design
 
 ## G) How Next Thread Should Behave
 

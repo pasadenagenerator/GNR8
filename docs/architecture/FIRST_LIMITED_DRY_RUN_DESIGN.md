@@ -293,15 +293,15 @@ The broader future output names remain out of scope for this first limited Dry R
 - `design_token_model`
 - `unknown`
 
-## Recommended Next Phase
+## Historical 8B-0 Recommended Next Phase
 
-Recommended next phase:
+At the end of 8B-0, the recommended next phase was:
 
 - Phase 8B-2 - First Limited Dry Run Builder Design
 
 8B-2 should design how a future builder will populate the limited outputs above. It should still avoid execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema changes, workers, and publishing.
 
-## Post 8B-5 Implementation Status
+## Post 8B-6 Design Status
 
 Implemented:
 
@@ -311,13 +311,27 @@ Implemented:
 - limitation propagation
 - output persistence
 
+Designed:
+
+- admin-only trigger boundary
+- superadmin-only access control
+- trigger request contract
+- trigger response contract
+- deterministic failure handling
+- idempotency strategy
+- auditability fields
+
 Still missing:
 
-- API trigger
+- API trigger implementation
 - UI display
 - worker execution
 - approval workflow
 
 Assessment:
 
-The first limited Dry Run design can now store and retrieve a validated deterministic `FirstLimitedDryRunOutput` as a durable provenance artifact using artifact kind `first_limited_dry_run_output`. The output remains Route Model, Navigation Model, and Section Model only. Block Model, Content Model, Design Token Model, React, GNR8 blocks, generated site output, runtime/API triggers, UI display, workers, approvals, and publishing remain outside this design.
+The first limited Dry Run design can now store and retrieve a validated deterministic `FirstLimitedDryRunOutput` as a durable provenance artifact using artifact kind `first_limited_dry_run_output`, and the admin-only trigger boundary for creating that artifact is defined in `docs/architecture/FIRST_LIMITED_DRY_RUN_TRIGGER_DESIGN.md`. The output remains Route Model, Navigation Model, and Section Model only. Block Model, Content Model, Design Token Model, React, GNR8 blocks, generated site output, runtime/API trigger implementation, UI display, workers, approvals, and publishing remain outside this design.
+
+Recommended next phase:
+
+- Phase 8B-7 - Admin-Only First Limited Dry Run Trigger Implementation
