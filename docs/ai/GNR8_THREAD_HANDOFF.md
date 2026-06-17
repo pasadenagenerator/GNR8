@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12K-Retry-F4 Deployed Worker Route / Entrypoint Alignment is complete.
+- 8B-12K-Retry-F6 Worker-Accessible Source Delivery / Navigation Failure Diagnosis is complete.
 
 Current Phase:
-- Phase 8B-12K-Retry-F4 Deployed Worker Route / Entrypoint Alignment is complete.
+- Phase 8B-12K-Retry-F6 Worker-Accessible Source Delivery / Navigation Failure Diagnosis is complete.
 
 Next Phase:
-- Phase 8B-12K-Retry-F5 Rendered Capture Smoke Retry After Worker Route Alignment.
+- Phase 8B-12K-Retry-F7 Worker-Accessible Raw Artifact Source Serving.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,42 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12K-Retry-F6 — Worker-Accessible Source Delivery / Navigation Failure Diagnosis.
+- Status: COMPLETE with source-delivery recommendation.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F6 did diagnostics and design only. No importer behavior, Evidence Capture behavior, worker capture behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or database schema was changed. No FirstLimitedDryRun output, reconstruction output, generated React, GNR8 block, CMS binding, publishing artifact, migration, import retry, capture retry, or new capture artifact was created.
+- Worker request source fields: the contract contains `sourceUrl` only for navigation. There is no `fileUrl`, local `path`, source base URL, raw HTML field, or data URL field. The capture POST endpoint is separate from the source URL and was observed in F5 as `https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker`.
+- Exact F5 source delivery shape: durable `raw_imported_site` HTML was rehydrated to a platform-local temp path under `/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8/rendered-capture-source-rehydration/90b3abf8-7a4c-41b5-af05-244642d1962d/6f0829d5-a481-4722-b9e1-1b999e65e4b7/index.html`, then converted with `pathToFileURL(...)` and sent as worker `sourceUrl`.
+- Worker navigation logic: the worker validates the request, passes `request.sourceUrl` into `runRenderedCapture(...)`, and the rendered capture executor calls `page.goto(input.sourceUrl)` with `waitUntil = domcontentloaded`. The worker does not currently support raw HTML request content, does not call `page.setContent(...)`, and only supports `file://` when the file exists inside the same worker filesystem.
+- Failure classification: A. remote worker cannot access local file path. Browser launch and page creation succeeded; navigation failed because the deployed worker browser was asked to navigate to a platform-local `file://` URL that does not exist in the worker runtime.
+- Source delivery options compared: raw HTML + `setContent`, temporary/public signed URL, platform source-serving endpoint, capture inside platform context, and worker refetch of original source URL.
+- Recommended strategy: add a platform source-serving endpoint for immutable raw artifact HTML and assets. The worker should receive a worker-accessible HTTPS URL for the selected durable raw import entry HTML, and relative CSS/images should resolve under the same controlled origin/path. This preserves deterministic capture against imported bytes and fits the existing `page.goto(...)` navigation model.
+- Not recommended: raw `setContent(...)` as the primary strategy, because imported-site screenshots, layout, and computed styles depend on relative asset resolution; original-source refetch, because it is non-deterministic against imported artifacts.
+- Recommended next phase: Phase 8B-12K-Retry-F7 — Worker-Accessible Raw Artifact Source Serving. Design and implement the smallest authenticated/internal source-serving route for raw artifact HTML/assets, update the worker request source URL to point at that route, and add focused tests. Do not rerun capture until the route/URL contract is proven without unrelated artifact creation.
+- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, migrations, capture retries, or unrelated artifact generation without a separate explicit phase.
+
+Previous completed milestone:
+- Phase 8B-12K-Retry-F5 — Rendered Capture Smoke Retry After Worker Route Alignment.
+- Status: COMPLETE with FAIL classification.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- Target retried: `siteVersionId = 90b3abf8-7a4c-41b5-af05-244642d1962d`, runtime site `site_aaa6d44109a38b5d083f`, ownership site `067e3aa9-773c-4d5d-ba2b-a138761a6354`, source URL `https://www.odv-cvijanovic.si/`.
+- F5 used the existing `runSiteRenderCapture(...)` path only. No code, schema, importer behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or worker code was changed. No Limited Dry Run, FirstLimitedDryRun output, reconstruction output, generated React, GNR8 block, CMS binding, publishing artifact, migration, import retry, or unrelated artifact was created.
+- Preflight passed: worker health returned ready, platform readiness route logic returned ready, production DB URL was present, worker enabled, worker base URL present (`https://gnr8-worker.vercel.app`), worker token present without printing the value, worker capture path `/internal/gnr8/rendered-capture-worker`, worker health path `/health`, and final F5 worker timeout `30000` ms.
+- Source rehydration passed from durable raw import artifact bytes. The target artifact was `6f0829d5-a481-4722-b9e1-1b999e65e4b7`, `entry_html_path = index.html`, `content_bytes` present, media type `text/html; charset=utf-8`, size `29715`, SHA `371313f6e7c3823f2feb91e3e6e6a400b5896bc75ae26ad0aba5190a996e7861`, with `351` persisted files.
+- Source diagnostics included `RENDERED_CAPTURE_SOURCE_LOCAL_PROVENANCE_MISSING`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_LOOKUP_STARTED`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_FOUND`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_FOUND`, and `RENDERED_CAPTURE_SOURCE_RESOLVED_FROM_RAW_IMPORT_ARTIFACT`.
+- Worker route was reached. The capture POST returned `200 OK`, `content-type = application/json; charset=utf-8`, and response kind `rendered_capture_worker_response_v1`; no generic `404` HTML was returned. Live diagnostics included `CAPTURE_WORKER_HTTP_REQUEST_SENT`, `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED`, `CAPTURE_WORKER_HTTP_RESPONSE_CLASSIFIED`, and `CAPTURE_WORKER_RESPONSE_PARSED`.
+- Worker execution reached Playwright/browser work, then failed at navigation. Diagnostics included `BROWSER_LAUNCH_SUCCEEDED`, `PAGE_CREATION_SUCCEEDED`, `NAVIGATION_STARTED`, `NAVIGATION_FAILED`, and `BROWSER_NAVIGATION_FAILED`.
+- F5 result: `renderedCaptureStatus = failed`, `renderedDomQuality = unusable`, `sourceMode = raw_html_fallback`, `hasUsableEvidence = false`, failure reason `CAPTURE_WORKER_EXECUTION_FAILED`, screenshots `0`, computed style samples `0`, rendered DOM length `0`, DOM node count `0`, layout geometry count `0`, section evidence count `0`, and navigation evidence count `0`.
+- A baseline-shaped `evidenceCaptureBaselineArtifact` exists, but it has no usable rendered evidence or capture-expansion evidence and is not a passing Evidence Capture baseline.
+- Failure classification: primary E. worker browser/playwright failed, more specifically worker navigation failed after browser launch/page creation; secondary consequence H. capture expansion evidence missing.
+- Recommended next phase: Phase 8B-12K-Retry-F6 — Worker-Accessible Source Delivery / Navigation Failure Diagnosis. Audit why the deployed worker browser cannot navigate the rehydrated source input. The likely boundary is worker-accessible delivery of durable `raw_imported_site` HTML/assets because the current retry passes a platform-local rehydrated `file://` source URL to a deployed worker.
+- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, migrations, or unrelated artifact generation without a separate explicit phase.
+
+Previous completed milestone:
 - Phase 8B-12K-Retry-F4 — Deployed Worker Route / Entrypoint Alignment.
 - Status: COMPLETE.
 - Updated `apps/worker` with `POST /internal/gnr8/rendered-capture-worker` and compatibility `POST /api/internal/gnr8/rendered-capture-worker`.

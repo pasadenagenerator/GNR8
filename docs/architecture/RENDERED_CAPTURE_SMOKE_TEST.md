@@ -692,3 +692,277 @@ The build output lists both dynamic worker routes:
 F4 aligns the deployed worker route entrypoint in source/build. After deployment, the platform caller should no longer receive a generic Next `404` HTML response from the worker capture endpoint. The next live check should verify the deployed worker returns worker JSON auth/contract responses on both POST paths before rerunning the full rendered-capture smoke test.
 
 Recommended next phase: **8B-12K-Retry-F5 Rendered Capture Smoke Retry After Worker Route Alignment**.
+
+## 8B-12K-Retry-F5 Result
+
+Phase 8B-12K-Retry-F5 reran the one-site rendered capture smoke test against the same existing imported runtime site version after worker route alignment.
+
+No code, schema, importer behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or worker code was changed in F5. No Limited Dry Run, FirstLimitedDryRun output, reconstruction output, generated React, GNR8 block, CMS binding, publishing artifact, migration, import retry, or unrelated artifact was created.
+
+The worker shared token was loaded from local execution env only. Token presence was confirmed as a boolean; the token value was not printed, copied into docs, committed, or persisted by this report.
+
+### F5 Preflight
+
+| Check | Result |
+| --- | --- |
+| worker health endpoint | ready; `GET https://gnr8-worker.vercel.app/health` returned `200` JSON |
+| platform readiness route logic | ready; route handler returned `200`, `ok = true`, `configured = true`, `baseUrlPresent = true`, `sharedTokenConfigured = true`, `healthStatus = ready`, `healthHttpStatus = 200` |
+| production DB URL present | yes |
+| worker enabled | yes |
+| worker base URL present | yes: `https://gnr8-worker.vercel.app` |
+| worker shared token present | yes, value not printed |
+| worker capture path configured | yes: `/internal/gnr8/rendered-capture-worker` |
+| worker health path configured | yes: `/health` |
+| worker timeout used for final F5 run | `30000` ms |
+| target runtime siteVersion exists | yes |
+| runtime siteId | `site_aaa6d44109a38b5d083f` |
+| ownership siteId | `067e3aa9-773c-4d5d-ba2b-a138761a6354` |
+| durable `raw_imported_site` artifact | exists: `6f0829d5-a481-4722-b9e1-1b999e65e4b7` |
+| durable root HTML bytes | exists: `index.html`, `text/html; charset=utf-8`, `29715` bytes, SHA `371313f6e7c3823f2feb91e3e6e6a400b5896bc75ae26ad0aba5190a996e7861` |
+| durable artifact file count | `351` |
+| pre-retry `evidenceCaptureBaselineArtifact` | exists, but not usable |
+| pre-retry layout geometry | absent; count `0` |
+| pre-retry section evidence | absent; count `0` |
+| pre-retry navigation evidence | absent; count `0` |
+
+The final F5 run explicitly set `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000` to match the documented F2 smoke timeout. A preliminary local invocation inherited a `1000` ms timeout and was not used as the F5 classification result.
+
+### F5 Method
+
+The retry used the existing worker-side rendered capture service path:
+
+`runSiteRenderCapture({ siteId: "067e3aa9-773c-4d5d-ba2b-a138761a6354", siteVersionId: "90b3abf8-7a4c-41b5-af05-244642d1962d" })`
+
+No new route, harness code, worker code, importer behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, publishing behavior, or schema behavior was added or modified.
+
+### F5 Source Resolution Diagnostics
+
+Source resolution passed from durable raw import artifact bytes.
+
+Diagnostics emitted:
+
+- `RENDERED_CAPTURE_SOURCE_LOCAL_PROVENANCE_MISSING`
+- `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_LOOKUP_STARTED`
+- `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_FOUND`
+- `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_FOUND`
+- `RENDERED_CAPTURE_SOURCE_RESOLVED_FROM_RAW_IMPORT_ARTIFACT`
+
+The selected durable raw import HTML was rehydrated to:
+
+`/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8/rendered-capture-source-rehydration/90b3abf8-7a4c-41b5-af05-244642d1962d/6f0829d5-a481-4722-b9e1-1b999e65e4b7/index.html`
+
+### F5 Worker Route Reachability Diagnostics
+
+The worker route was reached.
+
+Live route facts:
+
+| Check | Result |
+| --- | --- |
+| capture POST request sent | yes |
+| capture POST response received | yes |
+| response status | `200 OK` |
+| response content type | `application/json; charset=utf-8` |
+| generic `404` HTML | no |
+| response kind | `rendered_capture_worker_response_v1` |
+| JSON worker error shape | no; the route returned the worker response contract |
+
+The observed capture POST URL was the compatibility route:
+
+`https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker`
+
+Live diagnostics included:
+
+- `CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED`
+- `CAPTURE_WORKER_URL_RESOLVED`
+- `CAPTURE_WORKER_REQUEST_STARTED`
+- `CAPTURE_WORKER_REQUEST_BUILT`
+- `CAPTURE_WORKER_HTTP_REQUEST_SENT`
+- `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED`
+- `CAPTURE_WORKER_HTTP_RESPONSE_CLASSIFIED`
+- `CAPTURE_WORKER_RESPONSE_PARSED`
+- `CAPTURE_WORKER_EXECUTION_FAILED`
+
+Worker runtime diagnostics showed the request reached browser execution:
+
+- `RENDERED_CAPTURE_RUNTIME_ENVIRONMENT`
+- `PLAYWRIGHT_PACKAGE_CHECK`
+- `PLAYWRIGHT_BINARY_CHECK`
+- `PLAYWRIGHT_EXECUTABLE_RESOLUTION`
+- `PLAYWRIGHT_EXECUTABLE_EXISTS_CHECK`
+- `BROWSER_LAUNCH_CONFIGURATION`
+- `BROWSER_LAUNCH_STARTED`
+- `BROWSER_LAUNCH_SUCCEEDED`
+- `PAGE_CREATION_STARTED`
+- `PAGE_CREATION_SUCCEEDED`
+- `RENDERED_CAPTURE_SUPPORT_DECISION`
+- `NAVIGATION_STARTED`
+- `NAVIGATION_FAILED`
+- `BROWSER_NAVIGATION_FAILED`
+- `CLEANUP_STARTED`
+- `CLEANUP_COMPLETED`
+
+### F5 Capture Result
+
+| Check | Result |
+| --- | --- |
+| worker status | `failed` |
+| normalized worker status | `failed` |
+| `renderedCaptureStatus` | `failed` |
+| `renderedDomQuality` | `unusable` |
+| `sourceMode` | `raw_html_fallback` |
+| `hasUsableEvidence` | `false` |
+| failure reason | `CAPTURE_WORKER_EXECUTION_FAILED` |
+| rendered DOM length | `0` |
+| rendered DOM node count | `0` |
+| screenshots count | `0` |
+| computed style samples count | `0` |
+| layout geometry count | `0` |
+
+Persisted rendered-capture execution details:
+
+| Field | Result |
+| --- | --- |
+| `dom` | `empty_or_failed` |
+| `navigation` | `failed` |
+| `screenshot` | `none` |
+| `failureCode` | `CAPTURE_WORKER_EXECUTION_FAILED` |
+| `runtimeKind` | `nodejs` |
+| `browserLaunch` | `failed` |
+| `styleSampling` | `failed_or_empty` |
+| `failureCategory` | `page` |
+| `environmentStatus` | `unsupported` |
+| `environmentSupported` | `false` |
+| `browserPackageAvailable` | `true` |
+| `browserBinaryAvailable` | `true` |
+
+Although the persisted summary still reports `browserLaunch = failed`, the live diagnostics from the worker response show browser launch and page creation succeeded, followed by `NAVIGATION_FAILED` / `BROWSER_NAVIGATION_FAILED`.
+
+### F5 Evidence Artifact Result
+
+Post-retry production DB verification:
+
+| Check | Result |
+| --- | --- |
+| `evidenceCaptureBaselineArtifact` exists | yes |
+| baseline kind | `evidence_capture_baseline` |
+| layout geometry exists | no usable layout geometry; count `0` |
+| section evidence exists | no; count `0` |
+| navigation evidence exists | no; count `0` |
+| screenshots count | `0` |
+| computed style samples count | `0` |
+
+The baseline-shaped evidence artifact persisted, but it is not a passing Evidence Capture baseline because it contains no usable rendered DOM, screenshots, computed style samples, layout geometry, section evidence, or navigation evidence.
+
+### F5 Pass/Fail
+
+FAIL.
+
+PASS criteria were not met:
+
+- worker reached: yes
+- rendered capture succeeds or produces usable/partial rendered DOM: no
+- evidence baseline exists: yes
+- layout geometry exists: no
+- section evidence exists: no
+- navigation evidence exists: no
+
+### F5 Failure Classification
+
+Primary classification: **E. worker browser/playwright failed**.
+
+More specific subtype: worker capture execution reached Playwright/browser execution and returned a valid `rendered_capture_worker_response_v1`, but navigation failed before any rendered DOM, screenshots, computed styles, layout geometry, section evidence, or navigation evidence were produced.
+
+Secondary consequence: **H. capture expansion evidence missing**.
+
+F5 proves worker route alignment is successful. The remaining blocker is no longer worker health, platform worker env, source rehydration, route reachability, generic `404` HTML, or worker response-shape parsing. The next blocker is capture-source delivery/execution inside the remote worker browser context.
+
+### F5 Next Recommendation
+
+Recommended next phase: **8B-12K-Retry-F6 Worker-Accessible Source Delivery / Navigation Failure Diagnosis**.
+
+The next phase should inspect why the remote worker browser cannot navigate the rehydrated source input after route alignment. The likely design boundary to audit is worker-accessible delivery of the durable `raw_imported_site` HTML and assets, because the current platform retry passes a local rehydrated `file://` source URL to a deployed worker. Continue to avoid Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, migrations, or unrelated artifact generation unless separately authorized.
+
+## 8B-12K-Retry-F6 Navigation Failure Diagnosis
+
+Phase 8B-12K-Retry-F6 inspected the worker request source fields and navigation implementation after F5 proved browser launch and page creation succeed but navigation fails.
+
+No importer behavior, Evidence Capture behavior, worker capture behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or database schema was changed. No FirstLimitedDryRun output, reconstruction output, generated React, GNR8 block, CMS binding, publishing artifact, migration, import retry, capture retry, or new capture artifact was created.
+
+### F6 Source Fields Sent To Worker
+
+The worker request contract contains only one source/navigation field: `sourceUrl`.
+
+| Field | F6 finding |
+| --- | --- |
+| worker capture URL | Platform posts to the worker endpoint, observed in F5 as `https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker`. |
+| worker base URL | `https://gnr8-worker.vercel.app`. |
+| request body source field | `sourceUrl`. |
+| `sourceUrl` value shape | `file://` URL generated from the platform-local rehydrated HTML path. |
+| local source path | `/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8/rendered-capture-source-rehydration/90b3abf8-7a4c-41b5-af05-244642d1962d/6f0829d5-a481-4722-b9e1-1b999e65e4b7/index.html`. |
+| original imported source URL | `https://www.odv-cvijanovic.si/`, preserved in artifact metadata but not used as the worker navigation URL for F5. |
+| `fileUrl` field | none in the worker contract. |
+| `path` field | none in the worker contract. |
+| source base URL field | none in the worker contract. |
+| raw HTML field | none in the worker contract. |
+| data URL field | none in the worker contract. |
+| localhost URL | none observed for F5 source navigation. |
+| public source URL | none observed for F5 source navigation; the only public URL is the worker endpoint itself. |
+
+Code path:
+
+- `runSiteRenderCapture(...)` resolves durable `raw_imported_site` HTML bytes and rehydrates them to a local temp file.
+- It calls `pathToFileURL(source.entryHtmlPathAbs).toString()`.
+- `executeRenderedCaptureViaWorker(...)` builds `RenderedCaptureWorkerRequest` with that value as `sourceUrl`.
+- `createHttpRenderedCaptureWorkerClient(...)` sends the canonical JSON body to the remote worker.
+
+### F6 Worker Navigation Logic
+
+The worker fetch handler validates auth/body, then `executeRenderedCaptureWorkerRequest(...)` passes `request.sourceUrl` to `runRenderedCapture(...)`.
+
+The rendered capture executor then does:
+
+```ts
+await page.goto(input.sourceUrl, {
+  waitUntil: "domcontentloaded",
+  timeout: input.readiness.navigationTimeoutMs,
+});
+```
+
+Worker navigation support as implemented:
+
+| Capability | Current behavior |
+| --- | --- |
+| request field used for navigation | `request.sourceUrl` only. |
+| `file://` support | Indirect only: `page.goto(file://...)` can work if the file exists inside the same worker runtime filesystem. The platform-local file does not exist inside the deployed worker. |
+| raw HTML string support | not supported by the current worker request contract or execution path. |
+| `page.setContent(...)` support | not used. |
+| data URL support | not explicitly supported; a data URL could only be attempted if placed in `sourceUrl`, with poor asset-base behavior and no documented contract. |
+| public HTTP URL support | supported by `page.goto(...)` when the URL is reachable by the worker browser. |
+| local filesystem path support | not a contract field; only `file://` URLs can be passed through `sourceUrl`. |
+
+### F6 Failure Classification
+
+Classification: **A. remote worker cannot access local file path**.
+
+The F5 source rehydration path exists on the platform/local execution side, then is converted to a `file://` URL and sent to a deployed worker. The deployed worker's browser can launch and create a page, but it cannot navigate to a file that exists only on the caller's local filesystem. This is not primarily a malformed file URL, source asset path problem, navigation timeout, Playwright launch restriction, auth failure, worker route failure, or response-shape failure.
+
+### F6 Source Delivery Options
+
+| Option | Deterministic? | Secure? | Works on Vercel? | Asset implications | Cost | Recommendation |
+| --- | --- | --- | --- | --- | --- | --- |
+| A. Send raw HTML content in worker request and use `page.setContent(...)` | Yes for HTML bytes | Medium; requires payload limits and careful logging redaction | Yes for small HTML; body-size limits apply | Relative CSS/images/scripts do not resolve naturally unless additional base URL/asset routing is added | Medium | No. Good for DOM-only capture, but insufficient for screenshot/layout/computed-style fidelity from imported sites with persisted assets. |
+| B. Store HTML as temporary/public signed URL and navigate worker to HTTP URL | Yes if URL is immutable for the capture window | Medium to high; signed URL TTL and access scope required | Yes | HTML alone still leaves relative assets unresolved unless the asset tree is also served under the same origin/path | Medium | No as a standalone strategy. |
+| C. Add platform source-serving endpoint for raw artifact HTML/assets | Yes if endpoint serves immutable artifact bytes by siteVersion/artifact/path | High with superadmin/internal worker auth, path normalization, no-store, and no mutation | Yes | Best fit: worker navigates HTTP HTML and relative asset paths can resolve against the same origin endpoint | Medium to high | **Yes. Recommended.** |
+| D. Run capture inside platform context instead of remote worker | Yes | Medium; expands platform runtime/browser responsibility | Risky on Vercel depending on browser/runtime constraints | Local file URLs work only when files are present in that runtime; does not solve remote worker design | High | No. It reverses the worker separation F4 established. |
+| E. Refetch original source URL in worker | No; source may have changed and may be blocked/dynamic | Medium; fewer internal source bytes, but more external variability | Yes when public source is reachable | Assets resolve from the live site, not the imported artifact; this breaks imported-source determinism | Low | No. It violates the durable imported artifact boundary. |
+
+### F6 Recommended Strategy
+
+Recommended strategy: **C. Add a platform source-serving endpoint for immutable raw artifact HTML and assets**.
+
+The worker should receive a worker-accessible HTTPS URL for the selected durable `raw_imported_site` entry HTML. That URL should serve the exact persisted artifact bytes and allow relative asset paths to resolve under the same controlled origin/path. This keeps capture deterministic against imported source, works with the existing `page.goto(...)` navigation model, preserves screenshots/layout/computed-style fidelity better than raw `setContent(...)`, and avoids asking the remote worker to access platform-local temp files.
+
+Recommended next phase: **8B-12K-Retry-F7 Worker-Accessible Raw Artifact Source Serving**.
+
+F7 should design and implement the smallest authenticated/internal platform source-serving route for raw artifact HTML/assets, update the worker request source URL to point at that route, and add focused tests. Do not rerun capture until the route/URL contract is proven without creating unrelated artifacts.
