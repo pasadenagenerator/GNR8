@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12H Production Evidence Capture Worker Readiness Fix is complete.
+- 8B-12I Production Worker Env Configuration Verification is complete.
 
 Current Phase:
-- Phase 8B-12H Production Evidence Capture Worker Readiness Fix is complete.
+- Phase 8B-12I Production Worker Env Configuration Verification is complete.
 
 Next Phase:
-- Phase 8B-12I Production Worker Env Configuration Verification.
+- Phase 8B-12J Production Worker Readiness Live Check.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,23 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12I — Production Worker Env Configuration Verification.
+- Status: COMPLETE.
+- Created `docs/architecture/PRODUCTION_WORKER_ENV_CONFIGURATION_VERIFICATION.md`.
+- Updated `docs/architecture/PRODUCTION_EVIDENCE_CAPTURE_WORKER_READINESS_AUDIT.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- Documented required platform Production env vars: `GNR8_RENDERED_CAPTURE_WORKER_ENABLED`, `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL`, `GNR8_RENDERED_CAPTURE_WORKER_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_HEALTH_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`, and `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS`.
+- Documented that readiness requires an explicit worker base URL and shared token. Platform-origin fallbacks are not sufficient for readiness proof.
+- Documented worker-side requirements: deployed Vercel worker production URL, `GET /health`, `POST /internal/gnr8/rendered-capture-worker`, compatibility `POST /api/internal/gnr8/rendered-capture-worker`, matching `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`, Node runtime, Playwright package availability, launchable browser availability, and Vercel project configuration that serves the rendered capture worker.
+- Documented the 8B-12J production verification flow: configure platform env vars, configure worker env vars, deploy worker, deploy platform, call `GET /api/gnr8/admin/rendered-capture-worker/readiness` as superadmin, and record the response without exposing token values.
+- Expected ready proof: `enabled = true`, `configured = true`, `baseUrlPresent = true`, `sharedTokenConfigured = true`, `healthStatus = ready`, and diagnostics including `RENDERED_CAPTURE_WORKER_HEALTH_STARTED` and `RENDERED_CAPTURE_WORKER_HEALTH_SUCCEEDED`.
+- Failure examples now map disabled config, missing base URL, missing token, unreachable worker, and invalid health response to likely root causes.
+- Information required for 8B-12J: platform Vercel project name, worker Vercel project name, worker production URL, health endpoint URL, configured path, configured timeout, token-present confirmation without token disclosure, and readiness endpoint response.
+- Recommended next phase: Phase 8B-12J — Production Worker Readiness Live Check.
+- No token values, copied production secrets, Vercel env changes, deployments, readiness calls, imports, retries, capture POSTs, Evidence Capture artifacts, DryRun packages, FirstLimitedDryRun outputs, repair jobs, migrations, importer behavior, Evidence Capture behavior, worker code, platform code, Original Mirror behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, publishing behavior, or database schema changes were made.
+
+Previous completed milestone:
 - Phase 8B-12H — Production Evidence Capture Worker Readiness Fix.
 - Status: COMPLETE.
 - Added `apps/platform/gnr8/import-rendered-capture-worker/worker-readiness.ts`.

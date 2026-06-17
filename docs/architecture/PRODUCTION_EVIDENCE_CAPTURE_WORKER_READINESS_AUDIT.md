@@ -331,17 +331,33 @@ Diagnostics added:
 
 Focused tests cover disabled config, missing base URL, missing token, ready health response, unreachable health, invalid health response, token redaction, and superadmin guard enforcement.
 
+## 8B-12I Env Configuration Verification
+
+Phase 8B-12I created `docs/architecture/PRODUCTION_WORKER_ENV_CONFIGURATION_VERIFICATION.md`.
+
+The verification document defines the exact production Vercel configuration required for the platform to reach the rendered capture worker:
+
+- Platform Production env vars: `GNR8_RENDERED_CAPTURE_WORKER_ENABLED`, `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL`, `GNR8_RENDERED_CAPTURE_WORKER_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_HEALTH_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`, and `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS`.
+- Worker Production env vars: `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`, plus Vercel-managed runtime host/port expectations.
+- Required worker URL shape: `https://<worker-production-domain>` with no path.
+- Required worker endpoints: `GET /health`, `POST /internal/gnr8/rendered-capture-worker`, and compatibility alias `POST /api/internal/gnr8/rendered-capture-worker`.
+- Required ready health proof: authenticated worker health with capture service availability.
+
+Readiness verification remains a future live step. Phase 8B-12I did not change Vercel environment variables, deploy the platform, deploy the worker, call the readiness endpoint, send capture POSTs, retry imports, or create artifacts.
+
 ## Recommended Next Phase
 
 Recommended next phase:
 
-**8B-12I Production Worker Env Configuration Verification**
+**8B-12J Production Worker Readiness Live Check**
 
 Minimum safe scope for the next phase:
 
-- Verify/set platform worker envs in deployed production: `GNR8_RENDERED_CAPTURE_WORKER_ENABLED`, `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL`, `GNR8_RENDERED_CAPTURE_WORKER_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_HEALTH_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`, and timeout.
-- Verify/set dedicated worker service envs, especially `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`.
+- Collect platform Vercel project name, worker Vercel project name, worker production URL, health endpoint URL, configured path, configured timeout, and token-present confirmation without exposing token values.
+- Verify/set platform worker envs in deployed production.
+- Verify/set dedicated worker service envs.
+- Deploy worker and platform after env verification.
 - Call the superadmin readiness endpoint in production and record `healthStatus`, `healthHttpStatus`, and diagnostics.
-- Confirm the platform caller reaches the dedicated worker domain rather than a self-targeting app proxy or unconfigured platform route.
+- Confirm the readiness response is `healthStatus = ready` with `RENDERED_CAPTURE_WORKER_HEALTH_STARTED` and `RENDERED_CAPTURE_WORKER_HEALTH_SUCCEEDED`.
 
 The next phase should still avoid import retries, backfills, capture POSTs, Limited Dry Run execution, reconstruction, or Evidence Capture artifact creation until worker readiness is proven with explicit deployed environment verification.
