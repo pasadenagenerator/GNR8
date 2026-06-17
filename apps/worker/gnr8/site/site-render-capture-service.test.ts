@@ -3,9 +3,98 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
+import type { RenderedCaptureResult } from '@/gnr8/import-rendered-capture/rendered-capture-contract'
 import { runSiteRenderCapture } from '@/gnr8/site/site-render-capture-service'
+
+function makeExistingSummary(input: {
+  root: string
+  entryHtmlPath: string
+  diagnosticCodes?: string[]
+}): RuntimeImportProvenanceSummary {
+  return {
+    kind: 'runtime_import_provenance_summary_v1',
+    executionIdentity: {
+      snapshotId: 'snapshot-source-test',
+      snapshotRunId: 'snapshot-run-source-test',
+      snapshotStableRootDirAbs: input.root,
+      snapshotRunRootDirAbs: input.root,
+      requestId: 'request-source-test',
+    },
+    sourceMode: 'raw_html_fallback',
+    importFidelityStatus: 'capture_failed',
+    renderedCaptureStatus: 'failed',
+    renderedDomQuality: 'unusable',
+    screenshotCount: 0,
+    computedStyleSampleCount: 0,
+    renderedCapture: {
+      used: false,
+      status: 'failed',
+      quality: 'unusable',
+      domLength: 0,
+      nodeCount: 0,
+      styleSampleCount: 0,
+      styleCoverage: 0,
+      screenshots: { viewport: false, fullPage: false },
+      execution: {
+        runtimeKind: 'unknown',
+        environmentSupported: false,
+        browserPackageAvailable: false,
+        browserBinaryAvailable: false,
+        environmentStatus: 'unknown',
+        failureCategory: 'none',
+        failureCode: null,
+        browserLaunch: 'not_attempted',
+        navigation: 'not_attempted',
+        dom: 'not_attempted',
+        screenshot: 'none',
+        styleSampling: 'not_attempted',
+      },
+    },
+    importDiagnosticCodes: input.diagnosticCodes ?? [],
+    captureEvidence: {
+      selectedSourceHtmlPath: input.entryHtmlPath,
+      responseHtmlPath: input.entryHtmlPath,
+      entryHtmlPath: input.entryHtmlPath,
+      renderedCaptureManifestPath: null,
+      acquisitionEvidencePath: null,
+      renderedDomPath: null,
+      computedStylesPath: null,
+      renderedViewportScreenshotPath: null,
+      renderedFullpageScreenshotPath: null,
+      screenshotPaths: [],
+    },
+    styleSignals: null,
+  }
+}
+
+function makeCaptureResult(input: {
+  renderedDomPath: string
+  diagnostics?: RenderedCaptureResult['diagnostics']
+}): RenderedCaptureResult {
+  return {
+    kind: 'rendered_capture_result_v1',
+    version: '1.0.0',
+    status: 'available',
+    sourceMode: 'rendered_dom',
+    documents: [
+      {
+        kind: 'rendered_document_snapshot_v1',
+        sourceUrl: 'file://index.html',
+        htmlPathAbs: input.renderedDomPath,
+        htmlSha256: 'abc',
+        readinessState: 'ready',
+      },
+    ],
+    screenshots: [],
+    computedStyleSamples: [],
+    layoutGeometryEvidence: [],
+    renderedObservedAssetUrls: [],
+    diagnostics: input.diagnostics ?? [{ code: 'CAPTURE_JOB_COMPLETED', severity: 'info', message: 'ok' }],
+  }
+}
 
 test('runSiteRenderCapture persists rendered evidence and patches runtime provenance summary', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-capture-'))
@@ -667,4 +756,173 @@ test('runSiteRenderCapture keeps non-zero DOM length as usable evidence', async 
   assert.equal(result.hasUsableEvidence, true)
   assert.equal(result.renderedCaptureStatus, 'partial')
   assert.equal(result.sourceMode, 'rendered_dom')
+})
+
+test('runSiteRenderCapture uses existing local provenance source before raw import fallback', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-local-source-'))
+  const entryHtmlPath = path.resolve(root, 'index.html')
+  const renderedDomSourcePath = path.resolve(root, 'rendered-capture', 'rendered-dom.html')
+  fs.mkdirSync(path.dirname(renderedDomSourcePath), { recursive: true })
+  fs.writeFileSync(entryHtmlPath, '<!doctype html><html><body><h1>Local</h1></body></html>', 'utf8')
+  fs.writeFileSync(renderedDomSourcePath, '<!doctype html><html><body><h1>Local</h1><p>Rendered</p></body></html>', 'utf8')
+
+  let artifactLookupCalled = false
+  let capturedSourceUrl = ''
+
+  await runSiteRenderCapture(
+    {
+      siteId: '00000000-0000-4000-8000-000000000790',
+      siteVersionId: '00000000-0000-4000-8000-000000000990',
+    },
+    {
+      getRuntimeVersionById: async () => ({
+        id: '00000000-0000-4000-8000-000000000990',
+        site_id: 'runtime-site-local-source',
+        ownership_site_id: '00000000-0000-4000-8000-000000000790',
+        import_provenance_summary: makeExistingSummary({ root, entryHtmlPath }),
+      }),
+      getRawImportArtifactHtmlForCapture: async () => {
+        artifactLookupCalled = true
+        return { status: 'artifact_not_found' as const }
+      },
+      runRenderedCapture: async ({ sourceUrl }) => {
+        capturedSourceUrl = sourceUrl
+        return makeCaptureResult({ renderedDomPath: renderedDomSourcePath })
+      },
+      persistRuntimeVersionImportSummary: async () => undefined,
+    },
+  )
+
+  assert.equal(artifactLookupCalled, false)
+  assert.equal(capturedSourceUrl, pathToFileURL(entryHtmlPath).toString())
+})
+
+test('runSiteRenderCapture resolves missing local provenance from raw_imported_site artifact HTML bytes', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-raw-import-source-'))
+  const missingEntryHtmlPath = path.resolve(root, 'missing', 'index.html')
+  const renderedDomSourcePath = path.resolve(root, 'rendered-capture', 'rendered-dom.html')
+  fs.mkdirSync(path.dirname(renderedDomSourcePath), { recursive: true })
+  fs.writeFileSync(renderedDomSourcePath, '<!doctype html><html><body><h1>Durable</h1><p>Rendered</p></body></html>', 'utf8')
+
+  let capturedSourceUrl = ''
+  let capturedSnapshotRoot = ''
+  let persistedSummary: RuntimeImportProvenanceSummary | null = null
+
+  await runSiteRenderCapture(
+    {
+      siteId: '00000000-0000-4000-8000-000000000791',
+      siteVersionId: '00000000-0000-4000-8000-000000000991',
+    },
+    {
+      getRuntimeVersionById: async () => ({
+        id: '00000000-0000-4000-8000-000000000991',
+        site_id: 'runtime-site-raw-import-source',
+        ownership_site_id: '00000000-0000-4000-8000-000000000791',
+        import_provenance_summary: makeExistingSummary({ root, entryHtmlPath: missingEntryHtmlPath }),
+      }),
+      getRawImportArtifactHtmlForCapture: async () => ({
+        status: 'found' as const,
+        artifactId: '6f0829d5-a481-4722-b9e1-1b999e65e4b7',
+        artifactCreatedAt: '2026-06-16T00:00:00.000Z',
+        artifactEntryHtmlPath: 'index.html',
+        selectedHtmlPath: 'index.html',
+        mediaType: 'text/html; charset=utf-8',
+        sizeBytes: 75,
+        sha256: '371313f6e7c3823f2feb91e3e6e6a400b5896bc75ae26ad0aba5190a996e7861',
+        htmlBytes: Buffer.from('<!doctype html><html><body><h1>Durable raw import source</h1></body></html>', 'utf8'),
+      }),
+      runRenderedCapture: async ({ sourceUrl, snapshotRootDirAbs }) => {
+        capturedSourceUrl = sourceUrl
+        capturedSnapshotRoot = snapshotRootDirAbs
+        assert.equal(fs.readFileSync(new URL(sourceUrl), 'utf8').includes('Durable raw import source'), true)
+        return makeCaptureResult({ renderedDomPath: renderedDomSourcePath })
+      },
+      persistRuntimeVersionImportSummary: async ({ summary }) => {
+        persistedSummary = summary
+      },
+    },
+  )
+
+  assert.equal(capturedSourceUrl.endsWith('/index.html'), true)
+  assert.equal(capturedSnapshotRoot.includes('rendered-capture-source-rehydration'), true)
+  assert.equal(persistedSummary?.importDiagnosticCodes.includes('RENDERED_CAPTURE_SOURCE_LOCAL_PROVENANCE_MISSING'), true)
+  assert.equal(persistedSummary?.importDiagnosticCodes.includes('RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_LOOKUP_STARTED'), true)
+  assert.equal(persistedSummary?.importDiagnosticCodes.includes('RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_FOUND'), true)
+  assert.equal(persistedSummary?.importDiagnosticCodes.includes('RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_FOUND'), true)
+  assert.equal(persistedSummary?.importDiagnosticCodes.includes('RENDERED_CAPTURE_SOURCE_RESOLVED_FROM_RAW_IMPORT_ARTIFACT'), true)
+})
+
+test('runSiteRenderCapture fails clearly when raw_imported_site artifact root HTML is missing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-raw-import-html-missing-'))
+  const missingEntryHtmlPath = path.resolve(root, 'gone', 'index.html')
+  let captureCalled = false
+
+  await assert.rejects(
+    runSiteRenderCapture(
+      {
+        siteId: '00000000-0000-4000-8000-000000000792',
+        siteVersionId: '00000000-0000-4000-8000-000000000992',
+      },
+      {
+        getRuntimeVersionById: async () => ({
+          id: '00000000-0000-4000-8000-000000000992',
+          site_id: 'runtime-site-raw-import-html-missing',
+          ownership_site_id: '00000000-0000-4000-8000-000000000792',
+          import_provenance_summary: makeExistingSummary({ root, entryHtmlPath: missingEntryHtmlPath }),
+        }),
+        getRawImportArtifactHtmlForCapture: async () => ({
+          status: 'html_missing' as const,
+          artifactId: 'artifact-without-root-html',
+          artifactCreatedAt: '2026-06-16T00:00:00.000Z',
+          artifactEntryHtmlPath: 'routes/home.html',
+          candidateHtmlPaths: ['routes/home.html', 'index.html'],
+        }),
+        runRenderedCapture: async () => {
+          captureCalled = true
+          throw new Error('should not capture')
+        },
+      },
+    ),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.name === 'SiteRenderCaptureError' &&
+      'code' in error &&
+      error.code === 'SITE_RENDER_CAPTURE_SOURCE_NOT_FOUND' &&
+      error.message.includes('raw_imported_site artifact HTML'),
+  )
+  assert.equal(captureCalled, false)
+})
+
+test('runSiteRenderCapture fails when local provenance and raw_imported_site artifact are both missing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gnr8-site-render-no-source-'))
+  const missingEntryHtmlPath = path.resolve(root, 'missing.html')
+  let captureCalled = false
+
+  await assert.rejects(
+    runSiteRenderCapture(
+      {
+        siteId: '00000000-0000-4000-8000-000000000793',
+        siteVersionId: '00000000-0000-4000-8000-000000000993',
+      },
+      {
+        getRuntimeVersionById: async () => ({
+          id: '00000000-0000-4000-8000-000000000993',
+          site_id: 'runtime-site-no-source',
+          ownership_site_id: '00000000-0000-4000-8000-000000000793',
+          import_provenance_summary: makeExistingSummary({ root, entryHtmlPath: missingEntryHtmlPath }),
+        }),
+        getRawImportArtifactHtmlForCapture: async () => ({ status: 'artifact_not_found' as const }),
+        runRenderedCapture: async () => {
+          captureCalled = true
+          throw new Error('should not capture')
+        },
+      },
+    ),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.name === 'SiteRenderCaptureError' &&
+      'code' in error &&
+      error.code === 'SITE_RENDER_CAPTURE_SOURCE_NOT_FOUND',
+  )
+  assert.equal(captureCalled, false)
 })

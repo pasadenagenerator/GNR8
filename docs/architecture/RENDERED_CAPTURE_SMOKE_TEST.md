@@ -106,11 +106,21 @@ The bounded one-site capture attempt was executed through the existing rendered 
 
 ## Next Recommended Phase
 
-Phase 8B-12K Failure Analysis: Existing SiteVersion Capture Source Rehydration.
+Phase 8B-12K-F1 completed the failure analysis, and Phase 8B-12K-F2 implemented the rendered capture source-resolution fallback.
 
-Recommended focus:
+Current source resolution order after F2:
 
-- determine whether existing imported siteVersions should resolve recapture input from durable raw imported artifacts instead of ephemeral `/tmp/...` snapshot paths
-- verify whether production worker-side execution has access to the original snapshot files for this siteVersion
-- if not, run a constrained re-import or source artifact rehydration path before retrying rendered capture
-- after source resolution is fixed, retry this same one-site rendered capture smoke test before moving to `8B-12L Limited Dry Run Real-Site Retry`
+1. Existing local provenance file path, if present.
+2. Durable `raw_imported_site` artifact HTML from persisted `content_bytes`.
+3. `SITE_RENDER_CAPTURE_SOURCE_NOT_FOUND`.
+
+The F2 fallback does not refetch the original URL, mutate raw artifacts, create raw artifacts, change importer or preview behavior, or run capture by itself.
+
+Recommended next phase: **8B-12K-Retry Rendered Capture Smoke Test On Existing SiteVersion**.
+
+Retry focus:
+
+- retry the same one-site rendered capture smoke test only with explicit authorization
+- verify the source resolver uses the durable raw import HTML when `/tmp` provenance paths are gone
+- verify whether the request now reaches the rendered-capture worker
+- do not run Limited Dry Run, reconstruction, imports, AI, React/block generation, publishing, or unrelated artifact generation in the retry phase

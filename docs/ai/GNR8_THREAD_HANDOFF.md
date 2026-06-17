@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12I Production Worker Env Configuration Verification is complete.
+- 8B-12K-F1 Existing SiteVersion Capture Source Rehydration Audit is complete.
 
 Current Phase:
-- Phase 8B-12I Production Worker Env Configuration Verification is complete.
+- Phase 8B-12K-F1 Existing SiteVersion Capture Source Rehydration Audit is complete.
 
 Next Phase:
-- Phase 8B-12J Production Worker Readiness Live Check.
+- Phase 8B-12K-F2 Rendered Capture Raw Import Artifact Source Resolution Design/Fix.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,29 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12K-F2 — Rendered Capture Raw Import Artifact Source Resolution Fix.
+- Status: COMPLETE.
+- Updated `apps/worker/gnr8/site/site-render-capture-service.ts`.
+- Updated `apps/worker/gnr8/site/site-render-capture-service.test.ts`.
+- Updated `apps/platform/gnr8/import-rendered-capture/rendered-capture-contract.ts`.
+- Updated `docs/architecture/EXISTING_SITEVERSION_CAPTURE_SOURCE_REHYDRATION_AUDIT.md`.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- Target audited: `siteVersionId = 90b3abf8-7a4c-41b5-af05-244642d1962d`, runtime site `site_aaa6d44109a38b5d083f`, ownership site `067e3aa9-773c-4d5d-ba2b-a138761a6354`, source URL `https://www.odv-cvijanovic.si/`.
+- Existing import provenance points capture source refs at `/tmp/gnr8/validation/url-import-snapshots/imported-url-site-a5ecc916fe5604f0/runs/client-site-import-1781168573242-43684205/index.html` and `response-html.raw.html`.
+- Local verification found those `/tmp` files missing, matching the 8B-12K smoke-test failure before worker execution.
+- Durable source found: `raw_imported_site` artifact `6f0829d5-a481-4722-b9e1-1b999e65e4b7`, `entry_html_path = index.html`, stored in `gnr8_runtime_raw_template_artifact_files.content_bytes`, media type `text/html; charset=utf-8`, size `29715`, SHA `371313f6e7c3823f2feb91e3e6e6a400b5896bc75ae26ad0aba5190a996e7861`.
+- Raw artifact metadata records `sourceUrl = https://www.odv-cvijanovic.si/`, `finalUrl = https://www.odv-cvijanovic.si/`, `htmlByteLength = 29849`, `persistedAssetCount = 351`, and `externalFallbackAssetCount = 0`.
+- Runtime artifact `6d814f11-26bd-45ad-9e67-16fb0014c789` has `html_by_path` for `/`, but it is product/runtime output, not imported source HTML.
+- Multipage route discovery has one route `/`; no separate durable `htmlAcquisition` or `rawArtifactAssembly` refs were present for this target.
+- F2 fix: rendered capture source resolution now tries existing local provenance file path first; if missing, it performs a read-only lookup for the latest `raw_imported_site` artifact, tries artifact `entry_html_path` then `index.html`, reads selected HTML from `content_bytes`, materializes that HTML into a temporary rehydration path, and passes the file URL to the existing capture runner.
+- F2 diagnostics added: `RENDERED_CAPTURE_SOURCE_LOCAL_PROVENANCE_MISSING`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_LOOKUP_STARTED`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_FOUND`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_FOUND`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_MISSING`, and `RENDERED_CAPTURE_SOURCE_RESOLVED_FROM_RAW_IMPORT_ARTIFACT`.
+- Focused tests cover local provenance precedence, raw artifact fallback, raw artifact root HTML missing, no local/no raw artifact failure, and fallback diagnostics.
+- Recommended next phase: Phase 8B-12K-Retry — Rendered Capture Smoke Test On Existing SiteVersion.
+- No importer semantics, Original Mirror behavior, preview behavior, dry-run builder behavior, limited dry-run API/UI behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, database schema, FirstLimitedDryRun outputs, reconstruction outputs, generated React, GNR8 blocks, CMS bindings, publishing artifacts, imports, capture retries, or Evidence Capture artifacts were created or changed.
+
+Previous completed milestone:
 - Phase 8B-12I — Production Worker Env Configuration Verification.
 - Status: COMPLETE.
 - Created `docs/architecture/PRODUCTION_WORKER_ENV_CONFIGURATION_VERIFICATION.md`.
@@ -1915,6 +1938,7 @@ Reconstruction Dry Run Boundary is complete:
 - first real-site limited dry-run operational test: Phase 8B-12 completed a read-only real-site preflight against `https://www.odv-cvijanovic.si/`; the phase failed at preflight because checked runtime data had no qualifying real imported site version with the required Evidence Capture baseline, layout geometry, section evidence, navigation evidence, and `ReconstructionDryRunPackage`; Phase 8B-12F completed the follow-up production readiness inventory and Phase 8B-12G completed the production Evidence Capture worker readiness root-cause audit
 - reconstruction readiness inventory audit: Phase 8B-12F completed a read-only production inventory of all `14` imported runtime site versions; all `14` classify as `NO_EVIDENCE_CAPTURE`, all lack the baseline/package chain required for Limited Dry Run, and the dominant blocker is production rendered Evidence Capture/worker readiness
 - production Evidence Capture worker readiness root-cause audit: Phase 8B-12G completed a read-only audit of worker config, deployment assumptions, and persisted diagnostics; primary root cause is platform/worker readiness before usable rendered capture, with the next recommended phase Phase 8B-12H Production Evidence Capture Worker Readiness Fix
+- rendered capture raw import source fallback: Phase 8B-12K-F2 completed the source-resolution fix for existing imported siteVersions; rendered capture now falls back from missing local `/tmp` provenance paths to durable `raw_imported_site` artifact HTML bytes, with the next recommended phase Phase 8B-12K-Retry Rendered Capture Smoke Test On Existing SiteVersion
 
 ## G) How Next Thread Should Behave
 

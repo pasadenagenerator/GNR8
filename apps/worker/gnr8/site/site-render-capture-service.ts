@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -43,6 +44,35 @@ type RenderedCapturePersistResult = {
   failureReason: string | null
   evidence: RenderedEvidencePaths
   importProvenanceSummary: RuntimeImportProvenanceSummary
+}
+
+type RawImportArtifactHtmlLookupResult =
+  | {
+      status: 'found'
+      artifactId: string
+      artifactCreatedAt: string | null
+      artifactEntryHtmlPath: string
+      selectedHtmlPath: string
+      mediaType: string
+      sizeBytes: number
+      sha256: string
+      htmlBytes: Buffer
+    }
+  | {
+      status: 'artifact_not_found'
+    }
+  | {
+      status: 'html_missing'
+      artifactId: string
+      artifactCreatedAt: string | null
+      artifactEntryHtmlPath: string
+      candidateHtmlPaths: string[]
+    }
+
+type CaptureSourceResolution = {
+  snapshotRootDirAbs: string
+  entryHtmlPathAbs: string
+  diagnostics: RenderedCaptureDiagnostic[]
 }
 
 const DEFAULT_CAPTURE_VIEWPORT = { width: 1366, height: 768 }
@@ -119,6 +149,44 @@ function hasDiagnosticCode(input: {
   return input.diagnostics.some((entry) => normalizeText(entry.code) === input.code)
 }
 
+function toDiagnostic(input: {
+  code: RenderedCaptureDiagnostic['code']
+  message: string
+  severity?: RenderedCaptureDiagnostic['severity']
+  details?: Record<string, unknown>
+}): RenderedCaptureDiagnostic {
+  return {
+    code: input.code,
+    message: input.message,
+    severity: input.severity ?? 'info',
+    details: input.details,
+  }
+}
+
+function emitSourceResolutionDiagnostics(input: {
+  siteId: string
+  runtimeSiteId: string
+  siteVersionId: string
+  diagnostics: RenderedCaptureDiagnostic[]
+}): void {
+  for (const diagnostic of input.diagnostics) {
+    const logPayload = {
+      siteId: input.siteId,
+      runtimeSiteId: input.runtimeSiteId,
+      runtimeSiteVersionId: input.siteVersionId,
+      message: diagnostic.message,
+      details: diagnostic.details ?? {},
+    }
+    if (diagnostic.severity === 'error') {
+      console.error(`[site-render-worker] ${diagnostic.code}`, logPayload)
+    } else if (diagnostic.severity === 'warning') {
+      console.warn(`[site-render-worker] ${diagnostic.code}`, logPayload)
+    } else {
+      console.info(`[site-render-worker] ${diagnostic.code}`, logPayload)
+    }
+  }
+}
+
 function resolveFailureCodeFromDiagnostics(input: {
   diagnostics: RenderedCaptureDiagnostic[]
   emptySuccess: boolean
@@ -169,7 +237,18 @@ function readRenderedDomFromResult(input: {
   }
 }
 
-function resolveCaptureSource(input: { summary: RuntimeImportProvenanceSummary | null }): { snapshotRootDirAbs: string; entryHtmlPathAbs: string } | null {
+function normalizeArtifactFilePath(value: unknown): string {
+  const normalized = normalizeText(value).replaceAll('\\', '/').replace(/^\/+/, '')
+  if (!normalized || normalized === '.') return ''
+  const clean = path.posix.normalize(normalized)
+  if (!clean || clean === '.' || clean.startsWith('../') || clean === '..' || path.posix.isAbsolute(clean)) return ''
+  return clean
+}
+
+function resolveLocalCaptureSource(input: { summary: RuntimeImportProvenanceSummary | null }): {
+  source: CaptureSourceResolution | null
+  candidatePaths: string[]
+} {
   const fromEvidenceEntry = normalizeText(input.summary?.captureEvidence?.entryHtmlPath)
   const fromEvidenceSelected = normalizeText(input.summary?.captureEvidence?.selectedSourceHtmlPath)
   const fromExecutionRoot = normalizeText(input.summary?.executionIdentity?.snapshotRunRootDirAbs)
@@ -184,11 +263,215 @@ function resolveCaptureSource(input: { summary: RuntimeImportProvenanceSummary |
     const absPath = path.resolve(entryHtmlPathAbs)
     if (!fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) continue
     return {
-      snapshotRootDirAbs: path.dirname(absPath),
-      entryHtmlPathAbs: absPath,
+      source: {
+        snapshotRootDirAbs: path.dirname(absPath),
+        entryHtmlPathAbs: absPath,
+        diagnostics: [],
+      },
+      candidatePaths: candidates,
     }
   }
-  return null
+  return { source: null, candidatePaths: candidates }
+}
+
+function getRawImportCandidateHtmlPaths(entryHtmlPath: string): string[] {
+  const candidates = [normalizeArtifactFilePath(entryHtmlPath), 'index.html'].filter(Boolean)
+  return [...new Set(candidates)]
+}
+
+function resolveWithinRoot(rootAbs: string, filePath: string): string {
+  const normalizedFilePath = normalizeArtifactFilePath(filePath)
+  if (!normalizedFilePath) throw new Error('RAW_IMPORT_HTML_PATH_INVALID')
+  const resolved = path.resolve(rootAbs, normalizedFilePath)
+  const rootWithSep = rootAbs.endsWith(path.sep) ? rootAbs : `${rootAbs}${path.sep}`
+  if (resolved !== rootAbs && !resolved.startsWith(rootWithSep)) throw new Error('RAW_IMPORT_HTML_PATH_ESCAPED_ROOT')
+  return resolved
+}
+
+function safePathSegment(value: string): string {
+  return normalizeText(value).replace(/[^a-zA-Z0-9._-]/g, '_') || 'unknown'
+}
+
+function persistRehydratedRawImportHtml(input: {
+  siteVersionId: string
+  lookup: Extract<RawImportArtifactHtmlLookupResult, { status: 'found' }>
+}): CaptureSourceResolution {
+  const snapshotRootDirAbs = path.resolve(
+    os.tmpdir(),
+    'gnr8',
+    'rendered-capture-source-rehydration',
+    safePathSegment(input.siteVersionId),
+    safePathSegment(input.lookup.artifactId),
+  )
+  const entryHtmlPathAbs = resolveWithinRoot(snapshotRootDirAbs, input.lookup.selectedHtmlPath)
+  fs.mkdirSync(path.dirname(entryHtmlPathAbs), { recursive: true })
+  fs.writeFileSync(entryHtmlPathAbs, input.lookup.htmlBytes)
+  return {
+    snapshotRootDirAbs,
+    entryHtmlPathAbs,
+    diagnostics: [
+      toDiagnostic({
+        code: 'RENDERED_CAPTURE_SOURCE_RESOLVED_FROM_RAW_IMPORT_ARTIFACT',
+        message: 'Rendered capture source HTML resolved from durable raw_imported_site artifact bytes.',
+        details: {
+          artifactId: input.lookup.artifactId,
+          selectedHtmlPath: input.lookup.selectedHtmlPath,
+          mediaType: input.lookup.mediaType,
+          sizeBytes: input.lookup.sizeBytes,
+          sha256: input.lookup.sha256,
+          rehydratedEntryHtmlPathAbs: entryHtmlPathAbs,
+        },
+      }),
+    ],
+  }
+}
+
+async function getRawImportArtifactHtmlForCaptureDefault(input: {
+  siteVersionId: string
+}): Promise<RawImportArtifactHtmlLookupResult> {
+  const client = await getSuperadminPool().connect()
+  try {
+    const artifactResult = await client.query<{
+      id: string
+      entry_html_path: string
+      created_at: string | null
+    }>(
+      `
+      select
+        id::text as id,
+        entry_html_path::text as entry_html_path,
+        created_at::text as created_at
+      from public.gnr8_runtime_raw_template_artifacts
+      where site_version_id = $1::uuid
+        and artifact_type = 'raw_imported_site'
+      order by created_at desc, id desc
+      limit 1
+      `,
+      [input.siteVersionId],
+    )
+    const artifact = artifactResult.rows[0]
+    if (!artifact) return { status: 'artifact_not_found' }
+
+    const candidateHtmlPaths = getRawImportCandidateHtmlPaths(artifact.entry_html_path)
+    for (const candidateHtmlPath of candidateHtmlPaths) {
+      const fileResult = await client.query<{
+        file_path: string
+        media_type: string
+        file_size_bytes: number
+        sha256: string
+        content_bytes: Buffer | Uint8Array
+      }>(
+        `
+        select
+          file_path::text as file_path,
+          media_type::text as media_type,
+          file_size_bytes::integer as file_size_bytes,
+          sha256::text as sha256,
+          content_bytes
+        from public.gnr8_runtime_raw_template_artifact_files
+        where artifact_id = $1::uuid
+          and file_path = $2::text
+        limit 1
+        `,
+        [artifact.id, candidateHtmlPath],
+      )
+      const file = fileResult.rows[0]
+      if (!file) continue
+      return {
+        status: 'found',
+        artifactId: artifact.id,
+        artifactCreatedAt: artifact.created_at,
+        artifactEntryHtmlPath: normalizeArtifactFilePath(artifact.entry_html_path) || artifact.entry_html_path,
+        selectedHtmlPath: file.file_path,
+        mediaType: file.media_type,
+        sizeBytes: Math.max(0, Math.floor(Number(file.file_size_bytes) || 0)),
+        sha256: file.sha256,
+        htmlBytes: Buffer.isBuffer(file.content_bytes) ? file.content_bytes : Buffer.from(file.content_bytes),
+      }
+    }
+    return {
+      status: 'html_missing',
+      artifactId: artifact.id,
+      artifactCreatedAt: artifact.created_at,
+      artifactEntryHtmlPath: normalizeArtifactFilePath(artifact.entry_html_path) || artifact.entry_html_path,
+      candidateHtmlPaths,
+    }
+  } finally {
+    client.release()
+  }
+}
+
+async function resolveCaptureSource(input: {
+  siteVersionId: string
+  summary: RuntimeImportProvenanceSummary | null
+  getRawImportArtifactHtmlForCapture: (input: { siteVersionId: string }) => Promise<RawImportArtifactHtmlLookupResult>
+}): Promise<CaptureSourceResolution | null> {
+  const local = resolveLocalCaptureSource({ summary: input.summary })
+  if (local.source) return local.source
+
+  const diagnostics: RenderedCaptureDiagnostic[] = [
+    toDiagnostic({
+      code: 'RENDERED_CAPTURE_SOURCE_LOCAL_PROVENANCE_MISSING',
+      message: 'Rendered capture local provenance source HTML was missing.',
+      severity: 'warning',
+      details: { candidatePaths: local.candidatePaths },
+    }),
+    toDiagnostic({
+      code: 'RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_LOOKUP_STARTED',
+      message: 'Rendered capture raw_imported_site artifact source lookup started.',
+      details: { siteVersionId: input.siteVersionId },
+    }),
+  ]
+  const lookup = await input.getRawImportArtifactHtmlForCapture({ siteVersionId: input.siteVersionId })
+  if (lookup.status === 'artifact_not_found') return { snapshotRootDirAbs: '', entryHtmlPathAbs: '', diagnostics }
+
+  diagnostics.push(
+    toDiagnostic({
+      code: 'RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_FOUND',
+      message: 'Rendered capture raw_imported_site artifact found.',
+      details: {
+        artifactId: lookup.artifactId,
+        artifactCreatedAt: lookup.artifactCreatedAt,
+        artifactEntryHtmlPath: lookup.artifactEntryHtmlPath,
+      },
+    }),
+  )
+
+  if (lookup.status === 'html_missing') {
+    diagnostics.push(
+      toDiagnostic({
+        code: 'RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_MISSING',
+        message: 'Rendered capture raw_imported_site root HTML was missing.',
+        severity: 'error',
+        details: {
+          artifactId: lookup.artifactId,
+          artifactEntryHtmlPath: lookup.artifactEntryHtmlPath,
+          candidateHtmlPaths: lookup.candidateHtmlPaths,
+        },
+      }),
+    )
+    return { snapshotRootDirAbs: '', entryHtmlPathAbs: '', diagnostics }
+  }
+
+  diagnostics.push(
+    toDiagnostic({
+      code: 'RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_FOUND',
+      message: 'Rendered capture raw_imported_site root HTML bytes found.',
+      details: {
+        artifactId: lookup.artifactId,
+        selectedHtmlPath: lookup.selectedHtmlPath,
+        mediaType: lookup.mediaType,
+        sizeBytes: lookup.sizeBytes,
+        sha256: lookup.sha256,
+      },
+    }),
+  )
+  const rehydrated = persistRehydratedRawImportHtml({ siteVersionId: input.siteVersionId, lookup })
+  return {
+    snapshotRootDirAbs: rehydrated.snapshotRootDirAbs,
+    entryHtmlPathAbs: rehydrated.entryHtmlPathAbs,
+    diagnostics: [...diagnostics, ...rehydrated.diagnostics],
+  }
 }
 
 function persistRenderedEvidence(input: {
@@ -491,11 +774,13 @@ export async function runSiteRenderCapture(input: {
   siteVersionId: string
 }, deps: Partial<{
   getRuntimeVersionById: (input: { siteVersionId: string }) => Promise<RuntimeVersionRow | null>
+  getRawImportArtifactHtmlForCapture: (input: { siteVersionId: string }) => Promise<RawImportArtifactHtmlLookupResult>
   persistRuntimeVersionImportSummary: (input: { siteVersionId: string; summary: RuntimeImportProvenanceSummary }) => Promise<void>
   runRenderedCapture: (input: { sourceUrl: string; snapshotRootDirAbs: string }) => Promise<RenderedCaptureResult>
 }> = {}): Promise<RenderedCapturePersistResult> {
   const resolvedDeps = {
     getRuntimeVersionById: getRuntimeVersionByIdDefault,
+    getRawImportArtifactHtmlForCapture: getRawImportArtifactHtmlForCaptureDefault,
     persistRuntimeVersionImportSummary: persistRuntimeVersionImportSummaryDefault,
     runRenderedCapture: executeRenderedCaptureViaWorker,
     ...deps,
@@ -520,11 +805,23 @@ export async function runSiteRenderCapture(input: {
   }
 
   const existingSummary = parseExistingSummary(runtimeVersion.import_provenance_summary)
-  const source = resolveCaptureSource({ summary: existingSummary })
-  if (!source) {
+  const source = await resolveCaptureSource({
+    siteVersionId: input.siteVersionId,
+    summary: existingSummary,
+    getRawImportArtifactHtmlForCapture: resolvedDeps.getRawImportArtifactHtmlForCapture,
+  })
+  if (source?.diagnostics.length) {
+    emitSourceResolutionDiagnostics({
+      siteId: input.siteId,
+      runtimeSiteId: runtimeVersion.site_id,
+      siteVersionId: input.siteVersionId,
+      diagnostics: source.diagnostics,
+    })
+  }
+  if (!source?.entryHtmlPathAbs) {
     throw new SiteRenderCaptureError({
       code: 'SITE_RENDER_CAPTURE_SOURCE_NOT_FOUND',
-      message: 'Rendered capture source entry HTML could not be resolved for runtime site version.',
+      message: 'Rendered capture source entry HTML could not be resolved from local provenance or durable raw_imported_site artifact HTML.',
       siteVersionId: input.siteVersionId,
       siteId: input.siteId,
     })
@@ -537,10 +834,14 @@ export async function runSiteRenderCapture(input: {
       baseUrlPresent: Boolean(workerClientConfig.resolvedBaseUrl),
       tokenPresent: Boolean(workerClientConfig.sharedToken),
     }
-    const captureResult = await resolvedDeps.runRenderedCapture({
+    const captureResultRaw = await resolvedDeps.runRenderedCapture({
       sourceUrl: pathToFileURL(source.entryHtmlPathAbs).toString(),
       snapshotRootDirAbs: source.snapshotRootDirAbs,
     })
+    const captureResult: RenderedCaptureResult = {
+      ...captureResultRaw,
+      diagnostics: [...source.diagnostics, ...captureResultRaw.diagnostics],
+    }
     const workerCaptureStatus = resolveCaptureStatus(captureResult.status)
     const renderedDomHtml = readRenderedDomFromResult({
       snapshotRootDirAbs: source.snapshotRootDirAbs,
