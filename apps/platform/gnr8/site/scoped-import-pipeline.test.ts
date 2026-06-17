@@ -11,6 +11,7 @@ import {
   materializeCmsContentSlotsForScopedImport,
   runScopedImportPipeline,
 } from '@/gnr8/site/scoped-import-pipeline'
+import { buildRenderedHtmlHash } from '@/gnr8/architecture/evidence-capture-expansion'
 import { __runtimeStoreTestUtils } from '@/gnr8/runtime/runtime-store'
 import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
@@ -313,6 +314,229 @@ function createCanonicalTestStyleSignals(): any {
     diagnostics: [],
   }
 }
+
+function createF11RenderedHtml(): string {
+  return `<!doctype html><html><body>
+    <header id="top"><nav id="primary-nav" aria-label="Primary"><a href="/">Home</a><a href="/services">Services</a></nav></header>
+    <main id="main"><section id="hero"><h1>Evidence Hero</h1><p>Captured rendered DOM.</p></section></main>
+    <footer id="footer">Footer text</footer>
+  </body></html>`
+}
+
+function createF11LayoutGeometryEvidence(capturedAt = '2026-06-17T00:00:00.000Z'): any[] {
+  return [
+    {
+      routePath: '/',
+      viewportWidth: 1366,
+      viewportHeight: 768,
+      documentHeight: 1200,
+      capturedAt,
+      regions: [
+        {
+          regionId: 'layout-region-header',
+          tagName: 'header',
+          role: null,
+          selector: 'header#top',
+          boundingBox: { x: 0, y: 0, width: 1366, height: 96 },
+          childCount: 1,
+        },
+        {
+          regionId: 'layout-region-nav',
+          tagName: 'nav',
+          role: 'navigation',
+          selector: 'nav#primary-nav',
+          boundingBox: { x: 24, y: 18, width: 500, height: 48 },
+          childCount: 2,
+        },
+        {
+          regionId: 'layout-region-hero',
+          tagName: 'section',
+          role: null,
+          selector: 'section#hero',
+          boundingBox: { x: 0, y: 120, width: 1366, height: 520 },
+          childCount: 2,
+        },
+      ],
+    },
+  ]
+}
+
+async function runScopedImportForF11Baseline(input: { snapshot: any; sourceUrl?: string }) {
+  const pipeline = createSuccessPipelineFixture()
+  let createInput: any = null
+  let linkedArtifactId: string | null = null
+  const persistedSummaries: any[] = []
+  const sourceUrl = input.sourceUrl ?? input.snapshot.sourceUrl ?? 'https://f11.example/'
+
+  const outcome = await runScopedImportPipeline({
+    snapshot: input.snapshot,
+    sourceUrl,
+    actor: 'test:f11-baseline-wiring',
+    deps: {
+      importStaticSite: async () => ({ status: 'ok', documentMeta: { source: { kind: 'single-entry-html' } } }) as any,
+      createImportManifest: () => ({ status: 'success' }) as any,
+      runLinearMigrationPipeline: () => pipeline as any,
+      createSiteVersionFromMigration: async (versionInput) => {
+        createInput = versionInput
+        return { siteId: 'runtime-site-f11', siteVersionId: 'site-version-f11', versionNo: 1 }
+      },
+      setSiteVersionImportProvenanceSummary: async (summaryInput) => {
+        persistedSummaries.push(summaryInput.importProvenanceSummary)
+        return { affectedRows: 1 }
+      },
+      getSiteVersion: async () =>
+        ({
+          id: 'site-version-f11',
+          siteId: 'runtime-site-f11',
+          versionNo: 1,
+          state: 'DRAFT',
+          source: 'migration',
+          actor: 'test',
+          createdAt: new Date().toISOString(),
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          artifactId: linkedArtifactId,
+          importProvenanceSummary: persistedSummaries.at(-1) ?? createInput?.importProvenanceSummary ?? null,
+          pages: createInput?.pages ?? [],
+        }) as any,
+      buildDeterministicArtifactBundle: () =>
+        ({
+          siteId: 'runtime-site-f11',
+          siteVersionId: 'site-version-f11',
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          bundleSha256: 'bundle-sha-f11',
+          htmlByPath: { '/': '<!doctype html><html><body>preview</body></html>' },
+          compiledTokenStyles: ':root{}',
+          assetFingerprintMap: {},
+          manifest: {},
+        }) as any,
+      createArtifact: async () => ({ artifactId: 'artifact-f11' }),
+      bindArtifactToVersion: async (bindInput) => {
+        linkedArtifactId = bindInput.artifactId
+        return { affectedRows: 1 }
+      },
+      persistRawImportedSiteArtifact: async () =>
+        ({
+          artifactId: 'raw-artifact-f11',
+          artifactType: 'raw_imported_site',
+          entryHtmlPath: 'index.html',
+          assetBasePath: '.',
+          fileMap: {},
+          fileCount: 1,
+        }) as any,
+      upsertContentSlots: async () => 0,
+      importHtmlToPage: () => ({} as any),
+      migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
+    },
+  })
+
+  return {
+    outcome,
+    importProvenanceSummary: persistedSummaries.at(-1),
+  }
+}
+
+test('fresh scoped import wires rendered DOM and layout geometry into Evidence Capture baseline expansion', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-f11-baseline-'))
+  const entryAbs = path.resolve(root, 'index.html')
+  const assetsDir = path.resolve(root, 'assets')
+  const renderedCaptureDir = path.resolve(root, 'rendered-capture')
+  const renderedDir = path.resolve(root, 'rendered')
+  fs.mkdirSync(assetsDir)
+  fs.mkdirSync(renderedCaptureDir, { recursive: true })
+  fs.mkdirSync(renderedDir, { recursive: true })
+
+  const renderedHtml = createF11RenderedHtml()
+  const renderedDomAbs = path.resolve(renderedCaptureDir, 'rendered-dom.html')
+  const layoutGeometryEvidence = createF11LayoutGeometryEvidence()
+  fs.writeFileSync(entryAbs, '<!doctype html><html><body><h1>Raw entry</h1></body></html>', 'utf8')
+  fs.writeFileSync(renderedDomAbs, renderedHtml, 'utf8')
+  fs.writeFileSync(path.resolve(renderedDir, 'layout-geometry.json'), `${JSON.stringify(layoutGeometryEvidence, null, 2)}\n`, 'utf8')
+
+  const snapshot = createCanonicalTestSnapshot(root)
+  snapshot.snapshotStableRootDirAbs = root
+  snapshot.snapshotId = 'snapshot-f11'
+  snapshot.snapshotRunId = 'snapshot-run-f11'
+  snapshot.requestId = 'request-f11'
+  snapshot.sourceUrl = 'https://f11.example/'
+  snapshot.normalizedUrl = 'https://f11.example/'
+  snapshot.captureMode = 'rendered_browser'
+  snapshot.responseHtmlPathAbs = entryAbs
+  snapshot.importIntake = { ok: true, rawHtmlAvailable: true, htmlByteLength: fs.statSync(entryAbs).size }
+  snapshot.renderedCapture = {
+    status: 'available',
+    documents: [{ htmlPathAbs: renderedDomAbs }],
+    screenshots: [],
+    computedStyleSamples: [],
+    layoutGeometryEvidence,
+    renderedObservedAssetUrls: [],
+    diagnostics: [],
+  }
+
+  const { outcome, importProvenanceSummary } = await runScopedImportForF11Baseline({ snapshot })
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.equal(importProvenanceSummary.captureEvidence.layoutGeometryPath.endsWith('/rendered/layout-geometry.json'), true)
+  assert.equal(importProvenanceSummary.importDiagnosticCodes.includes('LAYOUT_GEOMETRY_PATH_PERSISTED'), true)
+  assert.equal(importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_DOM_HTML_BASELINE_INPUT_PROVIDED'), true)
+  assert.equal(importProvenanceSummary.importDiagnosticCodes.includes('LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED'), true)
+
+  const artifact = importProvenanceSummary.evidenceCaptureBaselineArtifact
+  assert.ok(artifact)
+  assert.equal(artifact.persistedRefs.layoutGeometryRef?.uri.endsWith('/rendered/layout-geometry.json'), true)
+  assert.equal(artifact.evidence.rendered.renderedHtmlHash, buildRenderedHtmlHash(renderedHtml))
+  assert.equal(artifact.captureExpansionEvidence.layoutGeometryEvidence.length > 0, true)
+  assert.equal(artifact.captureExpansionEvidence.sectionBoundaryEvidence.length > 0, true)
+  assert.equal(artifact.captureExpansionEvidence.navigationEvidence.length > 0, true)
+  assert.equal(artifact.summaries.layoutGeometry.geometryCaptured, true)
+  assert.equal(artifact.summaries.sectionBoundary.sectionEvidenceCaptured, true)
+  assert.equal(artifact.summaries.navigation.navigationCaptured, true)
+  assert.equal(importProvenanceSummary.importDiagnosticCodes.includes('SECTION_BOUNDARY_EVIDENCE_MATERIALIZED'), true)
+  assert.equal(importProvenanceSummary.importDiagnosticCodes.includes('NAVIGATION_EVIDENCE_MATERIALIZED'), true)
+})
+
+test('fresh scoped import keeps partial baseline when rendered DOM HTML is missing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scoped-pipeline-f11-missing-dom-'))
+  const entryAbs = path.resolve(root, 'index.html')
+  const assetsDir = path.resolve(root, 'assets')
+  const renderedDir = path.resolve(root, 'rendered')
+  fs.mkdirSync(assetsDir)
+  fs.mkdirSync(renderedDir, { recursive: true })
+
+  const layoutGeometryEvidence = createF11LayoutGeometryEvidence()
+  fs.writeFileSync(entryAbs, '<!doctype html><html><body><h1>Raw entry</h1></body></html>', 'utf8')
+  fs.writeFileSync(path.resolve(renderedDir, 'layout-geometry.json'), `${JSON.stringify(layoutGeometryEvidence, null, 2)}\n`, 'utf8')
+
+  const snapshot = createCanonicalTestSnapshot(root)
+  snapshot.snapshotStableRootDirAbs = root
+  snapshot.snapshotId = 'snapshot-f11-missing-dom'
+  snapshot.snapshotRunId = 'snapshot-run-f11-missing-dom'
+  snapshot.requestId = 'request-f11-missing-dom'
+  snapshot.sourceUrl = 'https://f11-missing-dom.example/'
+  snapshot.normalizedUrl = 'https://f11-missing-dom.example/'
+  snapshot.captureMode = 'rendered_browser'
+  snapshot.responseHtmlPathAbs = entryAbs
+  snapshot.importIntake = { ok: true, rawHtmlAvailable: true, htmlByteLength: fs.statSync(entryAbs).size }
+  snapshot.renderedCapture = {
+    status: 'available',
+    documents: [],
+    screenshots: [],
+    computedStyleSamples: [],
+    layoutGeometryEvidence,
+    renderedObservedAssetUrls: [],
+    diagnostics: [],
+  }
+
+  const { outcome, importProvenanceSummary } = await runScopedImportForF11Baseline({ snapshot })
+  const artifact = importProvenanceSummary.evidenceCaptureBaselineArtifact
+
+  assert.equal(outcome.mode, 'pipeline')
+  assert.ok(artifact)
+  assert.equal(artifact.artifactStatus, 'baseline_partial')
+  assert.equal(artifact.evidence.rendered.renderedHtmlHash, null)
+  assert.equal(artifact.captureExpansionEvidence.layoutGeometryEvidence.length > 0, true)
+  assert.equal(importProvenanceSummary.importDiagnosticCodes.includes('RENDERED_DOM_HTML_BASELINE_INPUT_MISSING'), true)
+  assert.equal(importProvenanceSummary.importDiagnosticCodes.includes('LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED'), true)
+})
 
 function createPipelineWithDocumentPaths(paths: string[]): any {
   const pipeline = createSuccessPipelineFixture()

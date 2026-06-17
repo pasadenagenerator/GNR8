@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12K-Retry-F6 Worker-Accessible Source Delivery / Navigation Failure Diagnosis is complete.
+- 8B-12K-F10 Capture Expansion Evidence Persistence Diagnosis is complete.
 
 Current Phase:
-- Phase 8B-12K-Retry-F6 Worker-Accessible Source Delivery / Navigation Failure Diagnosis is complete.
+- Phase 8B-12K-F10 Capture Expansion Evidence Persistence Diagnosis is complete.
 
 Next Phase:
-- Phase 8B-12K-Retry-F7 Worker-Accessible Raw Artifact Source Serving.
+- Phase 8B-12K-F11 Fresh Import Baseline Capture Expansion Wiring.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,8 +23,107 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12K-F11 - Fresh Import Baseline Capture Expansion Wiring.
+- Status: COMPLETE.
+- Updated `apps/platform/gnr8/site/scoped-import-pipeline.ts`.
+- Updated `apps/platform/gnr8/site/scoped-import-pipeline.test.ts`.
+- Updated `docs/architecture/CAPTURE_EXPANSION_EVIDENCE_PERSISTENCE_DIAGNOSIS.md`.
+- Updated `docs/architecture/FRESH_PRODUCTION_IMPORT_CAPTURE_VERIFICATION.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F11 changed only fresh import Evidence Capture baseline persistence/wiring. It did not modify worker behavior, browser capture behavior, importer semantics, Original Mirror behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or database schema.
+- F11 did not rerun fresh production import, Limited Dry Run, FirstLimitedDryRun output creation, reconstruction, AI, React/block generation, publishing, migrations, or schema changes.
+- `buildImportProvenanceSummary(...)` now persists `captureEvidence.layoutGeometryPath` when the existing canonical rendered capture file `rendered/layout-geometry.json` is present.
+- `runScopedImportPipeline(...)` now reads already-persisted rendered DOM HTML from `captureEvidence.renderedDomPath` and passes it to `attachEvidenceCaptureBaselineArtifact(...)`.
+- `runScopedImportPipeline(...)` now passes `snapshot.renderedCapture.layoutGeometryEvidence` to `attachEvidenceCaptureBaselineArtifact(...)`.
+- Existing deterministic builders now receive enough captured input to materialize `captureExpansionEvidence.layoutGeometryEvidence`, `sectionBoundaryEvidence`, and `navigationEvidence` when rendered DOM HTML and layout geometry are available.
+- Missing rendered HTML or layout geometry keeps the Evidence Capture baseline partial and records missing-input diagnostics instead of failing the import.
+- Added/reused diagnostics: `EVIDENCE_CAPTURE_BASELINE_INPUTS_READY`, `EVIDENCE_CAPTURE_BASELINE_EXPANSION_MATERIALIZED`, persisted `importDiagnosticCodes` for provided/missing rendered DOM baseline input, layout geometry input, layout geometry path, and materialized/missing layout/section/navigation evidence. Write-path provenance summaries now include rendered DOM path presence, layout geometry path presence/path, and baseline expansion counts when available.
+- Focused F11 tests passed: `NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test --test-name-pattern 'F11|Evidence Capture baseline expansion|rendered DOM HTML is missing' gnr8/site/scoped-import-pipeline.test.ts` from `apps/platform`.
+- Full `gnr8/site/scoped-import-pipeline.test.ts` was also attempted; the new F11 subtests passed, then unrelated existing tests failed because default runtime-store dependencies required missing `DATABASE_URL`.
+- Recommended next phase: Phase 8B-12K-F12 - Fresh Production Import Capture Verification Retry. Run a fresh production import verification only in F12 to confirm successful rendered capture now feeds persisted rendered HTML/layout geometry into the Evidence Capture baseline and materializes layout/section/navigation evidence. Do not run Limited Dry Run, FirstLimitedDryRun output creation, reconstruction, AI, React/block generation, publishing, migrations, or schema changes in F12 unless separately authorized.
+
+Previous completed milestone:
+- Phase 8B-12K-F10 - Capture Expansion Evidence Persistence Diagnosis.
+- Status: COMPLETE.
+- Created `docs/architecture/CAPTURE_EXPANSION_EVIDENCE_PERSISTENCE_DIAGNOSIS.md`.
+- Updated `docs/architecture/FRESH_PRODUCTION_IMPORT_CAPTURE_VERIFICATION.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F10 was diagnostics/documentation only. It did not modify importer behavior, Evidence Capture behavior, worker behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, database schema, import execution, capture retry, Limited Dry Run, FirstLimitedDryRun output, reconstruction output, generated React, GNR8 block, CMS binding, publishing artifact, or migration.
+- Target inspected: `siteVersionId = 9c1fdafd-ff1a-4d85-8559-5860d5775c1f`.
+- Persisted rendered capture data exists: rendered DOM path exists, computed styles path exists, acquisition evidence path exists, rendered-capture manifest path exists, and both screenshot paths exist. The rendered-capture manifest reports layout geometry captured true, region count `3`, viewport `1366 x 768`, and `layoutGeometryEvidence.length = 1`.
+- Persisted Evidence Capture baseline is missing that geometry: `captureEvidence.layoutGeometryPath` is absent, `persistedRefs.layoutGeometryRef = null`, `captureExpansionEvidence.layoutGeometryEvidence.length = 0`, `sectionBoundaryEvidence.length = 0`, and `navigationEvidence.length = 0`.
+- Builder path finding: `buildEvidenceCaptureBaselineArtifact(...)` calls `createLayoutGeometryEvidence(...)`, `createSectionBoundaryEvidence(...)`, and `createNavigationEvidence(...)`, but the fresh import attach call passes `renderedHtml: undefined` and does not pass `layoutGeometryEvidence`. `artifactStatus = baseline_partial` does not block the expansion builders.
+- Import pipeline finding: `importPublicSinglePageUrlToSnapshot(...)` and worker mapping carry `RenderedCaptureResult.layoutGeometryEvidence` and materialize `rendered/layout-geometry.json`; `buildImportProvenanceSummary(...)` omits `captureEvidence.layoutGeometryPath`; `runScopedImportPipeline(...)` omits rendered HTML and layout geometry when attaching the baseline artifact.
+- Root cause classification: primary E. persistence mapping missing. Worker capture and rendered-capture manifest persistence have layout geometry, but the fresh baseline artifact/provenance mapping does not carry geometry or rendered HTML into the Evidence Capture baseline expansion builders. The read model is not the primary cause.
+
+Earlier completed milestone:
+- Phase 8B-12K-F9 — Fresh Production Import Capture Retry With 30s Worker Timeout.
+- Status: COMPLETE with FAIL classification.
+- Updated `docs/architecture/FRESH_PRODUCTION_IMPORT_CAPTURE_VERIFICATION.md`.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F9 ran one fresh production import for `https://www.odv-cvijanovic.si/?gnr8_f9=20260617` with `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000` explicitly set. Required env was confirmed without printing the token: `DATABASE_URL` present, worker enabled `true`, worker base URL `https://gnr8-worker.vercel.app`, worker shared token present, timeout `30000`.
+- Preflight passed: effective worker client timeout `30000ms`; worker readiness ready with `healthHttpStatus = 200`; deployed routes existed (`HEAD /internal/gnr8/rendered-capture-worker` and `HEAD /api/internal/gnr8/rendered-capture-worker` returned `405` with matching `x-matched-path`); target URL returned `200 OK`, `text/html; charset=UTF-8`, `29849` bytes; worker source URL was public `https`, not `file://`.
+- New runtime version: `siteVersionId = 9c1fdafd-ff1a-4d85-8559-5860d5775c1f`, `siteId = site_bfabe23af164fb00b3ab`, `versionNo = 1`, reused = false, runtime artifact `f6cecf7a-fe52-461c-a3d0-0bd2a485f33f`, raw import artifact `61f44492-828a-4566-8ec9-c00e3b621f2d`.
+- F9 used the fresh import path (`importPublicSinglePageUrlToSnapshot(...)` + `runScopedImportPipeline(...)`). The existing-siteVersion retry path was not used. CMS slot inference ran, but persisted CMS slot count was `0` to honor the F9 no-CMS-binding boundary.
+- Worker request/result: request sent to `https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker`; worker returned HTTP `200 OK` in `15373ms`; diagnostics included `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED`, `CAPTURE_WORKER_RESPONSE_PARSED`, worker-side request receipt with public source URL, `BROWSER_LAUNCH_SUCCEEDED`, `PAGE_CREATION_SUCCEEDED`, `NAVIGATION_SUCCEEDED`, `DOM_SERIALIZATION_SUCCEEDED`, `SCREENSHOT_CAPTURE_SUCCEEDED`, `STYLE_SAMPLING_SUCCEEDED`, and `CAPTURE_WORKER_RENDERED_DOM_USED`.
+- Capture result: `renderedCaptureStatus = available`, `renderedDomQuality = strong`, `sourceMode = rendered_dom`, `importFidelityStatus = high_fidelity_import`, screenshots `2`, computed style samples `6`, rendered DOM node count `311`, raw imported files persisted `397`, external asset fallbacks `0`, and `evidenceCaptureBaselineArtifact` exists with `artifactStatus = baseline_partial`.
+- Evidence result: layout geometry count `0`, section evidence count `0`, navigation evidence count `0`; layout geometry captured false, section evidence captured false, navigation captured false.
+- Failure classification: primary H. capture expansion evidence missing. F9 is not A target unreachable, B worker not reached, C worker auth failed, D worker browser/playwright failed, E navigation failed, F capture output invalid, G baseline persistence failed, or I timeout after `30000ms`.
+- Recommended next phase: Phase 8B-12K-F10 Capture Expansion Evidence Persistence Diagnosis. Focus only on why successful fresh rendered capture still persists no layout geometry, section evidence, or navigation evidence. Do not run Limited Dry Run, FirstLimitedDryRun output, reconstruction, AI, React/block generation, publishing, schema changes, additional fresh imports, existing-siteVersion retries, or source-serving endpoint work without a separate explicit phase.
+
+Previous completed milestone:
+- Phase 8B-12K-F8 — Fresh Import Worker Capture Timeout Diagnosis.
+- Status: COMPLETE.
+- Updated `docs/architecture/FRESH_PRODUCTION_IMPORT_CAPTURE_VERIFICATION.md`.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F8 was diagnostics/documentation only. It did not modify importer behavior, Evidence Capture behavior, worker behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, database schema, import retry behavior, or capture retry behavior. It did not rerun import, retry capture, create FirstLimitedDryRun output, create reconstruction output, generate React, generate GNR8 blocks, create CMS bindings, create publishing artifacts, or create migrations.
+- Timeout sources audited: `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS`, worker client HTTP timeout, readiness health timeout, request readiness policy, request `capture.timeoutBudgetMs`, worker contract clamps, capture job wait budget, capture job attempt budget, platform proxy route behavior, worker execution timeout, and local smoke/import runner context.
+- Effective F7 timeout origin: the rendered-capture worker HTTP client config resolved `timeoutMs = 1000` and used `AbortSignal.timeout(timeoutMs)` for the capture POST. Persisted F7 diagnostics show `CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED.details.timeoutMs = 1000`, `CAPTURE_WORKER_REQUEST_STARTED.details.timeoutMs = 1000`, `CAPTURE_WORKER_REQUEST_BUILT.details.timeoutMs = 1000`, and `CAPTURE_WORKER_HTTP_ERROR.details.timeoutMs = 1000`.
+- Not the origin: F7's capture job `timeoutBudgetMs` was `30000`; the request payload `capture.timeoutBudgetMs` was `30000`; request readiness `maxTotalCaptureMs` was `30000`; `CAPTURE_JOB_WAIT_BUDGET_MS` was `40000`; no hardcoded `1000ms` capture POST timeout was found.
+- Env timeout wiring: `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS` is wired into `resolveRenderedCaptureWorkerClientConfigFromEnv(...)` and then into `createHttpRenderedCaptureWorkerClient(...)`; it was not ignored. The F7 script did not pass a short timeout, so the short value came from local execution env/config inheritance or injection.
+- Platform production timeout: same code would use `30000ms` if platform production env sets `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000`; if absent, worker-client default is `35000ms`. F7 proves the local F7 process used `1000ms`, not that platform production would.
+- Worker receipt check: client request sent yes; client response received no; worker request received unknown; worker execution started unknown; worker browser launched unknown. Vercel-side logs were not accessible from this workspace because no `vercel` CLI was on PATH and no `.vercel` project metadata existed in checked workspace roots.
+- Classification: primary D. local smoke runner override, more precisely local execution env/config inheritance of `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=1000`. Not A client hardcoded timeout, not B env timeout unwired, not C phase budget override, not E platform timeout, and not F worker hung as the primary proven cause.
+- Recommended next phase: increase smoke runner timeout by explicitly setting or asserting `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000` before the next bounded fresh-production verification. Do not implement worker/import/capture behavior changes as part of that timeout correction.
+
+Previous completed milestone:
+- Phase 8B-12K-F7 — Fresh Production Import Capture Verification.
+- Status: COMPLETE with FAIL classification.
+- Created `docs/architecture/FRESH_PRODUCTION_IMPORT_CAPTURE_VERIFICATION.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F7 ran one fresh scoped URL import for `https://www.odv-cvijanovic.si/?gnr8_f7=20260617` through the existing fresh import chain (`importPublicSinglePageUrlToSnapshot(...)` + `runScopedImportPipeline(...)`). The existing-siteVersion retry path was not used and no new route was created.
+- New runtime version: `siteVersionId = 30100643-0517-4dff-9051-769e20658b25`, `siteId = site_1f154c85c4b150f5f4b0`, `versionNo = 1`, reused = false.
+- Preflight: target URL reachable (`200 OK`, `text/html; charset=UTF-8`, `29849` bytes); worker readiness ready (`ok = true`, `enabled = true`, `configured = true`, `healthStatus = ready`, `healthHttpStatus = 200`); deployed route surface exists (`HEAD` returns `405` with `x-matched-path` for both `/internal/gnr8/rendered-capture-worker` and `/api/internal/gnr8/rendered-capture-worker`).
+- Worker sourceUrl proof: the worker request was built and sent with `sourceUrl = https://www.odv-cvijanovic.si/?gnr8_f7=20260617`, classified as public `https`, not `file://`.
+- Worker response result: no capture response was received. The capture POST timed out after `1000ms`. Diagnostics included `CAPTURE_WORKER_REQUEST_STARTED`, `CAPTURE_WORKER_REQUEST_BUILT`, `CAPTURE_WORKER_HTTP_REQUEST_SENT`, `CAPTURE_WORKER_HTTP_RESPONSE_CLASSIFIED`, `CAPTURE_WORKER_HTTP_ERROR`, `CAPTURE_WORKER_REQUEST_FAILED`, `CAPTURE_WORKER_UNAVAILABLE`, and `CAPTURE_WORKER_HEALTH_UNAVAILABLE`. Diagnostics did not include `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED`, `CAPTURE_WORKER_RESPONSE_PARSED`, `BROWSER_LAUNCH_SUCCEEDED`, `PAGE_CREATION_SUCCEEDED`, `NAVIGATION_STARTED`, or `NAVIGATION_SUCCEEDED`.
+- Capture result: `renderedCaptureStatus = failed`, `renderedDomQuality = unusable`, `sourceMode = raw_html_fallback`, screenshots `0`, computed style samples `0`, rendered documents `0`, layout geometry `0`, section evidence `0`, and navigation evidence `0`.
+- Evidence result: a baseline-shaped `evidenceCaptureBaselineArtifact` exists, but it has no usable rendered evidence or capture expansion evidence.
+- Failure classification: primary B. worker not reached, subtype capture POST timed out before worker response; secondary H. capture expansion evidence missing.
+- Normal scoped import persistence occurred as part of the requested fresh import, including raw imported artifact persistence, runtime preview artifact binding, and CMS slot materialization. No Limited Dry Run, FirstLimitedDryRun output, reconstruction output, generated React, GNR8 block, publishing artifact, migration, source-serving endpoint, repair job, existing-siteVersion capture retry, code change, schema change, or AI generation was created in F7.
+
+Previous completed milestone:
+- Phase 8B-12K-F6.5 — Production Capture Execution Path Audit.
+- Status: COMPLETE with F7 decision.
+- Created `docs/architecture/PRODUCTION_CAPTURE_EXECUTION_PATH_AUDIT.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F6.5 did architecture audit and decision only. No importer behavior, Evidence Capture behavior, worker behavior, source resolution behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or database schema was changed. No source-serving endpoint, Evidence Capture artifact, DryRun package, FirstLimitedDryRun output, import, capture retry, repair job, migration, or new capture artifact was created.
+- Intended fresh production URL import path: `apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts` calls `importPublicSinglePageUrlToSnapshot(...)`; fresh import fetches the public source URL, writes run-scoped snapshot files, then sends the worker `sourceUrl = entryFetchUrlUsed ?? normalizedHref`, a public `http(s)` URL. The worker does not need platform-local snapshot files for this path.
+- Existing siteVersion/admin retry path: `runSiteRenderCapture(...)` resolves existing provenance or durable `raw_imported_site` bytes, materializes HTML to caller-local temp storage, converts it to `file://`, and sends that as worker `sourceUrl`. A remote worker cannot reliably access that temp file, whether the caller is a local shell, platform runtime, or separate worker invocation.
+- F7 decision: do not implement the raw artifact source-serving endpoint as the immediate next step for proving intended fresh production capture. F7 remains a real architectural requirement only for retroactive existing-siteVersion recapture if that lane must preserve durable imported-source determinism and relative asset fidelity through a remote worker.
+- Recommended next phase: Phase 8B-12K-F7 Fresh Production Import Capture Verification. Use the normal fresh URL import path after worker readiness is confirmed, verify that the worker request uses public `http(s)` `sourceUrl` rather than `file://`, and reassess from the intended production path.
+- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, source-serving endpoint implementation, existing-siteVersion capture retry, repair jobs, backfills, migrations, or unrelated artifact generation without a separate explicit phase.
+
+Previous completed milestone:
 - Phase 8B-12K-Retry-F6 — Worker-Accessible Source Delivery / Navigation Failure Diagnosis.
-- Status: COMPLETE with source-delivery recommendation.
+- Status: COMPLETE with source-delivery recommendation for the existing-siteVersion retry lane.
 - Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
 - Updated `docs/ai/GNR8_CURRENT_STATE.md`.
 - Updated this handoff.
@@ -34,10 +133,7 @@ Latest completed milestone:
 - Worker navigation logic: the worker validates the request, passes `request.sourceUrl` into `runRenderedCapture(...)`, and the rendered capture executor calls `page.goto(input.sourceUrl)` with `waitUntil = domcontentloaded`. The worker does not currently support raw HTML request content, does not call `page.setContent(...)`, and only supports `file://` when the file exists inside the same worker filesystem.
 - Failure classification: A. remote worker cannot access local file path. Browser launch and page creation succeeded; navigation failed because the deployed worker browser was asked to navigate to a platform-local `file://` URL that does not exist in the worker runtime.
 - Source delivery options compared: raw HTML + `setContent`, temporary/public signed URL, platform source-serving endpoint, capture inside platform context, and worker refetch of original source URL.
-- Recommended strategy: add a platform source-serving endpoint for immutable raw artifact HTML and assets. The worker should receive a worker-accessible HTTPS URL for the selected durable raw import entry HTML, and relative CSS/images should resolve under the same controlled origin/path. This preserves deterministic capture against imported bytes and fits the existing `page.goto(...)` navigation model.
-- Not recommended: raw `setContent(...)` as the primary strategy, because imported-site screenshots, layout, and computed styles depend on relative asset resolution; original-source refetch, because it is non-deterministic against imported artifacts.
-- Recommended next phase: Phase 8B-12K-Retry-F7 — Worker-Accessible Raw Artifact Source Serving. Design and implement the smallest authenticated/internal source-serving route for raw artifact HTML/assets, update the worker request source URL to point at that route, and add focused tests. Do not rerun capture until the route/URL contract is proven without unrelated artifact creation.
-- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, migrations, capture retries, or unrelated artifact generation without a separate explicit phase.
+- F6 recommendation was source-serving for durable existing-siteVersion recapture, but F6.5 narrowed the immediate next step to fresh production import capture verification.
 
 Previous completed milestone:
 - Phase 8B-12K-Retry-F5 — Rendered Capture Smoke Retry After Worker Route Alignment.

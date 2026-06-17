@@ -858,6 +858,40 @@ function resolveEvidencePathIfExists(pathAbs: string): string | null {
   return fs.existsSync(normalized) ? normalized : null
 }
 
+function readPersistedRenderedDomHtmlForBaseline(summary: RuntimeImportProvenanceSummary): string | null {
+  const renderedDomPath = normalizeText(summary.captureEvidence.renderedDomPath)
+  if (!renderedDomPath) return null
+  try {
+    const html = fs.readFileSync(renderedDomPath, 'utf8')
+    return html.trim().length > 0 ? html : null
+  } catch {
+    return null
+  }
+}
+
+function addEvidenceCaptureBaselineInputDiagnostics(input: {
+  summary: RuntimeImportProvenanceSummary
+  renderedHtml: string | null
+  layoutGeometryInputCount: number
+}): RuntimeImportProvenanceSummary {
+  const artifact = input.summary.evidenceCaptureBaselineArtifact ?? null
+  const layoutGeometryCount = artifact?.captureExpansionEvidence.layoutGeometryEvidence.length ?? 0
+  const sectionEvidenceCount = artifact?.captureExpansionEvidence.sectionBoundaryEvidence.length ?? 0
+  const navigationEvidenceCount = artifact?.captureExpansionEvidence.navigationEvidence.length ?? 0
+  return {
+    ...input.summary,
+    importDiagnosticCodes: uniqueSorted([
+      ...input.summary.importDiagnosticCodes,
+      input.renderedHtml ? 'RENDERED_DOM_HTML_BASELINE_INPUT_PROVIDED' : 'RENDERED_DOM_HTML_BASELINE_INPUT_MISSING',
+      input.layoutGeometryInputCount > 0 ? 'LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED' : 'LAYOUT_GEOMETRY_BASELINE_INPUT_MISSING',
+      input.summary.captureEvidence.layoutGeometryPath ? 'LAYOUT_GEOMETRY_PATH_PERSISTED' : 'LAYOUT_GEOMETRY_PATH_MISSING',
+      layoutGeometryCount > 0 ? 'LAYOUT_GEOMETRY_EVIDENCE_MATERIALIZED' : 'LAYOUT_GEOMETRY_EVIDENCE_MISSING',
+      sectionEvidenceCount > 0 ? 'SECTION_BOUNDARY_EVIDENCE_MATERIALIZED' : 'SECTION_BOUNDARY_EVIDENCE_MISSING',
+      navigationEvidenceCount > 0 ? 'NAVIGATION_EVIDENCE_MATERIALIZED' : 'NAVIGATION_EVIDENCE_MISSING',
+    ]),
+  }
+}
+
 function resolveSiteTreeSeedContext(input: { sourceUrl: string; snapshot: UrlSinglePageImportSnapshot }): { siteId: string; seedUrl: string } {
   const sourceUrl = normalizeText(input.sourceUrl)
   try {
@@ -2591,6 +2625,7 @@ async function buildImportProvenanceSummary(input: {
   const styleCoverage = toCoverage({ sampleCount: styleSampleCount })
   const renderedDomPath = persistedCaptureEvidence.domPath
   const computedStylesPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'computed-styles.json')
+  const layoutGeometryPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'layout-geometry.json')
   const viewportScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'viewport.png')
   const fullpageScreenshotPath = path.resolve(snapshot.snapshotRootDirAbs, 'rendered', 'screenshots', 'fullpage.png')
   const screenshotPathsResolved = uniqueSorted(
@@ -2710,6 +2745,7 @@ async function buildImportProvenanceSummary(input: {
       acquisitionEvidencePath: resolveEvidencePathIfExists(path.resolve(snapshot.snapshotRootDirAbs, 'acquisition-evidence.json')),
       renderedDomPath: resolveEvidencePathIfExists(renderedDomPath),
       computedStylesPath: resolveEvidencePathIfExists(computedStylesPath),
+      layoutGeometryPath: resolveEvidencePathIfExists(layoutGeometryPath),
       renderedViewportScreenshotPath: renderedViewportScreenshotPath,
       renderedFullpageScreenshotPath: renderedFullpageScreenshotPath,
       screenshotPaths,
@@ -2781,6 +2817,19 @@ function summarizeProvenancePayload(summary: RuntimeImportProvenanceSummary): Re
     screenshotCount: summary.screenshotCount,
     computedStyleSampleCount: summary.computedStyleSampleCount,
     importDiagnosticCodeCount: Array.isArray(summary.importDiagnosticCodes) ? summary.importDiagnosticCodes.length : 0,
+    captureEvidence: {
+      renderedDomPathPresent: Boolean(summary.captureEvidence.renderedDomPath),
+      layoutGeometryPathPresent: Boolean(summary.captureEvidence.layoutGeometryPath),
+      layoutGeometryPath: summary.captureEvidence.layoutGeometryPath ?? null,
+    },
+    evidenceCaptureBaseline: summary.evidenceCaptureBaselineArtifact
+      ? {
+          artifactStatus: summary.evidenceCaptureBaselineArtifact.artifactStatus,
+          layoutGeometryCount: summary.evidenceCaptureBaselineArtifact.captureExpansionEvidence.layoutGeometryEvidence.length,
+          sectionEvidenceCount: summary.evidenceCaptureBaselineArtifact.captureExpansionEvidence.sectionBoundaryEvidence.length,
+          navigationEvidenceCount: summary.evidenceCaptureBaselineArtifact.captureExpansionEvidence.navigationEvidence.length,
+        }
+      : null,
     pageVersionDeduplication: summary.pageVersionDeduplication
       ? {
           duplicateCount: summary.pageVersionDeduplication.duplicateCount,
@@ -3703,13 +3752,25 @@ export async function runScopedImportPipeline(input: {
         },
       ]),
     )
+    const renderedHtmlForBaseline = readPersistedRenderedDomHtmlForBaseline(importProvenanceSummary)
+    const layoutGeometryEvidenceForBaseline = Array.isArray(input.snapshot.renderedCapture.layoutGeometryEvidence)
+      ? input.snapshot.renderedCapture.layoutGeometryEvidence
+      : []
+    console.info('[scoped-import] EVIDENCE_CAPTURE_BASELINE_INPUTS_READY', {
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      renderedDomHtmlProvided: Boolean(renderedHtmlForBaseline),
+      layoutGeometryProvided: layoutGeometryEvidenceForBaseline.length > 0,
+      layoutGeometryPath: importProvenanceSummary.captureEvidence.layoutGeometryPath ?? null,
+    })
     importProvenanceSummary = attachEvidenceCaptureBaselineArtifact({
       siteVersionId: migrated.siteVersionId,
       sourceUrl: input.sourceUrl,
       finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
       routePath: '/',
-      renderedHtml: undefined,
+      renderedHtml: renderedHtmlForBaseline,
       computedStyleSamples: input.snapshot.renderedCapture.computedStyleSamples,
+      layoutGeometryEvidence: layoutGeometryEvidenceForBaseline,
       importProvenanceSummary,
       rawImportArtifact: {
         artifactId: rawImportArtifact.artifactId,
@@ -3735,6 +3796,21 @@ export async function runScopedImportPipeline(input: {
           },
         },
       },
+    })
+    importProvenanceSummary = addEvidenceCaptureBaselineInputDiagnostics({
+      summary: importProvenanceSummary,
+      renderedHtml: renderedHtmlForBaseline,
+      layoutGeometryInputCount: layoutGeometryEvidenceForBaseline.length,
+    })
+    console.info('[scoped-import] EVIDENCE_CAPTURE_BASELINE_EXPANSION_MATERIALIZED', {
+      siteId: migrated.siteId,
+      siteVersionId: migrated.siteVersionId,
+      layoutGeometryCount:
+        importProvenanceSummary.evidenceCaptureBaselineArtifact?.captureExpansionEvidence.layoutGeometryEvidence.length ?? 0,
+      sectionEvidenceCount:
+        importProvenanceSummary.evidenceCaptureBaselineArtifact?.captureExpansionEvidence.sectionBoundaryEvidence.length ?? 0,
+      navigationEvidenceCount:
+        importProvenanceSummary.evidenceCaptureBaselineArtifact?.captureExpansionEvidence.navigationEvidence.length ?? 0,
     })
     await deps.setSiteVersionImportProvenanceSummary({
       siteVersionId: migrated.siteVersionId,

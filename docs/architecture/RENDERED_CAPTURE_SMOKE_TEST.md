@@ -966,3 +966,29 @@ The worker should receive a worker-accessible HTTPS URL for the selected durable
 Recommended next phase: **8B-12K-Retry-F7 Worker-Accessible Raw Artifact Source Serving**.
 
 F7 should design and implement the smallest authenticated/internal platform source-serving route for raw artifact HTML/assets, update the worker request source URL to point at that route, and add focused tests. Do not rerun capture until the route/URL contract is proven without creating unrelated artifacts.
+
+This recommendation remains historical for the existing-siteVersion recapture lane. It was superseded for the intended fresh production import path by 8B-12K-F6.5, F7, and F8.
+
+## 8B-12K-F8 Fresh Import Timeout Diagnosis Cross-Reference
+
+Phase 8B-12K-F8 diagnosed the later fresh-production F7 capture POST timeout without changing code or rerunning import/capture.
+
+Relevant timeout finding for this smoke-test history: the final F5 run explicitly set `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000`, but a preliminary F5 invocation had inherited a local `1000ms` timeout. F8 found the same local timeout shape in F7: the fresh import request/job budget remained `30000ms`, but the rendered-capture worker HTTP client config resolved `timeoutMs = 1000` and aborted the capture POST after about one second.
+
+Classification: **D. local smoke runner override**, specifically local execution env/config inheritance of `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=1000`.
+
+Recommended next phase from F8: **increase smoke runner timeout** by explicitly setting or asserting `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000` before the next bounded fresh-production verification. Worker receipt for F7 remains unknown because Vercel logs were not accessible from this workspace.
+
+## 8B-12K-F9 Fresh Import 30s Timeout Result Cross-Reference
+
+Phase 8B-12K-F9 ran one fresh production import for `https://www.odv-cvijanovic.si/?gnr8_f9=20260617` with `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000` explicitly set.
+
+Preflight passed: effective worker client timeout `30000ms`, worker health ready (`200`), deployed worker routes present (`405` with `x-matched-path`), target URL reachable (`200 OK`, `text/html; charset=UTF-8`, `29849` bytes), and the worker `sourceUrl` was public `https`, not `file://`.
+
+F9 created `siteVersionId = 9c1fdafd-ff1a-4d85-8559-5860d5775c1f`, runtime `siteId = site_bfabe23af164fb00b3ab`, runtime artifact `f6cecf7a-fe52-461c-a3d0-0bd2a485f33f`, and raw import artifact `61f44492-828a-4566-8ec9-c00e3b621f2d`. CMS slot inference ran, but persisted slot count was `0` to honor the F9 no-CMS-binding boundary.
+
+The worker request succeeded: `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED` reported HTTP `200 OK` with request latency `15373ms`, followed by `CAPTURE_WORKER_RESPONSE_PARSED`. Worker/browser diagnostics included `BROWSER_LAUNCH_SUCCEEDED`, `PAGE_CREATION_SUCCEEDED`, `NAVIGATION_SUCCEEDED`, `DOM_SERIALIZATION_SUCCEEDED`, `SCREENSHOT_CAPTURE_SUCCEEDED`, `STYLE_SAMPLING_SUCCEEDED`, and `CAPTURE_WORKER_RENDERED_DOM_USED`.
+
+Capture result: `renderedCaptureStatus = available`, `renderedDomQuality = strong`, `sourceMode = rendered_dom`, screenshots `2`, computed style samples `6`, rendered DOM node count `311`, and baseline artifact exists with `artifactStatus = baseline_partial`.
+
+F9 still fails the strict Evidence Capture PASS criteria because capture-expansion evidence is missing: layout geometry count `0`, section evidence count `0`, and navigation evidence count `0`. Classification: **H. capture expansion evidence missing**. It is not a worker-reachability, auth, Playwright, navigation, invalid-output, baseline-persistence, or 30s-timeout failure.
