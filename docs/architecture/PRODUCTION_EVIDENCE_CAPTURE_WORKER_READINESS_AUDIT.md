@@ -284,19 +284,64 @@ Production rendered Evidence Capture is failing before raw fallback because the 
 
 Overall readiness result: **NOT PRODUCTION READY** for rendered Evidence Capture.
 
-## Recommended Fix Phase
+## 8B-12H Readiness Fix Implementation
+
+Phase 8B-12H implemented a superadmin-only, read-only rendered capture worker readiness check endpoint:
+
+- `GET /api/gnr8/admin/rendered-capture-worker/readiness`
+
+Implemented readiness check endpoint.
+
+The endpoint resolves an explicit production rendered-capture worker readiness contract and never exposes the shared-token value. Returned fields are `ok`, `enabled`, `configured`, `baseUrlPresent`, `path`, `healthPath`, `sharedTokenConfigured`, `timeoutMs`, `healthStatus`, `healthHttpStatus`, and deterministic diagnostics.
+
+Readiness config rules:
+
+- Worker enabled defaults to `true`.
+- Default capture path is documented as `/internal/gnr8/rendered-capture-worker`.
+- Default health path is `/health`.
+- If enabled and `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL` is missing or invalid, readiness is `misconfigured`.
+- If enabled and `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN` is missing, readiness is `misconfigured`.
+- The config contract uses `sharedTokenConfigured` only; token values are not returned.
+
+Health check behavior:
+
+- Sends only `GET` to the configured worker health endpoint.
+- Uses the configured timeout.
+- Performs no retries.
+- Does not POST capture requests.
+- Does not execute browser work from the platform readiness endpoint.
+
+Health classifications:
+
+- `ready`
+- `disabled`
+- `misconfigured`
+- `unreachable`
+- `invalid_response`
+
+Diagnostics added:
+
+- `RENDERED_CAPTURE_WORKER_CONFIG_DISABLED`
+- `RENDERED_CAPTURE_WORKER_CONFIG_MISSING_BASE_URL`
+- `RENDERED_CAPTURE_WORKER_CONFIG_MISSING_TOKEN`
+- `RENDERED_CAPTURE_WORKER_HEALTH_STARTED`
+- `RENDERED_CAPTURE_WORKER_HEALTH_SUCCEEDED`
+- `RENDERED_CAPTURE_WORKER_HEALTH_FAILED`
+- `RENDERED_CAPTURE_WORKER_HEALTH_INVALID_RESPONSE`
+
+Focused tests cover disabled config, missing base URL, missing token, ready health response, unreachable health, invalid health response, token redaction, and superadmin guard enforcement.
+
+## Recommended Next Phase
 
 Recommended next phase:
 
-**8B-12H Production Evidence Capture Worker Readiness Fix**
+**8B-12I Production Worker Env Configuration Verification**
 
-Minimum safe scope for the fix phase:
+Minimum safe scope for the next phase:
 
-- Verify/set platform worker envs in deployed production: `GNR8_RENDERED_CAPTURE_WORKER_ENABLED`, `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL`, `GNR8_RENDERED_CAPTURE_WORKER_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`, and timeout.
+- Verify/set platform worker envs in deployed production: `GNR8_RENDERED_CAPTURE_WORKER_ENABLED`, `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL`, `GNR8_RENDERED_CAPTURE_WORKER_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_HEALTH_PATH`, `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`, and timeout.
 - Verify/set dedicated worker service envs, especially `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`.
-- Verify `GET /health` against the dedicated worker with the shared token.
-- Verify one authenticated POST to `/internal/gnr8/rendered-capture-worker` returns the expected worker response shape.
+- Call the superadmin readiness endpoint in production and record `healthStatus`, `healthHttpStatus`, and diagnostics.
 - Confirm the platform caller reaches the dedicated worker domain rather than a self-targeting app proxy or unconfigured platform route.
-- Persist enough response classification detail to disambiguate status code, endpoint URL, worker error code, and response snippet when capture fails before response parsing.
 
-The fix phase should still avoid import retries, backfills, or Evidence Capture artifact creation until worker readiness is proven with explicit deployment and health/capture endpoint checks.
+The next phase should still avoid import retries, backfills, capture POSTs, Limited Dry Run execution, reconstruction, or Evidence Capture artifact creation until worker readiness is proven with explicit deployed environment verification.

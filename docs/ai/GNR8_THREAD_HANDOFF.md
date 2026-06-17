@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12G Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
+- 8B-12H Production Evidence Capture Worker Readiness Fix is complete.
 
 Current Phase:
-- Phase 8B-12G Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
+- Phase 8B-12H Production Evidence Capture Worker Readiness Fix is complete.
 
 Next Phase:
-- Phase 8B-12H Production Evidence Capture Worker Readiness Fix.
+- Phase 8B-12I Production Worker Env Configuration Verification.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,24 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12H — Production Evidence Capture Worker Readiness Fix.
+- Status: COMPLETE.
+- Added `apps/platform/gnr8/import-rendered-capture-worker/worker-readiness.ts`.
+- Added `apps/platform/app/api/gnr8/admin/rendered-capture-worker/readiness/route.ts`.
+- Added `apps/platform/app/api/gnr8/admin/rendered-capture-worker/readiness/rendered-capture-worker-readiness-route-handlers.ts`.
+- Added `apps/platform/app/api/gnr8/admin/_tests/rendered-capture-worker-readiness-route.test.ts`.
+- Updated `docs/architecture/PRODUCTION_EVIDENCE_CAPTURE_WORKER_READINESS_AUDIT.md`.
+- Implemented a superadmin-only read-only endpoint: `GET /api/gnr8/admin/rendered-capture-worker/readiness`.
+- Endpoint returns `ok`, `enabled`, `configured`, `baseUrlPresent`, `path`, `healthPath`, `sharedTokenConfigured`, `timeoutMs`, `healthStatus`, `healthHttpStatus`, and deterministic diagnostics.
+- Config contract is explicit and fail-closed: enabled worker with missing/invalid `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL` is `misconfigured`; enabled worker with missing `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN` is `misconfigured`; token value is never returned.
+- Default capture path is documented as `/internal/gnr8/rendered-capture-worker`; default health path is `/health`.
+- Health check sends only bounded `GET` to the worker health endpoint, respects timeout, performs no retries, sends no capture POST, and runs no browser work from the platform endpoint.
+- Health classifications: `ready`, `disabled`, `misconfigured`, `unreachable`, and `invalid_response`.
+- Diagnostics added: `RENDERED_CAPTURE_WORKER_CONFIG_DISABLED`, `RENDERED_CAPTURE_WORKER_CONFIG_MISSING_BASE_URL`, `RENDERED_CAPTURE_WORKER_CONFIG_MISSING_TOKEN`, `RENDERED_CAPTURE_WORKER_HEALTH_STARTED`, `RENDERED_CAPTURE_WORKER_HEALTH_SUCCEEDED`, `RENDERED_CAPTURE_WORKER_HEALTH_FAILED`, and `RENDERED_CAPTURE_WORKER_HEALTH_INVALID_RESPONSE`.
+- Recommended next phase: Phase 8B-12I — Production Worker Env Configuration Verification.
+- No importer semantics, Evidence Capture capture execution, Original Mirror behavior, preview behavior, dry-run builder behavior, limited dry-run API/UI behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, database schema, FirstLimitedDryRun outputs, reconstruction outputs, generated React, GNR8 blocks, CMS bindings, publishing artifacts, imports, retries, or Evidence Capture artifacts were created or changed.
+
+Previous completed milestone:
 - Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit.
 - Status: COMPLETE.
 - Created `docs/architecture/PRODUCTION_EVIDENCE_CAPTURE_WORKER_READINESS_AUDIT.md`.
