@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-16
+2026-06-17
 
 ## Migration Platform MVP Buildout
 
@@ -136,8 +136,30 @@ Phase 8B-10 adds focused integration-style admin verification for the limited dr
 Phase 8B-10 verifies idempotency: the first equivalent call creates an artifact, the second equivalent call reuses the latest artifact without a second write, and changed navigation evidence creates a new latest artifact when the rebuilt output differs.
 Phase 8B-10 verifies safety: unauthorized requests are rejected, forbidden request fields are rejected, trigger responses contain metadata only, persisted output does not contain forbidden generated-output fields, and the read-only admin page source contains no trigger, rebuild, approve, publish, edit, AI, form, button, input, textarea, or select controls.
 No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, builder behavior, persistence schema, API trigger behavior, UI behavior, dry-run execution logic, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, worker execution, publishing behavior, new API routes, UI controls, worker jobs, queues, generated React, GNR8 blocks, CMS bindings, or publishing logic was added in Phase 8B-10.
-Current Phase: Phase 8B-10 — First Limited Dry Run End-to-End Admin Verification is complete.
-Next recommended major phase: Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary. Do not execute Dry Run workers, simulation, reconstruction, AI generation, React generation, block generation, content generation, design token generation, workers, UI write controls, approval workflow, publishing, source content mutation, domain/DNS mutation, or CMS mutation without a separate explicit phase.
+Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary is COMPLETE.
+Phase 8B-11 creates `docs/architecture/FIRST_LIMITED_DRY_RUN_REASSESSMENT.md` and reassesses the completed admin-only limited dry-run diagnostic chain. It confirms the implemented and verified state, remaining forbidden actions, missing capabilities, and current safety posture.
+Phase 8B-11 compares next-boundary options: UI trigger button, limited approval/readiness marker, runtime mutation capture, first real-site operational test, and candidate discovery implementation.
+Phase 8B-11 recommends Phase 8B-12 — First Real-Site Limited Dry Run Operational Test because the safest next step is to verify the existing superadmin API trigger, persisted artifact, latest loader, and read-only admin page against one real imported site before adding UI trigger, approval, runtime mutation capture, or candidate discovery behavior.
+No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, builder behavior, persistence behavior, API trigger behavior, UI behavior, dry-run execution logic, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, publishing behavior, new API routes, UI trigger button, approval controls, publish controls, edit controls, LLM calls, generated React, GNR8 blocks, CMS bindings, worker jobs, queues, client-user access, tenant-admin access, or publishing logic was added in Phase 8B-11.
+Phase 8B-12 — First Real-Site Limited Dry Run Operational Test is COMPLETE with a preflight FAIL.
+Phase 8B-12 creates `docs/architecture/FIRST_REAL_SITE_LIMITED_DRY_RUN_OPERATIONAL_TEST.md` and records a read-only operational attempt against `https://www.odv-cvijanovic.si/` (`siteVersionId = 90b3abf8-7a4c-41b5-af05-244642d1962d`, `siteId = site_aaa6d44109a38b5d083f`, route count `1`).
+Phase 8B-12 stopped at preflight because the selected real imported site did not have `evidenceCaptureBaselineArtifact`, layout geometry evidence, section evidence, navigation evidence, or an accepted `ReconstructionDryRunPackage`. A read-only production scan found `14` site versions with non-null import provenance summaries and `0` qualifying versions with the required baseline/package inputs. The staging database endpoint configured in `.env.staging` was not usable from this environment.
+No `POST /api/gnr8/admin/first-limited-dry-run` request was sent, no dry-run output was built, no `first_limited_dry_run_output` artifact was created, no latest artifact was loaded, no admin surface was verified against a real persisted output, and no idempotency trigger was run.
+No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, builder behavior, persistence behavior, API trigger behavior, UI behavior, dry-run execution logic, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, publishing behavior, new API routes, UI trigger button, approval controls, publish controls, edit controls, LLM calls, generated React, GNR8 blocks, CMS bindings, worker jobs, queues, client-user access, tenant-admin access, or publishing logic was added in Phase 8B-12.
+Phase 8B-12F — Reconstruction Readiness Inventory Audit is COMPLETE.
+Phase 8B-12F creates `docs/architecture/RECONSTRUCTION_READINESS_INVENTORY_AUDIT.md` and inventories all `14` production imported runtime site versions with non-null `import_provenance_summary`.
+Result: `14` classify as `NO_EVIDENCE_CAPTURE`; `0` classify as `BASELINE_ONLY`, `CAPTURE_EXPANDED`, `RECONSTRUCTION_READY`, `DRY_RUN_READY`, `DRY_RUN_COMPLETED`, or `UNKNOWN_STATE`.
+Root cause: every imported production site version is missing `evidenceCaptureBaselineArtifact`; all `14` have `renderedCaptureStatus = failed`, `renderedDomQuality = unusable`, `sourceMode = raw_html_fallback`, zero screenshots, zero computed style samples, no capture expansion evidence, no reconstruction package chain, no `ReconstructionDryRunPackage`, and no `FirstLimitedDryRunOutput`.
+Dominant blocker: production rendered Evidence Capture/worker readiness, not Limited Dry Run builder behavior or admin surface behavior. Worker health is missing on `5` versions, unreachable on `5`, and misconfigured on `4`; capture jobs are missing on `5`, transient failed on `5`, and terminal failed on `4`.
+No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, builder behavior, persistence behavior, API behavior, UI behavior, dry-run behavior, simulation behavior, reconstruction behavior, AI behavior, worker behavior, publishing behavior, database schema, Evidence Capture artifacts, DryRun packages, FirstLimitedDryRun outputs, migrations, repair jobs, or backfills were changed or created in Phase 8B-12F.
+Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit is COMPLETE.
+Phase 8B-12G creates `docs/architecture/PRODUCTION_EVIDENCE_CAPTURE_WORKER_READINESS_AUDIT.md` and audits rendered-capture worker config references, deployment assumptions, existing production diagnostics for representative failed versions, root-cause classification, and production readiness.
+Finding: production rendered Evidence Capture fails before raw fallback because the platform cannot obtain a valid usable worker response. Four imported versions are `worker_not_configured` / terminal failed before an HTTP request is sent, five are `worker_http_error` / transient failed after request/response classification, and five older imported versions retain worker HTTP failure/fallback diagnostics but no structured job/health state. No inspected version reaches `CAPTURE_WORKER_RESPONSE_PARSED` or browser-capture dependency diagnostics.
+Root-cause classification: primary `H. platform caller misconfigured`; supporting `A. worker URL missing` for config-missing paths and local production env, `C. worker health unavailable` for unreachable paths, and unresolved `J. unknown` for the exact HTTP response class because durable provenance does not retain endpoint/status/body details. `D`, `F`, `G`, and `I` are not supported by the inspected persisted diagnostics.
+Readiness result: NOT PRODUCTION READY for rendered Evidence Capture. Worker deployment/reachability, health response shape, capture response shape, and auth configuration are not proven ready; timeout is not the observed failure class; browser dependency readiness remains unknown because worker execution does not reach parsed capture truth.
+No importer behavior, Evidence Capture behavior, worker behavior, worker deployment, environment variables, Original Mirror behavior, preview behavior, builder behavior, persistence behavior, API behavior, UI behavior, dry-run behavior, simulation behavior, reconstruction behavior, AI behavior, publishing behavior, database schema, Evidence Capture artifacts, DryRun packages, FirstLimitedDryRun outputs, migrations, repair jobs, backfills, worker jobs, retries, or imports were changed or created in Phase 8B-12G.
+Current Phase: Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
+Next recommended major phase: Phase 8B-12H — Production Evidence Capture Worker Readiness Fix. Do not execute Dry Run workers, simulation, reconstruction, AI generation, React generation, block generation, content generation, design token generation, workers, UI write controls, approval workflow, publishing, source content mutation, domain/DNS mutation, CMS mutation, repair jobs, backfills, import retries, or artifact generation without a separate explicit phase.
 
 ## Current Importer Architecture
 
@@ -153,8 +175,8 @@ Original Mirror Layer:
 - Future: richer limitation evidence as Evidence Capture expands.
 
 Reconstruction Layer:
-- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, metadata-only Dry Run Boundary Contract, dry-run package contract validation, deterministic Dry Run Simulation Plan contract, Simulation Readiness Review, post-8A-4 Dry Run readiness reassessment, post-8A-6 Dry Run readiness reassessment, post-8A-8 Dry Run readiness reassessment, post-8A-10 Dry Run readiness reassessment, capture-expansion readiness integration for section boundary and navigation evidence, 8B-0 first limited Dry Run design, 8B-1 first limited Dry Run output contract, 8B-2 first limited Dry Run builder design, 8B-3 deterministic first limited Dry Run builder implementation, 8B-4 first limited Dry Run builder reassessment, 8B-5 first limited Dry Run output persistence, 8B-6 admin-only first limited Dry Run trigger design, 8B-7 admin-only first limited Dry Run API trigger implementation, 8B-8 read-only first limited Dry Run surface design, 8B-9 dedicated read-only first limited Dry Run admin surface, and 8B-10 end-to-end admin verification.
-- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, capture-expansion evidence can be evaluated for route/navigation/section model support, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, a Reconstruction Package can be evaluated for future Dry Run eligibility, an approved Reconstruction Package can produce a valid planned Dry Run Package contract without execution, a planned Dry Run Package can produce a deterministic Simulation Plan without simulation execution, a `ReconstructionDryRunPackage` can build a valid first limited output containing route/navigation/section models from existing evidence only, and that `FirstLimitedDryRunOutput` can now be persisted, triggered through a superadmin-only API, inspected through a dedicated read-only superadmin page, and verified end to end as an admin-only diagnostic flow. The current state now has real layout geometry evidence, deterministic section boundary evidence, deterministic navigation evidence, an 8B-1 contract-only first limited Dry Run output shape, an 8B-2 mapping design, an 8B-3 pure builder for constructing route/navigation/section models from existing evidence, an 8B-5 persistence boundary, an 8B-6 trigger design, an 8B-7 API trigger, an 8B-8 read-only surface design, an 8B-9 read-only admin diagnostics page, and 8B-10 end-to-end admin verification. Meaningful Dry Run execution still requires runtime mutation evidence and candidate discovery/review execution.
+- Implemented: Reconstruction Input Contract, deterministic readiness levels (`NOT_READY`, `MINIMUM_READY`, `RECOMMENDED`, `HIGH_CONFIDENCE`), blocker model, readiness evaluation helpers, Site Workspace Reconstruction Readiness projection, metadata-only Reconstruction Planning Gate, metadata-only Reconstruction Candidate Discovery Contract, metadata-only Reconstruction Candidate Review Contract, metadata-only Reconstruction Package Contract, Reconstruction Control Plane Closure, metadata-only Dry Run Boundary Contract, dry-run package contract validation, deterministic Dry Run Simulation Plan contract, Simulation Readiness Review, post-8A-4 Dry Run readiness reassessment, post-8A-6 Dry Run readiness reassessment, post-8A-8 Dry Run readiness reassessment, post-8A-10 Dry Run readiness reassessment, capture-expansion readiness integration for section boundary and navigation evidence, 8B-0 first limited Dry Run design, 8B-1 first limited Dry Run output contract, 8B-2 first limited Dry Run builder design, 8B-3 deterministic first limited Dry Run builder implementation, 8B-4 first limited Dry Run builder reassessment, 8B-5 first limited Dry Run output persistence, 8B-6 admin-only first limited Dry Run trigger design, 8B-7 admin-only first limited Dry Run API trigger implementation, 8B-8 read-only first limited Dry Run surface design, 8B-9 dedicated read-only first limited Dry Run admin surface, 8B-10 end-to-end admin verification, 8B-11 next-boundary reassessment, 8B-12 real-site operational preflight report, 8B-12F production reconstruction readiness inventory audit, and 8B-12G production Evidence Capture worker readiness root-cause audit.
+- Partially implemented: evidence can be normalized and evaluated for readiness, enriched evidence can be compared with baseline evidence, capture-expansion evidence can be evaluated for route/navigation/section model support, readiness can be evaluated for planning eligibility, planning output can be evaluated for candidate discovery eligibility, completed discovery package metadata can be evaluated for human review eligibility, reviewed candidate metadata can be packaged for future dry-run reconstruction, a Reconstruction Package can be evaluated for future Dry Run eligibility, an approved Reconstruction Package can produce a valid planned Dry Run Package contract without execution, a planned Dry Run Package can produce a deterministic Simulation Plan without simulation execution, a `ReconstructionDryRunPackage` can build a valid first limited output containing route/navigation/section models from existing evidence only, and that `FirstLimitedDryRunOutput` can now be persisted, triggered through a superadmin-only API, inspected through a dedicated read-only superadmin page, and verified end to end as an admin-only diagnostic flow. The current state now has real layout geometry evidence, deterministic section boundary evidence, deterministic navigation evidence, an 8B-1 contract-only first limited Dry Run output shape, an 8B-2 mapping design, an 8B-3 pure builder for constructing route/navigation/section models from existing evidence, an 8B-5 persistence boundary, an 8B-6 trigger design, an 8B-7 API trigger, an 8B-8 read-only surface design, an 8B-9 read-only admin diagnostics page, 8B-10 end-to-end admin verification, an 8B-12 finding that checked real imported site versions do not contain the required persisted baseline/package inputs for operational trigger verification, an 8B-12F inventory proving all 14 production imported site versions are blocked before Evidence Capture baseline readiness, and an 8B-12G root-cause audit showing the block is platform/worker readiness before usable rendered capture. Meaningful Dry Run execution still requires production Evidence Capture baseline availability, runtime mutation evidence, and candidate discovery/review execution.
 - Future: reconstruction execution, AI reconstruction, GNR8 React/block generation, editable content model generation, design token generation, reconstruction workers, approvals, and publishing.
 Phase 6A — Hosting Operations MVP is complete.
 Phase 6B — Hosting Operations Workflow Review is complete.
@@ -417,10 +439,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8B-10 — First Limited Dry Run End-to-End Admin Verification is complete.
+- Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
 
 Next Phase:
-- Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary.
+- Phase 8B-12H — Production Evidence Capture Worker Readiness Fix.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
@@ -507,7 +529,7 @@ Not included:
 - no script-policy changes
 
 Next recommended major phase:
-- 8B-11: First Limited Dry Run Re-Assessment / Next Safe Boundary.
+- 8B-12H: Production Evidence Capture Worker Readiness Fix.
 
 ## Production Validation
 
@@ -678,7 +700,11 @@ Current migration platform continuation:
 - Phase 8B-8 — Admin Trigger Re-Assessment / Read-Only Surface Design is complete.
 - Phase 8B-9 — Read-Only First Limited Dry Run Surface Implementation is complete.
 - Phase 8B-10 — First Limited Dry Run End-to-End Admin Verification is complete.
-- Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary is the next recommended phase.
+- Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary is complete.
+- Phase 8B-12 — First Real-Site Limited Dry Run Operational Test is complete with preflight failure.
+- Phase 8B-12F — Reconstruction Readiness Inventory Audit is complete.
+- Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
+- Phase 8B-12H — Production Evidence Capture Worker Readiness Fix is the next recommended phase.
 - Website OS runtime expansion remains paused.
 - Execution Artifact Runtime family remains outside the migration-critical path.
 
@@ -780,7 +806,11 @@ Current migration platform continuation:
 - Phase 8B-8 — Admin Trigger Re-Assessment / Read-Only Surface Design is complete.
 - Phase 8B-9 — Read-Only First Limited Dry Run Surface Implementation is complete.
 - Phase 8B-10 — First Limited Dry Run End-to-End Admin Verification is complete.
-- Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary is the next recommended phase.
+- Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary is complete.
+- Phase 8B-12 — First Real-Site Limited Dry Run Operational Test is complete with preflight failure.
+- Phase 8B-12F — Reconstruction Readiness Inventory Audit is complete.
+- Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
+- Phase 8B-12H — Production Evidence Capture Worker Readiness Fix is the next recommended phase.
 - Website OS runtime expansion remains paused.
 
 ## Execution Candidate Runtime Family v1 Milestone (2026-06-03)

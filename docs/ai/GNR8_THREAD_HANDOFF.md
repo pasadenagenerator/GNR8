@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-10 First Limited Dry Run End-to-End Admin Verification is complete.
+- 8B-12G Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
 
 Current Phase:
-- Phase 8B-10 First Limited Dry Run End-to-End Admin Verification is complete.
+- Phase 8B-12G Production Evidence Capture Worker Readiness Root-Cause Audit is complete.
 
 Next Phase:
-- Phase 8B-11 First Limited Dry Run Re-Assessment / Next Safe Boundary.
+- Phase 8B-12H Production Evidence Capture Worker Readiness Fix.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,63 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit.
+- Status: COMPLETE.
+- Created `docs/architecture/PRODUCTION_EVIDENCE_CAPTURE_WORKER_READINESS_AUDIT.md`.
+- Read-only audit inspected rendered-capture worker config references, expected worker deployment model, existing production diagnostics, representative failed versions, root-cause classification, and production readiness.
+- Representative diagnostics: `90b3abf8-7a4c-41b5-af05-244642d1962d` reached `CAPTURE_WORKER_HTTP_REQUEST_SENT` / `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED` / `CAPTURE_WORKER_HTTP_RESPONSE_CLASSIFIED`, then failed with `CAPTURE_WORKER_HTTP_ERROR`, `workerHealth.status = unreachable`, `captureJob.status = failed_transient`, and raw fallback. `88253466-783e-4484-8b68-df6c83b8a11c` built a request but did not send HTTP; it failed with `CAPTURE_WORKER_NOT_CONFIGURED`, `workerHealth.status = misconfigured`, `captureJob.status = failed_terminal`, and raw fallback.
+- Production aggregate remains `14` imported versions, all `sourceMode = raw_html_fallback`, `renderedCaptureStatus = failed`, `renderedDomQuality = unusable`, `screenshotCount = 0`, `computedStyleSampleCount = 0`, and missing `evidenceCaptureBaselineArtifact`.
+- Root-cause classification: primary `H. platform caller misconfigured`; supporting `A. worker URL missing` for config-missing paths/local production env and `C. worker health unavailable` for unreachable paths. `J. unknown` remains for the exact HTTP status/body of transient rows because durable provenance stores diagnostic codes and job/health state but not endpoint/status/body details.
+- Not supported by inspected persisted diagnostics: auth mismatch, timeout, browser dependency failure, or deployed-wrong-build as the concrete current failure class.
+- Readiness result: NOT PRODUCTION READY for rendered Evidence Capture. Worker deployment/reachability, health response shape, capture response shape, and auth configuration are not proven ready.
+- Recommended next phase: Phase 8B-12H — Production Evidence Capture Worker Readiness Fix.
+- No importer behavior, Evidence Capture behavior, worker behavior, worker deployment, environment variables, Original Mirror behavior, preview behavior, builder behavior, persistence behavior, API behavior, UI behavior, dry-run behavior, simulation behavior, reconstruction behavior, AI behavior, publishing behavior, database schema, Evidence Capture artifacts, DryRun packages, FirstLimitedDryRun outputs, migrations, repair jobs, backfills, worker jobs, retries, or imports were changed or created.
+
+Previous completed milestone:
+- Phase 8B-12F — Reconstruction Readiness Inventory Audit.
+- Status: COMPLETE.
+- Created `docs/architecture/RECONSTRUCTION_READINESS_INVENTORY_AUDIT.md`.
+- Read-only production inventory found `14` imported runtime site versions with non-null `import_provenance_summary`.
+- Bucket counts: `NO_EVIDENCE_CAPTURE = 14`; `BASELINE_ONLY = 0`; `CAPTURE_EXPANDED = 0`; `RECONSTRUCTION_READY = 0`; `DRY_RUN_READY = 0`; `DRY_RUN_COMPLETED = 0`; `UNKNOWN_STATE = 0`.
+- Every imported production site version is missing `evidenceCaptureBaselineArtifact`, capture expansion evidence, `ReconstructionInput`, `ReconstructionPlanningPackage`, `ReconstructionCandidateDiscovery` package, `ReconstructionReview` package, `ReconstructionPackage`, `ReconstructionDryRunPackage`, and `FirstLimitedDryRunOutput`.
+- Production capture aggregates: all `14` have `sourceMode = raw_html_fallback`, `renderedCaptureStatus = failed`, `renderedDomQuality = unusable`, `screenshotCount = 0`, and `computedStyleSampleCount = 0`.
+- Worker/capture-job signals: worker health is missing on `5`, unreachable on `5`, and misconfigured on `4`; capture job status is missing on `5`, failed transient on `5`, and failed terminal on `4`.
+- Dominant blocker: production rendered Evidence Capture/worker readiness, not Limited Dry Run builder behavior or admin surface behavior.
+- Representative blocked versions: `90b3abf8-7a4c-41b5-af05-244642d1962d` (`https://www.odv-cvijanovic.si/`) is worker-unreachable/transient-failed; `88253466-783e-4484-8b68-df6c83b8a11c` (`http://www.transportimaver.si/`) is worker-misconfigured/terminal-failed; older generated-host imports have failed rendered capture with no worker/capture-job status in provenance.
+- Follow-up completed by Phase 8B-12G — Production Evidence Capture Worker Readiness Root-Cause Audit.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, builder behavior, persistence behavior, API behavior, UI behavior, dry-run behavior, simulation behavior, reconstruction behavior, AI behavior, worker behavior, publishing behavior, database schema, Evidence Capture artifacts, DryRun packages, FirstLimitedDryRun outputs, migrations, repair jobs, or backfills were changed or created.
+
+Previous completed milestone:
+- Phase 8B-12 — First Real-Site Limited Dry Run Operational Test.
+- Status: COMPLETE WITH PREFLIGHT FAIL.
+- Created `docs/architecture/FIRST_REAL_SITE_LIMITED_DRY_RUN_OPERATIONAL_TEST.md`.
+- Selected attempted target: `https://www.odv-cvijanovic.si/`, `siteVersionId = 90b3abf8-7a4c-41b5-af05-244642d1962d`, `siteId = site_aaa6d44109a38b5d083f`, route count `1`.
+- Preflight found no `evidenceCaptureBaselineArtifact`, no layout geometry evidence, no section evidence, no navigation evidence, no accepted `ReconstructionDryRunPackage`, and no existing `first_limited_dry_run_output` artifact for the selected site version.
+- Read-only production candidate discovery found `14` site versions with non-null `import_provenance_summary` and `0` qualifying versions with the required baseline/package inputs.
+- The staging database endpoint configured in `.env.staging` was checked but was not usable from this environment: `tenant/user postgres.dpkdxllcxnlytgjbnmvp not found`.
+- Stopped per the 8B-12 boundary before triggering `POST /api/gnr8/admin/first-limited-dry-run`.
+- API trigger result: not executed.
+- Persistence verification: no write attempted, no output artifact created, no latest output loaded.
+- Admin surface verification: not executed against a real persisted output because no output artifact exists.
+- Idempotency check: not executed because the first trigger was not eligible to run.
+- Result: FAIL at preflight; the current real-site dataset is not prepared for the existing limited dry-run chain.
+- Follow-up completed by Phase 8B-12F — Reconstruction Readiness Inventory Audit.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, builder behavior, persistence behavior, API trigger behavior, UI behavior, dry-run execution logic, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, publishing behavior, new API routes, UI trigger button, approval controls, publish controls, edit controls, LLM calls, generated React, GNR8 blocks, CMS bindings, worker jobs, queues, client-user access, tenant-admin access, or publishing logic was added.
+
+Previous completed milestone:
+- Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary.
+- Status: COMPLETE.
+- Created `docs/architecture/FIRST_LIMITED_DRY_RUN_REASSESSMENT.md`.
+- Assessed the implemented and verified admin-only diagnostic chain: superadmin API trigger, deterministic builder, persisted `first_limited_dry_run_output`, latest artifact loader, read-only admin surface, idempotency, forbidden-action absence, and platform build verification from 8B-10.
+- Documented what remains forbidden: UI trigger button, approval controls, publish controls, edit controls, tenant-admin/client-user/public access, worker jobs, queues, simulation, reconstruction, AI, React generation, block generation, content generation, design token generation, CMS bindings, persistence schema changes, and publishing behavior.
+- Compared next-boundary options: A. UI trigger button, B. limited approval/readiness marker, C. runtime mutation capture, D. first real-site operational test, and E. candidate discovery implementation.
+- Recommended next phase: Phase 8B-12 — First Real-Site Limited Dry Run Operational Test.
+- Rationale: before adding a UI trigger or approval/readiness system, verify that the existing admin API, persisted artifact, latest loader, and read-only surface work against one real imported site.
+- Designed the 8B-12 operational test constraints: superadmin only, existing imported site only, small/static marketing-style site preferred, no ecommerce, no login/cookie-gated content, no publishing, no AI, no reconstruction execution, no worker execution, and no UI trigger.
+- Defined 8B-12 pass/fail criteria for artifact creation/reuse, read-only display, forbidden field absence, missing evidence, invalid output, unsafe fields, and forbidden controls.
+- No importer behavior, Evidence Capture behavior, Original Mirror behavior, preview behavior, capture behavior, builder behavior, persistence behavior, API trigger behavior, UI behavior, dry-run execution logic, simulation execution, reconstruction execution, AI generation, React generation, block generation, content generation, design token generation, persistence schema, worker execution, publishing behavior, new API routes, UI trigger button, approval controls, publish controls, edit controls, LLM calls, generated React, GNR8 blocks, CMS bindings, worker jobs, queues, client-user access, tenant-admin access, or publishing logic was added.
+
+Previous completed milestone:
 - Phase 8B-10 — First Limited Dry Run End-to-End Admin Verification.
 - Status: COMPLETE.
 - Added `apps/platform/app/api/gnr8/admin/_tests/first-limited-dry-run-admin-verification.test.ts`.
@@ -304,7 +361,7 @@ Earlier completed milestone:
 - Provider strategy: Chrome / Playwright is the only active provider; there is no secondary provider. Servo is only a possible later research spike and is not on the active roadmap.
 - Route sampling strategy for future expanded evidence: root route, top navigation routes, one listing route, one detail/blog route, one contact/form route, and routes with widget/map/form/gallery/embed signals, capped to a small representative MVP sample.
 - Settling strategy for future capture: DOMContentLoaded, bounded network idle, max wait cap, mutation quiet window, lazy-load scroll pass, font readiness timeout, and screenshots after settle.
-- Next recommended major phase: Phase 8B-11 — First Limited Dry Run Re-Assessment / Next Safe Boundary.
+- Next recommended major phase: Phase 8B-12H — Production Evidence Capture Worker Readiness Fix.
 
 Production smoke-test:
 - completed successfully.
@@ -1819,6 +1876,10 @@ Reconstruction Dry Run Boundary is complete:
 - first limited dry-run surface design: Phase 8B-8 completed post-trigger reassessment and designed the read-only operator surface for persisted First Limited Dry Run outputs; recommended next milestone Phase 8B-9 Read-Only First Limited Dry Run Surface Implementation
 - first limited dry-run surface implementation: Phase 8B-9 completed the dedicated read-only superadmin page and defensive persisted-output projection; recommended next milestone Phase 8B-10 First Limited Dry Run End-to-End Admin Verification
 - first limited dry-run end-to-end admin verification: Phase 8B-10 completed focused verification that the superadmin trigger creates or reuses a persisted output, latest readback loads it, the read-only surface projection/page can inspect it, idempotency works for equivalent and changed evidence inputs, and forbidden actions/outputs remain absent; recommended next milestone Phase 8B-11 First Limited Dry Run Re-Assessment / Next Safe Boundary
+- first limited dry-run reassessment: Phase 8B-11 completed the next safe boundary decision, compared UI trigger, approval/readiness marker, runtime mutation capture, real-site operational test, and candidate discovery implementation, and recommended Phase 8B-12 First Real-Site Limited Dry Run Operational Test
+- first real-site limited dry-run operational test: Phase 8B-12 completed a read-only real-site preflight against `https://www.odv-cvijanovic.si/`; the phase failed at preflight because checked runtime data had no qualifying real imported site version with the required Evidence Capture baseline, layout geometry, section evidence, navigation evidence, and `ReconstructionDryRunPackage`; Phase 8B-12F completed the follow-up production readiness inventory and Phase 8B-12G completed the production Evidence Capture worker readiness root-cause audit
+- reconstruction readiness inventory audit: Phase 8B-12F completed a read-only production inventory of all `14` imported runtime site versions; all `14` classify as `NO_EVIDENCE_CAPTURE`, all lack the baseline/package chain required for Limited Dry Run, and the dominant blocker is production rendered Evidence Capture/worker readiness
+- production Evidence Capture worker readiness root-cause audit: Phase 8B-12G completed a read-only audit of worker config, deployment assumptions, and persisted diagnostics; primary root cause is platform/worker readiness before usable rendered capture, with the next recommended phase Phase 8B-12H Production Evidence Capture Worker Readiness Fix
 
 ## G) How Next Thread Should Behave
 
