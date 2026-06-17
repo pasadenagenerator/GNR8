@@ -15,6 +15,14 @@ function env(input: Record<string, string | undefined>): NodeJS.ProcessEnv {
 function readyWorkerHealthResponse(): Response {
   return Response.json({
     ok: true,
+    service: "gnr8-worker",
+    status: "ready",
+  });
+}
+
+function legacyReadyWorkerHealthResponse(): Response {
+  return Response.json({
+    ok: true,
     health: {
       authenticated: true,
       authReason: "ok",
@@ -130,6 +138,24 @@ test("rendered capture worker readiness returns ready for valid health response"
   assert.equal(seen[0]?.init?.body, undefined);
 });
 
+test("rendered capture worker readiness still accepts legacy nested health response", async () => {
+  const config = resolveRenderedCaptureWorkerReadinessConfigFromEnv(
+    env({
+      GNR8_RENDERED_CAPTURE_WORKER_BASE_URL: "https://worker.example",
+      GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN: "secret-token",
+    }),
+  );
+  const result = await checkRenderedCaptureWorkerReadiness({
+    config,
+    fetchImpl: async () => legacyReadyWorkerHealthResponse(),
+    sharedToken: "secret-token",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.healthStatus, "ready");
+  assert.equal(result.healthHttpStatus, 200);
+});
+
 test("rendered capture worker readiness classifies unreachable health", async () => {
   const config = resolveRenderedCaptureWorkerReadinessConfigFromEnv(
     env({
@@ -151,7 +177,7 @@ test("rendered capture worker readiness classifies unreachable health", async ()
   assert.ok(result.diagnostics.includes("RENDERED_CAPTURE_WORKER_HEALTH_FAILED"));
 });
 
-test("rendered capture worker readiness classifies invalid health response", async () => {
+test("rendered capture worker readiness rejects non-ready health status", async () => {
   const config = resolveRenderedCaptureWorkerReadinessConfigFromEnv(
     env({
       GNR8_RENDERED_CAPTURE_WORKER_BASE_URL: "https://worker.example",
@@ -163,9 +189,54 @@ test("rendered capture worker readiness classifies invalid health response", asy
     fetchImpl: async () =>
       Response.json({
         ok: true,
-        health: {
-          authenticated: true,
-          captureServiceAvailable: false,
+        status: "ok",
+      }),
+    sharedToken: "secret-token",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.healthStatus, "invalid_response");
+  assert.equal(result.healthHttpStatus, 200);
+  assert.ok(result.diagnostics.includes("RENDERED_CAPTURE_WORKER_HEALTH_INVALID_RESPONSE"));
+});
+
+test("rendered capture worker readiness rejects non-ok ready health response", async () => {
+  const config = resolveRenderedCaptureWorkerReadinessConfigFromEnv(
+    env({
+      GNR8_RENDERED_CAPTURE_WORKER_BASE_URL: "https://worker.example",
+      GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN: "secret-token",
+    }),
+  );
+  const result = await checkRenderedCaptureWorkerReadiness({
+    config,
+    fetchImpl: async () =>
+      Response.json({
+        ok: false,
+        status: "ready",
+      }),
+    sharedToken: "secret-token",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.healthStatus, "invalid_response");
+  assert.equal(result.healthHttpStatus, 200);
+  assert.ok(result.diagnostics.includes("RENDERED_CAPTURE_WORKER_HEALTH_INVALID_RESPONSE"));
+});
+
+test("rendered capture worker readiness rejects malformed JSON health response", async () => {
+  const config = resolveRenderedCaptureWorkerReadinessConfigFromEnv(
+    env({
+      GNR8_RENDERED_CAPTURE_WORKER_BASE_URL: "https://worker.example",
+      GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN: "secret-token",
+    }),
+  );
+  const result = await checkRenderedCaptureWorkerReadiness({
+    config,
+    fetchImpl: async () =>
+      new Response("{", {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
         },
       }),
     sharedToken: "secret-token",

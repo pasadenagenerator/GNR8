@@ -100,6 +100,7 @@ function buildHealthUrl(config: RenderedCaptureWorkerReadinessConfig): string | 
 function isReadyHealthPayload(payload: unknown): boolean {
   if (!isObjectRecord(payload)) return false;
   if (payload.ok !== true) return false;
+  if (payload.status === "ready") return true;
   if (!isObjectRecord(payload.health)) return false;
   return payload.health.authenticated === true && payload.health.captureServiceAvailable === true;
 }
