@@ -4,7 +4,19 @@ const nextConfig = {
     tsconfigPath: './tsconfig.build.json',
   },
   output: 'standalone',
-  serverExternalPackages: ['pg'],
+  serverExternalPackages: ['pg', 'playwright', 'playwright-core', '@sparticuz/chromium'],
+  webpack(config, { isServer }) {
+    if (isServer) {
+      const externalPackages = new Set(['playwright', 'playwright-core', '@sparticuz/chromium'])
+      config.externals.push(({ request }, callback) => {
+        if (request && externalPackages.has(request)) {
+          return callback(null, `commonjs ${request}`)
+        }
+        return callback()
+      })
+    }
+    return config
+  },
   outputFileTracingExcludes: {
     '*': [
       './.next/cache/**',

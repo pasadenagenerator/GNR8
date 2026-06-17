@@ -361,3 +361,18 @@ Minimum safe scope for the next phase:
 - Confirm the readiness response is `healthStatus = ready` with `RENDERED_CAPTURE_WORKER_HEALTH_STARTED` and `RENDERED_CAPTURE_WORKER_HEALTH_SUCCEEDED`.
 
 The next phase should still avoid import retries, backfills, capture POSTs, Limited Dry Run execution, reconstruction, or Evidence Capture artifact creation until worker readiness is proven with explicit deployed environment verification.
+
+## 8B-12K-Retry-F4 Worker Route Alignment Update
+
+Phase 8B-12K-Retry-F4 added the missing rendered-capture worker POST route surface to `apps/worker`:
+
+- `POST /internal/gnr8/rendered-capture-worker`
+- `POST /api/internal/gnr8/rendered-capture-worker`
+
+Both routes share the same worker route handler and delegate to the rendered-capture worker server fetch contract in `apps/platform/gnr8/rendered-capture-worker-server/fetch-handler.ts`, which reuses `worker-service.ts` and `worker-contract.ts`.
+
+The shared-token auth contract is preserved through `x-gnr8-rendered-capture-worker-token`; token values are not emitted in responses or tests. Route errors are JSON worker errors instead of generic Next HTML when the route exists.
+
+Local validation passed for the focused worker route test and `apps/worker` build. No live capture retry, import retry, Limited Dry Run, reconstruction, generation, publishing, migration, or artifact creation was performed.
+
+Updated readiness implication: once deployed, the worker route-missing / generic `404` HTML blocker identified in Retry-F3 should be removed. The next readiness step is an F5 deployed smoke retry/check that verifies JSON worker auth/contract responses before attempting a full rendered capture retry.

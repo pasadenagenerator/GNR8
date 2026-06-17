@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12K-F1 Existing SiteVersion Capture Source Rehydration Audit is complete.
+- 8B-12K-Retry-F4 Deployed Worker Route / Entrypoint Alignment is complete.
 
 Current Phase:
-- Phase 8B-12K-F1 Existing SiteVersion Capture Source Rehydration Audit is complete.
+- Phase 8B-12K-Retry-F4 Deployed Worker Route / Entrypoint Alignment is complete.
 
 Next Phase:
-- Phase 8B-12K-F2 Rendered Capture Raw Import Artifact Source Resolution Design/Fix.
+- Phase 8B-12K-Retry-F5 Rendered Capture Smoke Retry After Worker Route Alignment.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,87 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12K-Retry-F4 — Deployed Worker Route / Entrypoint Alignment.
+- Status: COMPLETE.
+- Updated `apps/worker` with `POST /internal/gnr8/rendered-capture-worker` and compatibility `POST /api/internal/gnr8/rendered-capture-worker`.
+- Both route files use the same `renderedCaptureWorkerRouteHandlers.POST` handler from `apps/worker/gnr8/rendered-capture-worker-route-handlers.ts`.
+- Handler delegation path: `apps/worker/gnr8/rendered-capture-worker-route-handlers.ts` -> `apps/platform/gnr8/rendered-capture-worker-server/fetch-handler.ts` -> `apps/platform/gnr8/import-rendered-capture-worker/worker-service.ts` / `worker-contract.ts`.
+- Auth behavior: shared-token auth remains `x-gnr8-rendered-capture-worker-token` matched against `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN`; token values are not printed or returned.
+- Response contract: route errors are JSON worker errors, not generic Next HTML; successful mocked execution returns `kind = rendered_capture_worker_response_v1`, `contractVersion = 1.0.0`, matching `requestId`, and worker `status`.
+- Validation: focused worker route tests passed and `apps/worker` build passed. The build output lists both capture routes as dynamic server routes.
+- No full capture smoke retry, import retry, Limited Dry Run, reconstruction, AI, React/block generation, publishing, migration, or artifact creation was performed.
+- Recommended next phase: Phase 8B-12K-Retry-F5 — Rendered Capture Smoke Retry After Worker Route Alignment.
+
+Previous completed milestone:
+- Phase 8B-12K-Retry-F3 — Worker HTTP Error Diagnosis.
+- Status: COMPLETE with exact HTTP error classification.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- Diagnostic scope: inspected deployed worker HTTP response, endpoint contracts, platform request contract, and persisted F2 summary without changing importer behavior, Evidence Capture behavior, source resolution behavior, worker behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or database schema.
+- A tokened external diagnostic POST was not executed from this local session after escalation review rejected sending the shared worker token to the external worker host. No secret values were printed or persisted. Safe unauthenticated POST probes were used for route existence/status only.
+- HTTP result: both `POST https://gnr8-worker.vercel.app/internal/gnr8/rendered-capture-worker` and `POST https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker` returned `404 Not Found`, `content-type = text/html; charset=utf-8`, with a generic Next HTML not-found page. The body was not JSON, had no worker `error.code`, no worker diagnostics, and no `rendered_capture_worker_response_v1`.
+- Route contract finding: the standalone rendered-capture worker server in `apps/platform/gnr8/rendered-capture-worker-server/server.ts` supports `POST /internal/gnr8/rendered-capture-worker`, compatibility `POST /api/internal/gnr8/rendered-capture-worker`, and `GET /health`; the platform proxy route exists at `apps/platform/app/api/internal/gnr8/rendered-capture-worker/route.ts`; but `apps/worker` source/build exposes only `/health` and no capture POST route.
+- Platform request contract: F2 primary path was `/internal/gnr8/rendered-capture-worker`, with client fallback to `/api/internal/gnr8/rendered-capture-worker` after `404`; method `POST`; auth headers present in F2 (`x-gnr8-rendered-capture-worker-token` and bearer auth, values not printed); JSON body keys were `kind`, `contractVersion`, `requestId`, `importId`, `sourceUrl`, `trace`, and `capture`.
+- Failure classification: B. route missing / 404. The deployed worker host fails before auth, request validation, payload-size handling, worker runtime execution, Playwright/browser launch, timeout handling, or response-shape validation.
+- Recommended next phase: Phase 8B-12K-Retry-F4 — Deployed Worker Route/Entrypoint Alignment. Verify/correct deployment/start command so `gnr8-worker.vercel.app` serves the rendered-capture worker server entrypoint or equivalent route surface before rerunning a full capture.
+- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, migrations, or unrelated artifact generation without a separate explicit phase.
+
+Previous completed milestone:
+- Phase 8B-12K-Retry-F2 — Rendered Capture Smoke Retry With Worker Env.
+- Status: COMPLETE with FAIL classification.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- Target retried: `siteVersionId = 90b3abf8-7a4c-41b5-af05-244642d1962d`, runtime site `site_aaa6d44109a38b5d083f`, ownership site `067e3aa9-773c-4d5d-ba2b-a138761a6354`, source URL `https://www.odv-cvijanovic.si/`.
+- F2 loaded `apps/platform/.env.local` into the local execution process with shell tracing disabled. Worker token presence was confirmed as a boolean only; the token value was not printed, copied into docs, committed, or persisted by the report.
+- Preflight passed: production DB URL present, worker enabled, worker base URL present (`https://gnr8-worker.vercel.app`), worker token present, worker capture path present (`/internal/gnr8/rendered-capture-worker`), worker health path present (`/health`), worker timeout `30000`, durable raw import artifact `6f0829d5-a481-4722-b9e1-1b999e65e4b7` exists, and `index.html` is stored in `content_bytes` (`29715` bytes, SHA `371313f6e7c3823f2feb91e3e6e6a400b5896bc75ae26ad0aba5190a996e7861`) with `351` persisted files.
+- The existing `runSiteRenderCapture(...)` path was used. Source resolution succeeded from durable raw import artifact bytes and emitted `RENDERED_CAPTURE_SOURCE_LOCAL_PROVENANCE_MISSING`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_LOOKUP_STARTED`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_FOUND`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_FOUND`, and `RENDERED_CAPTURE_SOURCE_RESOLVED_FROM_RAW_IMPORT_ARTIFACT`.
+- The worker was reached in F2. Live diagnostics included `CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED`, `CAPTURE_WORKER_URL_RESOLVED`, `CAPTURE_WORKER_REQUEST_STARTED`, `CAPTURE_WORKER_REQUEST_BUILT`, `CAPTURE_WORKER_HTTP_REQUEST_SENT`, `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED`, `CAPTURE_WORKER_HTTP_RESPONSE_CLASSIFIED`, `CAPTURE_WORKER_HTTP_ERROR`, `CAPTURE_WORKER_REQUEST_FAILED`, `RENDERED_CAPTURE_UNAVAILABLE`, and `CAPTURE_WORKER_UNAVAILABLE`. Existing service logs showed worker config state `enabled = true`, `baseUrlPresent = true`, and `tokenPresent = true`.
+- F2 result: `renderedCaptureStatus = failed`, `renderedDomQuality = unusable`, `sourceMode = raw_html_fallback`, `hasUsableEvidence = false`, failure reason `CAPTURE_WORKER_HTTP_ERROR`, screenshots `0`, computed style samples `0`, rendered DOM length `0`, DOM node count `0`, layout geometry count `0`, section evidence count `0`, and navigation evidence count `0`.
+- A baseline-shaped `evidenceCaptureBaselineArtifact` exists and contains capture-expansion keys, but it has no usable rendered evidence or capture-expansion evidence and is not a passing Evidence Capture baseline.
+- Persisted rendered-capture execution reports `failureCode = CAPTURE_WORKER_HTTP_ERROR`, `environmentStatus = unsupported`, `environmentSupported = false`, `browserPackageAvailable = true`, and `browserBinaryAvailable = true`.
+- Failure classification: D. worker HTTP error. F2 proves source rehydration works and the configured worker is reached; the remaining blocker is the worker HTTP response/endpoint/runtime behavior.
+- Recommended next phase: Phase 8B-12K-Retry-F3 — Worker HTTP Error Diagnosis.
+- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, migrations, or unrelated artifact generation without a separate explicit phase.
+
+Previous completed milestone:
+- Phase 8B-12K-Retry-F1 — Production Worker Config Injection / Authenticated Readiness Verification.
+- Status: COMPLETE.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- Operational modes assessed: A. production admin route/server-side action with env already present, B. local shell with explicit env injection, C. Vercel CLI env pull into local `.env`, and D. dedicated superadmin-only smoke endpoint.
+- Recommended mode: B. local shell with explicit env injection. It requires no new route, endpoint, action, schema, queue, worker, or admin UI, and directly fixes the `CAPTURE_WORKER_NOT_CONFIGURED` failure class from the previous local retry.
+- Mode C remains a fallback only if the operator cannot safely inject the token at execution time; pulled env files must be gitignored, access-controlled, not pasted into reports, and removed after use.
+- Mode A was not recommended because no existing bounded production retry route/action was identified for this exact smoke retry. Mode D was not recommended because it would require new code and a new production execution surface.
+- Authenticated readiness method documented: sign in to `https://app.pasadenagenerator.com` as superadmin, call `GET /api/gnr8/admin/rendered-capture-worker/readiness`, and record only non-secret fields (`ok`, `enabled`, `configured`, `baseUrlPresent`, `path`, `healthPath`, `sharedTokenConfigured`, `timeoutMs`, `healthStatus`, `healthHttpStatus`, and `diagnostics`).
+- F1 production boundary check from this shell: unauthenticated `GET https://app.pasadenagenerator.com/api/gnr8/admin/rendered-capture-worker/readiness` returned `401 Unauthorized` at `2026-06-17 11:36:36 UTC` with `{"ok":false,"error":"Unauthorized"}`; in-app browser attempt was blocked before load with `net::ERR_BLOCKED_BY_CLIENT`.
+- Latest authenticated-superadmin readiness result carried into F1 from phase context, without secrets: `ok = true`, `enabled = true`, `configured = true`, `baseUrlPresent = true`, `sharedTokenConfigured = true`, `healthStatus = ready`, and diagnostics include `RENDERED_CAPTURE_WORKER_HEALTH_STARTED` and `RENDERED_CAPTURE_WORKER_HEALTH_SUCCEEDED`. Exact `timeoutMs` and `healthHttpStatus` should be copied from the authenticated response immediately before F2 if available.
+- F2 env checklist: `GNR8_RENDERED_CAPTURE_WORKER_ENABLED=true`, `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL=https://gnr8-worker.vercel.app`, `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN=<secret, do not print>`, optional `GNR8_RENDERED_CAPTURE_WORKER_PATH`, optional `GNR8_RENDERED_CAPTURE_WORKER_HEALTH_PATH`, and optional `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS`.
+- Secret handling rule: never commit the token, never paste it into docs, never print it in reports, disable shell tracing before injecting it, do not store pulled Production env files in tracked paths, and unset the token after the retry if exported.
+- Safe F2 command shape is documented with placeholder token expansion only; no real token value was recorded.
+- Recommended next phase: Phase 8B-12K-Retry-F2 — Rendered Capture Smoke Retry With Worker Env.
+- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, or unrelated artifact generation without a separate explicit phase.
+
+Previous completed milestone:
+- Phase 8B-12K-Retry — Rendered Capture Smoke Test On Existing SiteVersion.
+- Status: COMPLETE with FAIL classification.
+- Updated `docs/architecture/RENDERED_CAPTURE_SMOKE_TEST.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- Target retried: `siteVersionId = 90b3abf8-7a4c-41b5-af05-244642d1962d`, runtime site `site_aaa6d44109a38b5d083f`, ownership site `067e3aa9-773c-4d5d-ba2b-a138761a6354`, source URL `https://www.odv-cvijanovic.si/`.
+- Preflight confirmed old local `/tmp` source files are absent and durable raw import artifact `6f0829d5-a481-4722-b9e1-1b999e65e4b7` has `index.html` stored in `content_bytes` (`29715` bytes, SHA `371313f6e7c3823f2feb91e3e6e6a400b5896bc75ae26ad0aba5190a996e7861`) with `351` persisted artifact files.
+- Production admin readiness endpoint could not be independently read from this unauthenticated shell: `GET https://app.pasadenagenerator.com/api/gnr8/admin/rendered-capture-worker/readiness` returned `401 Unauthorized`; an in-app browser attempt was blocked with `net::ERR_BLOCKED_BY_CLIENT`.
+- The existing `runSiteRenderCapture(...)` path was used. Source resolution succeeded from durable raw import artifact bytes and emitted `RENDERED_CAPTURE_SOURCE_LOCAL_PROVENANCE_MISSING`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_LOOKUP_STARTED`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_ARTIFACT_FOUND`, `RENDERED_CAPTURE_SOURCE_RAW_IMPORT_HTML_FOUND`, and `RENDERED_CAPTURE_SOURCE_RESOLVED_FROM_RAW_IMPORT_ARTIFACT`.
+- The worker was not reached from this local retry process because `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL` and `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN` were absent. Retry diagnostics included `CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED`, `CAPTURE_WORKER_URL_RESOLVED`, `CAPTURE_WORKER_NOT_CONFIGURED`, `CAPTURE_WORKER_UNAVAILABLE`, and `RENDERED_CAPTURE_UNAVAILABLE`; no worker HTTP request was sent by the retry.
+- Result remained `renderedCaptureStatus = failed`, `renderedDomQuality = unusable`, `sourceMode = raw_html_fallback`, screenshots `0`, computed style samples `0`, layout geometry count `0`, section evidence count `0`, and navigation evidence count `0`.
+- A baseline-shaped `evidenceCaptureBaselineArtifact` now exists after the retry, but it has no usable rendered evidence or capture-expansion evidence and is not a passing Evidence Capture baseline.
+- Failure classification: B. worker not reached, with subtype local worker client not configured.
+- Recommended next phase: Phase 8B-12K-Retry-F1 — Production Worker Config Injection/Authenticated Readiness Verification.
+- Do not run Limited Dry Run, reconstruction, AI, React/block generation, publishing, import retries, repair jobs, backfills, or unrelated artifact generation without a separate explicit phase.
+
+Previous completed milestone:
 - Phase 8B-12K-F2 — Rendered Capture Raw Import Artifact Source Resolution Fix.
 - Status: COMPLETE.
 - Updated `apps/worker/gnr8/site/site-render-capture-service.ts`.
