@@ -306,8 +306,11 @@ Phase 8D-0 - Candidate Review Foundation is COMPLETE. Candidate Review is define
 The minimal decision model is exactly `approved | rejected | deferred`; unreviewed is the absence of a decision event. Review identity is the composite `(candidateDiscoveryArtifactId, candidateId)`, so approval never transfers silently to a later discovery artifact with the same deterministic candidate identity. Every immutable decision event requires its own ID, candidate and artifact IDs, `siteVersionId`, `dryRunId`, stable reviewer reference, decision, trusted timestamp, and an explicit superseded-decision reference when changing a decision.
 The Phase 7F-13 model remains compatible as historical intent but is obsolete as the canonical operational shape. Its extra decisions collapse into deferred/rejected reasons, its package-level attribution is replaced by per-event attribution, and its old discovery/planning lineage requires future migration to canonical 8C artifact lineage. Detailed foundation: `docs/architecture/CANDIDATE_REVIEW_FOUNDATION.md`.
 Phase 8D-0 changed documentation only. It added no Candidate Review implementation, persistence, UI, schema, worker, Candidate Discovery behavior, Evidence Capture behavior, Limited Dry Run behavior, reconstruction, AI, generation, or publishing.
-Current Phase: Phase 8D-0 - Candidate Review Foundation is complete.
-Next recommended phase: Phase 8D-1 - Candidate Review Contract, contract and focused validation tests only; no UI or persistence yet.
+Phase 8D-1 - Candidate Review Contract is COMPLETE. `apps/platform/gnr8/architecture/candidate-review-contract.ts` defines readonly immutable `CandidateReviewEvent` records, `CandidateReviewPackage`, `CandidateReviewLatestDecision`, and validation results. Decisions are exactly `approved`, `rejected`, and `deferred`; unreviewed remains the absence of an event.
+Latest decisions are derived per `(candidateDiscoveryArtifactId, candidateId)`: valid explicit supersession determines chain heads, with `decidedAt` and then `reviewEventId` providing deterministic fallback ordering. Package validation checks required lineage, package/event consistency, supersession integrity, exact derived latest decisions, counts, and recursively forbidden generated, reconstruction, execution, and publishing fields. The empty-package helper creates a valid zero-count contract package.
+Approval permits only future packaging or planning consideration and creates no execution authority or output. No persistence, UI, review execution, Candidate Discovery behavior/persistence/UI, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing, schema, migration, or worker behavior was added or changed.
+Current Phase: Phase 8D-1 - Candidate Review Contract is complete.
+Next recommended phase: Phase 8D-2 - Candidate Review Persistence Boundary Design.
 
 ## Current Importer Architecture
 
@@ -587,10 +590,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-0 - Candidate Review Foundation is complete.
+- Phase 8D-1 - Candidate Review Contract is complete.
 
 Next Phase:
-- Phase 8D-1 - Candidate Review Contract.
+- Phase 8D-2 - Candidate Review Persistence Boundary Design.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

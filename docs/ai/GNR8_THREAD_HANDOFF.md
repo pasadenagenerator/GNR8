@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-0 Candidate Review Foundation is complete.
+- 8D-1 Candidate Review Contract is complete.
 
 Current Phase:
-- Phase 8D-0 Candidate Review Foundation is complete.
+- Phase 8D-1 Candidate Review Contract is complete.
 
 Next Phase:
-- Phase 8D-1 Candidate Review Contract only: immutable decision-event contract and focused validation tests; no UI or persistence yet.
+- Phase 8D-2 Candidate Review Persistence Boundary Design only; no persistence implementation or UI yet.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,18 +23,23 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 8D-0 - Candidate Review Foundation.
-- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Phase 8D-1 - Candidate Review Contract.
+- Status: COMPLETE / CONTRACT ONLY.
 - Candidate Review is human governance, approval, auditability, and reconstruction preparation. It is not reconstruction, editing, generation, AI, or publishing.
 - The one minimal decision model is exactly `approved | rejected | deferred`; unreviewed is absence of a decision event, not a fourth decision.
 - Review applies to the exact Candidate Artifact Instance identified by `(candidateDiscoveryArtifactId, candidateId)`, not candidate identity alone. A later discovery artifact starts unreviewed even when a deterministic candidate ID recurs.
-- Minimum immutable lineage is `reviewDecisionId`, `candidateId`, `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, stable reviewer reference, decision, trusted timestamp, and `supersedesReviewDecisionId` when changing a decision.
+- Minimum immutable lineage is `reviewEventId`, `candidateId`, `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, stable `reviewerRef`, decision, trusted `decidedAt`, and nullable `supersedesReviewEventId`.
 - Latest state is derived from an explicit immutable supersession chain. Superseded decisions and reviewer attribution remain auditable; stale concurrent submissions must not silently create competing latest decisions.
 - Approval permits only future Reconstruction Package or Structure Planning consideration. It does not directly trigger AI, reconstruction, workers, generation, persistence, or publishing.
 - Phase 7F-13 is compatible historical intent but obsolete as the canonical operational shape; its extra decisions, package-level attribution, and old lineage require future contract migration to the canonical 8C artifact instance.
-- No Candidate Review implementation, persistence, UI, schema, worker, Candidate Discovery behavior, Evidence Capture behavior, Limited Dry Run behavior, reconstruction, AI, generation, or publishing changed.
+- No Candidate Review persistence, UI, execution, schema, worker, Candidate Discovery behavior, Evidence Capture behavior, Limited Dry Run behavior, reconstruction, AI, generation, or publishing changed.
 - Detailed foundation: `docs/architecture/CANDIDATE_REVIEW_FOUNDATION.md`.
-- Recommended next phase: Phase 8D-1 - Candidate Review Contract, contract and focused validation tests only; no UI or persistence yet.
+- Canonical module: `apps/platform/gnr8/architecture/candidate-review-contract.ts`.
+- Decisions: exactly `approved`, `rejected`, and `deferred`; unreviewed is no event.
+- Audit model: readonly immutable events, exact artifact-instance identity, explicit supersession, attributed and deterministic derived latest decisions.
+- Validation: required lineage, package/event consistency, supersession graph, exact latest-decision projection, counts, and recursive forbidden generated/execution fields.
+- Approval permits future packaging or planning consideration only; it does not execute reconstruction.
+- Recommended next phase: Phase 8D-2 - Candidate Review Persistence Boundary Design.
 
 Previous completed milestone:
 - Phase 8C-11 - Post-Discovery Boundary Reassessment.

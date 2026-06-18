@@ -2,10 +2,11 @@
 
 ## Phase And Boundary
 
-Phase 8D-0 defines the Candidate Review layer between persisted Candidate
-Discovery artifacts and future Reconstruction Planning.
+Phase 8D-1 defines the canonical Candidate Review contract between persisted
+Candidate Discovery artifacts and future Reconstruction Planning. Phase 8D-0
+established the foundation; 8D-1 adds contract shapes and pure validation only.
 
-This phase is documentation and architecture only. It adds no review behavior,
+This phase is contract-only. It adds no review behavior,
 persistence, UI, schema, worker, AI, reconstruction, generation, or publishing
 behavior. It does not change Candidate Discovery, Evidence Capture, or Limited
 Dry Run.
@@ -129,7 +130,7 @@ Every review decision event must contain this minimum lineage:
 
 | Field | Requirement |
 |---|---|
-| `reviewDecisionId` | Unique immutable identity for this audit event. |
+| `reviewEventId` | Unique immutable identity for this audit event. |
 | `candidateId` | Exact candidate within the persisted discovery result. |
 | `candidateDiscoveryArtifactId` | Exact persisted `candidate_discovery_result` artifact reviewed. |
 | `siteVersionId` | Source site version; must match the artifact and result. |
@@ -137,7 +138,7 @@ Every review decision event must contain this minimum lineage:
 | `reviewer` | Stable authenticated human subject reference. Display name alone is insufficient. |
 | `decision` | Exactly `approved`, `rejected`, or `deferred`. |
 | `decidedAt` | Server-trusted decision timestamp. |
-| `supersedesReviewDecisionId` | Required when changing an existing latest decision; absent for the first decision. |
+| `supersedesReviewEventId` | Nullable; identifies the prior event when changing an existing latest decision. |
 
 The minimum source identity is
 `candidateDiscoveryArtifactId + candidateId`. `siteVersionId` and `dryRunId`
@@ -159,7 +160,7 @@ Candidate Review uses an immutable event history.
 
 - A submitted decision is never updated or deleted in place.
 - A changed decision appends a new event whose
-  `supersedesReviewDecisionId` names the previously latest event for the same
+  `supersedesReviewEventId` names the previously latest event for the same
   candidate artifact instance.
 - The latest decision is the unsuperseded event at the head of that explicit
   chain, not whichever record has the greatest client timestamp.
@@ -241,15 +242,24 @@ are not modified in 8D-0.
 
 ## Smallest Safe Scope For 8D-1
 
-The recommended next phase is **Phase 8D-1 - Candidate Review Contract**.
+Phase 8D-1 is complete. Its canonical module is
+`apps/platform/gnr8/architecture/candidate-review-contract.ts`.
 
-Its smallest safe scope is:
+The contract contains:
 
-- a contract-only immutable review decision event shape;
-- exactly `approved | rejected | deferred`;
-- exact candidate artifact-instance identity and minimum lineage;
-- contract validation for IDs, reviewer, decision, timestamp, and explicit
-  supersession references;
+- readonly immutable `CandidateReviewEvent` records with exact artifact-instance
+  identity, reviewer attribution, lineage, optional rationale, diagnostics, and
+  nullable explicit supersession;
+- exactly `approved | rejected | deferred`, with unreviewed represented by no
+  decision event;
+- `deriveLatestCandidateReviewDecisions(...)`, where valid explicit
+  supersession determines chain heads and unrelated heads use `decidedAt` then
+  `reviewEventId` deterministic ordering;
+- `CandidateReviewPackage`, derived latest decisions and decision counts;
+- `validateCandidateReviewPackage(...)` for lineage, artifact/candidate
+  consistency, supersession integrity, latest-decision reproduction, counts,
+  and recursive forbidden generated/execution fields;
+- `createEmptyCandidateReviewPackage(...)` for a valid zero-event package;
 - focused contract tests;
 - no UI and no persistence yet.
 
@@ -258,14 +268,18 @@ write, schema change, package builder, Structure Plan, AI call, reconstruction,
 worker, generation, publishing, or changes to Candidate Discovery, Evidence
 Capture, or Limited Dry Run.
 
-## 8D-0 Exit State
+## 8D-1 Exit State
 
-Candidate Review is now defined as an auditable human governance layer over an
-exact persisted Candidate Discovery artifact instance. Its only decisions are
-`approved`, `rejected`, and `deferred`; its source identity and minimum lineage
-are explicit; its history is immutable; and its approval authority stops at
-eligibility for future packaging or planning consideration.
+Candidate Review now has a canonical, validated contract for auditable human
+governance over an exact persisted Candidate Discovery artifact instance. Its
+only decisions are `approved`, `rejected`, and `deferred`; its source identity
+and minimum lineage are explicit; its history is immutable; its latest decision
+is reproducibly derived; and approval stops at eligibility for future packaging
+or planning consideration.
 
-No Candidate Review implementation, persistence, UI, AI, reconstruction,
-generation, publishing, schema, worker, Candidate Discovery behavior, Evidence
-Capture behavior, or Limited Dry Run behavior was added or changed.
+No Candidate Review persistence, UI, execution, AI, reconstruction, generation,
+publishing, schema, worker, Candidate Discovery behavior, Evidence Capture
+behavior, or Limited Dry Run behavior was added or changed.
+
+The recommended next phase is **Phase 8D-2 - Candidate Review Persistence
+Boundary Design**.
