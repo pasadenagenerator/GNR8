@@ -112,6 +112,31 @@ test("builds route, navigation, and generic section candidates", () => {
   assert.equal(result.candidates[2]?.diagnostics[0], "SECTION_CANDIDATE_MAPPED:regionType=hero");
 });
 
+test("resolves compact Evidence Capture refs used by persisted dry-run navigation models", () => {
+  const output = validOutput();
+  output.navigationModels[0]!.sourceEvidenceRefs.push(
+    "layout-region-navigation",
+    "section-boundary-home-hero",
+  );
+  output.evidenceRefs.push(
+    "layout-region-navigation",
+    "section-boundary-home-hero",
+  );
+
+  const result = build(output);
+
+  assert.equal(result.candidateCount, 4);
+  assert.deepEqual(result.candidates.map((candidate) => candidate.candidateType), [
+    "route",
+    "navigation",
+    "section",
+    "section",
+  ]);
+  assert.equal(result.limitations.some((limitation) =>
+    limitation.code === "UNRESOLVED_REQUIRED_EVIDENCE"), false);
+  assert.equal(validateCandidateDiscoveryResult(result).valid, true);
+});
+
 test("uses stable percent-escaped IDs and deterministic ordering", () => {
   const first = build();
   const second = build();

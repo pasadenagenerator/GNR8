@@ -209,3 +209,47 @@ At the end of 8C-3, `buildCandidateDiscoveryResult(...)` creates only determinis
 There is still no Candidate Review execution, persistence, reconstruction, AI, React/block generation, CMS binding, publishing, schema change, migration, or importer/Evidence Capture/worker/preview/Limited Dry Run behavior change.
 
 The recommended next phase is Phase 8C-4 - Candidate Discovery Builder Validation On Known Fixtures.
+
+## 8C-4 Completion Boundary
+
+At the end of 8C-4, deterministic fixture versions of the successful ODV
+Cvijanovic and ViroiDoc Limited Dry Run shapes validate the implemented builder.
+The fixtures cover stable route/navigation/section identities, four- and
+five-candidate outputs, zero- and 18-limitation ledgers, warning propagation and
+confidence caps, broad navigation without candidate explosion, deterministic
+duplicate-section blocking, and blocked empty output for missing evidence refs.
+All outputs pass the Candidate Discovery contract and contain no forbidden
+generated fields.
+
+This phase adds tests and documentation only. It creates no persistence,
+Candidate Review execution, reconstruction output, AI, React/block generation,
+CMS binding, publishing artifact, schema change, migration, or importer/Evidence
+Capture/worker/preview/Limited Dry Run behavior change.
+
+The recommended next phase is Phase 8C-5 - Candidate Discovery Real-Site
+Dry-Run Artifact Validation.
+
+## 8C-5 Completion Boundary
+
+At the end of 8C-5, the two authoritative real persisted
+`FirstLimitedDryRunOutput` artifacts have been loaded through existing read
+helpers and passed to `buildCandidateDiscoveryResult(...)` in memory. ODV
+produces four candidates with `1 / 1 / 2` route/navigation/section counts,
+zero limitations, and zero blockers. ViroiDoc produces five candidates with
+`1 / 1 / 3` counts, preserves all 18 source limitations, and has zero blockers.
+Both results pass contract validation and contain no forbidden generated fields.
+
+The real artifacts exposed one bounded deterministic builder defect absent from
+the representative fixtures: compact persisted Evidence Capture refs using
+`layout-region-*` and `section-boundary-*` were not classified by the evidence
+registry. The registry now recognizes those established ref families, and a
+focused regression test covers the real shape. Final real-artifact behavior
+matches the 8C-4 fixture expectations.
+
+No Candidate Discovery result was persisted. There is still no Candidate Review,
+reconstruction, AI, React/block generation, CMS binding, publishing artifact,
+schema change, migration, or importer/Evidence Capture/worker/preview/Limited Dry
+Run behavior change.
+
+The recommended next phase is Phase 8C-6 - Candidate Discovery Persistence
+Boundary Design, documentation and contract assessment only.

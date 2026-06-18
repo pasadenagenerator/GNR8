@@ -706,3 +706,29 @@ behavior is added.
 
 The recommended next phase is Phase 8C-4 - Candidate Discovery Builder
 Validation On Known Fixtures.
+
+## 8C-4 Fixture Validation
+
+Phase 8C-4 adds validation-only fixtures representing the two successful
+real-site Limited Dry Run shapes without executing either real site:
+
+- ODV Cvijanovic shape: one route, one navigation, two sections, zero source
+  limitations, four stable candidates, zero blockers, and valid output.
+- ViroiDoc shape: one route, one broad 29-item navigation model, three sections,
+  18 source limitations, five stable candidates, zero blockers, lossless master
+  limitation preservation, applicable warning propagation, and `HIGH` to
+  `MEDIUM` confidence caps where those warnings apply.
+
+Edge fixtures prove that navigation items remain inside one referenced dry-run
+navigation model instead of expanding into candidates; duplicate section
+identity collision sets are omitted deterministically with one blocker; and
+missing required evidence refs return a valid blocked empty result containing
+none of the forbidden generated fields.
+
+No deterministic defect was found in the 8C-3 builder. Phase 8C-4 changes no
+builder, persistence, Candidate Review, reconstruction, AI, React/block
+generation, CMS binding, publishing, schema, migration, importer, Evidence
+Capture, worker, preview, or Limited Dry Run behavior.
+
+The recommended next phase is Phase 8C-5 - Candidate Discovery Real-Site
+Dry-Run Artifact Validation.

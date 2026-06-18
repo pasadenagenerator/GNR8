@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8C-3 Candidate Discovery Builder Implementation is complete.
+- 8C-5 Candidate Discovery Real-Site Dry-Run Artifact Validation is complete.
 
 Current Phase:
-- Phase 8C-3 Candidate Discovery Builder Implementation is complete.
+- Phase 8C-5 Candidate Discovery Real-Site Dry-Run Artifact Validation is complete.
 
 Next Phase:
-- Phase 8C-4 Candidate Discovery Builder Validation On Known Fixtures.
+- Phase 8C-6 Candidate Discovery Persistence Boundary Design, documentation and contract assessment only.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,27 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8C-5 - Candidate Discovery Real-Site Dry-Run Artifact Validation.
+- Status: COMPLETE / PASS / VALIDATION ONLY.
+- Loaded the exact ODV and ViroiDoc persisted `FirstLimitedDryRunOutput` artifacts through existing read helpers and ran `buildCandidateDiscoveryResult(...)` in memory without candidate persistence.
+- ODV result: four candidates, `1 / 1 / 2` route/navigation/section, zero limitations, zero blockers, valid output, and no forbidden generated fields.
+- ViroiDoc result: five candidates, `1 / 1 / 3`, all 18 source limitations preserved, zero blockers, valid output, and no forbidden generated fields. Its 29-item navigation remains one navigation candidate.
+- The first real run exposed compact persisted `layout-region-*` and `section-boundary-*` refs that the fixture-shaped registry did not classify. The bounded deterministic fix recognizes those existing Evidence Capture ref families, restoring the navigation and dependent route candidates.
+- Focused contract, builder, regression, and fixture tests pass `19 / 19`; final real-artifact assertions pass for both sites. Final real behavior matches 8C-4 expectations.
+- No Candidate Discovery artifact, Candidate Review package, reconstruction output, generated React/block, CMS binding, publishing artifact, migration, or schema change was created. No persistence, review, reconstruction, AI, generation, publishing, importer, Evidence Capture, worker, preview, or Limited Dry Run behavior changed.
+- Recommended next phase: Phase 8C-6 - Candidate Discovery Persistence Boundary Design, documentation and contract assessment only.
+
+Previous completed milestone:
+- Phase 8C-4 - Candidate Discovery Builder Validation On Known Fixtures.
+- Status: COMPLETE / VALIDATION AND TESTS ONLY.
+- Added deterministic ODV-shaped and ViroiDoc-shaped fixture tests without real-site execution. ODV validates `1 / 1 / 2` route/navigation/section candidates, four total candidates, zero limitations, zero blockers, valid output, and stable IDs.
+- ViroiDoc validates `1 / 1 / 3`, five total candidates, preservation of all 18 source limitations, applicable warning propagation, confidence caps, zero blockers, valid output, and stable IDs.
+- Edge fixtures validate one navigation candidate for a 29-item navigation model, deterministic duplicate section identity omission with one blocker diagnostic, and a blocked empty result when required evidence refs are missing.
+- The Candidate Discovery contract, builder, and fixture suite passes `18 / 18`. No deterministic builder defect was found, so builder behavior did not change.
+- No persistence, Candidate Review, reconstruction, AI, React/block generation, CMS binding, publishing, schema, migration, importer, Evidence Capture, worker, preview, Limited Dry Run behavior, or real-site execution changed.
+- Recommended next phase: Phase 8C-5 - Candidate Discovery Real-Site Dry-Run Artifact Validation.
+
+Previous completed milestone:
 - Phase 8C-3 - Candidate Discovery Builder Implementation.
 - Status: COMPLETE / PURE DETERMINISTIC BUILDER ONLY.
 - Created `apps/platform/gnr8/architecture/candidate-discovery-builder.ts` and its focused test.

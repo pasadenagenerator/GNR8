@@ -117,6 +117,10 @@ function buildEvidenceRegistry(
       register(refId, "section_boundary");
     } else if (refId.startsWith("evidence:navigation:")) {
       register(refId, "navigation_evidence");
+    } else if (refId.startsWith("layout-region-")) {
+      register(refId, "layout_geometry");
+    } else if (refId.startsWith("section-boundary-")) {
+      register(refId, "section_boundary");
     }
   }
 
@@ -442,19 +446,15 @@ export function buildCandidateDiscoveryResult(
       }
     }
 
-    for (const [type, models] of [
-      ["route", output.routeModels],
-      ["navigation", output.navigationModels],
-      ["section", output.sectionModels],
-    ] as const) {
-      for (const model of models.filter((item) => !routeScope.has(item.routePath))) {
-        const identity = type === "navigation"
-          ? escapeIdentity(model.navigationId)
-          : type === "section"
-            ? `${escapeIdentity(model.routePath, true)}:${escapeIdentity(model.sectionId)}`
-            : escapeIdentity(model.routePath, true);
-        addBlocker(type, identity, "OUT_OF_SCOPE_MODEL_ROUTE", `Candidate model route is outside route scope: ${escapeIdentity(model.routePath, true)}.`);
-      }
+    for (const model of output.routeModels.filter((item) => !routeScope.has(item.routePath))) {
+      addBlocker("route", escapeIdentity(model.routePath, true), "OUT_OF_SCOPE_MODEL_ROUTE", `Candidate model route is outside route scope: ${escapeIdentity(model.routePath, true)}.`);
+    }
+    for (const model of output.navigationModels.filter((item) => !routeScope.has(item.routePath))) {
+      addBlocker("navigation", escapeIdentity(model.navigationId), "OUT_OF_SCOPE_MODEL_ROUTE", `Candidate model route is outside route scope: ${escapeIdentity(model.routePath, true)}.`);
+    }
+    for (const model of output.sectionModels.filter((item) => !routeScope.has(item.routePath))) {
+      const identity = `${escapeIdentity(model.routePath, true)}:${escapeIdentity(model.sectionId)}`;
+      addBlocker("section", identity, "OUT_OF_SCOPE_MODEL_ROUTE", `Candidate model route is outside route scope: ${escapeIdentity(model.routePath, true)}.`);
     }
   }
 
