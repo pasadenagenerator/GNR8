@@ -318,3 +318,40 @@ schema, migrations, or workers.
 
 The recommended next phase is **Phase 8D-4 - Candidate Review Read-Only
 Surface Design**.
+
+Phase 8D-4 now defines that surface in
+`docs/architecture/CANDIDATE_REVIEW_SURFACE_DESIGN.md`. The selected location is
+a dedicated admin Candidate Review page. Its read-only projection combines the
+persisted review package's attributed latest decisions and immutable event
+history with candidate type, confidence, limitations, route grouping, and
+diagnostics from the exact linked Candidate Discovery artifact.
+
+The surface groups approved, rejected, deferred, and unreviewed candidates
+while preserving route, navigation, and sections-by-route Discovery grouping.
+It defines missing, empty, invalid, all-unreviewed, stale, and superseded-event
+states without creating decisions or exposing review, AI, reconstruction,
+publishing, edit, or trigger controls.
+
+The recommended next phase is **Phase 8D-5 - Candidate Review Read-Only Surface
+Implementation**.
+
+Phase 8D-5 now implements the dedicated read-only Candidate Review admin page
+at `/gnr8/admin/candidate-review/[siteVersionId]` and the UI-independent
+`CandidateReviewSurfaceProjection`. The projection validates the latest raw
+persisted review artifact, resolves its exact Candidate Discovery artifact,
+derives latest decisions and supersession history from immutable events, and
+preserves Discovery order within approved, rejected, deferred, and unreviewed
+groups.
+
+The guarded page displays persisted lineage, counts, attribution, rationale,
+event history, candidate confidence, limitations, diagnostics, and missing,
+empty, invalid, all-unreviewed, stale, and superseded-history states. It has no
+buttons, forms, inputs, review actions, edit controls, AI controls,
+reconstruction controls, publishing controls, or trigger controls.
+
+Phase 8D-5 changes no review contract or persistence behavior, Candidate
+Discovery behavior or persistence, Evidence Capture, Limited Dry Run,
+reconstruction, AI, publishing, schema, migrations, or workers.
+
+The recommended next phase is **Phase 8D-6 - Candidate Review End-to-End Admin
+Verification**.

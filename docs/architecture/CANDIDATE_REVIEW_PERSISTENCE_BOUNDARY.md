@@ -373,3 +373,19 @@ migration; or worker behavior was added or changed.
 
 The recommended next phase is **Phase 8D-4 - Candidate Review Read-Only
 Surface Design**.
+
+## Phase 8D-4 Surface Design Status
+
+Phase 8D-4 is complete. The canonical design is
+`docs/architecture/CANDIDATE_REVIEW_SURFACE_DESIGN.md`.
+
+It recommends a dedicated admin Candidate Review page that reads one persisted
+`candidate_review_package` and its exact linked Candidate Discovery artifact.
+The surface exposes package lineage and validation, decision counts, grouped
+latest decisions, unreviewed candidates, immutable chronological event history,
+supersession chains, candidate context, staleness, empty states, and diagnostics.
+It never appends a package, creates a decision, moves a pointer, or mutates the
+linked Discovery artifact.
+
+The recommended next phase is **Phase 8D-5 - Candidate Review Read-Only Surface
+Implementation**.

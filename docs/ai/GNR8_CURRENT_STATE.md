@@ -316,8 +316,16 @@ Phase 8D-2 changed documentation only. It added no persistence, provenance field
 Phase 8D-3 - Candidate Review Persistence Implementation is COMPLETE. `apps/platform/gnr8/architecture/candidate-review-persistence.ts` persists validated `candidate_review_package` snapshots in `candidateReviewPackageArtifacts` under the existing site-version import-provenance boundary and maintains `latestCandidateReviewPackageArtifact`. It exposes persist, latest-load, and by-ID-load helpers and returns cloned full artifact records on reads.
 Before write, the helper runs `validateCandidateReviewPackage(...)`, rejects forbidden generated/execution/publishing content, validates canonical package identity and exact site-version/dry-run/Discovery-artifact lineage, confirms every reviewed candidate exists in the persisted Discovery artifact, and preserves validation plus package/event diagnostics. Exact semantic retries reuse the latest artifact; changed valid event history appends and advances the pointer; omitted, rewritten, reordered, non-extending, stale, or branching history fails explicitly.
 Phase 8D-3 added no UI, review execution, Candidate Discovery behavior/persistence/UI, Evidence Capture, Limited Dry Run, reconstruction, generated output, AI, publishing, schema, migration, or worker behavior.
-Current Phase: Phase 8D-3 - Candidate Review Persistence Implementation is complete.
-Next recommended phase: Phase 8D-4 - Candidate Review Read-Only Surface Design.
+Phase 8D-4 - Candidate Review Read-Only Surface Design is COMPLETE. `docs/architecture/CANDIDATE_REVIEW_SURFACE_DESIGN.md` recommends a dedicated admin Candidate Review page for inspecting persisted `candidate_review_package` artifacts and their exact linked Candidate Discovery artifacts.
+The design defines Overview, Candidate Decision Summary, Latest Decisions, Review Event History, Candidate Context, and Diagnostics sections. It groups candidates by approved, rejected, deferred, and unreviewed while preserving route, navigation, and sections-by-route Discovery grouping and stable source order.
+The defensive `CandidateReviewSurfaceProjection` includes artifact metadata, package validation, linked Discovery summary and staleness, decision/event counts, grouped latest decisions, unreviewed candidates, complete immutable event history, empty/attention state, and separated diagnostics. Missing, empty, invalid, all-unreviewed, stale, and superseded-event states are defined.
+The surface is admin/superadmin-only and strictly read-only, with no approve/reject/defer, edit, AI, reconstruction, publishing, or trigger controls. Phase 8D-4 changes documentation only and adds no UI, API route, review event/package append, Candidate Discovery or Candidate Review behavior/persistence change, Evidence Capture, Limited Dry Run, reconstruction, generated output, AI, publishing, schema, migration, or worker behavior.
+Phase 8D-5 - Candidate Review Read-Only Surface Implementation is COMPLETE. `apps/platform/gnr8/architecture/candidate-review-surface-projection.ts` adds the defensive `CandidateReviewSurfaceProjection`, and `/gnr8/admin/candidate-review/[siteVersionId]` provides the dedicated guarded read-only admin page.
+The projection validates the persisted review envelope and package, resolves the exact linked Candidate Discovery artifact, derives latest decisions and immutable supersession history, reports lineage/counts/staleness/diagnostics, and groups approved, rejected, deferred, and unreviewed candidates while preserving route, navigation, and sections-by-route Discovery order. Missing, empty, invalid, all-unreviewed, stale, and superseded-history states are explicit.
+The page contains Overview, Decision Summary, Latest Decisions, Event History, Candidate Context, and Diagnostics. It adds no buttons, forms, inputs, review actions, edit controls, AI controls, reconstruction controls, publishing controls, or trigger controls. Focused source/projection tests pass `10 / 10`.
+Phase 8D-5 changes no Candidate Discovery behavior/persistence/UI, Candidate Review contract or persistence behavior, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing, schema, migrations, or workers.
+Current Phase: Phase 8D-5 - Candidate Review Read-Only Surface Implementation is complete.
+Next recommended phase: Phase 8D-6 - Candidate Review End-to-End Admin Verification.
 
 ## Current Importer Architecture
 
@@ -597,10 +605,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-3 - Candidate Review Persistence Implementation is complete.
+- Phase 8D-5 - Candidate Review Read-Only Surface Implementation is complete.
 
 Next Phase:
-- Phase 8D-4 - Candidate Review Read-Only Surface Design.
+- Phase 8D-6 - Candidate Review End-to-End Admin Verification.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
