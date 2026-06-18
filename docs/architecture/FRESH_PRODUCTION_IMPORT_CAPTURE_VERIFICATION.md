@@ -394,3 +394,169 @@ NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test --test-name-patter
 ```
 
 Recommended next phase: **Phase 8B-12K-F12 - Fresh Production Import Capture Verification Retry**.
+
+## F12 Fresh Production Import Capture Verification Retry
+
+Phase 8B-12K-F12 ran one valid fresh production import verification for:
+
+`https://www.odv-cvijanovic.si/?gnr8_f12=20260617`
+
+F12 did not modify code, schema, importer behavior, preview behavior, dry-run behavior, reconstruction behavior, AI behavior, React/block generation, publishing behavior, or worker code. It did not create FirstLimitedDryRun outputs, reconstruction outputs, generated React, GNR8 blocks, CMS bindings, publishing artifacts, or migrations. As in F9, CMS slot inference ran but the scoped pipeline dependency injection used a no-op `upsertContentSlots`, so persisted CMS slot count was `0`.
+
+### F12 Required Env
+
+Confirmed without printing the shared token:
+
+| Env | Result |
+| --- | --- |
+| `DATABASE_URL` | present |
+| `GNR8_RENDERED_CAPTURE_WORKER_ENABLED` | `true` |
+| `GNR8_RENDERED_CAPTURE_WORKER_BASE_URL` | `https://gnr8-worker.vercel.app` |
+| `GNR8_RENDERED_CAPTURE_WORKER_SHARED_TOKEN` | present |
+| `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS` | `30000` |
+
+### F12 Preflight
+
+| Check | Result |
+| --- | --- |
+| effective worker client timeout | `30000ms` |
+| worker client endpoint | `https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker` |
+| worker client config | `ready` |
+| worker health readiness | ready, HTTP `200` |
+| readiness diagnostics | `RENDERED_CAPTURE_WORKER_HEALTH_STARTED`, `RENDERED_CAPTURE_WORKER_HEALTH_SUCCEEDED` |
+| worker route exists | `HEAD /internal/gnr8/rendered-capture-worker` -> `405`, `x-matched-path: /internal/gnr8/rendered-capture-worker` |
+| compatibility route exists | `HEAD /api/internal/gnr8/rendered-capture-worker` -> `405`, `x-matched-path: /api/internal/gnr8/rendered-capture-worker` |
+| target URL reachable | `200 OK`, `text/html; charset=UTF-8`, `29849` bytes |
+| source URL sent to worker | public `https`, not `file://` |
+
+### F12 Import And Worker Request
+
+The verification used the existing fresh URL import chain:
+
+- `preallocateSiteVersionIdentity(...)`
+- `importPublicSinglePageUrlToSnapshot(...)`
+- `runScopedImportPipeline(...)`
+- production DB-backed runtime persistence
+- rendered-capture worker client from explicit env with `GNR8_RENDERED_CAPTURE_WORKER_TIMEOUT_MS=30000`
+
+The existing-siteVersion retry path was not used.
+
+| Field | Value |
+| --- | --- |
+| new `siteVersionId` | `09dce7ea-d860-4f60-a1eb-26c3335b302e` |
+| runtime `siteId` | `site_135623aa7648136dba36` |
+| versionNo | `1` |
+| reused | `false` |
+| runtime artifactId | `fdcdb547-6fc6-4542-822d-1f4264812265` |
+| raw import artifactId | `4d046e09-ec56-4a17-830b-1539526636e4` |
+| worker request endpoint | `https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker` |
+| sourceUrl sent to worker | `https://www.odv-cvijanovic.si/?gnr8_f12=20260617` |
+| worker request sent | yes |
+| worker response received | yes, HTTP `200 OK` |
+| worker response latency | `15048ms` |
+
+Worker and browser diagnostics included:
+
+- `CAPTURE_WORKER_HTTP_REQUEST_SENT`
+- `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED`
+- `CAPTURE_WORKER_RESPONSE_PARSED`
+- `CAPTURE_WORKER_RESULT_ACCEPTED`
+- `BROWSER_LAUNCH_SUCCEEDED`
+- `PAGE_CREATION_SUCCEEDED`
+- `NAVIGATION_SUCCEEDED`
+- `DOM_SERIALIZATION_SUCCEEDED`
+- `SCREENSHOT_CAPTURE_SUCCEEDED`
+- `STYLE_SAMPLING_SUCCEEDED`
+- `CAPTURE_WORKER_RENDERED_DOM_USED`
+
+### F12 Capture Result
+
+| Check | Result |
+| --- | --- |
+| renderedCaptureStatus | `available` |
+| renderedDomQuality | `strong` |
+| sourceMode | `rendered_dom` |
+| importFidelityStatus | `high_fidelity_import` |
+| rendered DOM length | `40043` |
+| rendered DOM node count | `292` |
+| screenshots count | `2` |
+| computed style samples count | `6` |
+| raw imported files persisted | `384` |
+| external asset fallbacks | `0` |
+| CMS slots persisted | `0` |
+
+### F12 Evidence Expansion Result
+
+| Evidence | Result |
+| --- | --- |
+| evidenceCaptureBaselineArtifact exists | yes |
+| baseline artifactStatus | `baseline_partial` |
+| baseline captureStatus | `partial` |
+| baseline coverageStatus | `baseline_partial_not_reconstruction_grade` |
+| `captureEvidence.renderedDomPath` | exists; file exists |
+| `captureEvidence.layoutGeometryPath` | exists; file exists |
+| rendered-capture manifest | exists; file exists |
+| screenshot refs | `2` |
+| computed style sample ref | exists |
+| layout geometry evidence count | `1` |
+| layout geometry region count | `3` |
+| section evidence count | `2` |
+| navigation evidence count | `1` |
+| navigation item count | `6` |
+
+Materialization diagnostics were persisted in `importDiagnosticCodes`:
+
+- `RENDERED_DOM_HTML_BASELINE_INPUT_PROVIDED`
+- `LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED`
+- `LAYOUT_GEOMETRY_PATH_PERSISTED`
+- `LAYOUT_GEOMETRY_EVIDENCE_MATERIALIZED`
+- `SECTION_BOUNDARY_EVIDENCE_MATERIALIZED`
+- `NAVIGATION_EVIDENCE_MATERIALIZED`
+
+The write-path logs also recorded `EVIDENCE_CAPTURE_BASELINE_INPUTS_READY` with rendered DOM HTML and layout geometry provided, followed by `EVIDENCE_CAPTURE_BASELINE_EXPANSION_MATERIALIZED` with layout geometry count `1`, section evidence count `2`, and navigation evidence count `1`.
+
+### F12 Classification
+
+Result: **PASS**.
+
+F12 confirms the F11 wiring fix causes a successful fresh rendered capture to persist usable Evidence Capture baseline expansion evidence. The worker was reached, rendered capture was `available` / `strong`, the baseline artifact exists, rendered DOM and layout geometry paths exist, layout geometry count is greater than `0`, section evidence count is greater than `0`, and navigation evidence count is greater than `0`.
+
+Not classified as any F12 failure class:
+
+- A. worker not reached: worker request was sent and HTTP `200 OK` was received.
+- B. worker capture failed: rendered capture was `available` and `strong`.
+- C. rendered DOM missing: rendered DOM path exists and file exists.
+- D. layout geometry path missing: `captureEvidence.layoutGeometryPath` exists.
+- E. layout geometry missing: baseline layout geometry evidence count is `1`.
+- F. section evidence missing: section evidence count is `2`.
+- G. navigation evidence missing: navigation evidence count is `1`, containing `6` navigation items.
+- H. baseline persistence failed: baseline artifact exists.
+- I. materialization diagnostics missing: materialization diagnostics are present in `importDiagnosticCodes`.
+
+### F12 Recommended Next Phase
+
+Recommended next phase: **Phase 8B-12K-F13 - Evidence Capture Readiness Re-Assessment**.
+
+Reassess First Limited Dry Run readiness against the new passing fresh production Evidence Capture baseline. Do not run Limited Dry Run, create FirstLimitedDryRun outputs, run reconstruction, add AI, generate React/GNR8 blocks, publish, mutate CMS bindings, create migrations, or run additional fresh imports unless a separate phase explicitly authorizes that work.
+
+## F13 Evidence Capture Readiness Re-Assessment
+
+Phase 8B-12K-F13 completed an audit and documentation-only re-assessment of the F12 result. No import, capture retry, Limited Dry Run, FirstLimitedDryRun output, reconstruction, AI, React/block generation, CMS binding, publishing artifact, migration, or schema/behavior change was performed.
+
+Readiness scores moved from conceptual `86/100` and execution `77/100` to conceptual `90/100` and execution `84/100`. F12 closes the real-site Evidence Capture gate for the existing limited Route, Navigation, and Section chain: rendered capture, rendered DOM, screenshots, layout geometry, section evidence, navigation evidence, worker readiness, public source URL handling, and the `30000ms` timeout configuration are ready. Computed style coverage and baseline persistence remain partial.
+
+Model feasibility remains deliberately bounded: route, navigation, and section models are feasible; the content model is risky; block and design-token models are not ready. Candidate discovery execution, candidate review execution, and a Limited Dry Run on the fresh F12 site version are still missing. No AI, reconstruction, generation, or publishing is authorized.
+
+Recommended next phase: **Phase 8B-12L - Limited Dry Run Real-Site Retry On Fresh Captured SiteVersion** using `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e` and the existing limited Route, Navigation, and Section boundary.
+
+## 8B-12L Limited Dry Run Real-Site Retry
+
+Phase 8B-12L completed with **PASS** against the fresh F12 `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e`. Preflight reconfirmed that the Evidence Capture baseline, rendered DOM path/file, layout geometry path/file, layout evidence `1`, section evidence `2`, and navigation evidence `1` with `6` items remain available.
+
+No ReconstructionDryRunPackage was persisted on the F12 record. The phase used the existing `createReconstructionDryRunPackage(...)` helper with a transient metadata-only draft package; candidate discovery and candidate review were not executed. The helper produced a contract-valid blocked package, and the existing First Limited Dry Run builder produced a valid evidence-only output with Route/Navigation/Section counts `1 / 1 / 2`, limitations/blockers `0 / 0`, and no validation errors or warnings.
+
+The output persisted as `first_limited_dry_run_output` artifact `first_limited_dry_run_output_4e86f6e01f67640ec0fd70bdf9cbf445` and loaded back successfully. The read-only projection reports `artifactStatus = present`, `outputStatus = valid`, `validationStatus = valid`, and counts `1 / 1 / 2`. A recursive forbidden-field scan found no React, GNR8 blocks, CMS bindings, content model, design token model, publishing artifacts, or generated output containers. The existing admin page source contains the First Limited Dry Run and Route/Navigation/Section labels and no action controls.
+
+Detailed evidence: `docs/architecture/LIMITED_DRY_RUN_REAL_SITE_RETRY.md`.
+
+Recommended next phase: **Phase 8B-12M - Limited Dry Run Result Re-Assessment / Package Preparation Boundary**.

@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12K-F10 Capture Expansion Evidence Persistence Diagnosis is complete.
+- 8B-12N Second Real-Site Limited Dry Run Validation is complete with PASS classification.
 
 Current Phase:
-- Phase 8B-12K-F10 Capture Expansion Evidence Persistence Diagnosis is complete.
+- Phase 8B-12N Second Real-Site Limited Dry Run Validation is complete.
 
 Next Phase:
-- Phase 8B-12K-F11 Fresh Import Baseline Capture Expansion Wiring.
+- Phase 8B-12O Cross-Site Evidence and Model Quality Re-Assessment.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,77 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8B-12N - Second Real-Site Limited Dry Run Validation.
+- Status: COMPLETE / PASS.
+- Selected existing site: ViroiDoc, `siteVersionId = e9257245-0256-4291-9989-66a33ee6741e`, a public research-project presentation site with visible navigation, no login gate, and no ecommerce-heavy or application-like flow.
+- The old record had provenance and rendered DOM but lacked expansion evidence. The proven production path created fresh `siteVersionId = e26b0754-988b-45b9-9e24-8e213179b6cf` for `https://www.viroidoc.eu/?gnr8_8b_12n=20260618`.
+- Evidence passed: rendered DOM `1`, layout geometry `1` with `4` regions, section evidence `3`, navigation evidence `1` with `29` items.
+- Existing bounded chain only: transient metadata-only package, builder, validator, persistence, latest-output readback, and read-only projection. Candidate discovery and candidate review were not executed.
+- Authoritative latest artifact: `first_limited_dry_run_output_f913707d4cfeda4a1d2ab8bdc4a054fc`.
+- Output passed: `outputStatus = valid`, Route/Navigation/Section counts `1 / 1 / 3`, limitations/blockers `18 / 0`, no validation errors or warnings, and exact semantic readback.
+- Surface passed: projection `present / valid / valid`; route `/`, core ViroiDoc navigation labels, and three section IDs visible; no action controls.
+- Portability result: the unchanged bounded Evidence Capture and Limited Dry Run chain is now proven on two distinct public real sites. The richer second sample exposes more non-blocking limitations and broader navigation extraction, which should be audited before Candidate Discovery work.
+- No importer, Evidence Capture, worker, preview, dry-run builder/persistence/API/UI, reconstruction, candidate, AI, generation, publishing, or schema behavior changed. No CMS binding, reconstruction output, generated React/GNR8 block, publishing artifact, migration, or worker job was created.
+- Detailed evidence: `docs/architecture/SECOND_REAL_SITE_LIMITED_DRY_RUN_VALIDATION.md`.
+- Recommended next phase: Phase 8B-12O - Cross-Site Evidence and Model Quality Re-Assessment, documentation/read-only only.
+
+Previous completed milestone:
+- Phase 8B-12M - Limited Dry Run Result Re-Assessment / Package Preparation Boundary.
+- Status: COMPLETE.
+- Audit/scoring/documentation only; no import, capture, dry-run output, candidate/review artifact, reconstruction, AI, generation, publishing, migration, worker job, schema, or application behavior change.
+- Re-assessment: 8B-12L proves the unchanged bounded Route/Navigation/Section chain works end to end on one simple real site, including validation, persistence, readback, and read-only projection. It does not prove cross-site generalization, dynamic/runtime mutation handling, reconstruction-grade evidence, candidate/review execution, or a durable ready package lifecycle.
+- Readiness scores: conceptual `92/100` (from `90/100`); execution `88/100` (from `84/100`).
+- Capability boundary: capture/evidence/builder/persistence/surface are proven once on a real site; baseline persistence remains partial; discovery/review are contract-only; Reconstruction Package is metadata-only; AI reconstruction, React/block generation, and publishing are not implemented.
+- Options assessed: Candidate Discovery, Candidate Review, Limited Dry Run package formalization, Runtime Mutation Capture, and second real-site validation.
+- Recommended next phase: Phase 8B-12N - Second Real-Site Limited Dry Run Validation, using the unchanged bounded chain on one additional simple public site before new behavior is implemented.
+- Detailed assessment: `docs/architecture/LIMITED_DRY_RUN_RESULT_REASSESSMENT.md`.
+
+Previous completed milestone:
+- Phase 8B-12L - Limited Dry Run Real-Site Retry On Fresh Captured SiteVersion.
+- Status: COMPLETE / PASS.
+- Target: `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e`, source `https://www.odv-cvijanovic.si/?gnr8_f12=20260617`.
+- Preflight passed: baseline exists; rendered DOM and layout geometry paths/files exist; layout/section/navigation evidence counts are `1 / 2 / 1`; navigation item count is `6`.
+- No ReconstructionDryRunPackage was persisted. The existing helper produced a contract-valid blocked package from transient metadata-only input; candidate discovery and candidate review were not executed and no candidate/review artifacts were created.
+- Existing builder and validation produced `outputStatus = valid`, Route/Navigation/Section counts `1 / 1 / 2`, limitations/blockers `0 / 0`, with no validation errors or warnings.
+- Persisted `first_limited_dry_run_output` artifact: `first_limited_dry_run_output_4e86f6e01f67640ec0fd70bdf9cbf445`.
+- Latest output readback and read-only surface projection passed with `artifactStatus = present`, `outputStatus = valid`, `validationStatus = valid`, and counts `1 / 1 / 2`.
+- Forbidden-field scanning found no React, GNR8 blocks, CMS bindings, content model, design token model, publishing artifacts, or generated output containers. Admin page source contains the required model labels and no action controls.
+- No application code, schema, importer, Evidence Capture, worker, preview, reconstruction, candidate, AI, generation, or publishing behavior changed.
+- Detailed evidence: `docs/architecture/LIMITED_DRY_RUN_REAL_SITE_RETRY.md`.
+- Phase 8B-12M subsequently completed the reassessment and selected Phase 8B-12N Second Real-Site Limited Dry Run Validation.
+
+Previous completed milestone:
+- Phase 8B-12K-F13 - Evidence Capture Readiness Re-Assessment.
+- Status: COMPLETE.
+- Updated `docs/architecture/SIMULATION_READINESS_REVIEW.md` with the post-F12 scores, Evidence Capture readiness matrix, model feasibility matrix, blockers, and next-phase decision.
+- Updated `docs/architecture/FRESH_PRODUCTION_IMPORT_CAPTURE_VERIFICATION.md`, `docs/ai/GNR8_CURRENT_STATE.md`, and this handoff.
+- F13 was audit, scoring, and documentation only. It did not run import or capture retry, Limited Dry Run, create FirstLimitedDryRun outputs, run reconstruction, add AI, generate React/GNR8 blocks, create CMS bindings, publish, or create migrations/schema changes.
+- Readiness moved from conceptual `86/100` and execution `77/100` to conceptual `90/100` and execution `84/100`.
+- F12 moved the system back into readiness for the existing bounded Limited Dry Run Route, Navigation, and Section chain: rendered capture, screenshots, rendered DOM, layout geometry, section evidence, navigation evidence, worker readiness, public source URL handling, and timeout readiness are ready. Computed style coverage and baseline persistence remain partial.
+- Model feasibility: route `feasible`, navigation `feasible`, section `feasible`, content `risky`, block `not_ready`, design token `not_ready`.
+- Remaining blockers: candidate discovery execution and candidate review execution are missing; Limited Dry Run has not run on fresh `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e`; no AI, reconstruction, generation, or publishing execution is authorized.
+- Recommended next phase: Phase 8B-12L - Limited Dry Run Real-Site Retry On Fresh Captured SiteVersion, using the existing limited Route, Navigation, and Section boundary.
+
+Previous completed milestone:
+- Phase 8B-12K-F12 - Fresh Production Import Capture Verification Retry.
+- Status: COMPLETE / PASS.
+- Updated `docs/architecture/FRESH_PRODUCTION_IMPORT_CAPTURE_VERIFICATION.md`.
+- Updated `docs/architecture/CAPTURE_EXPANSION_EVIDENCE_PERSISTENCE_DIAGNOSIS.md`.
+- Updated `docs/ai/GNR8_CURRENT_STATE.md`.
+- Updated this handoff.
+- F12 ran one valid fresh production import verification for `https://www.odv-cvijanovic.si/?gnr8_f12=20260617` through the normal fresh path: `preallocateSiteVersionIdentity(...)`, `importPublicSinglePageUrlToSnapshot(...)`, and `runScopedImportPipeline(...)`. The existing-siteVersion retry path was not used.
+- Required env was confirmed without printing the token: `DATABASE_URL` present, worker enabled `true`, worker base URL `https://gnr8-worker.vercel.app`, worker shared token present, and worker timeout `30000`.
+- Preflight passed: effective worker client timeout `30000ms`; worker readiness ready with `healthHttpStatus = 200`; deployed capture routes existed via `HEAD` returning `405` with `x-matched-path`; target URL returned `200 OK`, `text/html; charset=UTF-8`, `29849` bytes; source URL sent to worker was public `https`, not `file://`.
+- New runtime version: `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e`, `siteId = site_135623aa7648136dba36`, `versionNo = 1`, reused = false, runtime artifact `fdcdb547-6fc6-4542-822d-1f4264812265`, raw import artifact `4d046e09-ec56-4a17-830b-1539526636e4`.
+- Worker/capture result: worker request sent to `https://gnr8-worker.vercel.app/api/internal/gnr8/rendered-capture-worker`; worker returned HTTP `200 OK` in `15048ms`; persisted diagnostics include `CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED`, `CAPTURE_WORKER_RESPONSE_PARSED`, `CAPTURE_WORKER_RESULT_ACCEPTED`, `BROWSER_LAUNCH_SUCCEEDED`, `PAGE_CREATION_SUCCEEDED`, `NAVIGATION_SUCCEEDED`, `DOM_SERIALIZATION_SUCCEEDED`, `SCREENSHOT_CAPTURE_SUCCEEDED`, `STYLE_SAMPLING_SUCCEEDED`, and `CAPTURE_WORKER_RENDERED_DOM_USED`.
+- Capture result: `renderedCaptureStatus = available`, `renderedDomQuality = strong`, `sourceMode = rendered_dom`, `importFidelityStatus = high_fidelity_import`, screenshots `2`, computed style samples `6`, rendered DOM length `40043`, rendered DOM node count `292`, raw imported files persisted `384`, and external asset fallbacks `0`.
+- Evidence result: `evidenceCaptureBaselineArtifact` exists with `artifactStatus = baseline_partial`; `captureEvidence.renderedDomPath` exists; `captureEvidence.layoutGeometryPath` exists; layout geometry evidence count `1`, layout geometry region count `3`, section evidence count `2`, navigation evidence count `1`, and navigation item count `6`.
+- Materialization diagnostics persisted in `importDiagnosticCodes`: `RENDERED_DOM_HTML_BASELINE_INPUT_PROVIDED`, `LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED`, `LAYOUT_GEOMETRY_PATH_PERSISTED`, `LAYOUT_GEOMETRY_EVIDENCE_MATERIALIZED`, `SECTION_BOUNDARY_EVIDENCE_MATERIALIZED`, and `NAVIGATION_EVIDENCE_MATERIALIZED`.
+- CMS slot inference ran but persisted CMS slot count was `0` via no-op `upsertContentSlots`, preserving the no-CMS-binding boundary.
+- F12 did not run Limited Dry Run, create FirstLimitedDryRun outputs, run reconstruction, add AI, generate React/GNR8 blocks, publish, mutate CMS bindings, create migrations, or modify code/schema/importer/preview/dry-run/reconstruction/AI/publishing/worker behavior.
+- Recommended next phase: Phase 8B-12K-F13 - Evidence Capture Readiness Re-Assessment. Reassess First Limited Dry Run readiness against the new passing fresh production Evidence Capture baseline. Do not run Limited Dry Run, FirstLimitedDryRun output creation, reconstruction, AI, React/block generation, publishing, CMS binding mutation, migrations, or additional fresh imports unless separately authorized.
+
+Previous completed milestone:
 - Phase 8B-12K-F11 - Fresh Import Baseline Capture Expansion Wiring.
 - Status: COMPLETE.
 - Updated `apps/platform/gnr8/site/scoped-import-pipeline.ts`.

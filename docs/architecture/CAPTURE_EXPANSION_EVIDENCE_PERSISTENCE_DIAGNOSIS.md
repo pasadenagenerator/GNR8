@@ -164,6 +164,43 @@ Focused F11 validation passed for the fresh scoped pipeline baseline wiring, inc
 
 Recommended next phase: **Phase 8B-12K-F12 - Fresh Production Import Capture Verification Retry**.
 
+## F12 Verification Closure
+
+Phase 8B-12K-F12 ran the fresh production import verification retry for:
+
+`https://www.odv-cvijanovic.si/?gnr8_f12=20260617`
+
+Result: **PASS**.
+
+F12 created fresh `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e` with runtime `siteId = site_135623aa7648136dba36`. The worker request used the public `https` source URL, returned HTTP `200 OK` in `15048ms`, and persisted `renderedCaptureStatus = available`, `renderedDomQuality = strong`, `sourceMode = rendered_dom`, screenshots `2`, computed style samples `6`, rendered DOM length `40043`, and rendered DOM node count `292`.
+
+The F11 persistence/wiring fix is verified on the normal fresh import path:
+
+| Evidence | F12 persisted result |
+| --- | --- |
+| `evidenceCaptureBaselineArtifact` | exists |
+| artifactStatus | `baseline_partial` |
+| `captureEvidence.renderedDomPath` | exists; file exists |
+| `captureEvidence.layoutGeometryPath` | exists; file exists |
+| layout geometry evidence count | `1` |
+| layout geometry region count | `3` |
+| section evidence count | `2` |
+| navigation evidence count | `1` |
+| navigation item count | `6` |
+
+Persisted materialization diagnostics include:
+
+- `RENDERED_DOM_HTML_BASELINE_INPUT_PROVIDED`
+- `LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED`
+- `LAYOUT_GEOMETRY_PATH_PERSISTED`
+- `LAYOUT_GEOMETRY_EVIDENCE_MATERIALIZED`
+- `SECTION_BOUNDARY_EVIDENCE_MATERIALIZED`
+- `NAVIGATION_EVIDENCE_MATERIALIZED`
+
+Conclusion: the F10 root cause, **E. persistence mapping missing**, has been resolved for the normal fresh production import path. Successful rendered capture now feeds persisted rendered DOM HTML and layout geometry into the Evidence Capture baseline expansion builders, and the baseline materializes layout, section, and navigation evidence.
+
+Recommended next phase: **Phase 8B-12K-F13 - Evidence Capture Readiness Re-Assessment**.
+
 ## Validation
 
 Validation required for F10:

@@ -534,3 +534,98 @@ Recommended next phase:
 Rationale:
 
 Persistence is the smallest controlled step after the builder. It would make the deterministic output durable and reviewable without introducing API/runtime triggers, UI surface area, workers, approval execution, publishing, AI, React/block/content/design-token generation, or runtime mutation capture. API and UI work should follow only after the output has a narrow storage boundary.
+
+## Post F12 Evidence Capture Re-Assessment
+
+Phase 8B-12K-F13 re-assesses Evidence Capture and Limited Dry Run readiness after F12 proved that the normal fresh production import path can produce and persist the evidence required by the verified limited dry-run chain.
+
+Previous scores:
+
+- Conceptual Dry Run Readiness: 86/100
+- Execution Dry Run Readiness: 77/100
+
+Updated scores after F12:
+
+| Readiness Type | Score | Assessment |
+|---|---:|---|
+| Conceptual Dry Run Readiness | 90/100 | The limited Route, Navigation, and Section model boundary is already defined, built, persisted, triggered, and reviewable. F12 now adds real production-path proof that its required Evidence Capture inputs can be acquired and durably materialized on a fresh site version. Remaining uncertainty is concentrated in deliberately excluded content, block, design-token, candidate discovery, and candidate review work. |
+| Execution Dry Run Readiness | 84/100 | F12 closes the prior real-site evidence gate: the worker returned HTTP `200` in `15048ms`, rendered capture was `available` and `strong`, and persisted layout, section, and navigation evidence is non-empty. This is sufficient to retry the existing bounded Limited Dry Run chain on the fresh captured site version. It is not broad reconstruction readiness because the baseline remains partial and candidate discovery/review, content, block, design-token, AI, reconstruction, generation, and publishing execution remain absent. |
+
+Explanation:
+
+F12 moves the system back into **Limited Dry Run readiness** for the existing narrow Route, Navigation, and Section output boundary. The earlier execution risk was not a missing contract or builder; it was the lack of a fresh production site version carrying the required rendered layout, section, and navigation evidence. F12 produced that exact evidence through the intended fresh import path and persisted it on `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+
+The score increase does not broaden the allowed output. `artifactStatus = baseline_partial`, computed style sampling is bounded, and no content, block, or design-token model is ready. F13 is an audit and documentation phase only and does not run Limited Dry Run or create any output.
+
+### Evidence Capture Readiness Matrix
+
+| Capability | Status | F12 Evidence / Remaining Gap |
+|---|---|---|
+| rendered capture | READY | `renderedCaptureStatus = available`, `renderedDomQuality = strong`, and `sourceMode = rendered_dom`. |
+| screenshots | READY | Two persisted screenshot refs are available for the bounded capture. |
+| computed styles | PARTIAL | Six computed style samples exist, but this is bounded structural sampling rather than broad style or token coverage. |
+| rendered DOM | READY | Persisted rendered DOM exists with `292` nodes and `captureEvidence.renderedDomPath`. |
+| layout geometry | READY | `captureEvidence.layoutGeometryPath` exists; one evidence record contains three layout regions, satisfying the limited chain. Broader element and breakpoint geometry remains out of scope. |
+| section evidence | READY | Two persisted section evidence records satisfy the limited Section Model input. |
+| navigation evidence | READY | One persisted navigation evidence record contains six items, satisfying the limited Navigation Model input. |
+| baseline persistence | PARTIAL | The baseline artifact and required refs/evidence persist successfully, but `artifactStatus = baseline_partial` and coverage remains below reconstruction grade. |
+| worker readiness | READY | Worker health returned HTTP `200`; capture returned HTTP `200` with successful browser, navigation, DOM, screenshot, and style diagnostics. |
+| source URL handling | READY | The fresh import sent the public `https` target URL to the worker; no platform-local `file://` path was used. |
+| timeout readiness | READY | The effective client timeout was `30000ms`; the successful worker response arrived in `15048ms`. |
+
+### Model Feasibility Matrix
+
+| Target Model | Feasibility | Rationale |
+|---|---|---|
+| route model | feasible | The fresh site version has a public source URL plus persisted rendered, layout, section, and navigation evidence for deterministic route-scoped modeling. |
+| navigation model | feasible | Persisted navigation evidence contains six ordered items and satisfies the existing limited builder input. |
+| section model | feasible | Persisted layout geometry and two section evidence records provide the bounded section input required by the existing limited builder. |
+| content model | risky | Rendered DOM and section context exist, but reviewed content boundaries and candidate discovery/review execution do not. Content generation remains excluded. |
+| block model | not_ready | No executed candidate discovery, reviewed reconstruction intent, block/content mapping, or block generation boundary exists. |
+| design token model | not_ready | Six style samples do not provide token candidate contracts, broad usage counts, semantic roles, loaded-font confidence, or layout-context-aware extraction. |
+
+### Remaining Blockers
+
+- Content model feasibility remains risky.
+- Block model is not ready.
+- Design token model is not ready.
+- Candidate discovery execution is missing.
+- Candidate review execution is missing.
+- Limited Dry Run has not yet run on the fresh captured `siteVersionId = 09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- No AI, reconstruction, React/block generation, content/design-token generation, or publishing execution exists or is authorized by this re-assessment.
+
+### Next Phase Recommendation
+
+Recommended next phase:
+
+- **Phase 8B-12L - Limited Dry Run Real-Site Retry On Fresh Captured SiteVersion**
+
+Rationale:
+
+F12 produced the exact persisted evidence required by the verified Limited Dry Run chain: layout geometry, section evidence, and navigation evidence. The next safe step is therefore one bounded retry against the fresh captured site version, using the existing limited Route, Navigation, and Section boundary. F13 itself stops before that execution and creates no FirstLimitedDryRun output.
+
+## Post 8B-12L Limited Dry Run Re-Assessment
+
+Phase 8B-12M re-assesses readiness after 8B-12L successfully ran the existing bounded chain on the first fresh real-site Evidence Capture result.
+
+Previous F13 scores:
+
+- Conceptual Dry Run Readiness: 90/100
+- Execution Dry Run Readiness: 84/100
+
+Updated scores after 8B-12L:
+
+| Readiness Type | Score | Assessment |
+|---|---:|---|
+| Conceptual Dry Run Readiness | 92/100 | Higher because the complete bounded lifecycle is now demonstrated on real persisted evidence: package-contract entry, deterministic build, validation, persistence, readback, and read-only projection. The increase is modest because only one simple site has passed and candidate discovery/review, durable ready-package semantics, runtime mutation evidence, and broader model families remain absent. |
+| Execution Dry Run Readiness | 88/100 | Higher because the existing chain produced and persisted a valid real-site output with Route/Navigation/Section counts `1 / 1 / 2`, zero limitations/blockers, valid readback, and a loaded read-only projection. It remains below broad readiness because the result is a single-site static sample, the baseline is partial, the package was transient and blocked, and no candidate, reconstruction, generation, mutation, or publishing execution exists. |
+
+Explanation:
+
+The conceptual score rises by two points because 8B-12L confirms that the designed boundaries compose correctly with real persisted evidence; it does not introduce a new concept or broaden the model contract. The execution score rises by four points because the former real-site execution uncertainty is now closed for one bounded sample, including persistence and surface readback. Neither score reaches broad-readiness territory: a second simple real-site result is needed to reduce overfitting risk, while dynamic-site and reconstruction capability remain explicitly unproven.
+
+Recommended next phase:
+
+- **Phase 8B-12N - Second Real-Site Limited Dry Run Validation**
+
+Run the unchanged bounded chain on one additional simple public real site in a separately authorized phase. This is lower risk and more informative than implementing candidate discovery, candidate review, package formalization, or runtime mutation capture immediately. It tests portability before new behavior is built.
