@@ -281,5 +281,40 @@ No Candidate Review persistence, UI, execution, AI, reconstruction, generation,
 publishing, schema, worker, Candidate Discovery behavior, Evidence Capture
 behavior, or Limited Dry Run behavior was added or changed.
 
-The recommended next phase is **Phase 8D-2 - Candidate Review Persistence
-Boundary Design**.
+Phase 8D-2 now defines the persistence design in
+`CANDIDATE_REVIEW_PERSISTENCE_BOUNDARY.md`. It recommends a dedicated
+`candidate_review_package` artifact boundary as a sibling to Candidate
+Discovery artifacts in the existing site-version provenance container.
+
+Validated packages persist as append-only immutable snapshots with complete
+event history and a latest pointer. Exact semantic retries reuse the existing
+artifact; a changed valid event history appends; equal latest decisions with
+different history still append; stale or rewritten history is rejected.
+Discovery artifacts remain unchanged.
+
+Provider approval patterns contribute stable identity, scoped lineage,
+attribution, trusted timestamps, idempotent insert, and fail-closed audit
+practices. Their provider/execution scope, mutable approval transitions, DB
+tables, and lifecycle vocabulary are not the Candidate Review source of truth.
+
+Phase 8D-2 is documentation and architecture only. It adds no persistence,
+provenance field, schema, UI, review execution, reconstruction, AI, publishing,
+worker, Candidate Discovery, Evidence Capture, or Limited Dry Run behavior.
+
+Phase 8D-3 now implements the dedicated persistence boundary in
+`apps/platform/gnr8/architecture/candidate-review-persistence.ts`. Validated
+`candidate_review_package` snapshots persist under the existing site-version
+provenance container with append-only history and a latest pointer. Exact
+semantic retries reuse the latest artifact; changed valid history appends; and
+omitted, rewritten, reordered, stale, or branching history fails closed.
+
+The persistence helper verifies the referenced persisted Candidate Discovery
+artifact, exact site-version and dry-run lineage, canonical review-package
+identity, and candidate membership before write. It preserves package, event,
+validation, attribution, timestamp, count, contract-version, and diagnostic
+metadata. It adds no review UI or execution and does not change Candidate
+Discovery, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing,
+schema, migrations, or workers.
+
+The recommended next phase is **Phase 8D-4 - Candidate Review Read-Only
+Surface Design**.

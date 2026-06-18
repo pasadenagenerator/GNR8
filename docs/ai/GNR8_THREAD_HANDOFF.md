@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-1 Candidate Review Contract is complete.
+- 8D-3 Candidate Review Persistence Implementation is complete.
 
 Current Phase:
-- Phase 8D-1 Candidate Review Contract is complete.
+- Phase 8D-3 Candidate Review Persistence Implementation is complete.
 
 Next Phase:
-- Phase 8D-2 Candidate Review Persistence Boundary Design only; no persistence implementation or UI yet.
+- Phase 8D-4 Candidate Review Read-Only Surface Design only; no review UI implementation or review execution yet.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,33 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-3 - Candidate Review Persistence Implementation.
+- Status: COMPLETE / PERSISTENCE ONLY.
+- Canonical implementation: `apps/platform/gnr8/architecture/candidate-review-persistence.ts`; focused tests: `candidate-review-persistence.test.ts`.
+- Artifact storage: `candidate_review_package` records append to `candidateReviewPackageArtifacts` under the existing site-version import-provenance boundary; `latestCandidateReviewPackageArtifact` is the authoritative latest pointer.
+- Helpers: `persistCandidateReviewPackage(...)`, `loadLatestCandidateReviewPackage(...)`, and `loadCandidateReviewPackageById(...)`.
+- Validation before persist: package contract and recursive forbidden-field validation; canonical package identity; exact persisted Candidate Discovery artifact, site-version, and dry-run lineage; reviewed candidate membership; preserved validation and package/event diagnostics.
+- Idempotency and history: exact semantic retry reuses the latest artifact despite retry-only package `createdAt`; valid new immutable history appends; omitted, rewritten, reordered, non-extending, stale-supersession, and branching histories fail without writing.
+- Metadata: artifact/package/Discovery/site-version/dry-run IDs, reviewed decision counts, contract version, package creation time, persistence time, validation, and diagnostics are retained.
+- No review UI or execution, Candidate Discovery behavior/persistence/UI, Evidence Capture, Limited Dry Run, reconstruction, generated output, AI, publishing, schema, migration, or worker behavior changed.
+- Recommended next phase: Phase 8D-4 - Candidate Review Read-Only Surface Design.
+
+Previous completed milestone:
+- Phase 8D-2 - Candidate Review Persistence Boundary Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Storage recommendation: dedicated Candidate Review artifact boundary in the existing site-version provenance container, separate from and without mutating Candidate Discovery artifacts; no dedicated table or hybrid dual write yet.
+- Canonical artifact kind: `candidate_review_package`.
+- Artifact strategy: append-only immutable full-package snapshots, complete immutable review-event history, and a latest pointer. `reviewPackageId` identifies the logical package; `artifactId` identifies one persisted snapshot.
+- Required metadata: review package and Discovery artifact IDs, site-version/dry-run lineage, reviewed/approved/rejected/deferred counts, package creation time, persistence time, and contract version.
+- Idempotency: exact semantic retries reuse the current artifact; new valid event history appends; equal latest decisions with different history append; retry-only package timestamp variation reuses; contract-version changes append; stale, branching, omitted, or rewritten history is rejected.
+- Audit guarantees: immutable events and package snapshots, preserved supersession history, stable reviewer attribution, event/package/persistence timestamp lineage, reproducible latest decisions/counts, source lineage, and explicit concurrency conflicts.
+- Provider approval reconciliation: identity, attribution, trusted timestamps, scoped reads, idempotency, insert conflict handling, and fail-closed diagnostics may inform future shared infrastructure. Provider tables, mutable state transitions, execution authority, and lifecycle vocabulary are not reused as Candidate Review truth.
+- Relationships remain non-executable: Candidate Discovery -> Review Package without Discovery mutation; Review Package -> future Reconstruction Package / Structure Planning / governed AI Reconstruction only through later contracts and gates.
+- No persistence, provenance field, schema, migration, UI, review execution, Candidate Review contract change, Candidate Discovery behavior/persistence/UI, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing, or worker behavior changed.
+- Detailed design: `docs/architecture/CANDIDATE_REVIEW_PERSISTENCE_BOUNDARY.md`.
+- Phase 8D-3 consumed this design without changing Candidate Discovery persistence or adding a schema boundary.
+
+Previous completed milestone:
 - Phase 8D-1 - Candidate Review Contract.
 - Status: COMPLETE / CONTRACT ONLY.
 - Candidate Review is human governance, approval, auditability, and reconstruction preparation. It is not reconstruction, editing, generation, AI, or publishing.
@@ -39,7 +66,7 @@ Latest completed milestone:
 - Audit model: readonly immutable events, exact artifact-instance identity, explicit supersession, attributed and deterministic derived latest decisions.
 - Validation: required lineage, package/event consistency, supersession graph, exact latest-decision projection, counts, and recursive forbidden generated/execution fields.
 - Approval permits future packaging or planning consideration only; it does not execute reconstruction.
-- Recommended next phase: Phase 8D-2 - Candidate Review Persistence Boundary Design.
+- Phase 8D-2 consumed this contract without changing it.
 
 Previous completed milestone:
 - Phase 8C-11 - Post-Discovery Boundary Reassessment.

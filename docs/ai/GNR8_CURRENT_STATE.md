@@ -309,8 +309,15 @@ Phase 8D-0 changed documentation only. It added no Candidate Review implementati
 Phase 8D-1 - Candidate Review Contract is COMPLETE. `apps/platform/gnr8/architecture/candidate-review-contract.ts` defines readonly immutable `CandidateReviewEvent` records, `CandidateReviewPackage`, `CandidateReviewLatestDecision`, and validation results. Decisions are exactly `approved`, `rejected`, and `deferred`; unreviewed remains the absence of an event.
 Latest decisions are derived per `(candidateDiscoveryArtifactId, candidateId)`: valid explicit supersession determines chain heads, with `decidedAt` and then `reviewEventId` providing deterministic fallback ordering. Package validation checks required lineage, package/event consistency, supersession integrity, exact derived latest decisions, counts, and recursively forbidden generated, reconstruction, execution, and publishing fields. The empty-package helper creates a valid zero-count contract package.
 Approval permits only future packaging or planning consideration and creates no execution authority or output. No persistence, UI, review execution, Candidate Discovery behavior/persistence/UI, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing, schema, migration, or worker behavior was added or changed.
-Current Phase: Phase 8D-1 - Candidate Review Contract is complete.
-Next recommended phase: Phase 8D-2 - Candidate Review Persistence Boundary Design.
+Phase 8D-2 - Candidate Review Persistence Boundary Design is COMPLETE. `docs/architecture/CANDIDATE_REVIEW_PERSISTENCE_BOUNDARY.md` recommends a dedicated Candidate Review artifact boundary: immutable `candidate_review_package` snapshots are stored in a review-owned sibling collection in the existing site-version provenance container, with an append-only history and latest pointer. Candidate Discovery artifacts are referenced but never mutated.
+The artifact metadata includes `reviewPackageId`, `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, reviewed/approved/rejected/deferred counts, `createdAt`, `persistedAt`, and `contractVersion`. Exact semantic retries reuse the latest artifact; new event history appends and advances the pointer; equal latest decisions with different history still append; rewritten history, stale supersession, and competing heads fail closed.
+The design preserves immutable review events and package snapshots, explicit supersession, reviewer attribution, event/package/persistence timestamps, exact Discovery lineage, reproducible latest decisions, and conflict visibility. Provider approval patterns contribute identity, attribution, timestamps, scoped reads, idempotency, and fail-closed diagnostics, but their mutable transitions, DB tables, execution authority, and lifecycle vocabulary are not reused as Candidate Review persistence.
+Phase 8D-2 changed documentation only. It added no persistence, provenance field, UI, review execution, schema, migration, worker, Candidate Discovery behavior/persistence/UI, Candidate Review contract change, Evidence Capture, Limited Dry Run, reconstruction, AI, or publishing behavior.
+Phase 8D-3 - Candidate Review Persistence Implementation is COMPLETE. `apps/platform/gnr8/architecture/candidate-review-persistence.ts` persists validated `candidate_review_package` snapshots in `candidateReviewPackageArtifacts` under the existing site-version import-provenance boundary and maintains `latestCandidateReviewPackageArtifact`. It exposes persist, latest-load, and by-ID-load helpers and returns cloned full artifact records on reads.
+Before write, the helper runs `validateCandidateReviewPackage(...)`, rejects forbidden generated/execution/publishing content, validates canonical package identity and exact site-version/dry-run/Discovery-artifact lineage, confirms every reviewed candidate exists in the persisted Discovery artifact, and preserves validation plus package/event diagnostics. Exact semantic retries reuse the latest artifact; changed valid event history appends and advances the pointer; omitted, rewritten, reordered, non-extending, stale, or branching history fails explicitly.
+Phase 8D-3 added no UI, review execution, Candidate Discovery behavior/persistence/UI, Evidence Capture, Limited Dry Run, reconstruction, generated output, AI, publishing, schema, migration, or worker behavior.
+Current Phase: Phase 8D-3 - Candidate Review Persistence Implementation is complete.
+Next recommended phase: Phase 8D-4 - Candidate Review Read-Only Surface Design.
 
 ## Current Importer Architecture
 
@@ -590,10 +597,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-1 - Candidate Review Contract is complete.
+- Phase 8D-3 - Candidate Review Persistence Implementation is complete.
 
 Next Phase:
-- Phase 8D-2 - Candidate Review Persistence Boundary Design.
+- Phase 8D-4 - Candidate Review Read-Only Surface Design.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
