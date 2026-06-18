@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-17
+2026-06-18
 
 ## Migration Platform MVP Buildout
 
@@ -256,8 +256,22 @@ Phase 8B-12M updates conceptual readiness from `90/100` to `92/100` and executio
 Phase 8B-12N - Second Real-Site Limited Dry Run Validation is COMPLETE with PASS classification. ViroiDoc was selected from existing production record `e9257245-0256-4291-9989-66a33ee6741e` because it is a public research-project presentation site with visible navigation and no login or ecommerce gate. Its old capture lacked expansion evidence, so the already proven production path created fresh `siteVersionId = e26b0754-988b-45b9-9e24-8e213179b6cf` with rendered capture available and persisted rendered DOM, layout geometry `1` with `4` regions, section evidence `3`, and navigation evidence `1` with `29` items.
 Phase 8B-12N used the existing metadata-only package helper, First Limited Dry Run builder/validator, persistence/readback, and read-only projection only. Authoritative latest artifact `first_limited_dry_run_output_f913707d4cfeda4a1d2ab8bdc4a054fc` has `outputStatus = valid`, Route/Navigation/Section counts `1 / 1 / 3`, limitations/blockers `18 / 0`, no validation errors or warnings, exact semantic readback, and a present/valid projection with route, navigation, and section labels visible and no controls.
 Phase 8B-12N proves the unchanged bounded chain works on two distinct public real sites. It does not prove reconstruction-grade evidence or authorize candidate discovery/review, package formalization, runtime mutation capture, reconstruction, AI, React/GNR8 generation, CMS binding, publishing, migrations, or new behavior.
-Current Phase: Phase 8B-12N - Second Real-Site Limited Dry Run Validation is complete.
-Next recommended major phase: Phase 8B-12O - Cross-Site Evidence and Model Quality Re-Assessment. Audit the two passing samples, especially ViroiDoc's non-blocking limitations and broad navigation extraction, before Candidate Discovery design or implementation.
+Phase 8C-0 - Candidate Discovery Foundation Design is COMPLETE.
+Phase 8C-0 creates `docs/architecture/CANDIDATE_DISCOVERY_FOUNDATION.md` and defines Candidate Discovery as the deterministic, non-executable interpretation layer from a valid `FirstLimitedDryRunOutput` plus its existing Evidence Capture lineage into evidence-backed candidates for future human review.
+Phase 8C-0 proposes `CandidateDiscoveryResult`, `Candidate`, `CandidateEvidenceRef`, `CandidateLimitation`, `CandidateConfidence`, and `CandidateType`; defines allowed inputs, eligibility, confidence, traceability, limitation propagation, deterministic identity/order rules, and the Candidate Discovery -> Candidate Review -> Reconstruction Planning boundary.
+Phase 8C-0 considered later specialized families, but Phase 8C-1 explicitly defers them. The canonical initial set is route, navigation, and section only because those map directly to the three validated `FirstLimitedDryRunOutput` model families without new semantic inference.
+Phase 8C-0 refines the older Phase 7F-12 metadata-only candidate discovery envelope rather than creating a parallel source of truth. No contract code, candidate execution, candidate review execution, reconstruction planning/execution, AI, React/block generation, CMS binding, publishing artifact, persistence behavior, database schema, migration, or importer/Evidence Capture/worker/preview/Limited Dry Run behavior was created or changed.
+The next safe phase is Phase 8C-1 - Candidate Discovery Contract, limited to formal TypeScript shapes and validation rules with no discovery execution or persistence.
+Phase 8C-1 - Candidate Discovery Contract is COMPLETE. The canonical contract is `apps/platform/gnr8/architecture/candidate-discovery-contract.ts`, with `CandidateDiscoveryResult`, `Candidate`, `CandidateEvidenceRef`, `CandidateLimitation`, `CandidateConfidence`, `CandidateType`, `CandidateStatus`, and `CandidateDiscoveryValidationResult`.
+Initial candidate types are limited to `route`, `navigation`, and `section`; candidate statuses are limited to `discovered`, `valid`, `invalid`, and `blocked`. Validation requires deterministic identifiers, Evidence Capture refs and Limited Dry Run refs, verifies count/type summaries, and recursively rejects generated, reconstruction, and publishing fields. The empty builder copies IDs and creates no candidates.
+No discovery or review execution, candidate generation, reconstruction, AI, React/block generation, CMS binding, persistence behavior, publishing behavior, schema change, or migration was added.
+Phase 8C-2 - Candidate Discovery Builder Design is COMPLETE. `docs/architecture/CANDIDATE_DISCOVERY_BUILDER_DESIGN.md` defines exact one-to-one mapping from valid Limited Dry Run route, navigation, and section models into the existing `CandidateDiscoveryResult` contract.
+Phase 8C-2 defines readable source-derived candidate IDs with deterministic escaping, direct Evidence Capture and Limited Dry Run refs, evidence-quality confidence assignment, blocker suppression, lossless dry-run and Evidence Capture limitation propagation, route/type ordering, result identity and assembly, type counts in deterministic diagnostics, and an illustrative one-route, one-navigation, two-section result.
+Phase 8C-3 - Candidate Discovery Builder Implementation is COMPLETE. `apps/platform/gnr8/architecture/candidate-discovery-builder.ts` implements the pure deterministic `buildCandidateDiscoveryResult(...)` mapping for route, navigation, and generic section candidates only.
+Phase 8C-3 validates the Limited Dry Run input and assembled Candidate Discovery result; preserves Evidence Capture and dry-run refs; uses stable percent-escaped source identities and canonical route/type order; derives confidence only from source evidence quality with warning caps; preserves a lossless master limitation ledger; and suppresses blockers, unresolved evidence, out-of-scope models, and duplicate identity collision sets.
+Focused contract/builder tests pass. No persistence, Candidate Review, reconstruction, AI, React/block generation, CMS binding, publishing, schema, migration, importer, Evidence Capture, worker, preview, or Limited Dry Run behavior was added or changed. Specialized hero, footer, gallery, form, content-area, and other candidate types remain deferred.
+Current Phase: Phase 8C-3 - Candidate Discovery Builder Implementation is complete.
+Next recommended major phase: Phase 8C-4 - Candidate Discovery Builder Validation On Known Fixtures.
 
 ## Current Importer Architecture
 

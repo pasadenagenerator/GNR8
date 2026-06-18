@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8B-12N Second Real-Site Limited Dry Run Validation is complete with PASS classification.
+- 8C-3 Candidate Discovery Builder Implementation is complete.
 
 Current Phase:
-- Phase 8B-12N Second Real-Site Limited Dry Run Validation is complete.
+- Phase 8C-3 Candidate Discovery Builder Implementation is complete.
 
 Next Phase:
-- Phase 8B-12O Cross-Site Evidence and Model Quality Re-Assessment.
+- Phase 8C-4 Candidate Discovery Builder Validation On Known Fixtures.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,50 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8C-3 - Candidate Discovery Builder Implementation.
+- Status: COMPLETE / PURE DETERMINISTIC BUILDER ONLY.
+- Created `apps/platform/gnr8/architecture/candidate-discovery-builder.ts` and its focused test.
+- `buildCandidateDiscoveryResult(...)` consumes explicit site/dry-run lineage, one valid `FirstLimitedDryRunOutput`, and optional supplied Evidence Capture lineage; it returns the existing `CandidateDiscoveryResult` contract without persistence or side effects.
+- Implemented only one-to-one `route`, `navigation`, and generic `section` candidates. Source region types remain diagnostics only and do not create specialized candidates.
+- IDs are stable source-derived percent-escaped identities; canonical order is route-scope order, then route, escaped navigation identity, and source section order. Duplicate identity collision sets are omitted with one deterministic blocker.
+- Confidence never exceeds the source model. Applicable warnings cap `HIGH` at `MEDIUM`; blockers or unresolved required evidence suppress candidate creation.
+- Dry-run and optional Evidence Capture limitations are retained in a lossless master ledger; candidates carry unchanged applicable ledger subsets.
+- Builder output is passed through `validateCandidateDiscoveryResult(...)`; blocked inputs return no candidates with deterministic blocker limitations and diagnostics.
+- Focused Candidate Discovery contract and builder tests pass, including mapping, determinism, ordering, confidence, limitation propagation, duplicate identities, forbidden fields, and output validation.
+- No persistence, Candidate Review, reconstruction, AI, React/block generation, CMS binding, publishing, schema, migration, importer, Evidence Capture, worker, preview, or Limited Dry Run behavior changed.
+- Recommended next phase: Phase 8C-4 - Candidate Discovery Builder Validation On Known Fixtures.
+
+Previous completed milestone:
+- Phase 8C-2 - Candidate Discovery Builder Design.
+- Status: COMPLETE / DESIGN AND DOCUMENTATION ONLY.
+- Created `docs/architecture/CANDIDATE_DISCOVERY_BUILDER_DESIGN.md` and defined the exact mapping implemented by 8C-3.
+
+Previous completed milestone:
+- Phase 8C-1 - Candidate Discovery Contract.
+- Status: COMPLETE / CONTRACT ONLY.
+- Created `apps/platform/gnr8/architecture/candidate-discovery-contract.ts` and its focused test.
+- Canonical types: `CandidateDiscoveryResult`, `Candidate`, `CandidateEvidenceRef`, `CandidateLimitation`, `CandidateConfidence`, `CandidateType`, `CandidateStatus`, and `CandidateDiscoveryValidationResult`.
+- Allowed types: `route`, `navigation`, `section`. Allowed statuses: `discovered`, `valid`, `invalid`, `blocked`.
+- Validation requires identifiers and both Evidence Capture and Limited Dry Run refs, verifies count/type summaries, and recursively rejects generated, reconstruction, and publishing fields.
+- Empty builder copies identifiers and creates `candidateCount = 0`, no types, and no candidates. It creates no executable status or output.
+- No discovery/review execution, candidate generation, reconstruction, AI, React/block generation, CMS binding, persistence, publishing, schema, migration, importer, Evidence Capture, worker, preview, or Limited Dry Run behavior changed.
+- Recommended next phase: Phase 8C-2 - Candidate Discovery Builder Design, contract/design only with no execution. Completed by the latest milestone above.
+
+Earlier completed milestone:
+- Phase 8C-0 - Candidate Discovery Foundation Design.
+- Status: COMPLETE / DESIGN ONLY.
+- Created `docs/architecture/CANDIDATE_DISCOVERY_FOUNDATION.md`.
+- Defined a candidate as a non-executable, evidence-backed proposal that an existing Limited Dry Run route, navigation structure, or section may later become a reconstruction planning unit.
+- Allowed inputs are the Evidence Capture baseline, `LayoutGeometryEvidence`, `SectionBoundaryEvidence`, `NavigationEvidence`, and one valid `FirstLimitedDryRunOutput`. AI guesses, generated content, React/blocks, preview product truth, live source reads, and unpublished runtime state are forbidden.
+- Proposed contracts: `CandidateDiscoveryResult`, `Candidate`, `CandidateEvidenceRef`, `CandidateLimitation`, `CandidateConfidence`, and `CandidateType`.
+- Phase 8C-0 considered later specialized families; Phase 8C-1 defers them and permits route, navigation, and section only.
+- Deterministic rules cover result/model eligibility, stable IDs, input ordering, confidence copied or conservatively reduced from source models, complete evidence refs, and lossless limitation propagation.
+- Review boundary: Candidate Discovery identifies; future Candidate Review decides; future Reconstruction Planning assigns approved intent. Discovery cannot approve, plan execution, reconstruct, generate, persist runtime mutations, or publish.
+- Phase 7F-12 remains the older metadata-only control-plane envelope. 8C-0 refines its missing evidence-to-candidate semantics and requires a future implementation to avoid parallel taxonomies or sources of truth.
+- No implementation, candidate/review execution, reconstruction, AI, React/block generation, CMS bindings, publishing artifacts, persistence changes, schema changes, migrations, or importer/Evidence Capture/worker/preview/Limited Dry Run behavior changes were made.
+- Recommended next phase: Phase 8C-1 - Candidate Discovery Contract, formal shapes and validation only; no discovery execution or persistence.
+
+Previous completed milestone:
 - Phase 8B-12N - Second Real-Site Limited Dry Run Validation.
 - Status: COMPLETE / PASS.
 - Selected existing site: ViroiDoc, `siteVersionId = e9257245-0256-4291-9989-66a33ee6741e`, a public research-project presentation site with visible navigation, no login gate, and no ecommerce-heavy or application-like flow.
