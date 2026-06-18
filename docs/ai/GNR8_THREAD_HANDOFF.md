@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8C-5 Candidate Discovery Real-Site Dry-Run Artifact Validation is complete.
+- 8C-7 Candidate Discovery Persistence Implementation is complete.
 
 Current Phase:
-- Phase 8C-5 Candidate Discovery Real-Site Dry-Run Artifact Validation is complete.
+- Phase 8C-7 Candidate Discovery Persistence Implementation is complete.
 
 Next Phase:
-- Phase 8C-6 Candidate Discovery Persistence Boundary Design, documentation and contract assessment only.
+- Phase 8C-8 Candidate Discovery Read-Only Surface Design.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,30 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8C-7 - Candidate Discovery Persistence Implementation.
+- Status: COMPLETE / PERSISTENCE ONLY.
+- Created `apps/platform/gnr8/architecture/candidate-discovery-persistence.ts` and its focused test.
+- `persistCandidateDiscoveryResult(...)` stores validated `candidate_discovery_result` records in the existing site-version import-provenance summary under append-only `candidateDiscoveryResultArtifacts`, and advances `latestCandidateDiscoveryResultArtifact` for changed results. No table or migration was added.
+- `loadLatestCandidateDiscoveryResult(...)` supports site-version and optional dry-run scoping. `loadCandidateDiscoveryResultById(...)` requires both site-version and artifact identity. Reads return cloned full artifact records.
+- Pre-write validation preserves complete diagnostics, rejects recursive generated/reconstruction/publishing fields, rejects mismatched lineage, and requires explicit builder and contract versions.
+- Persisted metadata includes artifact kind/ID, site-version/dry-run/discovery lineage, candidate count/types, validation status and diagnostics, limitation/blocker counts, versions, result creation time, and persistence time.
+- Equivalent latest results under the same site version, dry run, builder version, and contract version reuse the existing artifact without a write; changed results append and advance the pointer.
+- Focused Candidate Discovery contract, builder, and persistence tests pass `20 / 20`.
+- No Candidate Review, UI, reconstruction, AI, React/block generation, CMS binding, publishing artifact, schema, migration, worker job, or importer/Evidence Capture/preview/Limited Dry Run behavior was added or changed.
+- Recommended next phase: Phase 8C-8 - Candidate Discovery Read-Only Surface Design.
+
+Previous completed milestone:
+- Phase 8C-6 - Candidate Discovery Persistence Boundary Design.
+- Status: COMPLETE / DESIGN AND DOCUMENTATION ONLY.
+- Created `docs/architecture/CANDIDATE_DISCOVERY_PERSISTENCE_BOUNDARY.md` and recommended the existing site-version import-provenance artifact boundary first, with no new table.
+- Canonical future artifact kind: `candidate_discovery_result`, stored as immutable append-only records with a deterministic latest pointer.
+- Required metadata covers artifact/result lineage, candidate counts and types, valid status, limitation and blocker counts, result and persistence timestamps, and explicit builder/contract versions.
+- Future helper boundaries are `persistCandidateDiscoveryResult(...)`, `loadLatestCandidateDiscoveryResult(...)`, and `loadCandidateDiscoveryResultById(...)`.
+- Idempotency reuses the latest artifact for the same `siteVersionId + dryRunId` when canonical result semantics and versions are equivalent; changed results append and advance the latest pointer.
+- The artifact remains read-only review input. No Candidate Discovery persistence, artifact, provenance field, table, schema, migration, Candidate Review, reconstruction, AI, generated React/block, CMS binding, publishing, runtime, importer, Evidence Capture, worker, preview, or Limited Dry Run behavior was created or changed.
+- Recommended next phase: Phase 8C-7 - Candidate Discovery Persistence Implementation, limited to the existing provenance artifact boundary and focused tests.
+
+Previous completed milestone:
 - Phase 8C-5 - Candidate Discovery Real-Site Dry-Run Artifact Validation.
 - Status: COMPLETE / PASS / VALIDATION ONLY.
 - Loaded the exact ODV and ViroiDoc persisted `FirstLimitedDryRunOutput` artifacts through existing read helpers and ran `buildCandidateDiscoveryResult(...)` in memory without candidate persistence.

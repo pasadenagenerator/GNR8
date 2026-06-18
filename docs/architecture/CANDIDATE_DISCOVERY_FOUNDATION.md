@@ -253,3 +253,47 @@ Run behavior change.
 
 The recommended next phase is Phase 8C-6 - Candidate Discovery Persistence
 Boundary Design, documentation and contract assessment only.
+
+## 8C-6 Completion Boundary
+
+At the end of 8C-6,
+`CANDIDATE_DISCOVERY_PERSISTENCE_BOUNDARY.md` defines the future persistence
+purpose and recommends storing validated `CandidateDiscoveryResult` records as
+immutable `candidate_discovery_result` artifacts inside the existing
+site-version import-provenance boundary. The design uses an append-only history
+plus latest pointer, explicit envelope/builder/contract versions, validated
+lineage and metadata, semantic-result idempotency, read-only load helpers, and
+fail-closed handling for invalid, forbidden, mismatched, or failed writes.
+
+This phase adds documentation only. It creates no persistence helper, artifact,
+table, schema, migration, Candidate Review, reconstruction, AI, React/block
+generation, CMS binding, publishing behavior, or importer/Evidence
+Capture/worker/preview/Limited Dry Run behavior change.
+
+The recommended next phase is Phase 8C-7 - Candidate Discovery Persistence
+Implementation, limited to the existing provenance artifact boundary and
+focused tests.
+
+## 8C-7 Completion Boundary
+
+At the end of 8C-7, validated `CandidateDiscoveryResult` values can be persisted
+and loaded as durable `candidate_discovery_result` artifacts through the
+existing site-version import-provenance boundary. The implementation provides
+`persistCandidateDiscoveryResult(...)`,
+`loadLatestCandidateDiscoveryResult(...)`, and
+`loadCandidateDiscoveryResultById(...)`, append-only history, a latest pointer,
+complete artifact metadata, cloned readback, and semantic idempotency for the
+same site version and dry run.
+
+Validation, recursive forbidden-field checks, and exact lineage checks all run
+before persistence. Invalid or generated output is rejected with complete
+validation diagnostics. Equivalent latest results reuse their artifact without
+a write; changed results append and advance the pointer. Focused contract,
+builder, and persistence tests pass `20 / 20`.
+
+No Candidate Review, UI, reconstruction, AI, React/block generation, CMS
+binding, publishing artifact, table, schema, migration, worker job, or
+importer/Evidence Capture/preview/Limited Dry Run behavior is added or changed.
+
+The recommended next phase is Phase 8C-8 - Candidate Discovery Read-Only
+Surface Design.
