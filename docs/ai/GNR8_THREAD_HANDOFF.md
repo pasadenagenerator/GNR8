@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8C-9 Candidate Discovery Read-Only Surface Implementation is complete.
+- 8D-0 Candidate Review Foundation is complete.
 
 Current Phase:
-- Phase 8C-9 Candidate Discovery Read-Only Surface Implementation is complete.
+- Phase 8D-0 Candidate Review Foundation is complete.
 
 Next Phase:
-- Phase 8C-10 Candidate Discovery End-to-End Admin Verification.
+- Phase 8D-1 Candidate Review Contract only: immutable decision-event contract and focused validation tests; no UI or persistence yet.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,69 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-0 - Candidate Review Foundation.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Candidate Review is human governance, approval, auditability, and reconstruction preparation. It is not reconstruction, editing, generation, AI, or publishing.
+- The one minimal decision model is exactly `approved | rejected | deferred`; unreviewed is absence of a decision event, not a fourth decision.
+- Review applies to the exact Candidate Artifact Instance identified by `(candidateDiscoveryArtifactId, candidateId)`, not candidate identity alone. A later discovery artifact starts unreviewed even when a deterministic candidate ID recurs.
+- Minimum immutable lineage is `reviewDecisionId`, `candidateId`, `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, stable reviewer reference, decision, trusted timestamp, and `supersedesReviewDecisionId` when changing a decision.
+- Latest state is derived from an explicit immutable supersession chain. Superseded decisions and reviewer attribution remain auditable; stale concurrent submissions must not silently create competing latest decisions.
+- Approval permits only future Reconstruction Package or Structure Planning consideration. It does not directly trigger AI, reconstruction, workers, generation, persistence, or publishing.
+- Phase 7F-13 is compatible historical intent but obsolete as the canonical operational shape; its extra decisions, package-level attribution, and old lineage require future contract migration to the canonical 8C artifact instance.
+- No Candidate Review implementation, persistence, UI, schema, worker, Candidate Discovery behavior, Evidence Capture behavior, Limited Dry Run behavior, reconstruction, AI, generation, or publishing changed.
+- Detailed foundation: `docs/architecture/CANDIDATE_REVIEW_FOUNDATION.md`.
+- Recommended next phase: Phase 8D-1 - Candidate Review Contract, contract and focused validation tests only; no UI or persistence yet.
+
+Previous completed milestone:
+- Phase 8C-11 - Post-Discovery Boundary Reassessment.
+- Status: COMPLETE / SINGLE NEXT BOUNDARY SELECTED.
+- Recommended next boundary: **Option A - Candidate Review Foundation**.
+- Candidate Review is the direct consumer of the now-validated persisted Candidate Discovery artifacts and is the smallest boundary that turns evidence-backed observations into explicit, attributable human intent.
+- The Phase 7F-13 review contract is conceptual scaffolding, not an operational fit for the canonical 8C result. The foundation must reconcile it with `CandidateDiscoveryResult`, preserve exact discovery artifact/candidate lineage, and define actor, timestamp, decision, reason, stale-result handling, idempotency, concurrency, and durable audit history.
+- Approval in this boundary may authorize only later package/planning consideration. It must not authorize reconstruction, generation, AI, rendering, workers, or publishing.
+- Reconstruction Package Foundation is deferred until approved-candidate review state is durable. Structure Planning Foundation is deferred until approval semantics exist and the reviewed handoff order is resolved.
+- No Candidate Review behavior or persistence, reconstruction, Structure Planning, AI, publishing, schema, worker, Evidence Capture, Limited Dry Run, Candidate Discovery behavior, UI, form, button, or control changed.
+- Detailed assessment: `docs/architecture/POST_DISCOVERY_BOUNDARY_REASSESSMENT.md`.
+
+Previous completed milestone:
+- Phase 8C-10R - Candidate Discovery End-to-End Admin Verification Rerun.
+- Status: COMPLETE / PASS - PERSISTED ADMIN CHAIN VERIFIED.
+- The canonical latest loader and `CandidateDiscoverySurfaceProjection` loaded the exact requested ODV and ViroiDoc artifacts from production persistence.
+- ODV artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8` projects `4` candidates (`1 / 1 / 2` route/navigation/section), `0 / 0` limitations/blockers, valid status with no errors or warnings, and `ready` state.
+- ViroiDoc artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64` projects `5` candidates (`1 / 1 / 3`), `18 / 0` limitations/blockers, valid status with no errors or warnings, and `candidates_with_limitations`; all limitations are warnings.
+- Both projections group their section candidates under `/`, have no unscoped sections, and preserve route and navigation groups.
+- Page source contains Candidate Discovery, Route Candidates, Navigation Candidates, and Section Candidates By Route and excludes buttons, forms, inputs, textareas, selects, review, approve, reject, AI, reconstruction, and publish controls.
+- Focused Candidate Discovery tests pass `36 / 36`. `cd apps/platform && pnpm run vercel-build` passes with existing unrelated lint warnings and includes the dynamic Candidate Discovery route. `git diff --check` passes.
+- No read-only projection or display defect was found. No application code or behavior changed.
+- Detailed evidence: `docs/architecture/CANDIDATE_DISCOVERY_ADMIN_VERIFICATION.md`.
+- Recommended next phase: Phase 8C-11 - Candidate Discovery Next-Boundary Reassessment, documentation/read-only only, with no Candidate Review, AI, reconstruction, generation, publishing, trigger, schema, worker, form, button, or other control.
+
+Previous completed milestone:
+- Phase 8C-10F - Candidate Discovery Real-Target Persistence Completion.
+- Status: COMPLETE / PASS - REAL-TARGET PERSISTENCE READY.
+- Existing helpers loaded the persisted ODV and ViroiDoc `FirstLimitedDryRunOutput` records, ran and validated `buildCandidateDiscoveryResult(...)`, persisted through `persistCandidateDiscoveryResult(...)`, and reloaded through `loadLatestCandidateDiscoveryResult(...)` scoped to each dry run.
+- ODV artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8` reloads with `4` candidates (`1 / 1 / 2` route/navigation/section), zero limitations, zero blockers, and valid status with no errors or warnings.
+- ViroiDoc artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64` reloads with `5` candidates (`1 / 1 / 3`), `18` limitations, zero blockers, and valid status with no errors or warnings.
+- Both reloaded artifact IDs match the persistence refs and retain builder version `8C-3` and contract version `8C-1`. Each target advanced from zero to one Candidate Discovery artifact.
+- Recursive forbidden-field checks found no generated, reconstruction, or publishing fields. Full provenance comparisons with only Candidate Discovery history/latest fields removed confirmed no Candidate Review, AI, reconstruction, generated output, publishing, or other provenance artifact changed.
+- No wrapper, application code, schema, importer, Evidence Capture, Limited Dry Run, UI, worker, Candidate Review, AI, reconstruction, generation, or publishing behavior changed. Phase 8C-10 was not rerun.
+- Detailed evidence: `docs/architecture/CANDIDATE_DISCOVERY_ADMIN_VERIFICATION.md`.
+- Recommended next phase: Phase 8C-10R - Candidate Discovery End-to-End Admin Verification Rerun, read-only against the two persisted artifacts.
+
+Previous completed milestone:
+- Phase 8C-10 - Candidate Discovery End-to-End Admin Verification.
+- Status: COMPLETE / FAIL - REAL-TARGET PERSISTENCE PRECONDITION MISSING.
+- Read-only production verification confirmed that ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf` both exist with runtime provenance summaries.
+- Both targets contain `0` persisted `candidate_discovery_result` artifacts and no latest Candidate Discovery pointer. The canonical latest loader returns `null`; the surface projection correctly returns `unavailable`, `missing`, zero counts, and `CANDIDATE_DISCOVERY_RESULT_MISSING`.
+- The expected ODV `4` candidates and ViroiDoc `5` candidates with `18 / 0` limitations/blockers cannot be verified through the required persisted chain. Earlier in-memory validation does not satisfy this phase.
+- Focused Candidate Discovery contract, builder, persistence, projection, and page-source tests pass `31 / 31`.
+- Page source contains Candidate Discovery, Route Candidates, Navigation Candidates, and Section Candidates By Route and excludes buttons, forms, inputs, review, approve, reject, AI, reconstruction, and publish controls.
+- `cd apps/platform && pnpm run vercel-build` passes with existing unrelated lint warnings and includes the Candidate Discovery dynamic route.
+- No display defect was found. No application code, persistence, trigger, review, AI, reconstruction, publishing, schema, worker, form, button, or other control changed.
+- Detailed evidence: `docs/architecture/CANDIDATE_DISCOVERY_ADMIN_VERIFICATION.md`.
+- Recommended next phase: Phase 8C-10F - Candidate Discovery Real-Target Persistence Completion, separately authorizing deterministic persistence for only the two proven targets through existing helpers, then rerunning 8C-10.
+
+Previous completed milestone:
 - Phase 8C-9 - Candidate Discovery Read-Only Surface Implementation.
 - Status: COMPLETE / READ-ONLY ADMIN SURFACE ONLY.
 - Added `CandidateDiscoverySurfaceProjection`, which defensively parses the latest stored artifact and exposes artifact lineage, validation, candidate and confidence counts, result-level limitations/blockers, diagnostics, and safe empty/attention states.

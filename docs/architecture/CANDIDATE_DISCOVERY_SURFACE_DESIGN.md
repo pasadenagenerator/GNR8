@@ -319,3 +319,53 @@ blocker states without buttons, forms, inputs, or mutation controls.
 
 The recommended next phase is **Phase 8C-10 - Candidate Discovery End-to-End
 Admin Verification**.
+
+## Phase 8C-10 Verification Closure
+
+Phase 8C-10 is complete with a **FAIL - real-target persistence precondition
+missing** classification. Read-only production verification confirmed that the
+ODV and ViroiDoc runtime site versions exist, but both provenance summaries
+contain `0` `candidate_discovery_result` artifacts and no latest pointer.
+Consequently, `loadLatestCandidateDiscoveryResult(...)` returns `null` and
+`loadLatestCandidateDiscoverySurfaceProjection(...)` correctly returns the
+safe `missing` state with `CANDIDATE_DISCOVERY_RESULT_MISSING` for both targets.
+
+The projection and page contract remain verified: focused Candidate Discovery
+tests pass `31 / 31`; the page source contains Candidate Discovery plus Route,
+Navigation, and Section labels; no buttons, forms, inputs, review, approval,
+rejection, AI, reconstruction, or publishing controls are present; and the
+platform production build passes.
+
+The detailed evidence is recorded in
+`docs/architecture/CANDIDATE_DISCOVERY_ADMIN_VERIFICATION.md`. The recommended
+next phase is **Phase 8C-10F - Candidate Discovery Real-Target Persistence
+Completion**, limited to separately authorized deterministic persistence for
+the two proven targets and a rerun of this verification. No trigger, review,
+AI, reconstruction, publishing, schema, worker, or UI control should be added.
+
+## Phase 8C-10R Verification Rerun Closure
+
+Phase 8C-10R is complete with a **PASS - persisted admin chain verified**
+classification. The canonical latest-result and surface-projection loaders
+read the exact persisted ODV and ViroiDoc artifacts. ODV projects `4`
+candidates grouped `1 / 1 / 2` route/navigation/section with `0 / 0`
+limitations/blockers and the `ready` state. ViroiDoc projects `5` candidates
+grouped `1 / 1 / 3` with `18 / 0` limitations/blockers and the
+`candidates_with_limitations` state. Both projections are valid with no errors
+or warnings and preserve all sections under route `/` with no unscoped
+sections.
+
+Page source contains the Candidate Discovery, Route Candidates, Navigation
+Candidates, and Section Candidates By Route labels. It contains no button,
+form, input, textarea, select, review, approve, reject, AI, reconstruction, or
+publish controls. Focused tests pass `36 / 36`, and the platform production
+build passes and includes the dynamic Candidate Discovery route. No read-only
+projection or display defect was found, so no application code or behavior
+changed.
+
+Detailed evidence is recorded in
+`docs/architecture/CANDIDATE_DISCOVERY_ADMIN_VERIFICATION.md`. The recommended
+next phase is **Phase 8C-11 - Candidate Discovery Next-Boundary Reassessment**,
+documentation/read-only only, with no Candidate Review, AI, reconstruction,
+generation, publishing, trigger, schema, worker, form, button, or other
+control.
