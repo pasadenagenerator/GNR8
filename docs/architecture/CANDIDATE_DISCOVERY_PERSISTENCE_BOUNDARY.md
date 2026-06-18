@@ -264,3 +264,19 @@ importer/Evidence Capture/preview/Limited Dry Run behavior change.
 
 The recommended next phase is **Phase 8C-8 - Candidate Discovery Read-Only
 Surface Design**.
+
+## Phase 8C-8 Surface Boundary
+
+Phase 8C-8 is defined in `CANDIDATE_DISCOVERY_SURFACE_DESIGN.md`. It recommends
+a dedicated admin Candidate Discovery page that reads persisted
+`candidate_discovery_result` artifacts only and projects artifact metadata,
+validation, counts, confidence distribution, limitations, diagnostics, and
+stable route/navigation/section candidate groups.
+
+The designed surface is admin/superadmin-only and strictly read-only. It adds
+no approval/rejection, Candidate Review, reconstruction, AI, edit, publish, or
+trigger controls. Phase 8C-8 changes documentation only and does not alter the
+persistence helpers or artifact format.
+
+The recommended next phase is **Phase 8C-9 - Candidate Discovery Read-Only
+Surface Implementation**.

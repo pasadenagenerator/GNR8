@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8C-7 Candidate Discovery Persistence Implementation is complete.
+- 8C-9 Candidate Discovery Read-Only Surface Implementation is complete.
 
 Current Phase:
-- Phase 8C-7 Candidate Discovery Persistence Implementation is complete.
+- Phase 8C-9 Candidate Discovery Read-Only Surface Implementation is complete.
 
 Next Phase:
-- Phase 8C-8 Candidate Discovery Read-Only Surface Design.
+- Phase 8C-10 Candidate Discovery End-to-End Admin Verification.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,29 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8C-9 - Candidate Discovery Read-Only Surface Implementation.
+- Status: COMPLETE / READ-ONLY ADMIN SURFACE ONLY.
+- Added `CandidateDiscoverySurfaceProjection`, which defensively parses the latest stored artifact and exposes artifact lineage, validation, candidate and confidence counts, result-level limitations/blockers, diagnostics, and safe empty/attention states.
+- Added `/gnr8/admin/candidate-discovery/[siteVersionId]` behind `requireSuperadminUserIdForPage()`.
+- The page renders Overview, Candidate Summary, Candidate List, and Diagnostics; routes appear first, navigation second, and sections are grouped by first route appearance while preserving builder-relative order.
+- Missing, invalid, blocked, no-candidate, limitation, and blocker states are explicit. Invalid stored values return diagnostics without throwing or rewriting persistence.
+- No buttons, forms, inputs, review decisions, reconstruction, AI, editing, triggers, or publishing controls are present.
+- Focused projection and page-source tests pass `11 / 11`.
+- No importer, Evidence Capture, worker, preview, Limited Dry Run, Candidate Discovery builder/persistence, Candidate Review, reconstruction, AI, generation, publishing, schema, migration, or runtime behavior changed.
+- Recommended next phase: Phase 8C-10 - Candidate Discovery End-to-End Admin Verification.
+
+Previous completed milestone:
+- Phase 8C-8 - Candidate Discovery Read-Only Surface Design.
+- Status: COMPLETE / DESIGN AND DOCUMENTATION ONLY.
+- Created `docs/architecture/CANDIDATE_DISCOVERY_SURFACE_DESIGN.md` and recommended a dedicated admin Candidate Discovery page for persisted `candidate_discovery_result` artifacts.
+- Defined Overview, Candidate Summary, and Candidate List sections with artifact lineage, validation, route/navigation/section and confidence counts, evidence refs, dry-run refs, limitations, and diagnostics.
+- Defined stable route-first, navigation-second, and sections-grouped-by-route presentation while preserving builder output order.
+- Defined missing, invalid, blocked, no-candidate, limitation, and blocker states and a defensive `CandidateDiscoverySurfaceProjection` read model.
+- The surface is admin/superadmin-only and read-only, with no approval/rejection, Candidate Review, reconstruction, AI, edit, publish, or trigger controls.
+- No UI, API route, Candidate Review package, reconstruction output, generated React/block/content, CMS binding, publishing artifact, schema, migration, or importer/Evidence Capture/worker/preview/Limited Dry Run/Candidate Discovery behavior was created or changed.
+- Recommended next phase: Phase 8C-9 - Candidate Discovery Read-Only Surface Implementation.
+
+Previous completed milestone:
 - Phase 8C-7 - Candidate Discovery Persistence Implementation.
 - Status: COMPLETE / PERSISTENCE ONLY.
 - Created `apps/platform/gnr8/architecture/candidate-discovery-persistence.ts` and its focused test.

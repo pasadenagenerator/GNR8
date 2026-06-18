@@ -297,3 +297,47 @@ importer/Evidence Capture/preview/Limited Dry Run behavior is added or changed.
 
 The recommended next phase is Phase 8C-8 - Candidate Discovery Read-Only
 Surface Design.
+
+## 8C-8 Completion Boundary
+
+At the end of 8C-8, `CANDIDATE_DISCOVERY_SURFACE_DESIGN.md` defines a dedicated
+admin read-only inspection page for persisted `candidate_discovery_result`
+artifacts. The design covers artifact and validation metadata, candidate-type
+and confidence counts, limitations and diagnostics, full candidate evidence
+details, stable route/navigation/section grouping, and explicit missing,
+invalid, blocked, empty, limitation, and blocker states.
+
+The future `CandidateDiscoverySurfaceProjection` consumes persisted artifacts
+only, preserves builder order, treats the result-level limitation ledger as
+authoritative, and fails safely for malformed data. The surface has no
+approve/reject, Candidate Review, reconstruction, AI, edit, publish, or trigger
+controls.
+
+This phase adds documentation only. It creates no UI, API route, review package,
+reconstruction output, generated React/block/content, CMS binding, publishing
+artifact, schema, migration, or behavior change.
+
+The recommended next phase is Phase 8C-9 - Candidate Discovery Read-Only
+Surface Implementation.
+
+## 8C-9 Completion Boundary
+
+At the end of 8C-9, the dedicated read-only admin page is implemented at
+`/gnr8/admin/candidate-discovery/[siteVersionId]`. It uses the existing
+superadmin page guard and reads the latest persisted
+`candidate_discovery_result` without building, repairing, rewriting, or
+triggering discovery.
+
+The UI-independent `CandidateDiscoverySurfaceProjection` exposes artifact
+lineage, validation, candidate and confidence counts, result limitations,
+diagnostics, stable route/navigation/section groups, and explicit missing,
+invalid, blocked, empty, limited, and blocker states. Focused projection and
+page-source tests pass `11 / 11`.
+
+There are no review, reconstruction, AI, generation, editing, trigger, or
+publishing controls. Importer, Evidence Capture, worker, preview, Limited Dry
+Run, Candidate Discovery building and persistence, database schema, and runtime
+behavior are unchanged.
+
+The recommended next phase is Phase 8C-10 - Candidate Discovery End-to-End
+Admin Verification.
