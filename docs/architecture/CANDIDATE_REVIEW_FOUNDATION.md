@@ -355,3 +355,23 @@ reconstruction, AI, publishing, schema, migrations, or workers.
 
 The recommended next phase is **Phase 8D-6 - Candidate Review End-to-End Admin
 Verification**.
+
+## Phase 8D-9 Action Contract
+
+Phase 8D-9 adds the canonical pure Candidate Review Action contract at
+`apps/platform/gnr8/architecture/candidate-review-action-contract.ts`. The
+allowed actions are exactly `approve | reject | defer`, mapped to the existing
+`approved | rejected | deferred` decisions. One request carries stable action
+identity, authenticated `superadmin` actor context, exact Discovery candidate
+and Review Package artifact lineage, rationale, and request time.
+
+Validation fails closed on invalid actions or actor roles, incomplete or
+mismatched lineage, a missing candidate in an optionally linked Discovery
+result, a stale known package artifact, and recursively nested generated,
+execution, reconstruction, or publishing fields. Accepted creation returns one
+immutable attributed event with explicit current-head supersession; rejection
+returns no event and explanatory diagnostics. The existing package is never
+mutated or persisted by the contract helper.
+
+The recommended next phase is **Phase 8D-10 - Candidate Review Action
+Application Design**.

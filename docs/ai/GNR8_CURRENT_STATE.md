@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-18
+2026-06-19
 
 ## Migration Platform MVP Buildout
 
@@ -324,8 +324,24 @@ Phase 8D-5 - Candidate Review Read-Only Surface Implementation is COMPLETE. `app
 The projection validates the persisted review envelope and package, resolves the exact linked Candidate Discovery artifact, derives latest decisions and immutable supersession history, reports lineage/counts/staleness/diagnostics, and groups approved, rejected, deferred, and unreviewed candidates while preserving route, navigation, and sections-by-route Discovery order. Missing, empty, invalid, all-unreviewed, stale, and superseded-history states are explicit.
 The page contains Overview, Decision Summary, Latest Decisions, Event History, Candidate Context, and Diagnostics. It adds no buttons, forms, inputs, review actions, edit controls, AI controls, reconstruction controls, publishing controls, or trigger controls. Focused source/projection tests pass `10 / 10`.
 Phase 8D-5 changes no Candidate Discovery behavior/persistence/UI, Candidate Review contract or persistence behavior, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing, schema, migrations, or workers.
-Current Phase: Phase 8D-5 - Candidate Review Read-Only Surface Implementation is complete.
-Next recommended phase: Phase 8D-6 - Candidate Review End-to-End Admin Verification.
+Phase 8D-6 - Candidate Review End-to-End Admin Verification is COMPLETE with a MISSING-STATE PASS classification. Read-only production verification found no persisted `candidate_review_package` for ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` or ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`; the canonical latest loader returns `null` for both.
+Both surface projections correctly return `validation.status = unavailable`, state `missing`, zero counts/groups/history, and `CANDIDATE_REVIEW_PACKAGE_MISSING`. The page source contains Candidate Review, Overview, Decision Summary, Latest Decisions, Event History, Candidate Context, and the missing-package message, with no buttons, forms, inputs, review actions, AI, reconstruction, publishing, or trigger controls. Focused tests pass `27 / 27`; the platform production build passes with existing unrelated lint warnings; no read-only display defect was found and no application behavior changed. Present-artifact metadata, decisions, history, and grouping remain unverified until packages exist. Detailed evidence: `docs/architecture/CANDIDATE_REVIEW_ADMIN_VERIFICATION.md`.
+Phase 8D-6F - Candidate Review Real-Target Package Persistence Completion is COMPLETE. The existing Candidate Review contract and persistence helpers created and persisted valid empty packages for ODV and ViroiDoc against their exact latest Candidate Discovery artifacts. ODV reloaded as `candidate_review_package_6bc93e296baa55f876ea0d9d6ce27520`; ViroiDoc reloaded as `candidate_review_package_c20e6b0ef6647a885ad577455d219f2f`.
+Both canonical reloads have valid package/persistence validation, zero reviewed/approved/rejected/deferred counts, and empty `latestDecisions` and `reviewEvents`. No review decisions were created. Stable before/after provenance comparison confirms every non-Candidate-Review field remained unchanged, including Candidate Discovery, AI, reconstruction, publishing, generated, and execution artifact state. No code, schema, UI, helper, worker, or behavior changed. Detailed evidence: `docs/architecture/CANDIDATE_REVIEW_ADMIN_VERIFICATION.md`.
+Phase 8D-6R - Candidate Review Present-Artifact Read-Only Admin Verification is COMPLETE. The canonical latest loader returned the exact persisted ODV and ViroiDoc artifacts; both projections are `ready` and `valid`. ODV projects `4` candidates and ViroiDoc projects `5`, all unreviewed, with zero reviewed/approved/rejected/deferred counts, empty latest decisions and review history, and both `empty_review_package` and `all_candidates_unreviewed` states.
+The page render contract contains Candidate Review, Overview, Decision Summary, Latest Decisions, Event History, and Candidate Context, including the all-unreviewed and empty-review states. It contains no button, form, input, review action, AI, reconstruction, or publishing control. No projection/display defect was found and no application code changed. An unauthenticated production URL check confirmed the admin guard and reached Login; the deployed authenticated page was not visually observed because no superadmin browser session was available. Detailed evidence: `docs/architecture/CANDIDATE_REVIEW_ADMIN_VERIFICATION.md`.
+Phase 8D-7 - Post-Review Boundary Reassessment is COMPLETE. The single selected next major Review Track boundary is **Candidate Review Actions Foundation**: authenticated `approved | rejected | deferred` decision creation, append-only immutable review events, latest-decision derivation, immutable audit history, idempotency, and stale/conflicting-write handling over the existing Candidate Review contract and persistence boundary. It creates no reconstruction or planning output.
+Reconstruction Package Foundation is deferred because both proven real targets still have zero approved candidates and the Phase 7F package scaffolding does not use canonical 8D artifact-instance lineage. A package can safely exist before decisions only as abstract or non-authorizing empty/draft scaffolding, not as a meaningful operational reviewed handoff. Structure Planning Foundation is deferred because planning from unreviewed discovery would turn observation into target intent without human approval; a generic schema could be discussed, but no operational plan is safe or valuable before approved candidates and a canonical reviewed handoff exist. Detailed assessment: `docs/architecture/POST_REVIEW_BOUNDARY_REASSESSMENT.md`.
+Phase 8D-7 changed documentation only. It added no review actions, Candidate Discovery behavior/persistence/UI, Candidate Review contract/persistence/UI behavior, Evidence Capture, Limited Dry Run, reconstruction, Structure Planning, AI, publishing, schema, migration, or worker behavior.
+Phase 8D-8 - Candidate Review Actions Foundation is COMPLETE. `docs/architecture/CANDIDATE_REVIEW_ACTIONS_FOUNDATION.md` defines the exact human decision path as one authenticated superadmin action for one exact `(candidateDiscoveryArtifactId, candidateId)` instance, creating one immutable attributed `CandidateReviewEvent`, deriving latest decisions and counts, and appending one validated immutable `candidate_review_package` snapshot.
+The minimal action set is exactly `approve | reject | defer`, mapped to the existing `approved | rejected | deferred` decisions. Deferred is an explicit non-authorizing decision; unreviewed remains absence of an event. Decision changes create an event that explicitly supersedes the current head, with stale expected-package or expected-head submissions rejected and identical action retries idempotently returning the existing result.
+Single-candidate action is canonical. A future batch may only orchestrate independent single-candidate commands with per-item events, validation, idempotency, conflicts, and outcomes. Provider approvals contribute actor resolution, trusted timestamps, stable identity, scoped authorization, idempotency, conflict handling, audit reads, and fail-closed practices, but their mutable lifecycle, tables, execution authority, and domain vocabulary are not reused.
+Phase 8D-8 changed documentation only. It added no action contract code, endpoint, UI control, review event, package write, Candidate Discovery or Candidate Review behavior/persistence/UI change, Evidence Capture, Limited Dry Run, reconstruction, Structure Planning, AI, publishing, schema, migration, or worker behavior.
+Phase 8D-9 - Candidate Review Action Contract is COMPLETE. `apps/platform/gnr8/architecture/candidate-review-action-contract.ts` defines the canonical `approve | reject | defer` request, authenticated `superadmin` actor, exact candidate and package-artifact target, validation result, action result, and pure immutable event-creation helper. Actions map exactly to `approved | rejected | deferred`.
+Validation rejects invalid actions and roles, missing or mismatched package/Discovery lineage, absent linked candidates, stale known package artifact refs, mismatched current heads, and recursively nested generated, execution, reconstruction, or publishing fields. Accepted results contain one immutable event with deterministic action identity and explicit current-head supersession; rejected results contain no event and explanatory diagnostics. The existing package is never mutated or persisted.
+Phase 8D-9 added no API route, persistence mutation, UI action, Candidate Discovery behavior/persistence/UI change, Candidate Review persistence/UI change, Evidence Capture, Limited Dry Run, reconstruction, generated output, AI, publishing, schema, migration, or worker behavior.
+Current Phase: Phase 8D-9 - Candidate Review Action Contract is complete.
+Next recommended phase: Phase 8D-10 - Candidate Review Action Application Design.
 
 ## Current Importer Architecture
 
@@ -605,10 +621,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-5 - Candidate Review Read-Only Surface Implementation is complete.
+- Phase 8D-9 - Candidate Review Action Contract is complete.
 
 Next Phase:
-- Phase 8D-6 - Candidate Review End-to-End Admin Verification.
+- Phase 8D-10 - Candidate Review Action Application Design.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

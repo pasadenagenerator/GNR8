@@ -458,3 +458,49 @@ publishing, schema, migrations, or workers.
 
 The recommended next phase is **Phase 8D-6 - Candidate Review End-to-End Admin
 Verification**.
+
+## Phase 8D-6 Verification
+
+Phase 8D-6 completed the read-only production check for ODV site version
+`09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc site version
+`e26b0754-988b-45b9-9e24-8e213179b6cf`. The canonical latest package loader
+returns `null` for both targets because neither provenance summary contains a
+persisted `candidate_review_package`.
+
+The surface loader correctly returns `validation.status = unavailable`, state
+`missing`, zero counts/groups/history, and
+`CANDIDATE_REVIEW_PACKAGE_MISSING`. The page source contains Candidate Review,
+Overview, Decision Summary, Latest Decisions, Event History, Candidate Context,
+and the explicit missing-package message. It contains no form, button, input,
+textarea, select, review action, AI, reconstruction, publishing, or trigger
+control. No projection/display defect was found, and no application behavior
+changed.
+
+Detailed evidence is recorded in
+`docs/architecture/CANDIDATE_REVIEW_ADMIN_VERIFICATION.md`. The recommended next
+phase is **Phase 8D-6F - Candidate Review Real-Target Package Persistence
+Completion**, followed by a separately authorized read-only 8D-6R verification.
+
+## Phase 8D-6R Present-Artifact Verification
+
+Phase 8D-6R loaded the exact persisted ODV and ViroiDoc Candidate Review
+artifacts through the canonical latest loader and projected their linked real
+Candidate Discovery artifacts. ODV projects `4` candidates and ViroiDoc
+projects `5`; every candidate is unreviewed. Both projections are `ready` and
+`valid`, with reviewed, approved, rejected, deferred, latest-decision, review
+event, and superseded-event counts all zero. Both explicitly expose
+`empty_review_package` and `all_candidates_unreviewed`.
+
+The page render contract contains Candidate Review, Overview, Decision Summary,
+Latest Decisions, Event History, and Candidate Context, together with the
+all-unreviewed and empty-review states. It contains no button, form, input,
+textarea, select, review action, AI control, reconstruction control, or
+publishing control. No projection/display defect was found and no application
+code changed. An unauthenticated production-browser check reached the guarded
+Login page; no authenticated superadmin browser session was available, so the
+deployed authenticated page was not visually observed.
+
+Detailed evidence is recorded in
+`docs/architecture/CANDIDATE_REVIEW_ADMIN_VERIFICATION.md`. The recommended next
+phase is **Phase 8D-7 - Candidate Review Next-Boundary Reassessment**, limited
+to documentation and read-only analysis.
