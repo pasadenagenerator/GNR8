@@ -63,6 +63,12 @@ export type CandidateReviewPersistenceOptions = RuntimeStoreDbOptions & {
     siteVersionId: string;
     importProvenanceSummary: RuntimeImportProvenanceSummary;
   }) => Promise<{ affectedRows: number }>;
+  compareAndSetSiteVersionImportProvenanceSummary?: (input: {
+    siteVersionId: string;
+    importProvenanceSummary: RuntimeImportProvenanceSummary;
+    expectedImportProvenanceSummary: RuntimeImportProvenanceSummary | null;
+    expectedLatestCandidateReviewPackageArtifactId: string | null;
+  }) => Promise<{ affectedRows: number }>;
 };
 
 export class CandidateReviewPersistenceValidationError extends Error {
@@ -324,11 +330,25 @@ async function defaultSetSiteVersionImportProvenanceSummary(
   return setSiteVersionImportProvenanceSummary(input, options);
 }
 
+async function defaultCompareAndSetSiteVersionImportProvenanceSummary(
+  input: {
+    siteVersionId: string;
+    importProvenanceSummary: RuntimeImportProvenanceSummary;
+    expectedImportProvenanceSummary: RuntimeImportProvenanceSummary | null;
+    expectedLatestCandidateReviewPackageArtifactId: string | null;
+  },
+  options: RuntimeStoreDbOptions,
+): Promise<{ affectedRows: number }> {
+  const { compareAndSetSiteVersionImportProvenanceSummary } = await import("../runtime/runtime-store");
+  return compareAndSetSiteVersionImportProvenanceSummary(input, options);
+}
+
 export async function persistCandidateReviewPackage(input: {
   siteVersionId: string;
   candidateDiscoveryArtifactId: string;
   reviewPackage: CandidateReviewPackage;
   contractVersion: string;
+  expectedLatestArtifactId?: string | null;
   options?: CandidateReviewPersistenceOptions;
 }): Promise<CandidateReviewPackageArtifactReference> {
   const options = input.options ?? {};
@@ -364,6 +384,13 @@ export async function persistCandidateReviewPackage(input: {
       siteVersionId: input.siteVersionId,
       candidateDiscoveryArtifactId: input.candidateDiscoveryArtifactId,
     });
+
+  if (
+    input.expectedLatestArtifactId !== undefined &&
+    latest?.artifactId !== input.expectedLatestArtifactId
+  ) {
+    throw new CandidateReviewPersistenceConflictError(["CANDIDATE_REVIEW_PACKAGE_STALE"]);
+  }
 
   if (latest && semanticFingerprint({
     reviewPackage: latest.package,
@@ -415,7 +442,21 @@ export async function persistCandidateReviewPackage(input: {
     latestCandidateReviewPackageArtifact: artifact,
   };
 
-  const write = options.setSiteVersionImportProvenanceSummary
+  const write = input.expectedLatestArtifactId !== undefined
+    ? options.compareAndSetSiteVersionImportProvenanceSummary
+      ? await options.compareAndSetSiteVersionImportProvenanceSummary({
+          siteVersionId: input.siteVersionId,
+          importProvenanceSummary: nextSummary,
+          expectedImportProvenanceSummary: siteVersion.importProvenanceSummary ?? null,
+          expectedLatestCandidateReviewPackageArtifactId: input.expectedLatestArtifactId,
+        })
+      : await defaultCompareAndSetSiteVersionImportProvenanceSummary({
+          siteVersionId: input.siteVersionId,
+          importProvenanceSummary: nextSummary,
+          expectedImportProvenanceSummary: siteVersion.importProvenanceSummary ?? null,
+          expectedLatestCandidateReviewPackageArtifactId: input.expectedLatestArtifactId,
+        }, options)
+    : options.setSiteVersionImportProvenanceSummary
     ? await options.setSiteVersionImportProvenanceSummary({
         siteVersionId: input.siteVersionId,
         importProvenanceSummary: nextSummary,
@@ -424,6 +465,9 @@ export async function persistCandidateReviewPackage(input: {
         siteVersionId: input.siteVersionId,
         importProvenanceSummary: nextSummary,
       }, options);
+  if (write.affectedRows <= 0 && input.expectedLatestArtifactId !== undefined) {
+    throw new CandidateReviewPersistenceConflictError(["CANDIDATE_REVIEW_PACKAGE_STALE"]);
+  }
   if (write.affectedRows <= 0) {
     throw new Error(`Candidate Review persistence affected 0 rows for site version ${input.siteVersionId}`);
   }
@@ -464,5 +508,28 @@ export async function loadCandidateReviewPackageById(input: {
   if (!siteVersion) return null;
   const artifact = readArtifacts(siteVersion.importProvenanceSummary).find((candidate) =>
     candidate.siteVersionId === input.siteVersionId && candidate.artifactId === input.artifactId);
+  return artifact ? cloneJson(artifact) : null;
+}
+
+export async function loadCandidateReviewPackageByReviewEventId(input: {
+  siteVersionId: string;
+  candidateDiscoveryArtifactId: string;
+  reviewEventId: string;
+  options?: CandidateReviewPersistenceOptions;
+}): Promise<CandidateReviewPackageArtifactRecord | null> {
+  const options = input.options ?? {};
+  const siteVersion = options.getSiteVersion
+    ? await options.getSiteVersion(input.siteVersionId)
+    : await defaultGetSiteVersion(input.siteVersionId, options);
+  if (!siteVersion) return null;
+  const artifact = readArtifacts(siteVersion.importProvenanceSummary)
+    .filter((candidate) =>
+      candidate.siteVersionId === input.siteVersionId &&
+      candidate.candidateDiscoveryArtifactId === input.candidateDiscoveryArtifactId &&
+      candidate.package.reviewEvents.some((event) => event.reviewEventId === input.reviewEventId))
+    .sort((left, right) =>
+      left.package.reviewEvents.length - right.package.reviewEvents.length ||
+      left.persistedAt.localeCompare(right.persistedAt) ||
+      left.artifactId.localeCompare(right.artifactId))[0] ?? null;
   return artifact ? cloneJson(artifact) : null;
 }

@@ -340,8 +340,14 @@ Phase 8D-8 changed documentation only. It added no action contract code, endpoin
 Phase 8D-9 - Candidate Review Action Contract is COMPLETE. `apps/platform/gnr8/architecture/candidate-review-action-contract.ts` defines the canonical `approve | reject | defer` request, authenticated `superadmin` actor, exact candidate and package-artifact target, validation result, action result, and pure immutable event-creation helper. Actions map exactly to `approved | rejected | deferred`.
 Validation rejects invalid actions and roles, missing or mismatched package/Discovery lineage, absent linked candidates, stale known package artifact refs, mismatched current heads, and recursively nested generated, execution, reconstruction, or publishing fields. Accepted results contain one immutable event with deterministic action identity and explicit current-head supersession; rejected results contain no event and explanatory diagnostics. The existing package is never mutated or persisted.
 Phase 8D-9 added no API route, persistence mutation, UI action, Candidate Discovery behavior/persistence/UI change, Candidate Review persistence/UI change, Evidence Capture, Limited Dry Run, reconstruction, generated output, AI, publishing, schema, migration, or worker behavior.
-Current Phase: Phase 8D-9 - Candidate Review Action Contract is complete.
-Next recommended phase: Phase 8D-10 - Candidate Review Action Application Design.
+Phase 8D-10 - Candidate Review Action Application Design is COMPLETE. `docs/architecture/CANDIDATE_REVIEW_ACTION_APPLICATION_DESIGN.md` defines one canonical application flow: validate the exact current Candidate Review Package and linked candidate, create one immutable event, append it to unchanged history, recompute latest decisions and counts, validate one new immutable package snapshot, and atomically compare, append, and advance the latest pointer.
+The expected package artifact ID is the package-wide optimistic concurrency token. Stale packages and supersession mismatches fail explicitly without automatic rebasing; successful actions create strict one-event snapshot extensions. Deterministic `actionId`/event identity makes exact retries return the original event and resulting artifact while conflicting reuse is rejected. Actor, decision, rationale, timestamps, prior and superseded decisions, source/base/result lineage, and derived state remain reconstructable.
+Phase 8D-10 changed documentation only. It added no application handler, endpoint, UI action, event or package write, Candidate Discovery or Candidate Review contract/persistence/UI change, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing, schema, migration, or worker behavior.
+Phase 8D-11 - Candidate Review Action Application Implementation is COMPLETE. `applyCandidateReviewAction(...)` validates one request against the authoritative latest Review Package artifact and linked Discovery result, derives the current candidate head, creates one immutable attributed event, appends it to unchanged history, recomputes latest decisions and counts, validates the complete new package, and persists one strict immutable snapshot.
+Concurrency is package-wide and fail-closed: the request artifact must equal the supplied authoritative latest artifact, and persistence performs an atomic artifact-ID compare-and-set when appending and advancing the latest pointer. Stale writes fail without automatic rebasing. Exact `actionId` replay returns the original event, package snapshot, and artifact reference from immutable history; semantically conflicting reuse is rejected.
+Focused Candidate Review action, contract, and persistence tests pass `29 / 29`. Phase 8D-11 added no UI control, API route, page action, reconstruction, AI, publishing, schema, migration, or worker behavior.
+Current Phase: Phase 8D-11 - Candidate Review Action Application Implementation is complete.
+Next recommended phase: Phase 8D-12 - Candidate Review Action UI Design, documentation and architecture only.
 
 ## Current Importer Architecture
 
@@ -621,10 +627,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-9 - Candidate Review Action Contract is complete.
+- Phase 8D-11 - Candidate Review Action Application Implementation is complete.
 
 Next Phase:
-- Phase 8D-10 - Candidate Review Action Application Design.
+- Phase 8D-12 - Candidate Review Action UI Design, documentation and architecture only.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

@@ -3365,6 +3365,36 @@ export async function setSiteVersionImportProvenanceSummary(input: {
   }, options);
 }
 
+export async function compareAndSetSiteVersionImportProvenanceSummary(input: {
+  siteVersionId: string;
+  importProvenanceSummary: RuntimeImportProvenanceSummary;
+  expectedImportProvenanceSummary: RuntimeImportProvenanceSummary | null;
+  expectedLatestCandidateReviewPackageArtifactId: string | null;
+}, options: RuntimeStoreDbOptions = {}): Promise<{ affectedRows: number }> {
+  return withTx(async (client) => {
+    const updated = await client.query<{ id: string }>(
+      `
+      update public.gnr8_runtime_site_versions
+      set import_provenance_summary = $2::jsonb, updated_at = now()
+      where id = $1::uuid
+        and (import_provenance_summary #>> '{latestCandidateReviewPackageArtifact,artifactId}')
+          is not distinct from $3::text
+        and import_provenance_summary is not distinct from $4::jsonb
+      returning id::text as id
+      `,
+      [
+        input.siteVersionId,
+        JSON.stringify(input.importProvenanceSummary),
+        input.expectedLatestCandidateReviewPackageArtifactId,
+        input.expectedImportProvenanceSummary === null
+          ? null
+          : JSON.stringify(input.expectedImportProvenanceSummary),
+      ],
+    );
+    return { affectedRows: updated.rowCount ?? 0 };
+  }, options);
+}
+
 export async function materializePageMigrationGovernanceForSiteVersion(input: {
   siteVersionId: string;
   governanceByPageId: Record<string, PageMigrationGovernanceSnapshot>;

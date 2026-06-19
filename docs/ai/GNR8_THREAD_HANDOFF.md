@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-9 Candidate Review Action Contract is complete.
+- 8D-11 Candidate Review Action Application Implementation is complete.
 
 Current Phase:
-- Phase 8D-9 Candidate Review Action Contract is complete.
+- Phase 8D-11 Candidate Review Action Application Implementation is complete.
 
 Next Phase:
-- Phase 8D-10 Candidate Review Action Application Design.
+- Phase 8D-12 Candidate Review Action UI Design, documentation and architecture only.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,28 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-11 - Candidate Review Action Application Implementation.
+- Status: COMPLETE / BACKEND APPLICATION ONLY.
+- `applyCandidateReviewAction(...)` validates the request, authoritative latest package artifact, linked Discovery lineage, actor, candidate, and current head; creates one immutable event; recomputes the full latest projection and counts; validates the new package; and persists one strict immutable snapshot.
+- Package-wide optimistic concurrency uses the request artifact as the base token and an atomic artifact-ID compare-and-set for append plus latest-pointer advancement. Stale preflight and concurrent commits fail without automatic rebase.
+- Exact deterministic-action replay returns the original event, resulting package, and artifact reference without a write. Different request semantics or base artifact reuse of the same `actionId` fails as an idempotency conflict.
+- Focused action application, action contract, and persistence tests pass `29 / 29`.
+- No UI control, API route, page action, Candidate Discovery behavior, reconstruction, AI, publishing, schema, migration, or worker was added.
+- Canonical implementation/design: `apps/platform/gnr8/architecture/candidate-review-action-application.ts` and `docs/architecture/CANDIDATE_REVIEW_ACTION_APPLICATION_DESIGN.md`.
+- Recommended next phase: Phase 8D-12 - Candidate Review Action UI Design, documentation and architecture only.
+
+Previous completed milestone:
+- Phase 8D-10 - Candidate Review Action Application Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Canonical flow: exact candidate and action request -> authentication/authorization/lineage/freshness validation -> one immutable review event -> deterministic latest-decision and count derivation -> one validated immutable package snapshot -> compare-and-set latest pointer update.
+- Package strategy: never mutate an existing package artifact. Preserve its complete history and append exactly one new event in a new immutable full-package snapshot with the same logical package and Discovery lineage.
+- Concurrency: the expected package artifact is the package-wide optimistic concurrency token, and the per-candidate supersession target is derived server-side from that exact package. Stale submissions fail without automatic rebasing; append plus pointer advancement is one logical commit.
+- Idempotency and audit: deterministic action/event identity returns the original event and resulting artifact for exact replay, rejects conflicting reuse, and preserves actor, decision, rationale, timestamps, prior/superseded decisions, source/base/result lineage, and reproducible derived state.
+- No application handler, endpoint, UI action, review event/package write, Candidate Discovery or Candidate Review contract/persistence/UI change, Evidence Capture, Limited Dry Run, reconstruction, AI, publishing, schema, migration, or worker behavior changed.
+- Canonical design: `docs/architecture/CANDIDATE_REVIEW_ACTION_APPLICATION_DESIGN.md`.
+- Recommended next phase: Phase 8D-11 - Candidate Review Action Application Implementation, backend boundary and focused tests only.
+
+Previous completed milestone:
 - Phase 8D-9 - Candidate Review Action Contract.
 - Status: COMPLETE / CONTRACT ONLY.
 - The exact action set is `approve | reject | defer`, mapped to existing `approved | rejected | deferred` decisions. Deferred is an explicit non-authorizing decision; unreviewed is absence of an event.
