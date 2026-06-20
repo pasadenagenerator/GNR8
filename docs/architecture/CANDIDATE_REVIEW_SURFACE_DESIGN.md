@@ -266,6 +266,24 @@ Page load must not append a review event or package, advance a pointer, validate
 and rewrite persistence, repair history, mutate Candidate Discovery, dispatch a
 worker, invoke AI, reconstruct, generate, or publish.
 
+## Phase 8D-12 Action UI Extension Design
+
+Phase 8D-12 selects this existing Candidate Review admin page as the location
+for future single-candidate Approve, Reject, and Defer controls. The current
+Phase 8D-5 surface implementation and its projection remain unchanged and
+read-only in 8D-12; the future action panel is a separate mutation boundary
+that consumes the exact artifact and candidate context displayed here.
+
+Only a valid authoritative latest snapshot may become actionable. Historical,
+stale, missing, and invalid views remain read-only. After success, exact replay,
+or stale conflict, the page must reload through the canonical latest package
+and surface projection loaders rather than patching local decisions, groups,
+counts, or history. Full immutable history remains visible after every refresh.
+
+The complete control, payload, concurrency, idempotency, refresh, and safety
+design is canonical in `CANDIDATE_REVIEW_ACTION_UI_DESIGN.md`. No UI, API, or
+server action is implemented by this documentation update.
+
 ## Projection Shape
 
 The future implementation should introduce a UI-independent read projection:

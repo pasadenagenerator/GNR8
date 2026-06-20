@@ -263,6 +263,13 @@ silently retrying, disable assumptions based on local optimistic state, and
 refresh from the canonical latest loader after success or conflict. It must not
 insert a locally guessed event or count as authoritative.
 
+Phase 8D-12 now defines that future control boundary in
+`CANDIDATE_REVIEW_ACTION_UI_DESIGN.md`. It places single-candidate Approve,
+Reject, and Defer controls on the existing Candidate Review admin page, keeps
+reviewer rationale optional through an explicit contract-compatible fallback,
+and requires canonical latest-package refresh after success, replay, or stale
+conflict. Phase 8D-12 adds no UI or transport implementation.
+
 ## Relationship To Reconstruction
 
 ```text
@@ -322,7 +329,15 @@ page action, reconstruction, AI, publishing, schema, or worker was added.
 
 ## Recommended Next Phase
 
-Recommend exactly one next boundary: **Phase 8D-12 - Candidate Review Action UI
-Design**, documentation and architecture only. It must add no UI implementation,
-API route, page action, reconstruction, AI, publishing, schema, migration, or
+Phase 8D-12 completed the Candidate Review Action UI design. Phase 8D-13 now
+defines one same-origin superadmin Admin API route as the official initial
+transport in `CANDIDATE_REVIEW_ACTION_API_DESIGN.md`. Its adapter accepts only
+minimal untrusted intent, resolves actor, time, dry-run lineage, and
+deterministic action identity server-side, invokes this existing application
+helper, and returns metadata only.
+
+Recommend exactly one next boundary: **Phase 8D-14 - Candidate Review Action
+API/Server Action Implementation**, limited to the designed Admin API route,
+its adapter, and focused tests. It must not change this application helper's
+semantics or add UI, reconstruction, AI, publishing, schema, migration, or
 worker behavior.

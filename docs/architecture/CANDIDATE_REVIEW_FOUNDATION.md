@@ -375,3 +375,29 @@ mutated or persisted by the contract helper.
 
 The recommended next phase is **Phase 8D-10 - Candidate Review Action
 Application Design**.
+
+## Phase 8D-13 Action API Design
+
+Phase 8D-13 defines the official initial UI-to-application boundary in
+`docs/architecture/CANDIDATE_REVIEW_ACTION_API_DESIGN.md`: one same-origin,
+superadmin-only Admin API `POST`, not a Server Action and not both transports.
+The browser sends only site version, exact candidate and Discovery/Review
+artifact identities, action type, and optional rationale.
+
+The server resolves the authenticated actor and role, trusted request time,
+dry-run lineage, authoritative latest Review Package, exact linked Discovery
+result, current supersession head, and a deterministic server-generated action
+identity. The expected Review Package artifact remains the package-wide
+optimistic concurrency token. Stale submissions fail without automatic rebase;
+exact deterministic retries return the original immutable result.
+
+The route design invokes only the existing action contract, application helper,
+and persistence boundary, then reloads latest and returns metadata-only counts
+and artifact/event identities. It rejects unknown and forbidden actor, time,
+lineage, generated, execution, reconstruction, AI, worker, and publishing
+fields. Phase 8D-13 changes documentation only and implements no endpoint,
+Server Action, UI action, review execution, schema, or behavior.
+
+The recommended next phase is **Phase 8D-14 - Candidate Review Action
+API/Server Action Implementation**, limited to the designed Admin API route,
+its adapter, and focused tests.

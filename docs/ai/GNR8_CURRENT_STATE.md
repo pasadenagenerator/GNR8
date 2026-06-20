@@ -346,8 +346,16 @@ Phase 8D-10 changed documentation only. It added no application handler, endpoin
 Phase 8D-11 - Candidate Review Action Application Implementation is COMPLETE. `applyCandidateReviewAction(...)` validates one request against the authoritative latest Review Package artifact and linked Discovery result, derives the current candidate head, creates one immutable attributed event, appends it to unchanged history, recomputes latest decisions and counts, validates the complete new package, and persists one strict immutable snapshot.
 Concurrency is package-wide and fail-closed: the request artifact must equal the supplied authoritative latest artifact, and persistence performs an atomic artifact-ID compare-and-set when appending and advancing the latest pointer. Stale writes fail without automatic rebasing. Exact `actionId` replay returns the original event, package snapshot, and artifact reference from immutable history; semantically conflicting reuse is rejected.
 Focused Candidate Review action, contract, and persistence tests pass `29 / 29`. Phase 8D-11 added no UI control, API route, page action, reconstruction, AI, publishing, schema, migration, or worker behavior.
-Current Phase: Phase 8D-11 - Candidate Review Action Application Implementation is complete.
-Next recommended phase: Phase 8D-12 - Candidate Review Action UI Design, documentation and architecture only.
+Phase 8D-12 - Candidate Review Action UI Design is COMPLETE. `docs/architecture/CANDIDATE_REVIEW_ACTION_UI_DESIGN.md` selects the existing Candidate Review admin page for future single-candidate Approve, Reject, and Defer controls. It defines an optional reviewer rationale with an explicit non-empty contract fallback, the exact action payload and lineage target, package-artifact optimistic concurrency, exact-replay and conflicting-ID behavior, canonical post-action refresh, preserved immutable history, and fail-closed stale-package handling without automatic rebase.
+The smallest future implementation is superadmin-only, single-candidate, no batch, no tenant/customer access, and no reconstruction handoff. Phase 8D-12 changed documentation only and added no UI, API/server action, Candidate Discovery or Candidate Review behavior, action application, persistence, Evidence Capture, Limited Dry Run, reconstruction, AI, generated output, publishing, schema, migration, or worker behavior.
+Phase 8D-13 - Candidate Review Action API/Server Action Design is COMPLETE. `docs/architecture/CANDIDATE_REVIEW_ACTION_API_DESIGN.md` selects one same-origin, superadmin-only Admin API JSON POST as the initial UI-to-application boundary, rather than a Next.js Server Action or dual transport. The strict client payload contains only `siteVersionId`, `candidateId`, `actionType`, optional `rationale`, `candidateDiscoveryArtifactId`, and the package-wide CAS token `candidateReviewPackageArtifactId`; `dryRunId`, actor context, trusted time, current supersession head, latest package, and linked Discovery result are server-resolved.
+The server generates a deterministic action identity from the normalized intent, authenticated actor, and exact base artifact. First receipt uses server time; exact replay recovers the original immutable event time so the existing application helper returns the original event and artifact without another write. The design defines fail-closed validation, no stale-package auto-rebase, metadata-only success/error envelopes, the closed error-code set, same-origin/session constraints, forbidden fields, and focused future tests.
+Phase 8D-13 changed documentation only and added no API route, Server Action, UI action, Candidate Discovery or Candidate Review behavior, action application, persistence, Evidence Capture, Limited Dry Run, reconstruction, AI, generated output, publishing, schema, migration, or worker behavior.
+Phase 8D-14 - Candidate Review Action API Implementation is COMPLETE. `POST /api/gnr8/admin/candidate-review/actions` requires the existing authenticated superadmin guard, same-origin `application/json`, and an exact allowlisted intent payload. It rejects anonymous and non-superadmin access, unknown and forbidden fields, invalid actions, missing candidates, invalid lineage, stale package tokens, idempotency conflicts, validation failures, and persistence failures through the documented closed metadata-only error contract.
+The route resolves actor identity and role, trusted request time, deterministic length-delimited SHA-256 action identity, dry-run identity, exact linked Candidate Discovery artifact, and authoritative latest Candidate Review Package on the server. It invokes only `applyCandidateReviewAction(...)`, preserves deterministic exact replay, persists one immutable package through the existing compare-and-set boundary, reloads canonical latest, and returns only the action/event identity, decision, resulting package artifact ID, counts, and diagnostics.
+Focused route tests pass `12 / 12`. Phase 8D-14 adds no UI control or action, reconstruction, AI, generated output, publishing, schema, migration, tenant/customer access, or worker behavior.
+Current Phase: Phase 8D-14 - Candidate Review Action API Implementation is complete.
+Next recommended phase: Phase 8D-15 - Candidate Review Action UI Implementation.
 
 ## Current Importer Architecture
 
@@ -627,10 +635,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-11 - Candidate Review Action Application Implementation is complete.
+- Phase 8D-14 - Candidate Review Action API Implementation is complete.
 
 Next Phase:
-- Phase 8D-12 - Candidate Review Action UI Design, documentation and architecture only.
+- Phase 8D-15 - Candidate Review Action UI Implementation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

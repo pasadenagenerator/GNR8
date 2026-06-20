@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-11 Candidate Review Action Application Implementation is complete.
+- 8D-14 Candidate Review Action API Implementation is complete.
 
 Current Phase:
-- Phase 8D-11 Candidate Review Action Application Implementation is complete.
+- Phase 8D-14 Candidate Review Action API Implementation is complete.
 
 Next Phase:
-- Phase 8D-12 Candidate Review Action UI Design, documentation and architecture only.
+- Phase 8D-15 Candidate Review Action UI Implementation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,46 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-14 - Candidate Review Action API Implementation.
+- Status: COMPLETE / SERVER API ONLY.
+- Route: `POST /api/gnr8/admin/candidate-review/actions`.
+- Auth and transport: authenticated superadmin only through the existing guard; same-origin `application/json`; no tenant, customer, agency-admin, anonymous, or cross-origin access.
+- Payload: exact allowlist of site version, candidate, action type, optional rationale, Discovery artifact, and expected Review Package artifact. Unknown fields and client-controlled actor, role, time, action ID, dry run, generated, reconstruction, execution, and publishing fields fail closed.
+- Server resolution: actor identity/role, trusted time, deterministic length-delimited SHA-256 action ID, dry-run identity, linked Discovery artifact, and authoritative latest Review Package.
+- Application: existing `applyCandidateReviewAction(...)` only; immutable append, compare-and-set latest pointer, exact replay without a second write, stale/conflict rejection, and canonical latest reload.
+- Response: metadata only, including action/event identity, decision, candidate, resulting package artifact, counts, diagnostics, or the documented closed error envelope.
+- Validation: focused route tests pass `12 / 12`; platform Vercel build passes; `git diff --check` passes.
+- Boundary: no UI controls/actions, reconstruction, AI, generated output, publishing, schema, migration, tenant/customer access, or workers.
+- Canonical implementation/design: `apps/platform/app/api/gnr8/admin/candidate-review/actions/` and `docs/architecture/CANDIDATE_REVIEW_ACTION_API_DESIGN.md`.
+- Recommended next phase: Phase 8D-15 - Candidate Review Action UI Implementation.
+
+Previous completed milestone:
+- Phase 8D-13 - Candidate Review Action API/Server Action Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Boundary: one same-origin, superadmin-only Admin API JSON POST, not a Next.js Server Action and not dual transport, matching existing GNR8 admin mutation patterns.
+- Client payload: site version, candidate, action type, optional rationale, exact Discovery artifact, and expected Review Package artifact only. Actor, role, request time, action ID, dry run, current head, latest package, and linked Discovery result are server-resolved.
+- Identity: a deterministic server-generated action ID hashes the normalized intent, authenticated actor, and exact base artifact. Exact retry reuses the original trusted event time and returns the original event/artifact; semantic disagreement is an idempotency conflict.
+- Validation: strict payload and forbidden-field rejection, exact linked Discovery and latest Review Package loading, package-wide stale/CAS failure without auto-rebase, existing-helper-only application, canonical latest reload, and metadata-only response.
+- Errors: `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_ACTION_TYPE`, `MISSING_CANDIDATE`, `STALE_REVIEW_PACKAGE`, `INVALID_LINEAGE`, `VALIDATION_FAILED`, `IDEMPOTENCY_CONFLICT`, `PERSISTENCE_FAILED`, and `UNKNOWN_ERROR`.
+- Security: same-origin JSON POST, session-derived superadmin actor, trusted server time, no tenant/customer access, and no generated, execution, reconstruction, AI, worker, or publishing fields or output.
+- No API route, Server Action, UI action, Candidate Discovery or Candidate Review behavior, persistence, reconstruction, AI, publishing, schema, migration, or worker was added.
+- Canonical design: `docs/architecture/CANDIDATE_REVIEW_ACTION_API_DESIGN.md`.
+- Recommended next phase: Phase 8D-14 - Candidate Review Action API/Server Action Implementation, limited to the designed Admin API route, its adapter, and focused tests.
+
+Previous completed milestone:
+- Phase 8D-12 - Candidate Review Action UI Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- UI location: the existing Candidate Review admin page, with one action panel per exact candidate and no Candidate Discovery UI change or duplicate action page.
+- Controls: Approve, Reject, and Defer for one candidate; optional reviewer rationale is normalized by the future server boundary to `No rationale provided by reviewer.` when blank so the existing non-empty contract remains unchanged.
+- The browser payload is now narrowed by 8D-13 to action intent and exact rendered artifact identities; trusted actor/time/action identity/dry-run lineage are server-resolved.
+- Stale packages show a conflict and reload latest state without automatic rebase. Exact replay returns the original outcome; idempotency conflicts fail.
+- Success and replay reload the canonical latest package, update derived groups and decisions, and preserve full immutable history visibility.
+- First scope is superadmin-only and single-candidate, with no batch, tenant/customer access, reconstruction handoff, AI, generated output, editing, or publishing control.
+- No UI, API/server action, Candidate Discovery or Candidate Review behavior, persistence, reconstruction, AI, publishing, schema, migration, or worker was added.
+- Canonical design: `docs/architecture/CANDIDATE_REVIEW_ACTION_UI_DESIGN.md`.
+- Recommended next phase at completion: Phase 8D-13 - Candidate Review Action API/Server Action Design.
+
+Previous completed milestone:
 - Phase 8D-11 - Candidate Review Action Application Implementation.
 - Status: COMPLETE / BACKEND APPLICATION ONLY.
 - `applyCandidateReviewAction(...)` validates the request, authoritative latest package artifact, linked Discovery lineage, actor, candidate, and current head; creates one immutable event; recomputes the full latest projection and counts; validates the new package; and persists one strict immutable snapshot.
