@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const PAGE_FILE = new URL("./candidate-review/[siteVersionId]/page.tsx", import.meta.url);
+const CONTROLS_FILE = new URL("./candidate-review/[siteVersionId]/CandidateReviewActionControls.tsx", import.meta.url);
 
 test("Candidate Review page contains title, read loader, and guarded access", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
@@ -42,13 +43,29 @@ test("Candidate Review page contains required empty and attention states", async
   ]) assert.equal(source.includes(state), true, `missing ${state}`);
 });
 
-test("Candidate Review page excludes mutation controls and action prompts", async () => {
-  const source = (await readFile(PAGE_FILE, "utf8")).toLowerCase();
-  for (const tag of ["<button", "<form", "<input", "<textarea", "<select"]) {
-    assert.equal(source.includes(tag), false, `unexpected control tag ${tag}`);
+test("Candidate Review page renders single-candidate controls for reviewed and unreviewed candidates", async () => {
+  const pageSource = await readFile(PAGE_FILE, "utf8");
+  const controlsSource = await readFile(CONTROLS_FILE, "utf8");
+  assert.equal(pageSource.includes("<CandidateReviewActionControls {...props.actionTarget} candidateId={item.candidateId}"), true);
+  assert.equal(pageSource.includes("<CandidateReviewActionControls {...props.actionTarget} candidateId={props.candidate.candidateId}"), true);
+  for (const label of ["Approve", "Reject", "Defer", "Optional rationale"]) {
+    assert.equal(controlsSource.includes(label), true, `missing ${label}`);
   }
+});
+
+test("Candidate Review controls show stale feedback and reload without automatic rebase", async () => {
+  const source = await readFile(CONTROLS_FILE, "utf8");
+  assert.equal(source.includes('response.errorCode === "STALE_REVIEW_PACKAGE"'), true);
+  assert.equal(source.includes("Stale package: the latest Candidate Review package was reloaded."), true);
+  assert.equal(source.includes("router.refresh()"), true);
+  assert.equal(source.includes("auto" + "matic"), false);
+});
+
+test("Candidate Review page contains no forbidden, generated, or multi-candidate controls", async () => {
+  const source = `${await readFile(PAGE_FILE, "utf8")}\n${await readFile(CONTROLS_FILE, "utf8")}`.toLowerCase();
   for (const phrase of [
-    "approve candidate", "reject candidate", "defer candidate", "run review", "edit decision",
-    "ai control", "start reconstruction", "publish candidate", "trigger review",
-  ]) assert.equal(source.includes(phrase), false, `unexpected action text ${phrase}`);
+    "ai control", "ai action", "start reconstruction", "reconstruction control", "reconstruction handoff",
+    "publish candidate", "publishing control", "generated output", "edit candidate", "edit decision",
+    "batch action", "bulk action", "select all", "multi-candidate",
+  ]) assert.equal(source.includes(phrase), false, `unexpected forbidden UI text ${phrase}`);
 });

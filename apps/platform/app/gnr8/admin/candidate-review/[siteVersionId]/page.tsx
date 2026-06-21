@@ -11,6 +11,8 @@ import {
 import type { CandidateLimitation } from "@/gnr8/architecture/candidate-discovery-contract";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
+import { CandidateReviewActionControls } from "./CandidateReviewActionControls";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -149,7 +151,13 @@ function CandidateContext(props: { candidate: CandidateReviewSurfaceCandidateCon
   );
 }
 
-function DecisionCard(props: { item: CandidateReviewSurfaceDecision }) {
+type ActionTarget = {
+  siteVersionId: string;
+  candidateDiscoveryArtifactId: string;
+  candidateReviewPackageArtifactId: string;
+};
+
+function DecisionCard(props: { item: CandidateReviewSurfaceDecision; actionTarget: ActionTarget | null }) {
   const item = props.item;
   return (
     <article style={panelStyle}>
@@ -165,15 +173,17 @@ function DecisionCard(props: { item: CandidateReviewSurfaceDecision }) {
         <dt>event diagnostics</dt><dd style={{ margin: 0 }}><StringList values={item.diagnostics} empty="No event diagnostics." /></dd>
       </dl>
       <CandidateContext candidate={item.candidate} />
+      {props.actionTarget ? <CandidateReviewActionControls {...props.actionTarget} candidateId={item.candidateId} /> : null}
     </article>
   );
 }
 
-function CandidateCard(props: { candidate: CandidateReviewSurfaceCandidateContext }) {
+function CandidateCard(props: { candidate: CandidateReviewSurfaceCandidateContext; actionTarget: ActionTarget | null }) {
   return (
     <article style={panelStyle}>
       <h4 style={{ marginTop: 0 }}>{props.candidate.candidateId}</h4>
       <CandidateContext candidate={props.candidate} />
+      {props.actionTarget ? <CandidateReviewActionControls {...props.actionTarget} candidateId={props.candidate.candidateId} /> : null}
     </article>
   );
 }
@@ -209,6 +219,16 @@ function GroupedCandidates<T>(props: {
 }
 
 function LatestDecisions(props: { model: CandidateReviewSurfaceProjection }) {
+  const artifact = props.model.artifact;
+  const actionTarget: ActionTarget | null = (
+    props.model.state !== "ready" ||
+    !artifact?.artifactId ||
+    !artifact.candidateDiscoveryArtifactId
+  ) ? null : {
+    siteVersionId: props.model.siteVersionId,
+    candidateDiscoveryArtifactId: artifact.candidateDiscoveryArtifactId,
+    candidateReviewPackageArtifactId: artifact.artifactId,
+  };
   return (
     <section style={{ marginTop: 22 }}>
       <h2 style={{ marginBottom: 10 }}>Latest Decisions</h2>
@@ -218,7 +238,7 @@ function LatestDecisions(props: { model: CandidateReviewSurfaceProjection }) {
           <GroupedCandidates
             groups={props.model.groupedLatestDecisions[decision]}
             empty={`No ${decision} candidates.`}
-            render={(item) => <DecisionCard item={item} />}
+            render={(item) => <DecisionCard item={item} actionTarget={actionTarget} />}
           />
         </section>
       ))}
@@ -227,7 +247,7 @@ function LatestDecisions(props: { model: CandidateReviewSurfaceProjection }) {
         <GroupedCandidates
           groups={props.model.unreviewedCandidates}
           empty="No unreviewed candidates."
-          render={(candidate) => <CandidateCard candidate={candidate} />}
+          render={(candidate) => <CandidateCard candidate={candidate} actionTarget={actionTarget} />}
         />
       </section>
     </section>
@@ -307,7 +327,7 @@ export default async function CandidateReviewPage(props: PageProps) {
     <main style={shellStyle}>
       <header>
         <h1 style={{ margin: 0 }}>Candidate Review</h1>
-        <p style={{ marginTop: 8, color: "#475569" }}>Read-only persisted review package diagnostics for a site version.</p>
+        <p style={{ marginTop: 8, color: "#475569" }}>Persisted review package diagnostics and single-candidate review actions for a site version.</p>
       </header>
       <Overview model={model} />
       <DecisionSummary model={model} />

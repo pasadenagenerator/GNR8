@@ -354,8 +354,11 @@ Phase 8D-13 changed documentation only and added no API route, Server Action, UI
 Phase 8D-14 - Candidate Review Action API Implementation is COMPLETE. `POST /api/gnr8/admin/candidate-review/actions` requires the existing authenticated superadmin guard, same-origin `application/json`, and an exact allowlisted intent payload. It rejects anonymous and non-superadmin access, unknown and forbidden fields, invalid actions, missing candidates, invalid lineage, stale package tokens, idempotency conflicts, validation failures, and persistence failures through the documented closed metadata-only error contract.
 The route resolves actor identity and role, trusted request time, deterministic length-delimited SHA-256 action identity, dry-run identity, exact linked Candidate Discovery artifact, and authoritative latest Candidate Review Package on the server. It invokes only `applyCandidateReviewAction(...)`, preserves deterministic exact replay, persists one immutable package through the existing compare-and-set boundary, reloads canonical latest, and returns only the action/event identity, decision, resulting package artifact ID, counts, and diagnostics.
 Focused route tests pass `12 / 12`. Phase 8D-14 adds no UI control or action, reconstruction, AI, generated output, publishing, schema, migration, tenant/customer access, or worker behavior.
-Current Phase: Phase 8D-14 - Candidate Review Action API Implementation is complete.
-Next recommended phase: Phase 8D-15 - Candidate Review Action UI Implementation.
+Phase 8D-15 - Candidate Review Action UI Implementation is COMPLETE. The existing superadmin Candidate Review page now renders Approve, Reject, and Defer controls plus an optional rationale for every reviewed and unreviewed candidate. Each action posts exactly one candidate intent with the rendered Discovery and Review Package artifact identities to the existing 8D-14 endpoint.
+Success shows metadata-only action/event/package state and refreshes the canonical server projection so the latest decision, counts, grouping, and immutable history reload. Stale-package responses show an explicit stale message and refresh latest without automatic rebase or resubmission. Other failures show metadata-only error state.
+Focused UI and transport tests pass `10 / 10`; the platform Vercel build passes. No batch, tenant/customer, edit, AI, reconstruction, generated-output, publishing, schema, migration, or worker behavior was added.
+Current Phase: Phase 8D-15 - Candidate Review Action UI Implementation is complete.
+Next recommended phase: Phase 8D-16 - Candidate Review Action End-to-End Verification.
 
 ## Current Importer Architecture
 
@@ -635,10 +638,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-14 - Candidate Review Action API Implementation is complete.
+- Phase 8D-15 - Candidate Review Action UI Implementation is complete.
 
 Next Phase:
-- Phase 8D-15 - Candidate Review Action UI Implementation.
+- Phase 8D-16 - Candidate Review Action End-to-End Verification.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

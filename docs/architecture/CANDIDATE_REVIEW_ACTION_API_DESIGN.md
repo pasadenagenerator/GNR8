@@ -360,3 +360,19 @@ publishing, schema, migration, or worker behavior is added.
 
 Recommend exactly one next boundary: **Phase 8D-15 - Candidate Review Action UI
 Implementation**, limited to integrating the approved controls with this API.
+
+## Phase 8D-15 UI Integration
+
+Phase 8D-15 integrates the existing endpoint with the superadmin Candidate
+Review page. The browser sends exactly the documented six intent and lineage
+fields for one candidate, while actor, time, action identity, dry-run identity,
+latest package, and linked Discovery resolution remain server-only.
+
+The UI consumes only the metadata success/error envelopes. Success refreshes
+the canonical page projection. `STALE_REVIEW_PACKAGE` displays a stale message
+and refreshes latest without automatic rebase or resubmission. The integration
+adds no API behavior, schema, worker, batch action, reconstruction, AI,
+generated-output, publishing, or tenant/customer access.
+
+Recommend exactly one next boundary: **Phase 8D-16 - Candidate Review Action
+End-to-End Verification**.

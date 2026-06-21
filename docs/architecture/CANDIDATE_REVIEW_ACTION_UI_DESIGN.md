@@ -2,16 +2,16 @@
 
 ## Phase And Boundary
 
-Phase 8D-12 designs the first superadmin controls for applying the existing
+Phase 8D-12 designed the first superadmin controls for applying the existing
 Candidate Review Action contract through the existing Candidate Review admin
-surface. This phase is documentation and architecture only.
+surface. Phase 8D-15 implements those controls against the Phase 8D-14 Admin
+API.
 
-It adds no UI, endpoint, server action, action application, persistence write,
+The implementation adds only single-candidate action UI and its same-origin
+transport. It adds no new endpoint, action application, persistence behavior,
 schema, migration, worker, AI call, reconstruction, generated output, or
-publishing behavior. It does not change Candidate Discovery behavior,
-persistence, or UI; the Candidate Review contract, persistence, or current
-read-only UI; the Candidate Review Action contract or application; Evidence
-Capture; or Limited Dry Run.
+publishing behavior. It does not change Candidate Discovery, Evidence Capture,
+or Limited Dry Run.
 
 ## UI Purpose
 
@@ -220,3 +220,26 @@ implements the UI or transport.
 Recommend exactly one next boundary: **Phase 8D-14 - Candidate Review Action
 API/Server Action Implementation**, limited to the designed Admin API route,
 its adapter, and focused tests.
+
+## Phase 8D-15 Exit State
+
+Phase 8D-15 adds Approve, Reject, and Defer controls with an optional rationale
+to every reviewed and unreviewed candidate card on the existing superadmin
+Candidate Review page. Each submission targets exactly one candidate and sends
+only `siteVersionId`, `candidateId`, `actionType`, `rationale`,
+`candidateDiscoveryArtifactId`, and `candidateReviewPackageArtifactId` to the
+existing Admin API.
+
+Success displays action result metadata and refreshes the canonical server
+projection so counts and candidate groups update. A stale-package response
+shows an explicit stale message and refreshes the latest package without
+rebasing or resubmitting the old intent. Other failures display only the safe
+error metadata returned by the API.
+
+Focused UI and transport tests pass `10 / 10`, and the platform Vercel build
+passes. The UI adds no batch, tenant/customer, edit, AI, reconstruction,
+generated-output, or publishing controls.
+
+Recommend exactly one next boundary: **Phase 8D-16 - Candidate Review Action
+End-to-End Verification**, limited to verifying the implemented single-action
+UI and canonical package refresh behavior.

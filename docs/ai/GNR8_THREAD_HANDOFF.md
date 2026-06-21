@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-14 Candidate Review Action API Implementation is complete.
+- 8D-15 Candidate Review Action UI Implementation is complete.
 
 Current Phase:
-- Phase 8D-14 Candidate Review Action API Implementation is complete.
+- Phase 8D-15 Candidate Review Action UI Implementation is complete.
 
 Next Phase:
-- Phase 8D-15 Candidate Review Action UI Implementation.
+- Phase 8D-16 Candidate Review Action End-to-End Verification.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,17 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-15 - Candidate Review Action UI Implementation.
+- Status: COMPLETE / SUPERADMIN SINGLE-CANDIDATE ACTION UI ONLY.
+- Controls: Approve, Reject, and Defer plus optional rationale on every reviewed and unreviewed candidate card.
+- Payload: exactly site version, candidate, action type, rationale, Discovery artifact, and expected Review Package artifact to the existing 8D-14 endpoint.
+- Refresh UX: metadata-only success followed by canonical projection refresh; explicit stale-package feedback followed by latest refresh without automatic rebase or resubmission; metadata-only other errors.
+- Safety: no batch, tenant/customer, edit, AI, reconstruction, generated-output, or publishing controls or behavior.
+- Validation: focused UI/transport tests pass `10 / 10`; platform Vercel build passes; `git diff --check` passes.
+- Canonical implementation/design: `apps/platform/app/gnr8/admin/candidate-review/[siteVersionId]/` and `docs/architecture/CANDIDATE_REVIEW_ACTION_UI_DESIGN.md`.
+- Recommended next phase: Phase 8D-16 - Candidate Review Action End-to-End Verification.
+
+Previous completed milestone:
 - Phase 8D-14 - Candidate Review Action API Implementation.
 - Status: COMPLETE / SERVER API ONLY.
 - Route: `POST /api/gnr8/admin/candidate-review/actions`.
@@ -34,7 +45,7 @@ Latest completed milestone:
 - Validation: focused route tests pass `12 / 12`; platform Vercel build passes; `git diff --check` passes.
 - Boundary: no UI controls/actions, reconstruction, AI, generated output, publishing, schema, migration, tenant/customer access, or workers.
 - Canonical implementation/design: `apps/platform/app/api/gnr8/admin/candidate-review/actions/` and `docs/architecture/CANDIDATE_REVIEW_ACTION_API_DESIGN.md`.
-- Recommended next phase: Phase 8D-15 - Candidate Review Action UI Implementation.
+- Recommended next phase at completion: Phase 8D-15 - Candidate Review Action UI Implementation.
 
 Previous completed milestone:
 - Phase 8D-13 - Candidate Review Action API/Server Action Design.
