@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-15 Candidate Review Action UI Implementation is complete.
+- 8D-16 Candidate Review Action End-to-End Verification is complete with PASS classification.
 
 Current Phase:
-- Phase 8D-15 Candidate Review Action UI Implementation is complete.
+- Phase 8D-16 Candidate Review Action End-to-End Verification is complete.
 
 Next Phase:
-- Phase 8D-16 Candidate Review Action End-to-End Verification.
+- Phase 8D-17 Post-Review Action Boundary Reassessment, documentation and read-only analysis only.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,18 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-16 - Candidate Review Action End-to-End Verification.
+- Status: COMPLETE / REAL-TARGET HUMAN REVIEW LOOP PASS.
+- ODV actions: approved `candidate:route:/`, deferred `candidate:navigation:nav%3A%2F`, and rejected `candidate:section:/:section-boundary-7ea033afed92`; latest package `candidate_review_package_9db6afaefda96317c2e1e858c6cf5b8f`.
+- ViroiDoc actions: approved `candidate:route:/`, deferred `candidate:navigation:nav%3A%2F`, and rejected `candidate:section:/:section-boundary-4156e11f8f75`; latest package `candidate_review_package_4e70cbc788098383b52de76249a5c412`.
+- Persistence: each action appended one immutable event and one distinct immutable package snapshot, advanced latest, and left every previous package unchanged and loadable; each target now has four package artifacts and three events.
+- UI projection: both are valid and `ready`, with `1` approved, `1` rejected, and `1` deferred; ODV has `1` unreviewed and ViroiDoc has `2` unreviewed.
+- Audit: all six events contain actor, decision, rationale, trusted `decidedAt`, and correct null supersession for initially unreviewed candidates.
+- Safety: all non-Review provenance remained unchanged; no reconstruction, AI, generated output, publishing, schema, migration, or worker-job state changed.
+- Canonical evidence: `docs/architecture/CANDIDATE_REVIEW_ACTION_E2E_VERIFICATION.md`.
+- Recommended next phase: Phase 8D-17 - Post-Review Action Boundary Reassessment, documentation and read-only analysis only.
+
+Previous completed milestone:
 - Phase 8D-15 - Candidate Review Action UI Implementation.
 - Status: COMPLETE / SUPERADMIN SINGLE-CANDIDATE ACTION UI ONLY.
 - Controls: Approve, Reject, and Defer plus optional rationale on every reviewed and unreviewed candidate card.

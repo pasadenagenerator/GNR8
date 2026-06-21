@@ -376,3 +376,20 @@ generated-output, publishing, or tenant/customer access.
 
 Recommend exactly one next boundary: **Phase 8D-16 - Candidate Review Action
 End-to-End Verification**.
+
+## Phase 8D-16 Verification
+
+The implemented Admin API path accepted all six bounded real-target actions:
+approve route, defer navigation, and reject section on ODV and ViroiDoc. Every
+request returned HTTP `200`, `CANDIDATE_REVIEW_ACTION_APPLIED`, one immutable
+event identity, one new package artifact identity, and the correct canonical
+counts. Latest pointers advanced after every action, while all previous
+packages remained unchanged and loadable.
+
+All events contain the server-resolved actor, decision, rationale, trusted
+time, and correct null supersession for previously unreviewed candidates. The
+non-Review provenance baseline remained unchanged. Detailed evidence is in
+`CANDIDATE_REVIEW_ACTION_E2E_VERIFICATION.md`.
+
+Recommend exactly one next boundary: **Phase 8D-17 - Post-Review Action
+Boundary Reassessment**, documentation and read-only analysis only.

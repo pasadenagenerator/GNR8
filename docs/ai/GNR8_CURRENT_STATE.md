@@ -357,8 +357,11 @@ Focused route tests pass `12 / 12`. Phase 8D-14 adds no UI control or action, re
 Phase 8D-15 - Candidate Review Action UI Implementation is COMPLETE. The existing superadmin Candidate Review page now renders Approve, Reject, and Defer controls plus an optional rationale for every reviewed and unreviewed candidate. Each action posts exactly one candidate intent with the rendered Discovery and Review Package artifact identities to the existing 8D-14 endpoint.
 Success shows metadata-only action/event/package state and refreshes the canonical server projection so the latest decision, counts, grouping, and immutable history reload. Stale-package responses show an explicit stale message and refresh latest without automatic rebase or resubmission. Other failures show metadata-only error state.
 Focused UI and transport tests pass `10 / 10`; the platform Vercel build passes. No batch, tenant/customer, edit, AI, reconstruction, generated-output, publishing, schema, migration, or worker behavior was added.
-Current Phase: Phase 8D-15 - Candidate Review Action UI Implementation is complete.
-Next recommended phase: Phase 8D-16 - Candidate Review Action End-to-End Verification.
+Phase 8D-16 - Candidate Review Action End-to-End Verification is COMPLETE with PASS classification. The implemented Admin API path applied approve-route, defer-navigation, and reject-section actions to both real targets. ODV latest is `candidate_review_package_9db6afaefda96317c2e1e858c6cf5b8f`; ViroiDoc latest is `candidate_review_package_4e70cbc788098383b52de76249a5c412`.
+Each action appended exactly one immutable event, created one distinct immutable package snapshot, advanced latest, preserved the previous package unchanged and loadable, and updated latest decisions and counts. Both final projections are valid and `ready`, with `1` approved, `1` rejected, and `1` deferred; ODV retains `1` unreviewed candidate and ViroiDoc retains `2`.
+All six events contain actor, decision, rationale, trusted time, and correct null supersession because each candidate was initially unreviewed. Non-Review provenance remained unchanged; no reconstruction, AI, generated output, publishing, schema, migration, or worker-job state changed. Detailed evidence: `docs/architecture/CANDIDATE_REVIEW_ACTION_E2E_VERIFICATION.md`.
+Current Phase: Phase 8D-16 - Candidate Review Action End-to-End Verification is complete.
+Next recommended phase: Phase 8D-17 - Post-Review Action Boundary Reassessment, documentation and read-only analysis only.
 
 ## Current Importer Architecture
 
@@ -638,10 +641,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-15 - Candidate Review Action UI Implementation is complete.
+- Phase 8D-16 - Candidate Review Action End-to-End Verification is complete.
 
 Next Phase:
-- Phase 8D-16 - Candidate Review Action End-to-End Verification.
+- Phase 8D-17 - Post-Review Action Boundary Reassessment, documentation and read-only analysis only.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

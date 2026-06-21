@@ -243,3 +243,18 @@ generated-output, or publishing controls.
 Recommend exactly one next boundary: **Phase 8D-16 - Candidate Review Action
 End-to-End Verification**, limited to verifying the implemented single-action
 UI and canonical package refresh behavior.
+
+## Phase 8D-16 Verification
+
+Phase 8D-16 verified the implemented action and canonical refresh path against
+the real ODV and ViroiDoc targets. Each projection now contains one approved
+route, one deferred navigation candidate, one rejected section candidate, and
+the correct remaining unreviewed candidates (`1` ODV, `2` ViroiDoc). Both
+projections are valid, `ready`, and point to the authoritative latest package.
+
+The six actions created six immutable events and six new immutable package
+snapshots. Prior snapshots remain unchanged and loadable. Detailed evidence is
+in `CANDIDATE_REVIEW_ACTION_E2E_VERIFICATION.md`.
+
+Recommend exactly one next boundary: **Phase 8D-17 - Post-Review Action
+Boundary Reassessment**, documentation and read-only analysis only.
