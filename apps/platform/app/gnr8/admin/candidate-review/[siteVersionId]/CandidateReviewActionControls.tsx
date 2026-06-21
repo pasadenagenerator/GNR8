@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { CSSProperties } from "react";
 
 import {
@@ -14,6 +14,7 @@ import {
 type Props = {
   siteVersionId: string;
   candidateId: string;
+  candidateLabel: string;
   candidateDiscoveryArtifactId: string;
   candidateReviewPackageArtifactId: string;
 };
@@ -40,6 +41,7 @@ const buttonStyle: CSSProperties = {
 
 export function CandidateReviewActionControls(props: Props) {
   const router = useRouter();
+  const rationaleId = useId();
   const [rationale, setRationale] = useState("");
   const [pendingAction, setPendingAction] = useState<CandidateReviewUiActionType | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -82,12 +84,12 @@ export function CandidateReviewActionControls(props: Props) {
   }
 
   return (
-    <section aria-label={`Candidate review actions for ${props.candidateId}`} style={{ marginTop: 14, borderTop: "1px solid #e2e8f0", paddingTop: 12 }}>
-      <label htmlFor={`candidate-review-rationale:${props.candidateId}`} style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
+    <section aria-label={`Candidate review actions for ${props.candidateLabel}`} style={{ marginTop: 14, borderTop: "1px solid #e2e8f0", paddingTop: 12 }}>
+      <label htmlFor={rationaleId} style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
         Optional rationale
       </label>
       <textarea
-        id={`candidate-review-rationale:${props.candidateId}`}
+        id={rationaleId}
         value={rationale}
         maxLength={2000}
         rows={3}
@@ -110,7 +112,7 @@ export function CandidateReviewActionControls(props: Props) {
       </div>
       {feedback?.kind === "success" ? (
         <div role="status" style={{ marginTop: 10, color: "#166534", fontSize: 13 }}>
-          Action succeeded: {feedback.response.decision}. Event {feedback.response.reviewEventId}. Package {feedback.response.candidateReviewPackageArtifactId}.
+          Decision saved: {feedback.response.decision}.
         </div>
       ) : null}
       {feedback?.kind === "stale" ? (

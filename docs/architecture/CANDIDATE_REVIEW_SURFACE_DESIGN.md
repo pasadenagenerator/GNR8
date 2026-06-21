@@ -522,3 +522,32 @@ Detailed evidence is recorded in
 `docs/architecture/CANDIDATE_REVIEW_ADMIN_VERIFICATION.md`. The recommended next
 phase is **Phase 8D-7 - Candidate Review Next-Boundary Reassessment**, limited
 to documentation and read-only analysis.
+
+## Phase 8D-17 Operator Presentation
+
+Phase 8D-17 simplifies the existing superadmin Candidate Review page for normal
+operator use without changing its projection, action behavior, API, contracts,
+or persistence. The default view now contains only the site version, review
+status, reviewed/total count, Approved/Rejected/Deferred/Needs review summary
+cards, and the same four candidate groups.
+
+Each candidate card uses a readable name such as `Section on /` or
+`Navigation section on /` and shows type, route path, confidence, current
+decision, reviewed rationale when present, optional rationale input, and the
+existing single-candidate action controls. Unreviewed is presented as **Needs
+review**; it remains the absence of a canonical decision rather than a new
+contract value.
+
+Artifact refs, raw candidate IDs, review event IDs, validation internals,
+diagnostics, lineage, and supersession details remain available in native
+`Technical details` disclosures that are collapsed by default. This preserves
+the complete audit surface without making internal identifiers the primary
+operator hierarchy.
+
+The page remains superadmin-only. Phase 8D-17 adds no AI, reconstruction,
+publishing, batch action, tenant/customer access, schema, contract, discovery,
+API, or persistence behavior.
+
+Recommend exactly one next boundary: **Phase 8D-18 - Candidate Review Operator
+UI End-to-End Verification**, limited to authenticated visual and interaction
+verification of the simplified page against the existing real review data.

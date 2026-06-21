@@ -258,3 +258,26 @@ in `CANDIDATE_REVIEW_ACTION_E2E_VERIFICATION.md`.
 
 Recommend exactly one next boundary: **Phase 8D-17 - Post-Review Action
 Boundary Reassessment**, documentation and read-only analysis only.
+
+## Phase 8D-17 Operator UI Simplification
+
+Phase 8D-17 keeps the implemented single-candidate action transport and
+behavior unchanged while simplifying the surrounding page presentation. The
+default operator view shows review progress, four decision counts, four
+candidate groups, readable candidate names, current decision, reviewed
+rationale, optional rationale, and Approve/Reject/Defer controls.
+
+Raw candidate IDs, package and Discovery artifact refs, event IDs, validation
+details, diagnostics, raw lineage, and supersession internals remain available
+inside collapsed `Technical details` disclosures. Successful action feedback
+uses operator language and relies on canonical refresh for the updated state;
+event and package IDs remain audit details rather than prominent success copy.
+
+The payload remains exactly the existing six-field payload, and success,
+stale-package, error, and refresh behavior are unchanged. The UI remains
+superadmin-only and one-candidate-at-a-time, with no AI, reconstruction,
+publishing, batch, tenant/customer, edit, or generated-output controls.
+
+Recommend exactly one next boundary: **Phase 8D-18 - Candidate Review Operator
+UI End-to-End Verification**, limited to authenticated visual and interaction
+verification of the simplified page against the existing real review data.

@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-16 Candidate Review Action End-to-End Verification is complete with PASS classification.
+- 8D-17 Candidate Review Operator UI Simplification is complete.
 
 Current Phase:
-- Phase 8D-16 Candidate Review Action End-to-End Verification is complete.
+- Phase 8D-17 Candidate Review Operator UI Simplification is complete.
 
 Next Phase:
-- Phase 8D-17 Post-Review Action Boundary Reassessment, documentation and read-only analysis only.
+- Phase 8D-18 Candidate Review Operator UI End-to-End Verification, authenticated visual and interaction verification only.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,17 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-17 - Candidate Review Operator UI Simplification.
+- Status: COMPLETE / PRESENTATION-ONLY OPERATOR SIMPLIFICATION.
+- Default view: site version, review status, reviewed/total progress, Approved/Rejected/Deferred/Needs review summary cards, and the same four candidate groups.
+- Candidate cards: readable Route/Navigation/Section names, route path, confidence, current decision, reviewed rationale, optional rationale, and unchanged single-candidate actions.
+- Technical details: raw candidate IDs, artifact refs, event IDs, validation, diagnostics, lineage, and supersession remain available in collapsed disclosures.
+- Behavior boundary: action payload, API, persistence, contracts, canonical refresh, stale/error handling, and superadmin-only access are unchanged.
+- Safety: no AI, reconstruction, publishing, batch action, tenant/customer access, schema, discovery, edit, or generated-output controls or behavior.
+- Validation: focused operator UI and transport tests pass `10 / 10`; platform Vercel build passes; `git diff --check` passes.
+- Recommended next phase: Phase 8D-18 - Candidate Review Operator UI End-to-End Verification, authenticated visual and interaction verification only.
+
+Previous completed milestone:
 - Phase 8D-16 - Candidate Review Action End-to-End Verification.
 - Status: COMPLETE / REAL-TARGET HUMAN REVIEW LOOP PASS.
 - ODV actions: approved `candidate:route:/`, deferred `candidate:navigation:nav%3A%2F`, and rejected `candidate:section:/:section-boundary-7ea033afed92`; latest package `candidate_review_package_9db6afaefda96317c2e1e858c6cf5b8f`.
