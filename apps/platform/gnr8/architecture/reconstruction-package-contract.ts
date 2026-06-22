@@ -1,335 +1,359 @@
 /**
- * Phase 7F-14 reconstruction package contract.
+ * Phase 8E-1 Reconstruction Package contract.
  *
- * This module defines the deterministic metadata package handed from future
- * Candidate Review into future Reconstruction. It does not execute
- * reconstruction, approve execution, call AI systems, generate React, generate
- * blocks, persist reconstruction, dispatch workers, change capture, change
- * preview, or change publishing behavior.
+ * A Reconstruction Package is an immutable, metadata-only handoff from one
+ * exact Candidate Review Package artifact. It does not plan, generate,
+ * execute, reconstruct, persist, or publish anything.
  */
 
-import type { ReconstructionPlanningRouteScope } from "./reconstruction-planning-contract";
-import type { ReconstructionReadinessLevel } from "./reconstruction-input-contract";
-import type {
-  ReconstructionCandidateConfidenceLevel,
-  ReconstructionCandidateType,
-} from "./reconstruction-candidate-discovery-contract";
-import type {
-  ReconstructionCandidateReviewItem,
-  ReconstructionCandidateReviewPackage,
-} from "./reconstruction-candidate-review-contract";
+import {
+  CANDIDATE_CONFIDENCE_LEVELS,
+  CANDIDATE_TYPES,
+  type CandidateConfidence,
+  type CandidateType,
+} from "./candidate-discovery-contract";
 
-export const RECONSTRUCTION_PACKAGE_CONTRACT_VERSION = "7F-14" as const;
-
-export const RECONSTRUCTION_INTENT_VALUES = [
-  "recreate_as_native_block",
-  "preserve_as_embed",
-  "preserve_as_external_widget",
-  "convert_to_runtime_provider",
-  "defer",
-  "unsupported",
-] as const;
-export type ReconstructionIntent = (typeof RECONSTRUCTION_INTENT_VALUES)[number];
+export const RECONSTRUCTION_PACKAGE_CONTRACT_VERSION = "8E-1" as const;
 
 export const RECONSTRUCTION_PACKAGE_STATUSES = [
-  "draft",
-  "ready_for_reconstruction",
-  "needs_more_evidence",
+  "planned",
+  "valid",
+  "invalid",
   "blocked",
-  "archived",
+  "stale",
 ] as const;
 export type ReconstructionPackageStatus = (typeof RECONSTRUCTION_PACKAGE_STATUSES)[number];
 
-export const RECONSTRUCTION_EXECUTION_READINESS_VALUES = [
-  "not_ready",
-  "ready_for_dry_run",
-  "ready_for_future_execution",
-] as const;
-export type ReconstructionExecutionReadiness =
-  (typeof RECONSTRUCTION_EXECUTION_READINESS_VALUES)[number];
-
-export type ReconstructionPackageLimitationSeverity = "note" | "warning" | "blocker";
-
-export type ReconstructionPackageLimitation = {
-  limitationId: string;
-  severity: ReconstructionPackageLimitationSeverity;
-  sourceCandidateId: string | null;
-  message: string;
+export type ReconstructionPackageLineage = {
+  readonly candidateReviewPackageArtifactId: string;
+  readonly candidateReviewPackageId: string;
+  readonly candidateDiscoveryArtifactId: string;
+  readonly siteVersionId: string;
+  readonly dryRunId: string;
 };
 
-export type ApprovedReconstructionCandidate = {
-  candidateId: string;
-  candidateType: ReconstructionCandidateType;
-  sourceRoute: string;
-  evidenceRefs: string[];
-  confidenceLevel: ReconstructionCandidateConfidenceLevel;
-  limitations: string[];
-  reviewerNotes: string[];
-  reconstructionIntent: ReconstructionIntent;
+export type ReconstructionPackageCandidateRef = {
+  readonly candidateId: string;
+  readonly candidateType: CandidateType;
+  readonly routePath?: string;
+  readonly decisionReviewEventId: string;
+  readonly decision: "approved";
+  readonly confidence?: CandidateConfidence;
+  readonly sourceCandidateRefs?: readonly string[];
+  readonly evidenceRefs?: readonly string[];
 };
 
-export type PackagedReviewedReconstructionCandidate = {
-  candidateId: string;
-  candidateType: ReconstructionCandidateType;
-  sourceRoute: string;
-  evidenceRefs: string[];
-  confidenceLevel: ReconstructionCandidateConfidenceLevel;
-  limitations: string[];
-  reviewerNotes: string[];
-};
-
-export type ReconstructionPackageInstructions = {
-  instructionSet: "reconstruction_package_contract_only_v1";
-  dryRunBoundary: "future_dry_run_only";
-  executionAllowed: false;
-  outputGenerationAllowed: false;
-  notes: string[];
+export type ReconstructionPackageEligibilitySummary = {
+  readonly approvedCount: number;
+  readonly rejectedCount: number;
+  readonly deferredCount: number;
+  readonly unreviewedCount: number;
+  readonly includedCount: number;
+  readonly excludedCount: number;
 };
 
 export type ReconstructionPackage = {
-  kind: "reconstruction_package_v1";
-  contractVersion: typeof RECONSTRUCTION_PACKAGE_CONTRACT_VERSION;
-  reconstructionPackageId: string;
-  reviewPackageId: string;
-  discoveryPackageId: string;
-  planningPackageId: string;
-  siteVersionId: string;
-  routeScope: ReconstructionPlanningRouteScope;
-  readinessLevel: ReconstructionReadinessLevel;
-  packageStatus: ReconstructionPackageStatus;
-  approvedCandidates: ApprovedReconstructionCandidate[];
-  deferredCandidates: PackagedReviewedReconstructionCandidate[];
-  unsupportedCandidates: PackagedReviewedReconstructionCandidate[];
-  requiredEvidenceRefs: string[];
-  limitations: ReconstructionPackageLimitation[];
-  reconstructionInstructions: ReconstructionPackageInstructions;
-  executionReadiness: ReconstructionExecutionReadiness;
-  createdAt: string;
+  readonly reconstructionPackageId: string;
+  readonly reconstructionPackageStatus: ReconstructionPackageStatus;
+  readonly candidateReviewPackageArtifactId: string;
+  readonly candidateDiscoveryArtifactId: string;
+  readonly siteVersionId: string;
+  readonly dryRunId: string;
+  readonly contractVersion: typeof RECONSTRUCTION_PACKAGE_CONTRACT_VERSION;
+  readonly createdAt: string;
+  readonly lineage: ReconstructionPackageLineage;
+  readonly approvedCandidateRefs: readonly ReconstructionPackageCandidateRef[];
+  readonly eligibilitySummary: ReconstructionPackageEligibilitySummary;
+  readonly limitations: readonly any[];
+  readonly diagnostics: readonly string[];
+
+  /** @deprecated Phase 7F compatibility only; not part of the 8E contract. */
+  readonly packageStatus?: any;
+  /** @deprecated Phase 7F compatibility only; not part of the 8E contract. */
+  readonly executionReadiness?: any;
+  /** @deprecated Phase 7F compatibility only; not part of the 8E contract. */
+  readonly routeScope?: any;
 };
 
-export type CreateReconstructionPackageFromReviewOptions = {
-  reconstructionPackageId?: string;
-  /**
-   * Compatibility override for older review-package fixtures. Current review
-   * packages carry planningPackageId directly so the control-plane chain can
-   * link backward without synthetic IDs.
-   */
-  planningPackageId?: string;
-  createdAt?: string;
-  reconstructionInstructions?: Partial<Pick<ReconstructionPackageInstructions, "notes">>;
+export type ReconstructionPackageValidationResult = {
+  readonly valid: boolean;
+  readonly errors: readonly string[];
+  readonly warnings: readonly string[];
 };
 
-export type ReconstructionPackageSummary = {
-  approvedCount: number;
-  deferredCount: number;
-  unsupportedCount: number;
-  packageStatus: ReconstructionPackageStatus;
-  executionReadiness: ReconstructionExecutionReadiness;
-  blockerCount: number;
-  limitationCount: number;
+export type CreateBlockedReconstructionPackageInput = {
+  readonly candidateReviewPackageArtifactId: string;
+  readonly candidateReviewPackageId: string;
+  readonly candidateDiscoveryArtifactId: string;
+  readonly siteVersionId: string;
+  readonly dryRunId: string;
+  readonly createdAt: string;
+  readonly rejectedCount?: number;
+  readonly deferredCount?: number;
+  readonly unreviewedCount?: number;
+  readonly limitations?: readonly string[];
+  readonly diagnostics?: readonly string[];
 };
 
-function reviewedCandidateFromItem(
-  review: ReconstructionCandidateReviewItem,
-): PackagedReviewedReconstructionCandidate {
-  return {
-    candidateId: review.candidateId,
-    candidateType: review.candidateType,
-    sourceRoute: review.sourceRoute,
-    evidenceRefs: review.evidenceRefs,
-    confidenceLevel: review.confidenceLevel,
-    limitations: review.limitations,
-    reviewerNotes: review.reviewerNotes,
-  };
+export const RECONSTRUCTION_PACKAGE_FORBIDDEN_FIELDS = [
+  "reactOutput",
+  "generatedOutputs",
+  "generatedBlocks",
+  "generatedContent",
+  "designTokens",
+  "aiOutputs",
+  "structurePlan",
+  "reconstructionPlan",
+  "publishingArtifacts",
+  "deploymentArtifacts",
+  "executionArtifacts",
+] as const;
+
+/** @deprecated Retained only so pre-8E dry-run types continue to compile. */
+export type ReconstructionPackageLimitationSeverity = "note" | "warning" | "blocker";
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function defaultReconstructionIntent(
-  review: ReconstructionCandidateReviewItem,
-): ReconstructionIntent {
-  if (review.candidateType === "map") {
-    return "convert_to_runtime_provider";
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isTimestamp(value: unknown): value is string {
+  return isNonEmptyString(value) && Number.isFinite(Date.parse(value));
+}
+
+function validateStringArray(value: unknown, path: string, errors: string[]): void {
+  if (!Array.isArray(value)) {
+    errors.push(`${path} must be an array`);
+    return;
   }
-
-  if (review.candidateType === "widget") {
-    return "preserve_as_external_widget";
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== "string") errors.push(`${path}[${index}] must be a string`);
   }
+}
 
-  if (review.candidateType === "unknown") {
-    return "defer";
+function validateOptionalStringArray(value: unknown, path: string, errors: string[]): void {
+  if (value !== undefined) validateStringArray(value, path, errors);
+}
+
+function validateCount(value: unknown, path: string, errors: string[]): void {
+  if (!Number.isInteger(value) || (value as number) < 0) {
+    errors.push(`${path} must be a non-negative integer`);
   }
-
-  return "recreate_as_native_block";
 }
 
-function approvedCandidateFromItem(
-  review: ReconstructionCandidateReviewItem,
-): ApprovedReconstructionCandidate {
-  return {
-    ...reviewedCandidateFromItem(review),
-    reconstructionIntent: defaultReconstructionIntent(review),
-  };
-}
-
-function uniqueEvidenceRefs(candidates: ApprovedReconstructionCandidate[]): string[] {
-  return Array.from(new Set(candidates.flatMap((candidate) => candidate.evidenceRefs)));
-}
-
-function limitationsFromReviewPackage(
-  reviewPackage: ReconstructionCandidateReviewPackage,
-): ReconstructionPackageLimitation[] {
-  const limitations: ReconstructionPackageLimitation[] = [];
-
-  for (const review of reviewPackage.candidateReviews) {
-    for (const [index, limitation] of review.limitations.entries()) {
-      limitations.push({
-        limitationId: `${review.candidateId}:limitation:${index + 1}`,
-        severity: review.reviewDecision === "needs_more_evidence" ? "blocker" : "warning",
-        sourceCandidateId: review.candidateId,
-        message: limitation,
-      });
+function validateForbiddenFields(
+  value: unknown,
+  path: string,
+  errors: string[],
+  seen: WeakSet<object>,
+): void {
+  if ((!isObject(value) && !Array.isArray(value)) || seen.has(value)) return;
+  seen.add(value);
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const nestedPath = path ? `${path}.${key}` : key;
+    if (RECONSTRUCTION_PACKAGE_FORBIDDEN_FIELDS.includes(key as never)) {
+      errors.push(`${nestedPath} is forbidden in Reconstruction Packages`);
     }
+    validateForbiddenFields(nestedValue, nestedPath, errors, seen);
+  }
+}
 
-    if (review.reviewDecision === "needs_more_evidence") {
-      limitations.push({
-        limitationId: `${review.candidateId}:needs_more_evidence`,
-        severity: "blocker",
-        sourceCandidateId: review.candidateId,
-        message: "Candidate review requires more evidence before reconstruction packaging can proceed.",
-      });
+function validateLineage(value: unknown, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push("lineage is required");
+    return;
+  }
+  for (const field of [
+    "candidateReviewPackageArtifactId",
+    "candidateReviewPackageId",
+    "candidateDiscoveryArtifactId",
+    "siteVersionId",
+    "dryRunId",
+  ] as const) {
+    if (!isNonEmptyString(value[field])) errors.push(`lineage.${field} is required`);
+  }
+}
+
+function validateConfidence(value: unknown, path: string, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+  if (!CANDIDATE_CONFIDENCE_LEVELS.includes(value.level as never)) {
+    errors.push(`${path}.level must be LOW, MEDIUM, or HIGH`);
+  }
+  validateStringArray(value.reasons, `${path}.reasons`, errors);
+}
+
+function validateCandidateRef(value: unknown, path: string, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+  if (!isNonEmptyString(value.candidateId)) errors.push(`${path}.candidateId is required`);
+  if (!CANDIDATE_TYPES.includes(value.candidateType as never)) {
+    errors.push(`${path}.candidateType must be route, navigation, or section`);
+  }
+  if (value.routePath !== undefined && !isNonEmptyString(value.routePath)) {
+    errors.push(`${path}.routePath must be a non-empty string when present`);
+  }
+  if (!isNonEmptyString(value.decisionReviewEventId)) {
+    errors.push(`${path}.decisionReviewEventId is required`);
+  }
+  if (value.decision !== "approved") {
+    errors.push(`${path}.decision must be approved`);
+  }
+  if (value.confidence !== undefined) validateConfidence(value.confidence, `${path}.confidence`, errors);
+  validateOptionalStringArray(value.sourceCandidateRefs, `${path}.sourceCandidateRefs`, errors);
+  validateOptionalStringArray(value.evidenceRefs, `${path}.evidenceRefs`, errors);
+}
+
+export function validateReconstructionPackage(value: unknown): ReconstructionPackageValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (!isObject(value)) {
+    return { valid: false, errors: ["Reconstruction Package must be an object"], warnings };
+  }
+
+  validateForbiddenFields(value, "", errors, new WeakSet<object>());
+  for (const field of [
+    "reconstructionPackageId",
+    "candidateReviewPackageArtifactId",
+    "candidateDiscoveryArtifactId",
+    "siteVersionId",
+    "dryRunId",
+  ] as const) {
+    if (!isNonEmptyString(value[field])) errors.push(`${field} is required`);
+  }
+  if (!RECONSTRUCTION_PACKAGE_STATUSES.includes(value.reconstructionPackageStatus as never)) {
+    errors.push("reconstructionPackageStatus must be planned, valid, invalid, blocked, or stale");
+  }
+  if (value.contractVersion !== RECONSTRUCTION_PACKAGE_CONTRACT_VERSION) {
+    errors.push(`contractVersion must be ${RECONSTRUCTION_PACKAGE_CONTRACT_VERSION}`);
+  }
+  if (
+    isNonEmptyString(value.candidateReviewPackageArtifactId) &&
+    value.reconstructionPackageId !==
+      `reconstruction-package:${value.candidateReviewPackageArtifactId}:${RECONSTRUCTION_PACKAGE_CONTRACT_VERSION}`
+  ) {
+    errors.push("reconstructionPackageId must be derived from the exact Review Package artifact and contract version");
+  }
+  if (!isTimestamp(value.createdAt)) errors.push("createdAt must be a valid timestamp");
+  validateLineage(value.lineage, errors);
+  validateStringArray(value.limitations, "limitations", errors);
+  validateStringArray(value.diagnostics, "diagnostics", errors);
+
+  if (isObject(value.lineage)) {
+    for (const field of [
+      "candidateReviewPackageArtifactId",
+      "candidateDiscoveryArtifactId",
+      "siteVersionId",
+      "dryRunId",
+    ] as const) {
+      if (value.lineage[field] !== value[field]) errors.push(`lineage.${field} must match ${field}`);
     }
+  }
 
-    if (review.reviewDecision === "rejected") {
-      limitations.push({
-        limitationId: `${review.candidateId}:rejected`,
-        severity: "note",
-        sourceCandidateId: review.candidateId,
-        message: "Rejected review decision excluded this candidate from reconstruction packaging.",
-      });
+  const approvedCandidateRefs = Array.isArray(value.approvedCandidateRefs)
+    ? value.approvedCandidateRefs
+    : [];
+  if (!Array.isArray(value.approvedCandidateRefs)) {
+    errors.push("approvedCandidateRefs must be an array");
+  } else {
+    const identities = new Set<string>();
+    for (const [index, candidateRef] of approvedCandidateRefs.entries()) {
+      validateCandidateRef(candidateRef, `approvedCandidateRefs[${index}]`, errors);
+      if (isObject(candidateRef) && isNonEmptyString(candidateRef.candidateId)) {
+        if (identities.has(candidateRef.candidateId)) {
+          errors.push(`approvedCandidateRefs[${index}].candidateId must be unique`);
+        }
+        identities.add(candidateRef.candidateId);
+      }
     }
   }
 
-  for (const [index, note] of reviewPackage.notes.entries()) {
-    limitations.push({
-      limitationId: `${reviewPackage.reviewPackageId}:review_note:${index + 1}`,
-      severity: "note",
-      sourceCandidateId: null,
-      message: note,
-    });
+  if (!isObject(value.eligibilitySummary)) {
+    errors.push("eligibilitySummary is required");
+  } else {
+    const summary = value.eligibilitySummary;
+    for (const field of [
+      "approvedCount",
+      "rejectedCount",
+      "deferredCount",
+      "unreviewedCount",
+      "includedCount",
+      "excludedCount",
+    ] as const) {
+      validateCount(summary[field], `eligibilitySummary.${field}`, errors);
+    }
+    if (summary.approvedCount !== approvedCandidateRefs.length) {
+      errors.push(`eligibilitySummary.approvedCount must equal ${approvedCandidateRefs.length}`);
+    }
+    if (summary.includedCount !== approvedCandidateRefs.length) {
+      errors.push(`eligibilitySummary.includedCount must equal ${approvedCandidateRefs.length}`);
+    }
+    if (
+      typeof summary.rejectedCount === "number" &&
+      typeof summary.deferredCount === "number" &&
+      typeof summary.unreviewedCount === "number" &&
+      summary.excludedCount !== summary.rejectedCount + summary.deferredCount + summary.unreviewedCount
+    ) {
+      errors.push("eligibilitySummary.excludedCount must equal rejectedCount + deferredCount + unreviewedCount");
+    }
   }
 
-  return limitations;
+  if (value.reconstructionPackageStatus === "stale") {
+    warnings.push("Stale Reconstruction Packages are historical metadata and are not eligible for new work");
+  }
+  if (value.reconstructionPackageStatus === "blocked" && approvedCandidateRefs.length > 0) {
+    errors.push("A blocked Reconstruction Package must not include approved candidates");
+  }
+  if (
+    value.reconstructionPackageStatus !== "blocked" &&
+    value.reconstructionPackageStatus !== "invalid" &&
+    approvedCandidateRefs.length === 0
+  ) {
+    errors.push("A non-blocked Reconstruction Package must include at least one approved candidate");
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
 }
 
-function packageStatusForReview(
-  reviewPackage: ReconstructionCandidateReviewPackage,
-  approvedCandidates: ApprovedReconstructionCandidate[],
-  limitations: ReconstructionPackageLimitation[],
-): ReconstructionPackageStatus {
-  if (reviewPackage.reviewStatus === "needs_more_evidence") {
-    return "needs_more_evidence";
-  }
-
-  if (reviewPackage.candidateReviews.some((review) => review.reviewDecision === "needs_more_evidence")) {
-    return "needs_more_evidence";
-  }
-
-  if (limitations.some((limitation) => limitation.severity === "blocker")) {
-    return "blocked";
-  }
-
-  if (approvedCandidates.length > 0) {
-    return "ready_for_reconstruction";
-  }
-
-  return "draft";
-}
-
-function executionReadinessForPackage(input: {
-  approvedCandidates: ApprovedReconstructionCandidate[];
-  limitations: ReconstructionPackageLimitation[];
-  hasNeedsMoreEvidenceReview: boolean;
-}): ReconstructionExecutionReadiness {
-  if (input.approvedCandidates.length === 0) {
-    return "not_ready";
-  }
-
-  if (input.hasNeedsMoreEvidenceReview) {
-    return "not_ready";
-  }
-
-  if (input.limitations.some((limitation) => limitation.severity === "blocker")) {
-    return "not_ready";
-  }
-
-  return "ready_for_dry_run";
-}
-
-export function createReconstructionPackageFromReview(
-  reviewPackage: ReconstructionCandidateReviewPackage,
-  options: CreateReconstructionPackageFromReviewOptions = {},
+export function createBlockedReconstructionPackage(
+  input: CreateBlockedReconstructionPackageInput,
 ): ReconstructionPackage {
-  const approvedCandidates = reviewPackage.candidateReviews
-    .filter((review) => review.reviewDecision === "approved")
-    .map(approvedCandidateFromItem);
-  const deferredCandidates = reviewPackage.candidateReviews
-    .filter((review) => review.reviewDecision === "defer")
-    .map(reviewedCandidateFromItem);
-  const unsupportedCandidates = reviewPackage.candidateReviews
-    .filter((review) => review.reviewDecision === "unsupported")
-    .map(reviewedCandidateFromItem);
-  const limitations = limitationsFromReviewPackage(reviewPackage);
-  const hasNeedsMoreEvidenceReview = reviewPackage.candidateReviews.some(
-    (review) => review.reviewDecision === "needs_more_evidence",
-  );
-
-  const packageStatus = packageStatusForReview(reviewPackage, approvedCandidates, limitations);
-
+  const rejectedCount = input.rejectedCount ?? 0;
+  const deferredCount = input.deferredCount ?? 0;
+  const unreviewedCount = input.unreviewedCount ?? 0;
   return {
-    kind: "reconstruction_package_v1",
+    reconstructionPackageId: `reconstruction-package:${input.candidateReviewPackageArtifactId}:${RECONSTRUCTION_PACKAGE_CONTRACT_VERSION}`,
+    reconstructionPackageStatus: "blocked",
+    candidateReviewPackageArtifactId: input.candidateReviewPackageArtifactId,
+    candidateDiscoveryArtifactId: input.candidateDiscoveryArtifactId,
+    siteVersionId: input.siteVersionId,
+    dryRunId: input.dryRunId,
     contractVersion: RECONSTRUCTION_PACKAGE_CONTRACT_VERSION,
-    reconstructionPackageId:
-      options.reconstructionPackageId ?? `${reviewPackage.reviewPackageId}:reconstruction-package`,
-    reviewPackageId: reviewPackage.reviewPackageId,
-    discoveryPackageId: reviewPackage.discoveryPackageId,
-    planningPackageId:
-      options.planningPackageId ?? reviewPackage.planningPackageId,
-    siteVersionId: reviewPackage.siteVersionId,
-    routeScope: reviewPackage.routeScope,
-    readinessLevel: reviewPackage.readinessLevel,
-    packageStatus,
-    approvedCandidates,
-    deferredCandidates,
-    unsupportedCandidates,
-    requiredEvidenceRefs: uniqueEvidenceRefs(approvedCandidates),
-    limitations,
-    reconstructionInstructions: {
-      instructionSet: "reconstruction_package_contract_only_v1",
-      dryRunBoundary: "future_dry_run_only",
-      executionAllowed: false,
-      outputGenerationAllowed: false,
-      notes: options.reconstructionInstructions?.notes ?? [],
+    createdAt: input.createdAt,
+    lineage: {
+      candidateReviewPackageArtifactId: input.candidateReviewPackageArtifactId,
+      candidateReviewPackageId: input.candidateReviewPackageId,
+      candidateDiscoveryArtifactId: input.candidateDiscoveryArtifactId,
+      siteVersionId: input.siteVersionId,
+      dryRunId: input.dryRunId,
     },
-    executionReadiness: executionReadinessForPackage({
-      approvedCandidates,
-      limitations,
-      hasNeedsMoreEvidenceReview,
-    }),
-    createdAt: options.createdAt ?? reviewPackage.reviewedAt ?? "",
-  };
-}
-
-export function summarizeReconstructionPackage(
-  reconstructionPackage: ReconstructionPackage,
-): ReconstructionPackageSummary {
-  return {
-    approvedCount: reconstructionPackage.approvedCandidates.length,
-    deferredCount: reconstructionPackage.deferredCandidates.length,
-    unsupportedCount: reconstructionPackage.unsupportedCandidates.length,
-    packageStatus: reconstructionPackage.packageStatus,
-    executionReadiness: reconstructionPackage.executionReadiness,
-    blockerCount: reconstructionPackage.limitations.filter(
-      (limitation) => limitation.severity === "blocker",
-    ).length,
-    limitationCount: reconstructionPackage.limitations.length,
+    approvedCandidateRefs: [],
+    eligibilitySummary: {
+      approvedCount: 0,
+      rejectedCount,
+      deferredCount,
+      unreviewedCount,
+      includedCount: 0,
+      excludedCount: rejectedCount + deferredCount + unreviewedCount,
+    },
+    limitations: [...(input.limitations ?? ["No approved candidates are eligible for inclusion."])],
+    diagnostics: [...(input.diagnostics ?? [])],
   };
 }

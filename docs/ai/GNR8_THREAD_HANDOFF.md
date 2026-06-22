@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-27 Post-Candidate-Context Boundary Reassessment is complete.
+- 8E-1 Reconstruction Package Contract is complete.
 
 Current Phase:
-- Phase 8D-27 Post-Candidate-Context Boundary Reassessment is complete.
+- Phase 8E-1 Reconstruction Package Contract is complete.
 
 Next Phase:
-- Phase 8E-0 Reconstruction Package Foundation Design, documentation and contract reconciliation only.
+- Phase 8E-2 Reconstruction Package Builder Design, design only.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,32 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8E-1 - Reconstruction Package Contract.
+- Status: COMPLETE / CONTRACT ONLY.
+- Canonical module: `apps/platform/gnr8/architecture/reconstruction-package-contract.ts`.
+- Types: `ReconstructionPackage`, `ReconstructionPackageCandidateRef`, `ReconstructionPackageLineage`, `ReconstructionPackageEligibilitySummary`, `ReconstructionPackageValidationResult`, and `ReconstructionPackageStatus`.
+- Statuses: only `planned`, `valid`, `invalid`, `blocked`, and `stale`; generated, executed, reconstructed, published, and deployed states are not allowed.
+- Candidate inclusion: approved-only refs with exact candidate and authorizing Review Event identity; optional route, confidence, source-candidate, and evidence refs remain metadata only.
+- Validation: exact required lineage, lineage consistency, approved-only inclusion, unique included candidates, eligibility counts, and recursive forbidden-field rejection.
+- Blocked helper: creates a deterministic metadata-only blocked package with zero approved refs for no-approval or invalid/stale-input outcomes.
+- Safety: no builder, persistence, Structure Plan, reconstruction, AI, generation, execution, publishing, migration, schema, worker, API, or UI behavior.
+- Validation result: focused contract tests pass `9 / 9`; platform Vercel build passes with existing lint warnings; `git diff --check` passes.
+- Recommended next phase: Phase 8E-2 - Reconstruction Package Builder Design, design only.
+
+Previous completed milestone:
+- Phase 8E-0 - Reconstruction Package Foundation Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Purpose: a Candidate Review Package records what was approved; a Reconstruction Package records what is eligible for future Structure Planning.
+- Required input: one exact immutable latest Candidate Review Package artifact; only its latest `approved` decisions authorize inclusion.
+- Supporting lineage: exact Candidate Discovery, Candidate Context, Limited Dry Run, and Evidence Capture refs may be retained for traceability but cannot independently authorize a candidate.
+- Output: an immutable metadata-only package with deterministic identity, exact Review/Discovery/Event lineage, approved candidate refs, bounded summaries, limitations, diagnostics, and planning-eligibility intent. It has no generated outputs.
+- Identity: derive package identity from the exact Review Package artifact ID plus contract version; a new Review head produces a new append-only package identity.
+- Staleness: a newer Review head, superseded approval, newly reviewed candidate lineage, incompatible contract version, or unresolvable exact lineage makes the package stale for new planning without changing its historical validity.
+- Safety: no React, blocks, content, AI output, Structure Plan, execution readiness, jobs, publishing artifacts, or deployment artifacts.
+- Canonical design: `docs/architecture/RECONSTRUCTION_PACKAGE_FOUNDATION.md`.
+- Recommended next phase at completion: Phase 8E-1 - Reconstruction Package Contract, formal types and validation only.
+
+Earlier completed milestone:
 - Phase 8D-27 - Post-Candidate-Context Boundary Reassessment.
 - Status: COMPLETE / DOCUMENTATION AND READ-ONLY ANALYSIS ONLY.
 - Decision: recommend exactly one next boundary, Reconstruction Package Foundation.
@@ -34,7 +60,7 @@ Latest completed milestone:
 - Canonical assessment: `docs/architecture/POST_CANDIDATE_CONTEXT_BOUNDARY_REASSESSMENT.md`.
 - Recommended next phase: Phase 8E-0 - Reconstruction Package Foundation Design, documentation and contract reconciliation only.
 
-Previous completed milestone:
+Earlier completed milestone:
 - Phase 8D-26 - Candidate Context Review UI Production Re-Verification.
 - Status: COMPLETE / PASS / AUTHENTICATED PRODUCTION VISUALS VERIFIED.
 - Deployment: the 8D-25 fix is present; both pages resolve their existing persisted PNG as a data URI instead of `Visual evidence unavailable`.

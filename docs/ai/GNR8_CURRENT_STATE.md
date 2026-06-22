@@ -393,8 +393,11 @@ Phase 8D-26 changed documentation only. Focused tests pass `27 / 27`; the platfo
 Phase 8D-27 - Post-Candidate-Context Boundary Reassessment is COMPLETE. The documentation-only assessment selects exactly one next boundary: Reconstruction Package Foundation. The canonical input is one exact immutable Candidate Review Package artifact selected as the current package head; approved candidates are derived only from that snapshot's latest decisions, while its linked exact Candidate Discovery, Limited Dry Run, and Evidence Capture artifacts remain supporting lineage rather than independent authorization.
 Reconstruction Package Foundation is now safe for design because real approved candidates, immutable events and Review Package snapshots, compare-and-set latest advancement, canonical reload, and exact-lineage production screenshots/overlays are proven on ODV and ViroiDoc. It was not safe before Candidate Context because the action path was technically auditable but the operator could not reliably see the source page and precise Navigation/Section region being authorized. The initial boundary must reconcile the old 7F metadata scaffolding with canonical 8C/8D lineage and must not persist packages, plan structure, reconstruct, call AI, generate output, dispatch workers, or publish. Detailed assessment: `docs/architecture/POST_CANDIDATE_CONTEXT_BOUNDARY_REASSESSMENT.md`.
 Structure Planning remains downstream of the canonical reviewed package. No additional governance layer or alternative boundary has a demonstrated prerequisite gap or higher current value. Phase 8D-27 changed documentation only and added no implementation or behavior change.
-Current Phase: Phase 8D-27 - Post-Candidate-Context Boundary Reassessment is complete.
-Next recommended phase: Phase 8E-0 - Reconstruction Package Foundation Design, documentation and contract reconciliation only.
+Phase 8E-0 - Reconstruction Package Foundation Design is COMPLETE. The canonical Reconstruction Package is an immutable, deterministic, metadata-only eligibility handoff derived from one exact latest Candidate Review Package artifact. Only that snapshot's latest `approved` decisions are eligible; rejected, deferred, unreviewed, stale, invalid, and superseded decisions remain excluded. Candidate Discovery, Candidate Context, Limited Dry Run, and Evidence Capture refs are supporting lineage and never independent authorization.
+Package identity is tied deterministically to the exact source Review Package artifact ID plus the Reconstruction Package contract version. A new Review head produces a new immutable package identity and makes the prior package stale for new planning without rewriting its audit history. The package carries exact approved candidate and authorizing Review Event refs, bounded summaries, limitations, diagnostics, and Structure Planning eligibility metadata only. It contains no generated output, AI output, Structure Plan, execution readiness, worker job, deployment artifact, or publishing artifact. The older Phase 7F scaffolding must be reconciled or replaced by the canonical 8E contract rather than remain a parallel truth. Detailed design: `docs/architecture/RECONSTRUCTION_PACKAGE_FOUNDATION.md`.
+Phase 8E-0 changed documentation only and added no implementation or behavior change.
+Current Phase: Phase 8E-1 - Reconstruction Package Contract is complete.
+Next recommended phase: Phase 8E-2 - Reconstruction Package Builder Design, design only.
 
 ## Current Importer Architecture
 
@@ -673,11 +676,39 @@ Explicitly not yet implemented:
 - production multi-page serving
 - dynamic content extraction
 
+## Phase 8E Reconstruction Package
+
+Phase 8E-1 - Reconstruction Package Contract is COMPLETE.
+
+The canonical module is
+`apps/platform/gnr8/architecture/reconstruction-package-contract.ts`. It
+defines `ReconstructionPackage`, `ReconstructionPackageCandidateRef`,
+`ReconstructionPackageLineage`, `ReconstructionPackageEligibilitySummary`,
+`ReconstructionPackageValidationResult`, and `ReconstructionPackageStatus`.
+
+Allowed statuses are `planned`, `valid`, `invalid`, `blocked`, and `stale`.
+Only approved candidate refs may be included. Exact Candidate Review artifact,
+Candidate Discovery artifact, site-version, dry-run, and authorizing Review
+Event lineage is retained. Rejected, deferred, unreviewed, stale, and
+superseded candidates do not enter the approved candidate list.
+
+`validateReconstructionPackage(...)` validates required and matching lineage,
+approved-only inclusion, eligibility counts, and recursive generated,
+planning, execution, deployment, and publishing field prohibitions.
+`createBlockedReconstructionPackage(...)` produces a metadata-only blocked
+shape with zero approved refs when an authorizing package cannot be formed.
+
+No builder, persistence, structure planning, reconstruction, AI, generated
+output, execution, publishing, migration, schema, worker, API, or UI behavior
+was added in Phase 8E-1.
+
+Recommended next phase: Phase 8E-2 - Reconstruction Package Builder Design.
+
 Current Phase:
-- Phase 8D-27 - Post-Candidate-Context Boundary Reassessment is complete.
+- Phase 8E-1 - Reconstruction Package Contract is complete.
 
 Next Phase:
-- Phase 8E-0 - Reconstruction Package Foundation Design, documentation and contract reconciliation only.
+- Phase 8E-2 - Reconstruction Package Builder Design, design only.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
