@@ -1,6 +1,46 @@
 # Candidate Context Review UI End-to-End Verification
 
-## Phase
+## Phase 8D-26 Production Re-Verification
+
+Date: 2026-06-22.
+
+The deployed 8D-25 screenshot-delivery fix is confirmed present in production.
+Authenticated superadmin checks on both real Candidate Review pages resolved the
+projected screenshot as an `image/png` data URI from the existing raw-import
+artifact rather than returning `Visual evidence unavailable`.
+
+| Target | Route | Navigation | Section |
+| --- | --- | --- | --- |
+| ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` | `1366 x 2970` screenshot rendered; no overlay | same screenshot rendered; visible `navigation` overlay | same screenshot rendered; visible `section` overlay |
+| ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf` | `1366 x 4428` screenshot rendered; no overlay | same screenshot rendered; visible `navigation` overlay | same screenshot rendered; visible `section` overlay |
+
+All four required overlays had non-zero rendered width and height and retained
+their projection-supplied document-coordinate styles. ViroiDoc's `29` ordered
+Navigation labels remained visible, including the useful menu labels; the
+previously noted source HTML/image markup noise remains non-blocking.
+
+No action was submitted. The existing Phase 8D-25 production action smoke proof
+remains sufficient, and the remaining unreviewed candidates were left unchanged.
+Counts remain ODV `1 approved / 1 rejected / 1 deferred / 1 needs review` and
+ViroiDoc `1 approved / 1 rejected / 1 deferred / 2 needs review`.
+
+The interactive-control audit again found only optional rationale and the
+single-candidate Approve, Reject, and Defer actions. No AI, reconstruction,
+publishing, batch, tenant, or customer controls were present. No behavior or
+application code changed in Phase 8D-26.
+
+Validation passed: focused Candidate Context, Candidate Review page, and action
+client tests `27 / 27`; `cd apps/platform && pnpm run vercel-build` with existing
+lint warnings only; and `git diff --check`.
+
+Phase 8D-26 result: **PASS**. Screenshots and required overlays render in
+production for Route, Navigation, and Section context on both real targets.
+
+Recommend exactly one next phase: **Phase 8D-27 - Post-Candidate-Context Boundary
+Reassessment**, documentation only, to select the next bounded architecture
+step without opening Reconstruction, AI, or Publishing behavior.
+
+## Phase 8D-25 Record
 
 Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
 

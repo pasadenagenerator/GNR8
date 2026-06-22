@@ -387,8 +387,14 @@ Each candidate card has a collapsed-by-default `View Context` panel. Route shows
 The existing Approve, Reject, and Defer action path is unchanged. Operator-visible context stays compact; raw screenshot paths, evidence and geometry refs, lineage, and projection diagnostics remain in collapsed `Technical details`. Focused tests pass `22 / 22`; the platform Vercel build passes. No AI, Reconstruction, Publishing, batch, tenant/customer, Evidence Capture, Candidate Discovery, Candidate Context Projection, Candidate Review persistence/API/action, schema, worker, screenshot, crop, or image-generation behavior changed.
 Phase 8D-25 - Candidate Context Review UI End-to-End Verification is COMPLETE WITH A BLOCKING PRESENTATION DEFECT FIXED IN CODE. Authenticated production checks on ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf` confirmed readable default cards, collapsed context/technical disclosures, confidence, limitations, Navigation labels, all six bounded Approve/Reject/Defer submissions, canonical refresh, stable decision counts, and no forbidden controls.
 The deployed pages could not display Route, Navigation, or Section screenshots because they attempted to read import-machine absolute paths from the deployment filesystem. The exact PNG bytes already existed in each raw-import artifact. The narrow fix adds a fail-closed read through existing raw-artifact helpers after the local-file read; both real artifacts resolve valid PNG data URIs. No endpoint, persistence, schema, worker, capture, projection, Review Action, AI, Reconstruction, Publishing, batch, tenant, or customer behavior changed. Focused tests pass `27 / 27`; the platform Vercel build passes. Deployed image/overlay verification remains pending deployment of this fix. Detailed evidence: `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_E2E_VERIFICATION.md`.
-Current Phase: Phase 8D-25 - Candidate Context Review UI End-to-End Verification is complete with production visual re-verification pending deployment.
-Next recommended phase: Phase 8D-26 - Candidate Context Review UI Production Re-Verification.
+Phase 8D-26 - Candidate Context Review UI Production Re-Verification is COMPLETE with PASS classification. The deployed 8D-25 fix is confirmed present because both authenticated production pages now resolve the exact persisted PNG as a data URI instead of `Visual evidence unavailable`.
+ODV renders the `1366 x 2970` screenshot for Route, Navigation, and the selected Section; Route has no overlay and Navigation/Section have visible, non-zero overlays. ViroiDoc renders the `1366 x 4428` screenshot for all three types with the same overlay invariants, and its `29` ordered Navigation labels remain visible. No action was submitted, review counts remain ODV `1 / 1 / 1 / 1` and ViroiDoc `1 / 1 / 1 / 2`, and no AI, Reconstruction, Publishing, batch, tenant, or customer controls are present.
+Phase 8D-26 changed documentation only. Focused tests pass `27 / 27`; the platform Vercel build passes with existing lint warnings; `git diff --check` passes. Detailed evidence: `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_E2E_VERIFICATION.md`.
+Phase 8D-27 - Post-Candidate-Context Boundary Reassessment is COMPLETE. The documentation-only assessment selects exactly one next boundary: Reconstruction Package Foundation. The canonical input is one exact immutable Candidate Review Package artifact selected as the current package head; approved candidates are derived only from that snapshot's latest decisions, while its linked exact Candidate Discovery, Limited Dry Run, and Evidence Capture artifacts remain supporting lineage rather than independent authorization.
+Reconstruction Package Foundation is now safe for design because real approved candidates, immutable events and Review Package snapshots, compare-and-set latest advancement, canonical reload, and exact-lineage production screenshots/overlays are proven on ODV and ViroiDoc. It was not safe before Candidate Context because the action path was technically auditable but the operator could not reliably see the source page and precise Navigation/Section region being authorized. The initial boundary must reconcile the old 7F metadata scaffolding with canonical 8C/8D lineage and must not persist packages, plan structure, reconstruct, call AI, generate output, dispatch workers, or publish. Detailed assessment: `docs/architecture/POST_CANDIDATE_CONTEXT_BOUNDARY_REASSESSMENT.md`.
+Structure Planning remains downstream of the canonical reviewed package. No additional governance layer or alternative boundary has a demonstrated prerequisite gap or higher current value. Phase 8D-27 changed documentation only and added no implementation or behavior change.
+Current Phase: Phase 8D-27 - Post-Candidate-Context Boundary Reassessment is complete.
+Next recommended phase: Phase 8E-0 - Reconstruction Package Foundation Design, documentation and contract reconciliation only.
 
 ## Current Importer Architecture
 
@@ -668,10 +674,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-25 - Candidate Context Review UI End-to-End Verification is complete with production visual re-verification pending deployment.
+- Phase 8D-27 - Post-Candidate-Context Boundary Reassessment is complete.
 
 Next Phase:
-- Phase 8D-26 - Candidate Context Review UI Production Re-Verification.
+- Phase 8E-0 - Reconstruction Package Foundation Design, documentation and contract reconciliation only.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

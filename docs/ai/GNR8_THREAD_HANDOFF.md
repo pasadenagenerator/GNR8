@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-25 Candidate Context Review UI End-to-End Verification is complete with production visual re-verification pending deployment.
+- 8D-27 Post-Candidate-Context Boundary Reassessment is complete.
 
 Current Phase:
-- Phase 8D-25 Candidate Context Review UI End-to-End Verification is complete with a blocking screenshot-delivery defect fixed in code.
+- Phase 8D-27 Post-Candidate-Context Boundary Reassessment is complete.
 
 Next Phase:
-- Phase 8D-26 Candidate Context Review UI Production Re-Verification.
+- Phase 8E-0 Reconstruction Package Foundation Design, documentation and contract reconciliation only.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,30 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-27 - Post-Candidate-Context Boundary Reassessment.
+- Status: COMPLETE / DOCUMENTATION AND READ-ONLY ANALYSIS ONLY.
+- Decision: recommend exactly one next boundary, Reconstruction Package Foundation.
+- Canonical next input: one exact immutable Candidate Review Package artifact selected as the current package head; only candidates with an `approved` latest decision in that snapshot are eligible.
+- Supporting lineage: the exact linked Candidate Discovery, Limited Dry Run, and Evidence Capture artifacts remain referenced dependencies, not independent authorization sources.
+- Why now: ODV and ViroiDoc prove real approvals, immutable events/package snapshots, canonical latest reload, and production-visible exact screenshots and Navigation/Section overlays.
+- Initial limit: reconcile the old 7F metadata scaffolding with canonical 8C/8D lineage only; no package persistence, UI, Structure Plan, reconstruction, AI, generation, workers, or publishing.
+- Deferred: Structure Planning follows the canonical reviewed package; another governance layer and alternative boundary have no demonstrated prerequisite gap.
+- Canonical assessment: `docs/architecture/POST_CANDIDATE_CONTEXT_BOUNDARY_REASSESSMENT.md`.
+- Recommended next phase: Phase 8E-0 - Reconstruction Package Foundation Design, documentation and contract reconciliation only.
+
+Previous completed milestone:
+- Phase 8D-26 - Candidate Context Review UI Production Re-Verification.
+- Status: COMPLETE / PASS / AUTHENTICATED PRODUCTION VISUALS VERIFIED.
+- Deployment: the 8D-25 fix is present; both pages resolve their existing persisted PNG as a data URI instead of `Visual evidence unavailable`.
+- ODV: Route, Navigation, and selected Section render the `1366 x 2970` screenshot; Route has no overlay; Navigation and Section have visible, non-zero overlays.
+- ViroiDoc: Route, Navigation, and selected Section render the `1366 x 4428` screenshot; Route has no overlay; Navigation and Section have visible, non-zero overlays; all `29` ordered Navigation labels remain visible.
+- Actions: no new review event was created; counts remain ODV `1 / 1 / 1 / 1` and ViroiDoc `1 / 1 / 1 / 2` for approved/rejected/deferred/unreviewed.
+- Safety: no AI, Reconstruction, Publishing, batch, tenant, or customer controls; no application behavior changed.
+- Validation: focused tests `27 / 27`; platform Vercel build passes with existing lint warnings; `git diff --check` passes.
+- Canonical evidence: `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_E2E_VERIFICATION.md`.
+- Recommended next phase: Phase 8D-27 - Post-Candidate-Context Boundary Reassessment, documentation only.
+
+Previous completed milestone:
 - Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
 - Status: COMPLETE / REAL UI VERIFIED / BLOCKING SCREENSHOT DELIVERY DEFECT FIXED IN CODE / DEPLOYED VISUAL RE-VERIFICATION PENDING.
 - Targets: ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`.
