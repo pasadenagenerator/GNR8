@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-21
+2026-06-22
 
 ## Migration Platform MVP Buildout
 
@@ -385,8 +385,10 @@ Phase 8D-23 changes documentation only. It adds no UI implementation, Candidate 
 Phase 8D-24 - Candidate Context Review UI Integration Implementation is COMPLETE. The existing Candidate Review page now loads one existing `CandidateContextProjection` per displayed candidate from the Review package's exact linked Candidate Discovery artifact, matching First Limited Dry Run output, and existing Evidence Capture baseline. It creates no new persistence or endpoint.
 Each candidate card has a collapsed-by-default `View Context` panel. Route shows the exact full-page screenshot without a highlight. Navigation shows the screenshot, geometry-backed CSS overlay, item count, and ordered labels. Section shows the screenshot, section CSS overlay, structural label, and route. Ready shows compatible visual context; incomplete shows the available screenshot plus a warning; unavailable shows an unavailable warning without requiring a screenshot. Projection state does not restrict or alter decisions.
 The existing Approve, Reject, and Defer action path is unchanged. Operator-visible context stays compact; raw screenshot paths, evidence and geometry refs, lineage, and projection diagnostics remain in collapsed `Technical details`. Focused tests pass `22 / 22`; the platform Vercel build passes. No AI, Reconstruction, Publishing, batch, tenant/customer, Evidence Capture, Candidate Discovery, Candidate Context Projection, Candidate Review persistence/API/action, schema, worker, screenshot, crop, or image-generation behavior changed.
-Current Phase: Phase 8D-24 - Candidate Context Review UI Integration Implementation is complete.
-Next recommended phase: Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
+Phase 8D-25 - Candidate Context Review UI End-to-End Verification is COMPLETE WITH A BLOCKING PRESENTATION DEFECT FIXED IN CODE. Authenticated production checks on ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf` confirmed readable default cards, collapsed context/technical disclosures, confidence, limitations, Navigation labels, all six bounded Approve/Reject/Defer submissions, canonical refresh, stable decision counts, and no forbidden controls.
+The deployed pages could not display Route, Navigation, or Section screenshots because they attempted to read import-machine absolute paths from the deployment filesystem. The exact PNG bytes already existed in each raw-import artifact. The narrow fix adds a fail-closed read through existing raw-artifact helpers after the local-file read; both real artifacts resolve valid PNG data URIs. No endpoint, persistence, schema, worker, capture, projection, Review Action, AI, Reconstruction, Publishing, batch, tenant, or customer behavior changed. Focused tests pass `27 / 27`; the platform Vercel build passes. Deployed image/overlay verification remains pending deployment of this fix. Detailed evidence: `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_E2E_VERIFICATION.md`.
+Current Phase: Phase 8D-25 - Candidate Context Review UI End-to-End Verification is complete with production visual re-verification pending deployment.
+Next recommended phase: Phase 8D-26 - Candidate Context Review UI Production Re-Verification.
 
 ## Current Importer Architecture
 
@@ -666,10 +668,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-24 - Candidate Context Review UI Integration Implementation is complete.
+- Phase 8D-25 - Candidate Context Review UI End-to-End Verification is complete with production visual re-verification pending deployment.
 
 Next Phase:
-- Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
+- Phase 8D-26 - Candidate Context Review UI Production Re-Verification.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

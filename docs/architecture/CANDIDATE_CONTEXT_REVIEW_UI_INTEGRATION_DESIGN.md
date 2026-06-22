@@ -284,3 +284,33 @@ collapsed candidate `Technical details`. Focused projection and page tests pass
 Recommend exactly one next phase: **Phase 8D-25 - Candidate Context Review UI
 End-to-End Verification**, limited to read-only real-target UI verification on
 ODV and ViroiDoc.
+
+## Phase 8D-25 End-to-End Verification Resolution
+
+Phase 8D-25 opened the authenticated production Candidate Review pages for ODV
+and ViroiDoc. Both default card views were operator-readable, all context and
+technical disclosures started collapsed, confidence and limitations were
+visible, Navigation item labels appeared, all six bounded Approve/Reject/Defer
+submissions succeeded, and no AI, Reconstruction, Publishing, batch,
+tenant/customer, or multi-candidate control was present.
+
+The deployed UI exposed one blocking presentation defect: the projection
+carried an import-machine absolute screenshot path, so the deployment could not
+read the image and showed `Visual evidence unavailable` for Route, Navigation,
+and Section on both targets. The exact screenshot bytes already existed in each
+site version's persisted raw-import artifact. The narrow fix preserves the
+local file read and adds a fail-closed read through the existing raw-artifact
+helpers when one unique persisted path suffix matches and has `image/png`
+media type. No endpoint, persistence, capture, crop, or projection behavior was
+added.
+
+Both real artifacts now resolve valid PNG data URIs through the fallback, and
+focused tests pass `27 / 27`; the platform Vercel build passes. Because the
+authenticated production observations predate deployment of this fix, the
+deployed Route/no-overlay and Navigation/Section-overlay result remains an
+explicit production re-verification item. Detailed evidence is in
+`CANDIDATE_CONTEXT_REVIEW_UI_E2E_VERIFICATION.md`.
+
+Recommend exactly one next phase: **Phase 8D-26 - Candidate Context Review UI
+Production Re-Verification**, limited to deployment and visual re-verification
+of the accepted screenshot delivery fix on ODV and ViroiDoc.

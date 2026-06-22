@@ -11,7 +11,10 @@ import {
 } from "@/gnr8/architecture/candidate-review-surface-projection";
 import type { CandidateLimitation } from "@/gnr8/architecture/candidate-discovery-contract";
 import type { CandidateContextProjection } from "@/gnr8/architecture/candidate-context-projection";
-import { loadCandidateContextProjectionsForReview } from "@/gnr8/architecture/candidate-context-review-runtime";
+import {
+  loadCandidateContextProjectionsForReview,
+  loadCandidateContextScreenshotDataUriForReview,
+} from "@/gnr8/architecture/candidate-context-review-runtime";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
 import { CandidateReviewActionControls } from "./CandidateReviewActionControls";
@@ -145,7 +148,7 @@ type CandidateContextPresentation = {
   screenshotSrc: string | null;
 };
 
-async function screenshotSource(projection: CandidateContextProjection): Promise<string | null> {
+async function screenshotSource(siteVersionId: string, projection: CandidateContextProjection): Promise<string | null> {
   const path = projection.screenshot?.artifactPath;
   if (!path) return null;
   if (path.startsWith("data:image/") || path.startsWith("https://") || path.startsWith("http://")) return path;
@@ -153,7 +156,7 @@ async function screenshotSource(projection: CandidateContextProjection): Promise
     const bytes = await readFile(path);
     return `data:image/png;base64,${bytes.toString("base64")}`;
   } catch {
-    return null;
+    return loadCandidateContextScreenshotDataUriForReview({ siteVersionId, projection });
   }
 }
 
@@ -432,7 +435,7 @@ export default async function CandidateReviewPage(props: PageProps) {
   }) : new Map<string, CandidateContextProjection>();
   const contexts = new Map<string, CandidateContextPresentation>();
   await Promise.all([...contextProjections].map(async ([candidateId, projection]) => {
-    contexts.set(candidateId, { projection, screenshotSrc: await screenshotSource(projection) });
+    contexts.set(candidateId, { projection, screenshotSrc: await screenshotSource(model.siteVersionId, projection) });
   }));
 
   return (

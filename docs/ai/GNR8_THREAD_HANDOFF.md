@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-24 Candidate Context Review UI Integration Implementation is complete.
+- 8D-25 Candidate Context Review UI End-to-End Verification is complete with production visual re-verification pending deployment.
 
 Current Phase:
-- Phase 8D-24 Candidate Context Review UI Integration Implementation is complete.
+- Phase 8D-25 Candidate Context Review UI End-to-End Verification is complete with a blocking screenshot-delivery defect fixed in code.
 
 Next Phase:
-- Phase 8D-25 Candidate Context Review UI End-to-End Verification.
+- Phase 8D-26 Candidate Context Review UI Production Re-Verification.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,20 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
+- Status: COMPLETE / REAL UI VERIFIED / BLOCKING SCREENSHOT DELIVERY DEFECT FIXED IN CODE / DEPLOYED VISUAL RE-VERIFICATION PENDING.
+- Targets: ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`.
+- Default cards: readable names, type, route, confidence, decision, and rationale; grouped decision hierarchy; `View Context` and `Technical details` collapsed initially.
+- Context copy: Route summaries, Navigation item counts/ordered labels, Section structural labels, confidence, evidence summaries, and limitations were present. ViroiDoc preserves 18 scope warnings and some noisy source-markup labels.
+- Defect: the deployment could not read import-machine absolute screenshot paths, so every expanded context showed `Visual evidence unavailable` and no overlay.
+- Fix: fall back through existing read-only raw-import artifact helpers to the one exact persisted screenshot suffix; both real artifacts resolve valid PNG data URIs. No new persistence or endpoint.
+- Actions: Approve, Reject, and Defer succeeded on both targets with Phase 8D-25 rationales and canonical refresh; counts remain ODV `1 / 1 / 1 / 1` and ViroiDoc `1 / 1 / 1 / 2` for approved/rejected/deferred/unreviewed.
+- Safety: no AI, Reconstruction, Publishing, batch, tenant/customer, multi-candidate, schema, worker, capture, projection, or Review Action behavior added.
+- Validation: focused tests `27 / 27`; real-artifact fallback checks pass for both targets; platform Vercel build passes; screenshots recorded in the canonical evidence document.
+- Canonical evidence: `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_E2E_VERIFICATION.md`.
+- Recommended next phase: Phase 8D-26 - Candidate Context Review UI Production Re-Verification, limited to deployment and visual verification of Route/no-overlay plus Navigation/Section overlays.
+
+Previous completed milestone:
 - Phase 8D-24 - Candidate Context Review UI Integration Implementation.
 - Status: COMPLETE / READ-ONLY CANDIDATE REVIEW UI INTEGRATION.
 - Loading: exact Review-linked Candidate Discovery artifact, matching First Limited Dry Run output, existing Evidence Capture baseline, and existing `buildCandidateContextProjection(...)`; no floating Discovery latest pointer.
