@@ -374,8 +374,19 @@ Phase 8D-21 - Candidate Context Projection Implementation is COMPLETE. `apps/pla
 Route projects the exact full-page screenshot, route summary, confidence, and limitations with no highlight. Navigation projects ordered labels/item count plus one exact ref-backed navigation geometry highlight. Section projects route and structural context plus one exact ref-backed section geometry highlight. Both highlight kinds carry renderable document coordinates and source geometry refs; screenshot context carries the direct artifact path, evidence ref, capture run, route, and available viewport metadata.
 Missing or invalid screenshot/artifact lineage fails `unavailable`; missing, invalid, or ambiguous required Navigation/Section geometry fails `incomplete`; compatible complete evidence is `ready`. The pure validator checks required lineage, candidate/type compatibility, screenshot refs, required highlight bounds, state consistency, and recursively rejects generated, reconstruction, execution, and publishing fields. Focused tests pass `10 / 10`.
 Phase 8D-21 adds no UI integration, screenshot/crop creation, Evidence Capture, Limited Dry Run, Candidate Discovery, Candidate Review persistence/action/API/UI behavior, Reconstruction, AI, Publishing, schema, migration, or worker change.
-Current Phase: Phase 8D-21 - Candidate Context Projection Implementation is complete.
-Next recommended phase: Phase 8D-22 - Candidate Context Projection Real-Artifact Validation.
+Phase 8D-22 - Candidate Context Projection Real-Artifact Validation is COMPLETE. The existing read-only projection was exercised against real ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` using their persisted Candidate Discovery, matching First Limited Dry Run, and Evidence Capture baseline artifacts.
+ODV used Discovery artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8` and capture run `phase-8b-12k-f12-1781722330653-af9ea5e2`; ViroiDoc used Discovery artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64` and capture run `phase-8b-12n-1781765161217`. Each target produced a ready Route with exact full-page screenshot and no highlight, a ready Navigation with exact screenshot and geometry-backed highlight, and a ready selected Section with exact screenshot and geometry-backed highlight.
+Combined projection quality is `ready = 6`, `incomplete = 0`, and `unavailable = 0`. All six pure validations pass with no projection diagnostics. ViroiDoc Route and Navigation each preserve 18 existing source Dry Run scope limitations; they are warnings rather than projection defects. No blocking projection defect was found, so no behavior changed.
+Phase 8D-22 is validation and documentation only. It adds no UI integration, screenshot/crop generation, Review behavior, Evidence Capture, Limited Dry Run, Candidate Discovery, Candidate Review persistence/action/API behavior, Reconstruction, AI, Publishing, schema, migration, or worker change.
+Phase 8D-23 - Candidate Context Review UI Integration Design is COMPLETE. `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_INTEGRATION_DESIGN.md` selects one collapsed-by-default inline `View context` panel inside each existing Candidate Review card. The panel keeps the readable candidate, exact visual evidence, and existing single-candidate actions in one flow while leaving Approve, Reject, Defer, rationale, concurrency, refresh, and all Review behavior unchanged.
+The visual card reuses the exact full-page screenshot. Route deliberately has no highlight; Navigation and Section render the projection-supplied geometry as a non-interactive CSS overlay. It shows route, confidence, evidence summary, and limitations in operator language while keeping diagnostics and raw refs inside collapsed `Technical details`. Ready shows complete compatible context; incomplete shows available evidence plus a warning without guessing missing geometry; unavailable shows an evidence warning and recommends Defer without selecting or enforcing it.
+The first implementation scope is read-only integration on the existing superadmin page, with no crops, no new screenshots, no evidence fallback, no new endpoint or persistence, and no action behavior change. AI, Reconstruction, Publishing, editing, generated output, capture controls, and batch actions remain forbidden.
+Phase 8D-23 changes documentation only. It adds no UI implementation, Candidate Context Projection behavior, Candidate Review behavior, Review Action/API behavior, Evidence Capture, Candidate Discovery, Reconstruction, AI, Publishing, schema, migration, or worker change.
+Phase 8D-24 - Candidate Context Review UI Integration Implementation is COMPLETE. The existing Candidate Review page now loads one existing `CandidateContextProjection` per displayed candidate from the Review package's exact linked Candidate Discovery artifact, matching First Limited Dry Run output, and existing Evidence Capture baseline. It creates no new persistence or endpoint.
+Each candidate card has a collapsed-by-default `View Context` panel. Route shows the exact full-page screenshot without a highlight. Navigation shows the screenshot, geometry-backed CSS overlay, item count, and ordered labels. Section shows the screenshot, section CSS overlay, structural label, and route. Ready shows compatible visual context; incomplete shows the available screenshot plus a warning; unavailable shows an unavailable warning without requiring a screenshot. Projection state does not restrict or alter decisions.
+The existing Approve, Reject, and Defer action path is unchanged. Operator-visible context stays compact; raw screenshot paths, evidence and geometry refs, lineage, and projection diagnostics remain in collapsed `Technical details`. Focused tests pass `22 / 22`; the platform Vercel build passes. No AI, Reconstruction, Publishing, batch, tenant/customer, Evidence Capture, Candidate Discovery, Candidate Context Projection, Candidate Review persistence/API/action, schema, worker, screenshot, crop, or image-generation behavior changed.
+Current Phase: Phase 8D-24 - Candidate Context Review UI Integration Implementation is complete.
+Next recommended phase: Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
 
 ## Current Importer Architecture
 
@@ -655,10 +666,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-21 - Candidate Context Projection Implementation is complete.
+- Phase 8D-24 - Candidate Context Review UI Integration Implementation is complete.
 
 Next Phase:
-- Phase 8D-22 - Candidate Context Projection Real-Artifact Validation.
+- Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

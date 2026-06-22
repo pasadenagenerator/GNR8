@@ -281,3 +281,26 @@ publishing, batch, tenant/customer, edit, or generated-output controls.
 Recommend exactly one next boundary: **Phase 8D-18 - Candidate Review Operator
 UI End-to-End Verification**, limited to authenticated visual and interaction
 verification of the simplified page against the existing real review data.
+
+## Phase 8D-23 Candidate Context Integration Design
+
+`CANDIDATE_CONTEXT_REVIEW_UI_INTEGRATION_DESIGN.md` defines a future read-only
+visual context extension to each existing candidate card. It selects a
+collapsed-by-default inline `View context` panel placed before the existing
+single-candidate controls in reading order. Approve, Reject, and Defer remain
+visible outside the panel.
+
+The panel does not alter this document's action payload, authorization,
+confirmation, rationale, concurrency, replay, stale-package, canonical refresh,
+history, or error behavior. Expanding the panel and loading an image are local
+presentation events and must never submit or change a decision.
+
+Incomplete context shows a warning without changing action behavior by default.
+Unavailable context recommends Defer as operator guidance only; it does not
+select, submit, enforce, or automatically disable an action. Any future change
+to decision availability requires a separate explicit Review behavior design.
+
+Phase 8D-23 is documentation only. Recommend exactly one next boundary: **Phase
+8D-24 - Candidate Context Review UI Integration Implementation**, limited to the
+designed read-only context panel and focused tests with all action behavior
+unchanged.

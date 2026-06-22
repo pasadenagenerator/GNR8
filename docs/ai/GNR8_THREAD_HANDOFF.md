@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-21 Candidate Context Projection Implementation is complete.
+- 8D-24 Candidate Context Review UI Integration Implementation is complete.
 
 Current Phase:
-- Phase 8D-21 Candidate Context Projection Implementation is complete.
+- Phase 8D-24 Candidate Context Review UI Integration Implementation is complete.
 
 Next Phase:
-- Phase 8D-22 Candidate Context Projection Real-Artifact Validation.
+- Phase 8D-25 Candidate Context Review UI End-to-End Verification.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,42 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8D-24 - Candidate Context Review UI Integration Implementation.
+- Status: COMPLETE / READ-ONLY CANDIDATE REVIEW UI INTEGRATION.
+- Loading: exact Review-linked Candidate Discovery artifact, matching First Limited Dry Run output, existing Evidence Capture baseline, and existing `buildCandidateContextProjection(...)`; no floating Discovery latest pointer.
+- Placement: one collapsed-by-default inline `View Context` panel inside every candidate card; existing Approve, Reject, and Defer controls remain unchanged and visible.
+- Route: persisted full-page screenshot, route summary, confidence, evidence summary, limitations, and no highlight by design.
+- Navigation: persisted full-page screenshot, projection-supplied geometry CSS overlay, item count, ordered labels, confidence, and limitations.
+- Section: persisted full-page screenshot, projection-supplied section CSS overlay, structural label, route, confidence, and limitations.
+- State UX: ready shows screenshot and compatible overlay; incomplete shows screenshot plus warning; unavailable shows a warning without a screenshot requirement; no decision restriction.
+- Technical boundary: raw paths, evidence refs, geometry refs, and diagnostics stay in collapsed `Technical details`.
+- Verification: focused projection and page tests pass `22 / 22`; platform Vercel build passes; `git diff --check` passes.
+- Safety: no action, API, persistence, projection, discovery, capture, AI, Reconstruction, Publishing, image generation, screenshot/crop generation, batch, tenant/customer, schema, or worker change.
+- Canonical design: `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_INTEGRATION_DESIGN.md`.
+- Recommended next phase: Phase 8D-25 - Candidate Context Review UI End-to-End Verification.
+
+Previous completed milestone:
+- Phase 8D-23 - Candidate Context Review UI Integration Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Placement: one collapsed-by-default inline `View context` panel inside each existing Candidate Review card; existing Approve, Reject, and Defer controls remain visible outside it.
+- Canonical design: `docs/architecture/CANDIDATE_CONTEXT_REVIEW_UI_INTEGRATION_DESIGN.md`.
+- Recommended next phase at completion: Phase 8D-24 - Candidate Context Review UI Integration Implementation.
+
+Previous completed milestone:
+- Phase 8D-22 - Candidate Context Projection Real-Artifact Validation.
+- Status: COMPLETE / REAL-ARTIFACT READ-ONLY VALIDATION PASS.
+- Targets: ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`.
+- ODV lineage: Discovery artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`; capture run `phase-8b-12k-f12-1781722330653-af9ea5e2`.
+- ViroiDoc lineage: Discovery artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`; capture run `phase-8b-12n-1781765161217`.
+- Projection result: each target's selected Route, Navigation, and Section projection is `ready`; combined counts are `6 ready / 0 incomplete / 0 unavailable`.
+- Visual invariants: both Routes have exact full-page screenshots and no highlight; both Navigations and both selected Sections have exact screenshots and unique, in-bounds, geometry-backed highlights.
+- Diagnostics: all six projection validators pass with no projection diagnostics. ViroiDoc Route and Navigation preserve 18 source Dry Run scope limitations each; these are warnings, not projection defects.
+- Defects: none; no behavior changed.
+- Safety: validation and the four required documentation updates only; no UI integration, screenshot/crop creation, review behavior, AI, Reconstruction, Publishing, schema, migration, or worker change.
+- Canonical evidence: `docs/architecture/CANDIDATE_CONTEXT_PROJECTION_DESIGN.md` and `docs/architecture/CANDIDATE_CONTEXT_VISUALIZATION_FOUNDATION.md`.
+- Recommended next phase: Phase 8D-23 - Candidate Context Review UI Integration Design, documentation and contract design only.
+
+Previous completed milestone:
 - Phase 8D-21 - Candidate Context Projection Implementation.
 - Status: COMPLETE / PURE DETERMINISTIC PROJECTION ONLY.
 - Implementation: `apps/platform/gnr8/architecture/candidate-context-projection.ts` builds one exact-lineage `CandidateContextProjection` with `ready | incomplete | unavailable` state, screenshot, optional highlight, candidate/evidence summary, limitations, and diagnostics.

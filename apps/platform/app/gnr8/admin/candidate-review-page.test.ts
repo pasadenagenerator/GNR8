@@ -4,6 +4,7 @@ import test from "node:test";
 
 const PAGE_FILE = new URL("./candidate-review/[siteVersionId]/page.tsx", import.meta.url);
 const CONTROLS_FILE = new URL("./candidate-review/[siteVersionId]/CandidateReviewActionControls.tsx", import.meta.url);
+const CONTEXT_RUNTIME_FILE = new URL("../../../gnr8/architecture/candidate-context-review-runtime.ts", import.meta.url);
 
 test("Candidate Review page keeps the canonical loader and superadmin guard", async () => {
   const source = await readFile(PAGE_FILE, "utf8");
@@ -90,4 +91,59 @@ test("Candidate Review page contains no forbidden or multi-candidate controls", 
     "publish candidate", "publishing control", "generated output", "edit candidate", "edit decision",
     "batch action", "bulk action", "select all", "multi-candidate", "tenant access", "customer access",
   ]) assert.equal(source.includes(phrase), false, `unexpected forbidden UI text ${phrase}`);
+});
+
+test("Candidate context is loaded from exact review lineage without new persistence", async () => {
+  const source = await readFile(CONTEXT_RUNTIME_FILE, "utf8");
+  assert.equal(source.includes("loadCandidateDiscoveryResultById"), true);
+  assert.equal(source.includes("artifactId: input.candidateDiscoveryArtifactId"), true);
+  assert.equal(source.includes("dryRunId: input.dryRunId"), true);
+  assert.equal(source.includes("buildCandidateContextProjection"), true);
+  for (const forbidden of ["persistCandidate", "insert(", "update(", "delete(", "fetch("]) {
+    assert.equal(source.toLowerCase().includes(forbidden), false, `unexpected context runtime operation ${forbidden}`);
+  }
+});
+
+test("View Context is collapsed by default and existing actions still render", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  const panelStart = source.indexOf("function CandidateContextPanel");
+  const cardStart = source.indexOf("function CandidateCard");
+  const panel = source.slice(panelStart, cardStart);
+  assert.equal(panel.includes("View Context"), true);
+  assert.equal(panel.includes("<details data-candidate-context-panel"), true);
+  assert.equal(panel.includes("<details open"), false);
+  assert.equal(source.includes("<CandidateReviewActionControls"), true);
+});
+
+test("Route, Navigation, and Section context render the screenshot and projected CSS overlay", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  assert.equal(source.includes("data-candidate-context-screenshot={projection.lineage.candidateType}"), true);
+  assert.equal(source.includes("Full-page screenshot for"), true);
+  assert.equal(source.includes("data-candidate-context-overlay={highlight.kind}"), true);
+  assert.equal(source.includes("highlight.sourceViewportWidth"), true);
+  assert.equal(source.includes("highlight.sourceDocumentHeight"), true);
+  assert.equal(source.includes('border: "3px solid #f97316"'), true);
+  assert.equal(source.includes("crop"), false);
+});
+
+test("context states and type-specific operator summaries are present", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  for (const label of [
+    "Visual context incomplete", "Visual evidence unavailable", "Route summary",
+    "Navigation item count", "Ordered labels", "Structural label", "Evidence summary",
+  ]) assert.equal(source.includes(label), true, `missing context UI ${label}`);
+  assert.equal(source.includes('context.projection.state === "incomplete"'), true);
+  assert.equal(source.includes('context.projection.state === "unavailable"'), true);
+});
+
+test("context diagnostics remain in collapsed Technical details", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  const detailsStart = source.indexOf("function CandidateTechnicalDetails");
+  const panelStart = source.indexOf("function CandidateContextPanel");
+  const details = source.slice(detailsStart, panelStart);
+  for (const label of ["Context diagnostics", "Screenshot artifact path", "Geometry evidence refs"]) {
+    assert.equal(details.includes(label), true, `missing context technical detail ${label}`);
+  }
+  assert.equal(details.includes("<details"), true);
+  assert.equal(details.includes("<details open"), false);
 });

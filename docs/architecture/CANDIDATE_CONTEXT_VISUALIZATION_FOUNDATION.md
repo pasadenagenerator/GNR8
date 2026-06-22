@@ -404,3 +404,30 @@ lineage fields, and recursive forbidden generated/output fields.
 There is no UI integration or Review behavior change in 8D-21. The single
 recommended next phase is **Phase 8D-22 - Candidate Context Projection
 Real-Artifact Validation**.
+
+## Phase 8D-22 Real-Artifact Validation Resolution
+
+The full-page plus highlighted-region strategy was validated against real ODV
+and ViroiDoc artifacts without creating screenshots or crops. Each target's
+Route projection reused its persisted `fullpage_screenshot` and correctly had
+no highlight. Each target's Navigation and selected Section projection reused
+that screenshot and resolved one exact, document-coordinate highlight from
+persisted geometry evidence.
+
+ODV supplied three layout regions, two section boundaries, and one navigation
+evidence record. ViroiDoc supplied four layout regions, three section boundaries,
+and one navigation evidence record. Across the six selected candidates the
+result was `6 ready / 0 incomplete / 0 unavailable`; all pure projection
+validations passed and projection diagnostics were empty. ViroiDoc's Route and
+Navigation projections preserved 18 source Dry Run limitations each; these are
+source-scope warnings, not projection failures, and did not weaken screenshot or
+highlight lineage.
+
+No visualization or projection defect was found. The fail-closed boundary
+remains unchanged: missing screenshot or lineage is unavailable, while missing,
+invalid, or ambiguous Navigation or Section geometry is incomplete. Phase 8D-22
+adds no UI integration, screenshot/crop generation, Review behavior, AI,
+Reconstruction, Publishing, schema, or worker change.
+
+The single recommended next phase is **Phase 8D-23 - Candidate Context Review UI
+Integration Design**, documentation and contract design only.

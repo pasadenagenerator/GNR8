@@ -401,3 +401,102 @@ Reconstruction, AI, Publishing, schema, migration, or worker change.
 
 Recommend exactly one next phase: **Phase 8D-22 - Candidate Context Projection
 Real-Artifact Validation**.
+
+## Phase 8D-22 Real-Artifact Validation Resolution
+
+Phase 8D-22 exercised the implemented projection read-only against the latest
+persisted Candidate Discovery, matching First Limited Dry Run, and Evidence
+Capture baseline artifacts for ODV and ViroiDoc. One Route, one Navigation, and
+one Section candidate were selected from each real Discovery result. All six
+projections passed `validateCandidateContextProjection(...)`.
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` used Discovery artifact
+`candidate_discovery_result_dbf786254717f980469b9b99853c14b8`, dry run
+`09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l`, and capture run
+`phase-8b-12k-f12-1781722330653-af9ea5e2`. The baseline contains one layout
+geometry record with three regions, two section boundaries, one navigation
+evidence record, and the `fullpage_screenshot` ref. Results:
+
+- Route `candidate:route:/`: `ready`; screenshot present; highlight absent by
+  design; no limitations or diagnostics.
+- Navigation `candidate:navigation:nav%3A%2F`: `ready`; screenshot present;
+  document highlight `(128, 232.172, 1110, 34.203)` backed by
+  `evidence:layout-geometry:/:region:layout-region-7c0572f3449b`; no limitations
+  or diagnostics.
+- Section `candidate:section:/:section-boundary-7ea033afed92`: `ready`;
+  screenshot present; document highlight `(98, 30, 1170, 237.375)` backed by
+  the exact section boundary and layout geometry refs; no limitations or
+  diagnostics.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` used Discovery
+artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`, dry run
+`e26b0754-988b-45b9-9e24-8e213179b6cf:8b-12n`, and capture run
+`phase-8b-12n-1781765161217`. The baseline contains one layout geometry record
+with four regions, three section boundaries, one navigation evidence record,
+and the `fullpage_screenshot` ref. Results:
+
+- Route `candidate:route:/`: `ready`; screenshot present; highlight absent by
+  design; 18 preserved source Dry Run limitations and no projection diagnostics.
+- Navigation `candidate:navigation:nav%3A%2F`: `ready`; screenshot present;
+  document highlight `(584.813, 30.391, 402.203, 53.203)` backed by
+  `evidence:layout-geometry:/:region:layout-region-bffe5ee61728`; 18 preserved
+  source Dry Run limitations and no projection diagnostics.
+- Section `candidate:section:/:section-boundary-4156e11f8f75`: `ready`;
+  screenshot present; document highlight `(0, 0, 1366, 114.969)` backed by the
+  exact section boundary and layout geometry refs; no limitations or diagnostics.
+
+The combined quality count is `ready = 6`, `incomplete = 0`, and
+`unavailable = 0`. Every selected candidate had exact screenshot and lineage;
+therefore none was classified unavailable. Navigation and Section geometry
+resolved uniquely and within the persisted document bounds, so no incomplete
+reason was required. No blocking projection defect was found and Phase 8D-22
+changes no projection behavior.
+
+Recommend exactly one next phase: **Phase 8D-23 - Candidate Context Review UI
+Integration Design**, documentation and contract design only.
+
+## Phase 8D-23 Review UI Integration Design Resolution
+
+Phase 8D-23 defines the first presentation boundary for this projection in
+`CANDIDATE_CONTEXT_REVIEW_UI_INTEGRATION_DESIGN.md`. The selected placement is
+one collapsed-by-default inline `View context` panel inside each existing
+Candidate Review card. The panel keeps the candidate, its visual evidence, and
+the existing single-candidate actions in one reading flow without changing
+Review behavior.
+
+Route presents the exact full-page screenshot without a highlight. Navigation
+and Section present that exact-lineage screenshot with the projection-supplied
+geometry highlight rendered as a non-interactive CSS overlay. The first
+implementation creates no crops or screenshots and performs no evidence lookup,
+coordinate inference, or fallback selection in presentation code.
+
+Ready, incomplete, and unavailable remain projection states rather than action
+states. Incomplete shows available evidence and a warning without inventing a
+highlight. Unavailable shows an evidence warning and recommends Defer, but does
+not select or enforce an action. Diagnostics stay inside collapsed `Technical
+details`; limitations remain operator-visible.
+
+Phase 8D-23 changes documentation only and leaves this projection contract and
+implementation unchanged.
+
+Recommend exactly one next phase: **Phase 8D-24 - Candidate Context Review UI
+Integration Implementation**, limited to the designed read-only panel and
+focused tests.
+
+## Phase 8D-24 Review UI Integration Resolution
+
+Phase 8D-24 consumes this projection unchanged through a new read-only Candidate
+Review runtime loader. The loader binds to the exact Candidate Discovery
+artifact and dry-run identity carried by the rendered Review package, reuses
+the existing Evidence Capture baseline, and calls
+`buildCandidateContextProjection(...)` once per linked candidate.
+
+Presentation performs no evidence matching or geometry inference. Route uses
+the projected screenshot without a highlight; Navigation and Section scale the
+projected document-coordinate rectangle as a CSS overlay. Projection
+diagnostics and raw refs remain collapsed in `Technical details`, while ready,
+incomplete, and unavailable receive the operator presentation defined in Phase
+8D-23. No projection contract or behavior changed.
+
+Recommend exactly one next phase: **Phase 8D-25 - Candidate Context Review UI
+End-to-End Verification**.
