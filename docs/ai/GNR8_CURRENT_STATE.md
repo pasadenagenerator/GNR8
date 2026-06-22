@@ -363,8 +363,19 @@ All six events contain actor, decision, rationale, trusted time, and correct nul
 Phase 8D-17 - Candidate Review Operator UI Simplification is COMPLETE. The existing superadmin page now defaults to site version, review status, reviewed/total progress, four product-language summary cards, and Approved/Rejected/Deferred/Needs review candidate groups. Candidate cards use readable Route/Navigation/Section names and show route, confidence, current decision, reviewed rationale, optional rationale, and the unchanged single-candidate actions.
 Artifact refs, raw candidate IDs, event IDs, validation internals, diagnostics, raw lineage, and supersession details remain available in collapsed `Technical details` disclosures. The six-field action payload, action API, persistence, contracts, success/stale/error refresh behavior, and superadmin-only boundary are unchanged. No AI, reconstruction, publishing, batch action, tenant/customer access, schema, discovery, or generated-output surface was added.
 Focused operator UI and transport tests pass `10 / 10`; the platform Vercel build passes. Phase 8D-17 is presentation-only.
-Current Phase: Phase 8D-17 - Candidate Review Operator UI Simplification is complete.
-Next recommended phase: Phase 8D-18 - Candidate Review Operator UI End-to-End Verification, authenticated visual and interaction verification only.
+Phase 8D-19 - Candidate Context Visualization Foundation is COMPLETE. `docs/architecture/CANDIDATE_CONTEXT_VISUALIZATION_FOUNDATION.md` defines the minimum evidence a human operator needs before reviewing Route, Navigation, and Section candidates. It reuses exact-lineage full-page screenshots, rendered DOM, layout geometry, section/navigation evidence, computed-style samples, and Limited Dry Run models without changing their behavior.
+The selected screenshot strategy is full-page screenshot plus highlighted region: Route uses the complete page without an artificial highlight, while Navigation and Section require geometry-backed highlights. Missing or ambiguous screenshot/model/geometry lineage fails closed as incomplete or unavailable. The future `CandidateContextProjection` is read-only, deterministic, metadata/ref based, non-authorizing, and separate from Candidate Discovery, review actions, persistence, and Reconstruction.
+Phase 8D-19 changed documentation only. It added no implementation, UI or review behavior change, Evidence Capture or Limited Dry Run behavior, Candidate Discovery behavior/persistence/UI, Candidate Review persistence/action/API change, Reconstruction, AI, Publishing, schema, migration, or worker behavior.
+Phase 8D-20 - Candidate Context Projection Design is COMPLETE. `docs/architecture/CANDIDATE_CONTEXT_PROJECTION_DESIGN.md` defines an exact-lineage, one-candidate `CandidateContextProjection` with deterministic `ready | incomplete | unavailable` states; lineage, screenshot, highlight, candidate/evidence summary, limitation, and diagnostic fields; and closed validation for Route, Navigation, and Section compatibility.
+Route projects its exact full-page screenshot, route summary, confidence, and limitations without a highlight. Navigation projects the exact screenshot, one proven navigation geometry highlight, item count, ordered labels, confidence, and limitations. Section projects the exact screenshot, exact model geometry, deterministic structural label, route, confidence, and limitations.
+The selected highlight model carries both resolved document coordinates and geometry evidence refs. The selected screenshot model carries both the direct persisted artifact path and evidence lineage ref. Missing screenshot or invalid lineage fails unavailable; missing, invalid, or ambiguous required geometry fails incomplete without guessing or fallback. The projection is read-only, non-authorizing, and separate from Review Actions and future Reconstruction.
+Phase 8D-20 changed documentation only. It added no implementation, UI or review behavior change, Evidence Capture, Candidate Discovery, Candidate Review, Review Actions, Review API, Reconstruction, AI, Publishing, schema, migration, or worker behavior.
+Phase 8D-21 - Candidate Context Projection Implementation is COMPLETE. `apps/platform/gnr8/architecture/candidate-context-projection.ts` implements a deterministic, one-candidate read model over the exact Candidate Discovery, Evidence Capture baseline, optional First Limited Dry Run, and site-version inputs. It performs no lookup, capture, persistence, or mutation.
+Route projects the exact full-page screenshot, route summary, confidence, and limitations with no highlight. Navigation projects ordered labels/item count plus one exact ref-backed navigation geometry highlight. Section projects route and structural context plus one exact ref-backed section geometry highlight. Both highlight kinds carry renderable document coordinates and source geometry refs; screenshot context carries the direct artifact path, evidence ref, capture run, route, and available viewport metadata.
+Missing or invalid screenshot/artifact lineage fails `unavailable`; missing, invalid, or ambiguous required Navigation/Section geometry fails `incomplete`; compatible complete evidence is `ready`. The pure validator checks required lineage, candidate/type compatibility, screenshot refs, required highlight bounds, state consistency, and recursively rejects generated, reconstruction, execution, and publishing fields. Focused tests pass `10 / 10`.
+Phase 8D-21 adds no UI integration, screenshot/crop creation, Evidence Capture, Limited Dry Run, Candidate Discovery, Candidate Review persistence/action/API/UI behavior, Reconstruction, AI, Publishing, schema, migration, or worker change.
+Current Phase: Phase 8D-21 - Candidate Context Projection Implementation is complete.
+Next recommended phase: Phase 8D-22 - Candidate Context Projection Real-Artifact Validation.
 
 ## Current Importer Architecture
 
@@ -644,10 +655,10 @@ Explicitly not yet implemented:
 - dynamic content extraction
 
 Current Phase:
-- Phase 8D-17 - Candidate Review Operator UI Simplification is complete.
+- Phase 8D-21 - Candidate Context Projection Implementation is complete.
 
 Next Phase:
-- Phase 8D-18 - Candidate Review Operator UI End-to-End Verification, authenticated visual and interaction verification only.
+- Phase 8D-22 - Candidate Context Projection Real-Artifact Validation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

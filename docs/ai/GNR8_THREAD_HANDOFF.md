@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8D-17 Candidate Review Operator UI Simplification is complete.
+- 8D-21 Candidate Context Projection Implementation is complete.
 
 Current Phase:
-- Phase 8D-17 Candidate Review Operator UI Simplification is complete.
+- Phase 8D-21 Candidate Context Projection Implementation is complete.
 
 Next Phase:
-- Phase 8D-18 Candidate Review Operator UI End-to-End Verification, authenticated visual and interaction verification only.
+- Phase 8D-22 Candidate Context Projection Real-Artifact Validation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,15 +23,27 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase 8D-17 - Candidate Review Operator UI Simplification.
-- Status: COMPLETE / PRESENTATION-ONLY OPERATOR SIMPLIFICATION.
-- Default view: site version, review status, reviewed/total progress, Approved/Rejected/Deferred/Needs review summary cards, and the same four candidate groups.
-- Candidate cards: readable Route/Navigation/Section names, route path, confidence, current decision, reviewed rationale, optional rationale, and unchanged single-candidate actions.
-- Technical details: raw candidate IDs, artifact refs, event IDs, validation, diagnostics, lineage, and supersession remain available in collapsed disclosures.
-- Behavior boundary: action payload, API, persistence, contracts, canonical refresh, stale/error handling, and superadmin-only access are unchanged.
-- Safety: no AI, reconstruction, publishing, batch action, tenant/customer access, schema, discovery, edit, or generated-output controls or behavior.
-- Validation: focused operator UI and transport tests pass `10 / 10`; platform Vercel build passes; `git diff --check` passes.
-- Recommended next phase: Phase 8D-18 - Candidate Review Operator UI End-to-End Verification, authenticated visual and interaction verification only.
+- Phase 8D-21 - Candidate Context Projection Implementation.
+- Status: COMPLETE / PURE DETERMINISTIC PROJECTION ONLY.
+- Implementation: `apps/platform/gnr8/architecture/candidate-context-projection.ts` builds one exact-lineage `CandidateContextProjection` with `ready | incomplete | unavailable` state, screenshot, optional highlight, candidate/evidence summary, limitations, and diagnostics.
+- Route: exact full-page screenshot, route summary, canonical confidence, and limitations; highlight is null by design.
+- Navigation: exact full-page screenshot, one proven ref-backed geometry highlight, item count, ordered labels, canonical confidence, and limitations.
+- Section: exact full-page screenshot, one exact ref-backed model geometry highlight, deterministic structural label, route, canonical confidence, and limitations.
+- Fail closed: missing screenshot or invalid lineage is unavailable; missing, invalid, or ambiguous required geometry is incomplete; no guessing or fallback.
+- Validation: pure required-lineage, candidate compatibility, screenshot/ref, geometry-bound, state consistency, and recursive forbidden-field checks.
+- Focused tests: `10 / 10` pass.
+- Safety: no UI integration, screenshot/crop creation, review behavior, Evidence Capture, Limited Dry Run, Candidate Discovery, Candidate Review persistence/action/API, Reconstruction, AI, Publishing, schema, migration, or worker behavior.
+- Canonical design: `docs/architecture/CANDIDATE_CONTEXT_PROJECTION_DESIGN.md`.
+- Recommended next phase: Phase 8D-22 - Candidate Context Projection Real-Artifact Validation.
+
+Previous completed milestone:
+- Phase 8D-19 - Candidate Context Visualization Foundation.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Existing reuse: exact-lineage desktop screenshots, rendered DOM, layout geometry, section/navigation evidence, computed-style samples, and Route/Navigation/Section models.
+- Selected strategy: full-page screenshot plus a geometry-backed highlight for Navigation and Section; Route has no artificial highlight.
+- Missing or ambiguous required evidence fails closed. The future projection is read-only, deterministic, metadata/ref based, non-authorizing, and separate from review and Reconstruction behavior.
+- Canonical design: `docs/architecture/CANDIDATE_CONTEXT_VISUALIZATION_FOUNDATION.md`.
+- Recommended next phase at completion: Phase 8D-20 - Candidate Context Projection Design.
 
 Previous completed milestone:
 - Phase 8D-16 - Candidate Review Action End-to-End Verification.
