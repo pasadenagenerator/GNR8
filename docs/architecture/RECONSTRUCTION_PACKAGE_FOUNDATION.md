@@ -324,16 +324,83 @@ Phase 8E-1 adds no builder, persistence, Structure Plan, reconstruction,
 generated React, generated blocks, generated content, AI output, execution,
 publishing artifact, migration, schema change, worker, API, or UI behavior.
 
+## Phase 8E-2 Builder Design Closure
+
+Phase 8E-2 adds
+`docs/architecture/RECONSTRUCTION_PACKAGE_BUILDER_DESIGN.md` as the canonical
+design for the pure deterministic builder. The builder converts one exact
+latest `CandidateReviewPackage` artifact plus its linked
+`CandidateDiscoveryResult` into a metadata-only `ReconstructionPackage`.
+
+The design keeps the Review Package as the only authorizing input. Only latest
+approved decisions become `approvedCandidateRefs`; rejected, deferred,
+unreviewed, superseded, stale, and missing-candidate decisions are excluded.
+Candidate refs are constructed from exact candidate identity, type, route,
+confidence, authorizing `reviewEventId`, source candidate refs, and evidence
+refs copied from the linked Discovery artifact.
+
+Package identity remains deterministic:
+
+```text
+reconstruction-package:<candidateReviewPackageArtifactId>:<contractVersion>
+```
+
+The first builder implementation should produce `valid`, `blocked`, `stale`,
+or `invalid` terminal results, propagate existing limitations, add only
+deterministic builder blockers, and emit diagnostics for counts, lineage,
+staleness, missing candidates, supersession, and contract validation.
+
+Phase 8E-2 remains documentation and architecture only. It adds no builder
+implementation, persistence, API, UI, Structure Plan, reconstruction, AI,
+generation, workers, deployment, publishing, schema, or behavior change.
+
+## Phase 8E-3 Builder Implementation Closure
+
+Phase 8E-3 creates
+`apps/platform/gnr8/architecture/reconstruction-package-builder.ts` as the
+canonical pure builder from one exact Candidate Review Package artifact plus
+its linked Candidate Discovery Result into a metadata-only
+`ReconstructionPackage`.
+
+The implementation keeps the Review Package as the only authorizing input.
+Only latest approved decisions that resolve to exact Discovery candidates are
+included. Rejected, deferred, unreviewed, superseded, stale, and
+missing-candidate decisions are excluded from `approvedCandidateRefs`.
+Included candidate refs copy candidate ID, candidate type, route path,
+confidence, authorizing Review Event ID, deterministic source candidate refs,
+and stable evidence/dry-run refs.
+
+The builder derives package identity as:
+
+```text
+reconstruction-package:<candidateReviewPackageArtifactId>:<contractVersion>
+```
+
+It records deterministic eligibility counts, source limitations, builder
+blockers, and diagnostics for validation, latest-head comparison, lineage,
+missing candidates, and Reconstruction Package contract validation. The
+builder validates its output through `validateReconstructionPackage(...)`.
+
+Focused tests in
+`apps/platform/gnr8/architecture/reconstruction-package-builder.test.ts`
+cover valid output, exclusion behavior, blocked no-approval output, stale
+status, missing-candidate diagnostics, deterministic identity, count
+validation, forbidden-field absence, and valid contract validation.
+
+Phase 8E-3 adds no persistence, latest-pointer mutation, API, UI, Structure
+Planning, reconstruction, AI, generated React, generated blocks, generated
+content, execution, publishing, migration, schema, worker, or behavior change
+outside the pure builder.
+
 ## Recommendation
 
 Recommend exactly one next phase:
 
-> **Phase 8E-2 - Reconstruction Package Builder Design**
+> **Phase 8E-4 - Reconstruction Package Real-Artifact Validation**
 
-8E-2 should design the pure deterministic mapping from one exact validated
-latest Candidate Review Package artifact into this contract. It must remain
-design-only and must not add persistence, API, UI, Structure Planning,
-reconstruction, AI, generation, workers, deployment, or publishing.
+8E-4 should validate the pure builder against real Candidate Review and linked
+Candidate Discovery artifacts without adding persistence, Structure Planning,
+AI, generation, publishing, schema, workers, API, or UI behavior.
 
 ## 8E-0 Exit State
 

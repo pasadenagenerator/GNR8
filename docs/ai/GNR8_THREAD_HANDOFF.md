@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8E-1 Reconstruction Package Contract is complete.
+- 8E-3 Reconstruction Package Builder Implementation is complete.
 
 Current Phase:
-- Phase 8E-1 Reconstruction Package Contract is complete.
+- Phase 8E-3 Reconstruction Package Builder Implementation is complete.
 
 Next Phase:
-- Phase 8E-2 Reconstruction Package Builder Design, design only.
+- Phase 8E-4 Reconstruction Package Real-Artifact Validation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,37 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8E-3 - Reconstruction Package Builder Implementation.
+- Status: COMPLETE / PURE DETERMINISTIC BUILDER ONLY.
+- Canonical module: `apps/platform/gnr8/architecture/reconstruction-package-builder.ts`.
+- Focused tests: `apps/platform/gnr8/architecture/reconstruction-package-builder.test.ts`.
+- Inputs: exact `CandidateReviewPackage`, linked `CandidateDiscoveryResult`, exact `candidateReviewPackageArtifactId`, and `latestCandidateReviewPackageArtifactId`.
+- Output: metadata-only `ReconstructionPackage`; no persistence, planning, generation, execution, or publishing.
+- Identity: `reconstruction-package:<candidateReviewPackageArtifactId>:<contractVersion>`.
+- Approved mapping: only latest approved decisions that resolve to exact Discovery candidates are included; refs copy candidate ID, candidate type, route path when available, confidence, authorizing `reviewEventId`, deterministic source candidate refs, and stable evidence/dry-run refs.
+- Exclusions: rejected, deferred, unreviewed, superseded, stale, and missing-candidate refs do not enter `approvedCandidateRefs`.
+- Status behavior: `valid` for included approved candidates with valid lineage and contract validation; `blocked` for no included approved candidates; `stale` for non-latest Review Package artifacts; `invalid` for invalid source lineage or contract validation failure.
+- Limitations and diagnostics: source limitations are propagated as deterministic strings; only builder blockers are added; diagnostics report source validation, latest-head comparison, lineage matching, included/excluded counts, missing candidates, and Reconstruction Package validation.
+- Safety: no persistence, latest-pointer mutation, Review API, Review UI, Candidate Discovery behavior, Candidate Context behavior, Candidate Review behavior, Review Actions, Evidence Capture, Structure Plan, reconstruction, AI, generation, execution, publishing, migration, schema, worker, API, UI, or behavior change outside the pure builder.
+- Validation result: focused Reconstruction Package contract and builder tests pass `18 / 18`; platform Vercel build passes with existing lint warnings; `git diff --check` passes.
+- Recommended next phase: Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
+
+Previous completed milestone:
+- Phase 8E-2 - Reconstruction Package Builder Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY.
+- Canonical design: `docs/architecture/RECONSTRUCTION_PACKAGE_BUILDER_DESIGN.md`.
+- Purpose: pure deterministic mapping from one exact latest `CandidateReviewPackage` artifact plus its linked `CandidateDiscoveryResult` into the 8E `ReconstructionPackage` contract.
+- Required inputs: exact latest Candidate Review Package artifact, exact linked Candidate Discovery Result, and optional supporting Evidence Capture baseline, Candidate Context, and FirstLimitedDryRunOutput refs as lineage only.
+- Eligibility: only latest approved decisions become `approvedCandidateRefs`; rejected, deferred, unreviewed, superseded, stale, and missing-candidate decisions are excluded.
+- Candidate refs: carry candidate ID, candidate type, route path, confidence, authorizing `reviewEventId`, deterministic source candidate refs, and copied evidence refs.
+- Identity: `reconstruction-package:<candidateReviewPackageArtifactId>:<contractVersion>`.
+- Status rules: `valid` for at least one approved candidate with valid lineage and passing validation; `blocked` for no approvals or missing required lineage; `stale` for non-latest Review Package artifacts; `invalid` for validation or lineage mismatch failures.
+- Limitations and diagnostics: propagate source limitations, add only deterministic builder blockers, and report counts, lineage validation, stale detection, missing candidates, supersession/latest-decision checks, and contract validation.
+- Safety: no builder implementation, persistence, Structure Plan, reconstruction, AI, generation, execution, publishing, migration, schema, worker, API, UI, or behavior change.
+- Validation result: `git diff --check` passes.
+- Recommended next phase: Phase 8E-3 - Reconstruction Package Builder Implementation.
+
+Previous completed milestone:
 - Phase 8E-1 - Reconstruction Package Contract.
 - Status: COMPLETE / CONTRACT ONLY.
 - Canonical module: `apps/platform/gnr8/architecture/reconstruction-package-contract.ts`.

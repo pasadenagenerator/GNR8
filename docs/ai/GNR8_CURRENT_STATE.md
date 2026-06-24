@@ -396,8 +396,59 @@ Structure Planning remains downstream of the canonical reviewed package. No addi
 Phase 8E-0 - Reconstruction Package Foundation Design is COMPLETE. The canonical Reconstruction Package is an immutable, deterministic, metadata-only eligibility handoff derived from one exact latest Candidate Review Package artifact. Only that snapshot's latest `approved` decisions are eligible; rejected, deferred, unreviewed, stale, invalid, and superseded decisions remain excluded. Candidate Discovery, Candidate Context, Limited Dry Run, and Evidence Capture refs are supporting lineage and never independent authorization.
 Package identity is tied deterministically to the exact source Review Package artifact ID plus the Reconstruction Package contract version. A new Review head produces a new immutable package identity and makes the prior package stale for new planning without rewriting its audit history. The package carries exact approved candidate and authorizing Review Event refs, bounded summaries, limitations, diagnostics, and Structure Planning eligibility metadata only. It contains no generated output, AI output, Structure Plan, execution readiness, worker job, deployment artifact, or publishing artifact. The older Phase 7F scaffolding must be reconciled or replaced by the canonical 8E contract rather than remain a parallel truth. Detailed design: `docs/architecture/RECONSTRUCTION_PACKAGE_FOUNDATION.md`.
 Phase 8E-0 changed documentation only and added no implementation or behavior change.
-Current Phase: Phase 8E-1 - Reconstruction Package Contract is complete.
-Next recommended phase: Phase 8E-2 - Reconstruction Package Builder Design, design only.
+Phase 8E-2 - Reconstruction Package Builder Design is COMPLETE. The canonical
+builder design converts one exact latest `CandidateReviewPackage` artifact
+plus its linked `CandidateDiscoveryResult` into a metadata-only
+`ReconstructionPackage`. The Review Package remains the only authorizing
+input; Discovery supplies exact candidate metadata and evidence refs but
+cannot approve candidates independently.
+Only latest approved decisions become `approvedCandidateRefs`. Rejected,
+deferred, unreviewed, superseded, stale, and missing-candidate decisions are
+excluded. Candidate refs carry candidate ID, candidate type, route path,
+confidence, authorizing `reviewEventId`, deterministic source candidate refs,
+and copied evidence refs. Package identity is derived from the exact
+`candidateReviewPackageArtifactId` plus the 8E contract version. Status rules
+are fail-closed: `valid` for at least one approved included candidate with
+valid lineage and passing contract validation, `blocked` for no approvals or
+missing required lineage, `stale` for a non-latest Review Package artifact,
+and `invalid` for validation or lineage mismatch failures.
+The design propagates source limitations and permits only deterministic
+builder blockers as new limitations. Diagnostics cover included and excluded
+counts, lineage validation, latest-head comparison, Discovery mismatch,
+missing candidates, supersession/latest-decision checks, and contract
+validation. Detailed design:
+`docs/architecture/RECONSTRUCTION_PACKAGE_BUILDER_DESIGN.md`.
+Phase 8E-2 changed documentation only and added no implementation, persistence,
+Structure Planning, reconstruction, AI, generation, execution, publishing,
+schema, worker, API, UI, or behavior change.
+Phase 8E-3 - Reconstruction Package Builder Implementation is COMPLETE. The
+pure builder module
+`apps/platform/gnr8/architecture/reconstruction-package-builder.ts` creates a
+metadata-only `ReconstructionPackage` from one exact
+`CandidateReviewPackage`, the linked `CandidateDiscoveryResult`, the exact
+Candidate Review Package artifact ID, and the latest Candidate Review Package
+artifact ID.
+The builder derives deterministic identity as
+`reconstruction-package:<candidateReviewPackageArtifactId>:<contractVersion>`,
+includes only latest approved decisions that resolve to exact Discovery
+candidates, copies candidate type, route, confidence, authorizing Review Event
+ID, source candidate refs, and evidence/dry-run refs, and excludes rejected,
+deferred, unreviewed, superseded, stale, and missing-candidate refs.
+Status behavior is metadata-only and fail-closed: `valid` for included
+approved candidates with valid lineage, `blocked` for no included approved
+candidates, `stale` for a non-latest Review Package artifact, and `invalid`
+for invalid source or package validation. The builder propagates source
+limitations as deterministic strings, adds only builder blockers, emits
+deterministic diagnostics, and validates output with
+`validateReconstructionPackage(...)`.
+Phase 8E-3 added no persistence, latest-pointer mutation, Structure Plan,
+generated React, generated blocks, generated content, AI output, execution,
+publishing artifact, migration, schema, worker, API, UI, or behavior outside
+the pure builder. Focused Reconstruction Package contract and builder tests
+pass `18 / 18`; the platform Vercel build passes with existing lint warnings;
+`git diff --check` passes.
+Current Phase: Phase 8E-3 - Reconstruction Package Builder Implementation is complete.
+Next recommended phase: Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
 
 ## Current Importer Architecture
 
@@ -678,7 +729,7 @@ Explicitly not yet implemented:
 
 ## Phase 8E Reconstruction Package
 
-Phase 8E-1 - Reconstruction Package Contract is COMPLETE.
+Phase 8E-3 - Reconstruction Package Builder Implementation is COMPLETE.
 
 The canonical module is
 `apps/platform/gnr8/architecture/reconstruction-package-contract.ts`. It
@@ -702,13 +753,40 @@ No builder, persistence, structure planning, reconstruction, AI, generated
 output, execution, publishing, migration, schema, worker, API, or UI behavior
 was added in Phase 8E-1.
 
-Recommended next phase: Phase 8E-2 - Reconstruction Package Builder Design.
+Phase 8E-2 defines the pure deterministic mapping from one exact latest
+`CandidateReviewPackage` artifact and its linked `CandidateDiscoveryResult`
+into the 8E `ReconstructionPackage` contract. Only latest approved decisions
+are included. Rejected, deferred, unreviewed, superseded, stale, and
+missing-candidate decisions are excluded. Package identity is derived from the
+Review Package artifact ID plus contract version. Status rules cover `valid`,
+`blocked`, `stale`, and `invalid`; limitations and diagnostics are propagated
+or generated deterministically without planning or generation.
+
+No builder implementation, persistence, structure planning, reconstruction,
+AI, generated output, execution, publishing, migration, schema, worker, API,
+UI, or behavior was added in Phase 8E-2.
+
+Phase 8E-3 implements that mapping in
+`apps/platform/gnr8/architecture/reconstruction-package-builder.ts`.
+The builder takes one exact `CandidateReviewPackage`, the linked
+`CandidateDiscoveryResult`, the source Candidate Review Package artifact ID,
+and the current latest Candidate Review Package artifact ID. It returns a
+metadata-only `ReconstructionPackage` with deterministic identity, approved
+candidate refs, eligibility counts, propagated limitations, builder blockers,
+and diagnostics, then validates the result with
+`validateReconstructionPackage(...)`.
+
+No persistence, structure planning, reconstruction, AI, generated output,
+execution, publishing, migration, schema, worker, API, UI, latest-pointer
+mutation, or behavior outside the pure builder was added in Phase 8E-3.
+
+Recommended next phase: Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
 
 Current Phase:
-- Phase 8E-1 - Reconstruction Package Contract is complete.
+- Phase 8E-3 - Reconstruction Package Builder Implementation is complete.
 
 Next Phase:
-- Phase 8E-2 - Reconstruction Package Builder Design, design only.
+- Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
