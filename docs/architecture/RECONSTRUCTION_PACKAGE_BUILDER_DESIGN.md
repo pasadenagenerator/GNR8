@@ -422,6 +422,29 @@ a metadata-only Reconstruction Package from approved latest review decisions
 and the exact linked Discovery artifact. No generation, planning, persistence,
 or execution behavior exists.
 
-Recommend exactly one next phase:
+Recommended next phase at 8E-3 completion:
 
 > **Phase 8E-4 - Reconstruction Package Real-Artifact Validation**
+
+## Phase 8E-5 Persistence Boundary Design Note
+
+Phase 8E-5 defines how packages produced by this pure builder should be stored
+later. The persistence design keeps the builder output immutable and
+metadata-only, stores `reconstruction_package` artifacts in the existing
+site-version provenance boundary, and uses append-only
+`reconstructionPackageArtifacts` plus `latestReconstructionPackageArtifact`.
+
+The persistence boundary must run `validateReconstructionPackage(...)`, enforce
+the recursive forbidden-field guard, check exact Review/Discovery/site-version
+lineage, and reject packages that are already `stale` or `invalid`. It persists
+only current `valid` or `blocked` package outputs and never reruns, rebases, or
+modifies the builder result while writing.
+
+The persistence design adds no Structure Planning, AI output, generated content,
+publishing artifact, execution artifact, schema change, worker, Review API,
+Review UI, or behavior change. Detailed design:
+`docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_BOUNDARY.md`.
+
+Recommended next phase after 8E-5:
+
+> **Phase 8E-6 - Reconstruction Package Persistence Implementation**

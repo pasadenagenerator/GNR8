@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8E-3 Reconstruction Package Builder Implementation is complete.
+- 8E-6 Reconstruction Package Persistence Implementation is complete.
 
 Current Phase:
-- Phase 8E-3 Reconstruction Package Builder Implementation is complete.
+- Phase 8E-6 Reconstruction Package Persistence Implementation is complete.
 
 Next Phase:
-- Phase 8E-4 Reconstruction Package Real-Artifact Validation.
+- Phase 8E-7 Reconstruction Package Persistence Real-Artifact Validation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,56 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8E-6 - Reconstruction Package Persistence Implementation.
+- Status: COMPLETE / PERSISTENCE HELPERS ONLY / NO STRUCTURE PLANNING.
+- Canonical design: `docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_BOUNDARY.md`.
+- Canonical module: `apps/platform/gnr8/architecture/reconstruction-package-persistence.ts`.
+- Focused tests: `apps/platform/gnr8/architecture/reconstruction-package-persistence.test.ts`.
+- Storage: uses the existing site-version `import_provenance_summary` artifact boundary, not a new DB table or hybrid dual-write path.
+- Artifact kind: `reconstruction_package`.
+- Storage shape: append-only `reconstructionPackageArtifacts` plus `latestReconstructionPackageArtifact`.
+- Metadata shape: artifact ID/ref, kind, `reconstructionPackageId`, authorizing `candidateReviewPackageArtifactId`, linked `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, `status`, included/excluded/approved counts, `createdAt`, `persistedAt`, and `contractVersion`.
+- Idempotency: equivalent package for the same Review artifact and contract version reuses latest; changed current packages append; invalid packages reject; packages already stale relative to latest Review Package reject.
+- Staleness policy: persist only `valid` or `blocked` packages. Historical packages that later become stale remain loadable for audit but must not be latest for new Structure Planning.
+- Validation before persist: run `validateReconstructionPackage(...)`, enforce forbidden-field guard, check exact Review/Discovery/site-version/dry-run lineage, verify referenced Candidate Review and Candidate Discovery artifacts from provenance, and require the authorizing Review artifact to be the latest head for the lineage.
+- Helper design: `persistReconstructionPackage(...)`, `loadLatestReconstructionPackage(...)`, and `loadReconstructionPackageById(...)`.
+- Safety: no Structure Plans, AI outputs, generated content, publishing artifacts, execution artifacts, worker jobs, schema changes, Review API changes, Review UI changes, Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, or Review Actions behavior changed.
+- Relationship to future Structure Planning: `ReconstructionPackage -> StructurePlanningPackage`, but no Structure Planning exists yet.
+- Validation result: focused 8E tests pass `26 / 26`.
+- Recommended next phase: Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
+
+Previous completed milestone:
+- Phase 8E-5 - Reconstruction Package Persistence Boundary Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NO IMPLEMENTATION.
+- Canonical design: `docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_BOUNDARY.md`.
+- Storage recommendation: use the existing site-version `import_provenance_summary` artifact boundary, not a new DB table or hybrid dual-write path.
+- Artifact kind: `reconstruction_package`.
+- Storage shape: append-only `reconstructionPackageArtifacts` plus `latestReconstructionPackageArtifact`.
+- Metadata shape: artifact ID/ref, kind, `reconstructionPackageId`, authorizing `candidateReviewPackageArtifactId`, linked `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, `status`, included/excluded/approved counts, `createdAt`, `persistedAt`, and `contractVersion`.
+- Idempotency: equivalent package for the same Review artifact and contract version reuses latest; changed current packages append; invalid packages reject; packages already stale relative to latest Review Package reject.
+- Staleness policy: persist only `valid` or `blocked` packages. Historical packages that later become stale remain loadable for audit but must not be latest for new Structure Planning.
+- Validation before persist: run `validateReconstructionPackage(...)`, enforce forbidden-field guard, check exact Review/Discovery/site-version/dry-run lineage, and compare against the latest Review Package head when latest-only enforcement is active.
+- Helper design: `persistReconstructionPackage(...)`, `loadLatestReconstructionPackage(...)`, and `loadReconstructionPackageById(...)`.
+- Safety: persistence must not create Structure Plans, AI outputs, generated content, publishing artifacts, execution artifacts, worker jobs, schema changes, Review API changes, or Review UI changes.
+- Relationship to future Structure Planning: `ReconstructionPackage -> StructurePlanningPackage`, but no Structure Planning exists yet.
+- Validation result: `git diff --check` passes.
+- Recommended next phase: Phase 8E-6 - Reconstruction Package Persistence Implementation.
+
+Previous completed milestone:
+- Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
+- Status: COMPLETE / VALIDATION ONLY / NO BEHAVIOR CHANGE.
+- Canonical evidence: `docs/architecture/RECONSTRUCTION_PACKAGE_REAL_ARTIFACT_VALIDATION.md`.
+- Method: read-only provenance query for the two real siteVersions, then in-memory `buildReconstructionPackage(...)` and `validateReconstructionPackage(...)`.
+- Latest-head finding: supplied Review artifact IDs were valid historical artifacts but no longer current latest heads.
+- ODV supplied artifact `candidate_review_package_9db6afaefda96317c2e1e858c6cf5b8f` produced `status = stale`, `1` approved/included Route candidate, `3` excluded candidates, valid lineage, and no forbidden fields.
+- ODV current latest artifact `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b` produced `status = valid`, `3` approved/included candidates, `1` excluded deferred candidate, `0` limitations, valid lineage, and no forbidden fields.
+- ViroiDoc supplied artifact `candidate_review_package_4e70cbc788098383b52de76249a5c412` produced `status = stale`, `1` approved/included Route candidate, `4` excluded candidates, propagated limitations, valid lineage, and no forbidden fields.
+- ViroiDoc current latest artifact `candidate_review_package_ecb5f777160a45e15b958948348bca08` produced `status = valid`, `1` approved/included Route candidate, `4` excluded candidates, propagated limitations, valid lineage, and no forbidden fields.
+- Safety: no persistence, latest-pointer mutation, Review API, Review UI, Candidate Discovery behavior, Candidate Review behavior, Structure Plan, reconstruction, AI, generation, execution, publishing, migration, schema, worker, API, UI, or behavior change.
+- Validation result: focused Reconstruction Package contract and builder tests pass `18 / 18`; platform Vercel build passes with existing lint warnings; `git diff --check` passes.
+- Recommended next phase: Phase 8E-5 - Reconstruction Package Persistence Boundary Design.
+
+Previous completed milestone:
 - Phase 8E-3 - Reconstruction Package Builder Implementation.
 - Status: COMPLETE / PURE DETERMINISTIC BUILDER ONLY.
 - Canonical module: `apps/platform/gnr8/architecture/reconstruction-package-builder.ts`.

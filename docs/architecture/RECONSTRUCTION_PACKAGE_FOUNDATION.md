@@ -392,15 +392,116 @@ Planning, reconstruction, AI, generated React, generated blocks, generated
 content, execution, publishing, migration, schema, worker, or behavior change
 outside the pure builder.
 
+## Phase 8E-4 Real-Artifact Validation Closure
+
+Phase 8E-4 validates the pure builder against real ODV and ViroiDoc Candidate
+Review and linked Candidate Discovery artifacts. The validation used a
+read-only provenance query and in-memory builder execution only. It did not
+persist a Reconstruction Package, advance a latest pointer, call mutation
+helpers, invoke workers, add UI, plan structure, generate content, call AI, or
+publish anything.
+
+The supplied Review artifact IDs were loadable and contract-valid but no
+longer current latest heads. The builder correctly classified both supplied
+historical inputs as `stale` while preserving exact Review, Discovery,
+site-version, and dry-run lineage:
+
+- ODV supplied Review artifact
+  `candidate_review_package_9db6afaefda96317c2e1e858c6cf5b8f` produced
+  `status = stale`, with `1` approved and included Route candidate, `3`
+  excluded candidates, and no forbidden fields.
+- ViroiDoc supplied Review artifact
+  `candidate_review_package_4e70cbc788098383b52de76249a5c412` produced
+  `status = stale`, with `1` approved and included Route candidate, `4`
+  excluded candidates, propagated source limitations, and no forbidden fields.
+
+The actual current latest Review Package heads produced valid Reconstruction
+Packages:
+
+- ODV latest Review artifact
+  `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b` produced
+  `status = valid`, `3` approved and included candidates, `1` excluded
+  deferred candidate, `0` limitations, and no forbidden fields.
+- ViroiDoc latest Review artifact
+  `candidate_review_package_ecb5f777160a45e15b958948348bca08` produced
+  `status = valid`, `1` approved and included Route candidate, `4` excluded
+  candidates, deterministic propagated limitations, and no forbidden fields.
+
+Detailed evidence:
+`docs/architecture/RECONSTRUCTION_PACKAGE_REAL_ARTIFACT_VALIDATION.md`.
+
+## Phase 8E-5 Persistence Boundary Design Closure
+
+Phase 8E-5 defines the durable storage boundary for `ReconstructionPackage`
+artifacts. The recommended storage strategy is the existing site-version
+provenance artifact boundary, with append-only `reconstructionPackageArtifacts`
+and `latestReconstructionPackageArtifact` as the latest pointer. The canonical
+artifact kind is `reconstruction_package`.
+
+The boundary persists only current `valid` or `blocked` metadata-only
+Reconstruction Packages. A package that is already `stale` relative to the
+latest Candidate Review Package pointer, or `invalid` under
+`validateReconstructionPackage(...)`, is rejected before write. Packages that
+were valid when persisted remain loadable as historical audit data if a later
+Review artifact makes them stale.
+
+Persistence remains a handoff storage boundary only. It creates no Structure
+Plan, AI output, generated content, publishing artifact, execution artifact,
+worker job, schema change, API, UI, or behavior change.
+
+Detailed design:
+`docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_BOUNDARY.md`.
+
+## Phase 8E-6 Persistence Implementation Closure
+
+Phase 8E-6 implements durable Reconstruction Package persistence in
+`apps/platform/gnr8/architecture/reconstruction-package-persistence.ts`.
+
+The implementation uses the existing site-version
+`import_provenance_summary` artifact boundary with canonical artifact kind
+`reconstruction_package`, append-only `reconstructionPackageArtifacts`, and
+`latestReconstructionPackageArtifact` as the latest pointer. It adds no schema,
+migration, API, UI, worker, Structure Plan, AI output, generated content,
+execution artifact, or publishing artifact.
+
+The helper surface is limited to `persistReconstructionPackage(...)`,
+`loadLatestReconstructionPackage(...)`, and
+`loadReconstructionPackageById(...)`. Persisted metadata includes
+`reconstructionPackageId`, `candidateReviewPackageArtifactId`,
+`candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, `status`,
+`includedCount`, `excludedCount`, `approvedCount`, `contractVersion`,
+`createdAt`, and `persistedAt`.
+
+Persistence runs `validateReconstructionPackage(...)` before write, verifies
+exact Review/Discovery/site-version/dry-run lineage, requires the authorizing
+Candidate Review artifact to be the current latest head for the lineage, and
+persists only `valid` or `blocked` packages. `stale`, `invalid`,
+forbidden-field, missing-artifact, and lineage-mismatch packages are rejected
+before write.
+
+Equivalent retries reuse the existing latest artifact without appending.
+Changed current packages append a new immutable artifact and advance the latest
+pointer. Read helpers are site-version scoped, return cloned records, and do
+not repair, rebuild, plan, generate, execute, publish, or mutate provenance.
+
+Focused tests in
+`apps/platform/gnr8/architecture/reconstruction-package-persistence.test.ts`
+cover valid and blocked persistence, latest and by-ID readback, idempotency,
+append-on-change, stale rejection, invalid rejection, metadata preservation,
+lineage rejection, and forbidden-field rejection.
+
 ## Recommendation
 
 Recommend exactly one next phase:
 
-> **Phase 8E-4 - Reconstruction Package Real-Artifact Validation**
+> **Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation**
 
-8E-4 should validate the pure builder against real Candidate Review and linked
-Candidate Discovery artifacts without adding persistence, Structure Planning,
-AI, generation, publishing, schema, workers, API, or UI behavior.
+8E-7 should validate the 8E-6 persistence helpers against real current
+Review/Discovery artifacts using only existing site-version provenance. It
+should persist and reload valid and blocked Reconstruction Packages where real
+inputs qualify, verify stale/invalid inputs still fail closed, and avoid
+Structure Planning, AI, generation, publishing, schema migration, workers, API,
+Review UI, or Review API behavior.
 
 ## 8E-0 Exit State
 

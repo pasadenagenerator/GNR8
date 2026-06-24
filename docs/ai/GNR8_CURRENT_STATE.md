@@ -447,8 +447,44 @@ publishing artifact, migration, schema, worker, API, UI, or behavior outside
 the pure builder. Focused Reconstruction Package contract and builder tests
 pass `18 / 18`; the platform Vercel build passes with existing lint warnings;
 `git diff --check` passes.
-Current Phase: Phase 8E-3 - Reconstruction Package Builder Implementation is complete.
-Next recommended phase: Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
+Phase 8E-4 - Reconstruction Package Real-Artifact Validation is COMPLETE. The
+real-artifact validation loaded ODV and ViroiDoc provenance with a read-only
+query and ran the pure builder in memory only. No package was persisted, no
+latest pointer was advanced, and no planning, generation, AI, publishing,
+schema, worker, API, UI, or behavior change was added.
+The supplied Review artifact IDs were valid historical artifacts but no
+longer current latest heads. The builder correctly produced `status = stale`
+for ODV
+`candidate_review_package_9db6afaefda96317c2e1e858c6cf5b8f` and ViroiDoc
+`candidate_review_package_4e70cbc788098383b52de76249a5c412`, preserving exact
+Review, Discovery, site-version, and dry-run lineage and keeping forbidden
+fields absent. The actual current latest heads produced `status = valid`:
+ODV `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b` included
+`3` approved candidates and excluded `1`; ViroiDoc
+`candidate_review_package_ecb5f777160a45e15b958948348bca08` included `1`
+approved Route candidate and excluded `4`. Detailed evidence:
+`docs/architecture/RECONSTRUCTION_PACKAGE_REAL_ARTIFACT_VALIDATION.md`.
+Phase 8E-5 - Reconstruction Package Persistence Boundary Design is COMPLETE.
+The design selects the existing site-version provenance artifact boundary for
+durable `reconstruction_package` artifacts, with append-only
+`reconstructionPackageArtifacts` and `latestReconstructionPackageArtifact`.
+The persistence boundary must validate with
+`validateReconstructionPackage(...)`, enforce the forbidden-field guard, check
+exact Review/Discovery/site-version/dry-run lineage, reuse equivalent packages,
+append changed current packages, and persist only `valid` or `blocked` outputs.
+Packages that are already `stale` or `invalid` are rejected before write.
+Detailed design:
+`docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_BOUNDARY.md`.
+Phase 8E-6 - Reconstruction Package Persistence Implementation is COMPLETE.
+The implementation adds `apps/platform/gnr8/architecture/reconstruction-package-persistence.ts`
+and persists validated metadata-only `reconstruction_package` artifacts in the
+existing site-version provenance boundary. It uses append-only
+`reconstructionPackageArtifacts` plus `latestReconstructionPackageArtifact`,
+stores the 8E-5 metadata set, reuses equivalent latest artifacts, appends
+changed current packages, and rejects stale, invalid, forbidden-field, missing
+artifact, and lineage-mismatch packages before write.
+Current Phase: Phase 8E-6 - Reconstruction Package Persistence Implementation is complete.
+Next recommended phase: Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
 
 ## Current Importer Architecture
 
@@ -729,7 +765,7 @@ Explicitly not yet implemented:
 
 ## Phase 8E Reconstruction Package
 
-Phase 8E-3 - Reconstruction Package Builder Implementation is COMPLETE.
+Phase 8E-6 - Reconstruction Package Persistence Implementation is COMPLETE.
 
 The canonical module is
 `apps/platform/gnr8/architecture/reconstruction-package-contract.ts`. It
@@ -776,17 +812,79 @@ candidate refs, eligibility counts, propagated limitations, builder blockers,
 and diagnostics, then validates the result with
 `validateReconstructionPackage(...)`.
 
+Phase 8E-4 validates the pure builder against real ODV and ViroiDoc artifacts
+without persistence. Supplied Review artifacts remained loadable but were
+stale relative to current latest heads, and the builder correctly produced
+`stale` metadata packages for those historical inputs. Current latest heads
+produced `valid` metadata packages: ODV included `3` approved candidates and
+excluded `1`; ViroiDoc included `1` approved Route candidate and excluded `4`.
+Forbidden fields remained absent in all package outputs.
+
 No persistence, structure planning, reconstruction, AI, generated output,
 execution, publishing, migration, schema, worker, API, UI, latest-pointer
-mutation, or behavior outside the pure builder was added in Phase 8E-3.
+mutation, or behavior change was added in Phase 8E-4.
 
-Recommended next phase: Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
+Phase 8E-5 defines the persistence boundary for immutable Reconstruction
+Package artifacts without implementing it. The recommended storage is the
+existing site-version provenance artifact boundary, using canonical kind
+`reconstruction_package`, append-only `reconstructionPackageArtifacts`, and
+`latestReconstructionPackageArtifact`. Metadata includes artifact identity,
+package identity, authorizing Review artifact, linked Discovery artifact, site
+version, dry run, status, counts, timestamps, and contract version.
+
+The idempotency model reuses an equivalent package for the same Review artifact
+and contract version, appends changed current packages, rejects invalid
+packages, and rejects packages that are already stale relative to the latest
+Review Package pointer. The staleness policy persists only `valid` or `blocked`
+packages; historical artifacts that later become stale remain loadable but are
+not latest for new Structure Planning. Pre-write validation must run
+`validateReconstructionPackage(...)`, enforce the forbidden-field guard, check
+lineage, and compare against the latest Review Package head when latest-only
+enforcement is active.
+
+No persistence helper, provenance field, latest-pointer mutation, Structure
+Planning package, reconstruction, AI, generated output, execution, publishing,
+migration, schema, worker, API, UI, Review API, Review UI, or behavior change
+was added in Phase 8E-5.
+
+Phase 8E-6 implements durable Reconstruction Package persistence in
+`apps/platform/gnr8/architecture/reconstruction-package-persistence.ts`.
+The helper surface is limited to `persistReconstructionPackage(...)`,
+`loadLatestReconstructionPackage(...)`, and
+`loadReconstructionPackageById(...)`.
+
+The implementation persists `valid` and `blocked` metadata-only packages as
+canonical `reconstruction_package` artifacts inside the existing site-version
+`import_provenance_summary`, with append-only
+`reconstructionPackageArtifacts` and
+`latestReconstructionPackageArtifact`. Persisted metadata includes
+`reconstructionPackageId`, `candidateReviewPackageArtifactId`,
+`candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, `status`,
+`includedCount`, `excludedCount`, `approvedCount`, `contractVersion`,
+`createdAt`, and `persistedAt`.
+
+Persistence validates with `validateReconstructionPackage(...)`, checks exact
+Review/Discovery/site-version/dry-run lineage, requires the authorizing
+Candidate Review artifact to be the current latest head for the lineage, and
+rejects `stale`, `invalid`, forbidden-field, missing-artifact, and
+lineage-mismatch inputs before write. Equivalent retries reuse the latest
+artifact. Changed current packages append a new immutable artifact and advance
+the latest pointer. Read helpers are site-version scoped and return cloned
+records without repairing, rebuilding, planning, generating, executing,
+publishing, or mutating provenance.
+
+No Structure Planning package, reconstruction, AI, generated output,
+execution, publishing, migration, schema, worker, API, UI, Review API, Review
+UI, Evidence Capture, Candidate Discovery, Candidate Context, Candidate
+Review, or Review Actions behavior was changed in Phase 8E-6.
+
+Recommended next phase: Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
 
 Current Phase:
-- Phase 8E-3 - Reconstruction Package Builder Implementation is complete.
+- Phase 8E-6 - Reconstruction Package Persistence Implementation is complete.
 
 Next Phase:
-- Phase 8E-4 - Reconstruction Package Real-Artifact Validation.
+- Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
