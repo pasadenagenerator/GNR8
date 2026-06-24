@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8E-6 Reconstruction Package Persistence Implementation is complete.
+- 8F-1 Structure Planning Contract is complete.
 
 Current Phase:
-- Phase 8E-6 Reconstruction Package Persistence Implementation is complete.
+- Phase 8F-1 Structure Planning Contract is complete.
 
 Next Phase:
-- Phase 8E-7 Reconstruction Package Persistence Real-Artifact Validation.
+- Phase 8F-2 Structure Planning Builder Design.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,49 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8F-1 - Structure Planning Contract.
+- Status: COMPLETE / CONTRACT ONLY / NO BUILDER / NO PERSISTENCE / NO GENERATION.
+- Canonical module: `apps/platform/gnr8/architecture/structure-plan-contract.ts`.
+- Focused tests: `apps/platform/gnr8/architecture/structure-plan-contract.test.ts`.
+- Types: `StructurePlan`, `StructurePlanRoute`, `StructurePlanNavigation`, `StructurePlanSection`, `StructurePlanAssignment`, `StructurePlanLineage`, `StructurePlanValidationResult`, and `StructurePlanStatus`.
+- Statuses: only `planned`, `valid`, `invalid`, `blocked`, and `stale`; generated, executed, published, deployed, and reconstructed states are not allowed.
+- Identity: `structure-plan:<reconstructionPackageArtifactId>:<contractVersion>`, derived from the exact Reconstruction Package artifact and Structure Plan contract version.
+- Lineage: exact Reconstruction Package artifact/package/status/version, Candidate Review Package artifact, Candidate Discovery artifact, site version, dry run, and included approved candidate refs copied from the package.
+- Assignment model: route, navigation, and section candidate assignments only, plus unresolved metadata buckets; assignments do not contain generated components, generated blocks, generated content, AI outputs, publishing artifacts, deployment artifacts, or execution artifacts.
+- Validation: required fields, exact lineage consistency, assignment coverage against included approved candidates, candidate participation, uniqueness, target compatibility, stale historical warnings, and recursive forbidden-field rejection.
+- Blocked helper: `createBlockedStructurePlan(...)` creates metadata-only blocked plans for no eligible candidates, invalid lineage, or stale Reconstruction Package input with no planned routes, navigation, sections, or assignments.
+- Safety: no builder, persistence, Structure Planning execution, generated React, generated blocks, generated content, AI, generation, publishing, deployment, schema, workers, API, UI, Evidence Capture, Candidate Discovery, Candidate Review, Candidate Context, Review Actions, Reconstruction Package, or runtime behavior changed.
+- Validation result: focused Structure Plan contract tests pass `8 / 8`; platform Vercel build passes; `git diff --check` passes.
+- Recommended next phase: Phase 8F-2 - Structure Planning Builder Design.
+
+Previous completed milestone:
+- Phase 8F-0 - Structure Planning Foundation Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NO IMPLEMENTATION / NO GENERATION.
+- Canonical design: `docs/architecture/STRUCTURE_PLANNING_FOUNDATION.md`.
+- Purpose: `ReconstructionPackage` defines what is eligible; `StructurePlan` defines how approved candidates are organized.
+- Required input: one exact latest persisted `ReconstructionPackage` artifact. Only included approved candidates already present in that package participate.
+- Outputs designed for the future contract: metadata-only `StructurePlan` with plan identity, exact lineage, planned routes, planned navigation, planned sections, candidate assignments, limitations, and diagnostics.
+- Eligibility: no candidate outside the source package may be planned. Rejected, deferred, unreviewed, superseded, stale, invalid, foreign-lineage, and inferred candidates remain excluded.
+- Identity recommendation: `structure-plan:<reconstructionPackageArtifactId>:<structurePlanContractVersion>`. Caller-supplied plan IDs are rejected.
+- Safety: no generated React, generated blocks, generated content, AI output, publishing artifact, deployment artifact, execution artifact, worker job, dry-run result, runtime state, schema, API, UI, or behavior change.
+- Relationship: Review -> Reconstruction Package -> Structure Plan -> Future Reconstruction.
+- Validation result: `git diff --check` passes.
+- Recommended next phase: Phase 8F-1 - Structure Planning Contract.
+
+Previous completed milestone:
+- Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
+- Status: COMPLETE / VALIDATION ONLY / REAL ARTIFACTS PERSISTED / NO STRUCTURE PLANNING.
+- Canonical evidence: `docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md`.
+- Method: load latest Candidate Review Package, load linked Candidate Discovery Result, build `ReconstructionPackage`, persist with `persistReconstructionPackage(...)`, reload latest, reload exact artifact by ID, and retry persistence for idempotency.
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`: latest Review artifact `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b`, linked Discovery artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`, persisted Reconstruction artifact `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`, status `valid`, `3` included, `1` excluded, `3` approved.
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`: latest Review artifact `candidate_review_package_ecb5f777160a45e15b958948348bca08`, linked Discovery artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`, persisted Reconstruction artifact `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`, status `valid`, `1` included, `4` excluded, `1` approved.
+- Reload/idempotency: both latest reloads and exact by-ID reloads matched the persisted artifact and exact package payload; both retries reused the same artifact ID and did not append another record.
+- Lineage/metadata: Review artifact, Review package ID, Discovery artifact, site version, dry run, counts, contract version, validation, and timestamps all matched.
+- Safety: forbidden-field scans found no Structure Plan, AI output, generated content, publishing artifact, deployment artifact, execution artifact, `reactOutput`, `generatedOutputs`, `generatedBlocks`, `designTokens`, or `reconstructionPlan`.
+- No Structure Planning, AI, generated output, execution, publishing, schema, worker, API, UI, Review API, Review UI, Candidate Discovery behavior, Candidate Review behavior, or runtime behavior was changed.
+- Recommended next phase: Phase 8F-0 - Structure Planning Foundation Design, documentation and contract design only.
+
+Previous completed milestone:
 - Phase 8E-6 - Reconstruction Package Persistence Implementation.
 - Status: COMPLETE / PERSISTENCE HELPERS ONLY / NO STRUCTURE PLANNING.
 - Canonical design: `docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_BOUNDARY.md`.

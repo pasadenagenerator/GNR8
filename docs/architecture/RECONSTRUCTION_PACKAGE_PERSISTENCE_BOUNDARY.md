@@ -379,3 +379,43 @@ Real-Artifact Validation**, limited to exercising these helpers against real
 valid/current and blocked Reconstruction Package inputs on existing persisted
 Review/Discovery artifacts, with no Structure Planning, AI, generation,
 publishing, schema, worker, Review API, or Review UI changes.
+
+## Phase 8E-7 Real-Artifact Validation Closure
+
+Phase 8E-7 validates the implemented persistence helpers against the real latest
+approved ODV and ViroiDoc Candidate Review Package artifacts. The validation
+loaded each latest Review Package, loaded its linked Candidate Discovery Result,
+built a `ReconstructionPackage`, persisted it with
+`persistReconstructionPackage(...)`, reloaded it with
+`loadLatestReconstructionPackage(...)`, reloaded it by exact artifact ID with
+`loadReconstructionPackageById(...)`, and retried persistence to verify
+idempotent reuse.
+
+Real persisted artifacts:
+
+| Target | Review artifact | Reconstruction artifact | Status | Included | Excluded | Approved |
+| --- | --- | --- | --- | --- | --- | --- |
+| ODV | `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b` | `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296` | `valid` | `3` | `1` | `3` |
+| ViroiDoc | `candidate_review_package_ecb5f777160a45e15b958948348bca08` | `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb` | `valid` | `1` | `4` | `1` |
+
+Both latest reload and exact by-ID reload returned the persisted artifact and
+exact package payload. Both retries returned the same artifact ID and did not
+append another artifact. Lineage and metadata checks passed for Review artifact,
+Review package ID, Discovery artifact, site version, dry run, counts, contract
+version, validation, and timestamps.
+
+Recursive forbidden-field scans found no Structure Plan, AI output, generated
+content, publishing artifact, deployment artifact, execution artifact,
+`reactOutput`, `generatedOutputs`, `generatedBlocks`, `designTokens`, or
+`reconstructionPlan`.
+
+Canonical evidence:
+`docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md`.
+
+No Structure Planning, AI, generated output, execution, publishing, schema,
+worker, API, UI, Review API, Review UI, Candidate Discovery behavior, Candidate
+Review behavior, or runtime behavior was changed in Phase 8E-7.
+
+The recommended next phase is **Phase 8F-0 - Structure Planning Foundation
+Design**, documentation and contract design only, with no AI, generation,
+execution, publishing, worker, API, UI, or schema changes.

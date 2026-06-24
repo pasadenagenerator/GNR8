@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-22
+2026-06-24
 
 ## Migration Platform MVP Buildout
 
@@ -483,8 +483,62 @@ existing site-version provenance boundary. It uses append-only
 stores the 8E-5 metadata set, reuses equivalent latest artifacts, appends
 changed current packages, and rejects stale, invalid, forbidden-field, missing
 artifact, and lineage-mismatch packages before write.
-Current Phase: Phase 8E-6 - Reconstruction Package Persistence Implementation is complete.
-Next recommended phase: Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
+Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation is COMPLETE.
+The real-artifact validation persisted durable `reconstruction_package`
+artifacts for the latest ODV and ViroiDoc approved Review Package heads:
+ODV `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296` with `3`
+included and `1` excluded, and ViroiDoc
+`reconstruction_package_0e143f5fc174668e2225f73ebe464ffb` with `1` included
+and `4` excluded. Both reloaded by latest pointer and exact artifact ID, both
+idempotent retries reused the same artifact, and forbidden Structure Planning,
+AI, generated, execution, and publishing fields remained absent. Detailed
+evidence:
+`docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md`.
+Phase 8F-0 - Structure Planning Foundation Design is COMPLETE. The
+documentation-only foundation defines Structure Plan as a deterministic,
+metadata-only planning artifact over one exact latest Reconstruction Package
+artifact. Reconstruction Package defines what is eligible; Structure Plan
+defines how included approved candidates are organized into planned routes,
+planned navigation, planned sections, and exact candidate assignments without
+generating a website.
+The exact latest Reconstruction Package artifact is the only authorizing
+input. Only included approved candidates already present in that package may
+participate. Review, Discovery, Candidate Context, Limited Dry Run, and
+Evidence Capture refs may be retained as copied lineage but cannot add
+candidates or infer target structure. Recommended identity is
+`structure-plan:<reconstructionPackageArtifactId>:<structurePlanContractVersion>`.
+Detailed design: `docs/architecture/STRUCTURE_PLANNING_FOUNDATION.md`.
+Phase 8F-0 changed documentation only and added no implementation, Structure
+Plan contract, builder, persistence, generated output, AI output, publishing
+artifact, deployment artifact, execution artifact, schema, worker, API, UI, or
+behavior change.
+Phase 8F-1 - Structure Planning Contract is COMPLETE. The canonical contract is
+`apps/platform/gnr8/architecture/structure-plan-contract.ts`, with focused
+tests in `apps/platform/gnr8/architecture/structure-plan-contract.test.ts`.
+The contract defines `StructurePlan`, `StructurePlanRoute`,
+`StructurePlanNavigation`, `StructurePlanSection`, `StructurePlanAssignment`,
+`StructurePlanLineage`, `StructurePlanValidationResult`, and
+`StructurePlanStatus`. Allowed statuses are exactly `planned`, `valid`,
+`invalid`, `blocked`, and `stale`.
+The plan identity is deterministic:
+`structure-plan:<reconstructionPackageArtifactId>:<contractVersion>`. Lineage
+carries the exact Reconstruction Package artifact, package ID/status/version,
+Review artifact, Discovery artifact, site version, dry run, and included
+approved candidate refs. Assignments may organize only route, navigation, and
+section candidates from that included set; unresolved assignments are metadata
+only and do not authorize generation.
+Validation checks required fields, lineage consistency, counts, uniqueness,
+candidate participation, assignment target compatibility, stale historical
+warnings, and the recursive forbidden-field guard for React, generated block,
+generated content, generated component, AI output, structure instruction,
+publishing, deployment, and execution payloads. The blocked helper creates a
+metadata-only blocked plan for no eligible candidates, invalid lineage, or
+stale Reconstruction Package input.
+Phase 8F-1 added no builder, persistence, AI, generated React, generated
+blocks, generated content, publishing artifacts, deployment artifacts,
+execution artifacts, schema, workers, API, UI, or behavior changes.
+Current Phase: Phase 8F-1 - Structure Planning Contract is complete.
+Next recommended phase: Phase 8F-2 - Structure Planning Builder Design.
 
 ## Current Importer Architecture
 
@@ -878,13 +932,103 @@ execution, publishing, migration, schema, worker, API, UI, Review API, Review
 UI, Evidence Capture, Candidate Discovery, Candidate Context, Candidate
 Review, or Review Actions behavior was changed in Phase 8E-6.
 
-Recommended next phase: Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
+Phase 8E-7 validates Reconstruction Package persistence against the real
+latest ODV and ViroiDoc Candidate Review Package artifacts. The validation
+loaded the latest Review Package, loaded the linked Candidate Discovery Result,
+built a `ReconstructionPackage`, persisted it through
+`persistReconstructionPackage(...)`, reloaded it through both
+`loadLatestReconstructionPackage(...)` and
+`loadReconstructionPackageById(...)`, and retried persistence to confirm
+idempotent reuse.
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` persisted
+`reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296` from latest Review
+artifact `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b` and
+linked Discovery artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`.
+The package status is `valid`, with `3` included, `1` excluded, and `3`
+approved candidates.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` persisted
+`reconstruction_package_0e143f5fc174668e2225f73ebe464ffb` from latest Review
+artifact `candidate_review_package_ecb5f777160a45e15b958948348bca08` and linked
+Discovery artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`.
+The package status is `valid`, with `1` included, `4` excluded, and `1`
+approved candidate.
+
+Both targets reloaded by latest pointer and exact artifact ID, exact package
+payloads matched, retries reused the same artifact without appending, lineage
+and metadata checks passed, and forbidden-field scans found no Structure Plan,
+AI output, generated content, publishing artifact, deployment artifact, or
+execution artifact. Detailed evidence:
+`docs/architecture/RECONSTRUCTION_PACKAGE_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md`.
+
+No Structure Planning package, reconstruction, AI, generated output,
+execution, publishing, migration, schema, worker, API, UI, Review API, Review
+UI, Evidence Capture, Candidate Discovery, Candidate Context, Candidate
+Review, Review Actions behavior, or runtime behavior was changed in Phase
+8E-7.
+
+Phase 8F-0 - Structure Planning Foundation Design is COMPLETE. The canonical
+Structure Plan is a deterministic, metadata-only planning artifact that
+organizes approved candidates from one exact latest `ReconstructionPackage`
+artifact into planned routes, planned navigation, planned sections, and exact
+candidate assignments. It answers how approved candidates are organized, not
+what is eligible and not how a website is generated.
+
+The only authorizing input is the exact latest Reconstruction Package artifact.
+Only included approved candidates already present in that package participate.
+The plan may retain Review, Discovery, Candidate Context, Limited Dry Run, and
+Evidence Capture refs as copied lineage, but those refs cannot add candidates
+or infer target structure independently. Candidate assignments must reconcile
+with the package included count and fail closed on missing, stale, invalid, or
+foreign package lineage.
+
+Recommended identity is deterministic:
+`structure-plan:<reconstructionPackageArtifactId>:<structurePlanContractVersion>`.
+This ties one plan meaning to one exact package artifact and contract version,
+rejects caller-supplied IDs, and keeps later package heads or contract changes
+from silently rewriting historical plan meaning. Detailed design:
+`docs/architecture/STRUCTURE_PLANNING_FOUNDATION.md`.
+
+Phase 8F-0 changed documentation only. It added no Structure Plan contract or
+builder implementation, no persistence, no generated React, no generated
+blocks, no generated content, no AI outputs, no publishing artifact, no
+deployment artifact, no execution artifact, no schema, no worker, no API, no
+UI, and no behavior change to Evidence Capture, Candidate Discovery, Candidate
+Review, Review Actions, Candidate Context, Reconstruction Package,
+generation, or publishing systems.
+
+Phase 8F-1 - Structure Planning Contract is COMPLETE. It creates
+`apps/platform/gnr8/architecture/structure-plan-contract.ts` and focused tests
+in `apps/platform/gnr8/architecture/structure-plan-contract.test.ts`.
+Contract types include `StructurePlan`, planned route/navigation/section
+metadata, candidate assignments, exact lineage, validation result, and the
+allowed `StructurePlanStatus` values `planned`, `valid`, `invalid`, `blocked`,
+and `stale`.
+
+Validation enforces deterministic identity from the exact Reconstruction
+Package artifact, required lineage and top-level consistency, candidate
+participation from included approved package refs only, one assignment per
+included candidate for active plans, uniqueness across planned objects and
+assignments, target compatibility, stale historical warnings, and recursive
+rejection of generated React, generated blocks/content/components, AI outputs,
+structure instructions, publishing artifacts, deployment artifacts, and
+execution artifacts. `createBlockedStructurePlan(...)` creates a
+metadata-only blocked plan for no eligible candidates, invalid lineage, or
+stale Reconstruction Package input.
+
+Phase 8F-1 added no builder, persistence, AI, generation, publishing, schema,
+worker, API, UI, Evidence Capture, Candidate Discovery, Candidate Review,
+Candidate Context, Review Actions, Reconstruction Package, or runtime behavior
+change.
+
+Recommended next phase: Phase 8F-2 - Structure Planning Builder Design.
 
 Current Phase:
-- Phase 8E-6 - Reconstruction Package Persistence Implementation is complete.
+- Phase 8F-1 - Structure Planning Contract is complete.
 
 Next Phase:
-- Phase 8E-7 - Reconstruction Package Persistence Real-Artifact Validation.
+- Phase 8F-2 - Structure Planning Builder Design.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
