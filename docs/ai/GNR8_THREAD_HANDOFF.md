@@ -7,22 +7,41 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8F-11 Post-Structure Plan Boundary Reassessment is complete.
+- Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 
 Current Phase:
-- Phase 8F-11 Post-Structure Plan Boundary Reassessment is complete.
+- Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 
 Next Phase:
-- Phase 8G-0 Layout Plan Foundation.
+- Phase 0.1 - Generation Task Boundary Design.
 
 Current architecture direction:
-- Evidence Capture -> Original Mirror -> Reconstruction.
+- GNR8 is an AI Orchestrator with a governed Website Understanding Engine.
+- Evidence Capture -> Original Mirror -> Reconstruction remains part of the
+  understanding chain, not a traditional builder/CMS path.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ALIGNMENT ONLY / AI ORCHESTRATOR IDENTITY LOCKED / NO IMPLEMENTATION / NO LAYOUT PLAN / NO BLOCK PLAN / NO CONTENT PLAN / NO AI INTEGRATION / NO GENERATION / NO PUBLISHING / NO SCHEMA / NO WORKERS / NO API / NO UI.
+- Canonical manifesto: `docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md`.
+- Canonical identity: GNR8 is an AI Orchestrator with a governed Website Understanding Engine.
+- Product boundary: GNR8 is not a traditional website builder, not a CMS, and not a generic page editor.
+- Digital Twin rule: the Digital Twin is the canonical operational representation of a website; generated websites are outputs, not the long-term source of truth.
+- Generation rule: generation without understanding is prohibited; the orchestrator owns the task and the model executes it; GNR8 must remain model-agnostic.
+- Governance rule: AI proposes; humans approve. Validation before publish is mandatory.
+- Canonical future lifecycle: Import -> Evidence -> Discovery -> Context -> Review -> Reconstruction Package -> Structure Plan -> Generation Task -> External AI -> Validation -> Human Approval -> Publish.
+- Rejected lifecycle: Import -> Generate React.
+- Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as if GNR8 is building a traditional internal website builder, CMS, page editor, block schema, or direct React generator.
+- Future reassessment areas: LayoutPlan, BlockPlan, ContentPlan, AI Editor architecture, publishing flow, generated output validation, provider orchestration, and external AI task format.
+- Recommended next phase: Phase 0.1 - Generation Task Boundary Design.
+- Safety: documentation and architecture alignment only; no Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, Review Actions, Reconstruction Package, StructurePlan, AI integration code, generation systems, publishing systems, schema, workers, API, or UI behavior changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
 - Phase 8F-11 - Post-Structure Plan Boundary Reassessment.
 - Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NEXT BOUNDARY SELECTED / LAYOUT PLAN FOUNDATION RECOMMENDED / NO CONTENT PLANNING / NO INTENT PLANNING / NO BLOCK PLANNING / NO AI / NO GENERATION / NO PUBLISHING / NO SCHEMA / NO WORKERS.
 - Canonical assessment: `docs/architecture/POST_STRUCTURE_PLAN_BOUNDARY_REASSESSMENT.md`.
@@ -36,6 +55,9 @@ Latest completed milestone:
 - Digital Twin alignment: LayoutPlan strengthens the Twin as operational understanding of visual organization without becoming HTML replay, a recommendation, proposal, mutation, generated frontend, or publishable artifact.
 - Safety: documentation only; no Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, Review Actions, Reconstruction Package, StructurePlan contract, StructurePlan builder, StructurePlan persistence, StructurePlan UI, AI, generation, publishing, schema, worker, runtime, API, or UI behavior changed.
 - Validation result: `git diff --check` passes.
+- Reset note: Phase 0 supersedes this recommendation as the active roadmap.
+  `LayoutPlan` is no longer the next phase until it is reassessed under the
+  AI Orchestrator / Website Understanding Engine architecture.
 
 Previous completed milestone:
 - Phase 8F-10 - Structure Plan End-to-End Verification.

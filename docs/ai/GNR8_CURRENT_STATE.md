@@ -878,9 +878,61 @@ schema, worker, runtime, API, or UI behavior.
 
 Validation result: `git diff --check` passes.
 
-Current Phase: Phase 8F-11 - Post-Structure Plan Boundary Reassessment is
+Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is COMPLETE.
+
+Canonical manifesto:
+`docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md`.
+
+Current architectural reset:
+GNR8 is an AI Orchestrator with a governed Website Understanding Engine.
+
+GNR8 is not a traditional website builder, not a CMS, and not a generic page
+editor. The Digital Twin is the canonical operational representation of a
+website. Generated websites are outputs, not the long-term source of truth.
+Generation without understanding is prohibited. AI proposes; humans approve.
+The orchestrator owns the task; the model executes it. GNR8 must remain
+model-agnostic.
+
+Canonical future lifecycle:
+
+```text
+Import
+-> Evidence
+-> Discovery
+-> Context
+-> Review
+-> Reconstruction Package
+-> Structure Plan
+-> Generation Task
+-> External AI
+-> Validation
+-> Human Approval
+-> Publish
+```
+
+Rejected lifecycle:
+
+```text
+Import
+-> Generate React
+```
+
+Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as if
+GNR8 is building a traditional internal website builder, CMS, page editor,
+block schema, or direct React generator. LayoutPlan, BlockPlan, ContentPlan, AI
+Editor architecture, publishing flow, generated output validation, provider
+orchestration, and external AI task format require reassessment under the AI
+Orchestrator / Website Understanding Engine identity.
+
+Phase 0 changed documentation and architecture alignment only. It added no
+Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review,
+Review Actions, Reconstruction Package, StructurePlan, AI integration code,
+generation systems, publishing systems, schema, workers, API, UI, or runtime
+behavior.
+
+Current Phase: Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is
 complete.
-Next recommended phase: Phase 8G-0 - Layout Plan Foundation.
+Next recommended phase: Phase 0.1 - Generation Task Boundary Design.
 
 ## Current Importer Architecture
 
@@ -1666,12 +1718,46 @@ Phase 8F-11 - Post-Structure Plan Boundary Reassessment is complete.
   StructurePlan persistence, StructurePlan UI, AI, generation, publishing,
   schema, worker, runtime, API, or UI behavior changed.
 - Validation result: `git diff --check` passes.
+- Reset note: Phase 0 supersedes this recommendation as the active roadmap.
+  `LayoutPlan` is no longer the next phase until it is reassessed under the
+  AI Orchestrator / Website Understanding Engine architecture.
+
+Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
+- Canonical manifesto:
+  `docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md`.
+- Current architectural reset: GNR8 is an AI Orchestrator with a governed
+  Website Understanding Engine.
+- Product boundary: GNR8 is not a traditional website builder, not a CMS, and
+  not a generic page editor.
+- Digital Twin rule: the Digital Twin is the canonical operational
+  representation of a website; generated websites are outputs, not the
+  long-term source of truth.
+- Generation rule: generation without understanding is prohibited. The
+  orchestrator owns the task; the model executes it. GNR8 must remain
+  model-agnostic.
+- Governance rule: AI proposes; humans approve. Validation before publish is
+  mandatory.
+- Canonical future lifecycle: Import -> Evidence -> Discovery -> Context ->
+  Review -> Reconstruction Package -> Structure Plan -> Generation Task ->
+  External AI -> Validation -> Human Approval -> Publish.
+- Rejected lifecycle: Import -> Generate React.
+- Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as
+  if GNR8 is building a traditional internal website builder, CMS, page editor,
+  block schema, or direct React generator.
+- Future reassessment areas: LayoutPlan, BlockPlan, ContentPlan, AI Editor
+  architecture, publishing flow, generated output validation, provider
+  orchestration, and external AI task format.
+- Safety: documentation and architecture alignment only; no Evidence Capture,
+  Candidate Discovery, Candidate Context, Candidate Review, Review Actions,
+  Reconstruction Package, StructurePlan, AI integration code, generation
+  systems, publishing systems, schema, workers, API, or UI behavior changed.
+- Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase 8F-11 - Post-Structure Plan Boundary Reassessment is complete.
+- Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 
 Next Phase:
-- Phase 8G-0 - Layout Plan Foundation.
+- Phase 0.1 - Generation Task Boundary Design.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
