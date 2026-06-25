@@ -779,9 +779,51 @@ builder, or StructurePlan persistence.
 Validation result: focused Structure Plan surface tests pass; `cd apps/platform
 && pnpm run vercel-build` passes; `git diff --check` passes.
 
-Current Phase: Phase 8F-9 - Structure Plan Read-Only Surface Implementation is
+Phase 8F-10 - Structure Plan End-to-End Verification is COMPLETE.
+
+Canonical evidence:
+`docs/architecture/STRUCTURE_PLAN_E2E_VERIFICATION.md`.
+
+The complete read-only admin chain is verified:
+
+```text
+persisted structure_plan artifact
+-> latest loader
+-> StructurePlanSurfaceProjection
+-> dedicated read-only admin page
+```
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` loads latest
+Structure Plan `structure_plan_08e12e859e457d5ac15870ce2892c817`. The surface
+projection is `valid` with `1` route, `0` navigation entries, `2` sections,
+`3` assignments, `0` blocked candidates, no navigation state present, and
+planned route/section/assignment rows visible.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` loads latest
+Structure Plan `structure_plan_7b73cf96b695da6ba0103fb30ad306a0`. The surface
+projection is `valid` with `1` route, `0` navigation entries, `0` sections,
+`1` assignment, `0` blocked candidates, no navigation state present, no
+sections state present, and limitations-present state visible.
+
+Both projections preserve current Reconstruction Package, Review Package,
+Discovery Result, `siteVersionId`, and `dryRunId` lineage. The dedicated admin
+page compiles as a dynamic route, enforces the superadmin guard, and contains
+no buttons, forms, inputs, AI, generation, publishing, execution, retry,
+approval, edit, Content Planning, or Layout Planning controls.
+
+Phase 8F-10 changed documentation only. It added no Content Planning, Layout
+Planning, AI, generation, publishing, schema, workers, API behavior, UI
+mutation behavior, buttons, forms, inputs, or Structure Plan behavior changes.
+
+Validation result: focused Structure Plan persistence/projection/page tests
+pass `16 / 16`; `cd apps/platform && pnpm run vercel-build` passes with
+existing unrelated lint warnings and includes the dynamic Structure Plan route;
+`git diff --check` passes.
+
+Current Phase: Phase 8F-10 - Structure Plan End-to-End Verification is
 complete.
-Next recommended phase: Phase 8F-10 - Structure Plan End-to-End Verification.
+Next recommended phase: Phase 8F-11 - Post-Structure Plan Boundary
+Reassessment.
 
 ## Current Importer Architecture
 
@@ -1506,11 +1548,41 @@ Phase 8F-9 - Structure Plan Read-Only Surface Implementation is complete.
 - Validation result: focused Structure Plan surface tests pass; `cd
   apps/platform && pnpm run vercel-build` passes; `git diff --check` passes.
 
+Phase 8F-10 - Structure Plan End-to-End Verification is complete.
+- Canonical evidence: `docs/architecture/STRUCTURE_PLAN_E2E_VERIFICATION.md`.
+- Chain verified: persisted `structure_plan` artifact -> latest loader ->
+  `StructurePlanSurfaceProjection` -> dedicated read-only admin page.
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`: latest Structure Plan
+  `structure_plan_08e12e859e457d5ac15870ce2892c817`; projection `valid`; `1`
+  route, `0` navigation, `2` sections, `3` assignments, `0` blocked
+  candidates; `no_navigation` attention state; planned route/section/assignment
+  rows visible.
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`: latest Structure Plan
+  `structure_plan_7b73cf96b695da6ba0103fb30ad306a0`; projection `valid`; `1`
+  route, `0` navigation, `0` sections, `1` assignment, `0` blocked
+  candidates; `limitations_present`, `no_navigation`, and `no_sections`
+  attention states.
+- Lineage: both projections preserve current Reconstruction Package, Review
+  Package, Discovery Result, `siteVersionId`, and `dryRunId` lineage.
+- Page result: dynamic admin route compiles and is included in production
+  build; unauthenticated browser requests redirect to `/login` through the
+  superadmin guard; authenticated artifact display is covered by live
+  loader/projection checks, page source, tests, and build route output.
+- Safety: no buttons, forms, inputs, AI controls, generation controls,
+  publishing controls, execution controls, retry controls, approval controls,
+  edit controls, Content Planning controls, Layout Planning controls, schema,
+  workers, API behavior, UI mutation behavior, or Structure Plan behavior
+  changes.
+- Validation result: focused Structure Plan persistence/projection/page tests
+  pass `16 / 16`; `cd apps/platform && pnpm run vercel-build` passes with
+  existing unrelated lint warnings and includes the dynamic Structure Plan
+  route; `git diff --check` passes.
+
 Current Phase:
-- Phase 8F-9 - Structure Plan Read-Only Surface Implementation is complete.
+- Phase 8F-10 - Structure Plan End-to-End Verification is complete.
 
 Next Phase:
-- Phase 8F-10 - Structure Plan End-to-End Verification.
+- Phase 8F-11 - Post-Structure Plan Boundary Reassessment.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

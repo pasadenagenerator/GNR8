@@ -638,3 +638,58 @@ The recommended next phase is:
 ```text
 Phase 8F-10 - Structure Plan End-to-End Verification
 ```
+
+## Phase 8F-10 End-to-End Verification Completion
+
+Phase 8F-10 verifies the complete read-only Structure Plan admin chain from
+persisted `structure_plan` artifact to latest loader, surface projection, and
+dedicated admin page.
+
+Detailed evidence is recorded in:
+
+```text
+docs/architecture/STRUCTURE_PLAN_E2E_VERIFICATION.md
+```
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` loads latest
+Structure Plan `structure_plan_08e12e859e457d5ac15870ce2892c817`. The surface
+projection is `valid` with `1` route, `0` navigation entries, `2` sections,
+`3` assignments, `0` blocked candidates, no navigation state present, and
+planned route/section/assignment rows visible in the projection.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` loads latest
+Structure Plan `structure_plan_7b73cf96b695da6ba0103fb30ad306a0`. The surface
+projection is `valid` with `1` route, `0` navigation entries, `0` sections,
+`1` assignment, `0` blocked candidates, no navigation state present, no
+sections state present, and limitations-present state visible.
+
+Both targets preserve exact Reconstruction Package, Review Package, Discovery
+Result, `siteVersionId`, and `dryRunId` lineage. The Reconstruction Package
+lineage is current for both projections.
+
+The dedicated admin page compiles as a dynamic server-rendered route and
+retains the superadmin guard. The browser check confirmed an unauthenticated
+request redirects to `/login`; authenticated artifact inspection was verified
+through live loader/projection checks, page source checks, focused tests, and
+the production build route output.
+
+The page remains read-only. It exposes no buttons, forms, inputs, AI controls,
+generation controls, publishing controls, execution controls, retry controls,
+approval controls, edit controls, Content Planning controls, or Layout Planning
+controls.
+
+Validation result: focused Structure Plan persistence/projection/page tests
+pass `16 / 16`; `cd apps/platform && pnpm run vercel-build` passes with
+existing unrelated lint warnings and includes
+`/gnr8/admin/structure-plan/[siteVersionId]`; `git diff --check` passes.
+
+Phase 8F-10 changed documentation only. It added no Content Planning, Layout
+Planning, AI, generation, publishing, schema, worker, API, UI mutation,
+button/form/input, StructurePlan contract change, StructurePlan builder change,
+StructurePlan persistence change, or StructurePlan page behavior change.
+
+The recommended next phase is:
+
+```text
+Phase 8F-11 - Post-Structure Plan Boundary Reassessment
+```
