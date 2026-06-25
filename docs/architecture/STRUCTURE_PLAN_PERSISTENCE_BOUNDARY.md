@@ -3,7 +3,10 @@
 ## Phase And Scope
 
 Phase 8F-5 defines how a valid `StructurePlan` should be durably stored and
-reloaded. Phase 8F-6 implements that boundary.
+reloaded. Phase 8F-6 implements that boundary. Phase 8F-7 validates the
+implemented helper surface against real ODV and ViroiDoc Reconstruction Package
+artifacts. Phase 8F-8 designs the read-only admin inspection surface for the
+persisted artifacts without changing persistence behavior.
 
 Phase 8F-6 implements only the Structure Plan persistence helper surface. It
 does not add or change a database table, modify the StructurePlan contract or
@@ -397,3 +400,82 @@ Real-Artifact Validation**, limited to exercising this persistence helper on
 real latest Reconstruction Package artifacts and reloading latest/by-id without
 creating Content Planning, Layout Planning, AI output, generation, publishing,
 schema, or worker behavior.
+
+## Phase 8F-7 Real-Artifact Validation Completion
+
+Phase 8F-7 validates the implemented helper surface on real latest
+Reconstruction Package artifacts. The canonical evidence record is:
+
+```text
+docs/architecture/STRUCTURE_PLAN_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md
+```
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` persisted
+`structure_plan_08e12e859e457d5ac15870ce2892c817` from latest Reconstruction
+Package `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`. The
+persisted plan is `valid`, with `1` planned route, `0` planned navigation
+entries, `2` planned sections, `3` assignments, and `0` blocked candidates.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` persisted
+`structure_plan_7b73cf96b695da6ba0103fb30ad306a0` from latest Reconstruction
+Package `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`. The
+persisted plan is `valid`, with `1` planned route, `0` planned navigation
+entries, `0` planned sections, `1` assignment, and `0` blocked candidates.
+
+For both targets, latest Structure Plan reload and by-ID reload returned the
+same exact artifact, lineage and metadata checks passed, and idempotent retry
+reused the same artifact without appending a duplicate.
+
+Phase 8F-7 added no Content Planning, Layout Planning, generated React,
+generated blocks, generated content, generated components, AI output,
+publishing artifact, deployment artifact, execution artifact, migration,
+schema, worker, API, UI, StructurePlan contract change, StructurePlan builder
+change, Reconstruction Package change, or runtime generation behavior.
+
+The recommended next phase is **Phase 8F-8 - Structure Plan Read-Only Surface
+Design**, limited to designing a read-only inspection surface for persisted
+Structure Plan metadata without Content Planning, Layout Planning, AI,
+generation, publishing, schema, workers, API implementation, or UI
+implementation.
+
+## Phase 8F-8 Read-Only Surface Design Completion
+
+Phase 8F-8 designs the persisted Structure Plan inspection surface in:
+
+```text
+docs/architecture/STRUCTURE_PLAN_SURFACE_DESIGN.md
+```
+
+The recommended UI location is a dedicated admin Structure Plan page. This
+keeps artifact metadata, lineage, planned routes, planned navigation, planned
+sections, assignments, limitations, diagnostics, and validation state together
+without placing the artifact inside generated reconstruction or normal Site
+Workspace output.
+
+The designed surface shows the persisted `structure_plan` artifact ref,
+`structurePlanId`, `siteVersionId`, status, timestamps, contract version,
+lineage back to Reconstruction Package, Candidate Review, Candidate Discovery,
+and dry run, summary counts, grouped planned route/navigation/section metadata,
+assignment mappings, limitations, diagnostics, and validation status.
+
+The read-only projection is `StructurePlanSurfaceProjection`. It includes
+artifact metadata, lineage, summary counts, grouped planned routes/navigation/
+sections, assignments, limitations, diagnostics, validation, and a display
+state covering missing, invalid, stale, blocked, valid-without-navigation,
+valid-without-sections, limitations-present, and ready-for-inspection cases.
+
+The surface is explicitly not generated website output. It must expose no AI,
+reconstruction, generation, publishing, execution, edit, trigger, repair,
+retry, force, approval, layout, content, worker, or queue controls.
+
+Phase 8F-8 changed documentation only. It added no UI implementation, route,
+API, loader, persistence helper, contract change, builder change, Evidence
+Capture change, Candidate Discovery change, Candidate Context change, Candidate
+Review change, Review Actions change, Reconstruction Package change, AI system,
+generation system, publishing system, schema, worker, or runtime behavior.
+
+The recommended next phase is **Phase 8F-9 - Structure Plan Read-Only Surface
+Implementation**, limited to implementing the designed read-only admin
+inspection surface without generation, publishing, execution, editing, schema,
+worker, StructurePlan contract, StructurePlan builder, or StructurePlan
+persistence changes.

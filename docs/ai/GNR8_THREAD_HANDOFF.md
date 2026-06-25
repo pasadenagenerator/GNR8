@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8F-6 Structure Plan Persistence Implementation is complete.
+- 8F-9 Structure Plan Read-Only Surface Implementation is complete.
 
 Current Phase:
-- Phase 8F-6 Structure Plan Persistence Implementation is complete.
+- Phase 8F-9 Structure Plan Read-Only Surface Implementation is complete.
 
 Next Phase:
-- Phase 8F-7 Structure Plan Persistence Real-Artifact Validation.
+- Phase 8F-10 Structure Plan End-to-End Verification.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,50 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8F-9 - Structure Plan Read-Only Surface Implementation.
+- Status: COMPLETE / READ-ONLY ADMIN SURFACE / NO CONTENT PLANNING / NO LAYOUT PLANNING / NO AI / NO GENERATION / NO PUBLISHING / NO MUTATIONS / NO SCHEMA / NO WORKERS.
+- Admin route: `apps/platform/app/gnr8/admin/structure-plan/[siteVersionId]/page.tsx`.
+- Projection: `apps/platform/gnr8/architecture/structure-plan-surface-projection.ts`.
+- Guard: existing superadmin page guard.
+- Projection contents: latest persisted Structure Plan artifact metadata, linked lineage, summary counts, planned routes, planned navigation, planned sections, assignments, limitations, diagnostics, validation status, primary state, and attention states.
+- Page sections: Overview, Lineage, Plan Summary, Planned Routes, Planned Navigation, Planned Sections, Assignments, and Diagnostics.
+- Implemented states: missing, blocked, stale, valid, limitations present, no navigation, and no sections.
+- Safety: no buttons, forms, inputs, edit controls, AI controls, reconstruction controls, generation controls, publishing controls, execution controls, retry controls, approval controls, Content Planning, Layout Planning, mutation behavior, Evidence Capture change, Candidate Discovery change, Candidate Context change, Candidate Review change, Review Actions change, Reconstruction Package change, StructurePlan contract change, StructurePlan builder change, StructurePlan persistence change, AI system, generation system, publishing system, schema, or worker.
+- Tests: `apps/platform/gnr8/architecture/structure-plan-surface-projection.test.ts` and `apps/platform/app/gnr8/admin/structure-plan-page.test.ts`.
+- Validation result: focused Structure Plan surface tests pass; `cd apps/platform && pnpm run vercel-build` passes; `git diff --check` passes.
+- Recommended next phase: Phase 8F-10 - Structure Plan End-to-End Verification.
+
+Previous completed milestone:
+- Phase 8F-8 - Structure Plan Read-Only Surface Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / READ-ONLY SURFACE DESIGN / NO UI IMPLEMENTATION / NO AI / NO GENERATION / NO PUBLISHING / NO SCHEMA.
+- Canonical design: `docs/architecture/STRUCTURE_PLAN_SURFACE_DESIGN.md`.
+- UI location recommendation: dedicated admin Structure Plan page.
+- Surface purpose: inspect persisted `structure_plan` metadata showing planned routes, planned navigation, planned sections, and deterministic assignment mappings from approved source candidates without presenting the artifact as generated reconstruction.
+- Surface sections: Overview, Lineage, Plan Summary, Planned Routes, Planned Navigation, Planned Sections, Assignments, and Diagnostics.
+- Empty/attention states: no Structure Plan, blocked Structure Plan, stale Structure Plan, valid but no navigation, valid but no sections, and limitations present.
+- Projection: `StructurePlanSurfaceProjection` with artifact metadata, lineage, summary counts, grouped planned routes/navigation/sections, assignments, limitations, diagnostics, validation, and display state.
+- Future relationship: `StructurePlan read-only page -> future Layout/Content Planning -> future Reconstruction Preview`.
+- Safety: no AI controls, reconstruction controls, generation controls, publishing controls, execution controls, edit controls, trigger controls, repair controls, retry controls, force controls, approval controls, layout controls, content controls, worker controls, or queue controls.
+- Phase 8F-8 changed documentation only. It added no UI implementation, route, API, loader, persistence helper, Evidence Capture change, Candidate Discovery change, Candidate Context change, Candidate Review change, Review Actions change, Reconstruction Package change, StructurePlan contract change, StructurePlan builder change, StructurePlan persistence change, AI system, generation system, publishing system, schema, worker, or runtime behavior.
+- Validation result: `git diff --check` passes.
+- Recommended next phase: Phase 8F-9 - Structure Plan Read-Only Surface Implementation.
+
+Previous completed milestone:
+- Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation.
+- Status: COMPLETE / VALIDATION ONLY / REAL STRUCTURE PLAN PERSISTENCE / NO CONTENT PLANNING / NO LAYOUT PLANNING / NO AI / NO GENERATION / NO PUBLISHING / NO SCHEMA.
+- Canonical evidence: `docs/architecture/STRUCTURE_PLAN_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md`.
+- Method: load latest Reconstruction Package artifact, confirm exact requested artifact ID, reload exact Reconstruction Package by ID, build with `buildStructurePlan(...)`, persist with `persistStructurePlan(...)`, reload latest with `loadLatestStructurePlan(...)`, reload exact artifact with `loadStructurePlanById(...)`, retry persist for idempotency, and scan persisted artifacts for forbidden downstream fields.
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`: latest Reconstruction Package `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`; persisted Structure Plan `structure_plan_08e12e859e457d5ac15870ce2892c817`; Review artifact `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b`; Discovery artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`; dry run `09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l`.
+- ODV Structure Plan: `valid`, `1` planned route, `0` planned navigation entries, `2` planned sections, `3` assignments, `0` blocked candidates, `0` limitations.
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`: latest Reconstruction Package `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`; persisted Structure Plan `structure_plan_7b73cf96b695da6ba0103fb30ad306a0`; Review artifact `candidate_review_package_ecb5f777160a45e15b958948348bca08`; Discovery artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`; dry run `e26b0754-988b-45b9-9e24-8e213179b6cf:8b-12n`.
+- ViroiDoc Structure Plan: `valid`, `1` planned route, `0` planned navigation entries, `0` planned sections, `1` assignment, `0` blocked candidates, `36` propagated source Reconstruction Package limitations.
+- Reload/idempotency: both targets reloaded latest and by ID to the same exact Structure Plan artifact; idempotent retry reused the same artifact and did not append a duplicate.
+- Lineage/metadata: both persisted artifacts preserve exact Reconstruction Package artifact, package ID/status/contract version, Candidate Review artifact, Candidate Discovery artifact, site version, dry run, included candidate refs, Structure Plan contract version, counts, createdAt, persistedAt, and validation status.
+- Safety: no Content Plan, Layout Plan, AI output, generated React, generated components, generated blocks, generated content, publishing artifact, deployment artifact, execution artifact, worker job, schema, API, UI, or runtime generation behavior was added.
+- Validation result: real-artifact persistence validation passed; focused Structure Plan persistence tests pass; `cd apps/platform && pnpm run vercel-build` passes; `git diff --check` passes.
+- Recommended next phase: Phase 8F-8 - Structure Plan Read-Only Surface Design.
+
+Earlier completed milestone:
 - Phase 8F-6 - Structure Plan Persistence Implementation.
 - Status: COMPLETE / PERSISTENCE ONLY / NO CONTENT PLANNING / NO LAYOUT PLANNING / NO AI / NO GENERATION / NO PUBLISHING / NO SCHEMA.
 - Canonical design: `docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md`.
@@ -42,7 +86,7 @@ Latest completed milestone:
 - Validation result: focused Structure Plan persistence tests pass; `cd apps/platform && pnpm run vercel-build` passes.
 - Recommended next phase: Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation.
 
-Previous completed milestone:
+Earlier completed milestone:
 - Phase 8F-5 - Structure Plan Persistence Boundary Design.
 - Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NO PERSISTENCE / NO AI / NO GENERATION / NO PUBLISHING.
 - Canonical design: `docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md`.

@@ -501,3 +501,140 @@ The recommended next phase is:
 ```text
 Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation
 ```
+
+## Phase 8F-7 Persistence Real-Artifact Validation Completion
+
+Phase 8F-7 validates real durable Structure Plan persistence evidence in:
+
+```text
+docs/architecture/STRUCTURE_PLAN_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md
+```
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` used latest
+Reconstruction Package
+`reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296` and persisted
+Structure Plan `structure_plan_08e12e859e457d5ac15870ce2892c817`.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` used latest
+Reconstruction Package
+`reconstruction_package_0e143f5fc174668e2225f73ebe464ffb` and persisted
+Structure Plan `structure_plan_7b73cf96b695da6ba0103fb30ad306a0`.
+
+Both persisted Structure Plans are `valid`. Latest reload and exact by-ID
+reload returned the same artifact for each target, lineage and metadata checks
+passed, and idempotent retry reused the existing artifact without creating a
+duplicate.
+
+The persisted artifacts remain metadata-only. They contain no Content Plan,
+Layout Plan, AI output, generated React, generated components, generated
+blocks, generated content, publishing artifact, deployment artifact, execution
+artifact, or worker job.
+
+Phase 8F-7 changed no behavior and added no Content Planning, Layout Planning,
+AI, generation, publishing, schema, worker, API, UI, StructurePlan contract
+change, StructurePlan builder change, Reconstruction Package change, or runtime
+generation behavior.
+
+The recommended next phase is:
+
+```text
+Phase 8F-8 - Structure Plan Read-Only Surface Design
+```
+
+## Phase 8F-8 Read-Only Surface Design Completion
+
+Phase 8F-8 designs the persisted Structure Plan inspection surface in:
+
+```text
+docs/architecture/STRUCTURE_PLAN_SURFACE_DESIGN.md
+```
+
+The surface purpose is read-only operator inspection of persisted
+`structure_plan` artifacts. It shows planned routes, planned navigation,
+planned sections, and deterministic assignment mappings from approved source
+candidates. It also makes clear that a Structure Plan is not generated website
+output, not reconstruction preview, not generated React, not generated content,
+and not publishable output.
+
+The recommended UI location is a dedicated admin Structure Plan page. Candidate
+Review, Reconstruction Package, and Site Workspace placements were considered
+but not selected for the first detailed surface because each risks conflating
+approval, package eligibility, normal workspace operation, or future preview
+with this metadata-only planning artifact.
+
+The designed `StructurePlanSurfaceProjection` includes artifact metadata,
+lineage, summary counts, grouped planned routes/navigation/sections,
+assignments, limitations, diagnostics, validation status, and state. Empty and
+attention states cover no Structure Plan, blocked Structure Plan, stale
+Structure Plan, valid plans with no navigation, valid plans with no sections,
+and limitations-present cases.
+
+The page must expose no AI controls, reconstruction controls, generation
+controls, publishing controls, execution controls, edit controls, trigger
+controls, repair controls, retry controls, force controls, approval controls,
+layout controls, content controls, worker controls, or queue controls.
+
+The future UI relationship remains:
+
+```text
+StructurePlan read-only page
+-> future Layout/Content Planning
+-> future Reconstruction Preview
+```
+
+Phase 8F-8 changed documentation only. It added no UI implementation, route,
+API, loader, persistence helper, StructurePlan contract change, StructurePlan
+builder change, StructurePlan persistence change, Reconstruction Package
+change, Evidence Capture change, Candidate Discovery change, Candidate Context
+change, Candidate Review change, Review Actions change, AI system, generation
+system, publishing system, schema, worker, or runtime behavior.
+
+The recommended next phase is:
+
+```text
+Phase 8F-9 - Structure Plan Read-Only Surface Implementation
+```
+
+## Phase 8F-9 Read-Only Surface Implementation Completion
+
+Phase 8F-9 implements the persisted Structure Plan inspection surface at:
+
+```text
+apps/platform/app/gnr8/admin/structure-plan/[siteVersionId]/page.tsx
+```
+
+The implemented projection lives at:
+
+```text
+apps/platform/gnr8/architecture/structure-plan-surface-projection.ts
+```
+
+It reads only the latest persisted `structure_plan` artifact through the
+existing Structure Plan persistence loader and projects artifact metadata,
+lineage, summary counts, planned routes, planned navigation, planned sections,
+assignments, limitations, diagnostics, and validation status for read-only
+display.
+
+The page implements the designed Overview, Lineage, Plan Summary, Planned
+Routes, Planned Navigation, Planned Sections, Assignments, and Diagnostics
+sections. It covers missing, blocked, stale, valid, limitations-present,
+no-navigation, and no-sections states.
+
+The surface remains inspection-only. It exposes no buttons, forms, inputs, edit
+controls, AI controls, reconstruction controls, generation controls, publishing
+controls, execution controls, retry controls, or approval controls.
+
+Phase 8F-9 changed no Evidence Capture, Candidate Discovery, Candidate Context,
+Candidate Review, Review Actions, Reconstruction Package, StructurePlan
+contract, StructurePlan builder, StructurePlan persistence, AI system,
+generation system, publishing system, schema, worker, Content Planning, Layout
+Planning, execution, approval, mutation, or publishing behavior.
+
+Validation result: focused Structure Plan surface tests pass; `cd apps/platform
+&& pnpm run vercel-build` passes; `git diff --check` passes.
+
+The recommended next phase is:
+
+```text
+Phase 8F-10 - Structure Plan End-to-End Verification
+```

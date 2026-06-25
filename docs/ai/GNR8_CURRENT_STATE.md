@@ -695,10 +695,93 @@ builder change, or runtime generation behavior.
 Validation passed: focused Structure Plan persistence tests and
 `cd apps/platform && pnpm run vercel-build`.
 
-Current Phase: Phase 8F-6 - Structure Plan Persistence Implementation is
+Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation is COMPLETE.
+Canonical evidence:
+`docs/architecture/STRUCTURE_PLAN_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md`.
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` persisted
+`structure_plan_08e12e859e457d5ac15870ce2892c817` from latest Reconstruction
+Package `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`. The
+persisted Structure Plan is `valid`, with `1` planned route, `0` planned
+navigation entries, `2` planned sections, `3` assignments, and `0` blocked
+candidates.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` persisted
+`structure_plan_7b73cf96b695da6ba0103fb30ad306a0` from latest Reconstruction
+Package `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`. The
+persisted Structure Plan is `valid`, with `1` planned route, `0` planned
+navigation entries, `0` planned sections, `1` assignment, and `0` blocked
+candidates.
+
+For both targets, latest Structure Plan reload and by-ID reload returned the
+same exact artifact, lineage and metadata checks passed, and idempotent retry
+reused the same artifact without appending a duplicate. The persisted artifacts
+contain no Content Plan, Layout Plan, AI output, generated content/components,
+publishing artifact, deployment artifact, execution artifact, or worker job.
+
+Phase 8F-7 changed no behavior. It added no Content Planning, Layout Planning,
+AI, generation, publishing, schema, worker, API, UI, StructurePlan contract
+change, StructurePlan builder change, Reconstruction Package change, or runtime
+generation behavior.
+
+Phase 8F-8 - Structure Plan Read-Only Surface Design is COMPLETE. The canonical
+design is `docs/architecture/STRUCTURE_PLAN_SURFACE_DESIGN.md`.
+
+It recommends a dedicated admin Structure Plan page for read-only inspection of
+persisted `structure_plan` artifacts. The surface shows artifact metadata,
+lineage, planned routes, planned navigation, planned sections, assignment
+mappings, summary counts, limitations, diagnostics, and validation state while
+making clear that the artifact is not generated website output.
+
+The designed `StructurePlanSurfaceProjection` includes artifact metadata,
+lineage, summary counts, grouped planned routes/navigation/sections,
+assignments, limitations, diagnostics, validation, and state for missing,
+invalid, stale, blocked, valid-without-navigation, valid-without-sections,
+limitations-present, and ready-for-inspection cases.
+
+Phase 8F-8 changed documentation only. It added no UI implementation, route,
+API, loader, persistence helper, Evidence Capture change, Candidate Discovery
+change, Candidate Context change, Candidate Review change, Review Actions
+change, Reconstruction Package change, StructurePlan contract change,
+StructurePlan builder change, StructurePlan persistence change, AI system,
+generation system, publishing system, schema, worker, or runtime behavior.
+
+Phase 8F-9 - Structure Plan Read-Only Surface Implementation is COMPLETE.
+
+Implemented admin route:
+`apps/platform/app/gnr8/admin/structure-plan/[siteVersionId]/page.tsx`.
+
+Implemented projection:
+`apps/platform/gnr8/architecture/structure-plan-surface-projection.ts`.
+
+The page uses the existing superadmin page guard and displays persisted
+Structure Plan artifacts in read-only sections: Overview, Lineage, Plan
+Summary, Planned Routes, Planned Navigation, Planned Sections, Assignments, and
+Diagnostics.
+
+The projection reads only the latest persisted Structure Plan artifact through
+the existing Structure Plan persistence loader and projects artifact metadata,
+linked lineage, summary counts, planned route/navigation/section metadata,
+assignments, limitations, diagnostics, validation status, primary state, and
+attention states.
+
+Implemented states: missing, blocked, stale, valid, limitations present, no
+navigation, and no sections.
+
+Phase 8F-9 added no buttons, forms, inputs, edit controls, AI controls,
+reconstruction controls, generation controls, publishing controls, execution
+controls, retry controls, approval controls, Content Planning, Layout Planning,
+AI, generation, publishing, mutation behavior, schema, workers, or changes to
+Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review,
+Review Actions, Reconstruction Package, StructurePlan contract, StructurePlan
+builder, or StructurePlan persistence.
+
+Validation result: focused Structure Plan surface tests pass; `cd apps/platform
+&& pnpm run vercel-build` passes; `git diff --check` passes.
+
+Current Phase: Phase 8F-9 - Structure Plan Read-Only Surface Implementation is
 complete.
-Next recommended phase: Phase 8F-7 - Structure Plan Persistence Real-Artifact
-Validation.
+Next recommended phase: Phase 8F-10 - Structure Plan End-to-End Verification.
 
 ## Current Importer Architecture
 
@@ -1355,11 +1438,79 @@ generation behavior.
 Validation passed: focused Structure Plan persistence tests and
 `cd apps/platform && pnpm run vercel-build`.
 
+Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation is COMPLETE.
+Canonical evidence:
+`docs/architecture/STRUCTURE_PLAN_PERSISTENCE_REAL_ARTIFACT_VALIDATION.md`.
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` persisted
+`structure_plan_08e12e859e457d5ac15870ce2892c817` from latest Reconstruction
+Package `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`. The
+persisted Structure Plan is `valid`, with `1` planned route, `0` planned
+navigation entries, `2` planned sections, `3` assignments, and `0` blocked
+candidates.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` persisted
+`structure_plan_7b73cf96b695da6ba0103fb30ad306a0` from latest Reconstruction
+Package `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`. The
+persisted Structure Plan is `valid`, with `1` planned route, `0` planned
+navigation entries, `0` planned sections, `1` assignment, and `0` blocked
+candidates.
+
+For both targets, latest Structure Plan reload and by-ID reload returned the
+same exact artifact, lineage and metadata checks passed, and idempotent retry
+reused the same artifact without appending a duplicate. The persisted artifacts
+contain no Content Plan, Layout Plan, AI output, generated content/components,
+publishing artifact, deployment artifact, execution artifact, or worker job.
+
+Phase 8F-7 changed no behavior. It added no Content Planning, Layout Planning,
+AI, generation, publishing, schema, worker, API, UI, StructurePlan contract
+change, StructurePlan builder change, Reconstruction Package change, or runtime
+generation behavior.
+
+Phase 8F-8 - Structure Plan Read-Only Surface Design is COMPLETE. The canonical
+design is `docs/architecture/STRUCTURE_PLAN_SURFACE_DESIGN.md`.
+
+It recommends a dedicated admin Structure Plan page for read-only inspection of
+persisted `structure_plan` artifacts. The surface shows artifact metadata,
+lineage, planned routes, planned navigation, planned sections, assignment
+mappings, summary counts, limitations, diagnostics, and validation state while
+making clear that the artifact is not generated website output.
+
+The designed `StructurePlanSurfaceProjection` includes artifact metadata,
+lineage, summary counts, grouped planned routes/navigation/sections,
+assignments, limitations, diagnostics, validation, and state for missing,
+invalid, stale, blocked, valid-without-navigation, valid-without-sections,
+limitations-present, and ready-for-inspection cases.
+
+Phase 8F-8 changed documentation only. It added no UI implementation, route,
+API, loader, persistence helper, Evidence Capture change, Candidate Discovery
+change, Candidate Context change, Candidate Review change, Review Actions
+change, Reconstruction Package change, StructurePlan contract change,
+StructurePlan builder change, StructurePlan persistence change, AI system,
+generation system, publishing system, schema, worker, or runtime behavior.
+
+Phase 8F-9 - Structure Plan Read-Only Surface Implementation is complete.
+- Admin route: `apps/platform/app/gnr8/admin/structure-plan/[siteVersionId]/page.tsx`.
+- Projection: `apps/platform/gnr8/architecture/structure-plan-surface-projection.ts`.
+- Surface: superadmin-guarded, read-only Overview, Lineage, Plan Summary,
+  Planned Routes, Planned Navigation, Planned Sections, Assignments, and
+  Diagnostics sections.
+- States: missing, blocked, stale, valid, limitations present, no navigation,
+  and no sections.
+- Safety: no buttons, forms, inputs, edit controls, AI controls,
+  reconstruction controls, generation controls, publishing controls, execution
+  controls, retry controls, approval controls, Content Planning, Layout
+  Planning, AI, generation, publishing, mutations, schema, workers,
+  StructurePlan contract changes, StructurePlan builder changes, or
+  StructurePlan persistence changes.
+- Validation result: focused Structure Plan surface tests pass; `cd
+  apps/platform && pnpm run vercel-build` passes; `git diff --check` passes.
+
 Current Phase:
-- Phase 8F-6 - Structure Plan Persistence Implementation is complete.
+- Phase 8F-9 - Structure Plan Read-Only Surface Implementation is complete.
 
 Next Phase:
-- Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation.
+- Phase 8F-10 - Structure Plan End-to-End Verification.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
