@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8F-5 Structure Plan Persistence Boundary Design is complete.
+- 8F-6 Structure Plan Persistence Implementation is complete.
 
 Current Phase:
-- Phase 8F-5 Structure Plan Persistence Boundary Design is complete.
+- Phase 8F-6 Structure Plan Persistence Implementation is complete.
 
 Next Phase:
-- Phase 8F-6 Structure Plan Persistence Implementation.
+- Phase 8F-7 Structure Plan Persistence Real-Artifact Validation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,26 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8F-6 - Structure Plan Persistence Implementation.
+- Status: COMPLETE / PERSISTENCE ONLY / NO CONTENT PLANNING / NO LAYOUT PLANNING / NO AI / NO GENERATION / NO PUBLISHING / NO SCHEMA.
+- Canonical design: `docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md`.
+- Implementation: `apps/platform/gnr8/architecture/structure-plan-persistence.ts`.
+- Tests: `apps/platform/gnr8/architecture/structure-plan-persistence.test.ts`.
+- Storage: uses the existing site-version provenance artifact boundary, not a new DB table or hybrid dual-write path.
+- Artifact kind: `structure_plan`.
+- Storage shape: append-only `structurePlanArtifacts` plus `latestStructurePlanArtifact`.
+- Metadata shape: artifact ID/ref, artifact kind, `structurePlanId`, `reconstructionPackageArtifactId`, `candidateReviewPackageArtifactId`, `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, `status`, planned route/navigation/section counts, assignment count, blocked candidate count, `createdAt`, `persistedAt`, and `contractVersion`.
+- Helpers: `persistStructurePlan(...)`, `loadLatestStructurePlan(...)`, and `loadStructurePlanById(...)`.
+- Idempotency: equivalent latest plan for the same Reconstruction Package artifact and contract version reuses latest; changed current plans from a newer latest Reconstruction Package artifact append and advance latest.
+- Staleness policy: persist only `valid` or `blocked`; reject `stale` and `invalid`.
+- Rejection behavior: stale, invalid, forbidden-field, invalid-lineage, missing-package, non-latest-package, and package-reconciliation failures reject before write.
+- Validation before persist: run `validateStructurePlan(...)`, enforce recursive forbidden-field guard, check exact lineage, verify the referenced Reconstruction Package artifact, require it to remain latest, and reconcile copied included candidate refs/counts against the package payload.
+- Safety: no AI outputs, generated content/components/blocks, publishing artifacts, deployment artifacts, execution artifacts, worker jobs, Content Planning artifacts, Layout/Block Planning artifacts, schema, API, UI, StructurePlan contract changes, StructurePlan builder changes, Reconstruction Package changes, or runtime behavior.
+- Future relationship: `StructurePlan -> Future Content Planning` or `StructurePlan -> Future Layout/Block Planning`; no next generation boundary exists yet.
+- Validation result: focused Structure Plan persistence tests pass; `cd apps/platform && pnpm run vercel-build` passes.
+- Recommended next phase: Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation.
+
+Previous completed milestone:
 - Phase 8F-5 - Structure Plan Persistence Boundary Design.
 - Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NO PERSISTENCE / NO AI / NO GENERATION / NO PUBLISHING.
 - Canonical design: `docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md`.
@@ -39,7 +59,7 @@ Latest completed milestone:
 - Validation result: `git diff --check` passes.
 - Recommended next phase: Phase 8F-6 - Structure Plan Persistence Implementation.
 
-Previous completed milestone:
+Earlier completed milestone:
 - Phase 8F-4 - Structure Planning Real-Artifact Validation.
 - Status: COMPLETE / VALIDATION ONLY / REAL RECONSTRUCTION PACKAGE ARTIFACTS / NO PERSISTENCE / NO AI / NO GENERATION / NO PUBLISHING.
 - Canonical evidence: `docs/architecture/STRUCTURE_PLANNING_REAL_ARTIFACT_VALIDATION.md`.

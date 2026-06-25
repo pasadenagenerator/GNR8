@@ -449,3 +449,55 @@ The recommended next phase is:
 ```text
 Phase 8F-6 - Structure Plan Persistence Implementation
 ```
+
+## Phase 8F-6 Persistence Implementation Completion
+
+Phase 8F-6 implements the Structure Plan persistence boundary in:
+
+```text
+apps/platform/gnr8/architecture/structure-plan-persistence.ts
+```
+
+The helper surface is limited to `persistStructurePlan(...)`,
+`loadLatestStructurePlan(...)`, and `loadStructurePlanById(...)`. Storage uses
+the existing site-version provenance artifact boundary with artifact kind
+`structure_plan`, append-only `structurePlanArtifacts`, and
+`latestStructurePlanArtifact`.
+
+Persistence writes only `valid` or `blocked` Structure Plans after
+`validateStructurePlan(...)` passes. It verifies exact plan lineage, confirms
+the referenced Reconstruction Package artifact is valid and latest for the
+site-version lineage, and reconciles copied included candidate refs/counts
+against the package payload before writing.
+
+Persisted metadata includes `structurePlanId`,
+`reconstructionPackageArtifactId`, `candidateReviewPackageArtifactId`,
+`candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, status, planned
+route/navigation/section counts, assignment count, blocked candidate count,
+contract version, `createdAt`, and `persistedAt`.
+
+Equivalent latest plans for the same Reconstruction Package artifact and
+contract version reuse the existing artifact. Changed current plans from a
+newer latest Reconstruction Package artifact append a new record and advance
+`latestStructurePlanArtifact`. Stale, invalid, forbidden-field,
+invalid-lineage, missing-package, non-latest-package, and package-reconciliation
+failures reject before write.
+
+Focused tests live in:
+
+```text
+apps/platform/gnr8/architecture/structure-plan-persistence.test.ts
+```
+
+Phase 8F-6 added no Content Planning, Layout Planning, generated React,
+generated blocks, generated content, AI output, publishing artifact, migration,
+schema, worker, API, UI, Evidence Capture change, Candidate Discovery change,
+Candidate Context change, Candidate Review change, Review Actions change,
+Reconstruction Package change, StructurePlan contract change, StructurePlan
+builder change, or runtime generation behavior.
+
+The recommended next phase is:
+
+```text
+Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation
+```

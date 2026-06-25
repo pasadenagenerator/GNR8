@@ -659,10 +659,46 @@ database table, schema migration, API, UI, worker, Content Planning,
 Layout/Block Planning, AI, generation, publishing, StructurePlan contract
 change, StructurePlan builder change, Reconstruction Package change, or
 runtime behavior.
-Current Phase: Phase 8F-5 - Structure Plan Persistence Boundary Design is
+
+Phase 8F-6 - Structure Plan Persistence Implementation is COMPLETE. It adds
+`apps/platform/gnr8/architecture/structure-plan-persistence.ts` and focused
+tests in
+`apps/platform/gnr8/architecture/structure-plan-persistence.test.ts`.
+
+The implementation persists metadata-only `structure_plan` artifacts inside
+the existing site-version provenance artifact boundary using append-only
+`structurePlanArtifacts` and `latestStructurePlanArtifact`. Helper surface is
+limited to `persistStructurePlan(...)`, `loadLatestStructurePlan(...)`, and
+`loadStructurePlanById(...)`.
+
+Persisted metadata includes `structurePlanId`,
+`reconstructionPackageArtifactId`, `candidateReviewPackageArtifactId`,
+`candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, status, planned
+route/navigation/section counts, assignment count, blocked candidate count,
+contract version, `createdAt`, and `persistedAt`.
+
+Persistence requires `validateStructurePlan(...)`, exact lineage checks, latest
+Reconstruction Package artifact verification, and package reconciliation before
+write. Equivalent latest plans reuse the existing artifact. Changed current
+plans from a newer latest Reconstruction Package artifact append and advance
+the latest pointer. Stale, invalid, forbidden-field, invalid-lineage,
+missing-package, non-latest-package, and package-reconciliation failures reject
+before write.
+
+Phase 8F-6 added no Content Planning, Layout Planning, generated React,
+generated blocks, generated content, AI output, publishing artifact, migration,
+schema, worker, API, UI, Evidence Capture change, Candidate Discovery change,
+Candidate Context change, Candidate Review change, Review Actions change,
+Reconstruction Package change, StructurePlan contract change, StructurePlan
+builder change, or runtime generation behavior.
+
+Validation passed: focused Structure Plan persistence tests and
+`cd apps/platform && pnpm run vercel-build`.
+
+Current Phase: Phase 8F-6 - Structure Plan Persistence Implementation is
 complete.
-Next recommended phase: Phase 8F-6 - Structure Plan Persistence
-Implementation.
+Next recommended phase: Phase 8F-7 - Structure Plan Persistence Real-Artifact
+Validation.
 
 ## Current Importer Architecture
 
@@ -1288,11 +1324,42 @@ Content Planning, Layout/Block Planning, AI, generation, publishing,
 StructurePlan contract change, StructurePlan builder change, Reconstruction
 Package change, execution artifact, deployment artifact, or runtime behavior.
 
+Phase 8F-6 - Structure Plan Persistence Implementation is COMPLETE. It adds
+the `structure_plan` persistence helper in
+`apps/platform/gnr8/architecture/structure-plan-persistence.ts` and focused
+tests in
+`apps/platform/gnr8/architecture/structure-plan-persistence.test.ts`.
+
+The helper persists valid or blocked Structure Plans through the existing
+site-version provenance artifact boundary, appending `structurePlanArtifacts`
+and advancing `latestStructurePlanArtifact` only after contract validation,
+latest Reconstruction Package verification, exact lineage checks, and package
+candidate/count reconciliation pass.
+
+Metadata persisted includes `structurePlanId`,
+`reconstructionPackageArtifactId`, `candidateReviewPackageArtifactId`,
+`candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, status, planned
+route/navigation/section counts, assignment count, blocked candidate count,
+contract version, `createdAt`, and `persistedAt`.
+
+Idempotency reuses equivalent latest artifacts. Changed current plans from a
+newer latest Reconstruction Package artifact append and advance latest. Stale,
+invalid, forbidden-field, invalid-lineage, missing-package,
+non-latest-package, and package-reconciliation failures reject before write.
+
+Phase 8F-6 added no Content Planning, Layout Planning, AI, generation,
+publishing, schema, worker, API, UI, StructurePlan contract change,
+StructurePlan builder change, Reconstruction Package change, or runtime
+generation behavior.
+
+Validation passed: focused Structure Plan persistence tests and
+`cd apps/platform && pnpm run vercel-build`.
+
 Current Phase:
-- Phase 8F-5 - Structure Plan Persistence Boundary Design is complete.
+- Phase 8F-6 - Structure Plan Persistence Implementation is complete.
 
 Next Phase:
-- Phase 8F-6 - Structure Plan Persistence Implementation.
+- Phase 8F-7 - Structure Plan Persistence Real-Artifact Validation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

@@ -3,13 +3,12 @@
 ## Phase And Scope
 
 Phase 8F-5 defines how a valid `StructurePlan` should be durably stored and
-reloaded in a later implementation phase.
+reloaded. Phase 8F-6 implements that boundary.
 
-This phase is documentation and architecture only. It does not implement
-persistence, add provenance fields, add or change a database table, modify the
-StructurePlan contract or builder, modify Reconstruction Package behavior,
-create AI output, generate content, publish, dispatch workers, change schema,
-add APIs, or add UI.
+Phase 8F-6 implements only the Structure Plan persistence helper surface. It
+does not add or change a database table, modify the StructurePlan contract or
+builder, modify Reconstruction Package behavior, create AI output, generate
+content, publish, dispatch workers, change schema, add APIs, or add UI.
 
 The design answers one question:
 
@@ -241,7 +240,7 @@ plan and then continue. Any mismatch fails closed.
 
 ## Read And Write Helpers
 
-Phase 8F-6 should design and implement only these persistence helpers:
+Phase 8F-6 implements only these persistence helpers:
 
 ```ts
 persistStructurePlan({
@@ -349,3 +348,52 @@ boundary, focused persistence tests, and no AI, generation, publishing, schema,
 worker, Evidence Capture, Candidate Discovery, Candidate Context, Candidate
 Review, Review Actions, Reconstruction Package, StructurePlan contract,
 StructurePlan builder, API, UI, or runtime behavior changes.
+
+## Phase 8F-6 Completion Boundary
+
+At the end of Phase 8F-6, the helper implementation lives in:
+
+```text
+apps/platform/gnr8/architecture/structure-plan-persistence.ts
+```
+
+The implementation uses the existing site-version provenance artifact boundary
+with artifact kind `structure_plan`, append-only `structurePlanArtifacts`, and
+`latestStructurePlanArtifact`. It persists only validated `valid` or `blocked`
+Structure Plans and stores the metadata defined by this boundary:
+`structurePlanId`, exact Reconstruction Package artifact lineage, Candidate
+Review artifact, Candidate Discovery artifact, site version, dry run, status,
+planned route/navigation/section counts, assignment count, blocked candidate
+count, contract version, `createdAt`, and `persistedAt`.
+
+The write helper runs `validateStructurePlan(...)`, rejects recursive forbidden
+fields through the contract validator, verifies the referenced Reconstruction
+Package artifact, requires that artifact to be the latest package for the
+site-version lineage, and reconciles copied included candidate refs and counts
+against the package payload before writing.
+
+Equivalent latest plans for the same Reconstruction Package artifact and
+Structure Plan contract version reuse the existing artifact. Changed current
+plans from a newer latest Reconstruction Package artifact append a new immutable
+record and advance `latestStructurePlanArtifact`. Stale, invalid,
+forbidden-field, invalid-lineage, missing-package, non-latest-package, and
+package-reconciliation failures reject before write.
+
+Phase 8F-6 added focused tests in:
+
+```text
+apps/platform/gnr8/architecture/structure-plan-persistence.test.ts
+```
+
+It added no Content Planning, Layout Planning, generated React, generated
+blocks, generated content, AI output, publishing artifact, migration, schema,
+worker, API, UI, Evidence Capture change, Candidate Discovery change, Candidate
+Context change, Candidate Review change, Review Actions change, Reconstruction
+Package change, StructurePlan contract change, StructurePlan builder change, or
+runtime generation behavior.
+
+The recommended next phase is **Phase 8F-7 - Structure Plan Persistence
+Real-Artifact Validation**, limited to exercising this persistence helper on
+real latest Reconstruction Package artifacts and reloading latest/by-id without
+creating Content Planning, Layout Planning, AI output, generation, publishing,
+schema, or worker behavior.
