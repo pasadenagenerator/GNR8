@@ -267,3 +267,93 @@ Phase 8F-2 - Structure Planning Builder Design
 ```
 
 Phase 8F-2 should remain design-only unless separately authorized.
+
+## Phase 8F-2 Builder Design Completion
+
+Phase 8F-2 defines the deterministic builder design in:
+
+```text
+docs/architecture/STRUCTURE_PLANNING_BUILDER_DESIGN.md
+```
+
+The builder design keeps the Structure Plan boundary metadata-only. The future
+builder converts one exact latest `ReconstructionPackage` artifact into a
+`StructurePlan` by planning approved route, navigation, and section candidates
+and creating one assignment per included approved candidate unless blocked.
+
+The required first implementation input is the exact latest persisted
+`ReconstructionPackage` artifact record. Candidate Discovery, Candidate
+Context, and Candidate Review lineage may support diagnostics only; they do
+not authorize additional candidates, infer target structure, or reorder the
+approved package set.
+
+The design defines deterministic route, navigation, section, assignment,
+ordering, status, limitation, and diagnostic rules. It adds no builder
+implementation, persistence, AI, generation, publishing, schema, workers,
+Evidence Capture changes, Candidate Discovery changes, Candidate Context
+changes, Candidate Review changes, Review Actions changes, Reconstruction
+Package changes, StructurePlan contract changes, API, UI, or runtime behavior.
+
+The recommended next phase is:
+
+```text
+Phase 8F-3 - Structure Planning Builder Implementation
+```
+
+## Phase 8F-3 Builder Implementation Completion
+
+Phase 8F-3 implements the pure deterministic Structure Plan builder in:
+
+```text
+apps/platform/gnr8/architecture/structure-plan-builder.ts
+```
+
+The builder input is one exact `ReconstructionPackage` payload, the exact
+persisted `reconstructionPackageArtifactId`, the latest
+`ReconstructionPackage` artifact ID for stale detection, and the Structure Plan
+contract version override used only for tests.
+
+The builder output is a metadata-only `StructurePlan` with deterministic
+identity:
+
+```text
+structure-plan:<reconstructionPackageArtifactId>:<structurePlanContractVersion>
+```
+
+Route planning creates one planned route for each approved route candidate
+with an explicit route path. Navigation and section planning create entries
+only when route association is explicit through `routePath` or unambiguous
+because exactly one planned route exists. Missing or ambiguous association is
+reported as a deterministic builder blocker.
+
+Valid plans create exactly one assignment per successfully planned included
+approved candidate. Assignments preserve source candidate refs, evidence refs,
+candidate identity/type, target kind, target ID, and source Reconstruction
+Package diagnostics. Because the 8F-1 contract requires blocked plans to be
+assignment-free, blocked plans report candidate blockers in limitations and
+diagnostics while preserving contract-valid metadata.
+
+Status behavior is deterministic: `valid` when all included candidates are
+planned and `validateStructurePlan(...)` passes, `blocked` when there are no
+included candidates or required route association is missing/ambiguous, `stale`
+when the supplied Reconstruction Package artifact is not latest, and `invalid`
+when source or Structure Plan validation fails.
+
+Diagnostics include route count, navigation count, section count, assignment
+count, included approved candidate count, blocked candidates, stale detection,
+source Reconstruction Package validation, and Structure Plan validation.
+Limitations include source Reconstruction Package limitations,
+candidate-specific limitations when available, and builder blockers.
+
+Phase 8F-3 added no Structure Plan persistence, generated React, generated
+blocks, generated content, AI output, publishing artifacts, deployment
+artifacts, migrations, schema, workers, Evidence Capture behavior, Candidate
+Discovery behavior, Candidate Context behavior, Candidate Review behavior,
+Review Actions behavior, Reconstruction Package behavior, StructurePlan
+contract changes, API, UI, or runtime execution.
+
+The recommended next phase is:
+
+```text
+Phase 8F-4 - Structure Planning Real-Artifact Validation
+```

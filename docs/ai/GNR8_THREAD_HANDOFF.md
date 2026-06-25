@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8F-1 Structure Planning Contract is complete.
+- 8F-3 Structure Planning Builder Implementation is complete.
 
 Current Phase:
-- Phase 8F-1 Structure Planning Contract is complete.
+- Phase 8F-3 Structure Planning Builder Implementation is complete.
 
 Next Phase:
-- Phase 8F-2 Structure Planning Builder Design.
+- Phase 8F-4 Structure Planning Real-Artifact Validation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,35 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8F-3 - Structure Planning Builder Implementation.
+- Status: COMPLETE / PURE DETERMINISTIC BUILDER ONLY / NO PERSISTENCE / NO AI / NO GENERATION / NO PUBLISHING.
+- Canonical module: `apps/platform/gnr8/architecture/structure-plan-builder.ts`.
+- Focused tests: `apps/platform/gnr8/architecture/structure-plan-builder.test.ts`.
+- Inputs: exact `ReconstructionPackage` payload, exact persisted `reconstructionPackageArtifactId`, latest Reconstruction Package artifact ID for stale detection, and optional Structure Plan contract version override only for tests.
+- Output: metadata-only `StructurePlan`; no persistence, generated React, generated blocks, generated content, AI output, publishing artifact, deployment artifact, migration, worker job, or runtime execution.
+- Identity: `structure-plan:<reconstructionPackageArtifactId>:8F-1`.
+- Route planning: approved route candidates create planned routes from explicit route paths only.
+- Navigation planning: approved navigation candidates create planned navigation entries only when route association is explicit or unambiguous.
+- Section planning: approved section candidates create planned sections only when route association is explicit or unambiguous, with deterministic per-route section order.
+- Assignment model: valid plans create exactly one assignment per successfully planned included approved candidate, preserving candidate refs, evidence refs, target kind, target ID, and source Reconstruction Package diagnostics.
+- Blocked behavior: no included candidates or missing/ambiguous route association produce a contract-valid blocked plan; because the 8F-1 contract requires blocked plans to be assignment-free, blocked candidates are recorded in limitations and diagnostics.
+- Status behavior: `valid` for fully planned/assigned and validated output, `blocked` for no included candidates or route-association blockers, `stale` for non-latest Reconstruction Package artifact input, and `invalid` for source or Structure Plan validation failure.
+- Limitations and diagnostics: propagate Reconstruction Package limitations, candidate-specific limitations when present, and builder blockers; report route, navigation, section, assignment, included-candidate, blocked-candidate, stale, source-validation, and Structure Plan validation results.
+- Safety: no Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, Review Actions, Reconstruction Package behavior, StructurePlan contract, AI system, generation system, publishing system, schema, worker, API, UI, migration, deployment, or runtime behavior changed.
+- Validation result: focused Structure Plan contract and builder tests pass `18 / 18`; platform Vercel build passes; `git diff --check` passes.
+- Recommended next phase: Phase 8F-4 - Structure Planning Real-Artifact Validation.
+
+Previous completed milestone:
+- Phase 8F-2 - Structure Planning Builder Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NO IMPLEMENTATION / NO PERSISTENCE / NO GENERATION.
+- Canonical design: `docs/architecture/STRUCTURE_PLANNING_BUILDER_DESIGN.md`.
+- Purpose: a future deterministic builder converts one exact latest `ReconstructionPackage` artifact into a metadata-only `StructurePlan`.
+- Required input: the exact latest persisted Reconstruction Package artifact record with artifact identity, latest-head proof, valid package payload, and source package contract version.
+- Route, navigation, section, assignment, ordering, status, limitation, and diagnostic rules are defined without AI sorting, design-intent heuristics, layout importance ranking, content inference, or upstream querying.
+- Safety: no builder implementation, persistence, AI, generation, publishing, schema, workers, API, UI, Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, Review Actions, Reconstruction Package, StructurePlan contract, or runtime behavior changed.
+- Recommended next phase: Phase 8F-3 - Structure Planning Builder Implementation.
+
+Previous completed milestone:
 - Phase 8F-1 - Structure Planning Contract.
 - Status: COMPLETE / CONTRACT ONLY / NO BUILDER / NO PERSISTENCE / NO GENERATION.
 - Canonical module: `apps/platform/gnr8/architecture/structure-plan-contract.ts`.

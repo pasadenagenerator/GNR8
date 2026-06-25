@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-24
+2026-06-25
 
 ## Migration Platform MVP Buildout
 
@@ -537,8 +537,56 @@ stale Reconstruction Package input.
 Phase 8F-1 added no builder, persistence, AI, generated React, generated
 blocks, generated content, publishing artifacts, deployment artifacts,
 execution artifacts, schema, workers, API, UI, or behavior changes.
-Current Phase: Phase 8F-1 - Structure Planning Contract is complete.
-Next recommended phase: Phase 8F-2 - Structure Planning Builder Design.
+Phase 8F-2 - Structure Planning Builder Design is COMPLETE. The canonical
+design is `docs/architecture/STRUCTURE_PLANNING_BUILDER_DESIGN.md`. It
+defines a future deterministic builder that converts one exact latest
+`ReconstructionPackage` artifact into a metadata-only `StructurePlan` by
+planning approved route, navigation, and section candidates and creating one
+assignment per included approved candidate unless blocked.
+The required first implementation input is the exact latest persisted
+Reconstruction Package artifact record. Candidate Discovery Result, Candidate
+Context Projection, and Candidate Review Package may support diagnostics only;
+they cannot authorize candidates, infer target structure, reorder the package
+set, or add hidden planning inputs.
+Phase 8F-2 changed documentation only and added no builder implementation,
+persistence, AI, generation, publishing, schema, workers, API, UI, Evidence
+Capture behavior, Candidate Discovery behavior, Candidate Context behavior,
+Candidate Review behavior, Review Actions behavior, Reconstruction Package
+behavior, StructurePlan contract changes, or runtime behavior.
+Phase 8F-3 - Structure Planning Builder Implementation is COMPLETE. The
+canonical builder is
+`apps/platform/gnr8/architecture/structure-plan-builder.ts`; focused coverage
+is in `apps/platform/gnr8/architecture/structure-plan-builder.test.ts`.
+The builder is a pure deterministic mapper from one exact
+`ReconstructionPackage` payload, its exact persisted artifact ID, and the
+latest Reconstruction Package artifact ID into a metadata-only `StructurePlan`.
+It derives `structure-plan:<reconstructionPackageArtifactId>:8F-1`, copies
+lineage from the package, and runs `validateStructurePlan(...)` on the output.
+Route planning creates one planned route per approved route candidate with an
+explicit route path. Navigation and section planning create entries only when
+route association is explicit or unambiguous. Missing or ambiguous association
+is reported as a deterministic builder blocker.
+Valid plans create one assignment per successfully planned included approved
+candidate, preserving candidate refs, evidence refs, target kind, target ID,
+and source Reconstruction Package diagnostics. Because the 8F-1 contract
+requires blocked plans to be assignment-free, blocked plans report candidate
+blockers in limitations and diagnostics while remaining contract-valid.
+Status behavior is `valid` when all included candidates plan and assign,
+`blocked` for no included candidates or route-association blockers, `stale`
+when the supplied package artifact is not latest, and `invalid` when source or
+Structure Plan validation fails. Diagnostics include route, navigation,
+section, assignment, included candidate, blocked candidate, stale detection,
+source validation, and Structure Plan validation counts/results.
+Phase 8F-3 added no persistence, generated React, generated blocks, generated
+content, AI outputs, publishing artifacts, deployment artifacts, migrations,
+schema, workers, Evidence Capture behavior, Candidate Discovery behavior,
+Candidate Context behavior, Candidate Review behavior, Review Actions
+behavior, Reconstruction Package behavior, StructurePlan contract changes,
+API, UI, or runtime execution.
+Current Phase: Phase 8F-3 - Structure Planning Builder Implementation is
+complete.
+Next recommended phase: Phase 8F-4 - Structure Planning Real-Artifact
+Validation.
 
 ## Current Importer Architecture
 
@@ -1022,13 +1070,95 @@ worker, API, UI, Evidence Capture, Candidate Discovery, Candidate Review,
 Candidate Context, Review Actions, Reconstruction Package, or runtime behavior
 change.
 
-Recommended next phase: Phase 8F-2 - Structure Planning Builder Design.
+Phase 8F-2 - Structure Planning Builder Design is COMPLETE. It creates
+`docs/architecture/STRUCTURE_PLANNING_BUILDER_DESIGN.md` and defines how a
+future deterministic builder converts one exact latest
+`ReconstructionPackage` artifact into a metadata-only `StructurePlan`.
+
+The builder purpose is pure organization: approved package candidates become
+planned routes, planned navigation, planned sections, and exact assignments.
+The builder does not infer new candidates, generate React, generate
+components, generate blocks, generate content, call AI, publish, execute, or
+persist anything. The required first implementation input is the exact latest
+persisted `ReconstructionPackage` artifact record with latest-head proof and
+valid package payload. Candidate Discovery Result, Candidate Context
+Projection, and Candidate Review Package may support diagnostics only; they
+cannot authorize candidates or infer target structure.
+
+Route planning creates one planned route per approved route candidate when a
+deterministic route path is present. Navigation planning creates one planned
+navigation entry per approved navigation candidate when route association is
+explicit or unambiguous. Section planning creates one planned section per
+approved section candidate when route association is explicit or unambiguous,
+with per-route source-order section ordering. Each included approved candidate
+should produce exactly one assignment unless blocked.
+
+Ordering is deterministic only: routes by route path/source order, navigation
+by route/source order, sections by route/source order, and assignments by
+source package order. The design forbids AI sorting, design-intent heuristics,
+layout importance ranking, content inference, and upstream querying for hidden
+planning inputs.
+
+Status rules are `valid` when all included candidates assign and contract
+validation passes, `blocked` for no included candidates or missing required
+lineage/blocked assignments, `stale` when the Reconstruction Package is not
+latest, and `invalid` when package or Structure Plan contract validation
+fails. Limitations propagate Reconstruction Package limitations,
+candidate-specific limitations when available, and deterministic builder
+blockers. Diagnostics include route, navigation, section, and assignment
+counts; blocked candidates; lineage validation; latest-package validation;
+ordering decisions; and contract validation.
+
+Phase 8F-2 changed documentation only. It added no builder implementation,
+persistence, AI, generation, publishing, schema, workers, API, UI, Evidence
+Capture behavior, Candidate Discovery behavior, Candidate Context behavior,
+Candidate Review behavior, Review Actions behavior, Reconstruction Package
+behavior, StructurePlan contract changes, or runtime behavior.
+
+Phase 8F-3 - Structure Planning Builder Implementation is COMPLETE. It adds
+`apps/platform/gnr8/architecture/structure-plan-builder.ts` and
+`apps/platform/gnr8/architecture/structure-plan-builder.test.ts`.
+
+The builder is pure and deterministic. Inputs are the exact
+`ReconstructionPackage` payload, the exact persisted
+`reconstructionPackageArtifactId`, the latest Reconstruction Package artifact
+ID for stale detection, and the Structure Plan contract version override only
+for tests. Output is a metadata-only `StructurePlan` with identity
+`structure-plan:<reconstructionPackageArtifactId>:8F-1` and validation through
+`validateStructurePlan(...)`.
+
+Route candidates create planned routes from explicit route paths only.
+Navigation candidates create planned navigation entries when route association
+is explicit or unambiguous. Section candidates create planned sections when
+route association is explicit or unambiguous, with per-route deterministic
+section ordering. Valid plans create one assignment per successfully planned
+included approved candidate. Blocked plans remain assignment-free per the
+8F-1 contract and report blocked candidates in limitations and diagnostics.
+
+Status rules are implemented as `valid` for fully planned/assigned and
+validated output, `blocked` for no included candidates or
+missing/ambiguous route association, `stale` for non-latest Reconstruction
+Package artifacts, and `invalid` for source or Structure Plan validation
+failure. Limitations propagate Reconstruction Package limitations,
+candidate-specific limitations when present, and builder blockers. Diagnostics
+include planned route/navigation/section counts, assignment count, included
+candidate count, blocked candidates, stale detection, source package
+validation, and Structure Plan validation.
+
+Phase 8F-3 added no persistence, AI, generation, publishing, schema, workers,
+API, UI, Evidence Capture behavior, Candidate Discovery behavior, Candidate
+Context behavior, Candidate Review behavior, Review Actions behavior,
+Reconstruction Package behavior, StructurePlan contract changes, migrations,
+deployment artifacts, or runtime execution.
+
+Recommended next phase: Phase 8F-4 - Structure Planning Real-Artifact
+Validation.
 
 Current Phase:
-- Phase 8F-1 - Structure Planning Contract is complete.
+- Phase 8F-3 - Structure Planning Builder Implementation is complete.
 
 Next Phase:
-- Phase 8F-2 - Structure Planning Builder Design.
+- Phase 8F-4 - Structure Planning Real-Artifact Validation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
