@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8F-3 Structure Planning Builder Implementation is complete.
+- 8F-5 Structure Plan Persistence Boundary Design is complete.
 
 Current Phase:
-- Phase 8F-3 Structure Planning Builder Implementation is complete.
+- Phase 8F-5 Structure Plan Persistence Boundary Design is complete.
 
 Next Phase:
-- Phase 8F-4 Structure Planning Real-Artifact Validation.
+- Phase 8F-6 Structure Plan Persistence Implementation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,38 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8F-5 - Structure Plan Persistence Boundary Design.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NO PERSISTENCE / NO AI / NO GENERATION / NO PUBLISHING.
+- Canonical design: `docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md`.
+- Storage recommendation: use the existing site-version provenance artifact boundary, not a new DB table or hybrid dual-write path.
+- Artifact kind: `structure_plan`.
+- Storage shape: append-only `structurePlanArtifacts` plus `latestStructurePlanArtifact`.
+- Metadata shape: artifact ID/ref, artifact kind, `structurePlanId`, `reconstructionPackageArtifactId`, `candidateReviewPackageArtifactId`, `candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, `status`, planned route/navigation/section counts, assignment count, blocked candidate count, `createdAt`, `persistedAt`, and `contractVersion`.
+- Idempotency: equivalent plan for the same Reconstruction Package artifact and contract version reuses latest; changed current plans append; stale, invalid, forbidden-field, and lineage-mismatch plans reject before write.
+- Staleness policy: persist only `valid` or `blocked`; reject `stale` and `invalid`.
+- Validation before persist: run `validateStructurePlan(...)`, enforce recursive forbidden-field guard, check exact lineage, verify the referenced Reconstruction Package artifact, require it to remain latest, and reconcile copied included candidate refs/counts against the package payload.
+- Helper design: `persistStructurePlan(...)`, `loadLatestStructurePlan(...)`, and `loadStructurePlanById(...)`.
+- Safety: no AI outputs, generated content/components/blocks, publishing artifacts, deployment artifacts, execution artifacts, worker jobs, Content Planning artifacts, Layout/Block Planning artifacts, schema, API, UI, StructurePlan contract changes, StructurePlan builder changes, Reconstruction Package changes, or runtime behavior.
+- Future relationship: `StructurePlan -> Future Content Planning` or `StructurePlan -> Future Layout/Block Planning`; no next generation boundary exists yet.
+- Validation result: `git diff --check` passes.
+- Recommended next phase: Phase 8F-6 - Structure Plan Persistence Implementation.
+
+Previous completed milestone:
+- Phase 8F-4 - Structure Planning Real-Artifact Validation.
+- Status: COMPLETE / VALIDATION ONLY / REAL RECONSTRUCTION PACKAGE ARTIFACTS / NO PERSISTENCE / NO AI / NO GENERATION / NO PUBLISHING.
+- Canonical evidence: `docs/architecture/STRUCTURE_PLANNING_REAL_ARTIFACT_VALIDATION.md`.
+- Method: load latest Reconstruction Package artifact, load exact artifact by ID, confirm exact artifact is latest, build `StructurePlan` with `buildStructurePlan(...)`, validate with `validateStructurePlan(...)`, and scan for forbidden generated/AI/publishing/deployment/execution fields.
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`: exact/latest Reconstruction artifact `reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`, Review artifact `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b`, Discovery artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`, dry run `09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l`.
+- ODV Structure Plan: `valid`, `1` planned route, `0` planned navigation entries, `2` planned sections, `3` assignments, `0` blocked candidates, `0` limitations.
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`: exact/latest Reconstruction artifact `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`, Review artifact `candidate_review_package_ecb5f777160a45e15b958948348bca08`, Discovery artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`, dry run `e26b0754-988b-45b9-9e24-8e213179b6cf:8b-12n`.
+- ViroiDoc Structure Plan: `valid`, `1` planned route, `0` planned navigation entries, `0` planned sections, `1` assignment, `0` blocked candidates, `36` propagated source Reconstruction Package limitations.
+- Lineage: both outputs preserve exact `reconstructionPackageArtifactId`, `candidateReviewPackageArtifactId`, `candidateDiscoveryArtifactId`, `siteVersionId`, and `dryRunId`.
+- Safety: no generated React, generated blocks, generated content, generated components, AI output, publishing artifact, deployment artifact, execution artifact, reconstruction instructions, or structure instructions in either Structure Plan output.
+- Defects: no builder defect found; no behavior changed.
+- Validation result: real-artifact validation passed; focused Structure Plan contract and builder tests pass `18 / 18`; platform Vercel build passes with existing unrelated frontend lint warnings; `git diff --check` passes.
+- Recommended next phase: Phase 8F-5 - Structure Plan Persistence Boundary Design.
+
+Previous completed milestone:
 - Phase 8F-3 - Structure Planning Builder Implementation.
 - Status: COMPLETE / PURE DETERMINISTIC BUILDER ONLY / NO PERSISTENCE / NO AI / NO GENERATION / NO PUBLISHING.
 - Canonical module: `apps/platform/gnr8/architecture/structure-plan-builder.ts`.

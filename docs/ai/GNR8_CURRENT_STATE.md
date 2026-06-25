@@ -583,10 +583,86 @@ schema, workers, Evidence Capture behavior, Candidate Discovery behavior,
 Candidate Context behavior, Candidate Review behavior, Review Actions
 behavior, Reconstruction Package behavior, StructurePlan contract changes,
 API, UI, or runtime execution.
-Current Phase: Phase 8F-3 - Structure Planning Builder Implementation is
+Phase 8F-4 - Structure Planning Real-Artifact Validation is COMPLETE. The
+validation loaded the exact real ODV and ViroiDoc Reconstruction Package
+artifacts through the existing persistence loaders, confirmed each requested
+artifact was also the latest artifact for its site version, built
+metadata-only `StructurePlan` values with `buildStructurePlan(...)`, validated
+the outputs with `validateStructurePlan(...)`, and scanned them for forbidden
+generated, AI, publishing, deployment, and execution fields.
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` used
+`reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`, linked Review
+artifact `candidate_review_package_9c9d65c293abf149d20c2301fd4e6b5b`, linked
+Discovery artifact `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`,
+and dry run `09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l`. The resulting
+Structure Plan status is `valid`, with `1` planned route, `0` planned
+navigation entries, `2` planned sections, `3` assignments, and `0` blocked
+candidates.
+
+ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` used
+`reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`, linked Review
+artifact `candidate_review_package_ecb5f777160a45e15b958948348bca08`, linked
+Discovery artifact `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`,
+and dry run `e26b0754-988b-45b9-9e24-8e213179b6cf:8b-12n`. The resulting
+Structure Plan status is `valid`, with `1` planned route, `0` planned
+navigation entries, `0` planned sections, `1` assignment, and `0` blocked
+candidates. ViroiDoc retained `36` propagated Reconstruction Package
+limitations; they did not block Structure Plan validation.
+
+Detailed evidence:
+`docs/architecture/STRUCTURE_PLANNING_REAL_ARTIFACT_VALIDATION.md`.
+
+Phase 8F-4 found no builder defect and changed no behavior. It added no
+Structure Plan persistence, AI output, generated React, generated blocks,
+generated content, publishing artifact, deployment artifact, execution
+artifact, migration, schema, worker, API, UI, or runtime execution.
+Phase 8F-5 - Structure Plan Persistence Boundary Design is COMPLETE. The
+canonical design is
+`docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md`. It recommends
+persisting future validated Structure Plan artifacts in the existing
+site-version provenance artifact boundary, not a new DB table or hybrid
+dual-write path.
+
+The canonical artifact kind is `structure_plan`. The designed storage shape is
+append-only `structurePlanArtifacts` plus `latestStructurePlanArtifact`.
+Persisted metadata includes artifact ID/ref, artifact kind, `structurePlanId`,
+`reconstructionPackageArtifactId`, `candidateReviewPackageArtifactId`,
+`candidateDiscoveryArtifactId`, `siteVersionId`, `dryRunId`, `status`,
+planned route/navigation/section counts, assignment count, blocked candidate
+count, `createdAt`, `persistedAt`, and Structure Plan contract version.
+
+Idempotency reuses an equivalent latest plan for the same Reconstruction
+Package artifact and contract version. Changed current plans append. Stale,
+invalid, forbidden-field, and lineage-mismatch plans reject before write.
+The staleness policy persists only `valid` or `blocked`; `stale` and `invalid`
+are not persisted.
+
+Validation before persist must run `validateStructurePlan(...)`, enforce the
+recursive forbidden-field guard, verify exact plan lineage, verify the
+referenced Reconstruction Package artifact, require the Reconstruction Package
+artifact to remain latest for the site-version lineage, and reconcile copied
+included candidate refs and counts against the package payload.
+
+The future helper design is `persistStructurePlan(...)`,
+`loadLatestStructurePlan(...)`, and `loadStructurePlanById(...)`. The boundary
+creates no AI outputs, generated content/components/blocks, publishing
+artifacts, deployment artifacts, execution artifacts, worker jobs, Content
+Planning artifacts, or Layout/Block Planning artifacts. Future downstream
+relationships are `StructurePlan -> Future Content Planning` or
+`StructurePlan -> Future Layout/Block Planning`; no next generation boundary
+exists yet.
+
+Phase 8F-5 changed documentation only. It added no persistence helper,
+provenance field, artifact record implementation, latest pointer mutation,
+database table, schema migration, API, UI, worker, Content Planning,
+Layout/Block Planning, AI, generation, publishing, StructurePlan contract
+change, StructurePlan builder change, Reconstruction Package change, or
+runtime behavior.
+Current Phase: Phase 8F-5 - Structure Plan Persistence Boundary Design is
 complete.
-Next recommended phase: Phase 8F-4 - Structure Planning Real-Artifact
-Validation.
+Next recommended phase: Phase 8F-6 - Structure Plan Persistence
+Implementation.
 
 ## Current Importer Architecture
 
@@ -1151,14 +1227,72 @@ Context behavior, Candidate Review behavior, Review Actions behavior,
 Reconstruction Package behavior, StructurePlan contract changes, migrations,
 deployment artifacts, or runtime execution.
 
-Recommended next phase: Phase 8F-4 - Structure Planning Real-Artifact
-Validation.
+Phase 8F-4 - Structure Planning Real-Artifact Validation is COMPLETE. It
+loaded the exact real ODV and ViroiDoc Reconstruction Package artifacts through
+the existing Reconstruction Package persistence helpers, confirmed each target
+artifact was latest, built `StructurePlan` values with
+`buildStructurePlan(...)`, validated the outputs, and verified that forbidden
+generated, AI, publishing, deployment, and execution fields remained absent.
+
+ODV produced a `valid` Structure Plan with `1` planned route, `0` planned
+navigation entries, `2` planned sections, `3` assignments, and `0` blocked
+candidates from
+`reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296`.
+
+ViroiDoc produced a `valid` Structure Plan with `1` planned route, `0` planned
+navigation entries, `0` planned sections, `1` assignment, and `0` blocked
+candidates from
+`reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`. Its `36`
+limitations are propagated source Reconstruction Package limitations and did
+not block validation.
+
+Detailed evidence:
+`docs/architecture/STRUCTURE_PLANNING_REAL_ARTIFACT_VALIDATION.md`.
+
+Phase 8F-4 found no builder defect and changed no behavior. It added no
+Structure Plan persistence, AI, generation, publishing, schema, worker, API,
+UI, migration, deployment artifact, execution artifact, or runtime execution.
+
+Phase 8F-5 - Structure Plan Persistence Boundary Design is COMPLETE. It
+creates `docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md` and defines
+how a future implementation should persist validated Structure Plan artifacts.
+
+The storage recommendation is the existing site-version provenance artifact
+boundary. The canonical artifact kind is `structure_plan`; the designed
+storage shape is append-only `structurePlanArtifacts` plus
+`latestStructurePlanArtifact`.
+
+Persisted metadata should include artifact identity, artifact kind,
+`structurePlanId`, exact `reconstructionPackageArtifactId`, copied
+`candidateReviewPackageArtifactId`, copied `candidateDiscoveryArtifactId`,
+`siteVersionId`, `dryRunId`, status, planned route/navigation/section counts,
+assignment count, blocked candidate count, `createdAt`, `persistedAt`, and
+contract version.
+
+Idempotency rules reuse an equivalent latest plan for the same Reconstruction
+Package artifact and contract version, append changed current plans, and reject
+stale, invalid, forbidden-field, and lineage-mismatch plans before write. The
+staleness policy persists only `valid` or `blocked`; `stale` and `invalid`
+outputs remain non-persisted.
+
+Validation before persist requires `validateStructurePlan(...)`, recursive
+forbidden-field rejection, exact lineage checks, latest Reconstruction Package
+artifact verification, and reconciliation of included candidate refs/counts
+against the resolved package payload. Future helper design is limited to
+`persistStructurePlan(...)`, `loadLatestStructurePlan(...)`, and
+`loadStructurePlanById(...)`.
+
+Phase 8F-5 changed documentation only. It added no persistence, provenance
+field, latest pointer mutation, schema, table, migration, worker, API, UI,
+Content Planning, Layout/Block Planning, AI, generation, publishing,
+StructurePlan contract change, StructurePlan builder change, Reconstruction
+Package change, execution artifact, deployment artifact, or runtime behavior.
 
 Current Phase:
-- Phase 8F-3 - Structure Planning Builder Implementation is complete.
+- Phase 8F-5 - Structure Plan Persistence Boundary Design is complete.
 
 Next Phase:
-- Phase 8F-4 - Structure Planning Real-Artifact Validation.
+- Phase 8F-6 - Structure Plan Persistence Implementation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

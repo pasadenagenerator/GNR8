@@ -491,3 +491,77 @@ The recommended next phase is:
 ```text
 Phase 8F-4 - Structure Planning Real-Artifact Validation
 ```
+
+## Phase 8F-4 Real-Artifact Validation Completion
+
+Phase 8F-4 validated the builder against the real latest ODV and ViroiDoc
+`ReconstructionPackage` artifacts. Evidence is recorded in:
+
+```text
+docs/architecture/STRUCTURE_PLANNING_REAL_ARTIFACT_VALIDATION.md
+```
+
+The validation loaded each target through the existing Reconstruction Package
+persistence helpers, confirmed the exact requested artifact was also the
+latest artifact for the site version, built a `StructurePlan` with
+`buildStructurePlan(...)`, validated the output with
+`validateStructurePlan(...)`, and scanned the result for forbidden generated,
+AI, publishing, deployment, and execution fields.
+
+ODV produced a `valid` metadata-only plan with `1` planned route, `0` planned
+navigation entries, `2` planned sections, `3` assignments, and `0` blocked
+candidates. ViroiDoc produced a `valid` metadata-only plan with `1` planned
+route, `0` planned navigation entries, `0` planned sections, `1` assignment,
+and `0` blocked candidates. ViroiDoc retained `36` propagated source
+limitations from the source Reconstruction Package; they did not block
+Structure Plan validation.
+
+Phase 8F-4 found no builder defect and changed no behavior. It added no
+Structure Plan persistence, generated React, generated blocks, generated
+content, AI output, publishing artifact, deployment artifact, execution
+artifact, migration, schema, worker, API, UI, or runtime execution.
+
+The recommended next phase is:
+
+```text
+Phase 8F-5 - Structure Plan Persistence Boundary Design
+```
+
+## Phase 8F-5 Persistence Boundary Design Completion
+
+Phase 8F-5 defined how validated builder output should be persisted later,
+without implementing persistence. The canonical design is:
+
+```text
+docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md
+```
+
+The storage recommendation is the existing site-version provenance artifact
+boundary. The canonical artifact kind is `structure_plan`; the storage shape is
+append-only `structurePlanArtifacts` with `latestStructurePlanArtifact`.
+
+The boundary preserves the builder's deterministic semantics: equivalent plans
+for the same Reconstruction Package artifact and contract version reuse the
+latest artifact, changed current plans append, and stale or invalid plans
+reject before write. Persisted metadata records plan identity, exact
+Reconstruction Package lineage, copied Review/Discovery/site-version/dry-run
+lineage, status, planned route/navigation/section counts, assignment count,
+blocked candidate count, timestamps, and contract version.
+
+A future `persistStructurePlan(...)` helper must validate with
+`validateStructurePlan(...)`, enforce recursive forbidden-field rejection,
+verify exact lineage, confirm the source Reconstruction Package artifact is
+still latest, and reject stale, invalid, forbidden-field, and lineage-mismatch
+plans before mutating provenance. Future `loadLatestStructurePlan(...)` and
+`loadStructurePlanById(...)` helpers are read-only.
+
+Phase 8F-5 added no persistence, builder changes, StructurePlan contract
+changes, Reconstruction Package changes, AI, generation, publishing, schema,
+workers, API, UI, Content Planning, Layout/Block Planning, or runtime
+behavior.
+
+The recommended next phase is:
+
+```text
+Phase 8F-6 - Structure Plan Persistence Implementation
+```

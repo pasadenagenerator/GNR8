@@ -357,3 +357,95 @@ The recommended next phase is:
 ```text
 Phase 8F-4 - Structure Planning Real-Artifact Validation
 ```
+
+## Phase 8F-4 Real-Artifact Validation Completion
+
+Phase 8F-4 validates that the Structure Planning boundary works on real
+persisted Reconstruction Package artifacts without crossing into persistence,
+AI, generation, execution, or publishing.
+
+Detailed evidence:
+
+```text
+docs/architecture/STRUCTURE_PLANNING_REAL_ARTIFACT_VALIDATION.md
+```
+
+The validation used only existing loaders and the existing pure builder:
+`loadLatestReconstructionPackage(...)`,
+`loadReconstructionPackageById(...)`, and `buildStructurePlan(...)`. It
+confirmed that the exact ODV artifact
+`reconstruction_package_d91aa763f2285cd7ccf075e82dcd3296` and the exact
+ViroiDoc artifact `reconstruction_package_0e143f5fc174668e2225f73ebe464ffb`
+were also the latest Reconstruction Package artifacts for their site versions.
+
+ODV produced a `valid` Structure Plan with `1` planned route, `0` planned
+navigation entries, `2` planned sections, `3` assignments, and `0` blocked
+candidates. ViroiDoc produced a `valid` Structure Plan with `1` planned route,
+`0` planned navigation entries, `0` planned sections, `1` assignment, and `0`
+blocked candidates.
+
+Lineage was preserved for both targets: exact Reconstruction Package artifact,
+Candidate Review artifact, Candidate Discovery artifact, site version, and dry
+run. Recursive forbidden-field scans found no generated React, generated
+blocks, generated content, AI output, publishing artifact, deployment artifact,
+or execution artifact in either Structure Plan output.
+
+Phase 8F-4 found no builder defect and changed no behavior. It added no
+Structure Plan persistence, generated output, AI output, publishing artifact,
+execution artifact, schema, worker, API, UI, or runtime behavior.
+
+The recommended next phase is:
+
+```text
+Phase 8F-5 - Structure Plan Persistence Boundary Design
+```
+
+## Phase 8F-5 Persistence Boundary Design Completion
+
+Phase 8F-5 defines the future persistence boundary in:
+
+```text
+docs/architecture/STRUCTURE_PLAN_PERSISTENCE_BOUNDARY.md
+```
+
+The selected storage strategy is the existing site-version provenance artifact
+boundary, not a new table or hybrid dual-write path. The canonical artifact
+kind is `structure_plan`.
+
+The designed storage shape is append-only `structurePlanArtifacts` plus
+`latestStructurePlanArtifact`, following the established provenance artifact
+pattern. Persisted metadata includes artifact identity, artifact kind,
+`structurePlanId`, exact Reconstruction Package artifact lineage, Candidate
+Review artifact, Candidate Discovery artifact, site version, dry run, status,
+planned route/navigation/section counts, assignment count, blocked candidate
+count, creation/persistence timestamps, and Structure Plan contract version.
+
+The persistence boundary should persist only `valid` or `blocked` plans.
+`stale` and `invalid` plans reject before write. Equivalent plans for the same
+Reconstruction Package artifact and contract version reuse the latest artifact;
+changed current plans append; stale, invalid, forbidden-field, or
+lineage-mismatch plans fail closed.
+
+Before persist, a future implementation must run `validateStructurePlan(...)`,
+enforce the recursive forbidden-field guard, check exact plan lineage, verify
+the referenced Reconstruction Package artifact, require that package artifact
+to remain latest for the site-version lineage, and reconcile copied included
+candidate refs and counts against the package payload.
+
+The future helper surface is limited to `persistStructurePlan(...)`,
+`loadLatestStructurePlan(...)`, and `loadStructurePlanById(...)`. Reads are
+read-only and must not rerun the builder, repair history, advance latest
+pointers, create downstream planning artifacts, generate content, or mutate
+provenance.
+
+Phase 8F-5 added no persistence helper, provenance field, artifact record
+implementation, latest pointer mutation, database table, schema migration, API,
+UI, worker, Content Planning artifact, Layout/Block Planning artifact, AI
+output, generated content, execution artifact, publishing artifact, or behavior
+change.
+
+The recommended next phase is:
+
+```text
+Phase 8F-6 - Structure Plan Persistence Implementation
+```
