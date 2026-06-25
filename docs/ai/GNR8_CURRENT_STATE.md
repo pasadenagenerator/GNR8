@@ -820,10 +820,67 @@ pass `16 / 16`; `cd apps/platform && pnpm run vercel-build` passes with
 existing unrelated lint warnings and includes the dynamic Structure Plan route;
 `git diff --check` passes.
 
-Current Phase: Phase 8F-10 - Structure Plan End-to-End Verification is
+Phase 8F-10 closed with Phase 8F-11 - Post-Structure Plan Boundary
+Reassessment as the next recommended phase at that time.
+
+Phase 8F-11 - Post-Structure Plan Boundary Reassessment is COMPLETE.
+
+Canonical assessment:
+`docs/architecture/POST_STRUCTURE_PLAN_BOUNDARY_REASSESSMENT.md`.
+
+Phase 8F-11 selects exactly one next boundary after verified persisted
+StructurePlan artifacts and the read-only StructurePlan UI:
+
+```text
+StructurePlan
+-> LayoutPlan
+```
+
+Recommended next boundary: Phase 8G-0 - Layout Plan Foundation.
+
+The next layer is primarily visual/layout, not content, semantic intent, or
+component/block mapping. LayoutPlan should define metadata-only placement
+intent: route-level layout containers, section order/grouping, region roles,
+navigation placement intent, density/prominence/alignment/responsive hints when
+source-grounded, source evidence refs, StructurePlan assignment refs,
+limitations, and diagnostics.
+
+Canonical input to the next phase is the latest persisted `StructurePlan`
+artifact for the requested `siteVersionId`, the exact linked Reconstruction
+Package artifact referenced by that StructurePlan, and supporting lineage refs
+to Candidate Review, Candidate Discovery, Candidate Context, Evidence Capture,
+`dryRunId`, and `siteVersionId`. Supporting refs explain placement evidence and
+limitations; they must not add candidates or override the StructurePlan
+envelope.
+
+Content Plan Foundation is deferred until layout anchors exist for content
+slotting and media/text mapping. Intent / Experience Plan Foundation is
+deferred until semantic purpose can attach to stable layout and content
+entities without outrunning evidence. Block Plan Foundation is deferred because
+component mapping is downstream of layout, content, and design constraints and
+would carry the highest generic builder risk if introduced now.
+
+AI-editor alignment: LayoutPlan remains outside AI proposals, code generation,
+editing mutations, and publish flow. It gives future content and editing layers
+source-grounded placement anchors while preserving proposal-before-mutation and
+approval-before-publish governance.
+
+Digital Twin alignment: LayoutPlan strengthens the Twin as operational
+understanding rather than HTML replay. It bridges StructurePlan into future
+Design State and Experience State without becoming a recommendation, proposal,
+mutation, generated frontend, or publishable artifact.
+
+Phase 8F-11 changed documentation only. It added no Evidence Capture,
+Candidate Discovery, Candidate Context, Candidate Review, Review Actions,
+Reconstruction Package, StructurePlan contract, StructurePlan builder,
+StructurePlan persistence, StructurePlan UI, AI, generation, publishing,
+schema, worker, runtime, API, or UI behavior.
+
+Validation result: `git diff --check` passes.
+
+Current Phase: Phase 8F-11 - Post-Structure Plan Boundary Reassessment is
 complete.
-Next recommended phase: Phase 8F-11 - Post-Structure Plan Boundary
-Reassessment.
+Next recommended phase: Phase 8G-0 - Layout Plan Foundation.
 
 ## Current Importer Architecture
 
@@ -1578,11 +1635,43 @@ Phase 8F-10 - Structure Plan End-to-End Verification is complete.
   existing unrelated lint warnings and includes the dynamic Structure Plan
   route; `git diff --check` passes.
 
+Phase 8F-11 - Post-Structure Plan Boundary Reassessment is complete.
+- Canonical assessment:
+  `docs/architecture/POST_STRUCTURE_PLAN_BOUNDARY_REASSESSMENT.md`.
+- Recommendation: Phase 8G-0 - Layout Plan Foundation.
+- Decision: the next boundary after StructurePlan is metadata-only
+  LayoutPlan, not ContentPlan, Intent / Experience Plan, BlockPlan, or another
+  detour.
+- Primary layer answer: visual/layout. The next artifact should define
+  placement intent, section order/grouping, region roles, navigation placement
+  intent, source evidence refs, StructurePlan assignment refs, limitations, and
+  diagnostics without generated React, blocks, content, CSS, CMS schema, AI,
+  publishing, or editor mutation.
+- Canonical input: latest persisted `StructurePlan` artifact, exact linked
+  Reconstruction Package artifact, and supporting Candidate Review, Candidate
+  Discovery, Candidate Context, Evidence Capture, `dryRunId`, and
+  `siteVersionId` lineage refs.
+- Deferred: ContentPlan until layout anchors exist; Intent / Experience Plan
+  until semantic purpose can attach to stable layout/content entities;
+  BlockPlan until layout, content, and design constraints exist.
+- AI-editor alignment: keeps import evidence, code generation, content
+  modeling, editor proposals, and publish flow separate while preparing
+  placement anchors for future governed editing.
+- Digital Twin alignment: advances operational understanding of visual
+  organization without becoming HTML replay, a recommendation, proposal,
+  mutation, generated frontend, or publishable artifact.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Review Actions,
+  Reconstruction Package, StructurePlan contract, StructurePlan builder,
+  StructurePlan persistence, StructurePlan UI, AI, generation, publishing,
+  schema, worker, runtime, API, or UI behavior changed.
+- Validation result: `git diff --check` passes.
+
 Current Phase:
-- Phase 8F-10 - Structure Plan End-to-End Verification is complete.
+- Phase 8F-11 - Post-Structure Plan Boundary Reassessment is complete.
 
 Next Phase:
-- Phase 8F-11 - Post-Structure Plan Boundary Reassessment.
+- Phase 8G-0 - Layout Plan Foundation.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

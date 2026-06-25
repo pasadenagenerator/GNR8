@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- 8F-10 Structure Plan End-to-End Verification is complete.
+- 8F-11 Post-Structure Plan Boundary Reassessment is complete.
 
 Current Phase:
-- Phase 8F-10 Structure Plan End-to-End Verification is complete.
+- Phase 8F-11 Post-Structure Plan Boundary Reassessment is complete.
 
 Next Phase:
-- Phase 8F-11 Post-Structure Plan Boundary Reassessment.
+- Phase 8G-0 Layout Plan Foundation.
 
 Current architecture direction:
 - Evidence Capture -> Original Mirror -> Reconstruction.
@@ -23,6 +23,21 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase 8F-11 - Post-Structure Plan Boundary Reassessment.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / NEXT BOUNDARY SELECTED / LAYOUT PLAN FOUNDATION RECOMMENDED / NO CONTENT PLANNING / NO INTENT PLANNING / NO BLOCK PLANNING / NO AI / NO GENERATION / NO PUBLISHING / NO SCHEMA / NO WORKERS.
+- Canonical assessment: `docs/architecture/POST_STRUCTURE_PLAN_BOUNDARY_REASSESSMENT.md`.
+- Decision: the next boundary after verified persisted StructurePlan artifacts and the read-only StructurePlan UI is **Layout Plan Foundation**.
+- Primary layer answer: the next layer is visual/layout, not content, semantic intent, or component/block mapping.
+- Recommended next phase: Phase 8G-0 - Layout Plan Foundation.
+- Boundary shape: future LayoutPlan should remain metadata-only placement intent: route-level layout containers, section order/grouping, region roles, navigation placement intent, source-grounded density/prominence/alignment/responsive hints, StructurePlan assignment refs, source evidence refs, limitations, and diagnostics.
+- Canonical input: latest persisted `StructurePlan` artifact for the requested `siteVersionId`, exact linked Reconstruction Package artifact, and supporting Candidate Review, Candidate Discovery, Candidate Context, Evidence Capture, `dryRunId`, and `siteVersionId` lineage refs. Supporting refs explain placement evidence and limitations; they do not add candidates or override the StructurePlan envelope.
+- Deferred options: Content Plan Foundation is deferred until layout anchors exist for slotting; Intent / Experience Plan Foundation is deferred until semantic purpose can attach to stable layout/content entities; Block Plan Foundation is deferred until layout, content, and design constraints exist.
+- AI-editor alignment: LayoutPlan stays outside code generation, AI proposals, editing mutations, and publish flow while preparing placement anchors for future governed content and editing layers.
+- Digital Twin alignment: LayoutPlan strengthens the Twin as operational understanding of visual organization without becoming HTML replay, a recommendation, proposal, mutation, generated frontend, or publishable artifact.
+- Safety: documentation only; no Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, Review Actions, Reconstruction Package, StructurePlan contract, StructurePlan builder, StructurePlan persistence, StructurePlan UI, AI, generation, publishing, schema, worker, runtime, API, or UI behavior changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
 - Phase 8F-10 - Structure Plan End-to-End Verification.
 - Status: COMPLETE / VERIFICATION ONLY / REAL STRUCTURE PLAN ADMIN CHAIN VERIFIED / NO CONTENT PLANNING / NO LAYOUT PLANNING / NO AI / NO GENERATION / NO PUBLISHING / NO MUTATIONS / NO SCHEMA / NO WORKERS.
 - Canonical evidence: `docs/architecture/STRUCTURE_PLAN_E2E_VERIFICATION.md`.
@@ -34,7 +49,7 @@ Latest completed milestone:
 - Safety: page source contains no buttons, forms, inputs, edit controls, AI controls, generation controls, publishing controls, execution controls, retry controls, approval controls, Content Planning controls, or Layout Planning controls.
 - Tests: `apps/platform/gnr8/architecture/structure-plan-persistence.test.ts`, `apps/platform/gnr8/architecture/structure-plan-surface-projection.test.ts`, and `apps/platform/app/gnr8/admin/structure-plan-page.test.ts`.
 - Validation result: focused Structure Plan persistence/projection/page tests pass `16 / 16`; `cd apps/platform && pnpm run vercel-build` passes with existing unrelated lint warnings and includes `/gnr8/admin/structure-plan/[siteVersionId]`; `git diff --check` passes.
-- Recommended next phase: Phase 8F-11 - Post-Structure Plan Boundary Reassessment.
+- Then-recommended next phase: Phase 8F-11 - Post-Structure Plan Boundary Reassessment.
 
 Previous completed milestone:
 - Phase 8F-9 - Structure Plan Read-Only Surface Implementation.
