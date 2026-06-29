@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-25
+2026-06-29
 
 ## Migration Platform MVP Buildout
 
@@ -884,26 +884,24 @@ Canonical manifesto:
 `docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md`.
 
 Current architectural reset:
-GNR8 is an AI Orchestrator with a governed Website Understanding Engine.
+GNR8 is an AI Orchestrator with a governed Digital Business Twin at its core.
 
 GNR8 is not a traditional website builder, not a CMS, and not a generic page
-editor. The Digital Twin is the canonical operational representation of a
-website. Generated websites are outputs, not the long-term source of truth.
-Generation without understanding is prohibited. AI proposes; humans approve.
-The orchestrator owns the task; the model executes it. GNR8 must remain
-model-agnostic.
+editor. The Digital Business Twin is the canonical operational understanding
+of a business and its digital identity. Generated websites are outputs, not
+the long-term source of truth. Generation without understanding is prohibited.
+AI proposes; humans approve. The orchestrator owns the task; the model
+executes it. GNR8 must remain model-agnostic.
 
 Canonical future lifecycle:
 
 ```text
-Import
--> Evidence
--> Discovery
--> Context
--> Review
--> Reconstruction Package
--> Structure Plan
--> Generation Task
+Connectors
+-> Digital Business Twin
+-> Business Intent
+-> Experience Domain
+-> Generation Package
+-> Provider Adapter
 -> External AI
 -> Validation
 -> Human Approval
@@ -913,7 +911,8 @@ Import
 Rejected lifecycle:
 
 ```text
-Import
+Website
+-> Prompt
 -> Generate React
 ```
 
@@ -921,8 +920,8 @@ Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as if
 GNR8 is building a traditional internal website builder, CMS, page editor,
 block schema, or direct React generator. LayoutPlan, BlockPlan, ContentPlan, AI
 Editor architecture, publishing flow, generated output validation, provider
-orchestration, and external AI task format require reassessment under the AI
-Orchestrator / Website Understanding Engine identity.
+orchestration, provider adapters, and external AI serialization formats require
+reassessment under the AI Orchestrator / Digital Business Twin identity.
 
 Phase 0 changed documentation and architecture alignment only. It added no
 Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review,
@@ -930,9 +929,332 @@ Review Actions, Reconstruction Package, StructurePlan, AI integration code,
 generation systems, publishing systems, schema, workers, API, UI, or runtime
 behavior.
 
-Current Phase: Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is
-complete.
-Next recommended phase: Phase 0.1 - Generation Task Boundary Design.
+Phase GP-0 - Generation Package Foundation is COMPLETE.
+
+Canonical foundation:
+`docs/architecture/GENERATION_PACKAGE_FOUNDATION.md`.
+
+Purpose:
+A `GenerationPackage` is the deterministic, immutable, provider-neutral,
+versioned, lineage-aware, review-backed description of a website that is
+sufficiently complete for any external AI system to generate or reconstruct
+that website under GNR8 governance.
+
+Generation Package does not equal Prompt. A prompt is a provider-specific
+serialization of a Generation Package. The Generation Package owns meaning;
+provider adapters own serialization.
+
+Canonical AI orchestration chain:
+
+```text
+Import
+-> Evidence
+-> Discovery
+-> Context
+-> Review
+-> Reconstruction Package
+-> StructurePlan
+-> Generation Package
+-> Provider Adapter
+-> External AI
+-> Validation
+-> Human Approval
+-> Publish
+```
+
+Canonical input is the latest persisted `StructurePlan` artifact. Supporting
+lineage includes ReconstructionPackage, CandidateReviewPackage,
+CandidateDiscoveryResult, CandidateContext, Evidence, `siteVersionId`, and
+`dryRunId`.
+
+Canonical sections to evaluate are Site Identity, Business Purpose, Audience,
+Brand, Design System, Logo, Colors, Typography, Assets, Navigation, Routes,
+Sections, Content References, Evidence References, Constraints, Accessibility,
+SEO, Runtime Target, Hosting Target, Publishing Constraints, Acceptance
+Criteria, Limitations, Diagnostics, Version Metadata, and Lineage.
+
+Provider independence: the package never contains OpenAI prompts, Claude
+prompts, Gemini prompts, Codex tasks, v0 prompts, Stitch prompts,
+provider-specific formatting, provider payloads, generated React, generated
+HTML, generated CSS, generated content, publishing artifacts, or deployment
+artifacts.
+
+Adapter model: future OpenAI, Claude, Gemini, Codex, Stitch, v0, and
+future-provider adapters own prompt/task/API serialization. The Generation
+Package owns provider-neutral meaning.
+
+Digital Twin relationship: Digital Twin -> Generation Package -> External AI
+is preferred over HTML -> Prompt -> AI because the Twin and package preserve
+governed understanding, evidence, lineage, constraints, diagnostics,
+validation expectations, and human approval boundaries.
+
+Future architecture sequence: Generation Package -> Generation Validation
+Package -> Generated Website Validation -> Approval -> Publishing.
+
+Phase GP-0 changed documentation and architecture only. It added no Evidence
+Capture, Candidate Discovery, Candidate Context, Candidate Review,
+Reconstruction Package, StructurePlan, Publishing, AI integrations, Workers,
+Schema, API, UI, prompts, adapters, generated outputs, validation packages,
+approvals, or publishing artifacts.
+
+Phase DBT-0 - Digital Business Twin Specification v1.0 is COMPLETE.
+
+Canonical specification:
+`docs/architecture/DIGITAL_BUSINESS_TWIN_SPECIFICATION.md`.
+
+Canonical definition:
+The Digital Business Twin is the canonical operational understanding of a
+business and its digital identity.
+
+The DBT is deterministic, versioned, evidence-backed, provider-neutral,
+model-independent, continuously evolving, and human-governed.
+
+Fundamental principle:
+A business exists independently of any website. A website is only one
+expression of the business. The Digital Business Twin represents the business
+itself.
+
+Current DBT-centered architecture:
+
+```text
+Connectors
+-> Digital Business Twin
+-> Generation Package
+-> Provider Adapter
+-> External AI
+-> Validation
+-> Human Approval
+-> Publish
+```
+
+Possible connectors include Existing Website, Brand Book, CRM, ERP, Product
+Catalog, Knowledge Base, Support Platform, Social Networks, Google Business,
+Notion, PDFs, Office documents, Figma, Images, Video, Human interviews,
+Questionnaires, and future connectors. All connectors enrich the same DBT.
+
+Possible projections include Website Generation Package, Landing Page
+Generation Package, Campaign Generation Package, Documentation Package,
+Chatbot Package, Sales Package, Marketing Package, Training Package, and
+future packages. Generation Package is one projection, never the source of
+truth.
+
+Internal DBT domains evaluated in DBT-0 are Business Identity, Brand,
+Products, Services, Audience, Messaging, Visual Identity, Knowledge, Content,
+Assets, Relationships, Evidence, Constraints, Compliance, Accessibility,
+History, Governance, Lineage, Versioning, Goals, Success Metrics,
+Limitations, and Diagnostics.
+
+Relationship to existing artifacts:
+
+```text
+Evidence
+-> Discovery
+-> Review
+-> Reconstruction Package
+-> StructurePlan
+-> Business Intent
+-> Experience Domain
+-> Generation Package
+```
+
+These artifacts become contributors or projections around the DBT. None
+replaces it. Business Intent is the governed outcome layer between the DBT and
+Experience Domains. Generation Packages are projections of the DBT through
+Business Intent and Experience Domain scope. Connectors are enrichment
+mechanisms. AI models are interchangeable execution engines.
+
+Architectural rules: the DBT is always provider-neutral; the DBT never
+contains prompts, generated React, generated HTML, or provider payloads; the
+DBT owns meaning; everything else is derived.
+
+Phase DBT-0 changed documentation and specification only. It added no
+implementation, TypeScript, schema, API, UI, workers, persistence, AI
+integration, provider adapters, prompts, contracts, generated outputs, or
+publishing artifacts.
+
+Phase DBT-1 - Knowledge Domain And Understanding Specification is COMPLETE.
+
+Canonical specification:
+`docs/architecture/GNR8_KNOWLEDGE_AND_UNDERSTANDING_SPECIFICATION.md`.
+
+Knowledge hierarchy:
+
+```text
+Reality
+-> Evidence
+-> Facts
+-> Interpretations
+-> Knowledge
+-> Understanding
+-> Digital Business Twin
+-> Projections
+-> External AI
+```
+
+Canonical concepts defined in DBT-1 are Evidence, Fact, Inference,
+Interpretation, Knowledge, Understanding, Projection, Suggestion, Generated
+Output, Validation, Truth, Uncertainty, Confidence, Lineage, and Governance.
+
+Truth model: Evidence is immutable. Facts are evidence-backed.
+Interpretations are derived. Knowledge is validated interpretation.
+Understanding is integrated knowledge. The DBT is governed, versioned
+understanding. Generation Packages are projections. AI outputs are proposals.
+Published artifacts are approved manifestations.
+
+Confidence model: confidence propagates from Evidence -> Fact -> Knowledge ->
+Twin -> Generation Package. Low-confidence upstream material must lower
+downstream confidence or become an explicit limitation. A projection may
+narrow scope to preserve confidence, but it must not hide uncertainty.
+
+Understanding domains defined for future phases are Website Understanding,
+Brand Understanding, CRM Understanding, Commerce Understanding, Content
+Understanding, Knowledge Understanding, Marketing Understanding, Support
+Understanding, and Future Domains. Each domain produces domain knowledge. The
+DBT integrates domain knowledge into cross-domain understanding. Connectors
+may feed domains, but connectors are not domains and databases are not the
+knowledge model.
+
+Architectural rules: the DBT never stores guesses as facts; distinguishes
+evidence from interpretation; distinguishes facts from knowledge;
+distinguishes knowledge from generated content; distinguishes projections
+from source truth; records uncertainty and conflicts; preserves lineage;
+remains versioned and auditable; AI never changes truth directly; AI outputs
+remain proposals until validated and approved; human governance remains
+authoritative.
+
+Phase DBT-1 changed documentation and specification only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, AI
+integration, connectors, provider adapters, prompts, generated output, or
+publishing behavior.
+
+Phase DBT-2 - Business Domain Model Specification is COMPLETE.
+
+Canonical specification:
+`docs/architecture/BUSINESS_DOMAIN_MODEL_SPECIFICATION.md`.
+
+DBT-2 constitutional rule: the Digital Business Twin is not "website
+knowledge." It is the governed integration of multiple independent Business
+Domains. Websites, landing pages, portals, apps, campaigns, decks,
+documentation, newsletters, chatbots, marketplaces, and future channel outputs
+are Experience Domains derived from the DBT.
+
+Canonical relationship model:
+
+```text
+Reality
+-> Business Domains
+-> Digital Business Twin
+-> Business Intent
+-> Experience Domains
+-> Generation Packages
+-> Provider Adapters
+-> External AI
+-> Validation
+-> Human Approval
+-> Publishing
+```
+
+Fundamental Business Domains are Business Identity, Brand, Offerings,
+Audience, Goals, Relationships, Knowledge, Assets, and Compliance.
+
+Optional Business Domains are Sales, Marketing, Operations, Analytics,
+Support, Digital Presence, and Future Domains.
+
+Projection-only Experience Domains include Website, Landing Page, Customer
+Portal, Mobile App, Marketplace, Documentation, Campaign, Newsletter, Chatbot,
+Sales Deck, and Future Experiences.
+
+Domain responsibility model: every Business Domain declares its purpose, what
+it owns, what it consumes, what it produces, its relationships, typical
+evidence sources, and likely future connectors. Business Domains own
+knowledge. Experience Domains own manifestations. Generation Packages own
+orchestration targets. Provider Adapters own serialization. AI owns
+generation. Humans own approval.
+
+Relationship to existing artifacts: Evidence can support facts, confidence,
+limitations, and lineage for one or more Business Domains. Discovery proposes
+candidate domain knowledge. Review governs acceptance, rejection, deferral, or
+limitations. Reconstruction Package may inform Digital Presence, Assets,
+Brand, Offerings, Knowledge, Relationships, and Website Experience Domain
+scope. StructurePlan is an Experience Domain planning projection for website
+structure. Business Intent is the governed outcome layer selected from DBT
+understanding. Generation Package is a provider-neutral orchestration target
+derived from a DBT-backed Experience Domain under one or more Business
+Intents.
+
+Phase DBT-2 changed documentation and specification only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, connectors,
+AI integration, provider adapters, prompts, generated output, or publishing
+behavior.
+
+Phase DBT-3 - Business Intent Specification is COMPLETE.
+
+Canonical specification:
+`docs/architecture/BUSINESS_INTENT_SPECIFICATION.md`.
+
+Canonical definition:
+Business Intent is the governed description of the business outcome that the
+organization wants to achieve.
+
+Business Intent is provider-neutral, evidence-backed, versioned,
+human-governed, and independent of implementation.
+
+Business Intent is not a website, UI, prompt, code, AI output, or project
+plan.
+
+Intent categories are examples, not a fixed taxonomy. Evaluated categories are
+Sales, Lead Generation, Brand Awareness, Recruitment, Customer Support,
+Education, Commerce, Customer Self-Service, Partner Enablement, Internal
+Operations, Compliance, Community, and Future Intents.
+
+Canonical relationship model:
+
+```text
+Reality
+-> Business Domains
+-> Digital Business Twin
+-> Business Intent
+-> Experience Domain
+-> Generation Package
+-> Provider Adapter
+-> External AI
+-> Validation
+-> Human Approval
+-> Publishing
+```
+
+Intent vs Experience model: Intent is why the business acts; Experience is
+where that intent is expressed. Increase qualified leads can express through a
+Website. Reduce support costs can express through a Knowledge Base. Employee
+onboarding can express through a Training Portal. Increase sales conversion can
+express through a Website, Landing Page, Sales Deck, and Email Campaign.
+
+Intent composition: a business may have multiple active Business Intents. One
+Intent may project into multiple Experience Domains. One Experience Domain may
+satisfy multiple Intents. Generation Packages are created for one specific
+Experience Domain within one or more Business Intents.
+
+Architectural rules: Business Intent never contains prompts, provider
+payloads, generated HTML, generated React, generated content, publishing
+artifacts, or execution state. Business Intent owns desired outcomes.
+Experience Domains own manifestations. Generation Packages own orchestration
+targets.
+
+Relationship to existing artifacts: Evidence supports or challenges Intent.
+Knowledge justifies, constrains, prioritizes, or revises Intent. The DBT
+integrates Business Domain knowledge and provides the governed understanding
+from which Intents are selected, validated, and versioned. Generation Packages
+translate one specific Experience Domain, under one or more Business Intents,
+into a provider-neutral orchestration target for external AI.
+
+Phase DBT-3 changed documentation and specification only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, connectors,
+AI integration, provider adapters, prompts, generated output, execution state,
+or publishing behavior.
+
+Current Phase: Phase DBT-3 - Business Intent Specification is complete.
+Next recommended phase: DBT-4 Experience Domain Projection Boundary Design,
+documentation and architecture only.
 
 ## Current Importer Architecture
 
@@ -1726,27 +2048,28 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Canonical manifesto:
   `docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md`.
 - Current architectural reset: GNR8 is an AI Orchestrator with a governed
-  Website Understanding Engine.
+  Digital Business Twin at its core.
 - Product boundary: GNR8 is not a traditional website builder, not a CMS, and
   not a generic page editor.
-- Digital Twin rule: the Digital Twin is the canonical operational
-  representation of a website; generated websites are outputs, not the
-  long-term source of truth.
+- Digital Business Twin rule: the DBT is the canonical operational
+  understanding of a business and its digital identity; generated websites are
+  outputs, not the long-term source of truth.
 - Generation rule: generation without understanding is prohibited. The
   orchestrator owns the task; the model executes it. GNR8 must remain
   model-agnostic.
 - Governance rule: AI proposes; humans approve. Validation before publish is
   mandatory.
-- Canonical future lifecycle: Import -> Evidence -> Discovery -> Context ->
-  Review -> Reconstruction Package -> Structure Plan -> Generation Task ->
-  External AI -> Validation -> Human Approval -> Publish.
-- Rejected lifecycle: Import -> Generate React.
+- Canonical future lifecycle after DBT-3: Reality -> Business Domains ->
+  Digital Business Twin -> Business Intent -> Experience Domains ->
+  Generation Packages -> Provider Adapters -> External AI -> Validation ->
+  Human Approval -> Publishing.
+- Rejected lifecycle: Website -> Prompt -> Generate React.
 - Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as
   if GNR8 is building a traditional internal website builder, CMS, page editor,
   block schema, or direct React generator.
 - Future reassessment areas: LayoutPlan, BlockPlan, ContentPlan, AI Editor
   architecture, publishing flow, generated output validation, provider
-  orchestration, and external AI task format.
+  orchestration, provider adapters, and external AI serialization formats.
 - Safety: documentation and architecture alignment only; no Evidence Capture,
   Candidate Discovery, Candidate Context, Candidate Review, Review Actions,
   Reconstruction Package, StructurePlan, AI integration code, generation
@@ -1754,10 +2077,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
+- Phase DBT-3 - Business Intent Specification is complete.
 
 Next Phase:
-- Phase 0.1 - Generation Task Boundary Design.
+- DBT-4 Experience Domain Projection Boundary Design, documentation and
+  architecture only.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 
