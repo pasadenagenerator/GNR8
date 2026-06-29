@@ -38,6 +38,9 @@ drag-and-drop construction surface or an internal page-generation engine.
 - GNR8 is not a generic page editor.
 - Generated websites are outputs, not the long-term source of truth.
 - Generation without understanding is prohibited.
+- GNR8 always validates understanding before generation.
+- The Business Understanding Report is the first human-facing projection of
+  the Digital Business Twin.
 - AI proposes; humans approve.
 - The orchestrator owns the task; the model executes it.
 - GNR8 must remain model-agnostic.
@@ -62,6 +65,13 @@ The product center is business understanding before digital generation. A
 business exists independently of any website, and a website is only one
 expression of the business. The Digital Business Twin represents the business
 itself.
+
+GNR8 always validates understanding before generation. The first human-facing
+artifact is a Business Understanding Report: a deterministic, evidence-backed,
+provider-neutral, human-readable projection of the current Digital Business
+Twin. The report lets humans validate what GNR8 understands before a Design
+Brief, Generation Package, provider adapter, external AI task, generated
+output, validation flow, or publishing flow is prepared.
 
 The Digital Business Twin is composed from Business Domains: Business
 Identity, Brand, Offerings, Audience, Goals, Relationships, Knowledge, Assets,
@@ -156,6 +166,8 @@ The Digital Business Twin follows the canonical knowledge hierarchy:
 Reality
 -> Business Domains
 -> Digital Business Twin
+-> Business Understanding Report
+-> Business Validation
 -> Business Intent
 -> Experience Domains
 -> Generation Packages
@@ -179,6 +191,12 @@ serialized by provider adapters for external AI generation or reconstruction.
 It is derived from governed business understanding, desired outcome,
 Experience Domain scope, and approved lineage, not from raw HTML pasted into a
 prompt.
+
+A Business Understanding Report is a human-readable projection of the current
+Digital Business Twin. It is the first validation checkpoint for business
+understanding and is not a prompt, website, implementation specification,
+generated code, Generation Package, Design Brief, provider payload, publishing
+artifact, or execution state.
 
 ## GNR8 And External AI Systems
 
@@ -362,6 +380,12 @@ wants to achieve. Experience Domains describe where that intent will be
 expressed. Generation Packages describe how a specific experience should be
 generated for external AI.
 
+Phase BR-0 defines the Business Understanding Report as the first human-facing
+artifact produced from the Digital Business Twin. It summarizes current
+business understanding, exposes confidence, missing knowledge, limitations,
+evidence, lineage, and diagnostics, and creates a Business Validation checkpoint
+before any Website Design Brief or Website Generation Package.
+
 No current canonical phase should proceed into `LayoutPlan`, `BlockPlan`, or
 `ContentPlan` as if GNR8 is building a traditional internal website builder,
 CMS, page editor, block schema, or direct React generator.
@@ -384,6 +408,8 @@ The following areas need future reassessment under this manifesto:
 - Business Domain evolution and enrichment boundaries
 - Business Intent governance and validation boundaries
 - Experience Domain projection boundaries
+- Business Understanding Report generation and validation boundaries
+- Website Design Brief boundaries
 - DBT validation and governance package boundaries
 
 ## Long-Term Architecture Rule
@@ -391,9 +417,10 @@ The following areas need future reassessment under this manifesto:
 GNR8 remains an AI orchestration platform with a governed Digital Business
 Twin at its core. It understands businesses through independent Business
 Domains, integrates those domains into coherent DBT understanding, prepares
-Business Intent outcomes, prepares Experience Domain projections and
-Generation Package orchestration targets for external AI systems, validates
-results, preserves lineage and approvals, and publishes only approved outputs.
+Business Understanding Reports for human validation, prepares Business Intent
+outcomes, prepares Experience Domain projections and Generation Package
+orchestration targets for external AI systems, validates results, preserves
+lineage and approvals, and publishes only approved outputs.
 
 Any future architecture that makes generated React, CMS records, editable page
 blocks, provider-specific prompts, provider payloads, or provider-specific AI

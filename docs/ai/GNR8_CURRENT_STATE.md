@@ -898,6 +898,8 @@ Canonical future lifecycle:
 ```text
 Connectors
 -> Digital Business Twin
+-> Business Understanding Report
+-> Business Validation
 -> Business Intent
 -> Experience Domain
 -> Generation Package
@@ -922,6 +924,20 @@ block schema, or direct React generator. LayoutPlan, BlockPlan, ContentPlan, AI
 Editor architecture, publishing flow, generated output validation, provider
 orchestration, provider adapters, and external AI serialization formats require
 reassessment under the AI Orchestrator / Digital Business Twin identity.
+
+Roadmap after BR-0:
+
+```text
+Business Discovery
+-> Digital Business Twin
+-> Business Understanding Report
+-> Business Validation
+-> Website Design Brief
+-> Website Generation Package
+-> External AI
+-> Validation
+-> Publish
+```
 
 Phase 0 changed documentation and architecture alignment only. It added no
 Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review,
@@ -1252,8 +1268,86 @@ implementation, TypeScript, schema, persistence, API, UI, workers, connectors,
 AI integration, provider adapters, prompts, generated output, execution state,
 or publishing behavior.
 
-Current Phase: Phase DBT-3 - Business Intent Specification is complete.
-Next recommended phase: DBT-4 Experience Domain Projection Boundary Design,
+Phase BR-0 - Business Understanding Report Specification is COMPLETE.
+
+Canonical specification:
+`docs/architecture/BUSINESS_UNDERSTANDING_REPORT_SPECIFICATION.md`.
+
+Canonical definition:
+A Business Understanding Report is a deterministic, evidence-backed,
+provider-neutral, human-readable projection of the current Digital Business
+Twin.
+
+The report summarizes what GNR8 currently understands. It is not a prompt,
+website, specification, generated code, Generation Package, or Design Brief.
+The Digital Business Twin remains the canonical governed source of business
+understanding.
+
+Report purpose: validate understanding, expose missing knowledge, build trust,
+explain confidence, support human corrections, prepare future planning, and
+serve as business documentation before downstream generation planning.
+
+Recommended report structure: Executive Summary, Business Overview, Mission,
+Products & Services, Target Audience, Business Goals, Brand Identity,
+Competitive Advantages, Customer Journey, Current Digital Presence, Strengths,
+Weaknesses, Business Opportunities, Business Risks, Missing Knowledge,
+Confidence Overview, Recommendations, Limitations, Evidence Summary, Version &
+Lineage, and Diagnostics.
+
+Confidence model: every major section exposes confidence and explains
+uncertainty. Confidence is shown for overall understanding, Business Identity,
+Brand, Offerings, Audience, Goals, Knowledge, and Digital Presence. Low,
+unknown, stale, or conflicting understanding becomes a visible limitation or
+human correction request.
+
+Business recommendations model: recommendations are business-oriented only.
+Examples include clarifying positioning, improving messaging, consolidating
+products, strengthening trust, improving customer journey, expanding
+documentation, improving SEO, and modernizing the website. Recommendations
+never prescribe implementation.
+
+Relationship model:
+
+```text
+Reality
+-> Business Domains
+-> Digital Business Twin
+-> Business Understanding Report
+-> Business Validation
+-> Website Design Brief
+-> Website Generation Package
+-> External AI
+-> Validation
+-> Publishing
+```
+
+Roadmap after BR-0:
+
+```text
+Business Discovery
+-> Digital Business Twin
+-> Business Understanding Report
+-> Business Validation
+-> Website Design Brief
+-> Website Generation Package
+-> External AI
+-> Validation
+-> Publish
+```
+
+Architectural rules: the Business Understanding Report never contains prompts,
+provider payloads, generated HTML, generated React, generated components,
+generated pages, publishing artifacts, or execution state. The report
+communicates understanding only.
+
+Phase BR-0 changed documentation and specification only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, connectors,
+AI integration, provider adapters, prompts, generated output, execution state,
+or publishing behavior.
+
+Current Phase: Phase BR-0 - Business Understanding Report Specification is
+complete.
+Next recommended phase: BR-1 Business Validation Boundary Specification,
 documentation and architecture only.
 
 ## Current Importer Architecture
@@ -2060,9 +2154,13 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Governance rule: AI proposes; humans approve. Validation before publish is
   mandatory.
 - Canonical future lifecycle after DBT-3: Reality -> Business Domains ->
-  Digital Business Twin -> Business Intent -> Experience Domains ->
-  Generation Packages -> Provider Adapters -> External AI -> Validation ->
-  Human Approval -> Publishing.
+  Digital Business Twin -> Business Understanding Report -> Business
+  Validation -> Business Intent -> Experience Domains -> Generation Packages
+  -> Provider Adapters -> External AI -> Validation -> Human Approval ->
+  Publishing.
+- Roadmap after BR-0: Business Discovery -> Digital Business Twin -> Business
+  Understanding Report -> Business Validation -> Website Design Brief ->
+  Website Generation Package -> External AI -> Validation -> Publish.
 - Rejected lifecycle: Website -> Prompt -> Generate React.
 - Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as
   if GNR8 is building a traditional internal website builder, CMS, page editor,
@@ -2077,10 +2175,10 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase DBT-3 - Business Intent Specification is complete.
+- Phase BR-0 - Business Understanding Report Specification is complete.
 
 Next Phase:
-- DBT-4 Experience Domain Projection Boundary Design, documentation and
+- BR-1 Business Validation Boundary Specification, documentation and
   architecture only.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability

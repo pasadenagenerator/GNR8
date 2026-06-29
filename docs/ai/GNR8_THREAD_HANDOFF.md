@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- Phase DBT-3 - Business Intent Specification is complete.
+- Phase BR-0 - Business Understanding Report Specification is complete.
 
 Current Phase:
-- Phase DBT-3 - Business Intent Specification is complete.
+- Phase BR-0 - Business Understanding Report Specification is complete.
 
 Next Phase:
-- DBT-4 Experience Domain Projection Boundary Design, documentation and
+- BR-1 Business Validation Boundary Specification, documentation and
   architecture only.
 
 Current architecture direction:
@@ -31,8 +31,12 @@ Current architecture direction:
   Knowledge -> Understanding -> Digital Business Twin -> Projections ->
   External AI.
 - Business Domain model: Reality -> Business Domains -> Digital Business Twin
-  -> Business Intent -> Experience Domains -> Generation Packages -> Provider
-  Adapters -> External AI -> Validation -> Human Approval -> Publishing.
+  -> Business Understanding Report -> Business Validation -> Business Intent
+  -> Experience Domains -> Generation Packages -> Provider Adapters ->
+  External AI -> Validation -> Human Approval -> Publishing.
+- Roadmap after BR-0: Business Discovery -> Digital Business Twin -> Business
+  Understanding Report -> Business Validation -> Website Design Brief ->
+  Website Generation Package -> External AI -> Validation -> Publish.
 - Business Domains own knowledge; Business Intent owns desired outcomes;
   Experience Domains own manifestations; Generation Packages own
   orchestration targets.
@@ -40,14 +44,68 @@ Current architecture direction:
   derived; knowledge is validated interpretation; understanding is integrated
   knowledge; AI outputs are proposals.
 - Current architecture: Reality -> Business Domains -> Digital Business Twin
-  -> Business Intent -> Experience Domains -> Generation Packages -> Provider
-  Adapters -> External AI -> Validation -> Human Approval -> Publishing.
+  -> Business Understanding Report -> Business Validation -> Business Intent
+  -> Experience Domains -> Generation Packages -> Provider Adapters ->
+  External AI -> Validation -> Human Approval -> Publishing.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase BR-0 - Business Understanding Report Specification.
+- Status: COMPLETE / DOCUMENTATION AND SPECIFICATION ONLY / BUSINESS
+  UNDERSTANDING REPORT ESTABLISHED AS THE FIRST HUMAN-FACING ARTIFACT /
+  UNDERSTANDING VALIDATION BEFORE DESIGN BRIEF OR GENERATION PACKAGE / NO
+  IMPLEMENTATION / NO TYPESCRIPT / NO SCHEMA / NO PERSISTENCE / NO API / NO UI
+  / NO WORKERS / NO CONNECTORS / NO AI INTEGRATION / NO PROVIDER ADAPTERS / NO
+  PROMPTS / NO GENERATED OUTPUTS / NO EXECUTION STATE / NO PUBLISHING.
+- Canonical specification:
+  `docs/architecture/BUSINESS_UNDERSTANDING_REPORT_SPECIFICATION.md`.
+- Canonical definition: A Business Understanding Report is a deterministic,
+  evidence-backed, provider-neutral, human-readable projection of the current
+  Digital Business Twin.
+- The report summarizes what GNR8 currently understands. It is not a prompt,
+  website, specification, generated code, Generation Package, or Design Brief.
+- Report purpose: validate understanding, expose missing knowledge, build
+  trust, explain confidence, support human corrections, prepare future
+  planning, and serve as business documentation.
+- Recommended report structure: Executive Summary, Business Overview, Mission,
+  Products & Services, Target Audience, Business Goals, Brand Identity,
+  Competitive Advantages, Customer Journey, Current Digital Presence,
+  Strengths, Weaknesses, Business Opportunities, Business Risks, Missing
+  Knowledge, Confidence Overview, Recommendations, Limitations, Evidence
+  Summary, Version & Lineage, and Diagnostics.
+- Confidence model: every section exposes confidence and explains uncertainty;
+  overall understanding, Business Identity, Brand, Offerings, Audience, Goals,
+  Knowledge, and Digital Presence receive visible confidence treatment.
+- Business recommendations model: recommendations are business-oriented only,
+  such as clarifying positioning, improving messaging, consolidating products,
+  strengthening trust, improving customer journey, expanding documentation,
+  improving SEO, and modernizing the website. They never prescribe
+  implementation.
+- Relationship model: Reality -> Business Domains -> Digital Business Twin ->
+  Business Understanding Report -> Business Validation -> Website Design Brief
+  -> Website Generation Package -> External AI -> Validation -> Publishing.
+- Roadmap after BR-0: Business Discovery -> Digital Business Twin -> Business
+  Understanding Report -> Business Validation -> Website Design Brief ->
+  Website Generation Package -> External AI -> Validation -> Publish.
+- Architectural rules: Business Understanding Report never contains prompts,
+  provider payloads, generated HTML, generated React, generated components,
+  generated pages, publishing artifacts, or execution state. The report
+  communicates understanding only.
+- Manifesto alignment: `docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md` now
+  establishes that GNR8 always validates understanding before generation.
+- Recommended next phase: BR-1 Business Validation Boundary Specification,
+  documentation and architecture only.
+- Safety: documentation and specification only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Generation Package contract, Publishing, AI integrations,
+  Workers, Schema, API, UI, TypeScript, connectors, provider adapters, prompts,
+  generated artifacts, execution state, or persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
 - Phase DBT-3 - Business Intent Specification.
 - Status: COMPLETE / DOCUMENTATION AND SPECIFICATION ONLY / BUSINESS INTENT ESTABLISHED AS THE GOVERNED OUTCOME BRIDGE BETWEEN THE DIGITAL BUSINESS TWIN AND EXPERIENCE DOMAINS / NO IMPLEMENTATION / NO TYPESCRIPT / NO SCHEMA / NO PERSISTENCE / NO API / NO UI / NO WORKERS / NO CONNECTORS / NO AI INTEGRATION / NO PROVIDER ADAPTERS / NO PROMPTS / NO GENERATED OUTPUTS / NO PUBLISHING.
 - Canonical specification: `docs/architecture/BUSINESS_INTENT_SPECIFICATION.md`.
