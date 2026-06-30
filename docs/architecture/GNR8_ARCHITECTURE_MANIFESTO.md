@@ -39,8 +39,22 @@ drag-and-drop construction surface or an internal page-generation engine.
 - Generated websites are outputs, not the long-term source of truth.
 - Generation without understanding is prohibited.
 - GNR8 always validates understanding before generation.
+- GNR8 never optimizes for generation speed.
+- GNR8 optimizes for business understanding quality.
 - The Business Understanding Report is the first human-facing projection of
   the Digital Business Twin.
+- Business Alignment confirms or improves the Digital Business Twin before
+  downstream planning begins.
+- Every generated experience must originate from an aligned Digital Business
+  Twin.
+- Business understanding defines intent.
+- Website Design Brief defines experience.
+- Website Generation Package defines generation.
+- The Website Generation Package is the canonical generation contract.
+- Provider prompts are disposable projections.
+- GNR8 owns meaning.
+- Providers own implementation.
+- GNR8 separates Business, Experience, Generation, and Implementation.
 - AI proposes; humans approve.
 - The orchestrator owns the task; the model executes it.
 - GNR8 must remain model-agnostic.
@@ -66,12 +80,17 @@ business exists independently of any website, and a website is only one
 expression of the business. The Digital Business Twin represents the business
 itself.
 
-GNR8 always validates understanding before generation. The first human-facing
+GNR8 always aligns understanding before generation. The first human-facing
 artifact is a Business Understanding Report: a deterministic, evidence-backed,
 provider-neutral, human-readable projection of the current Digital Business
-Twin. The report lets humans validate what GNR8 understands before a Design
-Brief, Generation Package, provider adapter, external AI task, generated
-output, validation flow, or publishing flow is prepared.
+Twin. The report lets humans inspect what GNR8 understands before Business
+Alignment confirms or improves the Twin and before a Design Brief, Generation
+Package, provider adapter, external AI task, generated output, validation flow,
+or publishing flow is prepared.
+
+GNR8 never optimizes for generation speed. GNR8 optimizes for business
+understanding quality. Every generated experience must originate from an aligned
+Digital Business Twin.
 
 The Digital Business Twin is composed from Business Domains: Business
 Identity, Brand, Offerings, Audience, Goals, Relationships, Knowledge, Assets,
@@ -88,13 +107,26 @@ Business Intent describes what the business wants to achieve. It is the
 governed bridge between the Digital Business Twin and Experience Domains.
 Intent is not a website, UI, prompt, code, AI output, or project plan.
 
+Business understanding defines intent.
+
+Website Design Brief defines experience.
+
+Website Generation Package defines generation.
+
+GNR8 separates Business, Experience, Generation, and Implementation. Business
+understanding and Alignment govern what is true and intended. The Website
+Design Brief governs what the website experience should express. The Website
+Generation Package is the canonical generation contract and governs generation
+intent. Provider prompts are disposable projections. GNR8 owns meaning.
+Providers own implementation.
+
 Connectors, evidence, lineage, candidate discovery, context, review,
 reconstruction packaging, structure planning, and generation packaging are not
 setup chores. They are contributors and projections around the core system.
 
 Generation without understanding is prohibited. Any generated website,
 component draft, layout proposal, or code artifact must be downstream of
-verified understanding, explicit lineage, validation, and human governance.
+aligned understanding, explicit lineage, validation, and human governance.
 
 Generated websites are outputs, not the long-term source of truth. The source
 of truth is the governed Digital Business Twin and its approved evidence,
@@ -167,15 +199,14 @@ Reality
 -> Business Domains
 -> Digital Business Twin
 -> Business Understanding Report
--> Business Validation
--> Business Intent
--> Experience Domains
--> Generation Packages
--> Provider Adapters
+-> Business Alignment
+-> Website Design Brief
+-> Website Generation Package
+-> Provider Adapter
 -> External AI
 -> Validation
 -> Human Approval
--> Publishing
+-> Publish
 ```
 
 The DBT never stores guesses as facts. It distinguishes evidence from
@@ -193,10 +224,29 @@ Experience Domain scope, and approved lineage, not from raw HTML pasted into a
 prompt.
 
 A Business Understanding Report is a human-readable projection of the current
-Digital Business Twin. It is the first validation checkpoint for business
+Digital Business Twin. It is the first human-facing checkpoint for business
 understanding and is not a prompt, website, implementation specification,
 generated code, Generation Package, Design Brief, provider payload, publishing
 artifact, or execution state.
+
+Business Alignment is a deterministic, human-governed process that confirms or
+improves the Digital Business Twin before downstream planning begins. Alignment
+is neither generation nor editing. It improves understanding only. It validates
+business understanding, not website quality.
+
+A Website Design Brief is a deterministic, provider-neutral, human-readable,
+experience-oriented projection of an aligned Digital Business Twin that
+defines the intended business expression of a website. It is business-aware,
+technology-independent, AI-readable, versioned, and lineage-aware. It is not
+React, HTML, components, blocks, layouts, provider payloads, prompts,
+publishing artifacts, execution artifacts, or generated output.
+
+A Website Generation Package is a deterministic, immutable, provider-neutral,
+versioned, lineage-aware generation contract describing the intended website
+that external generation systems must create. It is produced exclusively from
+an aligned Website Design Brief. It is not a prompt, provider payload, React,
+HTML, Vue, Next.js, component tree, published website, execution artifact,
+deployment artifact, or runtime state.
 
 ## GNR8 And External AI Systems
 
@@ -207,6 +257,8 @@ GNR8 owns:
 - Business Domain integration
 - Business Intent governance
 - Experience Domain projection boundaries
+- Website Design Brief preparation
+- Website Generation Package preparation
 - evidence capture
 - candidate discovery
 - candidate context
@@ -227,13 +279,14 @@ External AI owns:
 - layout/code drafts
 - component/code implementation drafts
 
-GNR8 should express precise provider-neutral Generation Packages containing
-tasks, constraints, evidence refs, acceptance criteria, validation
-requirements, and approval gates derived from the Digital Business Twin.
-Provider adapters may serialize those packages into OpenAI, Claude, Gemini,
-Codex, Stitch, v0, or future provider formats. External systems may execute
-those serialized tasks, but they do not own GNR8's product identity, source of
-truth, governance state, or publish authority.
+GNR8 should express precise provider-neutral Website Generation Packages
+containing generation intent, constraints, evidence refs, acceptance criteria,
+validation requirements, and approval gates derived from an aligned Website
+Design Brief. Provider adapters may serialize those packages into OpenAI,
+Claude, Gemini, Codex, Stitch, v0, or future provider formats. External
+systems may execute those serialized tasks, but they do not own GNR8's
+meaning, product identity, source of truth, governance state, or publish
+authority.
 
 ## Human Governance
 
@@ -287,11 +340,12 @@ The canonical future lifecycle is:
 
 ```text
 Reality
--> Business Domains
+-> Business Discovery
 -> Digital Business Twin
--> Business Intent
--> Experience Domains
--> Generation Packages
+-> Business Understanding Report
+-> Business Alignment
+-> Website Design Brief
+-> Website Generation Package
 -> Provider Adapter
 -> External AI
 -> Validation
@@ -383,8 +437,28 @@ generated for external AI.
 Phase BR-0 defines the Business Understanding Report as the first human-facing
 artifact produced from the Digital Business Twin. It summarizes current
 business understanding, exposes confidence, missing knowledge, limitations,
-evidence, lineage, and diagnostics, and creates a Business Validation checkpoint
+evidence, lineage, and diagnostics, and creates a human-facing checkpoint
 before any Website Design Brief or Website Generation Package.
+
+Phase BA-0 defines Business Alignment as the deterministic, human-governed
+process that confirms or improves the Digital Business Twin before downstream
+planning begins. Business Alignment validates business understanding, not
+websites, and Generation Packages may only originate from an aligned Digital
+Business Twin.
+
+Phase WDB-0 defines the Website Design Brief as the canonical
+business-to-experience bridge. The Website Design Brief is a deterministic,
+provider-neutral, human-readable, experience-oriented projection of an aligned
+Digital Business Twin that defines the intended business expression of a
+website. Business understanding defines intent. Website Design Brief defines
+experience. Website Generation Package defines generation.
+
+Phase WGP-0 defines the Website Generation Package as the canonical generation
+contract. It is a deterministic, immutable, provider-neutral, versioned,
+lineage-aware generation contract describing the intended website that
+external generation systems must create. It is produced exclusively from an
+aligned Website Design Brief. Provider prompts are disposable projections.
+GNR8 owns meaning. Providers own implementation.
 
 No current canonical phase should proceed into `LayoutPlan`, `BlockPlan`, or
 `ContentPlan` as if GNR8 is building a traditional internal website builder,
@@ -409,7 +483,8 @@ The following areas need future reassessment under this manifesto:
 - Business Intent governance and validation boundaries
 - Experience Domain projection boundaries
 - Business Understanding Report generation and validation boundaries
-- Website Design Brief boundaries
+- Business Alignment governance and readiness boundaries
+- Website Generation Package boundaries
 - DBT validation and governance package boundaries
 
 ## Long-Term Architecture Rule
@@ -417,10 +492,11 @@ The following areas need future reassessment under this manifesto:
 GNR8 remains an AI orchestration platform with a governed Digital Business
 Twin at its core. It understands businesses through independent Business
 Domains, integrates those domains into coherent DBT understanding, prepares
-Business Understanding Reports for human validation, prepares Business Intent
-outcomes, prepares Experience Domain projections and Generation Package
-orchestration targets for external AI systems, validates results, preserves
-lineage and approvals, and publishes only approved outputs.
+Business Understanding Reports for human inspection, aligns the Digital
+Business Twin through human governance, prepares Website Design Briefs and
+Website Generation Package contracts from aligned understanding for external
+AI systems, validates results, preserves lineage and approvals, and publishes
+only approved outputs.
 
 Any future architecture that makes generated React, CMS records, editable page
 blocks, provider-specific prompts, provider payloads, or provider-specific AI

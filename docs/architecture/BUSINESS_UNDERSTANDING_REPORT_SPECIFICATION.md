@@ -302,7 +302,7 @@ not say how to build the solution.
 
 ## Relationship Model
 
-The Business Understanding Report establishes the first validation checkpoint
+The Business Understanding Report establishes the first human-facing checkpoint
 before planning and generation:
 
 ```text
@@ -310,9 +310,10 @@ Reality
 -> Business Domains
 -> Digital Business Twin
 -> Business Understanding Report
--> Business Validation
+-> Business Alignment
 -> Website Design Brief
 -> Website Generation Package
+-> Provider Adapter
 -> External AI
 -> Validation
 -> Publishing
@@ -324,18 +325,19 @@ The product roadmap view is:
 Business Discovery
 -> Digital Business Twin
 -> Business Understanding Report
--> Business Validation
+-> Business Alignment
 -> Website Design Brief
 -> Website Generation Package
+-> Provider Adapter
 -> External AI
 -> Validation
 -> Publish
 ```
 
 This model means GNR8 no longer begins with generation. GNR8 first produces a
-Business Understanding Report, humans validate understanding, and only then
-may downstream Design Briefs, Generation Packages, provider adapters, external
-AI tasks, validations, approvals, or publishing workflows be prepared.
+Business Understanding Report, humans align business understanding, and only
+then may downstream Design Briefs, Generation Packages, provider adapters,
+external AI tasks, validations, approvals, or publishing workflows be prepared.
 
 ## Differences From A Design Brief
 
@@ -352,7 +354,7 @@ communicate.
 | Written for business validation. | Written for design and planning alignment. |
 | Describes knowns, unknowns, confidence, and evidence. | Describes desired direction, audience priorities, messaging emphasis, and creative constraints. |
 | Does not prescribe an experience. | May define the intended website or experience direction. |
-| Comes before Business Validation. | Comes after humans validate understanding. |
+| Comes before Business Alignment. | Comes after humans align understanding. |
 
 The report is not a Design Brief because it does not decide what to design. It
 decides whether GNR8 understands the business well enough for humans to allow
@@ -391,10 +393,10 @@ It validates the DBT by:
 - naming missing knowledge before it is silently assumed;
 - identifying contradictions, stale information, or unsupported inferences;
 - letting humans confirm, reject, correct, or request more evidence;
-- creating a business validation checkpoint before downstream planning;
+- creating a Business Alignment checkpoint before downstream planning;
 - preserving a record of what was understood at a specific DBT version.
 
-Human corrections from Business Validation may later enrich or revise the DBT
+Human corrections from Business Alignment may later enrich or revise the DBT
 through governed processes. The report itself does not mutate the DBT, create
 generation artifacts, call providers, or publish output.
 

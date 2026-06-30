@@ -7,14 +7,16 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- Phase BR-0 - Business Understanding Report Specification is complete.
+- Phase WGP-0 - Website Generation Package Canonical Specification is
+  complete.
 
 Current Phase:
-- Phase BR-0 - Business Understanding Report Specification is complete.
+- Phase WGP-0 - Website Generation Package Canonical Specification is
+  complete.
 
 Next Phase:
-- BR-1 Business Validation Boundary Specification, documentation and
-  architecture only.
+- WGP-1 Website Generation Package Validation Contract Specification,
+  documentation and architecture only.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -25,34 +27,205 @@ Current architecture direction:
   expression of the business.
 - Evidence Capture -> Original Mirror -> Reconstruction remains part of the
   website-understanding connector chain, not a traditional builder/CMS path.
-- Generation Package is a canonical provider-neutral projection of the DBT for
-  external AI systems; prompts are adapter-owned serializations.
+- Website Generation Package is the canonical generation contract between an
+  aligned Website Design Brief and future external generation systems.
+- Provider prompts are disposable projections. Provider adapters serialize the
+  package; they never redefine meaning.
+- GNR8 owns meaning. Providers own implementation.
 - Knowledge hierarchy: Reality -> Evidence -> Facts -> Interpretations ->
   Knowledge -> Understanding -> Digital Business Twin -> Projections ->
   External AI.
-- Business Domain model: Reality -> Business Domains -> Digital Business Twin
-  -> Business Understanding Report -> Business Validation -> Business Intent
-  -> Experience Domains -> Generation Packages -> Provider Adapters ->
-  External AI -> Validation -> Human Approval -> Publishing.
-- Roadmap after BR-0: Business Discovery -> Digital Business Twin -> Business
-  Understanding Report -> Business Validation -> Website Design Brief ->
-  Website Generation Package -> External AI -> Validation -> Publish.
+- Business Alignment confirms or improves the Digital Business Twin before
+  downstream planning begins.
+- Current lifecycle: Reality -> Business Discovery -> Digital Business Twin ->
+  Business Understanding Report -> Business Alignment -> Website Design Brief
+  -> Website Generation Package -> Provider Adapter -> External AI ->
+  Validation -> Human Approval -> Publish.
+- Roadmap after WGP-0: Business Discovery -> Digital Business Twin -> Business
+  Understanding Report -> Business Alignment -> Website Design Brief ->
+  Website Generation Package -> Provider Adapter -> External AI -> Validation
+  -> Human Approval -> Publish.
 - Business Domains own knowledge; Business Intent owns desired outcomes;
   Experience Domains own manifestations; Generation Packages own
   orchestration targets.
 - Evidence is immutable; facts are evidence-backed; interpretations are
   derived; knowledge is validated interpretation; understanding is integrated
   knowledge; AI outputs are proposals.
-- Current architecture: Reality -> Business Domains -> Digital Business Twin
-  -> Business Understanding Report -> Business Validation -> Business Intent
-  -> Experience Domains -> Generation Packages -> Provider Adapters ->
-  External AI -> Validation -> Human Approval -> Publishing.
+- Current architecture: Reality -> Business Discovery -> Digital Business Twin
+  -> Business Understanding Report -> Business Alignment -> Website Design
+  Brief -> Website Generation Package -> Provider Adapter -> External AI ->
+  Validation -> Human Approval -> Publish.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase WGP-0 - Website Generation Package Canonical Specification.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / WEBSITE GENERATION
+  PACKAGE ESTABLISHED AS THE CANONICAL DETERMINISTIC PROVIDER-NEUTRAL
+  GENERATION CONTRACT BETWEEN GNR8 AND FUTURE EXTERNAL GENERATION SYSTEMS / NO
+  IMPLEMENTATION / NO TYPESCRIPT / NO SCHEMA / NO PERSISTENCE / NO API / NO UI
+  / NO WORKERS / NO PROMPTS / NO PROVIDER ADAPTERS / NO AI INTEGRATION / NO
+  GENERATION / NO PUBLISHING / NO VALIDATION EXECUTION / NO RUNTIME STATE.
+- Canonical specification:
+  `docs/architecture/WEBSITE_GENERATION_PACKAGE_SPECIFICATION.md`.
+- Canonical definition: "A deterministic, immutable, provider-neutral,
+  versioned, lineage-aware generation contract describing the intended website
+  that external generation systems must create."
+- Website Generation Package is provider-neutral, technology-neutral,
+  implementation-neutral, deterministic, versioned, lineage-aware,
+  human-readable, and AI-readable.
+- Website Generation Package is not prompt, provider payload, React, HTML,
+  Vue, Next.js, component tree, published website, execution artifact,
+  deployment artifact, or runtime state.
+- Purpose: create one canonical generation contract, remove provider-specific
+  business logic, separate business intent from implementation, support
+  multiple AI providers, enable regeneration, enable comparison, enable
+  validation, and enable future providers.
+- Recommended structure: Package Metadata, Business Context, Business
+  Objectives, Website Objectives, Audience, Business Intent, Experience
+  Intent, Brand Requirements, Messaging, Visual Direction, Information
+  Architecture, Navigation Contract, Page Contract, Section Contract, Content
+  Requirements, Media Requirements, SEO Requirements, Accessibility
+  Requirements, Performance Requirements, Technical Constraints, Acceptance
+  Criteria, Validation Contract, Limitations, Confidence, Evidence Summary,
+  Lineage, and Diagnostics.
+- Generation Contract model: WGP specifies what must exist, what must be
+  communicated, what users must accomplish, what business outcomes must be
+  supported, and what constraints must never be violated. It never specifies
+  implementation.
+- Validation Contract model: WGP contains explicit success expectations later
+  evaluated by GNR8 Validation, including correct business positioning, brand
+  consistency, complete navigation, complete customer journey, accessibility,
+  SEO, required content, trust signals, and respected constraints.
+- Provider-neutral model: Website Generation Package -> Provider Adapter ->
+  Provider Payload -> External AI. Provider adapters serialize; they never
+  redefine meaning.
+- Regeneration model: the same WGP should produce equivalent websites across
+  providers. Providers may produce different implementations, but business
+  meaning must remain invariant.
+- Relationship model: Reality -> Business Discovery -> Digital Business Twin
+  -> Business Understanding Report -> Business Alignment -> Website Design
+  Brief -> Website Generation Package -> Provider Adapter -> External AI ->
+  Validation -> Human Approval -> Publish.
+- Manifesto alignment: The Website Generation Package is the canonical
+  generation contract. Provider prompts are disposable projections. GNR8 owns
+  meaning. Providers own implementation.
+- Recommended next phase: WGP-1 Website Generation Package Validation Contract
+  Specification, documentation and architecture only.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Publishing, AI integrations, Workers, Schema, API, UI,
+  TypeScript, provider adapters, prompts, generated artifacts, validation
+  execution, runtime state, or persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
+- Phase WDB-0 - Website Design Brief Canonical Specification.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / WEBSITE DESIGN
+  BRIEF ESTABLISHED AS THE CANONICAL BUSINESS-TO-EXPERIENCE BRIDGE FROM AN
+  ALIGNED DIGITAL BUSINESS TWIN INTO WEBSITE EXPERIENCE INTENT / NO
+  IMPLEMENTATION / NO TYPESCRIPT / NO SCHEMA / NO PERSISTENCE / NO API / NO
+  UI / NO WORKERS / NO AI INTEGRATION / NO PROMPTS / NO PROVIDER ADAPTERS / NO
+  GENERATION / NO PUBLISHING / NO VALIDATION EXECUTION / NO RUNTIME STATE.
+- Canonical specification:
+  `docs/architecture/WEBSITE_DESIGN_BRIEF_SPECIFICATION.md`.
+- Canonical definition: "A deterministic, provider-neutral, human-readable,
+  experience-oriented projection of an aligned Digital Business Twin that
+  defines the intended business expression of a website."
+- Website Design Brief is business-aware, experience-oriented,
+  technology-independent, provider-neutral, human-readable, AI-readable,
+  versioned, and lineage-aware.
+- Website Design Brief is not React, HTML, Components, Blocks, Layouts,
+  Provider payloads, Prompts, Publishing artifacts, Execution artifacts, or
+  Generated output.
+- Purpose: transform business understanding into website intent, guide human
+  review, guide creative direction, guide AI generation, create one canonical
+  source of website intent, reduce provider-specific prompting, and support
+  future regeneration.
+- Recommended structure: Executive Summary, Business Context, Business Goals,
+  Website Objectives, Primary Audience, Secondary Audience, Customer Problems,
+  Business Value Proposition, Competitive Advantages, Brand Personality, Tone
+  of Voice, Messaging Principles, Trust Signals, Products & Services Overview,
+  Desired Customer Journey, Website Information Architecture, Required Website
+  Pages, Required Navigation, Required Content Themes, Accessibility
+  Expectations, SEO Direction, Performance Expectations, Visual Direction,
+  Constraints, Success Criteria, Limitations, Confidence Summary, Evidence
+  Summary, Lineage, and Diagnostics.
+- Business-to-website mapping: Business Goals -> Website Objectives; Audience
+  -> Navigation priorities; Offerings -> Content hierarchy; Brand -> Visual
+  direction; Business Intent -> Customer journey; Knowledge -> Trust content.
+  These are transformations of understanding, not implementation.
+- Experience principles: Website Design Brief defines what users should
+  experience, what users should understand, what users should accomplish, and
+  what the website should communicate. It never defines HTML, React, CSS,
+  frameworks, component libraries, providers, or prompt wording.
+- Relationship model: Reality -> Business Discovery -> Digital Business Twin
+  -> Business Understanding Report -> Business Alignment -> Website Design
+  Brief -> Website Generation Package -> Provider Adapter -> External AI ->
+  Validation -> Human Approval -> Publish.
+- Manifesto alignment: Business understanding defines intent. Website Design
+  Brief defines experience. Website Generation Package defines generation.
+  GNR8 separates Business, Experience, Generation, and Implementation.
+- Recommended next phase: WGP-0 Website Generation Package Canonical
+  Specification, documentation and architecture only.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Generation Package contract, Publishing, AI integrations,
+  Workers, Schema, API, UI, TypeScript, provider adapters, prompts, generated
+  artifacts, validation execution, runtime state, or persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
+- Phase BA-0 - Business Alignment Specification.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / BUSINESS ALIGNMENT
+  ESTABLISHED AS THE HUMAN-GOVERNED CHECKPOINT THAT CONFIRMS OR IMPROVES THE
+  DIGITAL BUSINESS TWIN BEFORE DOWNSTREAM PLANNING / NO IMPLEMENTATION / NO
+  TYPESCRIPT / NO SCHEMA / NO PERSISTENCE / NO API / NO UI / NO WORKERS / NO AI
+  INTEGRATION / NO PROMPTS / NO PROVIDER ADAPTERS / NO GENERATION / NO
+  PUBLISHING / NO VALIDATION EXECUTION / NO RUNTIME STATE.
+- Canonical specification:
+  `docs/architecture/BUSINESS_ALIGNMENT_SPECIFICATION.md`.
+- Canonical definition: "A deterministic, human-governed process that confirms
+  or improves the Digital Business Twin before downstream planning begins."
+- Business Alignment is neither generation nor editing. It improves
+  understanding only.
+- Business Alignment validates business understanding, not websites.
+- Alignment may improve Business Identity, Mission, Vision, Products, Services,
+  Target Audience, Business Goals, Brand, Tone of Voice, Competitive
+  Advantages, Business Relationships, Knowledge, Assets, Constraints,
+  Compliance, Business Priorities, Success Metrics, and Business Intent.
+- Alignment never edits HTML, React, components, layouts, pages, Generation
+  Packages, provider payloads, prompts, publishing artifacts, deployment
+  artifacts, or runtime state.
+- Alignment levels: Level 0 Unknown, Level 1 Observed, Level 2 Reviewed, Level
+  3 Aligned, and Level 4 Confirmed. Generation Package preparation should only
+  begin after sufficient alignment.
+- Knowledge evolution: Observed -> Inferred -> Reviewed -> Aligned ->
+  Confirmed. Every correction creates new knowledge; nothing rewrites history;
+  evidence remains immutable; corrections become lineage; human corrections
+  have authority over interpretations.
+- Generation Readiness is derived from Business Understanding, Alignment
+  completeness, Confidence, Missing knowledge, Conflicts, and Limitations. It
+  measures whether enough understanding exists, not website quality.
+- Relationship model: Reality -> Business Discovery -> Digital Business Twin ->
+  Business Understanding Report -> Business Alignment -> Website Design Brief
+  -> Website Generation Package -> Provider Adapter -> External AI ->
+  Validation -> Human Approval -> Publish.
+- Manifesto alignment: GNR8 never optimizes for generation speed. GNR8
+  optimizes for business understanding quality. Every generated experience must
+  originate from an aligned Digital Business Twin.
+- Recommended next phase: WDB-0 Website Design Brief Boundary Specification,
+  documentation and architecture only.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Generation Package contract, Publishing, AI integrations,
+  Workers, Schema, API, UI, TypeScript, provider adapters, prompts, generated
+  artifacts, validation execution, runtime state, or persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
 - Phase BR-0 - Business Understanding Report Specification.
 - Status: COMPLETE / DOCUMENTATION AND SPECIFICATION ONLY / BUSINESS
   UNDERSTANDING REPORT ESTABLISHED AS THE FIRST HUMAN-FACING ARTIFACT /
@@ -84,12 +257,14 @@ Latest completed milestone:
   strengthening trust, improving customer journey, expanding documentation,
   improving SEO, and modernizing the website. They never prescribe
   implementation.
-- Relationship model: Reality -> Business Domains -> Digital Business Twin ->
-  Business Understanding Report -> Business Validation -> Website Design Brief
-  -> Website Generation Package -> External AI -> Validation -> Publishing.
+- Relationship model: Reality -> Business Discovery -> Digital Business Twin
+  -> Business Understanding Report -> Business Alignment -> Website Design
+  Brief -> Website Generation Package -> Provider Adapter -> External AI ->
+  Validation -> Human Approval -> Publish.
 - Roadmap after BR-0: Business Discovery -> Digital Business Twin -> Business
-  Understanding Report -> Business Validation -> Website Design Brief ->
-  Website Generation Package -> External AI -> Validation -> Publish.
+  Understanding Report -> Business Alignment -> Website Design Brief ->
+  Website Generation Package -> Provider Adapter -> External AI -> Validation
+  -> Human Approval -> Publish.
 - Architectural rules: Business Understanding Report never contains prompts,
   provider payloads, generated HTML, generated React, generated components,
   generated pages, publishing artifacts, or execution state. The report
