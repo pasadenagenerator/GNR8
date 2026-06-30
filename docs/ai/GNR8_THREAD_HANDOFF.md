@@ -7,15 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 Importer Architecture Evolution
 
 Current status:
-- Phase WGP-0 - Website Generation Package Canonical Specification is
-  complete.
+- Phase UX-0 - Business Journey Specification is complete.
 
 Current Phase:
-- Phase WGP-0 - Website Generation Package Canonical Specification is
-  complete.
+- Phase UX-0 - Business Journey Specification is complete.
 
 Next Phase:
-- WGP-1 Website Generation Package Validation Contract Specification,
+- UX-1 Business Journey Decision Model Specification,
   documentation and architecture only.
 
 Current architecture direction:
@@ -25,26 +23,44 @@ Current architecture direction:
   business and its digital identity.
 - A business exists independently of any website; a website is only one
   expression of the business.
+- Business Journey is the canonical human experience layer above the existing
+  architecture.
+- GNR8 guides businesses through understanding before generation.
+- Conversation replaces unnecessary software complexity.
+- Every artifact exists to support a human business decision.
+- The Business Owner is the canonical journey owner.
 - Evidence Capture -> Original Mirror -> Reconstruction remains part of the
   website-understanding connector chain, not a traditional builder/CMS path.
 - Website Generation Package is the canonical generation contract between an
   aligned Website Design Brief and future external generation systems.
 - Provider prompts are disposable projections. Provider adapters serialize the
   package; they never redefine meaning.
-- GNR8 owns meaning. Providers own implementation.
+- GNR8 owns contractual meaning. External AI owns implementation proposals.
+  Compliance determines contractual fulfillment.
+- Generation Contract Compliance Report communicates contractual fulfillment
+  for Business Approval.
+- GNR8 publishes only after governed business approval.
+- Business approval accepts contractual fulfillment, not implementation
+  technology.
+- Generation quality is measured by contract compliance, not by implementation
+  technology.
 - Knowledge hierarchy: Reality -> Evidence -> Facts -> Interpretations ->
   Knowledge -> Understanding -> Digital Business Twin -> Projections ->
   External AI.
 - Business Alignment confirms or improves the Digital Business Twin before
   downstream planning begins.
+- Current human layer: Business Journey -> Architecture -> Generation ->
+  Governance -> Publishing.
 - Current lifecycle: Reality -> Business Discovery -> Digital Business Twin ->
   Business Understanding Report -> Business Alignment -> Website Design Brief
   -> Website Generation Package -> Provider Adapter -> External AI ->
-  Validation -> Human Approval -> Publish.
-- Roadmap after WGP-0: Business Discovery -> Digital Business Twin -> Business
+  Generation Contract Compliance -> Generation Contract Compliance Report ->
+  Business Approval -> Publish.
+- Roadmap after UX-0: Business Discovery -> Digital Business Twin -> Business
   Understanding Report -> Business Alignment -> Website Design Brief ->
-  Website Generation Package -> Provider Adapter -> External AI -> Validation
-  -> Human Approval -> Publish.
+  Website Generation Package -> Provider Adapter -> External AI -> Generation
+  Contract Compliance -> Generation Contract Compliance Report -> Business
+  Approval -> Publish.
 - Business Domains own knowledge; Business Intent owns desired outcomes;
   Experience Domains own manifestations; Generation Packages own
   orchestration targets.
@@ -54,13 +70,249 @@ Current architecture direction:
 - Current architecture: Reality -> Business Discovery -> Digital Business Twin
   -> Business Understanding Report -> Business Alignment -> Website Design
   Brief -> Website Generation Package -> Provider Adapter -> External AI ->
-  Validation -> Human Approval -> Publish.
+  Generation Contract Compliance -> Generation Contract Compliance Report ->
+  Business Approval -> Publish.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase UX-0 - Business Journey Specification.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / BUSINESS JOURNEY
+  ESTABLISHED AS THE CANONICAL HUMAN EXPERIENCE LAYER ABOVE THE EXISTING
+  ARCHITECTURE / NO IMPLEMENTATION / NO TYPESCRIPT / NO SCHEMA / NO
+  PERSISTENCE / NO API / NO UI / NO WIREFRAMES / NO VISUAL DESIGN / NO
+  WORKERS / NO PROMPTS / NO PROVIDER ADAPTERS / NO AI INTEGRATION / NO
+  GENERATION / NO PUBLISHING / NO RUNTIME STATE.
+- Canonical specification:
+  `docs/architecture/BUSINESS_JOURNEY_SPECIFICATION.md`.
+- Canonical definition: "The governed human experience through which a
+  business progressively transforms its business understanding into approved
+  digital experiences."
+- Business Journey is conversation-driven, business-centric, goal-oriented,
+  human-governed, provider-neutral, technology-independent, deterministic in
+  architecture, and adaptive in interaction.
+- Business Journey is not a wizard, page flow, screen hierarchy, technical
+  pipeline, backend workflow, implementation sequence, UI flow, sequence of
+  screens, prompt strategy, provider integration, generation logic, publishing
+  implementation, schema, API, runtime state, React, or HTML.
+- Journey philosophy: the journey begins with understanding; every step
+  increases business confidence; humans approve understanding before
+  generation; humans approve business decisions, not AI; the system guides;
+  the human decides.
+- Primary actor: Business Owner. Future secondary actors may include
+  Marketing, Agency, Designer, Developer, Content Editor, Operations, Support,
+  and Administrators. The Business Owner remains the canonical journey owner.
+- Canonical stages: Welcome -> Business Discovery -> Digital Business Twin ->
+  Business Understanding Report -> Business Alignment -> Website Design Brief
+  -> Website Generation Package -> Generation -> Compliance Review ->
+  Business Approval -> Publishing -> Continuous Evolution.
+- Human decisions: Continue, Correct Understanding, Provide Missing
+  Information, Approve Alignment, Approve Design Intent, Generate, Review
+  Compliance, Approve Publication, and Continue Improvement. The journey is
+  decision-driven rather than screen-driven.
+- Conversation principle: GNR8 interacts primarily through guided business
+  conversations. Conversation replaces traditional software complexity.
+  Artifacts are outcomes of conversations. Conversations produce business
+  understanding.
+- Journey outputs: Business Discovery -> Digital Business Twin -> Business
+  Understanding Report -> Business Alignment -> Website Design Brief ->
+  Website Generation Package -> Compliance Report -> Business Approval.
+- Relationship model: Business Journey -> Architecture -> Generation ->
+  Governance -> Publishing.
+- Canonical separation: Human Journey -> Business Understanding -> Business
+  Governance -> Website Intent -> Generation Contract -> External AI ->
+  Compliance -> Business Approval -> Publishing.
+- Manifesto alignment: GNR8 guides businesses through understanding before
+  generation. Conversation replaces unnecessary software complexity. Every
+  artifact exists to support a human business decision. The Business Journey
+  is the canonical human experience of GNR8.
+- Future vision: GNR8 should feel like working with an experienced digital
+  transformation consultant rather than operating a traditional website
+  builder. Business conversations should naturally produce governed
+  architectural artifacts.
+- Recommended next phase: UX-1 Business Journey Decision Model Specification,
+  documentation and architecture only.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Publishing, AI integrations, Workers, Schema, API, UI,
+  wireframes, visual design, TypeScript, provider adapters, prompts, generated
+  artifacts, compliance execution, validation execution, runtime state, or
+  persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
+- Phase WGP-3 - Business Approval Boundary Specification.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / BUSINESS APPROVAL
+  ESTABLISHED AS THE CANONICAL GOVERNED BUSINESS DECISION BETWEEN GENERATION
+  CONTRACT COMPLIANCE REPORT AND PUBLISH / NO IMPLEMENTATION / NO TYPESCRIPT /
+  NO SCHEMA / NO PERSISTENCE / NO API / NO UI / NO WORKERS / NO PROMPTS / NO
+  PROVIDER ADAPTERS / NO AI INTEGRATION / NO GENERATION / NO PUBLISHING / NO
+  COMPLIANCE EXECUTION / NO VALIDATION EXECUTION / NO RUNTIME STATE.
+- Canonical specification:
+  `docs/architecture/BUSINESS_APPROVAL_SPECIFICATION.md`.
+- Canonical definition: "A deterministic, governed business decision
+  confirming that contractual expectations have been sufficiently satisfied
+  for publishing."
+- Business Approval governs business acceptance. It does not govern
+  implementation.
+- Business Approval is the final business governance checkpoint after
+  Generation Contract Compliance Report and before Publish.
+- Purpose: approve contractual fulfillment, accept business risk, authorize
+  publishing, authorize regeneration, require further alignment, protect
+  business integrity, and maintain governance.
+- Approval scope: Business Approval evaluates Business Alignment, Website
+  Design Brief, Website Generation Package, Compliance Report, Business
+  Risks, Generation Readiness, Limitations, and Recommendations. It never
+  evaluates HTML, React, Framework, Provider, Prompt, or Coding style.
+- Approval outcomes: APPROVED, APPROVED_WITH_LIMITATIONS, REGENERATE,
+  RETURN_TO_ALIGNMENT, and BLOCKED.
+- Decision responsibility chain: Compliance -> Business Approval ->
+  Publishing. Compliance evaluates contractual fulfillment. Business Approval
+  accepts or rejects the business consequence. Publishing promotes only
+  Business Approved output.
+- Relationship model: Reality -> Business Discovery -> Digital Business Twin
+  -> Business Understanding Report -> Business Alignment -> Website Design
+  Brief -> Website Generation Package -> Provider Adapter -> External AI ->
+  Generation Contract Compliance -> Generation Contract Compliance Report ->
+  Business Approval -> Publish.
+- Architectural rule: Business Approval never contains generated HTML,
+  provider payloads, prompts, deployment artifacts, runtime state, or
+  implementation artifacts. It governs business decisions only.
+- Manifesto alignment: GNR8 publishes only after governed business approval.
+  Business approval accepts contractual fulfillment, not implementation
+  technology.
+- Recommended next phase: WGP-4 Publishing Boundary Specification,
+  documentation and architecture only.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Publishing, AI integrations, Workers, Schema, API, UI,
+  TypeScript, provider adapters, prompts, generated artifacts, compliance
+  execution, validation execution, runtime state, or persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
+- Phase WGP-2 - Generation Contract Compliance Report Specification.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / GENERATION CONTRACT
+  COMPLIANCE REPORT ESTABLISHED AS THE CANONICAL DETERMINISTIC
+  PROVIDER-NEUTRAL HUMAN-READABLE LINEAGE-AWARE BUSINESS REPORT DESCRIBING
+  CONTRACTUAL COMPLIANCE BETWEEN THE WEBSITE GENERATION PACKAGE AND A
+  GENERATED WEBSITE / NO IMPLEMENTATION / NO TYPESCRIPT / NO SCHEMA / NO
+  PERSISTENCE / NO API / NO UI / NO WORKERS / NO PROMPTS / NO PROVIDER
+  ADAPTERS / NO AI INTEGRATION / NO GENERATION / NO PUBLISHING / NO
+  COMPLIANCE EXECUTION / NO VALIDATION EXECUTION / NO RUNTIME STATE.
+- Canonical specification:
+  `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REPORT_SPECIFICATION.md`.
+- Canonical definition: "A deterministic, provider-neutral, human-readable,
+  lineage-aware report describing contractual compliance between the Website
+  Generation Package and a generated website."
+- Generation Contract Compliance is the governed evaluation process.
+  Generation Contract Compliance Report is the human-readable result of that
+  evaluation. Compliance evaluates. The report explains.
+- Purpose: explain generation results, support business review, support
+  approval, explain contractual deviations, summarize business risks, support
+  provider comparison, support regeneration decisions, and provide
+  auditability.
+- Recommended report structure: Executive Summary, Generation Overview,
+  Overall Compliance, Business Compliance, Experience Compliance,
+  Implementation Compliance, Category Results, Detected Deviations, Missing
+  Requirements, Unexpected Elements, Constraint Violations, Business Risks,
+  Generation Readiness, Recommendation, Limitations, Evidence Summary,
+  Lineage, and Diagnostics.
+- Recommendation model: Proceed To Approval, Regenerate, Improve Website
+  Generation Package, Repeat Business Alignment, Insufficient Evidence, and
+  Human Review Required.
+- Compliance classification: Business Compliance evaluates approved business
+  meaning; Experience Compliance evaluates the required website experience;
+  Implementation Compliance evaluates observable package-defined constraints
+  and acceptance expectations without grading provider craft, framework
+  choice, code style, or subjective aesthetics.
+- Generation Readiness states are READY, READY_WITH_LIMITATIONS,
+  REQUIRES_REGENERATION, REQUIRES_ALIGNMENT, and BLOCKED. Readiness is a
+  business decision, not a technical score.
+- Relationship model: Reality -> Business Discovery -> Digital Business Twin
+  -> Business Understanding Report -> Business Alignment -> Website Design
+  Brief -> Website Generation Package -> Provider Adapter -> External AI ->
+  Generation Contract Compliance -> Generation Contract Compliance Report ->
+  Business Approval -> Publish.
+- Architectural rule: Generation Contract Compliance Report never contains
+  provider prompts, provider payloads, generated HTML, generated React,
+  generated components, generated blocks, deployment artifacts, execution
+  artifacts, runtime state, or publishing state. It communicates business
+  evaluation only.
+- Manifesto alignment: GNR8 communicates contractual truth before publishing.
+  Human approval is based on governed compliance reports rather than
+  subjective inspection.
+- Recommended next phase: WGP-3 Business Approval Boundary Specification,
+  documentation and architecture only.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Publishing, AI integrations, Workers, Schema, API, UI,
+  TypeScript, provider adapters, prompts, generated artifacts, compliance
+  execution, validation execution, runtime state, or persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
+- Phase WGP-1 - Generation Contract Compliance Specification.
+- Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / GENERATION CONTRACT
+  COMPLIANCE ESTABLISHED AS THE DETERMINISTIC PROVIDER-NEUTRAL
+  EVIDENCE-BACKED EVALUATION COMPARING A GENERATED WEBSITE AGAINST THE
+  CANONICAL WEBSITE GENERATION PACKAGE / NO IMPLEMENTATION / NO TYPESCRIPT /
+  NO SCHEMA / NO PERSISTENCE / NO API / NO UI / NO WORKERS / NO PROMPTS / NO
+  PROVIDER ADAPTERS / NO AI INTEGRATION / NO GENERATION / NO PUBLISHING / NO
+  COMPLIANCE EXECUTION / NO VALIDATION EXECUTION / NO RUNTIME STATE.
+- Canonical specification:
+  `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_SPECIFICATION.md`.
+- Canonical definition: "A deterministic, provider-neutral, evidence-backed
+  evaluation comparing a generated website against the canonical Website
+  Generation Package."
+- Generation Contract Compliance determines whether contractual intent has
+  been satisfied. It never evaluates implementation style.
+- Purpose: verify contractual fulfillment, measure generation completeness,
+  detect missing requirements, detect violated constraints, support human
+  approval, support provider comparison, support regeneration, and support
+  governance.
+- Compliance model: Website Generation Package -> Expected Website Intent ->
+  Generated Website -> Observed Website Reality -> Contract Delta ->
+  Compliance Report.
+- Compliance categories include Business Goals, Audience Representation,
+  Messaging, Brand Consistency, Navigation, Information Architecture, Customer
+  Journey, Content Coverage, Trust Signals, Accessibility, SEO, Performance
+  Expectations, Technical Constraints, Required Assets, and Limitations.
+- Canonical compliance results are PASS, PARTIAL, FAIL, NOT_APPLICABLE, and
+  UNKNOWN.
+- Compliance Report structure: Executive Summary, Overall Compliance Score,
+  Category Results, Detected Deviations, Missing Requirements, Unexpected
+  Elements, Constraint Violations, Business Risks, Recommended Actions,
+  Limitations, Evidence, Version, Lineage, and Diagnostics.
+- Provider-neutral evaluation model: Website Generation Package -> Provider
+  Adapter -> External AI -> Generated Website -> Compliance.
+- Relationship model: Reality -> Business Discovery -> Digital Business Twin
+  -> Business Understanding Report -> Business Alignment -> Website Design
+  Brief -> Website Generation Package -> Provider Adapter -> External AI ->
+  Generation Contract Compliance -> Generation Contract Compliance Report -> Business Approval -> Publish.
+- Architectural rule: Generation Contract Compliance never contains provider
+  prompts, provider payloads, HTML generation, React generation, component
+  generation, layout generation, publishing artifacts, deployment artifacts,
+  execution artifacts, or runtime state. It evaluates outcomes only.
+- Manifesto alignment: GNR8 owns contractual meaning. External AI owns
+  implementation proposals. Compliance determines contractual fulfillment.
+  Generation quality is measured by contract compliance, not by implementation
+  technology.
+- Future direction: Compliance Reports should enable deterministic comparison
+  between multiple provider outputs generated from the same Website Generation
+  Package. The Website Generation Package remains the canonical reference.
+- Recommended next phase: WGP-2 Generation Contract Compliance Report
+  Specification, documentation and architecture only.
+- Safety: documentation and architecture only; no Evidence Capture, Candidate
+  Discovery, Candidate Context, Candidate Review, Reconstruction Package,
+  StructurePlan, Publishing, AI integrations, Workers, Schema, API, UI,
+  TypeScript, provider adapters, prompts, generated artifacts, compliance
+  execution, validation execution, runtime state, or persistence changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
 - Phase WGP-0 - Website Generation Package Canonical Specification.
 - Status: COMPLETE / DOCUMENTATION AND ARCHITECTURE ONLY / WEBSITE GENERATION
   PACKAGE ESTABLISHED AS THE CANONICAL DETERMINISTIC PROVIDER-NEUTRAL
@@ -95,10 +347,11 @@ Latest completed milestone:
   communicated, what users must accomplish, what business outcomes must be
   supported, and what constraints must never be violated. It never specifies
   implementation.
-- Validation Contract model: WGP contains explicit success expectations later
-  evaluated by GNR8 Validation, including correct business positioning, brand
-  consistency, complete navigation, complete customer journey, accessibility,
-  SEO, required content, trust signals, and respected constraints.
+- Compliance Contract model: WGP contains explicit success expectations later
+  evaluated by Generation Contract Compliance, including correct business
+  positioning, brand consistency, complete navigation, complete customer
+  journey, accessibility, SEO, required content, trust signals, and respected
+  constraints.
 - Provider-neutral model: Website Generation Package -> Provider Adapter ->
   Provider Payload -> External AI. Provider adapters serialize; they never
   redefine meaning.
@@ -108,12 +361,13 @@ Latest completed milestone:
 - Relationship model: Reality -> Business Discovery -> Digital Business Twin
   -> Business Understanding Report -> Business Alignment -> Website Design
   Brief -> Website Generation Package -> Provider Adapter -> External AI ->
-  Validation -> Human Approval -> Publish.
+  Generation Contract Compliance -> Generation Contract Compliance Report -> Business Approval -> Publish.
 - Manifesto alignment: The Website Generation Package is the canonical
   generation contract. Provider prompts are disposable projections. GNR8 owns
-  meaning. Providers own implementation.
-- Recommended next phase: WGP-1 Website Generation Package Validation Contract
-  Specification, documentation and architecture only.
+  contractual meaning. External AI owns implementation proposals. Compliance
+  determines contractual fulfillment.
+- Recommended next phase: WGP-1 Generation Contract Compliance Specification,
+  documentation and architecture only.
 - Safety: documentation and architecture only; no Evidence Capture, Candidate
   Discovery, Candidate Context, Candidate Review, Reconstruction Package,
   StructurePlan, Publishing, AI integrations, Workers, Schema, API, UI,
@@ -164,7 +418,7 @@ Previous completed milestone:
 - Relationship model: Reality -> Business Discovery -> Digital Business Twin
   -> Business Understanding Report -> Business Alignment -> Website Design
   Brief -> Website Generation Package -> Provider Adapter -> External AI ->
-  Validation -> Human Approval -> Publish.
+  Validation -> Business Approval -> Publish.
 - Manifesto alignment: Business understanding defines intent. Website Design
   Brief defines experience. Website Generation Package defines generation.
   GNR8 separates Business, Experience, Generation, and Implementation.
@@ -212,7 +466,7 @@ Previous completed milestone:
 - Relationship model: Reality -> Business Discovery -> Digital Business Twin ->
   Business Understanding Report -> Business Alignment -> Website Design Brief
   -> Website Generation Package -> Provider Adapter -> External AI ->
-  Validation -> Human Approval -> Publish.
+  Validation -> Business Approval -> Publish.
 - Manifesto alignment: GNR8 never optimizes for generation speed. GNR8
   optimizes for business understanding quality. Every generated experience must
   originate from an aligned Digital Business Twin.
@@ -260,11 +514,12 @@ Previous completed milestone:
 - Relationship model: Reality -> Business Discovery -> Digital Business Twin
   -> Business Understanding Report -> Business Alignment -> Website Design
   Brief -> Website Generation Package -> Provider Adapter -> External AI ->
-  Validation -> Human Approval -> Publish.
+  Generation Contract Compliance -> Generation Contract Compliance Report -> Business Approval -> Publish.
 - Roadmap after BR-0: Business Discovery -> Digital Business Twin -> Business
   Understanding Report -> Business Alignment -> Website Design Brief ->
-  Website Generation Package -> Provider Adapter -> External AI -> Validation
-  -> Human Approval -> Publish.
+  Website Generation Package -> Provider Adapter -> External AI -> Generation
+  Contract Compliance -> Generation Contract Compliance Report -> Business
+  Approval -> Publish.
 - Architectural rules: Business Understanding Report never contains prompts,
   provider payloads, generated HTML, generated React, generated components,
   generated pages, publishing artifacts, or execution state. The report
@@ -288,7 +543,7 @@ Previous completed milestone:
 - Business Intent is provider-neutral, evidence-backed, versioned, human-governed, and independent of implementation.
 - Business Intent is not a website, UI, prompt, code, AI output, or project plan.
 - Intent categories are examples, not a fixed taxonomy: Sales, Lead Generation, Brand Awareness, Recruitment, Customer Support, Education, Commerce, Customer Self-Service, Partner Enablement, Internal Operations, Compliance, Community, and Future Intents.
-- Canonical relationship model: Reality -> Business Domains -> Digital Business Twin -> Business Intent -> Experience Domain -> Generation Package -> Provider Adapter -> External AI -> Validation -> Human Approval -> Publishing.
+- Canonical relationship model: Reality -> Business Domains -> Digital Business Twin -> Business Intent -> Experience Domain -> Generation Package -> Provider Adapter -> External AI -> Generation Contract Compliance -> Generation Contract Compliance Report -> Business Approval -> Publishing.
 - Intent vs Experience model: Intent is why the business acts; Experience is where that intent is expressed. One Intent may project into many Experience Domains, and one Experience Domain may satisfy multiple Intents.
 - Intent composition: a business may have multiple active Business Intents. Generation Packages are created for one specific Experience Domain within one or more Business Intents.
 - Architectural rules: Business Intent never contains prompts, provider payloads, generated HTML, generated React, generated content, publishing artifacts, or execution state. Business Intent owns desired outcomes. Experience Domains own manifestations. Generation Packages own orchestration targets.
@@ -307,7 +562,7 @@ Previous completed milestone:
 - Fundamental Business Domains: Business Identity, Brand, Offerings, Audience, Goals, Relationships, Knowledge, Assets, and Compliance.
 - Optional Business Domains: Sales, Marketing, Operations, Analytics, Support, Digital Presence, and Future Domains.
 - Projection-only Experience Domains: Website, Landing Page, Customer Portal, Mobile App, Marketplace, Documentation, Campaign, Newsletter, Chatbot, Sales Deck, and Future Experiences.
-- Canonical relationship model: Reality -> Business Domains -> Digital Business Twin -> Experience Domains -> Generation Packages -> Provider Adapters -> External AI -> Validation -> Human Approval -> Publishing.
+- Canonical relationship model: Reality -> Business Domains -> Digital Business Twin -> Experience Domains -> Generation Packages -> Provider Adapters -> External AI -> Generation Contract Compliance -> Generation Contract Compliance Report -> Business Approval -> Publishing.
 - Domain responsibility model: every Business Domain declares purpose, owns, consumes, produces, relationships, typical evidence sources, and future connectors. Business Domains own knowledge. Experience Domains own manifestations. Generation Packages own orchestration targets. Provider Adapters own serialization. AI owns generation. Humans own approval.
 - Relationship to existing artifacts: Evidence supports Business Domains; Discovery proposes candidate domain knowledge; Review governs acceptance; Reconstruction Package can inform relevant Business Domains and Website Experience Domain scope; StructurePlan is an Experience Domain planning projection; Generation Package is a provider-neutral orchestration target derived from a DBT-backed Experience Domain.
 - Updated constitutional docs: `docs/architecture/DIGITAL_BUSINESS_TWIN_SPECIFICATION.md`, `docs/architecture/GNR8_KNOWLEDGE_AND_UNDERSTANDING_SPECIFICATION.md`, and `docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md` now reference the DBT-2 Business Domain and Experience Domain model.
@@ -344,7 +599,7 @@ Previous completed milestone:
 - Internal domains: Business Identity, Brand, Products, Services, Audience, Messaging, Visual Identity, Knowledge, Content, Assets, Relationships, Evidence, Constraints, Compliance, Accessibility, History, Governance, Lineage, Versioning, Goals, Success Metrics, Limitations, and Diagnostics.
 - Existing artifact relationship: Evidence -> Discovery -> Review -> Reconstruction Package -> StructurePlan -> Generation Package become contributors or projections around the DBT. None replace it.
 - Architectural rules: the DBT is always provider-neutral; the DBT never contains prompts, generated React, generated HTML, or provider payloads; the DBT owns meaning; everything else is derived.
-- Current architecture at DBT-0: Connectors -> Digital Business Twin -> Generation Package -> Provider Adapter -> External AI -> Validation -> Human Approval -> Publish.
+- Current architecture at DBT-0: Connectors -> Digital Business Twin -> Generation Package -> Provider Adapter -> External AI -> Generation Contract Compliance -> Generation Contract Compliance Report -> Business Approval -> Publish.
 - Then-recommended next phase: DBT-1 Digital Business Twin Domain Boundary Design, documentation and architecture only.
 - Safety: documentation and specification only; no Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, Reconstruction Package, StructurePlan, Generation Package contract, Publishing, AI integrations, Workers, Schema, API, UI, TypeScript, prompts, adapters, generated artifacts, or persistence changed.
 - Validation result: `git diff --check` passes.
@@ -373,11 +628,12 @@ Previous completed milestone:
 - Product boundary: GNR8 is not a traditional website builder, not a CMS, and not a generic page editor.
 - Digital Business Twin rule after DBT-0: the DBT is the canonical operational understanding of a business and its digital identity; generated websites are outputs, not the long-term source of truth.
 - Generation rule: generation without understanding is prohibited; the orchestrator owns the task and the model executes it; GNR8 must remain model-agnostic.
-- Governance rule: AI proposes; humans approve. Validation before publish is mandatory.
-- Canonical future lifecycle after DBT-0: Connectors -> Digital Business Twin -> Generation Package -> Provider Adapter -> External AI -> Validation -> Human Approval -> Publish.
+- Governance rule: AI proposes; humans approve. Generation Contract Compliance
+  Report before Business Approval is mandatory.
+- Canonical future lifecycle after WGP-2: Connectors -> Digital Business Twin -> Generation Package -> Provider Adapter -> External AI -> Generation Contract Compliance -> Generation Contract Compliance Report -> Business Approval -> Publish.
 - Rejected lifecycle after DBT-0: Website -> Prompt -> Generate React.
 - Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as if GNR8 is building a traditional internal website builder, CMS, page editor, block schema, or direct React generator.
-- Future reassessment areas: LayoutPlan, BlockPlan, ContentPlan, AI Editor architecture, publishing flow, generated output validation, provider orchestration, provider adapters, and external AI serialization formats.
+- Future reassessment areas: LayoutPlan, BlockPlan, ContentPlan, AI Editor architecture, publishing flow, Generation Contract Compliance, provider orchestration, provider adapters, and external AI serialization formats.
 - Superseded next phase: GP-0 Generation Package Foundation.
 - Safety: documentation and architecture alignment only; no Evidence Capture, Candidate Discovery, Candidate Context, Candidate Review, Review Actions, Reconstruction Package, StructurePlan, AI integration code, generation systems, publishing systems, schema, workers, API, or UI behavior changed.
 - Validation result: `git diff --check` passes.

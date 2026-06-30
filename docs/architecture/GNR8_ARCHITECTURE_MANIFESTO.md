@@ -16,9 +16,10 @@ GNR8 is not a generic page editor.
 
 GNR8 exists to understand businesses and their digital identities deeply enough
 to prepare governed, source-grounded projections for external AI systems,
-validate the results, route the results through human approval, and publish
-only approved outputs. It is an orchestration and governance platform, not a
-drag-and-drop construction surface or an internal page-generation engine.
+validate the results, route the results through Business Approval, and publish
+only Business Approved outputs. It is an orchestration and governance
+platform, not a drag-and-drop construction surface or an internal
+page-generation engine.
 
 ## Required Manifesto Statements
 
@@ -33,6 +34,10 @@ drag-and-drop construction surface or an internal page-generation engine.
 - Business Domains own knowledge.
 - Business Intent owns desired outcomes.
 - Experience Domains own manifestations.
+- GNR8 guides businesses through understanding before generation.
+- Conversation replaces unnecessary software complexity.
+- Every artifact exists to support a human business decision.
+- The Business Journey is the canonical human experience of GNR8.
 - GNR8 is not a traditional website builder.
 - GNR8 is not a CMS.
 - GNR8 is not a generic page editor.
@@ -54,6 +59,19 @@ drag-and-drop construction surface or an internal page-generation engine.
 - Provider prompts are disposable projections.
 - GNR8 owns meaning.
 - Providers own implementation.
+- GNR8 owns contractual meaning.
+- External AI owns implementation proposals.
+- Compliance determines contractual fulfillment.
+- Generation Contract Compliance Report communicates contractual fulfillment
+  for Business Approval.
+- GNR8 communicates contractual truth before publishing.
+- GNR8 publishes only after governed business approval.
+- Business approval accepts contractual fulfillment, not implementation
+  technology.
+- Business Approval is based on governed compliance reports rather than
+  subjective inspection.
+- Generation quality is measured by contract compliance, not by implementation
+  technology.
 - GNR8 separates Business, Experience, Generation, and Implementation.
 - AI proposes; humans approve.
 - The orchestrator owns the task; the model executes it.
@@ -79,6 +97,11 @@ The product center is business understanding before digital generation. A
 business exists independently of any website, and a website is only one
 expression of the business. The Digital Business Twin represents the business
 itself.
+
+The Business Journey is the canonical human experience of GNR8. GNR8 guides
+businesses through understanding before generation. Conversation replaces
+unnecessary software complexity. Every artifact exists to support a human
+business decision.
 
 GNR8 always aligns understanding before generation. The first human-facing
 artifact is a Business Understanding Report: a deterministic, evidence-backed,
@@ -113,6 +136,28 @@ Website Design Brief defines experience.
 
 Website Generation Package defines generation.
 
+GNR8 owns contractual meaning.
+
+External AI owns implementation proposals.
+
+Compliance determines contractual fulfillment.
+
+Generation Contract Compliance Report communicates contractual fulfillment for
+Business Approval.
+
+GNR8 communicates contractual truth before publishing.
+
+GNR8 publishes only after governed business approval.
+
+Business approval accepts contractual fulfillment, not implementation
+technology.
+
+Business Approval is based on governed compliance reports rather than
+subjective inspection.
+
+Generation quality is measured by contract compliance, not by implementation
+technology.
+
 GNR8 separates Business, Experience, Generation, and Implementation. Business
 understanding and Alignment govern what is true and intended. The Website
 Design Brief governs what the website experience should express. The Website
@@ -145,7 +190,8 @@ model-agnostic.
 External AI systems may generate creative proposals, redesign options, layout
 or code drafts, and implementation candidates. Those outputs are never accepted
 because they exist. They are accepted only after GNR8 can validate them against
-the originating evidence, task contract, constraints, and human approval state.
+the originating evidence, task contract, constraints, and Business Approval
+state.
 
 ## Connectors And Website Understanding Engine
 
@@ -204,8 +250,9 @@ Reality
 -> Website Generation Package
 -> Provider Adapter
 -> External AI
--> Validation
--> Human Approval
+-> Generation Contract Compliance
+-> Generation Contract Compliance Report
+-> Business Approval
 -> Publish
 ```
 
@@ -268,9 +315,11 @@ GNR8 owns:
 - generation package preparation
 - provider adapter serialization
 - AI provider orchestration
-- generated output validation
-- human approval
+- Generation Contract Compliance
+- Generation Contract Compliance Report
+- Business Approval
 - publish flow
+- Business Journey orchestration
 
 External AI owns:
 
@@ -300,14 +349,36 @@ and explicitly approve before publish.
 Approval state must be durable, auditable, and separate from generation state.
 No model output may silently mutate canonical Digital Business Twin state.
 
-## Validation Before Publish
+## Generation Contract Compliance Report Before Business Approval
 
-Validation before publish is mandatory.
+Generation Contract Compliance and its report before Business Approval are
+mandatory.
 
-Generated output must be checked against the source task, accepted evidence,
-lineage, structural constraints, missing-data limitations, forbidden-field
-rules, and operator approval state before it can be promoted to any public
-environment.
+Generated output must be checked against the canonical Website Generation
+Package, accepted evidence, lineage, contractual constraints, missing-data
+limitations, forbidden-field rules, and Business Approval state before it can
+be promoted to any public environment.
+
+Compliance evaluates contractual fulfillment. It does not evaluate
+implementation technology, provider quality, code style, framework choice, or
+subjective aesthetics.
+
+The Generation Contract Compliance Report communicates that evaluation as a
+deterministic, provider-neutral, human-readable, lineage-aware business report.
+The report supports Business Approval by explaining contractual fulfillment,
+contractual deviations, missing requirements, unexpected elements, constraint
+violations, business risks, evidence, limitations, lineage, diagnostics,
+readiness, and recommendation.
+
+GNR8 communicates contractual truth before publishing.
+
+GNR8 publishes only after governed business approval.
+
+Business approval accepts contractual fulfillment, not implementation
+technology.
+
+Business Approval is based on governed compliance reports rather than
+subjective inspection.
 
 Publish is a governed promotion of approved output. It is not direct model
 execution, not direct editor mutation, and not the act of generating code.
@@ -329,8 +400,9 @@ business before website
 understanding before generation
 evidence before proposal
 lineage before mutation
-validation before approval
-approval before publish
+contract compliance before approval
+business compliance report before Business Approval
+Business Approval before publish
 orchestration before model execution
 ```
 
@@ -348,8 +420,9 @@ Reality
 -> Website Generation Package
 -> Provider Adapter
 -> External AI
--> Validation
--> Human Approval
+-> Generation Contract Compliance
+-> Generation Contract Compliance Report
+-> Business Approval
 -> Publish
 ```
 
@@ -384,6 +457,15 @@ Under DBT-0, that chain becomes a contributor and projection path around the
 Digital Business Twin. Evidence, Discovery, Review, Reconstruction Package,
 StructurePlan, and Generation Package remain valuable, but none replaces the
 DBT as the source of truth.
+
+Phase UX-0 defines the Business Journey as the canonical human experience
+layer above the existing architecture. The Business Journey is the governed
+human experience through which a business progressively transforms its
+business understanding into approved digital experiences. It is
+conversation-driven, business-centric, goal-oriented, human-governed,
+provider-neutral, technology-independent, deterministic in architecture, and
+adaptive in interaction. It is not a wizard, page flow, screen hierarchy,
+technical pipeline, backend workflow, or implementation sequence.
 
 Existing architecture/state documents generally protect this chain from direct
 generation. They repeatedly forbid generated React, blocks, content, CMS
@@ -460,6 +542,38 @@ external generation systems must create. It is produced exclusively from an
 aligned Website Design Brief. Provider prompts are disposable projections.
 GNR8 owns meaning. Providers own implementation.
 
+Phase WGP-1 defines Generation Contract Compliance as the deterministic,
+provider-neutral, evidence-backed evaluation comparing a generated website
+against the canonical Website Generation Package. Compliance determines
+whether contractual intent has been satisfied. It never evaluates
+implementation style, provider quality, framework choice, code style, or
+subjective aesthetics.
+
+Phase WGP-2 defines the Generation Contract Compliance Report as the
+deterministic, provider-neutral, human-readable, lineage-aware report
+describing contractual compliance between the Website Generation Package and a
+generated website. The report is the canonical business-facing evaluation
+after AI generation. It is not HTML, React, a prompt, provider payload,
+generation request, implementation artifact, publishing artifact, execution
+artifact, or runtime state.
+
+Phase WGP-3 defines Business Approval as the deterministic, governed business
+decision confirming that contractual expectations have been sufficiently
+satisfied for publishing. Business Approval governs business acceptance. It
+does not govern implementation. GNR8 publishes only after governed business
+approval. Business approval accepts contractual fulfillment, not
+implementation technology.
+
+Phase UX-0 defines the Business Journey as the canonical human layer that
+orchestrates the complete platform experience from Welcome through Continuous
+Evolution. The Business Owner is the canonical journey owner. The journey is
+decision-driven rather than screen-driven, conversation-driven rather than
+software-complexity-driven, and guides humans through Business Discovery,
+Digital Business Twin understanding, Business Understanding Report review,
+Business Alignment, Website Design Brief approval, Website Generation Package
+approval, Generation, Compliance Review, Business Approval, Publishing, and
+Continuous Evolution.
+
 No current canonical phase should proceed into `LayoutPlan`, `BlockPlan`, or
 `ContentPlan` as if GNR8 is building a traditional internal website builder,
 CMS, page editor, block schema, or direct React generator.
@@ -473,7 +587,7 @@ The following areas need future reassessment under this manifesto:
 - ContentPlan
 - AI Editor architecture
 - publishing flow
-- generated output validation
+- Generation Contract Compliance
 - provider orchestration
 - provider adapters and external AI serialization formats
 - connector enrichment rules
@@ -485,18 +599,27 @@ The following areas need future reassessment under this manifesto:
 - Business Understanding Report generation and validation boundaries
 - Business Alignment governance and readiness boundaries
 - Website Generation Package boundaries
+- Generation Contract Compliance Report boundaries
+- Business Approval boundaries
+- Business Journey boundaries
+- multi-provider compliance comparison boundaries
 - DBT validation and governance package boundaries
 
 ## Long-Term Architecture Rule
 
 GNR8 remains an AI orchestration platform with a governed Digital Business
-Twin at its core. It understands businesses through independent Business
-Domains, integrates those domains into coherent DBT understanding, prepares
-Business Understanding Reports for human inspection, aligns the Digital
-Business Twin through human governance, prepares Website Design Briefs and
-Website Generation Package contracts from aligned understanding for external
-AI systems, validates results, preserves lineage and approvals, and publishes
-only approved outputs.
+Twin at its core. Its Business Journey guides Business Owners through
+conversation, understanding, alignment, design intent, generation contracts,
+compliance review, Business Approval, publishing, and continuous evolution. It
+understands businesses through independent Business Domains, integrates those
+domains into coherent DBT understanding, prepares Business Understanding
+Reports for human inspection, aligns the Digital Business Twin through human
+governance, prepares Website Design Briefs and Website Generation Package
+contracts from aligned understanding for external AI systems, evaluates
+generated websites through Generation Contract Compliance, communicates
+contractual truth through Generation Contract Compliance Reports, preserves
+lineage and Business Approval decisions, and publishes only Business Approved
+outputs.
 
 Any future architecture that makes generated React, CMS records, editable page
 blocks, provider-specific prompts, provider payloads, or provider-specific AI
