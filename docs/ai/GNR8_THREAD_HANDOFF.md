@@ -4,19 +4,16 @@ This is the first file every new ChatGPT/Codex thread should read.
 
 ## Active Track
 
-Importer Architecture Evolution
+First Executable MVP Pipeline
 
 Current status:
-- Phase AO-0 - The GNR8 Blueprint is
-  complete.
+- Phase MVP-1A - Business Discovery Runtime Builder is complete.
 
 Current Phase:
-- Phase AO-0 - The GNR8 Blueprint is
-  complete.
+- Phase MVP-1A - Business Discovery Runtime Builder is complete.
 
 Next Phase:
-- ARCH-1 Canonical Architecture Index Reconciliation,
-  documentation only.
+- MVP-1A-R Business Discovery Real-Target Validation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -115,12 +112,109 @@ Current architecture direction:
   Design Brief -> Website Generation Package -> Provider Adapter -> External
   AI -> Generation Contract Compliance -> Generation Contract Compliance
   Report -> Business Approval -> Publish -> Continuous Evolution.
+- MVP-0 implementation planning lifecycle: Import Existing Website -> Evidence
+  Collection -> Business Discovery -> Digital Business Twin -> Business
+  Understanding Report -> Business Alignment -> Website Design Brief ->
+  Website Generation Package -> External AI -> Generation Contract Compliance
+  -> Business Approval -> Publish.
+- Architecture is complete. Implementation planning has officially started.
+- MVP-0 identifies the shortest executable path as reusing import, evidence,
+  runtime, and publish foundations, then building the missing canonical
+  artifact chain between Evidence Collection and Publish.
+- MVP-1A implements the first Business Discovery runtime builder and
+  provenance persistence boundary. The next implementation phase is real-target
+  validation before DBT runtime work.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase MVP-1A - Business Discovery Runtime Builder.
+- Status: COMPLETE / FIRST BUSINESS DISCOVERY RUNTIME ARTIFACT IMPLEMENTED /
+  DETERMINISTIC WEBSITE-EVIDENCE BUILDER / PROVENANCE PERSISTENCE /
+  FOCUSED TESTS / NO DBT / NO BUR / NO BUSINESS ALIGNMENT / NO WEBSITE DESIGN
+  BRIEF / NO WEBSITE GENERATION PACKAGE / NO AI / NO PROVIDER ADAPTER /
+  NO GENERATION / NO COMPLIANCE / NO BUSINESS APPROVAL / NO PUBLISHING /
+  NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS.
+- Canonical document:
+  `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_BUILDER.md`.
+- Runtime files:
+  `apps/platform/gnr8/architecture/business-discovery-contract.ts`,
+  `apps/platform/gnr8/architecture/business-discovery-builder.ts`, and
+  `apps/platform/gnr8/architecture/business-discovery-persistence.ts`.
+- Test files:
+  `apps/platform/gnr8/architecture/business-discovery-contract.test.ts`,
+  `apps/platform/gnr8/architecture/business-discovery-builder.test.ts`, and
+  `apps/platform/gnr8/architecture/business-discovery-persistence.test.ts`.
+- Artifact kind: `business_discovery`.
+- Contract version: `MVP-1A`.
+- Builder behavior: deterministic interpretation from existing imported
+  website evidence only, including source URL/host, routes, navigation labels,
+  section boundary types, asset inventory counts, upstream limitations,
+  diagnostics, and optional Candidate Discovery context.
+- MVP domains: `business_identity`, `offerings`, `audience`, `brand`,
+  `digital_presence`, `goals`, `trust`, `content`, and `constraints`.
+- Persistence: existing site-version `importProvenanceSummary` boundary,
+  append-only `businessDiscoveryArtifacts`, latest pointer
+  `latestBusinessDiscoveryArtifact`, semantic latest reuse, changed artifact
+  append, latest/by-ID load helpers, `invalid`/`stale` rejection, and
+  `blocked` accepted as valid fail-closed.
+- Business Discovery differs from DBT: it is an evidence-backed interpretation
+  artifact and canonical DBT input, not the governed operational business
+  understanding itself.
+- Validation result: focused Business Discovery tests pass `15 / 15`;
+  `cd apps/platform && pnpm run vercel-build` passes with existing unrelated
+  frontend lint warnings; `git diff --check` passes.
+- Real-target validation: not performed in MVP-1A because the current process
+  reported `DATABASE_URL_MISSING`, and this phase did not authorize loading
+  production secrets or mutating current ODV/ViroiDoc provenance artifacts. Run
+  it in MVP-1A-R against current ODV and ViroiDoc imported artifacts and record
+  exact artifact IDs.
+- Recommended next phase: MVP-1A-R Business Discovery Real-Target Validation.
+
+Previous completed milestone:
+- Phase MVP-0 - First Executable Website Transformation Pipeline.
+- Status: COMPLETE / DOCUMENTATION, ARCHITECTURE ANALYSIS, AND IMPLEMENTATION
+  PLANNING ONLY / FIRST EXECUTABLE MVP ROADMAP CREATED / NO IMPLEMENTATION /
+  NO TYPESCRIPT / NO SCHEMA / NO PERSISTENCE / NO API / NO UI / NO WORKERS /
+  NO PROMPTS / NO PROVIDER ADAPTERS / NO AI INTEGRATION / NO GENERATION / NO
+  PUBLISHING.
+- Canonical document:
+  `docs/architecture/MVP_0_FIRST_EXECUTABLE_PIPELINE.md`.
+- Document role: reconciles the completed architecture with the actual
+  codebase and identifies the shortest path from one imported customer website
+  to one generated, validated, approved, and published website.
+- Canonical MVP pipeline: Import Existing Website -> Evidence Collection ->
+  Business Discovery -> Digital Business Twin -> Business Understanding Report
+  -> Business Alignment -> Website Design Brief -> Website Generation Package
+  -> External AI -> Generation Contract Compliance -> Business Approval ->
+  Publish.
+- Reality assessment: Import Existing Website is complete; Evidence
+  Collection, Business Discovery, Digital Business Twin, and Publish are
+  partial; Business Understanding Report, Business Alignment, Website Design
+  Brief, Website Generation Package, External AI, Generation Contract
+  Compliance, and Business Approval are architecture complete but runtime
+  missing.
+- Critical path: create the MVP canonical artifact persistence boundary, add a
+  first-customer evidence readiness gate, build Business Discovery, DBT v1,
+  Business Understanding Report, Business Alignment, Website Design Brief,
+  Website Generation Package, one provider adapter, Generated Website Proposal,
+  Compliance Report, Business Approval, and the approval-gated publish bridge.
+- Deferred: multiple providers, provider comparison, multi-user workflows,
+  advanced Business Alignment, Experience Domains beyond Website, Continuous
+  Evolution, advanced governance UI, enterprise collaboration,
+  reconstruction-grade capture, advanced capture modalities, internal visual
+  editor behavior, and broad self-service product polish.
+- Recommended next phase: MVP-1 Canonical Artifact Persistence Boundary and
+  Business Discovery Builder.
+- Safety: documentation and architecture planning only; no implementation,
+  TypeScript, schema, persistence, API, UI, workers, prompts, provider
+  adapters, AI integration, generation, publishing, runtime behavior, or
+  deployment behavior changed.
+- Validation result: `git diff --check` passes.
+
+Previous completed milestone:
 - Phase AO-0 - The GNR8 Blueprint.
 - Status: COMPLETE / DOCUMENTATION ONLY / CANONICAL ARCHITECTURE NARRATIVE
   CREATED / PRIMARY ONBOARDING DOCUMENT ESTABLISHED / NO IMPLEMENTATION / NO

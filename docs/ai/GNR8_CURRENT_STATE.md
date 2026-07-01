@@ -3211,11 +3211,114 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase AO-0 - The GNR8 Blueprint is complete.
+- Phase MVP-1A - Business Discovery Runtime Builder is complete.
 
 Next Phase:
-- ARCH-1 Canonical Architecture Index Reconciliation,
-  documentation only.
+- MVP-1A-R Business Discovery Real-Target Validation.
+
+Phase MVP-0 officially starts implementation planning after completion of the
+canonical architecture. It creates the first executable MVP roadmap:
+`docs/architecture/MVP_0_FIRST_EXECUTABLE_PIPELINE.md`.
+
+MVP-0 does not define new architecture. It maps the completed architecture to
+the actual codebase and identifies the shortest executable path from imported
+website evidence to Business Discovery, Digital Business Twin, Business
+Understanding Report, Business Alignment, Website Design Brief, Website
+Generation Package, External AI, Generation Contract Compliance, Business
+Approval, and Publish.
+
+MVP-0 reality assessment:
+- Import Existing Website: MVP-ready from existing runtime.
+- Evidence Collection: partial and reusable, with an MVP readiness gate still
+  required.
+- Business Discovery: partial substrates exist, but the canonical artifact is
+  missing.
+- Digital Business Twin: partial runtime twin preview exists, but canonical
+  durable DBT is missing.
+- Business Understanding Report, Business Alignment, Website Design Brief,
+  Website Generation Package, External AI, Generation Contract Compliance, and
+  Business Approval: architecture complete, runtime missing.
+- Publish: runtime foundations exist, but canonical Business Approval to
+  Publish gating for generated proposals is missing.
+
+Shortest MVP path:
+
+```text
+Evidence-ready imported site
+-> Business Discovery
+-> DBT v1
+-> Business Understanding Report
+-> Business Alignment
+-> Website Design Brief
+-> Website Generation Package
+-> one provider adapter
+-> Generated Website Proposal
+-> Compliance Report
+-> Business Approval
+-> existing runtime publish path
+```
+
+MVP-0 changed documentation and architecture planning only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, prompts,
+provider adapters, AI integration, generation, or publishing behavior.
+
+Validation result: `git diff --check` passes.
+
+Phase MVP-1A creates the first runtime Business Discovery artifact:
+`docs/architecture/BUSINESS_DISCOVERY_RUNTIME_BUILDER.md`.
+
+MVP-1A implementation summary:
+- `apps/platform/gnr8/architecture/business-discovery-contract.ts` defines
+  `BusinessDiscoveryArtifact`, `BusinessDiscoveryLineage`,
+  `BusinessDiscoveryDomainSummary`, `BusinessDiscoveryFinding`,
+  `BusinessDiscoveryConfidence`, `BusinessDiscoveryValidationResult`, and
+  `BusinessDiscoveryStatus`.
+- Allowed statuses are `observed`, `partial`, `valid`, `invalid`, `blocked`,
+  and `stale`.
+- MVP domains are website-derived only: `business_identity`, `offerings`,
+  `audience`, `brand`, `digital_presence`, `goals`, `trust`, `content`, and
+  `constraints`.
+- `apps/platform/gnr8/architecture/business-discovery-builder.ts` implements
+  `buildBusinessDiscoveryFromSiteEvidence(...)` as a deterministic builder
+  from existing imported website evidence.
+- The builder derives conservative findings from source URL/host, route paths,
+  navigation labels, section boundary types, asset inventory counts, upstream
+  limitations, diagnostics, and optional Candidate Discovery context.
+- Missing signals become limitations instead of guesses.
+- `apps/platform/gnr8/architecture/business-discovery-persistence.ts` stores
+  artifact kind `business_discovery` in the existing site-version
+  `importProvenanceSummary`, with append-only history and
+  `latestBusinessDiscoveryArtifact`.
+- Equivalent latest artifacts are reused; changed current artifacts append;
+  latest and by-ID read helpers are implemented.
+- Persistence rejects `invalid` and `stale`; explicitly `blocked` artifacts
+  are valid fail-closed records.
+- Recursive forbidden fields are rejected: `generatedContent`,
+  `generatedHtml`, `generatedReact`, `generatedComponents`,
+  `generatedBlocks`, `providerPayload`, `prompt`, `aiOutput`,
+  `websiteDesignBrief`, `websiteGenerationPackage`, `publishingArtifact`,
+  `deploymentArtifact`, and `executionArtifact`.
+
+MVP-1A did not implement Digital Business Twin runtime, Business
+Understanding Report, Business Alignment, Website Design Brief, Website
+Generation Package, provider adapters, external AI integration, generation,
+compliance, Business Approval, publishing changes, UI, API routes, schema
+migrations, CRM/ERP/commerce/support domains, or future connector domains.
+
+MVP-1A validation:
+- Focused Business Discovery tests pass `15 / 15`.
+- `cd apps/platform && pnpm run vercel-build` passes with existing unrelated
+  frontend lint warnings.
+- `git diff --check` passes.
+- Real-target ODV/ViroiDoc validation was not performed in MVP-1A because the
+  current process reported `DATABASE_URL_MISSING`, and this phase did not
+  authorize loading production secrets or mutating current ODV/ViroiDoc
+  provenance artifacts. MVP-1A-R should run it and record exact artifact IDs.
+
+Recommended next phase:
+- MVP-1A-R Business Discovery Real-Target Validation, limited to running the
+  new builder and persistence helpers against current ODV and ViroiDoc
+  imported artifacts, verifying latest/by-ID reloads, and stopping before DBT.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.
