@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-06-30
+2026-07-01
 
 ## Migration Platform MVP Buildout
 
@@ -912,6 +912,28 @@ Business Journey
 -> Publish
 ```
 
+Decision Architecture is the governance layer between the Human Journey and
+canonical artifacts. The Decision Artifact Authorization Matrix is the
+canonical authorization layer inside Decision Architecture. The Canonical
+Artifact Governance State Model is the canonical maturity and approval-status
+layer for every canonical artifact. The Canonical Artifact Lineage and
+Versioning Model is the canonical history and evolution layer shared by every
+governed artifact:
+
+```text
+Decision Model
+-> Authorization
+-> Governance State
+-> Lineage
+-> Versioning
+-> Canonical Artifacts
+-> Business Journey
+-> External AI
+-> Compliance
+-> Business Approval
+-> Publishing
+```
+
 Canonical technical lifecycle:
 
 ```text
@@ -944,20 +966,35 @@ Editor architecture, publishing flow, Generation Contract Compliance, provider
 orchestration, provider adapters, and external AI serialization formats require
 reassessment under the AI Orchestrator / Digital Business Twin identity.
 
-Roadmap after UX-0:
+Roadmap after DA-3:
 
 ```text
-Business Discovery
+Decision Model
+-> Authorization
+-> Governance State
+-> Lineage
+-> Versioning
+-> Canonical Artifacts
+-> Business Journey
+-> Business Discovery
 -> Digital Business Twin
 -> Business Understanding Report
+-> Business Alignment Decision
 -> Business Alignment
+-> Website Design Decision
 -> Website Design Brief
+-> Generation Decision
 -> Website Generation Package
+-> Generation Execution Decision
+-> Generated Website Proposal
+-> Compliance Review Decision
 -> Provider Adapter
 -> External AI
 -> Generation Contract Compliance
 -> Generation Contract Compliance Report
+-> Business Approval Decision
 -> Business Approval
+-> Publishing Decision
 -> Publish
 ```
 
@@ -1976,9 +2013,356 @@ publishing, runtime state, or deployment behavior.
 
 Validation result: `git diff --check` passes.
 
-Current Phase: Phase UX-0 - Business Journey Specification is complete.
-Next recommended phase: UX-1 Business Journey Decision Model Specification,
-documentation and architecture only.
+Phase DA-0 - Decision Architecture Specification is COMPLETE.
+
+Canonical specification:
+`docs/architecture/DECISION_ARCHITECTURE_SPECIFICATION.md`.
+
+Canonical definition:
+"A deterministic governance model describing how business decisions progress
+through canonical artifacts while preserving lineage and human authority."
+
+Decision Architecture is the canonical governance model that controls how
+businesses progress through GNR8. It governs business decisions. It never
+governs implementation. Artifacts provide evidence. Humans make decisions.
+The architecture determines which decisions are allowed, when they are
+allowed, and what new artifacts they authorize.
+
+Decision Architecture is not workflow, UX, or application navigation.
+Workflow executes tasks. UX expresses the human experience. Navigation helps
+people reach surfaces. Decision Architecture defines deterministic business
+authority: what decision is allowed now, which artifact supports it, who owns
+it, and what lineage it creates.
+
+Core philosophy: artifacts exist to support decisions; humans remain decision
+makers; AI produces proposals; no artifact exists without a business decision;
+every decision produces new lineage; understanding precedes generation;
+generation precedes approval; approval precedes publishing.
+
+Canonical decision lifecycle:
+
+```text
+Evidence
+-> Understanding
+-> Decision
+-> Artifact
+-> Next Decision
+```
+
+Canonical decision types include Continue, Provide Information, Correct
+Understanding, Approve Understanding, Reject Understanding, Approve Alignment,
+Return To Discovery, Approve Website Intent, Generate, Review Compliance,
+Approve Business, Reject Business, Publish, and Continue Evolution.
+
+Decision ownership: the Business Owner is the canonical owner of business
+decisions. Marketing, Agency, Designer, Developer, Administrator, and Future
+Roles may contribute evidence, recommendations, review, feasibility, or
+governance support, but business decisions always remain business-governed.
+
+Decision preconditions are deterministic. Business Alignment cannot occur
+before Business Understanding. Website Design Brief cannot exist before
+Alignment. Website Generation Package cannot exist before an approved Website
+Design Brief. Generation cannot occur before Website Generation Package.
+Publishing cannot occur before Business Approval.
+
+Decision Architecture is graph-based rather than linear. Decisions may repeat,
+alignment may return to discovery, generation may repeat, compliance may
+return to Website Generation Package, Business Approval may reject or request
+regeneration, and business evolution may continue indefinitely.
+
+Relationship model:
+
+```text
+Business Journey
+-> Decision Architecture
+-> Canonical Artifacts
+-> External AI
+-> Compliance
+-> Business Approval
+-> Publishing
+```
+
+Future vision: GNR8 should behave like an experienced strategic advisor.
+Every recommendation should ultimately support a business decision. Decision
+Architecture should remain stable even if AI providers change.
+
+Phase DA-0 changed documentation and architecture only. It added no
+implementation, TypeScript, schema, persistence, API, UI, wireframes, workers,
+prompts, provider adapters, AI integration, generation, publishing, runtime
+state, or deployment behavior.
+
+Validation result: `git diff --check` passes.
+
+Phase DA-1 - Decision Artifact Authorization Matrix Specification is
+COMPLETE.
+
+Canonical specification:
+`docs/architecture/DECISION_ARTIFACT_AUTHORIZATION_MATRIX.md`.
+
+Canonical definition:
+"A deterministic governance model defining which business decisions authorize
+each canonical artifact and under which prerequisites."
+
+The Decision Artifact Authorization Matrix is the canonical authorization
+layer inside Decision Architecture. It defines which business decision
+authorizes each canonical artifact, which predecessor artifacts and decisions
+are required, what governance state is required, what lineage must be
+preserved, what confidence is required, and what alignment state must exist.
+
+Canonical authorization chain:
+
+```text
+Business Discovery
+-> Digital Business Twin
+-> Business Understanding Report
+-> Business Alignment Decision
+-> Business Alignment Artifact
+-> Website Design Decision
+-> Website Design Brief
+-> Generation Decision
+-> Website Generation Package
+-> Generation Execution Decision
+-> Generated Website Proposal
+-> Compliance Review Decision
+-> Generation Contract Compliance Report
+-> Business Approval Decision
+-> Business Approval
+-> Publishing Decision
+-> Published Experience
+```
+
+Authorization rules: every artifact requires an explicit authorizing decision;
+no downstream artifact may bypass upstream authorization; no artifact may
+authorize itself; authorization preserves lineage; supersession creates new
+lineage; nothing overwrites previous artifacts.
+
+Supersession model: superseded artifacts remain immutable. New decisions
+create new artifacts. Lineage records the transition. No history is deleted.
+
+Decision-to-artifact relationships include one decision to one artifact, one
+decision to multiple artifacts, and multiple decisions to one artifact. Each
+pattern is allowed only when authority, prerequisites, lineage, governance
+state, confidence, and alignment state remain explicit.
+
+Relationship model after DA-1:
+
+```text
+Decision Architecture
+-> Authorization Matrix
+-> Canonical Artifacts
+-> Business Journey
+-> External AI
+-> Compliance
+-> Business Approval
+-> Publishing
+```
+
+Phase DA-1 changed documentation and architecture only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, prompts,
+provider adapters, AI integration, generation, publishing, runtime behavior,
+or deployment behavior.
+
+Validation result: `git diff --check` passes.
+
+Phase DA-2 - Canonical Artifact Governance State Model is COMPLETE.
+
+Canonical specification:
+`docs/architecture/CANONICAL_ARTIFACT_GOVERNANCE_STATE_MODEL.md`.
+
+Canonical definition:
+"A deterministic business governance lifecycle describing the maturity and
+approval status of a canonical artifact."
+
+Every canonical artifact has a governance state. Governance State records the
+business maturity and approval status of a canonical artifact version. It is
+independent of implementation and represents business maturity and governance
+readiness.
+
+Canonical Governance States:
+
+```text
+Observed
+Draft
+Reviewed
+Aligned
+Approved
+Superseded
+Archived
+Rejected
+Blocked
+```
+
+Canonical forward transition model:
+
+```text
+Observed
+-> Reviewed
+-> Aligned
+-> Approved
+-> Superseded
+-> Archived
+```
+
+Canonical draft transition model:
+
+```text
+Observed
+-> Draft
+-> Reviewed
+-> Aligned
+-> Approved
+-> Superseded
+-> Archived
+```
+
+Rejected and Blocked are governed maturity states with legal return or archive
+paths. Return To Review is a legal transition pattern, not a canonical state.
+No illegal transition may skip required review, alignment, approval,
+supersession, or lineage.
+
+Governance State is not workflow and not authorization. Workflow executes
+tasks. Authorization determines whether a business decision may affect an
+artifact. Governance State records the artifact's maturity after that
+authorization.
+
+State ownership: the Business Owner is the canonical owner of artifact
+governance decisions. Marketing, Agency, Administrator, and Future Roles may
+review, recommend, resolve blockers, operate governance support, or transition
+artifacts only within delegated business authority.
+
+Relationship model after DA-2:
+
+```text
+Decision
+-> Authorization
+-> Governance State
+-> Artifact
+-> Business Journey
+```
+
+Governance State is independent from provider, implementation, runtime, UI,
+generation, publishing, prompts, provider adapters, workers, APIs, schemas,
+persistence, and deployment. It never contains implementation, runtime
+behavior, schema, provider logic, generation logic, or publishing
+implementation.
+
+Phase DA-2 changed documentation and architecture only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, prompts,
+provider adapters, AI integration, generation, publishing, runtime behavior,
+or deployment behavior.
+
+Validation result: `git diff --check` passes.
+
+Phase DA-3 - Canonical Artifact Lineage and Versioning Model is COMPLETE.
+
+Canonical specification:
+`docs/architecture/CANONICAL_ARTIFACT_LINEAGE_AND_VERSIONING_MODEL.md`.
+
+Canonical definitions:
+
+"The immutable chain describing how governed business artifacts originate,
+evolve, authorize successors, and preserve business history."
+
+"A deterministic revision of the same business artifact within the same
+lineage."
+
+Lineage preserves history. Versioning preserves evolution. Neither lineage nor
+versioning may ever overwrite business truth.
+
+Core philosophy:
+
+```text
+History is never rewritten.
+Every decision creates traceability.
+Superseded artifacts remain valid historical records.
+Business evolution is additive.
+Lineage preserves truth.
+Versioning preserves refinement.
+```
+
+Canonical lineage continuity:
+
+```text
+Business Discovery
+-> Digital Business Twin v1
+-> Digital Business Twin v2
+-> Business Understanding Report v3
+-> Business Alignment v2
+-> Website Design Brief v4
+-> Website Generation Package v7
+```
+
+Lineage is the immutable business-history chain across predecessor artifacts,
+authorizing decisions, governance states, versions, supersession, and
+downstream consequences. Versioning is the deterministic revision model for
+the same business artifact within the same lineage.
+
+New versions are required for minor refinement, major refinement, business
+correction, new evidence, new alignment, new approval, and regeneration when
+governed meaning, readiness, authority, confidence, alignment, or downstream
+eligibility changes.
+
+New lineage is created when the governed business chain branches, restarts, or
+produces a successor artifact that is not merely a revision of the same
+artifact. Canonical causes include a new Business Discovery origin, new
+business scope, new Experience Domain manifestation, new Business Intent,
+return to discovery that changes source understanding, corrective fork from a
+rejected or blocked path, new Published Experience family, or major
+continuous-evolution cycle.
+
+Canonical lineage events are Created, Updated, Reviewed, Aligned, Approved,
+Superseded, Archived, Rejected, Regenerated, and Published.
+
+Relationship model after DA-3:
+
+```text
+Reality
+-> Evidence
+-> Knowledge
+-> Decision
+-> Authorization
+-> Governance State
+-> Lineage
+-> Version
+-> Artifact
+-> Business Journey
+```
+
+Lineage never stores implementation, provider payloads, prompts, runtime
+state, React, HTML, generated code, or deployment artifacts. It preserves
+business evolution only.
+
+Decision Architecture is COMPLETE. The governance architecture now consists
+of:
+
+```text
+Decision Model
+-> Authorization
+-> Governance State
+-> Lineage
+-> Versioning
+-> Canonical Artifacts
+-> Business Journey
+-> External AI
+-> Compliance
+-> Business Approval
+-> Publishing
+```
+
+Future GNR8 should allow any historical digital experience to be reconstructed
+from governed lineage without ambiguity.
+
+Phase DA-3 changed documentation and architecture only. It added no
+implementation, TypeScript, schema, persistence, API, UI, workers, prompts,
+provider adapters, AI integration, generation, publishing, runtime behavior,
+or deployment behavior.
+
+Validation result: `git diff --check` passes.
+
+Historical DA-3 closeout: Phase DA-3 - Canonical Artifact Lineage and
+Versioning Model is complete.
+Historical DA-3 next recommendation: ARCH-1 Canonical Architecture Index
+Reconciliation, documentation only.
 
 ## Current Importer Architecture
 
@@ -2788,16 +3172,31 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
   business-centric, goal-oriented, human-governed, provider-neutral,
   technology-independent, deterministic in architecture, and adaptive in
   interaction.
-- Canonical future lifecycle after UX-0: Business Journey -> Reality -> Business Discovery ->
-  Digital Business Twin -> Business Understanding Report -> Business Alignment
-  -> Website Design Brief -> Website Generation Package -> Provider Adapter ->
-  External AI -> Generation Contract Compliance -> Generation Contract
-  Compliance Report -> Business Approval -> Publish.
-- Roadmap after UX-0: Business Discovery -> Digital Business Twin -> Business
-  Understanding Report -> Business Alignment -> Website Design Brief -> Website
-  Generation Package -> Provider Adapter -> External AI -> Generation Contract
-  Compliance -> Generation Contract Compliance Report -> Business Approval ->
-  Publish.
+- Decision Architecture rule: GNR8 is governed by decisions rather than
+  workflows. Decision Architecture is the operational backbone of GNR8 and
+  preserves human authority through deterministic business decisions,
+  prerequisites, artifact authorization, and immutable lineage.
+- Authorization Matrix rule: no artifact exists without an authorizing
+  business decision. Authorization preserves trust, lineage, and governance.
+  Artifacts are authorized, never assumed.
+- Governance State rule: every canonical artifact has a governance state.
+  Governance State describes artifact maturity and approval status and is
+  independent of provider, implementation, runtime, UI, generation, and
+  publishing.
+- Lineage and Versioning rule: business history is immutable. Every governed
+  artifact preserves lineage. Versioning refines understanding; lineage
+  preserves evolution.
+- Canonical future lifecycle after DA-3: Decision Model -> Authorization ->
+  Governance State -> Lineage -> Versioning -> Canonical Artifacts ->
+  Business Journey -> External AI -> Compliance -> Business Approval ->
+  Publishing.
+- Roadmap after DA-3: Business Discovery -> Digital Business Twin -> Business
+  Understanding Report -> Business Alignment Decision -> Business Alignment
+  Artifact -> Website Design Decision -> Website Design Brief -> Generation
+  Decision -> Website Generation Package -> Generation Execution Decision ->
+  Generated Website Proposal -> Compliance Review Decision -> Generation
+  Contract Compliance Report -> Business Approval Decision -> Business
+  Approval -> Publishing Decision -> Published Experience.
 - Rejected lifecycle: Website -> Prompt -> Generate React.
 - Roadmap reset: do not proceed into LayoutPlan, BlockPlan, or ContentPlan as
   if GNR8 is building a traditional internal website builder, CMS, page editor,
@@ -2812,11 +3211,57 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase UX-0 - Business Journey Specification is complete.
+- Phase AO-0 - The GNR8 Blueprint is complete.
 
 Next Phase:
-- UX-1 Business Journey Decision Model Specification,
-  documentation and architecture only.
+- ARCH-1 Canonical Architecture Index Reconciliation,
+  documentation only.
+
+Phase AO-0 created the first complete canonical architecture narrative:
+`docs/architecture/THE_GNR8_BLUEPRINT.md`.
+
+The GNR8 Blueprint is now the preferred onboarding document before reading
+detailed architecture specifications. It explains GNR8 from first principles:
+what GNR8 is, why it exists, why traditional CMSs and generic AI builders are
+insufficient, how the Digital Business Twin, Business Journey, Decision
+Architecture, Website Design Brief, Website Generation Package, external AI,
+compliance, Business Approval, publishing, and Continuous Evolution fit
+together.
+
+Canonical five-layer architecture:
+
+```text
+Reality
+-> Knowledge
+-> Decision
+-> Experience
+-> Execution
+```
+
+Canonical AO-0 lifecycle:
+
+```text
+Reality
+-> Business Discovery
+-> Digital Business Twin
+-> Business Understanding Report
+-> Business Alignment
+-> Website Design Brief
+-> Website Generation Package
+-> Provider Adapter
+-> External AI
+-> Generation Contract Compliance
+-> Generation Contract Compliance Report
+-> Business Approval
+-> Publish
+-> Continuous Evolution
+```
+
+AO-0 changed documentation only. It added no implementation, TypeScript,
+schema, persistence, API, UI, workers, prompts, provider adapters, AI
+integration, generation, or publishing behavior.
+
+Validation result: `git diff --check` passes.
 
 ## Phase 7D Multi-Page Raw Preview Correctness + Observability
 

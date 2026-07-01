@@ -38,6 +38,20 @@ page-generation engine.
 - Conversation replaces unnecessary software complexity.
 - Every artifact exists to support a human business decision.
 - The Business Journey is the canonical human experience of GNR8.
+- GNR8 is governed by decisions rather than workflows.
+- Artifacts exist to support business decisions.
+- No artifact exists without an authorizing business decision.
+- Authorization preserves trust, lineage, and governance.
+- Artifacts are authorized, never assumed.
+- Every canonical artifact has a governance state.
+- Governance State describes artifact maturity and approval status.
+- Governance State is independent of provider, implementation, runtime, UI,
+  generation, and publishing.
+- Business history is immutable.
+- Every governed artifact preserves lineage.
+- Versioning refines understanding; lineage preserves evolution.
+- Human authority is preserved through deterministic decision architecture.
+- Decision Architecture is the operational backbone of GNR8.
 - GNR8 is not a traditional website builder.
 - GNR8 is not a CMS.
 - GNR8 is not a generic page editor.
@@ -102,6 +116,15 @@ The Business Journey is the canonical human experience of GNR8. GNR8 guides
 businesses through understanding before generation. Conversation replaces
 unnecessary software complexity. Every artifact exists to support a human
 business decision.
+
+GNR8 is governed by decisions rather than workflows. Decision Architecture is
+the deterministic governance model describing how business decisions progress
+through canonical artifacts while preserving lineage and human authority. It
+determines which decisions are allowed, when they are allowed, which artifacts
+authorize those decisions, and what new artifacts those decisions authorize.
+Artifacts exist to support business decisions. Human authority is preserved
+through deterministic decision architecture. Decision Architecture is the
+operational backbone of GNR8.
 
 GNR8 always aligns understanding before generation. The first human-facing
 artifact is a Business Understanding Report: a deterministic, evidence-backed,
@@ -349,6 +372,105 @@ and explicitly approve before publish.
 Approval state must be durable, auditable, and separate from generation state.
 No model output may silently mutate canonical Digital Business Twin state.
 
+## Decision Architecture
+
+Decision Architecture is the canonical governance model that controls how
+businesses progress through GNR8.
+
+Its canonical definition is:
+
+"A deterministic governance model describing how business decisions progress
+through canonical artifacts while preserving lineage and human authority."
+
+Decision Architecture governs decisions. It never governs implementation.
+Artifacts provide evidence. Humans make decisions. The architecture determines
+which decisions are allowed, when they are allowed, and what new artifacts
+they authorize.
+
+Decision Architecture is different from workflow, UX, and application
+navigation. A workflow executes tasks. UX expresses the human experience.
+Navigation helps people reach surfaces. Decision Architecture defines the
+deterministic business authority underneath all of them.
+
+The canonical decision lifecycle is:
+
+```text
+Evidence
+-> Understanding
+-> Decision
+-> Artifact
+-> Next Decision
+```
+
+Decision Architecture is graph-based rather than linear. Decisions may repeat,
+alignment may return to discovery, generation may repeat, compliance may
+return to Website Generation Package, and business evolution may continue
+indefinitely. Nothing overwrites history. Every decision creates lineage.
+
+The Decision Artifact Authorization Matrix is the canonical authorization
+layer inside Decision Architecture. Its canonical definition is:
+
+"A deterministic governance model defining which business decisions authorize
+each canonical artifact and under which prerequisites."
+
+No artifact exists without an authorizing business decision. Authorization
+preserves trust, lineage, and governance. Artifacts are authorized, never
+assumed.
+
+The Decision Artifact Authorization Matrix governs artifact creation,
+revision, supersession, and progression. It determines which predecessor
+artifacts, predecessor decisions, governance state, lineage, confidence, and
+alignment state are required before a canonical artifact may exist.
+
+The Canonical Artifact Governance State Model is the canonical maturity layer
+for artifacts inside Decision Architecture. Its canonical definition is:
+
+"A deterministic business governance lifecycle describing the maturity and
+approval status of a canonical artifact."
+
+Every canonical artifact has a governance state. Governance State records
+whether an artifact is Observed, Draft, Reviewed, Aligned, Approved,
+Superseded, Archived, Rejected, or Blocked. Authorization determines whether a
+business decision may affect an artifact. Governance State records the
+artifact's governed maturity after that authorization.
+
+Governance State is different from workflow and access control. It does not
+execute tasks, route queues, grant permissions, call providers, generate
+outputs, publish experiences, or define implementation. It describes business
+maturity and governance readiness only.
+
+The Canonical Artifact Lineage and Versioning Model is the canonical history
+and evolution layer inside Decision Architecture. Its canonical definitions
+are:
+
+"The immutable chain describing how governed business artifacts originate,
+evolve, authorize successors, and preserve business history."
+
+"A deterministic revision of the same business artifact within the same
+lineage."
+
+Business history is immutable. Every governed artifact preserves lineage.
+Versioning refines understanding; lineage preserves evolution. Superseded
+artifacts remain valid historical records, and historical business
+understanding must always be reconstructable from governed lineage without
+ambiguity.
+
+Decision Architecture now consists of:
+
+```text
+Decision Model
+-> Authorization
+-> Governance State
+-> Lineage
+-> Versioning
+-> Canonical Artifacts
+-> Business Journey
+-> External AI
+-> Compliance
+-> Business Approval
+-> Publishing
+```
+
 ## Generation Contract Compliance Report Before Business Approval
 
 Generation Contract Compliance and its report before Business Approval are
@@ -411,7 +533,9 @@ orchestration before model execution
 The canonical future lifecycle is:
 
 ```text
-Reality
+Human Journey
+-> Decision Architecture
+-> Reality
 -> Business Discovery
 -> Digital Business Twin
 -> Business Understanding Report
@@ -574,6 +698,31 @@ Business Alignment, Website Design Brief approval, Website Generation Package
 approval, Generation, Compliance Review, Business Approval, Publishing, and
 Continuous Evolution.
 
+Phase DA-0 defines Decision Architecture as the canonical governance model
+that controls how businesses progress through GNR8. Decision Architecture
+governs business decisions, never implementation. It is graph-based rather
+than workflow-based, preserves immutable lineage, determines which decisions
+are allowed and when, and defines what artifacts those decisions authorize.
+
+Phase DA-1 defines the Decision Artifact Authorization Matrix as the canonical
+authorization layer inside Decision Architecture. It determines which business
+decision authorizes each canonical artifact and under which prerequisites.
+Artifacts are authorized, never assumed.
+
+Phase DA-2 defines Governance State as the canonical business maturity and
+approval-status layer for every canonical artifact. Governance State is
+independent of provider, implementation, runtime, UI, generation, and
+publishing. The canonical states are Observed, Draft, Reviewed, Aligned,
+Approved, Superseded, Archived, Rejected, and Blocked.
+
+Phase DA-3 defines Lineage and Versioning as the canonical history and
+evolution layer shared by every governed artifact. Lineage is the immutable
+chain describing how governed business artifacts originate, evolve, authorize
+successors, and preserve business history. Versioning is a deterministic
+revision of the same business artifact within the same lineage. Business
+history is immutable, every governed artifact preserves lineage, and
+versioning refines understanding while lineage preserves evolution.
+
 No current canonical phase should proceed into `LayoutPlan`, `BlockPlan`, or
 `ContentPlan` as if GNR8 is building a traditional internal website builder,
 CMS, page editor, block schema, or direct React generator.
@@ -602,6 +751,9 @@ The following areas need future reassessment under this manifesto:
 - Generation Contract Compliance Report boundaries
 - Business Approval boundaries
 - Business Journey boundaries
+- Decision Architecture boundaries
+- Decision Artifact Authorization Matrix boundaries
+- Canonical Artifact Governance State boundaries
 - multi-provider compliance comparison boundaries
 - DBT validation and governance package boundaries
 
@@ -610,16 +762,23 @@ The following areas need future reassessment under this manifesto:
 GNR8 remains an AI orchestration platform with a governed Digital Business
 Twin at its core. Its Business Journey guides Business Owners through
 conversation, understanding, alignment, design intent, generation contracts,
-compliance review, Business Approval, publishing, and continuous evolution. It
-understands businesses through independent Business Domains, integrates those
-domains into coherent DBT understanding, prepares Business Understanding
-Reports for human inspection, aligns the Digital Business Twin through human
-governance, prepares Website Design Briefs and Website Generation Package
-contracts from aligned understanding for external AI systems, evaluates
-generated websites through Generation Contract Compliance, communicates
-contractual truth through Generation Contract Compliance Reports, preserves
-lineage and Business Approval decisions, and publishes only Business Approved
-outputs.
+compliance review, Business Approval, publishing, and continuous evolution.
+Decision Architecture governs which business decisions are allowed inside
+that journey, when they are allowed, which artifacts authorize them, and what
+new lineage they create. The Decision Artifact Authorization Matrix governs
+which business decision authorizes each canonical artifact and under which
+prerequisites, so artifacts are authorized, never assumed. The Canonical
+Artifact Governance State Model governs the business maturity and approval
+status of every canonical artifact, independent of provider, implementation,
+runtime, UI, generation, and publishing. GNR8 understands businesses through
+independent Business Domains, integrates those domains into coherent DBT
+understanding, prepares Business Understanding Reports for human inspection,
+aligns the Digital Business Twin through human governance, prepares Website Design Briefs
+and Website Generation Package contracts from aligned understanding for
+external AI systems, evaluates generated websites through Generation Contract
+Compliance, communicates contractual truth through Generation Contract
+Compliance Reports, preserves lineage and Business Approval decisions, and
+publishes only Business Approved outputs.
 
 Any future architecture that makes generated React, CMS records, editable page
 blocks, provider-specific prompts, provider payloads, or provider-specific AI
