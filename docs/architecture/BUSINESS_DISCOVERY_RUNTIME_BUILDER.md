@@ -233,18 +233,39 @@ Focused tests cover:
 - load by ID
 - stale and invalid persistence rejection
 
+## Real-Target Validation
+
+MVP-1A-R validated the builder and persistence helpers against current ODV
+and ViroiDoc imported website evidence.
+
+Persisted Business Discovery artifacts:
+
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`:
+  `business_discovery_7b37413651d79de0d109e31690a34b62`
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`:
+  `business_discovery_360fa099cbcede288c2d0e04f2ec7986`
+
+Both artifacts are `partial`, validate without errors or warnings, reload by
+latest and by exact ID, and reuse the same artifact ID on idempotent retry.
+The validation created no DBT, Business Understanding Report, Business
+Alignment, Website Design Brief, Website Generation Package, provider payload,
+prompt, AI output, generated content, or publishing artifact.
+
+Canonical evidence:
+
+```text
+docs/architecture/BUSINESS_DISCOVERY_REAL_TARGET_VALIDATION.md
+```
+
 ## Next Phase
 
 Recommended next phase:
 
 ```text
-MVP-1A-R Business Discovery Real-Target Validation
+MVP-1B Digital Business Twin Runtime Builder
 ```
 
-Real-target validation was not performed in MVP-1A because the current process
-did not have `DATABASE_URL` loaded, and this phase did not authorize loading
-production secrets or mutating current ODV/ViroiDoc provenance artifacts.
-
-MVP-1A-R should run the new builder and persistence helpers against current
-ODV and ViroiDoc imported site-version evidence, record exact artifact IDs,
-and verify latest/by-ID reloads before any DBT runtime phase begins.
+MVP-1B should consume persisted Business Discovery artifacts as canonical DBT
+input and stop before Business Understanding Report, Business Alignment,
+Website Design Brief, Website Generation Package, provider adapters, external
+AI, generation, compliance, Business Approval, or publishing.

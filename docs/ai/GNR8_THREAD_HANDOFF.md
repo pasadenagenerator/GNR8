@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 First Executable MVP Pipeline
 
 Current status:
-- Phase MVP-1A - Business Discovery Runtime Builder is complete.
+- Phase MVP-1A-R - Business Discovery Real-Target Validation is complete.
 
 Current Phase:
-- Phase MVP-1A - Business Discovery Runtime Builder is complete.
+- Phase MVP-1A-R - Business Discovery Real-Target Validation is complete.
 
 Next Phase:
-- MVP-1A-R Business Discovery Real-Target Validation.
+- MVP-1B Digital Business Twin Runtime Builder.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -122,22 +122,25 @@ Current architecture direction:
   runtime, and publish foundations, then building the missing canonical
   artifact chain between Evidence Collection and Publish.
 - MVP-1A implements the first Business Discovery runtime builder and
-  provenance persistence boundary. The next implementation phase is real-target
-  validation before DBT runtime work.
+  provenance persistence boundary. MVP-1A-R validates that boundary on current
+  ODV and ViroiDoc imported website evidence. The next implementation phase is
+  DBT runtime work.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
-- Phase MVP-1A - Business Discovery Runtime Builder.
-- Status: COMPLETE / FIRST BUSINESS DISCOVERY RUNTIME ARTIFACT IMPLEMENTED /
-  DETERMINISTIC WEBSITE-EVIDENCE BUILDER / PROVENANCE PERSISTENCE /
-  FOCUSED TESTS / NO DBT / NO BUR / NO BUSINESS ALIGNMENT / NO WEBSITE DESIGN
-  BRIEF / NO WEBSITE GENERATION PACKAGE / NO AI / NO PROVIDER ADAPTER /
-  NO GENERATION / NO COMPLIANCE / NO BUSINESS APPROVAL / NO PUBLISHING /
-  NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS.
+- Phase MVP-1A-R - Business Discovery Real-Target Validation.
+- Status: COMPLETE / REAL ODV AND VIROIDOC VALIDATED / BUSINESS DISCOVERY
+  ARTIFACTS PERSISTED / LATEST RELOAD VERIFIED / BY-ID RELOAD VERIFIED /
+  IDEMPOTENT RETRY VERIFIED / NO DBT / NO BUR / NO BUSINESS ALIGNMENT /
+  NO WEBSITE DESIGN BRIEF / NO WEBSITE GENERATION PACKAGE / NO AI /
+  NO PROVIDER ADAPTER / NO GENERATION / NO COMPLIANCE / NO BUSINESS APPROVAL /
+  NO PUBLISHING / NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS.
 - Canonical document:
+  `docs/architecture/BUSINESS_DISCOVERY_REAL_TARGET_VALIDATION.md`.
+- Supporting builder document:
   `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_BUILDER.md`.
 - Runtime files:
   `apps/platform/gnr8/architecture/business-discovery-contract.ts`,
@@ -163,15 +166,31 @@ Latest completed milestone:
 - Business Discovery differs from DBT: it is an evidence-backed interpretation
   artifact and canonical DBT input, not the governed operational business
   understanding itself.
-- Validation result: focused Business Discovery tests pass `15 / 15`;
-  `cd apps/platform && pnpm run vercel-build` passes with existing unrelated
-  frontend lint warnings; `git diff --check` passes.
-- Real-target validation: not performed in MVP-1A because the current process
-  reported `DATABASE_URL_MISSING`, and this phase did not authorize loading
-  production secrets or mutating current ODV/ViroiDoc provenance artifacts. Run
-  it in MVP-1A-R against current ODV and ViroiDoc imported artifacts and record
-  exact artifact IDs.
-- Recommended next phase: MVP-1A-R Business Discovery Real-Target Validation.
+- Real-target validation result: ODV
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` persisted
+  `business_discovery_7b37413651d79de0d109e31690a34b62`; ViroiDoc
+  `e26b0754-988b-45b9-9e24-8e213179b6cf` persisted
+  `business_discovery_360fa099cbcede288c2d0e04f2ec7986`.
+- ODV result: status `partial`, 12 findings, 104 limitations, 0 blockers,
+  `MEDIUM` confidence, implemented domains `business_identity`, `brand`,
+  `digital_presence`, `goals`, `trust`, `content`, and `constraints`.
+- ViroiDoc result: status `partial`, 17 findings, 105 limitations, 0
+  blockers, `MEDIUM` confidence, implemented domains `business_identity`,
+  `offerings`, `brand`, `digital_presence`, `goals`, `trust`, `content`, and
+  `constraints`.
+- Lineage: ODV linked Candidate Discovery
+  `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`; ViroiDoc
+  linked Candidate Discovery
+  `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`.
+- Reload/idempotency: latest reload equality, by-ID reload equality, and
+  idempotent retry reuse all passed for both targets.
+- Safety: no DBT, Business Understanding Report, Business Alignment, Website
+  Design Brief, Website Generation Package, provider payload, prompt, AI
+  output, generated content, or publishing artifact was created.
+- Validation result: focused Business Discovery tests pass; platform Vercel
+  build passes; `git diff --check` passes.
+- Recommended next phase: MVP-1B Digital Business Twin Runtime Builder,
+  limited to consuming persisted Business Discovery artifacts as DBT input.
 
 Previous completed milestone:
 - Phase MVP-0 - First Executable Website Transformation Pipeline.

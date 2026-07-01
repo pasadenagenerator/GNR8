@@ -150,8 +150,6 @@ Current implementation:
   context.
 
 Missing implementation:
-- Real-target Business Discovery validation against current ODV and ViroiDoc
-  imported artifacts has not yet been performed in this document.
 - No DBT builder consumes Business Discovery yet.
 - No Business Owner confirmation or multi-source domain reconciliation exists
   in this layer.
@@ -162,14 +160,14 @@ Dependencies:
 - Digital Business Twin specification.
 
 Risk:
-- Medium after MVP-1A. The first runtime artifact now exists, but downstream
-  DBT, Business Understanding Report, Design Brief, Generation Package, and
-  Compliance must consume it rather than bypassing it with prompt-first or
-  website-copy-first shortcuts.
+- Medium after MVP-1A-R. The first runtime artifact now exists and has been
+  validated on ODV and ViroiDoc, but downstream DBT, Business Understanding
+  Report, Design Brief, Generation Package, and Compliance must consume it
+  rather than bypassing it with prompt-first or website-copy-first shortcuts.
 
 Estimated implementation complexity:
-- First runtime slice complete. Remaining work is real-target validation and
-  DBT input consumption.
+- First runtime slice and real-target validation are complete. Remaining work
+  is DBT input consumption.
 
 ### Digital Business Twin
 
@@ -548,7 +546,8 @@ through the full governed pipeline with measurable artifact evidence:
 - First Limited Dry Run route/navigation/section model builder and
   persistence.
 - Business Discovery contract, deterministic website-evidence builder, focused
-  tests, and provenance persistence boundary for `business_discovery`.
+  tests, provenance persistence boundary for `business_discovery`, and
+  real-target validation on ODV and ViroiDoc.
 - Candidate Discovery, Candidate Review, Candidate Context, and
   Reconstruction Package metadata foundations.
 - Runtime publish activation, publish enforcement, runtime resolution, and
@@ -557,8 +556,8 @@ through the full governed pipeline with measurable artifact evidence:
 ### Partially Implemented
 
 - Evidence Collection for MVP use.
-- Business Discovery, through the first canonical runtime artifact and
-  persistence boundary, pending real-target validation and downstream DBT
+- Business Discovery, through the first canonical runtime artifact,
+  persistence boundary, and real-target validation, pending downstream DBT
   consumption.
 - Digital Business Twin, through a runtime website twin preview model rather
   than the canonical governed DBT.
@@ -587,8 +586,6 @@ through the full governed pipeline with measurable artifact evidence:
 
 ### Runtime Missing
 
-- Business Discovery real-target validation on current ODV and ViroiDoc
-  imported artifacts.
 - Durable canonical Digital Business Twin artifact and latest read path.
 - Business Understanding Report builder and artifact.
 - Business Alignment decision artifact and correction loop.
@@ -618,8 +615,6 @@ through the full governed pipeline with measurable artifact evidence:
 ### Must Exist Before First Customer
 
 - MVP evidence readiness gate.
-- Canonical Business Discovery real-target validation and latest/by-ID reload
-  proof.
 - Canonical DBT v1 persistence.
 - Business Understanding Report.
 - Minimal Business Alignment.
@@ -662,17 +657,20 @@ customer path works.
 
 MVP-1A implemented the first Business Discovery runtime builder, contract,
 validator, focused tests, and `business_discovery` provenance persistence
-boundary.
+boundary. MVP-1A-R validated that boundary on current ODV and ViroiDoc
+imported website evidence.
 
 Recommended next phase:
 
 ```text
-MVP-1A-R Business Discovery Real-Target Validation
+MVP-1B Digital Business Twin Runtime Builder
 ```
 
-MVP-1A-R should run the new Business Discovery builder and persistence helpers
-against current ODV and ViroiDoc imported artifacts, record exact artifact IDs,
-and verify latest/by-ID reloads before the DBT runtime builder begins. MVP-1A
-did not run that validation because the current process did not have
-`DATABASE_URL` loaded, and the phase did not authorize loading production
-secrets or mutating current ODV/ViroiDoc provenance artifacts.
+MVP-1A-R persisted ODV
+`business_discovery_7b37413651d79de0d109e31690a34b62` and ViroiDoc
+`business_discovery_360fa099cbcede288c2d0e04f2ec7986`, verified latest/by-ID
+reload equality, verified idempotent retry reuse, and confirmed no downstream
+DBT, Business Understanding Report, Business Alignment, Website Design Brief,
+Website Generation Package, provider, AI, generation, or publishing artifacts
+were created. MVP-1B should consume those Business Discovery artifacts as the
+first canonical DBT input.

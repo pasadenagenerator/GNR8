@@ -3211,10 +3211,10 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1A - Business Discovery Runtime Builder is complete.
+- Phase MVP-1A-R - Business Discovery Real-Target Validation is complete.
 
 Next Phase:
-- MVP-1A-R Business Discovery Real-Target Validation.
+- MVP-1B Digital Business Twin Runtime Builder.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3231,8 +3231,8 @@ MVP-0 reality assessment:
 - Import Existing Website: MVP-ready from existing runtime.
 - Evidence Collection: partial and reusable, with an MVP readiness gate still
   required.
-- Business Discovery: partial substrates exist, but the canonical artifact is
-  missing.
+- Business Discovery: canonical runtime artifact, deterministic builder,
+  provenance persistence, and ODV/ViroiDoc real-target validation exist.
 - Digital Business Twin: partial runtime twin preview exists, but canonical
   durable DBT is missing.
 - Business Understanding Report, Business Alignment, Website Design Brief,
@@ -3310,15 +3310,32 @@ MVP-1A validation:
 - `cd apps/platform && pnpm run vercel-build` passes with existing unrelated
   frontend lint warnings.
 - `git diff --check` passes.
-- Real-target ODV/ViroiDoc validation was not performed in MVP-1A because the
-  current process reported `DATABASE_URL_MISSING`, and this phase did not
-  authorize loading production secrets or mutating current ODV/ViroiDoc
-  provenance artifacts. MVP-1A-R should run it and record exact artifact IDs.
+
+MVP-1A-R real-target validation:
+- Canonical document:
+  `docs/architecture/BUSINESS_DISCOVERY_REAL_TARGET_VALIDATION.md`.
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` persisted
+  `business_discovery_7b37413651d79de0d109e31690a34b62` with status
+  `partial`, 12 findings, 104 limitations, 0 blockers, `MEDIUM` confidence,
+  and Candidate Discovery lineage
+  `candidate_discovery_result_dbf786254717f980469b9b99853c14b8`.
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf` persisted
+  `business_discovery_360fa099cbcede288c2d0e04f2ec7986` with status
+  `partial`, 17 findings, 105 limitations, 0 blockers, `MEDIUM` confidence,
+  and Candidate Discovery lineage
+  `candidate_discovery_result_3fb206dfc3324144ee0ab94b7f75ee64`.
+- Latest reload equality, by-ID reload equality, and idempotent retry reuse
+  all passed for both targets.
+- Safety scan found no DBT, Business Understanding Report, Business
+  Alignment, Website Design Brief, Website Generation Package, provider
+  payload, prompt, AI output, generated content, or publishing artifact.
 
 Recommended next phase:
-- MVP-1A-R Business Discovery Real-Target Validation, limited to running the
-  new builder and persistence helpers against current ODV and ViroiDoc
-  imported artifacts, verifying latest/by-ID reloads, and stopping before DBT.
+- MVP-1B Digital Business Twin Runtime Builder, limited to consuming persisted
+  Business Discovery artifacts as DBT input and stopping before Business
+  Understanding Report, Business Alignment, Website Design Brief, Website
+  Generation Package, provider adapters, external AI, generation, compliance,
+  Business Approval, or publishing.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.
