@@ -7,13 +7,13 @@ This is the first file every new ChatGPT/Codex thread should read.
 First Executable MVP Pipeline
 
 Current status:
-- Phase MVP-1A-R - Business Discovery Real-Target Validation is complete.
+- Phase MVP-1C - Business Understanding Report Runtime Builder is complete.
 
 Current Phase:
-- Phase MVP-1A-R - Business Discovery Real-Target Validation is complete.
+- Phase MVP-1C - Business Understanding Report Runtime Builder is complete.
 
 Next Phase:
-- MVP-1B Digital Business Twin Runtime Builder.
+- MVP-1D Business Alignment Runtime Foundation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -125,14 +125,72 @@ Current architecture direction:
   provenance persistence boundary. MVP-1A-R validates that boundary on current
   ODV and ViroiDoc imported website evidence. MVP-1B implements the first
   deterministic DBT runtime builder and provenance persistence boundary from
-  Business Discovery. The next implementation phase is Business Understanding
-  Report runtime work.
+  Business Discovery. MVP-1C implements the first deterministic Business
+  Understanding Report runtime builder and provenance persistence boundary from
+  Digital Business Twin. The next implementation phase is Business Alignment
+  runtime foundation.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase MVP-1C - Business Understanding Report Runtime Builder.
+- Status: COMPLETE / BUR CONTRACT IMPLEMENTED / DETERMINISTIC BUILDER
+  IMPLEMENTED / PROVENANCE PERSISTENCE IMPLEMENTED / FOCUSED TESTS PASS /
+  PLATFORM VERCEL BUILD PASSES / GIT DIFF CHECK PASSES / NO BUSINESS
+  ALIGNMENT / NO WEBSITE DESIGN BRIEF / NO WEBSITE GENERATION PACKAGE /
+  NO AI / NO PROVIDER ADAPTER / NO GENERATION / NO COMPLIANCE /
+  NO BUSINESS APPROVAL / NO PUBLISHING / NO UI / NO API ROUTES /
+  NO SCHEMA MIGRATIONS.
+- Canonical document:
+  `docs/architecture/BUSINESS_UNDERSTANDING_REPORT_RUNTIME_BUILDER.md`.
+- Runtime files:
+  `apps/platform/gnr8/architecture/business-understanding-report-contract.ts`,
+  `apps/platform/gnr8/architecture/business-understanding-report-builder.ts`,
+  and
+  `apps/platform/gnr8/architecture/business-understanding-report-persistence.ts`.
+- Test files:
+  `apps/platform/gnr8/architecture/business-understanding-report-contract.test.ts`,
+  `apps/platform/gnr8/architecture/business-understanding-report-builder.test.ts`,
+  and
+  `apps/platform/gnr8/architecture/business-understanding-report-persistence.test.ts`.
+- Artifact kind: `business_understanding_report`.
+- Contract version: `MVP-1C`.
+- Builder behavior: deterministic BUR construction from one supplied Digital
+  Business Twin artifact only. DBT knowledge items become human-readable report
+  sections. DBT `missingKnowledge` becomes the Missing Knowledge section. DBT
+  limitations, confidence, evidence refs, lineage, and diagnostics propagate.
+  Partial DBT produces partial BUR; blocked DBT produces blocked fail-closed
+  BUR; invalid or stale DBT produces invalid or stale fail-closed BUR.
+- MVP sections: `executive_summary`, `business_overview`,
+  `products_and_services`, `target_audience`, `business_goals`,
+  `brand_identity`, `current_digital_presence`, `trust_signals`,
+  `missing_knowledge`, `confidence_overview`, `recommendations`,
+  `limitations`, `evidence_summary`, and `diagnostics`.
+- Recommendations are business-oriented only:
+  `clarify_positioning`, `improve_messaging`, `strengthen_trust`,
+  `improve_customer_journey`, `expand_content`, `improve_digital_presence`,
+  `resolve_missing_audience`, and `resolve_missing_offerings`.
+- Recommendations never prescribe React, HTML, components, layouts, prompts,
+  provider behavior, publishing behavior, generated content, or deployment
+  behavior.
+- Persistence: existing site-version `importProvenanceSummary` boundary,
+  append-only `businessUnderstandingReportArtifacts`, latest pointer
+  `latestBusinessUnderstandingReportArtifact`, semantic latest reuse, changed
+  artifact append, latest/by-ID load helpers, `invalid`/`stale` rejection, and
+  `blocked` accepted as valid fail-closed.
+- Forbidden guard rejects: `businessAlignment`, `websiteDesignBrief`,
+  `websiteGenerationPackage`, `providerPayload`, `prompt`, `aiOutput`,
+  `generatedContent`, `generatedHtml`, `generatedReact`,
+  `generatedComponents`, `generatedBlocks`, `publishingArtifact`,
+  `deploymentArtifact`, and `executionArtifact`.
+- Validation result: focused Business Understanding Report tests pass; platform
+  Vercel build passes; `git diff --check` passes.
+- Recommended next phase: MVP-1D Business Alignment Runtime Foundation,
+  limited to consuming persisted Business Understanding Report artifacts.
+
+Previous completed milestone:
 - Phase MVP-1B - Digital Business Twin Runtime Builder.
 - Status: COMPLETE / DBT CONTRACT IMPLEMENTED / DETERMINISTIC BUILDER
   IMPLEMENTED / PROVENANCE PERSISTENCE IMPLEMENTED / FOCUSED TESTS PASS /
@@ -173,7 +231,7 @@ Latest completed milestone:
   `deploymentArtifact`, and `executionArtifact`.
 - Validation result: focused Digital Business Twin tests pass; platform Vercel
   build passes; `git diff --check` passes.
-- Recommended next phase: MVP-1C Business Understanding Report Runtime
+- Then-recommended next phase: MVP-1C Business Understanding Report Runtime
   Builder, limited to consuming persisted Digital Business Twin artifacts.
 
 Previous completed milestone:

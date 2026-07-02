@@ -3211,10 +3211,10 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1B - Digital Business Twin Runtime Builder is complete.
+- Phase MVP-1C - Business Understanding Report Runtime Builder is complete.
 
 Next Phase:
-- MVP-1C Business Understanding Report Runtime Builder.
+- MVP-1D Business Alignment Runtime Foundation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3385,12 +3385,72 @@ MVP-1B validation:
 - `cd apps/platform && pnpm run vercel-build` passes.
 - `git diff --check` passes.
 
+Phase MVP-1C creates the first runtime Business Understanding Report artifact
+from persisted Digital Business Twin:
+`docs/architecture/BUSINESS_UNDERSTANDING_REPORT_RUNTIME_BUILDER.md`.
+
+MVP-1C implementation summary:
+- `apps/platform/gnr8/architecture/business-understanding-report-contract.ts`
+  defines `BusinessUnderstandingReportArtifact`,
+  `BusinessUnderstandingReportLineage`,
+  `BusinessUnderstandingReportSection`,
+  `BusinessUnderstandingReportRecommendation`,
+  `BusinessUnderstandingReportConfidence`,
+  `BusinessUnderstandingReportValidationResult`, and
+  `BusinessUnderstandingReportStatus`.
+- Allowed statuses are `draft`, `partial`, `valid`, `invalid`, `blocked`, and
+  `stale`.
+- MVP sections are `executive_summary`, `business_overview`,
+  `products_and_services`, `target_audience`, `business_goals`,
+  `brand_identity`, `current_digital_presence`, `trust_signals`,
+  `missing_knowledge`, `confidence_overview`, `recommendations`,
+  `limitations`, `evidence_summary`, and `diagnostics`.
+- `apps/platform/gnr8/architecture/business-understanding-report-builder.ts`
+  implements `buildBusinessUnderstandingReportFromDigitalBusinessTwin(...)`
+  as a deterministic builder from one Digital Business Twin artifact.
+- DBT knowledge items become human-readable report sections. DBT
+  `missingKnowledge` becomes the Missing Knowledge section. DBT confidence,
+  evidence refs, limitations, lineage, and diagnostics propagate into the
+  report.
+- Partial DBT produces partial BUR; blocked DBT produces blocked fail-closed
+  BUR; invalid or stale DBT produces invalid or stale fail-closed BUR.
+- Recommendations are business-oriented only: `clarify_positioning`,
+  `improve_messaging`, `strengthen_trust`, `improve_customer_journey`,
+  `expand_content`, `improve_digital_presence`,
+  `resolve_missing_audience`, and `resolve_missing_offerings`.
+- Recommendations do not prescribe React, HTML, components, layouts, prompts,
+  provider behavior, publishing behavior, generated content, or deployment
+  behavior.
+- `apps/platform/gnr8/architecture/business-understanding-report-persistence.ts`
+  stores artifact kind `business_understanding_report` in the existing
+  site-version `importProvenanceSummary`, with append-only
+  `businessUnderstandingReportArtifacts` and
+  `latestBusinessUnderstandingReportArtifact`.
+- Equivalent latest artifacts are reused; changed current artifacts append;
+  latest and by-ID read helpers are implemented.
+- Persistence rejects `invalid` and `stale`; `blocked` is accepted as a valid
+  fail-closed artifact.
+- Recursive forbidden fields are rejected: `businessAlignment`,
+  `websiteDesignBrief`, `websiteGenerationPackage`, `providerPayload`,
+  `prompt`, `aiOutput`, `generatedContent`, `generatedHtml`,
+  `generatedReact`, `generatedComponents`, `generatedBlocks`,
+  `publishingArtifact`, `deploymentArtifact`, and `executionArtifact`.
+
+MVP-1C did not implement Business Alignment, Website Design Brief, Website
+Generation Package, provider adapters, external AI integration, generation,
+compliance, Business Approval, publishing changes, UI, API routes, or schema
+migrations.
+
+MVP-1C validation:
+- Focused Business Understanding Report tests pass `19 / 19`.
+- `cd apps/platform && pnpm run vercel-build` passes.
+- `git diff --check` passes.
+
 Recommended next phase:
-- MVP-1C Business Understanding Report Runtime Builder, limited to consuming
-  persisted Digital Business Twin artifacts and stopping before Business
-  Alignment, Website Design Brief, Website Generation Package, provider
-  adapters, external AI, generation, compliance, Business Approval, or
-  publishing.
+- MVP-1D Business Alignment Runtime Foundation, limited to consuming persisted
+  Business Understanding Report artifacts and stopping before Website Design
+  Brief, Website Generation Package, provider adapters, external AI,
+  generation, compliance, Business Approval, or publishing.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

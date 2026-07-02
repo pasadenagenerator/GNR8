@@ -56,7 +56,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Evidence Collection | COMPLETE | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
 | Business Discovery | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Digital Business Twin | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
-| Business Understanding Report | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
+| Business Understanding Report | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Business Alignment | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Website Design Brief | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Website Generation Package | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
@@ -186,10 +186,11 @@ Current implementation:
   missing knowledge for domains without Business Discovery support, preserves
   uncertainty, and fail-closes blocked, invalid, or stale source Business
   Discovery states.
+- MVP-1C adds the first canonical Business Understanding Report consumer of
+  persisted DBT artifacts.
 
 Missing implementation:
 - No Business Owner confirmation or multi-source domain reconciliation exists.
-- No Business Understanding Report consumes persisted DBT yet.
 - No governance-state transition or alignment correction loop exists above DBT.
 
 Dependencies:
@@ -199,10 +200,10 @@ Dependencies:
 - Canonical artifact persistence boundary.
 
 Risk:
-- Medium after MVP-1B. The first canonical DBT artifact and persistence path
-  exist, but downstream Business Understanding Report, Business Alignment,
-  Design Brief, Generation Package, and Compliance must consume it rather than
-  bypassing it with prompt-first or website-copy-first shortcuts.
+- Medium after MVP-1C. The first canonical DBT artifact, persistence path, and
+  Business Understanding Report consumer exist, but Business Alignment, Design
+  Brief, Generation Package, and Compliance must consume the artifact chain
+  rather than bypassing it with prompt-first or website-copy-first shortcuts.
 
 Estimated implementation complexity:
 - First deterministic DBT runtime slice is complete. Remaining work starts with
@@ -212,15 +213,25 @@ Estimated implementation complexity:
 
 Current implementation:
 - The architecture specification is complete.
-- No runtime builder, persisted report artifact, read path, validation tests,
-  or approval/alignment handoff exists.
+- MVP-1C adds the first runtime Business Understanding Report artifact from
+  persisted Digital Business Twin, deterministic builder, contract validator,
+  and provenance persistence boundary under artifact kind
+  `business_understanding_report`.
+- DBT knowledge items become human-readable report sections. DBT
+  `missingKnowledge` becomes the Missing Knowledge section. DBT limitations,
+  evidence refs, confidence, lineage, and diagnostics are preserved.
+- The report includes executive summary, business overview, products and
+  services, target audience, business goals, brand identity, current digital
+  presence, trust signals, missing knowledge, confidence overview,
+  recommendations, limitations, evidence summary, and diagnostics.
+- Recommendations are business-oriented only and never prescribe implementation
+  technology, prompts, provider behavior, publishing behavior, or generated
+  output.
 
 Missing implementation:
-- Deterministic report builder from a DBT version.
-- Report artifact persistence.
-- Report validation.
-- Human-readable projection fields, missing-knowledge summary, confidence
-  summary, evidence summary, and lineage.
+- No Business Alignment consumes the persisted report yet.
+- No Business Owner review, correction loop, UI, or API exists for the report.
+- No downstream authorization gate exists above the report.
 
 Dependencies:
 - Digital Business Twin.
@@ -228,13 +239,13 @@ Dependencies:
 - Lineage.
 
 Risk:
-- High. The Business Understanding Report is the first human-facing checkpoint
-  and prevents generation before understanding.
+- Medium after MVP-1C. The first deterministic report artifact exists and is
+  persisted, but Business Alignment still needs to consume it before downstream
+  planning can begin.
 
 Estimated implementation complexity:
-- Medium. The report can be deterministic and text-structured for MVP, with a
-  minimal internal read surface deferred until the implementation phase that
-  authorizes UI/API work.
+- First deterministic report builder, validation, persistence, and focused
+  tests are complete. Remaining work starts with Business Alignment.
 
 ### Business Alignment
 
