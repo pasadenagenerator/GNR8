@@ -55,7 +55,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Import Existing Website | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE |
 | Evidence Collection | COMPLETE | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
 | Business Discovery | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
-| Digital Business Twin | COMPLETE | PARTIAL | PARTIAL | MISSING | PARTIAL | PARTIAL |
+| Digital Business Twin | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Business Understanding Report | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Business Alignment | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Website Design Brief | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
@@ -150,7 +150,7 @@ Current implementation:
   context.
 
 Missing implementation:
-- No DBT builder consumes Business Discovery yet.
+- DBT builder consumption is now implemented in MVP-1B.
 - No Business Owner confirmation or multi-source domain reconciliation exists
   in this layer.
 
@@ -166,8 +166,8 @@ Risk:
   rather than bypassing it with prompt-first or website-copy-first shortcuts.
 
 Estimated implementation complexity:
-- First runtime slice and real-target validation are complete. Remaining work
-  is DBT input consumption.
+- First runtime slice, provenance persistence, real-target validation, and DBT
+  input consumption are complete.
 
 ### Digital Business Twin
 
@@ -179,12 +179,18 @@ Current implementation:
   yet the canonical governed Digital Business Twin that integrates Business
   Domains, evidence, facts, interpretations, knowledge, understanding,
   governance state, lineage, and versioning.
+- MVP-1B adds the first canonical runtime DBT artifact from persisted Business
+  Discovery, deterministic builder, contract validator, and provenance
+  persistence boundary under artifact kind `digital_business_twin`.
+- DBT v1 maps Business Discovery findings into knowledge items, records
+  missing knowledge for domains without Business Discovery support, preserves
+  uncertainty, and fail-closes blocked, invalid, or stale source Business
+  Discovery states.
 
 Missing implementation:
-- No durable canonical DBT artifact exists.
-- No DBT builder maps Business Discovery into Business Domains with evidence,
-  confidence, lineage, governance state, and version.
-- No persisted latest DBT read path exists for downstream canonical artifacts.
+- No Business Owner confirmation or multi-source domain reconciliation exists.
+- No Business Understanding Report consumes persisted DBT yet.
+- No governance-state transition or alignment correction loop exists above DBT.
 
 Dependencies:
 - Business Discovery.
@@ -193,13 +199,14 @@ Dependencies:
 - Canonical artifact persistence boundary.
 
 Risk:
-- High. The DBT is the business source of truth. If MVP bypasses it, the
-  pipeline contradicts the architecture and risks generating from a prompt or
-  website snapshot instead of governed business understanding.
+- Medium after MVP-1B. The first canonical DBT artifact and persistence path
+  exist, but downstream Business Understanding Report, Business Alignment,
+  Design Brief, Generation Package, and Compliance must consume it rather than
+  bypassing it with prompt-first or website-copy-first shortcuts.
 
 Estimated implementation complexity:
-- Medium to high. The MVP can start with one website-derived DBT version and
-  postpone multi-source continuous evolution.
+- First deterministic DBT runtime slice is complete. Remaining work starts with
+  a Business Understanding Report read path from persisted DBT.
 
 ### Business Understanding Report
 
@@ -443,8 +450,8 @@ implementation sequence is:
 3. Implement Business Discovery builder from imported website evidence into
    website-derived business domains, confidence, missing knowledge, evidence
    refs, and limitations.
-4. Implement canonical Digital Business Twin v1 builder and durable latest-DBT
-   read path from Business Discovery.
+4. Use the implemented canonical Digital Business Twin v1 builder and durable
+   latest-DBT read path from Business Discovery.
 5. Implement Business Understanding Report builder and persistence from DBT
    v1.
 6. Implement minimal Business Alignment decision and DBT correction loop.

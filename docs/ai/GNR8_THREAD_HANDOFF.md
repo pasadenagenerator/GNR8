@@ -123,14 +123,60 @@ Current architecture direction:
   artifact chain between Evidence Collection and Publish.
 - MVP-1A implements the first Business Discovery runtime builder and
   provenance persistence boundary. MVP-1A-R validates that boundary on current
-  ODV and ViroiDoc imported website evidence. The next implementation phase is
-  DBT runtime work.
+  ODV and ViroiDoc imported website evidence. MVP-1B implements the first
+  deterministic DBT runtime builder and provenance persistence boundary from
+  Business Discovery. The next implementation phase is Business Understanding
+  Report runtime work.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Latest completed milestone:
+- Phase MVP-1B - Digital Business Twin Runtime Builder.
+- Status: COMPLETE / DBT CONTRACT IMPLEMENTED / DETERMINISTIC BUILDER
+  IMPLEMENTED / PROVENANCE PERSISTENCE IMPLEMENTED / FOCUSED TESTS PASS /
+  PLATFORM VERCEL BUILD PASSES / GIT DIFF CHECK PASSES / NO BUR /
+  NO BUSINESS ALIGNMENT / NO WEBSITE DESIGN BRIEF / NO WEBSITE GENERATION
+  PACKAGE / NO AI / NO PROVIDER ADAPTER / NO GENERATION / NO COMPLIANCE /
+  NO BUSINESS APPROVAL / NO PUBLISHING / NO UI / NO API ROUTES /
+  NO SCHEMA MIGRATIONS.
+- Canonical document:
+  `docs/architecture/DIGITAL_BUSINESS_TWIN_RUNTIME_BUILDER.md`.
+- Runtime files:
+  `apps/platform/gnr8/architecture/digital-business-twin-contract.ts`,
+  `apps/platform/gnr8/architecture/digital-business-twin-builder.ts`, and
+  `apps/platform/gnr8/architecture/digital-business-twin-persistence.ts`.
+- Test files:
+  `apps/platform/gnr8/architecture/digital-business-twin-contract.test.ts`,
+  `apps/platform/gnr8/architecture/digital-business-twin-builder.test.ts`,
+  and `apps/platform/gnr8/architecture/digital-business-twin-persistence.test.ts`.
+- Artifact kind: `digital_business_twin`.
+- Contract version: `MVP-1B`.
+- Builder behavior: deterministic DBT construction from one supplied Business
+  Discovery artifact only. Business Discovery findings become DBT knowledge
+  items. Missing Business Discovery domains become `missingKnowledge`. Partial
+  Business Discovery produces partial DBT; blocked Business Discovery produces
+  blocked fail-closed DBT; invalid or stale Business Discovery produces invalid
+  or stale DBT.
+- MVP domains: `business_identity`, `offerings`, `audience`, `brand`,
+  `digital_presence`, `goals`, `trust`, `content`, and `constraints`.
+- Persistence: existing site-version `importProvenanceSummary` boundary,
+  append-only `digitalBusinessTwinArtifacts`, latest pointer
+  `latestDigitalBusinessTwinArtifact`, semantic latest reuse, changed artifact
+  append, latest/by-ID load helpers, `invalid`/`stale` rejection, and
+  `blocked` accepted as valid fail-closed.
+- Forbidden guard rejects: `businessUnderstandingReport`,
+  `businessAlignment`, `websiteDesignBrief`, `websiteGenerationPackage`,
+  `providerPayload`, `prompt`, `aiOutput`, `generatedContent`,
+  `generatedHtml`, `generatedReact`, `publishingArtifact`,
+  `deploymentArtifact`, and `executionArtifact`.
+- Validation result: focused Digital Business Twin tests pass; platform Vercel
+  build passes; `git diff --check` passes.
+- Recommended next phase: MVP-1C Business Understanding Report Runtime
+  Builder, limited to consuming persisted Digital Business Twin artifacts.
+
+Previous completed milestone:
 - Phase MVP-1A-R - Business Discovery Real-Target Validation.
 - Status: COMPLETE / REAL ODV AND VIROIDOC VALIDATED / BUSINESS DISCOVERY
   ARTIFACTS PERSISTED / LATEST RELOAD VERIFIED / BY-ID RELOAD VERIFIED /
@@ -189,10 +235,11 @@ Latest completed milestone:
   output, generated content, or publishing artifact was created.
 - Validation result: focused Business Discovery tests pass; platform Vercel
   build passes; `git diff --check` passes.
-- Recommended next phase: MVP-1B Digital Business Twin Runtime Builder,
-  limited to consuming persisted Business Discovery artifacts as DBT input.
+- Recommended next phase at completion: MVP-1B Digital Business Twin Runtime
+  Builder, limited to consuming persisted Business Discovery artifacts as DBT
+  input. Completed by the latest milestone above.
 
-Previous completed milestone:
+Earlier completed milestone:
 - Phase MVP-0 - First Executable Website Transformation Pipeline.
 - Status: COMPLETE / DOCUMENTATION, ARCHITECTURE ANALYSIS, AND IMPLEMENTATION
   PLANNING ONLY / FIRST EXECUTABLE MVP ROADMAP CREATED / NO IMPLEMENTATION /

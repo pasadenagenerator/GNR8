@@ -3211,10 +3211,10 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1A-R - Business Discovery Real-Target Validation is complete.
+- Phase MVP-1B - Digital Business Twin Runtime Builder is complete.
 
 Next Phase:
-- MVP-1B Digital Business Twin Runtime Builder.
+- MVP-1C Business Understanding Report Runtime Builder.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3233,8 +3233,9 @@ MVP-0 reality assessment:
   required.
 - Business Discovery: canonical runtime artifact, deterministic builder,
   provenance persistence, and ODV/ViroiDoc real-target validation exist.
-- Digital Business Twin: partial runtime twin preview exists, but canonical
-  durable DBT is missing.
+- Digital Business Twin: canonical runtime artifact, deterministic builder,
+  provenance persistence, and focused tests exist; Business Owner confirmation
+  and multi-source reconciliation are not implemented.
 - Business Understanding Report, Business Alignment, Website Design Brief,
   Website Generation Package, External AI, Generation Contract Compliance, and
   Business Approval: architecture complete, runtime missing.
@@ -3246,7 +3247,7 @@ Shortest MVP path:
 ```text
 Evidence-ready imported site
 -> Business Discovery
--> DBT v1
+-> persisted DBT v1
 -> Business Understanding Report
 -> Business Alignment
 -> Website Design Brief
@@ -3330,12 +3331,66 @@ MVP-1A-R real-target validation:
   Alignment, Website Design Brief, Website Generation Package, provider
   payload, prompt, AI output, generated content, or publishing artifact.
 
+Phase MVP-1B creates the first runtime Digital Business Twin artifact from
+persisted Business Discovery:
+`docs/architecture/DIGITAL_BUSINESS_TWIN_RUNTIME_BUILDER.md`.
+
+MVP-1B implementation summary:
+- `apps/platform/gnr8/architecture/digital-business-twin-contract.ts` defines
+  `DigitalBusinessTwinArtifact`, `DigitalBusinessTwinLineage`,
+  `DigitalBusinessTwinDomain`, `DigitalBusinessTwinKnowledgeItem`,
+  `DigitalBusinessTwinConfidence`, `DigitalBusinessTwinValidationResult`, and
+  `DigitalBusinessTwinStatus`.
+- Allowed statuses are `observed`, `partial`, `aligned`, `confirmed`,
+  `invalid`, `blocked`, and `stale`.
+- MVP domains are Business Discovery-derived only: `business_identity`,
+  `offerings`, `audience`, `brand`, `digital_presence`, `goals`, `trust`,
+  `content`, and `constraints`.
+- `apps/platform/gnr8/architecture/digital-business-twin-builder.ts`
+  implements `buildDigitalBusinessTwinFromBusinessDiscovery(...)` as a
+  deterministic builder from one Business Discovery artifact.
+- Business Discovery findings become DBT knowledge items with deterministic
+  IDs, evidence refs, source finding IDs, confidence, limitations, and
+  diagnostics.
+- Missing Business Discovery domains become `missingKnowledge`; the DBT
+  validator requires domains with no knowledge items to carry matching missing
+  knowledge unless the DBT is `invalid` or `stale`.
+- Partial Business Discovery produces partial DBT; blocked Business Discovery
+  produces blocked fail-closed DBT; invalid or stale Business Discovery
+  produces invalid or stale DBT.
+- MVP-1B does not produce `aligned` or `confirmed`; those statuses are reserved
+  for later Business Alignment and Business Owner confirmation phases.
+- `apps/platform/gnr8/architecture/digital-business-twin-persistence.ts`
+  stores artifact kind `digital_business_twin` in the existing site-version
+  `importProvenanceSummary`, with append-only history and
+  `latestDigitalBusinessTwinArtifact`.
+- Equivalent latest artifacts are reused; changed current artifacts append;
+  latest and by-ID read helpers are implemented.
+- Persistence rejects `invalid` and `stale`; explicitly `blocked` artifacts
+  are valid fail-closed records.
+- Recursive forbidden fields are rejected: `businessUnderstandingReport`,
+  `businessAlignment`, `websiteDesignBrief`, `websiteGenerationPackage`,
+  `providerPayload`, `prompt`, `aiOutput`, `generatedContent`,
+  `generatedHtml`, `generatedReact`, `publishingArtifact`,
+  `deploymentArtifact`, and `executionArtifact`.
+
+MVP-1B did not implement Business Understanding Report, Business Alignment,
+Website Design Brief, Website Generation Package, provider adapters, external
+AI integration, generation, compliance, Business Approval, publishing changes,
+UI, API routes, schema migrations, CRM/ERP/commerce/support domains, or future
+connector domains.
+
+MVP-1B validation:
+- Focused Digital Business Twin tests pass `17 / 17`.
+- `cd apps/platform && pnpm run vercel-build` passes.
+- `git diff --check` passes.
+
 Recommended next phase:
-- MVP-1B Digital Business Twin Runtime Builder, limited to consuming persisted
-  Business Discovery artifacts as DBT input and stopping before Business
-  Understanding Report, Business Alignment, Website Design Brief, Website
-  Generation Package, provider adapters, external AI, generation, compliance,
-  Business Approval, or publishing.
+- MVP-1C Business Understanding Report Runtime Builder, limited to consuming
+  persisted Digital Business Twin artifacts and stopping before Business
+  Alignment, Website Design Brief, Website Generation Package, provider
+  adapters, external AI, generation, compliance, Business Approval, or
+  publishing.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.
