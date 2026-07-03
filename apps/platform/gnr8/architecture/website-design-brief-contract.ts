@@ -488,11 +488,12 @@ function validateSourceArtifacts(input: {
       input.errors.push("sourceDigitalBusinessTwin.dryRunId must match dryRunId");
     }
     if (
+      input.sourceDigitalBusinessTwin.status !== "partial" &&
       input.sourceDigitalBusinessTwin.status !== "aligned" &&
       input.sourceDigitalBusinessTwin.status !== "confirmed" &&
       input.sourceDigitalBusinessTwin.status !== "blocked"
     ) {
-      input.errors.push("sourceDigitalBusinessTwin.status must be aligned, confirmed, or blocked for Website Design Brief");
+      input.errors.push("sourceDigitalBusinessTwin.status must be partial, aligned, confirmed, or blocked for Website Design Brief");
     }
   }
 

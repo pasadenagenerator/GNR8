@@ -110,8 +110,30 @@ test("forbidden downstream fields and implementation instructions are rejected r
     error.includes("must describe website intent, not implementation instructions")));
 });
 
-test("source validation requires aligned or confirmed DBT and matching Business Alignment lineage", () => {
-  const dbt = alignedDigitalBusinessTwinFixture({ status: "partial" });
+test("source validation allows partial aligned-output DBT and requires matching Business Alignment lineage", () => {
+  const dbt = alignedDigitalBusinessTwinFixture({ status: "partial", missingDomains: ["audience"] });
+  const value = buildWebsiteDesignBrief({
+    alignedDigitalBusinessTwin: dbt,
+    businessAlignment: businessAlignmentFixture(dbt.digitalBusinessTwinId),
+    createdAt: WDB_TEST_CREATED_AT,
+  });
+  const validPartial = validateWebsiteDesignBrief({
+    artifact: value,
+    sourceDigitalBusinessTwin: dbt,
+    sourceBusinessAlignment: businessAlignmentFixture(dbt.digitalBusinessTwinId),
+  });
+  const validation = validateWebsiteDesignBrief({
+    artifact: value,
+    sourceDigitalBusinessTwin: dbt,
+    sourceBusinessAlignment: businessAlignmentFixture("other-output-dbt"),
+  });
+
+  assert.equal(validPartial.valid, true);
+  assert.ok(validation.errors.includes("sourceBusinessAlignment lineage must output sourceDigitalBusinessTwinId"));
+});
+
+test("source validation rejects unreviewed observed DBT", () => {
+  const dbt = alignedDigitalBusinessTwinFixture({ status: "observed" });
   const value = buildWebsiteDesignBrief({
     alignedDigitalBusinessTwin: dbt,
     businessAlignment: businessAlignmentFixture(dbt.digitalBusinessTwinId),
@@ -120,9 +142,8 @@ test("source validation requires aligned or confirmed DBT and matching Business 
   const validation = validateWebsiteDesignBrief({
     artifact: value,
     sourceDigitalBusinessTwin: dbt,
-    sourceBusinessAlignment: businessAlignmentFixture("other-output-dbt"),
+    sourceBusinessAlignment: businessAlignmentFixture(dbt.digitalBusinessTwinId),
   });
 
-  assert.ok(validation.errors.includes("sourceDigitalBusinessTwin.status must be aligned, confirmed, or blocked for Website Design Brief"));
-  assert.ok(validation.errors.includes("sourceBusinessAlignment lineage must output sourceDigitalBusinessTwinId"));
+  assert.ok(validation.errors.includes("sourceDigitalBusinessTwin.status must be partial, aligned, confirmed, or blocked for Website Design Brief"));
 });

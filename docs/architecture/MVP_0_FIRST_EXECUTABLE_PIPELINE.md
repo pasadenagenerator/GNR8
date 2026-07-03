@@ -326,6 +326,14 @@ Current implementation:
 - MVP-1E adds the deterministic builder, contract validator, focused tests,
   and provenance persistence boundary under artifact kind
   `website_design_brief`.
+- MVP-1E-R validates the Website Design Brief runtime against real ODV and
+  ViroiDoc aligned DBT vNext artifacts and Business Alignment lineage.
+- MVP-1E-R persists ODV
+  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59` and ViroiDoc
+  `website_design_brief_782c43e390c353d192af867c227d191d`.
+- MVP-1E-R confirms latest reload equality, by-ID reload equality,
+  idempotent retry reuse, human-readability, and no downstream generation
+  material for both targets.
 - Canonical sections are Executive Summary, Website Purpose, Website
   Objectives, Target Audience, Core Messages, Brand Expression, Information
   Priorities, Website Journey, Trust Strategy, Accessibility Goals, SEO Intent,
@@ -337,8 +345,6 @@ Current implementation:
   latest/by-ID loads, `invalid`/`stale` rejection, and `blocked` allowed.
 
 Missing implementation:
-- Real-target Website Design Brief validation against persisted ODV and
-  ViroiDoc aligned DBT vNext artifacts.
 - Human Website Design decision and review workflow.
 - Downstream Website Generation Package runtime builder.
 
@@ -348,14 +354,15 @@ Dependencies:
 - Website Experience Domain scope.
 
 Risk:
-- Medium. The first deterministic Website Design Brief runtime exists, but it
-  still needs real-target validation before downstream package preparation
-  consumes it.
+- Medium-low. The first deterministic Website Design Brief runtime exists and
+  real-target validation has passed, but downstream package preparation is not
+  implemented yet.
 
 Estimated implementation complexity:
 - First deterministic Website Design Brief runtime slice and focused tests are
-  complete. Remaining work starts with real-target validation or the first
-  Website Generation Package runtime builder after validation.
+  complete, and real-target validation has persisted ODV/ViroiDoc WDB
+  artifacts. Remaining work starts with the first Website Generation Package
+  runtime builder.
 
 ### Website Generation Package
 

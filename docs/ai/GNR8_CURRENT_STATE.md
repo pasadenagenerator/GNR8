@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1E - Website Design Brief Runtime Builder
+- Phase MVP-1E-R - Website Design Brief Real-Target Validation
   is complete.
 
 Next Phase:
-- MVP-1E-R Website Design Brief Real-Target Validation.
+- MVP-1F Website Generation Package Runtime Builder.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3681,17 +3681,55 @@ changes, UI, API routes, schema migrations, workers, or generated website
 artifacts.
 
 MVP-1E validation:
-- Focused Website Design Brief tests pass `16 / 16`; initial sandbox
+- Focused Website Design Brief tests pass `17 / 17`; initial sandbox
   execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
   and the rerun outside the sandbox passed.
 - Platform Vercel build passes.
 - `git diff --check` passes.
 
-Recommended next phase after MVP-1E:
-- MVP-1E-R Website Design Brief Real-Target Validation, limited to consuming
-  persisted aligned DBT vNext artifacts and Business Alignment lineage. Stop
-  before Website Generation Package, provider adapters, external AI,
-  generation, compliance, Business Approval, or publishing.
+MVP-1E-R real-target validation:
+- ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` loaded exact
+  aligned DBT `digital_business_twin_2614a690e29e87a201658f3de4f72983` and
+  Business Alignment `business_alignment_18c0a6958048bf8985044e4781e788a8`;
+  both were latest before WDB build.
+- ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` loaded exact
+  aligned DBT `digital_business_twin_3429791a7d365461306d74059c206f8f` and
+  Business Alignment `business_alignment_7a3ad7e2222e732a895f89c1dc22452a`;
+  both were latest before WDB build.
+- ODV persisted
+  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59`, status `partial`,
+  17 sections, 2 objectives, 0 audience-experience items with audience
+  missing-knowledge limitation recorded, 5 messages, journey present with 4
+  steps, 6 constraints, LOW confidence, 109 limitations, and WDB-valid
+  diagnostics.
+- ViroiDoc persisted
+  `website_design_brief_782c43e390c353d192af867c227d191d`, status `partial`,
+  17 sections, 3 objectives, 0 audience-experience items with audience
+  missing-knowledge limitation recorded, 12 messages, journey present with 4
+  steps, 4 constraints, LOW confidence, 108 limitations, and WDB-valid
+  diagnostics.
+- Both briefs clearly explain the website kind, map business goals to website
+  objectives, preserve missing audience knowledge, project brand/digital
+  presence into website intent, use trust/content/digital presence to shape
+  intent, and preserve limitations before WGP.
+- Latest reload equality, by-ID reload equality, and idempotent retry reuse
+  passed for both Website Design Brief artifacts.
+- Blocking WDB fix: source validation now accepts a Business-Alignment-output
+  DBT with status `partial`, matching MVP-1D-R's conservative unresolved
+  knowledge behavior while still rejecting unreviewed `observed` DBTs.
+- Safety scan found no WGP, provider payload, prompt, AI output, generated
+  content, generated HTML, generated React, generated components, publishing
+  artifact, generation, compliance, or Business Approval.
+- Focused Website Design Brief tests pass `17 / 17`; initial sandbox
+  execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
+  and the rerun outside the sandbox passed.
+- `cd apps/platform && pnpm run vercel-build` passes.
+- `git diff --check` passes.
+
+Recommended next phase after MVP-1E-R:
+- MVP-1F Website Generation Package Runtime Builder. Stop before provider
+  adapters, external AI, generation, compliance, Business Approval,
+  publishing, UI, API, schema, or workers unless explicitly authorized.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

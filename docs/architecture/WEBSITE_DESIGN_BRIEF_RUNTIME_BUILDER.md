@@ -129,6 +129,8 @@ Builder status behavior:
 
 - aligned or confirmed DBT with no missing knowledge -> `valid`;
 - aligned or confirmed DBT with missing knowledge -> `partial`;
+- Business-Alignment-output DBT with status `partial` -> `partial`, preserving
+  missing knowledge instead of inventing facts;
 - blocked DBT or blocked Business Alignment -> `blocked`;
 - invalid source -> `invalid`;
 - stale source -> `stale`.
@@ -148,6 +150,8 @@ artifact is blocked.
 - complete canonical section coverage;
 - structured section items;
 - confidence, limitations, diagnostics, and evidence refs;
+- source DBT statuses `partial`, `aligned`, `confirmed`, or `blocked`, with
+  Business Alignment lineage required to output the source DBT;
 - recursive forbidden downstream fields;
 - absence of implementation instructions.
 
@@ -200,7 +204,7 @@ NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test apps/platform/gnr8
 Result:
 
 ```text
-16 / 16 passing
+17 / 17 passing
 ```
 
 Initial sandbox execution hit the known `tsx` IPC pipe permission issue. The
@@ -214,4 +218,5 @@ publishing behavior, UI route, API route, worker behavior, or schema migration.
 
 Recommended next phase:
 
-- MVP-1E-R Website Design Brief Real-Target Validation.
+- MVP-1E-R Website Design Brief Real-Target Validation is complete.
+- Next recommended phase: MVP-1F Website Generation Package Runtime Builder.
