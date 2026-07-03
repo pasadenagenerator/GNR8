@@ -248,9 +248,45 @@ NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test apps/platform/gnr8
 Platform Vercel build and `git diff --check` are part of the MVP-1B closure
 validation.
 
+## MVP-1B-R Real-Target Validation
+
+MVP-1B-R validated the DBT builder, persistence, lineage, reload helpers, and
+idempotent persistence behavior against the real ODV and ViroiDoc Business
+Discovery artifacts.
+
+Canonical validation document:
+
+```text
+docs/architecture/DIGITAL_BUSINESS_TWIN_REAL_TARGET_VALIDATION.md
+```
+
+Persisted real-target DBT artifacts:
+
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`:
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f`
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`:
+  `digital_business_twin_4eb9e9260ba45b9efee236ec18769e92`
+
+Both DBTs are `partial`, valid, persisted, reloadable by latest pointer and by
+exact artifact ID, and idempotent retry reuses the same artifact record.
+
+ODV has 12 DBT knowledge items and 2 missing knowledge records:
+`offerings` and `audience`.
+
+ViroiDoc has 17 DBT knowledge items and 1 missing knowledge record:
+`audience`.
+
+Blocked Business Discovery was verified to produce a blocked DBT with 0 usable
+knowledge items and 9 missing knowledge records. Recursive safety scans found
+no Business Understanding Report, Business Alignment, Website Design Brief,
+Website Generation Package, provider payload, prompt, AI output, generated
+HTML, generated React, generated components, generated blocks, publishing,
+deployment, or execution artifact fields.
+
 ## Next Step
 
-MVP-1C should implement the Business Understanding Report from persisted DBT
-artifacts and stop before Business Alignment, Website Design Brief, Website
-Generation Package, provider adapters, external AI, generation, compliance,
-Business Approval, or publishing.
+MVP-1C-R should retry Business Understanding Report real-target validation
+from the newly persisted ODV and ViroiDoc DBT artifacts and stop before
+Business Alignment, Website Design Brief, Website Generation Package, provider
+adapters, external AI, generation, compliance, Business Approval, or
+publishing.

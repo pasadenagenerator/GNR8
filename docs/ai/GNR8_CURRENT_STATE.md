@@ -3211,10 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1C - Business Understanding Report Runtime Builder is complete.
+- Phase MVP-1D - Business Alignment Runtime Foundation
+  is complete.
 
 Next Phase:
-- MVP-1D Business Alignment Runtime Foundation.
+- MVP-1E Website Design Brief Runtime Builder.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3236,9 +3237,11 @@ MVP-0 reality assessment:
 - Digital Business Twin: canonical runtime artifact, deterministic builder,
   provenance persistence, and focused tests exist; Business Owner confirmation
   and multi-source reconciliation are not implemented.
-- Business Understanding Report, Business Alignment, Website Design Brief,
-  Website Generation Package, External AI, Generation Contract Compliance, and
-  Business Approval: architecture complete, runtime missing.
+- Business Understanding Report and Business Alignment: first runtime
+  foundations exist.
+- Website Design Brief, Website Generation Package, External AI, Generation
+  Contract Compliance, and Business Approval: architecture complete, runtime
+  missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
   Publish gating for generated proposals is missing.
 
@@ -3385,6 +3388,33 @@ MVP-1B validation:
 - `cd apps/platform && pnpm run vercel-build` passes.
 - `git diff --check` passes.
 
+MVP-1B-R real-target validation:
+- Canonical document:
+  `docs/architecture/DIGITAL_BUSINESS_TWIN_REAL_TARGET_VALIDATION.md`.
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` persisted
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` from
+  `business_discovery_7b37413651d79de0d109e31690a34b62`.
+- ODV DBT status is `partial`, with 12 knowledge items, 2 missing knowledge
+  records (`offerings`, `audience`), 104 limitations, `LOW` confidence, valid
+  lineage, latest reload equality, by-ID reload equality, and idempotent retry
+  reuse.
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf` persisted
+  `digital_business_twin_4eb9e9260ba45b9efee236ec18769e92` from
+  `business_discovery_360fa099cbcede288c2d0e04f2ec7986`.
+- ViroiDoc DBT status is `partial`, with 17 knowledge items, 1 missing
+  knowledge record (`audience`), 105 limitations, `LOW` confidence, valid
+  lineage, latest reload equality, by-ID reload equality, and idempotent retry
+  reuse.
+- Business Discovery findings were converted into DBT knowledge without
+  invented source findings. Missing Business Discovery domains became
+  `missingKnowledge`.
+- Blocked Business Discovery produces a blocked DBT with 0 usable knowledge
+  items and 9 missing knowledge records.
+- Safety scan found no Business Understanding Report, Business Alignment,
+  Website Design Brief, Website Generation Package, provider payload, prompt,
+  AI output, generated HTML, generated React, generated components, generated
+  blocks, publishing artifact, deployment artifact, or execution artifact.
+
 Phase MVP-1C creates the first runtime Business Understanding Report artifact
 from persisted Digital Business Twin:
 `docs/architecture/BUSINESS_UNDERSTANDING_REPORT_RUNTIME_BUILDER.md`.
@@ -3446,11 +3476,115 @@ MVP-1C validation:
 - `cd apps/platform && pnpm run vercel-build` passes.
 - `git diff --check` passes.
 
+Recommended next phase after MVP-1C implementation:
+- MVP-1C-R Business Understanding Report Real-Target Validation retry.
+
+MVP-1C-R real-target validation:
+- Canonical document:
+  `docs/architecture/BUSINESS_UNDERSTANDING_REPORT_REAL_TARGET_VALIDATION.md`.
+- Previous attempt before MVP-1B-R was blocked for both supplied targets
+  because the required latest persisted `DigitalBusinessTwinArtifact` was
+  missing at that time.
+- ODV source DBT
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` is latest for
+  site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` and produced persisted
+  BUR artifact
+  `business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad`.
+- ODV BUR status is `partial`, with 14 sections, 2 recommendations, 2 missing
+  knowledge records (`audience`, `offerings`), 104 limitations, `LOW`
+  confidence, valid lineage, latest reload equality, by-ID reload equality,
+  and idempotent retry reuse.
+- ViroiDoc source DBT
+  `digital_business_twin_4eb9e9260ba45b9efee236ec18769e92` is latest for
+  site version `e26b0754-988b-45b9-9e24-8e213179b6cf` and produced persisted
+  BUR artifact
+  `business_understanding_report_007e94c64a3fd1d637c7c6e3d64ded10`.
+- ViroiDoc BUR status is `partial`, with 14 sections, 1 recommendation, 1
+  missing knowledge record (`audience`), 105 limitations, `LOW` confidence,
+  valid lineage, latest reload equality, by-ID reload equality, and idempotent
+  retry reuse.
+- Human-readability checks pass for both targets: the reports explain current
+  business understanding, products/services, audience gaps, brand/digital
+  presence, missing knowledge, and business-oriented recommendations without
+  inventing absent knowledge.
+- Safety scan found no Business Alignment, Website Design Brief, Website
+  Generation Package, provider payload, prompt, AI output, generated content,
+  or publishing artifact fields in the persisted BUR artifacts.
+- Focused Business Understanding Report tests pass `19 / 19`; initial sandbox
+  execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
+  and the rerun outside the sandbox passed.
+- `cd apps/platform && pnpm run vercel-build` passes with existing unrelated
+  frontend lint warnings for hook dependency and `<img>` usage.
+- `git diff --check` passes.
+
 Recommended next phase:
 - MVP-1D Business Alignment Runtime Foundation, limited to consuming persisted
   Business Understanding Report artifacts and stopping before Website Design
   Brief, Website Generation Package, provider adapters, external AI,
   generation, compliance, Business Approval, or publishing.
+
+Phase MVP-1D creates the first Business Alignment runtime foundation:
+`docs/architecture/BUSINESS_ALIGNMENT_RUNTIME_FOUNDATION.md`.
+
+MVP-1D implementation summary:
+- `apps/platform/gnr8/architecture/business-alignment-contract.ts` defines
+  `BusinessAlignmentArtifact`, `BusinessAlignmentDecision`,
+  `BusinessAlignmentCorrection`, `BusinessAlignmentLineage`,
+  `BusinessAlignmentConfidence`, `BusinessAlignmentValidationResult`, and
+  `BusinessAlignmentStatus`.
+- Allowed statuses are `draft`, `reviewed`, `applied`, `blocked`, `invalid`,
+  and `stale`.
+- MVP correction domains are `business_identity`, `offerings`, `audience`,
+  `brand`, `digital_presence`, `goals`, `trust`, `content`, and
+  `constraints`.
+- MVP correction types are `confirm`, `correct`, `remove`, `add_missing`, and
+  `unresolved`.
+- `apps/platform/gnr8/architecture/business-alignment-runtime.ts` implements
+  `applyBusinessAlignment(...)` as a deterministic runtime from one source
+  Digital Business Twin, one source Business Understanding Report, explicit
+  alignment decisions, and explicit corrections.
+- Business Alignment evolves the Digital Business Twin. Business Alignment
+  never edits reports.
+- Business Understanding Reports remain deterministic projections from the
+  current Digital Business Twin. MVP-1D does not implement report
+  regeneration.
+- Corrections apply only to DBT knowledge and missing knowledge. The runtime
+  never overwrites the source DBT; it produces DBT vNext with a new
+  `digitalBusinessTwinId`.
+- The runtime preserves source lineage, upstream artifact refs, evidence refs,
+  confidence, limitations, and diagnostics. Unresolved corrections become
+  missing knowledge and limitations.
+- `apps/platform/gnr8/architecture/business-alignment-persistence.ts` stores
+  artifact kind `business_alignment` in the existing site-version
+  `importProvenanceSummary`, with append-only `businessAlignmentArtifacts` and
+  `latestBusinessAlignmentArtifact`.
+- Equivalent latest artifacts are reused; changed current artifacts append;
+  latest and by-ID read helpers are implemented.
+- Persistence rejects `invalid` and `stale`; `blocked` is accepted as a valid
+  fail-closed artifact.
+- Recursive forbidden fields are rejected: `websiteDesignBrief`,
+  `websiteGenerationPackage`, `providerPayload`, `prompt`,
+  `generatedContent`, `generatedReact`, `generatedHtml`,
+  `generatedComponents`, `generatedBlocks`, `AIOutput`, `aiOutput`,
+  `publishingArtifact`, `deploymentArtifact`, and `executionArtifact`.
+
+MVP-1D did not implement Website Design Brief, Website Generation Package,
+provider adapters, external AI integration, generation, compliance, Business
+Approval, publishing changes, UI, API routes, or schema migrations.
+
+MVP-1D validation:
+- Focused Business Alignment tests pass `16 / 16`; initial sandbox execution
+  hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue, and the
+  rerun outside the sandbox passed.
+- `cd apps/platform && pnpm run vercel-build` passes with existing unrelated
+  frontend lint warnings for hook dependency and `<img>` usage.
+- `git diff --check` passes.
+
+Recommended next phase after MVP-1D:
+- MVP-1E Website Design Brief Runtime Builder, limited to consuming aligned
+  DBT output and Business Alignment lineage. Stop before Website Generation
+  Package, provider adapters, external AI, generation, compliance, Business
+  Approval, or publishing.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

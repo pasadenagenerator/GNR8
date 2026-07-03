@@ -257,3 +257,41 @@ Report from a Digital Business Twin.
 
 The next architecture stage remains Business Alignment, but MVP-1C does not
 implement it.
+
+## MVP-1C-R Real-Target Validation
+
+MVP-1C-R validates the BUR contract, builder, and persistence helpers against
+the real ODV and ViroiDoc DBT artifacts:
+
+- ODV: `09dce7ea-d860-4f60-a1eb-26c3335b302e`
+- ViroiDoc: `e26b0754-988b-45b9-9e24-8e213179b6cf`
+
+The first attempt before MVP-1B-R was blocked because both site versions were
+missing persisted DBT artifacts. The retry consumed the newly persisted DBT
+artifacts and succeeded:
+
+- ODV source DBT
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` was confirmed
+  latest and produced
+  `business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad`.
+- ViroiDoc source DBT
+  `digital_business_twin_4eb9e9260ba45b9efee236ec18769e92` was confirmed
+  latest and produced
+  `business_understanding_report_007e94c64a3fd1d637c7c6e3d64ded10`.
+- Both BUR artifacts are `partial`, persisted, latest-reloadable,
+  by-ID-reloadable, and idempotent retry reuses the same artifact.
+- ODV produced 14 sections, 2 recommendations, 2 missing knowledge records
+  (`audience`, `offerings`), 104 limitations, and `LOW` confidence.
+- ViroiDoc produced 14 sections, 1 recommendation, 1 missing knowledge record
+  (`audience`), 105 limitations, and `LOW` confidence.
+- Human-readability checks passed: both reports explain current business
+  understanding, products/services, audience gaps, brand/digital presence,
+  missing knowledge, and business-oriented recommendations without inventing
+  absent knowledge.
+- Safety verification found no Business Alignment, Website Design Brief,
+  Website Generation Package, provider payload, prompt, AI output, generated
+  content, or publishing artifact fields in the persisted BUR artifacts.
+
+The focused BUR tests pass `19 / 19`, the platform Vercel build passes with
+existing unrelated frontend lint warnings, and `git diff --check` passes.
+MVP-1C-R stops before Business Alignment.
