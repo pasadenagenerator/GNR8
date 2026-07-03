@@ -59,7 +59,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Business Understanding Report | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Business Alignment | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Website Design Brief | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
-| Website Generation Package | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
+| Website Generation Package | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | External AI | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Generation Contract Compliance | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Business Approval | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
@@ -369,14 +369,23 @@ Estimated implementation complexity:
 Current implementation:
 - The architecture specification and earlier Generation Package foundation
   document exist.
-- No canonical `WebsiteGenerationPackage` runtime artifact, builder,
-  persistence, tests, provider-neutral validation contract, or downstream
-  adapter handoff exists.
+- MVP-1F adds the first canonical `WebsiteGenerationPackage` runtime artifact
+  from a persisted Website Design Brief.
+- MVP-1F adds the deterministic builder, contract validator, focused tests,
+  provider-neutral validation contract, and provenance persistence boundary
+  under artifact kind `website_generation_package`.
+- The package answers: "What must an external generation system create?"
+- The package is not a prompt, provider payload, generated website,
+  implementation artifact, publishing artifact, UI, API, schema, or worker.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  append-only `websiteGenerationPackageArtifacts`,
+  `latestWebsiteGenerationPackageArtifact`, equivalent latest reuse, changed
+  append, latest/by-ID loads, `invalid`/`stale` rejection, and `blocked`
+  allowed.
 
 Missing implementation:
-- Deterministic package builder from an aligned Website Design Brief.
-- Immutable package artifact persistence.
-- Validation contract and acceptance criteria.
+- Real-target validation against persisted ODV and ViroiDoc Website Design
+  Brief artifacts.
 - Provider serialization boundary.
 
 Dependencies:
@@ -386,12 +395,14 @@ Dependencies:
 - Canonical artifact persistence.
 
 Risk:
-- Critical. The Website Generation Package is the contract GNR8 owns before
-  any external AI system executes.
+- Medium. The first deterministic Website Generation Package runtime exists,
+  but real-target validation and provider serialization are not implemented
+  yet.
 
 Estimated implementation complexity:
-- Medium to high. The first version can be text/JSON and provider-neutral,
-  with one provider adapter built later.
+- First deterministic Website Generation Package runtime slice and focused
+  tests are complete. Remaining work starts with real-target validation before
+  any provider adapter is introduced.
 
 ### External AI
 
@@ -532,8 +543,8 @@ implementation sequence is:
    then expose the aligned DBT output to Website Design Brief.
 7. Implement Website Design Brief builder from aligned DBT and Business
    Alignment.
-8. Implement Website Generation Package builder from aligned Website Design
-   Brief.
+8. Validate Website Generation Package runtime against real persisted Website
+   Design Brief artifacts.
 9. Implement one external AI provider adapter that serializes the Website
    Generation Package without redefining it and stores a Generated Website
    Proposal.
@@ -752,7 +763,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1E-R Website Design Brief Real-Target Validation
+MVP-1F-R Website Generation Package Real-Target Validation
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -764,7 +775,14 @@ Design Brief runtime builder from aligned DBT output and Business Alignment
 lineage. The brief is the first Experience Projection, contains website intent
 only, and contains no implementation, provider knowledge, prompts, generation,
 compliance, approval, publishing, UI, API, or schema migration behavior.
-The next safe phase is real-target validation of persisted ODV and ViroiDoc
-aligned DBT vNext artifacts before any Website Generation Package work. Stop
-before Website Generation Package, provider adapters, external AI, generation,
-compliance, Business Approval, or publishing.
+MVP-1E-R validated that brief runtime on persisted ODV and ViroiDoc aligned
+DBT vNext artifacts and Business Alignment lineage. MVP-1F implemented the
+first deterministic Website Generation Package runtime builder from persisted
+Website Design Brief artifacts. The package is provider-neutral, contains the
+generation contract and validation expectations, and contains no provider
+payload, prompt, external AI call, generated website, compliance evaluator,
+Business Approval artifact, publishing behavior, UI, API, schema migration, or
+worker behavior. The next safe phase is real-target validation of persisted ODV
+and ViroiDoc Website Design Brief artifacts into Website Generation Packages.
+Stop before provider adapters, external AI, generation, compliance, Business
+Approval, publishing, UI, API, schema, or workers.

@@ -18,13 +18,14 @@ Current status:
 - Phase MVP-1E - Website Design Brief Runtime Builder is complete.
 - Phase MVP-1E-R - Website Design Brief Real-Target Validation is complete and
   has persisted ODV and ViroiDoc Website Design Brief artifacts.
+- Phase MVP-1F - Website Generation Package Runtime Builder is complete.
 
 Current Phase:
-- Phase MVP-1E-R - Website Design Brief Real-Target Validation
+- Phase MVP-1F - Website Generation Package Runtime Builder
   is complete.
 
 Next Phase:
-- MVP-1F Website Generation Package Runtime Builder.
+- MVP-1F-R Website Generation Package Real-Target Validation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -147,103 +148,87 @@ Current architecture direction:
   persists Business Alignment artifacts, and persists governed DBT vNext
   artifacts without adding customer facts. MVP-1E implements the first
   deterministic Website Design Brief runtime builder from aligned DBT output
-  and Business Alignment lineage.
+  and Business Alignment lineage. MVP-1E-R validates that runtime against
+  persisted ODV and ViroiDoc aligned DBT vNext artifacts and Business
+  Alignment lineage. MVP-1F implements the first deterministic Website
+  Generation Package runtime builder from persisted Website Design Brief
+  artifacts.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Current validation status:
-- Phase MVP-1E-R - Website Design Brief Real-Target Validation
+- Phase MVP-1F - Website Generation Package Runtime Builder
   is COMPLETE.
 - Canonical document:
-  `docs/architecture/WEBSITE_DESIGN_BRIEF_REAL_TARGET_VALIDATION.md`.
+  `docs/architecture/WEBSITE_GENERATION_PACKAGE_RUNTIME_BUILDER.md`.
 - Runtime-builder document:
-  `docs/architecture/WEBSITE_DESIGN_BRIEF_RUNTIME_BUILDER.md`.
-- Website Design Brief is NOT a design document.
-- Website Design Brief is the first Experience Projection of an Aligned
-  Digital Business Twin.
-- Website Design Brief is produced ONLY from an Aligned Digital Business Twin
-  and Business Alignment lineage.
-- Website Design Brief contains website intent.
-- Website Design Brief never contains implementation.
-- Runtime behavior: `buildWebsiteDesignBrief(...)` deterministically projects
-  aligned DBT knowledge into canonical website-intent sections while
-  preserving missing knowledge, confidence, limitations, diagnostics,
-  evidence refs, and lineage.
-- Canonical sections: Executive Summary, Website Purpose, Website Objectives,
-  Target Audience, Core Messages, Brand Expression, Information Priorities,
-  Website Journey, Trust Strategy, Accessibility Goals, SEO Intent,
-  Experience Constraints, Missing Knowledge, Recommendations, Confidence,
-  Limitations, and Diagnostics.
-- Transformation behavior: Business Goals -> Website Objectives; Audience ->
-  Audience Experience; Offerings -> Information Priorities; Brand -> Brand
-  Expression; Trust -> Trust Strategy; Digital Presence -> Experience
-  Recommendations; Missing knowledge -> Missing Knowledge section.
-- Persistence: artifact kind `website_design_brief` in the existing
+  `docs/architecture/WEBSITE_GENERATION_PACKAGE_RUNTIME_BUILDER.md`.
+- Website Generation Package answers: "What must an external generation system
+  create?"
+- Website Generation Package consumes only a persisted Website Design Brief
+  and lineage already present in WDB.
+- Website Generation Package is provider-neutral and implementation-neutral.
+- Website Generation Package is not a prompt, provider payload, generated
+  website, publishing artifact, UI, API, schema, or worker.
+- Runtime behavior: `buildWebsiteGenerationPackage(...)` deterministically
+  projects WDB objectives, audience, messages, journey, constraints, missing
+  knowledge, confidence, limitations, evidence refs, lineage, and diagnostics
+  into a generation contract.
+- Generation contract shape includes business context, generation objectives,
+  audience requirements, required messaging, navigation contract, page
+  contracts, section contracts, content requirements, constraints, validation
+  contract, confidence, limitations, and diagnostics.
+- Validation contract expectations cover business positioning, audience
+  representation, message coverage, brand consistency, navigation
+  completeness, journey completeness, trust signal coverage, accessibility
+  expectations, SEO intent, and constraint preservation.
+- Persistence: artifact kind `website_generation_package` in the existing
   site-version `importProvenanceSummary` boundary with append-only
-  `websiteDesignBriefArtifacts`, latest pointer
-  `latestWebsiteDesignBriefArtifact`, equivalent latest reuse, changed append,
-  latest/by-ID load, `invalid`/`stale` rejection, and `blocked` allowed.
-- ODV persisted
-  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59`, status `partial`,
-  17 sections, 2 objectives, audience missing-knowledge limitation recorded,
-  5 messages, journey present with 4 steps, 6 constraints, LOW confidence,
-  and 109 limitations.
-- ViroiDoc persisted
-  `website_design_brief_782c43e390c353d192af867c227d191d`, status `partial`,
-  17 sections, 3 objectives, audience missing-knowledge limitation recorded,
-  12 messages, journey present with 4 steps, 4 constraints, LOW confidence,
-  and 108 limitations.
-- Latest reload equality, by-ID reload equality, and idempotent retry reuse
-  passed for both Website Design Brief artifacts.
-- The briefs are human-readable: they explain the website kind, map business
-  goals to website objectives, preserve missing audience knowledge, project
-  brand/digital presence into website intent, use trust/content/digital
-  presence to shape intent, and preserve limitations before WGP.
-- Blocking WDB fix: source validation now accepts a Business-Alignment-output
-  DBT with status `partial`, matching MVP-1D-R's conservative unresolved
-  knowledge behavior while still rejecting unreviewed `observed` DBTs.
-- Focused Website Design Brief tests pass `17 / 17`; initial sandbox execution
-  hit the known `tsx` IPC pipe permission issue, and the rerun outside the
-  sandbox passed.
-- MVP-1E-R created no Website Generation Package, provider adapter, external
-  AI call, generated website, compliance artifact, Business Approval artifact,
+  `websiteGenerationPackageArtifacts`, latest pointer
+  `latestWebsiteGenerationPackageArtifact`, equivalent latest reuse, changed
+  append, latest/by-ID load, `invalid`/`stale` rejection, and `blocked`
+  allowed.
+- Focused Website Generation Package tests pass `18 / 18`; initial sandbox
+  execution hit the known `tsx` IPC pipe permission issue, and the rerun
+  outside the sandbox passed.
+- MVP-1F created no provider adapter, external AI call, generated website,
+  compliance evaluator, Compliance Report, Business Approval artifact,
   publishing behavior, UI route, API route, worker behavior, or schema
   migration.
-- Next recommended phase is MVP-1F Website Generation Package Runtime
-  Builder. Stop before provider adapters, external AI, generation, compliance,
-  Business Approval, publishing, UI, API, schema, or workers unless explicitly
-  authorized.
+- Next recommended phase is MVP-1F-R Website Generation Package Real-Target
+  Validation. Stop before provider adapters, external AI, generation,
+  compliance, Business Approval, publishing, UI, API, schema, or workers
+  unless explicitly authorized.
 
 Latest completed milestone:
-- Phase MVP-1E-R - Website Design Brief Real-Target Validation.
-- Status: COMPLETE / REAL ODV VALIDATED / REAL VIROIDOC VALIDATED /
-  WDB ARTIFACTS PERSISTED / RELOAD EQUALITY PASSES / IDEMPOTENT RETRY
-  REUSES ARTIFACTS / HUMAN-READABLE / LIMITATIONS PRESERVED /
-  NO WEBSITE GENERATION PACKAGE / NO AI / NO PROVIDER ADAPTER /
-  NO GENERATION / NO COMPLIANCE / NO BUSINESS APPROVAL / NO PUBLISHING /
+- Phase MVP-1F - Website Generation Package Runtime Builder.
+- Status: COMPLETE / RUNTIME BUILDER IMPLEMENTED / CONTRACT VALIDATION
+  IMPLEMENTED / PROVIDER-NEUTRAL VALIDATION CONTRACT IMPLEMENTED /
+  PROVENANCE PERSISTENCE IMPLEMENTED / FOCUSED TESTS PASS /
+  NO PROVIDER ADAPTER / NO EXTERNAL AI / NO GENERATED WEBSITE /
+  NO COMPLIANCE EVALUATOR / NO BUSINESS APPROVAL / NO PUBLISHING /
   NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS.
 - Canonical document:
-  `docs/architecture/WEBSITE_DESIGN_BRIEF_REAL_TARGET_VALIDATION.md`.
+  `docs/architecture/WEBSITE_GENERATION_PACKAGE_RUNTIME_BUILDER.md`.
 - Runtime-builder document:
-  `docs/architecture/WEBSITE_DESIGN_BRIEF_RUNTIME_BUILDER.md`.
+  `docs/architecture/WEBSITE_GENERATION_PACKAGE_RUNTIME_BUILDER.md`.
 - Runtime files:
-  `apps/platform/gnr8/architecture/website-design-brief-contract.ts`,
-  `apps/platform/gnr8/architecture/website-design-brief-builder.ts`, and
-  `apps/platform/gnr8/architecture/website-design-brief-persistence.ts`.
-- Test files:
-  `apps/platform/gnr8/architecture/website-design-brief-contract.test.ts`,
-  `apps/platform/gnr8/architecture/website-design-brief-builder.test.ts`,
+  `apps/platform/gnr8/architecture/website-generation-package-contract.ts`,
+  `apps/platform/gnr8/architecture/website-generation-package-builder.ts`,
   and
-  `apps/platform/gnr8/architecture/website-design-brief-persistence.test.ts`.
-- Artifact kind: `website_design_brief`.
-- Contract version: `MVP-1E`.
-- Persisted artifacts:
-  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59` and
-  `website_design_brief_782c43e390c353d192af867c227d191d`.
-- Recommended next phase after MVP-1E-R: MVP-1F Website Generation Package
-  Runtime Builder.
+  `apps/platform/gnr8/architecture/website-generation-package-persistence.ts`.
+- Test files:
+  `apps/platform/gnr8/architecture/website-generation-package-contract.test.ts`,
+  `apps/platform/gnr8/architecture/website-generation-package-builder.test.ts`,
+  and
+  `apps/platform/gnr8/architecture/website-generation-package-persistence.test.ts`.
+- Artifact kind: `website_generation_package`.
+- Contract version: `MVP-1F`.
+- Focused test result: `18 / 18` passing.
+- Recommended next phase after MVP-1F: MVP-1F-R Website Generation Package
+  Real-Target Validation.
 
 Previous completed milestone:
 - Phase MVP-1D-R - Business Alignment Real-Target Validation.

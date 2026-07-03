@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1E-R - Website Design Brief Real-Target Validation
+- Phase MVP-1F - Website Generation Package Runtime Builder
   is complete.
 
 Next Phase:
-- MVP-1F Website Generation Package Runtime Builder.
+- MVP-1F-R Website Generation Package Real-Target Validation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3240,10 +3240,12 @@ MVP-0 reality assessment:
 - Business Understanding Report and Business Alignment: first runtime
   foundations exist, and both have passed ODV/ViroiDoc real-target validation.
 - Website Design Brief: first runtime contract, deterministic builder,
-  provenance persistence, and focused tests exist. Real-target validation is
-  next.
-- Website Generation Package, External AI, Generation Contract Compliance, and
-  Business Approval: architecture complete, runtime missing.
+  provenance persistence, focused tests, and real-target validation exist.
+- Website Generation Package: first runtime contract, deterministic builder,
+  validation helper, provider-neutral validation contract, provenance
+  persistence, and focused tests exist. Real-target validation is next.
+- External AI, Generation Contract Compliance, and Business Approval:
+  architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
   Publish gating for generated proposals is missing.
 
@@ -3727,8 +3729,76 @@ MVP-1E-R real-target validation:
 - `git diff --check` passes.
 
 Recommended next phase after MVP-1E-R:
-- MVP-1F Website Generation Package Runtime Builder. Stop before provider
-  adapters, external AI, generation, compliance, Business Approval,
+- MVP-1F Website Generation Package Runtime Builder.
+
+Phase MVP-1F creates the first runtime Website Generation Package artifact
+from a persisted Website Design Brief:
+`docs/architecture/WEBSITE_GENERATION_PACKAGE_RUNTIME_BUILDER.md`.
+
+MVP-1F implementation summary:
+- `apps/platform/gnr8/architecture/website-generation-package-contract.ts`
+  defines `WebsiteGenerationPackageArtifact`,
+  `WebsiteGenerationPackageLineage`, `WebsiteGenerationObjective`,
+  `WebsiteGenerationAudience`, `WebsiteGenerationMessage`,
+  `WebsiteGenerationNavigationContract`, `WebsiteGenerationPageContract`,
+  `WebsiteGenerationSectionContract`,
+  `WebsiteGenerationContentRequirement`, `WebsiteGenerationConstraint`,
+  `WebsiteGenerationValidationExpectation`,
+  `WebsiteGenerationConfidence`, `WebsiteGenerationValidationResult`, and
+  `WebsiteGenerationPackageStatus`.
+- Allowed statuses are `draft`, `partial`, `valid`, `blocked`, `invalid`, and
+  `stale`.
+- Website Generation Package answers: "What must an external generation system
+  create?"
+- Website Generation Package is NOT a prompt, provider payload, generated
+  website, implementation artifact, publishing artifact, UI, API, schema, or
+  worker.
+- Website Generation Package consumes only a persisted Website Design Brief and
+  lineage already present in that WDB.
+- `apps/platform/gnr8/architecture/website-generation-package-builder.ts`
+  implements `buildWebsiteGenerationPackage(...)` as a deterministic builder
+  from one Website Design Brief artifact.
+- Transformation behavior: WDB Objectives -> Generation Objectives; WDB
+  Audience Experience -> Audience Requirements; WDB Messages -> Required
+  Messaging; WDB Journey -> Navigation/Page/Section Intent; WDB constraints,
+  missing knowledge, limitations, SEO, accessibility, trust, and information
+  priorities -> content requirements and constraints.
+- Missing knowledge remains explicit and is never filled by inference.
+- Confidence, limitations, evidence refs, lineage, and diagnostics propagate
+  from WDB.
+- The validation contract covers business positioning, audience
+  representation, message coverage, brand consistency, navigation
+  completeness, journey completeness, trust signal coverage, accessibility
+  expectations, SEO intent, and constraint preservation.
+- `apps/platform/gnr8/architecture/website-generation-package-persistence.ts`
+  stores artifact kind `website_generation_package` in the existing
+  site-version `importProvenanceSummary`, with append-only
+  `websiteGenerationPackageArtifacts` and
+  `latestWebsiteGenerationPackageArtifact`.
+- Equivalent latest artifacts are reused; changed current artifacts append;
+  latest and by-ID read helpers are implemented.
+- Persistence rejects `invalid` and `stale`; `blocked` is accepted as a valid
+  fail-closed artifact.
+- Recursive forbidden fields are rejected: `providerPayload`, `prompt`,
+  `openAiPrompt`, `claudePrompt`, `geminiPrompt`, `aiOutput`,
+  `generatedWebsite`, `generatedContent`, `generatedHtml`, `generatedReact`,
+  `generatedComponents`, `generatedBlocks`, `code`, `framework`, `library`,
+  `deploymentArtifact`, `publishingArtifact`, and `executionArtifact`.
+
+MVP-1F did not implement provider adapters, external AI integration,
+generation, compliance execution, Business Approval, publishing changes, UI,
+API routes, schema migrations, workers, or generated website artifacts.
+
+MVP-1F validation:
+- Focused Website Generation Package tests pass `18 / 18`; initial sandbox
+  execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
+  and the rerun outside the sandbox passed.
+- `cd apps/platform && pnpm run vercel-build` passes.
+- `git diff --check` passes.
+
+Recommended next phase after MVP-1F:
+- MVP-1F-R Website Generation Package Real-Target Validation. Stop before
+  provider adapters, external AI, generation, compliance, Business Approval,
   publishing, UI, API, schema, or workers unless explicitly authorized.
 
 Phase AO-0 created the first complete canonical architecture narrative:
