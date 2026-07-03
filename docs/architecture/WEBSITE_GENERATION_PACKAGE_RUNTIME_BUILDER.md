@@ -204,12 +204,33 @@ Result:
 Initial sandbox execution hit the known `tsx` IPC pipe permission issue. The
 same focused command passed outside the sandbox.
 
+Real-target validation:
+
+- MVP-1F-R validates this runtime against real persisted ODV and ViroiDoc
+  Website Design Brief artifacts.
+- Canonical validation report:
+  `docs/architecture/WEBSITE_GENERATION_PACKAGE_REAL_TARGET_VALIDATION.md`.
+- ODV source WDB:
+  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59`.
+- ODV persisted WGP:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`.
+- ViroiDoc source WDB:
+  `website_design_brief_782c43e390c353d192af867c227d191d`.
+- ViroiDoc persisted WGP:
+  `website_generation_package_3e34393aef612a2c597042917dc45085`.
+- Both WGPs are `partial`, provider-neutral, reloadable by latest and by ID,
+  semantically equal to rebuilt output, and idempotent retries reuse the same
+  artifact IDs.
+
 ## Boundary Confirmation
 
-MVP-1F created no provider adapter, external AI call, generated website,
-compliance evaluator, Compliance Report, Business Approval artifact, publishing
-behavior, UI route, API route, worker behavior, or schema migration.
+MVP-1F and MVP-1F-R created no provider adapter, external AI call, generated
+website, compliance evaluator, Compliance Report, Business Approval artifact,
+publishing behavior, UI route, API route, worker behavior, or schema migration.
 
 Recommended next phase:
 
-- MVP-1F-R Website Generation Package Real-Target Validation.
+- MVP-1G Provider Adapter Boundary Design, documentation and contract design
+  only. Stop before provider payloads, prompts, external AI calls, generated
+  websites, compliance execution, Business Approval, publishing, UI, API,
+  schema, or workers unless explicitly authorized.

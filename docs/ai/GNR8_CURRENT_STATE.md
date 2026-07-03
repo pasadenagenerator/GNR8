@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1F - Website Generation Package Runtime Builder
+- Phase MVP-1G - Provider Adapter Boundary Design
   is complete.
 
 Next Phase:
-- MVP-1F-R Website Generation Package Real-Target Validation.
+- MVP-1H Codex Task Provider Payload Runtime Builder.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3243,7 +3243,10 @@ MVP-0 reality assessment:
   provenance persistence, focused tests, and real-target validation exist.
 - Website Generation Package: first runtime contract, deterministic builder,
   validation helper, provider-neutral validation contract, provenance
-  persistence, and focused tests exist. Real-target validation is next.
+  persistence, focused tests, and real-target validation exist.
+- Provider Adapter: boundary design exists for
+  `WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`, with Codex
+  task payload recommended as the first provider path.
 - External AI, Generation Contract Compliance, and Business Approval:
   architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
@@ -3797,9 +3800,107 @@ MVP-1F validation:
 - `git diff --check` passes.
 
 Recommended next phase after MVP-1F:
-- MVP-1F-R Website Generation Package Real-Target Validation. Stop before
-  provider adapters, external AI, generation, compliance, Business Approval,
-  publishing, UI, API, schema, or workers unless explicitly authorized.
+- MVP-1F-R Website Generation Package Real-Target Validation.
+
+Phase MVP-1F-R validates the Website Generation Package runtime against real
+persisted ODV and ViroiDoc Website Design Brief artifacts:
+`docs/architecture/WEBSITE_GENERATION_PACKAGE_REAL_TARGET_VALIDATION.md`.
+
+MVP-1F-R validation summary:
+- ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` loaded exact source
+  WDB `website_design_brief_ff19a711c948d28fdd58bdea521c4f59`, confirmed it
+  is latest for dry run `09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l`, and
+  persisted WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`.
+- ODV WGP status is `partial`; objectives `2`, audience requirements `3`,
+  messages `5`, navigation destinations `4`, page contracts `4`, section
+  contracts `14`, content requirements `128`, constraints `114`, validation
+  expectations `10`, confidence `LOW`, limitations `111`.
+- ViroiDoc site version `e26b0754-988b-45b9-9e24-8e213179b6cf` loaded exact
+  source WDB `website_design_brief_782c43e390c353d192af867c227d191d`,
+  confirmed it is latest for dry run
+  `e26b0754-988b-45b9-9e24-8e213179b6cf:8b-12n`, and persisted WGP
+  `website_generation_package_3e34393aef612a2c597042917dc45085`.
+- ViroiDoc WGP status is `partial`; objectives `3`, audience requirements
+  `3`, messages `12`, navigation destinations `4`, page contracts `4`,
+  section contracts `14`, content requirements `134`, constraints `111`,
+  validation expectations `10`, confidence `LOW`, limitations `110`.
+- Both WGPs are reloadable by latest and by ID; latest/by-ID reload equality
+  passes, rebuilt semantic equality passes, and idempotent retry reuses the
+  same artifact IDs.
+- Both WGPs are human-readable provider-neutral contracts that explain what an
+  external generation system must create, what business objectives must be
+  supported, what messages must be communicated, what journey/navigation/content
+  must be represented, what constraints must be preserved, and what validation
+  expectations must be checked later.
+- Safety scan found no provider payload, prompt, OpenAI/Claude/Gemini prompt,
+  AI output, generated website, generated content, generated HTML, generated
+  React, generated components, code/framework/library fields, publishing
+  artifact, generation, compliance execution, or Business Approval.
+- Focused Website Generation Package tests pass `18 / 18`; initial sandbox
+  execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
+  and the rerun outside the sandbox passed.
+- `cd apps/platform && pnpm run vercel-build` passes.
+- `git diff --check` passes.
+
+MVP-1F-R did not implement provider adapters, external AI integration,
+generation, compliance execution, Business Approval, publishing changes, UI,
+API routes, schema migrations, workers, or generated website artifacts.
+
+Recommended next phase after MVP-1F-R:
+- MVP-1G Provider Adapter Boundary Design, documentation and contract design
+  only. Stop before provider payloads, prompts, external AI calls, generated
+  websites, compliance execution, Business Approval, publishing, UI, API,
+  schema, or workers unless explicitly authorized.
+
+Phase MVP-1G defines the Provider Adapter boundary:
+`docs/architecture/PROVIDER_ADAPTER_BOUNDARY_DESIGN.md`.
+
+MVP-1G boundary summary:
+- Provider Adapter responsibility is
+  `WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`.
+- The adapter serializes. It never redefines business intent.
+- Provider-neutral source is `WebsiteGenerationPackageArtifact`.
+- Provider-specific output is `ProviderGenerationPayload`.
+- The first MVP provider recommendation is exactly one path: Codex task
+  payload.
+- First provider type is `codex_task`; OpenAI API payload, Claude payload,
+  and manual export payload are deferred.
+- Adapter identity must include adapter ID, adapter name, adapter version,
+  adapter contract version, provider type, provider payload kind, source WGP
+  reference, creation timestamp, serialization mode, and diagnostics.
+- ProviderGenerationPayload conceptually contains payload identity, adapter
+  identity, provider type, payload kind, source WGP reference, serialized
+  package content, provider-specific task envelope, preserved constraints,
+  preserved validation expectations, preserved limitations, preserved
+  confidence, preserved lineage, diagnostics, and safety classification.
+- Future conceptual functions are `buildProviderGenerationPayload(...)`,
+  `validateProviderGenerationPayload(...)`, and
+  `serializeWebsiteGenerationPackageForProvider(...)`.
+- Serialization rules require preserving all WGP objectives, audience
+  requirements, messaging, navigation, page and section contracts, content
+  requirements, constraints, validation expectations, confidence,
+  limitations, lineage, and diagnostics.
+- Forbidden mutation rules prohibit business reinterpretation, new facts,
+  hidden prompt-only business logic, removal or weakening of WGP constraints,
+  hidden limitations, hidden low confidence, provider-only requirements,
+  provider output persistence, generated output persistence, and generation
+  execution in this phase.
+- Safety rule: provider payload may contain provider-specific formatting, but
+  must preserve WGP meaning and lineage.
+
+MVP-1G did not implement TypeScript, schema, persistence, UI, API, workers,
+provider calls, prompts sent, AI integration, generation, compliance
+execution, Business Approval, publishing, runtime state, deployment behavior,
+provider output persistence, or generated output persistence.
+
+Recommended next phase after MVP-1G:
+- MVP-1H Codex Task Provider Payload Runtime Builder, limited to implementing
+  and validating the first `codex_task` ProviderGenerationPayload builder from
+  a persisted Website Generation Package. Stop before provider calls, prompts
+  sent, external AI execution, generated websites, compliance execution,
+  Business Approval, publishing, UI, API, schema, or workers unless explicitly
+  authorized.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

@@ -39,6 +39,7 @@ Import Existing Website
 -> Business Alignment
 -> Website Design Brief
 -> Website Generation Package
+-> Provider Adapter
 -> External AI
 -> Generation Contract Compliance
 -> Business Approval
@@ -60,6 +61,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Business Alignment | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Website Design Brief | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Website Generation Package | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
+| Provider Adapter | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | External AI | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Generation Contract Compliance | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Business Approval | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
@@ -374,6 +376,15 @@ Current implementation:
 - MVP-1F adds the deterministic builder, contract validator, focused tests,
   provider-neutral validation contract, and provenance persistence boundary
   under artifact kind `website_generation_package`.
+- MVP-1F-R validates the Website Generation Package runtime against real ODV
+  and ViroiDoc persisted Website Design Brief artifacts.
+- MVP-1F-R persists ODV
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` and ViroiDoc
+  `website_generation_package_3e34393aef612a2c597042917dc45085`.
+- MVP-1F-R confirms latest reload equality, by-ID reload equality, rebuilt
+  semantic equality, idempotent retry reuse, human-readability,
+  provider-neutrality, and no forbidden downstream generation material for
+  both targets.
 - The package answers: "What must an external generation system create?"
 - The package is not a prompt, provider payload, generated website,
   implementation artifact, publishing artifact, UI, API, schema, or worker.
@@ -384,8 +395,6 @@ Current implementation:
   allowed.
 
 Missing implementation:
-- Real-target validation against persisted ODV and ViroiDoc Website Design
-  Brief artifacts.
 - Provider serialization boundary.
 
 Dependencies:
@@ -395,14 +404,56 @@ Dependencies:
 - Canonical artifact persistence.
 
 Risk:
-- Medium. The first deterministic Website Generation Package runtime exists,
-  but real-target validation and provider serialization are not implemented
-  yet.
+- Medium-low. The first deterministic Website Generation Package runtime
+  exists and real-target validation has passed, but provider serialization is
+  not implemented yet.
 
 Estimated implementation complexity:
 - First deterministic Website Generation Package runtime slice and focused
-  tests are complete. Remaining work starts with real-target validation before
-  any provider adapter is introduced.
+  tests are complete, and real-target validation has persisted ODV/ViroiDoc WGP
+  artifacts. Remaining work starts with provider-adapter boundary design before
+  any provider payload, prompt, external AI call, or generated website is
+  introduced.
+
+### Provider Adapter
+
+Current implementation:
+- MVP-1G defines the provider adapter boundary as
+  `WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`.
+- The adapter is defined as a serialization-only boundary. It preserves WGP
+  meaning, constraints, limitations, confidence, diagnostics, and lineage.
+- MVP-1G recommends exactly one first provider path: Codex task payload.
+- The first provider type is `codex_task`; OpenAI API payload, Claude payload,
+  and manual export payload are deferred.
+- Conceptual future functions are `buildProviderGenerationPayload(...)`,
+  `validateProviderGenerationPayload(...)`, and
+  `serializeWebsiteGenerationPackageForProvider(...)`.
+- Canonical design document:
+  `docs/architecture/PROVIDER_ADAPTER_BOUNDARY_DESIGN.md`.
+
+Missing implementation:
+- No runtime ProviderGenerationPayload builder exists.
+- No provider payload validator exists.
+- No provider payload persistence or execution policy exists.
+- No Codex task payload has been produced from a real WGP.
+- No provider call, prompt sent, external AI execution, or generated website
+  exists.
+
+Dependencies:
+- Website Generation Package.
+- Governance State.
+- Lineage.
+- Provider credential and execution policy for later provider-call phases.
+
+Risk:
+- Medium. The boundary is now defined, but runtime serialization still needs to
+  prove that a WGP can be converted into a provider-shaped payload without
+  business reinterpretation.
+
+Estimated implementation complexity:
+- Low to medium for the first Codex task payload builder because it can remain
+  deterministic and local. External provider execution remains a later, higher
+  risk boundary.
 
 ### External AI
 
@@ -413,8 +464,7 @@ Current implementation:
   Package and returns a generated website proposal for this architecture.
 
 Missing implementation:
-- One external AI provider adapter for the Website Generation Package.
-- Provider request serialization.
+- Provider execution from the selected Codex task payload path.
 - Generated website proposal artifact.
 - Execution record with model/provider metadata, input package reference,
   output reference, diagnostics, and failure classification.
@@ -422,6 +472,7 @@ Missing implementation:
 
 Dependencies:
 - Website Generation Package.
+- Provider Adapter.
 - Provider credential resolution and execution policy.
 - Generated proposal artifact boundary.
 
@@ -545,16 +596,17 @@ implementation sequence is:
    Alignment.
 8. Validate Website Generation Package runtime against real persisted Website
    Design Brief artifacts.
-9. Implement one external AI provider adapter that serializes the Website
-   Generation Package without redefining it and stores a Generated Website
-   Proposal.
-10. Implement Generation Contract Compliance evaluator and Compliance Report
+9. Implement the first Codex task provider adapter that serializes the Website
+   Generation Package without redefining it.
+10. Execute the authorized provider path and store a Generated Website
+    Proposal.
+11. Implement Generation Contract Compliance evaluator and Compliance Report
     for the generated proposal against the package.
-11. Implement Business Approval decision that consumes the Compliance Report
+12. Implement Business Approval decision that consumes the Compliance Report
     and authorizes or blocks Publish.
-12. Connect approved generated proposal to existing runtime publish foundations
+13. Connect approved generated proposal to existing runtime publish foundations
     and publish one approved website.
-13. Run an end-to-end first-customer smoke path with artifact lineage from
+14. Run an end-to-end first-customer smoke path with artifact lineage from
     imported website to published experience.
 
 ## Deferred Features
@@ -616,6 +668,8 @@ through the full governed pipeline with measurable artifact evidence:
 - Website Design Brief is produced from aligned understanding;
 - Website Generation Package is produced as an immutable provider-neutral
   generation contract;
+- one provider adapter serializes the package into a Codex task payload without
+  changing meaning;
 - one external AI provider generates a website proposal from the package;
 - Generation Contract Compliance evaluates the proposal against the package
   and produces a human-readable Compliance Report;
@@ -650,6 +704,7 @@ through the full governed pipeline with measurable artifact evidence:
   ViroiDoc.
 - Business Alignment contract, deterministic DBT correction runtime, focused
   tests, and provenance persistence boundary for `business_alignment`.
+- Provider Adapter boundary design for `codex_task` payload serialization.
 - Candidate Discovery, Candidate Review, Candidate Context, and
   Reconstruction Package metadata foundations.
 - Runtime publish activation, publish enforcement, runtime resolution, and
@@ -688,10 +743,8 @@ through the full governed pipeline with measurable artifact evidence:
 
 ### Runtime Missing
 
-- Business Alignment to Website Design Brief gate.
-- Website Design Brief builder and artifact.
-- Website Generation Package builder and artifact.
-- External AI provider adapter for Website Generation Package execution.
+- Codex task ProviderGenerationPayload builder and validator.
+- External AI execution from the provider payload.
 - Generated Website Proposal artifact.
 - Generation Contract Compliance evaluator and report artifact.
 - Business Approval decision artifact.
@@ -720,7 +773,7 @@ through the full governed pipeline with measurable artifact evidence:
 - Real-target Business Alignment validation and aligned DBT handoff.
 - Website Design Brief.
 - Website Generation Package.
-- One external AI provider adapter.
+- One Codex task provider adapter.
 - Generated Website Proposal storage.
 - Generation Contract Compliance and Compliance Report.
 - Business Approval.
@@ -743,6 +796,7 @@ Evidence-ready imported site
 -> Website Design Brief
 -> Website Generation Package
 -> one provider adapter
+-> External AI
 -> Generated Website Proposal
 -> Compliance Report
 -> Business Approval
@@ -763,7 +817,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1F-R Website Generation Package Real-Target Validation
+MVP-1H Codex Task Provider Payload Runtime Builder
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -782,7 +836,16 @@ Website Design Brief artifacts. The package is provider-neutral, contains the
 generation contract and validation expectations, and contains no provider
 payload, prompt, external AI call, generated website, compliance evaluator,
 Business Approval artifact, publishing behavior, UI, API, schema migration, or
-worker behavior. The next safe phase is real-target validation of persisted ODV
-and ViroiDoc Website Design Brief artifacts into Website Generation Packages.
-Stop before provider adapters, external AI, generation, compliance, Business
-Approval, publishing, UI, API, schema, or workers.
+worker behavior. MVP-1F-R validated that package runtime on persisted ODV and
+ViroiDoc Website Design Brief artifacts, persisted reloadable Website
+Generation Packages, and confirmed provider-neutrality, safety, and
+idempotent retry reuse. The next safe phase is Provider Adapter Boundary
+Design, documentation and contract design only. MVP-1G defined
+`WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`, recommended
+Codex task payload as the first provider path, and kept adapters
+serialization-only with no business reinterpretation, no new facts, no
+provider calls, no prompts sent, no generation, and no provider output
+persistence. The next safe phase is MVP-1H Codex Task Provider Payload Runtime
+Builder. Stop before provider calls, prompts sent, external AI execution,
+generated websites, compliance execution, Business Approval, publishing, UI,
+API, schema, or workers.
