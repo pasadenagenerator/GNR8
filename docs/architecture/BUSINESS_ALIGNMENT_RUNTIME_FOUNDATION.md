@@ -179,6 +179,12 @@ The source DBT remains immutable. DBT vNext receives a new
 `digitalBusinessTwinId`, retains source lineage, and adds the Business
 Alignment artifact as an upstream artifact reference.
 
+DBT vNext persistence is separate from Business Alignment persistence. MVP-1D-R
+validated that DBT vNext can be persisted safely with the existing
+`persistDigitalBusinessTwinArtifact(...)` helper because the runtime returns a
+valid `DigitalBusinessTwinArtifact` revision. No new DBT persistence behavior
+was added.
+
 ## Validation
 
 The contract exports:
@@ -249,6 +255,44 @@ NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test apps/platform/gnr8
 
 The first sandbox run hit the known `tsx` IPC pipe permission issue. The same
 command passed outside the sandbox with `16 / 16` tests passing.
+
+## Real-Target Validation Result
+
+MVP-1D-R validates Business Alignment against real ODV and ViroiDoc DBT plus
+BUR artifacts:
+
+```text
+docs/architecture/BUSINESS_ALIGNMENT_REAL_TARGET_VALIDATION.md
+```
+
+Results:
+
+- ODV source DBT
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` and source BUR
+  `business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad` were both
+  latest before validation.
+- ODV persisted Business Alignment
+  `business_alignment_18c0a6958048bf8985044e4781e788a8` with status
+  `reviewed`, 1 decision, 5 corrections, correction types `confirm` and
+  `unresolved`, and DBT vNext
+  `digital_business_twin_2614a690e29e87a201658f3de4f72983`.
+- ViroiDoc source DBT
+  `digital_business_twin_4eb9e9260ba45b9efee236ec18769e92` and source BUR
+  `business_understanding_report_007e94c64a3fd1d637c7c6e3d64ded10` were both
+  latest before validation.
+- ViroiDoc persisted Business Alignment
+  `business_alignment_7a3ad7e2222e732a895f89c1dc22452a` with status
+  `reviewed`, 1 decision, 4 corrections, correction types `confirm` and
+  `unresolved`, and DBT vNext
+  `digital_business_twin_3429791a7d365461306d74059c206f8f`.
+- Latest reload equality, by-ID reload equality, and idempotent retry reuse
+  passed for both Business Alignment artifacts and both DBT vNext artifacts.
+- Source DBTs remained reloadable by original artifact ID. Lineage, evidence
+  refs, limitations, and missing knowledge were preserved; missing audience
+  and ODV missing offerings were explicitly marked unresolved.
+- Safety scan found no Website Design Brief, Website Generation Package,
+  provider payload, prompt, AI output, generated content, publishing artifact,
+  generation, compliance, or Business Approval.
 
 ## Next Phase Boundary
 

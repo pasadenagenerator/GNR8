@@ -13,13 +13,16 @@ Current status:
 - Phase MVP-1C-R - Business Understanding Report Real-Target Validation retry
   is complete and has persisted ODV and ViroiDoc BUR artifacts.
 - Phase MVP-1D - Business Alignment Runtime Foundation is complete.
+- Phase MVP-1D-R - Business Alignment Real-Target Validation is complete and
+  has persisted ODV and ViroiDoc Business Alignment plus DBT vNext artifacts.
+- Phase MVP-1E - Website Design Brief Runtime Builder is complete.
 
 Current Phase:
-- Phase MVP-1D - Business Alignment Runtime Foundation
+- Phase MVP-1E - Website Design Brief Runtime Builder
   is complete.
 
 Next Phase:
-- MVP-1E Website Design Brief Runtime Builder.
+- MVP-1E-R Website Design Brief Real-Target Validation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -138,59 +141,94 @@ Current architecture direction:
   ViroiDoc and persists real-target BUR artifacts. MVP-1D implements the first
   deterministic Business Alignment runtime foundation and provenance
   persistence boundary from Business Understanding Report plus Digital
-  Business Twin. The next implementation phase is MVP-1E Website Design Brief
-  Runtime Builder.
+  Business Twin. MVP-1D-R validates Business Alignment on ODV and ViroiDoc,
+  persists Business Alignment artifacts, and persists governed DBT vNext
+  artifacts without adding customer facts. MVP-1E implements the first
+  deterministic Website Design Brief runtime builder from aligned DBT output
+  and Business Alignment lineage.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Current validation status:
-- Phase MVP-1D - Business Alignment Runtime Foundation
+- Phase MVP-1E - Website Design Brief Runtime Builder
   is COMPLETE.
 - Canonical document:
-  `docs/architecture/BUSINESS_ALIGNMENT_RUNTIME_FOUNDATION.md`.
-- Business Alignment consumes a source Digital Business Twin, a source Business
-  Understanding Report, explicit alignment decisions, and explicit corrections.
-- Business Alignment evolves the Digital Business Twin. Business Alignment
-  never edits reports.
-- Business Understanding Reports remain deterministic projections from the
-  current Digital Business Twin. MVP-1D does not implement report
-  regeneration.
-- Supported correction domains: `business_identity`, `offerings`, `audience`,
-  `brand`, `digital_presence`, `goals`, `trust`, `content`, and
-  `constraints`.
-- Supported correction types: `confirm`, `correct`, `remove`, `add_missing`,
-  and `unresolved`.
-- Runtime behavior: `applyBusinessAlignment(...)` deterministically produces a
-  `BusinessAlignmentArtifact` plus Digital Business Twin vNext, preserves
-  lineage/evidence/confidence/limitations, and never overwrites the source DBT.
-- Persistence: artifact kind `business_alignment` in the existing
+  `docs/architecture/WEBSITE_DESIGN_BRIEF_RUNTIME_BUILDER.md`.
+- Website Design Brief is NOT a design document.
+- Website Design Brief is the first Experience Projection of an Aligned
+  Digital Business Twin.
+- Website Design Brief is produced ONLY from an Aligned Digital Business Twin
+  and Business Alignment lineage.
+- Website Design Brief contains website intent.
+- Website Design Brief never contains implementation.
+- Runtime behavior: `buildWebsiteDesignBrief(...)` deterministically projects
+  aligned DBT knowledge into canonical website-intent sections while
+  preserving missing knowledge, confidence, limitations, diagnostics,
+  evidence refs, and lineage.
+- Canonical sections: Executive Summary, Website Purpose, Website Objectives,
+  Target Audience, Core Messages, Brand Expression, Information Priorities,
+  Website Journey, Trust Strategy, Accessibility Goals, SEO Intent,
+  Experience Constraints, Missing Knowledge, Recommendations, Confidence,
+  Limitations, and Diagnostics.
+- Transformation behavior: Business Goals -> Website Objectives; Audience ->
+  Audience Experience; Offerings -> Information Priorities; Brand -> Brand
+  Expression; Trust -> Trust Strategy; Digital Presence -> Experience
+  Recommendations; Missing knowledge -> Missing Knowledge section.
+- Persistence: artifact kind `website_design_brief` in the existing
   site-version `importProvenanceSummary` boundary with append-only
-  `businessAlignmentArtifacts`, latest pointer
-  `latestBusinessAlignmentArtifact`, equivalent latest reuse, changed append,
+  `websiteDesignBriefArtifacts`, latest pointer
+  `latestWebsiteDesignBriefArtifact`, equivalent latest reuse, changed append,
   latest/by-ID load, `invalid`/`stale` rejection, and `blocked` allowed.
-- Focused Business Alignment tests pass `16 / 16`; initial sandbox execution
+- Focused Website Design Brief tests pass `16 / 16`; initial sandbox execution
   hit the known `tsx` IPC pipe permission issue, and the rerun outside the
   sandbox passed.
-- Platform build passes with existing unrelated frontend lint warnings for
-  hook dependency and `<img>` usage.
-- `git diff --check` passes.
-- Next recommended phase is MVP-1E Website Design Brief Runtime Builder,
-  limited to consuming aligned DBT output and Business Alignment lineage. Stop
-  before Website Generation Package, provider adapters, external AI,
-  generation, compliance, Business Approval, or publishing.
+- MVP-1E created no Website Generation Package, provider adapter, external AI
+  call, generated website, compliance artifact, Business Approval artifact,
+  publishing behavior, UI route, API route, worker behavior, or schema
+  migration.
+- Next recommended phase is MVP-1E-R Website Design Brief Real-Target
+  Validation, limited to persisted aligned DBT vNext artifacts and Business
+  Alignment lineage. Stop before Website Generation Package, provider
+  adapters, external AI, generation, compliance, Business Approval, or
+  publishing.
 
 Latest completed milestone:
-- Phase MVP-1D - Business Alignment Runtime Foundation.
-- Status: COMPLETE / BUSINESS ALIGNMENT CONTRACT IMPLEMENTED /
-  DETERMINISTIC DBT REVISION RUNTIME IMPLEMENTED / PROVENANCE PERSISTENCE
-  IMPLEMENTED / FOCUSED TESTS PASS / NO WEBSITE DESIGN BRIEF / NO WEBSITE
-  GENERATION PACKAGE / NO AI / NO PROVIDER ADAPTER / NO GENERATION /
-  NO COMPLIANCE / NO BUSINESS APPROVAL / NO PUBLISHING / NO UI /
-  NO API ROUTES / NO SCHEMA MIGRATIONS.
+- Phase MVP-1E - Website Design Brief Runtime Builder.
+- Status: COMPLETE / WDB CONTRACT IMPLEMENTED / DETERMINISTIC BUILDER
+  IMPLEMENTED / PROVENANCE PERSISTENCE IMPLEMENTED / FOCUSED TESTS PASS /
+  NO WEBSITE GENERATION PACKAGE / NO AI / NO PROVIDER ADAPTER /
+  NO GENERATION / NO COMPLIANCE / NO BUSINESS APPROVAL / NO PUBLISHING /
+  NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS.
 - Canonical document:
-  `docs/architecture/BUSINESS_ALIGNMENT_RUNTIME_FOUNDATION.md`.
+  `docs/architecture/WEBSITE_DESIGN_BRIEF_RUNTIME_BUILDER.md`.
+- Runtime files:
+  `apps/platform/gnr8/architecture/website-design-brief-contract.ts`,
+  `apps/platform/gnr8/architecture/website-design-brief-builder.ts`, and
+  `apps/platform/gnr8/architecture/website-design-brief-persistence.ts`.
+- Test files:
+  `apps/platform/gnr8/architecture/website-design-brief-contract.test.ts`,
+  `apps/platform/gnr8/architecture/website-design-brief-builder.test.ts`,
+  and
+  `apps/platform/gnr8/architecture/website-design-brief-persistence.test.ts`.
+- Artifact kind: `website_design_brief`.
+- Contract version: `MVP-1E`.
+- Recommended next phase after MVP-1E: MVP-1E-R Website Design Brief
+  Real-Target Validation.
+
+Previous completed milestone:
+- Phase MVP-1D-R - Business Alignment Real-Target Validation.
+- Status: COMPLETE / REAL ODV VALIDATED / REAL VIROIDOC VALIDATED /
+  BUSINESS ALIGNMENT ARTIFACTS PERSISTED / DBT VNEXT PERSISTED /
+  RELOAD EQUALITY PASSES / IDEMPOTENT RETRY REUSES ARTIFACTS /
+  LINEAGE PRESERVED / MISSING KNOWLEDGE UNRESOLVED WITHOUT NEW FACTS /
+  NO WEBSITE DESIGN BRIEF / NO WEBSITE GENERATION PACKAGE / NO AI /
+  NO PROVIDER ADAPTER / NO GENERATION / NO COMPLIANCE /
+  NO BUSINESS APPROVAL / NO PUBLISHING / NO UI / NO API ROUTES /
+  NO SCHEMA MIGRATIONS.
+- Canonical document:
+  `docs/architecture/BUSINESS_ALIGNMENT_REAL_TARGET_VALIDATION.md`.
 - Runtime files:
   `apps/platform/gnr8/architecture/business-alignment-contract.ts`,
   `apps/platform/gnr8/architecture/business-alignment-runtime.ts`, and
@@ -217,7 +255,7 @@ Latest completed milestone:
   `generatedContent`, `generatedReact`, `generatedHtml`,
   `generatedComponents`, `generatedBlocks`, `AIOutput`, `aiOutput`,
   `publishingArtifact`, `deploymentArtifact`, and `executionArtifact`.
-- Recommended next phase after MVP-1D: MVP-1E Website Design Brief Runtime
+- Recommended next phase after MVP-1D-R: MVP-1E Website Design Brief Runtime
   Builder, limited to consuming aligned DBT output and Business Alignment
   lineage.
 

@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1D - Business Alignment Runtime Foundation
+- Phase MVP-1E - Website Design Brief Runtime Builder
   is complete.
 
 Next Phase:
-- MVP-1E Website Design Brief Runtime Builder.
+- MVP-1E-R Website Design Brief Real-Target Validation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3238,10 +3238,12 @@ MVP-0 reality assessment:
   provenance persistence, and focused tests exist; Business Owner confirmation
   and multi-source reconciliation are not implemented.
 - Business Understanding Report and Business Alignment: first runtime
-  foundations exist.
-- Website Design Brief, Website Generation Package, External AI, Generation
-  Contract Compliance, and Business Approval: architecture complete, runtime
-  missing.
+  foundations exist, and both have passed ODV/ViroiDoc real-target validation.
+- Website Design Brief: first runtime contract, deterministic builder,
+  provenance persistence, and focused tests exist. Real-target validation is
+  next.
+- Website Generation Package, External AI, Generation Contract Compliance, and
+  Business Approval: architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
   Publish gating for generated proposals is missing.
 
@@ -3580,11 +3582,116 @@ MVP-1D validation:
   frontend lint warnings for hook dependency and `<img>` usage.
 - `git diff --check` passes.
 
-Recommended next phase after MVP-1D:
-- MVP-1E Website Design Brief Runtime Builder, limited to consuming aligned
-  DBT output and Business Alignment lineage. Stop before Website Generation
-  Package, provider adapters, external AI, generation, compliance, Business
-  Approval, or publishing.
+MVP-1D-R real-target validation:
+- Canonical document:
+  `docs/architecture/BUSINESS_ALIGNMENT_REAL_TARGET_VALIDATION.md`.
+- ODV source DBT
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` and source BUR
+  `business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad` were both
+  latest for site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` before
+  validation.
+- ODV persisted Business Alignment
+  `business_alignment_18c0a6958048bf8985044e4781e788a8` with status
+  `reviewed`, 1 decision, 5 corrections, correction types `confirm` and
+  `unresolved`, and DBT vNext
+  `digital_business_twin_2614a690e29e87a201658f3de4f72983`.
+- ViroiDoc source DBT
+  `digital_business_twin_4eb9e9260ba45b9efee236ec18769e92` and source BUR
+  `business_understanding_report_007e94c64a3fd1d637c7c6e3d64ded10` were both
+  latest for site version `e26b0754-988b-45b9-9e24-8e213179b6cf` before
+  validation.
+- ViroiDoc persisted Business Alignment
+  `business_alignment_7a3ad7e2222e732a895f89c1dc22452a` with status
+  `reviewed`, 1 decision, 4 corrections, correction types `confirm` and
+  `unresolved`, and DBT vNext
+  `digital_business_twin_3429791a7d365461306d74059c206f8f`.
+- Both DBT vNext artifacts were persisted through the existing
+  `persistDigitalBusinessTwinArtifact(...)` helper; no new persistence
+  behavior was added.
+- Latest reload equality, by-ID reload equality, and idempotent retry reuse
+  passed for both Business Alignment artifacts and both DBT vNext artifacts.
+- Source DBTs remained reloadable by original artifact ID. Lineage, evidence
+  refs, limitations, and missing knowledge were preserved; missing audience
+  and ODV missing offerings were explicitly marked unresolved without adding
+  new customer facts.
+- Safety scan found no Website Design Brief, Website Generation Package,
+  provider payload, prompt, AI output, generated content, publishing artifact,
+  generation, compliance, or Business Approval.
+- Focused Business Alignment tests pass `16 / 16`; initial sandbox execution
+  hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue, and the
+  rerun outside the sandbox passed.
+- `cd apps/platform && pnpm run vercel-build` passes with existing unrelated
+  frontend lint warnings for hook dependency and `<img>` usage.
+- `git diff --check` passes.
+
+Phase MVP-1E creates the first runtime Website Design Brief artifact from an
+aligned Digital Business Twin:
+`docs/architecture/WEBSITE_DESIGN_BRIEF_RUNTIME_BUILDER.md`.
+
+MVP-1E implementation summary:
+- `apps/platform/gnr8/architecture/website-design-brief-contract.ts` defines
+  `WebsiteDesignBriefArtifact`, `WebsiteDesignBriefLineage`,
+  `WebsiteObjective`, `AudienceExperience`, `WebsiteMessage`,
+  `WebsiteJourney`, `WebsiteConstraint`,
+  `WebsiteDesignBriefConfidence`, `WebsiteDesignBriefValidationResult`, and
+  `WebsiteDesignBriefStatus`.
+- Allowed statuses are `draft`, `partial`, `valid`, `blocked`, `invalid`, and
+  `stale`.
+- Website Design Brief is NOT a design document.
+- Website Design Brief is the first Experience Projection of an Aligned
+  Digital Business Twin.
+- Website Design Brief is produced ONLY from an Aligned Digital Business Twin
+  and Business Alignment lineage.
+- Website Design Brief contains website intent.
+- Website Design Brief never contains implementation.
+- Canonical sections are Executive Summary, Website Purpose, Website
+  Objectives, Target Audience, Core Messages, Brand Expression, Information
+  Priorities, Website Journey, Trust Strategy, Accessibility Goals, SEO Intent,
+  Experience Constraints, Missing Knowledge, Recommendations, Confidence,
+  Limitations, and Diagnostics.
+- `apps/platform/gnr8/architecture/website-design-brief-builder.ts`
+  implements `buildWebsiteDesignBrief(...)` as a deterministic builder from
+  one aligned Digital Business Twin artifact and one Business Alignment
+  artifact lineage.
+- Transformation behavior: Business Goals -> Website Objectives; Audience ->
+  Audience Experience; Offerings -> Information Priorities; Brand -> Brand
+  Expression; Trust -> Trust Strategy; Digital Presence -> Experience
+  Recommendations; Missing knowledge -> Missing Knowledge section.
+- The builder never invents business information. Missing DBT knowledge is
+  preserved as missing knowledge, limitations, low-confidence recommendations,
+  and diagnostics.
+- Confidence, limitations, evidence refs, lineage, and diagnostics propagate
+  from the aligned DBT and Business Alignment lineage.
+- `apps/platform/gnr8/architecture/website-design-brief-persistence.ts`
+  stores artifact kind `website_design_brief` in the existing site-version
+  `importProvenanceSummary`, with append-only
+  `websiteDesignBriefArtifacts` and `latestWebsiteDesignBriefArtifact`.
+- Equivalent latest artifacts are reused; changed current artifacts append;
+  latest and by-ID read helpers are implemented.
+- Persistence rejects `invalid` and `stale`; `blocked` is accepted as a valid
+  fail-closed artifact.
+- Recursive forbidden fields are rejected: `providerPayload`, `prompt`,
+  `generatedWebsite`, `generatedHTML`, `generatedHtml`, `generatedReact`,
+  `generatedComponents`, `generatedBlocks`, `code`, `framework`, `library`,
+  `deploymentArtifact`, `publishingArtifact`, and `executionArtifact`.
+
+MVP-1E did not implement Website Generation Package, provider adapters,
+external AI integration, generation, compliance, Business Approval, publishing
+changes, UI, API routes, schema migrations, workers, or generated website
+artifacts.
+
+MVP-1E validation:
+- Focused Website Design Brief tests pass `16 / 16`; initial sandbox
+  execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
+  and the rerun outside the sandbox passed.
+- Platform Vercel build passes.
+- `git diff --check` passes.
+
+Recommended next phase after MVP-1E:
+- MVP-1E-R Website Design Brief Real-Target Validation, limited to consuming
+  persisted aligned DBT vNext artifacts and Business Alignment lineage. Stop
+  before Website Generation Package, provider adapters, external AI,
+  generation, compliance, Business Approval, or publishing.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

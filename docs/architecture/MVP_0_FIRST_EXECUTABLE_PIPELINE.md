@@ -58,7 +58,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Digital Business Twin | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Business Understanding Report | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Business Alignment | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
-| Website Design Brief | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
+| Website Design Brief | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Website Generation Package | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | External AI | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Generation Contract Compliance | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
@@ -282,12 +282,15 @@ Current implementation:
   boundary with append-only `businessAlignmentArtifacts`,
   `latestBusinessAlignmentArtifact`, equivalent latest reuse, changed append,
   latest/by-ID loads, `invalid`/`stale` rejection, and `blocked` allowed.
+- MVP-1D-R validates Business Alignment on real ODV and ViroiDoc DBT plus BUR
+  artifacts, persists Business Alignment artifacts for both targets, persists
+  DBT vNext through the existing DBT persistence helper, verifies latest and
+  by-ID reload equality, verifies idempotent retry reuse, and records lineage,
+  evidence, limitations, and missing knowledge preservation.
 
 Missing implementation:
 - Gate that allows Website Design Brief only after alignment.
 - Business Owner UI/API review surface.
-- Real-target Business Alignment execution over persisted ODV and ViroiDoc
-  BUR/DBT artifacts.
 - Advanced alignment collaboration, supersession, and governance-state
   workflows.
 
@@ -298,28 +301,46 @@ Dependencies:
 - Lineage.
 
 Risk:
-- Medium after MVP-1D. Business Alignment now deterministically confirms or
-  improves DBT knowledge before planning begins, but the first real-target
-  alignment execution and downstream Website Design Brief gate are still
-  missing.
+- Medium after MVP-1D-R. Business Alignment now deterministically confirms or
+  improves DBT knowledge before planning begins, and real ODV/ViroiDoc
+  validation has produced persisted Business Alignment artifacts and governed
+  DBT vNext results without inventing customer facts. The downstream Website
+  Design Brief gate is still missing.
 
 Estimated implementation complexity:
-- First deterministic alignment contract, runtime, persistence, and focused
-  tests are complete. Remaining work starts with real-target alignment
-  validation or the first Website Design Brief builder.
+- First deterministic alignment contract, runtime, persistence, focused tests,
+  and real-target validation are complete. Remaining work starts with the
+  first Website Design Brief builder.
 
 ### Website Design Brief
 
 Current implementation:
 - The architecture specification is complete.
-- No runtime Website Design Brief artifact, builder, persistence, tests, or
-  downstream gate exists.
+- MVP-1E adds the first runtime Website Design Brief artifact from an aligned
+  Digital Business Twin plus Business Alignment lineage.
+- Website Design Brief is the first Experience Projection of an Aligned
+  Digital Business Twin.
+- Website Design Brief is produced ONLY from an Aligned Digital Business Twin.
+- Website Design Brief contains website intent.
+- Website Design Brief never contains implementation.
+- MVP-1E adds the deterministic builder, contract validator, focused tests,
+  and provenance persistence boundary under artifact kind
+  `website_design_brief`.
+- Canonical sections are Executive Summary, Website Purpose, Website
+  Objectives, Target Audience, Core Messages, Brand Expression, Information
+  Priorities, Website Journey, Trust Strategy, Accessibility Goals, SEO Intent,
+  Experience Constraints, Missing Knowledge, Recommendations, Confidence,
+  Limitations, and Diagnostics.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  append-only `websiteDesignBriefArtifacts`,
+  `latestWebsiteDesignBriefArtifact`, equivalent latest reuse, changed append,
+  latest/by-ID loads, `invalid`/`stale` rejection, and `blocked` allowed.
 
 Missing implementation:
-- Deterministic builder from aligned DBT and Business Alignment.
-- Experience intent, audience, messaging, IA, section priorities, content
-  direction, brand direction, constraints, acceptance expectations, evidence,
-  confidence, and lineage.
+- Real-target Website Design Brief validation against persisted ODV and
+  ViroiDoc aligned DBT vNext artifacts.
+- Human Website Design decision and review workflow.
+- Downstream Website Generation Package runtime builder.
 
 Dependencies:
 - Business Alignment.
@@ -327,12 +348,14 @@ Dependencies:
 - Website Experience Domain scope.
 
 Risk:
-- High. Without a Website Design Brief, the Website Generation Package has no
-  governed experience source.
+- Medium. The first deterministic Website Design Brief runtime exists, but it
+  still needs real-target validation before downstream package preparation
+  consumes it.
 
 Estimated implementation complexity:
-- Medium. MVP can produce one website-only brief and postpone non-website
-  Experience Domains.
+- First deterministic Website Design Brief runtime slice and focused tests are
+  complete. Remaining work starts with real-target validation or the first
+  Website Generation Package runtime builder after validation.
 
 ### Website Generation Package
 
@@ -722,14 +745,19 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1E Website Design Brief Runtime Builder
+MVP-1E-R Website Design Brief Real-Target Validation
 ```
 
-MVP-1D implemented the first Business Alignment runtime foundation. It
-accepts explicit governed business corrections, produces a new DBT revision,
-persists `business_alignment` artifacts in the existing provenance boundary,
-and confirms that Business Alignment never edits Business Understanding
-Reports. MVP-1E should consume aligned DBT output and Business Alignment
-lineage to create the first Website Design Brief runtime artifact. Stop before
-Website Generation Package, provider adapters, external AI, generation,
+MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
+validated that foundation on real ODV and ViroiDoc DBT plus BUR artifacts,
+persisted Business Alignment artifacts and DBT vNext artifacts, and confirmed
+that Business Alignment never edits Business Understanding Reports or invents
+missing customer facts. MVP-1E implemented the first deterministic Website
+Design Brief runtime builder from aligned DBT output and Business Alignment
+lineage. The brief is the first Experience Projection, contains website intent
+only, and contains no implementation, provider knowledge, prompts, generation,
+compliance, approval, publishing, UI, API, or schema migration behavior.
+The next safe phase is real-target validation of persisted ODV and ViroiDoc
+aligned DBT vNext artifacts before any Website Generation Package work. Stop
+before Website Generation Package, provider adapters, external AI, generation,
 compliance, Business Approval, or publishing.
