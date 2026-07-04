@@ -123,9 +123,9 @@ Conceptual adapter identity fields:
 For the first MVP path:
 
 ```text
-provider type: codex_task
-provider payload kind: codex_task_payload
-adapter contract version: MVP-1G
+provider type: codex
+provider payload kind: codex_task
+adapter contract version: MVP-1H
 ```
 
 ## Provider Type
@@ -135,7 +135,7 @@ Provider type identifies the provider-specific serialization target.
 Allowed conceptual first provider type:
 
 ```text
-codex_task
+codex
 ```
 
 Deferred provider types:
@@ -145,7 +145,8 @@ Deferred provider types:
 - `manual_export`
 - any future provider-specific execution target
 
-Only `codex_task` is recommended for the first MVP provider path.
+Only `codex` is recommended for the first MVP provider path, with first
+payload kind `codex_task`.
 
 ## Payload Model
 
@@ -340,19 +341,58 @@ lineage.
 
 No TypeScript is introduced in MVP-1G.
 
+## MVP-1H Runtime Implementation
+
+MVP-1H implements the first provider payload runtime builder:
+
+```text
+WebsiteGenerationPackageArtifact
+-> ProviderGenerationPayload
+```
+
+Implemented runtime modules:
+
+- `apps/platform/gnr8/architecture/provider-generation-payload-contract.ts`
+- `apps/platform/gnr8/architecture/codex-task-provider-payload-builder.ts`
+- `apps/platform/gnr8/architecture/provider-generation-payload-persistence.ts`
+
+Canonical implementation document:
+
+- `docs/architecture/CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_BUILDER.md`
+
+Concrete runtime identifiers:
+
+- provider type: `codex`
+- payload kind: `codex_task`
+- artifact kind: `provider_generation_payload`
+- contract version: `MVP-1H`
+
+The MVP-1H Codex task envelope instructs a future Codex run to produce an
+implementation proposal only. It does not authorize provider calls, prompt
+sends, external AI execution, generated website output, compliance execution,
+Business Approval, publishing, deployment, DNS changes, production mutations,
+UI, API, schema, or worker behavior.
+
+MVP-1H persistence uses the existing site-version `importProvenanceSummary`
+boundary with append-only `providerGenerationPayloadArtifacts`,
+`latestProviderGenerationPayloadArtifact`, semantic latest reuse, changed
+artifact append, latest/by-ID load helpers, `invalid`/`stale` rejection, and
+`blocked` accepted as a fail-closed artifact.
+
 ## Boundary Confirmation
 
-MVP-1G defines the provider adapter boundary only. It does not create a
-runtime adapter, provider payload artifact, provider call, prompt execution,
-generated website, compliance evaluator, Compliance Report, Business Approval
-artifact, publishing behavior, UI route, API route, worker behavior, schema
-migration, or generated output persistence.
+MVP-1G defines the provider adapter boundary only. MVP-1H implements the first
+runtime Codex task provider payload builder and provenance persistence
+boundary. Neither phase creates a provider call, prompt execution, generated
+website, compliance evaluator, Compliance Report, Business Approval artifact,
+publishing behavior, UI route, API route, worker behavior, schema migration,
+or generated output persistence.
 
 Recommended next phase:
 
-- MVP-1H Codex Task Provider Payload Runtime Builder, limited to implementing
-  and validating the first `codex_task` ProviderGenerationPayload builder from
-  a persisted Website Generation Package. Stop before provider calls, prompts
-  sent, external AI execution, generated websites, compliance execution,
-  Business Approval, publishing, UI, API, schema, or workers unless explicitly
-  authorized.
+- MVP-1H-R Codex Task Provider Payload Real-Target Validation, limited to
+  building and persisting ProviderGenerationPayload artifacts from latest
+  persisted real Website Generation Package artifacts. Stop before provider
+  calls, prompts sent, external AI execution, generated websites, compliance
+  execution, Business Approval, publishing, UI, API, schema, or workers unless
+  explicitly authorized.

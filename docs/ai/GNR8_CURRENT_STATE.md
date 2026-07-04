@@ -1,7 +1,7 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-07-01
+2026-07-04
 
 ## Migration Platform MVP Buildout
 
@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1G - Provider Adapter Boundary Design
+- Phase MVP-1H - Codex Task Provider Payload Runtime Builder
   is complete.
 
 Next Phase:
-- MVP-1H Codex Task Provider Payload Runtime Builder.
+- MVP-1H-R Codex Task Provider Payload Real-Target Validation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3244,9 +3244,11 @@ MVP-0 reality assessment:
 - Website Generation Package: first runtime contract, deterministic builder,
   validation helper, provider-neutral validation contract, provenance
   persistence, focused tests, and real-target validation exist.
-- Provider Adapter: boundary design exists for
-  `WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`, with Codex
-  task payload recommended as the first provider path.
+- Provider Adapter: boundary design exists and first runtime Codex task
+  ProviderGenerationPayload builder, validator, and provenance persistence now
+  exist for `WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`.
+  Concrete provider type is `codex`, payload kind is `codex_task`, and artifact
+  kind is `provider_generation_payload`.
 - External AI, Generation Contract Compliance, and Business Approval:
   architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
@@ -3864,8 +3866,9 @@ MVP-1G boundary summary:
 - Provider-specific output is `ProviderGenerationPayload`.
 - The first MVP provider recommendation is exactly one path: Codex task
   payload.
-- First provider type is `codex_task`; OpenAI API payload, Claude payload,
-  and manual export payload are deferred.
+- Concrete first provider type is `codex`; concrete first payload kind is
+  `codex_task`. OpenAI API payload, Claude payload, and manual export payload
+  are deferred.
 - Adapter identity must include adapter ID, adapter name, adapter version,
   adapter contract version, provider type, provider payload kind, source WGP
   reference, creation timestamp, serialization mode, and diagnostics.
@@ -3901,6 +3904,65 @@ Recommended next phase after MVP-1G:
   sent, external AI execution, generated websites, compliance execution,
   Business Approval, publishing, UI, API, schema, or workers unless explicitly
   authorized.
+
+Phase MVP-1H implements the Codex Task Provider Payload runtime builder:
+`docs/architecture/CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_BUILDER.md`.
+
+MVP-1H runtime summary:
+- Provider Adapter responsibility remains
+  `WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`.
+- Provider type is `codex`.
+- Payload kind is `codex_task`.
+- Artifact kind is `provider_generation_payload`.
+- Contract version is `MVP-1H`.
+- Runtime files are
+  `apps/platform/gnr8/architecture/provider-generation-payload-contract.ts`,
+  `apps/platform/gnr8/architecture/codex-task-provider-payload-builder.ts`,
+  and
+  `apps/platform/gnr8/architecture/provider-generation-payload-persistence.ts`.
+- `buildCodexTaskProviderPayload(...)` consumes only a persisted
+  WebsiteGenerationPackageArtifact plus source WGP artifact ID, serializes the
+  full WGP, preserves constraints, validation expectations, confidence,
+  limitations, lineage, and diagnostics, and creates a proposal-only Codex task
+  envelope.
+- `codexTaskEnvelope` contains objective, source package summary, required
+  website outcomes, navigation/page/section requirements, content
+  requirements, constraints, validation expectations, forbidden actions,
+  expected output shape, and stop conditions.
+- Expected output shape is `implementation_proposal_only`.
+- Safety classification is `export_only_no_execution`; provider execution,
+  AI execution, generated website output, publishing, deployment, DNS mutation,
+  production mutation, and compliance execution flags are all false.
+- `validateProviderGenerationPayload(...)` validates provider type, payload
+  kind, lineage, source WGP reference, required envelope sections, preserved
+  constraints, preserved validation expectations, forbidden fields absence, and
+  generated-output/provider-result absence.
+- Forbidden recursive fields include `openAiPrompt`, `claudePrompt`,
+  `geminiPrompt`, `aiOutput`, `generatedWebsite`, `generatedContent`,
+  `generatedHtml`, `generatedReact`, `generatedComponents`,
+  `generatedBlocks`, `deploymentArtifact`, `publishingArtifact`,
+  `executionArtifact`, `providerResult`, and `runtimeMutation`.
+- Persistence uses the existing site-version `importProvenanceSummary`
+  boundary with append-only `providerGenerationPayloadArtifacts`,
+  `latestProviderGenerationPayloadArtifact`, equivalent latest reuse, changed
+  append, latest load, by-ID load, `invalid`/`stale` rejection, and `blocked`
+  allowed.
+- Focused Provider Generation Payload tests pass `17 / 17`; initial sandbox
+  execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
+  and the rerun outside the sandbox passed.
+
+MVP-1H did not call Codex, send prompts, execute external AI, generate a
+website, persist generated websites, run compliance, add Business Approval,
+publish, deploy, mutate DNS, mutate production, add UI, add API routes, add
+schema, or add workers.
+
+Recommended next phase after MVP-1H:
+- MVP-1H-R Codex Task Provider Payload Real-Target Validation, limited to
+  building and persisting ProviderGenerationPayload artifacts from the latest
+  persisted real ODV and ViroiDoc Website Generation Package artifacts. Stop
+  before provider calls, prompts sent, external AI execution, generated
+  websites, compliance execution, Business Approval, publishing, UI, API,
+  schema, or workers unless explicitly authorized.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

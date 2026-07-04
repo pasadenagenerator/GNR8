@@ -23,13 +23,14 @@ Current status:
   complete and has persisted ODV and ViroiDoc Website Generation Package
   artifacts.
 - Phase MVP-1G - Provider Adapter Boundary Design is complete.
+- Phase MVP-1H - Codex Task Provider Payload Runtime Builder is complete.
 
 Current Phase:
-- Phase MVP-1G - Provider Adapter Boundary Design
+- Phase MVP-1H - Codex Task Provider Payload Runtime Builder
   is complete.
 
 Next Phase:
-- MVP-1H Codex Task Provider Payload Runtime Builder.
+- MVP-1H-R Codex Task Provider Payload Real-Target Validation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -85,6 +86,10 @@ Current architecture direction:
 - The first MVP Provider Adapter path is Codex task payload. It is a
   provider-specific serialization of the Website Generation Package, not a new
   source of business intent.
+- MVP-1H concrete provider identifiers are provider type `codex`, payload kind
+  `codex_task`, and artifact kind `provider_generation_payload`.
+- The Codex task payload is export-only and instructs future Codex execution
+  to produce an implementation proposal only.
 - GNR8 owns contractual meaning. External AI owns implementation proposals.
   Compliance determines contractual fulfillment.
 - Generation Contract Compliance Report communicates contractual fulfillment
@@ -162,76 +167,90 @@ Current architecture direction:
   artifacts. MVP-1F-R validates that runtime against persisted ODV and
   ViroiDoc Website Design Brief artifacts and persists real Website Generation
   Package artifacts. MVP-1G defines the first Provider Adapter boundary and
-  recommends Codex task payload as the first provider path.
+  recommends Codex task payload as the first provider path. MVP-1H implements
+  the first deterministic Codex task ProviderGenerationPayload builder,
+  validator, and provenance persistence boundary from persisted Website
+  Generation Package artifacts.
 
 Website OS branch status:
 - Closed/frozen/paused.
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Current validation status:
-- Phase MVP-1G - Provider Adapter Boundary Design
+- Phase MVP-1H - Codex Task Provider Payload Runtime Builder
   is COMPLETE.
 - Canonical document:
+  `docs/architecture/CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_BUILDER.md`.
+- Companion boundary document:
   `docs/architecture/PROVIDER_ADAPTER_BOUNDARY_DESIGN.md`.
 - Provider Adapter responsibility is
   `WebsiteGenerationPackageArtifact -> ProviderGenerationPayload`.
 - Provider-neutral source is `WebsiteGenerationPackageArtifact`.
 - Provider-specific output is `ProviderGenerationPayload`.
 - The adapter serializes. It never redefines business intent.
-- First MVP provider recommendation is exactly one path: Codex task payload.
-- First provider type is `codex_task`; OpenAI API payload, Claude payload,
-  and manual export payload are deferred.
-- Adapter identity must include adapter ID, adapter name, adapter version,
-  adapter contract version, provider type, provider payload kind, source WGP
-  reference, creation timestamp, serialization mode, and diagnostics.
-- ProviderGenerationPayload conceptually contains payload identity, adapter
-  identity, provider type, payload kind, source WGP reference, serialized
-  package content, provider-specific task envelope, preserved constraints,
-  preserved validation expectations, preserved limitations, preserved
-  confidence, preserved lineage, diagnostics, and safety classification.
-- Serialization rules preserve all WGP objectives, audience requirements,
-  messaging, navigation, page and section contracts, content requirements,
-  constraints, validation expectations, confidence, limitations, lineage, and
-  diagnostics.
-- Forbidden mutation rules prohibit business reinterpretation, new facts,
-  hidden prompt-only business logic, removing or weakening WGP constraints,
-  hiding limitations or low confidence, provider-only business requirements,
-  provider output persistence, generated output persistence, and generation
-  execution in this phase.
-- Future conceptual functions are `buildProviderGenerationPayload(...)`,
-  `validateProviderGenerationPayload(...)`, and
-  `serializeWebsiteGenerationPackageForProvider(...)`.
-- MVP-1G created no TypeScript, schema, persistence, UI, API, workers,
-  provider calls, prompts sent, AI integration, generation, compliance
-  execution, Business Approval, publishing, runtime state, deployment
-  behavior, provider output persistence, or generated output persistence.
+- First MVP runtime provider type is `codex`.
+- First MVP runtime payload kind is `codex_task`.
+- Artifact kind is `provider_generation_payload`.
+- Runtime files:
+  `apps/platform/gnr8/architecture/provider-generation-payload-contract.ts`,
+  `apps/platform/gnr8/architecture/codex-task-provider-payload-builder.ts`,
+  and
+  `apps/platform/gnr8/architecture/provider-generation-payload-persistence.ts`.
+- Test files:
+  `apps/platform/gnr8/architecture/provider-generation-payload-contract.test.ts`,
+  `apps/platform/gnr8/architecture/codex-task-provider-payload-builder.test.ts`,
+  and
+  `apps/platform/gnr8/architecture/provider-generation-payload-persistence.test.ts`.
+- `buildCodexTaskProviderPayload(...)` consumes only a persisted
+  WebsiteGenerationPackageArtifact plus source WGP artifact ID, serializes the
+  full WGP, preserves constraints, validation expectations, confidence,
+  limitations, lineage, and diagnostics, and creates a proposal-only Codex task
+  envelope.
+- `validateProviderGenerationPayload(...)` validates provider type, payload
+  kind, lineage, source WGP reference, required envelope sections, preserved
+  constraints, preserved validation expectations, export-only safety, and
+  recursive forbidden generated-output/provider-result fields.
+- Persistence uses the existing site-version `importProvenanceSummary`
+  boundary with append-only `providerGenerationPayloadArtifacts`,
+  `latestProviderGenerationPayloadArtifact`, equivalent latest reuse, changed
+  append, latest load, by-ID load, `invalid`/`stale` rejection, and `blocked`
+  allowed.
+- Focused Provider Generation Payload tests pass `17 / 17`; initial sandbox
+  execution hit the known `tsx` IPC `listen EPERM ... tsx-501/*.pipe` issue,
+  and the rerun outside the sandbox passed.
 - Input readiness from MVP-1F-R remains: ODV WGP
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d` and ViroiDoc
   WGP `website_generation_package_3e34393aef612a2c597042917dc45085` are
-  persisted, reloadable, provider-neutral package inputs for the future
-  adapter runtime phase.
-- Next recommended phase is MVP-1H Codex Task Provider Payload Runtime
-  Builder. Stop before provider calls, prompts sent, external AI execution,
+  persisted, reloadable, provider-neutral package inputs for real-target
+  provider payload validation.
+- MVP-1H created no provider calls, prompts sent, AI integration, external AI
+  execution, generated website, generated output persistence, compliance
+  execution, Business Approval, publishing, deployment, DNS mutation,
+  production mutation, UI, API routes, schema migrations, or workers.
+- Next recommended phase is MVP-1H-R Codex Task Provider Payload Real-Target
+  Validation. Stop before provider calls, prompts sent, external AI execution,
   generated websites, compliance execution, Business Approval, publishing, UI,
   API, schema, or workers unless explicitly authorized.
 
 Latest completed milestone:
-- Phase MVP-1G - Provider Adapter Boundary Design.
-- Status: COMPLETE / PROVIDER ADAPTER BOUNDARY DEFINED / CODEX TASK PAYLOAD
-  RECOMMENDED / PAYLOAD MODEL DEFINED / SERIALIZATION RULES DEFINED /
-  FORBIDDEN MUTATION RULES DEFINED / LINEAGE REQUIREMENTS DEFINED /
-  DIAGNOSTICS DEFINED / SAFETY RULES DEFINED / NO IMPLEMENTATION /
-  NO PROVIDER CALL / NO PROMPT SENT / NO AI INTEGRATION / NO GENERATION /
+- Phase MVP-1H - Codex Task Provider Payload Runtime Builder.
+- Status: COMPLETE / CONTRACT IMPLEMENTED / DETERMINISTIC CODEX TASK BUILDER
+  IMPLEMENTED / PROVIDER PAYLOAD VALIDATOR IMPLEMENTED / PROVENANCE
+  PERSISTENCE IMPLEMENTED / FOCUSED TESTS PASS / NO PROVIDER CALL /
+  NO PROMPT SENT / NO AI INTEGRATION / NO EXTERNAL AI EXECUTION /
+  NO GENERATED WEBSITE / NO GENERATED OUTPUT PERSISTENCE /
   NO COMPLIANCE EXECUTION / NO BUSINESS APPROVAL / NO PUBLISHING /
+  NO DEPLOYMENT / NO DNS MUTATION / NO PRODUCTION MUTATION /
   NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS.
 - Canonical document:
-  `docs/architecture/PROVIDER_ADAPTER_BOUNDARY_DESIGN.md`.
-- Provider type: `codex_task`.
-- Provider payload kind: `codex_task_payload`.
+  `docs/architecture/CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_BUILDER.md`.
+- Provider type: `codex`.
+- Provider payload kind: `codex_task`.
+- Artifact kind: `provider_generation_payload`.
 - Source artifact: `WebsiteGenerationPackageArtifact`.
-- Output concept: `ProviderGenerationPayload`.
-- Recommended next phase after MVP-1G: MVP-1H Codex Task Provider Payload
-  Runtime Builder.
+- Output artifact: `ProviderGenerationPayload`.
+- Recommended next phase after MVP-1H: MVP-1H-R Codex Task Provider Payload
+  Real-Target Validation.
 
 Earlier completed milestone:
 - Phase MVP-1D-R - Business Alignment Real-Target Validation.
