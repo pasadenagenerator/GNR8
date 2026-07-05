@@ -71,6 +71,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Website Observation | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Observed Website Model | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Generation Contract Compliance | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
+| Generation Contract Compliance Report | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Business Approval | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Publish | COMPLETE | PARTIAL | PARTIAL | PARTIAL | PARTIAL | MISSING |
 
@@ -728,7 +729,6 @@ Current implementation:
   `incomplete`, `partial`, `compliant`, and `non_compliant`.
 
 Missing implementation:
-- Compliance report artifact.
 - Gate that Business Approval can consume.
 
 Dependencies:
@@ -738,15 +738,53 @@ Dependencies:
 - Evidence or rendered capture of generated output when a future runtime
   boundary is authorized.
 
+### Generation Contract Compliance Report
+
+Current implementation:
+- Compliance Report specification is complete.
+- MVP-1K-5 implements the first deterministic Generation Contract Compliance
+  Report runtime foundation.
+- Runtime modules now implement `GenerationContractComplianceReportArtifact`,
+  report sections, recommendation model, readiness model, validation helper,
+  `buildGenerationContractComplianceReport(...)`,
+  `persistGenerationContractComplianceReport(...)`,
+  `loadLatestGenerationContractComplianceReport(...)`, and
+  `loadGenerationContractComplianceReportById(...)`.
+- Artifact kind is `generation_contract_compliance_report`.
+- The builder consumes only persisted `GenerationContractComplianceArtifact`
+  and explains compliance through executive summary, overall compliance,
+  business compliance, experience compliance, implementation observability,
+  category results, deviations, missing requirements, constraint violations,
+  business risks, recommendation, generation readiness, limitations, evidence
+  summary, lineage, and diagnostics.
+- Recommendation values are `proceed_to_approval`, `regenerate`,
+  `improve_wgp`, `repeat_business_alignment`, `insufficient_evidence`, and
+  `human_review_required`.
+- Readiness values are `ready`, `ready_with_limitations`,
+  `requires_regeneration`, `requires_alignment`, and `blocked`.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  append-only `generationContractComplianceReportArtifacts`,
+  `latestGenerationContractComplianceReportArtifact`, equivalent latest
+  reuse, changed append, latest load, and by-ID load.
+- The report explains compliance only. It does not recompute compliance,
+  approve, publish, call providers, execute AI, add UI/API/schema/workers, or
+  mutate runtime/business truth.
+
+Missing implementation:
+- Business Approval artifact and approval decision boundary.
+- Publish gate that consumes Business Approval.
+
+Dependencies:
+- Persisted Generation Contract Compliance artifact.
+
 Risk:
-- Medium. The first deterministic comparison runtime now exists, but Business
-  Approval still needs a human-readable Compliance Report boundary before any
-  generated proposal can be governed toward publishing.
+- Medium. The deterministic compliance runtime and report runtime now exist,
+  but no governed Business Approval decision has accepted business consequence
+  for a generated proposal.
 
 Estimated implementation complexity:
-- First deterministic compliance runtime, validation, persistence, and focused
-  tests are complete. Remaining work starts with the Compliance Report
-  artifact.
+- First deterministic report contract, builder, validation, persistence, and
+  focused tests are complete. Remaining work starts with Business Approval.
 
 ### Business Approval
 
@@ -1057,7 +1095,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1K-5 Generation Contract Compliance Report Runtime Foundation
+MVP-1K-6 Business Approval Runtime Foundation
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -1141,8 +1179,13 @@ artifacts, records evidence-backed category results, findings, deviations,
 limitations, confidence, diagnostics, and lineage, and persists
 `generation_contract_compliance` with latest reuse, append, latest load,
 by-ID load, invalid/stale rejection, and blocked/incomplete/partial/
-compliant/non-compliant acceptance. The next safe phase is MVP-1K-5
-Generation Contract Compliance Report Runtime Foundation. Stop before
-Business Approval, publishing, deployment, DNS mutation, production mutation,
-UI, API, schema, workers, provider calls, or AI execution unless explicitly
+compliant/non-compliant acceptance. MVP-1K-5 implemented the first
+deterministic Generation Contract Compliance Report runtime foundation from
+persisted `GenerationContractComplianceArtifact` only. It creates
+human-readable report sections, recommendation, readiness, evidence summary,
+lineage, diagnostics, and `generation_contract_compliance_report`
+provenance persistence with latest reuse, append, latest load, and by-ID
+load. The next safe phase is MVP-1K-6 Business Approval Runtime Foundation.
+Stop before publishing, deployment, DNS mutation, production mutation, UI,
+API, schema, workers, provider calls, or AI execution unless explicitly
 authorized.

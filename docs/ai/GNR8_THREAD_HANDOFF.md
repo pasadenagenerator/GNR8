@@ -37,13 +37,15 @@ Current status:
 - Phase MVP-1K-3 - Observed Website Model Runtime Foundation is complete.
 - Phase MVP-1K-4 - Generation Contract Compliance Runtime Foundation is
   complete.
+- Phase MVP-1K-5 - Generation Contract Compliance Report Runtime Foundation
+  is complete.
 
 Current Phase:
-- Phase MVP-1K-4 - Generation Contract Compliance Runtime Foundation
+- Phase MVP-1K-5 - Generation Contract Compliance Report Runtime Foundation
   is complete.
 
 Next Phase:
-- MVP-1K-5 Generation Contract Compliance Report Runtime Foundation.
+- MVP-1K-6 Business Approval Runtime Foundation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -506,30 +508,56 @@ Current validation status:
   provider calls, AI execution, automatic generation, UI, API, schema
   migration, workers, deployment, DNS mutation, production mutation, runtime
   mutation, or upstream business artifact mutation.
-- Next recommended phase is MVP-1K-5 Generation Contract Compliance Report
-  Runtime Foundation, limited to communicating the persisted compliance
-  artifact for business review. Stop before Business Approval, publishing,
-  deployment, DNS mutation, production mutation, UI, API, schema, workers,
-  provider calls, AI execution, or runtime mutation outside the explicitly
-  authorized report boundary.
+- MVP-1K-5 implements the first Generation Contract Compliance Report runtime
+  foundation in
+  `apps/platform/gnr8/architecture/generation-contract-compliance-report-contract.ts`,
+  `apps/platform/gnr8/architecture/generation-contract-compliance-report-builder.ts`,
+  and
+  `apps/platform/gnr8/architecture/generation-contract-compliance-report-persistence.ts`.
+- Artifact kind is `generation_contract_compliance_report`.
+- `buildGenerationContractComplianceReport(...)` consumes only persisted
+  `GenerationContractComplianceArtifact` and creates executive summary,
+  overall compliance, business compliance, experience compliance,
+  implementation observability, category results, deviations, missing
+  requirements, constraint violations, business risks, recommendation,
+  generation readiness, limitations, evidence summary, lineage, and
+  diagnostics.
+- Recommendation values are `proceed_to_approval`, `regenerate`,
+  `improve_wgp`, `repeat_business_alignment`, `insufficient_evidence`, and
+  `human_review_required`.
+- Readiness values are `ready`, `ready_with_limitations`,
+  `requires_regeneration`, `requires_alignment`, and `blocked`.
+- The report does not recompute compliance. Compliance evaluates; the report
+  explains.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  `generationContractComplianceReportArtifacts`,
+  `latestGenerationContractComplianceReportArtifact`, equivalent latest
+  reuse, changed append, latest load, and by-ID load.
+- MVP-1K-5 added no Business Approval, publishing, provider calls, AI
+  execution, automatic generation, compliance recomputation, UI, API, schema
+  migration, workers, deployment, DNS mutation, production mutation, runtime
+  mutation, or upstream business artifact mutation.
+- Next recommended phase is MVP-1K-6 Business Approval Runtime Foundation.
+  Stop before publishing, deployment, DNS mutation, production mutation, UI,
+  API, schema, workers, provider calls, AI execution, or runtime mutation
+  outside the explicitly authorized Business Approval boundary.
 
 Latest completed milestone:
-- Phase MVP-1K-4 - Generation Contract Compliance Runtime Foundation.
-- Status: COMPLETE / GENERATION CONTRACT COMPLIANCE RUNTIME FOUNDATION /
-  WEBSITE GENERATION PACKAGE TO OBSERVED WEBSITE MODEL COMPARISON /
-  DETERMINISTIC BUILDER / CONTRACT VALIDATOR / EVIDENCE-BACKED FINDINGS /
-  DEVIATIONS / LIMITATIONS / FORBIDDEN GUARD / EXISTING PROVENANCE BOUNDARY /
+- Phase MVP-1K-5 - Generation Contract Compliance Report Runtime Foundation.
+- Status: COMPLETE / GENERATION CONTRACT COMPLIANCE REPORT RUNTIME
+  FOUNDATION / PERSISTED COMPLIANCE ARTIFACT INPUT ONLY / DETERMINISTIC
+  REPORT BUILDER / CONTRACT VALIDATOR / HUMAN-READABLE SECTIONS /
+  RECOMMENDATION MODEL / READINESS MODEL / EVIDENCE SUMMARY / LINEAGE /
+  DIAGNOSTICS / FORBIDDEN GUARD / EXISTING PROVENANCE BOUNDARY /
   LATEST REUSE / CHANGED APPEND / LATEST LOAD / BY-ID LOAD /
-  INVALID REJECTED / STALE REJECTED / BLOCKED ACCEPTED /
-  INCOMPLETE ACCEPTED / PARTIAL ACCEPTED / COMPLIANT ACCEPTED /
-  NON_COMPLIANT ACCEPTED / NO COMPLIANCE REPORT / NO BUSINESS APPROVAL /
-  NO PUBLISHING / NO PROVIDER CALLS / NO AI EXECUTION / NO UI /
-  NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS / NO DEPLOYMENT /
-  NO DNS MUTATION / NO PRODUCTION MUTATION / NO RUNTIME MUTATION.
+  NO COMPLIANCE RECOMPUTATION / NO BUSINESS APPROVAL / NO PUBLISHING /
+  NO PROVIDER CALLS / NO AI EXECUTION / NO UI / NO API ROUTES /
+  NO SCHEMA MIGRATIONS / NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION /
+  NO PRODUCTION MUTATION / NO RUNTIME MUTATION.
 - Canonical document:
-  `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_RUNTIME_FOUNDATION.md`.
-- Recommended next phase after MVP-1K-4: MVP-1K-5 Generation Contract
-  Compliance Report Runtime Foundation.
+  `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REPORT_RUNTIME_FOUNDATION.md`.
+- Recommended next phase after MVP-1K-5: MVP-1K-6 Business Approval Runtime
+  Foundation.
 
 Previous completed milestone:
 - Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design.
@@ -594,8 +622,9 @@ Earlier completed milestone:
   Website Proposal Import Runtime Foundation, completed MVP-1K-2 Generated
   Website Proposal Observation Boundary Design, and completed MVP-1K-3
   Observed Website Model Runtime Foundation, and completed MVP-1K-4
-  Generation Contract Compliance Runtime Foundation. Current next recommended
-  phase is MVP-1K-5 Generation Contract Compliance Report Runtime Foundation.
+  Generation Contract Compliance Runtime Foundation, and completed MVP-1K-5
+  Generation Contract Compliance Report Runtime Foundation. Current next
+  recommended phase is MVP-1K-6 Business Approval Runtime Foundation.
 
 Earlier completed milestone:
 - Phase MVP-1D-R - Business Alignment Real-Target Validation.
