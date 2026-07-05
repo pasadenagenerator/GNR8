@@ -39,13 +39,19 @@ Current status:
   complete.
 - Phase MVP-1K-5 - Generation Contract Compliance Report Runtime Foundation
   is complete.
+- Phase MVP-1K-5-R - Generation Contract Compliance Report Real-Target
+  Validation is complete with a missing-prerequisite blocker: neither ODV nor
+  ViroiDoc has a latest persisted `GenerationContractComplianceArtifact`.
+- Phase MVP-1K-4-R - Generation Contract Compliance Real-Target Validation is
+  complete with a missing-prerequisite blocker: neither ODV nor ViroiDoc has a
+  latest persisted `ObservedWebsiteModelArtifact`.
 
 Current Phase:
-- Phase MVP-1K-5 - Generation Contract Compliance Report Runtime Foundation
-  is complete.
+- Phase MVP-1K-4-R - Generation Contract Compliance Real-Target Validation is
+  complete and safely blocked before compliance build/persistence.
 
 Next Phase:
-- MVP-1K-6 Business Approval Runtime Foundation.
+- MVP-1K-3-R Observed Website Model Real-Target Validation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -508,6 +514,14 @@ Current validation status:
   provider calls, AI execution, automatic generation, UI, API, schema
   migration, workers, deployment, DNS mutation, production mutation, runtime
   mutation, or upstream business artifact mutation.
+- MVP-1K-4-R real-target validation checked ODV
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` with source WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` and ViroiDoc
+  `e26b0754-988b-45b9-9e24-8e213179b6cf` with source WGP
+  `website_generation_package_3e34393aef612a2c597042917dc45085`.
+- MVP-1K-4-R is blocked because both targets are missing a latest persisted
+  `ObservedWebsiteModelArtifact`; no exact WGP was loaded, no compliance was
+  built, and no `GenerationContractComplianceArtifact` was persisted.
 - MVP-1K-5 implements the first Generation Contract Compliance Report runtime
   foundation in
   `apps/platform/gnr8/architecture/generation-contract-compliance-report-contract.ts`,
@@ -537,27 +551,34 @@ Current validation status:
   execution, automatic generation, compliance recomputation, UI, API, schema
   migration, workers, deployment, DNS mutation, production mutation, runtime
   mutation, or upstream business artifact mutation.
-- Next recommended phase is MVP-1K-6 Business Approval Runtime Foundation.
-  Stop before publishing, deployment, DNS mutation, production mutation, UI,
-  API, schema, workers, provider calls, AI execution, or runtime mutation
-  outside the explicitly authorized Business Approval boundary.
+- MVP-1K-5-R real-target validation found no latest persisted
+  `GenerationContractComplianceArtifact` for ODV
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` or ViroiDoc
+  `e26b0754-988b-45b9-9e24-8e213179b6cf`, so no report was built or
+  persisted.
+- Next recommended phase is MVP-1K-3-R Observed Website Model Real-Target
+  Validation. After ODV and ViroiDoc OWM artifacts are persisted, rerun
+  MVP-1K-4-R, then rerun MVP-1K-5-R before Business Approval. Stop before
+  Business Approval, publishing, deployment, DNS mutation, production
+  mutation, UI, API, schema, workers, provider calls, AI execution, or runtime
+  mutation outside the explicitly authorized validation boundary.
 
 Latest completed milestone:
-- Phase MVP-1K-5 - Generation Contract Compliance Report Runtime Foundation.
-- Status: COMPLETE / GENERATION CONTRACT COMPLIANCE REPORT RUNTIME
-  FOUNDATION / PERSISTED COMPLIANCE ARTIFACT INPUT ONLY / DETERMINISTIC
-  REPORT BUILDER / CONTRACT VALIDATOR / HUMAN-READABLE SECTIONS /
-  RECOMMENDATION MODEL / READINESS MODEL / EVIDENCE SUMMARY / LINEAGE /
-  DIAGNOSTICS / FORBIDDEN GUARD / EXISTING PROVENANCE BOUNDARY /
-  LATEST REUSE / CHANGED APPEND / LATEST LOAD / BY-ID LOAD /
-  NO COMPLIANCE RECOMPUTATION / NO BUSINESS APPROVAL / NO PUBLISHING /
-  NO PROVIDER CALLS / NO AI EXECUTION / NO UI / NO API ROUTES /
+- Phase MVP-1K-4-R - Generation Contract Compliance Real-Target
+  Validation.
+- Status: COMPLETE / REAL ODV CHECKED / REAL VIROIDOC CHECKED /
+  MISSING LATEST OBSERVED WEBSITE MODEL ARTIFACTS / NO EXACT WGP LOADED /
+  NO COMPLIANCE BUILT / NO COMPLIANCE PERSISTED / NO LATEST COMPLIANCE
+  RELOAD / NO BY-ID COMPLIANCE RELOAD / NO IDEMPOTENT COMPLIANCE RETRY /
+  BLOCKED BEFORE COMPLIANCE REPORT / NO COMPLIANCE REPORT /
+  NO BUSINESS APPROVAL / NO PUBLISHING / NO PROVIDER CALLS /
+  NO AI EXECUTION / NO GENERATED CONTENT MUTATION / NO UI / NO API ROUTES /
   NO SCHEMA MIGRATIONS / NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION /
   NO PRODUCTION MUTATION / NO RUNTIME MUTATION.
 - Canonical document:
-  `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REPORT_RUNTIME_FOUNDATION.md`.
-- Recommended next phase after MVP-1K-5: MVP-1K-6 Business Approval Runtime
-  Foundation.
+  `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REAL_TARGET_VALIDATION.md`.
+- Recommended next phase after MVP-1K-4-R: MVP-1K-3-R Observed Website Model
+  Real-Target Validation.
 
 Previous completed milestone:
 - Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design.
@@ -623,8 +644,12 @@ Earlier completed milestone:
   Website Proposal Observation Boundary Design, and completed MVP-1K-3
   Observed Website Model Runtime Foundation, and completed MVP-1K-4
   Generation Contract Compliance Runtime Foundation, and completed MVP-1K-5
-  Generation Contract Compliance Report Runtime Foundation. Current next
-  recommended phase is MVP-1K-6 Business Approval Runtime Foundation.
+  Generation Contract Compliance Report Runtime Foundation, and completed
+  MVP-1K-5-R Generation Contract Compliance Report Real-Target Validation
+  with missing upstream compliance artifacts, and completed MVP-1K-4-R
+  Generation Contract Compliance Real-Target Validation with missing upstream
+  Observed Website Model artifacts. Current next recommended phase is
+  MVP-1K-3-R Observed Website Model Real-Target Validation.
 
 Earlier completed milestone:
 - Phase MVP-1D-R - Business Alignment Real-Target Validation.

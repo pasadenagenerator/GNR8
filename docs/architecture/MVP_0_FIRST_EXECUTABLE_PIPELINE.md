@@ -727,6 +727,14 @@ Current implementation:
   changed append, latest load, and by-ID load.
 - Persistence rejects `invalid` and `stale`, and accepts `blocked`,
   `incomplete`, `partial`, `compliant`, and `non_compliant`.
+- MVP-1K-4-R real-target validation checked ODV
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` with source WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` and ViroiDoc
+  `e26b0754-988b-45b9-9e24-8e213179b6cf` with source WGP
+  `website_generation_package_3e34393aef612a2c597042917dc45085`.
+- MVP-1K-4-R is blocked because both targets are missing a latest persisted
+  `ObservedWebsiteModelArtifact`; no compliance artifact was built or
+  persisted.
 
 Missing implementation:
 - Gate that Business Approval can consume.
@@ -769,10 +777,16 @@ Current implementation:
 - The report explains compliance only. It does not recompute compliance,
   approve, publish, call providers, execute AI, add UI/API/schema/workers, or
   mutate runtime/business truth.
+- MVP-1K-5-R real-target validation checked ODV
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc
+  `e26b0754-988b-45b9-9e24-8e213179b6cf`, but both targets are missing the
+  required latest persisted `GenerationContractComplianceArtifact`. No
+  Generation Contract Compliance Report was built or persisted.
 
 Missing implementation:
 - Business Approval artifact and approval decision boundary.
 - Publish gate that consumes Business Approval.
+- Real-target Generation Contract Compliance artifacts for ODV and ViroiDoc.
 
 Dependencies:
 - Persisted Generation Contract Compliance artifact.
@@ -784,7 +798,8 @@ Risk:
 
 Estimated implementation complexity:
 - First deterministic report contract, builder, validation, persistence, and
-  focused tests are complete. Remaining work starts with Business Approval.
+  focused tests are complete. Remaining work starts with real-target
+  Generation Contract Compliance validation before Business Approval.
 
 ### Business Approval
 
@@ -1095,7 +1110,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1K-6 Business Approval Runtime Foundation
+MVP-1K-3-R Observed Website Model Real-Target Validation
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -1185,7 +1200,13 @@ persisted `GenerationContractComplianceArtifact` only. It creates
 human-readable report sections, recommendation, readiness, evidence summary,
 lineage, diagnostics, and `generation_contract_compliance_report`
 provenance persistence with latest reuse, append, latest load, and by-ID
-load. The next safe phase is MVP-1K-6 Business Approval Runtime Foundation.
+load. MVP-1K-5-R found that real ODV and ViroiDoc report validation is blocked
+because latest persisted `GenerationContractComplianceArtifact` inputs are
+missing. MVP-1K-4-R then found that both targets are missing the prerequisite
+latest persisted `ObservedWebsiteModelArtifact`, so no compliance artifact was
+built or persisted. The next safe phase is MVP-1K-3-R Observed Website Model
+Real-Target Validation. After ODV and ViroiDoc have OWM inputs, rerun
+MVP-1K-4-R and then rerun MVP-1K-5-R before Business Approval.
 Stop before publishing, deployment, DNS mutation, production mutation, UI,
 API, schema, workers, provider calls, or AI execution unless explicitly
 authorized.

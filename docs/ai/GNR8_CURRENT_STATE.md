@@ -3211,11 +3211,12 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1K-5 - Generation Contract Compliance Report Runtime Foundation
-  is complete.
+- Phase MVP-1K-4-R - Generation Contract Compliance Real-Target Validation is
+  complete with a missing-prerequisite blocker: neither ODV nor ViroiDoc has a
+  latest persisted `ObservedWebsiteModelArtifact`.
 
 Next Phase:
-- MVP-1K-6 Business Approval Runtime Foundation.
+- MVP-1K-3-R Observed Website Model Real-Target Validation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3286,7 +3287,12 @@ MVP-0 reality assessment:
   latest reuse, append-on-change, latest load, and by-ID load. It explains
   compliance only and does not recompute compliance, approve, publish, call
   providers, execute AI, add UI/API/schema/workers, or mutate runtime/business
-  truth.
+  truth. MVP-1K-5-R checked real ODV and ViroiDoc inputs and found no latest
+  persisted `GenerationContractComplianceArtifact` for either target, so no
+  report was built or persisted. MVP-1K-4-R then checked the real ODV and
+  ViroiDoc Compliance inputs and found no latest persisted
+  `ObservedWebsiteModelArtifact` for either target, so no Compliance artifact
+  was built or persisted.
 - External AI and Business Approval: architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
   Publish gating for generated proposals is missing.
@@ -4294,6 +4300,12 @@ MVP-1K-4 Generation Contract Compliance Runtime Foundation:
   provider calls, AI execution, automatic generation, UI, API, schema
   migration, workers, deployment, DNS mutation, production mutation, runtime
   mutation, or upstream business artifact mutation.
+- MVP-1K-4-R real-target validation is complete and blocked before compliance
+  build/persistence. ODV
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc
+  `e26b0754-988b-45b9-9e24-8e213179b6cf` both have no latest persisted
+  `ObservedWebsiteModelArtifact`, so the exact WGP artifacts were not loaded
+  and no `GenerationContractComplianceArtifact` was persisted.
 
 MVP-1K-5 Generation Contract Compliance Report Runtime Foundation:
 - MVP-1K-5 is complete. It creates the first deterministic Generation
@@ -4331,11 +4343,15 @@ MVP-1K-5 Generation Contract Compliance Report Runtime Foundation:
   migration, workers, deployment, DNS mutation, production mutation, runtime
   mutation, or upstream business artifact mutation.
 
-Recommended next phase after MVP-1K-5:
-- MVP-1K-6 Business Approval Runtime Foundation. Stop before publishing,
-  deployment, DNS mutation, production mutation, UI, API, schema, workers,
-  provider calls, AI execution, or runtime mutation outside the explicitly
-  authorized Business Approval boundary.
+Recommended next phase after MVP-1K-4-R:
+- MVP-1K-4-R is complete and blocked before compliance build/persistence
+  because real ODV and ViroiDoc Observed Website Model artifacts are missing.
+- MVP-1K-3-R Observed Website Model Real-Target Validation is now the next
+  safe phase. After ODV and ViroiDoc have latest persisted OWM inputs, rerun
+  MVP-1K-4-R, then rerun MVP-1K-5-R before Business Approval. Stop before
+  Business Approval, publishing, deployment, DNS mutation, production
+  mutation, UI, API, schema, workers, provider calls, AI execution, or runtime
+  mutation outside the explicitly authorized validation boundary.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

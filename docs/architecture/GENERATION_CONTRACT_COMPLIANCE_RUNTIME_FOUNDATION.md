@@ -146,14 +146,29 @@ Persistence accepts `blocked`, `incomplete`, `partial`, `compliant`, and
 
 No new table or schema migration is required.
 
+## Real-Target Validation
+
+MVP-1K-4-R attempted real-target validation for ODV
+`09dce7ea-d860-4f60-a1eb-26c3335b302e` with source WGP
+`website_generation_package_c2c555025f186178f27c44c7cd272d4d`, and ViroiDoc
+`e26b0754-988b-45b9-9e24-8e213179b6cf` with source WGP
+`website_generation_package_3e34393aef612a2c597042917dc45085`.
+
+The validation is blocked before compliance build or persistence because both
+targets are missing a latest persisted `ObservedWebsiteModelArtifact`.
+
+No `GenerationContractComplianceArtifact` was persisted for either target.
+
+Canonical validation record:
+`docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REAL_TARGET_VALIDATION.md`.
+
 ## Next Boundary
 
-The next safe phase is Generation Contract Compliance Report.
+The next safe phase is MVP-1K-3-R Observed Website Model Real-Target
+Validation.
 
-That future phase may communicate compliance findings for business review.
-It must still stop before Business Approval, publishing, provider calls, AI
-execution, automatic generation, UI, API, schema, workers, deployment, DNS
-mutation, production mutation, and runtime mutation unless explicitly
-authorized.
+After ODV and ViroiDoc have latest persisted Observed Website Model inputs,
+rerun MVP-1K-4-R. Only after MVP-1K-4-R persists real compliance artifacts
+should MVP-1K-5-R rerun before Business Approval.
 
-MVP-1K-4 stops before the report.
+MVP-1K-4 and MVP-1K-4-R stop before the report.

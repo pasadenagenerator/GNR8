@@ -137,6 +137,19 @@ Validation enforces:
 - recursive absence of Business Approval, publishing, provider execution, AI
   execution, runtime mutation, and upstream business mutation fields.
 
+## Real-Target Validation
+
+MVP-1K-5-R attempted real-target validation for ODV
+`09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc
+`e26b0754-988b-45b9-9e24-8e213179b6cf`.
+
+Both targets are missing the required latest persisted
+`GenerationContractComplianceArtifact`, so no real report was built or
+persisted. The blocker is upstream of the report runtime:
+MVP-1K-4-R must persist real ODV and ViroiDoc Generation Contract Compliance
+artifacts before MVP-1K-5-R can validate report build, persistence, latest
+reload, by-ID reload, and idempotent retry reuse.
+
 ## Stop Boundary
 
 MVP-1K-5 stops after the report runtime foundation.
