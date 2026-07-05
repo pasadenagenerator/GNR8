@@ -48,6 +48,16 @@ Observed Website Model. Observation does not compare, judge compliance,
 approve, publish, mutate upstream artifacts, trust providers, or execute
 generated output.
 
+MVP-1K-3 adds the first runtime foundation for that Observed Website Model.
+It deterministically creates and persists `observed_website_model` artifacts
+from quarantined `GeneratedWebsiteProposalArtifact` metadata. It records
+pages, navigation, sections, messages, assets, constraints, technical
+signals, evidence, readiness, limitations, diagnostics, and lineage when
+available. It records limitations instead of guessing when metadata is
+absent. It still does not compare against the WGP, judge compliance, create a
+Compliance Report, approve, publish, call providers, execute AI, render or
+execute generated output, mutate runtime, or add UI/API/workers/schema.
+
 ## Canonical Pipeline
 
 ```text
@@ -507,9 +517,9 @@ Compliance Report, Business Approval, publishing, UI, API, schema, workers,
 provider calls, AI execution, automatic generation, deployment, DNS mutation,
 production mutation, runtime mutation, or generated output execution.
 
-After MVP-1K-2, the next safe phase is MVP-1K-3 Observed Website Model
-Runtime Foundation, limited to a bounded observation model runtime only if
-explicitly authorized. It must still stop before Generation Contract
-Compliance, Compliance Report, Business Approval, publishing, provider calls,
-AI execution, UI, API, schema, workers, deployment, DNS mutation, production
-mutation, or runtime mutation outside the approved observation boundary.
+After MVP-1K-3, the next safe phase is Generation Contract Compliance,
+limited to comparing a persisted Observed Website Model against the Website
+Generation Package. It must still stop before Compliance Report, Business
+Approval, publishing, provider calls, AI execution, UI, API, schema, workers,
+deployment, DNS mutation, production mutation, or runtime mutation unless
+explicitly authorized.

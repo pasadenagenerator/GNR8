@@ -34,13 +34,14 @@ Current status:
   complete.
 - Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design is
   complete.
+- Phase MVP-1K-3 - Observed Website Model Runtime Foundation is complete.
 
 Current Phase:
-- Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design
+- Phase MVP-1K-3 - Observed Website Model Runtime Foundation
   is complete.
 
 Next Phase:
-- MVP-1K-3 Observed Website Model Runtime Foundation.
+- MVP-1K-4 Generation Contract Compliance Runtime Foundation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -451,14 +452,55 @@ Current validation status:
   evaluator, Compliance Report, Business Approval, publishing, provider calls,
   AI execution, UI, API, schema, workers, deployment, DNS mutation, production
   mutation, or runtime mutation.
-- Next recommended phase is MVP-1K-3 Observed Website Model Runtime
-  Foundation, limited to bounded observation runtime only if explicitly
-  authorized. Stop before Generation Contract Compliance, Compliance Report,
-  Business Approval, publishing, deployment, DNS mutation, production
-  mutation, UI, API, schema, workers, provider calls, AI execution, or runtime
-  mutation outside the approved observation boundary.
+- MVP-1K-3 implements the first Observed Website Model runtime foundation in
+  `apps/platform/gnr8/architecture/observed-website-model-contract.ts`,
+  `apps/platform/gnr8/architecture/observed-website-model-builder.ts`, and
+  `apps/platform/gnr8/architecture/observed-website-model-persistence.ts`.
+- Artifact kind is `observed_website_model`.
+- `buildObservedWebsiteModel(...)` consumes a quarantined
+  GeneratedWebsiteProposalArtifact, output bundle metadata, available route
+  and file metadata, provider notes, and operator notes. It records
+  limitations when metadata is absent and does not compare against WGP.
+- `validateObservedWebsiteModel(...)` validates required lineage, allowed
+  status, unique observed IDs, readiness consistency, source proposal
+  consistency when supplied, and recursive absence of compliance/downstream
+  mutation fields.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  `observedWebsiteModelArtifacts`, `latestObservedWebsiteModelArtifact`,
+  equivalent latest reuse, changed append, latest load, and by-ID load.
+- Persistence rejects `invalid` and `stale`, and accepts `blocked`,
+  `not_observable`, `partially_observable`, and `observable`.
+- MVP-1K-3 added no Generation Contract Compliance, Compliance Report,
+  Business Approval, publishing, provider calls, AI execution, automatic
+  generation, UI, API, schema migration, workers, deployment, DNS mutation,
+  production mutation, runtime mutation, generated code execution, or rendered
+  inspection beyond existing metadata.
+- Next recommended phase is MVP-1K-4 Generation Contract Compliance Runtime
+  Foundation, limited to comparing a persisted Observed Website Model against
+  the Website Generation Package. Stop before Compliance Report, Business
+  Approval, publishing, deployment, DNS mutation, production mutation, UI,
+  API, schema, workers, provider calls, AI execution, or runtime mutation
+  outside the explicitly authorized comparison boundary.
 
 Latest completed milestone:
+- Phase MVP-1K-3 - Observed Website Model Runtime Foundation.
+- Status: COMPLETE / OBSERVED WEBSITE MODEL RUNTIME FOUNDATION /
+  GENERATED WEBSITE PROPOSAL TO OBSERVED WEBSITE MODEL / OBSERVATION ONLY /
+  DETERMINISTIC BUILDER / CONTRACT VALIDATOR / FORBIDDEN GUARD /
+  EXISTING PROVENANCE BOUNDARY / LATEST REUSE / CHANGED APPEND /
+  LATEST LOAD / BY-ID LOAD / INVALID REJECTED / STALE REJECTED /
+  BLOCKED ACCEPTED / NOT_OBSERVABLE ACCEPTED / PARTIALLY_OBSERVABLE ACCEPTED /
+  OBSERVABLE ACCEPTED / NO WGP COMPARISON / NO COMPLIANCE JUDGMENT /
+  NO COMPLIANCE REPORT / NO BUSINESS APPROVAL / NO PUBLISHING /
+  NO PROVIDER CALLS / NO AI EXECUTION / NO UI / NO API ROUTES /
+  NO SCHEMA MIGRATIONS / NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION /
+  NO PRODUCTION MUTATION / NO RUNTIME MUTATION.
+- Canonical document:
+  `docs/architecture/OBSERVED_WEBSITE_MODEL_RUNTIME_FOUNDATION.md`.
+- Recommended next phase after MVP-1K-3: MVP-1K-4 Generation Contract
+  Compliance Runtime Foundation.
+
+Previous completed milestone:
 - Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design.
 - Status: COMPLETE / GENERATED WEBSITE PROPOSAL OBSERVATION BOUNDARY /
   OBSERVATION ONLY / GENERATED WEBSITE PROPOSAL TO WEBSITE OBSERVATION /
@@ -471,10 +513,8 @@ Latest completed milestone:
   NO RUNTIME MUTATION.
 - Canonical document:
   `docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
-- Recommended next phase after MVP-1K-2: MVP-1K-3 Observed Website Model
-  Runtime Foundation.
 
-Previous completed milestone:
+Earlier completed milestone:
 - Phase MVP-1K-1 - Generated Website Proposal Import Runtime Foundation.
 - Status: COMPLETE / GENERATED WEBSITE PROPOSAL IMPORT RUNTIME FOUNDATION /
   QUARANTINED IMPORT STORAGE / MANUAL CODEX OUTPUT BUNDLE METADATA /
@@ -520,9 +560,10 @@ Earlier completed milestone:
   `provider_generation_payload_2d99b17572dc23ef482cf56ba06e1230`.
 - Recommended next phase after MVP-1J: superseded by completed MVP-1K-0
   Generation Validation Engine Architecture and completed MVP-1K-1 Generated
-  Website Proposal Import Runtime Foundation and completed MVP-1K-2 Generated
-  Website Proposal Observation Boundary Design. Current next recommended phase
-  is MVP-1K-3 Observed Website Model Runtime Foundation.
+  Website Proposal Import Runtime Foundation, completed MVP-1K-2 Generated
+  Website Proposal Observation Boundary Design, and completed MVP-1K-3
+  Observed Website Model Runtime Foundation. Current next recommended phase
+  is MVP-1K-4 Generation Contract Compliance Runtime Foundation.
 
 Earlier completed milestone:
 - Phase MVP-1D-R - Business Alignment Real-Target Validation.

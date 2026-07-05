@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design
+- Phase MVP-1K-3 - Observed Website Model Runtime Foundation
   is complete.
 
 Next Phase:
-- MVP-1K-3 Observed Website Model Runtime Foundation.
+- MVP-1K-4 Generation Contract Compliance Runtime Foundation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3264,9 +3264,12 @@ MVP-0 reality assessment:
   load.
 - Website Observation and Observed Website Model: MVP-1K-2 defines the
   observation-only boundary from quarantined Generated Website Proposal to
-  Observed Website Model. Observation records what exists from available
-  proposal sources and does not compare, judge compliance, approve, publish,
-  mutate WGP, trust providers, or mutate runtime state.
+  Observed Website Model. MVP-1K-3 implements the first deterministic
+  Observed Website Model runtime foundation with contract, builder, validator,
+  focused tests, and `observed_website_model` provenance persistence.
+  Observation records what exists from available proposal metadata and does
+  not compare, judge compliance, approve, publish, mutate WGP, trust
+  providers, or mutate runtime state.
 - External AI, Generation Contract Compliance, and Business Approval:
   architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
@@ -4197,13 +4200,56 @@ MVP-1K-2 Generated Website Proposal Observation Boundary Design:
   AI execution, UI, API, schema, workers, deployment, DNS mutation, production
   mutation, or runtime mutation.
 
-Recommended next phase after MVP-1K-2:
-- MVP-1K-3 Observed Website Model Runtime Foundation, limited to the first
-  bounded observation model runtime only if explicitly authorized. Stop before
-  Generation Contract Compliance, Compliance Report, Business Approval,
-  publishing, deployment, DNS mutation, production mutation, UI, API, schema,
-  workers, provider calls, AI execution, or runtime mutation outside the
-  approved observation boundary.
+MVP-1K-3 Observed Website Model Runtime Foundation:
+- MVP-1K-3 is complete. It creates the first deterministic Observed Website
+  Model runtime foundation from a quarantined Generated Website Proposal.
+- Canonical document:
+  `docs/architecture/OBSERVED_WEBSITE_MODEL_RUNTIME_FOUNDATION.md`.
+- Runtime files:
+  `apps/platform/gnr8/architecture/observed-website-model-contract.ts`,
+  `apps/platform/gnr8/architecture/observed-website-model-builder.ts`, and
+  `apps/platform/gnr8/architecture/observed-website-model-persistence.ts`.
+- Artifact kind is `observed_website_model`.
+- The contract defines `ObservedWebsiteModelArtifact`,
+  `ObservedWebsiteLineage`, `ObservedPage`, `ObservedNavigation`,
+  `ObservedSection`, `ObservedMessage`, `ObservedAsset`,
+  `ObservedConstraint`, `ObservedTechnicalSignal`, `ObservedEvidence`,
+  `ObservedLimitation`, `ObservedWebsiteReadiness`,
+  `ObservedWebsiteValidationResult`, and `ObservedWebsiteStatus`.
+- Allowed statuses are `not_observable`, `partially_observable`,
+  `observable`, `blocked`, `invalid`, and `stale`.
+- `buildObservedWebsiteModel(...)` consumes a quarantined
+  `GeneratedWebsiteProposalArtifact`, output bundle metadata, available route
+  and file metadata, provider notes, and operator notes. It does not consume
+  the WGP directly except lineage references.
+- Observation derives route/page inventory, file inventory, declared
+  navigation, declared sections, declared message/content summaries, declared
+  assets, technical signals, and missing observation limitations when those
+  signals are explicitly available.
+- If data is absent, the builder records a limitation instead of guessing.
+- `validateObservedWebsiteModel(...)` validates required lineage, allowed
+  status, unique observed IDs, readiness consistency, source proposal
+  consistency when supplied, and recursive absence of compliance/downstream
+  mutation fields.
+- Persistence uses the existing site-version `importProvenanceSummary`
+  boundary with append-only `observedWebsiteModelArtifacts`,
+  `latestObservedWebsiteModelArtifact`, equivalent latest reuse, changed
+  append, latest load, and by-ID load.
+- Persistence rejects `invalid` and `stale`, and accepts `blocked`,
+  `not_observable`, `partially_observable`, and `observable`.
+- MVP-1K-3 added no Generation Contract Compliance, Compliance Report,
+  Business Approval, publishing, provider calls, AI execution, automatic
+  generation, UI, API, schema migration, workers, deployment, DNS mutation,
+  production mutation, runtime mutation, generated code execution, or rendered
+  inspection beyond existing metadata.
+
+Recommended next phase after MVP-1K-3:
+- MVP-1K-4 Generation Contract Compliance Runtime Foundation, limited to
+  comparing a persisted Observed Website Model against the Website Generation
+  Package. Stop before Compliance Report, Business Approval, publishing,
+  deployment, DNS mutation, production mutation, UI, API, schema, workers,
+  provider calls, AI execution, or runtime mutation outside the explicitly
+  authorized comparison boundary.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

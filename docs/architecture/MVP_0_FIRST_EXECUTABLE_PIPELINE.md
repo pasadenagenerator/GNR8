@@ -68,8 +68,8 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Provider Adapter | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | External AI | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Generated Website Proposal | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
-| Website Observation | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
-| Observed Website Model | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
+| Website Observation | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
+| Observed Website Model | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Generation Contract Compliance | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Business Approval | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Publish | COMPLETE | PARTIAL | PARTIAL | PARTIAL | PARTIAL | MISSING |
@@ -610,26 +610,29 @@ Current implementation:
 - MVP-1K-2 defines the Generated Website Proposal Observation Boundary Design
   in
   `docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
+- MVP-1K-3 adds the first deterministic observation runtime foundation in
+  `apps/platform/gnr8/architecture/observed-website-model-builder.ts`.
 - Observation pipeline is
   `Generated Website Proposal -> Website Observation -> Observed Website Model
   -> Future Contract Comparison`.
 - Observation sources are generated output bundle metadata, generated file
-  tree, rendered preview when available, static HTML/content when available,
-  asset inventory, route/page inventory, operator notes, and provider notes.
+  tree metadata when available, asset inventory metadata, route/page
+  inventory metadata, operator notes, and provider notes.
 - Observation rules are observe only, no compliance judgment, no business
   reinterpretation, no canonical business updates, no WGP mutation, no
   provider trust, no publishing, and no runtime mutation.
 - Observation readiness values are `not_observable`,
   `partially_observable`, `observable`, and `blocked`.
+- The MVP-1K-3 builder records missing observation limitations when metadata
+  is absent instead of guessing.
 
 Missing implementation:
-- Observation runtime.
 - File tree inspection.
 - Rendered preview inspection.
 - Static HTML/content inspection.
 - Asset inventory inspection.
 - Route/page inventory inspection.
-- Persisted Observed Website Model.
+- Real-target observation validation.
 
 Dependencies:
 - Quarantined Generated Website Proposal.
@@ -642,8 +645,8 @@ Risk:
   ambiguous proposal reality without turning provider claims into facts.
 
 Estimated implementation complexity:
-- Medium for a bounded first observation model. It should be implemented
-  before any compliance evaluator.
+- First bounded observation runtime is complete. Remaining observation work is
+  richer inspection and real-target validation before broad compliance use.
 
 ### Observed Website Model
 
@@ -652,17 +655,26 @@ Current implementation:
   ObservedNavigation, ObservedSection, ObservedMessage, ObservedAsset,
   ObservedConstraint, ObservedTechnicalSignal, ObservedEvidence,
   ObservedLimitation, and ObservedWebsiteLineage artifacts.
+- MVP-1K-3 implements `ObservedWebsiteModelArtifact`,
+  `ObservedWebsiteLineage`, `ObservedPage`, `ObservedNavigation`,
+  `ObservedSection`, `ObservedMessage`, `ObservedAsset`,
+  `ObservedConstraint`, `ObservedTechnicalSignal`, `ObservedEvidence`,
+  `ObservedLimitation`, `ObservedWebsiteReadiness`,
+  `ObservedWebsiteValidationResult`, and `ObservedWebsiteStatus`.
+- Artifact kind is `observed_website_model`.
+- Persistence uses the existing site-version `importProvenanceSummary`
+  boundary with append-only `observedWebsiteModelArtifacts`,
+  `latestObservedWebsiteModelArtifact`, equivalent latest reuse, changed
+  append, latest load, and by-ID load.
+- Persistence rejects `invalid` and `stale`, and accepts `blocked`,
+  `not_observable`, `partially_observable`, and `observable`.
 - The evidence model must preserve source proposal artifact, source provider
   payload, source WGP, observed routes, sections, navigation, messages,
   assets, missing observations, limitations, and diagnostics.
 
 Missing implementation:
-- Runtime contract.
-- Validator.
-- Persistence.
-- Latest/by-ID reload.
-- Focused tests.
 - Real-target observation validation.
+- Rendered/static inspection backed observations.
 
 Dependencies:
 - Website Observation.
@@ -674,9 +686,9 @@ Risk:
   pass, partial, fail, unknown, or not applicable.
 
 Estimated implementation complexity:
-- Medium. The first runtime slice can stay narrow by recording only available
-  source metadata, route/page inventory, asset inventory, static content, and
-  explicit limitations.
+- First runtime contract, builder, validator, focused tests, and provenance
+  persistence are complete. Remaining work starts with real-target
+  observation validation or Generation Contract Compliance.
 
 ### Generation Contract Compliance
 
@@ -693,7 +705,6 @@ Current implementation:
   approval gate exists for generated websites.
 
 Missing implementation:
-- Generated Website Proposal observation runtime foundation.
 - Compliance evaluator comparing observed generated website reality against
   the Website Generation Package.
 - Compliance report artifact.
@@ -1025,7 +1036,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1K-3 Observed Website Model Runtime Foundation
+MVP-1K-4 Generation Contract Compliance Runtime Foundation
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -1097,9 +1108,14 @@ defined the Generated Website Proposal observation boundary:
 -> Future Contract Comparison`. It also defined conceptual observation
 artifacts, observation sources, observation readiness, and the evidence model
 while adding no implementation, observation runtime, compliance, approval, or
-publishing behavior. The next safe phase is MVP-1K-3 Observed Website Model
-Runtime Foundation, limited to bounded observation runtime only if explicitly
-authorized. Stop before Generation Contract Compliance, Compliance Report,
-Business Approval, publishing, deployment, DNS mutation, production mutation,
-UI, API, schema, workers, provider calls, or AI execution unless explicitly
-authorized.
+publishing behavior. MVP-1K-3 implemented the first deterministic Observed
+Website Model runtime foundation from quarantined Generated Website Proposal
+metadata. It added contract, builder, validator, focused tests, and
+`observed_website_model` provenance persistence with latest reuse, append,
+latest load, by-ID load, invalid/stale rejection, and blocked/not observable/
+partially observable/observable acceptance. The next safe phase is MVP-1K-4
+Generation Contract Compliance Runtime Foundation, limited to comparing a
+persisted Observed Website Model against the Website Generation Package.
+Stop before Compliance Report, Business Approval, publishing, deployment, DNS
+mutation, production mutation, UI, API, schema, workers, provider calls, or AI
+execution unless explicitly authorized.

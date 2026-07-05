@@ -5,7 +5,9 @@
 Phase MVP-1K-2 defines the observation boundary for quarantined Generated
 Website Proposals.
 
-This phase is documentation and architecture only.
+This phase is documentation and architecture only. MVP-1K-3 later implements
+the first bounded runtime foundation for the Observed Website Model defined
+here.
 
 It adds no implementation, observation runtime, compliance evaluator,
 Compliance Report, Business Approval, publishing, provider calls, AI
@@ -73,8 +75,10 @@ limitation instead of guessing.
 
 ### Observed Website Model
 
-Observed Website Model is the future artifact family that records observed
-proposal reality in a structured, evidence-backed form.
+Observed Website Model is the artifact family that records observed proposal
+reality in a structured, evidence-backed form. MVP-1K-3 implements the first
+runtime contract, deterministic builder, validator, and provenance
+persistence for this family.
 
 It is not compliance, not approval, not publishing state, and not a canonical
 business update.
@@ -209,7 +213,7 @@ generation contract remains the future comparison target.
 
 ## Observation Sources
 
-Future observation may use these sources when available:
+Observation may use these sources when available:
 
 - generated output bundle metadata;
 - generated file tree;
@@ -376,6 +380,13 @@ MVP-1K-2 defines how future observation may inspect that quarantined proposal
 without trusting it, executing it, evaluating it, approving it, or publishing
 it.
 
+MVP-1K-3 implements the first runtime foundation in
+`docs/architecture/OBSERVED_WEBSITE_MODEL_RUNTIME_FOUNDATION.md`. The runtime
+consumes quarantined `GeneratedWebsiteProposalArtifact` metadata and records
+available route/page, file, navigation, section, message, asset, technical,
+provider-note, operator-note, evidence, limitation, readiness, diagnostic, and
+lineage facts. It records limitations when metadata is absent.
+
 Import readiness and observation readiness are separate:
 
 - import readiness asks whether the proposal can be quarantined and persisted;
@@ -393,12 +404,12 @@ Website Model without evaluating compliance, creating a Compliance Report,
 approving, publishing, calling providers, executing AI, adding UI/API/schema
 or workers, or mutating runtime state.
 
-## Recommended Next Phase
+## Next Boundary After MVP-1K-3
 
-MVP-1K-3 Observed Website Model Runtime Foundation.
+Generation Contract Compliance may later compare a persisted Observed Website
+Model against the Website Generation Package.
 
-That phase should implement only the first bounded observation model runtime
-if explicitly authorized. It should stop before Generation Contract
-Compliance, Compliance Report, Business Approval, publishing, provider calls,
-AI execution, UI, API, schema, workers, deployment, DNS mutation, production
-mutation, or runtime mutation outside the approved observation boundary.
+That future phase must still stop before Compliance Report, Business
+Approval, publishing, provider calls, AI execution, UI, API, schema, workers,
+deployment, DNS mutation, production mutation, or runtime mutation unless
+explicitly authorized.
