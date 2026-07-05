@@ -70,7 +70,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Generated Website Proposal | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Website Observation | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Observed Website Model | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
-| Generation Contract Compliance | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
+| Generation Contract Compliance | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Business Approval | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Publish | COMPLETE | PARTIAL | PARTIAL | PARTIAL | PARTIAL | MISSING |
 
@@ -701,15 +701,34 @@ Current implementation:
 - MVP-1K-2 clarifies that observation creates the Observed Website Model and
   compliance later compares that observed reality against the Website
   Generation Package.
-- No runtime evaluator, persisted compliance result, report builder, tests, or
-  approval gate exists for generated websites.
+- MVP-1K-4 implements the first deterministic Generation Contract Compliance
+  runtime foundation.
+- Runtime modules now implement `GenerationContractComplianceArtifact`,
+  `ComplianceCategory`, `ComplianceEvidence`, `ComplianceFinding`,
+  `ComplianceDeviation`, `ComplianceLimitation`, `ComplianceConfidence`,
+  `validateGenerationContractCompliance(...)`,
+  `buildGenerationContractCompliance(...)`,
+  `persistGenerationContractCompliance(...)`,
+  `loadLatestGenerationContractCompliance(...)`, and
+  `loadGenerationContractComplianceById(...)`.
+- Artifact kind is `generation_contract_compliance`.
+- The builder consumes only `WebsiteGenerationPackageArtifact` and
+  `ObservedWebsiteModelArtifact`.
+- The MVP comparison scope covers objectives represented, navigation
+  obligations, page obligations, section obligations, message coverage, asset
+  presence, trust signal presence, constraints preserved, accessibility
+  expectations observable, and SEO expectations observable.
+- Every finding references observable compliance evidence. Missing or
+  unobservable signals become limitations rather than invented compliance.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  append-only `generationContractComplianceArtifacts`,
+  `latestGenerationContractComplianceArtifact`, equivalent latest reuse,
+  changed append, latest load, and by-ID load.
+- Persistence rejects `invalid` and `stale`, and accepts `blocked`,
+  `incomplete`, `partial`, `compliant`, and `non_compliant`.
 
 Missing implementation:
-- Compliance evaluator comparing observed generated website reality against
-  the Website Generation Package.
 - Compliance report artifact.
-- Pass/partial/fail/unknown outcome model.
-- Evidence-backed criteria results and limitations.
 - Gate that Business Approval can consume.
 
 Dependencies:
@@ -720,13 +739,14 @@ Dependencies:
   boundary is authorized.
 
 Risk:
-- Critical. Without compliance, Business Approval becomes subjective
-  inspection and publishing becomes ungoverned.
+- Medium. The first deterministic comparison runtime now exists, but Business
+  Approval still needs a human-readable Compliance Report boundary before any
+  generated proposal can be governed toward publishing.
 
 Estimated implementation complexity:
-- Medium to high. MVP should evaluate measurable package criteria first and
-  defer advanced visual, accessibility, performance, and multi-provider
-  comparison.
+- First deterministic compliance runtime, validation, persistence, and focused
+  tests are complete. Remaining work starts with the Compliance Report
+  artifact.
 
 ### Business Approval
 
@@ -1017,6 +1037,7 @@ Evidence-ready imported site
 -> Generated Website Proposal
 -> Website Observation
 -> Observed Website Model
+-> Generation Contract Compliance
 -> Compliance Report
 -> Business Approval
 -> existing runtime publish path
@@ -1036,7 +1057,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1K-4 Generation Contract Compliance Runtime Foundation
+MVP-1K-5 Generation Contract Compliance Report Runtime Foundation
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -1113,9 +1134,15 @@ Website Model runtime foundation from quarantined Generated Website Proposal
 metadata. It added contract, builder, validator, focused tests, and
 `observed_website_model` provenance persistence with latest reuse, append,
 latest load, by-ID load, invalid/stale rejection, and blocked/not observable/
-partially observable/observable acceptance. The next safe phase is MVP-1K-4
-Generation Contract Compliance Runtime Foundation, limited to comparing a
-persisted Observed Website Model against the Website Generation Package.
-Stop before Compliance Report, Business Approval, publishing, deployment, DNS
-mutation, production mutation, UI, API, schema, workers, provider calls, or AI
-execution unless explicitly authorized.
+partially observable/observable acceptance. MVP-1K-4 implemented the first
+deterministic Generation Contract Compliance runtime foundation. It compares
+only Website Generation Package artifacts and Observed Website Model
+artifacts, records evidence-backed category results, findings, deviations,
+limitations, confidence, diagnostics, and lineage, and persists
+`generation_contract_compliance` with latest reuse, append, latest load,
+by-ID load, invalid/stale rejection, and blocked/incomplete/partial/
+compliant/non-compliant acceptance. The next safe phase is MVP-1K-5
+Generation Contract Compliance Report Runtime Foundation. Stop before
+Business Approval, publishing, deployment, DNS mutation, production mutation,
+UI, API, schema, workers, provider calls, or AI execution unless explicitly
+authorized.

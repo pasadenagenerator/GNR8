@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1K-3 - Observed Website Model Runtime Foundation
+- Phase MVP-1K-4 - Generation Contract Compliance Runtime Foundation
   is complete.
 
 Next Phase:
-- MVP-1K-4 Generation Contract Compliance Runtime Foundation.
+- MVP-1K-5 Generation Contract Compliance Report Runtime Foundation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3270,8 +3270,15 @@ MVP-0 reality assessment:
   Observation records what exists from available proposal metadata and does
   not compare, judge compliance, approve, publish, mutate WGP, trust
   providers, or mutate runtime state.
-- External AI, Generation Contract Compliance, and Business Approval:
-  architecture complete, runtime missing.
+- Generation Contract Compliance: MVP-1K-4 implements the first deterministic
+  runtime foundation from Website Generation Package plus Observed Website
+  Model only. It creates evidence-backed category results, findings,
+  deviations, limitations, confidence, diagnostics, and lineage, then persists
+  artifact kind `generation_contract_compliance` with latest reuse,
+  append-on-change, latest load, and by-ID load. It does not create a
+  Compliance Report, approve, publish, call providers, execute AI, add UI/API,
+  add schema/workers, or mutate runtime/business truth.
+- External AI and Business Approval: architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
   Publish gating for generated proposals is missing.
 
@@ -3289,6 +3296,7 @@ Evidence-ready imported site
 -> Generated Website Proposal
 -> Website Observation
 -> Observed Website Model
+-> Generation Contract Compliance
 -> Compliance Report
 -> Business Approval
 -> existing runtime publish path
@@ -3297,8 +3305,6 @@ Evidence-ready imported site
 MVP-0 changed documentation and architecture planning only. It added no
 implementation, TypeScript, schema, persistence, API, UI, workers, prompts,
 provider adapters, AI integration, generation, or publishing behavior.
-
-Validation result: `git diff --check` passes.
 
 Phase MVP-1A creates the first runtime Business Discovery artifact:
 `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_BUILDER.md`.
@@ -4243,13 +4249,49 @@ MVP-1K-3 Observed Website Model Runtime Foundation:
   production mutation, runtime mutation, generated code execution, or rendered
   inspection beyond existing metadata.
 
-Recommended next phase after MVP-1K-3:
-- MVP-1K-4 Generation Contract Compliance Runtime Foundation, limited to
-  comparing a persisted Observed Website Model against the Website Generation
-  Package. Stop before Compliance Report, Business Approval, publishing,
-  deployment, DNS mutation, production mutation, UI, API, schema, workers,
-  provider calls, AI execution, or runtime mutation outside the explicitly
-  authorized comparison boundary.
+MVP-1K-4 Generation Contract Compliance Runtime Foundation:
+- MVP-1K-4 is complete. It creates the first deterministic Generation
+  Contract Compliance runtime foundation from Website Generation Package plus
+  Observed Website Model only.
+- Canonical document:
+  `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_RUNTIME_FOUNDATION.md`.
+- Runtime files:
+  `apps/platform/gnr8/architecture/generation-contract-compliance-contract.ts`,
+  `apps/platform/gnr8/architecture/generation-contract-compliance-builder.ts`,
+  and
+  `apps/platform/gnr8/architecture/generation-contract-compliance-persistence.ts`.
+- Artifact kind is `generation_contract_compliance`.
+- Allowed statuses are `incomplete`, `partial`, `compliant`,
+  `non_compliant`, `blocked`, `invalid`, and `stale`.
+- `buildGenerationContractCompliance(...)` consumes only
+  `WebsiteGenerationPackageArtifact` and `ObservedWebsiteModelArtifact`.
+- MVP comparison categories are objectives represented, navigation
+  obligations, page obligations, section obligations, message coverage, asset
+  presence, trust signal presence, constraints preserved, accessibility
+  expectations observable, and SEO expectations observable.
+- Every finding references observable compliance evidence. Missing or
+  unobservable signals become limitations rather than invented compliance.
+- `validateGenerationContractCompliance(...)` validates source lineage,
+  allowed statuses, required evidence, unique finding IDs, category coverage,
+  source WGP/OWM consistency when supplied, and recursive absence of
+  downstream approval/publishing/mutation/provider-execution fields.
+- Persistence uses the existing site-version `importProvenanceSummary`
+  boundary with append-only `generationContractComplianceArtifacts`,
+  `latestGenerationContractComplianceArtifact`, equivalent latest reuse,
+  changed append, latest load, and by-ID load.
+- Persistence rejects `invalid` and `stale`, and accepts `blocked`,
+  `incomplete`, `partial`, `compliant`, and `non_compliant`.
+- MVP-1K-4 added no Compliance Report, Business Approval, publishing,
+  provider calls, AI execution, automatic generation, UI, API, schema
+  migration, workers, deployment, DNS mutation, production mutation, runtime
+  mutation, or upstream business artifact mutation.
+
+Recommended next phase after MVP-1K-4:
+- MVP-1K-5 Generation Contract Compliance Report Runtime Foundation, limited
+  to communicating the persisted compliance artifact for business review.
+  Stop before Business Approval, publishing, deployment, DNS mutation,
+  production mutation, UI, API, schema, workers, provider calls, AI execution,
+  or runtime mutation outside the explicitly authorized report boundary.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

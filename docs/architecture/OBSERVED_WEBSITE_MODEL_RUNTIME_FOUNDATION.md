@@ -156,7 +156,11 @@ No new table or schema migration is required.
 
 ## Next Boundary
 
-The next safe phase is Generation Contract Compliance. That future phase may
-compare an Observed Website Model against the Website Generation Package.
+MVP-1K-4 now implements Generation Contract Compliance as the next runtime
+boundary after Observed Website Model. It compares an Observed Website Model
+against the Website Generation Package and persists a
+`generation_contract_compliance` artifact.
 
-MVP-1K-3 stops before that comparison.
+MVP-1K-3 itself stops before that comparison.
+
+The next safe phase after MVP-1K-4 is Generation Contract Compliance Report.

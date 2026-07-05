@@ -58,6 +58,15 @@ absent. It still does not compare against the WGP, judge compliance, create a
 Compliance Report, approve, publish, call providers, execute AI, render or
 execute generated output, mutate runtime, or add UI/API/workers/schema.
 
+MVP-1K-4 adds the first deterministic Generation Contract Compliance runtime
+foundation. It compares `WebsiteGenerationPackageArtifact` against
+`ObservedWebsiteModelArtifact`, creates evidence-backed category results,
+findings, deviations, limitations, confidence, diagnostics, and lineage, and
+persists `generation_contract_compliance` artifacts through the existing
+site-version import-provenance boundary. It still does not create a
+Compliance Report, approve, publish, call providers, execute AI, generate
+websites, mutate runtime, or add UI/API/workers/schema.
+
 ## Canonical Pipeline
 
 ```text
@@ -517,9 +526,52 @@ Compliance Report, Business Approval, publishing, UI, API, schema, workers,
 provider calls, AI execution, automatic generation, deployment, DNS mutation,
 production mutation, runtime mutation, or generated output execution.
 
-After MVP-1K-3, the next safe phase is Generation Contract Compliance,
-limited to comparing a persisted Observed Website Model against the Website
-Generation Package. It must still stop before Compliance Report, Business
-Approval, publishing, provider calls, AI execution, UI, API, schema, workers,
-deployment, DNS mutation, production mutation, or runtime mutation unless
-explicitly authorized.
+## MVP-1K-3 Observed Website Model Runtime Foundation
+
+MVP-1K-3 is complete. It implements deterministic Observed Website Model
+runtime foundation only:
+
+- contract, validator, builder, and provenance persistence for
+  `observed_website_model`;
+- observations for pages, navigation, sections, messages, assets,
+  constraints, technical signals, evidence, readiness, limitations,
+  diagnostics, and lineage when source metadata is available;
+- missing observation limitations instead of inferred reality;
+- persistence through existing site-version `importProvenanceSummary` with
+  latest reuse, changed append, latest load, and by-ID load.
+
+MVP-1K-3 still adds no Generation Contract Compliance, Compliance Report,
+Business Approval, publishing, UI, API, schema, workers, provider calls, AI
+execution, automatic generation, deployment, DNS mutation, production
+mutation, runtime mutation, or generated output execution.
+
+## MVP-1K-4 Generation Contract Compliance Runtime Foundation
+
+MVP-1K-4 is complete. It implements deterministic contract comparison only:
+
+- contract, validator, builder, and provenance persistence for
+  `generation_contract_compliance`;
+- comparison from `WebsiteGenerationPackageArtifact` and
+  `ObservedWebsiteModelArtifact` only;
+- category results for objectives represented, navigation obligations, page
+  obligations, section obligations, message coverage, asset presence, trust
+  signal presence, constraints preserved, accessibility expectations
+  observable, and SEO expectations observable;
+- evidence-backed findings, deviations, limitations, confidence, diagnostics,
+  and lineage;
+- recursive forbidden guard for approval, publishing, deployment, DNS,
+  production, runtime, provider execution, canonical truth, DBT mutation, and
+  WGP mutation fields;
+- persistence through existing site-version `importProvenanceSummary` with
+  latest reuse, changed append, latest load, and by-ID load.
+
+MVP-1K-4 still adds no Compliance Report, Business Approval, publishing, UI,
+API, schema, workers, provider calls, AI execution, automatic generation,
+deployment, DNS mutation, production mutation, runtime mutation, or upstream
+business artifact mutation.
+
+After MVP-1K-4, the next safe phase is Generation Contract Compliance Report,
+limited to communicating the persisted compliance artifact for review. It
+must still stop before Business Approval, publishing, provider calls, AI
+execution, UI, API, schema, workers, deployment, DNS mutation, production
+mutation, or runtime mutation unless explicitly authorized.
