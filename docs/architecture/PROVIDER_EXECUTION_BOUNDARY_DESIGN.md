@@ -255,12 +255,51 @@ website, import generated output, run compliance, create Business Approval,
 publish, deploy, mutate DNS, mutate production, add UI, add API routes, add
 schema, add workers, or add TypeScript.
 
-Recommended next phase:
+Completed follow-up phase:
 
 - MVP-1J Manual Codex Execution Runbook and Generated Proposal Import Boundary
-  Design, documentation and contract design only. Define how an operator may
-  execute the export-ready payload outside GNR8 and how future generated output
-  may be imported as quarantined proposal material. Stop before provider calls,
-  prompts sent from GNR8, AI execution inside GNR8, generated website
-  acceptance, compliance execution, Business Approval, publishing, UI, API,
-  schema, or workers unless explicitly authorized.
+  Design.
+
+## MVP-1J Manual Codex Execution And Import Boundary
+
+Canonical documents:
+
+- `docs/architecture/MANUAL_CODEX_EXECUTION_RUNBOOK.md`
+- `docs/architecture/GENERATED_WEBSITE_PROPOSAL_IMPORT_BOUNDARY.md`
+
+MVP-1J defines the safe manual operator process for executing an export-ready
+Codex task ProviderGenerationPayload outside GNR8. The runbook requires exact
+source ProviderGenerationPayload and WGP artifact recording, copied payload
+integrity, no hidden prompt edits, no business reinterpretation, no production
+mutation, no deployment, no publishing, no DNS mutation, expected
+proposal-only Codex output, external output bundle storage, provider notes,
+implementation assumptions, known limitations, execution timestamp, operator
+reference, and operator attestation.
+
+MVP-1J also defines the future import boundary for quarantined
+GeneratedWebsiteProposal material. Future concepts are
+GeneratedWebsiteProposal, GeneratedWebsiteProposalLineage,
+GeneratedWebsiteProposalStatus, GeneratedWebsiteProposalSource,
+GeneratedWebsiteProposalSafety, and
+GeneratedWebsiteProposalValidationReadiness. Conceptual status values are
+`received`, `quarantined`, `invalid`, `blocked`, `superseded`, and
+`compliance_ready`.
+
+Generated Website Proposal material is not trusted. It cannot publish, update
+DBT, update WDB, update WGP, update ProviderGenerationPayload, become a
+compliance result by itself, become Business Approval by itself, or mutate
+production. It must first be checked by Generation Contract Compliance.
+
+MVP-1J adds no provider call from GNR8, prompt sent by GNR8, automated AI
+execution, generated website import implementation, compliance execution,
+Business Approval, publishing, deployment, DNS mutation, production mutation,
+UI, API, schema, workers, or TypeScript.
+
+Recommended next phase:
+
+- MVP-1K Generated Website Proposal Import Runtime Foundation, limited to
+  quarantined import/storage of a manually generated output bundle with
+  lineage, metadata, operator attestation, and fail-closed safety validation.
+  Stop before compliance execution, Business Approval, publishing, deployment,
+  DNS mutation, production mutation, UI, API, schema, or workers unless
+  explicitly authorized.

@@ -451,10 +451,40 @@ Provider execution may generate an implementation proposal only. It is not
 publishing, deployment, DNS mutation, production mutation, compliance
 approval, Business Approval, or a source of business truth.
 
-Recommended next phase after MVP-1I:
+Completed follow-up phase:
 
 - MVP-1J Manual Codex Execution Runbook and Generated Proposal Import Boundary
-  Design, documentation and contract design only. Stop before provider calls,
-  prompts sent from GNR8, AI execution inside GNR8, generated website
-  acceptance, compliance execution, Business Approval, publishing, UI, API,
-  schema, or workers unless explicitly authorized.
+  Design.
+
+## MVP-1J Manual Codex Execution And Import Boundary
+
+MVP-1J defines the manual operator runbook for executing an export-ready Codex
+task ProviderGenerationPayload outside GNR8, and the future import boundary
+for saving the result as quarantined GeneratedWebsiteProposal material.
+
+Canonical documents:
+
+- `docs/architecture/MANUAL_CODEX_EXECUTION_RUNBOOK.md`
+- `docs/architecture/GENERATED_WEBSITE_PROPOSAL_IMPORT_BOUNDARY.md`
+
+The runbook requires exact source ProviderGenerationPayload and WGP artifact
+recording, copied payload integrity, no hidden prompt edits, no business
+reinterpretation, no production mutation, no deployment, no publishing, no DNS
+mutation, proposal-only Codex output, external generated-output storage,
+provider notes, implementation assumptions, known limitations, execution
+timestamp, operator reference, and operator attestation.
+
+The future Generated Website Proposal import boundary is quarantine-first.
+Generated Website Proposal material is not trusted, cannot publish, cannot
+update DBT, WDB, WGP, or ProviderGenerationPayload, cannot become compliance
+or Business Approval by itself, and must first be checked by Generation
+Contract Compliance.
+
+Recommended next phase after MVP-1J:
+
+- MVP-1K Generated Website Proposal Import Runtime Foundation, limited to
+  quarantined import/storage of a manually generated output bundle with
+  lineage, metadata, operator attestation, and fail-closed safety validation.
+  Stop before compliance execution, Business Approval, publishing, deployment,
+  DNS mutation, production mutation, UI, API, schema, or workers unless
+  explicitly authorized.

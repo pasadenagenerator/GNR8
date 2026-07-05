@@ -41,7 +41,11 @@ Import Existing Website
 -> Website Generation Package
 -> Provider Adapter
 -> External AI
+-> Generated Website Proposal
+-> Website Observation
+-> Observed Website Model
 -> Generation Contract Compliance
+-> Generation Contract Compliance Report
 -> Business Approval
 -> Publish
 ```
@@ -63,6 +67,7 @@ Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
 | Website Generation Package | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Provider Adapter | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | External AI | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
+| Generated Website Proposal | COMPLETE | PARTIAL | PARTIAL | PARTIAL | COMPLETE | PARTIAL |
 | Generation Contract Compliance | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Business Approval | COMPLETE | MISSING | MISSING | MISSING | MISSING | MISSING |
 | Publish | COMPLETE | PARTIAL | PARTIAL | PARTIAL | PARTIAL | MISSING |
@@ -462,6 +467,12 @@ Current implementation:
 - MVP-1I recommends Manual Codex execution outside GNR8 as the first execution
   mode, followed by future controlled import of manually generated output as
   quarantined proposal material.
+- MVP-1J defines the manual Codex execution runbook and future Generated
+  Website Proposal import boundary. It requires exact source payload and WGP
+  artifact recording, copied payload integrity, no hidden prompt edits, no
+  business reinterpretation, proposal-only output, no production mutation, no
+  deployment, no publishing, no DNS mutation, external bundle storage, and
+  operator attestation.
 - Canonical design document:
   `docs/architecture/PROVIDER_ADAPTER_BOUNDARY_DESIGN.md`.
 - Canonical runtime document:
@@ -470,6 +481,10 @@ Current implementation:
   `docs/architecture/CODEX_TASK_PROVIDER_PAYLOAD_REAL_TARGET_VALIDATION.md`.
 - Canonical provider execution boundary document:
   `docs/architecture/PROVIDER_EXECUTION_BOUNDARY_DESIGN.md`.
+- Canonical manual execution runbook:
+  `docs/architecture/MANUAL_CODEX_EXECUTION_RUNBOOK.md`.
+- Canonical generated proposal import boundary document:
+  `docs/architecture/GENERATED_WEBSITE_PROPOSAL_IMPORT_BOUNDARY.md`.
 
 Missing implementation:
 - No provider call, prompt sent, external AI execution, or generated website
@@ -502,15 +517,23 @@ Current implementation:
 - MVP-1I defines future ProviderExecutionRequest, ProviderExecutionRun,
   ProviderExecutionResult, and GeneratedWebsiteProposal concepts, but adds no
   TypeScript or runtime behavior.
+- MVP-1J defines the manual Codex execution runbook outside GNR8 and the
+  future quarantine-first GeneratedWebsiteProposal import boundary. It defines
+  conceptual GeneratedWebsiteProposalLineage, GeneratedWebsiteProposalStatus,
+  GeneratedWebsiteProposalSource, GeneratedWebsiteProposalSafety, and
+  GeneratedWebsiteProposalValidationReadiness without runtime behavior.
+- MVP-1K-1 implements quarantined Generated Website Proposal import/storage
+  for manually generated Codex output bundle metadata under artifact kind
+  `generated_website_proposal`.
 - No canonical external AI execution runtime consumes a ProviderGenerationPayload
   and returns a Generated Website Proposal for this architecture.
 
 Missing implementation:
 - Provider execution from the selected Codex task payload path.
-- Generated website proposal artifact.
 - Execution record with model/provider metadata, input package reference,
   output reference, diagnostics, and failure classification.
-- Safe storage of generated output for validation before publish.
+- Safe generated-output content storage and observation for validation before
+  publish.
 
 Dependencies:
 - Website Generation Package.
@@ -522,23 +545,80 @@ Risk:
 - Critical for actual execution. MVP cannot prove website transformation
   without one working provider path, but multiple providers are not required.
 - Lower for the first recommended mode because Manual Codex execution outside
-  GNR8 avoids provider credential plumbing and keeps generated output outside
-  production until controlled import and compliance exist.
+  GNR8 avoids provider credential plumbing and keeps generated output
+  quarantined until observation, compliance, and Business Approval exist.
 
 Estimated implementation complexity:
-- Medium for manual runbook and controlled import boundary design.
+- Low for the completed manual-output import/storage foundation.
 - High for direct or API-based provider execution.
+
+### Generated Website Proposal
+
+Current implementation:
+- MVP-1K-1 implements the first runtime foundation for importing manually
+  generated Codex output bundle metadata as a quarantined Generated Website
+  Proposal.
+- Runtime modules now implement `GeneratedWebsiteProposalArtifact`,
+  `GeneratedWebsiteProposalLineage`, `GeneratedWebsiteProposalSource`,
+  `GeneratedWebsiteProposalSafety`,
+  `GeneratedWebsiteProposalValidationReadiness`,
+  `GeneratedWebsiteProposalOperatorAttestation`,
+  `buildGeneratedWebsiteProposalFromManualOutput(...)`,
+  `validateGeneratedWebsiteProposal(...)`,
+  `persistGeneratedWebsiteProposal(...)`,
+  `loadLatestGeneratedWebsiteProposal(...)`, and
+  `loadGeneratedWebsiteProposalById(...)`.
+- Artifact kind is `generated_website_proposal`.
+- Persistence uses the existing site-version `importProvenanceSummary`
+  boundary with append-only history, latest pointer, equivalent latest reuse,
+  changed append, latest load, and by-ID load.
+- Import requires source ProviderGenerationPayload, source WGP lineage,
+  operator-provided output bundle metadata, and operator attestation.
+- Import rejects missing attestation, missing output bundle metadata, lineage
+  mismatch, publish/deploy/DNS/runtime mutation artifacts, compliance or
+  approval artifacts, canonical business artifact fields, and claims that GNR8
+  performed provider execution side effects.
+- Imported proposals remain implementation proposal material only. They are not
+  trusted, not compliance, not Business Approval, not publishable, and not a
+  mutation of DBT, BUR, Business Alignment, WDB, WGP, or
+  ProviderGenerationPayload.
+
+Missing implementation:
+- Website observation of quarantined proposal material.
+- Observed Website Model.
+- Contract comparison against the Website Generation Package.
+- Generation Contract Compliance and Compliance Report.
+- Business Approval and publish authorization.
+
+Dependencies:
+- ProviderGenerationPayload.
+- Website Generation Package.
+- Manual Codex output bundle metadata.
+- Operator attestation.
+
+Risk:
+- Medium. The proposal can now be stored safely, but the generated output has
+  not been observed or compared against the package.
+
+Estimated implementation complexity:
+- First import/storage foundation is complete. Remaining work begins with the
+  observation boundary before any compliance evaluator is implemented.
 
 ### Generation Contract Compliance
 
 Current implementation:
 - Compliance and Compliance Report specifications are complete.
+- Generation Validation Engine architecture is complete. It defines the
+  observation, observed website model, comparison, evidence, confidence, and
+  compliance-report input responsibilities for checking a Generated Website
+  Proposal against the Website Generation Package.
 - No runtime evaluator, persisted compliance result, report builder, tests, or
   approval gate exists for generated websites.
 
 Missing implementation:
-- Compliance evaluator comparing generated website proposal against the
-  Website Generation Package.
+- Generated Website Proposal observation runtime foundation.
+- Compliance evaluator comparing observed generated website reality against
+  the Website Generation Package.
 - Compliance report artifact.
 - Pass/partial/fail/unknown outcome model.
 - Evidence-backed criteria results and limitations.
@@ -547,7 +627,9 @@ Missing implementation:
 Dependencies:
 - Website Generation Package.
 - Generated website proposal from External AI.
-- Evidence or rendered capture of generated output.
+- Website observation and Observed Website Model.
+- Evidence or rendered capture of generated output when a future runtime
+  boundary is authorized.
 
 Risk:
 - Critical. Without compliance, Business Approval becomes subjective
@@ -643,8 +725,8 @@ implementation sequence is:
    Design Brief artifacts.
 9. Validate the first Codex task provider payload runtime against real
    persisted Website Generation Package artifacts.
-10. Execute the authorized provider path and store a Generated Website
-    Proposal.
+10. Import the manually generated output bundle metadata and store a
+    quarantined Generated Website Proposal.
 11. Implement Generation Contract Compliance evaluator and Compliance Report
     for the generated proposal against the package.
 12. Implement Business Approval decision that consumes the Compliance Report
@@ -750,6 +832,9 @@ through the full governed pipeline with measurable artifact evidence:
 - Business Alignment contract, deterministic DBT correction runtime, focused
   tests, and provenance persistence boundary for `business_alignment`.
 - Provider Adapter boundary design for `codex_task` payload serialization.
+- Quarantined Generated Website Proposal import/storage artifact,
+  deterministic manual-output import builder, focused tests, and provenance
+  persistence boundary for `generated_website_proposal`.
 - Candidate Discovery, Candidate Review, Candidate Context, and
   Reconstruction Package metadata foundations.
 - Runtime publish activation, publish enforcement, runtime resolution, and
@@ -788,10 +873,8 @@ through the full governed pipeline with measurable artifact evidence:
 
 ### Runtime Missing
 
-- Real-target Codex task ProviderGenerationPayload validation from persisted
-  ODV and ViroiDoc Website Generation Package artifacts.
 - External AI execution from the provider payload.
-- Generated Website Proposal artifact.
+- Generated Website Proposal observation runtime.
 - Generation Contract Compliance evaluator and report artifact.
 - Business Approval decision artifact.
 - Business Approval to Publish gate for generated proposals.
@@ -819,8 +902,8 @@ through the full governed pipeline with measurable artifact evidence:
 - Real-target Business Alignment validation and aligned DBT handoff.
 - Website Design Brief.
 - Website Generation Package.
-- Real-target validation of the Codex task provider payload adapter.
-- Generated Website Proposal storage.
+- Quarantined Generated Website Proposal import/storage.
+- Generated Website Proposal observation.
 - Generation Contract Compliance and Compliance Report.
 - Business Approval.
 - Publish gate connected to Business Approval.
@@ -863,7 +946,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1J Manual Codex Execution Runbook and Generated Proposal Import Boundary Design
+MVP-1K-1 Generated Website Proposal Import Runtime Foundation
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -911,9 +994,26 @@ Proposal`; defined future ProviderExecutionRequest, ProviderExecutionRun,
 ProviderExecutionResult, and GeneratedWebsiteProposal concepts; established
 execution prerequisites and safety rules; and recommended Manual Codex
 execution outside GNR8 as the first execution mode, followed by future
-controlled import of generated output as quarantined proposal material. The
-next safe phase is MVP-1J Manual Codex Execution Runbook and Generated
-Proposal Import Boundary Design, documentation and contract design only. Stop
-before provider calls, prompts sent from GNR8, AI execution inside GNR8,
-generated website acceptance, compliance execution, Business Approval,
-publishing, UI, API, schema, or workers.
+controlled import of generated output as quarantined proposal material.
+MVP-1J defined the manual Codex execution runbook and future Generated Website
+Proposal import boundary. It requires exact source ProviderGenerationPayload
+and WGP artifact recording, copied payload integrity, no hidden prompt edits,
+no business reinterpretation, proposal-only Codex output, no production
+mutation, no deployment, no publishing, no DNS mutation, external generated
+output storage, provider notes, implementation assumptions, known limitations,
+execution timestamp, operator reference, and operator attestation. It also
+defined future GeneratedWebsiteProposal, GeneratedWebsiteProposalLineage,
+GeneratedWebsiteProposalStatus, GeneratedWebsiteProposalSource,
+GeneratedWebsiteProposalSafety, and
+GeneratedWebsiteProposalValidationReadiness concepts with status values
+`received`, `quarantined`, `invalid`, `blocked`, `superseded`, and
+`compliance_ready`. MVP-1K-0 defined the Generation Validation Engine
+architecture: generation produces a proposal, validation observes reality,
+compliance compares reality against the Website Generation Package, Business
+Approval decides, and Publish remains downstream. The next safe phase is
+MVP-1K-1 Generated Website Proposal Import Runtime Foundation, limited to
+quarantined import/storage of a manually generated output bundle with lineage,
+metadata, operator attestation, and fail-closed safety validation. Stop before
+compliance implementation, Business Approval, publishing, deployment, DNS
+mutation, production mutation, UI, API, schema, workers, or provider calls
+unless explicitly authorized.
