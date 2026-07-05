@@ -222,10 +222,15 @@ latest/by-ID reload, idempotent reuse, and append-on-change behavior.
 
 ## Recommended Next Phase
 
-MVP-1K-2 Generated Website Proposal Observation Boundary Design.
+MVP-1K-2 Generated Website Proposal Observation Boundary Design is complete:
+`docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
 
-That phase should define the narrow observation boundary for proposal material
-without implementing compliance, compliance report, Business Approval,
-publishing, provider calls, automatic generation, UI, API routes, schema
-migrations, deployment, DNS mutation, production mutation, or runtime
+It defines the narrow observation boundary for proposal material without
+implementing observation runtime, compliance, compliance report, Business
+Approval, publishing, provider calls, automatic generation, UI, API routes,
+schema migrations, deployment, DNS mutation, production mutation, or runtime
 mutation.
+
+The next safe phase is MVP-1K-3 Observed Website Model Runtime Foundation,
+limited to the first bounded observation model runtime only if explicitly
+authorized.

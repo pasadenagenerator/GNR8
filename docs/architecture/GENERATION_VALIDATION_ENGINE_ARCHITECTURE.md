@@ -42,6 +42,12 @@ quarantined `GeneratedWebsiteProposalArtifact` under artifact kind
 not run compliance, does not approve, does not publish, and does not execute
 generated output.
 
+MVP-1K-2 defines the observation boundary between quarantined proposal import
+and future contract comparison. Observation records proposal reality as an
+Observed Website Model. Observation does not compare, judge compliance,
+approve, publish, mutate upstream artifacts, trust providers, or execute
+generated output.
+
 ## Canonical Pipeline
 
 ```text
@@ -87,8 +93,8 @@ Publishing remains downstream and requires Business Approval.
 ### Observation
 
 Observation records what exists in the generated website proposal. It may
-record pages, sections, navigation, visible messages, constraints, evidence,
-limitations, and lineage.
+record pages, sections, navigation, visible messages, assets, constraints,
+technical signals, evidence, limitations, and lineage.
 
 Observation does not decide whether the website is good. Observation does not
 decide whether the business should approve the website. Observation does not
@@ -135,8 +141,8 @@ types, or implementation instructions in this phase.
 
 ObservedWebsite is the observed representation of one Generated Website
 Proposal. It records the generated proposal under review, the observation
-scope, observed pages, navigation, messages, constraints, evidence,
-limitations, confidence, and lineage.
+scope, observed pages, navigation, messages, assets, constraints, technical
+signals, evidence, limitations, confidence, and lineage.
 
 ObservedWebsite is not the generated website source, not provider output, not
 published state, and not business truth.
@@ -177,6 +183,15 @@ signals that can be directly observed.
 ObservedMessage must not invent missing positioning, missing offers, or
 missing facts.
 
+### ObservedAsset
+
+ObservedAsset records assets referenced by or available in the proposal,
+including file identity, path or URL, media type, observed usage location,
+load availability when observable, missing asset signals, and evidence
+references.
+
+ObservedAsset does not decide whether an asset is brand-correct or compliant.
+
 ### ObservedConstraint
 
 ObservedConstraint records whether a package constraint appears preserved,
@@ -186,16 +201,29 @@ Examples include forbidden claims, required exclusions, required channels,
 accessibility expectations, SEO expectations, asset use, privacy constraints,
 and no-production constraints.
 
+ObservedConstraint records the observable signal only. Future compliance owns
+the pass, partial, fail, unknown, or not-applicable result.
+
+### ObservedTechnicalSignal
+
+ObservedTechnicalSignal records technical facts that can be observed without
+judgment, such as route availability, render success or failure, static HTML
+availability, asset load state, missing files, broken links, metadata
+presence, form presence, script dependence, viewport issues, and preview
+diagnostics.
+
+ObservedTechnicalSignal is diagnostic evidence. It is not a quality score.
+
 ### ObservedEvidence
 
 ObservedEvidence records the observable support for an observation or
-comparison result. Evidence may reference visible text, route presence,
-navigation labels, section presence, asset presence, missing elements,
-accessibility observations, SEO observations, screenshots, rendered DOM facts,
-metadata, or operator-attested input facts.
+future comparison result. Evidence may reference visible text, route
+presence, navigation labels, section presence, asset presence, missing
+elements, accessibility observations, SEO observations, screenshots, rendered
+DOM facts, metadata, or operator-attested input facts.
 
 ObservedEvidence must be specific enough for a reviewer to understand why a
-compliance result was reached.
+fact was observed and why a future compliance result could cite it.
 
 ### ObservedLimitation
 
@@ -280,6 +308,10 @@ Comparison must identify:
 ## Evidence Model
 
 Compliance decisions must always reference observable evidence.
+
+MVP-1K-2 separates observation evidence from compliance evidence. Observation
+evidence records source-specific observed reality. Compliance evidence later
+uses that observed reality to evaluate the Website Generation Package.
 
 Examples of valid evidence include:
 
@@ -392,6 +424,11 @@ compliance boundary when validation readiness permits it. It is not a pass,
 not a Compliance Report, not Business Approval, and not publish
 authorization.
 
+MVP-1K-2 observation readiness is also not compliance. `not_observable`,
+`partially_observable`, `observable`, and `blocked` only describe whether the
+proposal can be observed from available sources. They do not describe whether
+the proposal satisfies the Website Generation Package.
+
 ## Relationship To Business Approval
 
 Business Approval decides. Validation does not.
@@ -446,8 +483,33 @@ Report, Business Approval, publishing, UI, API, schema, workers, provider
 calls, AI execution, automatic generation, deployment, DNS mutation,
 production mutation, runtime mutation, or generated output execution.
 
-After MVP-1K-1, the next safe phase is MVP-1K-2 Generated Website Proposal
-Observation Boundary Design. That phase should define observation only and
-must still stop before compliance implementation, Compliance Report, Business
-Approval, publishing, provider calls, automatic generation, UI, API, schema,
-workers, deployment, DNS mutation, production mutation, or runtime mutation.
+## MVP-1K-2 Observation Boundary
+
+MVP-1K-2 is complete. It defines observation only:
+
+- `Generated Website Proposal -> Website Observation -> Observed Website
+  Model -> Future Contract Comparison`;
+- conceptual ObservedWebsite, ObservedPage, ObservedNavigation,
+  ObservedSection, ObservedMessage, ObservedAsset, ObservedConstraint,
+  ObservedTechnicalSignal, ObservedEvidence, ObservedLimitation, and
+  ObservedWebsiteLineage artifacts;
+- observation sources including output bundle metadata, file tree, rendered
+  preview, static HTML/content, asset inventory, route/page inventory,
+  operator notes, and provider notes;
+- readiness values `not_observable`, `partially_observable`, `observable`,
+  and `blocked`;
+- an evidence model that preserves source proposal, source provider payload,
+  source WGP, observed routes, sections, navigation, messages, assets, missing
+  observations, limitations, and diagnostics.
+
+MVP-1K-2 adds no implementation, observation runtime, compliance evaluator,
+Compliance Report, Business Approval, publishing, UI, API, schema, workers,
+provider calls, AI execution, automatic generation, deployment, DNS mutation,
+production mutation, runtime mutation, or generated output execution.
+
+After MVP-1K-2, the next safe phase is MVP-1K-3 Observed Website Model
+Runtime Foundation, limited to a bounded observation model runtime only if
+explicitly authorized. It must still stop before Generation Contract
+Compliance, Compliance Report, Business Approval, publishing, provider calls,
+AI execution, UI, API, schema, workers, deployment, DNS mutation, production
+mutation, or runtime mutation outside the approved observation boundary.

@@ -32,13 +32,15 @@ Current status:
 - Phase MVP-1K-0 - Generation Validation Engine Architecture is complete.
 - Phase MVP-1K-1 - Generated Website Proposal Import Runtime Foundation is
   complete.
+- Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design is
+  complete.
 
 Current Phase:
-- Phase MVP-1K-1 - Generated Website Proposal Import Runtime Foundation
+- Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design
   is complete.
 
 Next Phase:
-- MVP-1K-2 Generated Website Proposal Observation Boundary Design.
+- MVP-1K-3 Observed Website Model Runtime Foundation.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -129,6 +131,19 @@ Current architecture direction:
   `importProvenanceSummary` with append-only history,
   `latestGeneratedWebsiteProposalArtifact`, equivalent latest reuse, changed
   append, latest load, and by-ID load.
+- MVP-1K-2 defines the observation-only boundary
+  `Generated Website Proposal -> Website Observation -> Observed Website Model
+  -> Future Contract Comparison`.
+- Observation records what exists in quarantined proposal material. It does
+  not compare against WGP, judge compliance, create a Compliance Report,
+  approve, publish, reinterpret the business, mutate WGP, trust providers, or
+  mutate runtime state.
+- Observation readiness values are `not_observable`,
+  `partially_observable`, `observable`, and `blocked`.
+- Conceptual observation artifacts are ObservedWebsite, ObservedPage,
+  ObservedNavigation, ObservedSection, ObservedMessage, ObservedAsset,
+  ObservedConstraint, ObservedTechnicalSignal, ObservedEvidence,
+  ObservedLimitation, and ObservedWebsiteLineage.
 - GNR8 owns contractual meaning. External AI owns implementation proposals.
 - Generation Validation Engine observes proposal reality. Compliance
   determines contractual fulfillment.
@@ -226,10 +241,12 @@ Website OS branch status:
 - Do not continue Website OS runtime expansion unless explicitly requested.
 
 Current validation status:
-- Phase MVP-1K-1 - Generated Website Proposal Import Runtime Foundation
+- Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design
   is COMPLETE.
 - Canonical Generation Validation Engine architecture document:
   `docs/architecture/GENERATION_VALIDATION_ENGINE_ARCHITECTURE.md`.
+- Canonical generated proposal observation boundary document:
+  `docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
 - Canonical manual runbook:
   `docs/architecture/MANUAL_CODEX_EXECUTION_RUNBOOK.md`.
 - Canonical generated proposal import boundary document:
@@ -377,9 +394,10 @@ Current validation status:
 - The engine does not own generation, business truth, business alignment,
   provider execution, or publishing.
 - Future runtime concepts are ObservedWebsite, ObservedPage,
-  ObservedSection, ObservedNavigation, ObservedMessage, ObservedConstraint,
-  ObservedEvidence, ObservedLimitation, and ObservedWebsiteLineage. MVP-1K-0
-  defines them conceptually only.
+  ObservedSection, ObservedNavigation, ObservedMessage, ObservedAsset,
+  ObservedConstraint, ObservedTechnicalSignal, ObservedEvidence,
+  ObservedLimitation, and ObservedWebsiteLineage. MVP-1K-0 and MVP-1K-2
+  define them conceptually only.
 - Observation records what exists, never guesses intent, never infers business
   truth, and preserves missing or ambiguous observations as limitations.
 - Comparison is Observed Website against Website Generation Package only. It
@@ -419,14 +437,44 @@ Current validation status:
   Report, Business Approval, publishing, provider calls, AI execution,
   automatic generation, UI, API, schema, workers, deployment, DNS mutation,
   production mutation, runtime mutation, or generated output execution.
-- Next recommended phase is MVP-1K-2 Generated Website Proposal Observation
-  Boundary Design, limited to defining how future observation may inspect
-  quarantined proposal material. Stop before compliance implementation,
-  Compliance Report, Business Approval, publishing, deployment, DNS mutation,
-  production mutation, UI, API, schema, workers, provider calls, automatic
-  generation, or runtime mutation unless explicitly authorized.
+- MVP-1K-2 defines Generated Website Proposal Observation Boundary Design in
+  `docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
+- Observation pipeline is `Generated Website Proposal -> Website Observation
+  -> Observed Website Model -> Future Contract Comparison`.
+- Observation sources are generated output bundle metadata, generated file
+  tree, rendered preview when available, static HTML/content when available,
+  asset inventory, route/page inventory, operator notes, and provider notes.
+- Observation evidence preserves source proposal artifact, source provider
+  payload, source WGP, observed routes, sections, navigation, messages,
+  assets, missing observations, limitations, and diagnostics.
+- MVP-1K-2 added no implementation, observation runtime, compliance
+  evaluator, Compliance Report, Business Approval, publishing, provider calls,
+  AI execution, UI, API, schema, workers, deployment, DNS mutation, production
+  mutation, or runtime mutation.
+- Next recommended phase is MVP-1K-3 Observed Website Model Runtime
+  Foundation, limited to bounded observation runtime only if explicitly
+  authorized. Stop before Generation Contract Compliance, Compliance Report,
+  Business Approval, publishing, deployment, DNS mutation, production
+  mutation, UI, API, schema, workers, provider calls, AI execution, or runtime
+  mutation outside the approved observation boundary.
 
 Latest completed milestone:
+- Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design.
+- Status: COMPLETE / GENERATED WEBSITE PROPOSAL OBSERVATION BOUNDARY /
+  OBSERVATION ONLY / GENERATED WEBSITE PROPOSAL TO WEBSITE OBSERVATION /
+  OBSERVED WEBSITE MODEL / FUTURE CONTRACT COMPARISON / CONCEPTUAL ARTIFACTS
+  DEFINED / OBSERVATION SOURCES DEFINED / OBSERVATION READINESS DEFINED /
+  EVIDENCE MODEL DEFINED / NO COMPLIANCE JUDGMENT / NO COMPLIANCE REPORT /
+  NO BUSINESS APPROVAL / NO PUBLISHING / NO PROVIDER CALLS /
+  NO AI EXECUTION / NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS /
+  NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION / NO PRODUCTION MUTATION /
+  NO RUNTIME MUTATION.
+- Canonical document:
+  `docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
+- Recommended next phase after MVP-1K-2: MVP-1K-3 Observed Website Model
+  Runtime Foundation.
+
+Previous completed milestone:
 - Phase MVP-1K-1 - Generated Website Proposal Import Runtime Foundation.
 - Status: COMPLETE / GENERATED WEBSITE PROPOSAL IMPORT RUNTIME FOUNDATION /
   QUARANTINED IMPORT STORAGE / MANUAL CODEX OUTPUT BUNDLE METADATA /
@@ -443,19 +491,8 @@ Latest completed milestone:
   NO PRODUCTION MUTATION / NO RUNTIME MUTATION.
 - Canonical document:
   `docs/architecture/GENERATED_WEBSITE_PROPOSAL_IMPORT_RUNTIME_FOUNDATION.md`.
-- Runtime files:
-  `apps/platform/gnr8/architecture/generated-website-proposal-contract.ts`,
-  `apps/platform/gnr8/architecture/generated-website-proposal-import.ts`, and
-  `apps/platform/gnr8/architecture/generated-website-proposal-persistence.ts`.
-- Test files:
-  `apps/platform/gnr8/architecture/generated-website-proposal-contract.test.ts`,
-  `apps/platform/gnr8/architecture/generated-website-proposal-import.test.ts`,
-  and
-  `apps/platform/gnr8/architecture/generated-website-proposal-persistence.test.ts`.
-- Recommended next phase after MVP-1K-1: MVP-1K-2 Generated Website Proposal
-  Observation Boundary Design.
 
-Previous completed milestone:
+Earlier completed milestone:
 - Phase MVP-1J - Manual Codex Execution Runbook and Generated Proposal Import
   Boundary Design.
 - Status: COMPLETE / MANUAL CODEX RUNBOOK DEFINED /
@@ -483,8 +520,9 @@ Previous completed milestone:
   `provider_generation_payload_2d99b17572dc23ef482cf56ba06e1230`.
 - Recommended next phase after MVP-1J: superseded by completed MVP-1K-0
   Generation Validation Engine Architecture and completed MVP-1K-1 Generated
-  Website Proposal Import Runtime Foundation. Current next recommended phase
-  is MVP-1K-2 Generated Website Proposal Observation Boundary Design.
+  Website Proposal Import Runtime Foundation and completed MVP-1K-2 Generated
+  Website Proposal Observation Boundary Design. Current next recommended phase
+  is MVP-1K-3 Observed Website Model Runtime Foundation.
 
 Earlier completed milestone:
 - Phase MVP-1D-R - Business Alignment Real-Target Validation.

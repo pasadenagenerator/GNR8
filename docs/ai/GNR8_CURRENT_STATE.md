@@ -3211,11 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1K-1 - Generated Website Proposal Import Runtime Foundation
+- Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design
   is complete.
 
 Next Phase:
-- MVP-1K-2 Generated Website Proposal Observation Boundary Design.
+- MVP-1K-3 Observed Website Model Runtime Foundation.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -3262,6 +3262,11 @@ MVP-0 reality assessment:
   WGP lineage, output bundle metadata, operator attestation, fail-closed safety
   validation, provenance latest reuse, changed append, latest load, and by-ID
   load.
+- Website Observation and Observed Website Model: MVP-1K-2 defines the
+  observation-only boundary from quarantined Generated Website Proposal to
+  Observed Website Model. Observation records what exists from available
+  proposal sources and does not compare, judge compliance, approve, publish,
+  mutate WGP, trust providers, or mutate runtime state.
 - External AI, Generation Contract Compliance, and Business Approval:
   architecture complete, runtime missing.
 - Publish: runtime foundations exist, but canonical Business Approval to
@@ -3279,6 +3284,8 @@ Evidence-ready imported site
 -> Website Generation Package
 -> one provider adapter
 -> Generated Website Proposal
+-> Website Observation
+-> Observed Website Model
 -> Compliance Report
 -> Business Approval
 -> existing runtime publish path
@@ -4161,13 +4168,42 @@ MVP-1K-1 Generated Website Proposal Import Runtime Foundation:
   automatic generation, UI, API, schema, workers, deployment, DNS mutation,
   production mutation, runtime mutation, or generated output execution.
 
-Recommended next phase after MVP-1K-1:
-- MVP-1K-2 Generated Website Proposal Observation Boundary Design, limited to
-  defining how future observation may inspect quarantined proposal material.
-  Stop before compliance implementation, Compliance Report, Business Approval,
+MVP-1K-2 Generated Website Proposal Observation Boundary Design:
+- MVP-1K-2 is complete. It defines how future observation may inspect
+  quarantined Generated Website Proposal material and produce an Observed
+  Website Model.
+- Canonical document:
+  `docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
+- Observation pipeline:
+  `Generated Website Proposal -> Website Observation -> Observed Website Model
+  -> Future Contract Comparison`.
+- Conceptual future artifacts are ObservedWebsite, ObservedPage,
+  ObservedNavigation, ObservedSection, ObservedMessage, ObservedAsset,
+  ObservedConstraint, ObservedTechnicalSignal, ObservedEvidence,
+  ObservedLimitation, and ObservedWebsiteLineage.
+- Observation sources are generated output bundle metadata, generated file
+  tree, rendered preview when available, static HTML/content when available,
+  asset inventory, route/page inventory, operator notes, and provider notes.
+- Observation readiness values are `not_observable`,
+  `partially_observable`, `observable`, and `blocked`.
+- Observation evidence preserves source proposal artifact, source provider
+  payload, source WGP, observed routes, sections, navigation, messages,
+  assets, missing observations, limitations, and diagnostics.
+- Observation records what exists. It does not compare against the WGP, judge
+  compliance, create a Compliance Report, approve, publish, reinterpret the
+  business, mutate WGP, trust providers, or mutate runtime state.
+- MVP-1K-2 added no implementation, observation runtime, compliance
+  evaluator, Compliance Report, Business Approval, publishing, provider calls,
+  AI execution, UI, API, schema, workers, deployment, DNS mutation, production
+  mutation, or runtime mutation.
+
+Recommended next phase after MVP-1K-2:
+- MVP-1K-3 Observed Website Model Runtime Foundation, limited to the first
+  bounded observation model runtime only if explicitly authorized. Stop before
+  Generation Contract Compliance, Compliance Report, Business Approval,
   publishing, deployment, DNS mutation, production mutation, UI, API, schema,
-  workers, provider calls, automatic generation, or runtime mutation unless
-  explicitly authorized.
+  workers, provider calls, AI execution, or runtime mutation outside the
+  approved observation boundary.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.
