@@ -388,11 +388,73 @@ website, compliance evaluator, Compliance Report, Business Approval artifact,
 publishing behavior, UI route, API route, worker behavior, schema migration,
 or generated output persistence.
 
-Recommended next phase:
+Completed follow-up phase:
 
-- MVP-1H-R Codex Task Provider Payload Real-Target Validation, limited to
-  building and persisting ProviderGenerationPayload artifacts from latest
-  persisted real Website Generation Package artifacts. Stop before provider
-  calls, prompts sent, external AI execution, generated websites, compliance
-  execution, Business Approval, publishing, UI, API, schema, or workers unless
-  explicitly authorized.
+- MVP-1H-R Codex Task Provider Payload Real-Target Validation.
+
+## MVP-1H-R Real-Target Validation
+
+MVP-1H-R validates the first provider adapter payload path against real
+persisted Website Generation Package artifacts.
+
+Canonical validation document:
+
+- `docs/architecture/CODEX_TASK_PROVIDER_PAYLOAD_REAL_TARGET_VALIDATION.md`
+
+Validated results:
+
+- ODV source WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` produced
+  provider payload
+  `provider_generation_payload_0738b677c762f830c235dae425a8ec1c`.
+- ViroiDoc source WGP
+  `website_generation_package_3e34393aef612a2c597042917dc45085` produced
+  provider payload
+  `provider_generation_payload_2d99b17572dc23ef482cf56ba06e1230`.
+- Both payloads preserve WGP lineage, serialized WGP content, constraints,
+  validation expectations, confidence, limitations, and diagnostics.
+- Both Codex task envelopes are readable/export-ready with objective, source
+  package summary, required website outcomes, navigation/page/section
+  requirements, content requirements, constraints, validation expectations,
+  forbidden actions, expected output shape, and stop conditions.
+- Both payloads reload by latest and by ID, and idempotent retry reuses the
+  same artifact ID.
+- Safety remains `export_only_no_execution`; no provider call, prompt sent,
+  AI execution, generated website, compliance execution, Business Approval,
+  publishing, UI, API, schema, or worker behavior was added.
+
+Completed follow-up phase:
+
+- MVP-1I Provider Execution Boundary Design.
+
+## MVP-1I Provider Execution Boundary
+
+MVP-1I defines the governed boundary that follows an export-ready
+ProviderGenerationPayload:
+
+```text
+ProviderGenerationPayload
+-> External AI Execution
+-> Generated Website Proposal
+```
+
+Canonical boundary document:
+
+- `docs/architecture/PROVIDER_EXECUTION_BOUNDARY_DESIGN.md`
+
+The boundary defines future concepts for ProviderExecutionRequest,
+ProviderExecutionRun, ProviderExecutionResult, and GeneratedWebsiteProposal.
+It also defines execution prerequisites, safety rules, and the generated
+output boundary without adding TypeScript or runtime behavior.
+
+Provider execution may generate an implementation proposal only. It is not
+publishing, deployment, DNS mutation, production mutation, compliance
+approval, Business Approval, or a source of business truth.
+
+Recommended next phase after MVP-1I:
+
+- MVP-1J Manual Codex Execution Runbook and Generated Proposal Import Boundary
+  Design, documentation and contract design only. Stop before provider calls,
+  prompts sent from GNR8, AI execution inside GNR8, generated website
+  acceptance, compliance execution, Business Approval, publishing, UI, API,
+  schema, or workers unless explicitly authorized.
