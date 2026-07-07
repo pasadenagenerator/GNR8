@@ -180,6 +180,38 @@ Required recovery step: import the manually generated ODV and ViroiDoc output
 bundles as quarantined Generated Website Proposal artifacts, then rerun
 MVP-1K-3-R.
 
+## First Real Observed Website Model
+
+MVP-2.0-C created the first real persisted Observed Website Model for ODV from
+the first real persisted Generated Website Proposal.
+
+Canonical result document:
+
+- `docs/architecture/FIRST_OBSERVED_WEBSITE_MODEL.md`
+
+Result:
+
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` loaded latest and by-ID source
+  `GeneratedWebsiteProposalArtifact`
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
+- The source proposal was valid, quarantined, classified as
+  `implementation_proposal_only`, untrusted, and ready for observation.
+- `buildObservedWebsiteModel(...)` produced an `observable`
+  `ObservedWebsiteModelArtifact`.
+- Latest persisted OWM artifact:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- Readiness is `observable`.
+- Observation counts: pages `1`, routes `1`, navigation/links `11`, sections
+  `7`, headings `14`, CTA links `3`, messages `53`, assets `6`, constraints
+  `9`, technical signals `12`, evidence refs `17`, limitations `127`.
+- Latest reload, by-ID reload, immediate idempotent retry, and cold idempotent
+  retry all returned
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- No Generation Contract Compliance, Compliance Report, Business Approval,
+  publishing, deploy, provider execution, AI execution, generated proposal
+  mutation, canonical business artifact mutation, UI, API, schema, or worker
+  behavior was added.
+
 ## Next Boundary
 
 MVP-1K-4 now implements Generation Contract Compliance as the next runtime
@@ -189,7 +221,7 @@ against the Website Generation Package and persists a
 
 MVP-1K-3 itself stops before that comparison.
 
-The next safe phase after MVP-1K-3-R is the required manual Generated Website
-Proposal import step for ODV and ViroiDoc, followed by a rerun of MVP-1K-3-R.
-Only after real OWM artifacts exist should MVP-1K-4-R and MVP-1K-5-R be
-rerun.
+The next safe phase after MVP-2.0-C is MVP-2.0-D - First Real Generation
+Contract Compliance for ODV. That phase may compare the persisted ODV OWM
+against the ODV Website Generation Package. MVP-2.0-C stops before that
+comparison.

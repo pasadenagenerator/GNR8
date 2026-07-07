@@ -672,10 +672,26 @@ Current implementation:
 - The evidence model must preserve source proposal artifact, source provider
   payload, source WGP, observed routes, sections, navigation, messages,
   assets, missing observations, limitations, and diagnostics.
+- MVP-2.0-C created the first real persisted Observed Website Model for ODV
+  from `GeneratedWebsiteProposalArtifact`
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
+- Latest ODV OWM artifact:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- ODV OWM status/readiness is `observable`; counts are pages `1`, routes `1`,
+  navigation/links `11`, sections `7`, headings `14`, CTA links `3`,
+  messages `53`, assets `6`, constraints `9`, technical signals `12`,
+  evidence refs `17`, and limitations `127`.
+- Latest reload, by-ID reload, immediate idempotent retry, and cold
+  idempotent retry reuse all returned
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- MVP-2.0-C added no WGP comparison, compliance, Compliance Report, Business
+  Approval, publishing, deploy, provider execution, AI execution, generated
+  proposal mutation, canonical business artifact mutation, UI, API, schema, or
+  worker behavior.
 
 Missing implementation:
-- Real-target observation validation.
-- Rendered/static inspection backed observations.
+- Rendered browser inspection backed observations.
+- ViroiDoc real Generated Website Proposal observation.
 
 Dependencies:
 - Website Observation.
@@ -688,8 +704,9 @@ Risk:
 
 Estimated implementation complexity:
 - First runtime contract, builder, validator, focused tests, and provenance
-  persistence are complete. Remaining work starts with real-target
-  observation validation or Generation Contract Compliance.
+  persistence are complete. The first real ODV static-HTML observation is
+  persisted. Remaining work starts with first real ODV Generation Contract
+  Compliance or richer rendered observation.
 
 ### Generation Contract Compliance
 

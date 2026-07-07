@@ -52,13 +52,18 @@ Current status:
   and produced the first deterministic manual Codex execution export bundle.
 - Phase MVP-2.0-A2 - Generation Delivery Package Polish is complete for ODV
   and made `ODV_EXPORT/` clearer and safer for manual Codex execution.
+- Phase MVP-2.0-C - First Real Observed Website Model is complete for ODV and
+  persisted latest OWM artifact
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
 
 Current Phase:
-- Phase MVP-2.0-A2 - Generation Delivery Package Polish is complete.
+- Phase MVP-2.0-C - First Real Observed Website Model is complete.
 
 Next Phase:
-- Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
-  implementation proposal bundle only.
+- MVP-2.0-D - First Real Generation Contract Compliance for ODV. Compare the
+  persisted ODV Observed Website Model against the ODV Website Generation
+  Package only. Stop before Compliance Report, Business Approval, publishing,
+  deployment, provider execution, AI execution, UI, API, schema, or workers.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -171,6 +176,22 @@ Current architecture direction:
   ObservedNavigation, ObservedSection, ObservedMessage, ObservedAsset,
   ObservedConstraint, ObservedTechnicalSignal, ObservedEvidence,
   ObservedLimitation, and ObservedWebsiteLineage.
+- MVP-2.0-C created the first real persisted ODV Observed Website Model from
+  source `GeneratedWebsiteProposalArtifact`
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
+- Latest ODV OWM artifact:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- Status/readiness: `observable`.
+- Observation counts: pages `1`, routes `1`, navigation/links `11`, sections
+  `7`, headings `14`, CTA links `3`, messages `53`, assets `6`, constraints
+  `9`, technical signals `12`, evidence refs `17`, limitations `127`.
+- Latest reload, by-ID reload, immediate idempotent retry, and cold
+  idempotent retry all returned
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- MVP-2.0-C added no WGP comparison, Generation Contract Compliance,
+  Compliance Report, Business Approval, publishing, deploy, provider
+  execution, AI execution, generated proposal mutation, canonical business
+  artifact mutation, UI, API, schema, or worker behavior.
 - GNR8 owns contractual meaning. External AI owns implementation proposals.
 - Generation Validation Engine observes proposal reality. Compliance
   determines contractual fulfillment.
@@ -535,13 +556,15 @@ Current validation status:
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d` and ViroiDoc
   `e26b0754-988b-45b9-9e24-8e213179b6cf` with source WGP
   `website_generation_package_3e34393aef612a2c597042917dc45085`.
-- MVP-1K-4-R is blocked because both targets are missing a latest persisted
-  `ObservedWebsiteModelArtifact`; no exact WGP was loaded, no compliance was
-  built, and no `GenerationContractComplianceArtifact` was persisted.
-- MVP-1K-3-R real-target validation checked the same ODV and ViroiDoc
-  site versions for latest Generated Website Proposal inputs. Both targets are
-  missing a latest persisted `GeneratedWebsiteProposalArtifact`, so no
-  Observed Website Model was built or persisted.
+- MVP-1K-4-R originally blocked because both targets were missing a latest
+  persisted `ObservedWebsiteModelArtifact`; MVP-2.0-C has now unblocked ODV by
+  persisting latest OWM artifact
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- MVP-1K-3-R originally found missing Generated Website Proposal inputs for
+  ODV and ViroiDoc. ODV now has source
+  `GeneratedWebsiteProposalArtifact`
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3` and latest
+  OWM artifact `observed_website_model_35499a9cb91a15740910532d451a739a`.
 - MVP-1K-5 implements the first Generation Contract Compliance Report runtime
   foundation in
   `apps/platform/gnr8/architecture/generation-contract-compliance-report-contract.ts`,
@@ -576,44 +599,32 @@ Current validation status:
   `09dce7ea-d860-4f60-a1eb-26c3335b302e` or ViroiDoc
   `e26b0754-988b-45b9-9e24-8e213179b6cf`, so no report was built or
   persisted.
-- Next recommended phase is manual Generated Website Proposal import for ODV
-  and ViroiDoc under the existing quarantine boundary. After ODV and ViroiDoc
-  proposal artifacts are persisted, rerun MVP-1K-3-R; after OWM artifacts are
-  persisted, rerun MVP-1K-4-R, then rerun MVP-1K-5-R before Business
-  Approval. Stop before Business Approval, publishing, deployment, DNS
-  mutation, production mutation, UI, API, schema, workers, provider calls, AI
-  execution, or runtime mutation outside the explicitly authorized validation
-  boundary.
+- Next recommended phase is MVP-2.0-D - First Real Generation Contract
+  Compliance for ODV. Compare the persisted ODV Observed Website Model against
+  the ODV Website Generation Package only. Stop before Compliance Report,
+  Business Approval, publishing, deployment, provider execution, AI execution,
+  UI, API, schema, or workers.
 
 Latest completed milestone:
-- Phase MVP-2.0-A2 - Generation Delivery Package Polish.
-- Status: COMPLETE / REAL ODV EXPORT READY / FIRST GNR8 GENERATION DELIVERY
-  PACKAGE POLISHED / LINEAGE VERIFIED / HUMAN-REVIEWABLE BUNDLE PRODUCED /
-  MANUAL CODEX EXECUTION ONLY / NO PROVIDER CALLS / NO CODEX EXECUTION /
-  NO AI EXECUTION / NO GENERATED WEBSITE / NO IMPORT / NO PUBLISHING /
-  NO COMPLIANCE / NO BUSINESS APPROVAL / NO UI / NO API ROUTES /
-  NO SCHEMA MIGRATIONS / NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION /
-  NO PRODUCTION MUTATION.
+- Phase MVP-2.0-C - First Real Observed Website Model.
+- Status: COMPLETE / REAL ODV GENERATED PROPOSAL OBSERVED / LATEST OWM
+  PERSISTED / STATUS OBSERVABLE / READINESS OBSERVABLE / LATEST RELOAD
+  PASSED / BY-ID RELOAD PASSED / IDEMPOTENT RETRY REUSED / NO WGP COMPARISON /
+  NO COMPLIANCE / NO COMPLIANCE REPORT / NO BUSINESS APPROVAL /
+  NO PUBLISHING / NO DEPLOY / NO PROVIDER EXECUTION / NO AI EXECUTION /
+  NO GENERATED PROPOSAL MUTATION / NO CANONICAL BUSINESS ARTIFACT MUTATION /
+  NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS.
 - Canonical document:
-  `docs/architecture/FIRST_REAL_WEBSITE_GENERATION_EXPORT.md`.
-- Export directory: `ODV_EXPORT/`.
-- Export ID: `odv-export-25b18a7102ed29c2`.
-- MVP-2.0-A2 polish: business-readable `business-summary.md`, explicit
-  non-invention and preservation guidance in `limitations.md`, expected
-  deliverables, stop conditions, forbidden actions, and output-folder guidance
-  in `execution-readme.md`, and a non-canonical execution-facing
-  `generationMission` field in `provider-generation-payload.json`.
-- ODV artifact chain:
-  `business_discovery_7b37413651d79de0d109e31690a34b62` ->
-  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` ->
-  `business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad` ->
-  `business_alignment_18c0a6958048bf8985044e4781e788a8` ->
-  `digital_business_twin_2614a690e29e87a201658f3de4f72983` ->
-  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59` ->
-  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` ->
-  `provider_generation_payload_0738b677c762f830c235dae425a8ec1c`.
-- Recommended next phase after MVP-2.0-A2: manual Codex execution outside GNR8
-  using `ODV_EXPORT/`, producing an implementation proposal bundle only.
+  `docs/architecture/FIRST_OBSERVED_WEBSITE_MODEL.md`.
+- Source Generated Website Proposal artifact:
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
+- Latest OWM artifact:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- Observation counts: pages `1`, routes `1`, navigation/links `11`, sections
+  `7`, headings `14`, CTA links `3`, messages `53`, assets `6`, constraints
+  `9`, technical signals `12`, evidence refs `17`, limitations `127`.
+- Recommended next phase after MVP-2.0-C: MVP-2.0-D - First Real Generation
+  Contract Compliance for ODV.
 
 Previous completed milestone:
 - Phase MVP-1K-3-R - Observed Website Model Real-Target Validation.
