@@ -886,15 +886,19 @@ implementation sequence is:
    Design Brief artifacts.
 9. Validate the first Codex task provider payload runtime against real
    persisted Website Generation Package artifacts.
-10. Import the manually generated output bundle metadata and store a
+10. Produce the first deterministic, human-reviewable ODV export bundle for
+    manual Codex execution.
+11. Run manual Codex execution outside GNR8 and produce an implementation
+    proposal bundle only.
+12. Import the manually generated output bundle metadata and store a
     quarantined Generated Website Proposal.
-11. Implement Generation Contract Compliance evaluator and Compliance Report
+13. Implement Generation Contract Compliance evaluator and Compliance Report
     for the generated proposal against the package.
-12. Implement Business Approval decision that consumes the Compliance Report
+14. Implement Business Approval decision that consumes the Compliance Report
     and authorizes or blocks Publish.
-13. Connect approved generated proposal to existing runtime publish foundations
+15. Connect approved generated proposal to existing runtime publish foundations
     and publish one approved website.
-14. Run an end-to-end first-customer smoke path with artifact lineage from
+16. Run an end-to-end first-customer smoke path with artifact lineage from
     imported website to published experience.
 
 ## Deferred Features
@@ -1110,7 +1114,7 @@ imported website evidence.
 Recommended next phase:
 
 ```text
-MVP-1K-3-R Observed Website Model Real-Target Validation
+Manual Codex execution outside GNR8 using ODV_EXPORT/
 ```
 
 MVP-1D implemented the first Business Alignment runtime foundation. MVP-1D-R
@@ -1204,9 +1208,20 @@ load. MVP-1K-5-R found that real ODV and ViroiDoc report validation is blocked
 because latest persisted `GenerationContractComplianceArtifact` inputs are
 missing. MVP-1K-4-R then found that both targets are missing the prerequisite
 latest persisted `ObservedWebsiteModelArtifact`, so no compliance artifact was
-built or persisted. The next safe phase is MVP-1K-3-R Observed Website Model
-Real-Target Validation. After ODV and ViroiDoc have OWM inputs, rerun
-MVP-1K-4-R and then rerun MVP-1K-5-R before Business Approval.
+built or persisted. MVP-1K-3-R then found that both targets are missing latest
+persisted `GeneratedWebsiteProposalArtifact` inputs, so no Observed Website
+Model artifact was built or persisted. The next safe phase is manual Generated
+Website Proposal import for ODV and ViroiDoc under the existing quarantine
+boundary. After ODV and ViroiDoc have proposal inputs, rerun MVP-1K-3-R; after
+they have OWM inputs, rerun MVP-1K-4-R and then rerun MVP-1K-5-R before
+Business Approval.
+MVP-2.0-A then produced the first deterministic ODV export bundle at
+`ODV_EXPORT/`, with manifest, complete lineage, source WGP, ProviderGenerationPayload,
+business summary, limitations, and manual execution instructions. The current
+next safe phase is manual Codex execution outside GNR8 using `ODV_EXPORT/`,
+producing an implementation proposal bundle only. After a proposal bundle
+exists, import it as quarantined Generated Website Proposal material before
+rerunning MVP-1K-3-R.
 Stop before publishing, deployment, DNS mutation, production mutation, UI,
 API, schema, workers, provider calls, or AI execution unless explicitly
 authorized.

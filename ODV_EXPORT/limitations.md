@@ -1,0 +1,259 @@
+# ODV Export Limitations
+
+Export ID: `odv-export-25b18a7102ed29c2`
+
+## Codex Must Not Invent
+- New business offerings, services, prices, guarantees, certifications, team details, process claims, legal claims, geographic coverage, customer segments, testimonials, case studies, statistics, contact details, or calls to action not present in the Website Generation Package.
+- Missing audience knowledge.
+- Missing offerings knowledge.
+- Any stronger trust claim than the source artifacts support.
+- Any implementation, publishing, compliance, approval, or deployment authority.
+
+## Missing Knowledge Items
+- Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for audience. Business Alignment validation did not add new business facts.
+- Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for offerings. Business Alignment validation did not add new business facts.
+- Business Discovery did not provide deterministic knowledge for audience.
+- Business Discovery did not provide deterministic knowledge for offerings.
+- audience: Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for audience. Business Alignment validation did not add new business facts.
+- audience: Business Discovery did not provide deterministic knowledge for audience.
+- offerings: Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for offerings. Business Alignment validation did not add new business facts.
+- offerings: Business Discovery did not provide deterministic knowledge for offerings.
+
+## Low-Confidence Areas
+- Aligned Digital Business Twin overall confidence is LOW.
+- Audience: Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for audience. Business Alignment validation did not add new business facts.
+- Audience: Business Discovery did not provide deterministic knowledge for audience.
+- Audience: No aligned Digital Business Twin knowledge is available for this section.
+- Business Alignment overall confidence is LOW.
+- Business Understanding Report overall confidence is LOW.
+- Digital Business Twin overall confidence is LOW.
+- Message: A contact path is present, which is a basic trust and accessibility signal.
+- Message: Imported evidence includes 384 persisted assets that may carry brand signals.
+- Message: Imported website host odv-cvijanovic.si is observed as the first business identity signal.
+- Objective: The website should support this business goal: Website wording suggests a business goal or visitor action: Kontakt.
+- Website Design Brief overall confidence is LOW.
+- Website Generation Package overall confidence is LOW.
+
+## Source Limitations
+- Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for audience. Business Alignment validation did not add new business facts.
+- Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for offerings. Business Alignment validation did not add new business facts.
+- DOMAIN_SIGNAL_MISSING: No deterministic website-derived Business Discovery signal was available for audience.
+- DOMAIN_SIGNAL_MISSING: No deterministic website-derived Business Discovery signal was available for offerings.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: ASSET_FETCH_NON_OK.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: ASSET_FETCH_UNSUPPORTED_SCHEME.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: ASSET_REFERENCE_UNSUPPORTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: BROWSER_LAUNCH_CONFIGURATION.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: BROWSER_LAUNCH_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: BROWSER_LAUNCH_SUCCEEDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_JOB_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_JOB_QUEUED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_JOB_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_DOM_SERIALIZATION_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_DOM_SERIALIZATION_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_RESPONSE_ASSEMBLY_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_RESPONSE_ASSEMBLY_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_FULLPAGE_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_FULLPAGE_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_VIEWPORT_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_VIEWPORT_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STABILIZATION_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STABILIZATION_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STYLE_SAMPLING_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STYLE_SAMPLING_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_HTTP_REQUEST_SENT.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_HTTP_RESPONSE_CLASSIFIED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RENDERED_DOM_USED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_REQUEST_BUILT.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_REQUEST_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RESPONSE_PARSED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RESULT_ACCEPTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RESULT_PERSISTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_URL_RESOLVED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CLEANUP_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CLEANUP_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CONTACT_SECTION_DETECTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: DOM_SERIALIZATION_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: DOM_SERIALIZATION_SUCCEEDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: EVIDENCE_RUN_ISOLATED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: FALLBACK_EVIDENCE_SUPERSEDED_BY_RENDERED_CAPTURE.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: HERO_DETECTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: IMAGE_ROLE_ASSIGNED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: IMPORT_FIDELITY_SCORE_COMPUTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: IMPORT_RUN_ID_CREATED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LATEST_EXECUTION_EVIDENCE_SELECTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LAYOUT_GEOMETRY_EVIDENCE_MATERIALIZED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LAYOUT_GEOMETRY_PATH_PERSISTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: NAVIGATION_EVIDENCE_MATERIALIZED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: NAVIGATION_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: NAVIGATION_SUCCEEDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PAGE_CREATION_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PAGE_CREATION_SUCCEEDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_BINARY_CHECK.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_EXECUTABLE_EXISTS_CHECK.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_EXECUTABLE_RESOLUTION.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_PACKAGE_CHECK.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PREVIEW_HTML_IMAGE_REWRITE_APPLIED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PREVIEW_HTML_IMAGE_REWRITE_SKIPPED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PREVIEW_HTML_IMAGE_REWRITE_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PRIMARY_STYLESHEET_CAPTURED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PRIMARY_STYLESHEET_DETECTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PRIMARY_STYLESHEET_SELECTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_HTML_ONLY_MODE_USED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_CANDIDATE_FOUND.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_CANDIDATE_RESOLVED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_CANDIDATE_SKIPPED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: READINESS_WAIT_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: READINESS_WAIT_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_ARTIFACT_PERSISTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_ACCEPTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_PERSISTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_RUNTIME_ENVIRONMENT.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_SUMMARY_PERSISTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_SUPPORT_DECISION.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_USED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_DOM_HTML_BASELINE_INPUT_PROVIDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_PRIMARY_SELECTED_AFTER_SUCCESS.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_SUMMARY_HYDRATED_FROM_WORKER_SUCCESS.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SCREENSHOT_CAPTURE_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SCREENSHOT_CAPTURE_SUCCEEDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SECTION_BOUNDARY_EVIDENCE_MATERIALIZED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SEMANTIC_IMPORT_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SEMANTIC_IMPORT_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_ASSET_DISCOVERY_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_HTML_RECEIVED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_INTAKE_COMPLETED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_INTAKE_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_URL_FETCH_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: STALE_EVIDENCE_SUPERSEDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: STYLE_SAMPLING_STARTED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: STYLE_SAMPLING_SUCCEEDED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: WORKER_RENDERED_PAYLOAD_HYDRATED.
+- IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: WORKER_SUCCESS_RESPONSE_ACCEPTED.
+- MVP-1D-R validation left audience unresolved because no new business truth was provided.
+- MVP-1D-R validation left offerings unresolved because no new business truth was provided.
+- SOURCE_DBT_STATUS_NOT_ALIGNED:partial
+- SOURCE_WDB_STATUS_NOT_VALID:partial
+- SOURCE_WGP_STATUS_NOT_VALID:partial
+- UPSTREAM_EVIDENCE_LIMITATION: missing_computed_styles
+- UPSTREAM_EVIDENCE_LIMITATION: missing_font_source_evidence
+- UPSTREAM_EVIDENCE_LIMITATION: missing_mutation_evidence
+- UPSTREAM_EVIDENCE_LIMITATION: missing_widget_runtime_evidence
+- UPSTREAM_EVIDENCE_LIMITATION: partial_asset_inventory
+- UPSTREAM_EVIDENCE_LIMITATION: partial_network_evidence
+- WDB_SECTION_SOURCE_KNOWLEDGE_MISSING:target_audience
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: ASSET_FETCH_NON_OK.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: ASSET_FETCH_UNSUPPORTED_SCHEME.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: ASSET_REFERENCE_UNSUPPORTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: BROWSER_LAUNCH_CONFIGURATION.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: BROWSER_LAUNCH_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: BROWSER_LAUNCH_SUCCEEDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_JOB_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_JOB_QUEUED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_JOB_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_ASSET_MANIFEST_FINALIZATION_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_DOM_SERIALIZATION_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_DOM_SERIALIZATION_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_RESPONSE_ASSEMBLY_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_RESPONSE_ASSEMBLY_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_FULLPAGE_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_FULLPAGE_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_VIEWPORT_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_SCREENSHOT_VIEWPORT_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STABILIZATION_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STABILIZATION_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STYLE_SAMPLING_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_PHASE_STYLE_SAMPLING_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_CLIENT_CONFIG_RESOLVED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_HTTP_REQUEST_SENT.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_HTTP_RESPONSE_CLASSIFIED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_HTTP_RESPONSE_RECEIVED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RENDERED_DOM_USED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_REQUEST_BUILT.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_REQUEST_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RESPONSE_PARSED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RESULT_ACCEPTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_RESULT_PERSISTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CAPTURE_WORKER_URL_RESOLVED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CLEANUP_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CLEANUP_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: CONTACT_SECTION_DETECTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: DOM_SERIALIZATION_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: DOM_SERIALIZATION_SUCCEEDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: EVIDENCE_RUN_ISOLATED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: FALLBACK_EVIDENCE_SUPERSEDED_BY_RENDERED_CAPTURE.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: HERO_DETECTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: IMAGE_ROLE_ASSIGNED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: IMPORT_FIDELITY_SCORE_COMPUTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: IMPORT_RUN_ID_CREATED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LATEST_EXECUTION_EVIDENCE_SELECTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LAYOUT_GEOMETRY_BASELINE_INPUT_PROVIDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LAYOUT_GEOMETRY_EVIDENCE_MATERIALIZED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: LAYOUT_GEOMETRY_PATH_PERSISTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: NAVIGATION_EVIDENCE_MATERIALIZED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: NAVIGATION_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: NAVIGATION_SUCCEEDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PAGE_CREATION_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PAGE_CREATION_SUCCEEDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_BINARY_CHECK.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_EXECUTABLE_EXISTS_CHECK.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_EXECUTABLE_RESOLUTION.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PLAYWRIGHT_PACKAGE_CHECK.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PREVIEW_HTML_IMAGE_REWRITE_APPLIED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PREVIEW_HTML_IMAGE_REWRITE_SKIPPED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PREVIEW_HTML_IMAGE_REWRITE_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PRIMARY_STYLESHEET_CAPTURED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PRIMARY_STYLESHEET_DETECTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: PRIMARY_STYLESHEET_SELECTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_HTML_ONLY_MODE_USED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_CANDIDATE_FOUND.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_CANDIDATE_RESOLVED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RAW_IMPORT_HTML_IMAGE_CANDIDATE_SKIPPED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: READINESS_WAIT_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: READINESS_WAIT_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_ARTIFACT_PERSISTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_ACCEPTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_PERSISTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_RUNTIME_ENVIRONMENT.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_SUMMARY_PERSISTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_SUPPORT_DECISION.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_CAPTURE_USED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_DOM_HTML_BASELINE_INPUT_PROVIDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_PRIMARY_SELECTED_AFTER_SUCCESS.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: RENDERED_SUMMARY_HYDRATED_FROM_WORKER_SUCCESS.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SCREENSHOT_CAPTURE_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SCREENSHOT_CAPTURE_SUCCEEDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SECTION_BOUNDARY_EVIDENCE_MATERIALIZED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SEMANTIC_IMPORT_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SEMANTIC_IMPORT_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_ASSET_DISCOVERY_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_HTML_RECEIVED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_INTAKE_COMPLETED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_INTAKE_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: SITE_IMPORT_URL_FETCH_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: STALE_EVIDENCE_SUPERSEDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: STYLE_SAMPLING_STARTED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: STYLE_SAMPLING_SUCCEEDED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: WORKER_RENDERED_PAYLOAD_HYDRATED.
+- note: IMPORT_DIAGNOSTIC_OBSERVED: Import diagnostic was present upstream: WORKER_SUCCESS_RESPONSE_ACCEPTED.
+- warning: DOMAIN_SIGNAL_MISSING: No deterministic website-derived Business Discovery signal was available for audience.
+- warning: DOMAIN_SIGNAL_MISSING: No deterministic website-derived Business Discovery signal was available for offerings.
+- warning: UPSTREAM_EVIDENCE_LIMITATION: missing_computed_styles
+- warning: UPSTREAM_EVIDENCE_LIMITATION: missing_font_source_evidence
+- warning: UPSTREAM_EVIDENCE_LIMITATION: missing_mutation_evidence
+- warning: UPSTREAM_EVIDENCE_LIMITATION: missing_widget_runtime_evidence
+- warning: UPSTREAM_EVIDENCE_LIMITATION: partial_asset_inventory
+- warning: UPSTREAM_EVIDENCE_LIMITATION: partial_network_evidence
+
+## Operational Limitations
+- This export is manual-execution input only.
+- The ProviderGenerationPayload status is `draft` because the source WGP status is `partial`.
+- The generated result, if manually produced later, must remain quarantined as a Generated Website Proposal.
+- This export does not include compliance, approval, publishing, deployment, DNS mutation, production mutation, provider execution, prompt sending, or generated website output.

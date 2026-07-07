@@ -3211,12 +3211,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-1K-4-R - Generation Contract Compliance Real-Target Validation is
-  complete with a missing-prerequisite blocker: neither ODV nor ViroiDoc has a
-  latest persisted `ObservedWebsiteModelArtifact`.
+- Phase MVP-2.0-A - First Real Website Generation Export is complete for ODV.
 
 Next Phase:
-- MVP-1K-3-R Observed Website Model Real-Target Validation.
+- Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
+  implementation proposal bundle only.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -4306,6 +4305,10 @@ MVP-1K-4 Generation Contract Compliance Runtime Foundation:
   `e26b0754-988b-45b9-9e24-8e213179b6cf` both have no latest persisted
   `ObservedWebsiteModelArtifact`, so the exact WGP artifacts were not loaded
   and no `GenerationContractComplianceArtifact` was persisted.
+- MVP-1K-3-R real-target validation is complete and blocked before Observed
+  Website Model build/persistence. Both targets have no latest persisted
+  `GeneratedWebsiteProposalArtifact`, so no `ObservedWebsiteModelArtifact`
+  was persisted.
 
 MVP-1K-5 Generation Contract Compliance Report Runtime Foundation:
 - MVP-1K-5 is complete. It creates the first deterministic Generation
@@ -4343,15 +4346,57 @@ MVP-1K-5 Generation Contract Compliance Report Runtime Foundation:
   migration, workers, deployment, DNS mutation, production mutation, runtime
   mutation, or upstream business artifact mutation.
 
-Recommended next phase after MVP-1K-4-R:
-- MVP-1K-4-R is complete and blocked before compliance build/persistence
-  because real ODV and ViroiDoc Observed Website Model artifacts are missing.
-- MVP-1K-3-R Observed Website Model Real-Target Validation is now the next
-  safe phase. After ODV and ViroiDoc have latest persisted OWM inputs, rerun
-  MVP-1K-4-R, then rerun MVP-1K-5-R before Business Approval. Stop before
-  Business Approval, publishing, deployment, DNS mutation, production
+Recommended next phase after MVP-1K-3-R:
+- MVP-1K-3-R is complete and blocked before Observed Website Model
+  build/persistence because real ODV and ViroiDoc Generated Website Proposal
+  artifacts are missing.
+- Manually import the ODV and ViroiDoc Generated Website Proposal artifacts as
+  quarantined proposal material under the existing MVP-1K-1 import boundary.
+  After both proposal inputs exist, rerun MVP-1K-3-R; after OWM inputs exist,
+  rerun MVP-1K-4-R, then rerun MVP-1K-5-R before Business Approval. Stop
+  before Business Approval, publishing, deployment, DNS mutation, production
   mutation, UI, API, schema, workers, provider calls, AI execution, or runtime
   mutation outside the explicitly authorized validation boundary.
+
+MVP-2.0-A First Real Website Generation Export:
+- Canonical document:
+  `docs/architecture/FIRST_REAL_WEBSITE_GENERATION_EXPORT.md`.
+- Export directory: `ODV_EXPORT/`.
+- Export ID: `odv-export-25b18a7102ed29c2`.
+- Target: ODV only.
+- Site version: `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Dry run: `09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l`.
+- Export status: `ready_for_manual_codex_execution`.
+- Export safety classification: `export_only_no_execution`.
+- Export contents: `manifest.json`, `lineage.json`,
+  `website-generation-package.json`, `provider-generation-payload.json`,
+  `business-summary.md`, `limitations.md`, and `execution-readme.md`.
+- Artifact chain verified:
+  `business_discovery_7b37413651d79de0d109e31690a34b62` ->
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` ->
+  `business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad` ->
+  `business_alignment_18c0a6958048bf8985044e4781e788a8` ->
+  `digital_business_twin_2614a690e29e87a201658f3de4f72983` ->
+  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59` ->
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` ->
+  `provider_generation_payload_0738b677c762f830c235dae425a8ec1c`.
+- Lineage checks passed from BusinessDiscovery through
+  ProviderGenerationPayload with no missing links.
+- Safety verification passed: no provider execution, no AI execution, no
+  generated website, no publishing, no deployment, no DNS mutation, no
+  production mutation, no compliance execution, no Business Approval, and no
+  forbidden generated-output fields in the provider payload.
+- MVP-2.0-A created no provider calls, no prompt sends, no Codex execution, no
+  website generation, no publishing, no compliance, no Business Approval, no
+  API, no UI, no schema migration, no worker, no deployment, no DNS mutation,
+  and no production mutation.
+
+Recommended next phase after MVP-2.0-A:
+- Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
+  implementation proposal bundle only. Stop before generated website import,
+  compliance, Business Approval, publishing, deployment, DNS mutation,
+  production mutation, UI, API, schema, workers, provider calls from GNR8, or
+  automated AI execution unless explicitly authorized.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

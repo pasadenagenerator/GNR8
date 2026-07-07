@@ -1,0 +1,88 @@
+{
+  "exportId": "odv-export-25b18a7102ed29c2",
+  "timestamp": "2026-07-07T00:00:00.000Z",
+  "target": "ODV",
+  "exportStatus": "ready_for_manual_codex_execution",
+  "exportSafetyClassification": {
+    "notes": [
+      "Payload is safe to inspect and export as a future task envelope only.",
+      "Payload does not authorize provider execution, generated output, deployment, DNS, production mutation, compliance, approval, or publishing."
+    ],
+    "classification": "export_only_no_execution",
+    "deploymentAllowed": false,
+    "publishingAllowed": false,
+    "aiExecutionAllowed": false,
+    "dnsMutationAllowed": false,
+    "generatedWebsiteAllowed": false,
+    "providerExecutionAllowed": false,
+    "productionMutationAllowed": false,
+    "complianceExecutionAllowed": false
+  },
+  "siteVersionId": "09dce7ea-d860-4f60-a1eb-26c3335b302e",
+  "dryRunId": "09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l",
+  "sourceUrl": "https://www.odv-cvijanovic.si/?gnr8_f12=20260617",
+  "contractVersions": {
+    "BusinessDiscovery": "MVP-1A",
+    "DigitalBusinessTwin": "MVP-1B",
+    "BusinessUnderstandingReport": "MVP-1C",
+    "BusinessAlignment": "MVP-1D",
+    "AlignedDigitalBusinessTwin": "MVP-1B",
+    "WebsiteDesignBrief": "MVP-1E",
+    "WebsiteGenerationPackage": "MVP-1F",
+    "ProviderGenerationPayload": "MVP-1H"
+  },
+  "artifactIds": {
+    "BusinessDiscovery": "business_discovery_7b37413651d79de0d109e31690a34b62",
+    "DigitalBusinessTwin": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+    "BusinessUnderstandingReport": "business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad",
+    "BusinessAlignment": "business_alignment_18c0a6958048bf8985044e4781e788a8",
+    "AlignedDigitalBusinessTwin": "digital_business_twin_2614a690e29e87a201658f3de4f72983",
+    "WebsiteDesignBrief": "website_design_brief_ff19a711c948d28fdd58bdea521c4f59",
+    "WebsiteGenerationPackage": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+    "ProviderGenerationPayload": "provider_generation_payload_0738b677c762f830c235dae425a8ec1c"
+  },
+  "providerType": "codex",
+  "payloadKind": "codex_task",
+  "validationSummary": {
+    "businessDiscovery": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    },
+    "digitalBusinessTwin": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    },
+    "businessUnderstandingReport": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    },
+    "businessAlignment": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    },
+    "alignedDigitalBusinessTwin": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    },
+    "websiteDesignBrief": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    },
+    "websiteGenerationPackage": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    },
+    "providerGenerationPayload": {
+      "valid": true,
+      "errors": [],
+      "warnings": []
+    }
+  }
+}

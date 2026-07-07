@@ -23,6 +23,10 @@ calls, AI execution, UI, API, schema, workers, or generated content mutation.
 Real-target Generation Contract Compliance validation is blocked by a missing
 Observed Website Model prerequisite on both targets.
 
+MVP-1K-3-R later confirmed the upstream reason: both ODV and ViroiDoc are
+also missing latest persisted `GeneratedWebsiteProposalArtifact` inputs, so
+Observed Website Models cannot yet be built for either target.
+
 | Target | Latest ObservedWebsiteModelArtifact | Exact WGP loaded | Compliance built | Compliance persisted | Result |
 | --- | --- | --- | --- | --- | --- |
 | ODV | missing | no | no | no | blocked |
@@ -142,8 +146,10 @@ Focused real-target harness output at `2026-07-05T19:10:33.224Z`:
 
 ## Recommended Next Phase
 
-Recommended next phase: MVP-1K-3-R Observed Website Model Real-Target
-Validation.
+Recommended next phase: manually import the ODV and ViroiDoc Generated
+Website Proposal artifacts as quarantined proposal material under the existing
+MVP-1K-1 import boundary, then rerun MVP-1K-3-R Observed Website Model
+Real-Target Validation.
 
 After ODV and ViroiDoc have latest persisted
 `ObservedWebsiteModelArtifact` inputs, rerun MVP-1K-4-R. Do not rerun

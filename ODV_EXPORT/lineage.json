@@ -1,0 +1,154 @@
+{
+  "exportId": "odv-export-25b18a7102ed29c2",
+  "siteVersionId": "09dce7ea-d860-4f60-a1eb-26c3335b302e",
+  "dryRunId": "09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l",
+  "chain": [
+    {
+      "stage": "BusinessDiscovery",
+      "artifactKind": "business_discovery",
+      "artifactId": "business_discovery_7b37413651d79de0d109e31690a34b62",
+      "semanticId": "business-discovery:09dce7ea-d860-4f60-a1eb-26c3335b302e:09dce7ea-d860-4f60-a1eb-26c3335b302e%3A8b-12l",
+      "status": "partial",
+      "contractVersion": "MVP-1A",
+      "createdAt": "2026-07-01T20:51:58.624Z",
+      "persistedAt": "2026-07-01T20:52:00.241Z"
+    },
+    {
+      "stage": "DigitalBusinessTwin",
+      "artifactKind": "digital_business_twin",
+      "artifactId": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+      "semanticId": "digital-business-twin:09dce7ea-d860-4f60-a1eb-26c3335b302e:09dce7ea-d860-4f60-a1eb-26c3335b302e-8b-12l:business_discovery_7b37413651d79de0d109e31690a34b62",
+      "status": "partial",
+      "contractVersion": "MVP-1B",
+      "createdAt": "2026-07-02T18:42:52.843Z",
+      "persistedAt": "2026-07-02T18:42:53.369Z",
+      "sourceArtifactId": "business_discovery_7b37413651d79de0d109e31690a34b62"
+    },
+    {
+      "stage": "BusinessUnderstandingReport",
+      "artifactKind": "business_understanding_report",
+      "artifactId": "business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad",
+      "semanticId": "business-understanding-report:09dce7ea-d860-4f60-a1eb-26c3335b302e:09dce7ea-d860-4f60-a1eb-26c3335b302e-8b-12l:digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+      "status": "partial",
+      "contractVersion": "MVP-1C",
+      "createdAt": "2026-07-02T19:03:36.381Z",
+      "persistedAt": "2026-07-02T19:03:37.895Z",
+      "sourceArtifactId": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f"
+    },
+    {
+      "stage": "BusinessAlignment",
+      "artifactKind": "business_alignment",
+      "artifactId": "business_alignment_18c0a6958048bf8985044e4781e788a8",
+      "semanticId": "business-alignment:b588bc0416fc1eee93de0ac54a8cd2d3",
+      "status": "reviewed",
+      "contractVersion": "MVP-1D",
+      "createdAt": "2026-07-03T00:00:00.000Z",
+      "persistedAt": "2026-07-03T11:59:54.115Z",
+      "sourceArtifactId": "business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad",
+      "sourceDigitalBusinessTwinArtifactId": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+      "outputDigitalBusinessTwinArtifactId": "digital_business_twin_2614a690e29e87a201658f3de4f72983"
+    },
+    {
+      "stage": "AlignedDigitalBusinessTwin",
+      "artifactKind": "digital_business_twin",
+      "artifactId": "digital_business_twin_2614a690e29e87a201658f3de4f72983",
+      "semanticId": "digital-business-twin:09dce7ea-d860-4f60-a1eb-26c3335b302e:09dce7ea-d860-4f60-a1eb-26c3335b302e-8b-12l:business_discovery_7b37413651d79de0d109e31690a34b62:alignment:9bf462ca9250eea9",
+      "status": "partial",
+      "contractVersion": "MVP-1B",
+      "createdAt": "2026-07-03T00:00:00.000Z",
+      "persistedAt": "2026-07-03T12:00:04.410Z",
+      "sourceBusinessAlignmentArtifactId": "business_alignment_18c0a6958048bf8985044e4781e788a8"
+    },
+    {
+      "stage": "WebsiteDesignBrief",
+      "artifactKind": "website_design_brief",
+      "artifactId": "website_design_brief_ff19a711c948d28fdd58bdea521c4f59",
+      "semanticId": "website-design-brief:b2aa6ffee52dda53095e3e004286de0c",
+      "status": "partial",
+      "contractVersion": "MVP-1E",
+      "createdAt": "2026-07-03T17:43:10.166Z",
+      "persistedAt": "2026-07-03T17:43:12.262Z",
+      "sourceArtifactId": "digital_business_twin_2614a690e29e87a201658f3de4f72983",
+      "sourceBusinessAlignmentArtifactId": "business_alignment_18c0a6958048bf8985044e4781e788a8"
+    },
+    {
+      "stage": "WebsiteGenerationPackage",
+      "artifactKind": "website_generation_package",
+      "artifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+      "semanticId": "website-generation-package:0bb33dd388323a443bf36be58bf2d9a1",
+      "status": "partial",
+      "contractVersion": "MVP-1F",
+      "createdAt": "2026-07-03T18:38:51.561Z",
+      "persistedAt": "2026-07-03T18:38:53.662Z",
+      "sourceArtifactId": "website_design_brief_ff19a711c948d28fdd58bdea521c4f59"
+    },
+    {
+      "stage": "ProviderGenerationPayload",
+      "artifactKind": "provider_generation_payload",
+      "artifactId": "provider_generation_payload_0738b677c762f830c235dae425a8ec1c",
+      "semanticId": "provider-generation-payload:c8f60618b95a4bd13003a68606860705",
+      "status": "draft",
+      "contractVersion": "MVP-1H",
+      "createdAt": "2026-07-04T20:39:23.958Z",
+      "persistedAt": "2026-07-04T20:39:24.527Z",
+      "sourceArtifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+      "providerType": "codex",
+      "payloadKind": "codex_task"
+    }
+  ],
+  "continuityChecks": [
+    {
+      "check": "DBT -> BusinessDiscovery",
+      "passed": true
+    },
+    {
+      "check": "BUR -> DBT artifact",
+      "passed": true
+    },
+    {
+      "check": "BUR -> BusinessDiscovery",
+      "passed": true
+    },
+    {
+      "check": "BusinessAlignment -> BUR",
+      "passed": true
+    },
+    {
+      "check": "BusinessAlignment -> DBT",
+      "passed": true
+    },
+    {
+      "check": "BusinessAlignment output -> aligned DBT",
+      "passed": true
+    },
+    {
+      "check": "Aligned DBT -> BusinessDiscovery",
+      "passed": true
+    },
+    {
+      "check": "WDB -> BusinessAlignment",
+      "passed": true
+    },
+    {
+      "check": "WDB -> aligned DBT",
+      "passed": true
+    },
+    {
+      "check": "WGP -> WDB",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload -> WGP semantic ID",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload -> WGP artifact ID",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload serialized WGP",
+      "passed": true
+    }
+  ],
+  "noMissingLinks": true
+}

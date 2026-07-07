@@ -45,13 +45,18 @@ Current status:
 - Phase MVP-1K-4-R - Generation Contract Compliance Real-Target Validation is
   complete with a missing-prerequisite blocker: neither ODV nor ViroiDoc has a
   latest persisted `ObservedWebsiteModelArtifact`.
+- Phase MVP-1K-3-R - Observed Website Model Real-Target Validation is
+  complete with a missing-prerequisite blocker: neither ODV nor ViroiDoc has a
+  latest persisted `GeneratedWebsiteProposalArtifact`.
+- Phase MVP-2.0-A - First Real Website Generation Export is complete for ODV
+  and produced the first deterministic manual Codex execution export bundle.
 
 Current Phase:
-- Phase MVP-1K-4-R - Generation Contract Compliance Real-Target Validation is
-  complete and safely blocked before compliance build/persistence.
+- Phase MVP-2.0-A - First Real Website Generation Export is complete.
 
 Next Phase:
-- MVP-1K-3-R Observed Website Model Real-Target Validation.
+- Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
+  implementation proposal bundle only.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -125,6 +130,10 @@ Current architecture direction:
   WGP artifact recording, copied payload integrity, no hidden prompt edits, no
   business reinterpretation, proposal-only output, external bundle storage,
   and operator attestation.
+- MVP-2.0-A produced the first complete ODV manual execution export bundle at
+  `ODV_EXPORT/`. The bundle preserves source WGP and ProviderGenerationPayload
+  artifacts, complete lineage, business summary, limitations, and manual
+  execution instructions.
 - Generated Website Proposal import is quarantine-first. Proposal material is
   not trusted, cannot publish, cannot update DBT/WDB/WGP or
   ProviderGenerationPayload, cannot become compliance or Business Approval by
@@ -522,6 +531,10 @@ Current validation status:
 - MVP-1K-4-R is blocked because both targets are missing a latest persisted
   `ObservedWebsiteModelArtifact`; no exact WGP was loaded, no compliance was
   built, and no `GenerationContractComplianceArtifact` was persisted.
+- MVP-1K-3-R real-target validation checked the same ODV and ViroiDoc
+  site versions for latest Generated Website Proposal inputs. Both targets are
+  missing a latest persisted `GeneratedWebsiteProposalArtifact`, so no
+  Observed Website Model was built or persisted.
 - MVP-1K-5 implements the first Generation Contract Compliance Report runtime
   foundation in
   `apps/platform/gnr8/architecture/generation-contract-compliance-report-contract.ts`,
@@ -556,14 +569,56 @@ Current validation status:
   `09dce7ea-d860-4f60-a1eb-26c3335b302e` or ViroiDoc
   `e26b0754-988b-45b9-9e24-8e213179b6cf`, so no report was built or
   persisted.
-- Next recommended phase is MVP-1K-3-R Observed Website Model Real-Target
-  Validation. After ODV and ViroiDoc OWM artifacts are persisted, rerun
-  MVP-1K-4-R, then rerun MVP-1K-5-R before Business Approval. Stop before
-  Business Approval, publishing, deployment, DNS mutation, production
-  mutation, UI, API, schema, workers, provider calls, AI execution, or runtime
-  mutation outside the explicitly authorized validation boundary.
+- Next recommended phase is manual Generated Website Proposal import for ODV
+  and ViroiDoc under the existing quarantine boundary. After ODV and ViroiDoc
+  proposal artifacts are persisted, rerun MVP-1K-3-R; after OWM artifacts are
+  persisted, rerun MVP-1K-4-R, then rerun MVP-1K-5-R before Business
+  Approval. Stop before Business Approval, publishing, deployment, DNS
+  mutation, production mutation, UI, API, schema, workers, provider calls, AI
+  execution, or runtime mutation outside the explicitly authorized validation
+  boundary.
 
 Latest completed milestone:
+- Phase MVP-2.0-A - First Real Website Generation Export.
+- Status: COMPLETE / REAL ODV EXPORT READY / LINEAGE VERIFIED /
+  HUMAN-REVIEWABLE BUNDLE PRODUCED / MANUAL CODEX EXECUTION ONLY /
+  NO PROVIDER CALLS / NO CODEX EXECUTION / NO AI EXECUTION /
+  NO GENERATED WEBSITE / NO PUBLISHING / NO COMPLIANCE /
+  NO BUSINESS APPROVAL / NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS /
+  NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION / NO PRODUCTION MUTATION.
+- Canonical document:
+  `docs/architecture/FIRST_REAL_WEBSITE_GENERATION_EXPORT.md`.
+- Export directory: `ODV_EXPORT/`.
+- Export ID: `odv-export-25b18a7102ed29c2`.
+- ODV artifact chain:
+  `business_discovery_7b37413651d79de0d109e31690a34b62` ->
+  `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` ->
+  `business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad` ->
+  `business_alignment_18c0a6958048bf8985044e4781e788a8` ->
+  `digital_business_twin_2614a690e29e87a201658f3de4f72983` ->
+  `website_design_brief_ff19a711c948d28fdd58bdea521c4f59` ->
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` ->
+  `provider_generation_payload_0738b677c762f830c235dae425a8ec1c`.
+- Recommended next phase after MVP-2.0-A: manual Codex execution outside GNR8
+  using `ODV_EXPORT/`, producing an implementation proposal bundle only.
+
+Previous completed milestone:
+- Phase MVP-1K-3-R - Observed Website Model Real-Target Validation.
+- Status: COMPLETE / REAL ODV CHECKED / REAL VIROIDOC CHECKED /
+  MISSING LATEST GENERATED WEBSITE PROPOSAL ARTIFACTS / NO OWM BUILT /
+  NO OWM PERSISTED / NO LATEST OWM RELOAD / NO BY-ID OWM RELOAD /
+  NO IDEMPOTENT OWM RETRY / BLOCKED BEFORE COMPLIANCE /
+  NO COMPLIANCE ARTIFACT / NO COMPLIANCE REPORT / NO BUSINESS APPROVAL /
+  NO PUBLISHING / NO PROVIDER CALLS / NO AI EXECUTION /
+  NO GENERATED CONTENT MUTATION / NO UI / NO API ROUTES /
+  NO SCHEMA MIGRATIONS / NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION /
+  NO PRODUCTION MUTATION / NO RUNTIME MUTATION.
+- Canonical document:
+  `docs/architecture/OBSERVED_WEBSITE_MODEL_REAL_TARGET_VALIDATION.md`.
+- Recommended next phase after MVP-1K-3-R: manually import ODV and ViroiDoc
+  Generated Website Proposal artifacts as quarantined proposal material.
+
+Previous completed milestone:
 - Phase MVP-1K-4-R - Generation Contract Compliance Real-Target
   Validation.
 - Status: COMPLETE / REAL ODV CHECKED / REAL VIROIDOC CHECKED /
@@ -577,8 +632,6 @@ Latest completed milestone:
   NO PRODUCTION MUTATION / NO RUNTIME MUTATION.
 - Canonical document:
   `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REAL_TARGET_VALIDATION.md`.
-- Recommended next phase after MVP-1K-4-R: MVP-1K-3-R Observed Website Model
-  Real-Target Validation.
 
 Previous completed milestone:
 - Phase MVP-1K-2 - Generated Website Proposal Observation Boundary Design.
@@ -648,8 +701,10 @@ Earlier completed milestone:
   MVP-1K-5-R Generation Contract Compliance Report Real-Target Validation
   with missing upstream compliance artifacts, and completed MVP-1K-4-R
   Generation Contract Compliance Real-Target Validation with missing upstream
-  Observed Website Model artifacts. Current next recommended phase is
-  MVP-1K-3-R Observed Website Model Real-Target Validation.
+  Observed Website Model artifacts, and completed MVP-1K-3-R Observed Website
+  Model Real-Target Validation with missing upstream Generated Website
+  Proposal artifacts. Current next recommended phase is manual Generated
+  Website Proposal import for ODV and ViroiDoc.
 
 Earlier completed milestone:
 - Phase MVP-1D-R - Business Alignment Real-Target Validation.
