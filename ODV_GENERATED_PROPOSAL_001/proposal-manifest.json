@@ -1,0 +1,31 @@
+{
+  "proposalId": "ODV_GENERATED_PROPOSAL_001",
+  "proposalKind": "GeneratedWebsiteProposal",
+  "proposalStatus": "quarantined",
+  "createdFor": "ODV",
+  "sourceExportDirectory": "../ODV_EXPORT",
+  "sourceExportId": "odv-export-25b18a7102ed29c2",
+  "sourceWebsiteGenerationPackageId": "website-generation-package:0bb33dd388323a443bf36be58bf2d9a1",
+  "sourceWebsiteGenerationPackageArtifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+  "sourceProviderGenerationPayloadArtifactId": "provider_generation_payload_0738b677c762f830c235dae425a8ec1c",
+  "siteVersionId": "09dce7ea-d860-4f60-a1eb-26c3335b302e",
+  "dryRunId": "09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l",
+  "sourceUrl": "https://www.odv-cvijanovic.si/?gnr8_f12=20260617",
+  "executionBoundary": {
+    "deploymentAllowed": false,
+    "publishingAllowed": false,
+    "dnsMutationAllowed": false,
+    "productionMutationAllowed": false,
+    "complianceExecuted": false,
+    "businessApprovalCreated": false,
+    "canonicalArtifactsModified": false
+  },
+  "sourceBundle": {
+    "entrypoint": "source/index.html",
+    "files": [
+      "source/index.html",
+      "source/styles.css",
+      "source/script.js"
+    ]
+  }
+}
