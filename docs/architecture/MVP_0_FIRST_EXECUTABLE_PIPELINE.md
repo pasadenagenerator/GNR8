@@ -1217,11 +1217,17 @@ they have OWM inputs, rerun MVP-1K-4-R and then rerun MVP-1K-5-R before
 Business Approval.
 MVP-2.0-A then produced the first deterministic ODV export bundle at
 `ODV_EXPORT/`, with manifest, complete lineage, source WGP, ProviderGenerationPayload,
-business summary, limitations, and manual execution instructions. The current
-next safe phase is manual Codex execution outside GNR8 using `ODV_EXPORT/`,
-producing an implementation proposal bundle only. After a proposal bundle
-exists, import it as quarantined Generated Website Proposal material before
-rerunning MVP-1K-3-R.
+business summary, limitations, and manual execution instructions. MVP-2.0-A2
+polished `ODV_EXPORT/` as the first GNR8 Generation Delivery Package by making
+`business-summary.md` business-readable, adding explicit non-invention and
+preservation guidance to `limitations.md`, adding expected deliverables, stop
+conditions, forbidden actions, and output-folder guidance to
+`execution-readme.md`, and adding a non-canonical execution-facing
+`generationMission` field to `provider-generation-payload.json` without
+changing canonical runtime contracts. The current next safe phase is manual
+Codex execution outside GNR8 using `ODV_EXPORT/`, producing an implementation
+proposal bundle only. After a proposal bundle exists, import it as quarantined
+Generated Website Proposal material before rerunning MVP-1K-3-R.
 Stop before publishing, deployment, DNS mutation, production mutation, UI,
 API, schema, workers, provider calls, or AI execution unless explicitly
 authorized.

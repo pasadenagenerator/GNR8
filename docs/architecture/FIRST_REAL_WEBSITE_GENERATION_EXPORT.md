@@ -2,14 +2,15 @@
 
 ## Phase
 
-MVP-2.0-A - First Real Website Generation Export
+MVP-2.0-A / MVP-2.0-A2 - First Real Website Generation Export and Generation
+Delivery Package Polish
 
 ## Status
 
 Complete.
 
 GNR8 now has its first complete, human-reviewable, deterministic, export-ready
-package for manual Codex execution against a real target.
+Generation Delivery Package for manual Codex execution against a real target.
 
 Target:
 - ODV only.
@@ -25,7 +26,7 @@ Export timestamp:
 
 ## Boundary
 
-This phase is execution preparation only.
+This phase is execution preparation and delivery-package polish only.
 
 It does not call a provider, execute Codex, generate a website, publish,
 perform compliance, or implement Business Approval.
@@ -59,17 +60,26 @@ Generation Package.
 `provider-generation-payload.json` is the Codex task ProviderGenerationPayload
 serialization of that package.
 
-`business-summary.md` is a human-readable summary of business, objectives,
-audience, offerings, messaging, navigation intent, trust strategy,
-constraints, known missing knowledge, and confidence.
+`business-summary.md` is a business-readable summary of the source evidence:
+business overview, apparent business purpose, website objectives, known
+offerings, known audience, brand/tone, trust signals, navigation intent, known
+missing knowledge, and low-confidence areas.
 
-`limitations.md` lists what Codex must not invent, every missing knowledge
-item carried by the export, low-confidence areas, source limitations, and
-operational limitations.
+`limitations.md` lists what Codex must not invent, what Codex should preserve,
+every missing knowledge item carried by the export, low-confidence areas,
+source limitations, and operational limitations.
 
 `execution-readme.md` explains the manual execution boundary, proposal-only
-output expectation, WGP preservation requirement, no hidden prompt edit rule,
-and quarantine rule for later generated proposal material.
+output expectation, expected deliverables, stop conditions, forbidden actions,
+recommended output folder, WGP preservation requirement, no hidden prompt edit
+rule, and quarantine rule for later generated proposal material.
+
+`provider-generation-payload.json` includes a non-canonical execution-facing
+`generationMission` field. The mission says the manual executor should create
+an implementation proposal only, preserve WGP meaning, avoid reinterpreting
+business truth, avoid publishing/deployment/DNS/production mutation, and keep
+any output quarantined for later import and compliance review. The runtime
+ProviderGenerationPayload contract was not changed.
 
 ## Verified Artifact Chain
 
@@ -154,6 +164,8 @@ no UI, no schema migration, no worker, no deployment, no DNS mutation, and no
 production mutation.
 
 ## Validation
+
+JSON parse validation passes for every JSON file in `ODV_EXPORT/`.
 
 `git diff --check` passes.
 

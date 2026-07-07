@@ -2,12 +2,22 @@
 
 Export ID: `odv-export-25b18a7102ed29c2`
 
-## Codex Must Not Invent
+## What Codex MUST NOT invent
 - New business offerings, services, prices, guarantees, certifications, team details, process claims, legal claims, geographic coverage, customer segments, testimonials, case studies, statistics, contact details, or calls to action not present in the Website Generation Package.
 - Missing audience knowledge.
 - Missing offerings knowledge.
 - Any stronger trust claim than the source artifacts support.
 - Any implementation, publishing, compliance, approval, or deployment authority.
+
+## What Codex SHOULD preserve
+- Business identity: preserve the observed `odv-cvijanovic.si` host signal and `O nas` about/company navigation signal without upgrading them into a stronger legal identity claim.
+- Navigation intent: preserve the Website Design Brief journey destinations for relevance, offer understanding, proof, and next action.
+- Contact path: preserve the `Kontakt` contact/conversion path as the known action route.
+- Trust strategy: preserve the contact path as a basic trust and accessibility signal without adding testimonials, certifications, guarantees, reputation claims, or quality claims.
+- Brand/tone: preserve the source business identity, imported asset context, and WGP brand expression while keeping unconfirmed logo, brand semantics, and tone as limitations.
+- Content hierarchy: preserve the WGP hierarchy from business context to objectives, audience uncertainty, message coverage, brand expression, information priorities, journey, trust strategy, accessibility, SEO intent, constraints, missing knowledge, and limitations.
+- Known constraints: preserve the inherited upstream evidence limitations, Candidate Discovery context, partial source statuses, missing audience knowledge, missing offering knowledge, and all source diagnostics.
+- Validation expectations: preserve every WGP validation expectation, including business positioning, audience representation without invention, message coverage, brand consistency, navigation completeness, journey completeness, trust signal coverage, accessibility expectations, SEO intent, and constraint preservation.
 
 ## Missing Knowledge Items
 - Business Alignment unresolved: Business Discovery did not provide deterministic knowledge for audience. Business Alignment validation did not add new business facts.

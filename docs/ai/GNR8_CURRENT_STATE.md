@@ -3211,7 +3211,7 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-2.0-A - First Real Website Generation Export is complete for ODV.
+- Phase MVP-2.0-A2 - Generation Delivery Package Polish is complete for ODV.
 
 Next Phase:
 - Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
@@ -4391,7 +4391,30 @@ MVP-2.0-A First Real Website Generation Export:
   API, no UI, no schema migration, no worker, no deployment, no DNS mutation,
   and no production mutation.
 
-Recommended next phase after MVP-2.0-A:
+MVP-2.0-A2 Generation Delivery Package Polish:
+- `ODV_EXPORT/` is now documented as the first GNR8 Generation Delivery
+  Package.
+- `business-summary.md` was rewritten from technical export language into a
+  business-readable summary covering business overview, apparent purpose,
+  website objectives, known offerings, known audience, brand/tone, trust
+  signals, navigation intent, known missing knowledge, and low-confidence
+  areas.
+- `limitations.md` now includes explicit `What Codex MUST NOT invent` and
+  `What Codex SHOULD preserve` sections while retaining the existing missing
+  knowledge, low-confidence, source limitation, and operational limitation
+  ledgers.
+- `execution-readme.md` now includes concrete expected deliverables, stop
+  conditions, forbidden actions, output-folder guidance, and the unchanged
+  quarantine rule.
+- `provider-generation-payload.json` now includes a non-canonical
+  execution-facing `generationMission` field. The canonical
+  ProviderGenerationPayload runtime contract was not changed.
+- MVP-2.0-A2 added no provider calls, no Codex execution, no AI execution, no
+  generated website, no import, no compliance, no approval, no publishing, no
+  API, no UI, no worker, no schema change, no deployment, no DNS mutation, and
+  no production mutation.
+
+Recommended next phase after MVP-2.0-A2:
 - Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
   implementation proposal bundle only. Stop before generated website import,
   compliance, Business Approval, publishing, deployment, DNS mutation,

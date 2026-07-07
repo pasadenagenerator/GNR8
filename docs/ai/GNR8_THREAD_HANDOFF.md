@@ -50,9 +50,11 @@ Current status:
   latest persisted `GeneratedWebsiteProposalArtifact`.
 - Phase MVP-2.0-A - First Real Website Generation Export is complete for ODV
   and produced the first deterministic manual Codex execution export bundle.
+- Phase MVP-2.0-A2 - Generation Delivery Package Polish is complete for ODV
+  and made `ODV_EXPORT/` clearer and safer for manual Codex execution.
 
 Current Phase:
-- Phase MVP-2.0-A - First Real Website Generation Export is complete.
+- Phase MVP-2.0-A2 - Generation Delivery Package Polish is complete.
 
 Next Phase:
 - Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
@@ -131,9 +133,14 @@ Current architecture direction:
   business reinterpretation, proposal-only output, external bundle storage,
   and operator attestation.
 - MVP-2.0-A produced the first complete ODV manual execution export bundle at
-  `ODV_EXPORT/`. The bundle preserves source WGP and ProviderGenerationPayload
-  artifacts, complete lineage, business summary, limitations, and manual
-  execution instructions.
+  `ODV_EXPORT/`. MVP-2.0-A2 polished it as the first GNR8 Generation Delivery
+  Package. The bundle preserves source WGP and ProviderGenerationPayload
+  artifacts, complete lineage, a business-readable summary, explicit
+  non-invention and preservation rules, expected deliverables, stop
+  conditions, forbidden actions, output-folder guidance, and manual execution
+  instructions. `provider-generation-payload.json` includes a non-canonical
+  execution-facing `generationMission`; canonical runtime contracts were not
+  changed.
 - Generated Website Proposal import is quarantine-first. Proposal material is
   not trusted, cannot publish, cannot update DBT/WDB/WGP or
   ProviderGenerationPayload, cannot become compliance or Business Approval by
@@ -579,17 +586,23 @@ Current validation status:
   boundary.
 
 Latest completed milestone:
-- Phase MVP-2.0-A - First Real Website Generation Export.
-- Status: COMPLETE / REAL ODV EXPORT READY / LINEAGE VERIFIED /
-  HUMAN-REVIEWABLE BUNDLE PRODUCED / MANUAL CODEX EXECUTION ONLY /
-  NO PROVIDER CALLS / NO CODEX EXECUTION / NO AI EXECUTION /
-  NO GENERATED WEBSITE / NO PUBLISHING / NO COMPLIANCE /
-  NO BUSINESS APPROVAL / NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS /
-  NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION / NO PRODUCTION MUTATION.
+- Phase MVP-2.0-A2 - Generation Delivery Package Polish.
+- Status: COMPLETE / REAL ODV EXPORT READY / FIRST GNR8 GENERATION DELIVERY
+  PACKAGE POLISHED / LINEAGE VERIFIED / HUMAN-REVIEWABLE BUNDLE PRODUCED /
+  MANUAL CODEX EXECUTION ONLY / NO PROVIDER CALLS / NO CODEX EXECUTION /
+  NO AI EXECUTION / NO GENERATED WEBSITE / NO IMPORT / NO PUBLISHING /
+  NO COMPLIANCE / NO BUSINESS APPROVAL / NO UI / NO API ROUTES /
+  NO SCHEMA MIGRATIONS / NO WORKERS / NO DEPLOYMENT / NO DNS MUTATION /
+  NO PRODUCTION MUTATION.
 - Canonical document:
   `docs/architecture/FIRST_REAL_WEBSITE_GENERATION_EXPORT.md`.
 - Export directory: `ODV_EXPORT/`.
 - Export ID: `odv-export-25b18a7102ed29c2`.
+- MVP-2.0-A2 polish: business-readable `business-summary.md`, explicit
+  non-invention and preservation guidance in `limitations.md`, expected
+  deliverables, stop conditions, forbidden actions, and output-folder guidance
+  in `execution-readme.md`, and a non-canonical execution-facing
+  `generationMission` field in `provider-generation-payload.json`.
 - ODV artifact chain:
   `business_discovery_7b37413651d79de0d109e31690a34b62` ->
   `digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f` ->
@@ -599,7 +612,7 @@ Latest completed milestone:
   `website_design_brief_ff19a711c948d28fdd58bdea521c4f59` ->
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d` ->
   `provider_generation_payload_0738b677c762f830c235dae425a8ec1c`.
-- Recommended next phase after MVP-2.0-A: manual Codex execution outside GNR8
+- Recommended next phase after MVP-2.0-A2: manual Codex execution outside GNR8
   using `ODV_EXPORT/`, producing an implementation proposal bundle only.
 
 Previous completed milestone:
