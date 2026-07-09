@@ -1433,4 +1433,15 @@ MVP-2.0-H - Regeneration Delivery Package v2, packaging the persisted
 Provider Payload v2 for a future manual regeneration cycle without Codex
 execution, provider execution, AI execution, website generation, Generated
 Website Proposal v2, publishing, deployment, DNS mutation, production
-mutation, UI, API, schema, or workers unless explicitly authorized.
+mutation, UI, API, schema, or workers unless explicitly authorized. MVP-2.0-H
+then created `ODV_REGENERATION_EXPORT_002/`, the first complete Second
+Generation Delivery Package for ODV Iteration 2. It includes manifest,
+lineage, copied canonical WebsiteGenerationPackage, copied Provider Payload
+v2, copied GenerationImprovementPlan, business summary, regeneration summary,
+Improvement Plan-derived delta, and manual external execution readme. The
+next safe phase is MVP-2.0-I - Manual External Regeneration Execution,
+consuming `ODV_REGENERATION_EXPORT_002/` outside GNR8 and producing an
+implementation proposal only while stopping before Generated Website Proposal
+v2 import, compliance, Business Approval, publishing, deployment, DNS
+mutation, production mutation, UI, API, schema, or workers unless explicitly
+authorized.

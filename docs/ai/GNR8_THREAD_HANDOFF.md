@@ -67,18 +67,21 @@ Current status:
 - Phase MVP-2.0-G - Provider Payload v2 Runtime Foundation is complete for
   ODV and persisted latest Provider Payload v2 artifact
   `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- Phase MVP-2.0-H - Second Generation Delivery Package is complete for ODV and
+  created `ODV_REGENERATION_EXPORT_002/`, export ID
+  `odv-regeneration-export-002`, generation cycle ID
+  `odv-generation-cycle-002`, iteration `2`.
 
 Current Phase:
-- Phase MVP-2.0-G - Provider Payload v2 Runtime Foundation is complete.
+- Phase MVP-2.0-H - Second Generation Delivery Package is complete.
 
 Next Phase:
-- MVP-2.0-H - Regeneration Delivery Package v2. Package persisted Provider
-  Payload v2
-  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7` for a future
-  manual regeneration cycle. Stop before Codex execution, provider execution,
-  AI execution, regeneration, Generated Website Proposal v2, publishing,
-  deployment, DNS, Business Approval, UI, API, schema, or workers unless
-  explicitly authorized.
+- MVP-2.0-I - Manual External Regeneration Execution. Consume
+  `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an implementation
+  proposal only. Stop before GNR8 provider execution, automated AI execution
+  from GNR8, Generated Website Proposal v2 import, compliance, Business
+  Approval, publishing, deployment, DNS, production mutation, UI, API, schema,
+  or workers unless explicitly authorized.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its

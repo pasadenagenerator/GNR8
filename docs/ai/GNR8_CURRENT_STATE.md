@@ -5,53 +5,58 @@
 
 ## Current Phase
 
-MVP-2.0-G - Provider Payload v2 Runtime Foundation is COMPLETE for ODV.
+MVP-2.0-H - Second Generation Delivery Package is COMPLETE for ODV.
 
-GNR8 now possesses its first real persisted deterministic second-generation
-`ProviderGenerationPayload`, derived only from the persisted ODV
-`WebsiteGenerationPackageArtifact` plus the persisted ODV
-`GenerationImprovementPlanArtifact`:
+GNR8 now possesses its first complete deterministic regeneration delivery
+package for Iteration 2:
+
+```text
+ODV_REGENERATION_EXPORT_002/
+```
+
+The package exports the persisted ODV Provider Payload v2 together with copied
+canonical JSON artifacts, complete lineage, business summary, regeneration
+summary, Improvement Plan-derived delta, and manual external execution readme.
 
 - target: ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`;
+- export ID: `odv-regeneration-export-002`;
+- generation cycle ID: `odv-generation-cycle-002`;
+- iteration: `2`;
 - source `WebsiteGenerationPackageArtifact`:
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
 - source `GenerationImprovementPlanArtifact`:
   `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`;
-- latest Provider Payload v2 artifact:
+- source `GenerationContractComplianceReportArtifact`:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`;
+- Provider Payload v2 artifact:
   `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`;
-- status: `ready`;
-- source WGP status: `partial`;
-- source Improvement Plan status: `ready`;
-- preserved WGP counts: objectives `2`, audience `3`, messages `5`,
-  navigation destinations `4`, page contracts `4`, section contracts `14`,
-  content requirements `128`, validation expectations `10`, confidence `LOW`;
+- export status: `ready_for_manual_external_generation`;
+- current compliance: `NON_COMPLIANT`;
+- reason: `Regeneration Required`;
 - improvement count: `413`;
-- priority counts: critical `259`, high `0`, medium `154`, low `0`;
-- affected categories: Accessibility, Assets, Business Positioning,
-  Constraints, Messages, Navigation, SEO, Sections, Trust;
-- regeneration guidance counts: preserve `12`, improve `413`,
-  do-not-change `6`, known limitations `112`, critical items `259`;
-- recommended regeneration strategy: run a full business-level regeneration
-  pass focused first on critical items;
-- source WGP and source Improvement Plan latest/by-ID validation passed;
-- latest reload, by-ID reload, and idempotent retry all returned
-  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- priority counts: critical `259`, medium `154`;
+- business intent: `Preserve`;
+- expected result: `Higher contractual compliance`;
+- lineage continuity passed from BusinessDiscovery through ProviderPayload v2;
+- manifest consistency passed;
+- JSON parse validation passed.
 
-MVP-2.0-G did not execute Codex, execute a provider, execute AI, regenerate a
-website, modify the Website Generation Package, modify the Generation
-Improvement Plan, modify Compliance, modify the Compliance Report, create
-Business Approval, publish, deploy, mutate canonical business artifacts, add
-UI, add API, add schema, add workers, or create Generated Website Proposal v2.
+MVP-2.0-H did not execute Codex, execute a provider, execute AI, regenerate a
+website, import a Generated Website Proposal v2, mutate the Website Generation
+Package, mutate the Generation Improvement Plan, mutate Compliance, mutate the
+Compliance Report, create Business Approval, publish, deploy, mutate canonical
+business artifacts, add UI, add API, add schema, or add workers.
 
 Canonical document:
 
-- `docs/architecture/PROVIDER_PAYLOAD_V2_RUNTIME_FOUNDATION.md`
+- `docs/architecture/SECOND_GENERATION_DELIVERY_PACKAGE.md`
 
-Next recommended phase: MVP-2.0-H - Regeneration Delivery Package v2. Package
-the persisted Provider Payload v2 for a future manual regeneration cycle while
-still stopping before Codex execution, provider execution, AI execution,
-website generation, Generated Website Proposal v2 creation, publishing,
-deployment, DNS, or Business Approval.
+Next recommended phase: MVP-2.0-I - Manual External Regeneration Execution.
+Consume `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an
+implementation proposal only, still stopping before GNR8 provider execution,
+automated AI execution from GNR8, Generated Website Proposal v2 import,
+compliance, Business Approval, publishing, deployment, DNS, production
+mutation, UI, API, schema, or workers unless explicitly authorized.
 
 ## Migration Platform MVP Buildout
 

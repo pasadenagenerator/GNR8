@@ -1,0 +1,76 @@
+{
+  "exportId": "odv-regeneration-export-002",
+  "generationCycleId": "odv-generation-cycle-002",
+  "iteration": 2,
+  "exportTimestamp": "2026-07-09T19:24:36.166Z",
+  "target": "ODV",
+  "siteVersionId": "09dce7ea-d860-4f60-a1eb-26c3335b302e",
+  "exportFolder": "ODV_REGENERATION_EXPORT_002",
+  "exportStatus": "ready_for_manual_external_generation",
+  "safetyClassification": {
+    "classification": "export_only_no_execution",
+    "providerExecutionAllowed": false,
+    "aiExecutionAllowed": false,
+    "regenerationAllowed": false,
+    "generatedWebsiteAllowed": false,
+    "proposalImportAllowed": false,
+    "complianceMutationAllowed": false,
+    "businessApprovalAllowed": false,
+    "publishingAllowed": false,
+    "deploymentAllowed": false,
+    "productionMutationAllowed": false,
+    "canonicalArtifactMutationAllowed": false,
+    "notes": [
+      "Package is intended for manual external generation handoff only.",
+      "Package does not authorize provider execution, AI execution, website regeneration, proposal import, compliance mutation, approval, publishing, deployment, or production mutation."
+    ]
+  },
+  "artifactReferences": {
+    "BusinessDiscovery": "business_discovery_7b37413651d79de0d109e31690a34b62",
+    "DigitalBusinessTwin": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+    "BusinessUnderstandingReport": "business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad",
+    "BusinessAlignment": "business_alignment_18c0a6958048bf8985044e4781e788a8",
+    "AlignedDigitalBusinessTwin": "digital_business_twin_2614a690e29e87a201658f3de4f72983",
+    "WebsiteDesignBrief": "website_design_brief_ff19a711c948d28fdd58bdea521c4f59",
+    "WebsiteGenerationPackage": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+    "ProviderPayloadV1": "provider_generation_payload_0738b677c762f830c235dae425a8ec1c",
+    "GeneratedProposal": "generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3",
+    "ObservedWebsite": "observed_website_model_35499a9cb91a15740910532d451a739a",
+    "Compliance": "generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7",
+    "ComplianceReport": "generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de",
+    "GenerationImprovementPlan": "generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694",
+    "ProviderPayloadV2": "provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7"
+  },
+  "sourceArtifactRecords": {
+    "WebsiteGenerationPackage": {
+      "artifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+      "status": "partial",
+      "contractVersion": "MVP-1F",
+      "persistedAt": "2026-07-03T18:38:53.662Z"
+    },
+    "ProviderPayloadV2": {
+      "artifactId": "provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7",
+      "status": "ready",
+      "contractVersion": "MVP-1H",
+      "runtimeVersion": "MVP-2.0-G",
+      "persistedAt": "2026-07-09T19:02:12.830Z"
+    },
+    "GenerationImprovementPlan": {
+      "artifactId": "generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694",
+      "status": "ready",
+      "contractVersion": "MVP-2.0-F",
+      "persistedAt": "2026-07-09T15:32:10.560Z",
+      "improvementCount": 413,
+      "criticalCount": 259,
+      "mediumCount": 154
+    },
+    "GenerationContractComplianceReport": {
+      "artifactId": "generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de",
+      "status": "blocked",
+      "recommendation": "regenerate",
+      "readiness": "requires_regeneration",
+      "contractVersion": "MVP-1K-5",
+      "persistedAt": "2026-07-08T18:51:42.521Z"
+    }
+  }
+}

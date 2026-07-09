@@ -169,10 +169,37 @@ JSON parse validation passes for every JSON file in `ODV_EXPORT/`.
 
 `git diff --check` passes.
 
+## Second Generation Package
+
+MVP-2.0-H created the second-generation counterpart to this first export:
+
+```text
+ODV_REGENERATION_EXPORT_002/
+```
+
+That package targets Iteration 2 and packages the persisted Provider Payload
+v2 `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7` together
+with the persisted WebsiteGenerationPackage, GenerationImprovementPlan,
+manifest, complete lineage, business summary, regeneration summary,
+improvement delta, and manual external execution readme.
+
+The second-generation package preserves the same export-only safety boundary:
+no provider execution, no AI execution, no website regeneration, no proposal
+import, no compliance mutation, no Business Approval, no publishing, no
+deployment, no canonical artifact mutation, and no UI, API, schema, or
+workers.
+
+Canonical document:
+
+```text
+docs/architecture/SECOND_GENERATION_DELIVERY_PACKAGE.md
+```
+
 ## Recommended Next Step
 
-Manual Codex execution outside GNR8 using `ODV_EXPORT/`, producing an
-implementation proposal bundle only.
+Manual external regeneration execution outside GNR8 using
+`ODV_REGENERATION_EXPORT_002/`, producing an implementation proposal bundle
+only.
 
 Stop before generated website import, compliance, Business Approval,
 publishing, deployment, DNS mutation, production mutation, UI, API, schema,

@@ -305,15 +305,42 @@ git diff --check
 
 Result: passed.
 
+## MVP-2.0-H Completion
+
+MVP-2.0-H created the first complete Second Generation Delivery Package:
+
+```text
+ODV_REGENERATION_EXPORT_002/
+```
+
+The package exports persisted Provider Payload v2
+`provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7` with the
+persisted ODV WebsiteGenerationPackage, GenerationImprovementPlan, manifest,
+lineage, business summary, regeneration summary, improvement delta, and manual
+external execution readme.
+
+MVP-2.0-H added no provider execution, AI execution, regeneration, Generated
+Website Proposal v2, import, compliance mutation, Business Approval,
+publishing, deployment, canonical artifact mutation, UI, API, schema, or
+workers.
+
+Canonical document:
+
+```text
+docs/architecture/SECOND_GENERATION_DELIVERY_PACKAGE.md
+```
+
 ## Next Phase
 
 Recommended next phase:
 
 ```text
-MVP-2.0-H - Regeneration Delivery Package v2
+MVP-2.0-I - Manual External Regeneration Execution
 ```
 
-This phase should package the persisted Provider Payload v2 for a future
-manual regeneration cycle while still stopping before Codex execution,
-provider execution, AI execution, website generation, Generated Website
-Proposal v2 creation, publishing, deployment, DNS, or Business Approval.
+This phase should consume `ODV_REGENERATION_EXPORT_002/` outside GNR8 and
+produce an implementation proposal only while still stopping before GNR8
+provider execution, automated AI execution from GNR8, Generated Website
+Proposal v2 import, compliance, Business Approval, publishing, deployment,
+DNS, production mutation, UI, API, schema, or workers unless explicitly
+authorized.

@@ -1,0 +1,245 @@
+{
+  "exportId": "odv-regeneration-export-002",
+  "generationCycleId": "odv-generation-cycle-002",
+  "iteration": 2,
+  "siteVersionId": "09dce7ea-d860-4f60-a1eb-26c3335b302e",
+  "chain": [
+    {
+      "stage": "BusinessDiscovery",
+      "artifactKind": "business_discovery",
+      "artifactId": "business_discovery_7b37413651d79de0d109e31690a34b62",
+      "semanticId": "business-discovery:09dce7ea-d860-4f60-a1eb-26c3335b302e:09dce7ea-d860-4f60-a1eb-26c3335b302e%3A8b-12l",
+      "status": "partial",
+      "contractVersion": "MVP-1A",
+      "createdAt": "2026-07-01T20:51:58.624Z",
+      "persistedAt": "2026-07-01T20:52:00.241Z"
+    },
+    {
+      "stage": "DigitalBusinessTwin",
+      "artifactKind": "digital_business_twin",
+      "artifactId": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+      "semanticId": "digital-business-twin:09dce7ea-d860-4f60-a1eb-26c3335b302e:09dce7ea-d860-4f60-a1eb-26c3335b302e-8b-12l:business_discovery_7b37413651d79de0d109e31690a34b62",
+      "status": "partial",
+      "contractVersion": "MVP-1B",
+      "createdAt": "2026-07-02T18:42:52.843Z",
+      "persistedAt": "2026-07-02T18:42:53.369Z",
+      "sourceArtifactId": "business_discovery_7b37413651d79de0d109e31690a34b62"
+    },
+    {
+      "stage": "BusinessUnderstandingReport",
+      "artifactKind": "business_understanding_report",
+      "artifactId": "business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad",
+      "semanticId": "business-understanding-report:09dce7ea-d860-4f60-a1eb-26c3335b302e:09dce7ea-d860-4f60-a1eb-26c3335b302e-8b-12l:digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+      "status": "partial",
+      "contractVersion": "MVP-1C",
+      "createdAt": "2026-07-02T19:03:36.381Z",
+      "persistedAt": "2026-07-02T19:03:37.895Z",
+      "sourceArtifactId": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f"
+    },
+    {
+      "stage": "BusinessAlignment",
+      "artifactKind": "business_alignment",
+      "artifactId": "business_alignment_18c0a6958048bf8985044e4781e788a8",
+      "semanticId": "business-alignment:b588bc0416fc1eee93de0ac54a8cd2d3",
+      "status": "reviewed",
+      "contractVersion": "MVP-1D",
+      "createdAt": "2026-07-03T00:00:00.000Z",
+      "persistedAt": "2026-07-03T11:59:54.115Z",
+      "sourceArtifactId": "business_understanding_report_7e65b85a7a983637ec5a77ed0be936ad",
+      "sourceDigitalBusinessTwinArtifactId": "digital_business_twin_b4c2bc94df6c0c0f462c9fcce3f16b2f",
+      "outputDigitalBusinessTwinArtifactId": "digital_business_twin_2614a690e29e87a201658f3de4f72983"
+    },
+    {
+      "stage": "WebsiteDesignBrief",
+      "artifactKind": "website_design_brief",
+      "artifactId": "website_design_brief_ff19a711c948d28fdd58bdea521c4f59",
+      "semanticId": "website-design-brief:b2aa6ffee52dda53095e3e004286de0c",
+      "status": "partial",
+      "contractVersion": "MVP-1E",
+      "createdAt": "2026-07-03T17:43:10.166Z",
+      "persistedAt": "2026-07-03T17:43:12.262Z",
+      "sourceArtifactId": "digital_business_twin_2614a690e29e87a201658f3de4f72983",
+      "sourceBusinessAlignmentArtifactId": "business_alignment_18c0a6958048bf8985044e4781e788a8"
+    },
+    {
+      "stage": "WebsiteGenerationPackage",
+      "artifactKind": "website_generation_package",
+      "artifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+      "semanticId": "website-generation-package:0bb33dd388323a443bf36be58bf2d9a1",
+      "status": "partial",
+      "contractVersion": "MVP-1F",
+      "createdAt": "2026-07-03T18:38:51.561Z",
+      "persistedAt": "2026-07-03T18:38:53.662Z",
+      "sourceArtifactId": "website_design_brief_ff19a711c948d28fdd58bdea521c4f59"
+    },
+    {
+      "stage": "ProviderPayload v1",
+      "artifactKind": "provider_generation_payload",
+      "artifactId": "provider_generation_payload_0738b677c762f830c235dae425a8ec1c",
+      "semanticId": "provider-generation-payload:c8f60618b95a4bd13003a68606860705",
+      "status": "draft",
+      "contractVersion": "MVP-1H",
+      "createdAt": "2026-07-04T20:39:23.958Z",
+      "persistedAt": "2026-07-04T20:39:24.527Z",
+      "sourceArtifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+      "providerType": "codex",
+      "payloadKind": "codex_task"
+    },
+    {
+      "stage": "GeneratedProposal",
+      "artifactKind": "generated_website_proposal",
+      "artifactId": "generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3",
+      "semanticId": "generated-website-proposal:e8211d1e619e960c6e6703cd07992121",
+      "status": "quarantined",
+      "contractVersion": "MVP-1K-1",
+      "createdAt": "2026-07-07T00:00:00.000Z",
+      "persistedAt": "2026-07-07T18:21:02.158Z",
+      "sourceArtifactId": "provider_generation_payload_0738b677c762f830c235dae425a8ec1c"
+    },
+    {
+      "stage": "ObservedWebsite",
+      "artifactKind": "observed_website_model",
+      "artifactId": "observed_website_model_35499a9cb91a15740910532d451a739a",
+      "semanticId": "observed-website-model:5a5f47881a29bb1c272360b50a3128f3",
+      "status": "observable",
+      "contractVersion": "MVP-1K-3",
+      "createdAt": "2026-07-07T00:00:00.000Z",
+      "persistedAt": "2026-07-07T18:44:37.790Z",
+      "sourceArtifactId": "generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3"
+    },
+    {
+      "stage": "Compliance",
+      "artifactKind": "generation_contract_compliance",
+      "artifactId": "generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7",
+      "semanticId": "generation-contract-compliance:fd7dd1d0cac76047d7e322bf9a7b15dc",
+      "status": "non_compliant",
+      "contractVersion": "MVP-1K-4",
+      "createdAt": "2026-07-07T00:00:00.000Z",
+      "persistedAt": "2026-07-08T17:25:57.869Z",
+      "sourceWebsiteGenerationPackageArtifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+      "sourceObservedWebsiteModelArtifactId": "observed_website_model_35499a9cb91a15740910532d451a739a"
+    },
+    {
+      "stage": "ComplianceReport",
+      "artifactKind": "generation_contract_compliance_report",
+      "artifactId": "generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de",
+      "semanticId": "generation-contract-compliance-report:eb17e949c40ad533e288939befab12bc",
+      "status": "blocked",
+      "contractVersion": "MVP-1K-5",
+      "createdAt": "2026-07-07T00:00:00.000Z",
+      "persistedAt": "2026-07-08T18:51:42.521Z",
+      "sourceArtifactId": "generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7"
+    },
+    {
+      "stage": "GenerationImprovementPlan",
+      "artifactKind": "generation_improvement_plan",
+      "artifactId": "generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694",
+      "semanticId": "generation-improvement-plan:0fb5c2904f143633c1d1b28ee217ba7d",
+      "status": "ready",
+      "contractVersion": "MVP-2.0-F",
+      "createdAt": "2026-07-07T00:00:00.000Z",
+      "persistedAt": "2026-07-09T15:32:10.560Z",
+      "sourceArtifactId": "generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de"
+    },
+    {
+      "stage": "ProviderPayload v2",
+      "artifactKind": "provider_generation_payload",
+      "artifactId": "provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7",
+      "semanticId": "provider-generation-payload:b895ddac5096c22630157fd609803efe",
+      "status": "ready",
+      "contractVersion": "MVP-1H",
+      "runtimeVersion": "MVP-2.0-G",
+      "createdAt": "2026-07-09T00:00:00.000Z",
+      "persistedAt": "2026-07-09T19:02:12.830Z",
+      "sourceWebsiteGenerationPackageArtifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+      "sourceGenerationImprovementPlanArtifactId": "generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694"
+    }
+  ],
+  "continuityChecks": [
+    {
+      "check": "DBT -> BusinessDiscovery",
+      "passed": true
+    },
+    {
+      "check": "BUR -> DBT artifact",
+      "passed": true
+    },
+    {
+      "check": "BUR -> BusinessDiscovery",
+      "passed": true
+    },
+    {
+      "check": "BusinessAlignment -> BUR",
+      "passed": true
+    },
+    {
+      "check": "BusinessAlignment -> DBT",
+      "passed": true
+    },
+    {
+      "check": "BusinessAlignment output -> aligned DBT",
+      "passed": true
+    },
+    {
+      "check": "Aligned DBT -> BusinessDiscovery",
+      "passed": true
+    },
+    {
+      "check": "WDB -> BusinessAlignment",
+      "passed": true
+    },
+    {
+      "check": "WDB -> aligned DBT",
+      "passed": true
+    },
+    {
+      "check": "WGP -> WDB",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload -> WGP semantic ID",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload -> WGP artifact ID",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload serialized WGP",
+      "passed": true
+    },
+    {
+      "check": "GeneratedProposal follows ProviderPayload v1",
+      "passed": true
+    },
+    {
+      "check": "ObservedWebsite follows GeneratedProposal",
+      "passed": true
+    },
+    {
+      "check": "Compliance follows WGP",
+      "passed": true
+    },
+    {
+      "check": "Compliance follows ObservedWebsite",
+      "passed": true
+    },
+    {
+      "check": "ComplianceReport follows Compliance",
+      "passed": true
+    },
+    {
+      "check": "ImprovementPlan follows ComplianceReport",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload v2 follows WGP artifact",
+      "passed": true
+    },
+    {
+      "check": "ProviderPayload v2 follows ImprovementPlan artifact",
+      "passed": true
+    }
+  ],
+  "noMissingLinks": true
+}
