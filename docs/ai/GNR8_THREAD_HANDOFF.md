@@ -55,15 +55,27 @@ Current status:
 - Phase MVP-2.0-C - First Real Observed Website Model is complete for ODV and
   persisted latest OWM artifact
   `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- Phase MVP-2.0-D - First Real Generation Contract Compliance is complete for
+  ODV and persisted latest compliance artifact
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- Phase MVP-2.0-E - First Real Generation Contract Compliance Report is
+  complete for ODV and persisted latest report artifact
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Phase MVP-2.0-F - Generation Improvement Plan Runtime Foundation is complete
+  for ODV and persisted latest plan artifact
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
 
 Current Phase:
-- Phase MVP-2.0-C - First Real Observed Website Model is complete.
+- Phase MVP-2.0-F - Generation Improvement Plan Runtime Foundation is
+  complete.
 
 Next Phase:
-- MVP-2.0-D - First Real Generation Contract Compliance for ODV. Compare the
-  persisted ODV Observed Website Model against the ODV Website Generation
-  Package only. Stop before Compliance Report, Business Approval, publishing,
-  deployment, provider execution, AI execution, UI, API, schema, or workers.
+- MVP-2.0-G - Provider Payload v2 Runtime Foundation. Consume the existing
+  Website Generation Package plus
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694` to create the
+  next export-ready regeneration payload. Stop before provider execution, AI
+  execution, regeneration, publishing, deployment, Business Approval, UI, API,
+  schema, or workers unless explicitly authorized.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -560,6 +572,18 @@ Current validation status:
   persisted `ObservedWebsiteModelArtifact`; MVP-2.0-C has now unblocked ODV by
   persisting latest OWM artifact
   `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- MVP-2.0-D used only `buildGenerationContractCompliance(...)` to compare ODV
+  WGP `website_generation_package_c2c555025f186178f27c44c7cd272d4d` against
+  OWM `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- MVP-2.0-D persisted
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7` with
+  status `non_compliant`, 10 category results, 149 findings, 145 deviations,
+  12 evidence records, and 268 limitations.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- MVP-2.0-D added no Compliance Report, Business Approval, publishing,
+  deployment, provider execution, AI execution, UI, API, schema, workers, WGP
+  mutation, OWM mutation, or canonical business artifact mutation.
 - MVP-1K-3-R originally found missing Generated Website Proposal inputs for
   ODV and ViroiDoc. ODV now has source
   `GeneratedWebsiteProposalArtifact`
@@ -594,39 +618,108 @@ Current validation status:
   execution, automatic generation, compliance recomputation, UI, API, schema
   migration, workers, deployment, DNS mutation, production mutation, runtime
   mutation, or upstream business artifact mutation.
-- MVP-1K-5-R real-target validation found no latest persisted
+- MVP-1K-5-R real-target validation originally found no latest persisted
   `GenerationContractComplianceArtifact` for ODV
   `09dce7ea-d860-4f60-a1eb-26c3335b302e` or ViroiDoc
   `e26b0754-988b-45b9-9e24-8e213179b6cf`, so no report was built or
   persisted.
-- Next recommended phase is MVP-2.0-D - First Real Generation Contract
-  Compliance for ODV. Compare the persisted ODV Observed Website Model against
-  the ODV Website Generation Package only. Stop before Compliance Report,
-  Business Approval, publishing, deployment, provider execution, AI execution,
-  UI, API, schema, or workers.
+- MVP-2.0-D unblocked ODV for a Compliance Report by persisting
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- MVP-2.0-E completed the first real ODV Compliance Report:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Report status is `blocked`, recommendation is `regenerate`, and generation
+  readiness is `requires_regeneration`.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- MVP-2.0-F implements the first Generation Improvement Plan runtime
+  foundation in
+  `apps/platform/gnr8/architecture/generation-improvement-plan-contract.ts`,
+  `apps/platform/gnr8/architecture/generation-improvement-plan-builder.ts`,
+  and
+  `apps/platform/gnr8/architecture/generation-improvement-plan-persistence.ts`.
+- Artifact kind is `generation_improvement_plan`.
+- `buildGenerationImprovementPlan(...)` consumes only persisted
+  `GenerationContractComplianceReportArtifact` and creates provider-neutral,
+  business-governed improvement actions with stable IDs, category, priority,
+  business explanation, originating deviation IDs, originating requirement
+  IDs, expected outcome, and evidence references.
+- Improvement categories are Business Positioning, Audience, Navigation,
+  Messages, Sections, Trust, Assets, Accessibility, SEO, Constraints, and
+  Other.
+- Priority values are `critical`, `high`, `medium`, and `low`; they are
+  derived only from compliance deviations, missing requirements, business
+  risks, and recommendation, never provider identity.
+- Recommended next action values are `regenerate`,
+  `collect_more_information`, `human_review`, and `stop`.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  `generationImprovementPlanArtifacts`,
+  `latestGenerationImprovementPlanArtifact`, equivalent latest reuse, changed
+  append, latest load, and by-ID load. Persistence rejects `invalid` and
+  `stale`; it allows `draft`, `ready`, and `blocked`.
+- MVP-2.0-F completed the first real ODV Generation Improvement Plan:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Plan status is `ready`, recommended next action is `regenerate`, and
+  estimated regeneration readiness is `ready`.
+- Counts: improvements `413`, critical `259`, high `0`, medium `154`,
+  low `0`.
+- Category summary: Constraints `228`, Assets `123`, Sections `36`,
+  Navigation `8`, Messages `6`, Trust `6`, Business Positioning `4`,
+  Accessibility `1`, SEO `1`.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- MVP-2.0-F added no regeneration, new Website Generation Package, Provider
+  Payload v2, provider execution, AI execution, Business Approval, publishing,
+  deployment, UI, API, schema, workers, WGP mutation, Compliance mutation,
+  Compliance Report mutation, or provider payload mutation.
+- Next recommended phase is MVP-2.0-G - Provider Payload v2 Runtime
+  Foundation. Consume the existing Website Generation Package plus the
+  persisted Generation Improvement Plan, and stop before provider execution,
+  AI execution, publishing, deployment, or Business Approval.
 
 Latest completed milestone:
-- Phase MVP-2.0-C - First Real Observed Website Model.
-- Status: COMPLETE / REAL ODV GENERATED PROPOSAL OBSERVED / LATEST OWM
-  PERSISTED / STATUS OBSERVABLE / READINESS OBSERVABLE / LATEST RELOAD
-  PASSED / BY-ID RELOAD PASSED / IDEMPOTENT RETRY REUSED / NO WGP COMPARISON /
-  NO COMPLIANCE / NO COMPLIANCE REPORT / NO BUSINESS APPROVAL /
-  NO PUBLISHING / NO DEPLOY / NO PROVIDER EXECUTION / NO AI EXECUTION /
-  NO GENERATED PROPOSAL MUTATION / NO CANONICAL BUSINESS ARTIFACT MUTATION /
-  NO UI / NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS.
+- Phase MVP-2.0-F - Generation Improvement Plan Runtime Foundation.
+- Status: COMPLETE / REAL ODV GENERATION IMPROVEMENT PLAN BUILT / LATEST PLAN
+  PERSISTED / STATUS READY / RECOMMENDED NEXT ACTION REGENERATE /
+  REGENERATION READINESS READY / LATEST RELOAD PASSED / BY-ID RELOAD PASSED /
+  IDEMPOTENT RETRY REUSED / NO REGENERATION / NO NEW WGP / NO PROVIDER
+  PAYLOAD V2 / NO BUSINESS APPROVAL / NO PUBLISHING / NO DEPLOY / NO PROVIDER
+  EXECUTION / NO AI EXECUTION / NO WGP MUTATION / NO COMPLIANCE MUTATION /
+  NO COMPLIANCE REPORT MUTATION / NO PROVIDER PAYLOAD MUTATION / NO UI /
+  NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS.
 - Canonical document:
-  `docs/architecture/FIRST_OBSERVED_WEBSITE_MODEL.md`.
-- Source Generated Website Proposal artifact:
-  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
-- Latest OWM artifact:
-  `observed_website_model_35499a9cb91a15740910532d451a739a`.
-- Observation counts: pages `1`, routes `1`, navigation/links `11`, sections
-  `7`, headings `14`, CTA links `3`, messages `53`, assets `6`, constraints
-  `9`, technical signals `12`, evidence refs `17`, limitations `127`.
-- Recommended next phase after MVP-2.0-C: MVP-2.0-D - First Real Generation
-  Contract Compliance for ODV.
+  `docs/architecture/GENERATION_IMPROVEMENT_PLAN_RUNTIME_FOUNDATION.md`.
+- Source Compliance Report artifact:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Latest plan artifact:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Plan counts: improvements `413`, critical `259`, high `0`, medium `154`,
+  low `0`.
+- Recommended next phase after MVP-2.0-F: MVP-2.0-G - Provider Payload v2
+  Runtime Foundation.
 
 Previous completed milestone:
+- Phase MVP-2.0-E - First Real Generation Contract Compliance Report.
+- Latest report artifact:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Status/recommendation/readiness: `blocked` / `regenerate` /
+  `requires_regeneration`.
+- Report counts: categories `10`, deviations `145`, missing requirements
+  `147`, business risks `411`, evidence records `12`, limitations `268`.
+
+Previous completed milestone:
+- Phase MVP-2.0-D - First Real Generation Contract Compliance.
+- Latest compliance artifact:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- Status/overall compliance: `non_compliant`.
+- Compliance counts: categories `10`, findings `149`, deviations `145`,
+  evidence records `12`, limitations `268`.
+
+Previous completed milestone:
+- Phase MVP-2.0-C - First Real Observed Website Model.
+- Latest OWM artifact:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+
+Earlier completed milestone:
 - Phase MVP-1K-3-R - Observed Website Model Real-Target Validation.
 - Status: COMPLETE / REAL ODV CHECKED / REAL VIROIDOC CHECKED /
   MISSING LATEST GENERATED WEBSITE PROPOSAL ARTIFACTS / NO OWM BUILT /

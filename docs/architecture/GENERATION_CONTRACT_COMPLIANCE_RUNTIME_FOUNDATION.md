@@ -148,27 +148,40 @@ No new table or schema migration is required.
 
 ## Real-Target Validation
 
-MVP-1K-4-R attempted real-target validation for ODV
+MVP-1K-4-R originally attempted real-target validation for ODV
 `09dce7ea-d860-4f60-a1eb-26c3335b302e` with source WGP
 `website_generation_package_c2c555025f186178f27c44c7cd272d4d`, and ViroiDoc
 `e26b0754-988b-45b9-9e24-8e213179b6cf` with source WGP
 `website_generation_package_3e34393aef612a2c597042917dc45085`.
 
-The validation is blocked before compliance build or persistence because both
-targets are missing a latest persisted `ObservedWebsiteModelArtifact`.
+That earlier validation was blocked because both targets were missing latest
+persisted `ObservedWebsiteModelArtifact` inputs.
 
-No `GenerationContractComplianceArtifact` was persisted for either target.
+MVP-2.0-C unblocked ODV by persisting latest OWM artifact
+`observed_website_model_35499a9cb91a15740910532d451a739a`.
+
+MVP-2.0-D then performed the first real Generation Contract Compliance
+evaluation for ODV. It compared WGP
+`website_generation_package_c2c555025f186178f27c44c7cd272d4d` against OWM
+`observed_website_model_35499a9cb91a15740910532d451a739a` using only
+`buildGenerationContractCompliance(...)` and persisted
+`generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+
+The persisted ODV compliance status is `non_compliant`. The artifact contains
+10 category results, 149 findings, 145 deviations, 12 evidence records, and
+268 limitations. Latest reload, by-ID reload, and idempotent retry all
+returned the same artifact ID.
 
 Canonical validation record:
+`docs/architecture/FIRST_REAL_GENERATION_CONTRACT_COMPLIANCE.md`.
+
+The earlier blocked validation record remains:
 `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REAL_TARGET_VALIDATION.md`.
 
 ## Next Boundary
 
-The next safe phase is MVP-1K-3-R Observed Website Model Real-Target
-Validation.
+The next safe phase is MVP-2.0-E - First Real Generation Contract Compliance
+Report for ODV.
 
-After ODV and ViroiDoc have latest persisted Observed Website Model inputs,
-rerun MVP-1K-4-R. Only after MVP-1K-4-R persists real compliance artifacts
-should MVP-1K-5-R rerun before Business Approval.
-
-MVP-1K-4 and MVP-1K-4-R stop before the report.
+MVP-2.0-D stops before the report, Business Approval, publishing, deployment,
+provider execution, AI execution, UI, API, schema, and workers.

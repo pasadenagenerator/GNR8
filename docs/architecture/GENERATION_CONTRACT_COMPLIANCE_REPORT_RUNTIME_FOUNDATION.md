@@ -150,6 +150,33 @@ MVP-1K-4-R must persist real ODV and ViroiDoc Generation Contract Compliance
 artifacts before MVP-1K-5-R can validate report build, persistence, latest
 reload, by-ID reload, and idempotent retry reuse.
 
+MVP-2.0-E then completed the first real ODV Compliance Report after MVP-2.0-D
+persisted the required ODV source compliance artifact.
+
+MVP-2.0-E consumed only
+`generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`, confirmed
+it was latest for ODV, built the report with
+`buildGenerationContractComplianceReport(...)`, and persisted it with
+`persistGenerationContractComplianceReport(...)`.
+
+Persisted ODV report:
+
+- artifact ID:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`
+- status: `blocked`
+- recommendation: `regenerate`
+- generation readiness: `requires_regeneration`
+- sections: executive summary `blocked`, business compliance `blocked`,
+  experience compliance `blocked`, implementation observability `blocked`,
+  limitations `partial`
+- latest reload, by-ID reload, and idempotent retry all returned
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`
+
+The ODV report explains overall non-compliance, `8` failed categories, `2`
+partial categories, `12` compliance evidence records, `17` observed evidence
+references, `411` business risks, and the `regenerate` recommendation. It is
+not Business Approval and does not authorize publishing.
+
 ## Stop Boundary
 
 MVP-1K-5 stops after the report runtime foundation.

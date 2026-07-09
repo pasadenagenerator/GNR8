@@ -749,11 +749,33 @@ Current implementation:
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d` and ViroiDoc
   `e26b0754-988b-45b9-9e24-8e213179b6cf` with source WGP
   `website_generation_package_3e34393aef612a2c597042917dc45085`.
-- MVP-1K-4-R is blocked because both targets are missing a latest persisted
-  `ObservedWebsiteModelArtifact`; no compliance artifact was built or
-  persisted.
+- MVP-1K-4-R originally blocked because both targets were missing a latest
+  persisted `ObservedWebsiteModelArtifact`.
+- MVP-2.0-D performed the first real ODV Generation Contract Compliance
+  evaluation after MVP-2.0-C persisted latest OWM
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- MVP-2.0-D persisted
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7` with
+  status `non_compliant`, 10 category results, 149 findings, 145 deviations,
+  12 evidence records, and 268 limitations.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- MVP-2.0-D added no Compliance Report, Business Approval, publishing,
+  deployment, provider execution, AI execution, UI, API, schema, workers, WGP
+  mutation, OWM mutation, or canonical business artifact mutation.
+
+Completed follow-up:
+- MVP-2.0-E created the first real ODV Compliance Report from
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- The persisted report is
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`
+  with status `blocked`, recommendation `regenerate`, and generation
+  readiness `requires_regeneration`.
+- Latest reload, by-ID reload, and idempotent retry all returned the same
+  report artifact.
 
 Missing implementation:
+- Business Approval artifact and approval decision boundary.
 - Gate that Business Approval can consume.
 
 Dependencies:
@@ -794,16 +816,26 @@ Current implementation:
 - The report explains compliance only. It does not recompute compliance,
   approve, publish, call providers, execute AI, add UI/API/schema/workers, or
   mutate runtime/business truth.
-- MVP-1K-5-R real-target validation checked ODV
+- MVP-1K-5-R real-target validation originally checked ODV
   `09dce7ea-d860-4f60-a1eb-26c3335b302e` and ViroiDoc
-  `e26b0754-988b-45b9-9e24-8e213179b6cf`, but both targets are missing the
-  required latest persisted `GenerationContractComplianceArtifact`. No
-  Generation Contract Compliance Report was built or persisted.
+  `e26b0754-988b-45b9-9e24-8e213179b6cf`, but both targets were missing the
+  required latest persisted `GenerationContractComplianceArtifact` at that
+  time. No Generation Contract Compliance Report was built or persisted.
+- MVP-2.0-D unblocked ODV for a report by persisting
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- MVP-2.0-E completed the first real ODV report:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- The report status is `blocked`, recommendation is `regenerate`, and
+  generation readiness is `requires_regeneration`.
+- The report explains `8` failed categories, `2` partial categories, `145`
+  deviations, `147` missing requirements, `411` business risks, `268`
+  limitations, `12` compliance evidence records, and why ODV is not ready for
+  Business Approval.
 
 Missing implementation:
 - Business Approval artifact and approval decision boundary.
 - Publish gate that consumes Business Approval.
-- Real-target Generation Contract Compliance artifacts for ODV and ViroiDoc.
+- Real-target Generation Contract Compliance artifact for ViroiDoc.
 
 Dependencies:
 - Persisted Generation Contract Compliance artifact.
@@ -817,6 +849,76 @@ Estimated implementation complexity:
 - First deterministic report contract, builder, validation, persistence, and
   focused tests are complete. Remaining work starts with real-target
   Generation Contract Compliance validation before Business Approval.
+
+### Generation Improvement Plan
+
+Current implementation:
+- MVP-2.0-F implements the first deterministic Generation Improvement Plan
+  runtime foundation.
+- Runtime modules now implement `GenerationImprovementPlanArtifact`,
+  `GenerationImprovementAction`, `GenerationImprovementPriority`,
+  `GenerationImprovementCategory`, `GenerationImprovementLineage`,
+  `GenerationImprovementValidationResult`,
+  `buildGenerationImprovementPlan(...)`,
+  `persistGenerationImprovementPlan(...)`,
+  `loadLatestGenerationImprovementPlan(...)`, and
+  `loadGenerationImprovementPlanById(...)`.
+- Artifact kind is `generation_improvement_plan`.
+- The builder consumes only persisted
+  `GenerationContractComplianceReportArtifact` and translates compliance
+  findings into provider-neutral, business-governed regeneration instructions.
+- Allowed statuses are `draft`, `ready`, `blocked`, `invalid`, and `stale`.
+  Persistence rejects `invalid` and `stale`; it allows `draft`, `ready`, and
+  `blocked`.
+- Improvement categories are Business Positioning, Audience, Navigation,
+  Messages, Sections, Trust, Assets, Accessibility, SEO, Constraints, and
+  Other.
+- Priority values are `critical`, `high`, `medium`, and `low`; priority
+  depends only on compliance deviations, missing requirements, business risks,
+  and recommendation.
+- Recommended next action values are `regenerate`,
+  `collect_more_information`, `human_review`, and `stop`.
+- Persistence uses existing site-version `importProvenanceSummary` with
+  append-only `generationImprovementPlanArtifacts`,
+  `latestGenerationImprovementPlanArtifact`, equivalent latest reuse, changed
+  append, latest load, and by-ID load.
+- MVP-2.0-F completed the first real ODV Generation Improvement Plan from
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Persisted plan artifact:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Status is `ready`; recommended next action is `regenerate`; estimated
+  regeneration readiness is `ready`.
+- Counts are improvements `413`, critical `259`, high `0`, medium `154`,
+  low `0`.
+- Category summary is Constraints `228`, Assets `123`, Sections `36`,
+  Navigation `8`, Messages `6`, Trust `6`, Business Positioning `4`,
+  Accessibility `1`, SEO `1`.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- The plan does not contain provider prompts, HTML, React, implementation
+  instructions, CSS, framework decisions, provider payloads, provider
+  execution, AI execution, regeneration output, approval, or publishing
+  permission.
+
+Missing implementation:
+- Provider Payload v2 that can consume the existing WGP plus the Generation
+  Improvement Plan.
+- Provider execution remains outside GNR8 until explicitly authorized.
+- Business Approval remains unimplemented.
+
+Dependencies:
+- Persisted Generation Contract Compliance Report.
+- Existing Website Generation Package for any later payload phase.
+
+Risk:
+- Medium. The plan is ready to drive the next generation cycle, but no next
+  export payload, provider execution, AI execution, or Business Approval has
+  been created.
+
+Estimated implementation complexity:
+- Runtime foundation is complete. Next work is MVP-2.0-G - Provider Payload v2
+  Runtime Foundation, still stopping before provider execution and AI
+  execution.
 
 ### Business Approval
 
@@ -1221,17 +1323,24 @@ persisted `GenerationContractComplianceArtifact` only. It creates
 human-readable report sections, recommendation, readiness, evidence summary,
 lineage, diagnostics, and `generation_contract_compliance_report`
 provenance persistence with latest reuse, append, latest load, and by-ID
-load. MVP-1K-5-R found that real ODV and ViroiDoc report validation is blocked
-because latest persisted `GenerationContractComplianceArtifact` inputs are
-missing. MVP-1K-4-R then found that both targets are missing the prerequisite
-latest persisted `ObservedWebsiteModelArtifact`, so no compliance artifact was
-built or persisted. MVP-1K-3-R then found that both targets are missing latest
-persisted `GeneratedWebsiteProposalArtifact` inputs, so no Observed Website
-Model artifact was built or persisted. The next safe phase is manual Generated
-Website Proposal import for ODV and ViroiDoc under the existing quarantine
-boundary. After ODV and ViroiDoc have proposal inputs, rerun MVP-1K-3-R; after
-they have OWM inputs, rerun MVP-1K-4-R and then rerun MVP-1K-5-R before
-Business Approval.
+load. MVP-1K-5-R found that real ODV and ViroiDoc report validation was
+blocked because latest persisted `GenerationContractComplianceArtifact` inputs
+were missing. MVP-1K-4-R then found that both targets were missing the
+prerequisite latest persisted `ObservedWebsiteModelArtifact`, so no compliance
+artifact was built or persisted in that phase. MVP-2.0-C later persisted the
+first real ODV Observed Website Model, and MVP-2.0-D then persisted the first
+real ODV Generation Contract Compliance artifact:
+`generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`. MVP-2.0-E
+then persisted the first real ODV Generation Contract Compliance Report:
+`generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+The report status is `blocked`, recommendation is `regenerate`, and
+generation readiness is `requires_regeneration`, so ODV is not ready for
+Business Approval. MVP-2.0-F then persisted the first real ODV Generation
+Improvement Plan:
+`generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`. The plan
+status is `ready`, recommended next action is `regenerate`, estimated
+regeneration readiness is `ready`, and latest reload, by-ID reload, and
+idempotent retry reuse passed.
 MVP-2.0-A then produced the first deterministic ODV export bundle at
 `ODV_EXPORT/`, with manifest, complete lineage, source WGP, ProviderGenerationPayload,
 business summary, limitations, and manual execution instructions. MVP-2.0-A2
@@ -1241,10 +1350,10 @@ preservation guidance to `limitations.md`, adding expected deliverables, stop
 conditions, forbidden actions, and output-folder guidance to
 `execution-readme.md`, and adding a non-canonical execution-facing
 `generationMission` field to `provider-generation-payload.json` without
-changing canonical runtime contracts. The current next safe phase is manual
-Codex execution outside GNR8 using `ODV_EXPORT/`, producing an implementation
-proposal bundle only. After a proposal bundle exists, import it as quarantined
-Generated Website Proposal material before rerunning MVP-1K-3-R.
+changing canonical runtime contracts. The current next safe phase is
+MVP-2.0-G - Provider Payload v2 Runtime Foundation, consuming the existing WGP
+plus the persisted Generation Improvement Plan without publishing, deploying,
+calling providers, executing AI, or regenerating the website.
 Stop before publishing, deployment, DNS mutation, production mutation, UI,
 API, schema, workers, provider calls, or AI execution unless explicitly
 authorized.

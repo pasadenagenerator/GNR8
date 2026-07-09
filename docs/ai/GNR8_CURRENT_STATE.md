@@ -1,42 +1,49 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-07-07
+2026-07-09
 
 ## Current Phase
 
-MVP-2.0-C - First Real Observed Website Model is COMPLETE for ODV.
+MVP-2.0-F - Generation Improvement Plan Runtime Foundation is COMPLETE for
+ODV.
 
-GNR8 now possesses its first real persisted `ObservedWebsiteModelArtifact`
-derived from an actual generated website proposal:
+GNR8 now possesses its first real persisted deterministic
+`GenerationImprovementPlanArtifact`, derived only from the persisted ODV
+`GenerationContractComplianceReportArtifact`:
 
 - target: ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`;
-- source `GeneratedWebsiteProposalArtifact`:
-  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`;
-- latest OWM artifact:
-  `observed_website_model_35499a9cb91a15740910532d451a739a`;
-- status/readiness: `observable`;
-- observed counts: pages `1`, routes `1`, navigation/links `11`, sections
-  `7`, headings `14`, CTA links `3`, messages `53`, assets `6`, constraints
-  `9`, technical signals `12`, evidence refs `17`, limitations `127`;
-- latest reload, by-ID reload, immediate idempotent retry, and cold
-  idempotent retry all returned
-  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- source `GenerationContractComplianceReportArtifact`:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`;
+- latest Generation Improvement Plan artifact:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`;
+- status: `ready`;
+- improvement count: `413`;
+- priority counts: critical `259`, high `0`, medium `154`, low `0`;
+- category summary: Constraints `228`, Assets `123`, Sections `36`,
+  Navigation `8`, Messages `6`, Trust `6`, Business Positioning `4`,
+  Accessibility `1`, SEO `1`;
+- recommended next action: `regenerate`;
+- estimated regeneration readiness: `ready`;
+- source report latest/by-ID validation passed;
+- latest reload, by-ID reload, and idempotent retry all returned
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
 
-MVP-2.0-C did not compare against the Website Generation Package, perform
-Generation Contract Compliance, create a Compliance Report, create Business
-Approval, publish, deploy, call providers, execute AI, regenerate the website,
-modify the Generated Website Proposal, mutate canonical business artifacts, or
-add UI, API, schema, or workers.
+MVP-2.0-F did not regenerate the website, create a new Website Generation
+Package, build Provider Payload v2, execute AI, call providers, create
+Business Approval, publish, deploy, mutate WGP, mutate Compliance, mutate the
+Compliance Report, mutate provider payloads, or add UI, API, schema, or
+workers.
 
 Canonical document:
 
-- `docs/architecture/FIRST_OBSERVED_WEBSITE_MODEL.md`
+- `docs/architecture/GENERATION_IMPROVEMENT_PLAN_RUNTIME_FOUNDATION.md`
 
-Next recommended phase: MVP-2.0-D - First Real Generation Contract Compliance
-for ODV. That phase may compare the persisted ODV Observed Website Model
-against the ODV Website Generation Package. Do not proceed to Compliance
-Report, Business Approval, or publishing in MVP-2.0-D.
+Next recommended phase: MVP-2.0-G - Provider Payload v2 Runtime Foundation.
+Consume the existing Website Generation Package plus the persisted Generation
+Improvement Plan to create the next export-ready regeneration payload, while
+still stopping before provider execution, AI execution, publishing, deployment,
+or Business Approval.
 
 ## Migration Platform MVP Buildout
 
@@ -3246,13 +3253,14 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-2.0-C - First Real Observed Website Model is complete for ODV.
+- Phase MVP-2.0-F - Generation Improvement Plan Runtime Foundation is
+  complete for ODV.
 
 Next Phase:
-- MVP-2.0-D - First Real Generation Contract Compliance for ODV. Compare the
-  persisted ODV Observed Website Model against the ODV Website Generation
-  Package only. Stop before Compliance Report, Business Approval, publishing,
-  deployment, provider execution, AI execution, UI, API, schema, or workers.
+- MVP-2.0-G - Provider Payload v2 Runtime Foundation. Consume the existing
+  Website Generation Package plus the persisted Generation Improvement Plan,
+  and stop before provider execution, AI execution, publishing, deployment, or
+  Business Approval unless explicitly authorized.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -4402,6 +4410,77 @@ MVP-2.0-C First Real Observed Website Model:
   proposal mutation, canonical business artifact mutation, UI, API, schema, or
   worker behavior.
 
+MVP-2.0-D First Real Generation Contract Compliance:
+- Canonical document:
+  `docs/architecture/FIRST_REAL_GENERATION_CONTRACT_COMPLIANCE.md`.
+- ODV source `WebsiteGenerationPackageArtifact`:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`.
+- ODV source `ObservedWebsiteModelArtifact`:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- Latest ODV Generation Contract Compliance artifact:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- Status/overall compliance: `non_compliant`.
+- Category summary: compared `10`, compliant `0`, partial `2`,
+  non-compliant `8`, blocked `0`, incomplete `0`.
+- Evidence summary: findings `149`, deviations `145`, evidence records `12`,
+  limitations `268`.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- MVP-2.0-D added no Compliance Report, Business Approval, publishing,
+  deployment, provider execution, AI execution, regenerated website, WGP
+  mutation, OWM mutation, canonical business artifact mutation, UI, API,
+  schema, or worker behavior.
+
+MVP-2.0-E First Real Generation Contract Compliance Report:
+- Canonical document:
+  `docs/architecture/FIRST_REAL_GENERATION_CONTRACT_COMPLIANCE_REPORT.md`.
+- ODV source `GenerationContractComplianceArtifact`:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- Latest ODV Generation Contract Compliance Report artifact:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Status: `blocked`.
+- Recommendation: `regenerate`.
+- Generation readiness: `requires_regeneration`.
+- Section summary: executive summary `blocked` with `1` item, business
+  compliance `blocked` with `4` items, experience compliance `blocked` with
+  `6` items, implementation observability `blocked` with `4` items, and
+  limitations `partial` with `268` items.
+- Quality summary: source compliance is `non_compliant`; report item counts
+  are failed `8` and partial `2`; the report preserves `12` compliance
+  evidence records, `17` observed evidence references, `145` deviations,
+  `147` missing requirements, `411` business risks, and `268` limitations.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- MVP-2.0-E added no Business Approval, publishing, deployment, provider
+  execution, AI execution, regenerated website, WGP mutation, OWM mutation,
+  Compliance artifact mutation, canonical business artifact mutation, UI,
+  API, schema, or worker behavior.
+
+MVP-2.0-F Generation Improvement Plan Runtime Foundation:
+- Canonical document:
+  `docs/architecture/GENERATION_IMPROVEMENT_PLAN_RUNTIME_FOUNDATION.md`.
+- ODV source `GenerationContractComplianceReportArtifact`:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Latest ODV Generation Improvement Plan artifact:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Status: `ready`.
+- Improvement count: `413`.
+- Priority counts: critical `259`, high `0`, medium `154`, low `0`.
+- Category summary: Constraints `228`, Assets `123`, Sections `36`,
+  Navigation `8`, Messages `6`, Trust `6`, Business Positioning `4`,
+  Accessibility `1`, SEO `1`.
+- Recommended next action: `regenerate`.
+- Estimated regeneration readiness: `ready`.
+- Source report latest/by-ID validation passed, report validation passed, and
+  lineage matched siteVersion, dry run, source Compliance, source Website
+  Generation Package, and source Observed Website Model.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- MVP-2.0-F added no regenerated website, new Website Generation Package,
+  Provider Payload v2, provider execution, AI execution, Business Approval,
+  publishing, deployment, WGP mutation, Compliance mutation, Compliance Report
+  mutation, provider payload mutation, UI, API, schema, or worker behavior.
+
 MVP-2.0-A First Real Website Generation Export:
 - Canonical document:
   `docs/architecture/FIRST_REAL_WEBSITE_GENERATION_EXPORT.md`.
@@ -4458,11 +4537,11 @@ MVP-2.0-A2 Generation Delivery Package Polish:
   API, no UI, no worker, no schema change, no deployment, no DNS mutation, and
   no production mutation.
 
-Recommended next phase after MVP-2.0-C:
-- MVP-2.0-D - First Real Generation Contract Compliance for ODV. Compare the
-  persisted ODV Observed Website Model against the ODV Website Generation
-  Package only. Stop before Compliance Report, Business Approval, publishing,
-  deployment, provider execution, AI execution, UI, API, schema, or workers.
+Recommended next phase after MVP-2.0-F:
+- MVP-2.0-G - Provider Payload v2 Runtime Foundation. Consume the existing
+  Website Generation Package plus the persisted Generation Improvement Plan,
+  and stop before provider execution, AI execution, publishing, deployment, or
+  Business Approval unless explicitly authorized.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.
