@@ -64,18 +64,21 @@ Current status:
 - Phase MVP-2.0-F - Generation Improvement Plan Runtime Foundation is complete
   for ODV and persisted latest plan artifact
   `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Phase MVP-2.0-G - Provider Payload v2 Runtime Foundation is complete for
+  ODV and persisted latest Provider Payload v2 artifact
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
 
 Current Phase:
-- Phase MVP-2.0-F - Generation Improvement Plan Runtime Foundation is
-  complete.
+- Phase MVP-2.0-G - Provider Payload v2 Runtime Foundation is complete.
 
 Next Phase:
-- MVP-2.0-G - Provider Payload v2 Runtime Foundation. Consume the existing
-  Website Generation Package plus
-  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694` to create the
-  next export-ready regeneration payload. Stop before provider execution, AI
-  execution, regeneration, publishing, deployment, Business Approval, UI, API,
-  schema, or workers unless explicitly authorized.
+- MVP-2.0-H - Regeneration Delivery Package v2. Package persisted Provider
+  Payload v2
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7` for a future
+  manual regeneration cycle. Stop before Codex execution, provider execution,
+  AI execution, regeneration, Generated Website Proposal v2, publishing,
+  deployment, DNS, Business Approval, UI, API, schema, or workers unless
+  explicitly authorized.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -671,31 +674,54 @@ Current validation status:
   Payload v2, provider execution, AI execution, Business Approval, publishing,
   deployment, UI, API, schema, workers, WGP mutation, Compliance mutation,
   Compliance Report mutation, or provider payload mutation.
-- Next recommended phase is MVP-2.0-G - Provider Payload v2 Runtime
-  Foundation. Consume the existing Website Generation Package plus the
-  persisted Generation Improvement Plan, and stop before provider execution,
-  AI execution, publishing, deployment, or Business Approval.
+- MVP-2.0-G implements the first deterministic Provider Payload v2 runtime
+  foundation in
+  `apps/platform/gnr8/architecture/provider-generation-payload-v2-builder.ts`
+  and reuses the existing `provider_generation_payload` artifact kind.
+- MVP-2.0-G completed the first real ODV Provider Payload v2:
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- Provider Payload v2 status is `ready`; runtime version is `MVP-2.0-G`.
+- Sources are WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` and
+  Improvement Plan
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Counts: improvements `413`, critical `259`, high `0`, medium `154`,
+  low `0`; guidance preserve `12`, improve `413`, do-not-change `6`, known
+  limitations `112`, critical items `259`.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- MVP-2.0-G added no Codex execution, provider execution, AI execution,
+  regeneration, Generated Website Proposal v2, Business Approval, publishing,
+  deployment, DNS, UI, API, schema, workers, WGP mutation, Improvement Plan
+  mutation, Compliance mutation, or Compliance Report mutation.
+- Next recommended phase is MVP-2.0-H - Regeneration Delivery Package v2.
+  Package the persisted Provider Payload v2 for a future manual regeneration
+  cycle, and stop before Codex execution, provider execution, AI execution,
+  website generation, Generated Website Proposal v2, publishing, deployment,
+  DNS, or Business Approval.
 
 Latest completed milestone:
-- Phase MVP-2.0-F - Generation Improvement Plan Runtime Foundation.
-- Status: COMPLETE / REAL ODV GENERATION IMPROVEMENT PLAN BUILT / LATEST PLAN
-  PERSISTED / STATUS READY / RECOMMENDED NEXT ACTION REGENERATE /
-  REGENERATION READINESS READY / LATEST RELOAD PASSED / BY-ID RELOAD PASSED /
-  IDEMPOTENT RETRY REUSED / NO REGENERATION / NO NEW WGP / NO PROVIDER
-  PAYLOAD V2 / NO BUSINESS APPROVAL / NO PUBLISHING / NO DEPLOY / NO PROVIDER
-  EXECUTION / NO AI EXECUTION / NO WGP MUTATION / NO COMPLIANCE MUTATION /
-  NO COMPLIANCE REPORT MUTATION / NO PROVIDER PAYLOAD MUTATION / NO UI /
-  NO API ROUTES / NO SCHEMA MIGRATIONS / NO WORKERS.
+- Phase MVP-2.0-G - Provider Payload v2 Runtime Foundation.
+- Status: COMPLETE / REAL ODV PROVIDER PAYLOAD V2 BUILT / LATEST PROVIDER
+  PAYLOAD V2 PERSISTED / STATUS READY / LATEST RELOAD PASSED / BY-ID RELOAD
+  PASSED / IDEMPOTENT RETRY REUSED / NO CODEX EXECUTION / NO PROVIDER
+  EXECUTION / NO AI EXECUTION / NO REGENERATION / NO GENERATED WEBSITE
+  PROPOSAL V2 / NO BUSINESS APPROVAL / NO PUBLISHING / NO DEPLOY / NO DNS /
+  NO WGP MUTATION / NO IMPROVEMENT PLAN MUTATION / NO COMPLIANCE MUTATION /
+  NO COMPLIANCE REPORT MUTATION / NO UI / NO API ROUTES / NO SCHEMA
+  MIGRATIONS / NO WORKERS.
 - Canonical document:
-  `docs/architecture/GENERATION_IMPROVEMENT_PLAN_RUNTIME_FOUNDATION.md`.
-- Source Compliance Report artifact:
-  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
-- Latest plan artifact:
+  `docs/architecture/PROVIDER_PAYLOAD_V2_RUNTIME_FOUNDATION.md`.
+- Source WGP artifact:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`.
+- Source Improvement Plan artifact:
   `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
-- Plan counts: improvements `413`, critical `259`, high `0`, medium `154`,
-  low `0`.
-- Recommended next phase after MVP-2.0-F: MVP-2.0-G - Provider Payload v2
-  Runtime Foundation.
+- Latest Provider Payload v2 artifact:
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- Provider Payload v2 counts: improvements `413`, critical `259`, high `0`,
+  medium `154`, low `0`.
+- Recommended next phase after MVP-2.0-G: MVP-2.0-H - Regeneration Delivery
+  Package v2.
 
 Previous completed milestone:
 - Phase MVP-2.0-E - First Real Generation Contract Compliance Report.

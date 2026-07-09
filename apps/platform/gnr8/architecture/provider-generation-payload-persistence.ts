@@ -32,12 +32,14 @@ export type ProviderGenerationPayloadArtifactRecord = {
   dryRunId: string;
   sourceWebsiteGenerationPackageId: string;
   sourceWebsiteGenerationPackageArtifactId: string;
+  sourceGenerationImprovementPlanId?: string;
+  sourceGenerationImprovementPlanArtifactId?: string;
   status: Exclude<ProviderGenerationPayloadStatus, "invalid" | "stale">;
   constraintCount: number;
   validationExpectationCount: number;
   limitationCount: number;
   contractVersion: string;
-  runtimeVersion: typeof CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_VERSION;
+  runtimeVersion: string;
   createdAt: string;
   persistedAt: string;
   artifact: ProviderGenerationPayload;
@@ -123,10 +125,16 @@ function semanticArtifact(artifact: ProviderGenerationPayload): Omit<ProviderGen
   return semantic;
 }
 
+function runtimeVersionForArtifact(artifact: ProviderGenerationPayload): string {
+  const diagnostic = artifact.diagnostics.find((item) =>
+    item.startsWith("PROVIDER_GENERATION_PAYLOAD_V2_RUNTIME_VERSION:"));
+  return diagnostic?.split(":").slice(1).join(":") || CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_VERSION;
+}
+
 function semanticFingerprint(artifact: ProviderGenerationPayload): string {
   return sha256Hex(stableStringify({
     artifact: semanticArtifact(artifact),
-    runtimeVersion: CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_VERSION,
+    runtimeVersion: runtimeVersionForArtifact(artifact),
     contractVersion: artifact.contractVersion,
   }));
 }
@@ -137,7 +145,7 @@ function createArtifactId(input: {
 }): string {
   return `provider_generation_payload_${sha256Hex(stableStringify({
     artifact: input.artifact,
-    runtimeVersion: CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_VERSION,
+    runtimeVersion: runtimeVersionForArtifact(input.artifact),
     persistedAt: input.persistedAt,
   })).slice(0, 32)}`;
 }
@@ -153,7 +161,12 @@ function isValidArtifact(value: unknown): value is ProviderGenerationPayloadArti
   if (record.kind !== PROVIDER_GENERATION_PAYLOAD_ARTIFACT_KIND) return false;
   if (record.artifactKind !== PROVIDER_GENERATION_PAYLOAD_ARTIFACT_KIND) return false;
   if (record.artifactVersion !== 1) return false;
-  if (record.status !== "draft" && record.status !== "valid" && record.status !== "blocked") return false;
+  if (
+    record.status !== "draft" &&
+    record.status !== "ready" &&
+    record.status !== "valid" &&
+    record.status !== "blocked"
+  ) return false;
   if (!record.artifact || record.validation?.valid !== true) return false;
   if (!validateProviderGenerationPayload(record.artifact).valid) return false;
   if (record.artifact.status === "invalid" || record.artifact.status === "stale") return false;
@@ -165,6 +178,8 @@ function isValidArtifact(value: unknown): value is ProviderGenerationPayloadArti
   if (record.artifact.dryRunId !== record.dryRunId) return false;
   if (record.artifact.sourceWebsiteGenerationPackageId !== record.sourceWebsiteGenerationPackageId) return false;
   if (record.artifact.sourceWebsiteGenerationPackageArtifactId !== record.sourceWebsiteGenerationPackageArtifactId) return false;
+  if (record.artifact.sourceGenerationImprovementPlanId !== record.sourceGenerationImprovementPlanId) return false;
+  if (record.artifact.sourceGenerationImprovementPlanArtifactId !== record.sourceGenerationImprovementPlanArtifactId) return false;
   return true;
 }
 
@@ -266,12 +281,14 @@ export async function persistProviderGenerationPayload(input: {
     dryRunId: input.dryRunId,
     sourceWebsiteGenerationPackageId: input.artifact.sourceWebsiteGenerationPackageId,
     sourceWebsiteGenerationPackageArtifactId: input.artifact.sourceWebsiteGenerationPackageArtifactId,
+    sourceGenerationImprovementPlanId: input.artifact.sourceGenerationImprovementPlanId,
+    sourceGenerationImprovementPlanArtifactId: input.artifact.sourceGenerationImprovementPlanArtifactId,
     status: input.artifact.status as ProviderGenerationPayloadArtifactRecord["status"],
     constraintCount: input.artifact.preservedConstraints.length,
     validationExpectationCount: input.artifact.validationExpectations.length,
     limitationCount: input.artifact.limitations.length,
     contractVersion: input.artifact.contractVersion,
-    runtimeVersion: CODEX_TASK_PROVIDER_PAYLOAD_RUNTIME_VERSION,
+    runtimeVersion: runtimeVersionForArtifact(input.artifact),
     createdAt: input.artifact.createdAt,
     persistedAt,
     artifact: cloneJson(input.artifact),

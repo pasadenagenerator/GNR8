@@ -63,6 +63,7 @@ Allowed statuses:
 
 ```text
 draft
+ready
 valid
 invalid
 stale
@@ -70,7 +71,8 @@ blocked
 ```
 
 Persistence rejects `invalid` and `stale`. Persistence accepts `blocked` as a
-fail-closed export artifact.
+fail-closed export artifact. MVP-2.0-G also allows `ready` for the second
+generation payload foundation while preserving legacy `valid` records.
 
 ## Contract Shape
 
@@ -82,6 +84,8 @@ fail-closed export artifact.
 - `payloadKind`
 - `sourceWebsiteGenerationPackageId`
 - `sourceWebsiteGenerationPackageArtifactId`
+- optional `sourceGenerationImprovementPlanId`
+- optional `sourceGenerationImprovementPlanArtifactId`
 - `siteVersionId`
 - `dryRunId`
 - `createdAt`
@@ -95,6 +99,8 @@ fail-closed export artifact.
 - `limitations`
 - `diagnostics`
 - `safetyClassification`
+- optional `regenerationGuidance`
+- optional `deltaSummary`
 
 Lineage preserves:
 
@@ -209,6 +215,11 @@ Validation rejects the following field names recursively:
 - `generatedContent`
 - `generatedHtml`
 - `generatedReact`
+- `html`
+- `react`
+- `css`
+- `framework`
+- `implementationInstructions`
 - `generatedComponents`
 - `generatedBlocks`
 - `deploymentArtifact`
@@ -218,6 +229,64 @@ Validation rejects the following field names recursively:
 - `runtimeMutation`
 
 This guard applies to the full ProviderGenerationPayload, including nested
+values.
+
+## MVP-2.0-G Provider Payload v2
+
+MVP-2.0-G extends the runtime foundation without creating a new canonical
+artifact type.
+
+New module:
+
+```text
+apps/platform/gnr8/architecture/provider-generation-payload-v2-builder.ts
+```
+
+Focused test:
+
+```text
+apps/platform/gnr8/architecture/provider-generation-payload-v2.test.ts
+```
+
+The v2 builder consumes only:
+
+```text
+WebsiteGenerationPackageArtifact
+GenerationImprovementPlanArtifact
+```
+
+plus the persisted source artifact IDs and optional `createdAt`.
+
+It preserves the original Website Generation Package in
+`serializedWebsiteGenerationPackage` and integrates the Improvement Plan only
+as deterministic, business-level `regenerationGuidance` plus `deltaSummary`.
+
+Provider Payload v2 adds no provider execution, AI execution, regenerated
+website, generated HTML, React, CSS, framework decision, implementation
+instruction, compliance mutation, report mutation, Business Approval,
+publishing, deployment, DNS mutation, UI, API, schema, or worker behavior.
+
+ODV result:
+
+```text
+provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7
+```
+
+Status:
+
+```text
+ready
+```
+
+Sources:
+
+```text
+website_generation_package_c2c555025f186178f27c44c7cd272d4d
+generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694
+```
+
+Latest reload, by-ID reload, and idempotent retry all returned
+`provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
 envelope and serialized WGP content.
 
 ## Validation

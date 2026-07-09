@@ -56,6 +56,14 @@ limitations, confidence, diagnostics, and safety classification.
 The ProviderGenerationPayload is not business truth. It is an execution input
 derived from the Website Generation Package.
 
+MVP-2.0-G introduced a second-generation ProviderGenerationPayload for the
+future regeneration cycle. It is still persisted as `provider_generation_payload`
+and still stops before execution. The v2 payload preserves the original Website
+Generation Package and adds business-level regeneration guidance from the
+Generation Improvement Plan. It does not execute a provider, execute AI,
+regenerate a website, create a Generated Website Proposal v2, publish, deploy,
+mutate DNS, mutate production, or create Business Approval.
+
 ### Execution
 
 The execution step is:
@@ -258,6 +266,14 @@ schema, add workers, or add TypeScript.
 Completed follow-up phase:
 
 - MVP-1J Manual Codex Execution Runbook and Generated Proposal Import Boundary
+
+Later completed regeneration-planning phase:
+
+- MVP-2.0-G Provider Payload v2 Runtime Foundation persisted
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7` from
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` plus
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`, with no
+  provider execution or AI execution.
   Design.
 
 ## MVP-1J Manual Codex Execution And Import Boundary

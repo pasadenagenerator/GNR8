@@ -27,6 +27,7 @@ export type ProviderGenerationPayloadKind = (typeof PROVIDER_GENERATION_PAYLOAD_
 
 export const PROVIDER_GENERATION_PAYLOAD_STATUSES = [
   "draft",
+  "ready",
   "valid",
   "invalid",
   "stale",
@@ -53,6 +54,10 @@ export type ProviderGenerationPayloadLineage = {
   sourceWebsiteGenerationPackageArtifactId: string;
   sourceWebsiteGenerationPackageStatus: WebsiteGenerationPackageStatus;
   sourceWebsiteGenerationPackageContractVersion: string;
+  sourceGenerationImprovementPlanId?: string;
+  sourceGenerationImprovementPlanArtifactId?: string;
+  sourceGenerationImprovementPlanStatus?: string;
+  sourceGenerationImprovementPlanContractVersion?: string;
   sourceWebsiteDesignBriefId: string;
   sourceDigitalBusinessTwinId: string;
   sourceBusinessAlignmentId: string;
@@ -109,6 +114,33 @@ export type ProviderGenerationPayloadSafetyClassification = {
   notes: string[];
 };
 
+export type ProviderGenerationPayloadImprovementGuidance = {
+  originatingImprovementId: string;
+  originatingDeviationIds: string[];
+  originatingRequirementIds: string[];
+  category: string;
+  priority: "critical" | "high" | "medium" | "low";
+  expectedOutcome: string;
+};
+
+export type ProviderGenerationPayloadRegenerationGuidance = {
+  preserve: string[];
+  improve: ProviderGenerationPayloadImprovementGuidance[];
+  do_not_change: string[];
+  known_limitations: string[];
+  critical_items: ProviderGenerationPayloadImprovementGuidance[];
+};
+
+export type ProviderGenerationPayloadDeltaSummary = {
+  totalImprovements: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  affectedCategories: string[];
+  recommendedRegenerationStrategy: string;
+};
+
 export type ProviderGenerationPayload = {
   providerGenerationPayloadId: string;
   status: ProviderGenerationPayloadStatus;
@@ -116,6 +148,8 @@ export type ProviderGenerationPayload = {
   payloadKind: ProviderGenerationPayloadKind;
   sourceWebsiteGenerationPackageId: string;
   sourceWebsiteGenerationPackageArtifactId: string;
+  sourceGenerationImprovementPlanId?: string;
+  sourceGenerationImprovementPlanArtifactId?: string;
   siteVersionId: string;
   dryRunId: string;
   createdAt: string;
@@ -129,6 +163,8 @@ export type ProviderGenerationPayload = {
   limitations: string[];
   diagnostics: string[];
   safetyClassification: ProviderGenerationPayloadSafetyClassification;
+  regenerationGuidance?: ProviderGenerationPayloadRegenerationGuidance;
+  deltaSummary?: ProviderGenerationPayloadDeltaSummary;
 };
 
 export type ProviderGenerationPayloadValidationResult = {
@@ -151,6 +187,11 @@ export const PROVIDER_GENERATION_PAYLOAD_FORBIDDEN_FIELDS = [
   "generatedContent",
   "generatedHtml",
   "generatedReact",
+  "html",
+  "react",
+  "css",
+  "framework",
+  "implementationInstructions",
   "generatedComponents",
   "generatedBlocks",
   "deploymentArtifact",
@@ -204,6 +245,10 @@ function validateStringArray(value: unknown, path: string, errors: string[]): st
     else values.push(item);
   }
   return values;
+}
+
+function validateOptionalString(value: unknown, path: string, errors: string[]): void {
+  if (value !== undefined && !isNonEmptyString(value)) errors.push(`${path} must be a non-empty string when present`);
 }
 
 function validateRequiredObject(value: unknown, path: string, errors: string[]): Record<string, unknown> | null {
@@ -269,6 +314,22 @@ function validateLineage(value: unknown, payload: Record<string, unknown>, error
   if (!isNonEmptyString(lineage.sourceWebsiteGenerationPackageContractVersion)) {
     errors.push("lineage.sourceWebsiteGenerationPackageContractVersion is required");
   }
+  validateOptionalString(lineage.sourceGenerationImprovementPlanId, "lineage.sourceGenerationImprovementPlanId", errors);
+  validateOptionalString(
+    lineage.sourceGenerationImprovementPlanArtifactId,
+    "lineage.sourceGenerationImprovementPlanArtifactId",
+    errors,
+  );
+  validateOptionalString(
+    lineage.sourceGenerationImprovementPlanStatus,
+    "lineage.sourceGenerationImprovementPlanStatus",
+    errors,
+  );
+  validateOptionalString(
+    lineage.sourceGenerationImprovementPlanContractVersion,
+    "lineage.sourceGenerationImprovementPlanContractVersion",
+    errors,
+  );
   if (!isNonEmptyString(lineage.sourceWebsiteDesignBriefId)) {
     errors.push("lineage.sourceWebsiteDesignBriefId is required");
   }
@@ -285,6 +346,14 @@ function validateLineage(value: unknown, payload: Record<string, unknown>, error
   }
   if (lineage.sourceWebsiteGenerationPackageArtifactId !== payload.sourceWebsiteGenerationPackageArtifactId) {
     errors.push("lineage.sourceWebsiteGenerationPackageArtifactId must match sourceWebsiteGenerationPackageArtifactId");
+  }
+  if (payload.sourceGenerationImprovementPlanId !== undefined &&
+    lineage.sourceGenerationImprovementPlanId !== payload.sourceGenerationImprovementPlanId) {
+    errors.push("lineage.sourceGenerationImprovementPlanId must match sourceGenerationImprovementPlanId");
+  }
+  if (payload.sourceGenerationImprovementPlanArtifactId !== undefined &&
+    lineage.sourceGenerationImprovementPlanArtifactId !== payload.sourceGenerationImprovementPlanArtifactId) {
+    errors.push("lineage.sourceGenerationImprovementPlanArtifactId must match sourceGenerationImprovementPlanArtifactId");
   }
   validateEvidenceRefs(lineage.evidenceRefs, "lineage.evidenceRefs", errors);
   validateEvidenceRefs(lineage.upstreamArtifactRefs, "lineage.upstreamArtifactRefs", errors);
@@ -398,6 +467,52 @@ function validatePreservedArrays(payload: Record<string, unknown>, errors: strin
   }
 }
 
+function validateImprovementGuidanceItem(value: unknown, path: string, errors: string[]): void {
+  const item = validateRequiredObject(value, path, errors);
+  if (!item) return;
+  if (!isNonEmptyString(item.originatingImprovementId)) errors.push(`${path}.originatingImprovementId is required`);
+  validateStringArray(item.originatingDeviationIds, `${path}.originatingDeviationIds`, errors);
+  validateStringArray(item.originatingRequirementIds, `${path}.originatingRequirementIds`, errors);
+  if (!isNonEmptyString(item.category)) errors.push(`${path}.category is required`);
+  if (item.priority !== "critical" && item.priority !== "high" && item.priority !== "medium" && item.priority !== "low") {
+    errors.push(`${path}.priority is not allowed`);
+  }
+  if (!isNonEmptyString(item.expectedOutcome)) errors.push(`${path}.expectedOutcome is required`);
+}
+
+function validateRegenerationGuidance(payload: Record<string, unknown>, errors: string[]): void {
+  if (payload.regenerationGuidance === undefined && payload.deltaSummary === undefined) return;
+  const guidance = validateRequiredObject(payload.regenerationGuidance, "regenerationGuidance", errors);
+  if (guidance) {
+    validateStringArray(guidance.preserve, "regenerationGuidance.preserve", errors);
+    validateStringArray(guidance.do_not_change, "regenerationGuidance.do_not_change", errors);
+    validateStringArray(guidance.known_limitations, "regenerationGuidance.known_limitations", errors);
+    if (!Array.isArray(guidance.improve)) errors.push("regenerationGuidance.improve must be an array");
+    else guidance.improve.forEach((item, index) =>
+      validateImprovementGuidanceItem(item, `regenerationGuidance.improve[${index}]`, errors));
+    if (!Array.isArray(guidance.critical_items)) errors.push("regenerationGuidance.critical_items must be an array");
+    else guidance.critical_items.forEach((item, index) =>
+      validateImprovementGuidanceItem(item, `regenerationGuidance.critical_items[${index}]`, errors));
+  }
+
+  const summary = validateRequiredObject(payload.deltaSummary, "deltaSummary", errors);
+  if (!summary) return;
+  for (const key of ["totalImprovements", "critical", "high", "medium", "low"]) {
+    if (!Number.isInteger(summary[key]) || Number(summary[key]) < 0) {
+      errors.push(`deltaSummary.${key} must be a non-negative integer`);
+    }
+  }
+  validateStringArray(summary.affectedCategories, "deltaSummary.affectedCategories", errors);
+  if (!isNonEmptyString(summary.recommendedRegenerationStrategy)) {
+    errors.push("deltaSummary.recommendedRegenerationStrategy is required");
+  }
+  const counted = Number(summary.critical ?? 0) + Number(summary.high ?? 0) +
+    Number(summary.medium ?? 0) + Number(summary.low ?? 0);
+  if (Number.isInteger(summary.totalImprovements) && counted !== summary.totalImprovements) {
+    errors.push("deltaSummary priority counts must equal totalImprovements");
+  }
+}
+
 export function validateProviderGenerationPayload(
   validationInput: ProviderGenerationPayloadValidationInput | ProviderGenerationPayload,
 ): ProviderGenerationPayloadValidationResult {
@@ -429,6 +544,8 @@ export function validateProviderGenerationPayload(
   if (!isNonEmptyString(payload.sourceWebsiteGenerationPackageArtifactId)) {
     errors.push("sourceWebsiteGenerationPackageArtifactId is required");
   }
+  validateOptionalString(payload.sourceGenerationImprovementPlanId, "sourceGenerationImprovementPlanId", errors);
+  validateOptionalString(payload.sourceGenerationImprovementPlanArtifactId, "sourceGenerationImprovementPlanArtifactId", errors);
   if (!isNonEmptyString(payload.siteVersionId)) errors.push("siteVersionId is required");
   if (!isNonEmptyString(payload.dryRunId)) errors.push("dryRunId is required");
   if (!isTimestamp(payload.createdAt)) errors.push("createdAt must be a valid timestamp");
@@ -449,6 +566,7 @@ export function validateProviderGenerationPayload(
   validateStringArray(payload.limitations, "limitations", errors);
   validateStringArray(payload.diagnostics, "diagnostics", errors);
   validateSafety(payload.safetyClassification, errors);
+  validateRegenerationGuidance(payload, errors);
 
   return {
     valid: errors.length === 0,

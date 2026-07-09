@@ -901,8 +901,8 @@ Current implementation:
   permission.
 
 Missing implementation:
-- Provider Payload v2 that can consume the existing WGP plus the Generation
-  Improvement Plan.
+- Regeneration Delivery Package v2 that can package the persisted Provider
+  Payload v2 for a future manual regeneration cycle.
 - Provider execution remains outside GNR8 until explicitly authorized.
 - Business Approval remains unimplemented.
 
@@ -916,9 +916,81 @@ Risk:
   been created.
 
 Estimated implementation complexity:
-- Runtime foundation is complete. Next work is MVP-2.0-G - Provider Payload v2
-  Runtime Foundation, still stopping before provider execution and AI
-  execution.
+- Generation Improvement Plan runtime foundation is complete. MVP-2.0-G has
+  now completed Provider Payload v2. Next work is MVP-2.0-H - Regeneration
+  Delivery Package v2, still stopping before Codex execution, provider
+  execution, AI execution, generated website output, publishing, deployment,
+  DNS, and Business Approval.
+
+### Provider Payload v2 Runtime Foundation
+
+Current implementation:
+- MVP-2.0-G implements the deterministic ProviderGenerationPayload v2 runtime
+  foundation.
+- Runtime module `provider-generation-payload-v2-builder.ts` now implements
+  `buildProviderGenerationPayloadV2(...)`,
+  `assertProviderGenerationPayloadV2SourceIntegrity(...)`, and
+  `verifyProviderGenerationPayloadV2Safety(...)`.
+- Provider Payload v2 reuses the existing `ProviderGenerationPayload`
+  contract and persists under artifact kind `provider_generation_payload`.
+  No new canonical `ProviderGenerationPayloadV2` artifact type exists.
+- The v2 builder consumes only `WebsiteGenerationPackageArtifact` plus
+  `GenerationImprovementPlanArtifact`, with persisted source artifact IDs.
+- The original Website Generation Package is preserved unchanged in
+  `serializedWebsiteGenerationPackage`.
+- The Generation Improvement Plan is translated into deterministic,
+  business-level `regenerationGuidance` and `deltaSummary`.
+- `regenerationGuidance` contains only `preserve`, `improve`,
+  `do_not_change`, `known_limitations`, and `critical_items`.
+- `deltaSummary` records total improvements, priority counts, affected
+  categories, and recommended regeneration strategy. This is regeneration
+  planning, not compliance.
+- Provider payload persistence now allows `ready` alongside existing
+  `draft`, `valid`, and `blocked` persisted records. It still rejects
+  `invalid` and `stale`.
+- MVP-2.0-G completed the first real ODV Provider Payload v2 from source WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` plus source
+  Improvement Plan
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Persisted Provider Payload v2 artifact:
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- Status is `ready`; runtime version is `MVP-2.0-G`.
+- Source WGP status is `partial`; source plan status is `ready`.
+- Preserved WGP counts are objectives `2`, audience `3`, messages `5`,
+  navigation destinations `4`, page contracts `4`, section contracts `14`,
+  content requirements `128`, validation expectations `10`, confidence `LOW`.
+- Improvement counts are total `413`, critical `259`, high `0`, medium
+  `154`, low `0`.
+- Affected categories are Accessibility, Assets, Business Positioning,
+  Constraints, Messages, Navigation, SEO, Sections, and Trust.
+- Guidance counts are preserve `12`, improve `413`, do-not-change `6`,
+  known limitations `112`, and critical items `259`.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- Safety verification passed with no provider execution, no AI execution, no
+  generated website, no generated HTML, no React, no CSS, no framework
+  decision, no deployment, no publishing, no DNS mutation, no runtime
+  mutation, no compliance execution, and no Business Approval.
+
+Missing implementation:
+- Regeneration Delivery Package v2 for a future manual regeneration cycle.
+- Provider execution remains outside GNR8 until explicitly authorized.
+- Generated Website Proposal v2 remains uncreated.
+- Business Approval remains unimplemented.
+
+Dependencies:
+- Existing Website Generation Package.
+- Existing Generation Improvement Plan.
+
+Risk:
+- Medium. The v2 payload is persisted and ready for a future regeneration
+  cycle, but no export package or governed execution boundary has consumed it.
+
+Estimated implementation complexity:
+- Runtime foundation is complete. Next work is MVP-2.0-H - Regeneration
+  Delivery Package v2, still stopping before Codex execution, provider
+  execution, AI execution, generated website output, Generated Website
+  Proposal v2, publishing, deployment, DNS, or Business Approval.
 
 ### Business Approval
 
@@ -1341,6 +1413,12 @@ Improvement Plan:
 status is `ready`, recommended next action is `regenerate`, estimated
 regeneration readiness is `ready`, and latest reload, by-ID reload, and
 idempotent retry reuse passed.
+MVP-2.0-G then persisted the first real ODV Provider Payload v2:
+`provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`. The payload
+status is `ready`, preserves the original Website Generation Package, adds
+business-level regeneration guidance from the Generation Improvement Plan, and
+passed latest reload, by-ID reload, idempotent retry reuse, and safety
+verification.
 MVP-2.0-A then produced the first deterministic ODV export bundle at
 `ODV_EXPORT/`, with manifest, complete lineage, source WGP, ProviderGenerationPayload,
 business summary, limitations, and manual execution instructions. MVP-2.0-A2
@@ -1351,9 +1429,8 @@ conditions, forbidden actions, and output-folder guidance to
 `execution-readme.md`, and adding a non-canonical execution-facing
 `generationMission` field to `provider-generation-payload.json` without
 changing canonical runtime contracts. The current next safe phase is
-MVP-2.0-G - Provider Payload v2 Runtime Foundation, consuming the existing WGP
-plus the persisted Generation Improvement Plan without publishing, deploying,
-calling providers, executing AI, or regenerating the website.
-Stop before publishing, deployment, DNS mutation, production mutation, UI,
-API, schema, workers, provider calls, or AI execution unless explicitly
-authorized.
+MVP-2.0-H - Regeneration Delivery Package v2, packaging the persisted
+Provider Payload v2 for a future manual regeneration cycle without Codex
+execution, provider execution, AI execution, website generation, Generated
+Website Proposal v2, publishing, deployment, DNS mutation, production
+mutation, UI, API, schema, or workers unless explicitly authorized.
