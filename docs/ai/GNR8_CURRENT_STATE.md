@@ -5,6 +5,46 @@
 
 ## Current Phase
 
+MVP-2.0-ARCH - Generation Cycle Architecture is COMPLETE.
+
+GNR8 now possesses the canonical Generation Cycle Architecture:
+
+- Generation Cycle is "A deterministic governance model describing the
+  complete evolutionary history of a website across multiple generation
+  iterations."
+- Iteration is "A governed generation attempt belonging to exactly one
+  Generation Cycle."
+- Artifacts preserve truth.
+- Lineage preserves causality.
+- Generation Cycles preserve evolution.
+- Iterations preserve improvement.
+- Business intent remains canonical.
+- Providers remain replaceable.
+
+Generation Cycle organizes existing artifact lineage across repeated
+generation iterations. It does not replace artifact lineage, own business
+truth, own business alignment, own the Website Generation Package, execute
+providers, execute AI, import proposals, run compliance, approve, publish,
+deploy, mutate production, introduce runtime cycle IDs, or modify canonical
+business artifacts.
+
+Canonical document:
+
+- `docs/architecture/GENERATION_CYCLE_ARCHITECTURE.md`
+
+MVP-2.0-ARCH was documentation only. It added no runtime behavior,
+persistence, schema, API, UI, workers, provider execution, AI execution,
+regeneration, publishing, deployment, or canonical business artifact mutation.
+
+Next recommended phase: MVP-2.0-I - Manual External Regeneration Execution.
+Consume `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an
+implementation proposal only, still stopping before GNR8 provider execution,
+automated AI execution from GNR8, Generated Website Proposal v2 import,
+compliance, Business Approval, publishing, deployment, DNS, production
+mutation, UI, API, schema, or workers unless explicitly authorized.
+
+## Previous Phase
+
 MVP-2.0-H - Second Generation Delivery Package is COMPLETE for ODV.
 
 GNR8 now possesses its first complete deterministic regeneration delivery
@@ -3266,15 +3306,15 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-2.0-G - Provider Payload v2 Runtime Foundation is
-  complete for ODV.
+- Phase MVP-2.0-ARCH - Generation Cycle Architecture is complete.
 
 Next Phase:
-- MVP-2.0-H - Regeneration Delivery Package v2. Package the persisted
-  Provider Payload v2 for a future manual regeneration cycle, and stop before
-  Codex execution, provider execution, AI execution, website generation,
-  Generated Website Proposal v2, publishing, deployment, DNS, or Business
-  Approval unless explicitly authorized.
+- MVP-2.0-I - Manual External Regeneration Execution. Consume
+  `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an implementation
+  proposal only, still stopping before GNR8 provider execution, automated AI
+  execution from GNR8, Generated Website Proposal v2 import, compliance,
+  Business Approval, publishing, deployment, DNS, production mutation, UI,
+  API, schema, or workers unless explicitly authorized.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -4589,12 +4629,11 @@ MVP-2.0-A2 Generation Delivery Package Polish:
   API, no UI, no worker, no schema change, no deployment, no DNS mutation, and
   no production mutation.
 
-Recommended next phase after MVP-2.0-G:
-- MVP-2.0-H - Regeneration Delivery Package v2. Package the persisted
-  Provider Payload v2 for a future manual regeneration cycle, and stop before
-  Codex execution, provider execution, AI execution, website generation,
-  Generated Website Proposal v2, publishing, deployment, DNS, or Business
-  Approval unless explicitly authorized.
+Subsequent phase after MVP-2.0-G:
+- MVP-2.0-H - Regeneration Delivery Package v2 packaged the persisted
+  Provider Payload v2 for a future manual regeneration cycle without Codex
+  execution, provider execution, AI execution, website generation, Generated
+  Website Proposal v2, publishing, deployment, DNS, or Business Approval.
 
 Phase AO-0 created the first complete canonical architecture narrative:
 `docs/architecture/THE_GNR8_BLUEPRINT.md`.

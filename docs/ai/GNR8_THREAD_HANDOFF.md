@@ -71,9 +71,13 @@ Current status:
   created `ODV_REGENERATION_EXPORT_002/`, export ID
   `odv-regeneration-export-002`, generation cycle ID
   `odv-generation-cycle-002`, iteration `2`.
+- Phase MVP-2.0-ARCH - Generation Cycle Architecture is complete and defines
+  Generation Cycle as the canonical deterministic governance model for the
+  complete evolutionary history of a website across multiple generation
+  iterations.
 
 Current Phase:
-- Phase MVP-2.0-H - Second Generation Delivery Package is complete.
+- Phase MVP-2.0-ARCH - Generation Cycle Architecture is complete.
 
 Next Phase:
 - MVP-2.0-I - Manual External Regeneration Execution. Consume
@@ -123,6 +127,13 @@ Current architecture direction:
   the same lineage.
 - Business history is immutable. Every governed artifact preserves lineage.
   Versioning refines understanding; lineage preserves evolution.
+- Generation Cycle is the canonical governance model for grouping multiple
+  generation iterations into one website-evolution history.
+- Artifacts preserve truth. Lineage preserves causality. Generation Cycles
+  preserve evolution. Iterations preserve improvement.
+- Generation Cycle organizes artifact lineage across iterations; it does not
+  replace lineage, own business truth, own the Website Generation Package,
+  execute providers, execute AI, approve, publish, or mutate production.
 - Artifacts exist to support business decisions.
 - GNR8 guides businesses through understanding before generation.
 - Conversation replaces unnecessary software complexity.

@@ -50,6 +50,47 @@ Import Existing Website
 -> Publish
 ```
 
+## MVP-2.0-ARCH Generation Cycle Addendum
+
+MVP-2.0-ARCH adds the canonical Generation Cycle Architecture as an
+organizational governance model for iterative website evolution. It does not
+rewrite the canonical artifact lineage above.
+
+Canonical document:
+
+- `docs/architecture/GENERATION_CYCLE_ARCHITECTURE.md`
+
+Canonical relationship:
+
+```text
+Reality
+        ↓
+Business Understanding
+        ↓
+Website Generation Package
+        ↓
+Generation Cycle
+        ↓
+Iteration 1
+        ↓
+Iteration 2
+        ↓
+Iteration 3
+        ↓
+...
+        ↓
+Approved Website
+```
+
+Generation Cycle groups proposal, observation, compliance, report,
+improvement, and next-payload history across iterations. The Website
+Generation Package remains the canonical generation contract, and artifact
+lineage remains the canonical truth and causality model.
+
+MVP-2.0-ARCH adds no runtime behavior, persistence, schema, API, UI, workers,
+provider execution, AI execution, regeneration, publishing, deployment, or
+canonical business artifact mutation.
+
 ## Reality Assessment Table
 
 Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
@@ -1444,4 +1485,7 @@ consuming `ODV_REGENERATION_EXPORT_002/` outside GNR8 and producing an
 implementation proposal only while stopping before Generated Website Proposal
 v2 import, compliance, Business Approval, publishing, deployment, DNS
 mutation, production mutation, UI, API, schema, or workers unless explicitly
-authorized.
+authorized. MVP-2.0-ARCH then established the canonical Generation Cycle
+Architecture as the governance model for grouping multiple generation
+iterations into one evolutionary history while preserving artifact lineage as
+the truth and causality model.

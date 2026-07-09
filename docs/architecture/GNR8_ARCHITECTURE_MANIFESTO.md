@@ -70,6 +70,10 @@ page-generation engine.
 - Website Design Brief defines experience.
 - Website Generation Package defines generation.
 - The Website Generation Package is the canonical generation contract.
+- Artifacts preserve truth.
+- Lineage preserves causality.
+- Generation Cycles preserve evolution.
+- Iterations preserve improvement.
 - Provider prompts are disposable projections.
 - GNR8 owns meaning.
 - Providers own implementation.
@@ -159,6 +163,14 @@ Website Design Brief defines experience.
 
 Website Generation Package defines generation.
 
+Artifacts preserve truth.
+
+Lineage preserves causality.
+
+Generation Cycles preserve evolution.
+
+Iterations preserve improvement.
+
 GNR8 owns contractual meaning.
 
 External AI owns implementation proposals.
@@ -187,6 +199,13 @@ Design Brief governs what the website experience should express. The Website
 Generation Package is the canonical generation contract and governs generation
 intent. Provider prompts are disposable projections. GNR8 owns meaning.
 Providers own implementation.
+
+Generation Cycle is the deterministic governance model describing the complete
+evolutionary history of a website across multiple generation iterations.
+Generation Cycle organizes artifact lineage across repeated generation,
+observation, compliance, reporting, and improvement attempts. It does not
+replace lineage, own business truth, own the Website Generation Package,
+execute providers, execute AI, approve, publish, or mutate production.
 
 Connectors, evidence, lineage, candidate discovery, context, review,
 reconstruction packaging, structure planning, and generation packaging are not
