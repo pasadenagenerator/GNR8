@@ -266,18 +266,21 @@ Iteration 2:
 - source bundle: `ODV_GENERATED_PROPOSAL_002/`;
 - source Provider Payload v2:
   `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`;
+- observed model:
+  `observed_website_model_0d5e829f546745b1433557978c875626`;
 - source Generation Improvement Plan:
   `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`;
 - source WGP:
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
-- status: latest quarantined Generated Website Proposal, ready for future
-  observation.
+- status: latest quarantined Generated Website Proposal and latest
+  `observable` Observed Website Model, ready for future compliance v2.
 
 Iteration 2 does not retroactively change Iteration 1's canonical artifact
-identity. The previous proposal remains reloadable by ID. Iteration/cycle
-metadata is preserved in source metadata, diagnostics, and operator
-attestation because the current runtime contract does not yet include
-canonical cycle fields.
+identity. The previous proposal and previous OWM remain reloadable by ID. No
+comparison between Iteration 1 and Iteration 2 has been performed.
+Iteration/cycle metadata is preserved in source metadata, diagnostics,
+lineage, and operator attestation because the current runtime contract does
+not yet include canonical cycle fields.
 
 ## Future Runtime Mapping
 

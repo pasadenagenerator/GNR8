@@ -652,7 +652,6 @@ Current implementation:
   contracts.
 
 Missing implementation:
-- Observed Website Model v2 for the latest ODV proposal.
 - Contract comparison v2 against the Website Generation Package.
 - Generation Contract Compliance v2 and Compliance Report v2.
 - Business Approval and publish authorization.
@@ -664,12 +663,12 @@ Dependencies:
 - Operator attestation.
 
 Risk:
-- Medium. The proposal can now be stored safely, but the generated output has
-  not been observed or compared against the package.
+- Medium. The proposal can now be stored safely and has been observed into
+  OWM v2, but the generated output has not been compared against the package.
 
 Estimated implementation complexity:
 - First import/storage foundation is complete. Remaining work begins with the
-  observation boundary before any compliance evaluator is implemented.
+  compliance v2 boundary for Iteration 2.
 
 ### Website Observation
 
@@ -692,14 +691,14 @@ Current implementation:
   `partially_observable`, `observable`, and `blocked`.
 - The MVP-1K-3 builder records missing observation limitations when metadata
   is absent instead of guessing.
+- MVP-2.0-K observed the Iteration 2 source bundle
+  `ODV_GENERATED_PROPOSAL_002/source/` through parsed static HTML observation
+  metadata and persisted OWM v2:
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
 
 Missing implementation:
-- File tree inspection.
 - Rendered preview inspection.
-- Static HTML/content inspection.
-- Asset inventory inspection.
-- Route/page inventory inspection.
-- Real-target observation validation.
+- ViroiDoc real Generated Website Proposal observation.
 
 Dependencies:
 - Quarantined Generated Website Proposal.
@@ -754,6 +753,27 @@ Current implementation:
   Approval, publishing, deploy, provider execution, AI execution, generated
   proposal mutation, canonical business artifact mutation, UI, API, schema, or
   worker behavior.
+- MVP-2.0-K created the second real persisted Observed Website Model for ODV
+  from `GeneratedWebsiteProposalArtifact`
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- Latest ODV OWM artifact:
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- ODV OWM v2 status/readiness is `observable`; counts are pages `1`, routes
+  `1`, navigation/links `11`, nav-menu links `7`, sections `7`, headings
+  `17`, CTA links `3`, messages `70`, assets `14`, constraints `53`,
+  technical signals `18`, evidence refs `18`, and limitations `121`.
+- Latest reload, by-ID reload, immediate idempotent retry, and cold
+  idempotent retry reuse all returned
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- OWM v1 remains immutable and reloadable by ID as
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- OWM v2 is now latest. No Iteration 1 vs Iteration 2 comparison has been
+  performed.
+- MVP-2.0-K added no WGP comparison, Generation Contract Compliance v2,
+  Compliance Report v2, Generation Improvement Plan v2, Business Approval,
+  publishing, deploy, provider execution, AI execution, generated proposal
+  mutation, canonical business artifact mutation, UI, API, schema, or worker
+  behavior.
 
 Missing implementation:
 - Rendered browser inspection backed observations.
@@ -770,9 +790,9 @@ Risk:
 
 Estimated implementation complexity:
 - First runtime contract, builder, validator, focused tests, and provenance
-  persistence are complete. The first real ODV static-HTML observation is
-  persisted. Remaining work starts with first real ODV Generation Contract
-  Compliance or richer rendered observation.
+  persistence are complete. The first and second real ODV static-HTML
+  observations are persisted. Remaining work starts with ODV Generation
+  Contract Compliance v2 or richer rendered observation.
 
 ### Generation Contract Compliance
 
@@ -1511,3 +1531,11 @@ Iteration 1
 stopping before observation v2, compliance v2, comparison, Compliance Report
 v2, Business Approval, publishing, deployment, DNS mutation, production
 mutation, provider execution, AI execution, UI, API, schema, or workers.
+MVP-2.0-K then observed `ODV_GENERATED_PROPOSAL_002/source/` only and
+persisted latest ODV Observed Website Model v2
+`observed_website_model_0d5e829f546745b1433557978c875626`, preserving
+Iteration 1 OWM `observed_website_model_35499a9cb91a15740910532d451a739a`
+by ID and stopping before compliance v2, comparison, Compliance Report v2,
+Generation Improvement Plan v2, Business Approval, publishing, deployment,
+DNS mutation, production mutation, provider execution, AI execution, UI, API,
+schema, or workers.

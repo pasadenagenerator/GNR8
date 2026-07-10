@@ -78,48 +78,50 @@ Current status:
 - Phase MVP-2.0-J - Import Second Generated Website Proposal is complete for
   ODV and persisted latest proposal artifact
   `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- Phase MVP-2.0-K - Observed Website Model v2 for ODV is complete and
+  persisted latest OWM artifact
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
 
 Current Phase:
-- Phase MVP-2.0-J - Import Second Generated Website Proposal is complete.
+- Phase MVP-2.0-K - Observed Website Model v2 for ODV is complete.
 
-MVP-2.0-J evidence:
+MVP-2.0-K evidence:
 - Target: ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
-- Source bundle: `ODV_GENERATED_PROPOSAL_002/`.
+- Source bundle: `ODV_GENERATED_PROPOSAL_002/source/`.
 - Iteration: `2`.
 - Generation cycle: `odv-generation-cycle-002`.
 - Source WGP:
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d`.
-- Source compliance:
-  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
-- Source compliance report:
-  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
-- Source improvement plan:
-  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
 - Source Provider Payload v2:
   `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
 - Generated Website Proposal v2:
   `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
-- Status/readiness: `quarantined` / `ready`, `readyForCompliance: true`.
-- Latest reload and by-ID reload returned Iteration 2; idempotent retry
-  reused Iteration 2.
-- Iteration 1 remains loadable by ID:
-  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
-- Proposal count increased exactly once from `1` to `2`; downstream
-  observation/compliance/report/approval counts did not change.
-- No OWM v2, compliance v2, iteration comparison, Compliance Report v2,
-  Business Approval, publishing, deployment, DNS mutation, production
-  mutation, provider execution, AI execution, WGP mutation, Improvement Plan
-  mutation, Provider Payload v2 mutation, UI, API, schema, or workers were
-  added.
+- Observed Website Model v2:
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- Status/readiness: `observable` / `observable`.
+- Observation counts: pages `1`, routes `1`, navigation/links `11`,
+  nav-menu links `7`, sections `7`, headings `17`, CTA links `3`, messages
+  `70`, assets `14`, constraints `53`, technical signals `18`, evidence refs
+  `18`, limitations `121`.
+- Latest reload and by-ID reload returned OWM v2; immediate and cold
+  idempotent retries reused OWM v2.
+- Iteration 1 OWM remains loadable by ID:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- OWM count increased exactly once from `2` to `3`; cold retry kept it
+  `3 -> 3`.
+- No WGP comparison, compliance v2, iteration comparison, Compliance Report
+  v2, Generation Improvement Plan v2, Business Approval, publishing,
+  deployment, DNS mutation, production mutation, provider execution, AI
+  execution, proposal mutation, canonical business mutation, UI, API, schema,
+  or workers were added.
 
 Next Phase:
-- MVP-2.0-K - Observed Website Model v2 for ODV. Consume latest Generated
-  Website Proposal v2
-  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e` only. Stop
-  before compliance v2, iteration comparison, Compliance Report v2, Business
-  Approval, publishing, deployment, DNS mutation, production mutation,
-  provider execution, AI execution, UI, API, schema, or workers unless
-  explicitly authorized.
+- MVP-2.0-L - Generation Contract Compliance v2 for ODV. Compare persisted
+  OWM v2 `observed_website_model_0d5e829f546745b1433557978c875626` against
+  the ODV Website Generation Package only. Stop before iteration comparison,
+  Compliance Report v2, Business Approval, publishing, deployment, DNS
+  mutation, production mutation, provider execution, AI execution, UI, API,
+  schema, or workers unless explicitly authorized.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -255,6 +257,26 @@ Current architecture direction:
   Compliance Report, Business Approval, publishing, deploy, provider
   execution, AI execution, generated proposal mutation, canonical business
   artifact mutation, UI, API, schema, or worker behavior.
+- MVP-2.0-K created the second real persisted ODV Observed Website Model from
+  source `GeneratedWebsiteProposalArtifact`
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- Latest ODV OWM v2 artifact:
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- Status/readiness: `observable`.
+- Observation counts: pages `1`, routes `1`, navigation/links `11`,
+  nav-menu links `7`, sections `7`, headings `17`, CTA links `3`, messages
+  `70`, assets `14`, constraints `53`, technical signals `18`, evidence refs
+  `18`, limitations `121`.
+- Latest reload, by-ID reload, immediate idempotent retry, and cold
+  idempotent retry all returned
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- OWM v1 remains immutable and reloadable by ID as
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- MVP-2.0-K added no WGP comparison, Generation Contract Compliance v2,
+  Compliance Report v2, Generation Improvement Plan v2, Business Approval,
+  publishing, deploy, provider execution, AI execution, generated proposal
+  mutation, canonical business artifact mutation, UI, API, schema, or worker
+  behavior.
 - GNR8 owns contractual meaning. External AI owns implementation proposals.
 - Generation Validation Engine observes proposal reality. Compliance
   determines contractual fulfillment.

@@ -225,3 +225,49 @@ The next safe phase after MVP-2.0-C is MVP-2.0-D - First Real Generation
 Contract Compliance for ODV. That phase may compare the persisted ODV OWM
 against the ODV Website Generation Package. MVP-2.0-C stops before that
 comparison.
+
+## Second Real Observed Website Model
+
+MVP-2.0-K created the second real persisted Observed Website Model for ODV
+from the second persisted Generated Website Proposal.
+
+Canonical result document:
+
+- `docs/architecture/SECOND_OBSERVED_WEBSITE_MODEL.md`
+
+Result:
+
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e` loaded latest and by-ID source
+  `GeneratedWebsiteProposalArtifact`
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- The source proposal was valid, quarantined, classified as
+  `implementation_proposal_only`, fail-closed, and ready for observation with
+  `readyForCompliance: true`.
+- `buildObservedWebsiteModel(...)` produced an `observable`
+  `ObservedWebsiteModelArtifact` from parsed static HTML observation metadata
+  under `ODV_GENERATED_PROPOSAL_002/source/`.
+- Latest persisted OWM artifact:
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- Readiness is `observable`.
+- Observation counts: pages `1`, routes `1`, navigation/links `11`,
+  nav-menu links `7`, sections `7`, headings `17`, CTA links `3`, messages
+  `70`, assets `14`, constraints `53`, technical signals `18`, evidence refs
+  `18`, limitations `121`.
+- Latest reload, by-ID reload, immediate idempotent retry, and cold
+  idempotent retry all returned
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- OWM v1 remains reloadable by ID as
+  `observed_website_model_35499a9cb91a15740910532d451a739a`.
+- OWM v2 is now latest. No Iteration 1 vs Iteration 2 comparison has been
+  performed.
+- No WGP comparison, Generation Contract Compliance v2, Compliance Report v2,
+  Generation Improvement Plan v2, Business Approval, publishing, deploy,
+  provider execution, AI execution, proposal mutation, canonical business
+  artifact mutation, UI, API, schema, or worker behavior was added.
+
+## Current Next Boundary
+
+The next safe phase after MVP-2.0-K is MVP-2.0-L - Generation Contract
+Compliance v2 for ODV. That phase may compare OWM v2 against the ODV Website
+Generation Package. MVP-2.0-K stops before compliance v2 and before any
+Iteration 1 vs Iteration 2 comparison.
