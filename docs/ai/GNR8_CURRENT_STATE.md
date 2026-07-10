@@ -5,166 +5,92 @@
 
 ## Current Phase
 
-MVP-2.0-L - Generation Contract Compliance v2 for ODV is COMPLETE.
+MVP-2.0-M - First Generation Evolution Analysis for ODV is COMPLETE.
 
-GNR8 now has two persisted ODV Generation Contract Compliance artifacts:
+GNR8 has formally compared ODV Iteration 1 and Iteration 2 against the same
+Website Generation Package without recomputing either compliance result.
+
+Compared compliance artifacts:
 
 - Iteration 1:
   `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`;
 - Iteration 2:
   `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
 
-Compliance v2 compares only:
+Shared Website Generation Package:
+
+- persisted WGP artifact:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
+- inner WGP ID referenced by both compliance artifacts:
+  `website-generation-package:0bb33dd388323a443bf36be58bf2d9a1`.
+
+Persisted Generation Evolution Analysis:
 
 ```text
-WebsiteGenerationPackage
-  website_generation_package_c2c555025f186178f27c44c7cd272d4d
-
-against
-
-ObservedWebsiteModel v2
-  observed_website_model_0d5e829f546745b1433557978c875626
+generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253
 ```
 
-Status:
+Status / overall assessment / recommended next action:
 
 ```text
-non_compliant
+improved / meaningful_improvement / create_compliance_report_v2
 ```
 
-Overall compliance:
+Category transition summary:
 
-```text
-non_compliant
-```
+- improved: `message_coverage`, `trust_signal_presence`,
+  `constraints_preserved`;
+- regressed: none;
+- unresolved: `objectives_represented`, `navigation_obligations`,
+  `page_obligations`, `section_obligations`, `asset_presence`,
+  `accessibility_expectations_observable`, `seo_expectations_observable`.
 
-Latest Generation Contract Compliance now returns:
+Metric deltas:
 
-```text
-generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b
-```
+| Metric | Iteration 1 | Iteration 2 | Delta |
+| --- | ---: | ---: | ---: |
+| compliant categories | `0` | `2` | `+2` |
+| partial categories | `2` | `2` | `0` |
+| non-compliant categories | `8` | `6` | `-2` |
+| findings | `149` | `149` | `0` |
+| deviations | `145` | `132` | `-13` |
+| evidence records | `12` | `25` | `+13` |
+| limitations | `268` | `252` | `-16` |
+| confidence | `MEDIUM` | `MEDIUM` | `0` |
 
-Compliance summary:
+Improvement Plan effectiveness from
+`generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`:
 
-| Compliance Signal | Count |
-| --- | ---: |
-| categories | `10` |
-| findings | `149` |
-| deviations | `132` |
-| evidence records | `25` |
-| limitations | `252` |
-
-Confidence:
-
-```text
-MEDIUM
-```
-
-Category summary:
-
-| Category | Status |
-| --- | --- |
-| `objectives_represented` | `non_compliant` |
-| `navigation_obligations` | `non_compliant` |
-| `page_obligations` | `non_compliant` |
-| `section_obligations` | `non_compliant` |
-| `message_coverage` | `compliant` |
-| `asset_presence` | `non_compliant` |
-| `trust_signal_presence` | `compliant` |
-| `constraints_preserved` | `non_compliant` |
-| `accessibility_expectations_observable` | `partial` |
-| `seo_expectations_observable` | `partial` |
+- observed improvement: `Messages`, `Trust`, `Constraints`;
+- no demonstrated improvement: `Accessibility`, `Assets`,
+  `Business Positioning`, `Navigation`, `SEO`, `Sections`;
+- regression: none;
+- insufficient evidence: none.
 
 Persistence verification:
 
 - latest reload returned
-  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`;
+  `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253`;
 - by-ID reload returned
-  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`;
+  `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253`;
 - idempotent retry reused
-  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`;
-- total compliance artifact count is `2`;
-- exactly `1` compliance record targets OWM v2;
-- Iteration 1 compliance remained reloadable by ID:
-  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
-
-Verified source lineage:
-
-- WGP by-ID load passed:
-  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
-- OWM v2 by-ID load passed:
-  `observed_website_model_0d5e829f546745b1433557978c875626`;
-- OWM v2 latest reload returned
-  `observed_website_model_0d5e829f546745b1433557978c875626`;
-- source proposal v2 artifact preserved:
-  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`;
-- source Provider Payload v2 artifact preserved:
-  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`;
-- compliance lineage preserved `20` upstream artifact refs.
-
-Verified Iteration 2 compliance lineage:
-
-```text
-WebsiteGenerationPackage
-  ↓
-GenerationContractCompliance
-  ↓
-ComplianceReport
-  ↓
-GenerationImprovementPlan
-  ↓
-ProviderGenerationPayload v2
-  ↓
-GeneratedWebsiteProposal v2
-  ↓
-ObservedWebsiteModel v2
-  ↓
-GenerationContractCompliance v2
-```
-
-Artifact chain:
-
-- WGP:
-  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
-- compliance:
-  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`;
-- compliance report:
-  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`;
-- improvement plan:
-  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`;
-- Provider Payload v2:
-  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`;
-- Generated Website Proposal v2:
-  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`;
-- Observed Website Model v2:
-  `observed_website_model_0d5e829f546745b1433557978c875626`;
-- Generation Contract Compliance v2:
-  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
-
-Iteration and generation cycle metadata (`iteration = 2`,
-`odv-generation-cycle-002`) are preserved in source metadata, diagnostics,
-lineage, and operator attestation. No existing canonical artifact contracts
-were changed solely to add cycle fields.
-
-Compliance v1 and compliance v2 both belong to the same Generation Cycle. No
-Iteration 1 vs Iteration 2 comparison has been performed.
+  `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253`;
+- both source compliance artifacts remained unmodified.
 
 Canonical document:
 
-- `docs/architecture/SECOND_REAL_GENERATION_CONTRACT_COMPLIANCE.md`
+- `docs/architecture/FIRST_GENERATION_EVOLUTION_ANALYSIS.md`
 
-MVP-2.0-L added no Compliance Report v2, iteration comparison, statistics
-across iterations, Generation Improvement Plan v2, Provider Payload v3,
-regeneration, Business Approval, publishing, deployment, DNS mutation,
-production mutation, provider execution, AI execution, WGP mutation, OWM v1
-mutation, OWM v2 mutation, canonical business mutation, UI, API, schema, or
-workers.
+MVP-2.0-M added no compliance recomputation, Compliance Report v2,
+Improvement Plan v2, Provider Payload v3, regeneration, provider execution, AI
+execution, Business Approval, publishing, deployment, DNS mutation, production
+mutation, source artifact mutation, WGP mutation, OWM mutation, canonical
+business mutation, UI, API, schema migration, or workers.
 
-Next recommended phase: MVP-2.0-M - Compliance Report v2 for ODV. Consume
-only persisted compliance v2
-`generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`, create the
-human-readable Compliance Report v2, and stop before iteration comparison,
-Generation Improvement Plan v2, Provider Payload v3, regeneration, Business
+Next recommended phase: MVP-2.0-N - Compliance Report v2 for ODV. Consume the
+persisted Iteration 2 compliance artifact plus the Generation Evolution
+Analysis result, create the human-readable Compliance Report v2, and stop
+before Improvement Plan v2, Provider Payload v3, regeneration, Business
 Approval, publishing, deployment, DNS mutation, production mutation, provider
 execution, AI execution, UI, API, schema, or workers unless explicitly
 authorized.
@@ -3502,15 +3428,17 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-2.0-L - Generation Contract Compliance v2 for ODV is complete.
+- Phase MVP-2.0-M - First Generation Evolution Analysis for ODV is complete.
 
 Next Phase:
-- MVP-2.0-M - Compliance Report v2 for ODV. Consume only persisted compliance
-  v2 `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b` and
-  stop before iteration comparison, Generation Improvement Plan v2, Provider
-  Payload v3, regeneration, Business Approval, publishing, deployment, DNS
-  mutation, production mutation, provider execution, AI execution, UI, API,
-  schema, or workers unless explicitly authorized.
+- MVP-2.0-N - Compliance Report v2 for ODV. Consume persisted compliance v2
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b` plus
+  Generation Evolution Analysis
+  `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253` and stop
+  before Improvement Plan v2, Provider Payload v3, regeneration, Business
+  Approval, publishing, deployment, DNS mutation, production mutation,
+  provider execution, AI execution, UI, API, schema, or workers unless
+  explicitly authorized.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:

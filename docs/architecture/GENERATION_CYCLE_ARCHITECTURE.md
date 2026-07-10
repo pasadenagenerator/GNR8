@@ -276,12 +276,28 @@ Iteration 2:
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
 - status: latest quarantined Generated Website Proposal, latest `observable`
   Observed Website Model, and latest `non_compliant` Generation Contract
-  Compliance artifact, ready for future Compliance Report v2.
+  Compliance artifact.
+
+Generation Evolution Analysis:
+
+- artifact:
+  `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253`;
+- compared Iteration 1 compliance
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`
+  against Iteration 2 compliance
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`;
+- both compliance artifacts reference the same Website Generation Package
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
+- status / overall assessment:
+  `improved` / `meaningful_improvement`;
+- recommendation:
+  `create_compliance_report_v2`.
 
 Iteration 2 does not retroactively change Iteration 1's canonical artifact
 identity. The previous proposal, previous OWM, and previous compliance remain
-reloadable by ID. No comparison between Iteration 1 and Iteration 2 has been
-performed.
+reloadable by ID. MVP-2.0-M performed the first deterministic comparison
+between Iteration 1 and Iteration 2 without recomputing either compliance
+result.
 Iteration/cycle metadata is preserved in source metadata, diagnostics,
 lineage, and operator attestation because the current runtime contract does
 not yet include canonical cycle fields.

@@ -766,8 +766,8 @@ Current implementation:
   `observed_website_model_0d5e829f546745b1433557978c875626`.
 - OWM v1 remains immutable and reloadable by ID as
   `observed_website_model_35499a9cb91a15740910532d451a739a`.
-- OWM v2 is now latest. No Iteration 1 vs Iteration 2 comparison has been
-  performed.
+- OWM v2 is now latest. MVP-2.0-M later compared Iteration 1 and Iteration 2
+  compliance through the first persisted Generation Evolution Analysis.
 - MVP-2.0-K added no WGP comparison, Generation Contract Compliance v2,
   Compliance Report v2, Generation Improvement Plan v2, Business Approval,
   publishing, deploy, provider execution, AI execution, generated proposal
@@ -861,14 +861,29 @@ Current implementation:
 - Iteration 1 compliance
   `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7` remains
   reloadable. Iteration 2 compliance is now latest. Both compliance artifacts
-  belong to the same ODV Generation Cycle, and no Iteration 1 vs Iteration 2
-  comparison has been performed.
+  belong to the same ODV Generation Cycle.
 - MVP-2.0-L added no Compliance Report v2, iteration comparison, statistics
   across iterations, Generation Improvement Plan v2, Provider Payload v3,
   regeneration, Business Approval, publishing, deployment, DNS mutation,
   production mutation, provider execution, AI execution, UI, API, schema,
   workers, WGP mutation, OWM mutation, or canonical business artifact
   mutation.
+- MVP-2.0-M then persisted the first deterministic Generation Evolution
+  Analysis:
+  `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253`.
+  It compared Iteration 1 compliance
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7` against
+  Iteration 2 compliance
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b` against
+  the same WGP `website_generation_package_c2c555025f186178f27c44c7cd272d4d`
+  without recomputing either compliance result. Status is `improved`, overall
+  assessment is `meaningful_improvement`, and recommended next action is
+  `create_compliance_report_v2`.
+- MVP-2.0-M added no Compliance Report v2, Improvement Plan v2, Provider
+  Payload v3, regeneration, Business Approval, publishing, deployment, DNS
+  mutation, production mutation, provider execution, AI execution, UI, API,
+  schema migration, workers, WGP mutation, OWM mutation, source compliance
+  mutation, or canonical business artifact mutation.
 
 Completed follow-up:
 - MVP-2.0-E created the first real ODV Compliance Report from
@@ -885,7 +900,7 @@ Missing implementation:
 - Gate that Business Approval can consume.
 - Compliance Report v2 for
   `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
-- Dedicated Iteration 1 vs Iteration 2 comparison phase.
+- Improvement Plan v2, if authorized after Compliance Report v2.
 
 Dependencies:
 - Website Generation Package.

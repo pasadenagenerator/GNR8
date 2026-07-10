@@ -190,6 +190,39 @@ Safety verification:
 - no Business Approval;
 - no publishing.
 
+## MVP-2.0-M Evolution Effectiveness
+
+MVP-2.0-M later consumed the persisted plan
+`generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694` without
+modifying it and compared stored Iteration 1 and Iteration 2 compliance
+results against the same WGP.
+
+Persisted Generation Evolution Analysis:
+
+```text
+generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253
+```
+
+The analysis found observed improvement for:
+
+- `Messages`
+- `Trust`
+- `Constraints`
+
+The analysis found no demonstrated improvement for:
+
+- `Accessibility`
+- `Assets`
+- `Business Positioning`
+- `Navigation`
+- `SEO`
+- `Sections`
+
+This effectiveness view is deterministic and source-only. It does not
+reinterpret the Improvement Plan, recompute compliance, create Improvement
+Plan v2, create Provider Payload v3, regenerate, execute providers, execute
+AI, approve, publish, deploy, or mutate production.
+
 ## Stop Boundary
 
 MVP-2.0-F stops after the Generation Improvement Plan runtime foundation and
