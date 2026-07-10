@@ -1,9 +1,98 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-07-09
+2026-07-10
 
 ## Current Phase
+
+MVP-2.0-J - Import Second Generated Website Proposal is COMPLETE for ODV.
+
+GNR8 now has two persisted, quarantined ODV Generated Website Proposal
+artifacts:
+
+- Iteration 1:
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`;
+- Iteration 2:
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+
+Iteration 2 was imported from:
+
+```text
+ODV_GENERATED_PROPOSAL_002/
+```
+
+Status:
+
+```text
+quarantined
+```
+
+Validation readiness:
+
+```text
+ready
+readyForCompliance: true
+```
+
+Iteration 2 is now the latest proposal for ODV site version
+`09dce7ea-d860-4f60-a1eb-26c3335b302e`. Latest reload and by-ID reload both
+returned `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+Idempotent retry reused the same artifact. Proposal count increased exactly
+once from `1` to `2`. Iteration 1 remained loadable by ID.
+
+Verified Iteration 2 lineage:
+
+```text
+WebsiteGenerationPackage
+  ↓
+GenerationContractCompliance
+  ↓
+ComplianceReport
+  ↓
+GenerationImprovementPlan
+  ↓
+ProviderGenerationPayload v2
+  ↓
+GeneratedWebsiteProposal v2
+```
+
+Artifact chain:
+
+- WGP:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
+- compliance:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`;
+- compliance report:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`;
+- improvement plan:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`;
+- Provider Payload v2:
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`;
+- Generated Website Proposal v2:
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+
+Iteration and generation cycle metadata (`iteration = 2`,
+`odv-generation-cycle-002`) are preserved in source diagnostics and operator
+attestation. No existing canonical artifact contracts were changed solely to
+add cycle fields.
+
+Canonical document:
+
+- `docs/architecture/SECOND_GENERATED_WEBSITE_PROPOSAL_IMPORT.md`
+
+MVP-2.0-J added no Observed Website Model v2, compliance v2, iteration
+comparison, Compliance Report v2, Business Approval, publishing, deployment,
+DNS mutation, production mutation, provider execution, AI execution, WGP
+mutation, Generation Improvement Plan mutation, Provider Payload v2 mutation,
+UI, API, schema, or workers.
+
+Next recommended phase: MVP-2.0-K - Observed Website Model v2 for ODV.
+Consume latest Generated Website Proposal v2 only, and stop before compliance
+v2, iteration comparison, Compliance Report v2, Business Approval, publishing,
+deployment, DNS mutation, production mutation, provider execution, AI
+execution, UI, API, schema, or workers unless explicitly authorized.
+
+## Previous Phase
 
 MVP-2.0-ARCH - Generation Cycle Architecture is COMPLETE.
 
@@ -35,15 +124,6 @@ Canonical document:
 MVP-2.0-ARCH was documentation only. It added no runtime behavior,
 persistence, schema, API, UI, workers, provider execution, AI execution,
 regeneration, publishing, deployment, or canonical business artifact mutation.
-
-Next recommended phase: MVP-2.0-I - Manual External Regeneration Execution.
-Consume `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an
-implementation proposal only, still stopping before GNR8 provider execution,
-automated AI execution from GNR8, Generated Website Proposal v2 import,
-compliance, Business Approval, publishing, deployment, DNS, production
-mutation, UI, API, schema, or workers unless explicitly authorized.
-
-## Previous Phase
 
 MVP-2.0-H - Second Generation Delivery Package is COMPLETE for ODV.
 
@@ -91,12 +171,10 @@ Canonical document:
 
 - `docs/architecture/SECOND_GENERATION_DELIVERY_PACKAGE.md`
 
-Next recommended phase: MVP-2.0-I - Manual External Regeneration Execution.
-Consume `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an
-implementation proposal only, still stopping before GNR8 provider execution,
-automated AI execution from GNR8, Generated Website Proposal v2 import,
-compliance, Business Approval, publishing, deployment, DNS, production
-mutation, UI, API, schema, or workers unless explicitly authorized.
+Historical next phase from MVP-2.0-H was MVP-2.0-I - Manual External
+Regeneration Execution. That handoff has now produced
+`ODV_GENERATED_PROPOSAL_002/`, and MVP-2.0-J has imported it as
+`generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
 
 ## Migration Platform MVP Buildout
 
@@ -3306,15 +3384,16 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-2.0-ARCH - Generation Cycle Architecture is complete.
+- Phase MVP-2.0-J - Import Second Generated Website Proposal is complete.
 
 Next Phase:
-- MVP-2.0-I - Manual External Regeneration Execution. Consume
-  `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an implementation
-  proposal only, still stopping before GNR8 provider execution, automated AI
-  execution from GNR8, Generated Website Proposal v2 import, compliance,
-  Business Approval, publishing, deployment, DNS, production mutation, UI,
-  API, schema, or workers unless explicitly authorized.
+- MVP-2.0-K - Observed Website Model v2 for ODV. Consume latest Generated
+  Website Proposal v2
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e` only. Stop
+  before compliance v2, iteration comparison, Compliance Report v2, Business
+  Approval, publishing, deployment, DNS mutation, production mutation,
+  provider execution, AI execution, UI, API, schema, or workers unless
+  explicitly authorized.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
@@ -4289,6 +4368,26 @@ MVP-1K-1 Generated Website Proposal Import Runtime Foundation:
   Report, Business Approval, publishing, provider calls, AI execution,
   automatic generation, UI, API, schema, workers, deployment, DNS mutation,
   production mutation, runtime mutation, or generated output execution.
+- MVP-2.0-J imported ODV Iteration 2 from
+  `ODV_GENERATED_PROPOSAL_002/` as the latest quarantined Generated Website
+  Proposal:
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- Iteration 1 remains loadable by ID as
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
+- Iteration 2 source lineage was verified through WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`,
+  compliance `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`,
+  compliance report
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`,
+  improvement plan
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`, and
+  Provider Payload v2
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- Latest reload and by-ID reload both returned Iteration 2, idempotent retry
+  reused Iteration 2, proposal count increased exactly once from `1` to `2`,
+  and downstream observation/compliance/report/approval counts did not change.
+- Iteration and cycle metadata are preserved in diagnostics and operator
+  attestation, not by changing existing canonical proposal contracts.
 
 MVP-1K-2 Generated Website Proposal Observation Boundary Design:
 - MVP-1K-2 is complete. It defines how future observation may inspect

@@ -231,6 +231,54 @@ The same canonical artifact lineage can participate in a Generation Cycle
 without being owned by the cycle. The cycle references and orders artifacts;
 it does not redefine their meaning.
 
+## Current ODV Generation Cycle Snapshot
+
+MVP-2.0-J provides the first concrete ODV Iteration 2 import that can be
+described by the Generation Cycle model without changing canonical artifact
+contracts.
+
+ODV Generation Cycle:
+
+```text
+odv-generation-cycle-002
+```
+
+Iteration 1:
+
+- generated proposal artifact:
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`;
+- source bundle: `ODV_GENERATED_PROPOSAL_001/`;
+- source Provider Payload:
+  `provider_generation_payload_0738b677c762f830c235dae425a8ec1c`;
+- downstream observed model:
+  `observed_website_model_35499a9cb91a15740910532d451a739a`;
+- downstream compliance:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`;
+- downstream report:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`;
+- outcome: report status `blocked`, recommendation `regenerate`, readiness
+  `requires_regeneration`.
+
+Iteration 2:
+
+- generated proposal artifact:
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`;
+- source bundle: `ODV_GENERATED_PROPOSAL_002/`;
+- source Provider Payload v2:
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`;
+- source Generation Improvement Plan:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`;
+- source WGP:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
+- status: latest quarantined Generated Website Proposal, ready for future
+  observation.
+
+Iteration 2 does not retroactively change Iteration 1's canonical artifact
+identity. The previous proposal remains reloadable by ID. Iteration/cycle
+metadata is preserved in source metadata, diagnostics, and operator
+attestation because the current runtime contract does not yet include
+canonical cycle fields.
+
 ## Future Runtime Mapping
 
 This section is documentation only. These fields are future concepts and are

@@ -198,6 +198,80 @@ It cannot publish, deploy, mutate DNS, mutate production, execute generated
 code, call a provider, send prompts, run AI, observe a website, run compliance,
 or approve anything.
 
+## Real ODV Proposal Imports
+
+Iteration 1 was imported as a quarantined Generated Website Proposal from:
+
+```text
+ODV_GENERATED_PROPOSAL_001/
+```
+
+Persisted artifact:
+
+```text
+generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3
+```
+
+Iteration 1 remains loadable by ID and was not overwritten by later work.
+
+MVP-2.0-J imported Iteration 2 from:
+
+```text
+ODV_GENERATED_PROPOSAL_002/
+```
+
+Persisted artifact:
+
+```text
+generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e
+```
+
+Iteration 2 source lineage:
+
+```text
+WebsiteGenerationPackage
+  ↓
+GenerationContractCompliance
+  ↓
+ComplianceReport
+  ↓
+GenerationImprovementPlan
+  ↓
+ProviderGenerationPayload v2
+  ↓
+GeneratedWebsiteProposal v2
+```
+
+Verified artifact chain:
+
+- WGP:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`;
+- compliance:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`;
+- compliance report:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`;
+- improvement plan:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`;
+- Provider Payload v2:
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+
+Iteration 2 became the latest generated proposal for ODV. Latest reload and
+by-ID reload both returned
+`generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`; idempotent
+retry reused the same artifact; the proposal count increased from `1` to `2`
+exactly once.
+
+Iteration metadata (`2`) and generation cycle metadata
+(`odv-generation-cycle-002`) are preserved in source diagnostics and operator
+attestation. No existing canonical artifact contracts were changed solely to
+add cycle fields.
+
+Canonical MVP-2.0-J document:
+
+```text
+docs/architecture/SECOND_GENERATED_WEBSITE_PROPOSAL_IMPORT.md
+```
+
 ## Validation
 
 Focused tests:
@@ -222,7 +296,10 @@ latest/by-ID reload, idempotent reuse, and append-on-change behavior.
 
 ## Recommended Next Phase
 
-MVP-1K-2 Generated Website Proposal Observation Boundary Design is complete:
+Historical foundation next phase, now complete:
+
+MVP-1K-2 Generated Website Proposal Observation Boundary Design:
+
 `docs/architecture/GENERATED_WEBSITE_PROPOSAL_OBSERVATION_BOUNDARY_DESIGN.md`.
 
 It defines the narrow observation boundary for proposal material without
@@ -231,6 +308,16 @@ Approval, publishing, provider calls, automatic generation, UI, API routes,
 schema migrations, deployment, DNS mutation, production mutation, or runtime
 mutation.
 
-The next safe phase is MVP-1K-3 Observed Website Model Runtime Foundation,
-limited to the first bounded observation model runtime only if explicitly
-authorized.
+Historical foundation runtime, now complete:
+
+MVP-1K-3 Observed Website Model Runtime Foundation.
+
+Current live next phase after MVP-2.0-J:
+
+MVP-2.0-K - Observed Website Model v2 for ODV, limited to observing latest
+Generated Website Proposal v2
+`generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e` if explicitly
+authorized. It must still stop before compliance v2, iteration comparison,
+Compliance Report v2, Business Approval, publishing, deployment, DNS
+mutation, production mutation, provider execution, AI execution, UI, API,
+schema, or workers.

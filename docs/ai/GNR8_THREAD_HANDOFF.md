@@ -75,17 +75,51 @@ Current status:
   Generation Cycle as the canonical deterministic governance model for the
   complete evolutionary history of a website across multiple generation
   iterations.
+- Phase MVP-2.0-J - Import Second Generated Website Proposal is complete for
+  ODV and persisted latest proposal artifact
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
 
 Current Phase:
-- Phase MVP-2.0-ARCH - Generation Cycle Architecture is complete.
+- Phase MVP-2.0-J - Import Second Generated Website Proposal is complete.
+
+MVP-2.0-J evidence:
+- Target: ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Source bundle: `ODV_GENERATED_PROPOSAL_002/`.
+- Iteration: `2`.
+- Generation cycle: `odv-generation-cycle-002`.
+- Source WGP:
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d`.
+- Source compliance:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- Source compliance report:
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`.
+- Source improvement plan:
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694`.
+- Source Provider Payload v2:
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7`.
+- Generated Website Proposal v2:
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- Status/readiness: `quarantined` / `ready`, `readyForCompliance: true`.
+- Latest reload and by-ID reload returned Iteration 2; idempotent retry
+  reused Iteration 2.
+- Iteration 1 remains loadable by ID:
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
+- Proposal count increased exactly once from `1` to `2`; downstream
+  observation/compliance/report/approval counts did not change.
+- No OWM v2, compliance v2, iteration comparison, Compliance Report v2,
+  Business Approval, publishing, deployment, DNS mutation, production
+  mutation, provider execution, AI execution, WGP mutation, Improvement Plan
+  mutation, Provider Payload v2 mutation, UI, API, schema, or workers were
+  added.
 
 Next Phase:
-- MVP-2.0-I - Manual External Regeneration Execution. Consume
-  `ODV_REGENERATION_EXPORT_002/` outside GNR8 and produce an implementation
-  proposal only. Stop before GNR8 provider execution, automated AI execution
-  from GNR8, Generated Website Proposal v2 import, compliance, Business
-  Approval, publishing, deployment, DNS, production mutation, UI, API, schema,
-  or workers unless explicitly authorized.
+- MVP-2.0-K - Observed Website Model v2 for ODV. Consume latest Generated
+  Website Proposal v2
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e` only. Stop
+  before compliance v2, iteration comparison, Compliance Report v2, Business
+  Approval, publishing, deployment, DNS mutation, production mutation,
+  provider execution, AI execution, UI, API, schema, or workers unless
+  explicitly authorized.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -708,18 +742,19 @@ Current validation status:
   regeneration, Generated Website Proposal v2, Business Approval, publishing,
   deployment, DNS, UI, API, schema, workers, WGP mutation, Improvement Plan
   mutation, Compliance mutation, or Compliance Report mutation.
-- Next recommended phase is MVP-2.0-H - Regeneration Delivery Package v2.
-  Package the persisted Provider Payload v2 for a future manual regeneration
-  cycle, and stop before Codex execution, provider execution, AI execution,
-  website generation, Generated Website Proposal v2, publishing, deployment,
-  DNS, or Business Approval.
+- Historical next recommended phase from MVP-2.0-G was MVP-2.0-H -
+  Regeneration Delivery Package v2. That package, the Generation Cycle
+  architecture, and the Iteration 2 Generated Website Proposal import are now
+  complete.
 
 Latest completed milestone:
-- Phase MVP-2.0-G - Provider Payload v2 Runtime Foundation.
-- Status: COMPLETE / REAL ODV PROVIDER PAYLOAD V2 BUILT / LATEST PROVIDER
-  PAYLOAD V2 PERSISTED / STATUS READY / LATEST RELOAD PASSED / BY-ID RELOAD
-  PASSED / IDEMPOTENT RETRY REUSED / NO CODEX EXECUTION / NO PROVIDER
-  EXECUTION / NO AI EXECUTION / NO REGENERATION / NO GENERATED WEBSITE
+- Phase MVP-2.0-J - Import Second Generated Website Proposal.
+- Status: COMPLETE / REAL ODV GENERATED WEBSITE PROPOSAL V2 IMPORTED /
+  LATEST PROPOSAL V2 PERSISTED / STATUS QUARANTINED / READINESS READY /
+  LATEST RELOAD PASSED / BY-ID RELOAD PASSED / IDEMPOTENT RETRY REUSED /
+  ITERATION 1 PRESERVED / NO OWM V2 / NO COMPLIANCE V2 / NO COMPARISON / NO
+  REPORT V2 / NO BUSINESS APPROVAL / NO PUBLISHING / NO DEPLOYMENT / NO DNS /
+  NO PROVIDER EXECUTION / NO AI EXECUTION
   PROPOSAL V2 / NO BUSINESS APPROVAL / NO PUBLISHING / NO DEPLOY / NO DNS /
   NO WGP MUTATION / NO IMPROVEMENT PLAN MUTATION / NO COMPLIANCE MUTATION /
   NO COMPLIANCE REPORT MUTATION / NO UI / NO API ROUTES / NO SCHEMA

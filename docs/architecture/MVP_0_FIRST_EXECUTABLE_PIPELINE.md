@@ -626,10 +626,35 @@ Current implementation:
   trusted, not compliance, not Business Approval, not publishable, and not a
   mutation of DBT, BUR, Business Alignment, WDB, WGP, or
   ProviderGenerationPayload.
+- MVP-2.0-J imported the second real ODV proposal from
+  `ODV_GENERATED_PROPOSAL_002/` as quarantined Generated Website Proposal v2:
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- Iteration 1 remains immutable and reloadable by ID as
+  `generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3`.
+- Iteration 2 became the latest proposal for ODV. Latest reload and by-ID
+  reload both returned
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`; idempotent
+  retry reused the same artifact; the proposal count increased exactly once
+  from `1` to `2`.
+- Iteration 2 source lineage was verified as WGP
+  `website_generation_package_c2c555025f186178f27c44c7cd272d4d` ->
+  compliance `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`
+  -> report
+  `generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de`
+  -> improvement plan
+  `generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694` ->
+  Provider Payload v2
+  `provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7` ->
+  proposal v2
+  `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
+- Iteration and generation cycle metadata are preserved in source diagnostics
+  and operator attestation, not by changing existing canonical proposal
+  contracts.
 
 Missing implementation:
-- Contract comparison against the Website Generation Package.
-- Generation Contract Compliance and Compliance Report.
+- Observed Website Model v2 for the latest ODV proposal.
+- Contract comparison v2 against the Website Generation Package.
+- Generation Contract Compliance v2 and Compliance Report v2.
 - Business Approval and publish authorization.
 
 Dependencies:
@@ -1469,23 +1494,20 @@ preservation guidance to `limitations.md`, adding expected deliverables, stop
 conditions, forbidden actions, and output-folder guidance to
 `execution-readme.md`, and adding a non-canonical execution-facing
 `generationMission` field to `provider-generation-payload.json` without
-changing canonical runtime contracts. The current next safe phase is
-MVP-2.0-H - Regeneration Delivery Package v2, packaging the persisted
-Provider Payload v2 for a future manual regeneration cycle without Codex
-execution, provider execution, AI execution, website generation, Generated
-Website Proposal v2, publishing, deployment, DNS mutation, production
-mutation, UI, API, schema, or workers unless explicitly authorized. MVP-2.0-H
-then created `ODV_REGENERATION_EXPORT_002/`, the first complete Second
-Generation Delivery Package for ODV Iteration 2. It includes manifest,
-lineage, copied canonical WebsiteGenerationPackage, copied Provider Payload
-v2, copied GenerationImprovementPlan, business summary, regeneration summary,
-Improvement Plan-derived delta, and manual external execution readme. The
-next safe phase is MVP-2.0-I - Manual External Regeneration Execution,
-consuming `ODV_REGENERATION_EXPORT_002/` outside GNR8 and producing an
-implementation proposal only while stopping before Generated Website Proposal
-v2 import, compliance, Business Approval, publishing, deployment, DNS
-mutation, production mutation, UI, API, schema, or workers unless explicitly
-authorized. MVP-2.0-ARCH then established the canonical Generation Cycle
-Architecture as the governance model for grouping multiple generation
-iterations into one evolutionary history while preserving artifact lineage as
-the truth and causality model.
+changing canonical runtime contracts. MVP-2.0-H then created
+`ODV_REGENERATION_EXPORT_002/`, the first complete Second Generation Delivery
+Package for ODV Iteration 2. It includes manifest, lineage, copied canonical
+WebsiteGenerationPackage, copied Provider Payload v2, copied
+GenerationImprovementPlan, business summary, regeneration summary,
+Improvement Plan-derived delta, and manual external execution readme.
+MVP-2.0-ARCH then established the canonical Generation Cycle Architecture as
+the governance model for grouping multiple generation iterations into one
+evolutionary history while preserving artifact lineage as the truth and
+causality model. MVP-2.0-J then imported `ODV_GENERATED_PROPOSAL_002/` as
+latest quarantined Generated Website Proposal v2
+`generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`, preserving
+Iteration 1
+`generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3` by ID and
+stopping before observation v2, compliance v2, comparison, Compliance Report
+v2, Business Approval, publishing, deployment, DNS mutation, production
+mutation, provider execution, AI execution, UI, API, schema, or workers.
