@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="360" viewBox="0 0 520 360" role="img" aria-labelledby="title desc">
+  <title id="title">Observed host identity signal</title>
+  <desc id="desc">Abstract visual showing odv-cvijanovic.si as the first identity signal.</desc>
+  <rect width="520" height="360" rx="18" fill="#f8faf6"/>
+  <rect x="42" y="46" width="436" height="268" rx="14" fill="#ffffff" stroke="#dce2dc"/>
+  <circle cx="112" cy="128" r="46" fill="#1f6b4b"/>
+  <text x="112" y="139" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#ffffff">ODV</text>
+  <text x="190" y="118" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#16201d">odv-cvijanovic.si</text>
+  <text x="190" y="150" font-family="Arial, sans-serif" font-size="16" fill="#52625c">observed host identity signal</text>
+  <path d="M78 220h364" stroke="#dce2dc" stroke-width="2"/>
+  <rect x="78" y="244" width="92" height="18" rx="4" fill="#dff1ed"/>
+  <rect x="190" y="244" width="92" height="18" rx="4" fill="#f1e3e7"/>
+  <rect x="302" y="244" width="92" height="18" rx="4" fill="#efe6d4"/>
+  <text x="124" y="284" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#52625c">O nas</text>
+  <text x="236" y="284" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#52625c">Kontakt</text>
+  <text x="348" y="284" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#52625c">Limits</text>
+</svg>

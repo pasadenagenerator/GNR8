@@ -1,0 +1,71 @@
+{
+  "proposalId": "ODV_GENERATED_PROPOSAL_002",
+  "proposalKind": "GeneratedWebsiteProposal",
+  "proposalStatus": "quarantined",
+  "iteration": 2,
+  "createdFor": "ODV",
+  "sourceExportDirectory": "../ODV_REGENERATION_EXPORT_002",
+  "sourceExportId": "odv-regeneration-export-002",
+  "generationCycleId": "odv-generation-cycle-002",
+  "siteVersionId": "09dce7ea-d860-4f60-a1eb-26c3335b302e",
+  "sourceWebsiteGenerationPackageId": "website-generation-package:0bb33dd388323a443bf36be58bf2d9a1",
+  "sourceWebsiteGenerationPackageArtifactId": "website_generation_package_c2c555025f186178f27c44c7cd272d4d",
+  "sourceGenerationImprovementPlanId": "generation-improvement-plan:0fb5c2904f143633c1d1b28ee217ba7d",
+  "sourceGenerationImprovementPlanArtifactId": "generation_improvement_plan_5401cbae3566e77aa4014e35ae73e694",
+  "sourceProviderGenerationPayloadArtifactId": "provider_generation_payload_914e79c7dba05881c1ff7548a0e8f8b7",
+  "sourceGenerationContractComplianceReportArtifactId": "generation_contract_compliance_report_9b54b0b6ecab46ee187bc0f4918871de",
+  "sourceReportStatus": "blocked",
+  "sourceReportRecommendation": "regenerate",
+  "sourceReportReadiness": "requires_regeneration",
+  "improvementSummary": {
+    "total": 413,
+    "critical": 259,
+    "medium": 154,
+    "categories": {
+      "Accessibility": 1,
+      "Assets": 123,
+      "Business Positioning": 4,
+      "Constraints": 228,
+      "Messages": 6,
+      "Navigation": 8,
+      "SEO": 1,
+      "Sections": 36,
+      "Trust": 6
+    }
+  },
+  "executionBoundary": {
+    "deploymentAllowed": false,
+    "publishingAllowed": false,
+    "dnsMutationAllowed": false,
+    "productionMutationAllowed": false,
+    "proposalImportExecuted": false,
+    "complianceExecuted": false,
+    "businessApprovalCreated": false,
+    "canonicalArtifactsModified": false
+  },
+  "sourceBundle": {
+    "entrypoint": "source/index.html",
+    "files": [
+      "source/index.html",
+      "source/styles.css",
+      "source/script.js",
+      "source/assets/identity-signal.svg",
+      "source/assets/navigation-evidence.svg",
+      "source/assets/contact-path.svg",
+      "source/assets/asset-inventory.svg",
+      "source/assets/constraint-map.svg"
+    ]
+  },
+  "deliverables": [
+    "complete website source bundle",
+    "README.md",
+    "implementation-notes.md",
+    "wgp-mapping.md",
+    "improvement-mapping.md",
+    "assumptions.md",
+    "limitations.md",
+    "open-questions.md",
+    "files-created.md",
+    "proposal-manifest.json"
+  ]
+}

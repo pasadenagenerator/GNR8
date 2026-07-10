@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="260" viewBox="0 0 420 260" role="img" aria-labelledby="title desc">
+  <title id="title">Asset inventory evidence</title>
+  <desc id="desc">Abstract local asset inventory signal for deterministic checks.</desc>
+  <rect width="420" height="260" rx="16" fill="#ffffff"/>
+  <g fill="#dff1ed" stroke="#1f6b4b" stroke-width="3">
+    <rect x="70" y="62" width="76" height="58" rx="8"/>
+    <rect x="172" y="62" width="76" height="58" rx="8"/>
+    <rect x="274" y="62" width="76" height="58" rx="8"/>
+    <rect x="70" y="144" width="76" height="58" rx="8"/>
+    <rect x="172" y="144" width="76" height="58" rx="8"/>
+    <rect x="274" y="144" width="76" height="58" rx="8"/>
+  </g>
+  <text x="210" y="36" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#16201d">Local asset references</text>
+  <text x="210" y="230" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#52625c">observable files, not brand claims</text>
+</svg>
