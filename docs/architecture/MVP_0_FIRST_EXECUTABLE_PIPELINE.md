@@ -652,8 +652,7 @@ Current implementation:
   contracts.
 
 Missing implementation:
-- Contract comparison v2 against the Website Generation Package.
-- Generation Contract Compliance v2 and Compliance Report v2.
+- Compliance Report v2.
 - Business Approval and publish authorization.
 
 Dependencies:
@@ -791,8 +790,9 @@ Risk:
 Estimated implementation complexity:
 - First runtime contract, builder, validator, focused tests, and provenance
   persistence are complete. The first and second real ODV static-HTML
-  observations are persisted. Remaining work starts with ODV Generation
-  Contract Compliance v2 or richer rendered observation.
+  observations are persisted, and ODV Generation Contract Compliance v2 is
+  persisted. Remaining work starts with ODV Compliance Report v2 or richer
+  rendered observation.
 
 ### Generation Contract Compliance
 
@@ -849,6 +849,26 @@ Current implementation:
 - MVP-2.0-D added no Compliance Report, Business Approval, publishing,
   deployment, provider execution, AI execution, UI, API, schema, workers, WGP
   mutation, OWM mutation, or canonical business artifact mutation.
+- MVP-2.0-L performed the second real ODV Generation Contract Compliance
+  evaluation against OWM v2
+  `observed_website_model_0d5e829f546745b1433557978c875626`.
+- MVP-2.0-L persisted
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b` with
+  status `non_compliant`, 10 category results, 149 findings, 132 deviations,
+  25 evidence records, 252 limitations, and `MEDIUM` confidence.
+- Latest reload, by-ID reload, and idempotent retry all returned
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
+- Iteration 1 compliance
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7` remains
+  reloadable. Iteration 2 compliance is now latest. Both compliance artifacts
+  belong to the same ODV Generation Cycle, and no Iteration 1 vs Iteration 2
+  comparison has been performed.
+- MVP-2.0-L added no Compliance Report v2, iteration comparison, statistics
+  across iterations, Generation Improvement Plan v2, Provider Payload v3,
+  regeneration, Business Approval, publishing, deployment, DNS mutation,
+  production mutation, provider execution, AI execution, UI, API, schema,
+  workers, WGP mutation, OWM mutation, or canonical business artifact
+  mutation.
 
 Completed follow-up:
 - MVP-2.0-E created the first real ODV Compliance Report from
@@ -863,6 +883,9 @@ Completed follow-up:
 Missing implementation:
 - Business Approval artifact and approval decision boundary.
 - Gate that Business Approval can consume.
+- Compliance Report v2 for
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
+- Dedicated Iteration 1 vs Iteration 2 comparison phase.
 
 Dependencies:
 - Website Generation Package.

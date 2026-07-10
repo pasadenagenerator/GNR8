@@ -81,13 +81,15 @@ Current status:
 - Phase MVP-2.0-K - Observed Website Model v2 for ODV is complete and
   persisted latest OWM artifact
   `observed_website_model_0d5e829f546745b1433557978c875626`.
+- Phase MVP-2.0-L - Generation Contract Compliance v2 for ODV is complete
+  and persisted latest compliance artifact
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
 
 Current Phase:
-- Phase MVP-2.0-K - Observed Website Model v2 for ODV is complete.
+- Phase MVP-2.0-L - Generation Contract Compliance v2 for ODV is complete.
 
-MVP-2.0-K evidence:
+MVP-2.0-L evidence:
 - Target: ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
-- Source bundle: `ODV_GENERATED_PROPOSAL_002/source/`.
 - Iteration: `2`.
 - Generation cycle: `odv-generation-cycle-002`.
 - Source WGP:
@@ -98,28 +100,31 @@ MVP-2.0-K evidence:
   `generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e`.
 - Observed Website Model v2:
   `observed_website_model_0d5e829f546745b1433557978c875626`.
-- Status/readiness: `observable` / `observable`.
-- Observation counts: pages `1`, routes `1`, navigation/links `11`,
-  nav-menu links `7`, sections `7`, headings `17`, CTA links `3`, messages
-  `70`, assets `14`, constraints `53`, technical signals `18`, evidence refs
-  `18`, limitations `121`.
-- Latest reload and by-ID reload returned OWM v2; immediate and cold
-  idempotent retries reused OWM v2.
-- Iteration 1 OWM remains loadable by ID:
-  `observed_website_model_35499a9cb91a15740910532d451a739a`.
-- OWM count increased exactly once from `2` to `3`; cold retry kept it
-  `3 -> 3`.
-- No WGP comparison, compliance v2, iteration comparison, Compliance Report
-  v2, Generation Improvement Plan v2, Business Approval, publishing,
-  deployment, DNS mutation, production mutation, provider execution, AI
-  execution, proposal mutation, canonical business mutation, UI, API, schema,
-  or workers were added.
+- Generation Contract Compliance v2:
+  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
+- Status / overall compliance / confidence:
+  `non_compliant` / `non_compliant` / `MEDIUM`.
+- Compliance counts: categories `10`, findings `149`, deviations `132`,
+  evidence records `25`, limitations `252`.
+- Category statuses: `6` non-compliant, `2` compliant, `2` partial.
+- Latest reload, by-ID reload, and idempotent retry returned compliance v2.
+- Total compliance artifact count is `2`; exactly `1` record targets OWM v2.
+- Iteration 1 compliance remains loadable by ID:
+  `generation_contract_compliance_5128ad2d31c97a40e9a47f295fa18fa7`.
+- Compliance v1 and compliance v2 both belong to the same Generation Cycle.
+- No Iteration 1 vs Iteration 2 comparison has been performed.
+- No Compliance Report v2, iteration comparison, statistics across
+  iterations, Generation Improvement Plan v2, Provider Payload v3,
+  regeneration, Business Approval, publishing, deployment, DNS mutation,
+  production mutation, provider execution, AI execution, WGP mutation, OWM
+  mutation, canonical business mutation, UI, API, schema, or workers were
+  added.
 
 Next Phase:
-- MVP-2.0-L - Generation Contract Compliance v2 for ODV. Compare persisted
-  OWM v2 `observed_website_model_0d5e829f546745b1433557978c875626` against
-  the ODV Website Generation Package only. Stop before iteration comparison,
-  Compliance Report v2, Business Approval, publishing, deployment, DNS
+- MVP-2.0-M - Compliance Report v2 for ODV. Consume only persisted compliance
+  v2 `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b` and
+  stop before iteration comparison, Generation Improvement Plan v2, Provider
+  Payload v3, regeneration, Business Approval, publishing, deployment, DNS
   mutation, production mutation, provider execution, AI execution, UI, API,
   schema, or workers unless explicitly authorized.
 

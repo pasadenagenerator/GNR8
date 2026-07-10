@@ -175,13 +175,35 @@ returned the same artifact ID.
 Canonical validation record:
 `docs/architecture/FIRST_REAL_GENERATION_CONTRACT_COMPLIANCE.md`.
 
+MVP-2.0-L then performed the second real Generation Contract Compliance
+evaluation for ODV. It compared the same WGP
+`website_generation_package_c2c555025f186178f27c44c7cd272d4d` against OWM v2
+`observed_website_model_0d5e829f546745b1433557978c875626` using only
+`buildGenerationContractCompliance(...)` and persisted
+`generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b`.
+
+The persisted ODV compliance v2 status is `non_compliant`. The artifact
+contains 10 category results, 149 findings, 132 deviations, 25 evidence
+records, 252 limitations, and `MEDIUM` confidence. Latest reload, by-ID
+reload, and idempotent retry all returned the same artifact ID. The previous
+Iteration 1 compliance artifact remained reloadable, and the compliance
+artifact count ended at `2` with exactly `1` record for OWM v2.
+
+Canonical validation record:
+`docs/architecture/SECOND_REAL_GENERATION_CONTRACT_COMPLIANCE.md`.
+
+No Iteration 1 vs Iteration 2 comparison has been performed by the compliance
+runtime. Compliance v1 and compliance v2 belong to the same ODV Generation
+Cycle through existing artifact lineage and iteration source metadata.
+
 The earlier blocked validation record remains:
 `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REAL_TARGET_VALIDATION.md`.
 
 ## Next Boundary
 
-The next safe phase is MVP-2.0-E - First Real Generation Contract Compliance
-Report for ODV.
+The next safe phase is MVP-2.0-M - Compliance Report v2 for ODV.
 
-MVP-2.0-D stops before the report, Business Approval, publishing, deployment,
-provider execution, AI execution, UI, API, schema, and workers.
+MVP-2.0-L stops before Compliance Report v2, iteration comparison, Generation
+Improvement Plan v2, Provider Payload v3, regeneration, Business Approval,
+publishing, deployment, provider execution, AI execution, UI, API, schema, and
+workers.
