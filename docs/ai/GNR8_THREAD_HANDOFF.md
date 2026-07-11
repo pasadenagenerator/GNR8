@@ -93,10 +93,71 @@ Current status:
 - Phase MVP-3.0-A - Generation Evolution Dashboard Runtime Foundation is
   complete and implemented the first real read-only GNR8 Runtime UX surface
   for ODV.
+- Phase MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
+  Verification is in progress and authenticated browser display is blocked by
+  missing local superadmin allowlist/session. The guard, real ODV projection,
+  preview boundary, attention states, forbidden-control absence, and preview
+  security behavior have been verified without bypassing authentication.
 
 Current Phase:
-- Phase MVP-3.0-A - Generation Evolution Dashboard Runtime Foundation is
-  complete.
+- Phase MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
+  Verification is IN PROGRESS / AUTHENTICATED BROWSER BLOCKED.
+
+MVP-3.0-B evidence:
+- Canonical verification record:
+  `docs/architecture/GENERATION_EVOLUTION_DASHBOARD_REAL_TARGET_VERIFICATION.md`.
+- Local runtime:
+  `http://localhost:3000`.
+- Dashboard route:
+  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Authentication result: unauthenticated browser and HTTP checks reached the
+  existing superadmin guard and redirected to `/login` with `307 Temporary
+  Redirect`. Authenticated display was not completed because the local runtime
+  did not include `SUPERADMIN_EMAILS`, and no authenticated superadmin browser
+  session was available. Do not bypass auth; configure the local allowlist and
+  sign in through the existing login flow to finish the browser pass.
+- Real ODV projection result: Generation Cycle `ODV Generation Cycle`, current
+  iteration `2`, cycle state `improving`, overall trajectory `improved`,
+  latest compliance `non_compliant`, latest evolution assessment
+  `meaningful_improvement`, latest recommendation
+  `create_compliance_report_v2`, business confidence
+  `HIGH from persisted artifacts`.
+- Business foundation references are present for Business Discovery, Digital
+  Business Twin, Business Understanding Report, Business Alignment, Website
+  Design Brief, and Website Generation Package.
+- Iteration 1 result: `complete`, proposal `quarantined`, OWM `observable`,
+  compliance `non_compliant`, compliant / partial / non-compliant
+  `0 / 2 / 8`, evidence `12`, limitations `268`, preview available.
+- Iteration 2 result: `complete`, proposal `quarantined`, OWM `observable`,
+  compliance `non_compliant`, compliant / partial / non-compliant
+  `2 / 2 / 6`, evidence `25`, limitations `252`, preview available,
+  meaningful improvement, newly compliant `message_coverage` and
+  `trust_signal_presence`, improved `constraints_preserved`, seven unresolved
+  categories, no regressions.
+- Both preview routes resolve allowlisted local static files. Iteration 1
+  serves `source/index.html`, `source/styles.css`, and `source/script.js`.
+  Iteration 2 serves those files plus five local SVG assets under
+  `source/assets`.
+- Preview security remains fail-closed for unknown iteration, missing file,
+  plain traversal, encoded traversal, absolute path attempts,
+  outside-source attempts, outside-bundle resolution, and unavailable bundles.
+- Attention states are `compliance_non_compliant`, `limitations_present`,
+  `evolution_improved`, `improvement_available`, and
+  `unresolved_knowledge_present`.
+- Forbidden controls remain absent: no forms, inputs, textareas, selects,
+  mutation buttons, generate/regenerate/approve/publish/deploy/provider/AI/DNS
+  controls, or server actions.
+- Narrow fix made: dashboard preview cards now say `Generated Proposal
+  Preview` and explicitly state the linked bundle is a read-only quarantined
+  proposal, not a published website.
+- Focused tests passed from `apps/platform`:
+  `NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test
+  gnr8/architecture/generation-evolution-dashboard-projection.test.ts
+  app/gnr8/admin/generation-evolution-dashboard-page.test.ts`
+  with `13/13` passing.
+- Full `cd apps/platform && pnpm run vercel-build` passed. The build emitted
+  existing unrelated lint warnings, then compiled and generated the route
+  table, including the evolution dashboard and preview routes.
 
 MVP-3.0-A evidence:
 - Dashboard route:

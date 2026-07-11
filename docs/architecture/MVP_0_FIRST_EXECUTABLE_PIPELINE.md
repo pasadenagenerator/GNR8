@@ -192,6 +192,49 @@ deployment, DNS mutation, production website mutation, provider execution, AI
 execution, workers, schema changes, persistence changes, automatic visual
 comparison, or compliance recomputation.
 
+## MVP-3.0-B Generation Evolution Dashboard Real-Target Verification Addendum
+
+MVP-3.0-B performs the first local real-target operator verification pass for
+the ODV Generation Evolution Dashboard.
+
+Verification document:
+
+- `docs/architecture/GENERATION_EVOLUTION_DASHBOARD_REAL_TARGET_VERIFICATION.md`
+
+Verified ODV runtime facts:
+
+```text
+siteVersionId: 09dce7ea-d860-4f60-a1eb-26c3335b302e
+Generation Cycle: ODV Generation Cycle
+current iteration: 2
+cycle state: improving
+overall trajectory: improved
+latest compliance: non_compliant
+latest evolution assessment: meaningful_improvement
+latest recommendation: create_compliance_report_v2
+business confidence: HIGH from persisted artifacts
+```
+
+The existing superadmin guard is active: unauthenticated local browser and
+HTTP requests redirect to `/login`. Authenticated operator display remains
+blocked until the local runtime has a valid `SUPERADMIN_EMAILS` allowlist and
+the browser is signed in through the existing login flow. No auth bypass was
+added.
+
+Both allowlisted generated proposal preview bundles are available locally, and
+the preview boundary remains fail-closed for unknown iterations, missing
+files, traversal, encoded traversal, absolute path attempts, outside-source
+attempts, outside-bundle resolution, and unavailable bundles.
+
+MVP-3.0-B made one narrow UX label fix: the preview card now says
+`Generated Proposal Preview` and explicitly states that the linked bundle is a
+read-only quarantined proposal, not a published website.
+
+MVP-3.0-B adds no edit UX, Business Alignment UX, generation controls,
+regeneration controls, approval controls, publishing, deployment, provider
+execution, AI execution, DNS controls, production mutation, schema changes,
+workers, broad redesign, or new dashboard concepts.
+
 ## Reality Assessment Table
 
 Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and

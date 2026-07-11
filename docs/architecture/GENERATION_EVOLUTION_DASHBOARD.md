@@ -26,6 +26,21 @@ publish, deploy, mutate DNS, mutate production, execute providers, execute AI,
 run workers, change schema, change persistence, recompute compliance, or
 perform automatic visual comparison.
 
+Phase MVP-3.0-B performs the first local real-target operator verification
+pass:
+
+```text
+docs/architecture/GENERATION_EVOLUTION_DASHBOARD_REAL_TARGET_VERIFICATION.md
+```
+
+MVP-3.0-B verifies the real ODV projection, the two allowlisted preview
+bundles, preview security behavior, attention states, forbidden-control
+absence, and the existing superadmin guard. Authenticated visual display is
+still blocked until a valid local `SUPERADMIN_EMAILS` allowlist and
+superadmin browser session are available. The dashboard remains read-only and
+does not gain edit, approval, generation, publishing, deployment, provider,
+AI, DNS, worker, schema, persistence, or production mutation behavior.
+
 Runtime route:
 
 ```text
@@ -246,6 +261,10 @@ Improvement Plan and Provider Payload that specifically informed Iteration 2.
 
 Every iteration card contains links to the generated website for that
 iteration when generated material exists.
+
+In the MVP-3.0 runtime surface these links are labelled as generated proposal
+previews. They are read-only quarantined proposal bundles, not published
+websites.
 
 Conceptual preview relationship:
 

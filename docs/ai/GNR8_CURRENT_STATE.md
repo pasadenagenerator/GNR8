@@ -5,6 +5,68 @@
 
 ## Current Phase
 
+MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator Verification
+is IN PROGRESS / AUTHENTICATED BROWSER BLOCKED.
+
+Canonical verification record:
+
+- `docs/architecture/GENERATION_EVOLUTION_DASHBOARD_REAL_TARGET_VERIFICATION.md`
+
+Local runtime verification reached the existing superadmin guard. An
+unauthenticated browser and HTTP request to the ODV dashboard route redirected
+to `/login`:
+
+```text
+HTTP/1.1 307 Temporary Redirect
+location: /login
+```
+
+Authenticated operator display has not yet been completed because the local
+runtime environment did not include `SUPERADMIN_EMAILS`, and no authenticated
+superadmin browser session was available. No authentication bypass was added.
+
+The real ODV dashboard projection loaded through existing read paths and
+verified:
+
+```text
+siteVersionId: 09dce7ea-d860-4f60-a1eb-26c3335b302e
+Generation Cycle: ODV Generation Cycle
+current iteration: 2
+cycle state: improving
+overall trajectory: improved
+latest compliance: non_compliant
+latest evolution assessment: meaningful_improvement
+latest recommendation: create_compliance_report_v2
+business confidence: HIGH from persisted artifacts
+attention states: compliance_non_compliant, limitations_present, evolution_improved, improvement_available, unresolved_knowledge_present
+```
+
+Both preview bundles are locally available through the allowlisted preview
+boundary:
+
+```text
+/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e/iterations/1/preview/
+/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e/iterations/2/preview/
+```
+
+Focused security checks confirmed fail-closed handling for unknown iteration,
+missing file, plain traversal, encoded traversal, absolute path attempt,
+outside-source attempt, outside-bundle resolution, and unavailable bundle.
+
+A narrow UX label fix was made: dashboard preview cards now say
+`Generated Proposal Preview` and explicitly state that the bundle is a
+read-only quarantined proposal, not a published website. No route, artifact,
+persistence, schema, provider, AI, worker, approval, publishing, deployment,
+DNS, or production behavior changed.
+
+Next required step: configure the local `SUPERADMIN_EMAILS` allowlist and sign
+in through the existing login flow, then complete the authenticated browser
+inspection of the dashboard and both preview pages. Stop before edit UX,
+Business Alignment UX, generation controls, approval, publishing, deployment,
+provider execution, AI execution, DNS, or production mutation.
+
+## Previous Phase
+
 MVP-3.0-A - Generation Evolution Dashboard Runtime Foundation is COMPLETE.
 
 GNR8 now has its first real read-only Runtime UX surface:
@@ -38,15 +100,6 @@ published websites and do not approve, publish, deploy, bind domains, mutate
 DNS, mutate production, execute providers, execute AI, recompute compliance,
 or mutate proposal files. Filesystem-backed preview availability depends on
 the proposal source folders being packaged in the current runtime.
-
-Next recommended phase: MVP-3.0-B - Generation Evolution Dashboard Real-Target
-Operator Verification. Open the ODV dashboard route as a superadmin against
-the real runtime, verify both preview routes, verify no forbidden controls are
-present, and stop before any edit UX, Business Alignment UX, generation
-controls, approval, publishing, deployment, provider execution, or AI
-execution.
-
-## Previous Phase
 
 MVP-2.0-N - Generation Evolution Dashboard Architecture is COMPLETE.
 

@@ -154,7 +154,10 @@ function Timeline(props: { model: GenerationEvolutionDashboardProjection }) {
 function PreviewLinks(props: { iteration: GenerationIterationProjection }) {
   return (
     <div style={{ ...cardStyle, background: "#f8fafc" }}>
-      <h4 style={{ margin: "0 0 8px" }}>Generated Website</h4>
+      <h4 style={{ margin: "0 0 8px" }}>Generated Proposal Preview</h4>
+      <p style={{ margin: "0 0 8px", color: "#475569", fontSize: 13 }}>
+        Read-only quarantined proposal bundle, not a published website.
+      </p>
       <p style={{ margin: "0 0 8px" }}><StatusPill value={props.iteration.preview.available ? "preview available" : "preview unavailable"} /></p>
       <a href={props.iteration.preview.route} style={{ color: "#0f766e", fontWeight: 700 }}>Open Website Preview</a>
       <p style={{ margin: "8px 0 4px", color: "#475569", fontSize: 13 }}>Open Source Proposal reference</p>

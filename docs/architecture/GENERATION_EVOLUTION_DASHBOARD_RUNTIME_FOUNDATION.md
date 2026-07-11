@@ -162,6 +162,39 @@ These states are operator visibility only. They do not trigger recomputation,
 provider execution, approval, publishing, deployment, DNS mutation, or
 production mutation.
 
+## MVP-3.0-B Verification Status
+
+MVP-3.0-B performed the first local real-target verification pass for the ODV
+dashboard and preview boundary.
+
+Canonical verification record:
+
+```text
+docs/architecture/GENERATION_EVOLUTION_DASHBOARD_REAL_TARGET_VERIFICATION.md
+```
+
+The local runtime served the app at `http://localhost:3000`. An
+unauthenticated browser and HTTP request to the ODV dashboard route correctly
+redirected to `/login` through the existing superadmin guard. Authenticated
+operator display remains blocked until the local runtime has a valid
+`SUPERADMIN_EMAILS` allowlist and the browser is signed in through the
+existing login flow. No auth bypass was introduced.
+
+The real ODV projection verified current iteration `2`, cycle state
+`improving`, overall trajectory `improved`, latest compliance
+`non_compliant`, latest evolution assessment `meaningful_improvement`, latest
+recommendation `create_compliance_report_v2`, and business confidence
+`HIGH from persisted artifacts`.
+
+Both allowlisted proposal previews resolved locally. Iteration 1 served
+`source/index.html`, `source/styles.css`, and `source/script.js`. Iteration 2
+served the same core files plus local SVG assets under `source/assets`.
+
+The dashboard preview label was narrowed from `Generated Website` to
+`Generated Proposal Preview`, with explicit read-only quarantined proposal
+copy. No route, artifact grouping, persistence, schema, provider, AI, worker,
+approval, publishing, deployment, DNS, or production behavior changed.
+
 ## Validation
 
 Focused tests:
