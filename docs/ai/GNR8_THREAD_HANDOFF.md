@@ -87,11 +87,79 @@ Current status:
 - Phase MVP-2.0-M - First Generation Evolution Analysis is complete for ODV
   and persisted latest evolution artifact
   `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253`.
+- Phase MVP-2.0-N - Generation Evolution Dashboard Architecture is complete
+  and created the canonical read-only dashboard model in
+  `docs/architecture/GENERATION_EVOLUTION_DASHBOARD.md`.
+- Phase MVP-3.0-A - Generation Evolution Dashboard Runtime Foundation is
+  complete and implemented the first real read-only GNR8 Runtime UX surface
+  for ODV.
 
 Current Phase:
-- Phase MVP-2.0-M - First Generation Evolution Analysis for ODV is complete.
+- Phase MVP-3.0-A - Generation Evolution Dashboard Runtime Foundation is
+  complete.
 
-MVP-2.0-M evidence:
+MVP-3.0-A evidence:
+- Dashboard route:
+  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Runtime projection:
+  `apps/platform/gnr8/architecture/generation-evolution-dashboard-projection.ts`.
+- Runtime page:
+  `apps/platform/app/gnr8/admin/evolution/[siteVersionId]/page.tsx`.
+- Preview routes:
+  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e/iterations/1/preview/`
+  and
+  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e/iterations/2/preview/`.
+- Runtime foundation document:
+  `docs/architecture/GENERATION_EVOLUTION_DASHBOARD_RUNTIME_FOUNDATION.md`.
+- The dashboard is superadmin-only, server-rendered, and read-only.
+- The dashboard consumes canonical artifacts from
+  `siteVersion.importProvenanceSummary`; it is not a canonical artifact and
+  does not create business truth.
+- The preview boundary serves only allowlisted static proposal files rooted at
+  `source/index.html`; previews are quarantined generated proposals, not
+  published websites.
+- No artifact editing, Business Alignment interaction, generation controls,
+  regeneration controls, approval controls, publishing, deployment, DNS
+  mutation, production mutation, provider execution, AI execution, workers,
+  schema changes, persistence changes, automatic visual comparison, or
+  compliance recomputation were added.
+
+Next recommended phase:
+- MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
+  Verification. Open the ODV dashboard route as a superadmin against the real
+  runtime, verify both preview routes, verify no forbidden controls are
+  present, and stop before any edit UX, Business Alignment UX, generation
+  controls, approval, publishing, deployment, provider execution, or AI
+  execution.
+
+MVP-2.0-N evidence:
+- Canonical dashboard document:
+  `docs/architecture/GENERATION_EVOLUTION_DASHBOARD.md`.
+- The dashboard answers "What happened to my website over time?", not "What
+  does my latest website look like?".
+- Canonical timeline: Generation Cycle -> Iteration 1 -> Iteration 2 ->
+  Iteration 3 -> ... -> Approved -> Published.
+- Each iteration card documents iteration number, generation cycle, creation
+  timestamp, status, overall assessment, recommendation, compliance status,
+  confidence, and improvement summary.
+- Each iteration card links to canonical artifacts such as Business Discovery,
+  Digital Business Twin, Business Understanding Report, Business Alignment,
+  Website Design Brief, Website Generation Package, Provider Payload,
+  Generated Proposal, Observed Website, Compliance, Compliance Report,
+  Improvement Plan, and Evolution Analysis.
+- The preview model is Generated Website -> Preview URL -> Open Preview ->
+  Static Snapshot -> Proposal Bundle.
+- Every generated website remains permanently reachable through its iteration
+  so users can manually inspect historical versions.
+- Future metrics such as compliance trend, improvement velocity, regeneration
+  gain, evidence growth, business confidence trend, iteration duration, and
+  provider comparison are documentation-only concepts.
+- No runtime behavior, persistence, UI implementation, routes, API, schema,
+  workers, provider execution, AI execution, publishing, artifact contract
+  changes, Generation Cycle runtime changes, compliance runtime changes, or
+  automatic future-iteration comparison were added.
+
+MVP-2.0-M prior evidence:
 - Target: ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
 - Source WGP:
   `website_generation_package_c2c555025f186178f27c44c7cd272d4d`.
@@ -131,14 +199,12 @@ MVP-2.0-M evidence:
   added.
 
 Next Phase:
-- MVP-2.0-N - Compliance Report v2 for ODV. Consume persisted compliance v2
-  `generation_contract_compliance_dfda0565997bd01266ec7464fcdeda0b` plus
-  the persisted evolution analysis
-  `generation_evolution_analysis_89ab4005fcb11ef4d00682f7a86c1253`, and stop
-  before Improvement Plan v2, Provider Payload v3, regeneration, Business
-  Approval, publishing, deployment, DNS mutation, production mutation,
-  provider execution, AI execution, UI, API, schema, or workers unless
-  explicitly authorized.
+- MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
+  Verification. Open the ODV dashboard route as a superadmin against the real
+  runtime, verify both preview routes, verify no forbidden controls are
+  present, and stop before any edit UX, Business Alignment UX, generation
+  controls, approval, publishing, deployment, provider execution, or AI
+  execution.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
@@ -187,6 +253,11 @@ Current architecture direction:
 - Generation Cycle organizes artifact lineage across iterations; it does not
   replace lineage, own business truth, own the Website Generation Package,
   execute providers, execute AI, approve, publish, or mutate production.
+- The Generation Evolution Dashboard is the canonical read-only historical
+  view of a website's evolution across Generation Cycles and Iterations. It
+  visualizes history, links to canonical artifacts and previews, and never
+  edits artifacts, becomes business truth, publishes, or executes providers or
+  AI.
 - Artifacts exist to support business decisions.
 - GNR8 guides businesses through understanding before generation.
 - Conversation replaces unnecessary software complexity.

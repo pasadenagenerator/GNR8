@@ -1,5 +1,28 @@
 # Generation Cycle Architecture
 
+## MVP-3.0-A Runtime Dashboard Addendum
+
+MVP-3.0-A implements the first read-only GNR8 Runtime UX surface over the
+Generation Cycle model:
+
+```text
+/gnr8/admin/evolution/[siteVersionId]
+```
+
+The Generation Evolution Dashboard runtime foundation displays ODV's active
+Generation Cycle, Iteration 1, Iteration 2, compliance results, the persisted
+Evolution Analysis, and the canonical artifact lineage behind the history.
+
+Generation Cycle remains an organizing and governance layer over artifact
+lineage. It does not replace lineage as the truth or causality layer. The
+dashboard projection is not a canonical artifact and does not create business
+truth. It reads existing persisted artifacts only.
+
+The preview routes expose quarantined generated proposal bundles as
+superadmin-only static previews. They are not published websites and do not
+approve, publish, deploy, bind domains, mutate DNS, mutate production, execute
+providers, execute AI, recompute compliance, or mutate canonical artifacts.
+
 ## Phase And Boundary
 
 Phase MVP-2.0-ARCH introduces the canonical Generation Cycle Architecture.
@@ -301,6 +324,34 @@ result.
 Iteration/cycle metadata is preserved in source metadata, diagnostics,
 lineage, and operator attestation because the current runtime contract does
 not yet include canonical cycle fields.
+
+## Generation Evolution Dashboard
+
+MVP-2.0-N adds the canonical Generation Evolution Dashboard architecture as
+the read-only historical view over Generation Cycles and Iterations.
+
+Canonical document:
+
+- `docs/architecture/GENERATION_EVOLUTION_DASHBOARD.md`
+
+The dashboard answers:
+
+```text
+What happened to my website over time?
+```
+
+It does not answer:
+
+```text
+What does my latest website look like?
+```
+
+The dashboard visualizes existing canonical artifacts only. It links each
+iteration to the relevant business, generation, proposal, observation,
+compliance, report, improvement, evolution, preview, snapshot, and proposal
+bundle records. It does not edit artifacts, become business truth, create
+runtime state, execute providers or AI, publish, or automatically compare
+future iterations.
 
 ## Future Runtime Mapping
 

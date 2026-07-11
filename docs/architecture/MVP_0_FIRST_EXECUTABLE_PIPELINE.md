@@ -91,6 +91,107 @@ MVP-2.0-ARCH adds no runtime behavior, persistence, schema, API, UI, workers,
 provider execution, AI execution, regeneration, publishing, deployment, or
 canonical business artifact mutation.
 
+## MVP-2.0-N Generation Evolution Dashboard Addendum
+
+MVP-2.0-N adds the canonical Generation Evolution Dashboard architecture as
+the read-only historical view of a website's evolution across Generation
+Cycles and Iterations.
+
+Canonical document:
+
+- `docs/architecture/GENERATION_EVOLUTION_DASHBOARD.md`
+
+The dashboard answers:
+
+```text
+What happened to my website over time?
+```
+
+It does not answer:
+
+```text
+What does my latest website look like?
+```
+
+Canonical dashboard timeline:
+
+```text
+Generation Cycle
+-> Iteration 1
+-> Iteration 2
+-> Iteration 3
+-> ...
+-> Approved
+-> Published
+```
+
+Each iteration is represented by a read-only card that summarizes iteration
+number, Generation Cycle, creation timestamp, status, overall assessment,
+recommendation, compliance status, confidence, and improvement summary. Each
+card links to canonical artifacts such as Business Discovery, Digital Business
+Twin, Business Understanding Report, Business Alignment, Website Design Brief,
+Website Generation Package, Provider Payload, Generated Proposal, Observed
+Website, Compliance, Compliance Report, Improvement Plan, and Evolution
+Analysis.
+
+The dashboard also defines the conceptual preview relationship:
+
+```text
+Generated Website
+-> Preview URL
+-> Open Preview
+-> Static Snapshot
+-> Proposal Bundle
+```
+
+Every generated version must remain reachable through its iteration so users
+can manually inspect and compare historical versions. Future automated visual
+diff, metrics, provider comparison, or comparison engines remain outside this
+phase.
+
+MVP-2.0-N adds no runtime behavior, persistence, schema, API, UI, workers,
+provider execution, AI execution, publishing, dashboard routes, artifact
+contract changes, Generation Cycle runtime changes, compliance runtime
+changes, or automatic future-iteration comparison.
+
+## MVP-3.0-A Generation Evolution Dashboard Runtime Foundation Addendum
+
+MVP-3.0-A implements the first real read-only GNR8 Runtime UX surface:
+
+```text
+/gnr8/admin/evolution/[siteVersionId]
+```
+
+ODV target:
+
+```text
+09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+Runtime foundation document:
+
+- `docs/architecture/GENERATION_EVOLUTION_DASHBOARD_RUNTIME_FOUNDATION.md`
+
+The implementation adds a runtime dashboard projection, a superadmin-only
+server-rendered admin page, read-only artifact references, focused tests, and
+safe static previews for the two quarantined generated proposal bundles:
+
+```text
+/gnr8/admin/evolution/[siteVersionId]/iterations/1/preview/
+/gnr8/admin/evolution/[siteVersionId]/iterations/2/preview/
+```
+
+The previews serve only allowlisted proposal bundle files rooted at
+`source/index.html`. They are quarantined generated proposals, not published
+websites. Runtime preview availability depends on whether the proposal source
+folders are present in the current runtime filesystem.
+
+MVP-3.0-A adds no artifact editing, Business Alignment interaction,
+generation controls, regeneration controls, approval controls, publishing,
+deployment, DNS mutation, production website mutation, provider execution, AI
+execution, workers, schema changes, persistence changes, automatic visual
+comparison, or compliance recomputation.
+
 ## Reality Assessment Table
 
 Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
