@@ -5,6 +5,81 @@
 
 ## Current Phase
 
+MVP-3.0-C - Business Foundation Runtime UX is COMPLETE.
+
+Canonical runtime UX record:
+
+- `docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md`
+
+GNR8 now has its second read-only Runtime UX surface:
+
+```text
+/gnr8/admin/business-foundation/[siteVersionId]
+```
+
+ODV route:
+
+```text
+/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+Runtime implementation:
+
+```text
+apps/platform/gnr8/architecture/generation-business-foundation-projection.ts
+apps/platform/app/gnr8/admin/business-foundation/[siteVersionId]/page.tsx
+```
+
+The projection is a read model only. It is not a canonical artifact and does
+not persist anything. It consumes only the existing business foundation chain
+from `siteVersion.importProvenanceSummary`: Business Discovery, Digital
+Business Twin, Business Understanding Report, Business Alignment, Aligned
+Digital Business Twin, Website Design Brief, and Website Generation Package.
+It intentionally excludes provider payloads, Generated Proposals, Compliance,
+Compliance Reports, Improvement Plans, Observed Website Models, and Generation
+Evolution Analysis.
+
+The page renders Business Summary, Business Knowledge, Offerings, Audience,
+Missing Knowledge, Transformation Story, Business Health, Attention States,
+and a read-only Artifact Explorer. Artifact IDs are copyable. There are no
+editors, forms, inputs, mutation buttons, approval controls, publishing
+controls, deployment controls, provider execution controls, AI controls, DNS
+controls, or mutation server actions.
+
+Attention states are read-only operator visibility only:
+`low_confidence`, `missing_audience`, `missing_offerings`,
+`missing_evidence`, `large_limitation_count`, and
+`business_partially_understood`.
+
+Focused tests passed:
+
+```text
+NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --tsconfig apps/platform/tsconfig.json --test apps/platform/gnr8/architecture/generation-business-foundation-projection.test.ts apps/platform/app/gnr8/admin/business-foundation-page.test.ts
+```
+
+Full platform build passed:
+
+```text
+cd apps/platform && pnpm run vercel-build
+```
+
+`git diff --check` passed.
+
+After MVP-3.0-C, GNR8 has two complete read-only Runtime UX surfaces:
+
+```text
+Business Foundation (WHY)
+-> Generation Evolution Dashboard (HOW)
+```
+
+Recommended next phase: MVP-3.0-D - Business Foundation Real-Target Operator
+Verification. Verify the new route against the persisted ODV target in an
+authenticated local browser session, without adding editing, generation,
+approval, publishing, deployment, provider execution, AI execution, DNS,
+schema changes, persistence changes, workers, or mutation behavior.
+
+## Previous Phase
+
 MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator Verification
 is COMPLETE.
 
@@ -65,14 +140,6 @@ CSS, JavaScript, and SVG assets resolve in the browser. No authorization
 logic, route authorization, artifact grouping, persistence, schema, provider,
 AI, worker, approval, publishing, deployment, DNS, production behavior,
 canonical artifact, or generated source bundle changed.
-
-Recommended next phase: documentation-only planning for the next read-only
-dashboard enhancement boundary, or a separately authorized operator-facing
-Evolution Dashboard UX polish phase. Stop before edit UX, Business Alignment
-UX, generation controls, approval, publishing, deployment, provider execution,
-AI execution, DNS, or production mutation.
-
-## Previous Phase
 
 MVP-3.0-A - Generation Evolution Dashboard Runtime Foundation is COMPLETE.
 
@@ -3512,13 +3579,11 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
-  Verification is complete.
+- Phase MVP-3.0-C - Business Foundation Runtime UX is complete.
 
 Next Phase:
-- Documentation-only planning for the next read-only Evolution Dashboard
-  enhancement boundary, or a separately authorized operator-facing Evolution
-  Dashboard UX polish phase.
+- MVP-3.0-D - Business Foundation Real-Target Operator Verification,
+  read-only against the persisted ODV target.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:

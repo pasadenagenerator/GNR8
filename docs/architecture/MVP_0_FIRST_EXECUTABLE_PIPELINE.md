@@ -238,6 +238,60 @@ regeneration controls, approval controls, publishing, deployment, provider
 execution, AI execution, DNS controls, production mutation, schema changes,
 workers, broad redesign, or new dashboard concepts.
 
+## MVP-3.0-C Business Foundation Runtime UX Addendum
+
+MVP-3.0-C implements the second real read-only GNR8 Runtime UX surface:
+
+```text
+/gnr8/admin/business-foundation/[siteVersionId]
+```
+
+ODV target:
+
+```text
+09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+Runtime UX document:
+
+- `docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md`
+
+The Business Foundation page is the canonical superadmin entry point for
+understanding why GNR8 generated a website the way it did. It visualizes the
+persisted business foundation without requiring operators to open raw JSON
+artifacts.
+
+The runtime projection consumes only the existing business artifact chain:
+
+```text
+Business Discovery
+-> Digital Business Twin
+-> Business Understanding Report
+-> Business Alignment
+-> Aligned Digital Business Twin
+-> Website Design Brief
+-> Website Generation Package
+```
+
+It intentionally excludes provider artifacts, Generated Proposals,
+Compliance, Compliance Reports, Improvement Plans, Observed Website Models,
+and Generation Evolution Analysis.
+
+The page displays Business Summary, Business Knowledge, Offerings, Audience,
+Missing Knowledge, Transformation Story, Business Health, Attention States,
+and a read-only Artifact Explorer with copyable artifact IDs.
+
+After MVP-3.0-C, GNR8 has two complete Runtime UX surfaces:
+
+```text
+Business Foundation (WHY)
+-> Generation Evolution Dashboard (HOW)
+```
+
+MVP-3.0-C adds no editing, AI execution, generation, regeneration, provider
+execution, Business Alignment editing, approval, publishing, deployment, DNS,
+schema changes, persistence changes, workers, or mutation server actions.
+
 ## Reality Assessment Table
 
 Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and

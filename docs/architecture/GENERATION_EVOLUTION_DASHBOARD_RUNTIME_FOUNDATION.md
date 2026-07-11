@@ -200,6 +200,41 @@ persistence, schema, provider, AI, worker, approval, publishing, deployment,
 DNS, production behavior, canonical artifact, or generated source bundle
 changed.
 
+## Runtime UX Pairing After MVP-3.0-C
+
+MVP-3.0-C adds the second read-only Runtime UX surface:
+
+```text
+/gnr8/admin/business-foundation/[siteVersionId]
+```
+
+Canonical document:
+
+```text
+docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md
+```
+
+The Business Foundation page answers why GNR8 generated a website the way it
+did by visualizing the persisted business-understanding chain from Business
+Discovery through Website Generation Package. The Generation Evolution
+Dashboard remains the historical view of how generated website iterations
+evolved over time.
+
+Together:
+
+```text
+Business Foundation
+(WHY)
+↓
+Generation Evolution Dashboard
+(HOW)
+```
+
+The pairing is read-only. It does not add artifact editing, Business Alignment
+editing, generation controls, regeneration controls, approval controls,
+publishing, deployment, provider execution, AI execution, DNS controls,
+workers, schema changes, persistence changes, or mutation server actions.
+
 ## Validation
 
 Focused tests:

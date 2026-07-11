@@ -98,70 +98,65 @@ Current status:
   authorized through the existing `SUPERADMIN_EMAILS` mechanism in an ignored
   local env file, the dashboard rendered at the target route, and both
   previews were opened from the dashboard without bypassing authentication.
+- Phase MVP-3.0-C - Business Foundation Runtime UX is complete and
+  implemented the second read-only GNR8 Runtime UX surface for ODV.
 
 Current Phase:
-- Phase MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
-  Verification is COMPLETE.
+- Phase MVP-3.0-C - Business Foundation Runtime UX is COMPLETE.
 
-MVP-3.0-B evidence:
-- Canonical verification record:
-  `docs/architecture/GENERATION_EVOLUTION_DASHBOARD_REAL_TARGET_VERIFICATION.md`.
-- Local runtime:
-  `http://localhost:3000`.
-- Dashboard route:
-  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
-- Authentication result: the current cookie-backed local user was identified
-  through the existing app session and authorized through local
-  `SUPERADMIN_EMAILS`. The private email value is not documented. No auth
-  bypass, production env edit, or authorization logic change was made.
-- Real ODV projection result: Generation Cycle `ODV Generation Cycle`, current
-  iteration `2`, cycle state `improving`, overall trajectory `improved`,
-  latest compliance `non_compliant`, latest evolution assessment
-  `meaningful_improvement`, latest recommendation
-  `create_compliance_report_v2`, business confidence
-  `HIGH from persisted artifacts`.
-- Business foundation references are present for Business Discovery, Digital
-  Business Twin, Business Understanding Report, Business Alignment, Website
-  Design Brief, and Website Generation Package.
-- Iteration 1 result: `complete`, proposal `quarantined`, OWM `observable`,
-  compliance `non_compliant`, compliant / partial / non-compliant
-  `0 / 2 / 8`, evidence `12`, limitations `268`, preview available.
-- Browser result: dashboard rendered Business Foundation, Iteration 1,
-  Improvement Plan transition, Iteration 2, Evolution Analysis, Attention
-  States, and Artifact Lineage. Iteration 1 preview rendered styled
-  HTML/CSS/JavaScript with no image elements. Iteration 2 preview rendered
-  styled HTML/CSS/JavaScript with local SVG assets and no broken image
-  elements.
-- Iteration 2 result: `complete`, proposal `quarantined`, OWM `observable`,
-  compliance `non_compliant`, compliant / partial / non-compliant
-  `2 / 2 / 6`, evidence `25`, limitations `252`, preview available,
-  meaningful improvement, newly compliant `message_coverage` and
-  `trust_signal_presence`, improved `constraints_preserved`, seven unresolved
-  categories, no regressions.
-- Both preview routes resolve allowlisted local static files. Iteration 1
-  serves `source/index.html`, `source/styles.css`, and `source/script.js`.
-  Iteration 2 serves those files plus five local SVG assets under
-  `source/assets`.
-- Preview security remains fail-closed for unknown iteration, missing file,
-  plain traversal, encoded traversal, absolute path attempts,
-  outside-source attempts, outside-bundle resolution, and unavailable bundles.
-- Attention states are `compliance_non_compliant`, `limitations_present`,
-  `evolution_improved`, `improvement_available`, and
-  `unresolved_knowledge_present`.
+MVP-3.0-C evidence:
+- Canonical runtime UX record:
+  `docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md`.
+- Runtime route:
+  `/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Runtime projection:
+  `apps/platform/gnr8/architecture/generation-business-foundation-projection.ts`.
+- Runtime page:
+  `apps/platform/app/gnr8/admin/business-foundation/[siteVersionId]/page.tsx`.
+- The projection is read-only and not a canonical artifact. It consumes only
+  Business Discovery, Digital Business Twin, Business Understanding Report,
+  Business Alignment, Aligned Digital Business Twin, Website Design Brief, and
+  Website Generation Package from existing `siteVersion.importProvenanceSummary`.
+- The projection intentionally excludes provider payloads, Generated
+  Proposals, Observed Website Models, Compliance, Compliance Reports,
+  Improvement Plans, and Generation Evolution Analysis.
+- The page is superadmin-only, server-rendered, and read-only.
+- Page sections: Header, Business Summary, Business Knowledge, Offerings,
+  Audience, Missing Knowledge, Transformation Story, Business Health,
+  Attention States, and Artifact Explorer.
+- Business Summary shows business name, business identity, business purpose,
+  business goals, business confidence, business tone, trust strategy, and
+  digital presence from persisted knowledge where available.
+- Business Knowledge groups Identity, Offerings, Goals, Brand, Content, Trust,
+  Digital Presence, and Constraints. Every group shows confidence, evidence
+  count, limitations, known statements, and missing knowledge when present.
+- Missing Knowledge separates Known, Unknown, and Assumed. When no persisted
+  assumptions exist, it states that instead of inventing assumptions.
+- Business Health shows existing confidence, known knowledge count, missing
+  knowledge count, limitation count, evidence quality, and Website Generation
+  Package readiness/status. It does not calculate a new business score.
+- Artifact Explorer exposes copyable IDs for Business Discovery, Digital
+  Business Twin, Business Understanding Report, Business Alignment, Aligned
+  Digital Business Twin, Website Design Brief, and Website Generation Package.
+- Attention states are `low_confidence`, `missing_audience`,
+  `missing_offerings`, `missing_evidence`, `large_limitation_count`, and
+  `business_partially_understood`.
 - Forbidden controls remain absent: no forms, inputs, textareas, selects,
-  mutation buttons, generate/regenerate/approve/publish/deploy/provider/AI/DNS
-  controls, or server actions.
-- Narrow fix made: dashboard preview cards now say `Generated Proposal
-  Preview` and explicitly state the linked bundle is a read-only quarantined
-  proposal, not a published website.
-- Focused tests passed from `apps/platform`:
-  `NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --test
-  gnr8/architecture/generation-evolution-dashboard-projection.test.ts
-  app/gnr8/admin/generation-evolution-dashboard-page.test.ts`
-  with `13/13` passing.
+  mutation buttons, edit controls, generate/regenerate/approve/publish/deploy
+  controls, provider execution controls, AI controls, DNS controls, or server
+  actions.
+- Focused tests passed:
+  `NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --tsconfig
+  apps/platform/tsconfig.json --test
+  apps/platform/gnr8/architecture/generation-business-foundation-projection.test.ts
+  apps/platform/app/gnr8/admin/business-foundation-page.test.ts`
+  with `8/8` passing.
 - Full `cd apps/platform && pnpm run vercel-build` passed. The build emitted
   existing unrelated lint warnings, then compiled and generated the route
-  table, including the evolution dashboard and preview routes.
+  table including `/gnr8/admin/business-foundation/[siteVersionId]`.
+- `git diff --check` passed.
+- Runtime UX pair now complete:
+  `Business Foundation (WHY) -> Generation Evolution Dashboard (HOW)`.
 
 MVP-3.0-A evidence:
 - Dashboard route:
@@ -190,12 +185,12 @@ MVP-3.0-A evidence:
   compliance recomputation were added.
 
 Next recommended phase:
-- Documentation-only planning for the next read-only Evolution Dashboard
-  enhancement boundary, or a separately authorized operator-facing Evolution
-  Dashboard UX polish phase. Stop before edit UX, Business Alignment UX,
-  generation controls, approval, publishing, deployment, provider execution,
-  AI execution, DNS, or production mutation unless a new phase explicitly
-  authorizes it.
+- MVP-3.0-D - Business Foundation Real-Target Operator Verification. Verify
+  the new Business Foundation route against the persisted ODV target in an
+  authenticated local browser session. Stop before editing, Business
+  Alignment editing, generation, regeneration, approval, publishing,
+  deployment, provider execution, AI execution, DNS, schema changes,
+  persistence changes, workers, or mutation behavior.
 
 MVP-2.0-N evidence:
 - Canonical dashboard document:
@@ -264,9 +259,8 @@ MVP-2.0-M prior evidence:
   added.
 
 Next Phase:
-- Documentation-only planning for the next read-only Evolution Dashboard
-  enhancement boundary, or a separately authorized operator-facing Evolution
-  Dashboard UX polish phase.
+- MVP-3.0-D - Business Foundation Real-Target Operator Verification,
+  read-only against the persisted ODV target.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its
