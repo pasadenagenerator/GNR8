@@ -97,8 +97,12 @@ function StatusPill(props: { value: string | null | undefined }) {
 function ArtifactLinkList(props: { artifacts: GenerationArtifactLinkProjection[] }) {
   return (
     <div style={{ display: "grid", gap: 9 }}>
-      {props.artifacts.map((artifact) => (
-        <div id={artifact.artifactId ? `artifact-${artifact.artifactId}` : undefined} key={`${artifact.kind}:${artifact.label}`} style={cardStyle}>
+      {props.artifacts.map((artifact, index) => (
+        <div
+          id={artifact.artifactId ? `artifact-${artifact.artifactId}` : undefined}
+          key={`${artifact.kind}:${artifact.label}:${artifact.artifactId ?? artifact.canonicalId ?? index}`}
+          style={cardStyle}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <strong>{artifact.label}</strong>
             <StatusPill value={artifact.status ?? (artifact.missing ? "missing" : "reference")} />

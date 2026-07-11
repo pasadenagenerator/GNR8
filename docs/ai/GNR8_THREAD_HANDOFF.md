@@ -94,14 +94,14 @@ Current status:
   complete and implemented the first real read-only GNR8 Runtime UX surface
   for ODV.
 - Phase MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
-  Verification is in progress and authenticated browser display is blocked by
-  missing local superadmin allowlist/session. The guard, real ODV projection,
-  preview boundary, attention states, forbidden-control absence, and preview
-  security behavior have been verified without bypassing authentication.
+  Verification is complete. The authenticated local browser session was
+  authorized through the existing `SUPERADMIN_EMAILS` mechanism in an ignored
+  local env file, the dashboard rendered at the target route, and both
+  previews were opened from the dashboard without bypassing authentication.
 
 Current Phase:
 - Phase MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
-  Verification is IN PROGRESS / AUTHENTICATED BROWSER BLOCKED.
+  Verification is COMPLETE.
 
 MVP-3.0-B evidence:
 - Canonical verification record:
@@ -110,12 +110,10 @@ MVP-3.0-B evidence:
   `http://localhost:3000`.
 - Dashboard route:
   `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
-- Authentication result: unauthenticated browser and HTTP checks reached the
-  existing superadmin guard and redirected to `/login` with `307 Temporary
-  Redirect`. Authenticated display was not completed because the local runtime
-  did not include `SUPERADMIN_EMAILS`, and no authenticated superadmin browser
-  session was available. Do not bypass auth; configure the local allowlist and
-  sign in through the existing login flow to finish the browser pass.
+- Authentication result: the current cookie-backed local user was identified
+  through the existing app session and authorized through local
+  `SUPERADMIN_EMAILS`. The private email value is not documented. No auth
+  bypass, production env edit, or authorization logic change was made.
 - Real ODV projection result: Generation Cycle `ODV Generation Cycle`, current
   iteration `2`, cycle state `improving`, overall trajectory `improved`,
   latest compliance `non_compliant`, latest evolution assessment
@@ -128,6 +126,12 @@ MVP-3.0-B evidence:
 - Iteration 1 result: `complete`, proposal `quarantined`, OWM `observable`,
   compliance `non_compliant`, compliant / partial / non-compliant
   `0 / 2 / 8`, evidence `12`, limitations `268`, preview available.
+- Browser result: dashboard rendered Business Foundation, Iteration 1,
+  Improvement Plan transition, Iteration 2, Evolution Analysis, Attention
+  States, and Artifact Lineage. Iteration 1 preview rendered styled
+  HTML/CSS/JavaScript with no image elements. Iteration 2 preview rendered
+  styled HTML/CSS/JavaScript with local SVG assets and no broken image
+  elements.
 - Iteration 2 result: `complete`, proposal `quarantined`, OWM `observable`,
   compliance `non_compliant`, compliant / partial / non-compliant
   `2 / 2 / 6`, evidence `25`, limitations `252`, preview available,
@@ -186,12 +190,12 @@ MVP-3.0-A evidence:
   compliance recomputation were added.
 
 Next recommended phase:
-- MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
-  Verification. Open the ODV dashboard route as a superadmin against the real
-  runtime, verify both preview routes, verify no forbidden controls are
-  present, and stop before any edit UX, Business Alignment UX, generation
-  controls, approval, publishing, deployment, provider execution, or AI
-  execution.
+- Documentation-only planning for the next read-only Evolution Dashboard
+  enhancement boundary, or a separately authorized operator-facing Evolution
+  Dashboard UX polish phase. Stop before edit UX, Business Alignment UX,
+  generation controls, approval, publishing, deployment, provider execution,
+  AI execution, DNS, or production mutation unless a new phase explicitly
+  authorizes it.
 
 MVP-2.0-N evidence:
 - Canonical dashboard document:
@@ -260,12 +264,9 @@ MVP-2.0-M prior evidence:
   added.
 
 Next Phase:
-- MVP-3.0-B - Generation Evolution Dashboard Real-Target Operator
-  Verification. Open the ODV dashboard route as a superadmin against the real
-  runtime, verify both preview routes, verify no forbidden controls are
-  present, and stop before any edit UX, Business Alignment UX, generation
-  controls, approval, publishing, deployment, provider execution, or AI
-  execution.
+- Documentation-only planning for the next read-only Evolution Dashboard
+  enhancement boundary, or a separately authorized operator-facing Evolution
+  Dashboard UX polish phase.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its

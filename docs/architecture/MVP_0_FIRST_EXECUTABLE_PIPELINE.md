@@ -194,8 +194,8 @@ comparison, or compliance recomputation.
 
 ## MVP-3.0-B Generation Evolution Dashboard Real-Target Verification Addendum
 
-MVP-3.0-B performs the first local real-target operator verification pass for
-the ODV Generation Evolution Dashboard.
+MVP-3.0-B performs and completes the first local real-target authenticated
+operator verification pass for the ODV Generation Evolution Dashboard.
 
 Verification document:
 
@@ -215,20 +215,23 @@ latest recommendation: create_compliance_report_v2
 business confidence: HIGH from persisted artifacts
 ```
 
-The existing superadmin guard is active: unauthenticated local browser and
-HTTP requests redirect to `/login`. Authenticated operator display remains
-blocked until the local runtime has a valid `SUPERADMIN_EMAILS` allowlist and
-the browser is signed in through the existing login flow. No auth bypass was
-added.
+The existing superadmin guard is active and the authenticated browser pass
+used the existing `SUPERADMIN_EMAILS` allowlist through an ignored local env
+file. No auth bypass was added, no production env configuration changed, and
+the private local email value is not documented.
 
-Both allowlisted generated proposal preview bundles are available locally, and
-the preview boundary remains fail-closed for unknown iterations, missing
-files, traversal, encoded traversal, absolute path attempts, outside-source
-attempts, outside-bundle resolution, and unavailable bundles.
+Both allowlisted generated proposal preview bundles are available locally and
+were opened from the dashboard in the browser. Iteration 1 rendered styled
+HTML/CSS/JavaScript with no image elements. Iteration 2 rendered styled
+HTML/CSS/JavaScript with local SVG assets and no broken image elements. The
+preview boundary remains fail-closed for unknown iterations, missing files,
+traversal, encoded traversal, absolute path attempts, outside-source attempts,
+outside-bundle resolution, and unavailable bundles.
 
-MVP-3.0-B made one narrow UX label fix: the preview card now says
-`Generated Proposal Preview` and explicitly states that the linked bundle is a
-read-only quarantined proposal, not a published website.
+MVP-3.0-B made narrow rendering/UX fixes only: the preview card now says
+`Generated Proposal Preview`, artifact lineage keys are unique, and preview
+HTML rewrites local `./...` asset references through `/preview/source/` so
+CSS, JavaScript, and SVG assets resolve in the browser.
 
 MVP-3.0-B adds no edit UX, Business Alignment UX, generation controls,
 regeneration controls, approval controls, publishing, deployment, provider

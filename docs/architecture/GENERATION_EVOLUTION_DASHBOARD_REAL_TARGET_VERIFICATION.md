@@ -31,14 +31,19 @@ location: /login
 
 The in-app browser landed on the Login page with title `GNR8 Platform`.
 
-Authenticated dashboard rendering was not completed in this pass because the
-local runtime environment did not include `SUPERADMIN_EMAILS`, and no
-authenticated superadmin browser session was available. The route was not
-bypassed. The result is therefore:
+MVP-3.0-B2 resolved the local-only authenticated verification blocker by
+identifying the current cookie-backed local session through the existing app
+auth flow and adding that email to the ignored local platform env file through
+the existing `SUPERADMIN_EMAILS` mechanism. The private email value is not
+documented here.
+
+The authenticated dashboard route then loaded successfully in the browser:
 
 ```text
-authenticated operator display: blocked by missing local superadmin allowlist/session
-auth guard: verified
+authenticated operator display: success
+auth guard: verified through existing superadmin allowlist
+route result: 200 at /gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e
+header/title: Generation Evolution Dashboard / GNR8 Platform
 ```
 
 ## Dashboard Projection Summary
@@ -162,13 +167,16 @@ Business Foundation
 -> Evolution Analysis
 ```
 
-No projection hierarchy issue was found. Authenticated visual inspection of
-the rendered dashboard remains blocked by the missing local superadmin
-allowlist/session.
+Authenticated browser inspection confirmed the rendered dashboard presents
+this story without reading raw JSON. The page shows the Business Foundation,
+Iteration 1, the Improvement Plan transition, Iteration 2, Evolution Analysis,
+Attention States, and Artifact Lineage as readable sections.
 
 ## Preview Results
 
-The preview boundary resolved both allowlisted proposal bundles:
+The preview boundary resolved both allowlisted proposal bundles in the
+authenticated browser. The dashboard links were opened from the rendered
+dashboard.
 
 ```text
 Iteration 1 preview route:
@@ -178,6 +186,8 @@ index HTML: source/index.html, 8796 bytes, text/html
 local CSS: source/styles.css, 6196 bytes, text/css
 local JavaScript: source/script.js, 577 bytes, text/javascript
 local assets: none under source/assets
+browser result: styled HTML rendered; script set quarantined proposal metadata
+mutation result: no backend mutation observed
 ```
 
 ```text
@@ -188,6 +198,9 @@ index HTML: source/index.html, 12357 bytes, text/html
 local CSS: source/styles.css, 7049 bytes, text/css
 local JavaScript: source/script.js, 1005 bytes, text/javascript
 local assets: 5 SVG files under source/assets
+browser result: styled HTML rendered with 6 image elements and 0 broken images
+script result: active desktop navigation state applied
+mutation result: no backend mutation observed
 ```
 
 The dashboard preview card now labels these links as `Generated Proposal
@@ -197,14 +210,19 @@ published website.
 ## Human Visual-Difference Assessment
 
 Without changing artifacts or creating automated comparison results, the
-source-bundle review shows that an operator should be able to identify
-practical differences between Iteration 1 and Iteration 2 once authenticated:
+authenticated browser review showed visible practical differences between
+Iteration 1 and Iteration 2:
 
-- Iteration 2 has richer content and larger HTML/CSS/JS payloads.
-- Iteration 2 adds local SVG assets for identity, navigation evidence,
+- Iteration 1 is simpler and more text-forward, with a blue-toned hero,
+  a boundary card, and no raster/SVG image elements.
+- Iteration 2 is visually richer, with a green-toned identity hero,
+  larger brand-first messaging, a status/evidence visual panel, and local SVG
+  assets for identity, navigation evidence,
   contact path, asset inventory, and constraint mapping.
 - Iteration 2 strengthens trust presentation with explicit supported-trust and
   constraint messaging.
+- Iteration 2 adds an `Evidence` navigation destination and clearer evidence
+  section structure.
 - Iteration 2 exposes more validation/evidence hooks through
   `data-validation-area` and asset evidence markup.
 - Both iterations preserve unresolved knowledge rather than inventing services,
@@ -257,7 +275,8 @@ unresolved knowledge and limitations.
 
 ## Forbidden Controls
 
-Source and focused test verification confirm the dashboard page contains no:
+Authenticated browser and focused test verification confirm the dashboard page
+contains no:
 
 ```text
 forms
@@ -276,14 +295,21 @@ DNS controls
 server actions
 ```
 
-Allowed read-only navigation and preview links remain present.
+Allowed read-only navigation and preview links remain present. Iteration 2's
+preview contains a non-mutating menu button for responsive navigation; it is
+not a generation, approval, publishing, provider, AI, DNS, or backend mutation
+control.
 
 ## Narrow Fix Made
 
-One narrowly scoped UX label fix was made:
+Three narrowly scoped rendering/UX fixes were made:
 
 ```text
 Generated Website -> Generated Proposal Preview
+Artifact lineage React keys now include artifact identity to avoid duplicate
+key warnings.
+Preview HTML rewrites local ./asset references through /preview/source/ so
+CSS, JavaScript, and SVG assets resolve in the browser.
 ```
 
 The preview card now explicitly states:
@@ -292,8 +318,9 @@ The preview card now explicitly states:
 Read-only quarantined proposal bundle, not a published website.
 ```
 
-No route, artifact grouping, persistence, schema, provider, AI, worker,
-approval, publishing, deployment, DNS, or production behavior changed.
+No authorization logic, artifact grouping, persistence, schema, provider, AI,
+worker, approval, publishing, deployment, DNS, production behavior, canonical
+artifact, or generated source bundle changed.
 
 ## Validation
 
@@ -335,20 +362,21 @@ and generated the route table successfully, including:
 
 ## Remaining UX Limitations
 
-- Authenticated visual inspection of the rendered dashboard and raw preview
-  pages remains blocked until the local runtime has a valid
-  `SUPERADMIN_EMAILS` allowlist and the browser is signed in as that
-  superadmin.
 - The dashboard is intentionally dense and read-only; it does not provide edit,
   approval, regeneration, publishing, or comparison tools.
 - The preview displays static proposal bundles. It does not imply publication,
   approval, compliance, deployment, provider execution, AI execution, or DNS
   binding.
+- Iteration 1 has no image elements; its visual evidence is typography,
+  layout, and text-only boundary/status presentation.
+- Iteration 2 still preserves unresolved audience/offering/contact knowledge
+  and remains non-compliant despite visible improvement.
 
 ## Recommended Next Phase
 
-Resume MVP-3.0-B after configuring the local superadmin allowlist and signing
-in through the existing login flow, then complete the authenticated browser
-inspection of the dashboard and both preview pages. Do not proceed to edit UX,
-Business Alignment UX, generation controls, approval, publishing, deployment,
-provider execution, AI execution, DNS, or production mutation.
+MVP-3.0-B is complete. The next safe phase is documentation-only planning for
+the next read-only dashboard enhancement boundary, or a separate explicitly
+authorized phase for operator-facing Evolution Dashboard UX polish. Do not
+proceed to edit UX, Business Alignment UX, generation controls, approval,
+publishing, deployment, provider execution, AI execution, DNS, or production
+mutation without a new phase boundary.

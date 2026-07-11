@@ -7,8 +7,8 @@ import { createGenerationEvolutionPreviewRouteHandlers } from "./evolution/[site
 const PAGE_FILE = new URL("./evolution/[siteVersionId]/page.tsx", import.meta.url);
 const ROUTE_FILE = new URL("./evolution/[siteVersionId]/iterations/[iteration]/preview/[[...assetPath]]/route.ts", import.meta.url);
 
-function request(): Request {
-  return new Request("https://app.test/gnr8/admin/evolution/site/iterations/1/preview/");
+function request(iteration = "1"): Request {
+  return new Request(`https://app.test/gnr8/admin/evolution/site/iterations/${iteration}/preview/`);
 }
 
 function route(input: {
@@ -93,6 +93,8 @@ test("preview route serves Iteration 1 entry HTML and local asset", async () => 
   assert.equal(entry.status, 200);
   assert.equal(entry.headers.get("content-type")?.startsWith("text/html"), true);
   assert.match(html, /ODV|html|DOCTYPE/i);
+  assert.match(html, /href="\/gnr8\/admin\/evolution\/site\/iterations\/1\/preview\/source\/styles\.css"/);
+  assert.match(html, /src="\/gnr8\/admin\/evolution\/site\/iterations\/1\/preview\/source\/script\.js"/);
 
   const asset = await handlers.GET(request(), { params: { iteration: "1", assetPath: ["source", "styles.css"] } });
   assert.equal(asset.status, 200);
@@ -102,9 +104,11 @@ test("preview route serves Iteration 1 entry HTML and local asset", async () => 
 test("preview route serves Iteration 2 entry HTML and local asset", async () => {
   const handlers = route();
 
-  const entry = await handlers.GET(request(), { params: { iteration: "2" } });
+  const entry = await handlers.GET(request("2"), { params: { iteration: "2" } });
+  const html = await entry.text();
   assert.equal(entry.status, 200);
   assert.equal(entry.headers.get("content-security-policy")?.includes("default-src 'none'"), true);
+  assert.match(html, /src="\/gnr8\/admin\/evolution\/site\/iterations\/2\/preview\/source\/assets\/identity-signal\.svg"/);
 
   const asset = await handlers.GET(request(), { params: { iteration: "2", assetPath: ["source", "assets", "asset-inventory.svg"] } });
   assert.equal(asset.status, 200);

@@ -164,8 +164,8 @@ production mutation.
 
 ## MVP-3.0-B Verification Status
 
-MVP-3.0-B performed the first local real-target verification pass for the ODV
-dashboard and preview boundary.
+MVP-3.0-B performed and completed the first local real-target authenticated
+browser verification pass for the ODV dashboard and preview boundary.
 
 Canonical verification record:
 
@@ -173,12 +173,11 @@ Canonical verification record:
 docs/architecture/GENERATION_EVOLUTION_DASHBOARD_REAL_TARGET_VERIFICATION.md
 ```
 
-The local runtime served the app at `http://localhost:3000`. An
-unauthenticated browser and HTTP request to the ODV dashboard route correctly
-redirected to `/login` through the existing superadmin guard. Authenticated
-operator display remains blocked until the local runtime has a valid
-`SUPERADMIN_EMAILS` allowlist and the browser is signed in through the
-existing login flow. No auth bypass was introduced.
+The local runtime served the app at `http://localhost:3000`. The authenticated
+local browser session was authorized through the existing `SUPERADMIN_EMAILS`
+allowlist in an ignored local env file. No auth bypass was introduced, no
+authorization logic changed, and the private local email value is not
+documented.
 
 The real ODV projection verified current iteration `2`, cycle state
 `improving`, overall trajectory `improved`, latest compliance
@@ -186,14 +185,20 @@ The real ODV projection verified current iteration `2`, cycle state
 recommendation `create_compliance_report_v2`, and business confidence
 `HIGH from persisted artifacts`.
 
-Both allowlisted proposal previews resolved locally. Iteration 1 served
-`source/index.html`, `source/styles.css`, and `source/script.js`. Iteration 2
-served the same core files plus local SVG assets under `source/assets`.
+Both allowlisted proposal previews resolved locally through the rendered
+dashboard links. Iteration 1 served styled `source/index.html`,
+`source/styles.css`, and `source/script.js`. Iteration 2 served the same core
+files plus local SVG assets under `source/assets`, all with browser-observed
+200 responses and no broken image elements.
 
-The dashboard preview label was narrowed from `Generated Website` to
-`Generated Proposal Preview`, with explicit read-only quarantined proposal
-copy. No route, artifact grouping, persistence, schema, provider, AI, worker,
-approval, publishing, deployment, DNS, or production behavior changed.
+The verification pass made narrow rendering fixes only: the dashboard preview
+label was narrowed from `Generated Website` to `Generated Proposal Preview`,
+artifact lineage keys were made unique, and preview HTML now rewrites local
+`./...` asset references through `/preview/source/` so CSS, JavaScript, and
+SVG assets resolve in the browser. No authorization logic, artifact grouping,
+persistence, schema, provider, AI, worker, approval, publishing, deployment,
+DNS, production behavior, canonical artifact, or generated source bundle
+changed.
 
 ## Validation
 

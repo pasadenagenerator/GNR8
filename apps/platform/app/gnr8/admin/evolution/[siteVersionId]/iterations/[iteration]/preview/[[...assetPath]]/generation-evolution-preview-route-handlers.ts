@@ -9,6 +9,23 @@ export type GenerationEvolutionPreviewRouteDependencies = {
   resolvePreviewFile: typeof resolveGenerationPreviewFile;
 };
 
+function previewAssetBasePath(request: Request): string {
+  const pathname = new URL(request.url).pathname;
+  const marker = "/preview";
+  const markerIndex = pathname.indexOf(marker);
+  if (markerIndex < 0) return `${pathname.replace(/\/$/, "")}/source/`;
+  return `${pathname.slice(0, markerIndex + marker.length).replace(/\/$/, "")}/source/`;
+}
+
+function rewriteHtmlRelativeAssetReferences(html: string, assetBasePath: string): string {
+  return html.replace(
+    /\b(href|src)=(["'])\.\/([^"'#?:][^"']*)\2/g,
+    (_match, attribute: string, quote: string, relativePath: string) => (
+      `${attribute}=${quote}${assetBasePath}${relativePath}${quote}`
+    ),
+  );
+}
+
 function statusForError(error: unknown): number {
   const message = error instanceof Error ? error.message : String(error);
   if (message.startsWith("Unauthorized")) return 401;
@@ -27,7 +44,7 @@ export function createGenerationEvolutionPreviewRouteHandlers(
 
   return {
     async GET(
-      _request: Request,
+      request: Request,
       context: { params: Promise<{ iteration: string; assetPath?: string[] }> | { iteration: string; assetPath?: string[] } },
     ): Promise<Response> {
       try {
@@ -46,6 +63,15 @@ export function createGenerationEvolutionPreviewRouteHandlers(
               headers: generationPreviewSecurityHeaders("application/json; charset=utf-8"),
             },
           );
+        }
+
+        if (result.contentType.startsWith("text/html")) {
+          const html = new TextDecoder().decode(result.body);
+          const rewritten = rewriteHtmlRelativeAssetReferences(html, previewAssetBasePath(request));
+          return new Response(new TextEncoder().encode(rewritten), {
+            status: 200,
+            headers: generationPreviewSecurityHeaders(result.contentType),
+          });
         }
 
         return new Response(result.body, {
