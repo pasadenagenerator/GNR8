@@ -241,6 +241,24 @@ links back to `Inspect Generation Evolution`. The links clarify that Business
 Foundation explains WHY while Generation Evolution explains HOW; they do not
 create a broader workspace shell or any mutation behavior.
 
+MVP-3.1-A strengthens the Business Foundation side of this pairing. Business
+Foundation now presents Website Versions near the top, including Original
+Website, Iteration 1 preview, and Iteration 2 preview, and uses the existing
+Generation Evolution Dashboard projection to expose persisted iteration
+status, compliance state, improvement state, and preview links. The Evolution
+Dashboard and preview routes are not recomputed or mutated by this phase.
+
+The pairing remains:
+
+```text
+Business Foundation product story
+-> Generation Evolution history
+-> Quarantined generated proposal previews
+```
+
+The latest generated proposal remains read-only, quarantined, not approved,
+not published, and non-compliant overall.
+
 ## Validation
 
 Focused tests:

@@ -2,6 +2,14 @@
 
 ## Phase Boundary
 
+MVP-3.1-A transforms the Business Foundation page into a story-first product
+experience while preserving the read-only runtime boundary from MVP-3.0-C.
+The canonical transformation record is:
+
+```text
+docs/architecture/BUSINESS_FOUNDATION_PRODUCT_UX_TRANSFORMATION.md
+```
+
 MVP-3.0-C implements the second real read-only GNR8 Runtime UX surface:
 the Business Foundation page for ODV site version
 `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
@@ -54,9 +62,35 @@ It consumes only:
 
 It intentionally excludes provider payloads, generated proposals, compliance,
 compliance reports, improvement plans, observed website models, and evolution
-analysis.
+analysis from the business artifact explorer.
+
+MVP-3.1-A extends the runtime projection with product-facing read-only
+concepts: business hero, source website, generated iteration links, business
+narrative, product attention summary, visual identity, brand colors,
+typography, imported asset summary, imported asset previews, missing
+knowledge gaps, and advanced technical details. These are composed from
+existing persisted sources and existing evolution dashboard projections. They
+are not canonical artifacts and are not persisted.
 
 ## Page Sections
+
+After MVP-3.1-A, the top-level page hierarchy is:
+
+- Business Hero
+- Website Versions
+- What GNR8 Understands
+- Offerings and Audience
+- Detected Brand & Visual Identity
+- Original Imported Assets
+- What GNR8 Still Needs to Know
+- Transformation Story
+- Advanced: Evidence, Lineage & Canonical Artifacts
+
+The page no longer begins as a grid of technical diagnostic cards. Artifact
+IDs, dry-run IDs, detailed evidence counts, attention codes, and the full
+limitation ledger are secondary advanced material.
+
+## Earlier MVP-3.0-C Sections
 
 The page exposes these read-only sections:
 
@@ -231,3 +265,28 @@ Narrow MVP-3.0-D fixes:
 No projection meaning, canonical data, persistence, schema, auth logic,
 provider behavior, AI behavior, generated source, publishing, deployment, DNS,
 or production behavior changed.
+
+## MVP-3.1-A Product UX Status
+
+MVP-3.1-A completed the story-first Business Foundation transformation.
+
+The hero now shows the observed business identity, persisted original website
+URL, business description, apparent website purpose, confidence/current state,
+and a concise missing-knowledge summary. Primary actions are read-only links:
+`Open Original Website`, `Inspect Generation Evolution`, and `Open Latest
+Generated Proposal`.
+
+Website Versions now appears near the top and links Original Website,
+Iteration 1, and Iteration 2. Iteration 2 is clearly marked as the latest
+quarantined generated proposal, not approved, not published, still
+non-compliant, and a meaningful improvement with no regressions according to
+persisted evolution data.
+
+The Visual Identity section shows ODV's current CGP gap honestly: no
+confirmed logo preview, no canonical brand colors, and no canonical
+typography. Imported original assets are summarized separately from generated
+proposal assets and are not all labeled as brand assets.
+
+The advanced technical section preserves lineage, IDs, evidence counts,
+diagnostics, and the Artifact Explorer. The page remains entirely read-only
+and adds no mutation controls or execution behavior.

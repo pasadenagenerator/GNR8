@@ -5,96 +5,113 @@
 
 ## Current Phase
 
+MVP-3.1-A - Business Foundation Product UX Transformation is
+COMPLETE.
+
+Canonical transformation record:
+
+- `docs/architecture/BUSINESS_FOUNDATION_PRODUCT_UX_TRANSFORMATION.md`
+
+Updated real ODV Business Foundation route:
+
+```text
+/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+MVP-3.1-A transforms the page from a diagnostic-first technical artifact
+surface into a story-first product experience for non-technical operators.
+The page now opens with the business, the original website, current
+understanding, missing knowledge, and read-only navigation to generated
+website iterations. Technical evidence and lineage remain available in
+Advanced Technical Details.
+
+New page hierarchy:
+
+```text
+Business Hero
+Website Versions
+What GNR8 Understands
+Offerings and Audience
+Detected Brand & Visual Identity
+Original Imported Assets
+What GNR8 Still Needs to Know
+Transformation Story
+Advanced: Evidence, Lineage & Canonical Artifacts
+```
+
+Business hero result:
+
+- Observed business identity remains the persisted imported-site identity.
+- The exact persisted original website URL is prominent:
+  `https://www.odv-cvijanovic.si/?gnr8_f12=20260617`.
+- The page states the website purpose and current understanding state without
+  leading with `dryRunId`, artifact IDs, or diagnostics.
+- Primary actions are read-only links: `Open Original Website`, `Inspect
+  Generation Evolution`, and `Open Latest Generated Proposal`.
+
+Generated versions result:
+
+- Website Versions displays Original Website -> Iteration 1 -> Iteration 2.
+- Iteration 1 and Iteration 2 preview links are visible near the top.
+- Iteration 2 is emphasized as the latest quarantined generated proposal,
+  not approved, not published, still non-compliant, and a meaningful
+  improvement with no regressions according to persisted evolution data.
+
+Business understanding result:
+
+- The narrative deterministically formats existing persisted business
+  foundation statements.
+- Offerings are presented as unresolved service-portfolio knowledge rather
+  than a bare zero count.
+- Audience remains visibly unresolved.
+- Missing knowledge prioritizes audience, offerings, canonical colors,
+  typography, logo confirmation, differentiators, and trust evidence.
+
+Visual identity and imported assets result:
+
+- ODV has no confirmed logo preview in the current persisted evidence.
+- No canonical brand colors are persisted.
+- Typography was not captured as canonical brand knowledge.
+- Original imported assets are summarized and sampled separately from
+  generated proposal assets.
+- Asset classifications remain conservative and fall back to unclassified
+  imported asset where meaning is not available.
+
+Authenticated browser verification confirmed the story-first hierarchy,
+source website link, Evolution link, Iteration 1 and Iteration 2 links,
+missing offerings/audience states, Visual Identity gaps, imported asset
+summary, secondary Advanced Details, desktop readability, and the absence of
+mutation controls.
+
+No business editing, Business Alignment correction UX, AI interpretation, new
+business truth, CGP inference, asset extraction pipeline, generation controls,
+regeneration controls, provider execution, AI execution, approval controls,
+publishing, deployment, DNS mutation, production mutation, schema changes,
+persistence changes, workers, or mutation server actions were added.
+
+Focused Business Foundation tests passed, full platform build passed, and
+`git diff --check` passed for this phase. Source-control safety checks found
+no private auth or environment values in the tracked diff.
+
+Recommended next phase:
+
+```text
+MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning
+```
+
+Keep the next phase read-only and source-evidence focused: no editing,
+correction UX, Business Alignment interaction, generation, approval,
+publishing, deployment, provider execution, AI execution, schema changes,
+persistence changes, workers, DNS, or mutation behavior.
+
+## Previous Phase
+
 MVP-3.0-D - Business Foundation Real-Target Operator Verification is
 COMPLETE.
 
 Canonical verification record:
 
 - `docs/architecture/BUSINESS_FOUNDATION_REAL_TARGET_VERIFICATION.md`
-
-Authenticated local browser verification loaded the real ODV Business
-Foundation route:
-
-```text
-/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
-```
-
-The route did not redirect to login or agency workspace, displayed the target
-`siteVersionId`, and remained visibly read-only. The browser session used the
-existing normal authentication flow and the existing ignored local
-`SUPERADMIN_EMAILS` configuration. No authentication bypass was introduced,
-no private auth value is documented, and no production environment
-configuration changed.
-
-Real ODV Business Foundation result:
-
-```text
-business confidence: LOW
-known knowledge: 12
-missing knowledge: 4
-limitations: 538
-evidence quality: evidence-linked persisted knowledge
-WGP status: partial
-attention states: low_confidence, missing_audience, missing_offerings, large_limitation_count, business_partially_understood
-```
-
-The page communicated that GNR8 identifies ODV from imported website/source
-evidence, with unresolved audience and offerings. Missing offerings and
-missing audience remained visibly unresolved and were not presented as
-confirmed business truth.
-
-The transformation story rendered Business Discovery -> Digital Business Twin
--> Business Understanding -> Business Alignment -> Website Design Brief ->
-Website Generation Package with visible artifact IDs and brief contribution
-text.
-
-Narrow MVP-3.0-D fixes:
-
-- Business Foundation now links to `Inspect Generation Evolution`.
-- Generation Evolution now links back to `Inspect Business Foundation`.
-- The visible `Business Health` heading was narrowed to `Business Foundation
-  Status`.
-
-No projection meaning, canonical artifact, persistence, schema, auth logic,
-provider behavior, AI behavior, generated source, publishing, deployment, DNS,
-or production behavior changed.
-
-Forbidden controls remain absent: no rendered forms, inputs, textareas,
-selects, buttons, editable content, correction controls, Business Alignment
-controls, generate/regenerate controls, provider controls, AI controls,
-approval controls, publish/deploy controls, DNS controls, or mutation server
-actions.
-
-Focused Business Foundation and dashboard tests passed:
-
-```text
-NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --tsconfig apps/platform/tsconfig.json --test apps/platform/gnr8/architecture/generation-business-foundation-projection.test.ts apps/platform/app/gnr8/admin/business-foundation-page.test.ts apps/platform/gnr8/architecture/generation-evolution-dashboard-projection.test.ts apps/platform/app/gnr8/admin/generation-evolution-dashboard-page.test.ts
-```
-
-Full platform build:
-
-```text
-cd apps/platform && pnpm run vercel-build
-```
-
-`git diff --check` passed. Source-control safety checks confirmed local env
-configuration remains ignored and no private auth value appears in the
-tracked diff.
-
-After MVP-3.0-D, the two read-only Runtime UX surfaces are connected:
-
-```text
-Business Foundation (WHY)
--> Generation Evolution Dashboard (HOW)
-```
-
-Recommended next phase: MVP-3.0-E - Business Foundation Read-Only Copy
-Polish. Keep it copy-only and read-only: no editing, correction UX, Business
-Alignment interaction, generation, approval, publishing, deployment, provider
-execution, AI execution, schema changes, persistence changes, workers, DNS,
-or mutation behavior.
-
-## Previous Phase
 
 MVP-3.0-C - Business Foundation Runtime UX is COMPLETE.
 
@@ -3617,12 +3634,12 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-3.0-D - Business Foundation Real-Target Operator Verification is
+- Phase MVP-3.1-A - Business Foundation Product UX Transformation is
   complete.
 
 Next Phase:
-- MVP-3.0-E - Business Foundation Read-Only Copy Polish, copy-only and
-  read-only against the persisted ODV target.
+- MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning, read-only
+  and source-evidence focused against the persisted ODV target.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:

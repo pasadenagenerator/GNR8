@@ -105,67 +105,54 @@ Current status:
   Foundation route without redirecting to login or agency workspace, verified
   the business foundation story, and added only narrow read-only cross-links
   plus a status-label correction.
+- Phase MVP-3.1-A - Business Foundation Product UX Transformation is
+  complete. The ODV Business Foundation page now opens as a story-first
+  product experience with the original website, generated iteration links,
+  business narrative, visual identity states, imported asset summary, missing
+  knowledge, and secondary advanced technical lineage.
 
 Current Phase:
-- Phase MVP-3.0-D - Business Foundation Real-Target Operator Verification is
+- Phase MVP-3.1-A - Business Foundation Product UX Transformation is
   COMPLETE.
 
-MVP-3.0-D evidence:
-- Canonical verification record:
-  `docs/architecture/BUSINESS_FOUNDATION_REAL_TARGET_VERIFICATION.md`.
-- Verified route:
+MVP-3.1-A evidence:
+- Canonical transformation record:
+  `docs/architecture/BUSINESS_FOUNDATION_PRODUCT_UX_TRANSFORMATION.md`.
+- Updated route:
   `/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
 - Related Evolution route:
   `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
-- The route loaded in the authenticated local browser session using the
-  existing normal auth flow and existing ignored local `SUPERADMIN_EMAILS`
-  configuration. No auth bypass was added, no private auth value is
-  documented, and no production environment configuration changed.
-- Unauthenticated HTTP probing redirected to `/login`, confirming the route
-  did not become public.
-- Rendered ODV result: business confidence `LOW`, known knowledge `12`,
-  missing knowledge `4`, limitations `538`, evidence quality
-  `evidence-linked persisted knowledge`, WGP status `partial`.
-- Attention states rendered:
-  `low_confidence`, `missing_audience`, `missing_offerings`,
-  `large_limitation_count`, and `business_partially_understood`.
-- Offerings remained unresolved: no known offerings, no separately identified
-  services or products, and `2` unknown offering items.
-- Audience remained unresolved: no known audience and `2` missing audience
-  knowledge items.
-- Missing Knowledge separated Known, Unknown, and Assumed; when no persisted
-  assumptions existed, the page stated that no persisted assumptions were
-  found.
-- Transformation Story rendered Business Discovery -> Digital Business Twin
-  -> Business Understanding -> Business Alignment -> Website Design Brief ->
-  Website Generation Package with visible artifact IDs.
-- Artifact Explorer contained only the seven business foundation artifacts:
-  Business Discovery, source DBT, BUR, Business Alignment, aligned DBT, WDB,
-  and WGP. It did not include provider, generated proposal, compliance, or
-  evolution artifacts.
-- Browser and source inspection found no forms, inputs, textareas, selects,
-  buttons, editable content, correction controls, Business Alignment
-  controls, generate/regenerate controls, provider controls, AI controls,
-  approval controls, publish/deploy controls, DNS controls, or mutation
-  server actions.
-- Narrow read-only fixes only:
-  Business Foundation now links to `Inspect Generation Evolution`; Generation
-  Evolution now links back to `Inspect Business Foundation`; the visible
-  `Business Health` heading was narrowed to `Business Foundation Status`.
-- No projection meaning, canonical artifact, persistence, schema, auth logic,
-  provider behavior, AI behavior, generated source, publishing, deployment,
-  DNS, or production behavior changed.
-- Focused Business Foundation and dashboard tests passed:
-  `NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --tsconfig
-  apps/platform/tsconfig.json --test
-  apps/platform/gnr8/architecture/generation-business-foundation-projection.test.ts
-  apps/platform/app/gnr8/admin/business-foundation-page.test.ts
-  apps/platform/gnr8/architecture/generation-evolution-dashboard-projection.test.ts
-  apps/platform/app/gnr8/admin/generation-evolution-dashboard-page.test.ts`.
-- Full `cd apps/platform && pnpm run vercel-build` passed.
-- `git diff --check` passed.
-- Source-control safety confirmed local env configuration remains ignored and
-  no private auth value appears in the tracked diff.
+- Preview routes:
+  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e/iterations/1/preview/`
+  and
+  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e/iterations/2/preview/`.
+- Top-level hierarchy is now Business Hero, Website Versions, What GNR8
+  Understands, Offerings and Audience, Detected Brand & Visual Identity,
+  Original Imported Assets, What GNR8 Still Needs to Know, Transformation
+  Story, and Advanced Technical Details.
+- The exact persisted original website URL is shown prominently:
+  `https://www.odv-cvijanovic.si/?gnr8_f12=20260617`.
+- Iteration 2 is shown as the latest quarantined generated proposal, not
+  approved, not published, still non-compliant, and a meaningful improvement
+  with no regressions from persisted evolution data.
+- Offerings and audience remain visibly unresolved.
+- Visual identity remains partial: no confirmed ODV logo preview, no
+  canonical brand colors, and no canonical typography are available in
+  persisted evidence.
+- Original imported assets are summarized separately from generated proposal
+  assets; unknown asset meaning is not invented.
+- Advanced Technical Details preserve siteVersionId, dry-run data, evidence
+  counts, diagnostics, full artifact IDs, and the grouped read-only Artifact
+  Explorer.
+- No business editing, Business Alignment correction UX, AI interpretation,
+  new business facts, CGP inference, asset extraction pipeline, generation,
+  regeneration, provider execution, AI execution, approval, publishing,
+  deployment, DNS mutation, production mutation, schema changes, persistence
+  changes, workers, broad workspace navigation, or mutation server actions
+  were added.
+- Focused Business Foundation tests passed, full platform build passed, and
+  `git diff --check` passed. Source-control safety checks found no private
+  auth or environment values in the tracked diff.
 
 MVP-3.0-C evidence:
 - Canonical runtime UX record:
@@ -248,11 +235,11 @@ MVP-3.0-A evidence:
   compliance recomputation were added.
 
 Next recommended phase:
-- MVP-3.0-E - Business Foundation Read-Only Copy Polish. Keep it copy-only
-  and read-only. Stop before editing, correction UX, Business Alignment
-  interaction, generation, regeneration, approval, publishing, deployment,
-  provider execution, AI execution, DNS, schema changes, persistence changes,
-  workers, or mutation behavior.
+- MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning. Keep it
+  read-only and source-evidence focused. Stop before editing, correction UX,
+  Business Alignment interaction, generation, regeneration, approval,
+  publishing, deployment, provider execution, AI execution, DNS, schema
+  changes, persistence changes, workers, or mutation behavior.
 
 MVP-2.0-N evidence:
 - Canonical dashboard document:
@@ -321,8 +308,8 @@ MVP-2.0-M prior evidence:
   added.
 
 Next Phase:
-- MVP-3.0-E - Business Foundation Read-Only Copy Polish, copy-only and
-  read-only against the persisted ODV target.
+- MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning, read-only
+  and source-evidence focused against the persisted ODV target.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its

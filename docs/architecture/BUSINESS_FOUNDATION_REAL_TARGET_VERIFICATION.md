@@ -338,10 +338,45 @@ configuration was changed.
   improve the distinction between observed business identity and confirmed
   business name.
 
+## MVP-3.1-A Product UX Verification
+
+MVP-3.1-A replaced the diagnostic-first ODV Business Foundation opening with
+a story-first product experience and verified the real route again:
+
+```text
+/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+Authenticated superadmin browser verification confirmed:
+
+- the page opens with a human-readable Business Hero instead of `dryRunId`
+  or artifact diagnostics
+- the persisted original website URL is prominent:
+  `https://www.odv-cvijanovic.si/?gnr8_f12=20260617`
+- read-only links are visible for Generation Evolution, Iteration 1 preview,
+  and Iteration 2 preview
+- Iteration 2 is visibly the latest quarantined generated proposal, not
+  approved, not published, still non-compliant, and improved over Iteration 1
+- offerings and audience remain visibly unresolved
+- Visual Identity states that logo, canonical colors, and canonical
+  typography are not fully available as persisted brand knowledge
+- original imported assets are summarized separately from generated proposal
+  assets
+- Advanced technical lineage is secondary and collapsed behind native
+  disclosure controls
+- no forms, editable inputs, buttons, mutation server actions, provider
+  controls, AI controls, approval controls, publishing controls, deployment
+  controls, or DNS controls are present
+
+Remaining upstream evidence gaps are business facts and source-evidence
+gaps, not UX gaps introduced by this phase: service portfolio, target
+audience, canonical colors, canonical typography, confirmed logo preview, and
+complete CGP knowledge remain absent or partial upstream.
+
 ## Recommended Next Phase
 
-MVP-3.0-E - Business Foundation Read-Only Copy Polish. Keep it documentation
-and read-only UX copy only: no editing, correction UX, Business Alignment
-interaction, generation, approval, publishing, deployment, provider execution,
-AI execution, schema changes, persistence changes, workers, DNS, or mutation
-behavior.
+MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning. Keep it
+read-only and source-evidence focused: no editing, correction UX, Business
+Alignment interaction, generation, approval, publishing, deployment, provider
+execution, AI execution, schema changes, persistence changes, workers, DNS,
+or mutation behavior.

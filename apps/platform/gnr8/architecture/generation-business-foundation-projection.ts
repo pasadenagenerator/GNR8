@@ -1,5 +1,7 @@
 import type { RuntimeStoreDbOptions } from "../runtime/runtime-store";
-import type { CanonicalSiteVersionSnapshot, RuntimeImportProvenanceSummary } from "../runtime/types";
+import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RawTemplateSiteFileMeta, RuntimeImportProvenanceSummary } from "../runtime/types";
+import type { GenerationPreviewBundleAvailability } from "./generation-evolution-preview-boundary";
+import { loadGenerationEvolutionDashboardProjection } from "./generation-evolution-dashboard-projection";
 
 export type BusinessFoundationAttentionState =
   | "low_confidence"
@@ -8,6 +10,8 @@ export type BusinessFoundationAttentionState =
   | "missing_evidence"
   | "large_limitation_count"
   | "business_partially_understood";
+
+export type BusinessFoundationAvailabilityState = "detected" | "partially_detected" | "not_available" | "unresolved";
 
 export type BusinessFoundationArtifactLinkProjection = {
   label: string;
@@ -55,6 +59,135 @@ export type BusinessFoundationSummaryProjection = {
   businessTone: string | null;
   trustStrategy: string | null;
   digitalPresence: string | null;
+};
+
+export type SourceWebsiteProjection = {
+  url: string | null;
+  hostname: string | null;
+  importedAt: string | null;
+  status: string | null;
+  unavailableMessage: string | null;
+};
+
+export type GeneratedIterationLinkProjection = {
+  label: string;
+  iteration: number | null;
+  status: string;
+  createdAt: string | null;
+  complianceState: string | null;
+  previewHref: string | null;
+  previewAvailable: boolean;
+  resultSummary: string;
+  isLatest: boolean;
+  quarantined: boolean;
+  approved: false;
+  published: false;
+};
+
+export type BusinessFoundationHeroProjection = {
+  businessName: string | null;
+  sourceWebsite: SourceWebsiteProjection;
+  description: string | null;
+  websitePurpose: string | null;
+  understandingConfidence: string | null;
+  currentState: string;
+  missingKnowledgeSummary: string;
+  primaryLinks: {
+    originalWebsiteHref: string | null;
+    evolutionHref: string;
+    latestGeneratedProposalHref: string | null;
+  };
+};
+
+export type BusinessNarrativeProjection = {
+  headline: string;
+  businessIdentity: string | null;
+  websitePurpose: string | null;
+  goals: string[];
+  trustSignals: string[];
+  digitalPresence: string | null;
+  uncertainties: string[];
+};
+
+export type ProductAttentionSummaryProjection = {
+  businessIdentity: "understood" | "unresolved";
+  websitePurpose: "understood" | "unresolved";
+  offerings: "understood" | "unresolved";
+  audience: "understood" | "unresolved";
+  visualIdentity: BusinessFoundationAvailabilityState;
+  generationReadiness: "partial" | "ready" | "unavailable";
+  latestWebsiteEvolution: string;
+};
+
+export type BrandColorProjection = {
+  value: string;
+  label: string;
+  source: string;
+  confidence: string | null;
+  status: "observed" | "upstream_inferred" | "unresolved";
+};
+
+export type TypographyProjection = {
+  family: string;
+  source: string;
+  confidence: string | null;
+  locallyAvailable: boolean | null;
+};
+
+export type ImportedAssetPreviewProjection = {
+  filename: string;
+  path: string;
+  type: "logo_candidate" | "content_image" | "decorative_image" | "icon" | "font" | "video" | "document" | "other" | "unclassified";
+  mediaType: string;
+  source: string;
+  previewHref: string | null;
+  dimensions: string | null;
+  sizeBytes: number | null;
+};
+
+export type ImportedAssetSummaryProjection = {
+  total: number;
+  logos: number;
+  images: number;
+  icons: number;
+  fonts: number;
+  videos: number;
+  otherFiles: number;
+  previews: ImportedAssetPreviewProjection[];
+  unavailableMessage: string | null;
+};
+
+export type VisualIdentityProjection = {
+  status: BusinessFoundationAvailabilityState;
+  logo: {
+    status: BusinessFoundationAvailabilityState;
+    assetReference: string | null;
+    previewHref: string | null;
+    unavailableMessage: string | null;
+  };
+  primaryColors: BrandColorProjection[];
+  secondaryColors: BrandColorProjection[];
+  typography: TypographyProjection[];
+  tone: string | null;
+  visualStyleObservations: string[];
+  confidence: string | null;
+  limitations: string[];
+};
+
+export type ProductKnowledgeGapProjection = {
+  label: string;
+  status: "critical" | "missing" | "partial" | "unresolved";
+  summary: string;
+  generationImpact: string;
+};
+
+export type AdvancedTechnicalProjection = {
+  siteVersionId: string;
+  dryRunId: string | null;
+  sourceSiteId: string | null;
+  evidenceCount: number;
+  diagnosticMarkers: string[];
+  limitationCount: number;
 };
 
 export type BusinessFoundationOfferingsProjection = {
@@ -109,9 +242,20 @@ export type GenerationBusinessFoundationProjection = {
   artifactExplorer: BusinessFoundationArtifactLinkProjection[];
   attentionStates: BusinessFoundationAttentionState[];
   diagnostics: string[];
+  hero: BusinessFoundationHeroProjection;
+  sourceWebsite: SourceWebsiteProjection;
+  generatedIterations: GeneratedIterationLinkProjection[];
+  narrative: BusinessNarrativeProjection;
+  productAttentionSummary: ProductAttentionSummaryProjection;
+  visualIdentity: VisualIdentityProjection;
+  importedAssets: ImportedAssetSummaryProjection;
+  productKnowledgeGaps: ProductKnowledgeGapProjection[];
+  advancedTechnical: AdvancedTechnicalProjection;
 };
 
-type SiteVersionLoader = (siteVersionId: string) => Promise<Pick<CanonicalSiteVersionSnapshot, "id" | "siteId" | "versionNo" | "state" | "importProvenanceSummary"> | null>;
+type SiteVersionLoader = (siteVersionId: string) => Promise<Pick<CanonicalSiteVersionSnapshot, "id" | "siteId" | "versionNo" | "state" | "createdAt" | "importProvenanceSummary"> | null>;
+type RawImportedSiteArtifactLoader = (siteVersionId: string) => Promise<RawImportedSiteArtifact | null>;
+type RawTemplateSiteAssetLoader = (input: { siteVersionId: string; filePath: string; artifactId?: string | null }) => Promise<{ mediaType: string; sizeBytes: number; sha256: string } | null>;
 
 type ProjectionRecord = {
   artifactId?: string;
@@ -125,6 +269,9 @@ type ProjectionRecord = {
 
 export type GenerationBusinessFoundationProjectionOptions = RuntimeStoreDbOptions & {
   getSiteVersion?: SiteVersionLoader;
+  getRawImportedSiteArtifact?: RawImportedSiteArtifactLoader;
+  getRawTemplateSiteAsset?: RawTemplateSiteAssetLoader;
+  getPreviewBundleAvailability?: (iteration: number) => Promise<GenerationPreviewBundleAvailability | null>;
 };
 
 const KNOWLEDGE_GROUPS = [
@@ -159,6 +306,19 @@ function strings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => text(item)).filter((item): item is string => item !== null)
     : [];
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function hostnameFromUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
 }
 
 function artifactBody(record: ProjectionRecord | null): Record<string, unknown> | null {
@@ -277,6 +437,10 @@ function statements(items: BusinessFoundationKnowledgeItemProjection[], domain: 
   return items.filter((item) => item.domain === domain).map((item) => item.statement);
 }
 
+function allEvidenceCount(items: BusinessFoundationKnowledgeItemProjection[]): number {
+  return items.reduce((total, item) => total + item.evidenceCount, 0);
+}
+
 function splitOfferingItems(items: BusinessFoundationKnowledgeItemProjection[], kindPart: string): BusinessFoundationKnowledgeItemProjection[] {
   return items.filter((item) => `${item.kind ?? ""} ${item.statement}`.toLowerCase().includes(kindPart));
 }
@@ -295,6 +459,216 @@ async function defaultGetSiteVersion(siteVersionId: string, options: RuntimeStor
   return getSiteVersion(siteVersionId, options);
 }
 
+async function defaultGetRawImportedSiteArtifact(siteVersionId: string, options: RuntimeStoreDbOptions) {
+  const { getRawImportedSiteArtifact } = await import("../runtime/runtime-store");
+  return getRawImportedSiteArtifact(siteVersionId, options);
+}
+
+async function defaultGetRawTemplateSiteAsset(
+  input: { siteVersionId: string; filePath: string; artifactId?: string | null },
+  options: RuntimeStoreDbOptions,
+) {
+  const { getRawTemplateSiteAsset } = await import("../runtime/runtime-store");
+  return getRawTemplateSiteAsset({ ...input, dbClient: options.dbClient });
+}
+
+function fileExtension(path: string): string {
+  return path.split(/[?#]/, 1)[0]?.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function classifyAsset(path: string, meta: RawTemplateSiteFileMeta): ImportedAssetPreviewProjection["type"] {
+  const lower = `${path} ${meta.mediaType}`.toLowerCase();
+  const extension = fileExtension(path);
+  if (lower.includes("logo")) return "logo_candidate";
+  if (extension === "ico" || lower.includes("favicon") || lower.includes("icon")) return "icon";
+  if (meta.mediaType.startsWith("font/") || ["woff", "woff2", "ttf", "otf", "eot"].includes(extension)) return "font";
+  if (meta.mediaType.startsWith("video/") || ["mp4", "webm", "mov"].includes(extension)) return "video";
+  if (meta.mediaType.startsWith("image/")) return lower.includes("bg") || lower.includes("background") || lower.includes("pattern") ? "decorative_image" : "content_image";
+  if (["pdf", "doc", "docx", "rtf", "odt"].includes(extension)) return "document";
+  if (meta.mediaType === "application/octet-stream") return "unclassified";
+  return "other";
+}
+
+function previewHref(input: { sourceSiteId: string | null; siteVersionId: string; path: string; mediaType: string }): string | null {
+  if (!input.sourceSiteId) return null;
+  if (!input.mediaType.startsWith("image/")) return null;
+  const safePath = input.path.replace(/^\/+/, "");
+  if (!safePath || safePath.split("/").some((segment) => segment === "..")) return null;
+  return `/api/gnr8/runtime/preview-assets/${encodeURIComponent(input.sourceSiteId)}/${encodeURIComponent(input.siteVersionId)}/${safePath}`;
+}
+
+async function assetSummary(input: {
+  sourceSiteId: string | null;
+  siteVersionId: string;
+  rawImportedSiteArtifact: RawImportedSiteArtifact | null;
+  getRawTemplateSiteAsset: RawTemplateSiteAssetLoader;
+}): Promise<ImportedAssetSummaryProjection> {
+  const fileMap = input.rawImportedSiteArtifact?.fileMap ?? {};
+  const baseAssets = Object.values(fileMap)
+    .filter((meta) => meta.path !== input.rawImportedSiteArtifact?.entryHtmlPath)
+    .map((meta): ImportedAssetPreviewProjection => {
+      const type = classifyAsset(meta.path, meta);
+      return {
+        filename: meta.path.split("/").pop() ?? meta.path,
+        path: meta.path,
+        type,
+        mediaType: meta.mediaType,
+        source: "Original imported website file map",
+        previewHref: null,
+        dimensions: null,
+        sizeBytes: meta.sizeBytes,
+      };
+    })
+    .sort((left, right) => {
+      const rank = (asset: ImportedAssetPreviewProjection) => {
+        if (asset.type === "logo_candidate") return 0;
+        if (asset.previewHref) return 1;
+        if (asset.mediaType.startsWith("image/")) return 2;
+        if (asset.type === "font") return 3;
+        return 4;
+      };
+      return rank(left) - rank(right) || left.path.localeCompare(right.path);
+    });
+  const previewCandidates = baseAssets
+    .filter((asset) => asset.mediaType.startsWith("image/"))
+    .slice(0, 12);
+  const verifiedPreviewHrefByPath = new Map<string, string>();
+  for (const asset of previewCandidates) {
+    const href = previewHref({ sourceSiteId: input.sourceSiteId, siteVersionId: input.siteVersionId, path: asset.path, mediaType: asset.mediaType });
+    if (!href) continue;
+    const persistedAsset = await input.getRawTemplateSiteAsset({
+      siteVersionId: input.siteVersionId,
+      filePath: asset.path,
+      artifactId: input.rawImportedSiteArtifact?.id ?? null,
+    });
+    if (persistedAsset) verifiedPreviewHrefByPath.set(asset.path, href);
+  }
+  const assets = baseAssets.map((asset) => ({
+    ...asset,
+    previewHref: verifiedPreviewHrefByPath.get(asset.path) ?? null,
+  }));
+  const visualPreviews = assets
+    .filter((asset) => asset.previewHref || asset.mediaType.startsWith("image/") || asset.type === "font")
+    .slice(0, 12);
+  return {
+    total: baseAssets.length,
+    logos: assets.filter((asset) => asset.type === "logo_candidate").length,
+    images: assets.filter((asset) => asset.type === "content_image" || asset.type === "decorative_image").length,
+    icons: assets.filter((asset) => asset.type === "icon").length,
+    fonts: assets.filter((asset) => asset.type === "font").length,
+    videos: assets.filter((asset) => asset.type === "video").length,
+    otherFiles: assets.filter((asset) => !["logo_candidate", "content_image", "decorative_image", "icon", "font", "video"].includes(asset.type)).length,
+    previews: visualPreviews,
+    unavailableMessage: baseAssets.length === 0 ? "No imported visual assets are available in the current persisted file map." : null,
+  };
+}
+
+function collectColorCandidates(summary: RuntimeImportProvenanceSummary | null | undefined): BrandColorProjection[] {
+  const baseline = summary?.evidenceCaptureBaselineArtifact as unknown as Record<string, unknown> | null | undefined;
+  const computedStyle = asRecord(baseline?.computedStyle);
+  const candidates = Array.isArray(computedStyle?.colorCandidates) ? computedStyle.colorCandidates : [];
+  return candidates
+    .map((item, index): BrandColorProjection | null => {
+      const record = asRecord(item);
+      const value = text(record?.value);
+      if (!value) return null;
+      return {
+        value,
+        label: index === 0 ? "Observed color candidate" : `Observed color candidate ${index + 1}`,
+        source: "Persisted evidence capture computed-style candidates",
+        confidence: null,
+        status: "observed",
+      };
+    })
+    .filter((item): item is BrandColorProjection => item !== null)
+    .slice(0, 8);
+}
+
+function collectTypography(summary: RuntimeImportProvenanceSummary | null | undefined, assets: ImportedAssetSummaryProjection): TypographyProjection[] {
+  const baseline = summary?.evidenceCaptureBaselineArtifact as unknown as Record<string, unknown> | null | undefined;
+  const computedStyle = asRecord(baseline?.computedStyle);
+  const fonts = Array.isArray(computedStyle?.fontsDetected) ? computedStyle.fontsDetected : [];
+  const localFontAvailable = assets.fonts > 0;
+  return fonts
+    .map((item): TypographyProjection | null => {
+      const record = asRecord(item);
+      const family = text(record?.family);
+      if (!family) return null;
+      return {
+        family,
+        source: text(record?.source) ?? "persisted computed-style evidence",
+        confidence: text(record?.providerClassification),
+        locallyAvailable: localFontAvailable,
+      };
+    })
+    .filter((item): item is TypographyProjection => item !== null)
+    .slice(0, 8);
+}
+
+function sourceWebsiteProjection(input: {
+  rawImportedSiteArtifact: RawImportedSiteArtifact | null;
+  siteVersion: Awaited<ReturnType<SiteVersionLoader>> | null;
+  summary: RuntimeImportProvenanceSummary | null;
+}): SourceWebsiteProjection {
+  const url = text(input.rawImportedSiteArtifact?.metadata?.sourceUrl);
+  return {
+    url,
+    hostname: hostnameFromUrl(url),
+    importedAt: text(input.rawImportedSiteArtifact?.createdAt ?? input.siteVersion?.createdAt ?? input.summary?.captureJob?.completedAt),
+    status: text(input.summary?.importFidelityStatus ?? input.summary?.renderedCaptureStatus),
+    unavailableMessage: url ? null : "Original website URL is not available in the current persisted evidence.",
+  };
+}
+
+function iterationResultSummary(iteration: Awaited<ReturnType<typeof loadGenerationEvolutionDashboardProjection>>["iterations"][number]): string {
+  if (iteration.iteration === 2 && iteration.evolution) {
+    const parts = [
+      iteration.evolution.meaningfulImprovement ? "meaningful improvement" : "no persisted meaningful-improvement signal",
+      iteration.evolution.newlyCompliantCategories.length > 0 ? `${iteration.evolution.newlyCompliantCategories.length} newly compliant categories` : "no newly compliant categories recorded",
+      iteration.evolution.noRegressions ? "no regressions" : `${iteration.evolution.regressionCount} regressions recorded`,
+      iteration.compliance.status ? `still ${iteration.compliance.status}` : "compliance state unavailable",
+    ];
+    return parts.join("; ");
+  }
+  return iteration.compliance.status
+    ? `Generated proposal preview with ${iteration.compliance.status} compliance state.`
+    : "Generated proposal preview exists only where persisted iteration evidence is available.";
+}
+
+function productKnowledgeGaps(input: {
+  unknownOfferings: string[];
+  unknownAudience: string[];
+  colorCount: number;
+  typographyCount: number;
+  logoStatus: BusinessFoundationAvailabilityState;
+  missing: string[];
+  limitationCount: number;
+}): ProductKnowledgeGapProjection[] {
+  const gaps: ProductKnowledgeGapProjection[] = [];
+  if (input.unknownAudience.length > 0) {
+    gaps.push({ label: "Audience", status: "critical", summary: "Target audience remains unresolved.", generationImpact: "limits audience targeting" });
+  }
+  if (input.unknownOfferings.length > 0) {
+    gaps.push({ label: "Offerings", status: "critical", summary: "GNR8 has not yet confirmed the service portfolio.", generationImpact: "limits service hierarchy" });
+  }
+  if (input.colorCount === 0) {
+    gaps.push({ label: "Canonical brand colors", status: "missing", summary: "No canonical brand colors are currently persisted.", generationImpact: "limits visual brand fidelity" });
+  }
+  if (input.typographyCount === 0) {
+    gaps.push({ label: "Canonical typography", status: "missing", summary: "Typography was not captured as canonical brand knowledge.", generationImpact: "limits visual brand fidelity" });
+  }
+  if (input.logoStatus !== "detected") {
+    gaps.push({ label: "Confirmed logo", status: "partial", summary: "A confirmed canonical logo is not fully established in the Business Foundation projection.", generationImpact: "Affects generation confidence" });
+  }
+  for (const item of input.missing.slice(0, Math.max(0, 6 - gaps.length))) {
+    gaps.push({ label: item.split(":", 1)[0] ?? "Missing knowledge", status: "unresolved", summary: item, generationImpact: "Affects generation confidence" });
+  }
+  if (gaps.length === 0 && input.limitationCount > 0) {
+    gaps.push({ label: "Technical limitations", status: "partial", summary: `${input.limitationCount} persisted technical limitations remain in advanced details.`, generationImpact: "Affects generation confidence" });
+  }
+  return gaps;
+}
+
 export async function loadGenerationBusinessFoundationProjection(input: {
   siteVersionId: string;
   options?: GenerationBusinessFoundationProjectionOptions;
@@ -304,6 +678,19 @@ export async function loadGenerationBusinessFoundationProjection(input: {
     ? await options.getSiteVersion(input.siteVersionId)
     : await defaultGetSiteVersion(input.siteVersionId, options);
   const summary = siteVersion?.importProvenanceSummary ?? null;
+  const rawImportedSiteArtifact = options.getRawImportedSiteArtifact
+    ? await options.getRawImportedSiteArtifact(input.siteVersionId)
+    : await defaultGetRawImportedSiteArtifact(input.siteVersionId, options);
+  const getRawTemplateSiteAsset = options.getRawTemplateSiteAsset ??
+    ((assetInput: { siteVersionId: string; filePath: string; artifactId?: string | null }) => defaultGetRawTemplateSiteAsset(assetInput, options));
+  const evolutionProjection = await loadGenerationEvolutionDashboardProjection({
+    siteVersionId: input.siteVersionId,
+    options: {
+      ...options,
+      getSiteVersion: options.getSiteVersion,
+      getPreviewBundleAvailability: options.getPreviewBundleAvailability,
+    },
+  });
   const diagnostics: string[] = [];
   const attention = new Set<BusinessFoundationAttentionState>();
 
@@ -363,6 +750,33 @@ export async function loadGenerationBusinessFoundationProjection(input: {
   const unknownOfferings = missing.filter((item) => item.startsWith("offerings:"));
   const unknownAudience = missing.filter((item) => item.startsWith("audience:"));
   const assumed = assumedKnowledge(knowledge);
+  const sourceSiteId = text(siteVersion?.siteId ?? businessDiscovery?.sourceSiteId ?? artifactBody(businessDiscovery)?.sourceSiteId);
+  const sourceWebsite = sourceWebsiteProjection({ rawImportedSiteArtifact, siteVersion, summary });
+  const importedAssets = await assetSummary({ sourceSiteId, siteVersionId: input.siteVersionId, rawImportedSiteArtifact, getRawTemplateSiteAsset });
+  const logoAsset = importedAssets.previews.find((asset) => asset.type === "logo_candidate") ?? null;
+  const colorCandidates = collectColorCandidates(summary);
+  const typography = collectTypography(summary, importedAssets);
+  const visualLimitations = [
+    ...(colorCandidates.length === 0 ? ["No canonical brand colors are currently persisted."] : []),
+    ...(typography.length === 0 ? ["Typography was not captured as canonical brand knowledge."] : []),
+    ...topLimitations.filter((item) => item.toLowerCase().includes("asset") || item.toLowerCase().includes("brand")).slice(0, 5),
+  ];
+  const visualIdentity: VisualIdentityProjection = {
+    status: logoAsset || colorCandidates.length > 0 || typography.length > 0 ? "partially_detected" : "unresolved",
+    logo: {
+      status: logoAsset ? "detected" : "unresolved",
+      assetReference: logoAsset?.path ?? null,
+      previewHref: logoAsset?.previewHref ?? null,
+      unavailableMessage: logoAsset ? null : "No confirmed logo preview is available in the current persisted imported asset evidence.",
+    },
+    primaryColors: colorCandidates.slice(0, 3),
+    secondaryColors: colorCandidates.slice(3, 8),
+    typography,
+    tone: firstStatement(knowledge, "brand"),
+    visualStyleObservations: statements(knowledge, "brand"),
+    confidence: topConfidence.level,
+    limitations: visualLimitations,
+  };
 
   if (topConfidence.level === "LOW" || knowledge.some((item) => item.confidence.level === "LOW")) attention.add("low_confidence");
   if (audienceItems.length === 0 || unknownAudience.length > 0) attention.add("missing_audience");
@@ -388,9 +802,43 @@ export async function loadGenerationBusinessFoundationProjection(input: {
     artifactLink({ label: "Website Generation Package", kind: "website_generation_package", record: websiteGenerationPackage, canonicalIdKey: "websiteGenerationPackageId" }),
   ];
 
-  return cloneJson({
+  const generatedIterations: GeneratedIterationLinkProjection[] = evolutionProjection.iterations.map((iteration) => ({
+    label: iteration.label,
+    iteration: iteration.iteration,
+    status: iteration.status,
+    createdAt: iteration.generatedAt,
+    complianceState: iteration.compliance.status,
+    previewHref: iteration.preview.route,
+    previewAvailable: iteration.preview.available,
+    resultSummary: iterationResultSummary(iteration),
+    isLatest: iteration.iteration === Math.max(...evolutionProjection.iterations.map((item) => item.iteration)),
+    quarantined: true,
+    approved: false,
+    published: false,
+  }));
+  const latestIteration = generatedIterations.find((iteration) => iteration.isLatest) ?? null;
+  const productGaps = productKnowledgeGaps({
+    unknownOfferings,
+    unknownAudience,
+    colorCount: colorCandidates.length,
+    typographyCount: typography.length,
+    logoStatus: visualIdentity.logo.status,
+    missing,
+    limitationCount: topLimitations.length,
+  });
+  const generationReadiness = text(websiteGenerationPackage?.status ?? artifactBody(websiteGenerationPackage)?.status);
+  const narrative: BusinessNarrativeProjection = {
+    headline: firstStatement(knowledge, "business_identity") ?? "Business identity is not fully available in persisted evidence.",
+    businessIdentity: firstStatement(knowledge, "business_identity"),
+    websitePurpose: firstStatement(knowledge, "content") ?? firstStatement(knowledge, "digital_presence"),
+    goals: statements(knowledge, "goals"),
+    trustSignals: statements(knowledge, "trust"),
+    digitalPresence: firstStatement(knowledge, "digital_presence"),
+    uncertainties: missing.slice(0, 6),
+  };
+  const result = {
     siteVersionId: input.siteVersionId,
-    sourceSiteId: text(siteVersion?.siteId ?? businessDiscovery?.sourceSiteId ?? artifactBody(businessDiscovery)?.sourceSiteId),
+    sourceSiteId,
     dryRunId: text(alignedDbt?.dryRunId ?? websiteGenerationPackage?.dryRunId ?? businessDiscovery?.dryRunId),
     summary: {
       businessName: text(siteVersion?.siteId ?? businessDiscovery?.sourceSiteId ?? artifactBody(businessDiscovery)?.sourceSiteId),
@@ -471,5 +919,43 @@ export async function loadGenerationBusinessFoundationProjection(input: {
     artifactExplorer,
     attentionStates: [...attention],
     diagnostics,
-  });
+    hero: {
+      businessName: text(siteVersion?.siteId ?? businessDiscovery?.sourceSiteId ?? artifactBody(businessDiscovery)?.sourceSiteId),
+      sourceWebsite,
+      description: firstStatement(knowledge, "business_identity"),
+      websitePurpose: firstStatement(knowledge, "content") ?? firstStatement(knowledge, "digital_presence"),
+      understandingConfidence: topConfidence.level,
+      currentState: attention.has("business_partially_understood") ? "Partially understood / aligned with limitations" : "Aligned with available persisted evidence",
+      missingKnowledgeSummary: productGaps[0]?.summary ?? "No material missing knowledge is highlighted by the current persisted artifacts.",
+      primaryLinks: {
+        originalWebsiteHref: sourceWebsite.url,
+        evolutionHref: `/gnr8/admin/evolution/${input.siteVersionId}`,
+        latestGeneratedProposalHref: latestIteration?.previewHref ?? null,
+      },
+    },
+    sourceWebsite,
+    generatedIterations,
+    narrative,
+    productAttentionSummary: {
+      businessIdentity: narrative.businessIdentity ? "understood" : "unresolved",
+      websitePurpose: narrative.websitePurpose ? "understood" : "unresolved",
+      offerings: offeringItems.length > 0 && unknownOfferings.length === 0 ? "understood" : "unresolved",
+      audience: audienceItems.length > 0 && unknownAudience.length === 0 ? "understood" : "unresolved",
+      visualIdentity: visualIdentity.status,
+      generationReadiness: generationReadiness && !["missing", "blocked"].includes(generationReadiness) ? "partial" : "unavailable",
+      latestWebsiteEvolution: evolutionProjection.evolution?.meaningfulImprovement ? "meaningful improvement" : "not available",
+    },
+    visualIdentity,
+    importedAssets,
+    productKnowledgeGaps: productGaps,
+    advancedTechnical: {
+      siteVersionId: input.siteVersionId,
+      dryRunId: text(alignedDbt?.dryRunId ?? websiteGenerationPackage?.dryRunId ?? businessDiscovery?.dryRunId),
+      sourceSiteId,
+      evidenceCount: allEvidenceCount(knowledge),
+      diagnosticMarkers: diagnostics,
+      limitationCount: topLimitations.length,
+    },
+  } satisfies GenerationBusinessFoundationProjection;
+  return cloneJson(result);
 }

@@ -9,23 +9,49 @@ test("business foundation page contains required read-only runtime sections", as
 
   for (const label of [
     "Business Foundation",
-    "Business Summary",
-    "Business Knowledge",
-    "Offerings",
-    "Audience",
-    "Missing Knowledge",
-    "Transformation Story",
-    "Business Foundation Status",
-    "Related Read-Only Surface",
+    "Open Original Website",
     "Inspect Generation Evolution",
-    "Attention States",
-    "Artifact Explorer",
-    "ArtifactLinkList",
+    "Open Latest Generated Proposal",
+    "Website Versions",
+    "Original Website",
+    "Generated Proposal Preview",
+    "What GNR8 Understands",
+    "Business Narrative",
+    "Current Understanding",
+    "Offerings and Audience",
+    "Detected Brand & Visual Identity",
+    "Original Imported Assets",
+    "What GNR8 Still Needs to Know",
+    "Transformation Story",
+    "Advanced: Evidence, Lineage & Canonical Artifacts",
+    "Understanding",
+    "Alignment",
+    "Website Intent",
     "requireSuperadminUserIdForPage",
     "loadGenerationBusinessFoundationProjection",
   ]) {
     assert.equal(source.includes(label), true, `missing ${label}`);
   }
+});
+
+test("business foundation page keeps technical identifiers in advanced details", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+  const advancedSource = source.slice(source.indexOf("Advanced: Evidence, Lineage & Canonical Artifacts"));
+
+  assert.equal(advancedSource.includes("siteVersionId"), true);
+  assert.equal(advancedSource.includes("dryRunId"), true);
+  assert.equal(source.includes("<details"), true);
+  assert.equal(source.includes("provider_generation_payload"), false);
+  assert.equal(source.includes("generation_contract_compliance_report"), false);
+});
+
+test("business foundation page exposes read-only navigation to evolution and previews", async () => {
+  const source = await readFile(PAGE_FILE, "utf8");
+
+  assert.equal(source.includes("hero.primaryLinks.evolutionHref"), true);
+  assert.equal(source.includes("iteration.previewHref"), true);
+  assert.equal(source.includes("Open {props.iteration.label} Preview"), true);
+  assert.equal(source.includes("View Website Evolution"), true);
 });
 
 test("business foundation page excludes forbidden edit and mutation controls", async () => {

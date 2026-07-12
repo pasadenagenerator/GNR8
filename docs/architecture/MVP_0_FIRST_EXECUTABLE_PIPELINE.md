@@ -339,6 +339,45 @@ production mutation, schema changes, persistence changes, workers, broad
 redesign, new business interpretation logic, or new confidence/readiness
 calculations.
 
+## MVP-3.1-A Business Foundation Product UX Transformation Addendum
+
+MVP-3.1-A transforms the ODV Business Foundation page from a diagnostic-first
+technical surface into a story-first product experience.
+
+Canonical transformation record:
+
+- `docs/architecture/BUSINESS_FOUNDATION_PRODUCT_UX_TRANSFORMATION.md`
+
+Updated route:
+
+```text
+/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+The page now opens with the business story, original website, current
+understanding, missing knowledge, and read-only navigation to Generation
+Evolution and generated proposal previews. Technical lineage, evidence
+counts, diagnostic markers, and artifact IDs remain available in Advanced
+Technical Details.
+
+The runtime projection adds product-facing read-only concepts for source
+website, generated iteration links, business narrative, visual identity,
+imported assets, missing knowledge, and advanced technical details. These are
+not canonical artifacts and do not persist new data.
+
+For ODV, the page honestly exposes remaining upstream gaps: offerings and
+audience are unresolved, no canonical brand colors are persisted, typography
+was not captured as canonical brand knowledge, and no confirmed logo preview
+is available. Imported original assets are summarized separately from
+generated proposal assets.
+
+MVP-3.1-A adds no business editing, Business Alignment correction UX, AI
+interpretation, new business truth, CGP inference, asset extraction pipeline,
+generation controls, regeneration controls, provider execution, AI execution,
+approval controls, publishing, deployment, DNS mutation, production mutation,
+schema changes, persistence changes, workers, broad workspace navigation, or
+mutation server actions.
+
 ## Reality Assessment Table
 
 Allowed status values are `COMPLETE`, `PARTIAL`, `MISSING`, and
