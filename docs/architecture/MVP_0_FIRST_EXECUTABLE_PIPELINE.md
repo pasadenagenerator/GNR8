@@ -278,8 +278,9 @@ Compliance, Compliance Reports, Improvement Plans, Observed Website Models,
 and Generation Evolution Analysis.
 
 The page displays Business Summary, Business Knowledge, Offerings, Audience,
-Missing Knowledge, Transformation Story, Business Health, Attention States,
-and a read-only Artifact Explorer with copyable artifact IDs.
+Missing Knowledge, Transformation Story, Business Foundation Status,
+Attention States, and a read-only Artifact Explorer with copyable artifact
+IDs.
 
 After MVP-3.0-C, GNR8 has two complete Runtime UX surfaces:
 
@@ -291,6 +292,52 @@ Business Foundation (WHY)
 MVP-3.0-C adds no editing, AI execution, generation, regeneration, provider
 execution, Business Alignment editing, approval, publishing, deployment, DNS,
 schema changes, persistence changes, workers, or mutation server actions.
+
+## MVP-3.0-D Business Foundation Real-Target Operator Verification Addendum
+
+MVP-3.0-D completes the first authenticated real-target operator verification
+of the ODV Business Foundation page.
+
+Canonical verification record:
+
+- `docs/architecture/BUSINESS_FOUNDATION_REAL_TARGET_VERIFICATION.md`
+
+Verified route:
+
+```text
+/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+The authenticated local browser session loaded the route without redirecting
+to login or agency workspace. The page displayed the target `siteVersionId`,
+source site, dry run, Business Summary, Business Knowledge, Offerings,
+Audience, Missing Knowledge, Transformation Story, Business Foundation
+Status, Attention States, and Artifact Explorer.
+
+ODV remained visibly partial:
+
+```text
+business confidence: LOW
+known knowledge: 12
+missing knowledge: 4
+limitations: 538
+WGP status: partial
+attention states: low_confidence, missing_audience, missing_offerings, large_limitation_count, business_partially_understood
+```
+
+Narrow read-only UX fixes:
+
+- Business Foundation now links to `Inspect Generation Evolution`.
+- Generation Evolution now links back to `Inspect Business Foundation`.
+- The visible `Business Health` label was narrowed to `Business Foundation
+  Status`.
+
+MVP-3.0-D adds no editing, Business Alignment interaction, correction
+controls, generation controls, regeneration controls, provider execution, AI
+execution, approval controls, publishing, deployment, DNS mutation,
+production mutation, schema changes, persistence changes, workers, broad
+redesign, new business interpretation logic, or new confidence/readiness
+calculations.
 
 ## Reality Assessment Table
 

@@ -235,6 +235,12 @@ editing, generation controls, regeneration controls, approval controls,
 publishing, deployment, provider execution, AI execution, DNS controls,
 workers, schema changes, persistence changes, or mutation server actions.
 
+MVP-3.0-D added plain read-only cross-links between the pair. Generation
+Evolution now links to `Inspect Business Foundation`, and Business Foundation
+links back to `Inspect Generation Evolution`. The links clarify that Business
+Foundation explains WHY while Generation Evolution explains HOW; they do not
+create a broader workspace shell or any mutation behavior.
+
 ## Validation
 
 Focused tests:

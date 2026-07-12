@@ -76,6 +76,23 @@ function CodeRef(props: { value: string | null }) {
   );
 }
 
+function RelatedRuntimeSurfaces(props: { siteVersionId: string }) {
+  return (
+    <section style={bandStyle}>
+      <h2>Related Read-Only Surface</h2>
+      <div style={cardStyle}>
+        <strong>Business Foundation</strong>
+        <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 14 }}>
+          Generation Evolution explains how generated website iterations changed. Business Foundation explains why GNR8 shaped the website intent.
+        </p>
+        <a href={`/gnr8/admin/business-foundation/${props.siteVersionId}`} style={{ color: "#0f766e", fontWeight: 700 }}>
+          Inspect Business Foundation
+        </a>
+      </div>
+    </section>
+  );
+}
+
 function StatusPill(props: { value: string | null | undefined }) {
   const value = props.value ?? "missing";
   const warning = value.includes("missing") || value.includes("unavailable") || value.includes("non_compliant");
@@ -255,6 +272,7 @@ export default async function GenerationEvolutionDashboardPage(props: PageProps)
         </p>
       </header>
 
+      <RelatedRuntimeSurfaces siteVersionId={model.cycle.siteVersionId} />
       <Summary model={model} />
 
       <section style={bandStyle}>

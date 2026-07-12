@@ -67,9 +67,10 @@ The page exposes these read-only sections:
 - Audience
 - Missing Knowledge
 - Transformation Story
-- Business Health
+- Business Foundation Status
 - Attention States
 - Artifact Explorer
+- Related Read-Only Surface
 
 Business Summary displays business name, business identity, business purpose,
 business goals, business confidence, business tone, trust strategy, and
@@ -84,10 +85,10 @@ Missing Knowledge explicitly separates known knowledge, unknown knowledge, and
 persisted assumptions. When no persisted assumptions are present, the page says
 so instead of inventing assumptions.
 
-Business Health displays existing business confidence, known knowledge count,
-missing knowledge count, limitation count, evidence quality, and Website
-Generation Package readiness/status. It does not calculate a new business
-score.
+Business Foundation Status displays existing business confidence, known
+knowledge count, missing knowledge count, limitation count, evidence quality,
+and Website Generation Package readiness/status. It does not calculate a new
+business score or unsupported health judgement.
 
 ## Transformation Story
 
@@ -172,6 +173,10 @@ the Website Design Brief and Website Generation Package. The Generation
 Evolution Dashboard explains how generated website iterations evolved from
 that foundation.
 
+After MVP-3.0-D, the two surfaces include plain read-only cross-links:
+Business Foundation links to `Inspect Generation Evolution`, and Generation
+Evolution links back to `Inspect Business Foundation`.
+
 ## Validation
 
 Focused tests:
@@ -190,3 +195,39 @@ cd apps/platform && pnpm run vercel-build
 
 MVP-3.0-C validation completed with focused tests passing, full platform
 build passing, and `git diff --check` passing.
+
+## MVP-3.0-D Verification Status
+
+MVP-3.0-D completed the first authenticated real-target operator verification
+of the ODV Business Foundation route.
+
+Canonical verification record:
+
+```text
+docs/architecture/BUSINESS_FOUNDATION_REAL_TARGET_VERIFICATION.md
+```
+
+The authenticated local browser session loaded:
+
+```text
+/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+The route did not redirect to login or agency workspace, displayed the target
+`siteVersionId`, and remained read-only. Browser and source inspection found
+no rendered forms, inputs, textareas, selects, buttons, editable content,
+mutation server actions, correction controls, Business Alignment controls,
+generation/regeneration controls, provider controls, AI controls, approval
+controls, publish/deploy controls, or DNS controls.
+
+Narrow MVP-3.0-D fixes:
+
+- Added a read-only link from Business Foundation to Generation Evolution.
+- Added a reciprocal read-only link from Generation Evolution to Business
+  Foundation.
+- Renamed the visible `Business Health` heading to `Business Foundation
+  Status` to avoid implying a newly calculated health judgement.
+
+No projection meaning, canonical data, persistence, schema, auth logic,
+provider behavior, AI behavior, generated source, publishing, deployment, DNS,
+or production behavior changed.

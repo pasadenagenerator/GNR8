@@ -100,9 +100,72 @@ Current status:
   previews were opened from the dashboard without bypassing authentication.
 - Phase MVP-3.0-C - Business Foundation Runtime UX is complete and
   implemented the second read-only GNR8 Runtime UX surface for ODV.
+- Phase MVP-3.0-D - Business Foundation Real-Target Operator Verification is
+  complete. The authenticated local browser session loaded the ODV Business
+  Foundation route without redirecting to login or agency workspace, verified
+  the business foundation story, and added only narrow read-only cross-links
+  plus a status-label correction.
 
 Current Phase:
-- Phase MVP-3.0-C - Business Foundation Runtime UX is COMPLETE.
+- Phase MVP-3.0-D - Business Foundation Real-Target Operator Verification is
+  COMPLETE.
+
+MVP-3.0-D evidence:
+- Canonical verification record:
+  `docs/architecture/BUSINESS_FOUNDATION_REAL_TARGET_VERIFICATION.md`.
+- Verified route:
+  `/gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Related Evolution route:
+  `/gnr8/admin/evolution/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- The route loaded in the authenticated local browser session using the
+  existing normal auth flow and existing ignored local `SUPERADMIN_EMAILS`
+  configuration. No auth bypass was added, no private auth value is
+  documented, and no production environment configuration changed.
+- Unauthenticated HTTP probing redirected to `/login`, confirming the route
+  did not become public.
+- Rendered ODV result: business confidence `LOW`, known knowledge `12`,
+  missing knowledge `4`, limitations `538`, evidence quality
+  `evidence-linked persisted knowledge`, WGP status `partial`.
+- Attention states rendered:
+  `low_confidence`, `missing_audience`, `missing_offerings`,
+  `large_limitation_count`, and `business_partially_understood`.
+- Offerings remained unresolved: no known offerings, no separately identified
+  services or products, and `2` unknown offering items.
+- Audience remained unresolved: no known audience and `2` missing audience
+  knowledge items.
+- Missing Knowledge separated Known, Unknown, and Assumed; when no persisted
+  assumptions existed, the page stated that no persisted assumptions were
+  found.
+- Transformation Story rendered Business Discovery -> Digital Business Twin
+  -> Business Understanding -> Business Alignment -> Website Design Brief ->
+  Website Generation Package with visible artifact IDs.
+- Artifact Explorer contained only the seven business foundation artifacts:
+  Business Discovery, source DBT, BUR, Business Alignment, aligned DBT, WDB,
+  and WGP. It did not include provider, generated proposal, compliance, or
+  evolution artifacts.
+- Browser and source inspection found no forms, inputs, textareas, selects,
+  buttons, editable content, correction controls, Business Alignment
+  controls, generate/regenerate controls, provider controls, AI controls,
+  approval controls, publish/deploy controls, DNS controls, or mutation
+  server actions.
+- Narrow read-only fixes only:
+  Business Foundation now links to `Inspect Generation Evolution`; Generation
+  Evolution now links back to `Inspect Business Foundation`; the visible
+  `Business Health` heading was narrowed to `Business Foundation Status`.
+- No projection meaning, canonical artifact, persistence, schema, auth logic,
+  provider behavior, AI behavior, generated source, publishing, deployment,
+  DNS, or production behavior changed.
+- Focused Business Foundation and dashboard tests passed:
+  `NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --tsconfig
+  apps/platform/tsconfig.json --test
+  apps/platform/gnr8/architecture/generation-business-foundation-projection.test.ts
+  apps/platform/app/gnr8/admin/business-foundation-page.test.ts
+  apps/platform/gnr8/architecture/generation-evolution-dashboard-projection.test.ts
+  apps/platform/app/gnr8/admin/generation-evolution-dashboard-page.test.ts`.
+- Full `cd apps/platform && pnpm run vercel-build` passed.
+- `git diff --check` passed.
+- Source-control safety confirmed local env configuration remains ignored and
+  no private auth value appears in the tracked diff.
 
 MVP-3.0-C evidence:
 - Canonical runtime UX record:
@@ -185,12 +248,11 @@ MVP-3.0-A evidence:
   compliance recomputation were added.
 
 Next recommended phase:
-- MVP-3.0-D - Business Foundation Real-Target Operator Verification. Verify
-  the new Business Foundation route against the persisted ODV target in an
-  authenticated local browser session. Stop before editing, Business
-  Alignment editing, generation, regeneration, approval, publishing,
-  deployment, provider execution, AI execution, DNS, schema changes,
-  persistence changes, workers, or mutation behavior.
+- MVP-3.0-E - Business Foundation Read-Only Copy Polish. Keep it copy-only
+  and read-only. Stop before editing, correction UX, Business Alignment
+  interaction, generation, regeneration, approval, publishing, deployment,
+  provider execution, AI execution, DNS, schema changes, persistence changes,
+  workers, or mutation behavior.
 
 MVP-2.0-N evidence:
 - Canonical dashboard document:
@@ -259,7 +321,7 @@ MVP-2.0-M prior evidence:
   added.
 
 Next Phase:
-- MVP-3.0-D - Business Foundation Real-Target Operator Verification,
+- MVP-3.0-E - Business Foundation Read-Only Copy Polish, copy-only and
   read-only against the persisted ODV target.
 
 Current architecture direction:

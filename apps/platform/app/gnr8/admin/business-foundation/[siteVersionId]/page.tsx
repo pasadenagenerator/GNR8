@@ -88,6 +88,23 @@ function CodeRef(props: { value: string | null }) {
   );
 }
 
+function RelatedRuntimeSurfaces(props: { siteVersionId: string }) {
+  return (
+    <section style={bandStyle}>
+      <h2>Related Read-Only Surface</h2>
+      <div style={cardStyle}>
+        <strong>Generation Evolution Dashboard</strong>
+        <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 14 }}>
+          Business Foundation explains why GNR8 shaped the website intent. Generation Evolution explains how generated website iterations changed.
+        </p>
+        <a href={`/gnr8/admin/evolution/${props.siteVersionId}`} style={{ color: "#0f766e", fontWeight: 700 }}>
+          Inspect Generation Evolution
+        </a>
+      </div>
+    </section>
+  );
+}
+
 function StatusPill(props: { value: string | null | undefined }) {
   const value = props.value ?? "missing";
   const warning = value.includes("missing") || value.includes("LOW") || value.includes("partial") || value.includes("blocked");
@@ -285,7 +302,7 @@ function BusinessHealth(props: { model: GenerationBusinessFoundationProjection }
   const health = props.model.businessHealth;
   return (
     <section style={bandStyle}>
-      <h2>Business Health</h2>
+      <h2>Business Foundation Status</h2>
       <div style={gridStyle}>
         <Field label="business confidence" value={health.businessConfidence.level} />
         <Field label="known knowledge" value={health.knownKnowledgeCount} />
@@ -342,6 +359,7 @@ export default async function BusinessFoundationPage(props: PageProps) {
         </div>
       </header>
 
+      <RelatedRuntimeSurfaces siteVersionId={model.siteVersionId} />
       <BusinessSummary model={model} />
       <BusinessKnowledge groups={model.knowledgeGroups} />
       <Offerings model={model} />
