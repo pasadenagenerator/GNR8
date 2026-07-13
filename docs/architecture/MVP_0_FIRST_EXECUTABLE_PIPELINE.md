@@ -491,6 +491,11 @@ Missing implementation:
 - DBT builder consumption is now implemented in MVP-1B.
 - No Business Owner confirmation or multi-source domain reconciliation exists
   in this layer.
+- MVP-3.1-B confirmed that ODV has additional source evidence for offerings,
+  audience, logo, colors, typography, differentiators, and trust in rendered
+  body text, HTML metadata, CSS, and imported assets. Those signals are not
+  absent; they are outside the current Business Discovery classification
+  boundary and must become governed candidates before DBT promotion.
 
 Dependencies:
 - Evidence Collection.
@@ -535,6 +540,10 @@ Current implementation:
 Missing implementation:
 - No Business Owner confirmation or multi-source domain reconciliation exists.
 - No governance-state transition or alignment correction loop exists above DBT.
+- MVP-3.1-B confirmed that missing ODV offerings and audience in DBT mean
+  "not classified and confirmed", not "not present on the original website".
+  Future candidate extraction must not mutate DBT until human governance
+  authorizes canonical knowledge.
 
 Dependencies:
 - Business Discovery.

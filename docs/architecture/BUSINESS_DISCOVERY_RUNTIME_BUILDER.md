@@ -257,6 +257,29 @@ Canonical evidence:
 docs/architecture/BUSINESS_DISCOVERY_REAL_TARGET_VALIDATION.md
 ```
 
+## MVP-3.1-B Upstream Evidence Gap Finding
+
+MVP-3.1-B analyzed why ODV still lacks canonical offerings, audience, logo,
+colors, typography, and complete CGP knowledge in Business Foundation.
+
+Canonical planning record:
+
+```text
+docs/architecture/BUSINESS_FOUNDATION_UPSTREAM_EVIDENCE_GAP_PLAN.md
+```
+
+The current Business Discovery builder is intentionally narrow. It derives
+findings from source URL, route paths, navigation labels, section boundary
+types, asset inventory counts, limitations, diagnostics, and optional
+Candidate Discovery context. For ODV, richer signals exist in rendered body
+text, headings, image `alt`, structured logo metadata, CSS, and font files,
+but those signals are not currently Business Discovery inputs.
+
+Therefore ODV offerings and audience are `CAPTURED_NOT_CLASSIFIED`, not
+proven absent. Future enrichment should add evidence-backed candidates with
+source refs and confidence, then require human confirmation before any DBT
+canonical update.
+
 ## Next Phase
 
 Recommended next phase:

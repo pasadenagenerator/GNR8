@@ -283,6 +283,25 @@ Website Generation Package, provider payload, prompt, AI output, generated
 HTML, generated React, generated components, generated blocks, publishing,
 deployment, or execution artifact fields.
 
+## MVP-3.1-B Upstream Evidence Gap Finding
+
+MVP-3.1-B confirms that ODV's missing DBT offerings and audience records are
+not proof that the source website lacks those signals. They mean the current
+Business Discovery artifact did not classify deterministic knowledge for those
+domains.
+
+Canonical planning record:
+
+```text
+docs/architecture/BUSINESS_FOUNDATION_UPSTREAM_EVIDENCE_GAP_PLAN.md
+```
+
+The source HTML contains candidate legal-service, customer-type,
+differentiator, trust, logo, color, and typography evidence. DBT must continue
+to preserve missing knowledge until a governed upstream candidate path and
+human confirmation provide canonical updates. Raw extraction, deterministic
+classification, or AI analysis must not silently write DBT truth.
+
 ## Next Step
 
 MVP-1C-R should retry Business Understanding Report real-target validation

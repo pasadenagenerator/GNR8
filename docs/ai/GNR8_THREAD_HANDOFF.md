@@ -110,10 +110,56 @@ Current status:
   product experience with the original website, generated iteration links,
   business narrative, visual identity states, imported asset summary, missing
   knowledge, and secondary advanced technical lineage.
+- Phase MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning is
+  complete. The new plan explains why ODV still lacks canonical offerings,
+  audience, logo, colors, typography, and full CGP knowledge even though
+  source text, HTML/logo metadata, CSS, font assets, screenshots, and imported
+  assets already exist.
 
 Current Phase:
-- Phase MVP-3.1-A - Business Foundation Product UX Transformation is
+- Phase MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning is
   COMPLETE.
+
+MVP-3.1-B evidence:
+- Canonical planning record:
+  `docs/architecture/BUSINESS_FOUNDATION_UPSTREAM_EVIDENCE_GAP_PLAN.md`.
+- Target:
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- The Business Foundation UX correctly exposes upstream gaps; the missing
+  canonical CGP/service/audience knowledge is not merely a display bug.
+- Offerings: rendered body text contains legal-service candidates, including
+  legal support, consulting, representation, commercial/civil law, insolvency,
+  labor, real estate, and commercial/labor orientation. Current Business
+  Discovery did not classify them because it does not inspect body text.
+- Audience: rendered body text contains candidate audience wording for
+  individuals and companies, plus geography and language signals. Current
+  Business Discovery did not classify them.
+- Logo: HTML contains `alt="Logo"` and structured logo URL for
+  `Tabla40x20cm_51.png`, but current asset classification only counts logo
+  candidates by logo-ish file paths, so the projection reports `logos: 0`.
+- Colors: CSS contains repeated visual color values, but no canonical brand
+  palette or computed-style candidate is persisted.
+- Typography: imported assets contain `17` font files, including `Nationale`
+  and `Fontello`, but canonical typography remains unavailable because usage
+  is not classified or confirmed.
+- Other visual identity: screenshots, layout geometry, CSS, imported images,
+  and font assets exist, but no governed CGP candidate model exists.
+- Required gap classes are recorded in the plan:
+  `CAPTURED_NOT_CLASSIFIED`, `CLASSIFIED_NOT_PROJECTED`, `LOW_CONFIDENCE`,
+  `HUMAN_CONFIRMATION_REQUIRED`, `CANONICAL_CONTRACT_MISSING`, and
+  `RUNTIME_PROJECTION_MISSING` where applicable.
+- P0 gaps: offerings and audience.
+- P1 gaps: logo, brand colors, typography, visual style, differentiators, and
+  trust evidence.
+- Human-governance boundary: GNR8 may observe and propose candidates with
+  source refs/confidence, but logo identity, canonical colors, canonical
+  fonts, offerings, and audience must not become DBT truth without explicit
+  human confirmation.
+- Original imported assets remain distinct from generated proposal assets.
+- No extraction runtime, asset classification runtime, AI, Business Alignment
+  editing, DBT mutation, WDB/WGP regeneration, persistence, schema, API,
+  worker, generation, approval, publishing, deployment, DNS, or production
+  mutation was added.
 
 MVP-3.1-A evidence:
 - Canonical transformation record:
@@ -235,11 +281,11 @@ MVP-3.0-A evidence:
   compliance recomputation were added.
 
 Next recommended phase:
-- MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning. Keep it
-  read-only and source-evidence focused. Stop before editing, correction UX,
-  Business Alignment interaction, generation, regeneration, approval,
-  publishing, deployment, provider execution, AI execution, DNS, schema
-  changes, persistence changes, workers, or mutation behavior.
+- MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate
+  Planning. Keep it candidate-only and original-import focused. Stop before
+  DBT mutation, Business Alignment editing, canonical visual identity
+  persistence, WDB/WGP regeneration, AI, workers, generation, approval,
+  publishing, deployment, DNS, or production mutation.
 
 MVP-2.0-N evidence:
 - Canonical dashboard document:
@@ -308,8 +354,9 @@ MVP-2.0-M prior evidence:
   added.
 
 Next Phase:
-- MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning, read-only
-  and source-evidence focused against the persisted ODV target.
+- MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate
+  Planning, candidate-only and original-import focused against the persisted
+  ODV target.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its

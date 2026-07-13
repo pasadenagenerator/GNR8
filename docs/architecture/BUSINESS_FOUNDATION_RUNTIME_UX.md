@@ -290,3 +290,25 @@ proposal assets and are not all labeled as brand assets.
 The advanced technical section preserves lineage, IDs, evidence counts,
 diagnostics, and the Artifact Explorer. The page remains entirely read-only
 and adds no mutation controls or execution behavior.
+
+## MVP-3.1-B Upstream Gap Planning Status
+
+MVP-3.1-B confirms that the Business Foundation page is exposing real upstream
+gaps, not merely display defects.
+
+Canonical planning record:
+
+```text
+docs/architecture/BUSINESS_FOUNDATION_UPSTREAM_EVIDENCE_GAP_PLAN.md
+```
+
+The ODV source evidence contains body-copy service and audience signals, an
+HTML/structured-data logo candidate, repeated CSS color values, and imported
+font assets. The runtime projection does not promote them because it is a
+read model over confirmed business artifacts, and those upstream signals have
+not been classified, governed, or confirmed as canonical DBT knowledge.
+
+Future Business Foundation UX may show candidate evidence only if provenance,
+confidence, original-vs-generated asset boundaries, and human-confirmation
+state are explicit. Candidate evidence must remain visually distinct from
+canonical business truth.

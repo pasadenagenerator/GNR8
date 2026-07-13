@@ -1,9 +1,111 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-07-12
+2026-07-13
 
 ## Current Phase
+
+MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning is
+COMPLETE.
+
+Canonical planning record:
+
+- `docs/architecture/BUSINESS_FOUNDATION_UPSTREAM_EVIDENCE_GAP_PLAN.md`
+
+Target:
+
+```text
+ODV siteVersionId: 09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+MVP-3.1-B is documentation and analysis only. It explains why the new
+Business Foundation UX correctly exposes upstream gaps instead of filling
+them.
+
+Core result:
+
+- ODV's lack of canonical offerings, audience, logo, colors, typography, and
+  full CGP knowledge is not merely a display bug.
+- Original imported evidence exists, but it is not yet classified, projected,
+  confirmed, or governed as canonical business truth.
+- Current Business Discovery only consumes a narrow deterministic slice:
+  source URL, routes, navigation labels, section boundary types, asset count,
+  limitations, diagnostics, and optional Candidate Discovery context.
+- Richer ODV signals exist in rendered body text, headings, metadata, image
+  `alt`, structured logo metadata, CSS, and font files, but they are outside
+  the current canonical Business Discovery/DBT promotion path.
+
+ODV evidence findings:
+
+- Offerings: body text contains candidate legal-service signals including
+  legal support, consulting, representation, commercial/civil law, insolvency
+  law, labor law, real estate law, and commercial/labor orientation. Current
+  Business Discovery did not classify them because navigation labels do not
+  match offering patterns and body text is not an input.
+- Audience: body text contains candidate audience wording for individuals and
+  companies, plus geography and language signals. Current Business Discovery
+  did not classify them.
+- Logo: rendered HTML contains an image with `alt="Logo"` and structured logo
+  URL for `Tabla40x20cm_51.png`, but current asset classification only counts
+  logo candidates when file paths contain `logo`.
+- Colors: CSS contains repeated visual color values, but no canonical brand
+  palette or computed-style candidate is persisted.
+- Typography: imported assets include `17` font files, including `Nationale`
+  and `Fontello`, but canonical typography is unavailable because font usage
+  is not classified or confirmed.
+- Visual identity: screenshots, layout geometry, CSS, image assets, and
+  imported fonts exist, but no governed visual-identity candidate model or
+  canonical CGP exists.
+- Differentiators and trust: body text and contact/legal details provide
+  candidates, while current canonical trust knowledge only has a weak contact
+  path signal.
+
+Gap classifications:
+
+- Offerings: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
+  `HUMAN_CONFIRMATION_REQUIRED`.
+- Audience: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
+  `HUMAN_CONFIRMATION_REQUIRED`.
+- Logo: `CAPTURED_NOT_CLASSIFIED`, `RUNTIME_PROJECTION_MISSING`,
+  `HUMAN_CONFIRMATION_REQUIRED`.
+- Brand colors: `CAPTURED_NOT_CLASSIFIED`, `CANONICAL_CONTRACT_MISSING`,
+  `HUMAN_CONFIRMATION_REQUIRED`.
+- Typography: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
+  `CANONICAL_CONTRACT_MISSING`, `HUMAN_CONFIRMATION_REQUIRED`.
+- Visual style: `CAPTURED_NOT_CLASSIFIED`, `CANONICAL_CONTRACT_MISSING`,
+  `HUMAN_CONFIRMATION_REQUIRED`.
+- Business differentiators: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
+  `HUMAN_CONFIRMATION_REQUIRED`.
+- Trust evidence: `CLASSIFIED_NOT_PROJECTED`, `CAPTURED_NOT_CLASSIFIED`,
+  `LOW_CONFIDENCE`, `HUMAN_CONFIRMATION_REQUIRED`.
+
+MVP priorities:
+
+- P0: offerings and audience.
+- P1: logo, colors, typography, visual style, differentiators, trust evidence.
+- P2: complete CGP refinements beyond first migration-wave needs.
+
+Human-governance boundary:
+
+- GNR8 may observe evidence automatically and propose candidates with source
+  refs, confidence, and limitations.
+- GNR8 must not silently turn deterministic candidates into canonical truth.
+- Logo identity, canonical colors, canonical fonts, offerings, and audience
+  require human confirmation before DBT update.
+- Original imported assets and generated proposal assets must remain
+  explicitly separated in any future UX and validation path.
+
+Recommended next phase:
+
+```text
+MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate Planning
+```
+
+Keep the next phase candidate-only and original-import focused. Do not mutate
+DBT, edit Business Alignment, persist canonical identity, regenerate WDB/WGP,
+call AI, create workers, publish, deploy, or mutate DNS/production.
+
+## Previous Phase
 
 MVP-3.1-A - Business Foundation Product UX Transformation is
 COMPLETE.
@@ -18,93 +120,8 @@ Updated real ODV Business Foundation route:
 /gnr8/admin/business-foundation/09dce7ea-d860-4f60-a1eb-26c3335b302e
 ```
 
-MVP-3.1-A transforms the page from a diagnostic-first technical artifact
+MVP-3.1-A transformed the page from a diagnostic-first technical artifact
 surface into a story-first product experience for non-technical operators.
-The page now opens with the business, the original website, current
-understanding, missing knowledge, and read-only navigation to generated
-website iterations. Technical evidence and lineage remain available in
-Advanced Technical Details.
-
-New page hierarchy:
-
-```text
-Business Hero
-Website Versions
-What GNR8 Understands
-Offerings and Audience
-Detected Brand & Visual Identity
-Original Imported Assets
-What GNR8 Still Needs to Know
-Transformation Story
-Advanced: Evidence, Lineage & Canonical Artifacts
-```
-
-Business hero result:
-
-- Observed business identity remains the persisted imported-site identity.
-- The exact persisted original website URL is prominent:
-  `https://www.odv-cvijanovic.si/?gnr8_f12=20260617`.
-- The page states the website purpose and current understanding state without
-  leading with `dryRunId`, artifact IDs, or diagnostics.
-- Primary actions are read-only links: `Open Original Website`, `Inspect
-  Generation Evolution`, and `Open Latest Generated Proposal`.
-
-Generated versions result:
-
-- Website Versions displays Original Website -> Iteration 1 -> Iteration 2.
-- Iteration 1 and Iteration 2 preview links are visible near the top.
-- Iteration 2 is emphasized as the latest quarantined generated proposal,
-  not approved, not published, still non-compliant, and a meaningful
-  improvement with no regressions according to persisted evolution data.
-
-Business understanding result:
-
-- The narrative deterministically formats existing persisted business
-  foundation statements.
-- Offerings are presented as unresolved service-portfolio knowledge rather
-  than a bare zero count.
-- Audience remains visibly unresolved.
-- Missing knowledge prioritizes audience, offerings, canonical colors,
-  typography, logo confirmation, differentiators, and trust evidence.
-
-Visual identity and imported assets result:
-
-- ODV has no confirmed logo preview in the current persisted evidence.
-- No canonical brand colors are persisted.
-- Typography was not captured as canonical brand knowledge.
-- Original imported assets are summarized and sampled separately from
-  generated proposal assets.
-- Asset classifications remain conservative and fall back to unclassified
-  imported asset where meaning is not available.
-
-Authenticated browser verification confirmed the story-first hierarchy,
-source website link, Evolution link, Iteration 1 and Iteration 2 links,
-missing offerings/audience states, Visual Identity gaps, imported asset
-summary, secondary Advanced Details, desktop readability, and the absence of
-mutation controls.
-
-No business editing, Business Alignment correction UX, AI interpretation, new
-business truth, CGP inference, asset extraction pipeline, generation controls,
-regeneration controls, provider execution, AI execution, approval controls,
-publishing, deployment, DNS mutation, production mutation, schema changes,
-persistence changes, workers, or mutation server actions were added.
-
-Focused Business Foundation tests passed, full platform build passed, and
-`git diff --check` passed for this phase. Source-control safety checks found
-no private auth or environment values in the tracked diff.
-
-Recommended next phase:
-
-```text
-MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning
-```
-
-Keep the next phase read-only and source-evidence focused: no editing,
-correction UX, Business Alignment interaction, generation, approval,
-publishing, deployment, provider execution, AI execution, schema changes,
-persistence changes, workers, DNS, or mutation behavior.
-
-## Previous Phase
 
 MVP-3.0-D - Business Foundation Real-Target Operator Verification is
 COMPLETE.
@@ -3634,12 +3651,13 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-3.1-A - Business Foundation Product UX Transformation is
+- Phase MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning is
   complete.
 
 Next Phase:
-- MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning, read-only
-  and source-evidence focused against the persisted ODV target.
+- MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate
+  Planning, candidate-only and original-import focused against the persisted
+  ODV target.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:

@@ -256,3 +256,34 @@ Keep the next phase read-only and source-evidence focused. Do not add
 Business Alignment correction UX, generation, provider execution, AI
 execution, approval, publishing, deployment, schema changes, persistence
 changes, or workers.
+
+## MVP-3.1-B Upstream Gap Planning Result
+
+MVP-3.1-B completed the read-only upstream evidence-gap analysis for ODV.
+Canonical record:
+
+```text
+docs/architecture/BUSINESS_FOUNDATION_UPSTREAM_EVIDENCE_GAP_PLAN.md
+```
+
+The MVP-3.1-A UX is correct to expose gaps. ODV lacks canonical offerings,
+audience, logo, colors, typography, and complete CGP knowledge because the
+current business chain does not classify or govern those candidates from raw
+HTML, CSS, imported asset metadata, body copy, or structured logo evidence.
+
+Imported evidence exists: body copy contains service and audience signals,
+the HTML contains a logo candidate with `alt="Logo"` plus structured logo
+metadata, CSS contains repeated visual color signals, and the imported file
+map contains `17` font files. These are candidates only. They must not become
+canonical truth without deterministic source refs, confidence, conflict
+visibility, and human confirmation.
+
+Recommended next phase:
+
+```text
+MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate Planning
+```
+
+Keep that phase candidate-only and original-import focused. Do not mutate DBT,
+edit Business Alignment, persist canonical visual identity, regenerate WDB/WGP,
+call AI, or publish anything.
