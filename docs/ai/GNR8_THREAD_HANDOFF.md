@@ -145,14 +145,26 @@ Current status:
   Input dependency coverage is 100% for ODV and ViroiDoc, but cutover remains
   blocked because both shadows lose at least one current
   `content_theme_observed` section-boundary evidence ref.
+- Phase WU-5 - Section Evidence Lineage Preservation for Optional Business
+  Discovery Cutover is complete. WU sections now preserve original
+  section-boundary identity, region type, exact upstream refs, source artifact
+  refs, Candidate Discovery refs, review state, and limitations; the WU adapter
+  preserves exact current section-boundary refs into the existing Business
+  Discovery builder input and fails closed on inconsistent lineage. ODV and
+  ViroiDoc now retain all current `content_theme_observed` refs with no missing
+  or added content-theme refs. Optional runtime integration is
+  `ready_with_expected_differences`; no runtime switch occurred.
 
 Current Phase:
-- Phase WU-4 - Business Discovery Website Understanding Shadow Adapter is
+- Phase WU-5 - Section Evidence Lineage Preservation for Optional Business
+  Discovery Cutover is
   COMPLETE.
 
-WU-4 evidence:
+WU-5 evidence:
 - Canonical shadow adapter record:
   `docs/architecture/BUSINESS_DISCOVERY_WEBSITE_UNDERSTANDING_SHADOW_ADAPTER.md`.
+- Canonical section-lineage record:
+  `docs/architecture/BUSINESS_DISCOVERY_SECTION_EVIDENCE_LINEAGE_PRESERVATION.md`.
 - Canonical equivalence record:
   `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`.
 - Canonical runtime record updated:
@@ -180,6 +192,8 @@ WU-4 evidence:
   baseline/fidelity limitations are projected verbatim with original messages,
   source refs, source artifact refs, severity/state, original codes, and
   deterministic dedupe.
+- WU-5 closes the WU-4 blocker: section-boundary evidence refs on
+  `content_theme_observed` are preserved exactly through the WU shadow path.
 - Real-target input coverage: ODV and ViroiDoc both produced valid WU
   projections, zero conflicts, zero duplicates, 100% current Business
   Discovery dependency coverage, no partial inputs, no missing inputs, and no
@@ -187,37 +201,36 @@ WU-4 evidence:
 - ODV:
   Business Discovery artifact
   `business_discovery_7b37413651d79de0d109e31690a34b62`; WU projection
-  `source_website_understanding_b0cd478c45734c2e6f31db84ed9ad2c3`; shadow
+  `source_website_understanding_0caa89099ee02c9469b539cf2b2d0613`; shadow
   Business Discovery
-  `business_discovery_shadow_0f6788b6b6eed75ec7db2aa3c5f78231`; findings
+  `business_discovery_shadow_effc750dce31c593fa8932ca66d98a8f`; findings
   12 vs 12; limitations 104 vs 131; confidence `MEDIUM` vs `MEDIUM`;
-  deterministic rebuild equality true; no write occurred.
+  content-theme missing refs 0; content-theme added refs 0; deterministic
+  rebuild equality true; no write occurred.
 - ViroiDoc:
   Business Discovery artifact
   `business_discovery_360fa099cbcede288c2d0e04f2ec7986`; WU projection
-  `source_website_understanding_d80895ffc313fb393b15ecbef3e90c1a`; shadow
+  `source_website_understanding_72cece90151974f980a2abf7b5528709`; shadow
   Business Discovery
-  `business_discovery_shadow_84c495a9a06e38f1d5980f89f62a0886`; findings
+  `business_discovery_shadow_e608b04066ab15ca5156579843aaf859`; findings
   17 vs 17; limitations 105 vs 132; confidence `MEDIUM` vs `MEDIUM`;
-  deterministic rebuild equality true; no write occurred.
+  content-theme missing refs 0; content-theme added refs 0; deterministic
+  rebuild equality true; no write occurred.
 - Covered inputs: `siteVersionId`, `dryRunId`, source URL, route inventory,
   navigation labels, section region types, asset inventory, import
   diagnostics, Candidate Discovery context, Candidate Review context,
   Reconstruction context, and StructurePlan context.
-- Cutover readiness: `blocked` for both targets.
-- Exact blocker: shadow `content_theme_observed` loses at least one current
-  section-boundary evidence ref: ODV `navigation`; ViroiDoc
-  `footer|navigation`.
-- Expected differences: projection-normalized finding IDs/tokens, stronger
-  evidence lineage on several findings, and increased limitation counts
-  because WU projects the current Evidence Capture limitation set verbatim.
+- Cutover readiness: `ready_with_expected_differences` for both targets.
+- Expected differences: projection-normalized finding IDs/tokens, supported
+  evidence supersets on non-content-theme findings, and 27 added
+  source-traceable `IMPORT_DIAGNOSTIC_OBSERVED` projection-transparency
+  limitations on each target.
 - Real-target CLI command succeeded read-only from `apps/platform` with
-  `NODE_OPTIONS='--conditions=react-server'`; the first sandboxed `tsx`
-  attempt hit the known `tsx-501/*.pipe` EPERM issue.
-- Next phase: WU-5 - Section Evidence Lineage Preservation for Optional
-  Business Discovery Cutover. Preserve exact section-boundary evidence refs
-  through WU and the adapter, then rerun shadow comparison. Do not switch
-  runtime behavior yet.
+  `NODE_OPTIONS='--conditions=react-server' node --import tsx`; the first
+  sandboxed `tsx` attempt hit the known `tsx-501/*.pipe` EPERM issue.
+- Next phase: WU-6 - Optional Business Discovery Runtime Integration Plan.
+  Keep it planning-only until explicitly authorized. Do not switch runtime
+  behavior by implication.
 - Safety: no Business Discovery runtime switch, DBT mutation, WDB/WGP change,
   provider execution, generation, approval, publishing, deployment,
   persistence, schema, API, worker, extraction, parsing, classifier, AI

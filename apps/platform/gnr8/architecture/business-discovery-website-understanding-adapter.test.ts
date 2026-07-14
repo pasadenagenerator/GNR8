@@ -14,7 +14,10 @@ function confidence(level: "LOW" | "MEDIUM" | "HIGH" = "MEDIUM") {
   return { level, reasons: [`${level.toLowerCase()}_fixture`] };
 }
 
-function projection(input: { sourceSiteId?: string | null } = {}): SourceWebsiteUnderstandingProjection {
+function projection(input: {
+  sourceSiteId?: string | null;
+  sections?: SourceWebsiteUnderstandingProjection["sections"];
+} = {}): SourceWebsiteUnderstandingProjection {
   const sourceSiteId = input.sourceSiteId === undefined ? "source-site-shadow" : input.sourceSiteId;
   const siteVersionId = "site-version-shadow";
   const dryRunId = "dry-run-shadow";
@@ -76,19 +79,22 @@ function projection(input: { sourceSiteId?: string | null } = {}): SourceWebsite
       evidenceRefs: ["nav:contact"],
       sourceCandidateId: null,
     }],
-    sections: [{
-      sectionId: "section:hero",
+    sections: input.sections ?? [{
+      sectionId: "source-section:hero",
+      sourceSectionId: "hero",
       routePath: "/",
       order: 0,
       heading: "Hero",
       semanticType: "hero",
+      regionType: "hero",
       observedBoundary: true,
       plannedOnly: false,
       state: "structured",
       reviewState: "not_applicable",
       confidence: confidence("HIGH"),
-      evidenceRefs: ["section:hero"],
+      evidenceRefs: ["evidence:section-boundary:/:hero"],
       sourceCandidateId: null,
+      sourceArtifactRefs: [{ kind: "first_limited_dry_run_output", artifactId: "dry-run-output-shadow", canonicalId: "reconstruction-shadow", status: "valid", source: "evidence_capture" }],
       limitations: [],
     }],
     content: [],
@@ -147,7 +153,139 @@ test("adapter maps Website Understanding into current Business Discovery input s
   assert.equal(result.status === "ready" && result.input.sourceSiteId, "source-site-shadow");
   assert.equal(result.status === "ready" && result.input.evidenceCaptureBaseline?.limitations?.[0], "missing_computed_styles");
   assert.equal(result.status === "ready" && result.input.evidenceCaptureBaseline?.fidelityLimitations?.[0]?.explanation, "Rendered DOM fidelity is partial.");
+  assert.deepEqual(
+    result.status === "ready" && result.input.evidenceCaptureBaseline?.captureExpansionEvidence.sectionBoundaryEvidence.map((item) => item.sourceEvidenceRefs),
+    [["evidence:section-boundary:/:hero"]],
+  );
   assert.equal(result.status === "ready" && result.input.navigationEvidence, undefined);
+});
+
+test("adapter preserves single and multiple section-boundary refs with deterministic exact dedupe", () => {
+  const result = buildShadowBusinessDiscoveryFromWebsiteUnderstanding(projection({
+    sections: [
+      {
+        sectionId: "source-section:navigation",
+        sourceSectionId: "navigation",
+        routePath: "/",
+        order: 0,
+        heading: null,
+        semanticType: "navigation",
+        regionType: "navigation",
+        observedBoundary: true,
+        plannedOnly: false,
+        state: "structured",
+        reviewState: "not_applicable",
+        confidence: confidence("HIGH"),
+        evidenceRefs: ["evidence:section-boundary:/:navigation"],
+        sourceCandidateId: null,
+        sourceArtifactRefs: [{ kind: "first_limited_dry_run_output", artifactId: "dry-run-output-shadow", source: "evidence_capture" }],
+        limitations: [],
+      },
+      {
+        sectionId: "source-section:footer",
+        sourceSectionId: "footer",
+        routePath: "/",
+        order: 1,
+        heading: null,
+        semanticType: "footer",
+        regionType: "footer",
+        observedBoundary: true,
+        plannedOnly: false,
+        state: "structured",
+        reviewState: "not_applicable",
+        confidence: confidence("HIGH"),
+        evidenceRefs: ["evidence:section-boundary:/:footer", "evidence:section-boundary:/:footer"],
+        sourceCandidateId: null,
+        sourceArtifactRefs: [{ kind: "first_limited_dry_run_output", artifactId: "dry-run-output-shadow", source: "evidence_capture" }],
+        limitations: [],
+      },
+    ],
+  }));
+
+  assert.equal(result.status, "built");
+  const contentTheme = result.status === "built"
+    ? result.artifact.findings.find((finding) => finding.kind === "content_theme_observed")
+    : null;
+  assert.deepEqual(contentTheme?.evidenceRefs.map((ref) => ref.refId), [
+    "evidence:section-boundary:/:footer",
+    "evidence:section-boundary:/:navigation",
+  ]);
+  assert.equal(contentTheme?.evidenceRefs.every((ref) => ref.sourceKind === "section_boundary"), true);
+});
+
+test("adapter does not collapse distinct-region refs and has no hardcoded target-specific behavior", () => {
+  const result = buildShadowBusinessDiscoveryFromWebsiteUnderstanding(projection({
+    sections: [
+      {
+        sectionId: "source-section:alpha",
+        sourceSectionId: "alpha",
+        routePath: "/",
+        order: 0,
+        heading: "Alpha",
+        semanticType: "navigation",
+        regionType: "navigation",
+        observedBoundary: true,
+        plannedOnly: false,
+        state: "structured",
+        reviewState: "not_applicable",
+        confidence: confidence("MEDIUM"),
+        evidenceRefs: ["evidence:section-boundary:/:alpha"],
+        sourceCandidateId: null,
+        sourceArtifactRefs: [{ kind: "first_limited_dry_run_output", artifactId: "dry-run-output-shadow", source: "evidence_capture" }],
+        limitations: [],
+      },
+      {
+        sectionId: "source-section:beta",
+        sourceSectionId: "beta",
+        routePath: "/",
+        order: 1,
+        heading: "Beta",
+        semanticType: "footer",
+        regionType: "footer",
+        observedBoundary: true,
+        plannedOnly: false,
+        state: "structured",
+        reviewState: "not_applicable",
+        confidence: confidence("MEDIUM"),
+        evidenceRefs: ["evidence:section-boundary:/:beta"],
+        sourceCandidateId: null,
+        sourceArtifactRefs: [{ kind: "first_limited_dry_run_output", artifactId: "dry-run-output-shadow", source: "evidence_capture" }],
+        limitations: [],
+      },
+    ],
+  }));
+
+  assert.equal(result.status, "built");
+  assert.equal(result.status === "built" && result.artifact.findings.some((finding) =>
+    finding.kind === "content_theme_observed" &&
+    finding.evidenceRefs.some((ref) => ref.refId.endsWith(":alpha")) &&
+    finding.evidenceRefs.some((ref) => ref.refId.endsWith(":beta"))), true);
+});
+
+test("adapter fails closed when section lineage is internally inconsistent", () => {
+  const result = buildBusinessDiscoveryInputFromWebsiteUnderstanding(projection({
+    sections: [{
+      sectionId: "source-section:navigation",
+      sourceSectionId: "navigation",
+      routePath: "/",
+      order: 0,
+      heading: null,
+      semanticType: "navigation",
+      regionType: "navigation",
+      observedBoundary: true,
+      plannedOnly: false,
+      state: "structured",
+      reviewState: "not_applicable",
+      confidence: confidence("HIGH"),
+      evidenceRefs: ["evidence:section-boundary:/:other"],
+      sourceCandidateId: null,
+      sourceArtifactRefs: [{ kind: "first_limited_dry_run_output", artifactId: "dry-run-output-shadow", source: "evidence_capture" }],
+      limitations: [],
+    }],
+  }));
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.status === "blocked" && result.blockers.some((item) => item.code === "SECTION_BOUNDARY_REF_CONFLICT"), true);
 });
 
 test("adapter fails closed when sourceSiteId is unavailable", () => {
@@ -175,4 +313,6 @@ test("adapter source has no persistence, raw artifact loader, or downstream cont
   assert.equal(source.includes("runtime-store"), false);
   assert.equal(source.includes("digital-business-twin"), false);
   assert.equal(source.includes("website-generation-package"), false);
+  assert.equal(source.includes("ODV"), false);
+  assert.equal(source.includes("ViroiDoc"), false);
 });

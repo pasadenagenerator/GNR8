@@ -94,13 +94,13 @@ test("comparison detects improvements, invented findings, lost limitations, and 
   const strongerLineage = compareBusinessDiscoveryShadow({
     current: artifact(),
     shadow: artifact({
-      findings: [{
-        ...artifact().findings[0],
-        evidenceRefs: [
-          ...artifact().findings[0].evidenceRefs,
-          { refId: "route:/", sourceKind: "route" as const, routePath: "/" },
-        ],
-      }],
+	      findings: [{
+	        ...artifact().findings[0],
+	        evidenceRefs: [
+	          ...artifact().findings[0].evidenceRefs,
+	          { refId: "source-url:https://www.example.test", sourceKind: "source_url" as const },
+	        ],
+	      }],
     }),
   });
   const invented = compareBusinessDiscoveryShadow({
@@ -125,4 +125,86 @@ test("comparison detects improvements, invented findings, lost limitations, and 
   assert.equal(lostLimitation.differences.some((item) => item.path.startsWith("limitations.")), true);
   assert.equal(inflatedConfidence.status, "blocked");
   assert.equal(inflatedConfidence.differences.some((item) => item.message.includes("without stronger evidence")), true);
+});
+
+test("comparison distinguishes evidence ordering, supported supersets, unsupported additions, and conflicts", () => {
+  const currentFinding = {
+    ...artifact().findings[0],
+    evidenceRefs: [
+      { refId: "evidence:section-boundary:/:navigation", sourceKind: "section_boundary" as const, routePath: "/" },
+      { refId: "evidence:section-boundary:/:footer", sourceKind: "section_boundary" as const, routePath: "/" },
+    ],
+  };
+  const orderingOnly = compareBusinessDiscoveryShadow({
+    current: artifact({ findings: [currentFinding] }),
+    shadow: artifact({ findings: [{ ...currentFinding, evidenceRefs: currentFinding.evidenceRefs.slice().reverse() }] }),
+  });
+  const supportedSuperset = compareBusinessDiscoveryShadow({
+    current: artifact({ findings: [currentFinding] }),
+    shadow: artifact({
+      findings: [{
+        ...currentFinding,
+        evidenceRefs: [
+          ...currentFinding.evidenceRefs,
+          { refId: "evidence:section-boundary:/:content", sourceKind: "section_boundary" as const, routePath: "/" },
+        ],
+      }],
+    }),
+  });
+  const unsupportedAddition = compareBusinessDiscoveryShadow({
+    current: artifact({ findings: [currentFinding] }),
+    shadow: artifact({
+      findings: [{
+        ...currentFinding,
+        evidenceRefs: [
+          ...currentFinding.evidenceRefs,
+          { refId: "evidence:route:/", sourceKind: "route" as const, routePath: "/" },
+        ],
+      }],
+    }),
+  });
+  const conflicting = compareBusinessDiscoveryShadow({
+    current: artifact({ findings: [currentFinding] }),
+    shadow: artifact({
+      findings: [{
+        ...currentFinding,
+        evidenceRefs: [
+          currentFinding.evidenceRefs[0]!,
+          { refId: "evidence:route:/", sourceKind: "route" as const, routePath: "/" },
+        ],
+      }],
+    }),
+  });
+
+  assert.equal(orderingOnly.status, "ready_with_expected_differences");
+  assert.equal(orderingOnly.differences.some((item) => item.classification === "ordering_only"), true);
+  assert.equal(supportedSuperset.status, "ready_with_expected_differences");
+  assert.equal(supportedSuperset.differences.some((item) => item.classification === "improvement"), true);
+  assert.equal(unsupportedAddition.status, "blocked");
+  assert.equal(unsupportedAddition.differences.some((item) => item.classification === "unsupported"), true);
+  assert.equal(conflicting.status, "blocked");
+  assert.equal(conflicting.differences.some((item) => item.classification === "conflicting"), true);
+});
+
+test("comparison accepts added traceable limitations and rejects duplicate semantic limitations", () => {
+  const addedTraceable = {
+    limitationId: "limitation:projection-transparency",
+    severity: "warning" as const,
+    code: "UPSTREAM_FIDELITY_LIMITATION",
+    message: "Rendered DOM fidelity is partial.",
+    evidenceRefs: [{ refId: "rendered-dom", sourceKind: "evidence_capture_baseline" as const, routePath: "/" }],
+  };
+  const accepted = compareBusinessDiscoveryShadow({
+    current: artifact(),
+    shadow: artifact({ limitations: [...artifact().limitations, addedTraceable] }),
+  });
+  const duplicate = compareBusinessDiscoveryShadow({
+    current: artifact(),
+    shadow: artifact({ limitations: [...artifact().limitations, artifact().limitations[0]!] }),
+  });
+
+  assert.equal(accepted.status, "ready_with_expected_differences");
+  assert.equal(accepted.differences.some((item) => item.message.includes("source-traceable limitation")), true);
+  assert.equal(duplicate.status, "blocked");
+  assert.equal(duplicate.differences.some((item) => item.message.includes("duplicate semantic limitations")), true);
 });

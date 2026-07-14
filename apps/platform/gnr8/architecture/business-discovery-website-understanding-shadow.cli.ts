@@ -1,4 +1,5 @@
 import type { BusinessDiscoveryBuilderInput } from "./business-discovery-builder";
+import type { BusinessDiscoveryArtifact, BusinessDiscoveryLimitation } from "./business-discovery-contract";
 import { loadBusinessDiscoveryArtifactById } from "./business-discovery-persistence";
 import { validateBusinessDiscoveryInputEquivalence } from "./business-discovery-input-equivalence";
 import { compareBusinessDiscoveryShadow } from "./business-discovery-shadow-comparison";
@@ -82,6 +83,84 @@ function businessDiscoveryInputFromSummary(input: {
   };
 }
 
+function refKey(ref: { sourceKind: string; refId: string; routePath?: string }): string {
+  return `${ref.sourceKind}:${ref.refId}:${ref.routePath ?? ""}`;
+}
+
+function findingKindSet(artifact: BusinessDiscoveryArtifact): string[] {
+  return [...new Set(artifact.findings.map((finding) => finding.kind))].sort((left, right) => left.localeCompare(right));
+}
+
+function findingEvidenceByKind(input: {
+  current: BusinessDiscoveryArtifact;
+  shadow: BusinessDiscoveryArtifact;
+  kind: string;
+}) {
+  const currentFinding = input.current.findings.find((finding) => finding.kind === input.kind) ?? null;
+  const shadowFinding = input.shadow.findings.find((finding) => finding.kind === input.kind) ?? null;
+  const currentRefs = (currentFinding?.evidenceRefs ?? []).map(refKey).sort((left, right) => left.localeCompare(right));
+  const shadowRefs = (shadowFinding?.evidenceRefs ?? []).map(refKey).sort((left, right) => left.localeCompare(right));
+  return {
+    kind: input.kind,
+    currentFindingId: currentFinding?.findingId ?? null,
+    shadowFindingId: shadowFinding?.findingId ?? null,
+    currentRefs,
+    shadowRefs,
+    missingRefs: currentRefs.filter((ref) => !shadowRefs.includes(ref)),
+    addedRefs: shadowRefs.filter((ref) => !currentRefs.includes(ref)),
+    currentConfidence: currentFinding?.confidence.level ?? null,
+    shadowConfidence: shadowFinding?.confidence.level ?? null,
+  };
+}
+
+function findingCoverage(input: { current: BusinessDiscoveryArtifact; shadow: BusinessDiscoveryArtifact }) {
+  const currentKinds = findingKindSet(input.current);
+  const shadowKinds = findingKindSet(input.shadow);
+  return {
+    currentKinds,
+    shadowKinds,
+    missingKinds: currentKinds.filter((kind) => !shadowKinds.includes(kind)),
+    addedKinds: shadowKinds.filter((kind) => !currentKinds.includes(kind)),
+  };
+}
+
+function limitationKey(item: BusinessDiscoveryLimitation): string {
+  return `${item.code}:${item.message}`;
+}
+
+function classifyAddedLimitation(item: BusinessDiscoveryLimitation): string {
+  if (item.code === "UPSTREAM_FIDELITY_LIMITATION") return "verbatim_upstream_fidelity_preservation";
+  if (item.code === "IMPORT_DIAGNOSTIC_OBSERVED") return "expected_projection_transparency";
+  if ((item.evidenceRefs ?? []).length === 0) return "new_regression";
+  return "source_traceable_added_limitation";
+}
+
+function limitationDelta(input: { current: BusinessDiscoveryArtifact; shadow: BusinessDiscoveryArtifact }) {
+  const currentKeys = new Set(input.current.limitations.map(limitationKey));
+  const shadowKeys = new Set(input.shadow.limitations.map(limitationKey));
+  const added = input.shadow.limitations.filter((item) => !currentKeys.has(limitationKey(item)));
+  const missing = input.current.limitations.filter((item) => !shadowKeys.has(limitationKey(item)));
+  const duplicateKeys = input.shadow.limitations
+    .map(limitationKey)
+    .filter((key, index, keys) => keys.indexOf(key) !== index)
+    .sort((left, right) => left.localeCompare(right));
+  const addedClassifications = added.reduce<Record<string, number>>((counts, item) => {
+    const classification = classifyAddedLimitation(item);
+    counts[classification] = (counts[classification] ?? 0) + 1;
+    return counts;
+  }, {});
+  return {
+    currentCount: input.current.limitations.length,
+    shadowCount: input.shadow.limitations.length,
+    addedCount: added.length,
+    missingCount: missing.length,
+    duplicateSemanticLimitationCount: [...new Set(duplicateKeys)].length,
+    addedClassifications,
+    addedCodes: [...new Set(added.map((item) => item.code))].sort((left, right) => left.localeCompare(right)),
+    missingCodes: [...new Set(missing.map((item) => item.code))].sort((left, right) => left.localeCompare(right)),
+  };
+}
+
 async function validateTarget(target: (typeof TARGETS)[number]) {
   const siteVersion = await getSiteVersion(target.siteVersionId);
   const current = await loadBusinessDiscoveryArtifactById({
@@ -131,11 +210,17 @@ async function validateTarget(target: (typeof TARGETS)[number]) {
       noWrite: true,
     };
   }
-  const comparison = compareBusinessDiscoveryShadow({
-    current: current.artifact,
-    shadow: firstShadow.artifact,
-  });
-  return {
+	  const comparison = compareBusinessDiscoveryShadow({
+	    current: current.artifact,
+	    shadow: firstShadow.artifact,
+	  });
+	  const coverage = findingCoverage({ current: current.artifact, shadow: firstShadow.artifact });
+	  const contentThemeEvidence = findingEvidenceByKind({
+	    current: current.artifact,
+	    shadow: firstShadow.artifact,
+	    kind: "content_theme_observed",
+	  });
+	  return {
     target: target.label,
     siteVersionId: target.siteVersionId,
     projectionId: projectionResult.projection.projectionId,
@@ -151,20 +236,29 @@ async function validateTarget(target: (typeof TARGETS)[number]) {
       duplicate: equivalence.duplicate,
       migrationBlockers: equivalence.migrationBlockers,
     },
-    comparison: {
-      status: comparison.status,
-      summary: comparison.summary,
-      cutoverBlockers: comparison.cutoverBlockers,
-      differences: comparison.differences.map((item) => ({
+	    comparison: {
+	      status: comparison.status,
+	      summary: comparison.summary,
+	      cutoverBlockers: comparison.cutoverBlockers,
+	      conflicts: comparison.differences.filter((item) => item.classification === "conflicting"),
+	      unexpectedDifferences: comparison.differences.filter((item) => item.classification === "unexpected" || item.classification === "unsupported"),
+	      differences: comparison.differences.map((item) => ({
         path: item.path,
         classification: item.classification,
         message: item.message,
         blocker: item.blocker,
       })),
-    },
-    deterministicRebuildEquality: firstShadow.contentIdentity === secondShadow.contentIdentity &&
-      firstShadow.shadowArtifactId === secondShadow.shadowArtifactId,
-    noWrite: true,
+	    },
+	    findingCoverage: coverage,
+	    contentThemeEvidence,
+	    limitationDelta: limitationDelta({ current: current.artifact, shadow: firstShadow.artifact }),
+	    confidenceComparison: {
+	      current: current.artifact.confidence,
+	      shadow: firstShadow.artifact.confidence,
+	    },
+	    deterministicRebuildEquality: firstShadow.contentIdentity === secondShadow.contentIdentity &&
+	      firstShadow.shadowArtifactId === secondShadow.shadowArtifactId,
+	    noWrite: true,
   };
 }
 
@@ -175,10 +269,12 @@ async function main() {
   }
   console.log(JSON.stringify({
     generatedAt: "2026-07-14T00:00:00.000Z",
-    mode: "read_only_shadow_validation",
-    wroteBusinessDiscovery: false,
-    wroteDownstreamArtifacts: false,
-    results,
+	    mode: "read_only_shadow_validation",
+	    wroteBusinessDiscovery: false,
+	    wroteProjection: false,
+	    wroteDownstreamArtifacts: false,
+	    wroteRuntimeCutover: false,
+	    results,
   }, null, 2));
   if (results.some((result) =>
     ("status" in result && result.status === "blocked") ||

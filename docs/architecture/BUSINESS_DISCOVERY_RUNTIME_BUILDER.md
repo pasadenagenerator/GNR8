@@ -358,7 +358,29 @@ Source Website Understanding Projection
 ```
 
 Real-target WU-4 validation produced 100% input dependency coverage for ODV
-and ViroiDoc, but cutover remains blocked because both shadow artifacts lose
-at least one current section-boundary evidence ref on the
-`content_theme_observed` finding. Future runtime integration must preserve
-that lineage before this builder can consume WU as its canonical input.
+and ViroiDoc, but cutover was blocked because both shadow artifacts lost at
+least one current section-boundary evidence ref on the
+`content_theme_observed` finding. WU-5 closes that lineage blocker.
+
+## WU-5 Section Evidence Aggregation Note
+
+WU-5 preserves the current `content_theme_observed` section evidence lineage
+through the WU shadow path. The builder now preserves exact upstream
+section-boundary refs from `SectionBoundaryEvidence.sourceEvidenceRefs` when
+they are present.
+
+Canonical aggregation rule:
+
+- aggregate all source sections that contribute to the content theme finding;
+- preserve every exact `evidence:section-boundary:<routePath>:<sectionId>` ref;
+- deduplicate exact duplicate refs only;
+- keep distinct footer, navigation, content, hero, and other region refs
+  separate;
+- do not collapse refs with similar labels or semantic types;
+- fall back to the legacy deterministic `sectionRef(routePath, sectionId)` only
+  when upstream section evidence does not provide stable source refs.
+
+Real-target WU-5 validation shows ODV and ViroiDoc retain all current
+`content_theme_observed` refs with no missing or added content-theme refs.
+Optional runtime integration is `ready_with_expected_differences`; this builder
+still has not been switched to consume WU at runtime.

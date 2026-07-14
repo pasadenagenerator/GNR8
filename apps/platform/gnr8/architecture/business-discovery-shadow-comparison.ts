@@ -12,10 +12,12 @@ export type BusinessDiscoveryShadowDifferenceClassification =
   | "equivalent"
   | "semantically_equivalent"
   | "expected_projection_normalization"
+  | "ordering_only"
   | "improvement"
   | "regression"
   | "missing"
   | "conflicting"
+  | "unsupported"
   | "unexpected";
 
 export type BusinessDiscoveryShadowCutoverReadiness =
@@ -76,6 +78,67 @@ function refsEqual(left: BusinessDiscoveryEvidenceRef[], right: BusinessDiscover
   const l = left.map(refsKey).sort();
   const r = right.map(refsKey).sort();
   return l.length === r.length && l.every((value, index) => value === r[index]);
+}
+
+function refsOrderedEqual(left: BusinessDiscoveryEvidenceRef[], right: BusinessDiscoveryEvidenceRef[]): boolean {
+  const l = left.map(refsKey);
+  const r = right.map(refsKey);
+  return l.length === r.length && l.every((value, index) => value === r[index]);
+}
+
+function compareEvidenceRefs(input: {
+  currentRefs: BusinessDiscoveryEvidenceRef[];
+  shadowRefs: BusinessDiscoveryEvidenceRef[];
+  lostMessage: string;
+  supersetMessage: string;
+  orderingMessage: string;
+  unsupportedMessage: string;
+  conflictingMessage: string;
+}): null | Pick<BusinessDiscoveryShadowDifference, "classification" | "message" | "blocker"> {
+  if (refsOrderedEqual(input.currentRefs, input.shadowRefs)) return null;
+  if (refsEqual(input.currentRefs, input.shadowRefs)) {
+    return {
+      classification: "ordering_only",
+      message: input.orderingMessage,
+      blocker: false,
+    };
+  }
+
+  const currentKeys = input.currentRefs.map(refsKey);
+  const shadowKeys = input.shadowRefs.map(refsKey);
+  const currentSet = new Set(currentKeys);
+  const shadowSet = new Set(shadowKeys);
+  const lost = currentKeys.filter((ref) => !shadowSet.has(ref));
+  const added = input.shadowRefs.filter((ref) => !currentSet.has(refsKey(ref)));
+  const currentKinds = new Set(input.currentRefs.map((ref) => ref.sourceKind));
+  const unsupportedAdded = added.filter((ref) => !currentKinds.has(ref.sourceKind));
+
+  if (lost.length > 0 && added.length > 0) {
+    return {
+      classification: "conflicting",
+      message: input.conflictingMessage,
+      blocker: true,
+    };
+  }
+  if (lost.length > 0) {
+    return {
+      classification: "regression",
+      message: input.lostMessage,
+      blocker: true,
+    };
+  }
+  if (unsupportedAdded.length > 0) {
+    return {
+      classification: "unsupported",
+      message: input.unsupportedMessage,
+      blocker: true,
+    };
+  }
+  return {
+    classification: "improvement",
+    message: input.supersetMessage,
+    blocker: false,
+  };
 }
 
 function limitationKey(item: BusinessDiscoveryLimitation): string {
@@ -197,17 +260,25 @@ function compareFindings(
         blocker: false,
       });
     }
-    if (!refsEqual(currentFinding.evidenceRefs, shadowFinding.evidenceRefs)) {
+    const evidenceDifference = compareEvidenceRefs({
+      currentRefs: currentFinding.evidenceRefs,
+      shadowRefs: shadowFinding.evidenceRefs,
+      lostMessage: "Shadow artifact lost at least one current evidence reference.",
+      supersetMessage: "Shadow artifact carries a complete supported evidence superset without changing finding meaning.",
+      orderingMessage: "Shadow artifact preserved the same evidence refs with deterministic ordering differences only.",
+      unsupportedMessage: "Shadow artifact added unsupported evidence refs not present in the current finding evidence family.",
+      conflictingMessage: "Shadow artifact both lost current evidence and added different evidence refs.",
+    });
+    if (evidenceDifference) {
       const currentRefs = currentFinding.evidenceRefs.map(refsKey);
       const shadowRefs = shadowFinding.evidenceRefs.map(refsKey);
-      const lost = currentRefs.filter((ref) => !shadowRefs.includes(ref));
       add(differences, {
         path: `findings.${currentFinding.findingId}.evidenceRefs`,
-        classification: lost.length > 0 ? "regression" : "improvement",
-        message: lost.length > 0 ? "Shadow artifact lost at least one current evidence reference." : "Shadow artifact carries stronger evidence lineage without changing finding meaning.",
+        classification: evidenceDifference.classification,
+        message: evidenceDifference.message,
         currentValue: currentRefs,
         shadowValue: shadowRefs,
-        blocker: lost.length > 0,
+        blocker: evidenceDifference.blocker,
       });
     }
     if (CONFIDENCE_RANK[shadowFinding.confidence.level] > CONFIDENCE_RANK[currentFinding.confidence.level]) {
@@ -249,7 +320,24 @@ function compareLimitations(
   current: BusinessDiscoveryArtifact,
   shadow: BusinessDiscoveryArtifact,
 ): void {
+  const shadowKeyCounts = new Map<string, number>();
+  for (const limitation of shadow.limitations) {
+    const key = limitationKey(limitation);
+    shadowKeyCounts.set(key, (shadowKeyCounts.get(key) ?? 0) + 1);
+  }
+  for (const [key, count] of shadowKeyCounts.entries()) {
+    if (count > 1) {
+      add(differences, {
+        path: `limitations.duplicates.${key}`,
+        classification: "unsupported",
+        message: "Shadow artifact contains duplicate semantic limitations instead of deduping them.",
+        shadowValue: key,
+      });
+    }
+  }
+
   const shadowByKey = new Map(shadow.limitations.map((item) => [limitationKey(item), item]));
+  const currentKeys = new Set(current.limitations.map(limitationKey));
   for (const currentLimitation of current.limitations) {
     const shadowLimitation = shadowByKey.get(limitationKey(currentLimitation));
     if (!shadowLimitation) {
@@ -271,19 +359,40 @@ function compareLimitations(
         blocker: currentLimitation.severity === "blocker",
       });
     }
-    if (!refsEqual(currentLimitation.evidenceRefs ?? [], shadowLimitation.evidenceRefs ?? [])) {
+    const evidenceDifference = compareEvidenceRefs({
+      currentRefs: currentLimitation.evidenceRefs ?? [],
+      shadowRefs: shadowLimitation.evidenceRefs ?? [],
+      lostMessage: "Shadow limitation lost current evidence lineage.",
+      supersetMessage: "Shadow limitation has a complete supported evidence superset.",
+      orderingMessage: "Shadow limitation preserved the same evidence refs with ordering differences only.",
+      unsupportedMessage: "Shadow limitation added unsupported evidence refs.",
+      conflictingMessage: "Shadow limitation both lost current evidence and added different evidence refs.",
+    });
+    if (evidenceDifference) {
       const currentRefs = (currentLimitation.evidenceRefs ?? []).map(refsKey);
       const shadowRefs = (shadowLimitation.evidenceRefs ?? []).map(refsKey);
-      const lost = currentRefs.filter((ref) => !shadowRefs.includes(ref));
       add(differences, {
         path: `limitations.${currentLimitation.limitationId}.evidenceRefs`,
-        classification: lost.length > 0 ? "regression" : "improvement",
-        message: lost.length > 0 ? "Shadow limitation lost current evidence lineage." : "Shadow limitation has stronger lineage.",
+        classification: evidenceDifference.classification,
+        message: evidenceDifference.message,
         currentValue: currentRefs,
         shadowValue: shadowRefs,
-        blocker: lost.length > 0,
+        blocker: evidenceDifference.blocker,
       });
     }
+  }
+  for (const shadowLimitation of shadow.limitations) {
+    if (currentKeys.has(limitationKey(shadowLimitation))) continue;
+    const traceable = (shadowLimitation.evidenceRefs ?? []).length > 0;
+    add(differences, {
+      path: `limitations.${shadowLimitation.limitationId}`,
+      classification: traceable ? "expected_projection_normalization" : "unsupported",
+      message: traceable
+        ? "Shadow artifact carries an added source-traceable limitation from Website Understanding projection transparency."
+        : "Shadow artifact carries an added limitation without source-traceable evidence.",
+      shadowValue: shadowLimitation,
+      blocker: !traceable,
+    });
   }
 }
 
@@ -313,9 +422,10 @@ export function compareBusinessDiscoveryShadow(input: {
   const blockerCount = differences.filter((item) => item.blocker).length;
   const expectedOnly = differences.every((item) =>
     item.classification === "equivalent" ||
-    item.classification === "semantically_equivalent" ||
-    item.classification === "expected_projection_normalization" ||
-    item.classification === "improvement");
+	    item.classification === "semantically_equivalent" ||
+	    item.classification === "expected_projection_normalization" ||
+	    item.classification === "ordering_only" ||
+	    item.classification === "improvement");
   const status: BusinessDiscoveryShadowCutoverReadiness = blockerCount > 0
     ? "blocked"
     : differences.length === 0

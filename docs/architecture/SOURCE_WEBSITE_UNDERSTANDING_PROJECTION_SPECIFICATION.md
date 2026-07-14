@@ -156,6 +156,26 @@ observation artifacts listed in the forbidden feedback section.
 | StructurePlan | Optional context only | planned organization from approved candidates | Planning projection | stale/missing context does not block source understanding | reviewed source refs remain separate | planning context |
 | current limitations and diagnostics | Required where emitted upstream | completeness, stale inputs, conflicts, unsupported evidence, mapper limits | Layer-local diagnostics | propagate and normalize; never hide; Evidence Capture baseline/fidelity limitations must preserve original messages, codes/types, severity/state, source refs, and artifact refs | n/a | governance |
 
+WU-5 section lineage requirement:
+
+Source section projection rows must preserve, when available, the exact upstream
+section-boundary identity in addition to the WU projection identity:
+
+- `sectionId`: deterministic WU projection ID;
+- `sourceSectionId`: original upstream section-boundary or planning section ID;
+- `semanticType`: upstream semantic label when available;
+- `regionType`: exact `SectionBoundaryRegionType` when available;
+- `evidenceRefs`: exact upstream refs, including
+  `evidence:section-boundary:<routePath>:<sectionId>`;
+- `sourceCandidateId`: Candidate Discovery candidate ref when applicable;
+- `reviewState`: Candidate Review state when applicable;
+- `sourceArtifactRefs`: producing source artifact refs;
+- `limitations`: local limitations without inferred business meaning.
+
+The projection must not create section-boundary refs from semantic-import-only
+sections. If a downstream adapter requires section-boundary lineage, it must use
+only exact projected refs or fail closed.
+
 ## Authority Hierarchy
 
 Authority order:

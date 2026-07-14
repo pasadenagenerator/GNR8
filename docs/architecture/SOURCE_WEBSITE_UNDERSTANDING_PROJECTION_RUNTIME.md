@@ -249,7 +249,26 @@ The shadow adapter consumes only the projection object, reuses
 does not read raw artifacts, import Business Discovery persistence, consume
 downstream artifacts, or mutate provenance.
 
-Current WU-4 real-target projection IDs:
+WU-5 section-lineage runtime update:
+
+- `SourceSectionUnderstanding` now distinguishes WU projection section identity
+  from original source section-boundary identity with `sourceSectionId`.
+- Observed sections now carry explicit `regionType` when the upstream section
+  evidence provides one.
+- First Limited Dry Run section rows preserve exact
+  `evidence:section-boundary:<routePath>:<sectionId>` refs and producing source
+  artifact refs.
+- The Business Discovery WU adapter consumes only these projection fields and
+  fails closed when evidence-capture section lineage is internally inconsistent.
+
+Current WU-5 real-target projection IDs:
+
+- ODV:
+  `source_website_understanding_0caa89099ee02c9469b539cf2b2d0613`
+- ViroiDoc:
+  `source_website_understanding_72cece90151974f980a2abf7b5528709`
+
+Historical WU-4 real-target projection IDs:
 
 - ODV:
   `source_website_understanding_b0cd478c45734c2e6f31db84ed9ad2c3`
@@ -261,10 +280,11 @@ now includes `sourceSiteId` and verbatim upstream limitations. This is
 expected deterministic identity behavior; no persisted projection ID was
 rewritten.
 
-WU-4 dependency coverage is 100% for ODV and ViroiDoc, with no missing or
-partial Business Discovery inputs. Runtime cutover is still blocked because
-shadow Business Discovery loses at least one current section-boundary
-evidence ref on the `content_theme_observed` finding for both targets.
+WU-5 keeps dependency coverage at 100% for ODV and ViroiDoc, with no missing or
+partial Business Discovery inputs. Shadow Business Discovery now preserves the
+current `content_theme_observed` section-boundary evidence refs exactly for both
+targets. Optional runtime integration is `ready_with_expected_differences`; no
+runtime switch or projection persistence occurred.
 
 WU-3 does not migrate Business Discovery, add classifiers, add extraction,
 persist projections, mutate DBT/WDB/WGP, generate, approve, publish, deploy,
@@ -275,8 +295,8 @@ or change production data.
 Recommended next phase:
 
 ```text
-WU-4 - Business Discovery Website Understanding Shadow Adapter
+WU-6 - Optional Business Discovery Runtime Integration Plan
 ```
 
-Keep WU-4 non-persistent and focused on a shadow adapter plus ODV/ViroiDoc
-artifact equivalence. Do not switch Business Discovery runtime behavior yet.
+Keep WU-6 planning-only until explicitly authorized. Do not switch Business
+Discovery runtime behavior by implication.

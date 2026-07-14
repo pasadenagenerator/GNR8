@@ -183,6 +183,19 @@ function sectionRef(routePath: string, sectionId: string): BusinessDiscoveryEvid
   };
 }
 
+function sectionBoundaryRefs(section: SectionBoundaryEvidence): BusinessDiscoveryEvidenceRef[] {
+  const stableBoundaryRefs = (section.sourceEvidenceRefs ?? [])
+    .filter((refId) => refId.startsWith("evidence:section-boundary:"))
+    .map((refId) => ({
+      refId,
+      sourceKind: "section_boundary" as const,
+      routePath: section.routePath,
+    }));
+  return stableBoundaryRefs.length > 0
+    ? uniqueRefs(stableBoundaryRefs)
+    : [sectionRef(section.routePath, section.sectionId)];
+}
+
 function baselineRef(routePath: string): BusinessDiscoveryEvidenceRef {
   return {
     refId: `evidence:capture-baseline:${routePath}`,
@@ -493,7 +506,7 @@ function buildFindings(input: BusinessDiscoveryBuilderInput): BusinessDiscoveryF
       kind: "content_theme_observed",
       token: sectionTypes.join("|"),
       summary: `Captured section evidence includes website content regions: ${sectionTypes.join(", ")}.`,
-      evidenceRefs: sectionEvidence.map((section) => sectionRef(section.routePath, section.sectionId)),
+      evidenceRefs: uniqueRefs(sectionEvidence.flatMap(sectionBoundaryRefs)),
       confidence: confidence("MEDIUM", ["section_boundary_types_observed"]),
       diagnostics: [`SECTION_TYPE_COUNT:${sectionTypes.length}`],
     });

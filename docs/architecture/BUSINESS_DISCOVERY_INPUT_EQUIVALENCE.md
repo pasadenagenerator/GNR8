@@ -13,6 +13,23 @@ or change production data.
 
 ## Executive Result
 
+WU-5 update, 2026-07-14:
+
+Website Understanding still covers 100% of current Business Discovery input
+dependencies for ODV and ViroiDoc. The WU-4 section-lineage blocker is closed:
+current `content_theme_observed` section-boundary refs are preserved exactly in
+the shadow Business Discovery artifacts.
+
+| Target | Business Discovery artifact | WU projection | Missing finding kinds | Added finding kinds | Missing content-theme refs | Added content-theme refs | Readiness |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| ODV | `business_discovery_7b37413651d79de0d109e31690a34b62` | `source_website_understanding_0caa89099ee02c9469b539cf2b2d0613` | 0 | 0 | 0 | 0 | `ready_with_expected_differences` |
+| ViroiDoc | `business_discovery_360fa099cbcede288c2d0e04f2ec7986` | `source_website_understanding_72cece90151974f980a2abf7b5528709` | 0 | 0 | 0 | 0 | `ready_with_expected_differences` |
+
+The remaining differences are projection-normalized IDs/tokens, supported
+evidence supersets on non-content-theme findings, and source-traceable
+projection-transparency limitations. They are not input-coverage blockers. No
+Business Discovery runtime switch occurred.
+
 WU-4 update, 2026-07-14:
 
 Website Understanding now covers 100% of current Business Discovery input
@@ -31,10 +48,11 @@ Current WU-4 real-target matrix:
 | ODV | `business_discovery_7b37413651d79de0d109e31690a34b62` | `source_website_understanding_b0cd478c45734c2e6f31db84ed9ad2c3` | 100% | 0 | 0 | 0 | 0 |
 | ViroiDoc | `business_discovery_360fa099cbcede288c2d0e04f2ec7986` | `source_website_understanding_d80895ffc313fb393b15ecbef3e90c1a` | 100% | 0 | 0 | 0 | 0 |
 
-This is input equivalence only. WU-4 shadow comparison still blocks runtime
-cutover because the shadow `content_theme_observed` finding loses at least one
-current section-boundary evidence ref for both ODV and ViroiDoc. See
-`docs/architecture/BUSINESS_DISCOVERY_WEBSITE_UNDERSTANDING_SHADOW_ADAPTER.md`.
+This was input equivalence only. WU-4 shadow comparison still blocked runtime
+cutover because the shadow `content_theme_observed` finding lost at least one
+current section-boundary evidence ref for both ODV and ViroiDoc. WU-5 closes
+that blocker; see
+`docs/architecture/BUSINESS_DISCOVERY_SECTION_EVIDENCE_LINEAGE_PRESERVATION.md`.
 
 ## WU-3 Result
 

@@ -153,8 +153,40 @@ schema, API, worker, extraction, parsing, classifier, or production mutation.
 Next safe step:
 
 ```text
-WU-4 - Business Discovery Website Understanding Shadow Adapter
+WU-6 - Optional Business Discovery Runtime Integration Plan
 ```
+
+## Phase WU-5 Section Evidence Lineage Addendum
+
+WU-5 closes the WU-4 Business Discovery shadow cutover blocker without
+performing a runtime cutover.
+
+What changed:
+
+- Source Website Understanding sections now preserve original
+  section-boundary identity separately from WU projection identity.
+- The WU -> Business Discovery adapter maps exact stable section-boundary refs
+  into existing Business Discovery builder input.
+- The Business Discovery builder preserves all upstream section-boundary refs
+  during `content_theme_observed` aggregation and dedupes exact duplicates only.
+- The shadow comparator distinguishes exact equality, ordering-only changes,
+  supported supersets, lost refs, unsupported added refs, and conflicting refs.
+- Added limitations are accepted only when source-traceable and
+  non-contradictory.
+
+Real-target result:
+
+- ODV: 12 current / 12 shadow findings, 0 missing content-theme refs, 0 added
+  content-theme refs, `MEDIUM` / `MEDIUM` confidence,
+  `ready_with_expected_differences`.
+- ViroiDoc: 17 current / 17 shadow findings, 0 missing content-theme refs, 0
+  added content-theme refs, `MEDIUM` / `MEDIUM` confidence,
+  `ready_with_expected_differences`.
+
+No Business Discovery runtime switch, projection persistence, Business
+Discovery persistence, DBT/BUR/Alignment/WDB/WGP regeneration, schema, API, UI,
+worker, generation, publishing, deployment, DNS, or production mutation
+occurred.
 
 ## MVP-2.0-ARCH Generation Cycle Addendum
 
@@ -2000,7 +2032,7 @@ What changed:
   WDB/WGP regeneration, generation, publishing, schema, API, worker, or
   production mutation occurred.
 
-Current pipeline gate:
+Historical WU-4 pipeline gate:
 
 ```text
 Website Understanding -> Business Discovery runtime cutover: BLOCKED
@@ -2009,8 +2041,14 @@ Website Understanding -> Business Discovery runtime cutover: BLOCKED
 Reason: both real-target shadow artifacts lose at least one current
 section-boundary evidence ref on the `content_theme_observed` finding.
 
+WU-5 closes this blocker. The current pipeline gate is:
+
+```text
+Website Understanding -> Business Discovery optional runtime integration: READY_WITH_EXPECTED_DIFFERENCES
+```
+
 Next phase:
 
 ```text
-WU-5 - Section Evidence Lineage Preservation for Optional Business Discovery Cutover
+WU-6 - Optional Business Discovery Runtime Integration Plan
 ```

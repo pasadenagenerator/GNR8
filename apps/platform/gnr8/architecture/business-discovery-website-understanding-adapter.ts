@@ -4,7 +4,7 @@ import {
   type BusinessDiscoveryBuilderInput,
 } from "./business-discovery-builder";
 import type { BusinessDiscoveryArtifact } from "./business-discovery-contract";
-import type { CaptureExpansionConfidenceLevel, SectionBoundaryRegionType } from "./evidence-capture-layout-contract";
+import type { CaptureExpansionConfidenceLevel, SectionBoundaryEvidence, SectionBoundaryRegionType } from "./evidence-capture-layout-contract";
 import type {
   SourceNavigationUnderstanding,
   SourceSectionUnderstanding,
@@ -77,6 +77,10 @@ function sectionRegionType(value: string | null | undefined): SectionBoundaryReg
     : "unknown";
 }
 
+function sectionBoundaryRef(routePathValue: string, sectionId: string): string {
+  return `evidence:section-boundary:${routePathValue}:${sectionId}`;
+}
+
 function routePath(value: string | null | undefined): string {
   const clean = String(value ?? "/").split("#")[0].split("?")[0].trim().replace(/\\/g, "/");
   const withSlash = clean.startsWith("/") ? clean : `/${clean}`;
@@ -137,17 +141,85 @@ function navigationEvidence(projection: SourceWebsiteUnderstandingProjection) {
   }));
 }
 
-function sectionBoundaryEvidence(projection: SourceWebsiteUnderstandingProjection) {
-  return projection.sections
-    .filter((item): item is SourceSectionUnderstanding => !item.plannedOnly && Boolean(item.semanticType))
-    .map((item, index) => ({
-      sectionId: item.sectionId,
-      routePath: routePath(item.routePath ?? "/"),
+function sectionBoundaryRefsForSection(item: SourceSectionUnderstanding): string[] {
+  const path = routePath(item.routePath ?? "/");
+  const refs = uniqueSorted(item.evidenceRefs.filter((refId) => refId.startsWith(`evidence:section-boundary:${path}:`)));
+  const exactSourceRef = item.sourceSectionId ? sectionBoundaryRef(path, item.sourceSectionId) : null;
+  return exactSourceRef && refs.includes(exactSourceRef) ? [exactSourceRef, ...refs.filter((refId) => refId !== exactSourceRef)] : refs;
+}
+
+function sectionIdFromBoundaryRef(routePathValue: string, refId: string): string | null {
+  const prefix = `evidence:section-boundary:${routePathValue}:`;
+  return refId.startsWith(prefix) ? text(refId.slice(prefix.length)) : null;
+}
+
+function sectionBoundaryEvidence(projection: SourceWebsiteUnderstandingProjection): {
+  evidence: SectionBoundaryEvidence[];
+  blockers: BusinessDiscoveryWebsiteUnderstandingAdapterBlocker[];
+  diagnostics: string[];
+} {
+  const blockers: BusinessDiscoveryWebsiteUnderstandingAdapterBlocker[] = [];
+  const diagnostics: string[] = [];
+  const evidence: SectionBoundaryEvidence[] = [];
+  const orderedSections = projection.sections
+    .filter((item): item is SourceSectionUnderstanding => !item.plannedOnly && item.observedBoundary)
+    .slice()
+    .sort((left, right) =>
+      String(left.routePath ?? "/").localeCompare(String(right.routePath ?? "/")) ||
+      left.order - right.order ||
+      left.sectionId.localeCompare(right.sectionId));
+
+  for (const [index, item] of orderedSections.entries()) {
+    const path = routePath(item.routePath ?? "/");
+    const regionType = item.regionType ?? sectionRegionType(item.semanticType);
+    const boundaryRefs = sectionBoundaryRefsForSection(item);
+    const firstBoundarySectionId = boundaryRefs.length > 0 ? sectionIdFromBoundaryRef(path, boundaryRefs[0]!) : null;
+    const sourceSectionId = item.sourceSectionId ?? firstBoundarySectionId;
+    const evidenceCaptureSection = (item.sourceArtifactRefs ?? []).some((ref) => ref.kind === "first_limited_dry_run_output" || ref.source === "evidence_capture");
+
+    if (regionType === "unknown") {
+      diagnostics.push(`SECTION_BOUNDARY_REGION_UNKNOWN:${item.sectionId}`);
+      continue;
+    }
+    if (boundaryRefs.length === 0) {
+      if (evidenceCaptureSection) {
+        blockers.push({
+          code: "SECTION_BOUNDARY_REF_MISSING",
+          message: "Website Understanding section came from evidence capture but has no stable section-boundary evidence ref.",
+          sourceRefs: [item.sectionId, ...(item.sourceArtifactRefs ?? []).map((ref) => ref.artifactId).filter((ref): ref is string => Boolean(ref))],
+        });
+      }
+      diagnostics.push(`SECTION_BOUNDARY_REF_UNAVAILABLE:${item.sectionId}`);
+      continue;
+    }
+    if (!sourceSectionId) {
+      blockers.push({
+        code: "SECTION_BOUNDARY_SECTION_ID_MISSING",
+        message: "Website Understanding section has boundary refs but no recoverable source section ID.",
+        sourceRefs: [item.sectionId, ...boundaryRefs],
+      });
+      continue;
+    }
+    if (item.sourceSectionId && !boundaryRefs.includes(sectionBoundaryRef(path, item.sourceSectionId))) {
+      blockers.push({
+        code: "SECTION_BOUNDARY_REF_CONFLICT",
+        message: "Website Understanding section sourceSectionId conflicts with its stable section-boundary evidence refs.",
+        sourceRefs: [item.sectionId, item.sourceSectionId, ...boundaryRefs],
+      });
+      continue;
+    }
+    evidence.push({
+      sectionId: sourceSectionId,
+      routePath: path,
       selector: `source-understanding-section-${index}`,
       boundingBox: { x: 0, y: index, width: 1, height: 1 },
-      regionType: sectionRegionType(item.semanticType),
+      regionType,
       confidenceLevel: confidenceLevel(item.confidence.level),
-    }));
+      sourceEvidenceRefs: boundaryRefs,
+    });
+  }
+
+  return { evidence, blockers, diagnostics };
 }
 
 function routeCandidates(projection: SourceWebsiteUnderstandingProjection): string[] {
@@ -188,7 +260,10 @@ function syntheticCandidateDiscoveryResult(projection: SourceWebsiteUnderstandin
   };
 }
 
-function syntheticEvidenceCaptureBaseline(projection: SourceWebsiteUnderstandingProjection) {
+function syntheticEvidenceCaptureBaseline(
+  projection: SourceWebsiteUnderstandingProjection,
+  sectionBoundaryEvidence: SectionBoundaryEvidence[],
+) {
   const path = projection.routes[0]?.routePath ?? "/";
   return {
     kind: "evidence_capture_baseline",
@@ -201,7 +276,7 @@ function syntheticEvidenceCaptureBaseline(projection: SourceWebsiteUnderstanding
     captureStatus: projection.sourceIdentity.sourceAvailability === "failed" ? "failed" : "completed",
     captureExpansionEvidence: {
       layoutGeometryEvidence: [],
-      sectionBoundaryEvidence: sectionBoundaryEvidence(projection),
+      sectionBoundaryEvidence,
       navigationEvidence: navigationEvidence(projection),
     },
     persistedRefs: {
@@ -266,6 +341,15 @@ export function buildBusinessDiscoveryInputFromWebsiteUnderstanding(
     };
   }
 
+  const sectionEvidence = sectionBoundaryEvidence(projection);
+  if (sectionEvidence.blockers.length > 0) {
+    return {
+      status: "blocked",
+      blockers: sectionEvidence.blockers,
+      diagnostics: ["BUSINESS_DISCOVERY_WU_ADAPTER_BLOCKED", ...sectionEvidence.diagnostics],
+    };
+  }
+
   const candidateDiscovery = syntheticCandidateDiscoveryResult(projection);
   return {
     status: "ready",
@@ -276,7 +360,7 @@ export function buildBusinessDiscoveryInputFromWebsiteUnderstanding(
       sourceUrl: sourceUrl(projection),
       createdAt: projection.generatedAt,
       importProvenanceSummary: importProvenanceSummary(projection) as never,
-      evidenceCaptureBaseline: syntheticEvidenceCaptureBaseline(projection) as never,
+      evidenceCaptureBaseline: syntheticEvidenceCaptureBaseline(projection, sectionEvidence.evidence) as never,
       candidateDiscoveryArtifactId: candidateDiscovery.artifactId,
       candidateDiscoveryResult: candidateDiscovery.result as never,
     },
@@ -284,6 +368,7 @@ export function buildBusinessDiscoveryInputFromWebsiteUnderstanding(
       "BUSINESS_DISCOVERY_WU_ADAPTER_READY",
       "BUSINESS_DISCOVERY_WU_ADAPTER_NO_PERSISTENCE",
       "BUSINESS_DISCOVERY_WU_ADAPTER_NO_RAW_ARTIFACT_ACCESS",
+      ...sectionEvidence.diagnostics,
     ],
   };
 }

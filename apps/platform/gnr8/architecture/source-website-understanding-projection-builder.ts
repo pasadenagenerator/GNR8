@@ -3,6 +3,7 @@ import type { RawImportedSiteArtifact, RuntimeImportProvenanceSummary } from "..
 import type { CandidateDiscoveryResult } from "./candidate-discovery-contract";
 import type { CandidateReviewPackage } from "./candidate-review-contract";
 import type { EvidenceCaptureBaselineArtifactRecord } from "./evidence-capture-baseline-artifact";
+import { SECTION_BOUNDARY_REGION_TYPES, type SectionBoundaryRegionType } from "./evidence-capture-layout-contract";
 import type { FirstLimitedDryRunOutput } from "./first-limited-dry-run-contract";
 import type { ReconstructionPackage } from "./reconstruction-package-contract";
 import type { StructurePlan } from "./structure-plan-contract";
@@ -121,6 +122,12 @@ function routePath(value: string | null | undefined): string {
   const clean = String(value ?? "/").split("#")[0].split("?")[0].trim().replace(/\\/g, "/");
   const withSlash = clean.startsWith("/") ? clean : `/${clean}`;
   return withSlash.replace(/\/{2,}/g, "/").replace(/\/+$/g, "") || "/";
+}
+
+function sectionRegionType(value: string | null | undefined): SectionBoundaryRegionType | null {
+  return value && SECTION_BOUNDARY_REGION_TYPES.includes(value as SectionBoundaryRegionType)
+    ? value as SectionBoundaryRegionType
+    : null;
 }
 
 function stableId(prefix: string, parts: unknown): string {
@@ -427,13 +434,42 @@ function buildNavigation(input: SourceWebsiteUnderstandingBuilderInput, reviews:
 function buildSections(input: SourceWebsiteUnderstandingBuilderInput, reviews: Map<string, ReviewedCandidateState>): SourceSectionUnderstanding[] {
   const sections: SourceSectionUnderstanding[] = [];
   let order = 0;
+  const semanticImportArtifactRef: SourceWebsiteUnderstandingArtifactReference | null = input.provenanceSummary?.semanticImport ? {
+    kind: "semantic_import",
+    artifactId: stableId("semantic-import", { siteVersionId: input.siteVersionId, title: input.provenanceSummary.semanticImport.title }),
+    canonicalId: null,
+    status: input.provenanceSummary.semanticImport.captureMode,
+    source: "semantic_import",
+  } : null;
+  const firstLimitedDryRunArtifactRef: SourceWebsiteUnderstandingArtifactReference | null = input.firstLimitedDryRunOutput ? {
+    kind: "first_limited_dry_run_output",
+    artifactId: input.firstLimitedDryRunOutput.outputId,
+    canonicalId: input.firstLimitedDryRunOutput.reconstructionPackageId,
+    status: input.firstLimitedDryRunOutput.outputStatus,
+    createdAt: input.firstLimitedDryRunOutput.createdAt,
+    source: "evidence_capture",
+  } : null;
+  const candidateDiscoveryArtifactRef = artifactRef({
+    artifact: input.candidateDiscoveryArtifact,
+    fallbackKind: "candidate_discovery_result",
+    source: "candidate_discovery",
+    canonicalIdFields: ["discoveryId"],
+  });
+  const structurePlanArtifactRef = artifactRef({
+    artifact: input.structurePlanArtifact,
+    fallbackKind: "structure_plan",
+    source: "structure_plan",
+    canonicalIdFields: ["structurePlanId"],
+  });
   for (const section of input.provenanceSummary?.semanticImport?.sections ?? []) {
     sections.push({
       sectionId: stableId("source-section", { source: "semantic-import", id: section.id }),
+      sourceSectionId: section.id,
       routePath: "/",
       order: order++,
       heading: section.title,
       semanticType: section.type,
+      regionType: sectionRegionType(section.type),
       observedBoundary: true,
       plannedOnly: false,
       state: "structured",
@@ -441,16 +477,19 @@ function buildSections(input: SourceWebsiteUnderstandingBuilderInput, reviews: M
       confidence: confidence(section.confidence >= 0.7 ? "HIGH" : section.confidence >= 0.4 ? "MEDIUM" : "LOW", ["Semantic import section exists."]),
       evidenceRefs: [`semantic-import:section:${section.id}`],
       sourceCandidateId: null,
+      sourceArtifactRefs: semanticImportArtifactRef ? [semanticImportArtifactRef] : [],
       limitations: section.diagnostics,
     });
   }
   for (const model of input.firstLimitedDryRunOutput?.sectionModels ?? []) {
     sections.push({
       sectionId: stableId("source-section", { source: "first-limited-dry-run", sectionId: model.sectionId, routePath: model.routePath }),
+      sourceSectionId: model.sectionId,
       routePath: routePath(model.routePath),
       order: order++,
       heading: null,
       semanticType: model.regionType,
+      regionType: model.regionType,
       observedBoundary: true,
       plannedOnly: false,
       state: "structured",
@@ -458,16 +497,19 @@ function buildSections(input: SourceWebsiteUnderstandingBuilderInput, reviews: M
       confidence: confidence(model.confidenceLevel, ["First Limited Dry Run section model exists."]),
       evidenceRefs: model.sourceEvidenceRefs,
       sourceCandidateId: null,
+      sourceArtifactRefs: firstLimitedDryRunArtifactRef ? [firstLimitedDryRunArtifactRef] : [],
       limitations: model.limitationRefs,
     });
   }
   for (const candidate of input.candidateDiscoveryResult?.candidates.filter((item) => item.candidateType === "section") ?? []) {
     sections.push({
       sectionId: stableId("source-section", { candidateId: candidate.candidateId }),
+      sourceSectionId: null,
       routePath: candidate.routePath ? routePath(candidate.routePath) : null,
       order: order++,
       heading: null,
       semanticType: null,
+      regionType: null,
       observedBoundary: false,
       plannedOnly: false,
       state: stateFromReview(candidate.candidateId, reviews, "candidate"),
@@ -475,16 +517,19 @@ function buildSections(input: SourceWebsiteUnderstandingBuilderInput, reviews: M
       confidence: confidence(candidate.confidence.level, candidate.confidence.reasons),
       evidenceRefs: refsFromCandidate(candidate),
       sourceCandidateId: candidate.candidateId,
+      sourceArtifactRefs: candidateDiscoveryArtifactRef ? [candidateDiscoveryArtifactRef] : [],
       limitations: candidate.limitations.map((item) => item.code),
     });
   }
   for (const planned of input.structurePlan?.plannedSections ?? []) {
     sections.push({
       sectionId: stableId("source-section-planning-context", { plannedSectionId: planned.plannedSectionId }),
+      sourceSectionId: planned.plannedSectionId,
       routePath: null,
       order: order++,
       heading: null,
       semanticType: "planning-context",
+      regionType: null,
       observedBoundary: false,
       plannedOnly: true,
       state: "unavailable",
@@ -492,6 +537,7 @@ function buildSections(input: SourceWebsiteUnderstandingBuilderInput, reviews: M
       confidence: confidence("LOW", ["StructurePlan section is planning context only and does not prove source reality."]),
       evidenceRefs: [...planned.sourceCandidateIds],
       sourceCandidateId: planned.sourceCandidateIds[0] ?? null,
+      sourceArtifactRefs: structurePlanArtifactRef ? [structurePlanArtifactRef] : [],
       limitations: ["Planning context is intentionally separated from observed source sections."],
     });
   }

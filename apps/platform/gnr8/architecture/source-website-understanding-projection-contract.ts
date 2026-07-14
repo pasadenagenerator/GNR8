@@ -1,4 +1,5 @@
 import type { CandidateConfidence, CandidateEvidenceRef, CandidateType } from "./candidate-discovery-contract";
+import type { SectionBoundaryRegionType } from "./evidence-capture-layout-contract";
 
 export const SOURCE_WEBSITE_UNDERSTANDING_CONTRACT_VERSION = "WU-2" as const;
 
@@ -154,10 +155,12 @@ export type SourceNavigationUnderstanding = {
 
 export type SourceSectionUnderstanding = {
   sectionId: string;
+  sourceSectionId: string | null;
   routePath: string | null;
   order: number;
   heading: string | null;
   semanticType: string | null;
+  regionType: SectionBoundaryRegionType | null;
   observedBoundary: boolean;
   plannedOnly: boolean;
   state: SourceWebsiteKnowledgeState;
@@ -165,6 +168,7 @@ export type SourceSectionUnderstanding = {
   confidence: SourceWebsiteConfidence;
   evidenceRefs: string[];
   sourceCandidateId: string | null;
+  sourceArtifactRefs?: SourceWebsiteUnderstandingArtifactReference[];
   limitations: string[];
 };
 

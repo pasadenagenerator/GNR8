@@ -62,6 +62,7 @@ export type SectionBoundaryEvidence = {
   boundingBox: EvidenceBoundingBox;
   regionType: SectionBoundaryRegionType;
   confidenceLevel: CaptureExpansionConfidenceLevel;
+  sourceEvidenceRefs?: string[];
 };
 
 export type NavigationEvidenceItem = {

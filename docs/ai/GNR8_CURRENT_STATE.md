@@ -5,16 +5,17 @@
 
 ## Current Phase
 
-WU-4 - Business Discovery Website Understanding Shadow Adapter is COMPLETE.
+WU-5 - Section Evidence Lineage Preservation for Optional Business Discovery Cutover is COMPLETE.
 
 Canonical records:
 
 - `docs/architecture/BUSINESS_DISCOVERY_WEBSITE_UNDERSTANDING_SHADOW_ADAPTER.md`
+- `docs/architecture/BUSINESS_DISCOVERY_SECTION_EVIDENCE_LINEAGE_PRESERVATION.md`
 - `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`
 - `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`
 - `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
 
-WU-4 scope:
+WU-5 scope:
 
 ```text
 Website Source
@@ -29,78 +30,77 @@ Website Source
 -> Digital Business Twin
 ```
 
-WU-4 implements only first-class `sourceSiteId` projection, verbatim Evidence
-Capture limitation projection, a non-persistent Website Understanding ->
-Business Discovery input adapter, in-memory shadow Business Discovery
-construction, deterministic semantic comparison, read-only CLI validation,
-documentation, and focused tests. It adds no Business Discovery runtime
-switch, shadow persistence, DBT mutation, WDB/WGP change, generation, provider
-execution, approval, publishing, deployment, schema, API, worker, extraction,
-parsing, classifier, AI execution, or production mutation.
+WU-5 implements only section evidence lineage preservation, exact adapter
+mapping of current section-boundary refs, comparison normalization, focused
+tests, read-only ODV/ViroiDoc shadow validation, and documentation. It adds no
+Business Discovery runtime switch, shadow persistence, projection persistence,
+DBT mutation, WDB/WGP change, generation, provider execution, approval,
+publishing, deployment, schema, API, worker, extraction, parsing, classifier,
+AI execution, or production mutation.
 
 Executive result:
 
-- WU-4 closes the WU-3 projection gaps: exact persisted `sourceSiteId` is now
-  projected from the runtime site-version boundary, and Evidence Capture
-  baseline/fidelity limitations are projected verbatim with source refs,
-  source artifact refs, severity/state, original codes, and deterministic
-  deduplication.
-- `validateBusinessDiscoveryInputEquivalence(...)` now reports 100% current
-  Business Discovery dependency coverage for ODV and ViroiDoc: no partial
-  inputs, no missing inputs, zero conflicts, zero duplicates, and no migration
-  blockers at the input-coverage layer.
-- New runtime files:
-  `business-discovery-website-understanding-adapter.ts`,
-  `business-discovery-shadow-comparison.ts`, and
-  `business-discovery-website-understanding-shadow.cli.ts`.
-- The adapter consumes only the WU projection and reuses
-  `buildBusinessDiscoveryFromSiteEvidence(...)`; it does not read raw imports,
-  import Business Discovery persistence, or consume downstream artifacts.
+- WU-5 closes the WU-4 blocker: current `content_theme_observed`
+  section-boundary evidence refs are preserved exactly through WU and the
+  shadow adapter for ODV and ViroiDoc.
+- Source Website Understanding sections now preserve `sourceSectionId`,
+  `regionType`, exact upstream refs, Candidate Discovery refs, review state,
+  source artifact refs, and limitations without new extraction.
+- The adapter consumes only WU projection data, maps only traceable observed
+  section-boundary evidence, and fails closed on internal lineage conflicts.
+- The Business Discovery builder preserves all upstream section-boundary refs
+  during content-theme aggregation and dedupes exact duplicates only.
+- The comparator distinguishes exact evidence equality, ordering-only
+  differences, complete supported supersets, lost evidence, unsupported added
+  evidence, and conflicting evidence.
 - ODV Business Discovery artifact:
   `business_discovery_7b37413651d79de0d109e31690a34b62`; WU projection:
-  `source_website_understanding_b0cd478c45734c2e6f31db84ed9ad2c3`;
+  `source_website_understanding_0caa89099ee02c9469b539cf2b2d0613`;
   shadow Business Discovery:
-  `business_discovery_shadow_0f6788b6b6eed75ec7db2aa3c5f78231`.
+  `business_discovery_shadow_effc750dce31c593fa8932ca66d98a8f`.
 - ViroiDoc Business Discovery artifact:
   `business_discovery_360fa099cbcede288c2d0e04f2ec7986`; WU projection:
-  `source_website_understanding_d80895ffc313fb393b15ecbef3e90c1a`;
+  `source_website_understanding_72cece90151974f980a2abf7b5528709`;
   shadow Business Discovery:
-  `business_discovery_shadow_84c495a9a06e38f1d5980f89f62a0886`.
-- Both targets built shadow artifacts in memory only, with deterministic
-  rebuild equality and `noWrite: true`.
-- Both targets remain cutover-blocked because the shadow
-  `content_theme_observed` finding loses at least one current
-  section-boundary evidence ref. This is a lineage break and an explicit
-  cutover blocker.
-- Expected differences include projection-normalized finding IDs/tokens,
-  stronger evidence lineage on several findings, and higher limitation counts
-  because WU now projects the current Evidence Capture limitation set
-  verbatim.
+  `business_discovery_shadow_e608b04066ab15ca5156579843aaf859`.
+- ODV findings: 12 current / 12 shadow; `content_theme_observed` refs identical
+  with 0 missing and 0 added refs; limitations 104 / 131; confidence
+  `MEDIUM` / `MEDIUM`; deterministic rebuild equality true.
+- ViroiDoc findings: 17 current / 17 shadow; `content_theme_observed` refs
+  identical with 0 missing and 0 added refs; limitations 105 / 132; confidence
+  `MEDIUM` / `MEDIUM`; deterministic rebuild equality true.
+- Added limitations are 27 expected projection-transparency diagnostics on each
+  target, all source-traceable, with 0 missing limitations and 0 duplicate
+  semantic limitations.
+- Cutover readiness for both targets:
+  `ready_with_expected_differences`.
+- The read-only CLI confirmed `wroteBusinessDiscovery: false`,
+  `wroteProjection: false`, `wroteDownstreamArtifacts: false`,
+  `wroteRuntimeCutover: false`, and `noWrite: true`.
 
 Recommended next phase:
 
 ```text
-WU-5 - Section Evidence Lineage Preservation for Optional Business Discovery Cutover
+WU-6 - Optional Business Discovery Runtime Integration Plan
 ```
 
-Keep WU-5 narrowly focused on preserving exact section-boundary evidence refs
-through Website Understanding and the shadow adapter. Do not switch Business
-Discovery runtime behavior yet.
+Keep WU-6 planning-only until explicitly authorized. Do not switch Business
+Discovery runtime behavior by implication.
 
 ## Previous Phase
 
-WU-3 - Business Discovery Input Equivalence and Website Understanding
-Hardening is COMPLETE.
+WU-4 - Business Discovery Website Understanding Shadow Adapter is COMPLETE.
 
 Canonical records:
 
+- `docs/architecture/BUSINESS_DISCOVERY_WEBSITE_UNDERSTANDING_SHADOW_ADAPTER.md`
 - `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`
 - `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`
 - `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
 
-WU-3 proved the current dependency map and found the two gaps closed by WU-4:
-first-class `sourceSiteId` projection and verbatim Evidence Capture
-baseline/fidelity limitation projection.
+WU-4 closed the WU-3 input gaps and proved the non-persistent WU shadow path,
+but still blocked cutover on section-boundary evidence lineage. WU-5 closes
+that lineage blocker.
 
 WU-2 - Source Website Understanding Projection Pure Runtime Implementation is
 COMPLETE.

@@ -1,5 +1,38 @@
 # Business Discovery Website Understanding Shadow Adapter
 
+## WU-5 Section Evidence Lineage Update
+
+WU-5 closes the WU-4 cutover blocker. The adapter now preserves exact
+section-boundary refs from Source Website Understanding sections when assembling
+the Business Discovery builder input.
+
+The loss was in adapter input mapping: WU sections carried upstream
+`evidence:section-boundary:<routePath>:<sectionId>` refs, but the adapter
+rebuilt synthetic section evidence using WU projection section IDs. WU-5 adds
+explicit source section identity and region type to the projection section model
+and maps only traceable observed section-boundary rows into Business Discovery.
+
+Real-target WU-5 result:
+
+| Target | WU projection | Current BD | Shadow BD | Findings | Content-theme missing refs | Content-theme added refs | Limitations | Confidence | Readiness |
+| --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- |
+| ODV | `source_website_understanding_0caa89099ee02c9469b539cf2b2d0613` | `business_discovery_7b37413651d79de0d109e31690a34b62` | `business_discovery_shadow_effc750dce31c593fa8932ca66d98a8f` | 12 / 12 | 0 | 0 | 104 / 131 | `MEDIUM` / `MEDIUM` | `ready_with_expected_differences` |
+| ViroiDoc | `source_website_understanding_72cece90151974f980a2abf7b5528709` | `business_discovery_360fa099cbcede288c2d0e04f2ec7986` | `business_discovery_shadow_e608b04066ab15ca5156579843aaf859` | 17 / 17 | 0 | 0 | 105 / 132 | `MEDIUM` / `MEDIUM` | `ready_with_expected_differences` |
+
+ODV `content_theme_observed` current and shadow refs are identical:
+`section-boundary-7ea033afed92` and `section-boundary-acafcf3135dc`.
+ViroiDoc current and shadow refs are identical:
+`section-boundary-230d7a52f0d6`, `section-boundary-4156e11f8f75`, and
+`section-boundary-c8165b22f882`.
+
+Added limitations are expected projection transparency diagnostics only:
+27 added `IMPORT_DIAGNOSTIC_OBSERVED` limitations on each target, 0 missing
+limitations, and 0 duplicate semantic limitations. The CLI confirmed
+deterministic rebuild equality and no writes. No runtime cutover occurred.
+
+See
+`docs/architecture/BUSINESS_DISCOVERY_SECTION_EVIDENCE_LINEAGE_PRESERVATION.md`.
+
 ## Phase WU-4 Boundary
 
 WU-4 implements a non-persistent, non-authoritative shadow path that builds
@@ -196,16 +229,19 @@ OWM, compliance, improvement, or evolution artifacts. The real-target CLI
 loads the current persisted Business Discovery artifact only as a comparison
 reference and never feeds it into the shadow builder.
 
-## Result
+## WU-4 Historical Result
 
 WU-4 proves that Business Discovery can be built in memory from one
 connector-neutral Website Understanding Projection using the existing builder,
 with 100% current dependency coverage. It also proves that runtime cutover
-must remain blocked until the projection preserves the exact current
+was blocked at WU-4 until the projection preserved the exact current
 section-boundary evidence refs used by `content_theme_observed` findings.
 
-Recommended next phase:
+WU-5 closes that blocker. Optional runtime integration is now ready with
+expected differences, but no runtime switch has occurred.
+
+Recommended next phase after WU-5:
 
 ```text
-WU-5 - Section Evidence Lineage Preservation for Optional Business Discovery Cutover
+WU-6 - Optional Business Discovery Runtime Integration Plan
 ```
