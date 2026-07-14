@@ -256,6 +256,28 @@ Import
 -> Structure Plan
 ```
 
+WU-0 reality audit reference:
+
+- `docs/architecture/WEBSITE_UNDERSTANDING_REALITY_AUDIT.md`
+
+WU-1 projection specification:
+
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
+
+The WU-0 audit concludes that this engine already exists as a distributed
+source-site understanding layer across Import, Evidence Capture, Candidate
+Discovery, Candidate Review, Reconstruction Package, StructurePlan, and
+Business Discovery inputs. Future work should reconcile and project the
+existing chain before adding any new extraction, persistence, AI analysis, or
+parallel Website Understanding runtime.
+
+WU-1 defines that reconciliation boundary as a pure runtime Source Website
+Understanding Projection: deterministic, connector-neutral, evidence-backed,
+read-only, fail-closed, and non-canonical business truth. It preserves source
+artifact lineage and makes missing, unavailable, stale, conflicting,
+candidate, reviewed, and confirmed-source-fact states explicit before Business
+Discovery interprets them.
+
 This chain is evidence-first and lineage-preserving. It decides what is known,
 what is approved, what is blocked, what is stale, and what may safely become an
 input to the Digital Business Twin or a future Generation Package projection.
@@ -806,3 +828,17 @@ output the long-term source of truth violates this manifesto.
 Any future architecture that makes a website the primary entity of truth
 instead of the Digital Business Twin also violates this manifesto. A website is
 one expression of the business, not the business itself.
+
+## WU-2 Runtime Manifesto Note
+
+WU-2 implements the Source Website Understanding Projection as a pure runtime
+read model over existing import/evidence/candidate/review artifacts.
+
+This preserves the manifesto boundary:
+
+- Website Understanding describes the imported source website.
+- Business Foundation and DBT remain business-understanding surfaces.
+- Observed Website Model remains generated-site observation.
+- Generated proposals, provider payloads, compliance artifacts, evolution
+  analyses, and published-site state never feed back into source-site
+  understanding.

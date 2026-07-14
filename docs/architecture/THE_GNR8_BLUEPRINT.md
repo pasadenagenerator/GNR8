@@ -35,6 +35,8 @@ Canonical detailed references include:
 - `docs/architecture/GENERATION_CONTRACT_COMPLIANCE_REPORT_SPECIFICATION.md`
 - `docs/architecture/BUSINESS_APPROVAL_SPECIFICATION.md`
 - `docs/architecture/PUBLISH_GOVERNANCE_ARCHITECTURE.md`
+- `docs/architecture/WEBSITE_UNDERSTANDING_REALITY_AUDIT.md`
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
 
 ## Vision
 
@@ -524,10 +526,18 @@ expresses it.
 
 ### Business Discovery
 
-GNR8 gathers business context through guided conversation and governed source
-understanding. Discovery identifies what the business is, what it offers, who
-it serves, what it wants to achieve, what is known, what is uncertain, and
-what must be clarified.
+GNR8 gathers business context through guided conversation and governed
+source understanding. For imported websites, the future connector-neutral
+boundary is the Source Website Understanding Projection: a deterministic,
+evidence-backed, read-only view of what GNR8 currently observes, knows,
+proposes, has reviewed, and still does not understand about the source
+website. Discovery identifies what the business is, what it offers, who it
+serves, what it wants to achieve, what is known, what is uncertain, and what
+must be clarified.
+
+Source website understanding is not business truth. Business Discovery remains
+responsible for interpretation, and DBT remains responsible for governed
+business knowledge.
 
 ### Digital Business Twin
 
@@ -695,3 +705,11 @@ The long-term principles of GNR8 are:
 - AI outputs are proposals.
 - Published artifacts are approved manifestations.
 
+## WU-2 Runtime Blueprint Note
+
+WU-2 makes the Source Website Understanding Projection executable as a
+runtime-only, read-only operator projection over existing artifacts.
+
+It does not change the Blueprint's canonical chain: GNR8 still moves from
+source understanding to governed business understanding before generation, and
+generated-site observations remain outside source-site understanding.

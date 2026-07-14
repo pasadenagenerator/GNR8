@@ -115,10 +115,93 @@ Current status:
   audience, logo, colors, typography, and full CGP knowledge even though
   source text, HTML/logo metadata, CSS, font assets, screenshots, and imported
   assets already exist.
+- Phase WU-0 - Website Understanding Reality Audit is complete. The audit
+  concludes that GNR8 already has a de facto Website Understanding layer
+  distributed across Import, Evidence Capture, semantic import, asset
+  inventory, Candidate Discovery, Candidate Review, Reconstruction Package,
+  StructurePlan, and Business Discovery input handling. The preferred boundary
+  outcome is a small source-site Website Understanding projection over
+  existing artifacts, with no new extraction pipeline.
+- Phase WU-1 - Source Website Understanding Projection Contract Design is
+  complete. The specification defines the deterministic, connector-neutral,
+  evidence-backed, read-only projection boundary over existing source-site
+  artifacts and chooses pure runtime projection with no dedicated persistence.
+- Phase WU-2 - Source Website Understanding Projection Pure Runtime
+  Implementation is complete. The runtime contract, builder, loader,
+  validator, focused tests, and read-only superadmin page now compose existing
+  Import, Evidence Capture, semantic import, asset, Candidate
+  Discovery/Review, Reconstruction, and StructurePlan-context artifacts into
+  one source-site projection without adding persistence or mutation behavior.
 
 Current Phase:
-- Phase MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning is
+- Phase WU-2 - Source Website Understanding Projection Pure Runtime
+  Implementation is
   COMPLETE.
+
+WU-2 evidence:
+- Canonical runtime record:
+  `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`.
+- Canonical specification:
+  `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`.
+- Runtime modules:
+  `apps/platform/gnr8/architecture/source-website-understanding-projection-contract.ts`,
+  `apps/platform/gnr8/architecture/source-website-understanding-projection-builder.ts`,
+  `apps/platform/gnr8/architecture/source-website-understanding-projection-loader.ts`,
+  and
+  `apps/platform/app/gnr8/admin/website-understanding/[siteVersionId]/page.tsx`.
+- Canonical definition: Source Website Understanding Projection is a
+  deterministic, connector-neutral, evidence-backed, read-only projection of
+  the current structured understanding of an imported source website.
+- Preferred persistence policy: pure runtime projection with no dedicated
+  persistence.
+- Allowed inputs: source import metadata, source URL/hostname, raw imported
+  artifact metadata, route inventory, asset registry, semantic import result,
+  Evidence Capture artifacts, rendered capture evidence, Candidate Discovery,
+  Candidate Review, Reconstruction Package, StructurePlan context only, and
+  current limitations/diagnostics.
+- Authority hierarchy: immutable source evidence -> structured evidence ->
+  deterministic candidates -> human-reviewed candidate decisions -> projection
+  -> business interpretation.
+- Knowledge states: `observed`, `structured`, `candidate`, `reviewed`,
+  `confirmed_source_fact`, `rejected`, `conflicting`, `missing`, and
+  `unavailable`.
+- Readiness states: `not_ready`, `partially_ready`,
+  `ready_for_business_discovery`, `blocked`, `stale`, and `invalid`.
+- Candidate Discovery keeps candidate extraction, confidence, evidence refs,
+  and deterministic candidate identities. Candidate Review keeps governance
+  decisions. Reconstruction Package keeps reviewed reconstruction eligibility.
+  StructurePlan remains planning context, not source truth.
+- Business Discovery should eventually consume the projection through the
+  conceptual future boundary, but no Business Discovery behavior changed.
+- Observed Website Model remains generated-site observation and must never feed
+  source-site understanding.
+- Operator route:
+  `/gnr8/admin/website-understanding/[siteVersionId]`.
+- Real-target verification: ODV and ViroiDoc both produced valid,
+  deterministic read-only projections with downstream contamination rejection.
+  ODV projection ID:
+  `source_website_understanding_17e489688596671bf353e23f216bd1e4`.
+  ViroiDoc projection ID:
+  `source_website_understanding_b9796806c7e95914abce1845675bcd4f`.
+- Browser verification: authenticated ODV operator page loaded; source,
+  readiness, pages/navigation, imported assets, logo candidate, typography,
+  colors, offering/audience gaps, and secondary advanced diagnostics were
+  visible; `main` contained zero forms, inputs, textareas, selects, or buttons.
+- Next phase: WU-3 - Source Website Understanding Hardening and Business
+  Discovery Input Planning, focused on read-only hardening and future
+  input-boundary design.
+- Safety: no projection persistence, schema, mutation API, workers, extraction,
+  HTML parsing, asset registry, AI analysis, Business Discovery behavior, DBT
+  mutation, WDB/WGP changes, provider execution, generation, approval,
+  publishing, deployment, DNS, production mutation, code moves, renames, or
+  broad refactors were added.
+
+WU-0 evidence:
+- Canonical audit record:
+  `docs/architecture/WEBSITE_UNDERSTANDING_REALITY_AUDIT.md`.
+- Preferred outcome: D. A small source-site Website Understanding projection
+  is needed over existing artifacts, with no new extraction pipeline.
+- WU-0 remains the audit foundation that WU-1 formalized.
 
 MVP-3.1-B evidence:
 - Canonical planning record:
@@ -281,11 +364,8 @@ MVP-3.0-A evidence:
   compliance recomputation were added.
 
 Next recommended phase:
-- MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate
-  Planning. Keep it candidate-only and original-import focused. Stop before
-  DBT mutation, Business Alignment editing, canonical visual identity
-  persistence, WDB/WGP regeneration, AI, workers, generation, approval,
-  publishing, deployment, DNS, or production mutation.
+- WU-3 - Source Website Understanding Hardening and Business Discovery Input
+  Planning. Keep it read-only and focused on future input-boundary design.
 
 MVP-2.0-N evidence:
 - Canonical dashboard document:
@@ -354,9 +434,8 @@ MVP-2.0-M prior evidence:
   added.
 
 Next Phase:
-- MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate
-  Planning, candidate-only and original-import focused against the persisted
-  ODV target.
+- WU-3 - Source Website Understanding Hardening and Business Discovery Input
+  Planning, focused on read-only hardening and future input-boundary design.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its

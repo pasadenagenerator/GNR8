@@ -1,9 +1,97 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-07-13
+2026-07-14
 
 ## Current Phase
+
+WU-2 - Source Website Understanding Projection Pure Runtime Implementation is
+COMPLETE.
+
+Canonical runtime record:
+
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
+
+WU-2 scope:
+
+```text
+Website Source
+-> Import
+-> Raw Evidence
+-> Structured Evidence
+-> Candidate Discovery / Review
+-> Source Website Understanding Projection
+-> Business Discovery
+-> Digital Business Twin
+```
+
+WU-2 implements only the runtime projection contract, deterministic builder,
+loader/composition boundary, validation helper, focused tests, and one
+read-only superadmin operator page. It adds no projection persistence, schema,
+new import behavior, new extraction, HTML parsing, asset classification
+runtime, AI analysis, Business Discovery behavior, DBT mutation, WDB/WGP
+changes, provider execution, generation, approval, publishing, deployment,
+DNS, workers, mutation APIs, or editing controls.
+
+Executive result:
+
+- Source Website Understanding Projection is implemented as a deterministic,
+  connector-neutral, evidence-backed, read-only runtime projection of the
+  current structured understanding of an imported source website.
+- Persistence policy remains pure runtime with no dedicated projection
+  persistence.
+- The projection composes existing Import, Evidence Capture, semantic import,
+  asset inventory, Candidate Discovery, Candidate Review, Reconstruction
+  Package, StructurePlan context, limitations, and diagnostics.
+- It is derived, fail-closed, non-canonical business truth, non-planning,
+  non-generation, and source-site only.
+- Knowledge states are `observed`, `structured`, `candidate`, `reviewed`,
+  `confirmed_source_fact`, `rejected`, `conflicting`, `missing`, and
+  `unavailable`.
+- Readiness states are `not_ready`, `partially_ready`,
+  `ready_for_business_discovery`, `blocked`, `stale`, and `invalid`.
+- The superadmin operator route is
+  `/gnr8/admin/website-understanding/[siteVersionId]`.
+- Business Foundation links back to Website Understanding, and Website
+  Understanding links forward to Business Foundation and Generation Evolution.
+- Read-only real-target verification on 2026-07-14 produced valid,
+  deterministic projections for ODV and ViroiDoc. ODV projection ID:
+  `source_website_understanding_17e489688596671bf353e23f216bd1e4`.
+  ViroiDoc projection ID:
+  `source_website_understanding_b9796806c7e95914abce1845675bcd4f`.
+- Browser verification loaded the authenticated ODV operator page and found
+  zero forms, inputs, textareas, selects, or buttons in `main`.
+- Business Discovery should eventually consume this projection through a
+  future boundary, but no Business Discovery behavior changed in WU-2.
+- Observed Website Model remains separate because it observes generated
+  proposals, not source websites.
+
+Recommended next phase:
+
+```text
+WU-3 - Source Website Understanding Hardening and Business Discovery Input Planning
+```
+
+Keep WU-3 focused on hardening the read-only source projection and planning
+the future Business Discovery input boundary. Do not mutate Business
+Discovery, DBT, WDB/WGP, providers, generation, approval, publishing, or DNS.
+
+## Previous Phase
+
+WU-0 - Website Understanding Reality Audit is
+COMPLETE.
+
+Canonical audit record:
+
+- `docs/architecture/WEBSITE_UNDERSTANDING_REALITY_AUDIT.md`
+
+WU-0 concluded that GNR8 already has a de facto Website Understanding layer
+distributed across Import, Evidence Capture, semantic import, asset inventory,
+Candidate Discovery, Candidate Review, Reconstruction Package, StructurePlan,
+and Business Discovery input handling. WU-1 formalized the recommended small
+source-site projection over those existing artifacts, and WU-2 implements it
+as a pure runtime read model.
 
 MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning is
 COMPLETE.
@@ -12,100 +100,11 @@ Canonical planning record:
 
 - `docs/architecture/BUSINESS_FOUNDATION_UPSTREAM_EVIDENCE_GAP_PLAN.md`
 
-Target:
-
-```text
-ODV siteVersionId: 09dce7ea-d860-4f60-a1eb-26c3335b302e
-```
-
-MVP-3.1-B is documentation and analysis only. It explains why the new
-Business Foundation UX correctly exposes upstream gaps instead of filling
-them.
-
-Core result:
-
-- ODV's lack of canonical offerings, audience, logo, colors, typography, and
-  full CGP knowledge is not merely a display bug.
-- Original imported evidence exists, but it is not yet classified, projected,
-  confirmed, or governed as canonical business truth.
-- Current Business Discovery only consumes a narrow deterministic slice:
-  source URL, routes, navigation labels, section boundary types, asset count,
-  limitations, diagnostics, and optional Candidate Discovery context.
-- Richer ODV signals exist in rendered body text, headings, metadata, image
-  `alt`, structured logo metadata, CSS, and font files, but they are outside
-  the current canonical Business Discovery/DBT promotion path.
-
-ODV evidence findings:
-
-- Offerings: body text contains candidate legal-service signals including
-  legal support, consulting, representation, commercial/civil law, insolvency
-  law, labor law, real estate law, and commercial/labor orientation. Current
-  Business Discovery did not classify them because navigation labels do not
-  match offering patterns and body text is not an input.
-- Audience: body text contains candidate audience wording for individuals and
-  companies, plus geography and language signals. Current Business Discovery
-  did not classify them.
-- Logo: rendered HTML contains an image with `alt="Logo"` and structured logo
-  URL for `Tabla40x20cm_51.png`, but current asset classification only counts
-  logo candidates when file paths contain `logo`.
-- Colors: CSS contains repeated visual color values, but no canonical brand
-  palette or computed-style candidate is persisted.
-- Typography: imported assets include `17` font files, including `Nationale`
-  and `Fontello`, but canonical typography is unavailable because font usage
-  is not classified or confirmed.
-- Visual identity: screenshots, layout geometry, CSS, image assets, and
-  imported fonts exist, but no governed visual-identity candidate model or
-  canonical CGP exists.
-- Differentiators and trust: body text and contact/legal details provide
-  candidates, while current canonical trust knowledge only has a weak contact
-  path signal.
-
-Gap classifications:
-
-- Offerings: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
-  `HUMAN_CONFIRMATION_REQUIRED`.
-- Audience: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
-  `HUMAN_CONFIRMATION_REQUIRED`.
-- Logo: `CAPTURED_NOT_CLASSIFIED`, `RUNTIME_PROJECTION_MISSING`,
-  `HUMAN_CONFIRMATION_REQUIRED`.
-- Brand colors: `CAPTURED_NOT_CLASSIFIED`, `CANONICAL_CONTRACT_MISSING`,
-  `HUMAN_CONFIRMATION_REQUIRED`.
-- Typography: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
-  `CANONICAL_CONTRACT_MISSING`, `HUMAN_CONFIRMATION_REQUIRED`.
-- Visual style: `CAPTURED_NOT_CLASSIFIED`, `CANONICAL_CONTRACT_MISSING`,
-  `HUMAN_CONFIRMATION_REQUIRED`.
-- Business differentiators: `CAPTURED_NOT_CLASSIFIED`, `LOW_CONFIDENCE`,
-  `HUMAN_CONFIRMATION_REQUIRED`.
-- Trust evidence: `CLASSIFIED_NOT_PROJECTED`, `CAPTURED_NOT_CLASSIFIED`,
-  `LOW_CONFIDENCE`, `HUMAN_CONFIRMATION_REQUIRED`.
-
-MVP priorities:
-
-- P0: offerings and audience.
-- P1: logo, colors, typography, visual style, differentiators, trust evidence.
-- P2: complete CGP refinements beyond first migration-wave needs.
-
-Human-governance boundary:
-
-- GNR8 may observe evidence automatically and propose candidates with source
-  refs, confidence, and limitations.
-- GNR8 must not silently turn deterministic candidates into canonical truth.
-- Logo identity, canonical colors, canonical fonts, offerings, and audience
-  require human confirmation before DBT update.
-- Original imported assets and generated proposal assets must remain
-  explicitly separated in any future UX and validation path.
-
-Recommended next phase:
-
-```text
-MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate Planning
-```
-
-Keep the next phase candidate-only and original-import focused. Do not mutate
-DBT, edit Business Alignment, persist canonical identity, regenerate WDB/WGP,
-call AI, create workers, publish, deploy, or mutate DNS/production.
-
-## Previous Phase
+MVP-3.1-B explained why ODV still lacks canonical offerings, audience, logo,
+colors, typography, and full CGP knowledge even though source text,
+HTML/logo metadata, CSS, font assets, screenshots, and imported assets already
+exist. WU-0 preserves that finding and reconciles it with the wider Website
+Understanding boundary.
 
 MVP-3.1-A - Business Foundation Product UX Transformation is
 COMPLETE.
@@ -3651,13 +3650,13 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase MVP-3.1-B - Business Foundation Upstream Evidence Gap Planning is
+- Phase WU-2 - Source Website Understanding Projection Pure Runtime
+  Implementation is
   complete.
 
 Next Phase:
-- MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate
-  Planning, candidate-only and original-import focused against the persisted
-  ODV target.
+- WU-3 - Source Website Understanding Hardening and Business Discovery Input
+  Planning, focused on read-only hardening and future input-boundary design.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:

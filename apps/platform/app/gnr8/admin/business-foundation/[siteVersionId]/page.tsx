@@ -187,6 +187,7 @@ function Hero(props: { model: GenerationBusinessFoundationProjection }) {
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
         <ExternalLink href={hero.primaryLinks.originalWebsiteHref} primary>Open Original Website</ExternalLink>
+        <InternalLink href={`/gnr8/admin/website-understanding/${props.model.siteVersionId}`}>Inspect Website Understanding</InternalLink>
         <InternalLink href={hero.primaryLinks.evolutionHref}>Inspect Generation Evolution</InternalLink>
         <InternalLink href={hero.primaryLinks.latestGeneratedProposalHref}>Open Latest Generated Proposal</InternalLink>
       </div>

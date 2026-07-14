@@ -50,6 +50,78 @@ Import Existing Website
 -> Publish
 ```
 
+## Phase WU-0 Website Understanding Reality Audit Addendum
+
+WU-0 audits the repository reality between Website Import and Business
+Discovery.
+
+Canonical audit record:
+
+- `docs/architecture/WEBSITE_UNDERSTANDING_REALITY_AUDIT.md`
+
+Conclusion:
+
+- GNR8 already has a de facto Website Understanding layer distributed across
+  Import, Evidence Capture, Candidate Discovery, Candidate Review,
+  Reconstruction Package, StructurePlan, semantic import, asset inventory, and
+  Business Discovery input handling.
+- The correct next boundary is not a new extraction or persistence pipeline.
+- The preferred outcome is a small source-site Website Understanding projection
+  over existing artifacts, with no new extraction pipeline, no generated-site
+  observation merge, and no automatic promotion into DBT truth.
+
+This addendum adds no runtime behavior, persistence, schema, API, UI, worker,
+provider behavior, generation, publishing, deployment, or DNS mutation.
+
+## Phase WU-1 Source Website Understanding Projection Addendum
+
+WU-1 defines the canonical connector-neutral projection boundary between
+existing source-site evidence/candidate artifacts and Business Discovery.
+
+Canonical specification:
+
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
+
+Conclusion:
+
+- Source Website Understanding Projection is a deterministic,
+  connector-neutral, evidence-backed, read-only projection of the current
+  structured understanding of an imported source website.
+- The preferred persistence policy is pure runtime projection with no
+  dedicated persistence.
+- The projection composes existing Import, Evidence Capture, semantic import,
+  asset inventory, Candidate Discovery, Candidate Review, Reconstruction
+  Package, StructurePlan context, limitations, and diagnostics.
+- It remains non-canonical business truth, non-planning, non-generation, and
+  source-site only.
+- Business Discovery should eventually consume the projection through a future
+  conceptual boundary named
+  `buildBusinessDiscoveryFromWebsiteUnderstanding(...)`.
+
+This addendum adds no runtime behavior, persistence, schema, API, UI, worker,
+provider behavior, generation, publishing, deployment, DNS mutation, or
+Business Discovery behavior change.
+
+## Phase WU-2 Source Website Understanding Runtime Addendum
+
+WU-2 implements the Source Website Understanding Projection as a pure runtime
+read model over existing artifacts.
+
+Canonical runtime record:
+
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`
+
+Runtime route:
+
+```text
+/gnr8/admin/website-understanding/[siteVersionId]
+```
+
+WU-2 keeps MVP-0's first executable pipeline boundary intact: no schema
+changes, no projection persistence, no Business Discovery input change, no DBT
+mutation, no provider execution, no generation, no approval, no publishing,
+and no DNS or production mutation.
+
 ## MVP-2.0-ARCH Generation Cycle Addendum
 
 MVP-2.0-ARCH adds the canonical Generation Cycle Architecture as an
@@ -491,6 +563,9 @@ Missing implementation:
 - DBT builder consumption is now implemented in MVP-1B.
 - No Business Owner confirmation or multi-source domain reconciliation exists
   in this layer.
+- WU-1 defines the future connector-neutral source input boundary for Business
+  Discovery, but the current Business Discovery builder has not yet been
+  changed to consume it.
 - MVP-3.1-B confirmed that ODV has additional source evidence for offerings,
   audience, logo, colors, typography, differentiators, and trust in rendered
   body text, HTML metadata, CSS, and imported assets. Those signals are not

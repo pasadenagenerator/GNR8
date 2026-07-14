@@ -287,3 +287,17 @@ MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate Planning
 Keep that phase candidate-only and original-import focused. Do not mutate DBT,
 edit Business Alignment, persist canonical visual identity, regenerate WDB/WGP,
 call AI, or publish anything.
+
+## WU-2 Website Understanding Link
+
+WU-2 adds a separate read-only Website Understanding operator page for
+source-site understanding:
+
+```text
+/gnr8/admin/website-understanding/[siteVersionId]
+```
+
+Business Foundation remains the WHY/business-understanding surface. Website
+Understanding remains the upstream source-site surface. The Business
+Foundation page now links back to Website Understanding so operators can move
+from business gaps to the source evidence projection without opening raw JSON.

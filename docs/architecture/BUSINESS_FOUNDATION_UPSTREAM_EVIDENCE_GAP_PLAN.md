@@ -646,7 +646,23 @@ Offerings and audience:
 - human alignment completed
 - DBT version updated only after confirmation
 
-## Recommended Next Phase
+## WU-0 Reconciliation Note
+
+Phase WU-0 audited the wider repository boundary between Website Import and
+Business Discovery after this gap plan. Its canonical record is:
+
+- `docs/architecture/WEBSITE_UNDERSTANDING_REALITY_AUDIT.md`
+
+WU-0 preserves this plan's finding that ODV has captured-but-not-classified
+offerings, audience, logo, colors, typography, visual style, differentiators,
+and trust evidence. It changes the immediate next step from a narrow visual
+identity planning phase to a repository-wide reconciliation/design boundary:
+define the source-site Website Understanding projection over existing Import,
+Evidence Capture, Candidate Discovery, Candidate Review, Reconstruction
+Package, StructurePlan, semantic import, asset inventory, and Business
+Discovery input artifacts first.
+
+## Superseded Recommended Next Phase
 
 MVP-3.1-C - Asset Evidence Classification and Visual Identity Candidate
 Planning.
@@ -654,3 +670,32 @@ Planning.
 Keep it bounded to original imported assets and visual-identity candidates.
 Do not persist canonical identity, mutate DBT, edit Business Alignment,
 regenerate WDB/WGP, call AI, create workers, or publish anything.
+
+WU-0 supersedes this as the immediate next step with:
+
+```text
+WU-1 - Source Website Understanding Projection Contract Design
+```
+
+Keep WU-1 design-only. Do not implement extraction, persistence, schema, API,
+UI, workers, AI, Business Discovery behavior changes, DBT mutation, WDB/WGP
+changes, generation, publishing, deployment, DNS, or production mutation.
+
+## WU-1 Projection Contract Note
+
+Phase WU-1 completed the design-only projection boundary and made this plan's
+evidence-governance distinction explicit in the source-site contract.
+
+Canonical specification:
+
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
+
+The Source Website Understanding Projection exposes original-import asset
+inventory, asset usage evidence where available, visual identity signals,
+offering candidates, audience candidates, trust candidates, confidence,
+limitations, and diagnostics as source-site understanding only. It does not
+create canonical logo, palette, typography, offerings, audience, or DBT truth.
+
+The immediate implementation path therefore becomes WU-2: implement the pure
+runtime projection over existing artifacts, prove it on ODV and ViroiDoc, and
+only then add optional Business Discovery consumption.
