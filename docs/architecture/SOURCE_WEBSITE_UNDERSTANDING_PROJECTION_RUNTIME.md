@@ -219,6 +219,53 @@ Remaining migration blockers:
 - Evidence Capture baseline/fidelity limitations are not yet proven as
   verbatim projection limitations.
 
+## WU-4 Shadow Adapter Update
+
+WU-4 closes the WU-3 projection gaps without adding projection persistence.
+
+Runtime changes:
+
+- `sourceSiteId` is now projected at the top level, inside `sourceIdentity`,
+  in lineage, and in deterministic inputs. The value comes from the existing
+  authoritative runtime site-version `siteId`; it is not derived from
+  `siteVersionId`.
+- Missing `sourceSiteId` now produces a blocking
+  `SOURCE_SITE_ID_MISSING` limitation and prevents shadow Business Discovery
+  construction.
+- Evidence Capture baseline and fidelity limitations are projected verbatim
+  as WU limitations, preserving current Business Discovery codes
+  (`UPSTREAM_EVIDENCE_LIMITATION`, `UPSTREAM_FIDELITY_LIMITATION`), original
+  messages, source refs, source artifact refs, original fidelity type,
+  severity/state, and deterministic ordering/deduplication.
+
+New shadow runtime helpers:
+
+- `apps/platform/gnr8/architecture/business-discovery-website-understanding-adapter.ts`
+- `apps/platform/gnr8/architecture/business-discovery-shadow-comparison.ts`
+- `apps/platform/gnr8/architecture/business-discovery-website-understanding-shadow.cli.ts`
+
+The shadow adapter consumes only the projection object, reuses
+`buildBusinessDiscoveryFromSiteEvidence(...)`, builds only in memory, and
+does not read raw artifacts, import Business Discovery persistence, consume
+downstream artifacts, or mutate provenance.
+
+Current WU-4 real-target projection IDs:
+
+- ODV:
+  `source_website_understanding_b0cd478c45734c2e6f31db84ed9ad2c3`
+- ViroiDoc:
+  `source_website_understanding_d80895ffc313fb393b15ecbef3e90c1a`
+
+The WU-2/WU-3 projection IDs changed because the normalized projection content
+now includes `sourceSiteId` and verbatim upstream limitations. This is
+expected deterministic identity behavior; no persisted projection ID was
+rewritten.
+
+WU-4 dependency coverage is 100% for ODV and ViroiDoc, with no missing or
+partial Business Discovery inputs. Runtime cutover is still blocked because
+shadow Business Discovery loses at least one current section-boundary
+evidence ref on the `content_theme_observed` finding for both targets.
+
 WU-3 does not migrate Business Discovery, add classifiers, add extraction,
 persist projections, mutate DBT/WDB/WGP, generate, approve, publish, deploy,
 or change production data.

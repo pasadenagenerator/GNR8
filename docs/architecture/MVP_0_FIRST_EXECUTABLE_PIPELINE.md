@@ -1982,3 +1982,35 @@ by ID and stopping before compliance v2, comparison, Compliance Report v2,
 Generation Improvement Plan v2, Business Approval, publishing, deployment,
 DNS mutation, production mutation, provider execution, AI execution, UI, API,
 schema, or workers.
+## WU-4 Business Discovery Shadow Adapter Checkpoint
+
+WU-4 is complete as a bounded, non-persistent shadow phase in the First
+Executable MVP pipeline.
+
+What changed:
+
+- Source Website Understanding now projects exact `sourceSiteId`.
+- Source Website Understanding now projects verbatim Evidence Capture
+  baseline/fidelity limitations.
+- Business Discovery can be built in memory from one WU projection through
+  the existing Business Discovery builder.
+- ODV and ViroiDoc both reach 100% current Business Discovery input
+  dependency coverage.
+- No Business Discovery runtime switch, shadow persistence, DBT regeneration,
+  WDB/WGP regeneration, generation, publishing, schema, API, worker, or
+  production mutation occurred.
+
+Current pipeline gate:
+
+```text
+Website Understanding -> Business Discovery runtime cutover: BLOCKED
+```
+
+Reason: both real-target shadow artifacts lose at least one current
+section-boundary evidence ref on the `content_theme_observed` finding.
+
+Next phase:
+
+```text
+WU-5 - Section Evidence Lineage Preservation for Optional Business Discovery Cutover
+```

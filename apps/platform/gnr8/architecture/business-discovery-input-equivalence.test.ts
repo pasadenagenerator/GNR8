@@ -18,6 +18,7 @@ function projection(input: {
   siteVersionId?: string;
   dryRunId?: string | null;
   sourceUrl?: string | null;
+  sourceSiteId?: string | null;
   routePaths?: string[];
   navigationLabels?: string[];
   sectionTypes?: string[];
@@ -32,6 +33,7 @@ function projection(input: {
   const siteVersionId = input.siteVersionId ?? "site-version-equivalence";
   const dryRunId = input.dryRunId === undefined ? "dry-run-equivalence" : input.dryRunId;
   const sourceUrl = input.sourceUrl === undefined ? "https://www.example.test/" : input.sourceUrl;
+  const sourceSiteId = input.sourceSiteId === undefined ? "source-site-equivalence" : input.sourceSiteId;
   const hostname = sourceUrl ? new URL(sourceUrl).hostname : null;
   const routePaths = input.routePaths ?? ["/"];
   const navigationLabels = input.navigationLabels ?? ["Services", "Contact"];
@@ -66,10 +68,12 @@ function projection(input: {
     contractVersion: "WU-2",
     generatedAt: GENERATED_AT,
     siteVersionId,
+    sourceSiteId,
     dryRunId,
     connectorType: "rendered_browser",
     sourceIdentity: {
       siteVersionId,
+      sourceSiteId,
       dryRunId,
       sourceUrl,
       finalUrl: sourceUrl,
@@ -244,6 +248,7 @@ function projection(input: {
     diagnostics: (input.diagnostics ?? []).map((code) => ({ code, message: code, sourceRefs: ["runtime-import-provenance"] })),
     lineage: {
       siteVersionId,
+      sourceSiteId,
       dryRunId,
       contractVersion: "WU-2",
       sourceArtifactRefs,
@@ -254,6 +259,7 @@ function projection(input: {
       planningContextArtifactRefs,
       deterministicInputs: {
         siteVersionId,
+        sourceSiteId,
         dryRunId,
         contractVersion: "WU-2",
         artifactIds: allRefs.map((ref) => ref.artifactId ?? ref.canonicalId).filter((id): id is string => Boolean(id)).sort(),
@@ -308,6 +314,66 @@ test("dependency mapping reports current Business Discovery inputs deterministic
   assert.equal(result.obsoleteRuntimeAssemblies.some((item) => item.includes("route inventory aggregation")), true);
 });
 
+test("equivalence validator requires exact sourceSiteId and verbatim upstream limitations", () => {
+  const projected = projection({
+    sourceSiteId: "source-site-1",
+    limitations: [],
+  });
+  projected.limitations.push(
+    {
+      limitationId: "limitation:baseline",
+      severity: "warning",
+      code: "UPSTREAM_EVIDENCE_LIMITATION",
+      message: "missing_computed_styles",
+      sourceRefs: ["evidence:capture-baseline:/"],
+      originalCode: "baseline_limitation",
+      state: "observed",
+      diagnostics: ["baseline_index:0"],
+    },
+    {
+      limitationId: "limitation:fidelity",
+      severity: "warning",
+      code: "UPSTREAM_FIDELITY_LIMITATION",
+      message: "Rendered DOM fidelity is partial.",
+      sourceRefs: ["rendered-dom"],
+      originalCode: "rendered_dom_partial",
+      state: "observed",
+      diagnostics: ["rendered_dom_partial", "evidence_capture", "manual_review", "fidelity_index:0"],
+    },
+  );
+  const result = validateBusinessDiscoveryInputEquivalence(
+    projected,
+    existingInput({
+      sourceSiteId: "source-site-1",
+      evidenceCaptureBaseline: {
+        routePath: "/",
+        sourceUrl: "https://www.example.test/",
+        finalUrl: "https://www.example.test/",
+        limitations: ["missing_computed_styles"],
+        fidelityLimitations: [{
+          type: "rendered_dom_partial",
+          affectedLayer: "evidence_capture",
+          severity: "warning",
+          explanation: "Rendered DOM fidelity is partial.",
+          recommendedNextLayer: "manual_review",
+          evidenceRefIds: ["rendered-dom"],
+        }],
+        captureExpansionEvidence: {
+          layoutGeometryEvidence: [],
+          sectionBoundaryEvidence: [],
+          navigationEvidence: [],
+        },
+        summaries: { assetInventory: { persistedAssetCount: 0 } },
+      } as never,
+    }),
+  );
+
+  assert.equal(result.matrix.find((row) => row.dependencyId === "runtime.source_site_id")?.alreadyProjected, "YES");
+  assert.equal(result.matrix.find((row) => row.dependencyId === "limitations.upstream_evidence_limitations")?.alreadyProjected, "YES");
+  assert.equal(result.migrationBlockers.some((item) => item.includes("sourceSiteId")), false);
+  assert.equal(result.migrationBlockers.some((item) => item.includes("baseline")), false);
+});
+
 test("coverage report includes the required Website Understanding categories", () => {
   const report = createWebsiteUnderstandingCoverageReport(projection());
 
@@ -345,7 +411,7 @@ test("equivalence validator detects duplicate and conflicting projection signals
   assert.equal(result.conflicting.some((item) => item.includes("source URL differs")), true);
   assert.equal(result.duplicate.some((item) => item.includes("routePath duplicates /")), true);
   assert.equal(result.duplicate.some((item) => item.includes("asset path duplicates uploads/logo.png")), true);
-  assert.equal(result.duplicate.some((item) => item.includes("limitation code duplicates DUPLICATE_LIMITATION")), true);
+  assert.equal(result.duplicate.some((item) => item.includes("limitation duplicates DUPLICATE_LIMITATION")), true);
 });
 
 test("ODV-shaped fixture is migration-ready except documented projection gaps", () => {

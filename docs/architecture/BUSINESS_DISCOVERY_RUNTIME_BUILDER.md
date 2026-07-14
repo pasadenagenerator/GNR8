@@ -340,3 +340,25 @@ WU-4 - Business Discovery Website Understanding Shadow Adapter
 WU-4 should add a non-persistent shadow adapter from WU to the current
 Business Discovery input shape, fill the two WU-3 projection gaps first, and
 compare Business Discovery artifacts before any runtime switch.
+## WU-4 Shadow Adapter Note
+
+WU-4 adds a non-authoritative Website Understanding shadow path beside this
+runtime builder. The canonical Business Discovery builder remains
+`buildBusinessDiscoveryFromSiteEvidence(...)`; WU-4 does not fork it, replace
+it, persist shadow outputs, or switch production input assembly.
+
+The shadow path is:
+
+```text
+Source Website Understanding Projection
+-> buildBusinessDiscoveryInputFromWebsiteUnderstanding(...)
+-> buildBusinessDiscoveryFromSiteEvidence(...)
+-> in-memory shadow Business Discovery artifact
+-> compareBusinessDiscoveryShadow(...)
+```
+
+Real-target WU-4 validation produced 100% input dependency coverage for ODV
+and ViroiDoc, but cutover remains blocked because both shadow artifacts lose
+at least one current section-boundary evidence ref on the
+`content_theme_observed` finding. Future runtime integration must preserve
+that lineage before this builder can consume WU as its canonical input.

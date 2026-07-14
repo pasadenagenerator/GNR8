@@ -13,6 +13,31 @@ or change production data.
 
 ## Executive Result
 
+WU-4 update, 2026-07-14:
+
+Website Understanding now covers 100% of current Business Discovery input
+dependencies for ODV and ViroiDoc. The WU-3 blockers are closed:
+
+- exact persisted `sourceSiteId` is projected from the runtime site-version
+  boundary;
+- Evidence Capture baseline/fidelity limitations are projected verbatim with
+  original messages, source refs, source artifact refs, severity/state,
+  original codes, and deterministic deduplication.
+
+Current WU-4 real-target matrix:
+
+| Target | Business Discovery artifact | WU projection | Dependency coverage | Partial inputs | Missing inputs | Conflicts | Duplicates |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| ODV | `business_discovery_7b37413651d79de0d109e31690a34b62` | `source_website_understanding_b0cd478c45734c2e6f31db84ed9ad2c3` | 100% | 0 | 0 | 0 | 0 |
+| ViroiDoc | `business_discovery_360fa099cbcede288c2d0e04f2ec7986` | `source_website_understanding_d80895ffc313fb393b15ecbef3e90c1a` | 100% | 0 | 0 | 0 | 0 |
+
+This is input equivalence only. WU-4 shadow comparison still blocks runtime
+cutover because the shadow `content_theme_observed` finding loses at least one
+current section-boundary evidence ref for both ODV and ViroiDoc. See
+`docs/architecture/BUSINESS_DISCOVERY_WEBSITE_UNDERSTANDING_SHADOW_ADAPTER.md`.
+
+## WU-3 Result
+
 Website Understanding is not switch-ready as the only Business Discovery input
 yet, but it is close enough for a shadow-migration phase.
 

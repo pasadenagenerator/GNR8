@@ -57,6 +57,7 @@ export type SourceWebsiteUnderstandingArtifactReference = {
 
 export type SourceWebsiteUnderstandingLineage = {
   siteVersionId: string;
+  sourceSiteId: string | null;
   dryRunId: string | null;
   contractVersion: typeof SOURCE_WEBSITE_UNDERSTANDING_CONTRACT_VERSION;
   sourceArtifactRefs: SourceWebsiteUnderstandingArtifactReference[];
@@ -67,6 +68,7 @@ export type SourceWebsiteUnderstandingLineage = {
   planningContextArtifactRefs: SourceWebsiteUnderstandingArtifactReference[];
   deterministicInputs: {
     siteVersionId: string;
+    sourceSiteId: string | null;
     dryRunId: string | null;
     contractVersion: typeof SOURCE_WEBSITE_UNDERSTANDING_CONTRACT_VERSION;
     artifactIds: string[];
@@ -84,6 +86,10 @@ export type SourceWebsiteLimitation = {
   code: string;
   message: string;
   sourceRefs: string[];
+  sourceArtifactRefs?: SourceWebsiteUnderstandingArtifactReference[];
+  originalCode?: string | null;
+  state?: SourceWebsiteKnowledgeState;
+  diagnostics?: string[];
 };
 
 export type SourceWebsiteDiagnostic = {
@@ -94,6 +100,7 @@ export type SourceWebsiteDiagnostic = {
 
 export type SourceWebsiteIdentity = {
   siteVersionId: string;
+  sourceSiteId: string | null;
   dryRunId: string | null;
   sourceUrl: string | null;
   finalUrl: string | null;
@@ -354,6 +361,7 @@ export type SourceWebsiteUnderstandingProjection = {
   contractVersion: typeof SOURCE_WEBSITE_UNDERSTANDING_CONTRACT_VERSION;
   generatedAt: string;
   siteVersionId: string;
+  sourceSiteId: string | null;
   dryRunId: string | null;
   connectorType: string | null;
   sourceIdentity: SourceWebsiteIdentity;

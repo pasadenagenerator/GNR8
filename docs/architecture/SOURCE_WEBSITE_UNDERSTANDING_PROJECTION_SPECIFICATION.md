@@ -124,6 +124,7 @@ The projection should use a deterministic projection key derived conceptually
 from:
 
 - siteVersionId;
+- sourceSiteId when available;
 - dryRunId where relevant;
 - contractVersion;
 - exact source artifact IDs;
@@ -141,7 +142,7 @@ observation artifacts listed in the forbidden feedback section.
 
 | Input class | Required | Contributes | Authority level | Missing/stale behavior | Review exposure | Role |
 | --- | --- | --- | --- | --- | --- | --- |
-| source import metadata | Required | siteVersionId, dryRunId, source mode, import timestamps, import status | Import authority | projection invalid if no import identity exists | n/a | evidence |
+| source import metadata | Required | siteVersionId, sourceSiteId, dryRunId, source mode, import timestamps, import status | Import authority | projection invalid if no import identity exists; missing sourceSiteId is a blocking readiness limitation for Business Discovery shadow construction | n/a | evidence |
 | source URL / hostname | Required when known | source identity, hostname, connector/source type hints | Import authority | explicit missing source URL limitation if absent | n/a | evidence |
 | imported raw artifact metadata | Optional but expected | raw artifact ID, file map, entry HTML, source file availability, asset refs | Raw evidence | mark unavailable/missing; do not infer files | n/a | evidence |
 | route inventory | Required for ready state, optional for buildability | pages, routes, availability, titles, route confidence | Structured evidence/candidate | readiness not_ready/partially_ready when absent | unreviewed routes may be exposed as candidates | evidence/candidates |
@@ -153,7 +154,7 @@ observation artifacts listed in the forbidden feedback section.
 | Candidate Review package / decisions | Optional | latest decisions, review events, approved/rejected/deferred/unreviewed state | Human governance over candidates | missing review means unreviewed, not approved | reviewed and rejected remain visible | reviewed candidates |
 | Reconstruction Package | Optional | eligibility, blockers, approved candidate refs, limitations, diagnostics, lineage | Reviewed reconstruction eligibility | blocked/missing remains explicit; projection can still build | approved refs preferred for presentation only | reviewed context |
 | StructurePlan | Optional context only | planned organization from approved candidates | Planning projection | stale/missing context does not block source understanding | reviewed source refs remain separate | planning context |
-| current limitations and diagnostics | Required where emitted upstream | completeness, stale inputs, conflicts, unsupported evidence, mapper limits | Layer-local diagnostics | propagate and normalize; never hide | n/a | governance |
+| current limitations and diagnostics | Required where emitted upstream | completeness, stale inputs, conflicts, unsupported evidence, mapper limits | Layer-local diagnostics | propagate and normalize; never hide; Evidence Capture baseline/fidelity limitations must preserve original messages, codes/types, severity/state, source refs, and artifact refs | n/a | governance |
 
 ## Authority Hierarchy
 
@@ -238,6 +239,22 @@ Propagation rules:
 - Stale inputs reduce readiness and may reduce confidence, but must remain
   inspectable.
 - Missing and unavailable items have no positive confidence.
+
+## WU-4 Implementation Note
+
+WU-4 implements the Business Discovery shadow-adapter requirements without
+changing the persistence policy:
+
+- `sourceSiteId` is first-class projection identity and is copied from the
+  authoritative runtime site-version boundary.
+- Evidence Capture baseline/fidelity limitations are first-class projection
+  limitations and preserve the exact messages and lineage needed by current
+  Business Discovery.
+- Missing `sourceSiteId` fails closed with a blocking limitation.
+- Projection identity changes when these fields are present because normalized
+  projection content changed.
+- Business Discovery may be built from WU in shadow mode only; WU-4 does not
+  authorize production input migration.
 
 ## Projection Domains
 

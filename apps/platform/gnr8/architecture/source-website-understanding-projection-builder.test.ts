@@ -372,12 +372,72 @@ test("builder creates deterministic projection identity and rebuild equality", (
 test("builder exposes source, routes, navigation, sections, and fail-closed readiness", () => {
   const projection = buildSourceWebsiteUnderstandingProjection(builderInput());
 
+  assert.equal(projection.sourceSiteId, "odv-site");
+  assert.equal(projection.sourceIdentity.sourceSiteId, "odv-site");
+  assert.equal(projection.lineage.sourceSiteId, "odv-site");
   assert.equal(projection.sourceIdentity.sourceUrl, "https://www.odv.example/");
   assert.equal(projection.routes.some((route) => route.routePath === "/" && route.state === "reviewed"), true);
   assert.equal(projection.navigation.some((item) => item.label === "Storitve"), true);
   assert.equal(projection.sections.some((section) => section.plannedOnly && section.state === "unavailable"), true);
   assert.equal(projection.readiness.status, "ready_for_business_discovery");
   assert.equal(projection.readiness.conservativeBusinessDiscoveryCanProceed, true);
+});
+
+test("builder fails closed when sourceSiteId is missing", () => {
+  const input = builderInput();
+  input.sourceSiteId = null;
+  const projection = buildSourceWebsiteUnderstandingProjection(input);
+  const validation = validateSourceWebsiteUnderstandingProjection(projection);
+
+  assert.equal(projection.sourceSiteId, null);
+  assert.equal(projection.readiness.status, "blocked");
+  assert.equal(projection.readiness.conservativeBusinessDiscoveryCanProceed, false);
+  assert.equal(projection.limitations.some((item) => item.code === "SOURCE_SITE_ID_MISSING" && item.severity === "blocking"), true);
+  assert.deepEqual(validation.errors, []);
+});
+
+test("builder preserves Evidence Capture limitations verbatim and deduplicates deterministically", () => {
+  const input = builderInput();
+  input.evidenceCaptureBaseline = {
+    kind: "evidence_capture_baseline",
+    artifactVersion: 1,
+    captureRunId: "capture-run-1",
+    persistedRefs: { rawImportArtifactId: "raw-import-odv" },
+    captureStatus: "completed",
+    routePath: "/",
+    sourceUrl: "https://www.odv.example/",
+    finalUrl: "https://www.odv.example/",
+    limitations: ["missing_computed_styles", "missing_computed_styles"],
+    fidelityLimitations: [
+      {
+        type: "rendered_dom_partial",
+        affectedLayer: "evidence_capture",
+        severity: "warning",
+        explanation: "Rendered DOM fidelity is partial.",
+        recommendedNextLayer: "manual_review",
+        evidenceRefIds: ["rendered-dom"],
+      },
+    ],
+    captureExpansionEvidence: {
+      layoutGeometryEvidence: [],
+      sectionBoundaryEvidence: [],
+      navigationEvidence: [],
+    },
+    summaries: { assetInventory: { persistedAssetCount: 4 } },
+  } as never;
+
+  const projection = buildSourceWebsiteUnderstandingProjection(input);
+  const baselineLimitations = projection.limitations.filter((item) => item.code === "UPSTREAM_EVIDENCE_LIMITATION");
+  const fidelityLimitations = projection.limitations.filter((item) => item.code === "UPSTREAM_FIDELITY_LIMITATION");
+
+  assert.equal(baselineLimitations.length, 1);
+  assert.equal(baselineLimitations[0]?.message, "missing_computed_styles");
+  assert.equal(baselineLimitations[0]?.sourceArtifactRefs?.[0]?.artifactId, "capture-run-1");
+  assert.equal(fidelityLimitations.length, 1);
+  assert.equal(fidelityLimitations[0]?.message, "Rendered DOM fidelity is partial.");
+  assert.equal(fidelityLimitations[0]?.originalCode, "rendered_dom_partial");
+  assert.deepEqual(fidelityLimitations[0]?.diagnostics?.slice(0, 3), ["rendered_dom_partial", "evidence_capture", "manual_review"]);
+  assert.equal(projection.projectionId, buildSourceWebsiteUnderstandingProjection(input).projectionId);
 });
 
 test("builder keeps reviewed rejected candidates visible and separate from source truth", () => {

@@ -120,6 +120,8 @@ test("loader composes existing site version and raw import data without persiste
   assert.equal(getSiteVersionCalls, 1);
   assert.equal(getRawImportedSiteArtifactCalls, 1);
   assert.notEqual(result.projection, null);
+  assert.equal(result.projection?.sourceSiteId, "source-site");
+  assert.equal(result.projection?.sourceIdentity.sourceSiteId, "source-site");
   assert.equal(result.projection?.sourceIdentity.sourceUrl, "https://source.example/");
   assert.equal(result.projection?.visualIdentitySignals.logoCandidates.length, 1);
   assert.deepEqual(result.validation.errors, []);

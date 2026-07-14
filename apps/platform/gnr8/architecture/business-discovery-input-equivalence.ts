@@ -155,6 +155,24 @@ function existingLimitationCount(input: BusinessDiscoveryBuilderInput): number {
     .reduce((sum, baseline) => sum + baseline.limitations.length + baseline.fidelityLimitations.length, 0);
 }
 
+function expectedEvidenceLimitations(input: BusinessDiscoveryBuilderInput): string[] {
+  return uniqueSorted(asArray(input.evidenceCaptureBaseline).flatMap((baseline) => [
+    ...baseline.limitations.map((message) => `UPSTREAM_EVIDENCE_LIMITATION\u0000${message}`),
+    ...baseline.fidelityLimitations.map((item) => `UPSTREAM_FIDELITY_LIMITATION\u0000${item.explanation}\u0000${item.type}\u0000${item.affectedLayer}\u0000${item.recommendedNextLayer}`),
+  ]));
+}
+
+function projectedEvidenceLimitations(projection: SourceWebsiteUnderstandingProjection): string[] {
+  return uniqueSorted(projection.limitations.flatMap((item) => {
+    if (item.code === "UPSTREAM_EVIDENCE_LIMITATION") return [`${item.code}\u0000${item.message}`];
+    if (item.code === "UPSTREAM_FIDELITY_LIMITATION") {
+      const diagnostics = item.diagnostics ?? [];
+      return [`${item.code}\u0000${item.message}\u0000${item.originalCode ?? diagnostics[0] ?? ""}\u0000${diagnostics[1] ?? ""}\u0000${diagnostics[2] ?? ""}`];
+    }
+    return [];
+  }));
+}
+
 function allIncluded<T>(expected: T[], projected: T[]): boolean {
   const set = new Set(projected);
   return expected.every((item) => set.has(item));
@@ -227,11 +245,11 @@ const dependencySpecs: DependencySpec[] = [
     futureClassifier: null,
     humanConfirmationRequirement: null,
     obsoleteAfterMigration: null,
-    coverage: (_projection, existing) => ({
-      alreadyProjected: existing.sourceSiteId ? "NO" : "PARTIAL",
-      strength: existing.sourceSiteId ? "not_projected" : "equivalent",
-      reason: existing.sourceSiteId ? "Source Website Understanding does not currently expose sourceSiteId as a first-class projection field." : "No sourceSiteId was required by this existing input.",
-      missingProjection: existing.sourceSiteId ? "sourceIdentity.sourceSiteId or equivalent runtime identity field" : null,
+    coverage: (projection, existing) => ({
+      alreadyProjected: existing.sourceSiteId && projection.sourceSiteId === existing.sourceSiteId ? "YES" : existing.sourceSiteId ? "NO" : "PARTIAL",
+      strength: existing.sourceSiteId && projection.sourceSiteId === existing.sourceSiteId ? "equivalent" : existing.sourceSiteId ? "not_projected" : "equivalent",
+      reason: existing.sourceSiteId && projection.sourceSiteId === existing.sourceSiteId ? "Projection carries the exact persisted sourceSiteId from the runtime site-version boundary." : existing.sourceSiteId ? "Projection sourceSiteId is missing or differs from the current Business Discovery input." : "No sourceSiteId was required by this existing input.",
+      missingProjection: existing.sourceSiteId && projection.sourceSiteId === existing.sourceSiteId ? null : existing.sourceSiteId ? "matching projection.sourceSiteId and sourceIdentity.sourceSiteId" : null,
     }),
   },
   {
@@ -340,9 +358,11 @@ const dependencySpecs: DependencySpec[] = [
     obsoleteAfterMigration: "Business Discovery evidenceLimitations(...) copying becomes unnecessary once projection limitations are complete.",
     coverage: (projection, existing) => {
       const expected = existingLimitationCount(existing);
-      const projected = projection.limitations.length + projection.readiness.blockers.length;
-      if (expected === 0) return { alreadyProjected: "YES", strength: projected > 0 ? "stronger" : "equivalent", reason: "No upstream evidence limitations were required by the existing input.", missingProjection: null };
-      if (projected > 0) return { alreadyProjected: "PARTIAL", strength: "weaker", reason: "Projection exposes limitations, but WU-3 does not prove every baseline/fidelity limitation message is preserved verbatim.", missingProjection: "verbatim evidence baseline limitation and fidelity limitation projection" };
+      const expectedItems = expectedEvidenceLimitations(existing);
+      const projectedItems = projectedEvidenceLimitations(projection);
+      if (expected === 0) return { alreadyProjected: "YES", strength: projectedItems.length > 0 ? "stronger" : "equivalent", reason: "No upstream evidence limitations were required by the existing input.", missingProjection: null };
+      if (allIncluded(expectedItems, projectedItems)) return { alreadyProjected: "YES", strength: "equivalent", reason: "Projection preserves every current baseline/fidelity limitation message and lineage diagnostic verbatim.", missingProjection: null };
+      if (projectedItems.length > 0) return { alreadyProjected: "PARTIAL", strength: "weaker", reason: "Projection exposes some upstream limitations, but at least one current baseline/fidelity limitation is missing or changed.", missingProjection: "verbatim evidence baseline limitation and fidelity limitation projection" };
       return { alreadyProjected: "NO", strength: "not_projected", reason: "Existing Business Discovery input includes upstream limitations that are not visible in the projection.", missingProjection: "source limitations mapped from Evidence Capture baseline and fidelity limitations" };
     },
   },
@@ -510,6 +530,9 @@ function conflictingValues(projection: SourceWebsiteUnderstandingProjection, exi
   if (projection.siteVersionId !== existing.siteVersionId) {
     conflicts.push(`siteVersionId differs: Business Discovery input ${existing.siteVersionId}; Website Understanding ${projection.siteVersionId}`);
   }
+  if (existing.sourceSiteId && projection.sourceSiteId && projection.sourceSiteId !== existing.sourceSiteId) {
+    conflicts.push(`sourceSiteId differs: Business Discovery input ${existing.sourceSiteId}; Website Understanding ${projection.sourceSiteId}`);
+  }
   if (projection.dryRunId && existing.dryRunId && projection.dryRunId !== existing.dryRunId) {
     conflicts.push(`dryRunId differs: Business Discovery input ${existing.dryRunId}; Website Understanding ${projection.dryRunId}`);
   }
@@ -546,7 +569,7 @@ export function validateBusinessDiscoveryInputEquivalence(
     ...duplicateValues("routePath", websiteUnderstandingProjection.routes.map((route) => route.routePath)),
     ...duplicateValues("navigation label", websiteUnderstandingProjection.navigation.map((item) => `${item.routePath ?? ""}:${item.label}:${item.href ?? ""}`)),
     ...duplicateValues("asset path", websiteUnderstandingProjection.assets.map((asset) => asset.path)),
-    ...duplicateValues("limitation code", websiteUnderstandingProjection.limitations.map((item) => item.code)),
+    ...duplicateValues("limitation", websiteUnderstandingProjection.limitations.map((item) => `${item.code}:${item.message}:${item.sourceRefs.join("|")}`)),
   ];
   const coverageReport = createWebsiteUnderstandingCoverageReport(websiteUnderstandingProjection);
   const migrationBlockers = [

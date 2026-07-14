@@ -100,6 +100,10 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
 }
 
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.length > 0))].sort((left, right) => left.localeCompare(right));
+}
+
 function confidence(level: SourceWebsiteConfidence["level"], reasons: string[]): SourceWebsiteConfidence {
   return { level, reasons: [...new Set(reasons)].sort() };
 }
@@ -151,13 +155,21 @@ function limitation(input: {
   message: string;
   severity?: SourceWebsiteLimitation["severity"];
   sourceRefs?: string[];
+  sourceArtifactRefs?: SourceWebsiteLimitation["sourceArtifactRefs"];
+  originalCode?: string | null;
+  state?: SourceWebsiteLimitation["state"];
+  diagnostics?: string[];
 }): SourceWebsiteLimitation {
   return {
     limitationId: stableId("source-understanding-limitation", input),
     code: input.code,
     message: input.message,
     severity: input.severity ?? "warning",
-    sourceRefs: input.sourceRefs ?? [],
+    sourceRefs: uniqueSorted(input.sourceRefs ?? []),
+    ...(input.sourceArtifactRefs && input.sourceArtifactRefs.length > 0 ? { sourceArtifactRefs: input.sourceArtifactRefs } : {}),
+    ...(input.originalCode ? { originalCode: input.originalCode } : {}),
+    ...(input.state ? { state: input.state } : {}),
+    ...(input.diagnostics && input.diagnostics.length > 0 ? { diagnostics: input.diagnostics.filter((value) => value.length > 0) } : {}),
   };
 }
 
@@ -758,6 +770,7 @@ function dimension(key: SourceWebsiteReadinessDimension["key"], status: SourceWe
 
 function buildReadiness(input: {
   sourceUrl: string | null;
+  sourceSiteId: string | null;
   routes: SourceRouteUnderstanding[];
   navigation: SourceNavigationUnderstanding[];
   sections: SourceSectionUnderstanding[];
@@ -770,7 +783,7 @@ function buildReadiness(input: {
   limitations: SourceWebsiteLimitation[];
 }): SourceWebsiteReadiness {
   const dims: SourceWebsiteReadinessDimension[] = [
-    dimension("source_acquisition", input.sourceUrl ? "ok" : "missing", input.sourceUrl ? "Source URL is persisted." : "Source URL is missing.", input.sourceUrl ? ["raw-imported-site:source-url"] : []),
+    dimension("source_acquisition", input.sourceUrl && input.sourceSiteId ? "ok" : input.sourceUrl ? "partial" : "missing", input.sourceUrl && input.sourceSiteId ? "Source URL and sourceSiteId are persisted." : input.sourceUrl ? "Source URL is persisted, but sourceSiteId is missing." : "Source URL is missing.", input.sourceUrl ? ["raw-imported-site:source-url"] : []),
     dimension("route_coverage", input.routes.length > 0 ? "ok" : "missing", `${input.routes.length} route(s) projected.`),
     dimension("navigation_coverage", input.navigation.length > 0 ? "ok" : "missing", `${input.navigation.length} navigation item(s) projected.`),
     dimension("structure_coverage", input.sections.some((item) => !item.plannedOnly) ? "partial" : "missing", `${input.sections.filter((item) => !item.plannedOnly).length} observed/source section item(s) projected.`),
@@ -785,7 +798,7 @@ function buildReadiness(input: {
   ];
   const blockers = input.limitations.filter((item) => item.severity === "blocking");
   const missingCritical = dims.filter((item) => item.status === "missing" || item.status === "blocked");
-  const conservativeCanProceed = Boolean(input.sourceUrl && input.routes.length > 0 && input.content.some((item) => item.bodyTextAvailable) && blockers.length === 0);
+  const conservativeCanProceed = Boolean(input.sourceUrl && input.sourceSiteId && input.routes.length > 0 && input.content.some((item) => item.bodyTextAvailable) && blockers.length === 0);
   return {
     status: blockers.length > 0 ? "blocked" : conservativeCanProceed ? "ready_for_business_discovery" : missingCritical.length > 0 ? "partially_ready" : "partially_ready",
     conservativeBusinessDiscoveryCanProceed: conservativeCanProceed,
@@ -797,8 +810,87 @@ function buildReadiness(input: {
   };
 }
 
+function evidenceCaptureLimitations(input: SourceWebsiteUnderstandingBuilderInput): SourceWebsiteLimitation[] {
+  const baseline = input.evidenceCaptureBaseline;
+  if (!baseline) return [];
+  const artifactRef: SourceWebsiteUnderstandingArtifactReference = {
+    kind: baseline.kind,
+    artifactId: baseline.captureRunId,
+    canonicalId: baseline.persistedRefs.rawImportArtifactId,
+    version: baseline.artifactVersion,
+    status: baseline.captureStatus,
+    source: "evidence_capture",
+  };
+  const baselineRef = `evidence:capture-baseline:${baseline.routePath}`;
+  const baselineLimitations = baseline.limitations.map((message) => limitation({
+    code: "UPSTREAM_EVIDENCE_LIMITATION",
+    originalCode: "baseline_limitation",
+    message,
+    severity: "warning",
+    sourceRefs: [baselineRef],
+    sourceArtifactRefs: [artifactRef],
+    state: "observed",
+  }));
+  const fidelityLimitations = baseline.fidelityLimitations.map((item) => limitation({
+    code: "UPSTREAM_FIDELITY_LIMITATION",
+    originalCode: item.type,
+    message: item.explanation,
+    severity: item.severity === "info" ? "info" : item.severity === "blocker" ? "blocking" : "warning",
+    sourceRefs: item.evidenceRefIds.length > 0 ? item.evidenceRefIds : [baselineRef],
+    sourceArtifactRefs: [artifactRef],
+    state: "observed",
+    diagnostics: [item.type, item.affectedLayer, item.recommendedNextLayer],
+  }));
+  return [...baselineLimitations, ...fidelityLimitations];
+}
+
+function dedupeLimitations(limitations: SourceWebsiteLimitation[]): SourceWebsiteLimitation[] {
+  const byKey = new Map<string, SourceWebsiteLimitation>();
+  for (const item of limitations) {
+    const key = stableStringify({
+      code: item.code,
+      message: item.message,
+      severity: item.severity,
+      sourceRefs: uniqueSorted(item.sourceRefs),
+      originalCode: item.originalCode ?? null,
+      diagnostics: uniqueSorted(item.diagnostics ?? []),
+    });
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...item, sourceRefs: uniqueSorted(item.sourceRefs), diagnostics: item.diagnostics ? item.diagnostics.filter((value) => value.length > 0) : undefined });
+      continue;
+    }
+    byKey.set(key, {
+      ...existing,
+      sourceRefs: uniqueSorted([...existing.sourceRefs, ...item.sourceRefs]),
+      sourceArtifactRefs: [
+        ...(existing.sourceArtifactRefs ?? []),
+        ...(item.sourceArtifactRefs ?? []),
+      ].filter((ref, index, refs) =>
+        refs.findIndex((candidate) =>
+          candidate.source === ref.source &&
+          candidate.kind === ref.kind &&
+          (candidate.artifactId ?? "") === (ref.artifactId ?? "") &&
+          (candidate.canonicalId ?? "") === (ref.canonicalId ?? "")) === index),
+    });
+  }
+  return [...byKey.values()].sort((left, right) =>
+    left.code.localeCompare(right.code) ||
+    left.message.localeCompare(right.message) ||
+    left.sourceRefs.join("|").localeCompare(right.sourceRefs.join("|")));
+}
+
 function collectLimitations(input: SourceWebsiteUnderstandingBuilderInput): SourceWebsiteLimitation[] {
   const limitations: SourceWebsiteLimitation[] = [];
+  if (!input.sourceSiteId) {
+    limitations.push(limitation({
+      code: "SOURCE_SITE_ID_MISSING",
+      message: "Authoritative sourceSiteId is unavailable on the runtime site-version boundary; shadow Business Discovery must fail closed.",
+      severity: "blocking",
+      sourceRefs: [`site-version:${input.siteVersionId}`],
+      state: "missing",
+    }));
+  }
   if (!input.rawImportedSiteArtifact) {
     limitations.push(limitation({
       code: "RAW_IMPORTED_SITE_ARTIFACT_MISSING",
@@ -967,12 +1059,15 @@ export function buildSourceWebsiteUnderstandingProjection(input: SourceWebsiteUn
   const businessSignalCandidates = buildBusinessSignals(input, content);
   const limitations = [
     ...collectLimitations(input),
+    ...evidenceCaptureLimitations(input),
     ...visualIdentitySignals.limitations,
     ...businessSignalCandidates.limitations,
-  ].sort((left, right) => left.code.localeCompare(right.code));
+  ];
+  const projectedLimitations = dedupeLimitations(limitations);
   const technicalSignals = buildTechnicalSignals(input, content);
   const readiness = buildReadiness({
     sourceUrl,
+    sourceSiteId: input.sourceSiteId,
     routes,
     navigation,
     sections,
@@ -982,7 +1077,7 @@ export function buildSourceWebsiteUnderstandingProjection(input: SourceWebsiteUn
     candidateReviewPackage: input.candidateReviewPackage,
     visualIdentity: visualIdentitySignals,
     businessSignals: businessSignalCandidates,
-    limitations,
+    limitations: projectedLimitations,
   });
   const diagnostics = [
     ...stringArray(input.provenanceSummary?.importDiagnosticCodes).map((code) => diagnostic(code, "Runtime import diagnostic.", ["runtime-import-provenance"])),
@@ -1003,10 +1098,12 @@ export function buildSourceWebsiteUnderstandingProjection(input: SourceWebsiteUn
     contractVersion: SOURCE_WEBSITE_UNDERSTANDING_CONTRACT_VERSION,
     generatedAt,
     siteVersionId: input.siteVersionId,
+    sourceSiteId: input.sourceSiteId,
     dryRunId,
     connectorType: input.provenanceSummary?.captureMode ?? input.provenanceSummary?.sourceMode ?? null,
     sourceIdentity: {
       siteVersionId: input.siteVersionId,
+      sourceSiteId: input.sourceSiteId,
       dryRunId,
       sourceUrl,
       finalUrl: text(input.rawImportedSiteArtifact?.metadata?.finalUrl) ?? text(input.evidenceCaptureBaseline?.finalUrl),
@@ -1042,10 +1139,11 @@ export function buildSourceWebsiteUnderstandingProjection(input: SourceWebsiteUn
       readiness.summary,
       "Projection confidence is fail-closed and does not use counts alone as proof.",
     ]),
-    limitations,
+    limitations: projectedLimitations,
     diagnostics,
     lineage: {
       siteVersionId: input.siteVersionId,
+      sourceSiteId: input.sourceSiteId,
       dryRunId,
       contractVersion: SOURCE_WEBSITE_UNDERSTANDING_CONTRACT_VERSION,
       sourceArtifactRefs,
@@ -1056,6 +1154,7 @@ export function buildSourceWebsiteUnderstandingProjection(input: SourceWebsiteUn
       planningContextArtifactRefs,
       deterministicInputs: {
         siteVersionId: input.siteVersionId,
+        sourceSiteId: input.sourceSiteId,
         dryRunId,
         contractVersion: SOURCE_WEBSITE_UNDERSTANDING_CONTRACT_VERSION,
         artifactIds: artifactIds(allRefs),
@@ -1147,6 +1246,14 @@ export function validateSourceWebsiteUnderstandingProjection(value: unknown): So
   if (!text(projection.siteVersionId)) errors.push("siteVersionId is required");
   if (!text(projection.projectionId)) errors.push("projectionId is required");
   if (!isRecord(projection.sourceIdentity)) errors.push("sourceIdentity is required");
+  if (projection.sourceSiteId !== projection.sourceIdentity?.sourceSiteId) errors.push("sourceSiteId must match sourceIdentity.sourceSiteId");
+  if (projection.lineage && projection.sourceSiteId !== projection.lineage.sourceSiteId) errors.push("sourceSiteId must match lineage.sourceSiteId");
+  if (projection.lineage?.deterministicInputs && projection.sourceSiteId !== projection.lineage.deterministicInputs.sourceSiteId) {
+    errors.push("sourceSiteId must match lineage.deterministicInputs.sourceSiteId");
+  }
+  if (!text(projection.sourceSiteId) && !projection.limitations?.some((item) => item.code === "SOURCE_SITE_ID_MISSING" && item.severity === "blocking")) {
+    errors.push("missing sourceSiteId requires blocking SOURCE_SITE_ID_MISSING limitation");
+  }
   if (!SOURCE_WEBSITE_READINESS_STATUSES.includes(projection.readiness?.status as never)) errors.push("readiness.status is invalid");
   validateConfidence(projection.confidence, "confidence", errors);
 

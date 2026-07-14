@@ -381,10 +381,12 @@ export default async function WebsiteUnderstandingPage(props: PageProps) {
           contractVersion: "WU-2",
           generatedAt: new Date(0).toISOString(),
           siteVersionId,
+          sourceSiteId: null,
           dryRunId: null,
           connectorType: null,
           sourceIdentity: {
             siteVersionId,
+            sourceSiteId: null,
             dryRunId: null,
             sourceUrl: null,
             finalUrl: null,
@@ -416,7 +418,7 @@ export default async function WebsiteUnderstandingPage(props: PageProps) {
           confidence: { level: "LOW", reasons: [] },
           limitations: [],
           diagnostics: result.diagnostics,
-          lineage: { siteVersionId, dryRunId: null, contractVersion: "WU-2", sourceArtifactRefs: [], evidenceArtifactRefs: [], candidateArtifactRefs: [], reviewArtifactRefs: [], reconstructionArtifactRefs: [], planningContextArtifactRefs: [], deterministicInputs: { siteVersionId, dryRunId: null, contractVersion: "WU-2", artifactIds: [] } },
+          lineage: { siteVersionId, sourceSiteId: null, dryRunId: null, contractVersion: "WU-2", sourceArtifactRefs: [], evidenceArtifactRefs: [], candidateArtifactRefs: [], reviewArtifactRefs: [], reconstructionArtifactRefs: [], planningContextArtifactRefs: [], deterministicInputs: { siteVersionId, sourceSiteId: null, dryRunId: null, contractVersion: "WU-2", artifactIds: [] } },
         }} />
       </main>
     );

@@ -829,3 +829,26 @@ Evidence:
 WU-3 adds no Business Discovery migration, DBT mutation, extraction, AI,
 generation, approval, publishing, deployment, persistence, schema, API, or
 worker behavior.
+## WU-4 Shadow Adapter Result
+
+WU-4 confirms the WU-0/WU-1 architectural direction: the existing Website
+Understanding layer can serve as a connector-neutral upstream boundary for
+Business Discovery shadow construction without adding a new extraction
+pipeline or projection persistence.
+
+Result:
+
+- first-class `sourceSiteId` and verbatim Evidence Capture limitations are now
+  projected;
+- Business Discovery input dependency coverage is 100% for ODV and ViroiDoc;
+- Business Discovery can be built in memory from the WU projection using the
+  existing `buildBusinessDiscoveryFromSiteEvidence(...)` builder;
+- no Business Discovery, DBT, WDB/WGP, generation, publish, schema, API,
+  worker, or provenance mutation occurred;
+- runtime cutover remains blocked because both real-target shadows lose at
+  least one current section-boundary evidence ref on
+  `content_theme_observed`.
+
+The next architecture gap is not another extraction/classification layer. It
+is exact section evidence lineage preservation through the projection and
+adapter.
