@@ -150,10 +150,10 @@ WU-3 adds no Business Discovery runtime switch, DBT mutation, WDB/WGP change,
 generation, provider execution, approval, publishing, deployment, persistence,
 schema, API, worker, extraction, parsing, classifier, or production mutation.
 
-Next safe step:
+Historical next safe step after WU-3:
 
 ```text
-WU-6 - Optional Business Discovery Runtime Integration Plan
+WU-4 - Business Discovery Website Understanding Shadow Adapter
 ```
 
 ## Phase WU-5 Section Evidence Lineage Addendum
@@ -187,6 +187,38 @@ No Business Discovery runtime switch, projection persistence, Business
 Discovery persistence, DBT/BUR/Alignment/WDB/WGP regeneration, schema, API, UI,
 worker, generation, publishing, deployment, DNS, or production mutation
 occurred.
+
+## Phase WU-6 Optional Business Discovery Runtime Integration Plan Addendum
+
+WU-6 documents the future production migration strategy from current Business
+Discovery input assembly to Source Website Understanding as the canonical
+upstream input.
+
+Canonical plan:
+
+- `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`
+
+Runtime modes:
+
+- `LEGACY`: current scattered input assembly is canonical; no shadow
+  execution and no comparison.
+- `SHADOW_COMPARE`: current Business Discovery remains canonical; WU builds
+  an in-memory shadow Business Discovery artifact through the adapter;
+  comparison runs; nothing is persisted and nothing downstream changes.
+- `WEBSITE_UNDERSTANDING`: WU becomes the Business Discovery input through the
+  adapter; current scattered assembly remains available only as rollback.
+
+The future rollout sequence is Legacy only, Legacy plus Shadow Compare,
+limited internal websites, selected migration customers, Website
+Understanding default, and legacy retirement in a later explicit phase.
+
+Rollback must require runtime configuration only. It must never require data
+migration, artifact migration, database repair, recomputation, rebuild, DBT or
+downstream repair, publishing repair, or DNS repair.
+
+WU-6 adds no Business Discovery runtime switch, Business Discovery builder
+change, adapter change, WU change, feature flag, persistence, schema, API, UI,
+worker, AI, generation, publishing, deployment, DNS, or production mutation.
 
 ## MVP-2.0-ARCH Generation Cycle Addendum
 
@@ -2047,8 +2079,80 @@ WU-5 closes this blocker. The current pipeline gate is:
 Website Understanding -> Business Discovery optional runtime integration: READY_WITH_EXPECTED_DIFFERENCES
 ```
 
-Next phase:
+Historical next phase after WU-5:
 
 ```text
 WU-6 - Optional Business Discovery Runtime Integration Plan
 ```
+
+WU-6 is now complete as a planning-only phase. The current pipeline gate is:
+
+```text
+Website Understanding -> Business Discovery future runtime integration plan: DOCUMENTED
+```
+
+Next safe phase:
+
+```text
+WU-7 - Business Discovery Runtime Mode Configuration Design
+```
+
+WU-7 should remain design-only unless explicitly authorized to implement
+runtime mode selection.
+
+## GX-1 Knowledge Workspace Foundation Addendum
+
+GX-1 implements the first Knowledge Workspace for GNR8.
+
+Route:
+
+```text
+/gnr8/admin/workspace/[siteVersionId]
+```
+
+ODV route:
+
+```text
+/gnr8/admin/workspace/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+Canonical record:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_RUNTIME_FOUNDATION.md
+```
+
+GX-1 composes existing runtime projections only:
+
+- Business Foundation.
+- Source Website Understanding.
+- Generation Evolution Dashboard.
+
+Workspace sections:
+
+- Workspace Hero.
+- Website Versions.
+- Business Understanding.
+- Visual Identity.
+- Transformation Story.
+- Current Knowledge Gaps.
+- Workspace Health.
+- Advanced.
+
+GX-1 adds reusable read-only UI components and reciprocal read-only Workspace
+links from Business Foundation, Website Understanding, and Generation
+Evolution. It moves technical artifact details into collapsed Advanced
+sections and keeps the first operator view product-oriented.
+
+GX-1 adds no Business Discovery change, Website Understanding change, DBT
+change, WDB/WGP change, generation change, compliance/evolution logic change,
+persistence, schema, API, worker, AI, publishing, deployment, DNS, runtime
+architecture mutation, edit controls, forms, or mutation controls.
+
+Next safe phase:
+
+```text
+GX-2 - Knowledge Workspace Real-Target Verification and UX Tightening
+```
+
+GX-2 should remain read-only unless explicitly authorized otherwise.

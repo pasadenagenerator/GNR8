@@ -278,6 +278,19 @@ artifact lineage and makes missing, unavailable, stale, conflicting,
 candidate, reviewed, and confirmed-source-fact states explicit before Business
 Discovery interprets them.
 
+WU-6 defines the future production migration strategy for allowing that
+projection to become the canonical Business Discovery input. The required
+modes are `LEGACY`, `SHADOW_COMPARE`, and `WEBSITE_UNDERSTANDING`. Rollout is
+allowed only through mandatory coverage, lineage, comparison, confidence,
+diagnostics, limitations, connector-compatibility, deterministic rebuild, ODV,
+and ViroiDoc gates. Rollback must require runtime configuration only, never
+data migration, artifact repair, recomputation, rebuild, or downstream
+mutation.
+
+WU-6 reference:
+
+- `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`
+
 This chain is evidence-first and lineage-preserving. It decides what is known,
 what is approved, what is blocked, what is stale, and what may safely become an
 input to the Digital Business Twin or a future Generation Package projection.
@@ -842,3 +855,25 @@ This preserves the manifesto boundary:
 - Generated proposals, provider payloads, compliance artifacts, evolution
   analyses, and published-site state never feed back into source-site
   understanding.
+
+## GX-1 Knowledge Workspace Manifesto Note
+
+GX-1 introduces the Knowledge Workspace as a read-only product surface over
+existing understanding projections.
+
+This preserves the manifesto boundary:
+
+- The Workspace is not a canonical artifact.
+- The Workspace is not a new persistence layer.
+- The Workspace is not a runtime mutation layer.
+- Business Foundation remains the business meaning module.
+- Source Website Understanding remains the source-site understanding module.
+- Generation Evolution remains the historical generated-website evolution
+  module.
+- Advanced technical lineage remains available but no longer leads the
+  operator experience.
+
+The Workspace becomes the first page an operator opens because it composes
+what GNR8 already knows into one coherent product view. It does not replace
+the Digital Business Twin, bypass governance, infer missing truth, edit
+artifacts, generate, approve, publish, deploy, or mutate DNS.

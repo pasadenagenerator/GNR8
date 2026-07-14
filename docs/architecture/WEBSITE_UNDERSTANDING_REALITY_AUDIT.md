@@ -39,6 +39,19 @@ candidate, what has been reviewed, and what is safe for Business Discovery to
 consume?
 ```
 
+WU-6 extends this conclusion into a production migration strategy. The future
+cutover must not create a second Website Understanding system or bypass the
+existing distributed evidence chain. It must use Source Website Understanding
+as the connector-neutral upstream input to the existing Business Discovery
+builder through the adapter, with `LEGACY`, `SHADOW_COMPARE`, and
+`WEBSITE_UNDERSTANDING` runtime modes documented in:
+
+- `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`
+
+WU-6 is planning-only. It does not activate Website Understanding, modify
+Business Discovery, persist projections, introduce feature flags, or change
+runtime behavior.
+
 ## Current Architecture Map
 
 Canonical docs now describe a Website Understanding Engine:

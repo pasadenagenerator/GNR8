@@ -154,87 +154,135 @@ Current status:
   ViroiDoc now retain all current `content_theme_observed` refs with no missing
   or added content-theme refs. Optional runtime integration is
   `ready_with_expected_differences`; no runtime switch occurred.
+- Phase WU-6 - Optional Business Discovery Runtime Integration Plan is
+  complete. The production migration strategy is documented with `LEGACY`,
+  `SHADOW_COMPARE`, and `WEBSITE_UNDERSTANDING` runtime modes, mandatory
+  coverage/lineage/comparison/confidence/diagnostics/limitations/connector
+  gates, instant runtime-configuration rollback, connector-neutrality for
+  WordPress, Joomla, Webflow, Shopify, Ecwid, Mono, and future connectors,
+  observability requirements, failure handling, and the future cutover
+  sequence. No runtime switch, feature flag, persistence, schema, API, UI,
+  worker, Business Discovery change, WU change, generation, publishing,
+  deployment, DNS, or production mutation occurred.
 
 Current Phase:
-- Phase WU-5 - Section Evidence Lineage Preservation for Optional Business
-  Discovery Cutover is
+- Phase GX-1 - GNR8 Knowledge Workspace Foundation is COMPLETE.
+
+GX-1 evidence:
+- Canonical runtime foundation:
+  `docs/architecture/KNOWLEDGE_WORKSPACE_RUNTIME_FOUNDATION.md`.
+- Workspace route:
+  `/gnr8/admin/workspace/[siteVersionId]`.
+- ODV workspace route:
+  `/gnr8/admin/workspace/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Projection composition:
+  `apps/platform/gnr8/architecture/knowledge-workspace-projection.ts`.
+- Route implementation:
+  `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/page.tsx`.
+- Reusable read-only components:
+  `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/knowledge-workspace-components.tsx`.
+- Focused test:
+  `apps/platform/app/gnr8/admin/knowledge-workspace-page.test.ts`.
+- The Workspace composes existing Business Foundation, Source Website
+  Understanding, and Generation Evolution projections; it writes nothing and
+  introduces no canonical artifact.
+- Workspace sections: Workspace Hero, Website Versions, Business
+  Understanding, Visual Identity, Transformation Story, Current Knowledge
+  Gaps, Workspace Health, and Advanced.
+- Product language is used before Advanced. Internal artifact names, IDs,
+  diagnostics, evidence counts, DryRun IDs, and Generation IDs stay collapsed
+  under Advanced details.
+- Business Foundation, Website Understanding, and Generation Evolution now
+  include reciprocal read-only `Open Knowledge Workspace` links.
+- Validation passed: focused admin UX tests, `cd apps/platform && pnpm run
+  vercel-build`, and `git diff --check`.
+- ODV browser check redirected to `/login` without a signed-in superadmin
+  browser session. Treat authenticated Workspace DOM verification as the
+  first GX-2 read-only task.
+- GX-1 adds no Business Discovery change, Website Understanding change, DBT
+  change, WDB/WGP change, generation change, compliance/evolution logic
+  change, persistence, schema, API, worker, AI, publishing, deployment, DNS,
+  runtime architecture mutation, forms, edit controls, or mutation controls.
+- Next phase: GX-2 - Knowledge Workspace Real-Target Verification and UX
+  Tightening. Keep it read-only unless explicitly authorized otherwise.
+
+Prior phase context:
+- Phase WU-6 - Optional Business Discovery Runtime Integration Plan is
   COMPLETE.
 
-WU-5 evidence:
-- Canonical shadow adapter record:
+WU-6 evidence:
+- Canonical integration plan:
+  `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`.
+- Canonical shadow adapter record updated:
   `docs/architecture/BUSINESS_DISCOVERY_WEBSITE_UNDERSTANDING_SHADOW_ADAPTER.md`.
-- Canonical section-lineage record:
-  `docs/architecture/BUSINESS_DISCOVERY_SECTION_EVIDENCE_LINEAGE_PRESERVATION.md`.
-- Canonical equivalence record:
+- Canonical equivalence record updated:
   `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`.
 - Canonical runtime record updated:
   `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`.
-- Canonical specification updated:
-  `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`.
-- Runtime modules added for WU-4:
-  `apps/platform/gnr8/architecture/business-discovery-website-understanding-adapter.ts`,
-  `apps/platform/gnr8/architecture/business-discovery-shadow-comparison.ts`,
-  and
-  `apps/platform/gnr8/architecture/business-discovery-website-understanding-shadow.cli.ts`.
-- Existing WU-3 modules remain:
-  `apps/platform/gnr8/architecture/business-discovery-input-equivalence.ts`,
-  `apps/platform/gnr8/architecture/business-discovery-input-equivalence-real-target.cli.ts`,
-  and
-  `apps/platform/gnr8/architecture/business-discovery-input-equivalence.test.ts`.
-- Existing WU runtime modules remain:
-  `apps/platform/gnr8/architecture/source-website-understanding-projection-contract.ts`,
-  `apps/platform/gnr8/architecture/source-website-understanding-projection-builder.ts`,
-  `apps/platform/gnr8/architecture/source-website-understanding-projection-loader.ts`,
-  and
-  `apps/platform/app/gnr8/admin/website-understanding/[siteVersionId]/page.tsx`.
-- WU-4 closes the WU-3 gaps: `sourceSiteId` is projected from the
-  authoritative runtime site-version `siteId`, and Evidence Capture
-  baseline/fidelity limitations are projected verbatim with original messages,
-  source refs, source artifact refs, severity/state, original codes, and
-  deterministic dedupe.
-- WU-5 closes the WU-4 blocker: section-boundary evidence refs on
-  `content_theme_observed` are preserved exactly through the WU shadow path.
-- Real-target input coverage: ODV and ViroiDoc both produced valid WU
-  projections, zero conflicts, zero duplicates, 100% current Business
-  Discovery dependency coverage, no partial inputs, no missing inputs, and no
-  input-layer migration blockers.
-- ODV:
-  Business Discovery artifact
-  `business_discovery_7b37413651d79de0d109e31690a34b62`; WU projection
+- Canonical audit record updated:
+  `docs/architecture/WEBSITE_UNDERSTANDING_REALITY_AUDIT.md`.
+- Top-level architecture docs updated:
+  `docs/architecture/GNR8_ARCHITECTURE_MANIFESTO.md`,
+  `docs/architecture/THE_GNR8_BLUEPRINT.md`, and
+  `docs/architecture/MVP_0_FIRST_EXECUTABLE_PIPELINE.md`.
+- Future runtime modes: `LEGACY`, `SHADOW_COMPARE`, and
+  `WEBSITE_UNDERSTANDING`.
+- `LEGACY` keeps current scattered Business Discovery input assembly
+  canonical and disables comparison.
+- `SHADOW_COMPARE` keeps current Business Discovery canonical while WU builds
+  an in-memory shadow Business Discovery artifact through the adapter, runs
+  comparison, writes nothing, and changes nothing downstream.
+- `WEBSITE_UNDERSTANDING` makes WU the Business Discovery input through the
+  adapter while current scattered assembly remains available for rollback.
+- Future rollout sequence: Legacy only, Legacy plus Shadow Compare, limited
+  internal websites, selected migration customers, Website Understanding
+  default, and legacy retirement in a later explicit phase.
+- Rollback rule: runtime configuration only. Never data migration, artifact
+  migration, database repair, recomputation, rebuild, DBT/downstream repair,
+  publish repair, or DNS repair.
+- Readiness requires 100% dependency coverage, deterministic rebuild, no lost
+  findings, no lost evidence refs, no lost limitations, no confidence
+  inflation, no unsupported business meaning, no lineage regression, no
+  downstream contamination, ODV validation, and ViroiDoc validation.
+- Mandatory safety gates: coverage, lineage, comparison, confidence,
+  diagnostics, limitations, connector compatibility, deterministic rebuild,
+  and downstream contamination.
+- Connector strategy: WordPress, Joomla, Webflow, Shopify, Ecwid, Mono, and
+  future connectors remain upstream of WU; WU remains connector-neutral and no
+  connector may bypass WU to special-case Business Discovery after activation.
+- Failure handling covers projection unavailable, shadow mismatch, lineage
+  regression, confidence regression/inflation, connector inconsistency,
+  unexpected business finding, comparison timeout, partial projection,
+  downstream contamination, lost evidence refs, lost limitations,
+  deterministic rebuild mismatch, and rollback requested.
+- Observability plan documents future metrics for shadow equivalence rate,
+  runtime mode distribution, rollback count/time, comparison failures, lineage
+  failures, coverage failures, confidence mismatches, deterministic rebuild
+  failures, connector compatibility failures, and downstream contamination
+  rejections. No telemetry was implemented.
+- Next phase: WU-7 - Business Discovery Runtime Mode Configuration Design.
+  Keep it design-only unless explicitly authorized to implement runtime mode
+  selection. Do not activate Website Understanding, modify Business Discovery,
+  introduce feature flags, persist anything, or change runtime behavior by
+  implication.
+
+WU-5 evidence:
+- WU-5 remains the readiness evidence behind WU-6. ODV and ViroiDoc both
+  produced valid WU projections, zero conflicts, zero duplicates, 100% current
+  Business Discovery dependency coverage, no partial inputs, no missing
+  inputs, no input-layer migration blockers, 0 missing content-theme refs, 0
+  added content-theme refs, unchanged `MEDIUM` confidence, deterministic
+  rebuild equality true, and no write occurred.
+- ODV Business Discovery artifact:
+  `business_discovery_7b37413651d79de0d109e31690a34b62`; WU projection:
   `source_website_understanding_0caa89099ee02c9469b539cf2b2d0613`; shadow
-  Business Discovery
-  `business_discovery_shadow_effc750dce31c593fa8932ca66d98a8f`; findings
-  12 vs 12; limitations 104 vs 131; confidence `MEDIUM` vs `MEDIUM`;
-  content-theme missing refs 0; content-theme added refs 0; deterministic
-  rebuild equality true; no write occurred.
-- ViroiDoc:
-  Business Discovery artifact
-  `business_discovery_360fa099cbcede288c2d0e04f2ec7986`; WU projection
+  Business Discovery:
+  `business_discovery_shadow_effc750dce31c593fa8932ca66d98a8f`.
+- ViroiDoc Business Discovery artifact:
+  `business_discovery_360fa099cbcede288c2d0e04f2ec7986`; WU projection:
   `source_website_understanding_72cece90151974f980a2abf7b5528709`; shadow
-  Business Discovery
-  `business_discovery_shadow_e608b04066ab15ca5156579843aaf859`; findings
-  17 vs 17; limitations 105 vs 132; confidence `MEDIUM` vs `MEDIUM`;
-  content-theme missing refs 0; content-theme added refs 0; deterministic
-  rebuild equality true; no write occurred.
-- Covered inputs: `siteVersionId`, `dryRunId`, source URL, route inventory,
-  navigation labels, section region types, asset inventory, import
-  diagnostics, Candidate Discovery context, Candidate Review context,
-  Reconstruction context, and StructurePlan context.
-- Cutover readiness: `ready_with_expected_differences` for both targets.
-- Expected differences: projection-normalized finding IDs/tokens, supported
-  evidence supersets on non-content-theme findings, and 27 added
-  source-traceable `IMPORT_DIAGNOSTIC_OBSERVED` projection-transparency
-  limitations on each target.
-- Real-target CLI command succeeded read-only from `apps/platform` with
-  `NODE_OPTIONS='--conditions=react-server' node --import tsx`; the first
-  sandboxed `tsx` attempt hit the known `tsx-501/*.pipe` EPERM issue.
-- Next phase: WU-6 - Optional Business Discovery Runtime Integration Plan.
-  Keep it planning-only until explicitly authorized. Do not switch runtime
-  behavior by implication.
-- Safety: no Business Discovery runtime switch, DBT mutation, WDB/WGP change,
-  provider execution, generation, approval, publishing, deployment,
-  persistence, schema, API, worker, extraction, parsing, classifier, AI
-  execution, or production mutation was added.
+  Business Discovery:
+  `business_discovery_shadow_e608b04066ab15ca5156579843aaf859`.
 
 WU-2 evidence:
 - WU-2 remains complete and is the runtime foundation. It created the Source
@@ -423,9 +471,9 @@ MVP-3.0-A evidence:
   schema changes, persistence changes, automatic visual comparison, or
   compliance recomputation were added.
 
-Next recommended phase:
-- WU-4 - Business Discovery Website Understanding Shadow Adapter. Keep it
-  non-persistent and focused on artifact equivalence before any runtime switch.
+Current recommended phase:
+- WU-7 - Business Discovery Runtime Mode Configuration Design. Keep it
+  design-only unless explicitly authorized to implement runtime mode selection.
 
 MVP-2.0-N evidence:
 - Canonical dashboard document:
@@ -493,10 +541,9 @@ MVP-2.0-M prior evidence:
   canonical business mutation, UI, API, schema migration, or workers were
   added.
 
-Next Phase:
-- WU-4 - Business Discovery Website Understanding Shadow Adapter, focused on
-  non-persistent shadow mapping and artifact equivalence before any runtime
-  switch.
+Current recommended phase:
+- WU-7 - Business Discovery Runtime Mode Configuration Design, kept
+  design-only unless explicitly authorized to implement runtime mode selection.
 
 Current architecture direction:
 - GNR8 is an AI Orchestrator with a governed Digital Business Twin at its

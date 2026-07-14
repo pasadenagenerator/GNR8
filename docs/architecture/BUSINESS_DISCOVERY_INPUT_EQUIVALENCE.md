@@ -1,5 +1,25 @@
 # Business Discovery Input Equivalence
 
+## WU-6 Runtime Integration Plan Update
+
+WU-6 uses the WU-3 through WU-5 equivalence evidence to define the future
+production migration plan from current Business Discovery input assembly to
+Website Understanding as the canonical upstream input.
+
+Canonical plan:
+
+- `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`
+
+Readiness before `WEBSITE_UNDERSTANDING` mode may be enabled requires 100%
+dependency coverage, deterministic rebuild, no lost findings, no lost
+evidence refs, no lost limitations, no confidence inflation, no unsupported
+business meaning, no lineage regression, no downstream contamination, ODV
+validation, and ViroiDoc validation.
+
+The plan does not change Business Discovery runtime behavior. Future rollout
+must pass through `LEGACY`, `SHADOW_COMPARE`, and then scoped
+`WEBSITE_UNDERSTANDING`, with rollback by runtime configuration only.
+
 ## Phase WU-3 Boundary
 
 WU-3 proves whether the Source Website Understanding Projection can become the

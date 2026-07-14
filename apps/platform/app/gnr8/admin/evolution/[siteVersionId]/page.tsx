@@ -79,8 +79,17 @@ function CodeRef(props: { value: string | null }) {
 function RelatedRuntimeSurfaces(props: { siteVersionId: string }) {
   return (
     <section style={bandStyle}>
-      <h2>Related Read-Only Surface</h2>
+      <h2>Related Read-Only Surfaces</h2>
       <div style={cardStyle}>
+        <strong>Knowledge Workspace</strong>
+        <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 14 }}>
+          The Workspace is the first operator view for source understanding, business meaning, versions, gaps, health, and evolution.
+        </p>
+        <a href={`/gnr8/admin/workspace/${props.siteVersionId}`} style={{ color: "#0f766e", fontWeight: 700 }}>
+          Open Knowledge Workspace
+        </a>
+      </div>
+      <div style={{ ...cardStyle, marginTop: 10 }}>
         <strong>Business Foundation</strong>
         <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 14 }}>
           Generation Evolution explains how generated website iterations changed. Business Foundation explains why GNR8 shaped the website intent.

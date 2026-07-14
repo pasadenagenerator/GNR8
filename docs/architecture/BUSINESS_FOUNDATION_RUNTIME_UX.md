@@ -312,3 +312,24 @@ Future Business Foundation UX may show candidate evidence only if provenance,
 confidence, original-vs-generated asset boundaries, and human-confirmation
 state are explicit. Candidate evidence must remain visually distinct from
 canonical business truth.
+
+## GX-1 Knowledge Workspace Relationship
+
+GX-1 adds the Knowledge Workspace as the first page an operator should open
+for a site version:
+
+```text
+/gnr8/admin/workspace/[siteVersionId]
+```
+
+Business Foundation remains the supporting page for business meaning and WHY
+context. The Workspace composes Business Foundation with Source Website
+Understanding and Generation Evolution so operators can see the original
+website, generated proposal history, knowledge quality, gaps, and health in
+one place before drilling into the Business Foundation module.
+
+GX-1 adds a read-only `Open Knowledge Workspace` link from Business
+Foundation. It does not change the Business Foundation projection semantics,
+Business Discovery, DBT, BUR, Business Alignment, WDB, WGP, persistence,
+schema, API, generation, AI, publishing, deployment, DNS, or runtime
+architecture.

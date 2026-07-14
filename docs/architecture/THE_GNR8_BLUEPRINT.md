@@ -539,6 +539,12 @@ Source website understanding is not business truth. Business Discovery remains
 responsible for interpretation, and DBT remains responsible for governed
 business knowledge.
 
+WU-6 defines the future production strategy for making Source Website
+Understanding the canonical upstream input to Business Discovery without
+changing the Business Discovery builder. The cutover path is `LEGACY`, then
+`SHADOW_COMPARE`, then scoped `WEBSITE_UNDERSTANDING`, with rollback by runtime
+configuration only and no data migration or downstream repair.
+
 ### Digital Business Twin
 
 GNR8 integrates validated knowledge into the canonical operational
@@ -713,3 +719,45 @@ runtime-only, read-only operator projection over existing artifacts.
 It does not change the Blueprint's canonical chain: GNR8 still moves from
 source understanding to governed business understanding before generation, and
 generated-site observations remain outside source-site understanding.
+
+## WU-6 Runtime Integration Blueprint Note
+
+WU-6 adds the canonical planning record for the future Business Discovery
+runtime cutover:
+
+- `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`
+
+The plan keeps the Blueprint's chain intact. Website Understanding may become
+the upstream Business Discovery input only through a governed adapter boundary,
+after mandatory safety gates, while Business Discovery, DBT, Business
+Understanding Report, Business Alignment, Website Design Brief, Website
+Generation Package, provider execution, compliance, approval, and publishing
+remain downstream and unchanged.
+
+## GX-1 Knowledge Workspace Blueprint Note
+
+GX-1 adds the Knowledge Workspace as the first-open operator workspace for one
+website:
+
+```text
+/gnr8/admin/workspace/[siteVersionId]
+```
+
+The Workspace does not alter the Blueprint chain. It composes existing
+runtime projections into one product view:
+
+```text
+Source Website Understanding
+-> Business Foundation
+-> Generation Evolution
+-> Proposal Preview
+```
+
+The main Workspace uses product language: understand, design, generate,
+evaluate, improve. Technical artifact names, IDs, diagnostics, evidence
+counts, DryRun IDs, and Generation IDs remain available only in Advanced.
+
+Business Foundation, Website Understanding, Evolution, and future Digital
+Business Twin UX become Workspace modules rather than competing first-open
+pages. GX-1 adds no editing, generation, regeneration, persistence, schema,
+API, worker, AI, publishing, deployment, DNS, or runtime architecture change.

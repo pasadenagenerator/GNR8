@@ -9,6 +9,7 @@ test("business foundation page contains required read-only runtime sections", as
 
   for (const label of [
     "Business Foundation",
+    "Open Knowledge Workspace",
     "Open Original Website",
     "Inspect Generation Evolution",
     "Open Latest Generated Proposal",
@@ -49,6 +50,7 @@ test("business foundation page exposes read-only navigation to evolution and pre
   const source = await readFile(PAGE_FILE, "utf8");
 
   assert.equal(source.includes("hero.primaryLinks.evolutionHref"), true);
+  assert.equal(source.includes("/gnr8/admin/workspace/"), true);
   assert.equal(source.includes("iteration.previewHref"), true);
   assert.equal(source.includes("Open {props.iteration.label} Preview"), true);
   assert.equal(source.includes("View Website Evolution"), true);

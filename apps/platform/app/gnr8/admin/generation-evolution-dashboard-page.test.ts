@@ -28,7 +28,8 @@ test("generation evolution dashboard page contains required read-only sections",
     "Generation Evolution Dashboard",
     "Generation Cycle Summary",
     "Business Foundation",
-    "Related Read-Only Surface",
+    "Related Read-Only Surfaces",
+    "Open Knowledge Workspace",
     "Inspect Business Foundation",
     "Evolution Timeline",
     "Iteration Cards",
@@ -42,6 +43,7 @@ test("generation evolution dashboard page contains required read-only sections",
     "Open Source Proposal reference",
     "requireSuperadminUserIdForPage",
     "loadGenerationEvolutionDashboardProjection",
+    "/gnr8/admin/workspace/",
   ]) {
     assert.equal(source.includes(label), true, `missing ${label}`);
   }

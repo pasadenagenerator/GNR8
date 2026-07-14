@@ -274,3 +274,22 @@ Required build:
 ```text
 cd apps/platform && pnpm run vercel-build
 ```
+
+## GX-1 Knowledge Workspace Relationship
+
+GX-1 adds the Knowledge Workspace as the first-open operator shell:
+
+```text
+/gnr8/admin/workspace/[siteVersionId]
+```
+
+Generation Evolution remains the supporting page for iteration history,
+proposal previews, compliance state, and improvement state. The Workspace
+pulls the existing Generation Evolution Dashboard projection into product
+sections for Website Versions, Transformation Story, Workspace Health, and
+Advanced details.
+
+GX-1 adds a read-only `Open Knowledge Workspace` link from Generation
+Evolution. It does not alter evolution analysis, compliance artifacts,
+proposal preview route handling, generation lineage, persistence, schema,
+API, workers, AI, publishing, deployment, DNS, or runtime architecture.

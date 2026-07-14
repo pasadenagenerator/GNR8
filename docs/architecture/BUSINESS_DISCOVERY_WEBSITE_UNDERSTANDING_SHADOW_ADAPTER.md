@@ -1,5 +1,29 @@
 # Business Discovery Website Understanding Shadow Adapter
 
+## WU-6 Runtime Integration Plan Update
+
+WU-6 documents the future production integration strategy without changing
+runtime behavior.
+
+Canonical plan:
+
+- `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`
+
+The future integration strategy defines three modes:
+
+- `LEGACY`: Business Discovery uses the current scattered input assembly.
+  Shadow execution and comparison are disabled.
+- `SHADOW_COMPARE`: current Business Discovery remains canonical while WU
+  builds an in-memory shadow Business Discovery artifact through the adapter
+  and compares it without writes.
+- `WEBSITE_UNDERSTANDING`: WU becomes the Business Discovery input through
+  the adapter, while current scattered assembly remains available only for
+  instant runtime-configuration rollback.
+
+The adapter remains the upstream boundary. Business Discovery builder behavior
+remains unchanged. WU-6 adds no feature flags, mode selection code,
+persistence, API, UI, worker, schema, or production mutation.
+
 ## WU-5 Section Evidence Lineage Update
 
 WU-5 closes the WU-4 cutover blocker. The adapter now preserves exact
@@ -240,8 +264,12 @@ section-boundary evidence refs used by `content_theme_observed` findings.
 WU-5 closes that blocker. Optional runtime integration is now ready with
 expected differences, but no runtime switch has occurred.
 
-Recommended next phase after WU-5:
+WU-6 documents the future integration modes, rollout, rollback, safety gates,
+readiness, connector strategy, observability, failure handling, and production
+cutover sequence.
+
+Recommended next phase after WU-6:
 
 ```text
-WU-6 - Optional Business Discovery Runtime Integration Plan
+WU-7 - Business Discovery Runtime Mode Configuration Design
 ```

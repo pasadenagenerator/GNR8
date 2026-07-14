@@ -1,5 +1,25 @@
 # Source Website Understanding Projection Runtime
 
+## WU-6 Runtime Integration Plan Update
+
+WU-6 defines how this runtime projection can become the future canonical
+upstream input to Business Discovery without changing this projection runtime
+in the current phase.
+
+Canonical plan:
+
+- `docs/architecture/BUSINESS_DISCOVERY_RUNTIME_INTEGRATION_PLAN.md`
+
+The projection remains deterministic, read-only, connector-neutral,
+source-site only, evidence-backed, fail-closed, rebuilt on demand, and not
+persisted as a new artifact. Future `WEBSITE_UNDERSTANDING` mode may use the
+projection through the WU -> Business Discovery adapter only after mandatory
+coverage, lineage, comparison, confidence, diagnostics, limitations,
+connector-compatibility, deterministic rebuild, ODV, and ViroiDoc gates pass.
+
+WU-6 adds no projection fields, no loader changes, no persistence, no mode
+selection, and no runtime switch.
+
 ## Phase WU-2 Runtime Boundary
 
 WU-2 implements the first pure-runtime Source Website Understanding
@@ -290,13 +310,34 @@ WU-3 does not migrate Business Discovery, add classifiers, add extraction,
 persist projections, mutate DBT/WDB/WGP, generate, approve, publish, deploy,
 or change production data.
 
-## Next Phase
+## Current Planning Status
 
-Recommended next phase:
+WU-6 is complete as planning-only documentation. Recommended next phase:
 
 ```text
-WU-6 - Optional Business Discovery Runtime Integration Plan
+WU-7 - Business Discovery Runtime Mode Configuration Design
 ```
 
-Keep WU-6 planning-only until explicitly authorized. Do not switch Business
-Discovery runtime behavior by implication.
+Keep WU-7 design-only unless explicitly authorized to implement runtime mode
+selection. Do not switch Business Discovery runtime behavior by implication.
+
+## GX-1 Knowledge Workspace Relationship
+
+GX-1 adds the Knowledge Workspace as the product-facing home for one website:
+
+```text
+/gnr8/admin/workspace/[siteVersionId]
+```
+
+Website Understanding remains the supporting page for source-site structure,
+content, navigation, assets, visual identity signals, and business signal
+candidates. The Workspace composes the existing Source Website Understanding
+runtime projection with Business Foundation and Generation Evolution so the
+operator sees source understanding in the context of business meaning,
+generated versions, current gaps, and workspace health.
+
+GX-1 adds a read-only `Open Knowledge Workspace` link from the Website
+Understanding page. It does not change the WU contract, builder, loader,
+adapter, Business Discovery runtime behavior, projection persistence policy,
+schema, API, workers, AI, generation, publishing, deployment, DNS, or runtime
+architecture.

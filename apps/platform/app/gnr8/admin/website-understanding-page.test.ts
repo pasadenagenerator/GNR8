@@ -11,6 +11,7 @@ test("website understanding page contains required read-only operator sections",
   for (const label of [
     "Website Understanding",
     "Open Original Website",
+    "Open Knowledge Workspace",
     "Open Business Foundation",
     "Inspect Generation Evolution",
     "Understanding Readiness",
@@ -68,5 +69,6 @@ test("business foundation links back to website understanding", async () => {
   const source = await readFile(BUSINESS_FOUNDATION_PAGE_FILE, "utf8");
 
   assert.equal(source.includes("Inspect Website Understanding"), true);
+  assert.equal(source.includes("/gnr8/admin/workspace/"), true);
   assert.equal(source.includes("/gnr8/admin/website-understanding/"), true);
 });
