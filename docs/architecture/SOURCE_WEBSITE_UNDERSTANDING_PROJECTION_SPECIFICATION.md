@@ -754,6 +754,27 @@ Phase 5: deprecate scattered input assembly only after proof.
 
 Do not use a big-bang switch.
 
+WU-3 completes Phase 2 and part of Phase 4 as a sidecar proof:
+
+- ODV and ViroiDoc both validate at 89% current dependency equivalence.
+- Both targets have valid WU projections and zero conflicts/duplicates.
+- Current Business Discovery dependencies are covered except for first-class
+  `sourceSiteId` projection and verbatim Evidence Capture baseline/fidelity
+  limitations.
+- WU exposes stronger concepts than Business Discovery currently consumes:
+  body messages, CTAs, concrete assets, logo candidates, color signals,
+  typography signals, Candidate Review, Reconstruction lineage, StructurePlan
+  context, readiness, confidence, and lineage.
+
+Canonical WU-3 record:
+
+- `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`
+
+The next safe migration step is not a runtime switch. It is a non-persistent
+shadow adapter that maps WU into the current Business Discovery input shape,
+compares output artifacts, and stops before changing Business Discovery
+behavior.
+
 ## Architecture Diagrams
 
 ### A. Current Distributed Source Understanding
@@ -864,3 +885,18 @@ Runtime modules:
 WU-2 preserves the WU-1 authority hierarchy and forbidden downstream boundary.
 The projection remains derived, read-only, fail-closed, source-site only, and
 not persisted as a canonical artifact.
+
+## WU-3 Equivalence Implementation Note
+
+WU-3 adds deterministic equivalence helpers and projection completeness checks
+without changing the projection persistence policy or Business Discovery
+runtime behavior.
+
+Runtime helpers:
+
+- `apps/platform/gnr8/architecture/business-discovery-input-equivalence.ts`
+- `apps/platform/gnr8/architecture/business-discovery-input-equivalence-real-target.cli.ts`
+
+Validation checks now also guard artifact-ref lineage equality, deterministic
+lineage artifact IDs, duplicate limitations, duplicate readiness dimensions,
+and fail-closed missing-navigation readiness.

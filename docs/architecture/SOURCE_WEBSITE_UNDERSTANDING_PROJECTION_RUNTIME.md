@@ -185,14 +185,51 @@ WU-2 intentionally leaves these gaps visible:
 - trust and differentiator signals remain source-level candidates;
 - Business Discovery does not yet consume the projection.
 
+## WU-3 Equivalence Hardening
+
+WU-3 adds deterministic Business Discovery input equivalence validation beside
+the WU runtime without changing Business Discovery behavior.
+
+Canonical equivalence record:
+
+- `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`
+
+Runtime helpers:
+
+- `apps/platform/gnr8/architecture/business-discovery-input-equivalence.ts`
+- `apps/platform/gnr8/architecture/business-discovery-input-equivalence-real-target.cli.ts`
+
+Hardening changes:
+
+- diagnostic codes/messages/source refs are normalized;
+- no-navigation readiness is now `missing`, not `partial`;
+- projection validation rejects duplicate limitations and duplicate readiness
+  dimensions;
+- projection validation checks top-level artifact refs against lineage refs;
+- projection validation checks deterministic lineage artifact IDs against
+  projected artifact refs.
+
+Real-target equivalence validation on 2026-07-14 showed both ODV and ViroiDoc
+at 89% dependency coverage and 82% coverage-report coverage. Both projections
+were valid, with zero conflicts and zero duplicates.
+
+Remaining migration blockers:
+
+- `sourceSiteId` is not projected as a first-class WU identity field.
+- Evidence Capture baseline/fidelity limitations are not yet proven as
+  verbatim projection limitations.
+
+WU-3 does not migrate Business Discovery, add classifiers, add extraction,
+persist projections, mutate DBT/WDB/WGP, generate, approve, publish, deploy,
+or change production data.
+
 ## Next Phase
 
 Recommended next phase:
 
 ```text
-WU-3 - Source Website Understanding Hardening and Business Discovery Input
-Planning
+WU-4 - Business Discovery Website Understanding Shadow Adapter
 ```
 
-Keep WU-3 read-only and focused on hardening the projection plus designing the
-future Business Discovery input boundary.
+Keep WU-4 non-persistent and focused on a shadow adapter plus ODV/ViroiDoc
+artifact equivalence. Do not switch Business Discovery runtime behavior yet.

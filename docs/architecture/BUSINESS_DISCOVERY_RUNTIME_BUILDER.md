@@ -280,15 +280,63 @@ proven absent. Future enrichment should add evidence-backed candidates with
 source refs and confidence, then require human confirmation before any DBT
 canonical update.
 
+## WU-3 Input Equivalence Finding
+
+WU-3 audits this builder's upstream dependencies and validates whether Source
+Website Understanding can replace scattered Business Discovery input assembly.
+
+Canonical equivalence record:
+
+```text
+docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md
+```
+
+Current builder dependencies:
+
+- runtime metadata: `siteVersionId`, `dryRunId`, optional `sourceSiteId`,
+  `createdAt`;
+- import: source URL/host, route candidates, raw route map, import
+  diagnostics;
+- Evidence Capture: route paths, navigation labels/hrefs/positions, section
+  IDs/region types, asset inventory counts, baseline limitations, fidelity
+  limitations;
+- Candidate Discovery: artifact ID, candidate count, candidate route paths;
+- diagnostics and limitations.
+
+The current builder does not consume Candidate Review, Reconstruction Package,
+or StructurePlan directly.
+
+WU-3 validation result:
+
+- ODV and ViroiDoc both reached 89% dependency equivalence.
+- Both targets had valid WU projections, zero conflicts, and zero duplicates.
+- Covered inputs include source URL, route inventory, navigation labels,
+  section region types, asset inventory, diagnostics, Candidate Discovery,
+  Candidate Review context, Reconstruction context, and StructurePlan context.
+- Partial input: upstream Evidence Capture baseline/fidelity limitations.
+- Missing input: first-class `sourceSiteId` projection.
+
+Duplicated logic that becomes obsolete after migration:
+
+- source URL fallback resolution;
+- route inventory aggregation;
+- navigation signal assembly;
+- section region aggregation;
+- asset count aggregation;
+- import diagnostic and upstream limitation copying once projection
+  limitations are complete;
+- Candidate Discovery context/count assembly.
+
+WU-3 documents this only. The Business Discovery builder remains unchanged.
+
 ## Next Phase
 
 Recommended next phase:
 
 ```text
-MVP-1B Digital Business Twin Runtime Builder
+WU-4 - Business Discovery Website Understanding Shadow Adapter
 ```
 
-MVP-1B should consume persisted Business Discovery artifacts as canonical DBT
-input and stop before Business Understanding Report, Business Alignment,
-Website Design Brief, Website Generation Package, provider adapters, external
-AI, generation, compliance, Business Approval, or publishing.
+WU-4 should add a non-persistent shadow adapter from WU to the current
+Business Discovery input shape, fill the two WU-3 projection gaps first, and
+compare Business Discovery artifacts before any runtime switch.

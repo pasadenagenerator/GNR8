@@ -122,6 +122,40 @@ changes, no projection persistence, no Business Discovery input change, no DBT
 mutation, no provider execution, no generation, no approval, no publishing,
 and no DNS or production mutation.
 
+## Phase WU-3 Business Discovery Input Equivalence Addendum
+
+WU-3 hardens the Source Website Understanding Projection and proves its
+current equivalence against the Business Discovery input boundary.
+
+Canonical equivalence record:
+
+- `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`
+
+Result:
+
+- ODV and ViroiDoc both validate at 89% Business Discovery dependency
+  equivalence.
+- Both targets have valid WU projections, zero conflicts, and zero duplicates.
+- WU already covers source URL, routes, navigation, sections, assets,
+  diagnostics, Candidate Discovery, Candidate Review, Reconstruction context,
+  StructurePlan context, lineage, readiness, and confidence.
+- WU is stronger than current Business Discovery for body messages, CTA
+  signals, concrete assets, logo candidates, colors, typography, and reviewed
+  context.
+- WU is not ready to become the only Business Discovery input until
+  `sourceSiteId` and verbatim Evidence Capture baseline/fidelity limitations
+  are projected.
+
+WU-3 adds no Business Discovery runtime switch, DBT mutation, WDB/WGP change,
+generation, provider execution, approval, publishing, deployment, persistence,
+schema, API, worker, extraction, parsing, classifier, or production mutation.
+
+Next safe step:
+
+```text
+WU-4 - Business Discovery Website Understanding Shadow Adapter
+```
+
 ## MVP-2.0-ARCH Generation Cycle Addendum
 
 MVP-2.0-ARCH adds the canonical Generation Cycle Architecture as an

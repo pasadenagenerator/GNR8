@@ -796,3 +796,36 @@ import, asset inventory, Candidate Discovery, Candidate Review, Reconstruction
 Package, and StructurePlan-context artifacts. It does not create a parallel
 extraction, persistence, candidate, review, Business Discovery, DBT,
 generation, publishing, or generated-observation pipeline.
+
+## WU-3 Business Discovery Input Equivalence Closure
+
+WU-3 validates the WU-0 recommendation against the current Business Discovery
+builder.
+
+Canonical equivalence record:
+
+- `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`
+
+The audit conclusion still holds: GNR8 does not need a parallel Website
+Understanding system. It needs the existing projection hardened enough to
+replace scattered Business Discovery input assembly.
+
+Evidence:
+
+- ODV WU projection
+  `source_website_understanding_17e489688596671bf353e23f216bd1e4` validates
+  against Business Discovery artifact
+  `business_discovery_7b37413651d79de0d109e31690a34b62` at 89% dependency
+  coverage.
+- ViroiDoc WU projection
+  `source_website_understanding_b9796806c7e95914abce1845675bcd4f` validates
+  against Business Discovery artifact
+  `business_discovery_360fa099cbcede288c2d0e04f2ec7986` at 89% dependency
+  coverage.
+- Both targets had valid projections, zero conflicts, and zero duplicates.
+- The remaining blockers are first-class `sourceSiteId` projection and
+  verbatim Evidence Capture baseline/fidelity limitation projection.
+
+WU-3 adds no Business Discovery migration, DBT mutation, extraction, AI,
+generation, approval, publishing, deployment, persistence, schema, API, or
+worker behavior.

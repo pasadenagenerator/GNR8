@@ -162,7 +162,11 @@ function limitation(input: {
 }
 
 function diagnostic(code: string, message: string, sourceRefs: string[] = []): SourceWebsiteDiagnostic {
-  return { code, message, sourceRefs };
+  return {
+    code: code.trim(),
+    message: message.trim(),
+    sourceRefs: [...new Set(sourceRefs.map((ref) => ref.trim()).filter(Boolean))].sort(),
+  };
 }
 
 function reviewMap(reviewPackage: CandidateReviewPackage | null | undefined): Map<string, ReviewedCandidateState> {
@@ -768,7 +772,7 @@ function buildReadiness(input: {
   const dims: SourceWebsiteReadinessDimension[] = [
     dimension("source_acquisition", input.sourceUrl ? "ok" : "missing", input.sourceUrl ? "Source URL is persisted." : "Source URL is missing.", input.sourceUrl ? ["raw-imported-site:source-url"] : []),
     dimension("route_coverage", input.routes.length > 0 ? "ok" : "missing", `${input.routes.length} route(s) projected.`),
-    dimension("navigation_coverage", input.navigation.length > 0 ? "ok" : "partial", `${input.navigation.length} navigation item(s) projected.`),
+    dimension("navigation_coverage", input.navigation.length > 0 ? "ok" : "missing", `${input.navigation.length} navigation item(s) projected.`),
     dimension("structure_coverage", input.sections.some((item) => !item.plannedOnly) ? "partial" : "missing", `${input.sections.filter((item) => !item.plannedOnly).length} observed/source section item(s) projected.`),
     dimension("content_coverage", input.content.some((item) => item.bodyTextAvailable) ? "partial" : "missing", input.content.some((item) => item.bodyTextAvailable) ? "Body/source text evidence is available but classification may remain unresolved." : "Body/source text evidence is unavailable."),
     dimension("asset_inventory", input.assets.length > 0 ? "ok" : "missing", `${input.assets.length} imported asset(s) projected.`),
@@ -1084,6 +1088,23 @@ function validateUnique(ids: string[], path: string, errors: string[]): void {
   }
 }
 
+function refKey(ref: SourceWebsiteUnderstandingArtifactReference): string {
+  return `${ref.source}\u0000${ref.kind}\u0000${ref.artifactId ?? ""}\u0000${ref.canonicalId ?? ""}`;
+}
+
+function validateMatchingRefs(
+  topLevel: SourceWebsiteUnderstandingArtifactReference[],
+  lineage: SourceWebsiteUnderstandingArtifactReference[],
+  path: string,
+  errors: string[],
+): void {
+  const left = topLevel.map(refKey).sort();
+  const right = lineage.map(refKey).sort();
+  if (left.length !== right.length || left.some((value, index) => value !== right[index])) {
+    errors.push(`${path} must match top-level artifact refs`);
+  }
+}
+
 function validateState(value: string, path: string, errors: string[]): void {
   if (!SOURCE_WEBSITE_KNOWLEDGE_STATES.includes(value as never)) errors.push(`${path} has invalid knowledge state ${value}`);
 }
@@ -1142,6 +1163,8 @@ export function validateSourceWebsiteUnderstandingProjection(value: unknown): So
   validateUnique((projection.navigation ?? []).map((item) => item.navigationId), "navigation", errors);
   validateUnique((projection.sections ?? []).map((item) => item.sectionId), "sections", errors);
   validateUnique((projection.assets ?? []).map((item) => item.assetId), "assets", errors);
+  validateUnique((projection.limitations ?? []).map((item) => item.limitationId), "limitations", errors);
+  validateUnique((projection.readiness?.dimensions ?? []).map((item) => item.key), "readiness.dimensions", errors);
 
   for (const [path, items] of [
     ["pages", projection.pages ?? []],
@@ -1161,9 +1184,9 @@ export function validateSourceWebsiteUnderstandingProjection(value: unknown): So
   validateObservedRefs(projection.pages ?? [], "pages", errors);
   validateObservedRefs(projection.routes ?? [], "routes", errors);
   validateObservedRefs(projection.navigation ?? [], "navigation", errors);
-  validateObservedRefs(projection.sections.filter((item) => !item.plannedOnly) ?? [], "sections", errors);
-  validateObservedRefs(projection.content.map((item) => ({ state: item.classificationStatus, evidenceRefs: item.evidenceRefs })) ?? [], "content", errors);
-  validateObservedRefs(projection.assets.map((item) => ({ state: item.inventoryState, evidenceRefs: item.evidenceRefs })) ?? [], "assets", errors);
+  validateObservedRefs((projection.sections ?? []).filter((item) => !item.plannedOnly), "sections", errors);
+  validateObservedRefs((projection.content ?? []).map((item) => ({ state: item.classificationStatus, evidenceRefs: item.evidenceRefs })), "content", errors);
+  validateObservedRefs((projection.assets ?? []).map((item) => ({ state: item.inventoryState, evidenceRefs: item.evidenceRefs })), "assets", errors);
 
   for (const [index, asset] of (projection.assets ?? []).entries()) {
     if (pathLooksUnsafe(asset.path)) errors.push(`assets[${index}].path exposes an unsafe or arbitrary path`);
@@ -1178,6 +1201,26 @@ export function validateSourceWebsiteUnderstandingProjection(value: unknown): So
   }
   if (projection.businessSignalCandidates?.offerings?.some((item) => item.state === "confirmed_source_fact")) {
     errors.push("offering candidates must not be promoted to confirmed source facts");
+  }
+  if (projection.lineage) {
+    validateMatchingRefs(projection.sourceArtifactRefs ?? [], projection.lineage.sourceArtifactRefs ?? [], "lineage.sourceArtifactRefs", errors);
+    validateMatchingRefs(projection.evidenceArtifactRefs ?? [], projection.lineage.evidenceArtifactRefs ?? [], "lineage.evidenceArtifactRefs", errors);
+    validateMatchingRefs(projection.candidateArtifactRefs ?? [], projection.lineage.candidateArtifactRefs ?? [], "lineage.candidateArtifactRefs", errors);
+    validateMatchingRefs(projection.reviewArtifactRefs ?? [], projection.lineage.reviewArtifactRefs ?? [], "lineage.reviewArtifactRefs", errors);
+    validateMatchingRefs(projection.reconstructionArtifactRefs ?? [], projection.lineage.reconstructionArtifactRefs ?? [], "lineage.reconstructionArtifactRefs", errors);
+    validateMatchingRefs(projection.planningContextArtifactRefs ?? [], projection.lineage.planningContextArtifactRefs ?? [], "lineage.planningContextArtifactRefs", errors);
+    const expectedArtifactIds = artifactIds([
+      ...(projection.sourceArtifactRefs ?? []),
+      ...(projection.evidenceArtifactRefs ?? []),
+      ...(projection.candidateArtifactRefs ?? []),
+      ...(projection.reviewArtifactRefs ?? []),
+      ...(projection.reconstructionArtifactRefs ?? []),
+      ...(projection.planningContextArtifactRefs ?? []),
+    ]);
+    const actualArtifactIds = [...(projection.lineage.deterministicInputs?.artifactIds ?? [])].sort();
+    if (expectedArtifactIds.length !== actualArtifactIds.length || expectedArtifactIds.some((value, index) => value !== actualArtifactIds[index])) {
+      errors.push("lineage.deterministicInputs.artifactIds must match projected artifact refs");
+    }
   }
   const expectedId = projectionIdentity(cloneJson({ ...projection, projectionId: undefined }) as Omit<SourceWebsiteUnderstandingProjection, "projectionId">);
   if (projection.projectionId !== expectedId) warnings.push("projectionId does not match normalized projection content");

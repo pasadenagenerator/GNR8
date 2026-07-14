@@ -5,15 +5,16 @@
 
 ## Current Phase
 
-WU-2 - Source Website Understanding Projection Pure Runtime Implementation is
-COMPLETE.
+WU-3 - Business Discovery Input Equivalence and Website Understanding
+Hardening is COMPLETE.
 
-Canonical runtime record:
+Canonical records:
 
+- `docs/architecture/BUSINESS_DISCOVERY_INPUT_EQUIVALENCE.md`
 - `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`
 - `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
 
-WU-2 scope:
+WU-3 scope:
 
 ```text
 Website Source
@@ -22,62 +23,81 @@ Website Source
 -> Structured Evidence
 -> Candidate Discovery / Review
 -> Source Website Understanding Projection
+-> Business Discovery Input Equivalence
 -> Business Discovery
 -> Digital Business Twin
 ```
 
-WU-2 implements only the runtime projection contract, deterministic builder,
-loader/composition boundary, validation helper, focused tests, and one
-read-only superadmin operator page. It adds no projection persistence, schema,
-new import behavior, new extraction, HTML parsing, asset classification
-runtime, AI analysis, Business Discovery behavior, DBT mutation, WDB/WGP
-changes, provider execution, generation, approval, publishing, deployment,
-DNS, workers, mutation APIs, or editing controls.
+WU-3 implements only deterministic equivalence analysis, runtime validation
+helpers, projection completeness checks, documentation, and focused tests. It
+adds no Business Discovery runtime change, DBT mutation, WDB/WGP change,
+generation, provider execution, approval, publishing, deployment, persistence,
+schema, API, worker, extraction, parsing, classifier, AI execution, or
+production mutation.
 
 Executive result:
 
-- Source Website Understanding Projection is implemented as a deterministic,
-  connector-neutral, evidence-backed, read-only runtime projection of the
-  current structured understanding of an imported source website.
-- Persistence policy remains pure runtime with no dedicated projection
-  persistence.
-- The projection composes existing Import, Evidence Capture, semantic import,
-  asset inventory, Candidate Discovery, Candidate Review, Reconstruction
-  Package, StructurePlan context, limitations, and diagnostics.
-- It is derived, fail-closed, non-canonical business truth, non-planning,
-  non-generation, and source-site only.
-- Knowledge states are `observed`, `structured`, `candidate`, `reviewed`,
-  `confirmed_source_fact`, `rejected`, `conflicting`, `missing`, and
-  `unavailable`.
-- Readiness states are `not_ready`, `partially_ready`,
-  `ready_for_business_discovery`, `blocked`, `stale`, and `invalid`.
-- The superadmin operator route is
-  `/gnr8/admin/website-understanding/[siteVersionId]`.
-- Business Foundation links back to Website Understanding, and Website
-  Understanding links forward to Business Foundation and Generation Evolution.
-- Read-only real-target verification on 2026-07-14 produced valid,
-  deterministic projections for ODV and ViroiDoc. ODV projection ID:
+- WU-3 adds `validateBusinessDiscoveryInputEquivalence(...)` and a read-only
+  real-target CLI over existing WU projections and existing Business
+  Discovery input shapes.
+- The current Business Discovery builder dependency inventory is documented:
+  runtime metadata, import source URL/routes/diagnostics, Evidence Capture
+  navigation/section/asset/limitation inputs, Candidate Discovery context,
+  diagnostics, and limitations.
+- ODV and ViroiDoc both validate at 89% current dependency equivalence and
+  82% Website Understanding coverage report coverage.
+- ODV Business Discovery artifact:
+  `business_discovery_7b37413651d79de0d109e31690a34b62`; WU projection:
   `source_website_understanding_17e489688596671bf353e23f216bd1e4`.
-  ViroiDoc projection ID:
+- ViroiDoc Business Discovery artifact:
+  `business_discovery_360fa099cbcede288c2d0e04f2ec7986`; WU projection:
   `source_website_understanding_b9796806c7e95914abce1845675bcd4f`.
-- Browser verification loaded the authenticated ODV operator page and found
-  zero forms, inputs, textareas, selects, or buttons in `main`.
-- Business Discovery should eventually consume this projection through a
-  future boundary, but no Business Discovery behavior changed in WU-2.
-- Observed Website Model remains separate because it observes generated
-  proposals, not source websites.
+- Both targets had valid projections, zero conflicts, and zero duplicates.
+- Covered inputs: `siteVersionId`, `dryRunId`, source URL, route inventory,
+  navigation labels, section region types, asset inventory, import
+  diagnostics, Candidate Discovery, Candidate Review context, Reconstruction
+  context, and StructurePlan context.
+- Partial input: verbatim upstream Evidence Capture baseline/fidelity
+  limitations.
+- Missing input: first-class `sourceSiteId` projection.
+- WU already exposes stronger signals than Business Discovery consumes:
+  body messages, CTAs, concrete assets, logo candidates, color signals,
+  typography signals, reviewed context, readiness, confidence, and lineage.
+- Projection hardening normalized diagnostics, made absent navigation
+  fail-closed as `missing`, and added completeness checks for lineage refs,
+  deterministic artifact IDs, duplicate limitations, and duplicate readiness
+  dimensions.
+- Business Discovery is not ready to switch to WU as its only upstream input
+  until `sourceSiteId` and verbatim baseline/fidelity limitations are
+  projected.
 
 Recommended next phase:
 
 ```text
-WU-3 - Source Website Understanding Hardening and Business Discovery Input Planning
+WU-4 - Business Discovery Website Understanding Shadow Adapter
 ```
 
-Keep WU-3 focused on hardening the read-only source projection and planning
-the future Business Discovery input boundary. Do not mutate Business
-Discovery, DBT, WDB/WGP, providers, generation, approval, publishing, or DNS.
+Keep WU-4 non-persistent and focused on a shadow adapter plus ODV/ViroiDoc
+Business Discovery artifact equivalence. Do not switch Business Discovery
+runtime behavior yet.
 
 ## Previous Phase
+
+WU-2 - Source Website Understanding Projection Pure Runtime Implementation is
+COMPLETE.
+
+Canonical runtime record:
+
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_RUNTIME.md`
+- `docs/architecture/SOURCE_WEBSITE_UNDERSTANDING_PROJECTION_SPECIFICATION.md`
+
+WU-2 implemented the runtime projection contract, deterministic builder,
+loader/composition boundary, validation helper, focused tests, and one
+read-only superadmin operator page. It added no projection persistence,
+schema, new import behavior, new extraction, HTML parsing, asset
+classification runtime, AI analysis, Business Discovery behavior, DBT
+mutation, WDB/WGP changes, provider execution, generation, approval,
+publishing, deployment, DNS, workers, mutation APIs, or editing controls.
 
 WU-0 - Website Understanding Reality Audit is
 COMPLETE.
@@ -3650,13 +3670,14 @@ Phase 0 - GNR8 Architecture Manifesto / AI Orchestrator Reset is complete.
 - Validation result: `git diff --check` passes.
 
 Current Phase:
-- Phase WU-2 - Source Website Understanding Projection Pure Runtime
-  Implementation is
+- Phase WU-3 - Business Discovery Input Equivalence and Website Understanding
+  Hardening is
   complete.
 
 Next Phase:
-- WU-3 - Source Website Understanding Hardening and Business Discovery Input
-  Planning, focused on read-only hardening and future input-boundary design.
+- WU-4 - Business Discovery Website Understanding Shadow Adapter, focused on
+  non-persistent shadow mapping and artifact equivalence before any runtime
+  switch.
 
 Phase MVP-0 officially starts implementation planning after completion of the
 canonical architecture. It creates the first executable MVP roadmap:
