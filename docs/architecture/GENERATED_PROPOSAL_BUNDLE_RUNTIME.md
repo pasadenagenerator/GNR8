@@ -265,3 +265,36 @@ Stop after:
 Do not continue toward publishing, deployment, hosting, Business Approval,
 provider execution, AI generation, Proposal v3, runtime serving, production
 activation, or generation.
+
+## VCU-0 Continuity And Thumbnail Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit of why the durable generated proposal bundles are
+previewable but do not provide card thumbnails or source-site visual
+continuity. The audit finds that Iteration 1 and Iteration 2 previews are
+durable and immutable, but Workspace cards have no persisted screenshot
+thumbnail and generated cards rely on live iframe preview instead.
+
+VCU-0 does not change bundle persistence, preview routes, persisted assets,
+Generated Proposal import behavior, observation, compliance, AI, publishing,
+deployment, DNS, schema, API, UI, workers, Proposal v3, or generation behavior.
+Future thumbnail work should preserve bundle immutability and prefer persisted
+screenshot thumbnails with live preview retained for click-through inspection.
+
+## VCU-1 Continuity And Thumbnail Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+and locks the thumbnail boundary conceptually without implementation. The
+preferred generated-iteration thumbnail model is a derived immutable screenshot
+child artifact associated with the Generated Proposal Bundle, while the bundle
+itself remains the authoritative immutable interactive preview asset set.
+
+Generated Proposal Bundle data is not an input to the source continuity
+projection. It may be referenced later by separate thumbnail presentation work
+or by generated-output continuity validation, but it must not rewrite source
+content, asset, or visual continuity. VCU-1 does not change bundle
+persistence, preview routes, persisted assets, Generated Proposal import,
+observation, compliance, AI, publishing, deployment, DNS, schema, API, UI,
+workers, Proposal v3, thumbnails, or generation behavior.

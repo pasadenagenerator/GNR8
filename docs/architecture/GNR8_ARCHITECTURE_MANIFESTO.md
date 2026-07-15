@@ -877,3 +877,46 @@ The Workspace becomes the first page an operator opens because it composes
 what GNR8 already knows into one coherent product view. It does not replace
 the Digital Business Twin, bypass governance, infer missing truth, edit
 artifacts, generate, approve, publish, deploy, or mutate DNS.
+
+## VCU-0 Source Content & Visual Continuity Manifesto Note
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit of the recognizable-identity gap between imported
+source websites and Generated Website Proposals.
+
+The manifesto boundary remains unchanged:
+
+- source content and visual evidence are observed evidence, not canonical
+  business truth;
+- logo, colors, fonts, images, offerings, audience, trust claims, and
+  differentiators require governance before canonical use;
+- WDB/WGP should consume governed continuity projections, not raw evidence
+  directly;
+- Provider Payloads should eventually deliver source materials and policies,
+  but VCU-0 does not implement Provider Payload changes;
+- generated proposal observations must not rewrite source understanding.
+
+## VCU-1 Source Content & Visual Continuity Contract Note
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as the canonical contract for the Source Content & Visual Continuity
+Projection. The manifesto boundary is now explicit: recognizable continuity is
+an evidence-backed projection over source content, assets, screenshots, visual
+signals, layout relationships, candidate review state, limitations, and
+diagnostics. It is not business truth, canonical brand identity, asset reuse
+authorization, WDB, WGP, Provider Payload, generated content, approval, or
+publishing.
+
+The preferred persistence policy is pure runtime projection with no dedicated
+persistence. Future WDB/WGP/Provider Payload enrichment may consume VCU output,
+but DBT, BUR, Business Alignment, WDB, WGP, Provider Payload, Generated
+Proposal, Generated Proposal Bundle, OWM, Compliance, Improvement, Evolution,
+Business Approval, and publishing state must never feed source continuity.
+
+Recommended next phase: `VCU-2 - Pure Runtime Source Content & Visual
+Continuity Projection`. Keep it bounded to a read-only projection unless a
+later phase explicitly authorizes persistence, WDB/WGP mutation, Provider
+Payload changes, thumbnails, generation, AI, publishing, deployment, DNS, or
+production mutation.

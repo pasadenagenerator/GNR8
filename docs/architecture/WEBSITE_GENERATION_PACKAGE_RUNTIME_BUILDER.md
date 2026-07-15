@@ -234,3 +234,34 @@ Recommended next phase:
   only. Stop before provider payloads, prompts, external AI calls, generated
   websites, compliance execution, Business Approval, publishing, UI, API,
   schema, or workers unless explicitly authorized.
+
+## VCU-0 Continuity Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit of why ODV source copy, logo candidates, images,
+fonts, colors, visual style, and section continuity do not meaningfully reach
+generated proposals. The audit finds that the current WGP describes generation
+obligations and preserves missing knowledge, but it does not provide the source
+materials needed to create a recognizable evolution of the original site.
+
+No WGP contract, builder, persistence, schema, UI, API, Provider Payload,
+generation, AI, or runtime behavior is changed by VCU-0. Future WGP enrichment
+should consume only governed continuity projections, not raw source evidence
+directly.
+
+## VCU-1 Continuity Projection Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as the canonical future input boundary for source-continuity obligations.
+Future WGP enrichment may consume exact source content references,
+transformation obligations, source asset references, safe asset-access refs,
+reuse constraints, candidate visual signals, layout continuity requirements,
+validation expectations, unresolved items, and licensing restrictions from VCU.
+
+WGP remains a generation contract. It must not silently confirm candidates,
+authorize reuse, store source assets, or consume downstream generated artifacts
+as source truth. VCU-1 does not change the WGP contract, builder, persistence,
+schema, API, UI, Provider Payload, generation, AI, thumbnails, publishing,
+deployment, DNS, or runtime behavior.

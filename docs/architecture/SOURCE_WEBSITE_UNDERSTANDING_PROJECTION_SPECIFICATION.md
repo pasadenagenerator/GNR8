@@ -937,3 +937,27 @@ Runtime helpers:
 Validation checks now also guard artifact-ref lineage equality, deterministic
 lineage artifact IDs, duplicate limitations, duplicate readiness dimensions,
 and fail-closed missing-navigation readiness.
+
+## VCU-1 Continuity Projection Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as a downstream, read-only projection contract over Source Website
+Understanding and other upstream source-site evidence. Source Website
+Understanding remains the broader source-site understanding boundary; VCU adds
+the narrower continuity view that future design and generation layers need to
+preserve recognizable source content, assets, screenshots, visual signals, and
+layout relationships.
+
+VCU-1 does not change this WU contract, persistence policy, runtime builder,
+loader, adapter, schema, API, UI, workers, Candidate Discovery, Candidate
+Review, Business Discovery, WDB, WGP, Provider Payload, generation, thumbnails,
+publishing, deployment, DNS, or production behavior. It also preserves the WU
+knowledge-state distinction between observed, structured, candidate, reviewed,
+confirmed_source_fact, rejected, conflicting, missing, and unavailable.
+
+The continuity projection may consume WU as a required source input for ready
+states, but WU must not consume VCU output. Future WDB/WGP/Provider Payload
+enrichment consumes VCU, not raw WU evidence directly. Recommended next phase
+for the VCU track is `VCU-2 - Pure Runtime Source Content & Visual Continuity
+Projection`.

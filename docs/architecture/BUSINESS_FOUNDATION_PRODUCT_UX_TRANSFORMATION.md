@@ -301,3 +301,19 @@ Business Foundation remains the WHY/business-understanding surface. Website
 Understanding remains the upstream source-site surface. The Business
 Foundation page now links back to Website Understanding so operators can move
 from business gaps to the source evidence projection without opening raw JSON.
+
+## VCU-0 Continuity Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit of why original source copy, logo candidates, images,
+fonts, colors, visual style, layout intent, and thumbnails do not yet reach
+Generated Website Proposals in a recognizable way.
+
+The audit preserves the Business Foundation boundary: raw source evidence and
+visual identity signals may be shown as evidence or candidates, but they must
+not become canonical offerings, audience, logo, palette, typography, trust, or
+brand truth without deterministic source refs, confidence, conflict visibility,
+and human confirmation. No Business Foundation runtime, persistence, schema, UI,
+AI, WDB/WGP, Provider Payload, generation, or thumbnail behavior is changed by
+VCU-0.

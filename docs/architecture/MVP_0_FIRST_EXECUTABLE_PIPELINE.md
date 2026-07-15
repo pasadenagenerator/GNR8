@@ -2244,3 +2244,75 @@ preview foundation. Keep publishing, approval, deployment, DNS, provider, AI,
 Proposal v3, schema, worker, and production website activation out of scope
 unless a new phase explicitly authorizes them.
 ```
+
+## VCU-0 Source Content & Visual Continuity Reality Audit
+
+VCU-0 is complete as documentation and repository-reality analysis only.
+
+Canonical audit:
+
+```text
+docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md
+```
+
+VCU-0 explains why original ODV body copy, logo candidate, source images,
+fonts, colors, visual style, source layout intent, and Workspace thumbnails do
+not yet meaningfully reach Generated Website Proposals. The audit finds that
+capture exists upstream, but the chain narrows through Business Discovery,
+DBT/BUR governance, WDB/WGP intent contracts, Provider Payload serialization,
+manual export delivery, and generated proposal choices.
+
+Completed subsequent phase:
+
+```text
+VCU-1 - Source Content & Visual Continuity Projection Contract Design
+```
+
+VCU-1 is now complete as documentation and contract design only. It implemented
+no runtime builders, persistence, schema, APIs, UI, workers, AI analysis,
+WDB/WGP changes, Provider Payload changes, generation, thumbnails, publishing,
+deployment, DNS, or Proposal v3.
+
+## VCU-1 Source Content & Visual Continuity Projection Contract
+
+VCU-1 is complete as documentation and contract design only.
+
+Canonical specification:
+
+```text
+docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md
+```
+
+VCU-1 defines the Source Content & Visual Continuity Projection as a
+deterministic, connector-neutral, evidence-backed, read-only projection of
+source content and visual materials that may need to be preserved, improved,
+reviewed, or intentionally excluded during future website generation.
+
+Preferred persistence policy:
+
+```text
+A. Pure runtime projection with no dedicated persistence.
+```
+
+Allowed inputs are limited to upstream source-site evidence and context:
+Source Website Understanding, source import metadata, raw imported artifact
+metadata, semantic import, source text evidence, asset registry/file metadata,
+Evidence Capture, rendered screenshots, computed-style samples, Candidate
+Discovery, Candidate Review, Reconstruction Package context, StructurePlan as
+context only, limitations, diagnostics, and safe preview/access refs.
+
+Forbidden inputs include DBT, BUR, Business Alignment, WDB, WGP, Provider
+Payload, Generated Website Proposal, Generated Proposal Bundle, OWM,
+Compliance, reports, improvement/evolution artifacts, Business Approval, and
+publishing state.
+
+Recommended next phase:
+
+```text
+VCU-2 - Pure Runtime Source Content & Visual Continuity Projection
+```
+
+Keep VCU-2 bounded to a read-only pure runtime projection unless a later phase
+explicitly authorizes persistence, schema, WDB/WGP mutation, Provider Payload
+changes, content transformation, asset reuse, thumbnails, Proposal v3, AI,
+generation, approval, publishing, deployment, DNS, or production mutation.

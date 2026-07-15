@@ -761,3 +761,55 @@ Business Foundation, Website Understanding, Evolution, and future Digital
 Business Twin UX become Workspace modules rather than competing first-open
 pages. GX-1 adds no editing, generation, regeneration, persistence, schema,
 API, worker, AI, publishing, deployment, DNS, or runtime architecture change.
+
+## VCU-0 Source Content & Visual Continuity Blueprint Note
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only reconciliation of this desired future chain:
+
+```text
+Original Website
+-> Source Content & Visual Evidence
+-> Governed Candidates
+-> Human Confirmation where required
+-> Website Design Intent
+-> Generation Contract
+-> Generated Proposal
+```
+
+The near-term Blueprint decision is one combined Source Content & Visual
+Continuity projection over existing WU/import/evidence/candidate artifacts. It
+is not a new canonical Creative/Brand artifact, not a parallel extraction
+system, and not a generation behavior change. VCU-1 has now designed that
+projection contract before any runtime, persistence, WDB/WGP, Provider Payload,
+thumbnail, AI, or generation work.
+
+## VCU-1 Source Content & Visual Continuity Blueprint Note
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as the canonical contract for that combined projection. The projection is a
+pure runtime, read-only, connector-neutral composition over existing upstream
+source-site evidence: WU, source import metadata, raw artifacts, semantic
+import, source text evidence, asset/file metadata, Evidence Capture,
+screenshots, computed-style samples, Candidate Discovery, Candidate Review,
+Reconstruction Package context, StructurePlan as context only, limitations,
+diagnostics, and safe preview/access refs.
+
+The Blueprint causal direction is now locked:
+
+```text
+Source evidence
+-> Source Website Understanding
+-> Source Content & Visual Continuity Projection
+-> future WDB/WGP enrichment
+-> future Provider Payload delivery
+-> future recognizable generation
+```
+
+Downstream artifacts are forbidden inputs to source continuity. VCU-1 creates
+no runtime, persistence, schema, extraction, transformation, asset reuse,
+thumbnail, WDB/WGP, Provider Payload, AI, generation, publishing, deployment,
+DNS, or production mutation. Recommended next phase:
+`VCU-2 - Pure Runtime Source Content & Visual Continuity Projection`.

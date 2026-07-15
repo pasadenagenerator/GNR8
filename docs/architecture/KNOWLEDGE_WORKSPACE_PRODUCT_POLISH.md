@@ -253,3 +253,32 @@ pnpm exec tsx --test apps/platform/app/gnr8/admin/knowledge-workspace-page.test.
 
 GX-2 makes the Knowledge Workspace a stronger first-stop operator console
 without changing runtime architecture or mutating persisted state.
+
+## VCU-0 Thumbnail Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit of Workspace thumbnail behavior. The audit finds that
+Original Website cards currently use the first imported asset preview rather
+than Evidence Capture screenshot evidence, and generated iteration cards set
+`previewImageHref` to `null` while relying on live preview iframes.
+
+VCU-0 does not create thumbnails, screenshot workers, new routes, new UI, new
+storage, or preview behavior. The recommended thumbnail direction is a future
+hybrid model: persisted screenshot thumbnails for cards with existing live
+previews kept for click-through inspection.
+
+## VCU-1 Thumbnail Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+and keeps the Workspace thumbnail model conceptual. Original Website cards
+should eventually use persisted Evidence Capture screenshot thumbnails.
+Generated Iteration cards should eventually use derived immutable screenshot
+child artifacts associated with Generated Proposal Bundles. Existing live
+preview routes remain the authoritative interactive click-through path.
+
+VCU-1 does not create thumbnails, screenshot workers, new routes, new UI,
+storage, preview behavior, WDB/WGP changes, Provider Payload changes,
+generation, publishing, deployment, DNS, schema, API, workers, or production
+mutation.

@@ -5,6 +5,64 @@
 
 ## Current Phase
 
+VCU-1 - Source Content & Visual Continuity Projection Contract Design is
+COMPLETE.
+
+Canonical VCU-1 record:
+
+- `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+
+Supporting VCU-0 audit:
+
+- `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md`
+
+VCU-1 was documentation and conceptual contract design only. It defined the
+canonical Source Content & Visual Continuity Projection boundary and chose
+pure runtime projection with no dedicated persistence. No runtime contract
+code, builder, loader, persistence, schema, API, UI, worker, extraction, HTML
+parsing, screenshot capture, thumbnail generation, content transformation,
+asset classification runtime, Candidate Review change, Business Discovery
+change, DBT change, WDB/WGP change, Provider Payload change, Proposal v3, AI,
+provider execution, generation, approval, publishing, deployment, DNS, or
+production mutation was implemented.
+
+VCU-1 conclusion:
+
+- the projection is a deterministic, connector-neutral, evidence-backed,
+  read-only composition over upstream source-site evidence and candidates;
+- source content remains distinct from business truth;
+- continuity candidates remain distinct from canonical brand identity;
+- asset existence, preview availability, and reuse permission remain separate;
+- allowed inputs are upstream source-site evidence and context only: WU, source
+  import metadata, raw artifact metadata, semantic import, source text
+  evidence, asset/file metadata, Evidence Capture, screenshots, computed-style
+  samples, Candidate Discovery, Candidate Review, Reconstruction Package
+  context, StructurePlan as context only, limitations, diagnostics, and safe
+  preview/access refs;
+- forbidden inputs include DBT, BUR, Business Alignment, WDB, WGP, Provider
+  Payload, Generated Website Proposal, Generated Proposal Bundle, OWM,
+  Compliance, reports, improvement/evolution artifacts, Business Approval, and
+  publishing state;
+- future WDB, WGP, and Provider Payload enrichment may consume VCU output, but
+  they do not feed it;
+- thumbnail architecture is conceptually locked as hybrid persisted screenshot
+  thumbnails with live preview on click, with no thumbnail implementation.
+
+Recommended next phase:
+
+```text
+VCU-2 - Pure Runtime Source Content & Visual Continuity Projection
+```
+
+Keep VCU-2 bounded to a pure read-only runtime projection. Stop before
+persistence, schema, APIs beyond existing read-only boundaries, UI, workers, new
+extraction, new HTML parsing, screenshot capture, thumbnail generation, content
+transformation, asset reuse, WDB/WGP changes, Provider Payload changes,
+proposal generation, Proposal v3, AI, publishing, deployment, DNS, or
+production mutation unless separately authorized.
+
+## Prior Completed Phase
+
 P0-CLOSEOUT - Durable Generated Proposal Preview Canonical Closeout is
 COMPLETE.
 
@@ -116,9 +174,12 @@ worker change, edit controls, forms, or mutation controls.
 Recommended next track:
 
 ```text
-Product UX review - return to Workspace and Evolution review using the durable
-preview foundation, without publishing, approval, deployment, DNS, provider,
-AI, Proposal v3, schema, worker, or production website activation work.
+VCU-2 - Pure Runtime Source Content & Visual Continuity Projection.
+Use the VCU-1 specification, durable preview foundation, existing
+WU/import/evidence/candidate/review/context chain, and VCU-0 audit. Keep
+publishing, approval, deployment, DNS, provider, AI, Proposal v3, schema,
+worker, thumbnails, WDB/WGP changes, Provider Payload changes, and production
+website activation out of scope unless separately authorized.
 ```
 
 Do not introduce publishing, deployment, hosting, runtime serving, Business

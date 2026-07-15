@@ -220,3 +220,32 @@ Recommended next phase:
 
 - MVP-1E-R Website Design Brief Real-Target Validation is complete.
 - Next recommended phase: MVP-1F Website Generation Package Runtime Builder.
+
+## VCU-0 Continuity Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit over source content and visual continuity. The audit
+finds that the current WDB contract supports website intent, messages, journey,
+constraints, missing knowledge, and evidence refs, but it does not carry exact
+source-copy excerpts, source asset manifests, logo candidates, typography,
+colors, visual-style candidates, source screenshots, or candidate review state.
+
+No WDB contract, builder, persistence, schema, UI, API, WGP, Provider Payload,
+generation, AI, or runtime behavior is changed by VCU-0. Future WDB enrichment
+should wait until a governed continuity projection and candidate review path
+exist.
+
+## VCU-1 Continuity Projection Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as the canonical future input boundary for source continuity enrichment. Future
+WDB enrichment may consume content priorities, preserve/improve/exclude
+candidates, visual identity candidates, source screenshot references, layout
+continuity, unresolved governance, confidence, and limitations from VCU.
+
+WDB remains design intent. It must not become an asset store, a raw evidence
+consumer, or a brand-confirmation boundary. VCU-1 does not change the WDB
+contract, builder, persistence, schema, API, UI, WGP, Provider Payload,
+generation, AI, thumbnails, publishing, deployment, DNS, or runtime behavior.

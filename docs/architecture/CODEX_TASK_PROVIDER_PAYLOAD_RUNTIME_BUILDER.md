@@ -461,3 +461,36 @@ Recommended next phase after MVP-1J:
   Stop before compliance execution, Business Approval, publishing, deployment,
   DNS mutation, production mutation, UI, API, schema, or workers unless
   explicitly authorized.
+
+## VCU-0 Continuity Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit of Provider Payload v1/v2 coverage. The audit finds
+that the current payloads serialize the WGP and task envelope correctly, but
+they omit original body copy, exact source snippets, source asset IDs as
+deliverable assets, asset preview URLs, logo candidates, source images, source
+fonts, source colors, source screenshots, source HTML/CSS, and content
+transformation policy.
+
+No Provider Payload contract, builder, persistence, export runtime, AI,
+generation, WDB, WGP, schema, API, UI, worker, publishing, deployment, DNS, or
+production behavior is changed by VCU-0.
+
+## VCU-1 Continuity Projection Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as the canonical future source-continuity input boundary for Provider Payload
+v3 shadow delivery. Future payload work may carry a continuity projection
+reference, source content excerpts, proposed transformation policies, a source
+asset manifest, safe preview/access refs, logo/image/typography/color
+candidates, source screenshots, layout continuity, preserve/improve/remove
+obligations, review status, licensing/source limitations, unresolved items, and
+expected output continuity evidence.
+
+VCU-1 does not modify Provider Payload v1/v2 contracts, builders, persistence,
+exports, AI execution, generation, WDB, WGP, schema, API, UI, workers,
+publishing, deployment, DNS, thumbnails, Proposal v3, or production behavior.
+Provider Payload must not treat continuity candidates as confirmed business or
+brand truth.

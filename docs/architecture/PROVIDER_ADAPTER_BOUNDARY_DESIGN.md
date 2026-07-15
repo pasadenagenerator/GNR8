@@ -488,3 +488,34 @@ Recommended next phase after MVP-1J:
   Stop before compliance execution, Business Approval, publishing, deployment,
   DNS mutation, production mutation, UI, API, schema, or workers unless
   explicitly authorized.
+
+## VCU-0 Continuity Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only audit of the provider handoff boundary. The audit finds that
+the current provider boundary is safe and lineage-preserving, but the handoff
+does not yet include governed source-copy excerpts, source asset manifests,
+candidate review states, asset preview/access URLs, font/color candidates,
+source screenshots, or continuity-specific generation instructions.
+
+No provider adapter contract, provider execution behavior, WDB, WGP, payload
+runtime, export format, AI, generation, publishing, deployment, DNS, schema,
+API, UI, or workers are changed by VCU-0.
+
+## VCU-1 Continuity Projection Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as the future source-continuity input boundary for provider delivery. A future
+provider handoff may receive continuity projection refs, source content
+excerpts, transformation policies, source asset manifests, safe preview/access
+refs, logo/image/font/color candidates, source screenshots, layout continuity,
+review state, licensing/source limitations, unresolved items, and expected
+output continuity evidence.
+
+VCU-1 does not modify provider adapter contracts, provider execution, WDB, WGP,
+Provider Payload, export formats, AI, generation, publishing, deployment, DNS,
+schema, API, UI, workers, thumbnails, Proposal v3, or production behavior. The
+provider boundary must treat VCU continuity materials as candidates or governed
+source obligations, not canonical brand truth.

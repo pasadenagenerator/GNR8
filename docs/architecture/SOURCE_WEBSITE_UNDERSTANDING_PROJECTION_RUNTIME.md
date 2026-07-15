@@ -351,3 +351,35 @@ visual identity signals explain why they are unavailable, and the Workspace
 does not change the WU projection, loader, adapter, persistence policy,
 Business Discovery behavior, schema, API, workers, AI, generation, publishing,
 deployment, DNS, or runtime architecture.
+
+## VCU-0 Continuity Audit Relationship
+
+VCU-0 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md` as a
+documentation-only repository audit over the source content and visual
+continuity chain. The audit confirms that this WU runtime can already expose
+source body-text availability, headings, CTA/contact signals, asset inventory,
+logo candidates, color signals, typography signals, sections, and layout
+context as source-site evidence or candidates.
+
+VCU-0 does not change the WU contract, builder, loader, adapter, persistence
+policy, Business Discovery behavior, schema, API, UI, workers, AI, generation,
+publishing, deployment, DNS, or runtime mutation behavior. VCU-1 subsequently
+completed the Source Content & Visual Continuity Projection Contract Design.
+
+## VCU-1 Continuity Projection Relationship
+
+VCU-1 adds
+`docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
+as the canonical contract for a future Source Content & Visual Continuity
+Projection. The future projection consumes this WU runtime output plus upstream
+source import, raw artifact, semantic import, Evidence Capture, screenshot,
+style, asset, Candidate Discovery, Candidate Review, Reconstruction Package,
+and context-only StructurePlan refs. It preserves source content and visual
+continuity as evidence/candidates, not business truth or brand truth.
+
+VCU-1 does not change the WU runtime contract, builder, loader, validator,
+page, adapter, persistence policy, Business Discovery behavior, schema, API,
+UI, workers, AI, generation, thumbnails, publishing, deployment, DNS, or
+production mutation. The recommended next phase is
+`VCU-2 - Pure Runtime Source Content & Visual Continuity Projection`.
