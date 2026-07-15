@@ -110,42 +110,47 @@ Preview routes:
 /gnr8/admin/evolution/[siteVersionId]/iterations/2/preview/
 ```
 
-The preview route is superadmin-only and read-only. It serves allowlisted
-static proposal files only:
+The preview route is superadmin-only and read-only. As of P0 Durable
+Generated Proposal Preview Runtime Foundation, it serves allowlisted persisted
+Generated Proposal Bundle artifacts only:
 
 ```text
-Iteration 1 -> ODV_GENERATED_PROPOSAL_001/source/index.html
-Iteration 2 -> ODV_GENERATED_PROPOSAL_002/source/index.html
+Iteration 1 -> generated_proposal_bundle -> source/index.html
+Iteration 2 -> generated_proposal_bundle -> source/index.html
 ```
 
-Local relative CSS, JavaScript, SVG, image, JSON, and text assets under the
-same `source/` tree resolve through the same route. The server never executes
-generated JavaScript. JavaScript, if present, is sent as a static asset to the
-browser. The route does not mutate proposal files and does not mark any
-proposal approved, compliant, published, or deployed.
+Relative CSS, JavaScript, SVG, image, JSON, icon, font, and manifest assets
+resolve from persisted bundle bytes through the same route. The server never
+executes generated JavaScript. JavaScript, if present, is sent as a static
+asset to the browser. The route does not mutate proposal files and does not
+mark any proposal approved, compliant, published, or deployed.
 
 Preview security behavior:
 
 - explicit iteration-to-bundle allowlist
 - no arbitrary filesystem path from the URL
-- path normalization before filesystem access
+- path normalization before persisted asset lookup
 - rejection of `..`, absolute paths, encoded traversal, slash-containing
   segments, and backslash-containing segments
-- realpath checks for symlink and outside-bundle escapes
 - explicit content types
 - `no-store`, `nosniff`, `no-referrer`, and restrictive CSP headers
-- explicit unavailable state when a proposal source bundle is not present
+- explicit unavailable state when a persisted proposal bundle is not present
 
-Preview availability is filesystem-backed. It is available in local runtime
-when the `ODV_GENERATED_PROPOSAL_001/` and `ODV_GENERATED_PROPOSAL_002/`
-directories are packaged with the app runtime. A deployment that excludes
-those folders must show preview unavailable rather than implying permanent
-website availability.
+Preview availability is artifact-backed. The route no longer checks
+`ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/` during preview.
+Production remains unavailable until the durable ODV bundle artifacts are
+materialized in the runtime database with explicit operator approval.
 
 GX-2 Knowledge Workspace polish reuses these same preview routes. The
 Workspace frames generated proposal previews as quarantined proposal previews,
 does not claim they are published websites, and does not add screenshot
 generation, image pipelines, storage, API changes, or proposal asset mutation.
+
+Canonical durable preview record:
+
+```text
+docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md
+```
 
 ## Attention States
 

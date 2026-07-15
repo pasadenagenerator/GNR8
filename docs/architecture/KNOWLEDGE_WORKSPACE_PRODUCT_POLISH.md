@@ -86,14 +86,23 @@ improvement, and Open Preview. They do not imply a published website.
 
 ## Preview Presentation
 
-GX-2 keeps the existing preview boundary:
+GX-2 kept the existing preview UX. P0 Durable Generated Proposal Preview
+Runtime Foundation changed only the preview source:
 
 - original/source visual previews use existing imported asset preview routes
-- generated proposal previews use existing Evolution preview routes in an
-  iframe
+- generated proposal previews use existing Evolution preview routes in an iframe
+- those Evolution preview routes now reconstruct from persisted
+  `generated_proposal_bundle` artifacts, not from local
+  `ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/` directories
 
 No screenshot generation, image pipeline, storage, or proposal asset mutation
-was added.
+was added to the Workspace UX.
+
+Canonical durable preview record:
+
+```text
+docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md
+```
 
 `<img>` remains intentional for imported preview assets and logo candidates.
 Those URLs are runtime preview-asset routes under the authenticated app

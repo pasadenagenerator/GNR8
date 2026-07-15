@@ -271,7 +271,7 @@ export type GenerationBusinessFoundationProjectionOptions = RuntimeStoreDbOption
   getSiteVersion?: SiteVersionLoader;
   getRawImportedSiteArtifact?: RawImportedSiteArtifactLoader;
   getRawTemplateSiteAsset?: RawTemplateSiteAssetLoader;
-  getPreviewBundleAvailability?: (iteration: number) => Promise<GenerationPreviewBundleAvailability | null>;
+  getPreviewBundleAvailability?: (input: { siteVersionId: string; iteration: number }) => Promise<GenerationPreviewBundleAvailability | null>;
 };
 
 const KNOWLEDGE_GROUPS = [

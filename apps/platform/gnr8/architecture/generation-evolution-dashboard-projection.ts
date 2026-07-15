@@ -132,7 +132,7 @@ type ProjectionRecord = {
 
 export type GenerationEvolutionDashboardProjectionOptions = RuntimeStoreDbOptions & {
   getSiteVersion?: SiteVersionLoader;
-  getPreviewBundleAvailability?: (iteration: number) => Promise<GenerationPreviewBundleAvailability | null>;
+  getPreviewBundleAvailability?: (input: { siteVersionId: string; iteration: number }) => Promise<GenerationPreviewBundleAvailability | null>;
 };
 
 function cloneJson<T>(value: T): T {
@@ -275,9 +275,12 @@ async function previewProjection(input: {
   siteVersionId: string;
   iteration: number;
   proposal: ProjectionRecord | null;
-  getPreviewBundleAvailability: (iteration: number) => Promise<GenerationPreviewBundleAvailability | null>;
+  getPreviewBundleAvailability: (input: { siteVersionId: string; iteration: number }) => Promise<GenerationPreviewBundleAvailability | null>;
 }): Promise<GenerationPreviewProjection> {
-  const availability = await input.getPreviewBundleAvailability(input.iteration);
+  const availability = await input.getPreviewBundleAvailability({
+    siteVersionId: input.siteVersionId,
+    iteration: input.iteration,
+  });
   return {
     iteration: input.iteration,
     available: availability?.available ?? false,
@@ -347,7 +350,7 @@ export async function loadGenerationEvolutionDashboardProjection(input: {
   }
 
   const getPreviewBundleAvailability = options.getPreviewBundleAvailability ??
-    ((iteration: number) => getGenerationPreviewBundleAvailability(iteration));
+    ((value: { siteVersionId: string; iteration: number }) => getGenerationPreviewBundleAvailability(value));
 
   const iterations: GenerationIterationProjection[] = [];
   for (const record of iterationRecords) {

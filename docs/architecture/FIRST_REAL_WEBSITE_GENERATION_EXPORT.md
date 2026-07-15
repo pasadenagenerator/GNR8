@@ -169,6 +169,22 @@ JSON parse validation passes for every JSON file in `ODV_EXPORT/`.
 
 `git diff --check` passes.
 
+## Durable Preview Follow-Up
+
+P0 Durable Generated Proposal Preview Runtime Foundation later introduced the
+`generated_proposal_bundle` artifact so Iteration 1 preview can be
+reconstructed from persisted runtime storage.
+
+`ODV_GENERATED_PROPOSAL_001/` remains the historical manual output folder and
+the materialization input for the durable bundle. It is no longer the preview
+route's runtime dependency once the bundle artifact is persisted.
+
+Canonical record:
+
+```text
+docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md
+```
+
 ## Second Generation Package
 
 MVP-2.0-H created the second-generation counterpart to this first export:

@@ -1,16 +1,22 @@
-import { constants as fsConstants } from "node:fs";
-import { existsSync } from "node:fs";
-import { access, readFile, realpath, stat } from "node:fs/promises";
-import path from "node:path";
+import {
+  GeneratedProposalBundleResolutionError,
+  loadGeneratedProposalBundleByIteration,
+  resolveGeneratedProposalBundleAsset,
+  type GeneratedProposalBundleIteration,
+  type GeneratedProposalBundlePersistenceOptions,
+} from "./generated-proposal-bundle-persistence";
 
-export type GenerationPreviewIteration = 1 | 2;
+export type GenerationPreviewIteration = GeneratedProposalBundleIteration;
 
 export type GenerationPreviewBundleAvailability = {
   iteration: GenerationPreviewIteration;
   proposalArtifactId: string;
   outputBundleId: string;
   bundleLabel: string;
-  bundleRoot: string;
+  bundleArtifactId: string | null;
+  bundleSha256: string | null;
+  assetCount: number | null;
+  byteSize: number | null;
   entryFile: "source/index.html";
   available: boolean;
   unavailableReason: string | null;
@@ -21,7 +27,7 @@ export type GenerationPreviewResolvedFile =
       ok: true;
       status: 200;
       iteration: GenerationPreviewIteration;
-      absolutePath: string;
+      bundleArtifactId: string;
       relativePath: string;
       contentType: string;
       body: ArrayBuffer;
@@ -55,90 +61,11 @@ const PREVIEW_BUNDLE_ALLOWLIST: Record<GenerationPreviewIteration, {
   },
 };
 
-function candidateRepoRoots(): string[] {
-  return [
-    process.cwd(),
-    path.resolve(process.cwd(), ".."),
-    path.resolve(process.cwd(), "../.."),
-  ];
-}
-
-function bundleRootFor(label: string): string {
-  return candidateRepoRoots()
-    .map((root) => path.resolve(root, label))
-    .find((candidate) => existsSync(candidate)) ?? path.resolve(process.cwd(), label);
-}
-
 function iterationFromUnknown(value: unknown): GenerationPreviewIteration | null {
   const normalized = String(value ?? "").trim();
   if (normalized === "1") return 1;
   if (normalized === "2") return 2;
   return null;
-}
-
-function contentTypeFor(relativePath: string): string {
-  const extension = path.extname(relativePath).toLowerCase();
-  if (extension === ".html") return "text/html; charset=utf-8";
-  if (extension === ".css") return "text/css; charset=utf-8";
-  if (extension === ".js") return "text/javascript; charset=utf-8";
-  if (extension === ".svg") return "image/svg+xml";
-  if (extension === ".png") return "image/png";
-  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
-  if (extension === ".webp") return "image/webp";
-  if (extension === ".gif") return "image/gif";
-  if (extension === ".ico") return "image/x-icon";
-  if (extension === ".json") return "application/json; charset=utf-8";
-  if (extension === ".txt") return "text/plain; charset=utf-8";
-  return "application/octet-stream";
-}
-
-async function pathExists(absolutePath: string): Promise<boolean> {
-  try {
-    await access(absolutePath, fsConstants.R_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function normalizeAssetPath(assetPathSegments: readonly string[] | undefined): string | null {
-  const rawSegments = assetPathSegments && assetPathSegments.length > 0
-    ? assetPathSegments
-    : ["source", "index.html"];
-  const decodedSegments: string[] = [];
-
-  for (const rawSegment of rawSegments) {
-    let segment = rawSegment;
-    try {
-      segment = decodeURIComponent(rawSegment);
-    } catch {
-      return null;
-    }
-    if (
-      segment.length === 0 ||
-      segment === "." ||
-      segment === ".." ||
-      segment.includes("/") ||
-      segment.includes("\\") ||
-      path.isAbsolute(segment)
-    ) {
-      return null;
-    }
-    decodedSegments.push(segment);
-  }
-
-  const relativePath = decodedSegments.join("/");
-  const normalized = path.posix.normalize(relativePath);
-  if (
-    normalized === "." ||
-    normalized.startsWith("../") ||
-    normalized.includes("/../") ||
-    normalized.startsWith("/") ||
-    normalized.split("/").some((segment) => segment === "..")
-  ) {
-    return null;
-  }
-  return normalized;
 }
 
 export function generationPreviewSecurityHeaders(contentType?: string): HeadersInit {
@@ -162,34 +89,51 @@ export function generationPreviewSecurityHeaders(contentType?: string): HeadersI
   };
 }
 
-export async function getGenerationPreviewBundleAvailability(
-  iterationValue: unknown,
-): Promise<GenerationPreviewBundleAvailability | null> {
-  const iteration = iterationFromUnknown(iterationValue);
+export async function getGenerationPreviewBundleAvailability(input: {
+  siteVersionId: string;
+  iteration: unknown;
+  options?: GeneratedProposalBundlePersistenceOptions;
+}): Promise<GenerationPreviewBundleAvailability | null> {
+  const iteration = iterationFromUnknown(input.iteration);
   if (!iteration) return null;
   const allowed = PREVIEW_BUNDLE_ALLOWLIST[iteration];
-  const bundleRoot = bundleRootFor(allowed.bundleLabel);
-  const entryPath = path.resolve(bundleRoot, "source", "index.html");
-  const available = await pathExists(entryPath);
+  const artifact = await loadGeneratedProposalBundleByIteration({
+    siteVersionId: input.siteVersionId,
+    iteration,
+    options: input.options,
+  });
+  const lineageMatches = artifact &&
+    artifact.generatedWebsiteProposalArtifactId === allowed.proposalArtifactId &&
+    artifact.outputBundleId === allowed.outputBundleId;
+  const available = Boolean(artifact && lineageMatches);
 
   return {
     iteration,
     proposalArtifactId: allowed.proposalArtifactId,
     outputBundleId: allowed.outputBundleId,
-    bundleLabel: allowed.bundleLabel,
-    bundleRoot,
+    bundleLabel: artifact?.bundleLabel ?? allowed.bundleLabel,
+    bundleArtifactId: artifact?.artifactId ?? null,
+    bundleSha256: artifact?.bundleSha256 ?? null,
+    assetCount: artifact?.assetCount ?? null,
+    byteSize: artifact?.byteSize ?? null,
     entryFile: "source/index.html",
     available,
-    unavailableReason: available ? null : "Proposal source bundle is not present in this runtime filesystem.",
+    unavailableReason: available
+      ? null
+      : artifact
+        ? "Persisted Generated Proposal Bundle lineage does not match the allowlisted iteration."
+        : "Persisted Generated Proposal Bundle artifact is not available for this runtime.",
   };
 }
 
 export async function resolveGenerationPreviewFile(input: {
+  siteVersionId: string;
   iteration: unknown;
   assetPathSegments?: readonly string[];
+  options?: GeneratedProposalBundlePersistenceOptions;
 }): Promise<GenerationPreviewResolvedFile> {
-  const availability = await getGenerationPreviewBundleAvailability(input.iteration);
-  if (!availability) {
+  const iteration = iterationFromUnknown(input.iteration);
+  if (!iteration) {
     return {
       ok: false,
       status: 404,
@@ -197,70 +141,57 @@ export async function resolveGenerationPreviewFile(input: {
       message: "Unknown generation iteration preview.",
     };
   }
-  if (!availability.available) {
+  const availability = await getGenerationPreviewBundleAvailability({
+    siteVersionId: input.siteVersionId,
+    iteration,
+    options: input.options,
+  });
+  if (!availability?.available) {
     return {
       ok: false,
       status: 410,
       code: "PREVIEW_UNAVAILABLE",
-      message: availability.unavailableReason ?? "Preview bundle is unavailable.",
+      message: availability?.unavailableReason ?? "Preview bundle is unavailable.",
     };
   }
 
-  const relativePath = normalizeAssetPath(input.assetPathSegments);
-  if (!relativePath || !relativePath.startsWith("source/")) {
+  const artifact = await loadGeneratedProposalBundleByIteration({
+    siteVersionId: input.siteVersionId,
+    iteration,
+    options: input.options,
+  });
+  if (!artifact) {
     return {
       ok: false,
-      status: 400,
-      code: "PATH_TRAVERSAL_REJECTED",
-      message: "Preview asset path was rejected.",
+      status: 410,
+      code: "PREVIEW_UNAVAILABLE",
+      message: "Persisted Generated Proposal Bundle artifact is not available for this runtime.",
     };
   }
 
-  const rootRealPath = await realpath(availability.bundleRoot);
-  const absolutePath = path.resolve(availability.bundleRoot, relativePath);
-  const absoluteRealPath = await realpath(path.dirname(absolutePath)).catch(() => null);
-  if (!absoluteRealPath || (absoluteRealPath !== rootRealPath && !absoluteRealPath.startsWith(`${rootRealPath}${path.sep}`))) {
+  try {
+    const file = resolveGeneratedProposalBundleAsset({
+      artifact,
+      assetPathSegments: input.assetPathSegments,
+    });
     return {
-      ok: false,
-      status: 403,
-      code: "ASSET_OUTSIDE_BUNDLE_REJECTED",
-      message: "Preview asset resolves outside the allowlisted proposal bundle.",
+      ok: true,
+      status: 200,
+      iteration,
+      bundleArtifactId: artifact.artifactId,
+      relativePath: file.relativePath,
+      contentType: file.contentType,
+      body: file.body,
     };
+  } catch (error) {
+    if (error instanceof GeneratedProposalBundleResolutionError) {
+      return {
+        ok: false,
+        status: error.status,
+        code: error.code,
+        message: error.message,
+      };
+    }
+    throw error;
   }
-
-  const fileStat = await stat(absolutePath).catch(() => null);
-  if (!fileStat?.isFile()) {
-    return {
-      ok: false,
-      status: 404,
-      code: "ASSET_NOT_FOUND",
-      message: "Preview asset was not found.",
-    };
-  }
-
-  const fileRealPath = await realpath(absolutePath);
-  if (fileRealPath !== rootRealPath && !fileRealPath.startsWith(`${rootRealPath}${path.sep}`)) {
-    return {
-      ok: false,
-      status: 403,
-      code: "ASSET_OUTSIDE_BUNDLE_REJECTED",
-      message: "Preview asset resolves outside the allowlisted proposal bundle.",
-    };
-  }
-
-  const fileBuffer = await readFile(fileRealPath);
-  const body = fileBuffer.buffer.slice(
-    fileBuffer.byteOffset,
-    fileBuffer.byteOffset + fileBuffer.byteLength,
-  ) as ArrayBuffer;
-
-  return {
-    ok: true,
-    status: 200,
-    iteration: availability.iteration,
-    absolutePath: fileRealPath,
-    relativePath,
-    contentType: contentTypeFor(relativePath),
-    body,
-  };
 }

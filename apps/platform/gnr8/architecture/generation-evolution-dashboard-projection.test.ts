@@ -159,7 +159,7 @@ function baseSummary(): RuntimeImportProvenanceSummary {
         },
       },
     ],
-  } as RuntimeImportProvenanceSummary;
+  } as unknown as RuntimeImportProvenanceSummary;
 }
 
 async function project(summary = baseSummary()) {
@@ -170,17 +170,20 @@ async function project(summary = baseSummary()) {
         id: SITE_VERSION_ID,
         siteId: "odv",
         versionNo: 1,
-        state: "READY",
+        state: "APPROVED",
         importProvenanceSummary: summary,
       }),
-      getPreviewBundleAvailability: async (iteration) => ({
+      getPreviewBundleAvailability: async ({ iteration }) => ({
         iteration: iteration as 1 | 2,
         proposalArtifactId: iteration === 1
           ? "generated_website_proposal_3f5cf8e9a4cd0cd91a3c7521edf8ddc3"
           : "generated_website_proposal_acbb2df2349e2973dbc7d26a696a378e",
         outputBundleId: `ODV_GENERATED_PROPOSAL_00${iteration}`,
         bundleLabel: `ODV_GENERATED_PROPOSAL_00${iteration}`,
-        bundleRoot: `/tmp/ODV_GENERATED_PROPOSAL_00${iteration}`,
+        bundleArtifactId: `generated_proposal_bundle_${iteration}`,
+        bundleSha256: `sha256-${iteration}`,
+        assetCount: 3,
+        byteSize: 1024,
         entryFile: "source/index.html",
         available: true,
         unavailableReason: null,

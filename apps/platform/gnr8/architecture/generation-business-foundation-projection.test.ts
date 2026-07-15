@@ -328,7 +328,7 @@ async function project(summary = baseSummary(), rawArtifact: RawImportedSiteArti
         id: SITE_VERSION_ID,
         siteId: "ODV",
         versionNo: 1,
-        state: "READY",
+        state: "APPROVED",
         createdAt: "2026-07-11T08:00:00.000Z",
         importProvenanceSummary: summary,
       }),
@@ -342,12 +342,15 @@ async function project(summary = baseSummary(), rawArtifact: RawImportedSiteArti
           sha256: rawArtifact.fileMap[filePath]!.sha256,
         };
       },
-      getPreviewBundleAvailability: async (iteration) => ({
+      getPreviewBundleAvailability: async ({ iteration }) => ({
         iteration: iteration as 1 | 2,
         proposalArtifactId: `generated_proposal_${iteration}`,
         outputBundleId: `ODV_GENERATED_PROPOSAL_00${iteration}`,
         bundleLabel: `ODV_GENERATED_PROPOSAL_00${iteration}`,
-        bundleRoot: "/tmp/not-used",
+        bundleArtifactId: `generated_proposal_bundle_${iteration}`,
+        bundleSha256: `sha256-${iteration}`,
+        assetCount: 3,
+        byteSize: 1024,
         entryFile: "source/index.html",
         available: true,
         unavailableReason: null,

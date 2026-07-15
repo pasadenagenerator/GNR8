@@ -7,6 +7,19 @@ This is the first file every new ChatGPT/Codex thread should read.
 First Executable MVP Pipeline
 
 Current status:
+- Phase P0 - Durable Generated Proposal Preview Runtime Foundation is
+  implemented and locally verified. It introduced immutable
+  `generated_proposal_bundle` artifacts in
+  `siteVersion.importProvenanceSummary`, switched the existing Evolution
+  preview route to reconstruct from persisted bundle assets by `siteVersionId`
+  and iteration, and preserved the existing Knowledge Workspace / Generation
+  Evolution / Business Foundation UX links. Focused validation passed
+  `30 pass / 0 fail`; filesystem independence passed with
+  `ODV_GENERATED_PROPOSAL_001/` and `ODV_GENERATED_PROPOSAL_002/`
+  temporarily renamed (`8 pass / 0 fail`). Production materialization of the
+  ODV bundle artifacts was not performed because it writes to the production
+  runtime database and the approval guard rejected that mutation. Canonical
+  doc: `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`.
 - Phase MVP-1C - Business Understanding Report Runtime Builder is complete.
 - Phase MVP-1B-R - Digital Business Twin Real-Target Validation is complete
   and has persisted ODV and ViroiDoc DBT artifacts.
@@ -219,8 +232,13 @@ GX-2 evidence:
   change, WDB/WGP change, generation change, compliance/evolution logic
   change, persistence, schema, API, worker, AI, publishing, deployment, DNS,
   runtime architecture mutation, forms, edit controls, or mutation controls.
-- Next phase: GX-3 - Knowledge Workspace Deployment Verification. Keep it
-  read-only unless explicitly authorized otherwise.
+- Next phase: P0-VERIFY - Explicitly Approved Production Generated Proposal
+  Bundle Materialization and Preview Verification. Keep it limited to
+  materializing the two ODV `generated_proposal_bundle` artifacts with the
+  prepared CLI and verifying the existing read-only preview URLs. Do not add
+  publishing, deployment, hosting, runtime serving, Business Approval,
+  provider execution, AI execution, new generation, Proposal v3, WGP
+  mutation, or production website activation.
 
 Prior phase context:
 - Phase WU-6 - Optional Business Discovery Runtime Integration Plan is

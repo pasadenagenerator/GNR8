@@ -45,12 +45,13 @@ export function createGenerationEvolutionPreviewRouteHandlers(
   return {
     async GET(
       request: Request,
-      context: { params: Promise<{ iteration: string; assetPath?: string[] }> | { iteration: string; assetPath?: string[] } },
+      context: { params: Promise<{ siteVersionId: string; iteration: string; assetPath?: string[] }> },
     ): Promise<Response> {
       try {
         await resolved.requireSuperadminUserId();
         const params = await context.params;
         const result = await resolved.resolvePreviewFile({
+          siteVersionId: params.siteVersionId,
           iteration: params.iteration,
           assetPathSegments: params.assetPath,
         });

@@ -351,16 +351,24 @@ safe static previews for the two quarantined generated proposal bundles:
 /gnr8/admin/evolution/[siteVersionId]/iterations/2/preview/
 ```
 
-The previews serve only allowlisted proposal bundle files rooted at
+The previews serve only allowlisted Generated Proposal Bundle assets rooted at
 `source/index.html`. They are quarantined generated proposals, not published
-websites. Runtime preview availability depends on whether the proposal source
-folders are present in the current runtime filesystem.
+websites. Runtime preview availability now depends on persisted
+`generated_proposal_bundle` artifacts for the current `siteVersionId` and
+iteration, not on `ODV_GENERATED_PROPOSAL_001/` or
+`ODV_GENERATED_PROPOSAL_002/` being present in the runtime filesystem.
+
+Durable preview foundation:
+
+- `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`
 
 MVP-3.0-A adds no artifact editing, Business Alignment interaction,
 generation controls, regeneration controls, approval controls, publishing,
 deployment, DNS mutation, production website mutation, provider execution, AI
-execution, workers, schema changes, persistence changes, automatic visual
-comparison, or compliance recomputation.
+execution, workers, automatic visual comparison, or compliance recomputation.
+P0 later added preview storage persistence only, without adding publishing,
+hosting, serving, provider execution, AI execution, Business Approval, WGP
+mutation, proposal regeneration, or production activation.
 
 ## MVP-3.0-B Generation Evolution Dashboard Real-Target Verification Addendum
 
@@ -2178,8 +2186,11 @@ forms, or mutation controls.
 Next safe phase:
 
 ```text
-GX-3 - Knowledge Workspace Deployment Verification
+P0-VERIFY - Explicitly Approved Production Generated Proposal Bundle Materialization and Preview Verification
 ```
 
-GX-3 should verify the deployed GX-2 Workspace after deployment. It should
-remain read-only unless explicitly authorized otherwise.
+P0-VERIFY should only materialize the two ODV `generated_proposal_bundle`
+artifacts with the prepared CLI and verify the existing read-only preview
+URLs. It must not introduce publishing, deployment, hosting, runtime serving,
+Business Approval, provider execution, AI execution, new generation, Proposal
+v3, WGP mutation, or production website activation.

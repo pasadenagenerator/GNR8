@@ -5,10 +5,12 @@
 
 ## Current Phase
 
-GX-2 - Knowledge Workspace Real-Target Verification and Product UX Polish is COMPLETE.
+P0 - Durable Generated Proposal Preview Runtime Foundation is IMPLEMENTED and
+LOCALLY VERIFIED.
 
 Canonical records:
 
+- `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`
 - `docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md`
 - `docs/architecture/KNOWLEDGE_WORKSPACE_RUNTIME_FOUNDATION.md`
 - `docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md`
@@ -20,71 +22,82 @@ Canonical records:
 - `docs/ai/GNR8_CURRENT_STATE.md`
 - `docs/ai/GNR8_THREAD_HANDOFF.md`
 
-Workspace route:
+Preview routes:
 
 ```text
-/gnr8/admin/workspace/[siteVersionId]
+/gnr8/admin/evolution/[siteVersionId]/iterations/1/preview/
+/gnr8/admin/evolution/[siteVersionId]/iterations/2/preview/
 ```
 
-ODV route:
+ODV target:
 
 ```text
-/gnr8/admin/workspace/09dce7ea-d860-4f60-a1eb-26c3335b302e
+09dce7ea-d860-4f60-a1eb-26c3335b302e
 ```
 
-GX-2 polishes the read-only Knowledge Workspace so it can serve as the first
-operator console for an imported website. It keeps GX-1's projection
-composition and runtime boundary, but improves hierarchy, copy, preview
-presentation, version cards, visual identity states, gap ranking, health
-labels, desktop rhythm, and focused tests.
+P0 introduces durable immutable `generated_proposal_bundle` artifacts for
+Generated Proposal Preview reconstruction. The existing preview URLs remain
+unchanged, but the route now loads persisted bundle assets for the current
+`siteVersionId` and iteration instead of reading
+`ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/` from the
+runtime filesystem.
 
-GX-2 implementation:
+Implemented modules:
 
-- Existing projection composition refined:
-  `apps/platform/gnr8/architecture/knowledge-workspace-projection.ts`.
-- Existing route:
-  `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/page.tsx`.
-- Reusable read-only UI components refined:
-  `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/knowledge-workspace-components.tsx`.
-- Focused test expanded:
-  `apps/platform/app/gnr8/admin/knowledge-workspace-page.test.ts`.
-- Supporting read-only links from Business Foundation, Website Understanding,
-  and Generation Evolution back to Workspace.
-- Validation: focused admin UX tests pass, and `cd apps/platform && pnpm run
-  vercel-build` passes with documented existing/intentional image warnings.
-- Authenticated production browser check reached the deployed ODV Workspace
-  without redirect, proving the existing deployed route/session. The deployed
-  page still served GX-1 because GX-2 does not deploy. Local browser
-  verification of GX-2 was blocked by safe execution policy when an
-  unsandboxed server would need production database credentials.
+- `apps/platform/gnr8/architecture/generated-proposal-bundle-persistence.ts`
+- `apps/platform/gnr8/architecture/generated-proposal-bundle-odv.cli.ts`
+- `apps/platform/gnr8/architecture/generation-evolution-preview-boundary.ts`
+- `apps/platform/app/gnr8/admin/evolution/[siteVersionId]/iterations/[iteration]/preview/[[...assetPath]]/generation-evolution-preview-route-handlers.ts`
 
-GX-2 first-inspection order:
+The bundle stores `source/index.html`, CSS, JavaScript, images, fonts, icons,
+manifest files, content types, relative path maps, lineage, per-asset SHA-256
+hashes, bundle integrity, preview metadata, and persisted asset bytes. Bundle
+records are immutable and idempotent.
+
+Validation:
+
+- focused durable preview tests pass: `30 pass / 0 fail`;
+- temporary filesystem independence proof passes with both
+  `ODV_GENERATED_PROPOSAL_001/` and `ODV_GENERATED_PROPOSAL_002/` renamed:
+  `8 pass / 0 fail`;
+- broad `cd apps/platform && pnpm exec tsc --noEmit` still fails on existing
+  unrelated repository-wide test/type issues; one route-context type issue
+  introduced by P0 was fixed.
+
+Important production status:
+
+- Production ODV bundle materialization was not performed in this thread.
+- Reason: writing durable bundles into the production runtime database is a
+  production data mutation, and the approval guard rejected the attempted
+  command.
+- Prepared materialization command:
 
 ```text
-Workspace Hero
-Website Versions
-Business Understanding
-Visual Identity
-Current Knowledge Gaps
-Workspace Health
-Transformation Story
-Advanced
+set -a
+source apps/platform/.env.production
+set +a
+pnpm exec tsx --tsconfig apps/platform/tsconfig.json apps/platform/gnr8/architecture/generated-proposal-bundle-odv.cli.ts
 ```
 
-GX-2 adds no Business Discovery change, Website Understanding change, DBT
-change, WDB/WGP change, generation change, compliance/evolution logic change,
-persistence, schema, API, worker, AI, publishing, deployment, DNS, runtime
-architecture mutation, edit controls, forms, or mutation controls.
+P0 adds no publishing, deployment, hosting, runtime serving, production
+activation, Business Approval, provider execution, AI execution, runtime
+generation, WGP mutation, proposal regeneration, edit controls, forms, or
+mutation controls.
 
 Recommended next phase:
 
 ```text
-GX-3 - Knowledge Workspace Deployment Verification
+P0-VERIFY - Explicitly Approved Production Generated Proposal Bundle Materialization and Preview Verification
 ```
 
-Keep GX-3 read-only unless explicitly authorized otherwise. Do not introduce
-editing, confirmation, generation, regeneration, persistence, schema, API,
-worker, AI, publishing, deployment, DNS, or runtime architecture changes.
+Keep P0-VERIFY to the exact materialization and read-only preview
+verification command. Do not introduce publishing, deployment, hosting,
+runtime serving, Business Approval, provider execution, AI execution, new
+generation, Proposal v3, WGP mutation, or production website activation.
+
+Prior current phase:
+
+GX-2 - Knowledge Workspace Real-Target Verification and Product UX Polish is COMPLETE.
 
 Prior planning context:
 
@@ -388,8 +401,9 @@ The preview routes are superadmin-only, static, allowlisted, and read-only.
 They expose quarantined generated proposal bundles only. They are not
 published websites and do not approve, publish, deploy, bind domains, mutate
 DNS, mutate production, execute providers, execute AI, recompute compliance,
-or mutate proposal files. Filesystem-backed preview availability depends on
-the proposal source folders being packaged in the current runtime.
+or mutate proposal files. P0 later changed preview availability to depend on
+persisted `generated_proposal_bundle` artifacts, not on proposal source
+folders being packaged in the current runtime.
 
 MVP-2.0-N - Generation Evolution Dashboard Architecture is COMPLETE.
 
