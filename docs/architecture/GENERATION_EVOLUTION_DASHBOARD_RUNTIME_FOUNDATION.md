@@ -149,6 +149,11 @@ Iteration 2: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
 Both production preview URLs now render from persisted bundle storage and no
 longer return `PREVIEW_UNAVAILABLE`.
 
+P0-CLOSEOUT confirmed both bundle records remain unchanged, both production
+preview URLs remain operational, historical Iteration 1 and Iteration 2 access
+remains available from Evolution, and no publishing, approval, deployment,
+provider, AI, DNS, schema, worker, or mutation behavior was introduced.
+
 GX-2 Knowledge Workspace polish reuses these same preview routes. The
 Workspace frames generated proposal previews as quarantined proposal previews,
 does not claim they are published websites, and does not add screenshot
@@ -164,6 +169,12 @@ Canonical production verification record:
 
 ```text
 docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
+```
+
+Canonical closeout record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md
 ```
 
 ## Attention States

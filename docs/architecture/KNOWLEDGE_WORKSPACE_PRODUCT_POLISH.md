@@ -121,10 +121,21 @@ Production Workspace verification confirmed:
   or approved state
 - no Workspace redesign or mutation controls were introduced in P0-VERIFY
 
+P0-CLOSEOUT later confirmed both production preview URLs remain operational,
+both Workspace preview links and iframe sources remain present, and the
+previews continue to be presented as quarantined generated proposals rather
+than published or approved websites.
+
 Canonical production verification record:
 
 ```text
 docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
+```
+
+Canonical closeout record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md
 ```
 
 `<img>` remains intentional for imported preview assets and logo candidates.
@@ -213,9 +224,9 @@ browser verification of the GX-2 page was blocked by the safe execution
 policy: starting an unsandboxed local dev server with production database
 credentials was rejected. No workaround was attempted.
 
-The deployed Iteration 2 preview route did not produce a normal document tab
-during this pass, so full deployed preview-page verification remains a GX-3
-deployment-verification item after GX-2 is deployed.
+That GX-2 limitation was superseded by P0-VERIFY and P0-CLOSEOUT: both
+production preview pages now render from durable persisted bundle storage, and
+Workspace keeps both preview links available without redesigning the UX.
 
 ## Tests
 

@@ -2219,10 +2219,28 @@ Canonical verification record:
 docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
 ```
 
-Next safe phase:
+P0-CLOSEOUT result:
 
 ```text
-P0-CLOSEOUT - Commit the verification record and keep any next runtime phase
-separate from production publishing, approval, deployment, DNS, provider, AI,
-or Proposal v3 work.
+P0-CLOSEOUT - Durable Generated Proposal Preview Canonical Closeout is COMPLETE.
+```
+
+P0-CLOSEOUT confirmed the durable bundle runtime is implemented, both ODV
+bundle records remain present and unchanged, both production previews remain
+operational, filesystem dependency is removed from preview serving, preview
+security remains fail-closed, and no additional production writes occurred.
+
+Canonical closeout record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md
+```
+
+Next safe track:
+
+```text
+Product UX review - return to Workspace and Evolution review using the durable
+preview foundation. Keep publishing, approval, deployment, DNS, provider, AI,
+Proposal v3, schema, worker, and production website activation out of scope
+unless a new phase explicitly authorizes them.
 ```

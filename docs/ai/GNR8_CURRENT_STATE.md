@@ -5,13 +5,14 @@
 
 ## Current Phase
 
-P0-VERIFY - Durable Generated Proposal Bundle Production Materialization and
-Preview Verification is COMPLETE.
+P0-CLOSEOUT - Durable Generated Proposal Preview Canonical Closeout is
+COMPLETE.
 
 Canonical records:
 
 - `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`
 - `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md`
+- `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md`
 - `docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md`
 - `docs/architecture/KNOWLEDGE_WORKSPACE_RUNTIME_FOUNDATION.md`
 - `docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md`
@@ -38,7 +39,8 @@ ODV target:
 
 P0 introduced durable immutable `generated_proposal_bundle` artifacts for
 Generated Proposal Preview reconstruction. P0-VERIFY then materialized the two
-approved ODV production bundle records. The existing preview URLs remain
+approved ODV production bundle records. P0-CLOSEOUT read-only verified and
+canonically closed the milestone. The existing preview URLs remain
 unchanged, but the route now loads persisted bundle assets for the current
 `siteVersionId` and iteration instead of reading
 `ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/` from the
@@ -92,17 +94,31 @@ P0-VERIFY evidence:
 - all non-bundle provenance stayed unchanged with hash
   `839a89dba37fd545772e25ba740dd1a95cb5b0cea81301ffc87009b9c7b46010`
 
-P0/P0-VERIFY adds no publishing, deployment, hosting, runtime serving,
+P0-CLOSEOUT evidence:
+
+- closeout read-only production verification confirmed bundle count remains
+  exactly `2`
+- Iteration 1 and Iteration 2 bundle IDs, file counts, byte counts, SHA-256
+  hashes, lineage, and by-ID/by-iteration retrieval remain unchanged
+- both production previews render from durable bundle storage
+- Workspace and Evolution links to both previews remain present
+- preview security remains fail-closed and unauthenticated access remains
+  rejected
+- no production write, materialization command, provider execution, AI
+  execution, publishing, deployment, DNS mutation, schema change, worker
+  change, or new bundle record occurred in closeout
+
+P0/P0-VERIFY/P0-CLOSEOUT add no publishing, deployment, hosting, runtime serving,
 production activation, Business Approval, provider execution, AI execution,
 runtime generation, WGP mutation, proposal regeneration, schema change,
 worker change, edit controls, forms, or mutation controls.
 
-Recommended next phase:
+Recommended next track:
 
 ```text
-P0-CLOSEOUT - Commit the verification record and keep any next runtime phase
-separate from production publishing, approval, deployment, DNS, provider, AI,
-or Proposal v3 work.
+Product UX review - return to Workspace and Evolution review using the durable
+preview foundation, without publishing, approval, deployment, DNS, provider,
+AI, Proposal v3, schema, worker, or production website activation work.
 ```
 
 Do not introduce publishing, deployment, hosting, runtime serving, Business

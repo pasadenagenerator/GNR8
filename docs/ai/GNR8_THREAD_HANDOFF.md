@@ -7,19 +7,21 @@ This is the first file every new ChatGPT/Codex thread should read.
 First Executable MVP Pipeline
 
 Current status:
-- Phase P0-VERIFY - Durable Generated Proposal Bundle Production
-  Materialization and Preview Verification is complete. It used explicit
-  operator approval to persist only the two approved ODV
-  `generated_proposal_bundle` artifacts under site version
-  `09dce7ea-d860-4f60-a1eb-26c3335b302e`:
+- Phase P0-CLOSEOUT - Durable Generated Proposal Preview Canonical Closeout is
+  complete. P0 implemented durable immutable `generated_proposal_bundle`
+  preview reconstruction, P0-VERIFY used explicit operator approval to persist
+  only the two approved ODV bundle artifacts, and P0-CLOSEOUT read-only
+  verified the final production state. Site version
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` has exactly two durable bundles:
   `generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4` for Iteration
   1 and `generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075` for
   Iteration 2. Preflight, production retrieval, by-ID/by-iteration loads,
   representative assets, idempotency retry, filesystem independence,
   production preview rendering, Workspace links, Evolution links, preview
-  security, and no-write-beyond-scope verification passed. Canonical docs:
-  `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md` and
-  `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md`.
+  security, no-write-beyond-scope verification, and canonical closeout passed.
+  Canonical docs: `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`,
+  `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md`,
+  and `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md`.
 - Phase MVP-1C - Business Understanding Report Runtime Builder is complete.
 - Phase MVP-1B-R - Digital Business Twin Real-Target Validation is complete
   and has persisted ODV and ViroiDoc DBT artifacts.
@@ -179,8 +181,8 @@ Current status:
   deployment, DNS, or production mutation occurred.
 
 Current Phase:
-- Phase P0-VERIFY - Durable Generated Proposal Bundle Production
-  Materialization and Preview Verification is COMPLETE.
+- Phase P0-CLOSEOUT - Durable Generated Proposal Preview Canonical Closeout is
+  COMPLETE.
 
 P0-VERIFY evidence:
 - Canonical production verification record:
@@ -205,6 +207,24 @@ P0-VERIFY evidence:
   AI execution, new generation, Proposal v3, WGP mutation, schema change,
   worker change, DNS mutation, domain binding, or production website
   activation occurred.
+
+P0-CLOSEOUT evidence:
+- Canonical closeout record:
+  `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md`.
+- Closeout read-only production verification confirmed bundle count remains
+  exactly `2`.
+- Iteration 1 and Iteration 2 bundle IDs, file counts, byte counts, SHA-256
+  hashes, lineage, by-ID retrieval, and by-iteration retrieval remain
+  unchanged.
+- Both production previews render from durable bundle storage and no longer
+  return `PREVIEW_UNAVAILABLE`.
+- Workspace and Evolution links to both previews remain present and historical
+  access remains available.
+- Preview security remains fail-closed; unauthenticated access remains
+  rejected with `401 UNAUTHORIZED`.
+- No production write, materialization command, provider execution, AI
+  execution, publishing, deployment, DNS mutation, schema change, worker
+  change, Proposal v3, or new bundle record occurred in closeout.
 
 GX-2 evidence:
 - Canonical product polish record:
@@ -256,12 +276,13 @@ GX-2 evidence:
   change, WDB/WGP change, generation change, compliance/evolution logic
   change, persistence, schema, API, worker, AI, publishing, deployment, DNS,
   runtime architecture mutation, forms, edit controls, or mutation controls.
-- P0-VERIFY completed after GX-2. The two durable production bundle IDs are
+- P0-CLOSEOUT completed after GX-2. The two durable production bundle IDs are
   `generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4` and
   `generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075`.
-- Next phase: P0-CLOSEOUT - Commit the verification record and keep any next
-  runtime phase separate from production publishing, approval, deployment,
-  DNS, provider, AI, or Proposal v3 work.
+- Next track: Product UX review. Return to Workspace and Evolution review using
+  the durable preview foundation, without publishing, approval, deployment,
+  DNS, provider, AI, Proposal v3, schema, worker, or production website
+  activation work.
 
 Prior phase context:
 - Phase WU-6 - Optional Business Discovery Runtime Integration Plan is

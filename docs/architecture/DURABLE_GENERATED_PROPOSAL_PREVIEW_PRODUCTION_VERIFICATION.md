@@ -427,7 +427,12 @@ persisted bundle storage and no longer return `PREVIEW_UNAVAILABLE`.
 Recommended next phase:
 
 ```text
-P0-CLOSEOUT - Commit the verification record and keep the next runtime phase
-separate from production publishing, approval, deployment, DNS, provider, AI,
-or Proposal v3 work.
+P0-CLOSEOUT - Canonically close the milestone and return the next track to
+product UX review.
+```
+
+P0-CLOSEOUT was later completed in:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md
 ```

@@ -6,13 +6,20 @@ P0 - Durable Generated Proposal Preview Runtime Foundation
 
 ## Status
 
-Runtime foundation implemented, locally verified, production materialized, and
-production preview verified for ODV Iteration 1 and Iteration 2.
+Runtime foundation implemented, locally verified, production materialized,
+production preview verified, and canonically closed for ODV Iteration 1 and
+Iteration 2.
 
 Production verification record:
 
 ```text
 docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
+```
+
+Closeout record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_CLOSEOUT.md
 ```
 
 ## Boundary
@@ -238,6 +245,12 @@ the idempotency retry:
 The CLI now closes the existing superadmin DB pool after completion so the
 production materialization and idempotency commands exit cleanly. This is a
 CLI process cleanup only and does not change persistence behavior.
+
+P0-CLOSEOUT read-only verification confirmed the production bundle count
+remains exactly `2`, both bundle IDs remain unchanged, both by-ID and
+by-iteration loaders resolve the expected records, filesystem independence
+remains documented, and both production previews remain operational. No
+materialization command or production write was run in closeout.
 
 ## Stop Line
 
