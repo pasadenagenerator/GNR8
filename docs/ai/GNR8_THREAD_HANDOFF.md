@@ -166,45 +166,61 @@ Current status:
   deployment, DNS, or production mutation occurred.
 
 Current Phase:
-- Phase GX-1 - GNR8 Knowledge Workspace Foundation is COMPLETE.
+- Phase GX-2 - Knowledge Workspace Real-Target Verification and Product UX
+  Polish is COMPLETE.
 
-GX-1 evidence:
-- Canonical runtime foundation:
+GX-2 evidence:
+- Canonical product polish record:
+  `docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md`.
+- Runtime foundation:
   `docs/architecture/KNOWLEDGE_WORKSPACE_RUNTIME_FOUNDATION.md`.
 - Workspace route:
   `/gnr8/admin/workspace/[siteVersionId]`.
 - ODV workspace route:
   `/gnr8/admin/workspace/09dce7ea-d860-4f60-a1eb-26c3335b302e`.
-- Projection composition:
+- Projection composition refined:
   `apps/platform/gnr8/architecture/knowledge-workspace-projection.ts`.
-- Route implementation:
-  `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/page.tsx`.
-- Reusable read-only components:
+- Reusable read-only components refined:
   `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/knowledge-workspace-components.tsx`.
-- Focused test:
+- Focused test expanded:
   `apps/platform/app/gnr8/admin/knowledge-workspace-page.test.ts`.
-- The Workspace composes existing Business Foundation, Source Website
-  Understanding, and Generation Evolution projections; it writes nothing and
-  introduces no canonical artifact.
-- Workspace sections: Workspace Hero, Website Versions, Business
-  Understanding, Visual Identity, Transformation Story, Current Knowledge
-  Gaps, Workspace Health, and Advanced.
-- Product language is used before Advanced. Internal artifact names, IDs,
-  diagnostics, evidence counts, DryRun IDs, and Generation IDs stay collapsed
-  under Advanced details.
-- Business Foundation, Website Understanding, and Generation Evolution now
-  include reciprocal read-only `Open Knowledge Workspace` links.
-- Validation passed: focused admin UX tests, `cd apps/platform && pnpm run
-  vercel-build`, and `git diff --check`.
-- ODV browser check redirected to `/login` without a signed-in superadmin
-  browser session. Treat authenticated Workspace DOM verification as the
-  first GX-2 read-only task.
-- GX-1 adds no Business Discovery change, Website Understanding change, DBT
+- Workspace first-inspection order is now Hero, Website Versions, Business
+  Understanding, Visual Identity, Current Knowledge Gaps, Workspace Health,
+  Transformation Story, and Advanced.
+- Hero foregrounds original website, latest iteration, generation status,
+  compliance status, improvement status, current recommendation, and workspace
+  confidence.
+- Version cards explicitly label generated iterations as quarantined generated
+  proposals and emphasize the latest persisted iteration.
+- Business copy now uses product wording: `We know...`, `GNR8 has not
+  confirmed...`, and `This still requires confirmation...`.
+- Visual Identity uses Observed, Candidate, Needs confirmation, and
+  Unavailable states without promoting candidates into canonical brand truth.
+- Knowledge gaps are ranked by business impact: Audience, Offerings, Brand,
+  Differentiators, Trust signals, Typography, Colors, and Logo confirmation.
+- Workspace Health uses product-facing labels: Website Structure, Business
+  Understanding, Visual Identity, Generation Quality, Compliance, Evolution,
+  and Readiness.
+- Advanced remains collapsed with artifact IDs, diagnostics, evidence counts,
+  DryRun IDs, Generation IDs, and limitations available.
+- Authenticated production browser verification reached the deployed ODV
+  Workspace without redirect and confirmed Business Foundation, Website
+  Understanding, and Evolution pages include reciprocal `Open Knowledge
+  Workspace` links. The deployed page still served GX-1 because GX-2 does not
+  deploy.
+- Local authenticated GX-2 browser verification was blocked by safe execution
+  policy: starting an unsandboxed dev server with production database
+  credentials was rejected. No workaround was attempted.
+- Validation passed: focused admin UX tests and `cd apps/platform && pnpm run
+  vercel-build`. The build reports existing image warnings, including the
+  intentional Workspace `<img>` usages for authenticated preview-asset/logo
+  routes.
+- GX-2 adds no Business Discovery change, Website Understanding change, DBT
   change, WDB/WGP change, generation change, compliance/evolution logic
   change, persistence, schema, API, worker, AI, publishing, deployment, DNS,
   runtime architecture mutation, forms, edit controls, or mutation controls.
-- Next phase: GX-2 - Knowledge Workspace Real-Target Verification and UX
-  Tightening. Keep it read-only unless explicitly authorized otherwise.
+- Next phase: GX-3 - Knowledge Workspace Deployment Verification. Keep it
+  read-only unless explicitly authorized otherwise.
 
 Prior phase context:
 - Phase WU-6 - Optional Business Discovery Runtime Integration Plan is

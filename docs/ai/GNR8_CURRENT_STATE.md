@@ -1,14 +1,15 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-07-14
+2026-07-15
 
 ## Current Phase
 
-GX-1 - GNR8 Knowledge Workspace Foundation is COMPLETE.
+GX-2 - Knowledge Workspace Real-Target Verification and Product UX Polish is COMPLETE.
 
 Canonical records:
 
+- `docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md`
 - `docs/architecture/KNOWLEDGE_WORKSPACE_RUNTIME_FOUNDATION.md`
 - `docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md`
 - `docs/architecture/GENERATION_EVOLUTION_DASHBOARD_RUNTIME_FOUNDATION.md`
@@ -19,7 +20,7 @@ Canonical records:
 - `docs/ai/GNR8_CURRENT_STATE.md`
 - `docs/ai/GNR8_THREAD_HANDOFF.md`
 
-GX-1 route:
+Workspace route:
 
 ```text
 /gnr8/admin/workspace/[siteVersionId]
@@ -31,45 +32,46 @@ ODV route:
 /gnr8/admin/workspace/09dce7ea-d860-4f60-a1eb-26c3335b302e
 ```
 
-GX-1 adds the first Knowledge Workspace: the read-only operator page that
-composes existing Business Foundation, Source Website Understanding, and
-Generation Evolution projections into one product-oriented workspace. It
-does not expose internal artifacts first. It exposes source website, latest
-proposal preview, understanding quality, current gaps, workspace health, and
-supporting navigation first, with technical details collapsed in Advanced.
+GX-2 polishes the read-only Knowledge Workspace so it can serve as the first
+operator console for an imported website. It keeps GX-1's projection
+composition and runtime boundary, but improves hierarchy, copy, preview
+presentation, version cards, visual identity states, gap ranking, health
+labels, desktop rhythm, and focused tests.
 
-GX-1 implementation:
+GX-2 implementation:
 
-- New projection composition:
+- Existing projection composition refined:
   `apps/platform/gnr8/architecture/knowledge-workspace-projection.ts`.
-- New route:
+- Existing route:
   `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/page.tsx`.
-- New reusable read-only UI components:
+- Reusable read-only UI components refined:
   `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/knowledge-workspace-components.tsx`.
-- New focused test:
+- Focused test expanded:
   `apps/platform/app/gnr8/admin/knowledge-workspace-page.test.ts`.
 - Supporting read-only links from Business Foundation, Website Understanding,
   and Generation Evolution back to Workspace.
-- Validation: focused admin UX tests pass, `cd apps/platform && pnpm run
-  vercel-build` passes, and `git diff --check` passes.
-- ODV browser check: local navigation to the Workspace route redirects to
-  `/login` without a signed-in superadmin browser session. The route is
-  confirmed auth-gated; authenticated DOM verification remains GX-2.
+- Validation: focused admin UX tests pass, and `cd apps/platform && pnpm run
+  vercel-build` passes with documented existing/intentional image warnings.
+- Authenticated production browser check reached the deployed ODV Workspace
+  without redirect, proving the existing deployed route/session. The deployed
+  page still served GX-1 because GX-2 does not deploy. Local browser
+  verification of GX-2 was blocked by safe execution policy when an
+  unsandboxed server would need production database credentials.
 
-GX-1 sections:
+GX-2 first-inspection order:
 
 ```text
 Workspace Hero
 Website Versions
 Business Understanding
 Visual Identity
-Transformation Story
 Current Knowledge Gaps
 Workspace Health
+Transformation Story
 Advanced
 ```
 
-GX-1 adds no Business Discovery change, Website Understanding change, DBT
+GX-2 adds no Business Discovery change, Website Understanding change, DBT
 change, WDB/WGP change, generation change, compliance/evolution logic change,
 persistence, schema, API, worker, AI, publishing, deployment, DNS, runtime
 architecture mutation, edit controls, forms, or mutation controls.
@@ -77,10 +79,10 @@ architecture mutation, edit controls, forms, or mutation controls.
 Recommended next phase:
 
 ```text
-GX-2 - Knowledge Workspace Real-Target Verification and UX Tightening
+GX-3 - Knowledge Workspace Deployment Verification
 ```
 
-Keep GX-2 read-only unless explicitly authorized otherwise. Do not introduce
+Keep GX-3 read-only unless explicitly authorized otherwise. Do not introduce
 editing, confirmation, generation, regeneration, persistence, schema, API,
 worker, AI, publishing, deployment, DNS, or runtime architecture changes.
 

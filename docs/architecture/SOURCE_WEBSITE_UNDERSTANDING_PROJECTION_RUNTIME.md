@@ -341,3 +341,13 @@ Understanding page. It does not change the WU contract, builder, loader,
 adapter, Business Discovery runtime behavior, projection persistence policy,
 schema, API, workers, AI, generation, publishing, deployment, DNS, or runtime
 architecture.
+
+## GX-2 Knowledge Workspace Polish Relationship
+
+GX-2 keeps Website Understanding as the supporting source-evidence page and
+polishes only the Workspace presentation. Source signals continue to appear as
+observed or candidate evidence, never canonical business truth. Unavailable
+visual identity signals explain why they are unavailable, and the Workspace
+does not change the WU projection, loader, adapter, persistence policy,
+Business Discovery behavior, schema, API, workers, AI, generation, publishing,
+deployment, DNS, or runtime architecture.

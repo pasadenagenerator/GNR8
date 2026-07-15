@@ -8,6 +8,13 @@ GX-1 - GNR8 Knowledge Workspace Foundation
 
 Implemented as a read-only runtime UX foundation.
 
+GX-2 adds product polish over this foundation without changing the runtime
+architecture. Canonical polish record:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md
+```
+
 ## Target
 
 ODV site version:
@@ -120,17 +127,33 @@ Internal artifact names remain in Advanced disclosure sections only.
 
 ## Sections
 
+GX-2 first-inspection order is:
+
+```text
+Hero
+-> Website Versions
+-> Business Understanding
+-> Visual Identity
+-> Current Knowledge Gaps
+-> Workspace Health
+-> Transformation Story
+-> Advanced
+```
+
 ### 1. Workspace Hero
 
-Shows business name, original website URL, current generation cycle, current
-iteration, overall understanding state, confidence, recommendation, evolution
-state, and compliance state.
+Shows business name, original website URL, latest iteration, generation
+status, compliance status, improvement status, current recommendation, and
+workspace confidence.
 
 Primary read-only links:
 
 - Open Original Website.
-- Open Latest Proposal Preview.
+- Open Latest Preview.
 - Open Evolution.
+
+Secondary read-only links:
+
 - Open Business Foundation.
 - Open Website Understanding.
 
@@ -144,6 +167,9 @@ Shows timeline cards for:
 - Future iterations.
 
 Generated iteration previews use existing Evolution preview routes only.
+Generated versions are labeled as quarantined generated proposals and never
+imply a published website. The latest persisted iteration is visually
+emphasized.
 
 ### 3. Business Understanding
 
@@ -172,6 +198,8 @@ Shows only persisted visual evidence:
 - Imported fonts.
 
 Missing visual identity signals are explained rather than fabricated.
+Signals are labeled as Observed, Candidate, Needs confirmation, or Unavailable.
+Candidates are never promoted into canonical brand truth or CGP.
 
 ### 5. Transformation Story
 
@@ -195,11 +223,12 @@ Prioritizes:
 
 - Audience.
 - Offerings.
-- Brand colors.
-- Typography.
-- Logo confirmation.
-- Trust signals.
+- Brand.
 - Differentiators.
+- Trust signals.
+- Typography.
+- Colors.
+- Logo confirmation.
 
 Each gap explains why it matters for future generation quality.
 
@@ -212,6 +241,7 @@ Shows human-readable states based on existing runtime state only:
 - Visual identity.
 - Generation quality.
 - Compliance.
+- Evolution.
 - Readiness.
 
 No invented scores are introduced.
@@ -301,7 +331,15 @@ GX-1 validation status:
 - Local ODV browser navigation to the Workspace route redirects to `/login`
   without a signed-in superadmin browser session. The route is therefore
   confirmed auth-gated in the browser, but authenticated Workspace DOM
-  verification remains a GX-2 read-only follow-up.
+  verification became the GX-2 follow-up.
+
+GX-2 validation status is recorded in:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md
+```
+
+GX-3 should verify the deployed GX-2 Workspace after deployment.
 
 ## Success Criteria
 

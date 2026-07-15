@@ -142,6 +142,11 @@ directories are packaged with the app runtime. A deployment that excludes
 those folders must show preview unavailable rather than implying permanent
 website availability.
 
+GX-2 Knowledge Workspace polish reuses these same preview routes. The
+Workspace frames generated proposal previews as quarantined proposal previews,
+does not claim they are published websites, and does not add screenshot
+generation, image pipelines, storage, API changes, or proposal asset mutation.
+
 ## Attention States
 
 The dashboard projects these read-only states:

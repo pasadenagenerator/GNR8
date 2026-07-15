@@ -42,6 +42,8 @@ export type KnowledgeWorkspaceHeroProjection = {
 export type KnowledgeWorkspaceVersionProjection = {
   label: string;
   kind: "original" | "generated" | "future";
+  emphasis: "primary" | "standard" | "quiet";
+  badges: string[];
   previewHref: string | null;
   previewImageHref: string | null;
   previewUnavailableReason: string | null;
@@ -224,6 +226,12 @@ function versionCards(input: {
   const iterations = input.evolution.iterations.map((iteration): KnowledgeWorkspaceVersionProjection => ({
     label: iteration.label,
     kind: "generated",
+    emphasis: iteration.iteration === input.evolution.cycle.currentIteration ? "primary" : "standard",
+    badges: [
+      iteration.iteration === input.evolution.cycle.currentIteration ? "Latest iteration" : null,
+      "Quarantined generated proposal",
+      iteration.preview.available ? "Preview available" : "Preview unavailable",
+    ].filter((value): value is string => Boolean(value)),
     previewHref: iteration.preview.route,
     previewImageHref: null,
     previewUnavailableReason: iteration.preview.available ? null : iteration.preview.unavailableReason,
@@ -237,6 +245,8 @@ function versionCards(input: {
     {
       label: "Original Website",
       kind: "original",
+      emphasis: "standard",
+      badges: ["Source baseline", "Original website"],
       previewHref: input.business.sourceWebsite.url,
       previewImageHref: originalPreview?.previewHref ?? null,
       previewUnavailableReason: originalPreview?.previewHref ? null : input.business.importedAssets.unavailableMessage ?? "No safe imported preview image is available from persisted assets.",
@@ -250,6 +260,8 @@ function versionCards(input: {
     {
       label: "Future iterations",
       kind: "future",
+      emphasis: "quiet",
+      badges: ["Not generated"],
       previewHref: null,
       previewImageHref: null,
       previewUnavailableReason: "Future iterations are not persisted yet.",
@@ -344,17 +356,35 @@ function knowledgeGaps(input: {
       whyItMatters: "Offerings determine service hierarchy and the content structure of generated pages.",
       currentEvidence: input.business.offerings.knownOfferings.length > 0 ? "Persisted offering statements are available." : "No confirmed service portfolio is available.",
     }),
-    gapFor("Brand colors", {
-      label: "Brand colors",
-      state: input.business.visualIdentity.primaryColors.length > 0 ? "partial" : "missing",
-      whyItMatters: "Color confidence controls visual brand fidelity without inventing a palette.",
-      currentEvidence: input.business.visualIdentity.primaryColors.length > 0 ? "Observed color candidates exist, but canonical brand confirmation may still be missing." : "No canonical brand colors are persisted.",
+    gapFor("Brand", {
+      label: "Brand",
+      state: input.business.visualIdentity.logo.status === "detected" || input.business.visualIdentity.primaryColors.length > 0 ? "partial" : "missing",
+      whyItMatters: "Brand confidence keeps generated proposals from inventing identity, tone, or visual emphasis.",
+      currentEvidence: input.business.visualIdentity.logo.assetReference ?? "No confirmed brand identity is available.",
     }),
+    {
+      label: "Differentiators",
+      state: sourceCandidateLabels(input.source?.businessSignalCandidates ?? null, "differentiators").length > 0 ? "partial" : "missing",
+      whyItMatters: "Differentiators help generated proposals avoid generic positioning.",
+      currentEvidence: sourceCandidateLabels(input.source?.businessSignalCandidates ?? null, "differentiators").join("; ") || "No differentiator candidates are available.",
+    },
+    {
+      label: "Trust signals",
+      state: input.business.narrative.trustSignals.length > 0 ? "known" : "missing",
+      whyItMatters: "Trust signals influence credibility sections, proof blocks, and conversion confidence.",
+      currentEvidence: input.business.narrative.trustSignals.length > 0 ? input.business.narrative.trustSignals.join("; ") : "No confirmed trust signals are available.",
+    },
     gapFor("Typography", {
       label: "Typography",
       state: input.business.visualIdentity.typography.length > 0 ? "partial" : "missing",
       whyItMatters: "Typography controls whether generated proposals can match the original brand voice visually.",
       currentEvidence: input.business.visualIdentity.typography.length > 0 ? "Typography candidates are available from persisted evidence." : "No canonical typography candidates are persisted.",
+    }),
+    gapFor("Colors", {
+      label: "Colors",
+      state: input.business.visualIdentity.primaryColors.length > 0 ? "partial" : "missing",
+      whyItMatters: "Color confidence controls visual brand fidelity without inventing a palette.",
+      currentEvidence: input.business.visualIdentity.primaryColors.length > 0 ? "Observed color candidates exist, but canonical brand confirmation may still be missing." : "No canonical brand colors are persisted.",
     }),
     gapFor("Logo confirmation", {
       label: "Logo confirmation",
@@ -362,18 +392,6 @@ function knowledgeGaps(input: {
       whyItMatters: "Logo confirmation prevents decorative or unrelated images from becoming brand identity.",
       currentEvidence: input.business.visualIdentity.logo.assetReference ?? "No confirmed logo asset is available.",
     }),
-    {
-      label: "Trust signals",
-      state: input.business.narrative.trustSignals.length > 0 ? "known" : "missing",
-      whyItMatters: "Trust signals influence credibility sections, proof blocks, and conversion confidence.",
-      currentEvidence: input.business.narrative.trustSignals.length > 0 ? input.business.narrative.trustSignals.join("; ") : "No confirmed trust signals are available.",
-    },
-    {
-      label: "Differentiators",
-      state: sourceCandidateLabels(input.source?.businessSignalCandidates ?? null, "differentiators").length > 0 ? "partial" : "missing",
-      whyItMatters: "Differentiators help generated proposals avoid generic positioning.",
-      currentEvidence: sourceCandidateLabels(input.source?.businessSignalCandidates ?? null, "differentiators").join("; ") || "No differentiator candidates are available.",
-    },
   ];
 }
 
@@ -384,22 +402,22 @@ function health(input: {
 }): KnowledgeWorkspaceHealthProjection[] {
   return [
     {
-      label: "Website structure",
+      label: "Website Structure",
       state: readable(input.source?.readiness.dimensions.find((item) => item.key === "structure_coverage")?.status, "unavailable"),
-      detail: input.source?.readiness.dimensions.find((item) => item.key === "structure_coverage")?.summary ?? "Source structure state is unavailable.",
+      detail: input.source?.readiness.dimensions.find((item) => item.key === "structure_coverage")?.summary ?? "Website structure is unavailable from the current persisted source evidence.",
     },
     {
-      label: "Business understanding",
+      label: "Business Understanding",
       state: input.business.productAttentionSummary.businessIdentity === "understood" ? "Understood" : "Partial",
       detail: input.business.hero.missingKnowledgeSummary,
     },
     {
-      label: "Visual identity",
+      label: "Visual Identity",
       state: readable(input.business.visualIdentity.status),
       detail: input.business.visualIdentity.limitations[0] ?? "Visual identity uses persisted candidates only.",
     },
     {
-      label: "Generation quality",
+      label: "Generation Quality",
       state: readable(input.evolution.cycle.latestEvolutionAssessment ?? input.evolution.cycle.overallTrajectory),
       detail: input.evolution.evolution?.meaningfulImprovement ? "Latest evolution reports meaningful improvement." : "Latest evolution does not report a confirmed meaningful-improvement signal.",
     },
@@ -407,6 +425,11 @@ function health(input: {
       label: "Compliance",
       state: readable(input.evolution.cycle.latestComplianceStatus, "compliance unavailable"),
       detail: readable(input.evolution.cycle.latestRecommendation, "No persisted compliance recommendation is available."),
+    },
+    {
+      label: "Evolution",
+      state: readable(input.evolution.cycle.overallTrajectory, "evolution unavailable"),
+      detail: input.evolution.evolution?.meaningfulImprovement ? "Evolution history reports meaningful improvement." : "Evolution history remains available without a confirmed meaningful-improvement signal.",
     },
     {
       label: "Readiness",

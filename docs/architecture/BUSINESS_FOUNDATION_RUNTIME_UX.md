@@ -192,6 +192,14 @@ deployment, DNS mutation, production mutation, or artifact mutation.
 
 ## Runtime UX Pairing
 
+After GX-2, Business Foundation remains the WHY page, while the Knowledge
+Workspace becomes the operator's first-stop console for the same ODV website.
+Business Foundation keeps the reciprocal read-only `Open Knowledge Workspace`
+link and remains supporting context rather than the first inspection surface.
+GX-2 changes no Business Foundation projection, persistence, schema, API,
+workers, AI, generation, approval, publishing, deployment, DNS, or mutation
+behavior.
+
 After MVP-3.0-C, GNR8 has two complete read-only Runtime UX surfaces:
 
 ```text

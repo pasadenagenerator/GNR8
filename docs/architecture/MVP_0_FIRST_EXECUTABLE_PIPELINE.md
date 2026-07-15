@@ -2155,4 +2155,31 @@ Next safe phase:
 GX-2 - Knowledge Workspace Real-Target Verification and UX Tightening
 ```
 
-GX-2 should remain read-only unless explicitly authorized otherwise.
+GX-2 is complete as product polish over the GX-1 foundation.
+
+Canonical polish record:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md
+```
+
+GX-2 improves the Workspace hero, version cards, preview presentation, visual
+identity states, business wording, knowledge gap ranking, health labels,
+desktop hierarchy, and focused tests. It keeps Advanced collapsed and keeps
+artifact IDs, diagnostics, evidence counts, DryRun IDs, Generation IDs, and
+limitations available there.
+
+GX-2 preserves the same runtime boundary as GX-1: no Business Discovery
+change, Website Understanding change, DBT change, WDB/WGP change, generation
+change, compliance/evolution logic change, persistence, schema, API, worker,
+AI, publishing, deployment, DNS, runtime architecture mutation, editing,
+forms, or mutation controls.
+
+Next safe phase:
+
+```text
+GX-3 - Knowledge Workspace Deployment Verification
+```
+
+GX-3 should verify the deployed GX-2 Workspace after deployment. It should
+remain read-only unless explicitly authorized otherwise.
