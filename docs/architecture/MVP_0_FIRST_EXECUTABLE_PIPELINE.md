@@ -2183,14 +2183,46 @@ change, compliance/evolution logic change, persistence, schema, API, worker,
 AI, publishing, deployment, DNS, runtime architecture mutation, editing,
 forms, or mutation controls.
 
+P0-VERIFY result:
+
+```text
+P0-VERIFY - Explicitly Approved Production Generated Proposal Bundle
+Materialization and Preview Verification is COMPLETE.
+```
+
+P0-VERIFY materialized only the two approved ODV `generated_proposal_bundle`
+artifacts for site version `09dce7ea-d860-4f60-a1eb-26c3335b302e`:
+
+```text
+Iteration 1: generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4
+Iteration 2: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
+```
+
+The exact materialization command was retried and reused the same IDs. Bundle
+count remained `2`; by-ID, by-iteration, representative asset retrieval,
+filesystem independence, production preview rendering, Workspace links,
+Evolution links, and preview security checks passed. The non-bundle
+provenance hash remained unchanged:
+
+```text
+839a89dba37fd545772e25ba740dd1a95cb5b0cea81301ffc87009b9c7b46010
+```
+
+No publishing, deployment, hosting, runtime serving, Business Approval,
+provider execution, AI execution, new generation, Proposal v3, WGP mutation,
+schema change, worker change, DNS mutation, or production website activation
+occurred.
+
+Canonical verification record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
+```
+
 Next safe phase:
 
 ```text
-P0-VERIFY - Explicitly Approved Production Generated Proposal Bundle Materialization and Preview Verification
+P0-CLOSEOUT - Commit the verification record and keep any next runtime phase
+separate from production publishing, approval, deployment, DNS, provider, AI,
+or Proposal v3 work.
 ```
-
-P0-VERIFY should only materialize the two ODV `generated_proposal_bundle`
-artifacts with the prepared CLI and verify the existing read-only preview
-URLs. It must not introduce publishing, deployment, hosting, runtime serving,
-Business Approval, provider execution, AI execution, new generation, Proposal
-v3, WGP mutation, or production website activation.

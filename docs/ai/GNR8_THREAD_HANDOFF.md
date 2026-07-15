@@ -7,19 +7,19 @@ This is the first file every new ChatGPT/Codex thread should read.
 First Executable MVP Pipeline
 
 Current status:
-- Phase P0 - Durable Generated Proposal Preview Runtime Foundation is
-  implemented and locally verified. It introduced immutable
-  `generated_proposal_bundle` artifacts in
-  `siteVersion.importProvenanceSummary`, switched the existing Evolution
-  preview route to reconstruct from persisted bundle assets by `siteVersionId`
-  and iteration, and preserved the existing Knowledge Workspace / Generation
-  Evolution / Business Foundation UX links. Focused validation passed
-  `30 pass / 0 fail`; filesystem independence passed with
-  `ODV_GENERATED_PROPOSAL_001/` and `ODV_GENERATED_PROPOSAL_002/`
-  temporarily renamed (`8 pass / 0 fail`). Production materialization of the
-  ODV bundle artifacts was not performed because it writes to the production
-  runtime database and the approval guard rejected that mutation. Canonical
-  doc: `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`.
+- Phase P0-VERIFY - Durable Generated Proposal Bundle Production
+  Materialization and Preview Verification is complete. It used explicit
+  operator approval to persist only the two approved ODV
+  `generated_proposal_bundle` artifacts under site version
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e`:
+  `generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4` for Iteration
+  1 and `generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075` for
+  Iteration 2. Preflight, production retrieval, by-ID/by-iteration loads,
+  representative assets, idempotency retry, filesystem independence,
+  production preview rendering, Workspace links, Evolution links, preview
+  security, and no-write-beyond-scope verification passed. Canonical docs:
+  `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md` and
+  `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md`.
 - Phase MVP-1C - Business Understanding Report Runtime Builder is complete.
 - Phase MVP-1B-R - Digital Business Twin Real-Target Validation is complete
   and has persisted ODV and ViroiDoc DBT artifacts.
@@ -179,8 +179,32 @@ Current status:
   deployment, DNS, or production mutation occurred.
 
 Current Phase:
-- Phase GX-2 - Knowledge Workspace Real-Target Verification and Product UX
-  Polish is COMPLETE.
+- Phase P0-VERIFY - Durable Generated Proposal Bundle Production
+  Materialization and Preview Verification is COMPLETE.
+
+P0-VERIFY evidence:
+- Canonical production verification record:
+  `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md`.
+- Runtime foundation record:
+  `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`.
+- ODV target site version:
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
+- Iteration 1 durable bundle:
+  `generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4`.
+- Iteration 2 durable bundle:
+  `generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075`.
+- Production bundle count moved from `0` to `2`; idempotency retry kept
+  count at `2` and reused both IDs.
+- Production previews now render both generated websites from durable bundle
+  storage and no longer return `PREVIEW_UNAVAILABLE`.
+- Filesystem independence passed while both local source folders were
+  temporarily renamed and then restored.
+- No-write-beyond-scope check passed: the non-bundle provenance hash remained
+  `839a89dba37fd545772e25ba740dd1a95cb5b0cea81301ffc87009b9c7b46010`.
+- No publishing, deployment, hosting, Business Approval, provider execution,
+  AI execution, new generation, Proposal v3, WGP mutation, schema change,
+  worker change, DNS mutation, domain binding, or production website
+  activation occurred.
 
 GX-2 evidence:
 - Canonical product polish record:
@@ -232,13 +256,12 @@ GX-2 evidence:
   change, WDB/WGP change, generation change, compliance/evolution logic
   change, persistence, schema, API, worker, AI, publishing, deployment, DNS,
   runtime architecture mutation, forms, edit controls, or mutation controls.
-- Next phase: P0-VERIFY - Explicitly Approved Production Generated Proposal
-  Bundle Materialization and Preview Verification. Keep it limited to
-  materializing the two ODV `generated_proposal_bundle` artifacts with the
-  prepared CLI and verifying the existing read-only preview URLs. Do not add
-  publishing, deployment, hosting, runtime serving, Business Approval,
-  provider execution, AI execution, new generation, Proposal v3, WGP
-  mutation, or production website activation.
+- P0-VERIFY completed after GX-2. The two durable production bundle IDs are
+  `generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4` and
+  `generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075`.
+- Next phase: P0-CLOSEOUT - Commit the verification record and keep any next
+  runtime phase separate from production publishing, approval, deployment,
+  DNS, provider, AI, or Proposal v3 work.
 
 Prior phase context:
 - Phase WU-6 - Optional Business Discovery Runtime Integration Plan is

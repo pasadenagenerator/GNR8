@@ -138,8 +138,16 @@ Preview security behavior:
 
 Preview availability is artifact-backed. The route no longer checks
 `ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/` during preview.
-Production remains unavailable until the durable ODV bundle artifacts are
-materialized in the runtime database with explicit operator approval.
+P0-VERIFY materialized the durable ODV bundle artifacts in the production
+runtime database with explicit operator approval:
+
+```text
+Iteration 1: generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4
+Iteration 2: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
+```
+
+Both production preview URLs now render from persisted bundle storage and no
+longer return `PREVIEW_UNAVAILABLE`.
 
 GX-2 Knowledge Workspace polish reuses these same preview routes. The
 Workspace frames generated proposal previews as quarantined proposal previews,
@@ -150,6 +158,12 @@ Canonical durable preview record:
 
 ```text
 docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md
+```
+
+Canonical production verification record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
 ```
 
 ## Attention States

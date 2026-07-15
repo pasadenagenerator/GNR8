@@ -5,12 +5,13 @@
 
 ## Current Phase
 
-P0 - Durable Generated Proposal Preview Runtime Foundation is IMPLEMENTED and
-LOCALLY VERIFIED.
+P0-VERIFY - Durable Generated Proposal Bundle Production Materialization and
+Preview Verification is COMPLETE.
 
 Canonical records:
 
 - `docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md`
+- `docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md`
 - `docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md`
 - `docs/architecture/KNOWLEDGE_WORKSPACE_RUNTIME_FOUNDATION.md`
 - `docs/architecture/BUSINESS_FOUNDATION_RUNTIME_UX.md`
@@ -35,8 +36,9 @@ ODV target:
 09dce7ea-d860-4f60-a1eb-26c3335b302e
 ```
 
-P0 introduces durable immutable `generated_proposal_bundle` artifacts for
-Generated Proposal Preview reconstruction. The existing preview URLs remain
+P0 introduced durable immutable `generated_proposal_bundle` artifacts for
+Generated Proposal Preview reconstruction. P0-VERIFY then materialized the two
+approved ODV production bundle records. The existing preview URLs remain
 unchanged, but the route now loads persisted bundle assets for the current
 `siteVersionId` and iteration instead of reading
 `ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/` from the
@@ -64,36 +66,48 @@ Validation:
   unrelated repository-wide test/type issues; one route-context type issue
   introduced by P0 was fixed.
 
-Important production status:
-
-- Production ODV bundle materialization was not performed in this thread.
-- Reason: writing durable bundles into the production runtime database is a
-  production data mutation, and the approval guard rejected the attempted
-  command.
-- Prepared materialization command:
+Production materialization:
 
 ```text
-set -a
-source apps/platform/.env.production
-set +a
-pnpm exec tsx --tsconfig apps/platform/tsconfig.json apps/platform/gnr8/architecture/generated-proposal-bundle-odv.cli.ts
+Iteration 1: generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4
+Iteration 2: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
 ```
 
-P0 adds no publishing, deployment, hosting, runtime serving, production
-activation, Business Approval, provider execution, AI execution, runtime
-generation, WGP mutation, proposal regeneration, edit controls, forms, or
-mutation controls.
+P0-VERIFY evidence:
+
+- preflight source integrity passed for both ODV source bundles
+- production bundle count moved from `0` to `2`
+- exact materialization retry reused the same two bundle IDs
+- by-ID and by-iteration retrieval passed for both bundles
+- representative entry/CSS/JS retrieval passed for both bundles
+- representative Iteration 2 SVG image retrieval passed
+- missing asset, unknown iteration, traversal, encoded traversal, absolute
+  path, and outside-bundle probes failed closed
+- filesystem independence passed while both local source folders were
+  temporarily renamed
+- production preview URLs rendered both generated websites and no longer
+  returned `PREVIEW_UNAVAILABLE`
+- Workspace and Evolution production links remained present and read-only
+- unauthenticated production preview access returned `401 UNAUTHORIZED`
+- all non-bundle provenance stayed unchanged with hash
+  `839a89dba37fd545772e25ba740dd1a95cb5b0cea81301ffc87009b9c7b46010`
+
+P0/P0-VERIFY adds no publishing, deployment, hosting, runtime serving,
+production activation, Business Approval, provider execution, AI execution,
+runtime generation, WGP mutation, proposal regeneration, schema change,
+worker change, edit controls, forms, or mutation controls.
 
 Recommended next phase:
 
 ```text
-P0-VERIFY - Explicitly Approved Production Generated Proposal Bundle Materialization and Preview Verification
+P0-CLOSEOUT - Commit the verification record and keep any next runtime phase
+separate from production publishing, approval, deployment, DNS, provider, AI,
+or Proposal v3 work.
 ```
 
-Keep P0-VERIFY to the exact materialization and read-only preview
-verification command. Do not introduce publishing, deployment, hosting,
-runtime serving, Business Approval, provider execution, AI execution, new
-generation, Proposal v3, WGP mutation, or production website activation.
+Do not introduce publishing, deployment, hosting, runtime serving, Business
+Approval, provider execution, AI execution, new generation, Proposal v3, WGP
+mutation, DNS mutation, or production website activation.
 
 Prior current phase:
 

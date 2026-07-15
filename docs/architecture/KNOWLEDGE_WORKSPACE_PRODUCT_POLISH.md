@@ -104,6 +104,29 @@ Canonical durable preview record:
 docs/architecture/GENERATED_PROPOSAL_BUNDLE_RUNTIME.md
 ```
 
+P0-VERIFY production materialized both ODV generated proposal bundles:
+
+```text
+Iteration 1: generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4
+Iteration 2: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
+```
+
+Production Workspace verification confirmed:
+
+- the ODV Workspace route loaded in an authenticated superadmin browser
+- `PREVIEW_UNAVAILABLE` was absent
+- Iteration 1 and Iteration 2 preview links were present
+- Iteration 1 and Iteration 2 preview iframe sources were present
+- generated proposal wording remained quarantined and did not imply published
+  or approved state
+- no Workspace redesign or mutation controls were introduced in P0-VERIFY
+
+Canonical production verification record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
+```
+
 `<img>` remains intentional for imported preview assets and logo candidates.
 Those URLs are runtime preview-asset routes under the authenticated app
 boundary; using Next/Image would introduce optimizer fetch behavior and remote

@@ -6,10 +6,14 @@ P0 - Durable Generated Proposal Preview Runtime Foundation
 
 ## Status
 
-Runtime foundation implemented and locally verified. Production runtime
-materialization of the ODV bundle artifacts was not performed in this thread
-because writing those artifacts to the production database is a production
-data mutation and the approval guard rejected that action.
+Runtime foundation implemented, locally verified, production materialized, and
+production preview verified for ODV Iteration 1 and Iteration 2.
+
+Production verification record:
+
+```text
+docs/architecture/DURABLE_GENERATED_PROPOSAL_PREVIEW_PRODUCTION_VERIFICATION.md
+```
 
 ## Boundary
 
@@ -199,21 +203,41 @@ unrelated test fixtures and older runtime/template areas.
 Code-level ODV preview verification passed for Iteration 1 and Iteration 2
 using persisted bundle bytes in tests.
 
-Production ODV bundle materialization remains pending explicit operator
-approval because it writes durable artifacts to the runtime database.
+Production ODV bundle materialization was performed in P0-VERIFY with explicit
+operator approval for only the two ODV `generated_proposal_bundle` writes under
+site version `09dce7ea-d860-4f60-a1eb-26c3335b302e`.
 
-The prepared command is:
+Materialization command:
 
 ```text
 set -a
 source apps/platform/.env.production
 set +a
-pnpm exec tsx --tsconfig apps/platform/tsconfig.json apps/platform/gnr8/architecture/generated-proposal-bundle-odv.cli.ts
+NODE_OPTIONS='--conditions=react-server' pnpm exec tsx --tsconfig apps/platform/tsconfig.json apps/platform/gnr8/architecture/generated-proposal-bundle-odv.cli.ts
 ```
 
-This command persists both ODV Generated Proposal Bundles and verifies
-reloaded `source/index.html`, `source/styles.css`, and `source/script.js`
-from persisted storage.
+Persisted bundle records:
+
+```text
+Iteration 1: generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4
+Iteration 2: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
+```
+
+The retry reused the same IDs and kept bundle count at `2`. Production
+previews now render the generated websites from durable persisted bundle
+storage instead of returning `PREVIEW_UNAVAILABLE`.
+
+The production no-write-beyond-scope hash for all non-bundle provenance
+remained unchanged before materialization, after materialization, and after
+the idempotency retry:
+
+```text
+839a89dba37fd545772e25ba740dd1a95cb5b0cea81301ffc87009b9c7b46010
+```
+
+The CLI now closes the existing superadmin DB pool after completion so the
+production materialization and idempotency commands exit cleanly. This is a
+CLI process cleanup only and does not change persistence behavior.
 
 ## Stop Line
 

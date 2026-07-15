@@ -5,6 +5,7 @@ import {
   resolveGeneratedProposalBundleAsset,
   type GeneratedProposalBundleIteration,
 } from "./generated-proposal-bundle-persistence";
+import { getSuperadminPool } from "../../src/superadmin/db";
 
 const SITE_VERSION_ID = "09dce7ea-d860-4f60-a1eb-26c3335b302e";
 const DRY_RUN_ID = "09dce7ea-d860-4f60-a1eb-26c3335b302e:8b-12l";
@@ -76,7 +77,11 @@ async function main() {
   console.log(JSON.stringify({ ok: true, siteVersionId: SITE_VERSION_ID, results }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await getSuperadminPool().end();
+  });
