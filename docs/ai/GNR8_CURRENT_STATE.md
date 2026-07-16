@@ -1,65 +1,86 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
 ## Snapshot Date
-2026-07-15
+2026-07-16
 
 ## Current Phase
 
-VCU-1 - Source Content & Visual Continuity Projection Contract Design is
+VCU-2 - Pure Runtime Source Content & Visual Continuity Projection is
 COMPLETE.
 
-Canonical VCU-1 record:
+Canonical VCU-2 runtime record:
+
+- `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`
+
+Supporting VCU records:
 
 - `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_SPECIFICATION.md`
-
-Supporting VCU-0 audit:
-
 - `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_REALITY_AUDIT.md`
 
-VCU-1 was documentation and conceptual contract design only. It defined the
-canonical Source Content & Visual Continuity Projection boundary and chose
-pure runtime projection with no dedicated persistence. No runtime contract
-code, builder, loader, persistence, schema, API, UI, worker, extraction, HTML
-parsing, screenshot capture, thumbnail generation, content transformation,
-asset classification runtime, Candidate Review change, Business Discovery
-change, DBT change, WDB/WGP change, Provider Payload change, Proposal v3, AI,
-provider execution, generation, approval, publishing, deployment, DNS, or
-production mutation was implemented.
+VCU-2 implemented the first deterministic runtime Source Content & Visual
+Continuity Projection over existing Source Website Understanding, source import
+metadata, raw artifact metadata, semantic import, asset/file metadata, Evidence
+Capture screenshot references, structured style signals, Candidate Discovery,
+Candidate Review, Reconstruction Package lineage, StructurePlan as context
+only, limitations, diagnostics, and safe source asset preview refs.
 
-VCU-1 conclusion:
+Implemented runtime files:
 
-- the projection is a deterministic, connector-neutral, evidence-backed,
-  read-only composition over upstream source-site evidence and candidates;
-- source content remains distinct from business truth;
-- continuity candidates remain distinct from canonical brand identity;
-- asset existence, preview availability, and reuse permission remain separate;
-- allowed inputs are upstream source-site evidence and context only: WU, source
-  import metadata, raw artifact metadata, semantic import, source text
-  evidence, asset/file metadata, Evidence Capture, screenshots, computed-style
-  samples, Candidate Discovery, Candidate Review, Reconstruction Package
-  context, StructurePlan as context only, limitations, diagnostics, and safe
-  preview/access refs;
-- forbidden inputs include DBT, BUR, Business Alignment, WDB, WGP, Provider
-  Payload, Generated Website Proposal, Generated Proposal Bundle, OWM,
-  Compliance, reports, improvement/evolution artifacts, Business Approval, and
-  publishing state;
-- future WDB, WGP, and Provider Payload enrichment may consume VCU output, but
-  they do not feed it;
-- thumbnail architecture is conceptually locked as hybrid persisted screenshot
-  thumbnails with live preview on click, with no thumbnail implementation.
+- `apps/platform/gnr8/architecture/source-content-visual-continuity-projection-contract.ts`
+- `apps/platform/gnr8/architecture/source-content-visual-continuity-projection-builder.ts`
+- `apps/platform/gnr8/architecture/source-content-visual-continuity-projection-loader.ts`
+- `apps/platform/gnr8/architecture/source-content-visual-continuity-real-target.cli.ts`
+- `apps/platform/app/gnr8/admin/continuity/[siteVersionId]/page.tsx`
+
+Operator route:
+
+```text
+/gnr8/admin/continuity/[siteVersionId]
+```
+
+ODV route:
+
+```text
+/gnr8/admin/continuity/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+VCU-2 real-target proof:
+
+- ODV `09dce7ea-d860-4f60-a1eb-26c3335b302e`:
+  `source_content_visual_continuity_8e855e8cb481f78e8131b579d6760357`;
+- ViroiDoc `e26b0754-988b-45b9-9e24-8e213179b6cf`:
+  `source_content_visual_continuity_aba6d40c4453e6bd2bec3405a66945b8`;
+- both targets are `ready_for_design_enrichment`, confidence `MEDIUM`;
+- both have deterministic rebuild equality `true`;
+- both validate with `0` errors and `0` warnings;
+- downstream contamination scan is empty for both targets;
+- ODV projects `25` content blocks, `383` source assets, `1` logo candidate,
+  `317` image candidates, `19` typography candidates, `7` color signals, and
+  `4` screenshot references;
+- ViroiDoc projects `58` content blocks, `401` source assets, `2` logo
+  candidates, `324` image candidates, `27` typography candidates, `7` color
+  signals, and `4` screenshot references.
+
+VCU-2 did not add projection persistence, schema, new database tables, new
+import behavior, extraction, HTML parsing, text extraction, asset extraction,
+screenshot capture, thumbnail generation, image analysis, AI analysis, content
+rewriting, content summarization, asset copying, asset approval, logo
+confirmation, canonical color/typography creation, Candidate Review mutation,
+Business Discovery changes, DBT/BUR/Business Alignment changes, WDB/WGP
+changes, Provider Payload changes, proposal regeneration, Proposal v3,
+generation, approval, publishing, deployment, DNS, workers, mutation APIs, or
+editing controls.
 
 Recommended next phase:
 
 ```text
-VCU-2 - Pure Runtime Source Content & Visual Continuity Projection
+VCU-3 - Downstream Continuity Enrichment Contract Design
 ```
 
-Keep VCU-2 bounded to a pure read-only runtime projection. Stop before
-persistence, schema, APIs beyond existing read-only boundaries, UI, workers, new
-extraction, new HTML parsing, screenshot capture, thumbnail generation, content
-transformation, asset reuse, WDB/WGP changes, Provider Payload changes,
-proposal generation, Proposal v3, AI, publishing, deployment, DNS, or
-production mutation unless separately authorized.
+Keep VCU-3 documentation/contract-only unless separately authorized. It should
+design how WDB/WGP may consume VCU without promoting source content into
+business truth, canonical brand identity, asset approval, provider-ready
+generation instructions, or publishing authority.
 
 ## Prior Completed Phase
 
@@ -174,12 +195,12 @@ worker change, edit controls, forms, or mutation controls.
 Recommended next track:
 
 ```text
-VCU-2 - Pure Runtime Source Content & Visual Continuity Projection.
-Use the VCU-1 specification, durable preview foundation, existing
-WU/import/evidence/candidate/review/context chain, and VCU-0 audit. Keep
-publishing, approval, deployment, DNS, provider, AI, Proposal v3, schema,
-worker, thumbnails, WDB/WGP changes, Provider Payload changes, and production
-website activation out of scope unless separately authorized.
+VCU-3 - Downstream Continuity Enrichment Contract Design.
+Use the VCU-2 runtime proof, VCU-1 specification, VCU-0 audit, and existing
+WU/import/evidence/candidate/review/context chain. Keep implementation,
+persistence, publishing, approval, deployment, DNS, provider, AI, Proposal v3,
+schema, worker, thumbnails, WDB/WGP changes, Provider Payload changes, and
+production website activation out of scope unless separately authorized.
 ```
 
 Do not introduce publishing, deployment, hosting, runtime serving, Business

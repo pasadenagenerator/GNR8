@@ -920,3 +920,19 @@ Continuity Projection`. Keep it bounded to a read-only projection unless a
 later phase explicitly authorizes persistence, WDB/WGP mutation, Provider
 Payload changes, thumbnails, generation, AI, publishing, deployment, DNS, or
 production mutation.
+
+## VCU-2 Runtime Note
+
+VCU-2 is complete as a pure runtime source continuity projection. Canonical
+record:
+
+- `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`
+
+The manifesto boundary is unchanged: VCU is source continuity evidence and
+candidates, not business truth, canonical brand identity, asset approval,
+generated content, or publishing authority. ODV and ViroiDoc validate as
+`ready_for_design_enrichment`; neither is `ready_for_generation_delivery`
+because confirmation and licensing/source status remain unresolved.
+
+Recommended next phase: `VCU-3 - Downstream Continuity Enrichment Contract
+Design`.

@@ -903,3 +903,27 @@ Recommended next phase:
 ```text
 VCU-2 - Pure Runtime Source Content & Visual Continuity Projection
 ```
+
+## VCU-2 Runtime Implementation Update
+
+VCU-2 is now implemented as the first pure runtime projection. Canonical runtime
+record:
+
+- `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`
+
+Implemented runtime files:
+
+- `apps/platform/gnr8/architecture/source-content-visual-continuity-projection-contract.ts`
+- `apps/platform/gnr8/architecture/source-content-visual-continuity-projection-builder.ts`
+- `apps/platform/gnr8/architecture/source-content-visual-continuity-projection-loader.ts`
+- `apps/platform/app/gnr8/admin/continuity/[siteVersionId]/page.tsx`
+
+The VCU-1 persistence decision remains unchanged: no VCU persistence module,
+schema, table, mutation API, extraction path, content transformation, asset
+approval, thumbnail generation, WDB/WGP enrichment, Provider Payload change,
+proposal regeneration, AI, publishing, deployment, DNS, or production mutation
+was added.
+
+ODV and ViroiDoc both validate read-only as `ready_for_design_enrichment`, not
+`ready_for_generation_delivery`, because source assets remain candidate-only
+and licensing/source reuse is unresolved.

@@ -813,3 +813,25 @@ no runtime, persistence, schema, extraction, transformation, asset reuse,
 thumbnail, WDB/WGP, Provider Payload, AI, generation, publishing, deployment,
 DNS, or production mutation. Recommended next phase:
 `VCU-2 - Pure Runtime Source Content & Visual Continuity Projection`.
+
+## VCU-2 Runtime Projection
+
+VCU-2 completes the first runtime implementation of the Source Content & Visual
+Continuity Projection:
+
+```text
+Source evidence
+-> Source Website Understanding
+-> Source Content & Visual Continuity Projection
+-> future WDB/WGP enrichment contract
+```
+
+The projection is rebuilt on demand, has no dedicated persistence, and exposes
+original content blocks, transformation-policy candidates, asset continuity,
+logo/image/font/color candidates, source layout, screenshot references,
+readiness, limitations, diagnostics, and exact lineage. ODV and ViroiDoc both
+validated read-only with deterministic rebuild equality and no downstream
+contamination.
+
+Recommended next phase:
+`VCU-3 - Downstream Continuity Enrichment Contract Design`.

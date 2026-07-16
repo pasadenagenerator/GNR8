@@ -265,3 +265,15 @@ authorize reuse, store source assets, or consume downstream generated artifacts
 as source truth. VCU-1 does not change the WGP contract, builder, persistence,
 schema, API, UI, Provider Payload, generation, AI, thumbnails, publishing,
 deployment, DNS, or runtime behavior.
+
+## VCU-2 Runtime Availability
+
+VCU-2 now provides a deterministic runtime projection for source continuity,
+including original content blocks, policy candidates, source asset continuity,
+logo/image/font/color candidates, screenshot references, readiness dimensions,
+and unresolved licensing/confirmation gaps.
+
+WGP does not consume VCU yet. Future WGP enrichment must be a separate phase and
+must preserve VCU's candidate-only governance: no silent logo confirmation, no
+asset reuse authorization, no canonical palette creation, no content rewriting,
+and no provider delivery changes without an explicit downstream contract.

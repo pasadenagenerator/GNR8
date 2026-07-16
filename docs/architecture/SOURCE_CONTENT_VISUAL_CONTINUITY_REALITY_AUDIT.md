@@ -846,3 +846,23 @@ WU/import/evidence/candidate/review/context data into a read-only projection
 with no new extraction and no persistence module. Do not create a persisted
 canonical brand artifact, change generation behavior, mutate WDB/WGP/Provider
 Payload, or implement thumbnails until a later phase explicitly authorizes it.
+
+## VCU-2 Implementation Update
+
+VCU-2 has now implemented the audit's recommended pure runtime projection:
+
+- canonical runtime record:
+  `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`;
+- read-only operator route:
+  `/gnr8/admin/continuity/[siteVersionId]`;
+- ODV route:
+  `/gnr8/admin/continuity/09dce7ea-d860-4f60-a1eb-26c3335b302e`;
+- ODV projection:
+  `source_content_visual_continuity_8e855e8cb481f78e8131b579d6760357`;
+- ViroiDoc projection:
+  `source_content_visual_continuity_aba6d40c4453e6bd2bec3405a66945b8`.
+
+The audit diagnosis remains accurate. VCU-2 exposes source continuity evidence
+and candidates, but WDB, WGP, Provider Payload, and generated proposals still do
+not consume VCU output. Source assets remain unapproved; logo/font/color/image
+signals remain non-canonical; thumbnails are readiness-only and not generated.

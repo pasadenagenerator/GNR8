@@ -249,3 +249,15 @@ WDB remains design intent. It must not become an asset store, a raw evidence
 consumer, or a brand-confirmation boundary. VCU-1 does not change the WDB
 contract, builder, persistence, schema, API, UI, WGP, Provider Payload,
 generation, AI, thumbnails, publishing, deployment, DNS, or runtime behavior.
+
+## VCU-2 Runtime Availability
+
+VCU-2 now provides a pure runtime continuity projection, documented in:
+
+- `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`
+
+WDB does not consume it yet. Future WDB enrichment must be separately designed
+so VCU content policies, asset candidates, typography/color signals, layout
+continuity, screenshots, limitations, and confirmation gaps enrich design intent
+without becoming business truth, canonical brand identity, asset approval, or
+generation instructions.

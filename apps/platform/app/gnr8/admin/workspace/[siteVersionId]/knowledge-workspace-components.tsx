@@ -142,6 +142,7 @@ export function WorkspaceHero(props: { hero: KnowledgeWorkspaceHeroProjection })
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18, paddingTop: 18, borderTop: "1px solid #dbeafe" }}>
         <ReadOnlyLink href={props.hero.links.businessFoundationHref}>Open Business Foundation</ReadOnlyLink>
         <ReadOnlyLink href={props.hero.links.websiteUnderstandingHref}>Open Website Understanding</ReadOnlyLink>
+        <ReadOnlyLink href={props.hero.links.continuityHref}>Open Content & Visual Continuity</ReadOnlyLink>
       </div>
     </section>
   );

@@ -282,3 +282,18 @@ VCU-1 does not create thumbnails, screenshot workers, new routes, new UI,
 storage, preview behavior, WDB/WGP changes, Provider Payload changes,
 generation, publishing, deployment, DNS, schema, API, workers, or production
 mutation.
+
+## VCU-2 Workspace Relationship
+
+VCU-2 adds the read-only Content & Visual Continuity page and links it from the
+Knowledge Workspace:
+
+```text
+/gnr8/admin/continuity/[siteVersionId]
+```
+
+The Workspace still does not generate thumbnails. VCU projects original-source
+thumbnail readiness only; ODV and ViroiDoc both have existing source screenshot
+references but no safe screenshot access ref yet, so Workspace thumbnail
+suitability remains blocked. Generated iteration thumbnails remain outside VCU
+and outside this phase.

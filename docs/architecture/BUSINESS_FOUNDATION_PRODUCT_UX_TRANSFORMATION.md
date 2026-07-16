@@ -317,3 +317,18 @@ brand truth without deterministic source refs, confidence, conflict visibility,
 and human confirmation. No Business Foundation runtime, persistence, schema, UI,
 AI, WDB/WGP, Provider Payload, generation, or thumbnail behavior is changed by
 VCU-0.
+
+## VCU-2 Continuity Page Relationship
+
+VCU-2 adds a separate read-only continuity operator page:
+
+```text
+/gnr8/admin/continuity/[siteVersionId]
+```
+
+Business Foundation remains the business-facing WHY surface. Content & Visual
+Continuity remains source evidence and candidate continuity only. VCU-2 does
+not promote offerings, audience, logo, palette, typography, trust, or brand
+truth into Business Foundation, and it does not change Business Foundation
+runtime, persistence, schema, mutation, WDB/WGP, Provider Payload, generation,
+thumbnails, publishing, deployment, DNS, or production behavior.

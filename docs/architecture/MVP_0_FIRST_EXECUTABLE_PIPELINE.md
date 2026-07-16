@@ -2316,3 +2316,26 @@ Keep VCU-2 bounded to a read-only pure runtime projection unless a later phase
 explicitly authorizes persistence, schema, WDB/WGP mutation, Provider Payload
 changes, content transformation, asset reuse, thumbnails, Proposal v3, AI,
 generation, approval, publishing, deployment, DNS, or production mutation.
+
+## VCU-2 Runtime Completion
+
+VCU-2 is complete. The runtime projection is documented in:
+
+- `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`
+
+Implemented surface:
+
+- `/gnr8/admin/continuity/[siteVersionId]`
+
+ODV and ViroiDoc both validate as `ready_for_design_enrichment`, with
+deterministic rebuild equality, no downstream contamination, and zero
+validation errors/warnings. No VCU persistence, schema, extraction, content
+transformation, asset approval, thumbnail generation, WDB/WGP enrichment,
+Provider Payload change, proposal regeneration, AI, publishing, deployment,
+DNS, or production mutation was added.
+
+Recommended next phase:
+
+```text
+VCU-3 - Downstream Continuity Enrichment Contract Design
+```

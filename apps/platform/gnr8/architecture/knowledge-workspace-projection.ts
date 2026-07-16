@@ -36,6 +36,7 @@ export type KnowledgeWorkspaceHeroProjection = {
     evolutionHref: string;
     businessFoundationHref: string;
     websiteUnderstandingHref: string;
+    continuityHref: string;
   };
 };
 
@@ -524,6 +525,7 @@ export async function loadKnowledgeWorkspaceProjection(input: {
         evolutionHref: `/gnr8/admin/evolution/${input.siteVersionId}`,
         businessFoundationHref: `/gnr8/admin/business-foundation/${input.siteVersionId}`,
         websiteUnderstandingHref: `/gnr8/admin/website-understanding/${input.siteVersionId}`,
+        continuityHref: `/gnr8/admin/continuity/${input.siteVersionId}`,
       },
     },
     versions: versionCards({ business, evolution }),

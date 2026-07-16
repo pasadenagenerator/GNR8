@@ -298,3 +298,12 @@ content, asset, or visual continuity. VCU-1 does not change bundle
 persistence, preview routes, persisted assets, Generated Proposal import,
 observation, compliance, AI, publishing, deployment, DNS, schema, API, UI,
 workers, Proposal v3, thumbnails, or generation behavior.
+
+## VCU-2 Runtime Relationship
+
+VCU-2 keeps Generated Proposal Bundles outside the source continuity input set.
+The new continuity projection reports original-source screenshot readiness only.
+It does not read bundle assets, generate generated-iteration thumbnails, change
+bundle persistence, alter preview routes, import proposals, observe generated
+sites, run compliance, regenerate proposals, publish, deploy, or mutate
+production state.

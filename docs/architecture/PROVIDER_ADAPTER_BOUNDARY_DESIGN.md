@@ -519,3 +519,14 @@ Provider Payload, export formats, AI, generation, publishing, deployment, DNS,
 schema, API, UI, workers, thumbnails, Proposal v3, or production behavior. The
 provider boundary must treat VCU continuity materials as candidates or governed
 source obligations, not canonical brand truth.
+
+## VCU-2 Runtime Availability
+
+VCU-2 makes source continuity inspectable at runtime, but provider delivery is
+unchanged. Provider Payload v1/v2 do not consume VCU output, no Provider Payload
+v3 was created, and no proposal regeneration or external provider execution was
+performed.
+
+Future provider work may consume VCU only after WDB/WGP define governed
+continuity obligations and after asset licensing/source status, review state,
+and confirmation requirements are carried explicitly.

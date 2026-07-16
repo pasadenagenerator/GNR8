@@ -383,3 +383,21 @@ page, adapter, persistence policy, Business Discovery behavior, schema, API,
 UI, workers, AI, generation, thumbnails, publishing, deployment, DNS, or
 production mutation. The recommended next phase is
 `VCU-2 - Pure Runtime Source Content & Visual Continuity Projection`.
+
+## VCU-2 Runtime Consumer Relationship
+
+VCU-2 now consumes this WU projection through a read-only composition boundary:
+
+- VCU contract/builder/loader:
+  `apps/platform/gnr8/architecture/source-content-visual-continuity-projection-*.ts`;
+- VCU operator page:
+  `/gnr8/admin/continuity/[siteVersionId]`;
+- canonical runtime record:
+  `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`.
+
+WU remains the source-site understanding projection. VCU is a downstream
+runtime read model over WU plus existing source evidence metadata. VCU-2 does
+not change WU persistence, WU extraction, WU validation, the WU-to-Business
+Discovery adapter, Business Discovery runtime behavior, DBT, WDB, WGP, Provider
+Payload, generated proposals, thumbnails, publishing, deployment, DNS, or
+production state.

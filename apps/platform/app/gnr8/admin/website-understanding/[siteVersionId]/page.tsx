@@ -116,6 +116,7 @@ function SourceHero(props: { projection: SourceWebsiteUnderstandingProjection })
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
         {source.sourceUrl ? <a href={source.sourceUrl} target="_blank" rel="noreferrer noopener" style={{ ...linkStyle, background: "#0f766e", color: "#ffffff" }}>Open Original Website</a> : <span style={{ ...linkStyle, color: "#64748b", borderColor: "#cbd5e1", background: "#f8fafc" }}>Original Website Unavailable</span>}
         <a href={`/gnr8/admin/workspace/${props.projection.siteVersionId}`} style={linkStyle}>Open Knowledge Workspace</a>
+        <a href={`/gnr8/admin/continuity/${props.projection.siteVersionId}`} style={linkStyle}>Open Content & Visual Continuity</a>
         <a href={`/gnr8/admin/business-foundation/${props.projection.siteVersionId}`} style={linkStyle}>Open Business Foundation</a>
         <a href={`/gnr8/admin/evolution/${props.projection.siteVersionId}`} style={linkStyle}>Inspect Generation Evolution</a>
       </div>
