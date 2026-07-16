@@ -159,6 +159,30 @@ function readable(value: string | number | null | undefined, fallback = "not ava
   return normalized.length > 0 ? normalized.replaceAll("_", " ") : fallback;
 }
 
+function isInternalIdentifier(value: string | null | undefined): boolean {
+  return /^site[_-][a-z0-9-]+$/i.test(String(value ?? "").trim());
+}
+
+function hostnameFromUrl(value: string | null | undefined): string | null {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return null;
+  try {
+    return new URL(normalized).hostname || null;
+  } catch {
+    return normalized.includes(".") && !normalized.includes(" ") ? normalized : null;
+  }
+}
+
+function heroIdentity(input: {
+  businessName: string | null | undefined;
+  sourceHostname: string | null | undefined;
+  sourceUrl: string | null | undefined;
+}): string {
+  const businessName = String(input.businessName ?? "").trim();
+  if (businessName && !isInternalIdentifier(businessName)) return businessName;
+  return input.sourceHostname ?? hostnameFromUrl(input.sourceUrl) ?? "Website identity unavailable";
+}
+
 function first<T>(values: T[], predicate: (item: T) => boolean): T | null {
   return values.find(predicate) ?? null;
 }
@@ -254,7 +278,7 @@ function versionCards(input: {
   business: GenerationBusinessFoundationProjection;
   evolution: GenerationEvolutionDashboardProjection;
 }): KnowledgeWorkspaceVersionProjection[] {
-  const originalPreview = first(input.business.importedAssets.previews, (asset) => Boolean(asset.previewHref)) ?? null;
+  const originalPreview = bestOriginalPreview(input.business.importedAssets.previews);
   const iterations = [1, 2].map((iterationNumber): KnowledgeWorkspaceVersionProjection => {
     const iteration = input.evolution.iterations.find((item) => item.iteration === iterationNumber) ?? null;
     if (!iteration) {
@@ -322,6 +346,36 @@ function versionCards(input: {
   ];
 }
 
+function bestOriginalPreview(assets: ImportedAssetPreviewProjection[]): ImportedAssetPreviewProjection | null {
+  return storyAssetPreviews(assets)[0] ?? null;
+}
+
+function storyAssetPreviews(assets: ImportedAssetPreviewProjection[]): ImportedAssetPreviewProjection[] {
+  return assets
+    .filter((asset) => Boolean(asset.previewHref))
+    .toSorted((left, right) => assetStoryRank(left) - assetStoryRank(right));
+}
+
+function assetStoryRank(asset: ImportedAssetPreviewProjection): number {
+  const filename = asset.filename.toLowerCase();
+  const utilityAsset = /\b(loading|loader|spinner|placeholder|favicon|sprite)\b/.test(filename);
+  const typeRank =
+    asset.type === "content_image" ? 0 :
+      asset.type === "decorative_image" ? 10 :
+        asset.type === "logo_candidate" ? 30 :
+          asset.type === "icon" ? 80 :
+            120;
+  const mediaRank =
+    /^image\/jpe?g$/i.test(asset.mediaType) ? 0 :
+      /^image\/webp$/i.test(asset.mediaType) ? 4 :
+        /^image\/png$/i.test(asset.mediaType) ? 8 :
+          /^image\/svg\+xml$/i.test(asset.mediaType) ? 18 :
+            40;
+  const sizeRank = -Math.min(Math.floor((asset.sizeBytes ?? 0) / 50_000), 12);
+
+  return (utilityAsset ? 1_000 : 0) + typeRank + mediaRank + sizeRank;
+}
+
 function improvementState(iteration: GenerationIterationProjection): string {
   if (iteration.evolution?.meaningfulImprovement) return "meaningful improvement";
   if (iteration.evolution?.improvedCategories.length) return "improved categories present";
@@ -336,7 +390,8 @@ function visualIdentity(input: {
   const businessLogo = input.business.visualIdentity.logo;
   const sourceLogo = input.source?.visualIdentitySignals.logoCandidates[0] ?? null;
   const logoPreviewHref = businessLogo.previewHref ?? sourceLogo?.previewHref ?? null;
-  const images = input.business.importedAssets.previews.filter((asset) => asset.type === "content_image" || asset.type === "decorative_image" || asset.type === "logo_candidate");
+  const images = storyAssetPreviews(input.business.importedAssets.previews)
+    .filter((asset) => asset.type === "content_image" || asset.type === "decorative_image" || asset.type === "logo_candidate");
   const icons = input.business.importedAssets.previews.filter((asset) => asset.type === "icon");
   const fonts = input.business.importedAssets.previews.filter((asset) => asset.type === "font");
   const unavailableReasons = [
@@ -592,7 +647,7 @@ function health(input: {
       detail: input.business.visualIdentity.limitations[0] ?? "Visual identity uses persisted candidates only.",
     },
     {
-      label: "Generation Quality",
+      label: "Proposal Quality",
       state: readable(input.evolution.cycle.latestEvolutionAssessment ?? input.evolution.cycle.overallTrajectory),
       detail: input.evolution.evolution?.meaningfulImprovement ? "Latest evolution reports meaningful improvement." : "Latest evolution does not report a confirmed meaningful-improvement signal.",
     },
@@ -714,7 +769,11 @@ export async function loadKnowledgeWorkspaceProjection(input: {
   const latestIteration = evolution.iterations.at(-1) ?? null;
   const latestBusinessIteration = business.generatedIterations.find((iteration) => iteration.isLatest) ?? business.generatedIterations.at(-1) ?? null;
   const hero: KnowledgeWorkspaceHeroProjection = {
-    businessName: business.hero.businessName ?? source?.sourceIdentity.hostname ?? "Website identity unavailable",
+    businessName: heroIdentity({
+      businessName: business.hero.businessName,
+      sourceHostname: source?.sourceIdentity.hostname,
+      sourceUrl: business.sourceWebsite.url ?? source?.sourceIdentity.sourceUrl ?? null,
+    }),
     originalWebsiteUrl: business.sourceWebsite.url ?? source?.sourceIdentity.sourceUrl ?? null,
     currentGenerationCycle: evolution.cycle.generationCycleLabel,
     currentIteration: evolution.cycle.currentIteration,

@@ -56,7 +56,8 @@ test("knowledge workspace contains required operator sections and reusable compo
     "SourceContentVisualContinuity",
     "ContinuityCard",
     "GapCard",
-    "HealthCard",
+    "KnowledgeProgressCard",
+    "KnowledgeProgress",
     "StoryTimeline",
     "NextRecommendedAction",
     "AdvancedDetails",
@@ -65,7 +66,7 @@ test("knowledge workspace contains required operator sections and reusable compo
     "What GNR8 Understands",
     "Source Content & Visual Continuity",
     "Knowledge Gaps",
-    "Workspace Health",
+    "Knowledge Progress",
     "Next Recommended Action",
     "Supporting Inspection Pages",
     "Advanced",
@@ -85,7 +86,7 @@ test("knowledge workspace exposes correct read-only navigation", async () => {
   for (const label of [
     "Open Original Website",
     "Open Latest Preview",
-    "Open supporting inspection page",
+    "Open Content & Visual Continuity",
     "Inspect",
     "Open Preview",
   ]) {
@@ -108,16 +109,16 @@ test("knowledge workspace hero, version cards, and gap cards expose required fie
 
   for (const label of [
     "Original Website",
-    "Current latest proposal",
-    "Current understanding state",
-    "Current recommendation",
-    "Assets discovered",
-    "Content sections",
+    "Imported",
+    "Understood",
+    "Improved",
+    "Next recommendation",
     "Status",
     "Major improvement",
-    "Major limitation",
-    "Why it matters:",
-    "After confirmation:",
+    "Remaining limitation",
+    "Why it matters",
+    "Confirmation unlocks",
+    "Expected impact",
   ]) {
     assert.equal(source.includes(label), true, `missing ${label}`);
   }
@@ -169,7 +170,7 @@ test("knowledge workspace uses product wording for business understanding", asyn
     "We know...",
     "GNR8 has not confirmed...",
     "This still requires confirmation...",
-    "Plain-language business knowledge only",
+    "Short product signals only",
   ]) {
     assert.equal(source.includes(label), true, `missing ${label}`);
   }
@@ -197,18 +198,20 @@ test("knowledge workspace preview presentation uses existing routes and safe ass
   assert.equal(source.includes("props.version.previewHref"), true);
   assert.equal(source.includes("<img"), true);
   assert.equal(source.includes("props.version.previewImageHref"), true);
+  assert.equal(projection.includes("assetStoryRank"), true);
+  assert.equal(projection.includes("loading|loader|spinner|placeholder"), true);
   assert.equal(projection.includes("iteration.preview.route"), true);
   assert.equal(projection.includes("latestProposalPreviewHref"), true);
 });
 
-test("knowledge workspace health labels are product-facing", async () => {
+test("knowledge workspace progress labels are product-facing", async () => {
   const projection = await readFile(PROJECTION_FILE, "utf8");
 
   for (const label of [
     "Website Structure",
     "Business Understanding",
     "Visual Identity",
-    "Generation Quality",
+    "Proposal Quality",
     "Compliance",
     "Evolution",
     "Readiness",
