@@ -109,15 +109,23 @@ new preview images, or create screenshot access routes.
 
 ## ODV Composition Result
 
-The ODV source screenshot references exist in VCU, but safe screenshot access
-refs are not currently available. Therefore the Original Website panel falls
-back to a representative imported source image when a safe preview asset is
-available, with explicit representative wording.
+WVT-1-VERIFY materialized the ODV original-source and generated-iteration
+Website Version Thumbnail artifacts. The ODV Workspace now displays persisted
+real thumbnails instead of representative or unavailable panels for completed
+versions.
 
-The Latest Proposal panel uses the existing authenticated live generated
-proposal preview route for the latest generated iteration when available. It
-is labelled as a quarantined generated proposal, not approved and not
-published.
+Persisted thumbnail IDs:
+
+```text
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+The Latest Proposal panel uses the Iteration 2 persisted generated thumbnail
+and keeps the existing authenticated live generated proposal preview route as
+the click target. It is labelled as a quarantined generated proposal, not
+approved and not published.
 
 The deterministic interpretation explains the apparently contradictory state:
 
@@ -201,6 +209,27 @@ not production-verified in browser. The branch was verified by focused tests,
 the platform production build, and static safety checks. Production browser
 verification should be rerun after deployment and after the database pool
 condition clears.
+
+### WVT-1-VERIFY Browser Update
+
+On 2026-07-16, authenticated production browser verification loaded the ODV
+Workspace at:
+
+```text
+/gnr8/admin/workspace/09dce7ea-d860-4f60-a1eb-26c3335b302e
+```
+
+Verified:
+
+- Original Website thumbnail loaded real PNG bytes, natural size `1366x768`.
+- Iteration 1 thumbnail loaded real PNG bytes, natural size `1440x900`.
+- Iteration 2 thumbnail loaded real PNG bytes, natural size `1440x900`.
+- Hero comparison displayed Original and latest Iteration 2 visually.
+- Future remained an intentional empty state.
+- Clicking Original still targets the source/original URL.
+- Clicking Iteration 1 and Iteration 2 still targets durable preview routes.
+- No broken images or generic gray placeholders remained for the three
+  completed versions.
 
 ## Validation
 

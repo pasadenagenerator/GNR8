@@ -39,7 +39,7 @@ The route serves persisted bytes only. It performs no capture, no persistence, n
 
 Original thumbnails reuse persisted raw-import screenshot bytes. If screenshot references exist but exact bytes cannot be loaded from the raw imported site artifact, materialization reports `SOURCE_SCREENSHOT_BYTES_UNAVAILABLE` and does not fall back to representative imported assets.
 
-Generated thumbnails require the exact durable Generated Proposal Bundle and the existing superadmin preview route. The materializer is injectable for tests and browser-backed for controlled authenticated operator capture. If no safe authenticated capture context is supplied, generated materialization fails closed without weakening preview auth.
+Generated thumbnails require the exact durable Generated Proposal Bundle and the existing superadmin preview route. The materializer is injectable for tests and browser-backed for controlled authenticated operator capture. WVT-1-VERIFY added the preferred internal persisted-bundle capture path: when no external authenticated preview URL is supplied, the materializer renders the persisted bundle through an in-memory internal preview origin and captures it with Playwright. This preserves preview security, uses persisted bundle bytes only, avoids anonymous HTTP, avoids cookies, and avoids local proposal folders.
 
 ## ODV Status
 
@@ -52,14 +52,28 @@ Prepared generated bundle targets:
 - Iteration 1: `generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4`
 - Iteration 2: `generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075`
 
-WVT-1 performs no production thumbnail writes. The prepared CLI defaults to dry-run:
+WVT-1 originally performed no production thumbnail writes. WVT-1-VERIFY later used explicit operator approval to persist exactly three ODV `website_version_thumbnail` artifacts:
+
+```text
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+Canonical verification record:
+
+```text
+docs/architecture/ODV_WEBSITE_VERSION_THUMBNAIL_PRODUCTION_VERIFICATION.md
+```
+
+The prepared CLI still defaults to dry-run:
 
 `pnpm exec tsx gnr8/architecture/website-version-thumbnail-odv.cli.ts --target=all`
 
-Production materialization remains a separate approval step: `WVT-1-VERIFY - ODV Thumbnail Production Materialization`.
+Production materialization has completed for the three approved ODV records only. Equivalent retries reuse the same IDs and do not append duplicates.
 
 ## Limitations
 
 - Original source thumbnail availability depends on exact persisted screenshot bytes in raw imported site storage.
-- Generated capture requires a safe authenticated browser context; WVT-1 does not add anonymous/public preview access.
+- Generated capture requires a safe authenticated or internal persisted-bundle capture context; WVT-1 does not add anonymous/public preview access.
 - No worker, queue, recurring job, public URL, publishing, deployment, provider execution, or proposal regeneration is introduced.

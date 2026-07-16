@@ -171,6 +171,19 @@ Generated versions are labeled as quarantined generated proposals and never
 imply a published website. The latest persisted iteration is visually
 emphasized.
 
+WVT-1-VERIFY activated persisted thumbnails for the ODV version timeline:
+
+```text
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+The Workspace still opens existing authoritative destinations on click:
+Original opens the source/original URL, and generated versions open durable
+Evolution preview routes. Thumbnails are private presentation derivatives and
+do not imply approval, publication, or deployment.
+
 ### 3. Business Understanding
 
 Shows human-readable cards for:

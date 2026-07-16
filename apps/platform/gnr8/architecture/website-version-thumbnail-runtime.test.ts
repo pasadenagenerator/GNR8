@@ -20,6 +20,7 @@ import {
   thumbnailBody,
 } from "./website-version-thumbnail-persistence";
 import {
+  captureGeneratedPreviewThumbnailFromPersistedBundle,
   materializeGeneratedWebsiteVersionThumbnail,
   materializeOriginalWebsiteVersionThumbnail,
 } from "./website-version-thumbnail-materializer";
@@ -210,6 +211,21 @@ test("generated materializer uses exact bundle lineage and injected capture with
   assert.equal(result.ok ? result.artifact.sourceArtifactKind : null, "generated_proposal_bundle");
   assert.equal(result.ok ? result.artifact.generatedProposalBundleId : null, bundle(1).artifactId);
   assert.equal(result.ok ? result.artifact.diagnostics.includes("NO_LOCAL_PROPOSAL_DIRECTORY") : false, true);
+});
+
+test("internal generated capture renders persisted bundle without auth material or local folders", async () => {
+  const artifact = bundle(1);
+  const result = await captureGeneratedPreviewThumbnailFromPersistedBundle({
+    siteVersionId: SITE_VERSION_ID,
+    iteration: 1,
+    bundle: artifact,
+    viewport: { ...WEBSITE_VERSION_THUMBNAIL_CANONICAL_VIEWPORT, width: 320, height: 180 },
+  });
+
+  assert.equal(result.mediaType, "image/png");
+  assert.equal(result.width, 320);
+  assert.equal(result.height, 180);
+  assert.equal(result.bytes.byteLength > 0, true);
 });
 
 test("thumbnail body returns exact persisted bytes", () => {

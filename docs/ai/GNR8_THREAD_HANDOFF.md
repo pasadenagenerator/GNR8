@@ -7,6 +7,25 @@ This is the first file every new ChatGPT/Codex thread should read.
 First Executable MVP Pipeline
 
 Current status:
+- Phase WVT-1-VERIFY - ODV Thumbnail Production Materialization and Workspace
+  Activation is complete. Canonical verification record:
+  `docs/architecture/ODV_WEBSITE_VERSION_THUMBNAIL_PRODUCTION_VERIFICATION.md`.
+  The real ODV site version
+  `09dce7ea-d860-4f60-a1eb-26c3335b302e` now has exactly three immutable
+  `website_version_thumbnail` records: Original
+  `website_version_thumbnail_553d438ae24a13985fc18f99debfa55d`, Iteration 1
+  `website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639`, and
+  Iteration 2
+  `website_version_thumbnail_a71501efe316a082c6b6534da699264f`. The
+  Workspace displays real original/source and generated iteration thumbnails,
+  the hero shows Original versus latest Iteration 2 visually, and Evolution
+  displays both generated thumbnails. The existing source/original and durable
+  preview links remain authoritative click targets. No public access,
+  proposal regeneration, Provider execution, AI execution, Business Approval,
+  publishing, deployment, DNS mutation, schema or migration, workers,
+  recurring captures, Generated Proposal Bundle mutation, WGP mutation,
+  Provider Payload mutation, OWM mutation, Compliance mutation, or Evolution
+  Analysis mutation was introduced.
 - Phase VCU-2 - Pure Runtime Source Content & Visual Continuity Projection is
   complete. Canonical runtime record:
   `docs/architecture/SOURCE_CONTENT_VISUAL_CONTINUITY_PROJECTION_RUNTIME.md`.
@@ -206,6 +225,35 @@ Current status:
   deployment, DNS, or production mutation occurred.
 
 Current Phase:
+- Phase WVT-1-VERIFY - ODV Thumbnail Production Materialization and Workspace
+  Activation is COMPLETE.
+
+WVT-1-VERIFY evidence:
+- Canonical verification record:
+  `docs/architecture/ODV_WEBSITE_VERSION_THUMBNAIL_PRODUCTION_VERIFICATION.md`.
+- Thumbnail count moved from `0` to `3`; exact retry remained `3`.
+- Original thumbnail:
+  `website_version_thumbnail_553d438ae24a13985fc18f99debfa55d`,
+  `1366x768`, `586268` bytes,
+  SHA-256 `4f8daa9f45228a613e4a168ffd6ecd82e9464364f7037e3b8c5644ad7be5f1f8`.
+- Iteration 1 thumbnail:
+  `website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639`,
+  `1440x900`, `403029` bytes,
+  SHA-256 `6323eab2fb5251263358931d04eda3765a3dc6b7f2a9bf935061a3597bf34596`.
+- Iteration 2 thumbnail:
+  `website_version_thumbnail_a71501efe316a082c6b6534da699264f`,
+  `1440x900`, `99211` bytes,
+  SHA-256 `f6be158074979f56ed360da1f9d0a827deaef71ae314dd6ebaa4128501e693a5`.
+- Generated thumbnail lineage uses persisted bundles
+  `generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4` and
+  `generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075`.
+- Filesystem independence passed while `ODV_GENERATED_PROPOSAL_001/` and
+  `ODV_GENERATED_PROPOSAL_002/` were temporarily renamed.
+- Focused WVT/Workspace/Evolution tests passed `39/39`.
+- Recommended next phase:
+  `WVT-1-CLOSEOUT - Website Version Thumbnail Canonical Closeout`.
+
+Prior current phase:
 - Phase VCU-2 - Pure Runtime Source Content & Visual Continuity Projection
   is COMPLETE.
 

@@ -159,6 +159,19 @@ Workspace frames generated proposal previews as quarantined proposal previews,
 does not claim they are published websites, and does not add screenshot
 generation, image pipelines, storage, API changes, or proposal asset mutation.
 
+WVT-1-VERIFY materialized private persisted thumbnails for both ODV generated
+iterations:
+
+```text
+Iteration 1 thumbnail: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2 thumbnail: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+Authenticated production browser verification confirmed the Evolution
+Dashboard displays both thumbnails at natural size `1440x900`, keeps both
+thumbnail click targets on the existing durable preview routes, and preserves
+read-only compliance and evolution values without recomputation.
+
 Canonical durable preview record:
 
 ```text

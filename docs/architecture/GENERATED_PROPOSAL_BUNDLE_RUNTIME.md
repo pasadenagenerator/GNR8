@@ -310,3 +310,24 @@ production state.
 # WVT-1 Update
 
 Generated version thumbnails derive from exact durable `generated_proposal_bundle` artifacts and the existing superadmin preview route. The thumbnail artifact stores lineage to the bundle ID and bundle SHA; it does not mutate the bundle or become an authoritative generated proposal artifact.
+
+## WVT-1-VERIFY Update
+
+WVT-1-VERIFY reused the persisted ODV bundle artifacts to render generated
+proposal thumbnails. Thumbnail capture did not read
+`ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/`; a filesystem
+independence proof temporarily renamed both folders and reproduced the same
+thumbnail IDs, byte counts, and hashes from persisted bundle storage.
+
+No bundle writes occurred during WVT-1-VERIFY. The generated thumbnail lineage
+remains:
+
+```text
+Iteration 1 bundle: generated_proposal_bundle_eb95bc58e327d009f2282cf6908dfdd4
+Iteration 1 bundleSha256: c486d84b30f284042454b11ed0306981c8041b25f7b19cdcab43cbe02c06f4aa
+Iteration 1 thumbnail: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+
+Iteration 2 bundle: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
+Iteration 2 bundleSha256: 39307d8d5017ec28fba3cf41531bf381370cd8f065d645026bfd93172203ed03
+Iteration 2 thumbnail: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```

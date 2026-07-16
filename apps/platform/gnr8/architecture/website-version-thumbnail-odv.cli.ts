@@ -2,6 +2,7 @@ import {
   materializeGeneratedWebsiteVersionThumbnail,
   materializeOriginalWebsiteVersionThumbnail,
 } from "./website-version-thumbnail-materializer";
+import { getSuperadminPool } from "../../src/superadmin/db";
 
 const ODV_SITE_VERSION_ID = "09dce7ea-d860-4f60-a1eb-26c3335b302e";
 
@@ -70,7 +71,11 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await getSuperadminPool().end();
+  });

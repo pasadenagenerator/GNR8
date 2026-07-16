@@ -2363,3 +2363,27 @@ mutation behavior.
 # WVT-1 Update
 
 MVP-0 now includes a private immutable website-version thumbnail boundary for product UX. The boundary is derived from existing source evidence or durable generated proposal bundles and performs no production writes, provider execution, public sharing, publishing, deployment, or DNS mutation in WVT-1.
+
+## WVT-1-VERIFY Website Version Thumbnail Production Addendum
+
+WVT-1-VERIFY materialized the first three immutable Website Version Thumbnail
+presentation artifacts for the real ODV target:
+
+```text
+siteVersionId: 09dce7ea-d860-4f60-a1eb-26c3335b302e
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+The thumbnails activate real visuals in Knowledge Workspace and Generation
+Evolution while preserving the MVP boundary: no proposal regeneration, no
+Provider execution, no AI execution, no Business Approval, no publishing, no
+deployment, no DNS mutation, no schema or migration, and no public thumbnail
+or preview access.
+
+Canonical verification record:
+
+```text
+docs/architecture/ODV_WEBSITE_VERSION_THUMBNAIL_PRODUCTION_VERIFICATION.md
+```

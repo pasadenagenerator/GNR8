@@ -3,6 +3,7 @@ import type { RuntimeStoreDbOptions } from "../runtime/runtime-store";
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeImportProvenanceSummary } from "../runtime/types";
 import {
   loadGeneratedProposalBundleByIteration,
+  resolveGeneratedProposalBundleAsset,
   type GeneratedProposalBundleArtifactRecord,
   type GeneratedProposalBundleIteration,
 } from "./generated-proposal-bundle-persistence";
@@ -121,6 +122,19 @@ function sniffImage(input: { bytes: Buffer; mediaType: string; width?: number | 
   return null;
 }
 
+function generatedPreviewBasePath(input: { siteVersionId: string; iteration: GeneratedProposalBundleIteration }): string {
+  return `/gnr8/admin/evolution/${input.siteVersionId}/iterations/${input.iteration}/preview`;
+}
+
+function rewriteHtmlRelativeAssetReferences(html: string, assetBasePath: string): string {
+  return html.replace(
+    /\b(href|src)=(["'])\.\/([^"'#?:][^"']*)\2/g,
+    (_match, attribute: string, quote: string, relativePath: string) => (
+      `${attribute}=${quote}${assetBasePath}${relativePath}${quote}`
+    ),
+  );
+}
+
 async function defaultGetSiteVersion(siteVersionId: string, options: RuntimeStoreDbOptions): Promise<CanonicalSiteVersionSnapshot | null> {
   const { getSiteVersion } = await import("../runtime/runtime-store");
   return getSiteVersion(siteVersionId, options);
@@ -162,6 +176,92 @@ export async function captureGeneratedPreviewThumbnailWithPlaywright(input: {
     page.setDefaultTimeout(20_000);
     page.setDefaultNavigationTimeout(20_000);
     await page.goto(input.previewUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await page.waitForLoadState("load", { timeout: 10_000 }).catch(() => undefined);
+    await page.evaluate(async () => {
+      await (document as Document & { fonts?: { ready: Promise<unknown> } }).fonts?.ready?.catch(() => undefined);
+      await Promise.all(Array.from(document.images).map((image) => {
+        if (image.complete) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        });
+      }));
+    });
+    await page.waitForTimeout(250);
+    const bytes = Buffer.from(await page.screenshot({ type: "png", fullPage: input.viewport.fullPage }));
+    const dimensions = pngDimensions(bytes);
+    if (!dimensions) throw new Error("Generated preview screenshot did not produce a valid PNG.");
+    return { bytes, mediaType: "image/png", ...dimensions };
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function captureGeneratedPreviewThumbnailFromPersistedBundle(input: {
+  siteVersionId: string;
+  iteration: GeneratedProposalBundleIteration;
+  bundle: GeneratedProposalBundleArtifactRecord;
+  viewport: WebsiteVersionThumbnailViewport;
+}): Promise<WebsiteVersionThumbnailImageBytes> {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  const origin = "https://wvt-internal.invalid";
+  const previewPath = generatedPreviewBasePath({ siteVersionId: input.siteVersionId, iteration: input.iteration });
+  const previewUrl = `${origin}${previewPath}/`;
+  const assetBasePath = `${previewPath}/source/`;
+
+  try {
+    const context = await browser.newContext({
+      viewport: { width: input.viewport.width, height: input.viewport.height },
+      deviceScaleFactor: input.viewport.deviceScaleFactor,
+      colorScheme: "light",
+      reducedMotion: "reduce",
+    });
+    await context.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.origin !== origin) {
+        await route.abort();
+        return;
+      }
+
+      const normalizedPath = url.pathname.replace(/\/+$/, "");
+      const previewRoot = previewPath.replace(/\/+$/, "");
+      const assetRoot = `${previewRoot}/source`;
+      let assetSegments: string[] | undefined;
+      if (normalizedPath === previewRoot) {
+        assetSegments = ["source", "index.html"];
+      } else if (normalizedPath.startsWith(`${assetRoot}/`)) {
+        assetSegments = ["source", ...normalizedPath.slice(assetRoot.length + 1).split("/").filter(Boolean)];
+      } else {
+        await route.fulfill({ status: 404, body: "not found" });
+        return;
+      }
+
+      try {
+        const file = resolveGeneratedProposalBundleAsset({ artifact: input.bundle, assetPathSegments: assetSegments });
+        if (file.contentType.startsWith("text/html")) {
+          const html = new TextDecoder().decode(file.body);
+          await route.fulfill({
+            status: 200,
+            contentType: file.contentType,
+            body: rewriteHtmlRelativeAssetReferences(html, assetBasePath),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: file.contentType,
+          body: Buffer.from(file.body),
+        });
+      } catch {
+        await route.fulfill({ status: 404, body: "not found" });
+      }
+    });
+
+    const page = await context.newPage();
+    page.setDefaultTimeout(20_000);
+    page.setDefaultNavigationTimeout(20_000);
+    await page.goto(previewUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await page.waitForLoadState("load", { timeout: 10_000 }).catch(() => undefined);
     await page.evaluate(async () => {
       await (document as Document & { fonts?: { ready: Promise<unknown> } }).fonts?.ready?.catch(() => undefined);
@@ -321,32 +421,33 @@ export async function materializeGeneratedWebsiteVersionThumbnail(input: {
   });
   if (!bundle) return failure({ mode, code: "GENERATED_BUNDLE_UNAVAILABLE", message: "Generated Proposal Bundle could not be loaded." });
 
-  const capture = options.captureGeneratedPreview ?? (async (captureInput: {
-    previewUrl: string;
-    viewport: WebsiteVersionThumbnailViewport;
-    cookieHeader: string | null;
-  }) => captureGeneratedPreviewThumbnailWithPlaywright(captureInput));
   const basePreviewUrl = String(options.basePreviewUrl ?? "").replace(/\/$/, "");
-  if (!basePreviewUrl && !options.captureGeneratedPreview) {
-    return failure({
-      mode,
-      code: "AUTHENTICATED_CAPTURE_UNAVAILABLE",
-      message: "No authenticated preview base URL or injected capture function was provided.",
-      diagnostics: ["Generated thumbnail capture did not weaken preview authentication."],
-    });
-  }
+  const capture = options.captureGeneratedPreview ?? (basePreviewUrl
+    ? (async (captureInput: {
+        previewUrl: string;
+        viewport: WebsiteVersionThumbnailViewport;
+        cookieHeader: string | null;
+      }) => captureGeneratedPreviewThumbnailWithPlaywright(captureInput))
+    : null);
   const previewUrl = basePreviewUrl
-    ? `${basePreviewUrl}/gnr8/admin/evolution/${input.siteVersionId}/iterations/${input.iteration}/preview/`
-    : `/gnr8/admin/evolution/${input.siteVersionId}/iterations/${input.iteration}/preview/`;
+    ? `${basePreviewUrl}${generatedPreviewBasePath({ siteVersionId: input.siteVersionId, iteration: input.iteration })}/`
+    : `${generatedPreviewBasePath({ siteVersionId: input.siteVersionId, iteration: input.iteration })}/`;
   let image: WebsiteVersionThumbnailImageBytes;
   try {
-    image = await capture({
-      siteVersionId: input.siteVersionId,
-      iteration: input.iteration,
-      previewUrl,
-      viewport,
-      cookieHeader: options.browserCookieHeader ?? null,
-    });
+    image = capture
+      ? await capture({
+          siteVersionId: input.siteVersionId,
+          iteration: input.iteration,
+          previewUrl,
+          viewport,
+          cookieHeader: options.browserCookieHeader ?? null,
+        })
+      : await captureGeneratedPreviewThumbnailFromPersistedBundle({
+          siteVersionId: input.siteVersionId,
+          iteration: input.iteration,
+          bundle,
+          viewport,
+        });
   } catch (error) {
     return failure({
       mode,
@@ -383,6 +484,7 @@ export async function materializeGeneratedWebsiteVersionThumbnail(input: {
     diagnostics: [
       `generatedProposalBundleId=${bundle.artifactId}`,
       `bundleSha256=${bundle.bundleSha256}`,
+      basePreviewUrl ? "AUTHENTICATED_BROWSER_CAPTURE" : "INTERNAL_PERSISTED_BUNDLE_CAPTURE",
       "NO_PROPOSAL_REGENERATION",
       "NO_LOCAL_PROPOSAL_DIRECTORY",
     ],

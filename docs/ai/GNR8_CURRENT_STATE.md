@@ -5,6 +5,36 @@
 
 ## Current Phase
 
+WVT-1-VERIFY - ODV Thumbnail Production Materialization and Workspace
+Activation is COMPLETE.
+
+Canonical WVT-1-VERIFY record:
+
+- `docs/architecture/ODV_WEBSITE_VERSION_THUMBNAIL_PRODUCTION_VERIFICATION.md`
+
+WVT-1-VERIFY persisted exactly three immutable ODV
+`website_version_thumbnail` artifacts:
+
+```text
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+The ODV Knowledge Workspace now displays the real original source screenshot,
+Iteration 1 generated thumbnail, and Iteration 2 generated thumbnail. The hero
+comparison displays Original versus latest Iteration 2 visually. The
+Generation Evolution Dashboard displays both generated thumbnails. Existing
+source/original and durable preview links remain the click targets.
+
+No public access, proposal regeneration, Provider execution, AI execution,
+Business Approval, publishing, deployment, DNS mutation, schema or migration,
+workers, recurring captures, Generated Proposal Bundle mutation, WGP mutation,
+Provider Payload mutation, OWM mutation, Compliance mutation, or Evolution
+Analysis mutation was introduced.
+
+Prior current phase:
+
 VCU-2 - Pure Runtime Source Content & Visual Continuity Projection is
 COMPLETE.
 
@@ -71,7 +101,18 @@ changes, Provider Payload changes, proposal regeneration, Proposal v3,
 generation, approval, publishing, deployment, DNS, workers, mutation APIs, or
 editing controls.
 
-Recommended next phase:
+Recommended next phase after WVT-1-VERIFY:
+
+```text
+WVT-1-CLOSEOUT - Website Version Thumbnail Canonical Closeout
+```
+
+Keep it read-only unless separately authorized. Do not create Proposal v3,
+public thumbnail routes, public preview sharing, workers, scheduled captures,
+confirmation mutations, publishing, deployment, provider execution, AI
+execution, DNS mutation, schema migration, or generated website deployment.
+
+Prior VCU-2 recommended next phase:
 
 ```text
 VCU-3 - Downstream Continuity Enrichment Contract Design
