@@ -915,11 +915,11 @@ but DBT, BUR, Business Alignment, WDB, WGP, Provider Payload, Generated
 Proposal, Generated Proposal Bundle, OWM, Compliance, Improvement, Evolution,
 Business Approval, and publishing state must never feed source continuity.
 
-Recommended next phase: `VCU-2 - Pure Runtime Source Content & Visual
-Continuity Projection`. Keep it bounded to a read-only projection unless a
-later phase explicitly authorizes persistence, WDB/WGP mutation, Provider
-Payload changes, thumbnails, generation, AI, publishing, deployment, DNS, or
-production mutation.
+VCU-2 has now completed that pure runtime projection. The current recommended
+next phase is `VCU-3 - Downstream Continuity Enrichment Contract Design`. Keep
+it documentation/contract-only unless a later phase explicitly authorizes
+persistence, WDB/WGP mutation, Provider Payload changes, thumbnails,
+generation, AI, publishing, deployment, DNS, or production mutation.
 
 ## VCU-2 Runtime Note
 

@@ -381,8 +381,9 @@ continuity as evidence/candidates, not business truth or brand truth.
 VCU-1 does not change the WU runtime contract, builder, loader, validator,
 page, adapter, persistence policy, Business Discovery behavior, schema, API,
 UI, workers, AI, generation, thumbnails, publishing, deployment, DNS, or
-production mutation. The recommended next phase is
-`VCU-2 - Pure Runtime Source Content & Visual Continuity Projection`.
+production mutation. That recommended runtime projection was completed in
+VCU-2; the current recommended next phase is
+`VCU-3 - Downstream Continuity Enrichment Contract Design`.
 
 ## VCU-2 Runtime Consumer Relationship
 

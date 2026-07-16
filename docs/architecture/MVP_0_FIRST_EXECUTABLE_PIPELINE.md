@@ -2306,16 +2306,17 @@ Payload, Generated Website Proposal, Generated Proposal Bundle, OWM,
 Compliance, reports, improvement/evolution artifacts, Business Approval, and
 publishing state.
 
-Recommended next phase:
+VCU-2 has now completed the pure runtime projection. The current recommended
+next phase is:
 
 ```text
-VCU-2 - Pure Runtime Source Content & Visual Continuity Projection
+VCU-3 - Downstream Continuity Enrichment Contract Design
 ```
 
-Keep VCU-2 bounded to a read-only pure runtime projection unless a later phase
-explicitly authorizes persistence, schema, WDB/WGP mutation, Provider Payload
-changes, content transformation, asset reuse, thumbnails, Proposal v3, AI,
-generation, approval, publishing, deployment, DNS, or production mutation.
+Keep VCU-3 documentation/contract-only unless a later phase explicitly
+authorizes persistence, schema, WDB/WGP mutation, Provider Payload changes,
+content transformation, asset reuse, thumbnails, Proposal v3, AI, generation,
+approval, publishing, deployment, DNS, or production mutation.
 
 ## VCU-2 Runtime Completion
 

@@ -811,8 +811,9 @@ Source evidence
 Downstream artifacts are forbidden inputs to source continuity. VCU-1 creates
 no runtime, persistence, schema, extraction, transformation, asset reuse,
 thumbnail, WDB/WGP, Provider Payload, AI, generation, publishing, deployment,
-DNS, or production mutation. Recommended next phase:
-`VCU-2 - Pure Runtime Source Content & Visual Continuity Projection`.
+DNS, or production mutation. VCU-2 has now completed the pure runtime
+projection. The current recommended next phase is
+`VCU-3 - Downstream Continuity Enrichment Contract Design`.
 
 ## VCU-2 Runtime Projection
 

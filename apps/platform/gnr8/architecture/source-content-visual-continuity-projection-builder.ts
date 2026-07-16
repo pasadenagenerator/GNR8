@@ -22,6 +22,7 @@ import {
   type ContinuityValidationResult,
   type SourceAssetContinuityItem,
   type SourceAssetReuseCandidate,
+  type SourceAssetUsageEvidence,
   type SourceColorContinuitySignal,
   type SourceContentBlock,
   type SourceContentContinuityCandidate,
@@ -517,20 +518,24 @@ function colorRole(label: string): SourceColorContinuitySignal["candidateRole"] 
 }
 
 function buildColorSignals(projection: SourceWebsiteUnderstandingProjection): SourceColorContinuitySignal[] {
-  return projection.visualIdentitySignals.colorSignals.map((signal) => ({
-    signalId: stableId("continuity-color", { value: signal.value, label: signal.label }),
-    value: signal.value,
-    normalizedValue: signal.value.toLocaleLowerCase(),
-    sourceDeclaration: signal.label,
-    usage: [signal.label],
-    candidateRole: colorRole(signal.label),
-    frequency: null,
-    contrastContext: null,
-    evidenceRefs: signal.evidenceRefs,
-    confidence: signal.confidence,
-    knowledgeState: signal.state === "confirmed_source_fact" ? "reviewed" : signal.state,
-    limitations: ["Color signal is not a canonical palette entry."],
-  }));
+  return projection.visualIdentitySignals.colorSignals.flatMap((signal) => {
+    const value = text(signal.value);
+    if (!value) return [];
+    return [{
+      signalId: stableId("continuity-color", { value, label: signal.label }),
+      value,
+      normalizedValue: value.toLocaleLowerCase(),
+      sourceDeclaration: signal.label,
+      usage: [signal.label],
+      candidateRole: colorRole(signal.label),
+      frequency: null,
+      contrastContext: null,
+      evidenceRefs: signal.evidenceRefs,
+      confidence: signal.confidence,
+      knowledgeState: signal.state === "confirmed_source_fact" ? "reviewed" as const : signal.state,
+      limitations: ["Color signal is not a canonical palette entry."],
+    }];
+  });
 }
 
 function buildVisualStyleSignals(projection: SourceWebsiteUnderstandingProjection): SourceVisualStyleContinuitySignal[] {
@@ -565,7 +570,7 @@ function buildLayoutContinuity(projection: SourceWebsiteUnderstandingProjection,
     heading: section.heading,
     semanticType: section.semanticType,
     observedLayoutState: section.plannedOnly ? "unavailable" : section.state === "confirmed_source_fact" ? "reviewed" : section.state,
-    continuityState: section.plannedOnly ? "confirmation_required" : "preserve_candidate",
+    continuityState: section.plannedOnly ? "confirmation_required" as const : "preserve_candidate" as const,
     structurePlanContextOnly: section.plannedOnly,
     evidenceRefs: section.evidenceRefs,
     limitations: section.plannedOnly ? ["StructurePlan context is separated from observed source layout."] : section.limitations,

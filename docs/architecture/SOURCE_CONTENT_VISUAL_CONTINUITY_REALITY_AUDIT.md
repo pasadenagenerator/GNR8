@@ -787,15 +787,20 @@ VCU-1 - Source Content & Visual Continuity Projection Contract Design - COMPLETE
   review states, and delivery-readiness states.
 - No persistence, runtime, WDB/WGP mutation, or provider payload change.
 
-VCU-2 - Pure Runtime Projection - RECOMMENDED NEXT
+VCU-2 - Pure Runtime Projection - COMPLETE
 
 - Compose existing WU/import/evidence/candidate/review/context data.
 - Produce read-only projection, no new extraction.
 
-VCU-2-R - ODV/ViroiDoc Real-Target Validation
+VCU-2 real-target validation - COMPLETE inside VCU-2
 
 - Validate projection on ODV and ViroiDoc.
 - Record exact counts, candidates, missing states, and thumbnail evidence states.
+
+VCU-3 - Downstream Continuity Enrichment Contract Design
+
+- Define how WDB/WGP may consume VCU output without implementing integration,
+  persistence, Provider Payload v3, generation, or asset approval.
 
 VCU-T1 - Thumbnail Contract Design
 
@@ -803,27 +808,27 @@ VCU-T1 - Thumbnail Contract Design
   generated iterations.
 - Contract/design only before any worker or capture implementation.
 
-VCU-3 - Content Transformation Candidate Runtime
+VCU-4 - Content Transformation Candidate Runtime
 
 - Candidate-only source text block policy and transformation recommendations.
 
-VCU-4 - Visual Identity & Asset Candidate Runtime
+VCU-5 - Visual Identity & Asset Candidate Runtime
 
 - Candidate-only logo/image/font/color/style projection.
 
-VCU-5 - Human Confirmation UX
+VCU-6 - Human Confirmation UX
 
 - Review/approve/reject/defer content and visual candidates.
 
-VCU-6 - WDB/WGP Enrichment
+VCU-7 - WDB/WGP Enrichment
 
 - Add governed continuity inputs to WDB/WGP after candidates exist.
 
-VCU-7 - Provider Payload v3 Shadow Generation
+VCU-8 - Provider Payload v3 Shadow Generation
 
 - Serialize source materials and policies without executing generation.
 
-VCU-8 - First Content-and-Brand-Preserving Regeneration
+VCU-9 - First Content-and-Brand-Preserving Regeneration
 
 - Use confirmed/candidate-safe payload to generate a recognizable ODV evolution.
 
@@ -839,13 +844,13 @@ VCU-8 - First Content-and-Brand-Preserving Regeneration
 
 ## Final Recommendation
 
-VCU-1 is complete as documentation and contract design only. Proceed to
-**VCU-2 - Pure Runtime Source Content & Visual Continuity Projection** when
-implementation scope is explicitly opened. VCU-2 should compose existing
-WU/import/evidence/candidate/review/context data into a read-only projection
-with no new extraction and no persistence module. Do not create a persisted
-canonical brand artifact, change generation behavior, mutate WDB/WGP/Provider
-Payload, or implement thumbnails until a later phase explicitly authorizes it.
+VCU-2 is complete as a pure runtime Source Content & Visual Continuity
+Projection with ODV and ViroiDoc validation included. Proceed to
+**VCU-3 - Downstream Continuity Enrichment Contract Design**. Keep VCU-3
+documentation/contract-only: do not implement WDB/WGP integration, Provider
+Payload v3, proposal regeneration, asset approval, thumbnails, persistence,
+schema, workers, AI, publishing, deployment, DNS, or production mutation unless
+a later phase explicitly authorizes it.
 
 ## VCU-2 Implementation Update
 

@@ -778,25 +778,28 @@ Recommended conceptual future files:
 apps/platform/gnr8/architecture/source-content-visual-continuity-projection-contract.ts
 apps/platform/gnr8/architecture/source-content-visual-continuity-projection-builder.ts
 apps/platform/gnr8/architecture/source-content-visual-continuity-projection-loader.ts
-apps/platform/gnr8/architecture/source-content-visual-continuity-projection.test.ts
+apps/platform/gnr8/architecture/source-content-visual-continuity-projection-contract.test.ts
+apps/platform/gnr8/architecture/source-content-visual-continuity-projection-builder.test.ts
+apps/platform/gnr8/architecture/source-content-visual-continuity-projection-loader.test.ts
 ```
 
-Because VCU-1 selects pure runtime projection, do not propose a persistence
-module for VCU-2.
+Because VCU-1 selected pure runtime projection and VCU-2 implemented it, do not
+add a persistence module in the VCU lane unless a later phase explicitly
+authorizes a cache that is not canonical truth.
 
 ## Rollout Sequence
 
 Recommended sequence:
 
 ```text
-VCU-2   Pure runtime continuity projection
-VCU-2-R ODV and ViroiDoc real-target validation
-VCU-3   Content transformation candidate hardening
-VCU-4   Visual/asset candidate hardening
-VCU-5   Human confirmation UX
-VCU-6   WDB/WGP enrichment shadow path
-VCU-7   Provider Payload v3 shadow delivery
-VCU-8   First recognizable continuity-preserving regeneration
+VCU-2   Pure runtime continuity projection with ODV/ViroiDoc validation - complete
+VCU-3   Downstream continuity enrichment contract design
+VCU-4   Content transformation candidate hardening
+VCU-5   Visual/asset candidate hardening
+VCU-6   Human confirmation UX
+VCU-7   WDB/WGP enrichment shadow path
+VCU-8   Provider Payload v3 shadow delivery
+VCU-9   First recognizable continuity-preserving regeneration
 ```
 
 Thumbnail implementation may proceed as an independent product sub-track only
@@ -898,10 +901,11 @@ thumbnail generation, WDB/WGP change, Provider Payload change, Proposal v3, AI,
 generation, approval, publishing, deployment, DNS mutation, or production
 mutation.
 
-Recommended next phase:
+That recommended runtime projection was completed in VCU-2. Current
+recommended next phase:
 
 ```text
-VCU-2 - Pure Runtime Source Content & Visual Continuity Projection
+VCU-3 - Downstream Continuity Enrichment Contract Design
 ```
 
 ## VCU-2 Runtime Implementation Update

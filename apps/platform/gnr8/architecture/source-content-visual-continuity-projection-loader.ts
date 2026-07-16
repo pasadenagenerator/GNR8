@@ -43,11 +43,16 @@ async function defaultGetSiteVersion(siteVersionId: string, options: RuntimeStor
 
 function screenshotInputs(summary: RuntimeImportProvenanceSummary | null | undefined, siteVersionId: string): NormalizedSourceScreenshotInput[] {
   const captureEvidence = summary?.captureEvidence;
-  const paths = [
-    captureEvidence?.renderedViewportScreenshotPath ? { path: captureEvidence.renderedViewportScreenshotPath, completeness: "viewport" as const } : null,
-    captureEvidence?.renderedFullpageScreenshotPath ? { path: captureEvidence.renderedFullpageScreenshotPath, completeness: "full_page" as const } : null,
-    ...(captureEvidence?.screenshotPaths ?? []).map((path) => ({ path, completeness: "unknown" as const })),
-  ].filter((item): item is { path: string; completeness: NormalizedSourceScreenshotInput["completeness"] } => Boolean(item?.path));
+  const paths: Array<{ path: string; completeness: NonNullable<NormalizedSourceScreenshotInput["completeness"]> }> = [];
+  if (captureEvidence?.renderedViewportScreenshotPath) {
+    paths.push({ path: captureEvidence.renderedViewportScreenshotPath, completeness: "viewport" });
+  }
+  if (captureEvidence?.renderedFullpageScreenshotPath) {
+    paths.push({ path: captureEvidence.renderedFullpageScreenshotPath, completeness: "full_page" });
+  }
+  for (const path of captureEvidence?.screenshotPaths ?? []) {
+    paths.push({ path, completeness: "unknown" });
+  }
   const unique = new Map<string, NormalizedSourceScreenshotInput>();
   for (const item of paths) {
     const safePath = item.path.replace(/^\/+/, "");
