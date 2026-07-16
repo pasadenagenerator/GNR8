@@ -15,6 +15,17 @@ architecture. Canonical polish record:
 docs/architecture/KNOWLEDGE_WORKSPACE_PRODUCT_POLISH.md
 ```
 
+WVT-1-CLOSEOUT confirms the ODV Workspace consumes private immutable Website
+Version Thumbnail records for Original Website, Iteration 1, and Iteration 2.
+The Workspace remains read-only: thumbnails are presentation derivatives only,
+and source/durable generated previews remain authoritative.
+
+Canonical WVT closeout record:
+
+```text
+docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md
+```
+
 ## Target
 
 ODV site version:

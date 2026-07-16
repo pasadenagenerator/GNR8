@@ -66,11 +66,25 @@ Canonical verification record:
 docs/architecture/ODV_WEBSITE_VERSION_THUMBNAIL_PRODUCTION_VERIFICATION.md
 ```
 
+Canonical closeout record:
+
+```text
+docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md
+```
+
 The prepared CLI still defaults to dry-run:
 
 `pnpm exec tsx gnr8/architecture/website-version-thumbnail-odv.cli.ts --target=all`
 
 Production materialization has completed for the three approved ODV records only. Equivalent retries reuse the same IDs and do not append duplicates.
+
+WVT-1-CLOSEOUT confirmed all three production records remain present,
+unchanged, independently retrievable, private, immutable, and operational in
+Workspace and Evolution. The milestone is COMPLETE. Thumbnails remain private
+presentation derivatives only; live source and durable generated previews
+remain authoritative.
+
+Next recommended track: continuity delivery pipeline design.
 
 ## Limitations
 

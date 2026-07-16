@@ -256,19 +256,21 @@ remains.
 
 ## Remaining Limitations
 
-- Production browser verification of the new UI requires deployment.
-- Production ODV route currently needs the server-side app error and database
-  pool exhaustion to clear before verification can be completed.
-- Original source screenshots do not yet have safe screenshot access refs for
-  Workspace display.
-- Generated iteration thumbnails remain unavailable unless already persisted by
-  another system.
+- Production browser verification of the KWX-3 UI was completed during
+  WVT-1-VERIFY and rechecked during WVT-1-CLOSEOUT for ODV.
+- The ODV original-source and generated-iteration thumbnails are served through
+  private WVT routes; the older server-side app error and database pool
+  exhaustion blocker no longer applies to WVT closeout.
+- Workspace still does not generate thumbnails itself. It consumes persisted
+  WVT records when present and shows intentional empty/unavailable states when
+  a version has no persisted thumbnail.
 - Representative source images are useful but must remain labelled as
   representative, never as screenshots.
 
-## Recommended Next Phase
+## Historical Recommended Next Phase
 
-KWX-4 should be a deployed verification and narrow UX tuning phase only:
+KWX-4 was the deployed verification and narrow UX tuning recommendation before
+WVT-1-VERIFY and WVT-1-CLOSEOUT completed:
 
 - Deploy the KWX-3 Workspace.
 - Reopen the production ODV Workspace as superadmin.
@@ -281,3 +283,24 @@ KWX-4 should be a deployed verification and narrow UX tuning phase only:
 # WVT-1 Update
 
 Knowledge Workspace now projects immutable `website_version_thumbnail` references when present. The Original Website card uses a persisted original-source screenshot thumbnail or an honest unavailable state; representative imported images are no longer used as Original Website thumbnails. Generated cards prefer persisted generated proposal thumbnails and keep durable live preview links for inspection.
+
+## WVT-1-CLOSEOUT Update
+
+WVT-1-CLOSEOUT confirmed the ODV Workspace now displays real persisted
+thumbnails for Original Website, Iteration 1, and Iteration 2:
+
+```text
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+The hero comparison displays Original versus latest Iteration 2. Website
+Evolution displays Original, Iteration 1, Iteration 2, and an intentional
+Future empty state. The thumbnails are private presentation derivatives only;
+live source and durable generated previews remain authoritative. They are not
+approval, publishing, deployment, public sharing, source truth, or business
+truth. No screenshot worker, recurring capture, public thumbnail route, or
+mutation UI exists.
+
+Current recommended next track: continuity delivery pipeline design.

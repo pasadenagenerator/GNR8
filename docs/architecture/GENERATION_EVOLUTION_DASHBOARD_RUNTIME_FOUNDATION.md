@@ -172,6 +172,19 @@ Dashboard displays both thumbnails at natural size `1440x900`, keeps both
 thumbnail click targets on the existing durable preview routes, and preserves
 read-only compliance and evolution values without recomputation.
 
+WVT-1-CLOSEOUT re-verified the same production Evolution page. Iteration 1 and
+Iteration 2 thumbnails remain visible, mapped to the correct historical
+iterations, and linked to the durable preview routes. The generated proposals
+remain quarantined, non-compliant, not approved, not published, and not
+deployed. No recomputation, mutation control, public thumbnail access, worker,
+provider execution, AI execution, or publishing behavior was introduced.
+
+Canonical WVT closeout record:
+
+```text
+docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md
+```
+
 Canonical durable preview record:
 
 ```text

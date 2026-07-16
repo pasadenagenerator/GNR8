@@ -255,6 +255,21 @@ Result: failed on pre-existing unrelated repository-wide test/type issues outsid
 - WVT persistence remains in `siteVersion.importProvenanceSummary`; no dedicated thumbnail table exists.
 - Generated thumbnails are presentation derivatives only and do not imply approval, publication, deployment, or business acceptance.
 
-## Recommended Next Phase
+## Closeout
 
-Proceed to a narrow WVT closeout or VCU-3 contract phase. Do not create Proposal v3, public thumbnail routes, public preview sharing, thumbnail workers, scheduled captures, confirmation mutations, publishing, deployment, provider execution, AI execution, DNS mutation, schema migration, or generated website deployment without separate explicit approval.
+WVT-1-CLOSEOUT is recorded in:
+
+```text
+docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md
+```
+
+Closeout re-verified the three persisted ODV thumbnails, Workspace and
+Evolution consumption, private fail-closed route behavior, DB pool health, and
+no-write-beyond-scope. Website Version Thumbnail status is COMPLETE.
+
+Recommended next track: continuity delivery pipeline design. Do not create
+Proposal v3, public thumbnail routes, public preview sharing, thumbnail
+workers, scheduled captures, confirmation mutations, publishing, deployment,
+provider execution, AI execution, DNS mutation, schema migration, generated
+website deployment, Business Approval, or WDB/WGP mutation without separate
+explicit approval.

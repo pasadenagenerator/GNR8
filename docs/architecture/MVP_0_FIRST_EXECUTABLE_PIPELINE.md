@@ -2387,3 +2387,22 @@ Canonical verification record:
 ```text
 docs/architecture/ODV_WEBSITE_VERSION_THUMBNAIL_PRODUCTION_VERIFICATION.md
 ```
+
+## WVT-1-CLOSEOUT Website Version Thumbnail Addendum
+
+WVT-1-CLOSEOUT confirms the Website Version Thumbnail milestone is COMPLETE.
+The three ODV thumbnails remain present, unchanged, private, immutable,
+independently retrievable, and operational in Workspace and Evolution.
+
+Canonical closeout record:
+
+```text
+docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md
+```
+
+Thumbnails remain presentation derivatives only. They are not MVP source truth,
+business truth, approval, publishing, deployment, provider output, AI output,
+or public sharing. Live source and durable generated previews remain
+authoritative for interaction.
+
+Recommended next track: continuity delivery pipeline design.

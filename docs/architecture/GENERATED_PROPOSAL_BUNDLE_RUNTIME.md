@@ -331,3 +331,25 @@ Iteration 2 bundle: generated_proposal_bundle_d43921f4457b6f26254bc8bf104c2075
 Iteration 2 bundleSha256: 39307d8d5017ec28fba3cf41531bf381370cd8f065d645026bfd93172203ed03
 Iteration 2 thumbnail: website_version_thumbnail_a71501efe316a082c6b6534da699264f
 ```
+
+## WVT-1-CLOSEOUT Update
+
+WVT-1-CLOSEOUT confirmed both generated thumbnails remain durably persisted,
+unchanged, and independently retrievable from their exact
+`generated_proposal_bundle` lineage. Filesystem independence remains proven:
+the generated thumbnail path does not depend on
+`ODV_GENERATED_PROPOSAL_001/` or `ODV_GENERATED_PROPOSAL_002/` being present
+locally.
+
+No Generated Proposal Bundle, Generated Website Proposal, Provider Payload,
+WGP, Improvement Plan, Compliance, Evolution Analysis, publishing state,
+deployment state, public route, worker, provider execution, AI execution, or
+DNS state was modified by WVT closeout. Thumbnails remain private presentation
+derivatives, while durable generated previews remain authoritative for
+interaction.
+
+Canonical WVT closeout record:
+
+```text
+docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md
+```

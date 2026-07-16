@@ -5,8 +5,13 @@
 
 ## Current Phase
 
-WVT-1-VERIFY - ODV Thumbnail Production Materialization and Workspace
-Activation is COMPLETE.
+WVT-1-CLOSEOUT - Website Version Thumbnail Canonical Closeout is COMPLETE.
+
+Canonical WVT-1-CLOSEOUT record:
+
+- `docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md`
+
+WVT-1 implementation and WVT-1-VERIFY production materialization are complete.
 
 Canonical WVT-1-VERIFY record:
 
@@ -26,6 +31,11 @@ Iteration 1 generated thumbnail, and Iteration 2 generated thumbnail. The hero
 comparison displays Original versus latest Iteration 2 visually. The
 Generation Evolution Dashboard displays both generated thumbnails. Existing
 source/original and durable preview links remain the click targets.
+
+The thumbnails are private superadmin presentation derivatives only. Live
+source and durable generated previews remain authoritative. Thumbnails are not
+source truth, business truth, approval, publishing, deployment, public sharing,
+or provider output.
 
 No public access, proposal regeneration, Provider execution, AI execution,
 Business Approval, publishing, deployment, DNS mutation, schema or migration,
@@ -101,16 +111,17 @@ changes, Provider Payload changes, proposal regeneration, Proposal v3,
 generation, approval, publishing, deployment, DNS, workers, mutation APIs, or
 editing controls.
 
-Recommended next phase after WVT-1-VERIFY:
+Recommended next phase after WVT-1-CLOSEOUT:
 
 ```text
-WVT-1-CLOSEOUT - Website Version Thumbnail Canonical Closeout
+Continuity Delivery Pipeline Design
 ```
 
-Keep it read-only unless separately authorized. Do not create Proposal v3,
-public thumbnail routes, public preview sharing, workers, scheduled captures,
-confirmation mutations, publishing, deployment, provider execution, AI
-execution, DNS mutation, schema migration, or generated website deployment.
+Keep the next track design/contract-focused unless separately authorized. Do
+not create Proposal v3, public thumbnail routes, public preview sharing,
+workers, scheduled captures, confirmation mutations, publishing, deployment,
+provider execution, AI execution, DNS mutation, schema migration, generated
+website deployment, Business Approval, or WDB/WGP mutation.
 
 Prior VCU-2 recommended next phase:
 

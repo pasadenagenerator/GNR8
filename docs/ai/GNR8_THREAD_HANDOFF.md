@@ -5738,6 +5738,33 @@ Rules:
 ## Ready-to-Copy Prompt
 
 "Read these files first in this exact order: docs/ai/GNR8_THREAD_HANDOFF.md, docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md, docs/ai/GNR8_CURRENT_STATE.md, docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md, docs/ai/GNR8_COLLABORATION_PROTOCOL.md, docs/ai/GNR8_PROJECT_MAP.md, docs/ai/GNR8_CANONICAL_DOC_INDEX.md, and docs/ai/decisions/*.md. Read docs/ai/GNR8_COLLABORATION_PROTOCOL.md before generating Codex tasks. Then compare with apps/platform/gnr8/**, apps/worker/gnr8/**, and apps/platform/supabase/migrations/** before making any changes. Keep deterministic contracts, control-plane boundaries, and no-live-execution rules intact."
-# WVT-1 Update
+# WVT-1-CLOSEOUT Update
 
-Implemented the Website Version Thumbnail runtime foundation. Key files are `website-version-thumbnail-contract.ts`, `website-version-thumbnail-builder.ts`, `website-version-thumbnail-persistence.ts`, `website-version-thumbnail-materializer.ts`, `website-version-thumbnail-odv.cli.ts`, and the superadmin thumbnail route under Workspace. The next phase is explicit approval for `WVT-1-VERIFY - ODV Thumbnail Production Materialization`; do not perform production thumbnail writes without that approval.
+Website Version Thumbnail is COMPLETE. Runtime implementation landed in
+`b4b43282 Implement thumbnail runtime`; ODV production verification landed in
+`c8c55f35 Verify ODV thumbnails`; canonical closeout is recorded in
+`docs/architecture/WEBSITE_VERSION_THUMBNAIL_CLOSEOUT.md`.
+
+ODV site version `09dce7ea-d860-4f60-a1eb-26c3335b302e` has exactly three
+immutable private `website_version_thumbnail` artifacts:
+
+```text
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+Workspace displays the Original, Iteration 1, and Iteration 2 thumbnails.
+Evolution displays Iteration 1 and Iteration 2 thumbnails. Live source and
+durable generated previews remain authoritative click targets. Thumbnails are
+private presentation derivatives only; they are not source truth, business
+truth, approval, publishing, deployment, public sharing, or provider output.
+
+Closeout verified idempotency, filesystem independence, private fail-closed
+routes, DB pool health `total=1 idle=1 waiting=0`, and no-write-beyond-scope.
+No public thumbnail access, screenshot worker, recurring capture, Proposal v3,
+WDB/WGP mutation, provider execution, AI execution, publishing, generated-site
+deployment, DNS mutation, schema, migration, or worker was introduced.
+
+Recommended next track: Continuity Delivery Pipeline Design. Keep it
+design/contract-focused unless separately authorized.

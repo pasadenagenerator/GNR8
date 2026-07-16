@@ -293,10 +293,10 @@ Knowledge Workspace:
 ```
 
 The Workspace still does not generate thumbnails. VCU projects original-source
-thumbnail readiness only; ODV and ViroiDoc both have existing source screenshot
-references but no safe screenshot access ref yet, so Workspace thumbnail
-suitability remains blocked. Generated iteration thumbnails remain outside VCU
-and outside this phase.
+thumbnail readiness only; generated iteration thumbnails remain outside VCU
+and outside this phase. For ODV specifically, WVT-1-VERIFY later materialized
+the approved original-source and generated-iteration thumbnail records, and
+WVT-1-CLOSEOUT verified Workspace now consumes them.
 
 ## KWX-3 Visual Command Center Result
 
@@ -331,3 +331,22 @@ new source knowledge, mutation controls, Proposal v3, or any runtime write.
 # WVT-1 Update
 
 Workspace visual polish now treats thumbnail absence as an intentional state. Cards render persisted thumbnails when available and otherwise show a polished unavailable/live-preview-available panel without broken image placeholders or dashboard iframes.
+
+## WVT-1-CLOSEOUT Update
+
+The VCU-2 thumbnail-readiness limitation above is historical for ODV. WVT-1
+and WVT-1-VERIFY materialized and served the approved ODV thumbnails, and
+WVT-1-CLOSEOUT verified they remain operational:
+
+```text
+Original: website_version_thumbnail_553d438ae24a13985fc18f99debfa55d
+Iteration 1: website_version_thumbnail_4fc6a605432164d10b46eb41ad7da639
+Iteration 2: website_version_thumbnail_a71501efe316a082c6b6534da699264f
+```
+
+Workspace displays real persisted thumbnails for completed versions. Future
+remains an intentional empty state. Thumbnails stay private, superadmin-only
+presentation derivatives and do not imply approval, publishing, deployment,
+public sharing, source truth, or business truth.
+
+Current recommended next track: continuity delivery pipeline design.
