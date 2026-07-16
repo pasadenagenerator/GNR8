@@ -160,7 +160,7 @@ function Hero(props: { model: GenerationBusinessFoundationProjection }) {
       <p style={{ margin: "0 0 8px", color: "#0f766e", fontWeight: 800 }}>Business Foundation</p>
       <h1 style={{ margin: 0, fontSize: 38, lineHeight: 1.1 }}>{hero.businessName ?? "Business identity unavailable"}</h1>
       <p style={{ maxWidth: 860, margin: "14px 0 0", color: "#334155", fontSize: 18, lineHeight: 1.55 }}>
-        {hero.description ?? "GNR8 does not yet have a persisted human-readable business description for this site version."}
+        Supporting inspection page for business foundation evidence. Knowledge Workspace is the primary product view; this page explains the business meaning behind it. {hero.description ?? "GNR8 does not yet have a persisted human-readable business description for this site version."}
       </p>
       <div style={{ ...grid3Style, marginTop: 18 }}>
         <div style={cardStyle}>

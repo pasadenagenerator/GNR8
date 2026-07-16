@@ -93,7 +93,7 @@ function Summary(props: { projection: SourceContentVisualContinuityProjection })
       <p style={{ margin: "0 0 8px", color: "#475569", fontWeight: 900 }}>Source Continuity Summary</p>
       <h1 style={{ margin: 0, fontSize: 38, lineHeight: 1.1 }}>{p.sourceIdentity.hostname ?? "Original website unavailable"}</h1>
       <p style={{ maxWidth: 940, margin: "14px 0 0", color: "#334155", fontSize: 18, lineHeight: 1.55 }}>
-        Source content and visual continuity composes original website evidence into deterministic preservation, reuse, and confirmation candidates. Candidate does not mean confirmed brand asset.
+        Supporting inspection page for source content and visual continuity. Knowledge Workspace is the primary product view; this page composes original website evidence into deterministic preservation, reuse, and confirmation candidates. Candidate does not mean confirmed brand asset.
       </p>
       <div style={{ ...grid3Style, marginTop: 18 }}>
         <CountCard label="Readiness" value={p.readiness.status.replaceAll("_", " ")} detail={p.readiness.summary} />

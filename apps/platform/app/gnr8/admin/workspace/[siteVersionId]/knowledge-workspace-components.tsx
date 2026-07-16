@@ -2,10 +2,13 @@ import type { CSSProperties, ReactNode } from "react";
 
 import type {
   KnowledgeWorkspaceAdvancedProjection,
+  KnowledgeWorkspaceContinuityItemProjection,
+  KnowledgeWorkspaceContinuityProjection,
   KnowledgeWorkspaceGapProjection,
   KnowledgeWorkspaceHealthProjection,
   KnowledgeWorkspaceHeroProjection,
   KnowledgeWorkspaceKnowledgeCardProjection,
+  KnowledgeWorkspaceNextActionProjection,
   KnowledgeWorkspaceProjection,
   KnowledgeWorkspaceStoryStepProjection,
   KnowledgeWorkspaceVersionProjection,
@@ -114,6 +117,12 @@ function ReadOnlyLink(props: { href: string | null; children: ReactNode; primary
 }
 
 export function WorkspaceHero(props: { hero: KnowledgeWorkspaceHeroProjection }) {
+  const storySteps = [
+    { label: "Original website", value: props.hero.originalWebsiteUrl ?? "not available" },
+    { label: "Current latest proposal", value: props.hero.latestProposalState },
+    { label: "Current understanding state", value: props.hero.overallUnderstandingState },
+    { label: "Current recommendation", value: props.hero.currentRecommendation },
+  ];
   return (
     <section style={{ border: "1px solid #bdd7f2", borderRadius: 8, background: "#f8fbff", padding: 28 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 22, alignItems: "start" }}>
@@ -121,28 +130,31 @@ export function WorkspaceHero(props: { hero: KnowledgeWorkspaceHeroProjection })
           <p style={{ margin: "0 0 7px", color: "#1d4ed8", fontWeight: 900 }}>Knowledge Workspace</p>
           <h1 style={{ margin: 0, fontSize: 44, lineHeight: 1.06 }}>{props.hero.businessName}</h1>
           <p style={{ margin: "12px 0 0", maxWidth: 820, color: "#334155", fontSize: 18, lineHeight: 1.55 }}>
-            The operator console for this imported website: what GNR8 has observed, where the latest quarantined proposal stands, what improved, and what still needs confirmation.
+            Primary product dashboard for this imported website. It summarizes what was imported, what GNR8 understands, what will be preserved, what improved, what still needs confirmation, and what should happen next.
           </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 20 }}>
-            <ReadOnlyLink href={props.hero.links.originalWebsiteHref} external primary>Open Original Website</ReadOnlyLink>
-            <ReadOnlyLink href={props.hero.links.latestProposalPreviewHref} primary>Open Latest Preview</ReadOnlyLink>
-            <ReadOnlyLink href={props.hero.links.evolutionHref}>Open Evolution</ReadOnlyLink>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginTop: 20 }}>
+            <WorkspaceMetric label="Import" value={props.hero.importState} tone="good" />
+            <WorkspaceMetric label="Understanding" value={props.hero.overallUnderstandingState} />
+            <WorkspaceMetric label="Assets discovered" value={props.hero.discoveredAssetCount} />
+            <WorkspaceMetric label="Content sections" value={props.hero.discoveredSectionCount} />
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+            {props.hero.unresolvedSignals.length === 0 ? <Badge tone="green">No unresolved product signals highlighted</Badge> : props.hero.unresolvedSignals.map((signal) => <Badge key={signal} tone="amber">{signal}</Badge>)}
           </div>
         </div>
         <div style={{ display: "grid", gap: 10 }}>
-          <WorkspaceMetric label="Original Website" value={props.hero.originalWebsiteUrl} />
-          <WorkspaceMetric label="Latest Iteration" value={props.hero.currentIteration} />
-          <WorkspaceMetric label="Generation Status" value={props.hero.currentGenerationCycle} />
-          <WorkspaceMetric label="Compliance Status" value={props.hero.currentComplianceState} tone="warn" />
-          <WorkspaceMetric label="Improvement Status" value={props.hero.currentEvolutionState} />
-          <WorkspaceMetric label="Current Recommendation" value={props.hero.currentRecommendation} tone="warn" />
-          <WorkspaceMetric label="Workspace Confidence" value={props.hero.currentConfidence} />
+          {storySteps.map((step, index) => (
+            <div key={step.label} style={quietCardStyle}>
+              <p style={{ margin: 0, color: "#64748b", fontSize: 12, fontWeight: 800 }}>{step.label}</p>
+              <p style={{ margin: "7px 0 0", color: index === storySteps.length - 1 ? "#9a3412" : "#172033", fontSize: 18, fontWeight: 850, lineHeight: 1.3, overflowWrap: "anywhere" }}>{step.value}</p>
+              {index < storySteps.length - 1 ? <p style={{ margin: "8px 0 0", color: "#94a3b8", fontWeight: 900 }}>↓</p> : null}
+            </div>
+          ))}
         </div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18, paddingTop: 18, borderTop: "1px solid #dbeafe" }}>
-        <ReadOnlyLink href={props.hero.links.businessFoundationHref}>Open Business Foundation</ReadOnlyLink>
-        <ReadOnlyLink href={props.hero.links.websiteUnderstandingHref}>Open Website Understanding</ReadOnlyLink>
-        <ReadOnlyLink href={props.hero.links.continuityHref}>Open Content & Visual Continuity</ReadOnlyLink>
+        <ReadOnlyLink href={props.hero.links.originalWebsiteHref} external primary>Open Original Website</ReadOnlyLink>
+        <ReadOnlyLink href={props.hero.links.latestProposalPreviewHref} primary>Open Latest Preview</ReadOnlyLink>
       </div>
     </section>
   );
@@ -175,9 +187,8 @@ export function VersionCard(props: { version: KnowledgeWorkspaceVersionProjectio
       <h3 style={{ margin: "12px 0 8px", fontSize: primary ? 22 : 19 }}>{props.version.label}</h3>
       <div style={{ display: "grid", gap: 8 }}>
         <WorkspaceMetric label="Status" value={props.version.status} />
-        <WorkspaceMetric label="Compliance" value={props.version.compliance} />
-        <WorkspaceMetric label="Recommendation" value={props.version.recommendation} />
-        <WorkspaceMetric label="Improvement" value={props.version.improvementState} />
+        <WorkspaceMetric label="Major improvement" value={props.version.majorImprovement} />
+        <WorkspaceMetric label="Major limitation" value={props.version.majorLimitation} tone="warn" />
       </div>
       <div style={{ marginTop: 12 }}>
         <ReadOnlyLink href={props.version.openPreviewHref} external={props.version.kind === "original"}>Open Preview</ReadOnlyLink>
@@ -189,8 +200,8 @@ export function VersionCard(props: { version: KnowledgeWorkspaceVersionProjectio
 export function WebsiteVersions(props: { versions: KnowledgeWorkspaceVersionProjection[] }) {
   return (
     <section style={sectionStyle}>
-      <SectionTitle title="Website Versions">
-        <p style={{ margin: 0 }}>Original source and quarantined generated proposal iterations are shown as read-only timeline cards. The latest persisted iteration is emphasized.</p>
+      <SectionTitle eyebrow="Visual center" title="Website Evolution">
+        <p style={{ margin: 0 }}>Original source, Iteration 1, Iteration 2, and the empty future state are shown as read-only journey cards. Iteration 2 is visually emphasized when present.</p>
       </SectionTitle>
       <div style={grid3Style}>
         {props.versions.map((version) => <VersionCard key={version.label} version={version} />)}
@@ -233,11 +244,46 @@ export function KnowledgeCard(props: { card: KnowledgeWorkspaceKnowledgeCardProj
 export function BusinessUnderstanding(props: { cards: KnowledgeWorkspaceKnowledgeCardProjection[] }) {
   return (
     <section style={sectionStyle}>
-      <SectionTitle title="Business Understanding">
+      <SectionTitle title="What GNR8 Understands">
         <p style={{ margin: 0 }}>Plain-language business knowledge only. Internal identifiers stay in Advanced.</p>
       </SectionTitle>
       <div style={grid2Style}>
         {props.cards.map((card) => <KnowledgeCard key={card.label} card={card} />)}
+      </div>
+    </section>
+  );
+}
+
+function ContinuityCard(props: { item: KnowledgeWorkspaceContinuityItemProjection }) {
+  return (
+    <article style={cardStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+        <h3 style={{ margin: 0, fontSize: 19 }}>{props.item.label}</h3>
+        <Badge tone={props.item.state.includes("unavailable") || props.item.state.includes("unresolved") ? "amber" : "green"}>{props.item.state}</Badge>
+      </div>
+      {props.item.previewHref ? (
+        <img src={props.item.previewHref} alt={`${props.item.label} preview`} style={{ display: "block", width: "100%", maxHeight: 150, objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: 8, background: "#ffffff", padding: 8, marginTop: 12 }} />
+      ) : null}
+      <p style={{ margin: "10px 0 0", color: "#334155", lineHeight: 1.5 }}>{props.item.detail}</p>
+      <AssetList values={props.item.values} empty="No source material is available for this category." />
+    </article>
+  );
+}
+
+export function SourceContentVisualContinuity(props: { continuity: KnowledgeWorkspaceContinuityProjection }) {
+  return (
+    <section style={sectionStyle}>
+      <SectionTitle title="Source Content & Visual Continuity">
+        <p style={{ margin: 0 }}>What original materials survive: logo candidate, main images, colors, typography, navigation, content, CTA, and contact signals.</p>
+      </SectionTitle>
+      <div style={{ ...quietCardStyle, marginBottom: 14 }}>
+        <p style={{ margin: 0, color: "#334155", lineHeight: 1.55 }}>{props.continuity.summary}</p>
+      </div>
+      <div style={grid3Style}>
+        {props.continuity.items.map((item) => <ContinuityCard key={item.label} item={item} />)}
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <ReadOnlyLink href={props.continuity.href}>Open supporting inspection page</ReadOnlyLink>
       </div>
     </section>
   );
@@ -334,7 +380,9 @@ function AssetList(props: { values: string[]; empty: string }) {
 export function StoryTimeline(props: { steps: KnowledgeWorkspaceStoryStepProjection[] }) {
   return (
     <section style={sectionStyle}>
-      <SectionTitle title="Transformation Story" />
+      <SectionTitle title="Supporting Inspection Pages">
+        <p style={{ margin: 0 }}>Business Foundation, Website Understanding, Source Content & Visual Continuity, and Generation Evolution remain available as supporting inspection pages. Knowledge Workspace is the primary product view.</p>
+      </SectionTitle>
       <ol style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, margin: 0, padding: 0, listStyle: "none" }}>
         {props.steps.map((step, index) => (
           <li key={step.label} style={quietCardStyle}>
@@ -342,6 +390,28 @@ export function StoryTimeline(props: { steps: KnowledgeWorkspaceStoryStepProject
             <h3 style={{ margin: "7px 0 6px", fontSize: 18 }}>{step.label}</h3>
             <p style={{ margin: "0 0 10px", color: "#475569", lineHeight: 1.45 }}>{step.summary}</p>
             <ReadOnlyLink href={step.href}>Open supporting page</ReadOnlyLink>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+export function NextRecommendedAction(props: { actions: KnowledgeWorkspaceNextActionProjection[] }) {
+  return (
+    <section style={sectionStyle}>
+      <SectionTitle title="Next Recommended Action">
+        <p style={{ margin: 0 }}>Read-only operator guidance for what should happen before the next proposal.</p>
+      </SectionTitle>
+      <ol style={{ display: "grid", gap: 10, margin: 0, padding: 0, listStyle: "none" }}>
+        {props.actions.map((action, index) => (
+          <li key={action.label} style={{ ...cardStyle, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <span style={{ display: "grid", placeItems: "center", width: 34, height: 34, borderRadius: 8, background: "#eff6ff", color: "#1d4ed8", fontWeight: 900 }}>{index + 1}</span>
+            <div style={{ flex: "1 1 260px" }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>{action.label}</h3>
+              <p style={{ margin: "5px 0 0", color: "#475569", lineHeight: 1.45 }}>{action.reason}</p>
+            </div>
+            {action.targetHref ? <ReadOnlyLink href={action.targetHref}>Inspect</ReadOnlyLink> : <span style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>Guidance only</span>}
           </li>
         ))}
       </ol>
@@ -357,6 +427,7 @@ export function GapCard(props: { gap: KnowledgeWorkspaceGapProjection }) {
       <WorkspaceMetric label="state" value={props.gap.state} tone={urgent ? "warn" : "neutral"} />
       <p style={{ margin: "10px 0 0", color: "#334155", lineHeight: 1.5 }}>{props.gap.currentEvidence}</p>
       <p style={{ margin: "10px 0 0", color: "#9a3412", lineHeight: 1.45 }}><strong>Why it matters:</strong> {props.gap.whyItMatters}</p>
+      <p style={{ margin: "10px 0 0", color: "#334155", lineHeight: 1.45 }}><strong>After confirmation:</strong> {props.gap.afterConfirmation}</p>
     </article>
   );
 }
@@ -364,10 +435,16 @@ export function GapCard(props: { gap: KnowledgeWorkspaceGapProjection }) {
 export function CurrentKnowledgeGaps(props: { gaps: KnowledgeWorkspaceGapProjection[] }) {
   return (
     <section style={sectionStyle}>
-      <SectionTitle title="Current Knowledge Gaps" />
-      <div style={grid3Style}>
-        {props.gaps.map((gap) => <GapCard key={gap.label} gap={gap} />)}
-      </div>
+      <SectionTitle title="Knowledge Gaps">
+        <p style={{ margin: 0 }}>Only unresolved product knowledge is shown here, ranked by likely impact on the next proposal.</p>
+      </SectionTitle>
+      {props.gaps.length === 0 ? (
+        <div style={quietCardStyle}><EmptyText>No meaningful missing knowledge is currently highlighted.</EmptyText></div>
+      ) : (
+        <div style={grid3Style}>
+          {props.gaps.map((gap) => <GapCard key={gap.label} gap={gap} />)}
+        </div>
+      )}
     </section>
   );
 }
@@ -399,7 +476,7 @@ export function AdvancedDetails(props: { advanced: KnowledgeWorkspaceAdvancedPro
   return (
     <section style={sectionStyle}>
       <details style={cardStyle}>
-        <summary style={{ cursor: "pointer", fontWeight: 900, fontSize: 18 }}>Advanced: artifact IDs, diagnostics, evidence counts, DryRun IDs, Generation IDs, and limitations</summary>
+        <summary style={{ cursor: "pointer", fontWeight: 900, fontSize: 18 }}>Advanced: artifact IDs, diagnostics, evidence counts, DryRun IDs, Generation IDs, raw lineage, and limitations</summary>
         <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
           <details style={quietCardStyle}>
             <summary style={{ cursor: "pointer", fontWeight: 800 }}>Artifact Explorer</summary>
@@ -458,9 +535,10 @@ export function KnowledgeWorkspace(props: { model: KnowledgeWorkspaceProjection 
       <WorkspaceHero hero={props.model.hero} />
       <WebsiteVersions versions={props.model.versions} />
       <BusinessUnderstanding cards={props.model.businessUnderstanding} />
-      <VisualIdentityCard visual={props.model.visualIdentity} />
+      <SourceContentVisualContinuity continuity={props.model.continuity} />
       <CurrentKnowledgeGaps gaps={props.model.gaps} />
       <WorkspaceHealth health={props.model.health} />
+      <NextRecommendedAction actions={props.model.nextActions} />
       <StoryTimeline steps={props.model.transformationStory} />
       <AdvancedDetails advanced={props.model.advanced} />
     </>

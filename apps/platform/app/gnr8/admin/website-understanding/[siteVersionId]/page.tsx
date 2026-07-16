@@ -106,7 +106,7 @@ function SourceHero(props: { projection: SourceWebsiteUnderstandingProjection })
       <p style={{ margin: "0 0 8px", color: "#0f766e", fontWeight: 800 }}>Website Understanding</p>
       <h1 style={{ margin: 0, fontSize: 38, lineHeight: 1.1 }}>{source.hostname ?? "Source website unavailable"}</h1>
       <p style={{ maxWidth: 920, margin: "14px 0 0", color: "#334155", fontSize: 18, lineHeight: 1.55 }}>
-        Source-site understanding explains what GNR8 has observed, structured, and still cannot classify about the imported original website. Candidate does not mean confirmed brand identity or business truth.
+        Supporting inspection page for source-site understanding. Knowledge Workspace is the primary product view; this page explains what GNR8 observed, structured, and still cannot classify about the imported original website. Candidate does not mean confirmed brand identity or business truth.
       </p>
       <div style={{ ...grid3Style, marginTop: 18 }}>
         <CountCard label="Source URL" value={source.sourceUrl ?? "not available"} detail={source.finalUrl ? `Final URL: ${source.finalUrl}` : undefined} />

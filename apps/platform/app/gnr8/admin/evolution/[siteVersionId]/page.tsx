@@ -277,7 +277,7 @@ export default async function GenerationEvolutionDashboardPage(props: PageProps)
         <p style={{ margin: "0 0 6px", color: "#0f766e", fontWeight: 700 }}>Read-only GNR8 Runtime UX</p>
         <h1 style={{ margin: 0 }}>Generation Evolution Dashboard</h1>
         <p style={{ marginTop: 8, color: "#475569" }}>
-          ODV generation history, generated proposal previews, compliance results, evolution analysis, and canonical artifact lineage.
+          Supporting inspection page for generation evolution. Knowledge Workspace is the primary product view; this page keeps generated proposal previews, compliance results, evolution analysis, and canonical artifact lineage available for deeper review.
         </p>
       </header>
 

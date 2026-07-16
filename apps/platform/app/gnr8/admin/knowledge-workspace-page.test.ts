@@ -53,17 +53,21 @@ test("knowledge workspace contains required operator sections and reusable compo
     "VersionCard",
     "VisualIdentityCard",
     "VisualStateBadge",
+    "SourceContentVisualContinuity",
+    "ContinuityCard",
     "GapCard",
     "HealthCard",
     "StoryTimeline",
+    "NextRecommendedAction",
     "AdvancedDetails",
     "Knowledge Workspace",
-    "Website Versions",
-    "Business Understanding",
-    "Visual Identity",
-    "Transformation Story",
-    "Current Knowledge Gaps",
+    "Website Evolution",
+    "What GNR8 Understands",
+    "Source Content & Visual Continuity",
+    "Knowledge Gaps",
     "Workspace Health",
+    "Next Recommended Action",
+    "Supporting Inspection Pages",
     "Advanced",
     "Artifact Explorer",
     "Diagnostics",
@@ -81,9 +85,8 @@ test("knowledge workspace exposes correct read-only navigation", async () => {
   for (const label of [
     "Open Original Website",
     "Open Latest Preview",
-    "Open Evolution",
-    "Open Business Foundation",
-    "Open Website Understanding",
+    "Open supporting inspection page",
+    "Inspect",
     "Open Preview",
   ]) {
     assert.equal(source.includes(label), true, `missing ${label}`);
@@ -93,6 +96,7 @@ test("knowledge workspace exposes correct read-only navigation", async () => {
     "/gnr8/admin/evolution/",
     "/gnr8/admin/business-foundation/",
     "/gnr8/admin/website-understanding/",
+    "/gnr8/admin/continuity/",
   ]) {
     assert.equal(projection.includes(route), true, `missing ${route}`);
   }
@@ -104,17 +108,16 @@ test("knowledge workspace hero, version cards, and gap cards expose required fie
 
   for (const label of [
     "Original Website",
-    "Latest Iteration",
-    "Generation Status",
-    "Compliance Status",
-    "Improvement Status",
-    "Current Recommendation",
-    "Workspace Confidence",
+    "Current latest proposal",
+    "Current understanding state",
+    "Current recommendation",
+    "Assets discovered",
+    "Content sections",
     "Status",
-    "Compliance",
-    "Recommendation",
-    "Improvement",
+    "Major improvement",
+    "Major limitation",
     "Why it matters:",
+    "After confirmation:",
   ]) {
     assert.equal(source.includes(label), true, `missing ${label}`);
   }
@@ -122,7 +125,7 @@ test("knowledge workspace hero, version cards, and gap cards expose required fie
   for (const label of [
     "badges",
     "emphasis",
-    "Latest iteration",
+    "Latest proposal available",
     "Quarantined generated proposal",
     "Audience",
     "Offerings",
@@ -220,7 +223,7 @@ test("knowledge workspace advanced details are collapsed details disclosures", a
 
   assert.equal(advancedSource.includes("<details"), true);
   assert.equal(advancedSource.includes("<summary"), true);
-  assert.equal(advancedSource.includes("Advanced: artifact IDs, diagnostics, evidence counts, DryRun IDs, Generation IDs, and limitations"), true);
+  assert.equal(advancedSource.includes("Advanced: artifact IDs, diagnostics, evidence counts, DryRun IDs, Generation IDs, raw lineage, and limitations"), true);
   assert.equal(advancedSource.includes("siteVersionId"), true);
   assert.equal(advancedSource.includes("DryRun IDs"), true);
   assert.equal(advancedSource.includes("Generation IDs"), true);
