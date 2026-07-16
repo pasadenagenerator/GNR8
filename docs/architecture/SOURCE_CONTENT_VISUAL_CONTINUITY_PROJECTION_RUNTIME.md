@@ -330,3 +330,32 @@ VCU-3 should design a read-only downstream enrichment contract showing exactly
 how WDB/WGP may consume VCU as source continuity context without promoting
 content into business truth, canonical brand identity, asset approval, or
 provider-ready generation instructions.
+
+## KWX-3 Workspace Consumption
+
+KWX-3 consumes the existing VCU runtime projection inside the Knowledge
+Workspace as the consolidated:
+
+```text
+What Will Remain Recognizable
+```
+
+The Workspace uses VCU data for logo candidates, representative image
+candidates, observed color signals, typography candidates, navigation, CTA,
+contact, source content, and layout continuity. It keeps these signals as
+candidates or observations only.
+
+ODV still has source screenshot references but no safe screenshot access ref,
+so the Workspace must not present them as displayed source screenshots. When a
+representative source image is used, it is labelled `Representative imported
+image`.
+
+Fontello remains icon-font evidence. Observed colors remain observed color
+signals, not brand colors. Candidate logo remains `Candidate logo -
+confirmation required`.
+
+KWX-3 does not change VCU truth, VCU runtime, source parsing, source capture,
+asset extraction, screenshot access, thumbnail generation, content
+transformation, asset approval, WDB/WGP enrichment, Provider Payload,
+generation, publishing, deployment, DNS, schema, persistence, API, worker, or
+AI behavior.

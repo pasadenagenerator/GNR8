@@ -341,3 +341,21 @@ Foundation. It does not change the Business Foundation projection semantics,
 Business Discovery, DBT, BUR, Business Alignment, WDB, WGP, persistence,
 schema, API, generation, AI, publishing, deployment, DNS, or runtime
 architecture.
+
+## KWX-3 Supporting Page Role
+
+KWX-3 keeps Business Foundation as a supporting inspection page. The primary
+operator story now starts in Knowledge Workspace.
+
+Business knowledge in the Workspace is summarized as:
+
+```text
+Known Or Observed
+Needs Confirmation
+```
+
+The Workspace does not change Business Foundation truth, Business Discovery,
+DBT, BUR, Business Alignment, WDB, WGP, persistence, schema, API, generation,
+AI, approval, publishing, deployment, DNS, or runtime architecture. It only
+composes existing business states into a shorter read-only product summary and
+links back to Business Foundation for inspection.

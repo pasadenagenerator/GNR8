@@ -5603,6 +5603,75 @@ Reconstruction Dry Run Boundary is complete:
 
 ## G) How Next Thread Should Behave
 
+## KWX-3 Knowledge Workspace Visual Command Center Handoff
+
+KWX-3 is complete in the branch as UX and deterministic read-only projection
+composition only.
+
+Canonical architecture note:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_VISUAL_COMMAND_CENTER.md
+```
+
+Changed implementation:
+
+- `apps/platform/gnr8/architecture/knowledge-workspace-projection.ts`
+- `apps/platform/app/gnr8/admin/workspace/[siteVersionId]/knowledge-workspace-components.tsx`
+- `apps/platform/app/gnr8/admin/knowledge-workspace-page.test.ts`
+
+The Workspace is now the primary product command center. It shows Original
+Website and Latest Proposal first, then a Website Evolution timeline, Known Or
+Observed versus Needs Confirmation, What Will Remain Recognizable, Knowledge
+Progress, prioritized gaps, one primary recommendation, secondary supporting
+inspection links, and collapsed Advanced.
+
+Preview truthfulness rules are now explicit:
+
+- original visual kind: `source_screenshot`, `source_preview`,
+  `representative_source_asset`, or `unavailable`
+- generated visual kind: `live_generated_proposal_preview`,
+  `persisted_generated_screenshot`, `bundle_cover_image`,
+  `live_preview_available`, or `generated_unavailable`
+- representative source assets are labelled `Representative imported image`
+- generated previews are never labelled as published websites
+- quarantined proposals are never labelled approved
+
+ODV browser verification status:
+
+- Authenticated production browser access initially reached the deployed ODV
+  Workspace, confirming the old deployed UI was still present.
+- Subsequent production reloads returned a server-side application error with
+  digest `1178603228`.
+- A read-only local projection probe hit production database pool exhaustion:
+  `EMAXCONNSESSION max clients reached in session mode`.
+- Because KWX-3 does not deploy, browser verification of the new UI remains a
+  post-deploy follow-up.
+
+Validation passed:
+
+```text
+pnpm exec tsx --test apps/platform/app/gnr8/admin/knowledge-workspace-page.test.ts
+pnpm exec tsx --test apps/platform/app/gnr8/admin/source-content-visual-continuity-page.test.ts
+pnpm exec tsx --test apps/platform/gnr8/architecture/source-content-visual-continuity-projection-builder.test.ts apps/platform/gnr8/architecture/source-content-visual-continuity-projection-loader.test.ts apps/platform/gnr8/architecture/source-content-visual-continuity-projection-contract.test.ts
+cd apps/platform && pnpm run vercel-build
+git diff --check
+```
+
+Safety boundary:
+
+- no schema or migrations
+- no API routes
+- no persistence modules
+- no source/business/continuity artifact mutation
+- no proposal regeneration
+- no Proposal v3
+- no screenshot generation
+- no thumbnail persistence
+- no confirmation controls
+- no production writes
+- no approval, publishing, deployment, DNS, worker, provider, or AI execution
+
 1. Read canonical files first before proposing changes.
 2. Compare docs against actual repository structure before edits.
 3. Update canonical docs instead of creating parallel systems.

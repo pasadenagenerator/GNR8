@@ -24,6 +24,30 @@ import { loadSourceWebsiteUnderstandingProjection } from "./source-website-under
 
 export type WorkspaceState = "Known" | "Unknown" | "Needs confirmation";
 
+export type KnowledgeWorkspaceOriginalVisualKind =
+  | "source_screenshot"
+  | "source_preview"
+  | "representative_source_asset"
+  | "unavailable";
+
+export type KnowledgeWorkspaceGeneratedPreviewKind =
+  | "live_generated_proposal_preview"
+  | "persisted_generated_screenshot"
+  | "bundle_cover_image"
+  | "live_preview_available"
+  | "generated_unavailable";
+
+export type KnowledgeWorkspaceVisualPreviewProjection = {
+  title: string;
+  kind: KnowledgeWorkspaceOriginalVisualKind | KnowledgeWorkspaceGeneratedPreviewKind;
+  label: string;
+  href: string | null;
+  imageHref: string | null;
+  unavailableReason: string | null;
+  altText: string;
+  badges: string[];
+};
+
 export type KnowledgeWorkspaceHeroProjection = {
   businessName: string;
   originalWebsiteUrl: string | null;
@@ -34,10 +58,14 @@ export type KnowledgeWorkspaceHeroProjection = {
   currentRecommendation: string;
   currentEvolutionState: string;
   currentComplianceState: string;
+  overallInterpretation: string;
+  overallRecommendation: string;
   importState: string;
   discoveredAssetCount: number | string;
   discoveredSectionCount: number | string;
   latestProposalState: string;
+  originalVisual: KnowledgeWorkspaceVisualPreviewProjection;
+  latestPreview: KnowledgeWorkspaceVisualPreviewProjection;
   unresolvedSignals: string[];
   links: {
     originalWebsiteHref: string | null;
@@ -56,19 +84,26 @@ export type KnowledgeWorkspaceVersionProjection = {
   badges: string[];
   previewHref: string | null;
   previewImageHref: string | null;
+  previewKind: KnowledgeWorkspaceOriginalVisualKind | KnowledgeWorkspaceGeneratedPreviewKind;
+  previewLabel: string;
   previewUnavailableReason: string | null;
+  quarantineState: string;
   status: string;
   majorImprovement: string;
   majorLimitation: string;
   openPreviewHref: string | null;
+  transitionFromPrevious: string | null;
 };
 
-export type KnowledgeWorkspaceKnowledgeCardProjection = {
+export type KnowledgeWorkspaceSummaryItemProjection = {
   label: string;
-  known: string[];
-  unknown: string[];
-  needsConfirmation: string[];
-  confidence: string;
+  state: string;
+  detail: string;
+};
+
+export type KnowledgeWorkspaceKnownUnknownProjection = {
+  knownObserved: KnowledgeWorkspaceSummaryItemProjection[];
+  needsConfirmation: KnowledgeWorkspaceSummaryItemProjection[];
 };
 
 export type KnowledgeWorkspaceVisualIdentityProjection = {
@@ -84,6 +119,39 @@ export type KnowledgeWorkspaceVisualIdentityProjection = {
   importedIcons: ImportedAssetPreviewProjection[];
   importedFonts: ImportedAssetPreviewProjection[];
   unavailableReasons: string[];
+};
+
+export type KnowledgeWorkspaceRecognizableProjection = {
+  summary: string;
+  logoCandidate: {
+    previewHref: string | null;
+    label: string;
+    confidence: string;
+    confirmationRequirement: string;
+    unavailableReason: string | null;
+  };
+  representativeImages: Array<{
+    previewHref: string;
+    label: string;
+    state: string;
+    altText: string;
+  }>;
+  colorSignals: Array<{
+    value: string;
+    role: string;
+    state: string;
+  }>;
+  typographySummary: Array<{
+    family: string;
+    role: string;
+    state: string;
+  }>;
+  navigationLabels: string[];
+  ctaLabels: string[];
+  contactSignals: string[];
+  keyContent: string[];
+  layoutContinuity: string[];
+  href: string;
 };
 
 export type KnowledgeWorkspaceContinuityItemProjection = {
@@ -108,6 +176,7 @@ export type KnowledgeWorkspaceStoryStepProjection = {
 
 export type KnowledgeWorkspaceGapProjection = {
   label: string;
+  group: "critical_before_next_generation" | "important_for_recognizability" | "future_enrichment";
   state: "critical" | "missing" | "partial" | "unresolved" | "known";
   whyItMatters: string;
   currentEvidence: string;
@@ -141,8 +210,9 @@ export type KnowledgeWorkspaceProjection = {
   siteVersionId: string;
   hero: KnowledgeWorkspaceHeroProjection;
   versions: KnowledgeWorkspaceVersionProjection[];
-  businessUnderstanding: KnowledgeWorkspaceKnowledgeCardProjection[];
+  businessUnderstanding: KnowledgeWorkspaceKnownUnknownProjection;
   visualIdentity: KnowledgeWorkspaceVisualIdentityProjection;
+  recognizable: KnowledgeWorkspaceRecognizableProjection;
   continuity: KnowledgeWorkspaceContinuityProjection;
   transformationStory: KnowledgeWorkspaceStoryStepProjection[];
   gaps: KnowledgeWorkspaceGapProjection[];
@@ -191,34 +261,6 @@ function groupByLabel(groups: BusinessFoundationKnowledgeGroupProjection[], labe
   return groups.find((group) => group.label.toLowerCase() === label.toLowerCase()) ?? null;
 }
 
-function knowledgeCard(input: {
-  label: string;
-  known?: string[];
-  unknown?: string[];
-  needsConfirmation?: string[];
-  confidence?: string | null;
-}): KnowledgeWorkspaceKnowledgeCardProjection {
-  return {
-    label: input.label,
-    known: input.known?.filter(Boolean) ?? [],
-    unknown: input.unknown?.filter(Boolean) ?? [],
-    needsConfirmation: input.needsConfirmation?.filter(Boolean) ?? [],
-    confidence: readable(input.confidence, "confidence unavailable"),
-  };
-}
-
-function cardFromGroup(label: string, group: BusinessFoundationKnowledgeGroupProjection | null): KnowledgeWorkspaceKnowledgeCardProjection {
-  return knowledgeCard({
-    label,
-    known: group?.statements.map((item) => item.statement) ?? [],
-    unknown: group?.missing ?? [`${label} is not confirmed in persisted business knowledge.`],
-    needsConfirmation: group?.statements
-      .filter((item) => item.confidence.level !== "HIGH")
-      .map((item) => item.statement) ?? [],
-    confidence: group?.confidence.level,
-  });
-}
-
 type SourceBusinessLabelCandidateKey = "offerings" | "audiences" | "trust" | "goals" | "identity" | "differentiators";
 
 function sourceCandidateLabels(candidates: SourceBusinessSignalCandidates | null, key: SourceBusinessLabelCandidateKey): string[] {
@@ -237,50 +279,169 @@ function sourceNeedsConfirmation(candidates: SourceBusinessSignalCandidates | nu
     : [];
 }
 
+function firstText(values: Array<string | null | undefined>, fallback: string): string {
+  return values.map((value) => String(value ?? "").trim()).find(Boolean) ?? fallback;
+}
+
+function summaryItem(label: string, state: string, detail: string): KnowledgeWorkspaceSummaryItemProjection {
+  return { label, state: readable(state), detail: readable(detail, "No persisted detail is available.") };
+}
+
 function businessUnderstandingCards(input: {
   business: GenerationBusinessFoundationProjection;
   source: SourceWebsiteUnderstandingProjection | null;
-}): KnowledgeWorkspaceKnowledgeCardProjection[] {
+}): KnowledgeWorkspaceKnownUnknownProjection {
   const groups = input.business.knowledgeGroups;
   const sourceCandidates = input.source?.businessSignalCandidates ?? null;
   const identity = groupByLabel(groups, "Identity");
   const offerings = groupByLabel(groups, "Offerings");
-  const goals = groupByLabel(groups, "Goals");
   const trust = groupByLabel(groups, "Trust");
-  const brand = groupByLabel(groups, "Brand");
   const content = groupByLabel(groups, "Content");
+  const identitySignal = firstText([
+    input.business.summary.businessName,
+    input.business.summary.businessIdentity,
+    identity?.statements[0]?.statement,
+    input.source?.sourceIdentity.hostname,
+  ], "Identity signal is not confirmed.");
+  const websitePurpose = firstText([
+    input.business.summary.businessPurpose,
+    input.business.narrative.websitePurpose,
+    content?.statements[0]?.statement,
+  ], "Website purpose is not confirmed.");
+  const contactPath = firstText([
+    input.source?.content.flatMap((item) => item.contactSignals)[0],
+    input.business.narrative.digitalPresence,
+  ], "Contact path is unresolved.");
+  const trustPresence = firstText([
+    input.business.narrative.trustSignals[0],
+    trust?.statements[0]?.statement,
+  ], "Trust/contact evidence is not confirmed.");
+  const sourceStructure = input.source
+    ? `${input.source.navigation.length} navigation label(s), ${input.source.sections.filter((section) => !section.plannedOnly).length} observed section(s)`
+    : "Source structure projection is unavailable.";
+  const contentAvailability = input.source?.content.some((item) => item.bodyTextAvailable)
+    ? "Visible source content is available."
+    : "Visible source content is partial or unavailable.";
 
-  return [
-    cardFromGroup("Identity", identity),
-    knowledgeCard({
-      label: "Purpose",
-      known: [input.business.summary.businessPurpose, input.business.narrative.websitePurpose].filter((value): value is string => Boolean(value)),
-      unknown: input.business.summary.businessPurpose ? [] : ["Website purpose is not available as persisted business knowledge."],
-      needsConfirmation: input.business.productAttentionSummary.websitePurpose === "understood" ? [] : ["Confirm the purpose before relying on it for generated messaging."],
-      confidence: input.business.summary.businessConfidence.level,
-    }),
-    cardFromGroup("Offerings", offerings),
-    knowledgeCard({
-      label: "Audience",
-      known: input.business.audience.knownAudience.map((item) => item.statement),
-      unknown: input.business.audience.missingAudienceKnowledge.length > 0 ? input.business.audience.missingAudienceKnowledge : sourceCandidateLabels(sourceCandidates, "audiences").length === 0 ? ["Target audience is not confirmed."] : [],
-      needsConfirmation: sourceNeedsConfirmation(sourceCandidates, "audiences"),
-      confidence: input.business.audience.confidence.level,
-    }),
-    cardFromGroup("Goals", goals),
-    cardFromGroup("Trust", trust),
-    cardFromGroup("Brand", brand),
-    cardFromGroup("Content", content),
-  ];
+  return {
+    knownObserved: [
+      summaryItem("Identity signal", input.business.productAttentionSummary.businessIdentity, identitySignal),
+      summaryItem("Website purpose", input.business.productAttentionSummary.websitePurpose, websitePurpose),
+      summaryItem("Contact path", contactPath === "Contact path is unresolved." ? "unresolved" : "observed", contactPath),
+      summaryItem("Trust/contact presence", trustPresence === "Trust/contact evidence is not confirmed." ? "unresolved" : "observed", trustPresence),
+      summaryItem("Source structure", input.source ? "observed" : "unavailable", sourceStructure),
+      summaryItem("Content availability", input.source?.content.some((item) => item.bodyTextAvailable) ? "observed" : "partial", contentAvailability),
+    ],
+    needsConfirmation: [
+      summaryItem("Exact offerings", input.business.productAttentionSummary.offerings, offerings?.missing[0] ?? sourceNeedsConfirmation(sourceCandidates, "offerings")[0] ?? "Confirm the service portfolio before the next generation."),
+      summaryItem("Primary audience", input.business.productAttentionSummary.audience, input.business.audience.missingAudienceKnowledge[0] ?? sourceNeedsConfirmation(sourceCandidates, "audiences")[0] ?? "Confirm who the website should primarily persuade."),
+      summaryItem("Canonical brand identity", input.business.visualIdentity.logo.status, input.business.visualIdentity.logo.assetReference ?? "Confirm which source identity signal is canonical."),
+      summaryItem("Differentiators", sourceCandidateLabels(sourceCandidates, "differentiators").length > 0 ? "partial" : "missing", sourceCandidateLabels(sourceCandidates, "differentiators")[0] ?? "Confirm what makes the business distinct."),
+      summaryItem("Canonical typography", input.business.visualIdentity.typography.length > 0 ? "candidate" : "missing", input.business.visualIdentity.typography[0]?.family ?? "Confirm which typography signals should carry forward."),
+      summaryItem("Canonical colors", input.business.visualIdentity.primaryColors.length > 0 ? "candidate" : "missing", input.business.visualIdentity.primaryColors[0]?.value ?? "Confirm observed color signals before treating them as brand colors."),
+    ],
+  };
+}
+
+function originalVisualPreview(input: {
+  business: GenerationBusinessFoundationProjection;
+  continuityResult: SourceContentVisualContinuityProjectionLoaderResult;
+  source: SourceWebsiteUnderstandingProjection | null;
+}): KnowledgeWorkspaceVisualPreviewProjection {
+  const continuity = input.continuityResult.projection;
+  const sourceScreenshot = continuity?.sourceScreenshots
+    .filter((screenshot) => screenshot.availability === "available" && Boolean(screenshot.safeAccessRef))
+    .toSorted((left, right) => {
+      const rank = (value: typeof left) => value.completeness === "full_page" ? 0 : value.completeness === "viewport" ? 1 : 2;
+      return rank(left) - rank(right) || left.screenshotId.localeCompare(right.screenshotId);
+    })[0] ?? null;
+  if (sourceScreenshot?.safeAccessRef) {
+    return {
+      title: "Original Website",
+      kind: "source_screenshot",
+      label: sourceScreenshot.completeness === "full_page" ? "Original source screenshot" : "Original source viewport screenshot",
+      href: input.business.sourceWebsite.url ?? input.source?.sourceIdentity.sourceUrl ?? null,
+      imageHref: sourceScreenshot.safeAccessRef,
+      unavailableReason: null,
+      altText: "Persisted source screenshot for the original website",
+      badges: ["source baseline", "source fidelity reference"],
+    };
+  }
+
+  const representative = bestOriginalPreview(input.business.importedAssets.previews);
+  if (representative?.previewHref) {
+    return {
+      title: "Original Website",
+      kind: "representative_source_asset",
+      label: "Representative imported image",
+      href: input.business.sourceWebsite.url ?? input.source?.sourceIdentity.sourceUrl ?? null,
+      imageHref: representative.previewHref,
+      unavailableReason: null,
+      altText: "Representative imported image from the original website evidence",
+      badges: ["source baseline", "imported", "source fidelity reference"],
+    };
+  }
+
+  const sourceUrl = input.business.sourceWebsite.url ?? input.source?.sourceIdentity.sourceUrl ?? null;
+  return {
+    title: "Original Website",
+    kind: sourceUrl ? "source_preview" : "unavailable",
+    label: sourceUrl ? "Original website link available" : "Original source preview unavailable",
+    href: sourceUrl,
+    imageHref: null,
+    unavailableReason: sourceUrl ? "No persisted screenshot or representative source image is safely available." : "No safe original visual source is available.",
+    altText: "Original website visual preview unavailable",
+    badges: sourceUrl ? ["source baseline", "open original website"] : ["unavailable"],
+  };
+}
+
+function generatedVisualPreview(iteration: GenerationIterationProjection | null): KnowledgeWorkspaceVisualPreviewProjection {
+  if (iteration?.preview.available) {
+    return {
+      title: "Latest Proposal",
+      kind: "live_generated_proposal_preview",
+      label: "Live generated proposal preview",
+      href: iteration.preview.route,
+      imageHref: null,
+      unavailableReason: null,
+      altText: `${iteration.label} live generated proposal preview`,
+      badges: [`Iteration ${iteration.iteration}`, "quarantined", "not approved", "not published"],
+    };
+  }
+  if (iteration?.preview.route) {
+    return {
+      title: "Latest Proposal",
+      kind: "live_preview_available",
+      label: "Live proposal preview available",
+      href: iteration.preview.route,
+      imageHref: null,
+      unavailableReason: iteration.preview.unavailableReason ?? "Preview requires authenticated access or has no persisted visual snapshot.",
+      altText: `${iteration.label} generated proposal preview available`,
+      badges: [`Iteration ${iteration.iteration}`, "quarantined", "open preview"],
+    };
+  }
+  return {
+    title: "Latest Proposal",
+    kind: "generated_unavailable",
+    label: "Generated proposal preview unavailable",
+    href: null,
+    imageHref: null,
+    unavailableReason: "No generated proposal preview is available from persisted iteration evidence.",
+    altText: "Generated proposal preview unavailable",
+    badges: ["unavailable"],
+  };
 }
 
 function versionCards(input: {
   business: GenerationBusinessFoundationProjection;
   evolution: GenerationEvolutionDashboardProjection;
+  continuityResult: SourceContentVisualContinuityProjectionLoaderResult;
+  source: SourceWebsiteUnderstandingProjection | null;
 }): KnowledgeWorkspaceVersionProjection[] {
-  const originalPreview = bestOriginalPreview(input.business.importedAssets.previews);
+  const originalPreview = originalVisualPreview({ business: input.business, continuityResult: input.continuityResult, source: input.source });
   const iterations = [1, 2].map((iterationNumber): KnowledgeWorkspaceVersionProjection => {
     const iteration = input.evolution.iterations.find((item) => item.iteration === iterationNumber) ?? null;
+    const generatedPreview = generatedVisualPreview(iteration);
     if (!iteration) {
       return {
         label: `Iteration ${iterationNumber}`,
@@ -289,11 +450,15 @@ function versionCards(input: {
         badges: ["Not available"],
         previewHref: null,
         previewImageHref: null,
+        previewKind: "generated_unavailable",
+        previewLabel: "Generated proposal preview unavailable",
         previewUnavailableReason: `Iteration ${iterationNumber} is not persisted yet.`,
+        quarantineState: "not generated",
         status: "not available",
         majorImprovement: "no persisted proposal is available",
         majorLimitation: "empty until this iteration exists",
         openPreviewHref: null,
+        transitionFromPrevious: iterationNumber === 1 ? "Initial proposal established a governed generation baseline." : "Messages, trust signals, and constraints improved. No regressions were observed.",
       };
     }
     return {
@@ -305,14 +470,21 @@ function versionCards(input: {
         iteration.iteration === 2 ? "Iteration 2" : null,
         "Quarantined generated proposal",
         iteration.preview.available ? "Preview available" : "Preview unavailable",
+        iteration.compliance.status ? readable(iteration.compliance.status) : null,
       ].filter((value): value is string => Boolean(value)),
-      previewHref: iteration.preview.route,
-      previewImageHref: null,
+      previewHref: generatedPreview.href,
+      previewImageHref: generatedPreview.imageHref,
+      previewKind: generatedPreview.kind,
+      previewLabel: generatedPreview.label,
       previewUnavailableReason: iteration.preview.available ? null : iteration.preview.unavailableReason,
+      quarantineState: "quarantined",
       status: readable(iteration.status),
       majorImprovement: improvementState(iteration),
       majorLimitation: readable(iteration.evolution?.limitations[0] ?? iteration.compliance.recommendation, "No persisted limitation is available."),
       openPreviewHref: iteration.preview.route,
+      transitionFromPrevious: iteration.iteration === 1
+        ? "Initial proposal established a governed generation baseline."
+        : transitionSummary(input.evolution.evolution),
     };
   });
   return [
@@ -320,14 +492,18 @@ function versionCards(input: {
       label: "Original Website",
       kind: "original",
       emphasis: "standard",
-      badges: ["Source baseline", "Original website"],
+      badges: originalPreview.badges,
       previewHref: input.business.sourceWebsite.url,
-      previewImageHref: originalPreview?.previewHref ?? null,
-      previewUnavailableReason: originalPreview?.previewHref ? null : input.business.importedAssets.unavailableMessage ?? "No safe imported preview image is available from persisted assets.",
+      previewImageHref: originalPreview.imageHref,
+      previewKind: originalPreview.kind,
+      previewLabel: originalPreview.label,
+      previewUnavailableReason: originalPreview.unavailableReason,
+      quarantineState: "source baseline",
       status: readable(input.business.sourceWebsite.status, "import status unavailable"),
       majorImprovement: "source baseline",
       majorLimitation: "original material still needs interpretation before regeneration",
       openPreviewHref: input.business.sourceWebsite.url,
+      transitionFromPrevious: null,
     },
     ...iterations,
     {
@@ -337,13 +513,27 @@ function versionCards(input: {
       badges: ["Not generated"],
       previewHref: null,
       previewImageHref: null,
+      previewKind: "generated_unavailable",
+      previewLabel: "Future step",
       previewUnavailableReason: "Future iterations are not persisted yet.",
+      quarantineState: "available after confirmation and future runtime authorization",
       status: "not generated",
       majorImprovement: "empty until operator confirmation unlocks the next proposal",
       majorLimitation: readable(input.evolution.cycle.latestRecommendation, "Use current gaps before regenerating."),
       openPreviewHref: null,
+      transitionFromPrevious: "Available after confirmation and future runtime authorization.",
     },
   ];
+}
+
+function transitionSummary(evolution: GenerationEvolutionDashboardProjection["evolution"]): string {
+  if (!evolution) return "No persisted transition analysis is available for this step.";
+  if (evolution.meaningfulImprovement && evolution.noRegressions) {
+    return "Messages, trust signals, and constraints improved. No regressions were observed.";
+  }
+  if (evolution.meaningfulImprovement) return "Persisted Evolution Analysis reports meaningful improvement.";
+  if (evolution.noRegressions) return "No regressions were observed in persisted Evolution Analysis.";
+  return readable(evolution.overallAssessment, "Persisted transition analysis is available without a concise improvement signal.");
 }
 
 function bestOriginalPreview(assets: ImportedAssetPreviewProjection[]): ImportedAssetPreviewProjection | null {
@@ -521,6 +711,96 @@ function sourceContinuity(input: {
   };
 }
 
+function recognizable(input: {
+  business: GenerationBusinessFoundationProjection;
+  source: SourceWebsiteUnderstandingProjection | null;
+  continuityResult: SourceContentVisualContinuityProjectionLoaderResult;
+  siteVersionId: string;
+}): KnowledgeWorkspaceRecognizableProjection {
+  const continuity = input.continuityResult.projection;
+  const logo = continuity?.visualIdentitySignals.logoCandidates[0] ?? null;
+  const imageCandidates = continuity?.visualIdentitySignals.imageCandidates ?? [];
+  const colorSignals = continuity?.visualIdentitySignals.colorSignals ?? [];
+  const typography = continuity?.visualIdentitySignals.typographyCandidates ?? [];
+  const representativeImages = imageCandidates
+    .filter((item) => Boolean(item.previewRef))
+    .toSorted((left, right) => {
+      const rank = (role: string) => role === "hero" ? 0 : role === "content" || role === "product_service" ? 1 : role === "gallery" ? 2 : 5;
+      return rank(left.roleCandidate) - rank(right.roleCandidate) || left.candidateId.localeCompare(right.candidateId);
+    })
+    .slice(0, 6)
+    .map((item) => ({
+      previewHref: item.previewRef ?? "",
+      label: readable(item.roleCandidate, "unknown role"),
+      state: readable(item.continuityRecommendation ?? item.reviewState, "candidate"),
+      altText: `Representative imported image candidate: ${readable(item.roleCandidate, "unknown role")}`,
+    }))
+    .filter((item) => item.previewHref);
+  const fallbackImages = representativeImages.length > 0 ? [] : storyAssetPreviews(input.business.importedAssets.previews)
+    .filter((asset) => asset.previewHref && (asset.type === "content_image" || asset.type === "decorative_image"))
+    .slice(0, 4)
+    .map((asset) => ({
+      previewHref: asset.previewHref ?? "",
+      label: asset.type === "decorative_image" ? "decorative image candidate" : "source image candidate",
+      state: "representative imported image",
+      altText: "Representative imported image from source asset evidence",
+    }));
+  const typographySummary = typography.length > 0
+    ? typography
+      .toSorted((left, right) => left.family.localeCompare(right.family) || left.roleCandidate.localeCompare(right.roleCandidate))
+      .filter((item, index, all) => all.findIndex((candidate) => candidate.family === item.family && candidate.roleCandidate === item.roleCandidate) === index)
+      .slice(0, 5)
+      .map((item) => ({
+        family: item.family,
+        role: item.roleCandidate === "icon_font" ? "icon font evidence" : readable(item.roleCandidate, "typography candidate"),
+        state: readable(item.continuityRecommendation ?? item.reviewState, "candidate"),
+      }))
+    : input.business.visualIdentity.typography
+      .slice(0, 4)
+      .map((item) => ({
+        family: item.family,
+        role: item.family.toLowerCase().includes("fontello") ? "icon font evidence" : "typography candidate",
+        state: item.locallyAvailable === null ? "availability unknown" : item.locallyAvailable ? "observed local file" : "observed external/fallback",
+      }));
+  const contentBlocks = continuity?.contentBlocks ?? [];
+  const ctaLabels = input.source?.content.flatMap((item) => item.ctaSignals).slice(0, 4) ?? [];
+  const contactSignals = input.source?.content.flatMap((item) => item.contactSignals).slice(0, 4) ?? [];
+  return {
+    summary: continuity?.readiness.summary ?? "Recognizable source continuity is composed from existing VCU and source-understanding evidence.",
+    logoCandidate: {
+      previewHref: logo?.previewRef ?? input.business.visualIdentity.logo.previewHref,
+      label: "Candidate logo - confirmation required",
+      confidence: readable(logo?.confidence.level ?? input.business.visualIdentity.confidence, "confidence unavailable"),
+      confirmationRequirement: "Candidate logo - confirmation required",
+      unavailableReason: logo?.previewRef || input.business.visualIdentity.logo.previewHref ? null : "No safe logo candidate preview is available.",
+    },
+    representativeImages: representativeImages.length > 0 ? representativeImages : fallbackImages,
+    colorSignals: (colorSignals.length > 0 ? colorSignals.map((item) => ({
+      value: item.normalizedValue,
+      role: readable(item.candidateRole),
+      state: readable(item.knowledgeState, "candidate/unresolved"),
+    })) : [...input.business.visualIdentity.primaryColors, ...input.business.visualIdentity.secondaryColors].map((item) => ({
+      value: item.value,
+      role: readable(item.label),
+      state: item.status === "observed" ? "candidate/unresolved" : readable(item.status),
+    }))).slice(0, 8),
+    typographySummary,
+    navigationLabels: input.source?.navigation.map((item) => item.label).filter(Boolean).slice(0, 6) ?? [],
+    ctaLabels,
+    contactSignals,
+    keyContent: contentBlocks
+      .filter((item) => ["title", "heading", "cta", "contact_detail", "service_offer_text"].includes(item.contentType))
+      .map((item) => item.originalText)
+      .filter(Boolean)
+      .slice(0, 6),
+    layoutContinuity: [
+      ...(continuity?.layoutContinuity.routeStructure.slice(0, 4) ?? []),
+      ...(continuity?.layoutContinuity.sectionSequence.map((item) => item.heading ?? readable(item.semanticType, "")).filter(Boolean).slice(0, 4) ?? []),
+    ].slice(0, 6),
+    href: `/gnr8/admin/continuity/${input.siteVersionId}`,
+  };
+}
+
 function gapMap(gaps: ProductKnowledgeGapProjection[]): Map<string, ProductKnowledgeGapProjection> {
   return new Map(gaps.map((gap) => [gap.label.toLowerCase(), gap]));
 }
@@ -535,6 +815,7 @@ function knowledgeGaps(input: {
     if (!gap) return fallback;
     return {
       label,
+      group: gapGroupFor(label),
       state: gap.status,
       whyItMatters: gap.generationImpact,
       currentEvidence: gap.summary,
@@ -544,6 +825,7 @@ function knowledgeGaps(input: {
   const ranked: KnowledgeWorkspaceGapProjection[] = [
     gapFor("Audience", {
       label: "Audience",
+      group: "critical_before_next_generation",
       state: input.business.audience.knownAudience.length > 0 ? "known" : "missing",
       whyItMatters: "Audience knowledge shapes messaging, proof, calls to action, and prioritization.",
       currentEvidence: input.business.audience.knownAudience.length > 0 ? "Persisted audience statements are available." : "No confirmed target audience is available.",
@@ -551,6 +833,7 @@ function knowledgeGaps(input: {
     }),
     gapFor("Offerings", {
       label: "Offerings",
+      group: "critical_before_next_generation",
       state: input.business.offerings.knownOfferings.length > 0 ? "known" : "missing",
       whyItMatters: "Offerings determine service hierarchy and the content structure of generated pages.",
       currentEvidence: input.business.offerings.knownOfferings.length > 0 ? "Persisted offering statements are available." : "No confirmed service portfolio is available.",
@@ -558,6 +841,7 @@ function knowledgeGaps(input: {
     }),
     gapFor("Brand", {
       label: "Brand",
+      group: "important_for_recognizability",
       state: input.business.visualIdentity.logo.status === "detected" || input.business.visualIdentity.primaryColors.length > 0 ? "partial" : "missing",
       whyItMatters: "Brand confidence keeps generated proposals from inventing identity, tone, or visual emphasis.",
       currentEvidence: input.business.visualIdentity.logo.assetReference ?? "No confirmed brand identity is available.",
@@ -565,6 +849,7 @@ function knowledgeGaps(input: {
     }),
     {
       label: "Differentiators",
+      group: "future_enrichment",
       state: sourceCandidateLabels(input.source?.businessSignalCandidates ?? null, "differentiators").length > 0 ? "partial" : "missing",
       whyItMatters: "Differentiators help generated proposals avoid generic positioning.",
       currentEvidence: sourceCandidateLabels(input.source?.businessSignalCandidates ?? null, "differentiators").join("; ") || "No differentiator candidates are available.",
@@ -572,6 +857,7 @@ function knowledgeGaps(input: {
     },
     {
       label: "Trust signals",
+      group: "future_enrichment",
       state: input.business.narrative.trustSignals.length > 0 ? "known" : "missing",
       whyItMatters: "Trust signals influence credibility sections, proof blocks, and conversion confidence.",
       currentEvidence: input.business.narrative.trustSignals.length > 0 ? input.business.narrative.trustSignals.join("; ") : "No confirmed trust signals are available.",
@@ -579,6 +865,7 @@ function knowledgeGaps(input: {
     },
     gapFor("Typography", {
       label: "Typography",
+      group: "important_for_recognizability",
       state: input.business.visualIdentity.typography.length > 0 ? "partial" : "missing",
       whyItMatters: "Typography controls whether generated proposals can match the original brand voice visually.",
       currentEvidence: input.business.visualIdentity.typography.length > 0 ? "Typography candidates are available from persisted evidence." : "No canonical typography candidates are persisted.",
@@ -586,6 +873,7 @@ function knowledgeGaps(input: {
     }),
     gapFor("Colors", {
       label: "Colors",
+      group: "important_for_recognizability",
       state: input.business.visualIdentity.primaryColors.length > 0 ? "partial" : "missing",
       whyItMatters: "Color confidence controls visual brand fidelity without inventing a palette.",
       currentEvidence: input.business.visualIdentity.primaryColors.length > 0 ? "Observed color candidates exist, but canonical brand confirmation may still be missing." : "No canonical brand colors are persisted.",
@@ -593,6 +881,7 @@ function knowledgeGaps(input: {
     }),
     gapFor("Logo confirmation", {
       label: "Logo confirmation",
+      group: "important_for_recognizability",
       state: input.business.visualIdentity.logo.status === "detected" ? "partial" : "missing",
       whyItMatters: "Logo confirmation prevents decorative or unrelated images from becoming brand identity.",
       currentEvidence: input.business.visualIdentity.logo.assetReference ?? "No confirmed logo asset is available.",
@@ -600,6 +889,13 @@ function knowledgeGaps(input: {
     }),
   ];
   return ranked.filter((gap) => gap.state !== "known");
+}
+
+function gapGroupFor(label: string): KnowledgeWorkspaceGapProjection["group"] {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("audience") || normalized.includes("offering")) return "critical_before_next_generation";
+  if (normalized.includes("logo") || normalized.includes("brand") || normalized.includes("color") || normalized.includes("typography")) return "important_for_recognizability";
+  return "future_enrichment";
 }
 
 function afterConfirmationFor(label: string): string {
@@ -647,6 +943,13 @@ function health(input: {
       detail: input.business.visualIdentity.limitations[0] ?? "Visual identity uses persisted candidates only.",
     },
     {
+      label: "Content Continuity",
+      state: readable(input.source?.readiness.dimensions.find((item) => item.key === "content_coverage")?.status, input.source ? "partial" : "unavailable"),
+      detail: input.source?.content.some((item) => item.bodyTextAvailable)
+        ? "Source content is present for continuity review."
+        : "Content continuity remains partial in existing source evidence.",
+    },
+    {
       label: "Proposal Quality",
       state: readable(input.evolution.cycle.latestEvolutionAssessment ?? input.evolution.cycle.overallTrajectory),
       detail: input.evolution.evolution?.meaningfulImprovement ? "Latest evolution reports meaningful improvement." : "Latest evolution does not report a confirmed meaningful-improvement signal.",
@@ -662,7 +965,7 @@ function health(input: {
       detail: input.evolution.evolution?.meaningfulImprovement ? "Evolution history reports meaningful improvement." : "Evolution history remains available without a confirmed meaningful-improvement signal.",
     },
     {
-      label: "Readiness",
+      label: "Overall Readiness",
       state: input.business.productKnowledgeGaps.length > 0 ? "Ready for focused regeneration planning" : "Ready for regeneration",
       detail: input.business.productKnowledgeGaps[0]?.summary ?? "No product-facing gap is currently highlighted.",
     },
@@ -697,8 +1000,42 @@ function nextActions(input: {
     if (gap.label === "Colors") add("Review Brand Colors", gap.afterConfirmation, input.hero.links.continuityHref);
   }
 
-  add("Generate Proposal v3", readable(input.hero.currentRecommendation, "Use confirmed knowledge before the next proposal."), null);
+  add("Future step: Proposal v3", "Available after confirmation and future runtime authorization.", null);
   return actions.slice(0, 6);
+}
+
+function overallInterpretation(input: {
+  evolution: GenerationEvolutionDashboardProjection;
+  gaps: KnowledgeWorkspaceGapProjection[];
+}): string {
+  const latestCompliance = readable(input.evolution.cycle.latestComplianceStatus, "compliance unavailable").toLowerCase();
+  const improvement = readable(input.evolution.cycle.latestEvolutionAssessment ?? input.evolution.cycle.overallTrajectory);
+  const hasImprovement = improvement.toLowerCase().includes("meaningful improvement") || input.evolution.evolution?.meaningfulImprovement;
+  const hasBusinessCriticalGap = input.gaps.some((gap) => gap.group === "critical_before_next_generation");
+  const hasRecognizabilityGap = input.gaps.some((gap) => gap.group === "important_for_recognizability");
+  if (hasImprovement && latestCompliance.includes("non compliant")) {
+    return "Iteration 2 is meaningfully better than Iteration 1, but the website is not ready for approval because offerings, audience, and visual identity still need confirmation.";
+  }
+  if (hasImprovement && (hasBusinessCriticalGap || hasRecognizabilityGap)) {
+    return "The latest proposal improved, but unresolved business and recognizability signals should be confirmed before approval.";
+  }
+  if (latestCompliance.includes("non compliant")) {
+    return "The latest proposal still does not satisfy the generation contract and should be treated as focused improvement material.";
+  }
+  return "The Workspace has enough persisted evidence to inspect the current website state and choose the next focused action.";
+}
+
+function overallRecommendation(input: {
+  gaps: KnowledgeWorkspaceGapProjection[];
+  fallback: string;
+}): string {
+  const firstCritical = input.gaps.find((gap) => gap.group === "critical_before_next_generation");
+  if (firstCritical?.label === "Offerings") return "Confirm Offerings";
+  if (firstCritical?.label === "Audience") return "Confirm Audience";
+  if (firstCritical) return `Confirm ${firstCritical.label}`;
+  const recognizability = input.gaps.find((gap) => gap.group === "important_for_recognizability");
+  if (recognizability) return `Review ${recognizability.label}`;
+  return readable(input.fallback, "Review persisted evidence before the next proposal.");
 }
 
 function advanced(input: {
@@ -768,6 +1105,13 @@ export async function loadKnowledgeWorkspaceProjection(input: {
   const source = sourceResult.projection;
   const latestIteration = evolution.iterations.at(-1) ?? null;
   const latestBusinessIteration = business.generatedIterations.find((iteration) => iteration.isLatest) ?? business.generatedIterations.at(-1) ?? null;
+  const gaps = knowledgeGaps({ business, source });
+  const originalVisual = originalVisualPreview({ business, continuityResult, source });
+  const latestPreview = generatedVisualPreview(latestIteration);
+  const recommendation = overallRecommendation({
+    gaps,
+    fallback: evolution.cycle.latestRecommendation ?? latestIteration?.compliance.recommendation ?? "Use current knowledge gaps before regeneration.",
+  });
   const hero: KnowledgeWorkspaceHeroProjection = {
     businessName: heroIdentity({
       businessName: business.hero.businessName,
@@ -779,13 +1123,17 @@ export async function loadKnowledgeWorkspaceProjection(input: {
     currentIteration: evolution.cycle.currentIteration,
     overallUnderstandingState: source?.readiness.status ? readable(source.readiness.status) : business.hero.currentState,
     currentConfidence: business.hero.understandingConfidence ?? source?.confidence.level ?? "confidence unavailable",
-    currentRecommendation: readable(evolution.cycle.latestRecommendation ?? latestIteration?.compliance.recommendation, "Use current knowledge gaps before regeneration."),
+    currentRecommendation: recommendation,
     currentEvolutionState: readable(evolution.cycle.latestEvolutionAssessment ?? evolution.cycle.overallTrajectory),
     currentComplianceState: readable(evolution.cycle.latestComplianceStatus, "compliance unavailable"),
+    overallInterpretation: overallInterpretation({ evolution, gaps }),
+    overallRecommendation: recommendation,
     importState: readable(business.sourceWebsite.status ?? source?.sourceIdentity.sourceAvailability, "import state unavailable"),
     discoveredAssetCount: source?.assets.length ?? business.importedAssets.total ?? "unavailable",
     discoveredSectionCount: source?.sections.filter((section) => !section.plannedOnly).length ?? "unavailable",
     latestProposalState: latestBusinessIteration?.previewAvailable || latestIteration?.preview.available ? "Latest proposal available" : "Latest proposal unavailable",
+    originalVisual,
+    latestPreview,
     unresolvedSignals: unresolvedSignals(business.productAttentionSummary),
     links: {
       originalWebsiteHref: business.hero.primaryLinks.originalWebsiteHref ?? source?.sourceIdentity.sourceUrl ?? null,
@@ -796,14 +1144,14 @@ export async function loadKnowledgeWorkspaceProjection(input: {
       continuityHref: `/gnr8/admin/continuity/${input.siteVersionId}`,
     },
   };
-  const gaps = knowledgeGaps({ business, source });
 
   return {
     siteVersionId: input.siteVersionId,
     hero,
-    versions: versionCards({ business, evolution }),
+    versions: versionCards({ business, evolution, continuityResult, source }),
     businessUnderstanding: businessUnderstandingCards({ business, source }),
     visualIdentity: visualIdentity({ business, source }),
+    recognizable: recognizable({ business, source, continuityResult, siteVersionId: input.siteVersionId }),
     continuity: sourceContinuity({ business, source, continuityResult, siteVersionId: input.siteVersionId }),
     transformationStory: [
       { label: "Business Foundation", summary: "Supporting inspection page for the persisted business meaning behind the Workspace.", href: `/gnr8/admin/business-foundation/${input.siteVersionId}` },

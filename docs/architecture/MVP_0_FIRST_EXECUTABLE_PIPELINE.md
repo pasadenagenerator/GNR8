@@ -2340,3 +2340,23 @@ Recommended next phase:
 ```text
 VCU-3 - Downstream Continuity Enrichment Contract Design
 ```
+
+## KWX-3 Knowledge Workspace Status
+
+KWX-3 is complete as a Workspace UX and deterministic projection-composition
+phase.
+
+Canonical record:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_VISUAL_COMMAND_CENTER.md
+```
+
+Knowledge Workspace is now the primary product surface for one website.
+Business Foundation, Website Understanding, Source Content & Visual
+Continuity, and Generation Evolution remain supporting inspection pages.
+
+KWX-3 adds no screenshot generation, thumbnail pipeline, source parsing,
+canonical knowledge, confirmation mutation, proposal regeneration, Proposal
+v3, approval, publishing, deployment, DNS, schema, API, worker, AI, or runtime
+mutation behavior.

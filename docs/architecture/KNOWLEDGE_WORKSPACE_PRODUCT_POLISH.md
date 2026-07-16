@@ -297,3 +297,34 @@ thumbnail readiness only; ODV and ViroiDoc both have existing source screenshot
 references but no safe screenshot access ref yet, so Workspace thumbnail
 suitability remains blocked. Generated iteration thumbnails remain outside VCU
 and outside this phase.
+
+## KWX-3 Visual Command Center Result
+
+KWX-3 supersedes the GX-2 card-heavy polish with a visual command-center
+composition.
+
+The hero now carries the observed identity or hostname, original website URL,
+cycle state, current iteration, proposal state, evolution state, compliance
+state, a deterministic plain-language interpretation, and one current
+recommendation. Original Website and Latest Proposal panels dominate the
+opening view.
+
+The page now uses:
+
+- semantic original preview kinds:
+  `source_screenshot`, `source_preview`, `representative_source_asset`,
+  `unavailable`
+- semantic generated preview kinds:
+  `live_generated_proposal_preview`, `persisted_generated_screenshot`,
+  `bundle_cover_image`, `live_preview_available`, `generated_unavailable`
+- a Website Evolution timeline
+- Known Or Observed versus Needs Confirmation
+- a consolidated What Will Remain Recognizable showcase
+- a Knowledge Progress rail
+- grouped high-impact gaps
+- one primary read-only recommendation
+- secondary supporting inspection links
+- collapsed Advanced
+
+KWX-3 still does not create screenshots, thumbnails, screenshot access routes,
+new source knowledge, mutation controls, Proposal v3, or any runtime write.

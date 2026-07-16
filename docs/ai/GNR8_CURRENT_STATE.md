@@ -9818,6 +9818,60 @@ Present (migration-defined baseline):
 - `gnr8_runtime_provider_operator_reviews`
 - `gnr8_runtime_provider_governance_snapshots`
 
+## Knowledge Workspace Visual Command Center
+
+KWX-3 is complete in code and docs.
+
+Canonical record:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_VISUAL_COMMAND_CENTER.md
+```
+
+The Knowledge Workspace is the primary product surface for one website. It now
+opens with a command-center hero, Original Website versus Latest Proposal,
+Website Evolution timeline, Known Or Observed versus Needs Confirmation, What
+Will Remain Recognizable, Knowledge Progress, prioritized gaps, one primary
+next recommendation, secondary supporting inspection links, and collapsed
+Advanced.
+
+Supporting pages remain:
+
+- Business Foundation
+- Website Understanding
+- Source Content & Visual Continuity
+- Generation Evolution
+
+KWX-3 boundaries:
+
+- no screenshot generation
+- no thumbnail pipeline or persistence
+- no new source parsing or classifiers
+- no new canonical knowledge
+- no confirmation or mutation controls
+- no Business Discovery, WU, VCU truth, DBT, WDB, WGP, Provider Payload, or
+  compliance recomputation changes
+- no Proposal v3 or proposal regeneration
+- no approval, publishing, deployment, DNS, schema, API, worker, AI, or
+  runtime mutation behavior
+
+Validation passed:
+
+```text
+pnpm exec tsx --test apps/platform/app/gnr8/admin/knowledge-workspace-page.test.ts
+pnpm exec tsx --test apps/platform/app/gnr8/admin/source-content-visual-continuity-page.test.ts
+pnpm exec tsx --test apps/platform/gnr8/architecture/source-content-visual-continuity-projection-builder.test.ts apps/platform/gnr8/architecture/source-content-visual-continuity-projection-loader.test.ts apps/platform/gnr8/architecture/source-content-visual-continuity-projection-contract.test.ts
+cd apps/platform && pnpm run vercel-build
+git diff --check
+```
+
+Authenticated production browser verification reached the deployed ODV
+Workspace initially, but the deployed page was still the pre-KWX-3 UI. Later
+production reloads returned a server-side application error with digest
+`1178603228`, and a read-only local projection probe hit database pool
+exhaustion (`EMAXCONNSESSION`). Because KWX-3 performs no deployment, browser
+verification of the new UI remains a post-deploy follow-up.
+
 ## Open Decisions (Needs ADR Before Live Execution)
 
 - Live provider execution gate release criteria.

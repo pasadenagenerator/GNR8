@@ -328,3 +328,26 @@ GX-1 adds a read-only `Open Knowledge Workspace` link from Generation
 Evolution. It does not alter evolution analysis, compliance artifacts,
 proposal preview route handling, generation lineage, persistence, schema,
 API, workers, AI, publishing, deployment, DNS, or runtime architecture.
+
+## KWX-3 Timeline Relationship
+
+KWX-3 keeps Generation Evolution as the supporting inspection page for
+iteration history and compliance detail, while the Knowledge Workspace now
+renders the product timeline:
+
+```text
+Original Website
+Iteration 1
+Iteration 2
+Future
+```
+
+Iteration 2 is visually emphasized as the latest quarantined generated
+proposal. Transition copy is deterministic and derived from persisted
+Evolution Analysis and compliance state. The Workspace explains that Iteration
+2 can be a meaningful improvement while still being non-compliant and not
+ready for approval or publishing.
+
+KWX-3 does not recompute evolution, compliance, recommendations, previews, or
+generation state. It adds no proposal regeneration, Proposal v3, approval,
+publishing, deployment, DNS, schema, API, worker, AI, or runtime mutation.

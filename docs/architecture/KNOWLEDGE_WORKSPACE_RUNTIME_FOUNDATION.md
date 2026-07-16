@@ -351,3 +351,25 @@ supporting pages.
 The Workspace remains read-only and adds no editing, generation,
 regeneration, approval, publishing, deployment, DNS, persistence, schema, API,
 worker, AI, or runtime architecture changes.
+
+## KWX-3 Visual Command Center Relationship
+
+KWX-3 promotes the Knowledge Workspace from an operator card collection into
+the primary visual command center for one website.
+
+Canonical record:
+
+```text
+docs/architecture/KNOWLEDGE_WORKSPACE_VISUAL_COMMAND_CENTER.md
+```
+
+The Workspace now prioritizes Original Website, Latest Proposal, evolution,
+known facts, recognizable continuity, unresolved knowledge, and the next
+recommended action. Business Foundation, Website Understanding, Source Content
+& Visual Continuity, and Generation Evolution remain supporting inspection
+pages.
+
+KWX-3 adds deterministic read-only projection composition only. It adds no
+source parsing, screenshot capture, thumbnail generation, persistence, schema,
+API, worker, AI, confirmation mutation, proposal regeneration, approval,
+publishing, deployment, DNS, or runtime mutation behavior.
