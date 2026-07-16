@@ -351,3 +351,6 @@ ready for approval or publishing.
 KWX-3 does not recompute evolution, compliance, recommendations, previews, or
 generation state. It adds no proposal regeneration, Proposal v3, approval,
 publishing, deployment, DNS, schema, API, worker, AI, or runtime mutation.
+# WVT-1 Update
+
+Generation Evolution Dashboard projections now expose persisted generated thumbnail hrefs per iteration when available. Clicking a thumbnail continues to open the existing durable preview. Evolution history, compliance, and analysis are not recomputed by thumbnail projection.

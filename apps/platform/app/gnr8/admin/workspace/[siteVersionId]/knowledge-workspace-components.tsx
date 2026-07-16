@@ -110,21 +110,14 @@ function StatePill(props: { label: string; value: string | number | null | undef
 function PreviewSurface(props: { preview: KnowledgeWorkspaceVisualPreviewProjection; compact?: boolean }) {
   const aspectRatio = props.compact ? "16 / 10" : "16 / 9";
   if (props.preview.imageHref) {
-    return (
+    const image = (
       <img
         src={props.preview.imageHref}
         alt={props.preview.altText}
         style={{ display: "block", width: "100%", aspectRatio, objectFit: "cover", border: "1px solid #d7dee7", borderRadius: 8, background: "#f8fafc" }}
       />
     );
-  }
-  if (props.preview.kind === "live_generated_proposal_preview" && props.preview.href) {
-    return (
-      <div style={{ position: "relative", aspectRatio, border: "1px solid #d7dee7", borderRadius: 8, overflow: "hidden", background: "#ffffff" }}>
-        <iframe src={props.preview.href} title={props.preview.altText} style={{ display: "block", width: "100%", height: "100%", border: 0, background: "#ffffff" }} />
-        <a href={props.preview.href} aria-label={`Open ${props.preview.title}`} style={{ position: "absolute", inset: 0 }} />
-      </div>
-    );
+    return props.preview.href ? <a href={props.preview.href} style={{ display: "block", textDecoration: "none" }}>{image}</a> : image;
   }
   return (
     <div style={{ display: "grid", placeItems: "center", width: "100%", aspectRatio, border: "1px solid #d7dee7", borderRadius: 8, background: "#f8fafc", color: "#64748b", textAlign: "center", padding: 18 }}>

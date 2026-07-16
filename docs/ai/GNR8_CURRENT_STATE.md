@@ -9888,3 +9888,6 @@ Start every new thread with:
 5. `docs/ai/GNR8_PROJECT_MAP.md`
 6. `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
 7. `docs/ai/decisions/*.md`
+# WVT-1 Update
+
+WVT-1 code introduces `website_version_thumbnail` as a private immutable presentation artifact in `importProvenanceSummary`, with deterministic IDs, read-only superadmin serving, Workspace projection, Evolution projection, and a dry-run ODV CLI. No production thumbnail materialization has been performed.

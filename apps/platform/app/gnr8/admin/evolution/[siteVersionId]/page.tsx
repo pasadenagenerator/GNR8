@@ -188,6 +188,19 @@ function PreviewLinks(props: { iteration: GenerationIterationProjection }) {
       <p style={{ margin: "0 0 8px", color: "#475569", fontSize: 13 }}>
         Read-only quarantined proposal bundle, not a published website.
       </p>
+      {props.iteration.thumbnail.available && props.iteration.thumbnail.href ? (
+        <a href={props.iteration.preview.route} aria-label={`Open ${props.iteration.label} durable preview`} style={{ display: "block", marginBottom: 10 }}>
+          <img
+            src={props.iteration.thumbnail.href}
+            alt={`${props.iteration.label} persisted generated proposal thumbnail`}
+            style={{ display: "block", width: "100%", aspectRatio: "16 / 10", objectFit: "cover", border: "1px solid #d7e2ee", borderRadius: 8, background: "#ffffff" }}
+          />
+        </a>
+      ) : (
+        <div style={{ display: "grid", placeItems: "center", width: "100%", aspectRatio: "16 / 10", border: "1px solid #d7e2ee", borderRadius: 8, background: "#ffffff", color: "#64748b", textAlign: "center", padding: 12, marginBottom: 10 }}>
+          <span>{props.iteration.thumbnail.unavailableReason ?? "Persisted generated thumbnail unavailable."}</span>
+        </div>
+      )}
       <p style={{ margin: "0 0 8px" }}><StatusPill value={props.iteration.preview.available ? "preview available" : "preview unavailable"} /></p>
       <a href={props.iteration.preview.route} style={{ color: "#0f766e", fontWeight: 700 }}>Open Website Preview</a>
       <p style={{ margin: "8px 0 4px", color: "#475569", fontSize: 13 }}>Open Source Proposal reference</p>

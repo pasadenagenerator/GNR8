@@ -249,3 +249,6 @@ KWX-4 should be a deployed verification and narrow UX tuning phase only:
 - Do not add screenshot generation, thumbnail persistence, confirmation
   mutations, WDB/WGP enrichment, Provider Payload v3, Proposal v3, publishing,
   deployment of generated websites, DNS, or AI.
+# WVT-1 Update
+
+Knowledge Workspace now projects immutable `website_version_thumbnail` references when present. The Original Website card uses a persisted original-source screenshot thumbnail or an honest unavailable state; representative imported images are no longer used as Original Website thumbnails. Generated cards prefer persisted generated proposal thumbnails and keep durable live preview links for inspection.

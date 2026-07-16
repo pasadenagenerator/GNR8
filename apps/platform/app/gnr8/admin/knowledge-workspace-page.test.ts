@@ -100,26 +100,27 @@ test("original versus latest comparison uses truthful visual semantics", async (
   const { projection, components } = await workspaceSources();
 
   for (const label of [
+    "persisted_original_source_thumbnail",
     "source_screenshot",
     "source_preview",
     "representative_source_asset",
     "unavailable",
     "live_generated_proposal_preview",
-    "persisted_generated_screenshot",
+    "persisted_generated_thumbnail",
     "bundle_cover_image",
     "live_preview_available",
     "generated_unavailable",
-    "Representative imported image",
+    "Representative imported images are not used as original website thumbnails.",
     "Live generated proposal preview",
   ]) {
     assert.equal(`${projection}\n${components}`.includes(label), true, `missing ${label}`);
   }
 
-  const screenshotPosition = projection.indexOf('kind: "source_screenshot"');
-  const representativePosition = projection.indexOf('kind: "representative_source_asset"');
-  assert.ok(screenshotPosition >= 0 && representativePosition > screenshotPosition);
-  assert.equal(components.includes("<iframe"), true);
-  assert.equal(components.includes("title={props.preview.altText}"), true);
+  assert.equal(projection.includes('kind: "persisted_original_source_thumbnail"'), true);
+  assert.equal(projection.includes("Representative imported images are not used as original website thumbnails."), true);
+  assert.equal(projection.includes('kind: "representative_source_asset"'), false);
+  assert.equal(components.includes("<iframe"), false);
+  assert.equal(components.includes("props.preview.imageHref"), true);
 });
 
 test("preview truthfulness guards prevent misleading states", async () => {

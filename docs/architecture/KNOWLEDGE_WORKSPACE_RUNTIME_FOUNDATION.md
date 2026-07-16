@@ -373,3 +373,6 @@ KWX-3 adds deterministic read-only projection composition only. It adds no
 source parsing, screenshot capture, thumbnail generation, persistence, schema,
 API, worker, AI, confirmation mutation, proposal regeneration, approval,
 publishing, deployment, DNS, or runtime mutation behavior.
+# WVT-1 Update
+
+The runtime foundation consumes the WVT-1 thumbnail projection as presentation-only state. Thumbnail reads are authenticated, read-only, and backed by site-version provenance artifacts; Workspace does not capture, persist, regenerate, approve, publish, or deploy from the page render path.

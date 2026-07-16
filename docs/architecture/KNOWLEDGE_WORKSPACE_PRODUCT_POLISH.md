@@ -328,3 +328,6 @@ The page now uses:
 
 KWX-3 still does not create screenshots, thumbnails, screenshot access routes,
 new source knowledge, mutation controls, Proposal v3, or any runtime write.
+# WVT-1 Update
+
+Workspace visual polish now treats thumbnail absence as an intentional state. Cards render persisted thumbnails when available and otherwise show a polished unavailable/live-preview-available panel without broken image placeholders or dashboard iframes.

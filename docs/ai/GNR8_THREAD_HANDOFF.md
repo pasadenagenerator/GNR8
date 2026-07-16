@@ -5690,3 +5690,6 @@ Rules:
 ## Ready-to-Copy Prompt
 
 "Read these files first in this exact order: docs/ai/GNR8_THREAD_HANDOFF.md, docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md, docs/ai/GNR8_CURRENT_STATE.md, docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md, docs/ai/GNR8_COLLABORATION_PROTOCOL.md, docs/ai/GNR8_PROJECT_MAP.md, docs/ai/GNR8_CANONICAL_DOC_INDEX.md, and docs/ai/decisions/*.md. Read docs/ai/GNR8_COLLABORATION_PROTOCOL.md before generating Codex tasks. Then compare with apps/platform/gnr8/**, apps/worker/gnr8/**, and apps/platform/supabase/migrations/** before making any changes. Keep deterministic contracts, control-plane boundaries, and no-live-execution rules intact."
+# WVT-1 Update
+
+Implemented the Website Version Thumbnail runtime foundation. Key files are `website-version-thumbnail-contract.ts`, `website-version-thumbnail-builder.ts`, `website-version-thumbnail-persistence.ts`, `website-version-thumbnail-materializer.ts`, `website-version-thumbnail-odv.cli.ts`, and the superadmin thumbnail route under Workspace. The next phase is explicit approval for `WVT-1-VERIFY - ODV Thumbnail Production Materialization`; do not perform production thumbnail writes without that approval.

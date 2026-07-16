@@ -21,10 +21,16 @@ import {
   type SourceContentVisualContinuityProjectionLoaderResult,
 } from "./source-content-visual-continuity-projection-loader";
 import { loadSourceWebsiteUnderstandingProjection } from "./source-website-understanding-projection-loader";
+import {
+  loadGeneratedWebsiteVersionThumbnail,
+  loadOriginalWebsiteVersionThumbnail,
+} from "./website-version-thumbnail-persistence";
+import type { WebsiteVersionThumbnailArtifact } from "./website-version-thumbnail-contract";
 
 export type WorkspaceState = "Known" | "Unknown" | "Needs confirmation";
 
 export type KnowledgeWorkspaceOriginalVisualKind =
+  | "persisted_original_source_thumbnail"
   | "source_screenshot"
   | "source_preview"
   | "representative_source_asset"
@@ -32,7 +38,7 @@ export type KnowledgeWorkspaceOriginalVisualKind =
 
 export type KnowledgeWorkspaceGeneratedPreviewKind =
   | "live_generated_proposal_preview"
-  | "persisted_generated_screenshot"
+  | "persisted_generated_thumbnail"
   | "bundle_cover_image"
   | "live_preview_available"
   | "generated_unavailable";
@@ -222,7 +228,10 @@ export type KnowledgeWorkspaceProjection = {
   sourceProjectionStatus: "valid" | "partial" | "blocked" | "invalid";
 };
 
-export type KnowledgeWorkspaceProjectionOptions = RuntimeStoreDbOptions;
+export type KnowledgeWorkspaceProjectionOptions = RuntimeStoreDbOptions & {
+  loadOriginalThumbnail?: typeof loadOriginalWebsiteVersionThumbnail;
+  loadGeneratedThumbnail?: typeof loadGeneratedWebsiteVersionThumbnail;
+};
 
 function readable(value: string | number | null | undefined, fallback = "not available"): string {
   const normalized = String(value ?? "").trim();
@@ -347,7 +356,20 @@ function originalVisualPreview(input: {
   business: GenerationBusinessFoundationProjection;
   continuityResult: SourceContentVisualContinuityProjectionLoaderResult;
   source: SourceWebsiteUnderstandingProjection | null;
+  thumbnail: WebsiteVersionThumbnailArtifact | null;
 }): KnowledgeWorkspaceVisualPreviewProjection {
+  if (input.thumbnail) {
+    return {
+      title: "Original Website",
+      kind: "persisted_original_source_thumbnail",
+      label: "Original source screenshot thumbnail",
+      href: input.business.sourceWebsite.url ?? input.source?.sourceIdentity.sourceUrl ?? null,
+      imageHref: `/gnr8/admin/workspace/${input.thumbnail.siteVersionId}/thumbnails/original`,
+      unavailableReason: null,
+      altText: "Persisted thumbnail derived from original source screenshot evidence",
+      badges: ["source baseline", "persisted screenshot", "presentation thumbnail"],
+    };
+  }
   const continuity = input.continuityResult.projection;
   const sourceScreenshot = continuity?.sourceScreenshots
     .filter((screenshot) => screenshot.availability === "available" && Boolean(screenshot.safeAccessRef))
@@ -368,34 +390,32 @@ function originalVisualPreview(input: {
     };
   }
 
-  const representative = bestOriginalPreview(input.business.importedAssets.previews);
-  if (representative?.previewHref) {
-    return {
-      title: "Original Website",
-      kind: "representative_source_asset",
-      label: "Representative imported image",
-      href: input.business.sourceWebsite.url ?? input.source?.sourceIdentity.sourceUrl ?? null,
-      imageHref: representative.previewHref,
-      unavailableReason: null,
-      altText: "Representative imported image from the original website evidence",
-      badges: ["source baseline", "imported", "source fidelity reference"],
-    };
-  }
-
   const sourceUrl = input.business.sourceWebsite.url ?? input.source?.sourceIdentity.sourceUrl ?? null;
   return {
     title: "Original Website",
     kind: sourceUrl ? "source_preview" : "unavailable",
-    label: sourceUrl ? "Original website link available" : "Original source preview unavailable",
+    label: sourceUrl ? "Original website link available" : "Original source thumbnail unavailable",
     href: sourceUrl,
     imageHref: null,
-    unavailableReason: sourceUrl ? "No persisted screenshot or representative source image is safely available." : "No safe original visual source is available.",
+    unavailableReason: sourceUrl ? "No persisted original-source thumbnail is available. Representative imported images are not used as original website thumbnails." : "No safe original visual source is available.",
     altText: "Original website visual preview unavailable",
     badges: sourceUrl ? ["source baseline", "open original website"] : ["unavailable"],
   };
 }
 
-function generatedVisualPreview(iteration: GenerationIterationProjection | null): KnowledgeWorkspaceVisualPreviewProjection {
+function generatedVisualPreview(iteration: GenerationIterationProjection | null, thumbnail: WebsiteVersionThumbnailArtifact | null = null): KnowledgeWorkspaceVisualPreviewProjection {
+  if (iteration && thumbnail) {
+    return {
+      title: "Latest Proposal",
+      kind: "persisted_generated_thumbnail",
+      label: `Iteration ${iteration.iteration} generated proposal thumbnail`,
+      href: iteration.preview.route,
+      imageHref: `/gnr8/admin/workspace/${thumbnail.siteVersionId}/thumbnails/iterations/${iteration.iteration}`,
+      unavailableReason: null,
+      altText: `Persisted thumbnail derived from ${iteration.label} durable generated proposal preview`,
+      badges: [`Iteration ${iteration.iteration}`, "quarantined", "not approved", "not published", "presentation thumbnail"],
+    };
+  }
   if (iteration?.preview.available) {
     return {
       title: "Latest Proposal",
@@ -437,11 +457,13 @@ function versionCards(input: {
   evolution: GenerationEvolutionDashboardProjection;
   continuityResult: SourceContentVisualContinuityProjectionLoaderResult;
   source: SourceWebsiteUnderstandingProjection | null;
+  originalThumbnail: WebsiteVersionThumbnailArtifact | null;
+  generatedThumbnails: Map<number, WebsiteVersionThumbnailArtifact>;
 }): KnowledgeWorkspaceVersionProjection[] {
-  const originalPreview = originalVisualPreview({ business: input.business, continuityResult: input.continuityResult, source: input.source });
+  const originalPreview = originalVisualPreview({ business: input.business, continuityResult: input.continuityResult, source: input.source, thumbnail: input.originalThumbnail });
   const iterations = [1, 2].map((iterationNumber): KnowledgeWorkspaceVersionProjection => {
     const iteration = input.evolution.iterations.find((item) => item.iteration === iterationNumber) ?? null;
-    const generatedPreview = generatedVisualPreview(iteration);
+    const generatedPreview = generatedVisualPreview(iteration, input.generatedThumbnails.get(iterationNumber) ?? null);
     if (!iteration) {
       return {
         label: `Iteration ${iterationNumber}`,
@@ -1043,6 +1065,8 @@ function advanced(input: {
   source: SourceWebsiteUnderstandingProjection | null;
   sourceValidation: SourceWebsiteUnderstandingValidationResult | null;
   evolution: GenerationEvolutionDashboardProjection;
+  originalThumbnail: WebsiteVersionThumbnailArtifact | null;
+  generatedThumbnails: Map<number, WebsiteVersionThumbnailArtifact>;
 }): KnowledgeWorkspaceAdvancedProjection {
   const generationIds = input.evolution.iterations.flatMap((iteration) =>
     iteration.artifacts
@@ -1069,7 +1093,19 @@ function advanced(input: {
     artifactExplorer: [
       ...input.business.artifactExplorer,
       ...input.evolution.artifactLineage,
-    ].map((artifact) => ({
+      input.originalThumbnail ? {
+        label: "Original Thumbnail",
+        kind: input.originalThumbnail.artifactKind,
+        artifactId: input.originalThumbnail.artifactId,
+        status: input.originalThumbnail.availability.status,
+      } : null,
+      ...[...input.generatedThumbnails.entries()].map(([iteration, thumbnail]) => ({
+        label: `Iteration ${iteration} Thumbnail`,
+        kind: thumbnail.artifactKind,
+        artifactId: thumbnail.artifactId,
+        status: thumbnail.availability.status,
+      })),
+    ].filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact)).map((artifact) => ({
       label: artifact.label,
       kind: artifact.kind,
       artifactId: artifact.artifactId,
@@ -1102,12 +1138,22 @@ export async function loadKnowledgeWorkspaceProjection(input: {
     loadSourceWebsiteUnderstandingProjection({ siteVersionId: input.siteVersionId, options }),
     loadSourceContentVisualContinuityProjection({ siteVersionId: input.siteVersionId, options }),
   ]);
+  const loadOriginalThumbnail = options.loadOriginalThumbnail ?? loadOriginalWebsiteVersionThumbnail;
+  const loadGeneratedThumbnail = options.loadGeneratedThumbnail ?? loadGeneratedWebsiteVersionThumbnail;
+  const [originalThumbnail, generated1Thumbnail, generated2Thumbnail] = await Promise.all([
+    loadOriginalThumbnail({ siteVersionId: input.siteVersionId, options }),
+    loadGeneratedThumbnail({ siteVersionId: input.siteVersionId, iteration: 1, options }),
+    loadGeneratedThumbnail({ siteVersionId: input.siteVersionId, iteration: 2, options }),
+  ]);
+  const generatedThumbnails = new Map<number, WebsiteVersionThumbnailArtifact>(
+    [[1, generated1Thumbnail], [2, generated2Thumbnail]].filter((entry): entry is [number, WebsiteVersionThumbnailArtifact] => Boolean(entry[1])),
+  );
   const source = sourceResult.projection;
   const latestIteration = evolution.iterations.at(-1) ?? null;
   const latestBusinessIteration = business.generatedIterations.find((iteration) => iteration.isLatest) ?? business.generatedIterations.at(-1) ?? null;
   const gaps = knowledgeGaps({ business, source });
-  const originalVisual = originalVisualPreview({ business, continuityResult, source });
-  const latestPreview = generatedVisualPreview(latestIteration);
+  const originalVisual = originalVisualPreview({ business, continuityResult, source, thumbnail: originalThumbnail });
+  const latestPreview = generatedVisualPreview(latestIteration, latestIteration ? generatedThumbnails.get(latestIteration.iteration) ?? null : null);
   const recommendation = overallRecommendation({
     gaps,
     fallback: evolution.cycle.latestRecommendation ?? latestIteration?.compliance.recommendation ?? "Use current knowledge gaps before regeneration.",
@@ -1148,7 +1194,7 @@ export async function loadKnowledgeWorkspaceProjection(input: {
   return {
     siteVersionId: input.siteVersionId,
     hero,
-    versions: versionCards({ business, evolution, continuityResult, source }),
+    versions: versionCards({ business, evolution, continuityResult, source, originalThumbnail, generatedThumbnails }),
     businessUnderstanding: businessUnderstandingCards({ business, source }),
     visualIdentity: visualIdentity({ business, source }),
     recognizable: recognizable({ business, source, continuityResult, siteVersionId: input.siteVersionId }),
@@ -1162,7 +1208,7 @@ export async function loadKnowledgeWorkspaceProjection(input: {
     gaps,
     health: health({ business, source, evolution }),
     nextActions: nextActions({ gaps, hero }),
-    advanced: advanced({ business, source, sourceValidation: sourceResult.validation, evolution }),
+    advanced: advanced({ business, source, sourceValidation: sourceResult.validation, evolution, originalThumbnail, generatedThumbnails }),
     sourceProjectionStatus: sourceResult.status,
   };
 }

@@ -2360,3 +2360,6 @@ KWX-3 adds no screenshot generation, thumbnail pipeline, source parsing,
 canonical knowledge, confirmation mutation, proposal regeneration, Proposal
 v3, approval, publishing, deployment, DNS, schema, API, worker, AI, or runtime
 mutation behavior.
+# WVT-1 Update
+
+MVP-0 now includes a private immutable website-version thumbnail boundary for product UX. The boundary is derived from existing source evidence or durable generated proposal bundles and performs no production writes, provider execution, public sharing, publishing, deployment, or DNS mutation in WVT-1.

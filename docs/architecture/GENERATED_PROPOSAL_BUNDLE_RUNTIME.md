@@ -307,3 +307,6 @@ It does not read bundle assets, generate generated-iteration thumbnails, change
 bundle persistence, alter preview routes, import proposals, observe generated
 sites, run compliance, regenerate proposals, publish, deploy, or mutate
 production state.
+# WVT-1 Update
+
+Generated version thumbnails derive from exact durable `generated_proposal_bundle` artifacts and the existing superadmin preview route. The thumbnail artifact stores lineage to the bundle ID and bundle SHA; it does not mutate the bundle or become an authoritative generated proposal artifact.

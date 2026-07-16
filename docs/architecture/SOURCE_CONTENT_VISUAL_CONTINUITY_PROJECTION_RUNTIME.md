@@ -359,3 +359,6 @@ asset extraction, screenshot access, thumbnail generation, content
 transformation, asset approval, WDB/WGP enrichment, Provider Payload,
 generation, publishing, deployment, DNS, schema, persistence, API, worker, or
 AI behavior.
+# WVT-1 Update
+
+Original Website thumbnails reuse persisted source screenshot evidence when exact bytes are safely retrievable. Source Content & Visual Continuity remains the evidence/projection layer; WVT-1 materializes only an immutable presentation derivative and never substitutes representative imported photos for source screenshots.

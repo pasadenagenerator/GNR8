@@ -4,6 +4,10 @@ import {
   getGenerationPreviewBundleAvailability,
   type GenerationPreviewBundleAvailability,
 } from "./generation-evolution-preview-boundary";
+import {
+  loadGeneratedWebsiteVersionThumbnail,
+} from "./website-version-thumbnail-persistence";
+import type { WebsiteVersionThumbnailArtifact } from "./website-version-thumbnail-contract";
 import type { ComplianceCategory, GenerationContractComplianceStatus } from "./generation-contract-compliance-contract";
 import type {
   GenerationEvolutionOverallAssessment,
@@ -46,6 +50,15 @@ export type GenerationPreviewProjection = {
   unavailableReason: string | null;
 };
 
+export type GenerationThumbnailProjection = {
+  available: boolean;
+  href: string | null;
+  artifactId: string | null;
+  sourceKind: "generated_proposal_thumbnail";
+  sourceLineage: string[];
+  unavailableReason: string | null;
+};
+
 export type GenerationComplianceSummaryProjection = {
   artifactId: string | null;
   complianceId: string | null;
@@ -84,6 +97,7 @@ export type GenerationIterationProjection = {
   observedWebsiteReadiness: string | null;
   compliance: GenerationComplianceSummaryProjection;
   preview: GenerationPreviewProjection;
+  thumbnail: GenerationThumbnailProjection;
   artifacts: GenerationArtifactLinkProjection[];
   evolution: GenerationEvolutionSummaryProjection | null;
   attentionStates: GenerationDashboardAttentionState[];
@@ -133,6 +147,7 @@ type ProjectionRecord = {
 export type GenerationEvolutionDashboardProjectionOptions = RuntimeStoreDbOptions & {
   getSiteVersion?: SiteVersionLoader;
   getPreviewBundleAvailability?: (input: { siteVersionId: string; iteration: number }) => Promise<GenerationPreviewBundleAvailability | null>;
+  loadGeneratedThumbnail?: typeof loadGeneratedWebsiteVersionThumbnail;
 };
 
 function cloneJson<T>(value: T): T {
@@ -293,6 +308,38 @@ async function previewProjection(input: {
   };
 }
 
+function thumbnailProjection(input: {
+  siteVersionId: string;
+  iteration: number;
+  thumbnail: WebsiteVersionThumbnailArtifact | null;
+  preview: GenerationPreviewProjection;
+}): GenerationThumbnailProjection {
+  if (input.thumbnail) {
+    return {
+      available: true,
+      href: `/gnr8/admin/workspace/${input.siteVersionId}/thumbnails/iterations/${input.iteration}`,
+      artifactId: input.thumbnail.artifactId,
+      sourceKind: "generated_proposal_thumbnail",
+      sourceLineage: [
+        input.thumbnail.sourceArtifactId,
+        input.thumbnail.generatedProposalBundleId ?? "",
+        input.thumbnail.lineage.generatedProposalBundleSha256 ?? "",
+      ].filter(Boolean),
+      unavailableReason: null,
+    };
+  }
+  return {
+    available: false,
+    href: null,
+    artifactId: null,
+    sourceKind: "generated_proposal_thumbnail",
+    sourceLineage: [],
+    unavailableReason: input.preview.available
+      ? "Persisted generated thumbnail is unavailable; live durable preview remains available."
+      : input.preview.unavailableReason ?? "Generated thumbnail and live preview are unavailable.",
+  };
+}
+
 export async function loadGenerationEvolutionDashboardProjection(input: {
   siteVersionId: string;
   options?: GenerationEvolutionDashboardProjectionOptions;
@@ -351,6 +398,7 @@ export async function loadGenerationEvolutionDashboardProjection(input: {
 
   const getPreviewBundleAvailability = options.getPreviewBundleAvailability ??
     ((value: { siteVersionId: string; iteration: number }) => getGenerationPreviewBundleAvailability(value));
+  const loadGeneratedThumbnail = options.loadGeneratedThumbnail ?? loadGeneratedWebsiteVersionThumbnail;
 
   const iterations: GenerationIterationProjection[] = [];
   for (const record of iterationRecords) {
@@ -360,6 +408,17 @@ export async function loadGenerationEvolutionDashboardProjection(input: {
       iteration: record.iteration,
       proposal: record.proposal,
       getPreviewBundleAvailability,
+    });
+    const thumbnailArtifact = await loadGeneratedThumbnail({
+      siteVersionId: input.siteVersionId,
+      iteration: record.iteration,
+      options,
+    });
+    const thumbnail = thumbnailProjection({
+      siteVersionId: input.siteVersionId,
+      iteration: record.iteration,
+      thumbnail: thumbnailArtifact,
+      preview,
     });
     const iterationAttention = new Set<GenerationDashboardAttentionState>(attentionForCompliance(compliance));
     if (!record.proposal || !record.observed || !record.compliance) iterationAttention.add("missing_iteration_artifact");
@@ -376,6 +435,7 @@ export async function loadGenerationEvolutionDashboardProjection(input: {
       observedWebsiteReadiness: text(record.observed?.status),
       compliance,
       preview,
+      thumbnail,
       artifacts: [
         artifactLink({ label: "Provider Payload", kind: "provider_generation_payload", record: record.provider, canonicalIdKey: "providerGenerationPayloadId" }),
         artifactLink({ label: "Generated Proposal", kind: "generated_website_proposal", record: record.proposal, canonicalIdKey: "generatedWebsiteProposalId" }),
