@@ -35,6 +35,34 @@ Canonical Bulk Migration Factory design docs:
 - `docs/product/gnr8-bulk-migration-operator-workflow.md`
 - `docs/product/gnr8-bulk-migration-factory-closeout.md`
 
+## CCO-1 Command Center And Ops Inbox
+
+Canonical Command Center and Ops Inbox design docs:
+- `docs/architecture/gnr8-command-center-ops-inbox-design.md`
+- `docs/architecture/gnr8-command-center-read-model-contract.md`
+- `docs/architecture/gnr8-ops-inbox-work-item-model.md`
+- `docs/product/gnr8-command-center-operator-workbench.md`
+- `docs/product/gnr8-command-center-ops-inbox-closeout.md`
+
+## AAF-1 Audit And Approval Foundation
+
+Canonical audit, approval, and evidence foundation docs:
+- `docs/architecture/gnr8-audit-approval-foundation-design.md`
+- `docs/architecture/gnr8-approval-persistence-model.md`
+- `docs/architecture/gnr8-audit-event-taxonomy.md`
+- `docs/architecture/gnr8-evidence-package-contract.md`
+- `docs/product/gnr8-audit-approval-operator-workflow.md`
+- `docs/product/gnr8-audit-approval-foundation-closeout.md`
+
+## DDOM-1 Domain And DNS Operating Model
+
+Canonical domain and DNS operating model docs:
+- `docs/architecture/gnr8-domain-dns-operating-model-decision.md`
+- `docs/architecture/gnr8-domain-dns-mvp-boundary.md`
+- `docs/architecture/gnr8-domain-dns-readiness-and-evidence-model.md`
+- `docs/product/gnr8-domain-dns-operator-workflow.md`
+- `docs/product/gnr8-domain-dns-operating-model-closeout.md`
+
 ## Secondary
 
 - `SYSTEM.md`

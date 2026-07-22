@@ -2,71 +2,11 @@
 
 BMF-1 closeout for Bulk Migration Factory design.
 
-BMF-1 is a documentation and architecture phase only. No runtime behavior, APIs, database schemas, migrations, worker behavior, import behavior, Command Center runtime/UI behavior, billing/Stripe behavior, DNS/domain behavior, provider execution, publishing, rollback, thumbnails, Generated Proposal Bundles, Workspace runtime, or Evolution runtime were intentionally changed.
+This is a documentation and architecture phase only. No runtime behavior, APIs, route handlers, schemas, migrations, database code, worker code, queue code, provider execution, billing code, DNS/domain code, publish/rollback implementation, asset storage implementation, Supabase Storage implementation, Vercel Blob implementation, thumbnail code, Generated Proposal Bundle runtime, Workspace runtime, Evolution runtime, AI execution, or deployment configuration was intentionally changed.
 
-## BMF-1 Status
+## Documents Created Or Updated
 
-BMF-1 is complete pending architectural review.
-
-The repository now contains implementation-ready design documentation for the Bulk Migration Factory MVP:
-
-- Bulk intake and validation model.
-- Batch lifecycle.
-- Site-level lifecycle within a batch.
-- Non-destructive dry-run model.
-- Operator-assisted execution model.
-- Retry/replay boundaries.
-- Failure taxonomy.
-- Stop/continue policy.
-- Command Center requirements.
-- Ops Inbox derived work item requirements.
-- BMF audit event taxonomy.
-- Conceptual data/artifact contracts.
-- Future implementation validation plan.
-- Architecture warnings.
-
-## Files Reviewed
-
-Required MVP-1 documents were present and reviewed:
-
-- `docs/product/gnr8-mvp-boundary.md`
-- `docs/product/gnr8-mvp-supported-site-classes.md`
-- `docs/architecture/gnr8-mvp-source-of-truth-matrix.md`
-- `docs/architecture/gnr8-mvp-operational-state-model.md`
-- `docs/product/gnr8-mvp-boundary-closeout.md`
-- `docs/product/future-gnr8-mvp-bridge.md`
-- `docs/product/future-gnr8-strategy-closeout.md`
-- `docs/product/gnr8-current-capability-inventory.md`
-- `docs/product/gnr8-mvp-readiness-map.md`
-- `docs/product/gnr8-capability-inventory-closeout.md`
-- `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
-- `docs/ai/GNR8_CURRENT_STATE.md`
-- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
-- `docs/ai/decisions/ADR-001-deterministic-pipeline.md`
-- `docs/ai/decisions/ADR-003-runtime-artifact-model.md`
-
-Implementation evidence inspected read-only:
-
-- `apps/platform/gnr8/migration-factory/**`
-- `apps/platform/gnr8/migration/**`
-- `apps/platform/gnr8/site/**`
-- `apps/platform/gnr8/runtime/**`
-- `apps/platform/gnr8/command-center/**`
-- `apps/platform/app/gnr8/command-center/**`
-- `apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts`
-- `apps/platform/app/api/gnr8/admin/migration-jobs/**`
-- `apps/platform/app/api/gnr8/admin/migration-batches/**`
-- `apps/platform/gnr8/multipage-import/**`
-- `apps/platform/gnr8/import-rendered-capture/**`
-- `apps/platform/gnr8/rendered-capture-worker-server/**`
-- `apps/worker/gnr8/**`
-- `apps/platform/supabase/migrations/**`
-- `packages/data/src/repositories/**`
-- `packages/core/src/modules/**`
-
-## Files Created Or Changed
-
-Created:
+Required BMF-1 outputs are present and updated as Markdown documentation:
 
 - `docs/architecture/gnr8-bulk-migration-factory-design.md`
 - `docs/architecture/gnr8-bulk-migration-batch-lifecycle.md`
@@ -74,302 +14,318 @@ Created:
 - `docs/product/gnr8-bulk-migration-operator-workflow.md`
 - `docs/product/gnr8-bulk-migration-factory-closeout.md`
 
-Changed:
+Canonical index status:
 
-- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md` was updated to reference the new BMF-1 documents as canonical architecture/product docs.
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md` exists.
+- It already contains a BMF-1 section referencing the five required BMF-1 documents.
+- BMF-1 did not rewrite unrelated index content.
 
-## MVP-1 Repository Status
+## MVP-1 Baseline Verification
 
-At BMF-1 start, all required MVP-1 documents existed.
+Required MVP-1 baseline files exist, are readable, and are tracked:
 
-`git status --short -- <required MVP-1 files>` reported:
+- `docs/product/gnr8-mvp-boundary.md`
+- `docs/product/gnr8-mvp-supported-site-classes.md`
+- `docs/architecture/gnr8-mvp-source-of-truth-matrix.md`
+- `docs/architecture/gnr8-mvp-operational-state-model.md`
+- `docs/product/gnr8-mvp-boundary-closeout.md`
 
-- Modified: `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
-- Untracked: `docs/architecture/gnr8-mvp-operational-state-model.md`
-- Untracked: `docs/architecture/gnr8-mvp-source-of-truth-matrix.md`
-- Untracked: `docs/product/gnr8-mvp-boundary-closeout.md`
-- Untracked: `docs/product/gnr8-mvp-boundary.md`
-- Untracked: `docs/product/gnr8-mvp-supported-site-classes.md`
-- No status output for the other required MVP-1 docs, indicating they were tracked and clean at inspection time.
+Targeted status at verification time showed all five MVP-1 files are tracked and modified in the working tree:
 
-BMF-1 did not normalize, revert, stage, or commit pre-existing MVP-1 status.
+- `M docs/architecture/gnr8-mvp-operational-state-model.md`
+- `M docs/architecture/gnr8-mvp-source-of-truth-matrix.md`
+- `M docs/product/gnr8-mvp-boundary-closeout.md`
+- `M docs/product/gnr8-mvp-boundary.md`
+- `M docs/product/gnr8-mvp-supported-site-classes.md`
 
-## Current Implementation Evidence Summary
+BMF-1 treated these as pre-existing documentation changes and did not edit them.
 
-| Area | Evidence | Classification |
-| --- | --- | --- |
-| Existing batch tables/stores | `gnr8_migration_batches`, `gnr8_migration_batch_jobs`, `PostgresMigrationBatchStore` | Implemented |
-| Existing job tables/stores | `gnr8_migration_jobs`, `gnr8_migration_job_stages`, `gnr8_migration_job_events`, activation history, `PostgresMigrationJobStore` | Implemented |
-| Existing stage/event model | Fixed stages and job/batch event enums | Implemented but narrower than BMF taxonomy |
-| Existing batch executor | `MigrationBatchExecutor` | Implemented for operator-driven sequential execution |
-| Queue/worker orchestration | Worker registrations do not include BMF queue worker | Not implemented/future candidate |
-| Current batch pages | Command Center migration batch list/detail | Implemented |
-| Current Command Center read models | Site/cost/runtime read model, batch observability | Partially implemented for BMF |
-| Current import route behavior | Client-scoped URL import validates agency/client and source URL, preallocates runtime identity, runs scoped pipeline, links ownership | Implemented |
-| Current scoped import pipeline | Static import, provenance, raw artifacts, evidence baseline, content slots, artifacts, multi-page evidence | Implemented |
-| Current multi-page discovery | Discovery, sitemap/robots/canonical/redirect/alias evidence, route limits, acquisition/assembly, operator summary | Partially implemented for controlled static cases |
-| Current rendered capture | Capture contract, service, worker server, site render capture worker, status/diagnostics | Implemented with external variance |
-| Current worker coverage | Template processing, site bootstrap, site render capture, domain verification, static import helpers | Partially implemented; no BMF queue worker |
-| Current audit/event coverage | Generic audit log, migration job/batch events, publish/content/domain/provider event stores | Partially implemented; BMF taxonomy not unified |
-| Current tests | Migration factory, route, multipage, capture, worker, runtime tests | Implemented for existing foundations; BMF lifecycle tests missing |
-| Provider execution | Provider control-plane/dry-run/readiness artifacts exist | Prepared/deferred; forbidden for BMF MVP execution |
-| Openprovider live DNS mutation | Read-only/sandbox/control-plane evidence only | Deferred/forbidden before ADR |
+## Implementation Evidence Reviewed
 
-## Bulk Migration Factory Design Summary
+Read-only evidence reviewed for BMF-1:
 
-BMF MVP is an operator-assisted planning and execution factory for static or mostly static public websites. It turns validated intake rows into approved batch plans, runs non-destructive dry-runs, executes migration jobs only under human-approved policies, records deterministic evidence, and projects operator work through Command Center and derived Ops Inbox items.
+- Scoped import route: `apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts`
+- Scoped import pipeline: `apps/platform/gnr8/site/scoped-import-pipeline.ts`
+- Static import: `apps/platform/gnr8/import/runtime/import-static-site.ts`, `apps/platform/gnr8/import/**`
+- Multi-page import: `apps/platform/gnr8/multipage-import/core/discover-multipage-import-tree.ts`, `apps/platform/gnr8/multipage-import/**`
+- Migration pipeline models: `apps/platform/gnr8/migration/**`
+- Migration job/batch/stage store and executor: `apps/platform/gnr8/migration-factory/**`
+- Runtime artifact store and raw-template artifacts: `apps/platform/gnr8/runtime/runtime-store.ts`
+- Runtime readiness, preview smoke, preview asset paths: `apps/platform/gnr8/runtime/readiness/**`, `apps/platform/gnr8/runtime/preview-smoke/**`, `apps/platform/app/api/gnr8/runtime/preview-assets/**`
+- Command Center migration and hosting pages/read models: `apps/platform/app/gnr8/command-center/**`, `apps/platform/gnr8/command-center/**`
+- Hosting operations pages/readiness: `apps/platform/gnr8/runtime/hosting-operations/**`
+- Publish activation safety: `apps/platform/gnr8/runtime/publish-activation-orchestrator.ts`, `apps/platform/gnr8/runtime/publish-activation-guard.ts`, `apps/platform/gnr8/runtime/publish-safety-check.ts`
+- Rollback primitive: `apps/platform/gnr8/runtime/rollback-switch.ts`
+- Cost event logging: `apps/platform/gnr8/billing/**`
+- Audit/event foundation: `packages/core/src/modules/audit-log/**`
+- Provider/DNS boundaries: `apps/platform/gnr8/runtime/dns/**`, `apps/platform/gnr8/runtime/domains/**`, `apps/platform/gnr8/runtime/providers/openprovider/**`, `apps/worker/gnr8/domain/inngest/domain-verification-job.ts`
+- Asset/storage evidence: preview asset routes, raw-template artifact file maps, byte sizes, hashes, media types, Supabase Storage/filesystem references surfaced by repository search.
+- ADRs: `docs/ai/decisions/ADR-001-deterministic-pipeline.md`, `docs/ai/decisions/ADR-003-runtime-artifact-model.md`
 
-The factory does not autonomously regenerate, publish, rollback, mutate DNS, execute providers, or perform billing/customer Stripe workflows.
+## Final Factory Design Summary
 
-## Bulk Intake Summary
+The Bulk Migration Factory is the canonical MVP architecture for migrating approximately 200 existing static or mostly static public websites through an operator-assisted workflow. It accepts bulk intake, validates and classifies sites, prepares non-destructive dry-runs, creates approved batches, executes jobs sequentially by default, pauses/resumes safely, supports governed retry/replay, handles failures through a taxonomy, exposes work in Command Center and Ops Inbox, records audit evidence, and preserves MVP-1 source-of-truth boundaries.
 
-MVP intake supports CSV and manual entry as required paths. API intake is design-ready but must not bypass validation.
-
-Required fields:
-
-- Agency/client identifier.
-- Site display name.
-- Source URL.
-- Intended launch domain or explicit no-custom-domain value.
-- Site class guess.
-- Migration priority.
-- Operator owner.
-- Approval owner or client reviewer if known.
-
-Rows are normalized, deduped, classified, assigned owners, and blocked/deferred before any migration job is created.
+It does not claim autonomous migration, autonomous AI execution, live DNS/registrar mutation, provider execution, autonomous regeneration, full Stripe billing, or storage migration as MVP behavior.
 
 ## Batch Lifecycle Summary
 
-BMF defines:
+The canonical batch states are:
 
 - `draft`
 - `intake_validating`
-- `intake_invalid`
-- `ready_for_dry_run`
+- `ready`
 - `dry_run_running`
 - `dry_run_completed`
 - `dry_run_failed`
-- `awaiting_batch_start_approval`
-- `approved_to_start`
+- `approval_pending`
 - `running`
 - `paused`
-- `partially_completed`
+- `partially_failed`
+- `failed`
 - `completed`
-- `completed_with_failures`
-- `blocked`
 - `cancelled`
 - `archived`
 
-Each state has meaning, allowed/prohibited transitions, evidence, operator action, approval requirement, audit event, Command Center representation, Ops Inbox representation, and retry/replay implication in the lifecycle doc.
+Each state defines meaning, allowed/prohibited transitions, required evidence, operator action, approval requirement, audit event, source-of-truth owner, Command Center representation, Ops Inbox representation, and recovery behavior.
 
-## Site-Level Lifecycle Summary
+Recommended MVP batch size is 10 to 25 sites, with a design warning above 50 sites. A 200-site portfolio should run as multiple batches/cohorts.
 
-BMF defines batch-adapted site states:
+## Site Item Lifecycle Summary
 
-- `intake_created`
-- `intake_validated`
-- `intake_blocked`
-- `classified_supported`
-- `classified_manual_review`
-- `classified_import_only`
-- `classified_out_of_scope`
-- `import_pending`
-- `import_running`
-- `import_succeeded`
-- `import_failed`
-- `capture_degraded`
-- `route_review_needed`
-- `preview_ready`
-- `review_pending`
-- `review_blocked`
-- `approval_pending`
+The canonical site item states are:
+
+- `candidate`
+- `classified`
+- `blocked`
+- `queued`
+- `running`
+- `completed`
+- `completed_with_warnings`
+- `failed`
+- `review_required`
 - `approved_for_launch`
-- `domain_pending`
-- `domain_ready`
-- `publish_ready`
-- `published`
-- `publish_failed`
-- `rollback_required`
-- `incident_open`
 - `deferred`
-- `archived_decommissioned`
+- `cancelled`
 
-Each state includes source-of-truth fields/artifacts, audit event, operator role, allowed/blocked actions, retry/replay policy, Command Center surface, and Ops Inbox item.
+Each state defines transition rules, evidence, approval/audit requirements, source-of-truth owner, Command Center/Ops Inbox representation, and recovery behavior.
 
-## Dry-Run Model
+## Failure And Recovery Summary
 
-Dry-run is non-destructive, review-only planning evidence. It evaluates intake validity, duplicates, site class support, source reachability, capture risk, likely route count, unsupported indicators, domain assumptions, approvals, workload, risk, cost estimates where available, and recommended stop/continue policy.
+The recovery doc defines canonical codes, severity, site/batch impact, stop/continue/pause behavior, retry eligibility, replay eligibility, evidence, operator action, approvals, audit event, Ops Inbox item, recovery path, and escalation owner for:
 
-Dry-run is not approval and cannot create public runtime changes, publish, mutate domains/DNS, execute providers, or start migration jobs.
+- invalid intake;
+- duplicate site/client mapping;
+- unsupported site class;
+- source unreachable;
+- source changed during migration;
+- rendered capture failure;
+- static import failure;
+- multi-page discovery failure;
+- missing critical assets;
+- degraded visual fidelity;
+- broken routes/navigation;
+- form behavior unresolved;
+- widget/third-party script unresolved;
+- heavy JavaScript unsupported;
+- preview smoke failure;
+- runtime artifact integrity failure;
+- content override conflict;
+- approval missing/rejected;
+- domain readiness failure;
+- publish readiness failure;
+- publish activation failure;
+- rollback required;
+- cost anomaly;
+- storage/object persistence failure;
+- audit event persistence failure;
+- worker/process interruption;
+- unknown system error.
 
-## Execution Model
+## Retry And Replay Policy Summary
 
-BMF MVP preserves current evidence as default:
+Replay classes:
 
-- Operator-triggered.
-- Sequential.
-- Batch start approval required.
-- `stop_on_failure` and `continue_on_failure` policies.
-- `maxJobs`/cohort-like pause by limit.
-- Completed-job skipping.
-- Batch events and observability.
+- fully deterministic replay;
+- deterministic replay with external input refs;
+- replay with environmental variance;
+- manual retry only;
+- not replayable;
+- forbidden replay.
 
-Queue workers, leases, heartbeat, retry scheduler, unattended orchestration, and concurrency are future implementation candidates only.
+Explicit rules:
 
-## Retry/Replay Model
+- Human approvals are not replayed.
+- Publish activation is not blindly replayed.
+- Rollback is a recovery action, not deterministic replay.
+- External DNS/provider checks may be repeated but not replayed as proof of past truth.
+- AI/provider outputs may be re-run only as new advisory bundles and must not overwrite previous bundles.
 
-BMF classifies each stage/action as:
+## Operator Workflow Summary
 
-- Replayable in MVP.
-- Replayable with external variance.
-- Manually repeatable only.
-- Not replayable.
-- Future replay candidate.
-- Forbidden.
+The operator workflow covers:
 
-Publish activation, rollback, approvals, provider execution, live DNS mutation, billing mutation, and autonomous AI actions are not replayable BMF stages.
+- migration preparation;
+- CSV/manual/API intake expectations;
+- validation feedback;
+- site class review;
+- dry-run review;
+- batch approval;
+- batch execution;
+- failure triage;
+- retry/replay request;
+- preview review;
+- content correction handoff;
+- domain readiness handoff;
+- publish readiness handoff;
+- incident/rollback handoff;
+- cost anomaly handling;
+- batch closeout;
+- reporting summary.
 
-## Failure Taxonomy Summary
+Each workflow step defines operator goal, required input, system output, possible blockers, approval requirement, audit requirement, Command Center view, and Ops Inbox item if blocked.
 
-The taxonomy covers invalid intake, duplicate source URL, duplicate target domain, unsupported site class, source unavailable/blocked, TLS/SSL errors, rendered capture failures/degradation, route count/ambiguity, asset failures, unsupported forms/widgets/heavy JavaScript, import/runtime/preview/content failures, review rejection, approval missing, domain/DNS failures, publish readiness failure, publish failure, rollback required, cost anomaly, worker/system failure, and ambiguous unknown failure.
+## Required Intake Fields
 
-Each failure type defines severity, source of truth, detection point, owner, retry/replay eligibility, auto-pause rule, batch policy, Ops Inbox item, recovery evidence, and escalation requirement.
+BMF-1 requires:
 
-## Stop/Continue Policy Summary
+- `agencyId` or agency reference;
+- `clientId` or client reference;
+- `siteName`;
+- `sourceUrl`;
+- `intendedDomain`;
+- `currentPlatformIfKnown`;
+- `siteClassIfKnown`;
+- `priority`;
+- `ownerOperator`;
+- `launchRequirement`;
+- `notes`;
+- `knownFormsFlag`;
+- `knownWidgetsFlag`;
+- `knownBookingFlag`;
+- `knownCommerceFlag`;
+- `knownAuthFlag`;
+- `knownPaymentFlag`;
+- `knownBackendFlag`;
+- `knownComplianceFlag`;
+- `redirectSeoComplexityFlag`;
+- `multilingualFlag`;
+- `expectedPageCountOrRouteEstimate`;
+- `externalWorkflowReference`.
 
-Default policy:
+CSV/manual intake are required MVP paths. API intake is design-ready only and must not bypass validation, classification, approval, audit, or source-of-truth boundaries.
 
-- Low severity: continue batch; record warning.
-- Medium severity: continue other sites; block affected site milestone.
-- High severity: block affected site; continue batch only if isolated and policy allows.
-- Critical severity: pause batch, publish wave, or affected cohort by default.
+## Source-Of-Truth Conclusions
 
-Critical triggers include duplicate target domain conflict, publish failure, rollback-required incident, cost anomaly threshold, repeated system/capture/import failures, forbidden provider/DNS/AI execution attempts, and unsupported site class entering launch readiness.
+Supabase/Postgres remains canonical for metadata, ownership, intake, batches, jobs, stages, attempts, approvals, audit, incidents/recovery, cost events, runtime versions/artifacts metadata, active pointers, content overrides, and lifecycle state.
 
-## Command Center Requirements Summary
+Command Center, Ops Inbox, previews, thumbnails, Website Understanding, Source Content and Visual Continuity, Knowledge Workspace, Evolution, Generated Proposal Bundles, AI/provider outputs, provider payloads, billing dashboards, and external workflow snapshots remain projections or review artifacts.
 
-Command Center must show batch list/status, progress counters, site class distribution, supported/manual-review/out-of-scope counts, import success/failure/degraded counts, route coverage, preview readiness, review status, approval status, domain readiness, publish readiness, incidents, cost indicators, owner assignment, next action, retry/replay controls, and runbook links.
+External systems remain authoritative for their own records: DNS registrars/providers, Vercel, Stripe, CMSs, booking/commerce/auth systems, and external workflow tools.
 
-Specialized pages remain drilldowns only.
+## Command Center Requirements
 
-## Ops Inbox Requirements Summary
+Command Center must show batch list/detail, batch lifecycle state, dry-run summary, approval evidence, execution policy, progress, timeline, failure groups, recovery records, pause reason, site class distribution, import state, preview readiness, review blockers, approval state, domain readiness, publish readiness, incidents, cost indicators, owner assignment, next required action, role-gated retry/replay controls, and runbook/drilldown links.
 
-Ops Inbox items are derived from canonical state and include:
+Specialized pages remain drilldowns. Command Center is not source of truth.
 
-- Intake blocked.
-- Duplicate detected.
-- Unsupported site class.
-- Dry-run failed.
-- Batch start approval needed.
-- Import failed.
-- Capture degraded.
-- Route review needed.
-- Preview failed.
-- Review needed.
-- Approval needed.
-- Domain action needed.
-- DNS verification failed.
-- Publish readiness failed.
-- Publish failed.
-- Rollback needed.
-- Incident open.
-- Cost anomaly.
-- Recovery evidence needed.
+## Ops Inbox Requirements
 
-Completing a work item requires updating underlying canonical state/evidence.
+Ops Inbox is derived from canonical state and must include blocker items for intake, duplicates, unsupported class, dry-run failure, approval needed, import failure, capture degradation, route review, preview failure, review, domain action, DNS verification failure, publish readiness failure, publish failure, rollback needed, incident open, cost anomaly, and missing recovery evidence.
 
-## Audit Requirements Summary
+Completing an Ops Inbox item requires a canonical state transition or audited decision.
 
-BMF audit taxonomy includes bulk intake, validation, batch creation/dry-run/start/pause/resume/completion/cancellation, site classification/import/capture/retry/replay/recovery/defer/approval, domain action, publish readiness, incidents, and cost anomalies.
+## Approval Requirements
 
-Every event requires actor, subject, payload, correlation IDs, immutable references, batch/site level, and human/system origin.
+Approval is required for batch start, high/critical resume/continue, retry/replay, dry-run waiver, unsupported or degraded launch exceptions, content publish readiness, client/launch signoff, domain action/exception, publish activation, rollback, cost exception, cancellation in critical/cross-client situations, and batch closeout after critical incidents.
 
-## Data And Artifact Contracts Summary
+No approval may be inferred from dry-run, preview availability, thumbnail existence, AI/provider output, Generated Proposal Bundle existence, or a UI badge.
 
-Conceptual contracts defined:
+## Audit And Replay Requirements
 
-- `BulkIntake`
-- `BulkIntakeRow`
-- `SiteClassAssessment`
-- `BatchPlan`
-- `BatchDryRunResult`
-- `MigrationBatch`
-- `MigrationBatchSite`
-- `MigrationStageResult`
-- `FailureRecord`
-- `RetryRequest`
-- `ReplayRequest`
-- `RecoveryRecord`
-- `BatchAuditEvent`
-- `OpsInboxItem`
-- `CommandCenterBatchReadModel`
+Audit events must include actor, subject, action, payload, evidence refs, correlation ids, timestamp, human/system origin, and lifecycle impact. Retry/replay events must identify the failed stage/action, replay class, immutable input refs, downstream reset behavior, attempt count, output refs, and verification result.
 
-No schemas or TypeScript code were added.
+## Cost-Control Requirements
 
-## Future Validation Plan
+BMF cost control must support batch estimates, stage/site cost refs, retry/replay cost accumulation, thresholds, anomaly detection, pause rules, and superadmin/agency-owner exception approvals. Cost visibility is internal operating evidence, not full Stripe/customer billing.
 
-BMF implementation must pass unit, integration, read-model, lifecycle, failure taxonomy, retry/replay, dry-run, Command Center read-model, Ops Inbox derivation, permission/approval, audit event, representative batch smoke, static fixture cohort, degraded capture fixture, unsupported class fixture, domain readiness fixture, and cost anomaly fixture tests before MVP readiness.
+## Asset/Storage Boundary Conclusions
+
+Supabase must remain canonical for control-plane metadata and source-of-truth records. Data-size-heavy webpage assets should be treated as data-plane artifacts. Repository evidence includes Supabase Storage and/or filesystem paths for preview/template/branding assets, preview asset routes, and raw-template artifact file maps with byte sizes, hashes, and media types.
+
+Future object storage, including Vercel Blob or equivalent, should be evaluated for imported website assets, preview bundles, thumbnails, screenshots, exported bundles, and generated proposal assets. BMF-1 does not implement storage migration. BMF depends on asset references, byte sizes, hashes, content types, retention policy, and replayability metadata.
+
+## Explicit Deferrals
+
+- Bulk Migration Factory implementation.
+- Command Center and Ops Inbox implementation.
+- Queue workers, leases, heartbeats, schedulers, concurrency, batch runners beyond current evidence.
+- Runtime/API/schema/migration/database/worker/provider/billing/DNS/publish/rollback/storage changes.
+- Supabase Storage changes, Vercel Blob implementation, or asset storage migration.
+- Live DNS/registrar mutation and Openprovider live mutation.
+- Full Stripe/customer billing.
+- Autonomous migration, autonomous AI execution, autonomous regeneration.
+- Commerce/auth/payment/custom-backend/compliance-heavy migration as normal MVP launch scope.
+- Workspace, Evolution, Generated Proposal Bundle, thumbnail, AI, provider payload, or billing dashboard source-of-truth changes.
 
 ## Architecture Warnings
 
-Critical warnings documented:
-
-- Bulk factory accidentally becoming autonomous.
-- Dry-run mistaken for approval.
-- Ops Inbox becoming independent state store.
-- UI pages becoming source of truth.
-- Retry/replay re-running non-deterministic side effects.
-- Rendered capture variance hiding source drift.
-- Domain failures blocking entire portfolio unnecessarily.
-- Publish failures continuing batch launch waves.
-- Cost anomalies ignored during large migration.
-- Unsupported site classes sneaking into launch.
-- AI summaries being treated as canonical.
-- Future queue/worker design implied before implementation.
-- Overbuilding external integrations before migration MVP.
-
-Most mitigations are required before implementation.
+- Approval persistence and audit taxonomy must be unified before implementation uses BMF gates as write paths.
+- Current batch/job implementation is narrower than BMF-1 and should not be marketed as the completed factory.
+- Current execution evidence is operator-triggered and sequential; unattended orchestration is not implemented.
+- Side-effect stages cannot be replayed blindly.
+- Source capture and domain/provider checks can vary and must not be treated as deterministic proof of past truth.
+- Unsupported site classes can derail a 200-site wave unless filtered early.
+- Asset volume may pressure current storage paths; storage design must remain architecture-only until separately approved.
+- Command Center/Ops Inbox must not become independent truth stores.
 
 ## Recommended Next Milestone
 
 Recommended next milestone: Command Center and Ops Inbox Design.
 
-Command Center and Ops Inbox Design should be next because BMF-1 defines the lifecycle, blockers, work item types, and operator actions, but the current Command Center/Ops Inbox read model and UX are only partially aligned with BMF. The next gate should map all BMF canonical state, derived projections, owner roles, allowed/blocked actions, and drilldowns into the primary operator surface.
+Yes, Command Center and Ops Inbox Design should be next. BMF-1 defines lifecycle semantics, blockers, work items, approval gates, and recovery rules; the next design should map those semantics into read models, role-gated controls, drilldowns, and operator UX before implementation.
 
-Migration Factory MVP Implementation is not safe to start immediately after BMF-1 alone unless architectural review explicitly waives remaining design gates. The safer sequence remains:
-
-1. Command Center and Ops Inbox Design.
-2. Domain/DNS Operating Model Decision.
-3. Audit, Replay, and Failure Recovery Design or explicit acceptance that BMF-1 covers enough for MVP.
-4. Migration Factory MVP Implementation.
+Do not proceed into Bulk Migration Factory implementation, Domain/DNS Operating Model Decision, Audit/Replay/Failure Recovery implementation, asset storage migration, billing, DNS, provider, publishing, AI, Workspace, Evolution, thumbnail, or Generated Proposal Bundle work until architectural review approves the next milestone.
 
 ## Validation Performed
 
-BMF-1 validation completed:
+BMF-1 validation performed:
 
-- Required MVP-1 docs exist.
-- BMF docs exist.
-- `git status --short` was reviewed.
-- `git diff --stat` was reviewed.
-- `git diff --name-only` was reviewed.
-- The tracked diff is documentation-only and limited to `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`.
-- The new BMF files are untracked Markdown documentation files under `docs/architecture/` and `docs/product/`.
-- No runtime/API/schema/migration/worker/import/Command Center runtime/DNS/publish/rollback/billing/provider/thumbnail/Workspace/Evolution code was changed by BMF-1.
+- Confirmed all required BMF-1 files exist.
+- Confirmed required BMF-1 and MVP-1 files are readable.
+- Confirmed MVP-1 files are tracked and currently modified in the working tree.
+- Confirmed `docs/ai/GNR8_CANONICAL_DOC_INDEX.md` exists and references BMF-1 docs.
+- Confirmed batch lifecycle includes all required states.
+- Confirmed site item lifecycle includes all required states.
+- Confirmed failure/recovery doc includes all required failure categories.
+- Confirmed operator workflow includes all required intake fields.
+- Confirmed source-of-truth boundaries remain aligned with MVP-1.
+- Confirmed asset/storage boundary is documented as architecture only.
+- Confirmed BMF-1 does not claim implementation.
+- Confirmed BMF-1 does not claim autonomous migration, live DNS/registrar mutation, full Stripe billing, autonomous AI execution, or autonomous regeneration as MVP behavior.
+- Ran git status checks and documentation/readability searches.
+- Ran `git diff --check` against the five BMF-1 docs; it reported no whitespace errors.
+- Searched known package/workspace files for a lightweight Markdown checker; none was found, and no new tooling was introduced.
 
 ## Commands Run
 
-Key commands used:
+Representative commands run:
 
+- `rg --files docs/product docs/architecture docs/ai`
 - `git status --short -- <required MVP-1 docs>`
-- `ls <required MVP-1 docs>`
-- `sed -n ... <required docs>`
-- `rg --files <implementation evidence paths>`
-- `rg -n <migration/domain/audit/cost table and behavior patterns>`
-- `find <implementation evidence paths> -type f`
+- `git ls-files -- <required MVP-1/BMF-1/index docs>`
+- `sed -n ... <required MVP-1 docs>`
+- `sed -n ... <BMF-1 docs>`
+- `rg --files <representative implementation paths>`
+- `sed -n ... <representative implementation files>`
+- `rg -n <storage/readiness/domain/audit/cost/publish patterns>`
+- `wc -l <BMF-1 docs and index>`
+- validation `rg` searches for required states, failure categories, intake fields, and forbidden MVP claims.
 - `git status --short`
-- `git diff --stat`
 - `git diff --name-only`
-- `git diff -- docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
-- `wc -l <BMF-1 docs>`
+- `git diff --name-only -- ':!docs/**/*.md' ':!docs/**/*.MD'`
+- `git diff --check -- <BMF-1 docs>`
 
-Command outcomes are summarized in the final BMF-1 report.
+## Confirmation
+
+BMF-1 changed Markdown documentation only. No runtime behavior was changed.

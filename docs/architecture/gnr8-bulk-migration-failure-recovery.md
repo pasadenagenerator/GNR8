@@ -1,154 +1,112 @@
 # GNR8 Bulk Migration Failure Recovery
 
-BMF-1 retry, replay, failure taxonomy, recovery evidence, and stop/continue policy for the Bulk Migration Factory.
+BMF-1 canonical failure, retry, replay, and recovery architecture for the Bulk Migration Factory.
 
-This is documentation-only. It does not modify runtime behavior, APIs, schemas, migrations, workers, import behavior, publish behavior, rollback behavior, DNS behavior, billing, providers, thumbnails, Generated Proposal Bundles, Workspace runtime, or Evolution runtime.
+This is documentation-only. It does not modify runtime behavior, APIs, schemas, migrations, workers, import behavior, publish behavior, rollback behavior, DNS/domain behavior, billing, storage, providers, thumbnails, Generated Proposal Bundles, Workspace runtime, Evolution runtime, or AI execution.
 
 ## Recovery Principles
 
-1. Recovery is evidence-driven. A failure is not recovered because an Ops Inbox item is dismissed; it is recovered when canonical state and evidence prove recovery.
-2. Retry and replay are different. Retry repeats an operator-approved action. Replay resets deterministic stage outputs from an immutable input boundary.
-3. Non-deterministic and externally mutating side effects are not replayed blindly.
-4. Rendered capture is replayable with external variance, not guaranteed deterministic.
-5. Publish, rollback, approvals, domain verification, provider execution, billing mutation, and AI/provider outputs require explicit classification and human approval.
-6. Site-level failures do not automatically stop the whole batch unless severity and policy require it.
+1. Failure recovery is evidence-driven. A failure is recovered only when canonical state and evidence prove recovery.
+2. Ops Inbox is a derived queue. Dismissing an item is never recovery.
+3. Retry repeats an approved action. Replay resets deterministic outputs from an immutable input boundary.
+4. Rendered capture, live source fetch, multi-page discovery against a live source, and domain/provider checks may vary across runs and must be labeled accordingly.
+5. Human approvals are not replayed.
+6. Publish activation is not blindly replayed.
+7. Rollback is a recovery action, not a deterministic replay.
+8. External DNS/provider checks may be repeated but not replayed as proof of past truth.
+9. AI/provider outputs may be re-run only as new advisory bundles and must not overwrite previous bundles.
 
-## Retry And Replay Classes
+## Replay Classes
 
-| Class | Meaning | Default BMF handling |
-| --- | --- | --- |
-| Replayable in MVP | Deterministic stage can be rerun from immutable inputs and expected outputs can be compared. | Allowed after operator request and audit. |
-| Replayable with external variance | Stage can be repeated but output may differ because source/network/browser/provider state changed. | Allowed with variance warning, new evidence refs, and review. |
-| Manually repeatable only | Human/external check can be repeated but not deterministically replayed. | Allowed as new check/action with audit. |
-| Not replayable | Historical decision/side effect cannot be replayed safely. | New decision/action required; preserve event history. |
-| Future replay candidate | Could become replayable once immutable input/output bundles and guards exist. | Design only; do not implement as replay in MVP. |
-| Forbidden | Must not run in BMF MVP. | Blocked unless future ADR explicitly approves. |
-
-## Stage Replay Matrix
-
-| Stage/action | Replay class | Required immutable input | Required output | Audit event | Operator role | Max retry guidance | Stop/continue effect | Recovery evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Intake validation | Replayable in MVP | Intake row original values, validation rules version | Validation result, invalid/duplicate report | `bulk_intake_validated` or `bulk_intake_failed` | Migration/account | Unlimited until start approval | Invalid rows block affected sites; batch can continue planning without them | Validated row set and audit note. |
-| Source URL normalization | Replayable in MVP | Original source URL, normalizer version | Normalized URL, parse diagnostics | `bulk_intake_validated` | Migration | Unlimited before job creation | Blocks row if invalid | Normalized URL accepted. |
-| Source reachability check | Replayable with external variance | Normalized URL, request policy, timestamp | HTTP result, final URL, diagnostics | `source_reachability_checked` if implemented | Migration/technical | 2-3 attempts before triage | Medium/high failures block site import, not whole batch unless repeated/systemic | Successful reachability or accepted source-unavailable defer. |
-| Rendered capture | Replayable with external variance | Source/captured HTML refs, capture policy, viewport, worker config | Rendered DOM, screenshots, style samples, diagnostics | `site_capture_degraded`, `site_import_completed` | Technical | 1 immediate replay, 1 later replay; more requires reason | Degraded site can continue to review; repeated capture/system failures may pause batch | New capture evidence or accepted degraded fallback. |
-| Raw HTML fetch | Replayable with external variance | Source URL/request policy | Response HTML, status, final URL, diagnostics | `site_import_started`/failure | Migration/technical | 2-3 attempts | Source failures block site; repeated cross-site source/system failures pause | Usable HTML or defer record. |
-| Static import | Replayable in MVP | Captured/raw HTML artifact, import manifest, importer version | Import output, diagnostics, raw artifact refs | `site_import_started`, `site_import_completed`, `site_import_failed` | Migration/technical | 2 attempts after root cause | Site failure can continue batch unless high/critical systemic | Completed import with artifact refs. |
-| Multi-page discovery | Replayable with external variance | Seed URL, captured seed HTML, discovery limits, robots/sitemap policy | Route map, discovery evidence, diagnostics | `route_review_requested` if implemented | Migration/SEO | 1-2 replays; more needs route policy change | Too many/ambiguous routes may block site and possibly pause if widespread | Operator-approved route map/coverage. |
-| Route map assembly | Replayable in MVP if from persisted acquisition | Discovered route set, fetched page refs, assembly rules | Route map, raw assembly manifest | `site_import_completed` | Migration/technical | 2 attempts | Blocks route review/preview for site | Valid preview route coverage. |
-| Runtime artifact creation | Replayable in MVP | Runtime site version, canonical input, raw/template artifacts, builder version | Immutable runtime artifact, bundle hash | `site_import_completed` or `runtime_artifact_failed` | Technical | 2 attempts after cause | Artifact failure blocks site; systemic artifact failures pause | Artifact exists, bound to version, integrity checks pass. |
-| Content slot inference | Replayable in MVP | Imported HTML/semantic import, inference version | Slot list, diagnostics | `content_slots_inferred` if implemented | Content/technical | 2 attempts | Failure does not block preview; may block content review | Slots persisted or explicit no-slot/review note. |
-| WU projection | Replayable in MVP | Persisted evidence/artifacts | Projection artifact/read model | `projection_generated` if used operationally | Migration/content | 1-2 attempts | Does not block import; may block enriched review | Projection available or waived. |
-| VCU projection | Replayable in MVP | Persisted evidence/artifacts | Projection artifact/read model | `projection_generated` if used operationally | Content/design | 1-2 attempts | Does not block launch unless used in approval policy | Projection available or waived. |
-| Preview generation | Replayable in MVP | Site version, artifact, content overrides | Preview URL/render result/diagnostics | `preview_generated` | Content/technical | 2 attempts | Blocks review/approval for site | Preview loads and evidence recorded. |
-| Domain verification | Manually repeatable only | Domain binding, DNS instruction snapshot, external provider state | Verification status, DNS/SSL evidence | `domain_action_required`, `domain_verified` | Technical/account/client | Repeat after DNS TTL/change; no blind loop | Blocks custom-domain publish; batch may continue other sites | Verified status or approved domain exception. |
-| Publish activation | Not replayable | Approved site version, readiness snapshot, active pointer before state | Publish event, active pointer after state | `publish_readiness_passed`, `publish_completed`, `publish_failed` | Technical/superadmin | No blind retry; retry only after cause and approval | Critical failure stops publish wave | Successful publish event or incident/rollback record. |
-| Rollback | Not replayable | Incident, target known-good version/content history | Rollback event, active pointer/content state after | `rollback_requested`, `rollback_completed` | Technical/superadmin | No blind retry | Stops launch actions for affected site; may pause batch | Recovery verification and incident resolution. |
-| AI plan generation | Future replay candidate | Immutable AI input bundle, model/version/prompt/tool refs | Immutable output bundle | `ai_plan_generated` if used | Operator reviewer | Advisory only | No execution effect | Human accepted/rejected advisory output. |
-| Provider execution | Forbidden | None approved for MVP | None | Must not occur | None | 0 | Blocked | N/A |
-
-## Failure Severity
-
-| Severity | Meaning | Default batch behavior | Default site behavior |
+| Class | Meaning | Examples | Default handling |
 | --- | --- | --- | --- |
-| Low | Non-blocking issue with clear workaround or review note. | Continue batch. | Continue site; record warning. |
-| Medium | Site-level blocker or manual review need with low systemic risk. | Continue other sites if policy allows. | Block affected milestone until resolved. |
-| High | Serious site blocker, repeated stage failure, domain/approval blocker, or risk of client-visible issue. | Pause affected site; batch may continue only under `continue_on_failure` and no systemic signal. | Requires owner and recovery/exception evidence. |
-| Critical | External/client-visible risk, publish/rollback incident, duplicate domain ownership conflict, cost anomaly threshold, unsupported launch risk, or systemic worker/import failure. | Pause batch or launch wave by default. | Stop launch/publish actions; incident/escalation required. |
+| Fully deterministic replay | Same immutable inputs and rules version should produce equivalent outputs. | Intake validation, URL normalization, static import from persisted input, runtime artifact build from immutable refs, preview generation from artifacts. | Allowed after operator approval; reset downstream derived outputs and audit. |
+| Deterministic replay with external input refs | Deterministic once the external observation is captured and referenced. | Route assembly from persisted fetched pages, import from captured HTML, projection from stored capture refs. | Allowed with immutable input refs; do not fetch new external truth under same replay claim. |
+| Replay with environmental variance | Re-run may differ because source/network/browser/provider state changed. | Live source reachability, rendered capture, raw fetch, live sitemap/robots discovery, domain verification. | Allowed only as a new attempt/check with variance label and new evidence refs. |
+| Manual retry only | Human work can be repeated but is not deterministic. | Review, content correction, client follow-up, DNS-owner follow-up. | New human action and audit event required. |
+| Not replayable | Historical decision or side effect cannot be safely reproduced. | Approval decision, publish activation, rollback, cost exception, external workflow truth. | New decision/action required; preserve old history. |
+| Forbidden replay | Action must not be performed by BMF MVP. | Live DNS/registrar mutation, Openprovider live mutation, provider execution, billing mutation, autonomous AI execution, autonomous regeneration. | Block and escalate; future ADR required. |
 
 ## Failure Taxonomy
 
-| Failure type | Description | Severity | Source of truth | Detection point | Owner | Retry | Replay | Auto-pause | Batch policy | Ops Inbox | Recovery evidence | Escalation |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Invalid intake | Required fields missing/invalid. | Medium | Intake validation result | Intake validation | Account/migration | After correction | Validation replayable | No unless many rows | Exclude rows; continue planning | `intake_blocked` | Corrected valid row | Account owner if client data needed |
-| Duplicate source URL | Same normalized source appears more than once. | Medium/high | Duplicate report/site records | Intake/dry-run | Migration/account | After resolution | Validation replayable | High if cross-client | Block affected rows | `duplicate_detected` | Duplicate decision/merge/defer record | Superadmin if cross-client |
-| Duplicate target domain | Same launch domain conflicts. | Critical | Domain/site/binding records | Intake/dry-run/domain readiness | Technical/account | After ownership resolution | Validation/check repeatable | Yes | Block affected rows; pause start if unresolved | `duplicate_detected`, `domain_action_needed` | Ownership/domain decision | Superadmin/client DNS owner |
-| Unsupported site class | Commerce/auth/payment/backend/etc. | High/critical | Site class assessment | Classification/dry-run/review | Superadmin/migration | No automatic retry | Classification reassessment only | Critical if launch path | Block launch; maybe import-only | `unsupported_site_class` | Out-of-scope/defer/exception record | Superadmin/client |
-| Source unavailable | URL unreachable or empty. | Medium/high | Reachability/import diagnostics | Dry-run/SNAPSHOT/import | Technical/migration | Yes | External variance | Pause if repeated/systemic | Continue other sites | `import_failed` | Successful fetch or defer | Technical |
-| Source blocked | CORS/network/bot/TLS/blocking prevents capture/fetch. | High | Import diagnostics | Capture/import | Technical | Limited | External variance | Pause if repeated/systemic | Continue only if isolated | `import_failed` | Alternate access/fallback/defer evidence | Technical/account |
-| TLS/SSL fetch error | HTTPS validation or certificate issue. | Medium/high | Fetch diagnostics | Dry-run/import | Technical | Limited | External variance | No unless systemic | Site blocked; others continue | `import_failed` | Successful fetch or accepted raw/http exception | Technical |
-| Rendered capture failed | Browser/capture produced no usable evidence. | Medium/high | Rendered capture diagnostics | Capture | Technical | Yes | External variance | Pause if repeated | Continue with raw fallback only if allowed | `capture_degraded` | New capture or degraded exception | Technical |
-| Capture degraded to raw fallback | Rendered evidence partial/unavailable, raw usable. | Medium | Provenance/capture status | Capture/import reporting | Technical/content | Optional | External variance | No | Continue to review; launch gated | `capture_degraded` | Review/exception noting missing evidence | Technical/content |
-| Too many routes | Discovery exceeds MVP route limit. | High | Multi-page discovery summary | Dry-run/discovery | Migration/SEO | With adjusted limits | External variance | No unless widespread | Site route review/defer | `route_review_needed` | Approved trimmed route map | SEO/client |
-| Route discovery ambiguous | Canonical/alias/redirect/hreflang conflict. | Medium/high | Discovery evidence | Discovery/route review | Migration/SEO | Yes after policy | External variance | No | Block route approval | `route_review_needed` | Operator-approved route map | SEO |
-| Asset fetch failure | Assets missing/unsupported/external fallback. | Low/medium | Import diagnostics/raw artifact metadata | Import/artifact | Technical/content | Limited | Static import replay | No | Continue if non-structural; review visual impact | `review_needed` if visible | Asset accepted/replaced/reimported | Content/technical |
-| Form behavior unsupported | Form endpoint/functionality not verified. | High | Site class/review checklist | Classification/review | Technical/content/client | No automatic | Manual repeat only | No | Block launch until verified/replaced | `review_needed`, `approval_needed` | End-to-end form evidence or approved replacement | Client/technical |
-| External widget unsupported | Map/chat/booking/widget broken or risky. | Medium/high | Review/capture evidence | Review/preview | Technical/content | Maybe after embed fix | Manual repeat | No | Block launch if critical | `review_needed` | Widget works/replaced/accepted limitation | Client/technical |
-| Heavy JavaScript mismatch | Preview cannot reproduce source UX. | High/critical | Capture/review evidence | Capture/preview review | Technical | Limited | External variance | Critical if app-like | Import-only/defer | `unsupported_site_class` | Defer or accepted static snapshot | Superadmin/client |
-| Import pipeline failure | Scoped pipeline/stage error. | High | Job/stage diagnostics | Import stage | Technical/migration | Yes after cause | Stage policy | Pause if repeated | Continue isolated failures | `import_failed` | Completed retry or defer | Technical |
-| Runtime artifact failure | Artifact creation/bind/integrity fails. | High/critical if systemic | Runtime store/artifact diagnostics | Artifact build | Technical | Yes after cause | Replayable | Pause if repeated/systemic | Block affected sites | `preview_failed` | Artifact bound and integrity passes | Technical |
-| Preview generation failure | Preview unavailable/broken. | High | Preview/readiness diagnostics | Preview | Technical/content | Yes | Replayable from artifacts | Pause if systemic | Block review/approval | `preview_failed` | Preview loads/evidence | Technical |
-| Content slot inference failure | Slots missing or inference failed. | Low/medium | Content slot diagnostics | Import/content | Content/technical | Yes | Replayable | No | Continue preview; may block content review | `review_needed` | Slots persisted or no-slot note | Content |
-| Review rejected | Human rejects fidelity/content/route coverage. | Medium/high | Review record | Review | Content/account/client | After correction | Manual repeat only | No | Block approval | `review_needed` | New review accepted | Account/client |
-| Approval missing | Required approver not assigned or has not approved. | Medium/high | Approval records | Approval gate | Account/approver | N/A | Not replayable | No | Block launch/publish | `approval_needed` | Approval granted or waiver | Account/client |
-| Domain ownership unclear | DNS owner/registrar authority unknown. | High | Intake/domain notes | Intake/domain readiness | Account/technical | After info gathered | Manual repeat | No | Block custom-domain publish | `domain_action_needed` | Ownership evidence | Client/account |
-| DNS instructions incomplete | Instructions missing or stale. | Medium/high | Domain binding/instructions | Domain readiness | Technical | Recompute/check | Manual repeat | No | Block domain readiness | `domain_action_needed` | Instruction snapshot accepted | Technical |
-| DNS verification failed | Provider/Vercel check failed. | High | Domain host binding/verifier | Domain verification | Technical/client | After DNS changes/TTL | Manual repeat | No | Block custom-domain publish; continue other sites | `dns_verification_failed` | Verified status or approved exception | Technical/client |
-| Publish readiness failed | Required readiness gate failed. | High | Readiness snapshot | Publish readiness | Technical | After correction | Replay deterministic checks only | No unless systemic | Block publish | `publish_readiness_failed` | Passing readiness snapshot | Technical |
-| Publish failed | Publish activation failed or unsafe. | Critical | Publish event/active pointer | Publish | Technical/superadmin | No blind retry | Not replayable | Yes | Stop publish wave | `publish_failed`, `incident_open` | Incident/recovery/publish success | Superadmin |
-| Rollback required | Incident requires rollback decision. | Critical | Incident/version history | Incident/publish/content | Technical/superadmin | No blind retry | Not replayable | Yes | Stop affected launch actions | `rollback_needed` | Rollback completed or incident resolved | Superadmin/account |
-| Cost anomaly | Estimated/actual cost exceeds threshold. | High/critical | Cost events/projections | Dry-run/execution | Superadmin/agency owner | After approval | Not replayable | Yes at threshold | Pause batch/site class | `cost_anomaly` | Cost review/approval | Superadmin/agency |
-| Worker/system failure | Infrastructure job failure or missing durable store. | High/critical | System diagnostics/route errors | Dry-run/import/capture/domain | Technical | After system fix | Depends stage | Pause if systemic | Stop unsafe execution | `incident_open` | System healthy and replay evidence | Technical |
-| Ambiguous unknown failure | Unclassified error. | Medium/high until classified | Failure record/job diagnostics | Any stage | Technical/migration | Case-by-case | Case-by-case | High if repeated | Pause if severity unknown and repeated | `recovery_evidence_needed` | Classified failure and resolution | Technical |
+Severity values: low, medium, high, critical.
 
-## Stop/Continue Policy
+| Category | Canonical code | Severity | Site/batch impact | Batch action | Retry eligibility | Replay eligibility | Required evidence | Operator action | Approval required | Audit event | Ops Inbox item | Recovery path | Escalation owner |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Invalid intake | `BMF_INTAKE_INVALID` | Medium | Affected site item blocked before job creation. | Continue planning without row or return to validation. | After correction. | Fully deterministic validation replay. | Original row, normalized fields, validation error list. | Correct row, defer, or cancel. | Exception if bypass requested. | `bulk_intake_failed` | `intake_blocked` | Revalidate corrected row or defer/cancel. | Account/migration operator. |
+| Duplicate site/client mapping | `BMF_DUPLICATE_SITE_CLIENT_MAPPING` | High; critical cross-client/domain | Affected rows blocked; possible batch start pause. | Pause affected rows; pause batch if cross-client domain conflict. | After ownership resolution. | Validation/check replay only. | Duplicate source/domain report, existing site/client/domain refs. | Merge, reassign, defer, or escalate. | Superadmin for cross-client conflict. | `duplicate_detected` | `duplicate_detected` | Record ownership decision and revalidate. | Superadmin/account owner. |
+| Unsupported site class | `BMF_SITE_CLASS_UNSUPPORTED` | High/critical | Site cannot become launch-ready; may be import-only/deferred. | Continue other sites unless unsupported launch attempt pauses batch. | Classification can be revisited with new evidence. | Manual reassessment only. | Classification decision, MVP matrix mapping, risk flags. | Mark import-only, defer, cancel, or request exception. | Superadmin for any launch exception. | `site_classified` | `unsupported_site_class` | Defer/cancel or approved import-only review. | Superadmin/migration. |
+| Source unreachable | `BMF_SOURCE_UNREACHABLE` | Medium/high | Site import blocked. | Continue other sites unless repeated/systemic. | Yes, limited. | Replay with environmental variance. | URL, request policy, HTTP/TLS/network diagnostics, timestamp. | Retry later, request alternate source, or defer. | None unless accepting degraded/no-source path. | `source_reachability_failed` | `import_failed` | Successful reachability/import or defer record. | Technical/account. |
+| Source changed during migration | `BMF_SOURCE_CHANGED_DURING_MIGRATION` | High | Site evidence may be inconsistent; review blocked. | Pause affected site; pause batch if repeated. | New capture/import attempt allowed. | Environmental variance; past truth not replayed. | Source capture hashes/timestamps, changed DOM/content/asset refs. | Decide whether to restart from new source snapshot or freeze prior captured refs. | Operator approval for restart; client/account if visible. | `source_changed_detected` | `review_needed` | New consistent capture set or accepted prior snapshot. | Technical/account. |
+| Rendered capture failure | `BMF_CAPTURE_RENDERED_FAILED` | Medium/high | Site can fall back only if policy allows; launch blocked until review. | Continue if isolated; pause if repeated/systemic. | Yes. | Replay with environmental variance. | Capture status, browser/network diagnostics, screenshots/DOM availability. | Replay capture, accept raw fallback for review, or defer. | Exception approval for launch-visible degraded evidence. | `site_capture_degraded` | `capture_degraded` | New capture evidence or accepted degraded limitation. | Technical/content. |
+| Static import failure | `BMF_IMPORT_STATIC_FAILED` | High | Site item failed before usable artifact. | Continue isolated failures under policy. | Yes after cause. | Fully deterministic if using persisted input refs. | Import manifest, raw/captured HTML refs, diagnostics, failed stage. | Retry/replay, correct input, or defer. | Retry/replay approval. | `site_import_failed` | `import_failed` | Successful import result or defer/cancel. | Technical/migration. |
+| Multi-page discovery failure | `BMF_DISCOVERY_MULTIPAGE_FAILED` | Medium/high | Route coverage blocked; single-page/import-only may remain possible. | Continue other sites; pause if systemic. | Yes with changed policy/limits. | Environmental variance unless using persisted fetched refs. | Seed URL, limits, sitemap/robots/canonical/alias diagnostics. | Re-run discovery, trim scope, or mark route review blocker. | Approval for changed limits or incomplete route coverage. | `route_discovery_failed` | `route_review_needed` | Approved route map/coverage or defer. | Migration/SEO. |
+| Missing critical assets | `BMF_ASSET_CRITICAL_MISSING` | Medium/high | Preview/review may proceed only with visible blocker; launch blocked if critical. | Continue other sites. | Limited after source/fetch correction. | Deterministic from persisted acquisition; environmental variance from live source. | Asset refs, byte size, hash/content type when available, visual impact. | Re-fetch, replace via content workflow, accept limitation, or defer. | Content/client approval for accepted/replaced asset. | `asset_missing_detected` | `review_needed` | Asset restored/replaced or accepted limitation. | Content/technical. |
+| Degraded visual fidelity | `BMF_VISUAL_FIDELITY_DEGRADED` | Medium/high | Review/approval blocked until accepted. | Continue other sites. | After correction. | Preview/projection replay if deterministic refs exist; manual review otherwise. | Source capture refs, screenshots, preview refs, reviewer notes. | Correct content/assets/styles or request exception. | Client/content approval if visible. | `visual_fidelity_degraded` | `review_needed` | Accepted review or corrected preview. | Content/client. |
+| Broken routes/navigation | `BMF_ROUTE_NAV_BROKEN` | High | Site launch blocked. | Continue other sites. | After route correction. | Deterministic route assembly replay if persisted refs exist. | Route map, navigation tree, broken link diagnostics, preview smoke. | Fix route map/links or defer. | SEO/client approval for accepted omissions. | `route_review_requested` | `route_review_needed` | Passing route review/smoke or accepted route exception. | Migration/SEO. |
+| Form behavior unresolved | `BMF_FORM_BEHAVIOR_UNRESOLVED` | High | Site launch blocked if form is business-critical. | Continue other sites. | Manual retest only. | Manual retry only. | Form inventory, endpoint/action behavior, test submission or replacement plan. | Verify external endpoint, replace, or accept disabled/static form. | Client/account/content approval. | `form_behavior_unresolved` | `review_needed` | End-to-end evidence or approved replacement/limitation. | Technical/client. |
+| Widget/third-party script unresolved | `BMF_WIDGET_SCRIPT_UNRESOLVED` | Medium/high | Site review/launch blocked based on criticality. | Continue other sites. | Manual retest after change. | Manual retry only; capture may vary. | Widget inventory, provider URL, preview/source evidence, criticality. | Verify, replace, remove, or defer. | Client approval for visible/functional limitation. | `widget_unresolved` | `review_needed` | Working widget or accepted fallback. | Technical/content/client. |
+| Heavy JavaScript unsupported | `BMF_HEAVY_JS_UNSUPPORTED` | High/critical | Site becomes import-only/deferred unless static fidelity proven. | Continue other sites; pause if launch attempted. | Limited. | Environmental variance; no launch replay. | Capture diagnostics, script/API dependency evidence, preview mismatch. | Mark import-only/defer or request exception. | Superadmin/client for exception. | `site_classified` | `unsupported_site_class` | Accepted static snapshot exception or defer. | Superadmin/technical. |
+| Preview smoke failure | `BMF_PREVIEW_SMOKE_FAILED` | High | Review/approval blocked. | Continue other sites unless systemic. | Yes after artifact/content correction. | Fully deterministic from artifacts unless environment issue. | Preview URL/ref, smoke result, failed route/asset/error details. | Re-run preview check, replay artifact stage, or defer. | None unless waiver requested. | `preview_smoke_failed` | `preview_failed` | Passing preview smoke or approved defer. | Technical. |
+| Runtime artifact integrity failure | `BMF_RUNTIME_ARTIFACT_INTEGRITY_FAILED` | High/critical | Site item failed; systemic failures pause batch. | Pause if repeated/systemic. | Yes after cause. | Fully deterministic from immutable inputs. | Artifact refs, hash, manifest, integrity diagnostics, builder version. | Replay artifact build or open incident. | Retry/replay approval; superadmin if critical. | `runtime_artifact_integrity_failed` | `preview_failed` | Artifact built, hash/integrity passes, bound to version. | Technical. |
+| Content override conflict | `BMF_CONTENT_OVERRIDE_CONFLICT` | Medium/high | Content review/publish blocked. | Continue import batch; block site launch. | Manual correction. | Manual retry only; deterministic content preview can regenerate. | Slot refs, draft/published override history, conflicting edits. | Resolve draft, publish plan, or rollback content. | Content/client approval. | `content_override_conflict` | `review_needed` | Approved content state and clean preview. | Content/account. |
+| Approval missing/rejected | `BMF_APPROVAL_MISSING_OR_REJECTED` | Medium/high | Site/batch/publish/rollback action blocked. | Continue unrelated work; pause action. | New request after changes. | Not replayable. | Approval request, evidence package, approver, decision/rejection reason. | Route approval, address rejection, or defer. | Required human approval. | `approval_requested`, `approval_rejected` | `approval_needed` | Approval granted or site/batch deferred/cancelled. | Account/approver. |
+| Domain readiness failure | `BMF_DOMAIN_READINESS_FAILED` | High | Custom-domain publish blocked. | Continue other sites/imports. | Repeat after DNS/provider changes. | Manual repeat/external variance. | Domain intent, binding, DNS instruction snapshot, verification result, freshness. | Fix DNS/manual instruction, recheck, or approve exception. | Domain action/client approval if DNS owned externally. | `domain_readiness_failed` | `domain_action_needed` | Verified/acceptable domain or approved no/custom-domain exception. | Technical/client. |
+| Publish readiness failure | `BMF_PUBLISH_READINESS_FAILED` | High | Publish action blocked. | Continue import/review work; no publish for site. | After correction. | Deterministic checks replayable; approval not replayed. | Readiness snapshot, blockers, version/artifact/domain/approval refs. | Resolve blockers and rerun readiness. | Publish readiness waiver only by superadmin. | `publish_readiness_failed` | `publish_readiness_failed` | Passing readiness snapshot. | Technical/superadmin. |
+| Publish activation failure | `BMF_PUBLISH_ACTIVATION_FAILED` | Critical | Site launch failed; publish wave paused. | Pause publish wave and possibly batch. | No blind retry; only after root cause and approval. | Not replayable. | Publish event, active pointer before/after, artifact/version refs, failure code. | Open incident, decide retry or rollback. | Technical/superadmin approval. | `publish_failed`, `incident_opened` | `publish_failed`, `incident_open` | Successful approved publish, rollback, or incident resolution. | Technical/superadmin. |
+| Rollback required | `BMF_ROLLBACK_REQUIRED` | Critical | Affected site launch/runtime actions stopped. | Pause affected launch wave. | Rollback action may be attempted with approval; not retry loop. | Not replayable; rollback is recovery action. | Incident, target known-good version/content history, impact, before pointer. | Approve and execute rollback or document alternative recovery. | Rollback approval; emergency still audited. | `rollback_requested`, `rollback_completed` | `rollback_needed` | Rollback verified or incident resolved by approved alternative. | Technical/superadmin/account. |
+| Cost anomaly | `BMF_COST_ANOMALY` | High/critical | Batch/site/cohort paused by threshold. | Pause according to threshold. | Continue only after approval/policy change. | Not replayable. | Cost event refs, estimate vs actual, threshold, affected stage/site/batch. | Review spend, adjust limits, approve exception, or cancel/defer. | Superadmin or agency owner/admin. | `cost_anomaly_detected` | `cost_anomaly` | Approved exception or corrected cost pattern. | Superadmin/agency owner. |
+| Storage/object persistence failure | `BMF_STORAGE_OBJECT_PERSISTENCE_FAILED` | High/critical | Site artifact/capture/preview evidence may be unusable. | Pause if artifact integrity/replayability at risk. | Yes after storage cause. | Depends on persisted input refs; may be not replayable if bytes lost. | Object/ref path, byte size, hash, content type, retention class, write/read error. | Retry persist, switch to safe fallback only after design, or defer. | Technical/superadmin if evidence loss. | `storage_persistence_failed` | `recovery_evidence_needed` | Durable asset refs verified with size/hash/content type. | Technical/platform. |
+| Audit event persistence failure | `BMF_AUDIT_EVENT_PERSISTENCE_FAILED` | Critical | State-changing action cannot be trusted; pause privileged actions. | Pause batch/action until audit restored. | Retry audit write after system fix. | Not replayable as proof unless action evidence exists; append compensating event. | Failed audit payload, action attempted, transaction outcome, correlation id. | Stop action, restore audit, record compensating event. | Superadmin for continuation. | `audit_persistence_failed` | `incident_open` | Audit restored and compensating record written. | Technical/superadmin. |
+| Worker/process interruption | `BMF_WORKER_PROCESS_INTERRUPTED` | High; critical if systemic | Current site attempt unknown; batch paused or partially failed. | Pause if current stage state cannot be proven safe. | Retry after classifying interruption. | Replay eligible deterministic stages from last safe refs. | Last heartbeat/stage event if available, attempt id, partial outputs, process diagnostics. | Mark interrupted, decide retry/replay/resume. | Resume approval for high/critical. | `worker_interrupted` | `incident_open` or `import_failed` | Resume from first safe non-succeeded stage or restart stage with audit. | Technical. |
+| Unknown system error | `BMF_UNKNOWN_SYSTEM_ERROR` | Medium/high until classified; critical if repeated | Site/batch blocked by unknown risk. | Pause if repeated, systemic, or privileged action involved. | Case-by-case after classification. | Case-by-case; default not replayable until classified. | Error stack/message, subject refs, stage/action, correlation id, surrounding events. | Classify, assign owner, open incident if needed. | Required for high/critical continuation. | `unknown_system_error` | `recovery_evidence_needed` | Classified failure with recovery record. | Technical/migration. |
 
-### Default Rules
+## Stage And Action Recovery Rules
 
-1. A site-level low or medium failure does not automatically stop the entire batch.
-2. A high failure blocks the affected site and may allow the batch to continue only if isolated and policy permits.
-3. A critical failure pauses the batch or launch wave by default.
-4. Unsupported site class blocks launch, but may allow import-only review if explicitly approved.
-5. Domain failures block publish for custom-domain sites but may allow preview and other sites to continue.
-6. Publish failure stops any publish wave.
-7. Rollback-required incident stops further launch actions for affected site and may pause related batch.
-8. Cost anomalies pause batch execution when threshold policy says high/critical.
-9. Repeated capture/system/import failures pause the batch until technical triage.
-
-### Severity Behavior
-
-| Severity | Batch default | Site default | Operator override |
-| --- | --- | --- | --- |
-| Low | Continue | Continue with warning | Operator may defer if review burden accumulates. |
-| Medium | Continue other sites under approved policy | Block affected milestone | Operator may pause site or batch if pattern emerges. |
-| High | Continue only when isolated and `continue_on_failure`/cohort policy allows | Block affected site; owner required | Superadmin/technical may pause/resume with reason. |
-| Critical | Pause batch, publish wave, or affected cohort | Stop launch/publish/rollback-sensitive actions | Override requires superadmin approval and explicit evidence. |
-
-### Auto-Pause Triggers
-
-- Duplicate target domain across clients or ownership conflict.
-- Publish failure.
-- Rollback-required incident.
-- Cost anomaly above critical threshold.
-- Repeated rendered capture failures across a batch/cohort.
-- Repeated import/artifact failures that indicate system issue.
-- Provider execution, live DNS mutation, autonomous publish, autonomous rollback, or autonomous AI execution attempt detected.
-- Unsupported site class attempts to enter launch/publish readiness.
+| Stage/action | Replay class | Recovery rule |
+| --- | --- | --- |
+| Intake validation and URL normalization | Fully deterministic replay | Re-run from original row and rules version; update validation result only by new event. |
+| Preflight/dry-run projections | Fully deterministic or external variance depending on checks | New result supersedes old result; old result remains evidence. |
+| Source reachability/raw fetch/rendered capture/live discovery | Replay with environmental variance | Repeat as new attempt; compare timestamps, hashes, and diagnostics. |
+| Static import from captured inputs | Fully deterministic replay | Reset import-derived downstream outputs and rebuild from immutable refs. |
+| Route assembly from persisted acquisition | Deterministic replay with external input refs | Use persisted page acquisition refs; live rediscovery is a new attempt. |
+| Runtime artifact build and integrity check | Fully deterministic replay | Rebuild artifact, verify hash/integrity, never overwrite prior artifact. |
+| Preview generation/smoke from artifacts | Fully deterministic replay | Regenerate from version/artifact/content refs; stale previews are superseded. |
+| Review/content/domain/client actions | Manual retry only | New human/external action and audit record. |
+| Approval | Not replayable | New approval decision must be requested if expired/rejected/superseded. |
+| Publish activation | Not replayable | New approved publish request after root cause; no blind retry. |
+| Rollback | Not replayable | Recovery action with target refs and approval, followed by verification. |
+| AI/provider advisory output | Future replay candidate | Re-run only as a new advisory bundle; never overwrite prior bundle or mutate runtime. |
+| Provider execution/live DNS/billing/autonomous AI/regeneration | Forbidden replay | Block in BMF MVP and escalate. |
 
 ## Recovery Evidence Requirements
 
-Every recovered failure must record:
+Every recovery record must include:
 
-- Failure id/type/severity.
-- Actor or system actor.
-- Subject id: intake row, batch, site, job, stage, version, domain, publish event, incident, or cost event.
-- Prior blocker state.
-- Recovery action taken.
-- Immutable input refs where replay occurred.
-- Output refs or external check snapshot.
-- Human approval/exception refs when needed.
-- Verification result.
-- Remaining limitations.
+- Failure code, severity, and subject refs.
+- Actor/system actor and owner role.
+- Failed stage/action and previous state.
+- Retry/replay/manual-action classification.
+- Immutable input refs used for replay, when applicable.
+- New output refs, hashes, byte sizes, content types, and diagnostics when applicable.
+- Human approval/exception refs.
+- Verification result and remaining limitations.
+- Batch/site state transition produced by recovery.
 - Timestamp and correlation id.
 
-## Future Tests
+## Stop, Continue, Pause, And Escalation Defaults
 
-Implementation must include:
+- Low: continue batch, record warning, no launch blocker unless reviewer marks visible.
+- Medium: continue unrelated items, block affected milestone, assign owner.
+- High: block affected site; continue batch only if isolated and approved policy allows.
+- Critical: pause batch, publish wave, or affected cohort by default.
+- Unknown repeated failures are high until classified.
+- Audit persistence failures are critical because source-of-truth reconstruction is at risk.
 
-- One test per failure taxonomy entry.
-- One test per severity class and stop/continue default.
-- Retry/replay tests for every stage in the matrix.
-- Tests proving publish, rollback, approvals, provider execution, and live DNS mutation are not replayable BMF stages.
-- Tests proving Ops Inbox item completion requires canonical state/evidence change.
-- Tests proving dry-run failures cannot start a batch without waiver.
-- Tests proving unsupported site classes cannot become launch-ready without exception.
+## Explicit Non-Replay Statements
+
+- Human approvals are not replayed.
+- Publish activation is not blindly replayed.
+- Rollback is a recovery action, not a deterministic replay.
+- External DNS/provider checks may be repeated but not replayed as proof of past truth.
+- AI/provider outputs may be re-run only as new advisory bundles and must not overwrite previous bundles.

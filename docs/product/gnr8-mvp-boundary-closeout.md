@@ -1,44 +1,10 @@
 # GNR8 MVP-1 Boundary Closeout
 
-MVP-1 is a documentation and architecture phase only. No runtime behavior, APIs, database schemas, migrations, provider payload construction, billing/Stripe behavior, DNS/domain behavior, publishing behavior, rollback behavior, thumbnails, Generated Proposal Bundles, Workspace runtime behavior, or Evolution runtime behavior were intentionally changed.
+MVP-1 is complete as a documentation and architecture phase. No runtime behavior, APIs, route handlers, schemas, migrations, provider execution, billing/Stripe behavior, DNS/domain behavior, publish/rollback implementation, thumbnail implementation, Generated Proposal Bundle runtime, Workspace runtime, Evolution runtime, AI execution, or deployment configuration was intentionally changed.
 
-## Files Reviewed
+## Documents Created Or Updated
 
-Required STRAT-1/CAP-1/current-state evidence reviewed:
-
-- `docs/product/gnr8-current-capability-inventory.md`
-- `docs/product/gnr8-operator-capability-map.md`
-- `docs/architecture/gnr8-technical-capability-map.md`
-- `docs/product/gnr8-mvp-readiness-map.md`
-- `docs/product/gnr8-capability-inventory-closeout.md`
-- `docs/product/future-gnr8-north-star.md`
-- `docs/product/future-gnr8-mvp-bridge.md`
-- `docs/architecture/future-gnr8-platform-pillars.md`
-- `docs/product/future-gnr8-competitive-positioning.md`
-- `docs/product/future-gnr8-strategy-closeout.md`
-- `docs/ai/GNR8_CURRENT_STATE.md`
-- `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
-- `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
-- `docs/ai/decisions/ADR-001-deterministic-pipeline.md`
-- `docs/ai/decisions/ADR-003-runtime-artifact-model.md`
-
-Implementation ownership evidence was inspected read-only in these areas:
-
-- `apps/platform/gnr8/migration-factory/**`
-- `apps/platform/gnr8/runtime/**`
-- `apps/platform/gnr8/command-center/**`
-- `apps/platform/gnr8/billing/**`
-- `apps/platform/gnr8/architecture/**`
-- `apps/platform/src/lib/vercel/**`
-- `apps/platform/app/api/gnr8/**`
-- `apps/worker/gnr8/**`
-- `packages/core/src/modules/**`
-- `packages/data/src/repositories/**`
-- `apps/platform/supabase/migrations/**`
-
-## Files Created Or Changed
-
-Created:
+Updated canonical MVP-1 documents:
 
 - `docs/product/gnr8-mvp-boundary.md`
 - `docs/product/gnr8-mvp-supported-site-classes.md`
@@ -46,15 +12,13 @@ Created:
 - `docs/architecture/gnr8-mvp-operational-state-model.md`
 - `docs/product/gnr8-mvp-boundary-closeout.md`
 
-Changed:
+Canonical index status:
 
-- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md` was updated with an MVP-1 canonical boundary section.
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md` exists and already references the five MVP-1 documents. It did not require unrelated rewrites for this closeout.
 
-## STRAT-1 Repository Status
+## Evidence Reviewed
 
-The STRAT-1 files were present and `git status --short -- <required files>` returned no modified or untracked entries for them at the start of MVP-1. They were not committed.
-
-STRAT-1 files verified:
+STRAT-1 baseline reviewed:
 
 - `docs/product/future-gnr8-north-star.md`
 - `docs/product/future-gnr8-mvp-bridge.md`
@@ -62,102 +26,115 @@ STRAT-1 files verified:
 - `docs/product/future-gnr8-competitive-positioning.md`
 - `docs/product/future-gnr8-strategy-closeout.md`
 
-## MVP Definition
+CAP-1/current-state evidence reviewed:
 
-GNR8 MVP is an operator-assisted migration factory and website operations backbone for static or mostly static public websites, designed to migrate and operate approximately 200 existing websites with deterministic workflows, auditability, clear source-of-truth boundaries, and controlled human approvals.
+- `docs/product/gnr8-current-capability-inventory.md`
+- `docs/product/gnr8-operator-capability-map.md`
+- `docs/architecture/gnr8-technical-capability-map.md`
+- `docs/product/gnr8-mvp-readiness-map.md`
+- `docs/product/gnr8-capability-inventory-closeout.md`
+- `docs/ai/GNR8_CURRENT_STATE.md`
+- `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
+- `docs/ai/MIGRATION_RUNTIME_PROGRESS.md`
+- `docs/ai/decisions/ADR-001-deterministic-pipeline.md`
+- `docs/ai/decisions/ADR-003-runtime-artifact-model.md`
 
-The MVP is migration-first, operator-assisted, portfolio-aware, deterministic where possible, audit-focused, safe for client/domain/publish operations, designed for the internal 200-site migration first, and compatible with later agency adoption.
+Implementation evidence was inspected read-only across ownership/auth, scoped import, static/multi-page import, rendered capture, migration jobs/batches, runtime artifacts, public serving, content slots/overrides, publish activation, rollback primitives, Vercel domains, Openprovider/provider boundaries, Command Center, cost/billing, audit/event foundations, and AI/provider surfaces.
 
-The MVP is not full Future GNR8, autonomous AI regeneration, a full DXP, a visual website builder, full DNS registrar automation, a full Stripe/customer billing product, a full agency marketplace, a general automation platform, or an autonomous AI operator.
+Representative paths inspected:
+
+- `apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts`
+- `apps/platform/gnr8/site/scoped-import-pipeline.ts`
+- `apps/platform/gnr8/import/**`
+- `apps/platform/gnr8/multipage-import/**`
+- `apps/platform/gnr8/validation/runtime/url-single-page-import.ts`
+- `apps/platform/gnr8/migration-factory/**`
+- `apps/platform/gnr8/runtime/runtime-store.ts`
+- `apps/platform/app/(public)/[[...slug]]/route.ts`
+- `apps/platform/src/public-site/**`
+- `apps/platform/gnr8/runtime/content-binding.ts`
+- `apps/platform/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/**`
+- `apps/platform/app/api/gnr8/runtime/versions/[siteVersionId]/publish/route.ts`
+- `apps/platform/gnr8/runtime/publish-activation-orchestrator.ts`
+- `apps/platform/app/api/gnr8/runtime/versions/[siteVersionId]/rollback/route.ts`
+- `apps/platform/gnr8/runtime/rollback-switch.ts`
+- `apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/[siteId]/domain/route.ts`
+- `apps/worker/gnr8/domain/inngest/domain-verification-job.ts`
+- `apps/platform/gnr8/runtime/providers/openprovider/**`
+- `apps/platform/app/gnr8/command-center/**`
+- `apps/platform/gnr8/billing/**`
+- `packages/core/src/modules/billing/**`
+- `packages/core/src/modules/audit-log/**`
+- `apps/platform/app/api/gnr8/ai/**`
+- `apps/platform/supabase/migrations/**`
+
+## STRAT-1 Verification Status
+
+All five required STRAT-1 files are present and tracked. Targeted `git status --short -- <STRAT-1 files>` returned no modified or untracked entries for those files during verification.
+
+STRAT-1 confirms the strategic north star is Future GNR8 as an AI-native website operations layer for portfolios, while the practical MVP is migration-first, operator-assisted, deterministic, auditable, approval-gated, and constrained to static or mostly static public websites.
+
+## Final MVP Definition
+
+GNR8 MVP is an operator-assisted migration factory and website operations backbone for static or mostly static public websites, designed to migrate and operate approximately 200 existing websites with deterministic workflows, explicit source-of-truth boundaries, auditability, recovery paths, and controlled human approvals.
 
 ## Supported Site Classes Summary
 
-Supported for MVP:
+Supported in the normal MVP wave:
 
-- Static brochure websites.
-- Mostly static multi-page websites.
-- Small business service websites.
+- simple static brochure sites;
+- mostly static multi-page business websites;
+- small service business websites.
 
 Supported with manual review:
 
-- Sites with forms.
-- Sites with embedded maps/widgets.
-- Sites with external scripts.
-- WordPress sites as public/static source surfaces.
-- Webflow sites as public/static source surfaces.
-- Wix/Squarespace sites when static enough.
-- Multilingual sites when route/language coverage is manageable.
-- Blogs/news sites when static/archive-oriented.
-- Sites with complex SEO redirect histories when reviewed.
+- public marketing sites with forms;
+- embedded widgets;
+- WordPress public/static surfaces;
+- Webflow/Wix/Squarespace public/static surfaces;
+- multilingual sites;
+- small/static blogs/news archives;
+- third-party booking/reservation flows that remain external and pass testing;
+- complex SEO migrations with redirect/runbook review.
 
-Importable but not launch-ready:
+Import-only:
 
-- Booking/reservation sites unless external flow is verified.
-- Dynamic listing/catalog sites unless accepted as static snapshots.
-- Sites with heavy JavaScript rendering unless preview fidelity is proven.
+- heavy JavaScript public sites unless fidelity is proven;
+- unknown/damaged source states;
+- dynamic listing/catalog sites unless accepted as static snapshots.
 
-Out of scope for MVP:
+Out of scope or deferred:
 
-- Shopify or commerce sites.
-- Authenticated/member sites.
-- Sites with custom backend functionality.
-- Sites with payment flows.
-- Sites requiring legal/compliance workflows unless separately approved.
+- ecommerce;
+- member/authenticated sites;
+- custom backend applications;
+- payment flows;
+- compliance-heavy sites without separate legal/compliance approval.
 
-## Capability Boundary Summary
+## Source-Of-Truth Conclusions
 
-Required for MVP:
+Runtime production truth is active pointer, site version, runtime artifact, and published override state.
 
-- Client-scoped import, bulk intake design, rendered capture, raw HTML fallback, static import, multi-page discovery, migration batches, batch pause/resume, retry/replay, failure recovery, Command Center, Ops Inbox, content slots, draft/published overrides, content rollback, preview runtime, public runtime, publish activation, rollback, domain binding/DNS instructions/Vercel verification if custom domains launch, and client approval.
+Canonical MVP state lives in ownership/auth records, site records, migration jobs/batches/stages/events, runtime site versions/artifacts/raw artifacts, active pointers, content slots/overrides/history, domain host bindings, approval records/events, audit events, incident/recovery events, and cost events.
 
-Strongly recommended for MVP:
+Review and presentation surfaces are non-authoritative: Website Understanding, Source Content and Visual Continuity, Website Version Thumbnails, Generated Proposal Bundles, Knowledge Workspace, Generation Evolution, previews, Command Center read models, Ops Inbox items, AI/provider outputs, billing dashboards, and external workflow snapshots.
 
-- Batch dry-run, WU/VCU projections, Knowledge Workspace drilldown, thumbnails as presentation-only, cost visibility, minimal client portal review, reporting/account management, external workflow references, AI read-only inspection/summarization.
+External systems remain authoritative for their own domains: Vercel for Vercel project/domain state, registrars/DNS providers for registrar/DNS truth, Stripe for Stripe billing truth, CMSs for source CMS state, booking/commerce systems for transactional workflows, and external project/CRM/support tools for their records unless a future ADR changes ownership.
 
-Design-only before MVP:
+## Operational State Conclusions
 
-- AI recommendation/planning, external workflow reference model, approval persistence model, replay bundle model.
-
-Explicitly deferred after MVP:
-
-- Full Stripe/customer billing, full external integrations, Digital Business Twin productization, advisory layer, regeneration/evolution, provider payload generation as operational workflow.
-
-Forbidden before explicit ADR:
-
-- AI execution, provider execution, Openprovider/live DNS or registrar mutation, AI-driven publish, AI-driven DNS mutation.
-
-## Source-Of-Truth Matrix Summary
-
-The canonical MVP authority is:
-
-- Agency/client/user/site identity: Postgres ownership/auth/membership tables and agency/site modules.
-- Migration jobs/batches/stages: `gnr8_migration_jobs`, stage/event tables, `gnr8_migration_batches`, batch job/event tables.
-- Runtime serving: runtime site versions, runtime artifacts, raw template artifacts, active pointer/publish activation state, published overrides.
-- Review projections: WU, VCU, Knowledge Workspace, thumbnails, Generated Proposal Bundles are projections/review/presentation artifacts, not production truth.
-- Domain/DNS: GNR8 domain host bindings and DNS instruction snapshots are MVP operational records; registrar/DNS providers remain external systems of record.
-- Billing/cost: cost events are append-only operational visibility; Stripe/customer billing remains external/partial and not a full MVP product.
-- AI/provider bundles: immutable review-only artifacts, forbidden as source of runtime truth in MVP.
-
-Known high-priority ambiguities:
-
-- Approval state needs a canonical MVP persistence model.
-- Active pointer/publish event authority should be documented against exact runtime fields before publish implementation changes.
-- Source capture/rendered DOM/screenshot artifacts are partly represented through provenance and worker records; a uniform artifact registry decision is needed.
-- External workflow references need a minimal source-of-truth model before integration work.
-
-## Operational State Model Summary
-
-The MVP state model defines:
+The MVP state model uses these canonical site states:
 
 - `intake_created`
-- `import_pending`
+- `intake_validated`
+- `intake_blocked`
+- `import_queued`
 - `import_running`
-- `import_succeeded`
 - `import_failed`
-- `capture_degraded`
-- `review_pending`
-- `review_blocked`
+- `import_completed_with_warnings`
+- `import_completed`
 - `preview_ready`
+- `review_pending`
 - `content_changes_requested`
 - `approval_pending`
 - `approved_for_launch`
@@ -168,184 +145,84 @@ The MVP state model defines:
 - `publish_failed`
 - `rollback_available`
 - `rollback_required`
+- `rollback_completed`
 - `incident_open`
 - `incident_resolved`
 - `archived_decommissioned`
 
-Each state has defined transitions, prohibited transitions, evidence, operator action, approval, audit event, source-of-truth fields/artifacts, Command Center representation, and Ops Inbox representation.
-
-## Approval Boundary Summary
-
-MVP approval gates exist for:
-
-- Migration batch start.
-- Failed site retry.
-- Unsupported site-class exception.
-- Content change.
-- Client review.
-- Launch approval.
-- Publish activation.
-- Rollback.
-- Domain/DNS change.
-- AI-generated plan acceptance.
-- Billing/cost exception.
-
-Post-MVP or deferred approvals include:
-
-- External workflow mutation.
-- AI-generated content acceptance beyond manual human review.
-- Provider/DNS/billing mutations.
-
-No approval may be implied by AI output, UI state, preview availability, or generated artifacts.
-
-## DNS/Domain Boundary Summary
-
-MVP may support:
-
-- Domain binding records for GNR8 runtime.
-- Vercel domain attachment/checks where current code supports them.
-- Manual DNS instruction workflows.
-- DNS verification/readiness display.
-- SSL/readiness display when available.
-- Openprovider availability/inventory as read-only evidence.
-
-MVP must not claim:
-
-- Full registrar automation.
-- Full DNS-zone mutation.
-- Openprovider live write execution.
-- AI-driven DNS mutation.
-
-Live provider DNS mutation remains deferred until an explicit ADR approves it.
-
-## Publish/Rollback Boundary Summary
-
-Publish means an approved runtime site version/artifact plus approved content state becomes active in the public runtime through publish activation/active pointer state. Publish requires launch approval, technical readiness, domain readiness or exception, rollback plan, and audit.
-
-Rollback means switching to a previous known-good version or reverting published content overrides. Rollback requires incident/reason evidence, approved target, before/after state, and audit. AI must not publish, rollback, or select rollback targets autonomously.
-
-## Audit/Replay/Failure Recovery Minimum
-
-Minimum audit events are defined for site intake, import, capture degradation, batch lifecycle, retry/replay, preview, review, content change/publish, approval grant/reject, domain checks, publish, rollback, incidents, cost anomalies, external workflow links, and AI plan generation if applicable.
-
-Replayable in MVP:
-
-- Source URL normalization.
-- Static/raw import.
-- Multi-page discovery.
-- Deterministic projections.
-- Preview generation.
-
-Replayable with external variance:
-
-- Rendered capture.
-
-Manually repeatable only:
-
-- Manual content review.
-- Vercel/domain checks.
-
-Not replayable as side effects:
-
-- Client approvals.
-- Publish activation.
-- Rollback.
-- Provider execution.
-
-Failure recovery categories cover intake errors, source/network failures, degraded capture, unsupported functionality, artifact/readiness failures, domain verification failures, publish failures, and cost anomalies.
-
-## Command Center/Ops Inbox Requirements
-
-Command Center is the primary MVP operator surface.
-
-Required Command Center views:
-
-- Portfolio overview.
-- Migration batch overview.
-- Site-level migration detail.
-- Failed site triage.
-- Domain readiness.
-- Publish readiness.
-- Approval queue.
-- Cost visibility.
-- Incidents/recovery.
-- Replay/runbook links.
-
-Required Ops Inbox work item taxonomy:
-
-- Intake blocked.
-- Import failed.
-- Capture degraded.
-- Unsupported site class.
-- Review needed.
-- Content change requested.
-- Approval needed.
-- Domain action needed.
-- Publish ready.
-- Publish failed.
-- Rollback needed.
-- Incident open.
-- Cost anomaly.
-- External workflow update.
-- AI plan review, if applicable.
-
-Ops Inbox is derived from canonical state and must not become a separate source of truth.
+The model also defines batch-level states, failure states, recovery states, prohibited shortcuts, approval gates, publish gates, rollback gates, domain gates, Command Center projection requirements, and Ops Inbox taxonomy.
 
 ## Explicit Deferrals
 
-Deferred after MVP:
+Deferred or forbidden before later ADR/design:
 
-- Autonomous regeneration.
-- Full Digital Business Twin productization.
-- Full Stripe/customer billing.
-- Full registrar/DNS automation.
-- Full external integration marketplace.
-- Full agency marketplace.
-- Autonomous AI execution.
-- AI-driven publish.
-- AI-driven DNS mutation.
-- Provider execution.
-- Large visual builder investment.
-- Full enterprise DXP features.
+- autonomous migration;
+- autonomous regeneration/evolution;
+- full Digital Business Twin productization;
+- full Stripe/customer billing;
+- full registrar/DNS automation;
+- Openprovider/live provider mutation;
+- full external integration marketplace;
+- full agency marketplace;
+- fully autonomous AI operator execution;
+- AI-driven publish, rollback, DNS, billing, provider, or external-workflow mutation;
+- full visual website builder;
+- commerce/auth/payment/custom-backend migration;
+- treating generated artifacts, projections, thumbnails, or AI outputs as runtime truth.
 
-Resume conditions and ADR requirements are documented in `docs/product/gnr8-mvp-boundary.md`.
+## Required Architecture Decisions Before Implementation
+
+1. Canonical MVP approval persistence model.
+2. Unified audit event taxonomy and event-store strategy.
+3. Exact active pointer/publish event authority across runtime store and site publish events.
+4. Replay input bundle contract for deterministic stages.
+5. Bulk intake format, dry-run contract, batch pause/resume semantics, retries, leases, and heartbeat.
+6. Ops Inbox read-model and work-item ownership contract.
+7. Domain/DNS stale-status policy and manual DNS completion evidence.
+8. Cost threshold/anomaly policy for a 200-site wave.
+9. External workflow reference model.
+10. AI advisory input/output bundle requirements before any AI-assisted MVP use.
+
+## Risks And Warnings
+
+- The repository has real publish activation and Vercel domain attachment/check foundations, but this must not be stretched into claims of autonomous publish, full DNS automation, or registrar control.
+- Approval persistence is the largest blocking architecture decision before governed launch/publish/rollback implementation.
+- Command Center must become the primary operator workbench; Workspace/admin pages should remain drilldowns.
+- AI/provider outputs, Generated Proposal Bundles, WU/VCU, thumbnails, and Evolution views must stay review-only unless a future approved publish/promotion architecture changes that.
+- Heavy JavaScript, commerce, auth, payment, custom backend, and compliance-heavy sites can derail the 200-site wave unless filtered early.
 
 ## Recommended Next Milestone
 
-Bulk Migration Factory Design should be next.
+Bulk Migration Factory Design should be next, after architectural review of MVP-1.
 
-Recommended scope:
+Recommended next scope:
 
-- Bulk intake format.
-- Batch dry-run contract.
-- Batch state machine.
-- Batch pause/resume semantics.
-- Retry/replay rules.
-- Failure recovery runbooks.
-- Command Center/Ops Inbox read model inputs.
-- Audit event contract.
+- bulk intake format;
+- batch dry-run contract;
+- batch lifecycle and pause/resume semantics;
+- retry/replay rules;
+- failure recovery runbooks;
+- worker/queue/lease/heartbeat decision;
+- Command Center/Ops Inbox read model inputs;
+- audit event contract.
 
-Do not implement the Bulk Migration Factory until architectural review explicitly approves MVP-1.
-
-## Architecture Warnings Or Objections
-
-1. The repository has real publish activation and Vercel domain capabilities, but MVP must not overclaim full publish automation, full DNS automation, or registrar control.
-2. The bootstrap/current-state docs contain historical "NO live DNS" style wording while CAP-1 found Vercel domain attachment/check code. A separate documentation reconciliation task should update bootstrap wording without weakening the no-registrar/no-provider-execution boundary.
-3. Approval persistence is the largest unresolved implementation dependency before governed publish/rollback/client review.
-4. Generated Proposal Bundles, WU/VCU, thumbnails, DBT, provider payloads, and AI plans must stay review-only unless a future ADR changes authority.
-5. Command Center must become the primary operator workbench before 200-site implementation, with Knowledge Workspace and admin pages as drilldowns.
+Do not proceed into Bulk Migration Factory implementation until the MVP-1 boundary is approved.
 
 ## Validation Performed
 
-Repository checks performed:
+Documentation validation performed:
 
-- Verified required STRAT-1/CAP-1/current-state docs exist.
-- Checked STRAT-1 required file status with `git status --short -- <required files>`.
-- Inspected canonical documentation index/bootstrap.
-- Inspected implementation ownership paths read-only.
-- Created only Markdown documentation files and updated one Markdown documentation index.
-- Reviewed final diff/status to confirm no runtime code, APIs, migrations, billing/Stripe code, DNS/domain code, provider code, publish/rollback code, thumbnail code, Generated Proposal Bundle code, Workspace runtime code, or Evolution runtime code was modified.
+- required MVP-1 files exist;
+- Markdown files are readable;
+- canonical documentation index exists and already references the MVP-1 files;
+- required STRAT-1 files exist, are tracked, and had no targeted status changes;
+- MVP/non-MVP/future boundaries are explicit;
+- supported/deferred/import-only/out-of-scope site classes are explicit;
+- source-of-truth matrix includes all requested domains;
+- operational state model includes approvals, publish, rollback, domain, incident, and recovery states;
+- docs do not claim full autonomous migration, full autonomous AI execution, full registrar/DNS automation, or full Stripe billing as MVP;
+- git status was reviewed for changed/untracked files.
 
-## MVP-1 Completion Statement
+## Confirmation
 
-MVP-1 documentation and architecture work is complete. Further implementation must wait for architectural review and explicit approval.
+MVP-1 changed Markdown documentation only. No runtime behavior was changed.

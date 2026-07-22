@@ -228,6 +228,68 @@ Batch closeout records:
 - Incident summary.
 - Audit/event references.
 
+## Bulk Intake Contract
+
+Bulk intake may arrive by CSV, manual entry, or a future API. CSV and manual entry are required MVP paths. API intake is design-ready only and must use the same validation, classification, audit, and approval gates.
+
+### Required Fields
+
+| Field | Operator expectation | Blocker if missing/invalid |
+| --- | --- | --- |
+| `agencyId` or agency reference | Identifies the agency owner for scope, permissions, cost, and reporting. | `intake_blocked` until resolved. |
+| `clientId` or client reference | Identifies the client under the agency. | `intake_blocked`; cross-agency mismatch is high severity. |
+| `siteName` | Human-readable site name for Command Center and reports. | `intake_blocked`. |
+| `sourceUrl` | Existing public website URL. | `intake_blocked` if not absolute `http`/`https`. |
+| `intendedDomain` | Desired launch domain, or explicit `no_custom_domain_yet`. | `domain_action_needed` or `intake_blocked`. |
+| `currentPlatformIfKnown` | WordPress, Webflow, Wix, Squarespace, static, custom, unknown, etc. | Not blocked if unknown is explicit; informs classification. |
+| `siteClassIfKnown` | Initial supported/manual-review/import-only/deferred/out-of-scope guess. | `review_needed` if unknown; unsupported classes block launch. |
+| `priority` | Batch ordering or urgency. | `intake_blocked` before ready/start approval. |
+| `ownerOperator` | Internal owner for migration action. | `intake_blocked` before batch start. |
+| `launchRequirement` | Launch intent, target date/window, staging-only, import-only, or defer. | `approval_needed` or `intake_blocked` if ambiguous. |
+| `notes` | Operator/account context, including known caveats. | Required as explicit empty value if no notes. |
+| `knownFormsFlag` | Flags contact/newsletter/lead forms. | `review_needed` if true/unknown. |
+| `knownWidgetsFlag` | Flags maps, booking, chat, embeds, analytics, reviews, etc. | `review_needed` if true/unknown. |
+| `knownBookingFlag` | Flags booking/reservation flow. | `review_needed`; launch blocked until external flow verified. |
+| `knownCommerceFlag` | Flags cart/catalog/checkout/order flow. | `unsupported_site_class`; normal launch out of scope. |
+| `knownAuthFlag` | Flags member/auth/private account behavior. | `unsupported_site_class`; normal launch out of scope. |
+| `knownPaymentFlag` | Flags payment/donation/subscription flow. | `unsupported_site_class`; normal launch out of scope. |
+| `knownBackendFlag` | Flags custom APIs, dashboards, databases, server workflows. | `unsupported_site_class`; normal launch out of scope. |
+| `knownComplianceFlag` | Flags legal/medical/finance/accessibility/regulated constraints. | `unsupported_site_class` or compliance deferral. |
+| `redirectSeoComplexityFlag` | Flags redirects, high-value SEO, canonical/hreflang concerns. | `route_review_needed` and SEO review. |
+| `multilingualFlag` | Flags language routes/switchers/hreflang. | `route_review_needed` and content review. |
+| `expectedPageCountOrRouteEstimate` | Rough route count for dry-run limits and batch sizing. | `review_needed` if unknown; high estimate may pause for route strategy. |
+| `externalWorkflowReference` | Sheet, ticket, CRM, email, drive, or project ref if any. | Not a source of truth; required as explicit empty value if none. |
+
+### Optional Fields
+
+- `approvalOwner`, `clientReviewer`, `contentOwner`, `domainOwner`, `seoOwner`.
+- `sourceSitemapUrl`, `criticalPages`, `redirectMapRef`, `knownCanonicalDomain`.
+- `importMode`: `dry_run_only`, `single_page`, `multi_page_controlled`, `import_only_review`, `defer`.
+- `batchCandidateGroup`, `costCenter`, `budgetThreshold`, `targetLaunchWindow`.
+- `knownAssetIssues`, `brandAssetRefs`, `sourceAccessNotes`, `DNSRegistrarNotes`.
+
+## Workflow Step Requirements
+
+| Step | Operator goal | Required input | System output | Possible blockers | Approval requirement | Audit requirement | Command Center view | Ops Inbox item if blocked |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Migration preparation workflow | Prepare a portfolio wave that can be split into safe batches. | Agency/client list, owner roles, launch goals, source inventory, cost/domain assumptions. | Portfolio readiness summary and candidate backlog. | Missing owners, unclear launch goals, unsupported portfolio mix. | None until batch start/exception. | `migration_wave_prepared` if implemented. | Portfolio wave dashboard with counts and owners. | `intake_blocked`, `approval_needed`. |
+| CSV/manual/API intake expectations | Accept rows without creating jobs. | Required intake fields, source format, actor, agency scope. | Intake record, row validation status, normalized values. | Invalid rows, duplicate source/domain, unresolved client mapping. | Exception only for bypass/alias acceptance. | `bulk_intake_created`, `bulk_intake_validated`, `bulk_intake_failed`. | Intake table and validation counters. | `intake_blocked`, `duplicate_detected`. |
+| Validation feedback | Tell operator exactly what must change before planning. | Original rows and validation rules version. | Row-level errors, warnings, duplicate report, owner needs. | Cross-client duplicates, missing required fields, unsupported flags. | Superadmin for critical exceptions. | Validation event with row refs. | Inline row status and batch readiness. | `intake_blocked`, `duplicate_detected`, `unsupported_site_class`. |
+| Site class review workflow | Confirm MVP launch eligibility. | Intake flags, MVP site-class matrix, source/dry-run hints. | Site classification decision and launch eligibility. | Commerce/auth/payment/backend/compliance, heavy JS, unknown platform. | Superadmin for unsupported launch exception. | `site_classified`. | Site class badge, risk, allowed/prohibited actions. | `unsupported_site_class`, `review_needed`. |
+| Dry-run review workflow | Review non-destructive batch readiness. | Validated intake, classification, duplicate/domain data, preflight refs. | Dry-run result, risk summary, blockers, cost estimate, recommended policy. | Source unreachable, dry-run failure, route risk, cost anomaly. | Waiver required to start without dry-run. | `batch_dry_run_started`, `batch_dry_run_completed`, `batch_dry_run_failed`. | Dry-run summary and blocker groups. | `dry_run_failed`, `cost_anomaly`, blocker-specific items. |
+| Batch approval workflow | Decide whether the batch may execute under a policy. | Batch plan, dry-run/waiver, site counts, known blockers, cost threshold, stop/continue policy. | Approval granted/rejected with evidence snapshot. | Missing approver, stale evidence, critical blocker. | Required before `running`. | `batch_approval_requested`, `batch_approval_granted`, `batch_approval_rejected`. | Approval panel and run action only after approval. | `approval_needed`. |
+| Batch execution workflow | Run operator-assisted sequential migration jobs safely. | Approved batch, job list, policy, current state. | Job/stage events, import results, failure records, counters. | Stage failure, worker interruption, cost pause, critical failure. | Prior start approval; resume approval for high/critical pauses. | `batch_started`, job/stage events, `batch_paused`, `batch_completed`. | Live batch detail, timeline, progress, pause reason. | `import_failed`, `incident_open`, `cost_anomaly`. |
+| Failure triage workflow | Classify failure and choose safe recovery. | Failure code/diagnostics, stage/action, severity, evidence refs. | Retry/replay/defer/escalation decision and owner. | Unknown error, missing evidence, high/critical risk. | Required for retry/replay/high-critical continuation. | `site_import_failed`, `failure_classified`, recovery request events. | Failure groups by code/severity. | Failure-specific item, `recovery_evidence_needed`. |
+| Retry/replay request workflow | Safely repeat or replay eligible work. | Failure record, stage/action, replay class, immutable input refs, reason. | Retry/replay request, new attempt, output refs, downstream reset notes. | Non-replayable side effect, missing input refs, cost threshold. | Operator approval; superadmin for critical/cost. | `site_retry_requested`, `site_replay_requested`, attempt outcome. | Role-gated retry/replay controls and history. | `approval_needed`, `cost_anomaly`. |
+| Preview review workflow | Validate imported result before approval. | Import result, runtime artifact refs, preview readiness, route/content/capture diagnostics. | Review checklist, accepted/rejected result, blockers. | Preview smoke failure, visual drift, missing assets, broken nav. | Client/content/technical approval as policy requires. | `preview_generated`, `review_requested`, `review_completed`. | Preview readiness and review checklist. | `preview_failed`, `review_needed`, `route_review_needed`. |
+| Content correction handoff | Resolve text/media/slot issues without changing runtime truth directly. | Review blockers, content slots, draft overrides, requested diffs. | Corrected draft/published-ready content state and preview refs. | Override conflict, missing owner, client rejection. | Content/client approval before publish-visible change. | `content_change_requested`, `draft_override_saved`, `content_ready`. | Content blockers and diffs. | `review_needed`, `approval_needed`. |
+| Domain readiness handoff | Get custom-domain prerequisites ready without live registrar mutation. | Intended domain, DNS owner notes, instructions, Vercel/domain check refs. | Domain readiness result or exception. | Unclear DNS owner, stale instructions, failed verification. | Domain action/client approval if needed. | `domain_action_required`, `domain_verified`, `domain_exception_approved`. | Domain readiness panel. | `domain_action_needed`, `dns_verification_failed`. |
+| Publish readiness handoff | Prove all launch gates are satisfied before publish activation. | Approved site, preview/review evidence, artifact refs, domain readiness, rollback target, cost/incident status. | Publish readiness passed/failed snapshot. | Approval missing, readiness failure, incident open, rollback target missing. | Publish activation approval remains separate. | `publish_readiness_passed`, `publish_readiness_failed`. | Publish readiness checklist. | `publish_readiness_failed`, `approval_needed`. |
+| Incident/rollback handoff | Recover from publish/runtime/domain/content incident. | Incident record, active pointer before/after, known-good target, impact, owner. | Rollback or alternative recovery decision, verification, incident resolution. | Missing rollback target, approval missing, audit failure. | Rollback approval; emergency path still audited. | `incident_opened`, `rollback_requested`, `rollback_completed`, `incident_resolved`. | Incident/recovery panel. | `incident_open`, `rollback_needed`. |
+| Cost anomaly workflow | Pause and review abnormal spend. | Cost events/estimate, threshold, site/batch refs, retry count. | Pause/continue/cancel decision, cost exception ref. | Missing cost owner, unexplained spike, threshold breach. | Superadmin or agency owner/admin. | `cost_anomaly_detected`, `cost_exception_approved`. | Cost banner and batch/site cost detail. | `cost_anomaly`. |
+| Batch closeout workflow | Freeze the audit/reporting summary for a batch. | Final counters, site states, approvals, failures, recovery refs, cost summary, incident refs. | Closeout report and archive readiness. | Unresolved recovery evidence, open incident, missing audit refs. | Closeout approval recommended; required for critical incidents. | `batch_completed`, `batch_cancelled`, `batch_archived`. | Closeout report and archive action. | `recovery_evidence_needed`, `incident_open`. |
+| Reporting summary workflow | Give account/ops a truthful portfolio update. | Batch closeout, item states, blockers, costs, approvals, external refs. | Summary by completed/warnings/failed/deferred/ready/blocked. | Stale state, unresolved external refs, missing cost/audit evidence. | None unless report asserts approval/launch. | `batch_report_generated` if implemented. | Report export/drilldown. | Blocker-specific items. |
+
 ## Command Center Requirements
 
 Command Center must show:

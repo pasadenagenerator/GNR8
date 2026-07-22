@@ -258,6 +258,146 @@ Each event must include actor, subject, required payload, correlation IDs, immut
 | `incident_resolved` | Operator | Incident | resolution, recovery evidence | Site/batch | Human |
 | `cost_anomaly_detected` | System | Batch/site | threshold, observed cost, owner | Site/batch | System |
 
+## Purpose
+
+BMF exists to make a 200-site static/mostly-static migration wave repeatable, deterministic where possible, auditable, recoverable, and approval-gated. It accepts bulk intake, classifies site risk, prepares non-destructive dry-runs, creates batches, runs operator-approved jobs, exposes blockers, and records enough evidence for review, retry/replay, recovery, closeout, and later implementation.
+
+## Relationship To MVP-1
+
+BMF-1 is a specialization of MVP-1. It does not widen the MVP boundary. It uses MVP-1 rules:
+
+- GNR8 MVP is operator-assisted, not unattended autonomous migration.
+- Supported launch scope is static or mostly static public websites.
+- Runtime source of truth is active pointer, site version, runtime artifact, published override state, and domain binding/readiness state.
+- Review projections, previews, thumbnails, Website Understanding, Source Content and Visual Continuity, Knowledge Workspace, Evolution, Generated Proposal Bundles, AI outputs, provider payloads, Command Center read models, Ops Inbox items, and billing dashboards are not production truth.
+- Human approvals gate batch start, retry/replay, exceptions, launch, content publish, domain actions, publish activation, rollback, and cost exceptions.
+
+## Relationship To Future GNR8
+
+Future GNR8 may add queue workers, leases, heartbeats, concurrency, autonomous advisory agents, richer source connectors, object-storage adapters, provider/DNS automation after ADR, billing productization, regeneration, Workspace/Evolution promotion workflows, and AI-assisted portfolio operations. BMF-1 leaves those visible as extension points, but it does not pull them into MVP implementation scope.
+
+## Source-Of-Truth Boundaries
+
+| Domain | Canonical owner | Non-authoritative projections |
+| --- | --- | --- |
+| Ownership and scope | Supabase/Postgres agency, client, site, membership/RBAC records. | Command Center filters, batch labels, external workflow labels. |
+| Intake, batches, jobs, stages, attempts, approvals, audit, incidents, cost events | Supabase/Postgres control-plane records and append-only events. | Ops Inbox items, dashboards, CSV export summaries. |
+| Runtime serving | Active pointer, site version, immutable runtime/raw artifacts, published content overrides, host/domain binding state. | Preview URLs, thumbnails, generated bundles, WU/VCU, Workspace/Evolution. |
+| External domains/DNS/providers/billing/workflows | External systems remain authoritative for their own records. GNR8 stores refs, snapshots, instructions, and audit. | DNS instruction views, Vercel status snapshots, Stripe/billing dashboards, project-tool links. |
+
+## Core Entities
+
+These are conceptual architecture entities only; BMF-1 does not create schemas or TypeScript types.
+
+| Entity | Purpose | Canonical fields/evidence | Source-of-truth boundary |
+| --- | --- | --- | --- |
+| Migration batch | Approved execution container for a cohort of site items. | `batchId`, owner, agency/client scope, lifecycle state, policy, counters, approval refs. | Future BMF batch service and audit. |
+| Migration batch item | Site-specific membership row inside a batch. | `batchItemId`, intake ref, site/client refs, position, state, blocker refs. | Future BMF batch item store; current batch-job membership is narrower evidence. |
+| Migration job | Durable import execution unit for a site. | Job id, source URL, site id, state, current stage, execution events. | Current migration job store plus future BMF governance. |
+| Migration stage | Named deterministic or variance-labeled stage. | Stage name, state, attempts, diagnostics, output refs. | Migration job/stage store. |
+| Migration run | One approved execution session over a batch or site item. | Run id, policy, started/ended timestamps, actor/system actor, result counters. | Future BMF run ledger. |
+| Migration attempt | One try for a stage/action. | Attempt id, stage/action, input refs, output refs, result, failure code. | Future BMF attempt ledger plus stage records. |
+| Site intake record | Original and normalized candidate-site input. | Agency/client refs, site name, source URL, intended domain, flags, owners. | Future intake store; never UI-only. |
+| Site classification decision | Accepted class against MVP matrix. | Class, risk, evidence refs, exception requirement, actor. | Classification decision/audit. |
+| Preflight result | Non-destructive row/site checks before dry-run or job creation. | Validation, duplicate, scope, source reachability, domain and risk hints. | Append-only evidence/projection. |
+| Dry-run result | Batch-level non-destructive readiness projection. | Site results, risk summary, blocker list, cost estimate, recommended policy. | Append-only evidence; not approval. |
+| Import result | Output of migration job/stages. | Site version refs, raw/runtime artifact refs, diagnostics, route/capture refs. | Migration/runtime stores. |
+| Preview readiness result | Derived check proving preview can be reviewed. | Preview ref, smoke result, route/asset failures, freshness. | Readiness/check evidence; not production truth. |
+| Review blocker | Human or system blocker preventing approval/launch. | Type, severity, owner, evidence, completion condition. | Review/failure/blocker records. |
+| Approval reference | Append-only human decision. | Approver, scope, evidence shown, decision, expiry/supersession. | Approval/event store. |
+| Audit event | Immutable record of state-changing or privileged action. | Actor, subject, action, payload, refs, correlation id, timestamp. | Audit/event foundation; BMF taxonomy must be unified before implementation. |
+| Incident/recovery reference | Recovery lifecycle evidence. | Incident id, severity, owner, recovery action, verification refs. | Future incident/recovery records plus audit. |
+| Cost event/reference | Operational cost signal or threshold decision. | Cost type, site/batch refs, estimate/actual, threshold, approval ref. | Cost event tables and future BMF cost policy. |
+| Asset bundle/reference | Data-plane object bundle used by import/preview/replay. | Object refs, byte sizes, hashes, content types, retention and replayability metadata. | Metadata in Supabase; heavy bytes in approved data-plane storage. |
+| Source capture reference | Immutable/variance-labeled source observation. | URL, timestamp, raw/rendered refs, screenshots/DOM/style refs, diagnostics. | Capture evidence store. |
+| Runtime artifact reference | Immutable runtime/raw-template artifact used for preview/serving candidates. | Artifact id, site version id, hash, manifest, file map. | Runtime artifact store. |
+| Active pointer reference | Public-serving pointer state. | Site id, site version id, artifact id, before/after refs. | Runtime active pointer/publish/rollback events. |
+
+## Operator Roles And System Actors
+
+| Actor | Responsibility | Cannot do in MVP |
+| --- | --- | --- |
+| Superadmin | Cross-client conflicts, critical overrides, unsupported exceptions, rollback/publish emergency governance. | Unrecorded provider/DNS/billing/AI mutation. |
+| Agency owner/admin | Portfolio accountability, client approval coordination, cost exception review. | Bypass technical readiness or source-of-truth records. |
+| Migration operator | Intake, classification, batch planning, dry-run, execution, retry/replay triage. | Publish, rollback, DNS mutation, autonomous execution. |
+| Technical operator | Capture/import/runtime/domain/publish readiness, incident recovery evidence. | Registrar mutation or provider execution without future ADR. |
+| Content operator | Preview/content review, content correction handoff, visual/fidelity blockers. | Public publish without approvals. |
+| Client reviewer/account manager | Client evidence review, approval routing, external workflow refs. | Mutate runtime state directly. |
+| System/worker process | Executes explicitly approved deterministic/variance-labeled stages. | Autonomous migration, approvals, publish, rollback, DNS, billing, provider, or AI mutation. |
+
+## Site Classification Model
+
+Classification maps intake and dry-run evidence to the MVP supported-site-class matrix:
+
+- Supported: simple static brochure, mostly static multi-page, small service business.
+- Supported with manual review: forms, widgets, WordPress/Webflow/Wix/Squarespace public static surfaces, multilingual, blogs/news, booking that remains external, complex SEO.
+- Import-only/deferred: heavy JavaScript, unknown/damaged source, dynamic catalog snapshots, unclear source ownership.
+- Out of scope: commerce, auth/member, payment, custom backend, compliance-heavy without separate review.
+
+Classification is not a UI badge. The accepted decision must record evidence refs, operator/system actor, risk, launch eligibility, exception requirement, and downstream blockers.
+
+## Preflight Model
+
+Preflight is row/site-level non-destructive validation before job creation. It checks:
+
+- required intake fields and normalized values;
+- agency/client/site scope and duplicate source/domain conflicts;
+- source URL parse/reachability where safe;
+- intended domain/no-domain intent and domain ownership notes;
+- site class guess, unsupported flags, manual review flags;
+- expected page count, route risk, forms/widgets/booking/commerce/auth/payment/backend/compliance flags;
+- owner assignments and approval owner availability;
+- cost center/threshold metadata.
+
+Preflight output is append-only evidence. It may feed dry-run, Command Center, and Ops Inbox, but it is not approval and does not create public runtime changes.
+
+## Approval Model
+
+Approvals are append-only human decisions scoped to a batch, site, stage/action, exception, content state, domain action, publish activation, rollback, or cost exception. They must include evidence shown, approver, role, decision, timestamp, expiry/revocation rules, and correlation ids. Approval cannot be inferred from a green dry-run, preview availability, Command Center action, Ops Inbox item, thumbnail, AI/provider output, or generated proposal bundle.
+
+## Cost-Control Model
+
+BMF tracks estimated and observed operational costs as internal control-plane signals, not customer billing truth. Cost controls must support batch estimates, stage/site cost refs, retry/replay cost accumulation, thresholds, anomaly detection, pause rules, and cost exception approvals. A critical cost anomaly pauses the affected batch/cohort until reviewed by superadmin or agency owner/admin.
+
+## Asset And Storage Boundary
+
+Supabase must remain the canonical control-plane/data-store for metadata, source-of-truth records, audit, approvals, jobs, batches, pointers, and lifecycle state.
+
+Data-size-heavy webpage assets should be treated as data-plane artifacts. Current repository evidence appears to include Supabase Storage and/or filesystem paths for preview/template/branding assets, plus runtime raw-template artifact file maps with byte sizes, hashes, media types, and preview asset routes. Future object storage, including Vercel Blob or an equivalent object storage layer, should be evaluated for imported website assets, preview bundles, thumbnails, screenshots, exported bundles, and generated proposal assets.
+
+BMF-1 must not implement storage migration. It only identifies where BMF depends on asset references, byte sizes, hashes, content types, retention policy, and replayability:
+
+- source capture refs for raw HTML, rendered DOM, screenshots, style samples, and fetch manifests;
+- imported asset bundle refs for CSS, JavaScript, fonts, images, videos, and external asset fallbacks;
+- raw-template/runtime artifact refs for preview and serving candidates;
+- preview bundle/readiness refs for review;
+- thumbnail/screenshot/generated proposal refs as review artifacts only;
+- exported bundle refs for future migration reporting or portability.
+
+## Implementation Prerequisites
+
+- Canonical intake/preflight/dry-run persistence contract.
+- Exact batch and site item lifecycle transition enforcement.
+- Unified BMF audit taxonomy and approval persistence model.
+- Retry/replay request model with immutable input refs and forbidden side-effect guards.
+- Failure/recovery record model and Ops Inbox derivation rules.
+- Command Center read model for all BMF states, blockers, approvals, costs, and actions.
+- Cost threshold/anomaly policy.
+- Asset reference contract with size/hash/content type/retention/replay metadata.
+- Domain/DNS operating model decision for stale checks, manual DNS evidence, and provider boundaries.
+- Tests for all lifecycle states, failure categories, retry/replay classes, approvals, source-of-truth boundaries, and derived read models.
+
+## Explicit Deferrals
+
+- Unattended queue/lease/heartbeat/retry scheduler and concurrent batch workers.
+- Autonomous migration, autonomous regeneration, autonomous AI execution, AI-driven publish, and AI-driven recovery.
+- Live DNS/registrar mutation, Openprovider live mutation, and provider execution.
+- Full Stripe/customer billing, checkout, invoicing, portal, subscription plan management, or customer charge workflows.
+- Asset storage migration, Vercel Blob implementation, Supabase Storage changes, or new storage adapter implementation.
+- Command Center UI/runtime changes and Ops Inbox implementation.
+- Publish/rollback implementation changes, domain implementation changes, thumbnail runtime changes, Workspace runtime changes, Evolution runtime changes, and Generated Proposal Bundle runtime changes.
+- Commerce, auth/member, payment, custom backend, and compliance-heavy migration as normal MVP launch scope.
+
 ## Command Center Requirements
 
 Command Center must remain the primary operator surface. Specialized pages are drilldowns only.

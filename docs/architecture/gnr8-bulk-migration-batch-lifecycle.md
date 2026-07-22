@@ -1,105 +1,140 @@
 # GNR8 Bulk Migration Batch Lifecycle
 
-BMF-1 lifecycle specification for migration batches and site-level migration state within a batch.
+BMF-1 canonical lifecycle specification for migration batches and site items inside a batch.
 
-This is documentation-only. It does not implement states, transitions, APIs, schemas, workers, Command Center behavior, or runtime behavior.
+This is documentation-only. It does not implement states, transitions, APIs, schemas, workers, Command Center behavior, Ops Inbox behavior, publishing, rollback, DNS/domain behavior, billing, storage, provider execution, Workspace runtime, Evolution runtime, Generated Proposal Bundles, thumbnails, or AI execution.
 
 ## Lifecycle Principles
 
-1. Batch state is canonical only when persisted through the future BMF batch domain service and audited.
-2. Site state is projected from intake, classification, migration job/stage, runtime version/artifact, preview, review, approval, domain, publish, rollback, incident, and recovery evidence.
-3. Command Center displays lifecycle state and allowed actions; it is not itself the source of truth.
-4. Ops Inbox work items are derived from lifecycle state and blockers.
+1. Batch lifecycle state is source-of-truth only when later persisted by the canonical BMF batch domain service and audited.
+2. Site item lifecycle is projected from intake, classification, preflight/dry-run, migration job/stage state, runtime artifact refs, preview readiness, review blockers, approval refs, domain/publish readiness, incidents, recovery refs, and closeout evidence.
+3. Command Center represents state and actions, but it is not source of truth.
+4. Ops Inbox items are derived blockers. They cannot be closed without changing underlying canonical evidence or recording an audited decision.
 5. Dry-run is evidence, not approval.
-6. Publish, rollback, domain mutation, provider execution, billing mutation, and autonomous AI execution are not batch replay actions.
+6. Publish activation, rollback, domain/provider checks, approvals, billing decisions, and AI/provider outputs are not deterministic batch replay actions.
 
-## Batch Lifecycle
+## Batch States
 
-Current repository status supports `draft`, `ready`, `running`, `paused`, `completed`, `failed`, `partially_failed`, and `cancelled`. BMF MVP expands the conceptual lifecycle below. Implementation must map or migrate states deliberately later; this document does not change schemas.
+Required fields for every batch-state transition: `batchId`, current state, requested next state, actor/system actor, reason, evidence refs, policy version, timestamp, and correlation id.
 
-| State | Meaning | Allowed transitions | Prohibited transitions | Required evidence | Operator action | Approval | Audit event | Command Center | Ops Inbox | Retry/replay implication |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `draft` | Batch exists as a planning container; intake may still be incomplete. | `intake_validating`, `cancelled`, `archived` | `running`, `completed`, `published` actions | Batch id, owner, agency/client scope if known | Add/edit rows, assign owners | None | `batch_created` | Draft badge, incomplete counters | None unless rows blocked | No jobs should run. |
-| `intake_validating` | Intake rows are being parsed, normalized, deduped, and scoped. | `intake_invalid`, `ready_for_dry_run`, `cancelled` | `approved_to_start`, `running` | Intake refs, validation run id | Wait/review validation | None | `bulk_intake_validated` or `bulk_intake_failed` | Validation progress | `intake_blocked` for invalid rows | Validation can be rerun deterministically from intake. |
-| `intake_invalid` | One or more rows fail required validation or duplicate checks. | `draft`, `intake_validating`, `cancelled`, `archived` | `ready_for_dry_run`, `running` | Invalid row list, duplicate report, owner | Correct rows or defer/remove them | None unless exception | `bulk_intake_failed` | Invalid counters and reasons | `intake_blocked`, `duplicate_detected` | No migration jobs for invalid rows. |
-| `ready_for_dry_run` | Intake is valid enough for a non-destructive planning run. | `dry_run_running`, `draft`, `cancelled` | `running`, `approved_to_start` | Validated intake, class guesses, domain intent | Start dry-run | None | `batch_dry_run_ready` if implemented | Ready for dry-run action | None | Dry-run only; no approval implied. |
-| `dry_run_running` | Non-destructive checks/projections are running. | `dry_run_completed`, `dry_run_failed`, `paused`, `cancelled` | `running`, `completed` | Dry-run id, input refs | Monitor | None | `batch_dry_run_started` | Dry-run progress | None unless stuck | Dry-run stages may be rerun; outputs supersede prior dry-run. |
-| `dry_run_completed` | Dry-run produced reviewable results and risk summary. | `awaiting_batch_start_approval`, `ready_for_dry_run`, `draft`, `cancelled` | `running` without approval | Dry-run result, blocker list, policy recommendation | Review evidence, choose policy | Start approval required next | `batch_dry_run_completed` | Dry-run summary, risk, blockers | `batch_start_approval_needed` if clean enough | Dry-run output is immutable evidence/projection. |
-| `dry_run_failed` | Dry-run could not complete. | `ready_for_dry_run`, `draft`, `blocked`, `cancelled` | `awaiting_batch_start_approval` unless explicitly waived | Failure diagnostics | Fix inputs/system or request waiver | Waiver if start without dry-run | `batch_dry_run_failed` | Failure summary | `dry_run_failed` | Dry-run retry allowed; no site execution. |
-| `awaiting_batch_start_approval` | Evidence is ready and start approval is requested. | `approved_to_start`, `draft`, `blocked`, `cancelled` | `running` | Evidence package, dry-run ref or waiver, policy, site counts | Approver reviews | Required | `batch_start_requested` | Approval pending | `batch_start_approval_needed` | No execution until approval. |
-| `approved_to_start` | Batch has human approval to create/run jobs under a policy. | `running`, `paused`, `cancelled` | `draft` without audit, `completed` | Approval ref, evidence snapshot, policy | Start execution or schedule operator window | Completed | `batch_start_approved` | Approved badge, run action | None | Jobs may be created/run. Approval can expire by policy. |
-| `running` | Batch jobs are executing under operator-approved policy. | `paused`, `partially_completed`, `completed`, `completed_with_failures`, `blocked`, `cancelled` | `draft`, `intake_validating` | Batch start event, job list, current stage/events | Monitor, pause if needed | Prior start approval | `batch_started`, job events | Live progress/timeline | Failure items as derived | Retry/replay only by policy; no side-effect replay. |
-| `paused` | Execution is stopped by operator, maxJobs/cohort limit, severity rule, or system guard. | `running`, `blocked`, `cancelled`, `completed_with_failures` | `completed` if runnable jobs remain without decision | Pause reason, counters, failed/stuck refs | Triage, resume, cancel, defer sites | Resume may require approval for high/critical reason | `batch_paused`, `batch_resumed` | Paused banner, reason, resume action | Failure/recovery items | Failed deterministic stages may be replayed after approval. |
-| `partially_completed` | Some sites completed import/review milestones while remaining sites are pending/failed/deferred. | `running`, `completed`, `completed_with_failures`, `paused`, `blocked` | `archived` without closeout | Progress counters and pending list | Decide continue/defer/close | Depends on remaining failures | `batch_partially_completed` if implemented | Partial progress counters | Remaining blockers | Retry/replay only for eligible failed sites. |
-| `completed` | All batch sites reached intended non-publish execution target with no unresolved failures. | `archived` | `running`, `paused` without reopening policy | Completion summary, site evidence refs | Review closeout | None | `batch_completed` | Completed status | None | No further retry unless batch is reopened by future policy. |
-| `completed_with_failures` | Batch is closed with failed/deferred/import-only/out-of-scope sites recorded. | `archived`, `blocked` if reopened by policy | `running` without reopen approval | Failure/deferred summary, recovery/defer refs | Closeout failed sites separately | Closeout approval recommended | `batch_completed_with_failures` | Completed with failures counters | `recovery_evidence_needed` for unresolved records | Eligible site retries belong to new batch or reopened plan. |
-| `blocked` | Batch cannot safely progress because a required decision/evidence/system dependency is missing. | `paused`, `running`, `cancelled`, `completed_with_failures` | `completed` without resolution | Blocker record, owner, severity | Resolve blocker/escalate | Depends on blocker | `batch_blocked` if implemented | Blocked banner and owner | Derived blocker item | No retry unless blocker policy allows. |
-| `cancelled` | Batch is intentionally stopped before completion. | `archived` | `running`, `completed` | Cancel reason, affected sites, owner | Record cancellation | Operator approval | `batch_cancelled` | Cancelled status | None unless site follow-up remains | No retries in cancelled batch. |
-| `archived` | Batch is retained for audit/history but not active. | None unless future reactivation policy | All active transitions | Closeout, final counters, audit timeline | None | Superadmin/account closeout if policy | `batch_archived` if implemented | Hidden/filterable archive | None | Replay/retry must create new decision context. |
+| State | Meaning | Allowed transitions | Prohibited transitions | Required evidence | Operator action | Approval requirement | Audit event | Source-of-truth owner | Command Center representation | Ops Inbox representation | Recovery behavior |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `draft` | Planning container exists; membership and intake may still change. | `intake_validating`, `ready`, `cancelled`, `archived` | `dry_run_running`, `running`, `completed`, `failed` | Batch id, owner, agency/client scope if known, candidate list or empty-batch reason. | Add/edit/remove candidates; assign owner and priority. | None. | `batch_created` | Future BMF batch service; current batch store is narrower evidence. | Draft badge, incomplete counters, editable membership. | None unless stale/incomplete by policy. | No job execution. Recover by editing batch or cancelling. |
+| `intake_validating` | Intake rows are being parsed, normalized, deduped, scoped, and checked for required fields. | `draft`, `ready`, `cancelled`, `archived` | `dry_run_completed`, `approval_pending`, `running`, `completed` | Intake refs, validation result or in-progress validation id. | Wait, correct invalid rows, or defer/remove blockers. | None unless accepting an exception. | `bulk_intake_validating`, `bulk_intake_validated`, `bulk_intake_failed` | Intake records and validation results. | Validation progress with invalid/duplicate counters. | `intake_blocked`, `duplicate_detected`. | Validation can be replayed from original intake values and rules version. |
+| `ready` | Intake is valid enough for dry-run or, with an audited dry-run waiver, start approval. | `draft`, `dry_run_running`, `approval_pending`, `cancelled`, `archived` | `running` without approval, `completed`, `failed` | Validated rows, accepted site class decisions or pending manual-review flags, duplicate report, owner assignments. | Start dry-run or request waiver/start approval. | Waiver approval if skipping dry-run. | `batch_ready` | Batch plan and validation result. | Ready badge, dry-run/start-approval actions. | `approval_needed` only when start requested. | If readiness was based on stale inputs, return to `intake_validating`. |
+| `dry_run_running` | Non-destructive batch checks/projections are running. | `dry_run_completed`, `dry_run_failed`, `paused`, `cancelled` | `running`, `completed`, `archived` | Dry-run id, immutable input refs, started-at event. | Monitor; avoid duplicate dry-run. | None. | `batch_dry_run_started` | Dry-run result store once implemented. | Dry-run progress and latest check. | None unless stuck by timeout policy. | Dry-run may be retried; previous outputs remain evidence. |
+| `dry_run_completed` | Dry-run produced immutable planning evidence and risk summary. | `ready`, `approval_pending`, `dry_run_running`, `cancelled`, `archived` | `running` without approval, `completed` | Dry-run result, risk summary, blockers, cost estimate if available, recommended stop/continue policy. | Review evidence; fix blockers or request start approval. | Start approval next. | `batch_dry_run_completed` | Dry-run evidence plus batch plan. | Dry-run summary, risk, blockers, recommended policy. | `approval_needed`, or blocker-specific items. | Re-run dry-run after input changes; old result is superseded, not overwritten. |
+| `dry_run_failed` | Dry-run did not produce acceptable planning evidence. | `ready`, `dry_run_running`, `paused`, `cancelled`, `archived` | `approval_pending` without waiver, `running`, `completed` | Failure diagnostics, failed check, retry eligibility. | Fix inputs/system issue, retry, or request waiver. | Waiver required before approval/start without dry-run. | `batch_dry_run_failed` | Dry-run failure record. | Failed dry-run panel with retry/waiver path. | `dry_run_failed`. | Retry dry-run from same input refs or after correction; no jobs run. |
+| `approval_pending` | Batch has enough evidence for an authorized human to approve or reject start/continue/exception. | `ready`, `running`, `paused`, `cancelled`, `archived` | `completed`, `failed` without execution or cancellation evidence | Evidence package, dry-run ref or waiver, policy, site counts, unresolved blocker list, cost threshold. | Route decision to approver; answer questions. | Required approval by migration operator, agency admin, or superadmin according to risk. | `batch_approval_requested`, `batch_approval_granted`, `batch_approval_rejected` | Approval records/events. | Approval queue state and evidence snapshot. | `approval_needed`. | Rejection returns to `ready` or `paused`; approval is append-only and never replayed. |
+| `running` | Approved operator-assisted execution is active. | `paused`, `partially_failed`, `failed`, `completed`, `cancelled` | `draft`, `intake_validating`, `dry_run_running` | Start approval, job list, execution policy, current job/stage events. | Monitor, pause, triage failures, avoid duplicate execution. | Prior start/continue approval. | `batch_started`, `batch_job_started`, `batch_job_completed`, `batch_job_failed` | Migration batch/job/stage stores and audit events. | Live progress, current stage, counters, latest failure. | Failure-specific items only. | Safe stop waits for current stage boundary where possible; interruption resumes from first non-succeeded eligible stage. |
+| `paused` | Execution is intentionally stopped by operator, max job limit, cost threshold, severity rule, or system guard. | `approval_pending`, `running`, `partially_failed`, `failed`, `cancelled`, `archived` | `completed` if unresolved runnable work remains | Pause reason, current counters, last safe stage/job, blocker refs. | Resolve blocker, request continue, defer/cancel remaining sites. | Resume approval required for high/critical, cost, unsupported, publish, or incident pauses. | `batch_paused`, `batch_resume_requested`, `batch_resumed` | Batch status plus pause event/reason. | Paused banner, resume/triage controls. | `batch_paused` and specific blocker items. | Resume from next eligible item; replay only approved deterministic stages. |
+| `partially_failed` | One or more site items failed or are deferred, while other items completed or remain eligible. | `approval_pending`, `running`, `paused`, `failed`, `completed`, `cancelled`, `archived` | `draft`, `dry_run_running` | Failed/deferred item list, severity, recovery eligibility, continue policy. | Triage failed items; continue eligible work or close with failures. | Required to continue after high/critical failures. | `batch_partially_failed` | Batch state plus failure records. | Partial failure counters and grouped failures. | `import_failed`, `review_needed`, `recovery_evidence_needed`, etc. | Eligible site items can retry/replay; unresolved items may be deferred into new batch. |
+| `failed` | Batch cannot safely continue under current plan. | `approval_pending`, `paused`, `cancelled`, `archived` | `running` without new approval, `completed` without recovery/closeout | Batch-level failure code, severity, affected items, root cause or unknown classification. | Open incident/recovery plan, request approval to resume or cancel. | Required for any resume/reopen. | `batch_failed` | Batch state plus failure/incident record. | Failed status, owner, recovery plan. | `batch_failed`, `incident_open`, `recovery_evidence_needed`. | Recovery requires new decision context; no blind resume. |
+| `completed` | All site items reached the intended batch target with no unresolved batch-blocking failures. | `archived` | `running`, `paused`, `failed` without reopen policy | Final counters, item states, evidence refs, cost summary, no unresolved blockers. | Produce closeout, review reporting summary. | Closeout approval recommended for portfolio wave. | `batch_completed` | Batch closeout record and audit. | Completed badge and closeout report. | None. | Retry/replay requires new batch or explicit reopen policy later. |
+| `cancelled` | Batch is intentionally stopped and will not continue under current plan. | `archived` | `running`, `completed`, `failed` without cancellation evidence | Cancellation reason, affected items, approver, remaining work disposition. | Notify owners, defer/archive items, preserve evidence. | Operator approval; superadmin if critical/cross-client. | `batch_cancelled` | Batch status and cancellation event. | Cancelled badge and final disposition. | Follow-up only for unresolved incidents. | No retry/replay in cancelled batch. New batch required. |
+| `archived` | Batch is retained for audit/history and removed from active operations. | None unless future reactivation policy exists. | All active execution transitions | Closeout summary, final state, audit timeline, retention classification. | None except reporting/audit retrieval. | Superadmin or agency/admin closeout policy. | `batch_archived` | Archived batch record and audit log. | Hidden or archive-filter status. | None. | Replay/retry requires new decision context and new audit chain. |
 
-## Batch Transition Rules
+## Site Item States
 
-1. `running` requires `approved_to_start`.
-2. `approved_to_start` requires valid intake and either a completed dry-run or an audited dry-run waiver.
-3. `completed` requires no unresolved failed, blocked, unsupported, approval, domain, publish-readiness, or recovery items for the batch target.
-4. `completed_with_failures` must preserve failed/deferred/out-of-scope site list and recovery evidence requirements.
-5. Critical severity pauses the batch or publish wave by default.
-6. Publish waves are not part of import execution unless separately approved; publish failure pauses further launch actions.
-7. `archived` requires a closeout summary.
+Required fields for every site item state transition: `batchItemId`, `batchId`, source URL normalized, client/site refs, current state, next state, evidence refs, actor/system actor, timestamp, and correlation id.
 
-## Site-Level Lifecycle Within A Batch
+| State | Meaning | Allowed transitions | Prohibited transitions | Required evidence | Operator action | Approval requirement | Audit event | Source-of-truth owner | Command Center representation | Ops Inbox representation | Recovery behavior |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `candidate` | Intake row is a possible site for the batch. | `classified`, `blocked`, `deferred`, `cancelled` | `queued`, `running`, `completed`, `approved_for_launch` | Intake row, original/normalized source URL, agency/client refs, required fields status. | Complete fields, validate duplicates, assign owner. | None. | `site_intake_created` | Site intake record. | Candidate row with completeness status. | `intake_blocked` when incomplete. | Correct row or defer/cancel. |
+| `classified` | Site class decision is recorded against MVP supported-site-class matrix. | `blocked`, `queued`, `deferred`, `cancelled` | `approved_for_launch`, `completed` without job evidence | Site classification decision, risk flags, exception need. | Accept class, change import mode, or defer unsupported sites. | Superadmin for unsupported/import-only launch exception. | `site_classified` | Classification decision record. | Site class badge and launch eligibility. | `unsupported_site_class` when high risk. | Reclassify only with new evidence/audit; do not overwrite prior decision silently. |
+| `blocked` | Site item cannot proceed because required evidence, ownership, classification, source, domain, approval, or system dependency is missing. | `candidate`, `classified`, `queued`, `deferred`, `cancelled` | `running`, `completed`, `approved_for_launch` | Blocker type, severity, owner, needed evidence. | Resolve, escalate, defer, or cancel. | Depends on blocker/exception. | `site_blocked` | Blocker/review/failure record. | Blocked badge and owner. | Specific blocker item. | Recovery requires canonical blocker resolution evidence. |
+| `queued` | Site item has an approved migration job/batch position but is not executing. | `running`, `blocked`, `deferred`, `cancelled` | `completed`, `approved_for_launch` | Job id, position, input refs, batch start approval. | Start/continue batch when allowed. | Batch start/continue approval already required. | `site_queued` | Migration job/batch membership. | Queued position and stage readiness. | None unless stale. | If prior failure was reset, replay request refs must be visible. |
+| `running` | Site migration job/stage is executing. | `completed`, `completed_with_warnings`, `failed`, `review_required`, `blocked` | `approved_for_launch`, `cancelled` without safe-stop evidence | Running job/stage event, attempt id, input refs. | Monitor; pause batch if needed. | Prior batch/job approval. | `site_import_started`, `stage_started`, `stage_succeeded`, `stage_failed` | Migration job/stage store. | Current stage and attempt. | Stuck/failure item if threshold exceeded. | Safe stop after stage boundary; process interruption resumes from current/first non-succeeded stage after audit. |
+| `completed` | Import target for the site item completed without launch-blocking warnings. | `review_required`, `approved_for_launch`, `deferred` | `running`, `cancelled` without reopen/cancel policy | Import result, runtime artifact refs, source capture refs, preview readiness if generated. | Review preview/readiness; prepare approval. | Launch approval still required later. | `site_import_completed` | Migration job, runtime artifact, provenance refs. | Import completed badge. | None unless review pending. | Deterministic downstream checks may be replayed; import result remains immutable evidence. |
+| `completed_with_warnings` | Import produced usable output but warnings require review or exception. | `review_required`, `approved_for_launch`, `failed`, `deferred` | `approved_for_launch` without reviewed warning/exception | Warning diagnostics, degraded capture, missing assets, route warnings, review blocker refs. | Triage warnings, replay eligible stages, request exception, or defer. | Exception approval for launch-visible warnings. | `site_import_completed_with_warnings`, `site_capture_degraded` | Import result and review blocker records. | Completed-with-warnings badge and warning groups. | `capture_degraded`, `route_review_needed`, `review_needed`. | Recover by replay, correction, or accepted limitation with approval. |
+| `failed` | Site item failed before acceptable batch target. | `queued`, `running`, `review_required`, `deferred`, `cancelled` | `completed`, `approved_for_launch` without recovery evidence | Failure code, failed stage, diagnostics, attempt count, retry/replay eligibility. | Classify failure, retry/replay/defer/escalate. | Retry/replay approval required. | `site_import_failed` | Failure record plus job/stage events. | Failure panel with allowed actions. | `import_failed`, `preview_failed`, or specific failure item. | Eligible deterministic stages can replay; non-deterministic checks create new evidence; side effects not replayed. |
+| `review_required` | Human review is required before launch eligibility. | `approved_for_launch`, `completed_with_warnings`, `blocked`, `deferred`, `cancelled` | `running`, `published` | Preview readiness result, review checklist, content/route/form/widget/domain blockers. | Review, request content correction, accept limitation, or reject. | Client/content/technical approval according to blocker. | `review_requested`, `review_completed`, `review_rejected` | Review blocker and approval records. | Review-required status and checklist. | `review_needed`, `approval_needed`. | Manual repeat after correction; human review decisions are not replayed. |
+| `approved_for_launch` | Required launch approval is recorded for this site item. | `completed`, `completed_with_warnings`, `deferred`, `cancelled` | `running`, `failed` without approved recovery, publish activation without separate gate | Approval reference, evidence snapshot, accepted limitations, rollback target or recovery plan if publish-ready. | Hand off to publish/domain readiness workflow when applicable. | Launch approval present; publish activation approval remains separate. | `site_approved_for_launch` | Approval record/event. | Approved badge with remaining domain/publish blockers. | None unless domain/publish blocker exists. | Approval may expire or be superseded; never replayed. |
+| `deferred` | Site intentionally leaves the current batch wave. | `candidate`, `classified`, `queued`, `cancelled` by new decision | `running`, `completed`, `approved_for_launch` without re-entry evidence | Defer reason, owner, follow-up ref/date. | Replan later or archive. | Operator/account approval; superadmin for critical exceptions. | `site_deferred` | Site item disposition record. | Deferred badge and reason. | Optional follow-up item only. | New batch or audited re-entry required. |
+| `cancelled` | Site item is intentionally stopped and will not continue in this batch. | None unless future reactivation policy. | All active transitions | Cancellation reason, actor, final evidence refs. | Preserve final disposition. | Operator approval; superadmin if critical/cross-client. | `site_cancelled` | Site item disposition record. | Cancelled row. | None unless incident remains. | Retry/replay requires new item/batch context. |
 
-The site lifecycle adapts the MVP operational state model for batch execution. State may be stored later or projected; source-of-truth fields/artifacts are listed conceptually.
+## Batch Creation Rules
 
-| State | Meaning | Transition rules | Source-of-truth fields/artifacts | Audit event | Operator role | Allowed actions | Blocked actions | Retry/replay policy | Command Center surface | Ops Inbox item |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `intake_created` | Row exists with required owner context not yet validated. | To `intake_validated` or `intake_blocked`. | `BulkIntakeRow`, original/normalized fields | `bulk_intake_created` | Account/migration operator | Edit row, validate | Create job if invalid | Validation replayable | Intake row | None unless incomplete |
-| `intake_validated` | Required fields and duplicates pass or are classified. | To classification states or `intake_blocked`. | Validation result, duplicate report | `bulk_intake_validated` | Migration operator | Classify, plan batch | Launch/publish | Validation replayable | Valid intake badge | None |
-| `intake_blocked` | Missing/invalid fields or unresolved duplicate/domain/client issue. | Back to `intake_validated`, `deferred`, or archive. | Invalid fields, blocker owner | `bulk_intake_failed` | Account/migration | Correct/defer/escalate | Create job/start import | Validation retry after correction | Blocker badge | `intake_blocked`, `duplicate_detected` |
-| `classified_supported` | Site class is MVP supported. | To `import_pending`. | `SiteClassAssessment` accepted | `site_classified` | Migration | Assign to job/batch | Publish before review | Classification update audited | Supported badge | None |
-| `classified_manual_review` | Site may be imported but needs manual review. | To `import_pending`, `review_blocked`, `deferred`. | Assessment, flags | `site_classified` | Migration/technical/content | Import with review flags | Launch without review | Classification re-evaluation allowed | Manual review badge | `unsupported_site_class` if high risk |
-| `classified_import_only` | Site may be imported for review but is not launch-ready. | To `import_pending`, `review_blocked`, `deferred`. | Assessment, import-only reason | `site_classified` | Superadmin/migration | Import-only review | Launch/publish | No automatic launch retry | Import-only badge | `unsupported_site_class` |
-| `classified_out_of_scope` | Site is not in MVP scope. | To `deferred` or `archived_decommissioned`; exception to import-only only. | Assessment, out-of-scope reason | `site_classified` | Superadmin/account | Defer/archive/exception | Import for launch | Forbidden for launch | Out-of-scope badge | `unsupported_site_class` |
-| `import_pending` | Valid site has approved job plan but import not running. | To `import_running`, `deferred`. | Batch plan/job input refs | `site_import_queued` if implemented | Migration | Run as batch/site | Publish/review | No replay before first run | Pending row | None |
-| `import_running` | Import/capture/stages executing. | To `import_succeeded`, `import_failed`, `capture_degraded`. | Job/stage records/events | `site_import_started` | Migration/technical | Monitor/pause batch | Duplicate import | Current stage controls | Stage progress | None unless stuck |
-| `import_succeeded` | Import produced usable site version/artifacts. | To `preview_ready`, `route_review_needed`, `review_pending`. | Runtime version, artifact refs, provenance | `site_import_completed` | Migration/content | Review preview/routes | Launch | Deterministic downstream projections replayable | Success badge | None |
-| `import_failed` | Import failed before usable output. | To `import_pending`, `import_running`, `review_blocked`, `deferred`. | Failed stage, diagnostics, failure record | `site_import_failed` | Migration/technical | Retry/replay/defer | Preview/launch | By stage policy | Failure panel | `import_failed` |
-| `capture_degraded` | Capture partial/raw fallback/missing evidence. | To `review_pending`, `route_review_needed`, `import_running`, `review_blocked`. | Rendered capture status/diagnostics/provenance | `site_capture_degraded` | Technical/content | Review fallback, replay capture, accept exception | Launch silently | Rendered capture replayable with external variance | Degraded badge | `capture_degraded` |
-| `route_review_needed` | Multi-page route map/discovery needs human coverage review. | To `preview_ready`, `review_blocked`, `deferred`. | Route map, discovery evidence, preview validation | `route_review_requested` if implemented | Migration/content/SEO | Approve route coverage, adjust future plan | Launch without review | Discovery replayable with source drift note | Route coverage panel | `route_review_needed` |
-| `preview_ready` | Preview is available for review. | To `review_pending`, `approval_pending`, `review_blocked`, `domain_pending`. | Preview URL/ref, runtime artifact, content state | `preview_generated` | Content/client/account | Review, request changes | Publish | Preview regenerable from artifacts | Preview link/status | `review_needed` |
-| `review_pending` | Human review is required. | To `approval_pending`, `review_blocked`, `preview_ready`, `deferred`. | Review checklist, preview evidence | `review_requested` | Content/client/technical | Accept/reject/request changes | Approval if blockers | Manual repeat only | Review queue | `review_needed` |
-| `review_blocked` | Review cannot finish. | To `review_pending`, `import_pending`, `deferred`. | Blocker record | `review_blocked` | Owner by blocker | Resolve/escalate/defer | Approval/publish | Retry depends on blocker | Blocked state | `review_needed` or specific blocker |
-| `approval_pending` | Required human approval missing. | To `approved_for_launch`, `review_blocked`, `domain_pending`. | Approval request/evidence package | `approval_requested` | Approver/account | Approve/reject/request changes | Publish | Approval not replayable | Approval status | `approval_needed` |
-| `approved_for_launch` | Launch approval exists. | To `domain_pending`, `domain_ready`, `publish_ready`. | Approval ref, evidence snapshot | `site_approved_for_launch` | Approver/technical | Run readiness/domain checks | Publish if readiness missing | Approval append-only | Approved badge | None unless domain/readiness |
-| `domain_pending` | Custom domain evidence/action incomplete. | To `domain_ready`, `review_blocked`, `deferred`. | Domain intent, host binding, DNS instructions | `domain_action_required` | Technical/account/client | Record DNS action, recheck | Publish custom domain | Domain check manually repeatable | Domain panel | `domain_action_needed` |
-| `domain_ready` | Domain or internal-domain exception is acceptable. | To `publish_ready`, `approval_pending`. | Verification evidence/exception | `domain_verified` | Technical | Mark readiness input | Mutate registrar DNS | Checks repeatable with external variance | Domain ready badge | None |
-| `publish_ready` | Review, approval, domain, artifact, rollback plan pass. | To `published`, `publish_failed`, `approval_pending`. | Readiness snapshot | `publish_readiness_passed` | Technical/superadmin | Request/execute approved publish | AI/autonomous publish | Not replay; side effect | Publish ready status | None or `publish_readiness_failed` |
-| `published` | Approved version active in public runtime. | To `incident_open`, `rollback_required`, `archived_decommissioned`. | Publish event, active pointer, domain/runtime state | `publish_completed` | Technical/account | Monitor, incident if needed | Import over active without plan | Not replayable | Live status | None |
-| `publish_failed` | Publish action failed. | To `publish_ready`, `rollback_required`, `incident_open`. | Publish failure event, before/after pointer | `publish_readiness_failed` or `publish_failed` | Technical/superadmin | Incident, retry after cause, rollback | Continue publish wave | No blind retry | Critical publish panel | `publish_failed` |
-| `rollback_required` | Incident requires rollback decision. | To `published`, `incident_open`, `deferred`. | Incident, prior good version, impact | `rollback_requested` | Technical/superadmin | Approve/execute rollback | Archive before recovery | Rollback is side effect, not replay | Critical banner | `rollback_needed` |
-| `incident_open` | Active incident affects site/batch. | To `incident_resolved`, `rollback_required`, `deferred`. | Incident record/evidence | `incident_opened` | Technical/account | Triage, communicate, recover | Publish wave continuation if critical | Recovery by runbook | Incident panel | `incident_open` |
-| `deferred` | Site intentionally postponed. | To `intake_validated`, `import_pending`, `archived_decommissioned` by new decision. | Defer reason, owner, follow-up | `site_deferred` | Account/migration | Replan later | Launch | New batch recommended | Deferred badge | None or follow-up |
-| `archived_decommissioned` | Site leaves active migration wave. | None unless future reactivation policy. | Archive reason, final state | `site_archived` | Superadmin/account | View audit | Active execution | New intake required | Archived filter | None |
+- A batch must have a name, owner, agency scope, created-by actor, creation timestamp, and purpose.
+- A batch may start as empty `draft`, but it cannot become `ready` without at least one non-cancelled candidate or an audited empty-batch closeout reason.
+- Batch membership order is stable and explicit. Reordering after approval requires a new audit event and may require renewed approval.
+- BMF MVP recommends batches of 10 to 25 sites for execution, with a hard design warning above 50 sites. A 200-site migration wave should be split into multiple batches/cohorts.
+- Batch priority is determined by `priority`, client/account urgency, site class risk, domain readiness, approval owner availability, and cost threshold policy.
 
-## Site Transition Rules
+## Batch Membership Rules
 
-1. `classified_out_of_scope` cannot become `publish_ready` or `published`.
-2. `classified_import_only` cannot become `publish_ready` without superadmin exception and launch-readiness redesign.
-3. `capture_degraded` can proceed to review but not silently to launch.
-4. `route_review_needed` must resolve before launch for multi-page sites.
-5. `approved_for_launch` does not imply `domain_ready` or `publish_ready`.
-6. `domain_pending` blocks custom-domain publish but may allow preview/internal staging.
-7. `publish_ready` requires launch approval, domain readiness or exception, artifact/readiness evidence, and rollback plan.
-8. `publish_failed` or `rollback_required` stops further launch actions for that site and may pause the batch/publish wave.
-9. Approval decisions are append-only and not replayable.
-10. Retry/replay actions must reference immutable input refs and allowed stage policy.
+- A site item belongs to one active migration batch at a time unless a future ADR defines parallel comparison batches.
+- A site item must reference intake, client/agency scope, normalized source URL, intended domain/no-domain intent, classification decision, and operator owner before it becomes `queued`.
+- Membership removal after `running` requires cancellation or deferral evidence.
+- Import-only, deferred, and out-of-scope rows may remain in the batch for reporting but must not count as launch-ready.
 
-## Current-To-BMF Mapping
+## Duplicate URL And Site Handling
 
-| Current evidence | Current states | BMF lifecycle mapping |
-| --- | --- | --- |
-| `gnr8_migration_batches.status` | `draft`, `ready`, `running`, `paused`, `completed`, `failed`, `partially_failed`, `cancelled` | BMF adds pre-run validation/dry-run/approval and completed-with-failures/archive distinctions. |
-| `gnr8_migration_jobs.status` | `PENDING`, `RUNNING`, `PAUSED`, `FAILED`, `COMPLETED` | Maps to site import execution only, not full launch/domain/review lifecycle. |
-| Runtime site version states | `DRAFT`, `READY_FOR_REVIEW`, `APPROVED`, `PUBLISHED`, `ARCHIVED` in read model logic | Maps to preview/review/approval/live portions of site lifecycle. |
-| Domain host binding status | Vercel/domain binding state | Feeds `domain_pending`/`domain_ready`. |
-| Batch observability | Summary, diagnostics, failures, timeline | Feeds Command Center batch projection; not full lifecycle source. |
+- Duplicate normalized source URL in the same intake blocks affected rows until merged, intentionally duplicated, or deferred.
+- Duplicate normalized source URL across different clients is high severity and requires superadmin/account review.
+- Duplicate intended domain across clients or active domain bindings is critical and pauses batch start for affected rows.
+- Existing site identity must be reused only when ownership scope matches; cross-client mismatch blocks import.
+- Redirect/canonical variants must be recorded as aliases, not silently merged.
+
+## Safe Stop And Safe Continue
+
+- Safe stop means the batch stops at the next stage boundary, records current job/stage/attempt refs, and leaves already succeeded stages intact.
+- If a worker/process interruption happens mid-stage, the resumed run must classify the prior attempt as interrupted/unknown before retry or replay.
+- Safe continue means only eligible queued/failed items continue under approved policy while blocked/high-risk items remain stopped.
+- Critical failures, publish failures, rollback-required incidents, duplicate target domain conflicts, cost anomalies above threshold, and unsupported launch attempts pause the batch or publish wave by default.
+
+## Partial Failure Policy
+
+- Low/medium site-level failures may allow the batch to continue when the approved policy allows.
+- High failures block affected sites and require owner assignment before continuation.
+- Critical failures pause the batch or affected launch wave.
+- A batch can close as `completed` only when no unresolved failures remain for the declared batch target.
+- Failed/deferred/import-only/out-of-scope sites must be listed in closeout and may be moved to a later batch only by new audited decision.
+
+## Retry And Replay Eligibility
+
+- Retry repeats an approved action and must record reason, actor, attempt count, prior failure, and expected stop condition.
+- Replay resets deterministic stage outputs from immutable input refs and must reset downstream derived outputs.
+- Fully deterministic replay applies to intake validation, URL normalization, static import from persisted inputs, route assembly from persisted acquisition, runtime artifact creation from immutable inputs, content slot inference, and preview generation from canonical artifacts.
+- Deterministic replay with external input refs applies when persisted external inputs are used, such as captured HTML, robots/sitemap snapshots, or source capture refs.
+- Replay with environmental variance applies to source reachability, rendered capture, raw fetch, multi-page discovery against a live source, and domain/provider checks.
+- Manual retry only applies to review, content correction, domain owner follow-up, and client approval routing.
+- Not replayable: human approvals, publish activation, rollback, external workflow truth, and cost exception decisions.
+- Forbidden replay: live DNS/registrar mutation, provider execution, autonomous AI execution, autonomous regeneration, and billing mutation in MVP.
+
+## Escalation And Cost Pause Policy
+
+- Superadmin escalation is required for cross-client duplicates, unsupported launch exceptions, critical failures, publish failures, rollback-required incidents, cost-threshold overrides, and any request to bypass source-of-truth guardrails.
+- Technical escalation is required for repeated capture/import/artifact/preview failures and worker/process interruption.
+- Account/client escalation is required for missing approval owner, unclear domain ownership, form/widget/booking acceptance, SEO redirects, and external workflow blockers.
+- Cost pause occurs when dry-run estimate or execution cost event exceeds the approved threshold, when a cost anomaly is detected, or when repeated retries would exceed the approved budget. Resume requires cost exception approval.
+
+## Unsupported Site Class Pause Policy
+
+- Unsupported classes include commerce, auth/member, payment flows, custom backend apps, compliance-heavy sites without separate approval, and heavy JavaScript sites that cannot be proven as static snapshots.
+- Unsupported rows may be `deferred`, `cancelled`, or retained as import-only review items.
+- Any unsupported site item attempting to become `approved_for_launch` pauses the site and may pause the batch when systemic classification drift is suspected.
+
+## Domain And Publish Boundary
+
+- Domain readiness is site-scoped and may block custom-domain publish without blocking import/review for unrelated sites.
+- BMF may record intended domain, DNS owner notes, manual DNS instruction snapshots, and Vercel/domain readiness evidence where current foundations support checks.
+- BMF must not claim live registrar/DNS mutation, Openprovider live mutation, autonomous domain changes, or provider execution as MVP behavior.
+- Publish activation is outside batch import execution and remains a separately approved side effect.
+- Publish failure stops the publish wave and opens incident/recovery flow; it is not a deterministic replay.
+
+## Batch Closeout Requirements
+
+Every batch closeout must include:
+
+- Final batch state and closeout actor.
+- Site item counts by state and site class.
+- Completed, completed-with-warnings, failed, deferred, cancelled, import-only, and out-of-scope lists.
+- Dry-run result refs and start/continue approval refs.
+- Failure/recovery summary and unresolved blocker list.
+- Retry/replay requests and outcomes.
+- Preview/review/approval/domain/publish readiness summaries.
+- Cost estimate/events/anomaly decisions.
+- Incident/rollback refs if any.
+- Audit timeline refs and external workflow refs.
+- Confirmation that Command Center/Ops Inbox items derive from canonical state.
