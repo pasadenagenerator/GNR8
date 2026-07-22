@@ -1,0 +1,71 @@
+# GNR8 Approval Gate Integration Map (AAF-2)
+
+## Purpose
+
+This map connects MVP-gated actions to current implementation surfaces, proposed AAF gate checks, approval scopes, audit events, evidence packages, policy evaluations, read model states, and replay classifications. It is documentation only and does not implement gates.
+
+## Gate Validation Sequence
+
+Every privileged action must:
+
+1. Load canonical subject state.
+2. Persist policy evaluation.
+3. Verify required evidence package and source watermarks.
+4. Verify freshness, expiration, revocation, and supersession state.
+5. Verify a granted approval or `not_required_by_policy` decision for the exact scope.
+6. Verify actor role, subject scope, and separation of duty.
+7. Write pre-action audit event.
+8. Execute only if allowed.
+9. Write outcome audit event.
+10. Update Command Center/Ops Inbox as derived state.
+
+## Integration Map
+
+| Gated action | Current implementation surface if any | Proposed gate check | Required approval scope | Required audit events | Required evidence package | Required policy evaluation | Fail-closed condition | Command Center state | Ops Inbox item | Replay class |
+|---|---|---|---|---|---|---|---|---|---|---|
+| batch start | BMF batch executor and job factory can start mutable batch/job execution. | Gate before first batch/job mutation using batch membership and dry-run watermarks. | `batch_start` | `batch.start.gate_requested`, `approval.*`, `batch.start.gate_allowed/blocked`, `batch.started` | `batch_start_evidence` | Start allowed/approval required/blocked/stale. | Missing batch evidence, stale membership, missing audit, missing approval. | `blocked`, `approval_requested`, `ready_to_start`, `running`. | Batch start approval or stale evidence. | manual retry only |
+| batch resume | BMF resume paths and batch lifecycle state exist. | Gate before resume mutation and new execution attempt. | `batch_resume` | `batch.resume.requested`, `approval.*`, `batch.resume.gate_allowed/blocked`, `batch.resumed` | `batch_start_evidence` | Resume allowed/approval required/stale. | New failure or plan change after evidence. | `resume_blocked`, `resume_ready`. | Resume approval. | manual retry only |
+| dry-run waiver | Dry-run evidence exists conceptually; no unified waiver gate found. | Require waiver package and scoped approval before bypassing dry-run requirement. | `dry_run_waiver` | `dry_run.waiver_requested`, `approval.*`, `dry_run.waiver_applied` | `dry_run_waiver_evidence` | Waiver required/blocked/not required. | Waiver missing, stale, or over timebox. | Waiver badge. | Dry-run waiver request. | not replayable |
+| retry | Command Center bulk retry can retry failed/skipped items; BMF retry paths exist. | Gate before each per-site retry; bulk action cannot reuse one approval for unrelated subjects. | `retry_request` | `retry.requested`, `approval.*`, `retry.gate_allowed/blocked`, `retry.executed` | `retry_replay_evidence` | Retry eligible/approval required/blocked. | Failure state changed, no approval, missing audit. | Per-site retry gate. | Retry approval/blocker. | manual retry only |
+| deterministic replay | BMF `replayMigrationStage` resets stage/downstream state and appends replay request event. | Gate by immutable input refs and replay eligibility; approval decision is not replayed. | `replay_request` | `replay.requested`, `approval.*`, `replay.gate_allowed/blocked`, `replay.executed` | `retry_replay_evidence` | Replay eligible/blocked/stale. | Input hash missing or changed, stage not eligible, audit unavailable. | Replay eligible/blocked. | Replay approval. | deterministic replay for computation only |
+| unsupported site exception | MVP class boundaries documented; implementation classification signals exist. | Gate continuation beyond supported class. | `unsupported_site_exception` | `exception.unsupported.requested`, `approval.*` | `unsupported_exception_evidence` | Exception required/blocked/stale. | Unsupported reason missing or stale. | Unsupported exception chip. | Unsupported-site approval. | not replayable |
+| degraded capture exception | Capture diagnostics and migration failures exist. | Gate continuation where capture is known degraded. | `degraded_capture_exception` | `exception.degraded_capture.requested`, `approval.*` | `unsupported_exception_evidence` | Exception required/blocked/stale. | New capture result or missing limitation. | Degraded capture warning. | Degraded capture approval. | not replayable |
+| route coverage exception | Route/readiness artifacts exist in migration/runtime paths. | Gate continuation where route coverage gap is accepted. | `route_coverage_exception` | `exception.route_coverage.requested`, `approval.*` | `unsupported_exception_evidence` | Exception required/blocked/stale. | Route inventory changed or gap unbounded. | Route gap badge. | Route coverage approval. | not replayable |
+| form/widget/booking exception | Widget/form limitations are MVP boundary concerns; no unified AAF gate. | Gate accepted limitation before client/launch review. | `form_widget_booking_exception` | `exception.form_widget_booking.requested`, `approval.*` | `unsupported_exception_evidence` | Exception required/blocked/stale. | Widget inventory or limitation changed. | Functional limitation marker. | Widget/form exception approval. | not replayable |
+| content publish | Content publish route mutates overrides with `publish` RBAC and scope check. **Risk: can publish content without final AAF gate.** | Gate before `publishDraftContentOverrides`; require content diff evidence. | `content_publish` | `content.publish.requested`, `approval.*`, `content.publish.gate_allowed/blocked`, `content.published` | `content_publish_evidence` | Content publish required/blocked/stale/not required. | Draft/content history changed, no approval, audit unavailable. | Content publish blocked/ready/published. | Content publish approval. | manual retry only |
+| client review | Client review workflow is documented; implementation has preview/content surfaces. | Record client decision as scoped approval only. | `client_review` | `review.client_requested`, `approval.*`, `review.client_decided` | `content_publish_evidence` | Client review required/stale. | Preview/content changed after package. | Client review pending/accepted/rejected/stale. | Client response needed. | not replayable |
+| launch signoff | Launch signoff documented; existing publish state may be mistaken for approval. | Gate business signoff separately from publish activation. | `launch_signoff` | `launch.signoff_requested`, `approval.*`, `launch.signoff_decided` | `launch_signoff_evidence` | Signoff required/blocked/stale. | Domain/content/cost/readiness changed. | Launch signoff pending/ready/stale. | Launch signoff approval. | not replayable |
+| domain instruction generation/share | Domain route computes DNS instructions and stores binding/instruction fields. **Risk: instructions can be generated/shared without AAF gate.** | Gate before generating/sharing instruction snapshot. | `domain_action` | `domain.instructions.generated/shared`, `approval.*`, `domain.action.gate_*` | `domain_action_evidence` | Domain action allowed/approval required/blocked/stale. | Domain binding/instruction snapshot stale or audit unavailable. | Domain instruction gate. | Domain action approval. | manual retry only |
+| Vercel domain attach/check | Domain route calls Vercel add/check and worker performs checks. **Risk: Vercel attach/check occurs without AAF gate.** | Gate before Vercel attach/check where action is operator-initiated; worker snapshots must be audited. | `domain_action` | `domain.vercel_attach_requested/completed`, `domain.verification_checked`, `approval.*` | `domain_action_evidence` | Vercel action allowed/blocked/stale. | Domain approval missing, DDOM no-live-DNS boundary unclear, audit unavailable. | Vercel domain action state. | Vercel/domain approval or blocker. | manual retry only |
+| domain exception | Domain readiness and exception model documented; no final AAF exception persistence. | Gate readiness exception and ensure it does not satisfy publish approval. | `domain_exception` | `domain.exception_requested`, `approval.*`, `domain.exception_decided` | `domain_exception_evidence` | Exception required/blocked/stale. | New Vercel/readiness/DNS instruction snapshot. | Domain exception accepted/stale. | Domain exception approval. | not replayable |
+| publish readiness request | Runtime/domain readiness projections exist. | Gate creation of readiness evidence if it will feed publish approval. | `publish_activation` or `not_required_by_policy` precheck depending policy | `publish.readiness_requested`, `readiness.evaluated`, `evidence.package_created` | `publish_activation_evidence` | Readiness evidence sufficient/stale/blocked. | Readiness source cannot be snapshotted. | Publish readiness fresh/stale. | Readiness blocker. | deterministic evaluation, not publish replay |
+| publish activation | Publish route calls orchestrator and switches active pointer. **Risk: can activate publish with runtime APPROVED state and RBAC but without AAF publish activation gate.** | Gate immediately before active pointer switch. | `publish_activation` | `publish.activation_requested`, `approval.*`, `publish.activation.gate_allowed/blocked`, `publish.activation.started/completed/failed` | `publish_activation_evidence` | Publish allowed/approval required/blocked/stale/superseded. | Audit unavailable, active pointer changed, artifact/domain/content/signoff/cost evidence stale. | Publish blocked/approval requested/ready/live. | Publish approval or stale evidence. | forbidden replay/not replayable |
+| rollback | Rollback route switches active pointer under `publish` permission. **Risk: rollback can execute without AAF incident/recovery gate.** | Gate before active pointer rollback with incident evidence. | `rollback` | `rollback.requested`, `approval.*`, `rollback.gate_allowed/blocked`, `rollback.started/completed/failed` | `rollback_evidence` | Rollback allowed/emergency required/blocked/stale. | Active pointer/target artifact/incident changed or audit unavailable. | Rollback blocked/ready/executed. | Incident rollback approval. | forbidden ordinary replay |
+| incident recovery | No unified incident approval path found. | Gate emergency recovery with short-lived approval and compensating audit requirements. | `incident_recovery` | `incident.recovery.requested`, `approval.*`, `incident.recovery.gate_*`, `audit.compensating_event_recorded` | `incident_recovery_evidence` | Emergency exception required/granted/blocked. | Incident stale, no superadmin approval where required, missing follow-up evidence. | Incident recovery state. | Emergency approval/follow-up. | not replayable |
+| cost exception | Cost usage tables and cost model exist; no approval exception gate found. | Gate spend threshold waiver before cost-sensitive action continues. | `cost_exception` | `cost.threshold_exceeded`, `cost.exception_requested`, `approval.*`, `cost.exception_decided` | `cost_exception_evidence` | Exception required/not required/blocked/stale. | Estimate/usage/threshold changed. | Cost exception pending/accepted/stale. | Cost exception approval. | not replayable |
+| external reference acceptance | External refs may exist as links/screenshots/tickets; no canonical acceptance gate found. | Gate acceptance of external ref as evidence only. | `external_workflow_reference_acceptance` | `external_reference.linked`, `external_reference.acceptance_requested`, `approval.*`, `external_reference.accepted/stale` | `external_workflow_reference_evidence` | Acceptance required/blocked/stale. | External snapshot missing/stale, tries to act as approval truth. | External evidence accepted/stale. | External evidence review. | not replayable |
+| AI advisory acceptance | AI advisory and autonomous execution route/policy surfaces exist. **Risk: advisory/execution language can be confused with authority.** | Gate human acceptance of AI plan as advisory evidence only; no execution authority. | `ai_advisory_plan_acceptance` | `ai.advisory.generated`, `ai.advisory.review_requested`, `approval.*`, `ai.advisory.accepted/rejected/stale`, `ai.execution_blocked_by_policy` | `ai_advisory_review_evidence` | Advisory acceptance required/blocked/stale. | AI plan/source evidence changed or action attempts to execute/mutate/approve. | Advisory accepted/stale/blocked. | AI advisory review. | forbidden replay |
+
+## Risky Current Surfaces To Wrap First
+
+- `apps/platform/app/api/gnr8/runtime/versions/[siteVersionId]/publish/route.ts` can activate publish with current runtime safety checks but without AAF publish activation approval/evidence/audit gate.
+- `apps/platform/app/api/gnr8/runtime/versions/[siteVersionId]/rollback/route.ts` can rollback active pointer with coarse `publish` permission but without incident/recovery approval.
+- `apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/[siteId]/domain/route.ts` can add/check Vercel domain and mutate GNR8 domain binding/instruction state without AAF domain gate.
+- `apps/worker/gnr8/domain/inngest/domain-verification-job.ts` mutates domain binding verification state from Vercel snapshots without AAF audit envelope.
+- `apps/platform/gnr8/command-center/bulk-migration-actions.ts` and Command Center UI trigger import/approve/publish and retries directly through existing routes.
+- BMF replay/resume/start code can mutate jobs, stages, and activation history before unified AAF gates.
+- Content publish/rollback routes mutate content state under current RBAC without AAF content publish/rollback scope separation.
+- AI autonomous execution route exposes an `apply` input and must remain outside MVP approval/execution authority.
+
+## Preserved Boundaries
+
+This map preserves that:
+
+- Command Center and Ops Inbox are derived only.
+- Domain readiness is not publish approval.
+- Domain action approval is not DNS mutation approval.
+- Launch signoff is not publish activation.
+- Client review is not technical publish approval.
+- External workflow acceptance is evidence acceptance only.
+- AI advisory acceptance is advisory evidence only.
+- Human approvals, publish activation, and rollback are not deterministic replay.
