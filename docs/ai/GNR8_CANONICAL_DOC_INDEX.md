@@ -17,6 +17,24 @@ Current decision records:
 - `docs/ai/decisions/ADR-002-preview-assets-architecture.md`
 - `docs/ai/decisions/ADR-003-runtime-artifact-model.md`
 
+## MVP-1 Boundary
+
+Canonical MVP boundary and authority docs:
+- `docs/product/gnr8-mvp-boundary.md`
+- `docs/product/gnr8-mvp-supported-site-classes.md`
+- `docs/architecture/gnr8-mvp-source-of-truth-matrix.md`
+- `docs/architecture/gnr8-mvp-operational-state-model.md`
+- `docs/product/gnr8-mvp-boundary-closeout.md`
+
+## BMF-1 Bulk Migration Factory
+
+Canonical Bulk Migration Factory design docs:
+- `docs/architecture/gnr8-bulk-migration-factory-design.md`
+- `docs/architecture/gnr8-bulk-migration-batch-lifecycle.md`
+- `docs/architecture/gnr8-bulk-migration-failure-recovery.md`
+- `docs/product/gnr8-bulk-migration-operator-workflow.md`
+- `docs/product/gnr8-bulk-migration-factory-closeout.md`
+
 ## Secondary
 
 - `SYSTEM.md`
