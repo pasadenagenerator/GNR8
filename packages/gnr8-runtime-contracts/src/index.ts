@@ -67,3 +67,5 @@ export {
   CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
   validateDomainVerificationCheckEventName,
 } from './domain-verification-check-event-validation'
+
+export * from './aaf-contracts'
