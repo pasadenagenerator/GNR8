@@ -79,6 +79,16 @@ Policy evaluation must return and persist:
 - `emergency_exception_granted`: emergency scope is effective.
 - `policy_error`: evaluator failed and the action must fail closed.
 
+## Retention Vocabulary
+
+The canonical MVP retention classes for approval, policy, and linked evidence records are:
+
+- `short_operational`: transient diagnostics and non-privileged traces.
+- `mvp_operational`: ordinary approval/evidence/audit records needed for MVP operations.
+- `security`: identity, auth, authorization, security-sensitive denials, and security incident diagnostics.
+- `compliance_long`: publish, rollback, domain, cost exception, incident, and admin exception evidence/audit.
+- `legal_hold`: records explicitly retained by superadmin/legal policy.
+
 ## Failure Behavior
 
 Approval request, decision, policy evaluation, and evidence link writes must fail closed for privileged actions when required refs cannot be persisted. UI callers may show a request failure, but execution routes must independently validate the persisted canonical state before mutation.

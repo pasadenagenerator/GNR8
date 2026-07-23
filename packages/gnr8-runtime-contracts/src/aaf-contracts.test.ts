@@ -146,7 +146,13 @@ test('AAF storage labels and gate results are exposed for persistence consumers'
     'provider_redacted',
     'legal_redacted',
   ])
-  assert.deepEqual(AAF_RETENTION_CLASSES, ['mvp_operational', 'security', 'compliance_long', 'legal_hold'])
+  assert.deepEqual(AAF_RETENTION_CLASSES, [
+    'short_operational',
+    'mvp_operational',
+    'security',
+    'compliance_long',
+    'legal_hold',
+  ])
   assert.deepEqual(AAF_GATE_RESULTS, [
     'allowed',
     'blocked',
@@ -172,6 +178,7 @@ test('AAF SQL migration contains the canonical enum values', () => {
   assertSqlContainsAll(AAF_AUDIT_SEVERITIES, sql)
   assertSqlContainsAll(AAF_REPLAY_CLASSES, sql)
   assertSqlContainsAll(AAF_EVIDENCE_PACKAGE_TYPES, sql)
+  assertSqlContainsAll(AAF_RETENTION_CLASSES, sql)
   assertSqlContainsAll(AAF_GATE_RESULTS, sql)
 })
 

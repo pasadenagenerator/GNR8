@@ -265,6 +265,7 @@ Retention classes should include:
 
 - `short_operational`: transient diagnostics and non-privileged traces.
 - `mvp_operational`: ordinary approval/evidence/audit records needed for MVP operations.
+- `security`: identity, auth, authorization, security-sensitive denials, and security incident diagnostics.
 - `compliance_long`: publish, rollback, domain, cost exception, incident, and admin exception evidence/audit.
 - `legal_hold`: records explicitly retained by superadmin/legal policy.
 

@@ -69,6 +69,8 @@ Canonical audit, approval, and evidence implementation design docs:
 
 Canonical audit, approval, and evidence persistence implementation docs:
 - `docs/product/gnr8-audit-approval-persistence-core-closeout.md`
+- `docs/product/gnr8-audit-approval-persistence-core-verification-closeout.md`
+- `docs/product/gnr8-audit-approval-persistence-core-db-execution-closeout.md`
 
 ## DDOM-1 Domain And DNS Operating Model
 

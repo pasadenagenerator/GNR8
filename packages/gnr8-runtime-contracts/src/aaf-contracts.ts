@@ -139,6 +139,7 @@ export const AAF_REDACTION_LABELS = [
 export type AafRedactionLabel = (typeof AAF_REDACTION_LABELS)[number]
 
 export const AAF_RETENTION_CLASSES = [
+  'short_operational',
   'mvp_operational',
   'security',
   'compliance_long',

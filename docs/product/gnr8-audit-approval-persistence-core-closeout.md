@@ -64,7 +64,7 @@ Deferred:
 
 ## Schema Summary
 
-The migration creates 20 additive `gnr8_aaf_*` tables for approvals, audit, evidence, policy evaluation, subject refs, partial timelines, and action gate attempts. It uses UUID primary keys, `created_at` defaults, text-scoped tenant/client/site/batch/job/site-version/domain/cost fields, correlation and idempotency keys, source refs, privacy labels, redaction labels, and retention classes.
+The migration creates 20 additive `gnr8_aaf_*` tables for approvals, audit, evidence, policy evaluation, subject refs, partial timelines, and action gate attempts. It uses UUID primary keys, `created_at` defaults, text-scoped tenant/client/site/batch/job/site-version/domain/cost fields, correlation and idempotency keys, source refs, privacy labels, redaction labels, and retention classes: `short_operational`, `mvp_operational`, `security`, `compliance_long`, and `legal_hold`.
 
 The migration stores only metadata, hashes, source watermarks, object refs, and bounded JSON envelopes. Heavy evidence payloads are intentionally not stored directly in Postgres.
 
@@ -99,7 +99,7 @@ RLS is enabled on every new AAF table, but no broad public/client access policie
 
 ## TypeScript Contract Summary
 
-`packages/gnr8-runtime-contracts/src/aaf-contracts.ts` exports canonical arrays and union types for approval statuses, scopes, policy results, audit families, severities, replay classes, evidence package types, privacy labels, redaction labels, retention classes, and gate results.
+`packages/gnr8-runtime-contracts/src/aaf-contracts.ts` exports canonical arrays and union types for approval statuses, scopes, policy results, audit families, severities, replay classes, evidence package types, privacy labels, redaction labels, retention classes, and gate results. The canonical MVP retention classes are `short_operational`, `mvp_operational`, `security`, `compliance_long`, and `legal_hold`.
 
 It also exports scope replay classes and prohibited-action mappings that preserve AAF boundaries such as domain action not authorizing DNS/Openprovider mutation, launch/client review not authorizing publish activation, publish/rollback not being deterministic replay, and AI advisory acceptance remaining advisory only.
 

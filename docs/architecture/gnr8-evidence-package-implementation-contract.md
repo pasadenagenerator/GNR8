@@ -10,6 +10,8 @@ Evidence packages must be immutable snapshots or immutable append-only ref sets.
 
 Canonical package metadata, hashes, source watermarks, freshness labels, redaction labels, and retention classes live in Supabase/Postgres. Heavy artifacts may live in object storage with immutable refs and hashes stored in the control plane.
 
+The canonical MVP retention classes are `short_operational`, `mvp_operational`, `security`, `compliance_long`, and `legal_hold`. Evidence packages should usually use `mvp_operational` for ordinary operational proof, `compliance_long` for gated publish/rollback/domain/cost/incident/admin evidence, `security` for security-sensitive source material, and `legal_hold` only for explicit legal/admin holds.
+
 ## Canonical Entities
 
 | Entity | Purpose | Required fields | Nullable fields | Immutable fields | Append-only behavior | Constraints and correlation | Privacy/retention/failure |

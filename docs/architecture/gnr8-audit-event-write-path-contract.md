@@ -101,6 +101,10 @@ Privileged actions must write a pre-action event before mutation. If that write 
 
 A partial timeline is valid evidence of an operational failure, not proof of approval. Command Center and Ops Inbox must display partial timelines as degraded/blocked until the missing canonical audit outcome is reconciled or a compensating event is written.
 
+## Retention Vocabulary
+
+The canonical MVP retention classes for audit events are `short_operational`, `mvp_operational`, `security`, `compliance_long`, and `legal_hold`. `short_operational` is for transient diagnostics and non-privileged traces, `security` is for identity/auth/security-sensitive events, `compliance_long` is for publish/rollback/domain/cost/incident/admin evidence, and `legal_hold` is reserved for explicit legal/admin holds.
+
 ## Event Families
 
 | Family | Representative event names | Payload focus | Required refs | Required correlation ids | Severity | Replay class | Retention importance | Fail closed if unavailable |

@@ -94,7 +94,7 @@ create table if not exists public.gnr8_aaf_approval_scope_definitions (
       'incident_recovery_evidence'
     )),
   constraint gnr8_aaf_approval_scope_definitions_retention_ck
-    check (retention_class in ('mvp_operational', 'security', 'compliance_long', 'legal_hold')),
+    check (retention_class in ('short_operational', 'mvp_operational', 'security', 'compliance_long', 'legal_hold')),
   constraint gnr8_aaf_approval_scope_definitions_privacy_ck
     check (privacy_label in (
       'public_operational',
@@ -191,7 +191,7 @@ create table if not exists public.gnr8_aaf_approval_requests (
       'legal_sensitive'
     )),
   constraint gnr8_aaf_approval_requests_retention_ck
-    check (retention_class in ('mvp_operational', 'security', 'compliance_long', 'legal_hold'))
+    check (retention_class in ('short_operational', 'mvp_operational', 'security', 'compliance_long', 'legal_hold'))
 );
 
 create table if not exists public.gnr8_aaf_evidence_packages (
@@ -270,7 +270,7 @@ create table if not exists public.gnr8_aaf_evidence_packages (
       'legal_redacted'
     )),
   constraint gnr8_aaf_evidence_packages_retention_ck
-    check (retention_class in ('mvp_operational', 'security', 'compliance_long', 'legal_hold')),
+    check (retention_class in ('short_operational', 'mvp_operational', 'security', 'compliance_long', 'legal_hold')),
   constraint gnr8_aaf_evidence_packages_content_hash_ck
     check (length(content_hash) >= 16),
   constraint gnr8_aaf_evidence_packages_limitations_object_ck
@@ -363,7 +363,7 @@ create table if not exists public.gnr8_aaf_approval_policy_evaluations (
       'legal_sensitive'
     )),
   constraint gnr8_aaf_approval_policy_evaluations_retention_ck
-    check (retention_class in ('mvp_operational', 'security', 'compliance_long', 'legal_hold'))
+    check (retention_class in ('short_operational', 'mvp_operational', 'security', 'compliance_long', 'legal_hold'))
 );
 
 create table if not exists public.gnr8_aaf_approval_decisions (
@@ -427,7 +427,7 @@ create table if not exists public.gnr8_aaf_approval_decisions (
       'legal_redacted'
     )),
   constraint gnr8_aaf_approval_decisions_retention_ck
-    check (retention_class in ('mvp_operational', 'security', 'compliance_long', 'legal_hold'))
+    check (retention_class in ('short_operational', 'mvp_operational', 'security', 'compliance_long', 'legal_hold'))
 );
 
 create table if not exists public.gnr8_aaf_audit_events (
@@ -526,7 +526,7 @@ create table if not exists public.gnr8_aaf_audit_events (
       'legal_redacted'
     )),
   constraint gnr8_aaf_audit_events_retention_ck
-    check (retention_class in ('mvp_operational', 'security', 'compliance_long', 'legal_hold')),
+    check (retention_class in ('short_operational', 'mvp_operational', 'security', 'compliance_long', 'legal_hold')),
   constraint gnr8_aaf_audit_events_payload_object_ck
     check (
       jsonb_typeof(source_ref_json) = 'object'
@@ -719,7 +719,7 @@ create table if not exists public.gnr8_aaf_evidence_package_items (
       'legal_redacted'
     )),
   constraint gnr8_aaf_evidence_package_items_retention_ck
-    check (retention_class in ('mvp_operational', 'security', 'compliance_long', 'legal_hold')),
+    check (retention_class in ('short_operational', 'mvp_operational', 'security', 'compliance_long', 'legal_hold')),
   constraint gnr8_aaf_evidence_package_items_limitations_object_ck
     check (jsonb_typeof(limitations_json) = 'object')
 );
