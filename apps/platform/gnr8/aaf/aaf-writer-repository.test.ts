@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  AafIdempotencyConflictError,
   AafWriterError,
   AafWriterRepository,
   AafWriterTx,
@@ -36,6 +37,34 @@ function recordingClient() {
         return { rows: [row], rowCount: 1 };
       }
       return { rows: rows.slice(-1), rowCount: rows.length > 0 ? 1 : 0 };
+    },
+  };
+  return { client, calls, rows };
+}
+
+function idempotencyAwareRecordingClient() {
+  const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+  const rows: AafRecord[] = [];
+  const client: AafPgClient = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      const insertMatch = sql.match(/insert into public\.(gnr8_aaf_[a-z_]+) \(([^)]+)\)/);
+      if (insertMatch) {
+        const columns = insertMatch[2]!.split(",").map((column) => column.trim());
+        const idempotencyIndex = columns.indexOf("idempotency_key");
+        if (idempotencyIndex >= 0 && rows.some((row) => row.idempotency_key === values[idempotencyIndex])) {
+          return { rows: [], rowCount: 0 };
+        }
+        const row: AafRecord = { id: `${insertMatch[1]}-${rows.length + 1}` };
+        columns.forEach((column, index) => {
+          row[column] = values[index];
+        });
+        rows.push(row);
+        return { rows: [row], rowCount: 1 };
+      }
+      const idempotencyKey = values[values.length - 1];
+      const existing = rows.find((row) => row.idempotency_key === idempotencyKey);
+      return { rows: existing ? [existing] : [], rowCount: existing ? 1 : 0 };
     },
   };
   return { client, calls, rows };
@@ -175,6 +204,58 @@ test("AAF writer preserves idempotency, correlation, actor, subject, scope, and 
   });
   assert.equal(evidence.content_hash, "0123456789abcdef");
   assert.equal(evidence.package_type, "publish_activation_evidence");
+});
+
+test("AAF writer returns matching idempotent rows and rejects semantic payload drift", async () => {
+  const { client } = idempotencyAwareRecordingClient();
+  const repository = new AafWriterRepository({ connect: async () => ({}) } as never);
+  const tx = txForClient(client);
+
+  const first = await repository.createApprovalRequest(tx, {
+    ...tenantScope,
+    ...correlation,
+    scope: "publish_activation",
+    subjectType: "site_version",
+    subjectId: "site-version-1",
+    requesterActorType: "human",
+    requesterActorId: "operator-1",
+    requesterRole: "agency_admin",
+    policyVersion: "AAF-UNIT",
+    reason: "same semantic payload",
+  });
+  const retry = await repository.createApprovalRequest(tx, {
+    ...tenantScope,
+    ...correlation,
+    scope: "publish_activation",
+    subjectType: "site_version",
+    subjectId: "site-version-1",
+    requesterActorType: "human",
+    requesterActorId: "operator-1",
+    requesterRole: "agency_admin",
+    policyVersion: "AAF-UNIT",
+    reason: "same semantic payload",
+  });
+  assert.equal(retry.id, first.id);
+
+  await assert.rejects(
+    () =>
+      repository.createApprovalRequest(tx, {
+        ...tenantScope,
+        ...correlation,
+        scope: "publish_activation",
+        subjectType: "site_version",
+        subjectId: "site-version-1",
+        requesterActorType: "human",
+        requesterActorId: "operator-1",
+        requesterRole: "agency_admin",
+        policyVersion: "AAF-UNIT",
+        reason: "drifted semantic payload",
+      }),
+    (error) =>
+      error instanceof AafIdempotencyConflictError &&
+      error.tableName === "gnr8_aaf_approval_requests" &&
+      error.driftedFields.includes("reason"),
+  );
 });
 
 test("AAF writer enforces local fail-closed and not-required reference guards", async () => {

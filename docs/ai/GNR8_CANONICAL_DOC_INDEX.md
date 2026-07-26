@@ -77,6 +77,11 @@ Canonical audit, approval, and evidence persistence implementation docs:
 Canonical audit, approval, and evidence writer implementation docs:
 - `docs/product/gnr8-audit-approval-writer-core-closeout.md`
 
+## AAF-5 Audit And Approval Policy Gate Facade
+
+Canonical audit, approval, evidence policy evaluator and non-executing gate facade docs:
+- `docs/product/gnr8-audit-approval-policy-gate-facade-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:

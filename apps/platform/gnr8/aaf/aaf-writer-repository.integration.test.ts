@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { Pool } from "pg";
 
-import { AafWriterRepository } from "./aaf-writer-repository";
+import { AafIdempotencyConflictError, AafWriterRepository } from "./aaf-writer-repository";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(TEST_DIR, "../../../..");
@@ -500,6 +500,7 @@ test("AAF writer applies migration and writes canonical records transactionally 
         requesterRole: "agency_admin",
         policyId: bootstrap.policy.id,
         policyVersion: String(bootstrap.policy.version),
+        reason: "Synthetic approval request for AAF writer integration.",
       });
       const retriedEvaluation = await writer.createApprovalPolicyEvaluation(tx, {
         ...scope,
@@ -514,6 +515,7 @@ test("AAF writer applies migration and writes canonical records transactionally 
         actorType: "human",
         actorId: "operator-aaf",
         actorRole: "agency_admin",
+        evidencePackageId: evidenceTx.evidencePackage.id,
       });
       const retriedAudit = await writer.createAuditEvent(tx, {
         ...scope,
@@ -527,6 +529,8 @@ test("AAF writer applies migration and writes canonical records transactionally 
         actorType: "human",
         actorId: "operator-aaf",
         actorRole: "agency_admin",
+        approvalRequestId: approvalRequestTx.approvalRequest.id,
+        evidencePackageId: evidenceTx.evidencePackage.id,
       });
       const retriedEvidence = await writer.createEvidencePackage(tx, {
         ...scope,
@@ -550,6 +554,10 @@ test("AAF writer applies migration and writes canonical records transactionally 
         actorType: "human",
         actorId: "operator-aaf",
         actorRole: "agency_admin",
+        policyEvaluationId: gateTx.policyEvaluation?.id,
+        preActionAuditEventId: gateTx.preActionAuditEvent?.id,
+        evidencePackageId: evidenceTx.evidencePackage.id,
+        approvalRequestId: approvalRequestTx.approvalRequest.id,
         gateResult: "approval_required",
       });
 
@@ -559,6 +567,108 @@ test("AAF writer applies migration and writes canonical records transactionally 
       assert.equal(retriedEvidence.id, evidenceTx.evidencePackage.id);
       assert.equal(retriedGate.id, gateTx.gateAttempt.id);
     });
+
+    await assert.rejects(
+      () =>
+        writer.withTransaction((tx) =>
+          writer.createApprovalRequest(tx, {
+            ...scope,
+            ...subject,
+            correlationId,
+            idempotencyKey: `idem-approval-request-${suffix}`,
+            scope: "publish_activation",
+            requesterActorType: "human",
+            requesterActorId: "operator-aaf",
+            requesterRole: "agency_admin",
+            policyId: bootstrap.policy.id,
+            policyVersion: String(bootstrap.policy.version),
+            reason: "Drifted approval request reason.",
+          }),
+        ),
+      (error) => error instanceof AafIdempotencyConflictError && error.driftedFields.includes("reason"),
+    );
+    await assert.rejects(
+      () =>
+        writer.withTransaction((tx) =>
+          writer.createApprovalPolicyEvaluation(tx, {
+            ...scope,
+            ...subject,
+            correlationId,
+            idempotencyKey: `idem-policy-evaluation-gate-${suffix}`,
+            policyId: bootstrap.policy.id,
+            policyVersion: String(bootstrap.policy.version),
+            result: "approval_blocked",
+            scope: "publish_activation",
+            actionKey: "publish.activation",
+            actorType: "human",
+            actorId: "operator-aaf",
+            actorRole: "agency_admin",
+            evidencePackageId: evidenceTx.evidencePackage.id,
+          }),
+        ),
+      (error) => error instanceof AafIdempotencyConflictError && error.driftedFields.includes("result"),
+    );
+    await assert.rejects(
+      () =>
+        writer.withTransaction((tx) =>
+          writer.createAuditEvent(tx, {
+            ...scope,
+            ...subject,
+            correlationId,
+            idempotencyKey: `idem-audit-gate-pre-action-${suffix}`,
+            eventName: "publish.activation.gate_blocked",
+            eventFamily: "publish",
+            severity: "error",
+            replayClass: "forbidden_replay",
+            actorType: "human",
+            actorId: "operator-aaf",
+            actorRole: "agency_admin",
+            approvalRequestId: approvalRequestTx.approvalRequest.id,
+            evidencePackageId: evidenceTx.evidencePackage.id,
+          }),
+        ),
+      (error) => error instanceof AafIdempotencyConflictError && error.driftedFields.includes("severity"),
+    );
+    await assert.rejects(
+      () =>
+        writer.withTransaction((tx) =>
+          writer.createEvidencePackage(tx, {
+            ...scope,
+            ...subject,
+            correlationId,
+            idempotencyKey: `idem-evidence-package-${suffix}`,
+            packageType: "publish_activation_evidence",
+            createdByActorType: "system",
+            createdByActorId: "aaf-writer-integration-test",
+            sourceWatermark: `site-version:${suffix}:1`,
+            freshnessLabel: "stale",
+            contentHash: `hash-${suffix}-0123456789abcdef`,
+          }),
+        ),
+      (error) => error instanceof AafIdempotencyConflictError && error.driftedFields.includes("freshness_label"),
+    );
+    await assert.rejects(
+      () =>
+        writer.withTransaction((tx) =>
+          writer.createActionGateAttempt(tx, {
+            ...scope,
+            ...subject,
+            correlationId,
+            idempotencyKey: `idem-gate-attempt-${suffix}`,
+            actionKey: "publish.activation",
+            scope: "publish_activation",
+            actorType: "human",
+            actorId: "operator-aaf",
+            actorRole: "agency_admin",
+            policyEvaluationId: gateTx.policyEvaluation?.id,
+            preActionAuditEventId: gateTx.preActionAuditEvent?.id,
+            evidencePackageId: evidenceTx.evidencePackage.id,
+            approvalRequestId: approvalRequestTx.approvalRequest.id,
+            gateResult: "blocked",
+          }),
+        ),
+      (error) => error instanceof AafIdempotencyConflictError && error.driftedFields.includes("gate_result"),
+    );
 
     await assertDbRejects(
       () =>

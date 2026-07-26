@@ -82,6 +82,19 @@ export class AafWriterError extends Error {
   }
 }
 
+export class AafIdempotencyConflictError extends AafWriterError {
+  constructor(
+    readonly tableName: string,
+    readonly idempotencyKey: string,
+    readonly driftedFields: string[],
+  ) {
+    super(
+      `AAF idempotency conflict in ${tableName} for key ${idempotencyKey}: semantic payload drift in ${driftedFields.join(", ")}`,
+    );
+    this.name = "AafIdempotencyConflictError";
+  }
+}
+
 export class AafWriterTx {
   readonly _tag = "aaf_writer_tx" as const;
 
@@ -528,6 +541,166 @@ const TABLES = {
   actionGateAttempts: "gnr8_aaf_action_gate_attempts",
 } as const;
 
+const TENANT_SCOPE_COLUMNS = [
+  "tenant_id",
+  "client_id",
+  "site_id",
+  "batch_id",
+  "job_id",
+  "site_version_id",
+  "domain_id",
+  "cost_center_id",
+] as const;
+const CORRELATION_SEMANTIC_COLUMNS = ["correlation_id", "causation_id", "request_id"] as const;
+const LABEL_SEMANTIC_COLUMNS = ["privacy_label", "redaction_label", "retention_class"] as const;
+
+const APPROVAL_REQUEST_SEMANTIC_FIELDS = [
+  ...TENANT_SCOPE_COLUMNS,
+  "scope",
+  "subject_type",
+  "subject_id",
+  "requester_actor_type",
+  "requester_actor_id",
+  "requester_role",
+  "status",
+  "policy_id",
+  "policy_version",
+  "requested_expires_at",
+  "reason",
+  "ops_inbox_item_id",
+  "privacy_label",
+  "retention_class",
+  ...CORRELATION_SEMANTIC_COLUMNS,
+] as const;
+const APPROVAL_EVIDENCE_LINK_SEMANTIC_FIELDS = [
+  "approval_request_id",
+  "approval_decision_id",
+  "policy_evaluation_id",
+  "evidence_package_id",
+  "link_role",
+  "source_note",
+  "correlation_id",
+] as const;
+const APPROVAL_POLICY_EVALUATION_SEMANTIC_FIELDS = [
+  ...TENANT_SCOPE_COLUMNS,
+  "policy_id",
+  "policy_version",
+  "result",
+  "scope",
+  "action_key",
+  "subject_type",
+  "subject_id",
+  "actor_type",
+  "actor_id",
+  "actor_role",
+  "approval_request_id",
+  "approval_decision_id",
+  "evidence_package_id",
+  "blocker_codes",
+  "stale_reason",
+  "emergency_reason",
+  "not_required_reason",
+  "audit_event_id",
+  "privacy_label",
+  "retention_class",
+  ...CORRELATION_SEMANTIC_COLUMNS,
+] as const;
+const APPROVAL_DECISION_SEMANTIC_FIELDS = [
+  "approval_request_id",
+  "status",
+  "decision_actor_type",
+  "decision_actor_id",
+  "decision_actor_role",
+  "policy_version",
+  "evidence_package_id",
+  "policy_evaluation_id",
+  "audit_event_id",
+  "reason",
+  "expires_at",
+  "freshness_label",
+  "separation_of_duty_result",
+  "emergency_policy_ref",
+  ...LABEL_SEMANTIC_COLUMNS,
+  ...CORRELATION_SEMANTIC_COLUMNS,
+] as const;
+const AUDIT_EVENT_SEMANTIC_FIELDS = [
+  ...TENANT_SCOPE_COLUMNS,
+  "event_name",
+  "event_family",
+  "severity",
+  "replay_class",
+  "actor_type",
+  "actor_id",
+  "actor_role",
+  "subject_type",
+  "subject_id",
+  "subject_version",
+  "source_system",
+  "source_route",
+  "source_ref_json",
+  "approval_request_id",
+  "approval_decision_id",
+  "policy_evaluation_id",
+  "evidence_package_id",
+  "original_audit_event_id",
+  "before_ref_json",
+  "after_ref_json",
+  "payload_json",
+  ...LABEL_SEMANTIC_COLUMNS,
+  "schema_version",
+  ...CORRELATION_SEMANTIC_COLUMNS,
+] as const;
+const EVIDENCE_PACKAGE_SEMANTIC_FIELDS = [
+  ...TENANT_SCOPE_COLUMNS,
+  "package_type",
+  "subject_type",
+  "subject_id",
+  "package_version",
+  "status",
+  "created_by_actor_type",
+  "created_by_actor_id",
+  "source_watermark",
+  "freshness_label",
+  "expires_at",
+  "content_hash",
+  "supersedes_package_id",
+  "redacted_package_id",
+  "limitations_json",
+  ...LABEL_SEMANTIC_COLUMNS,
+  ...CORRELATION_SEMANTIC_COLUMNS,
+] as const;
+const EVIDENCE_FRESHNESS_CHECK_SEMANTIC_FIELDS = [
+  "evidence_package_id",
+  "policy_version",
+  "result",
+  "checked_by_actor_type",
+  "checked_by_actor_id",
+  "stale_reason",
+  "expires_at",
+  "current_source_watermark",
+  "audit_event_id",
+  "correlation_id",
+] as const;
+const ACTION_GATE_ATTEMPT_SEMANTIC_FIELDS = [
+  ...TENANT_SCOPE_COLUMNS,
+  "action_key",
+  "scope",
+  "subject_type",
+  "subject_id",
+  "actor_type",
+  "actor_id",
+  "actor_role",
+  "policy_evaluation_id",
+  "evidence_package_id",
+  "approval_request_id",
+  "approval_decision_id",
+  "pre_action_audit_event_id",
+  "outcome_audit_event_id",
+  "gate_result",
+  "fail_closed_reason",
+  ...CORRELATION_SEMANTIC_COLUMNS,
+] as const;
+
 function optionalText(value: string | null | undefined): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -630,6 +803,46 @@ function toPostgresValue(value: unknown): unknown {
   return value;
 }
 
+function stableJsonValue(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map((entry) => stableJsonValue(entry));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, stableJsonValue(entry)]),
+    );
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        return stableJsonValue(JSON.parse(trimmed));
+      } catch {
+        return value;
+      }
+    }
+  }
+  return value ?? null;
+}
+
+function semanticValue(value: unknown): string {
+  return JSON.stringify(stableJsonValue(value));
+}
+
+function assertSemanticIdempotencyMatch(
+  tableName: string,
+  idempotencyKey: string,
+  attempted: InsertableRow,
+  existing: Record<string, unknown>,
+  fields: readonly string[],
+): void {
+  const driftedFields = fields.filter((field) => semanticValue(attempted[field]) !== semanticValue(existing[field]));
+  if (driftedFields.length > 0) {
+    throw new AafIdempotencyConflictError(tableName, idempotencyKey, driftedFields);
+  }
+}
+
 function mapRecord(row: Record<string, unknown>): AafRecord {
   const id = requiredText("id", row.id as string | undefined);
   return { ...row, id };
@@ -648,7 +861,7 @@ async function insertReturning(
   client: AafPgClient,
   tableName: string,
   row: InsertableRow,
-  options?: { conflictClause?: string; lookup?: InsertableRow },
+  options?: { conflictClause?: string; lookup?: InsertableRow; semanticFields?: readonly string[]; idempotencyKey?: string },
 ): Promise<AafRecord> {
   const payload = compactRow(row);
   const columns = Object.keys(payload);
@@ -684,6 +897,9 @@ async function insertReturning(
 
   const rowMatch = existing.rows[0];
   if (!rowMatch) throw new AafWriterError(`AAF idempotent insert into ${tableName} did not find an existing row`);
+  if (options.semanticFields && options.idempotencyKey) {
+    assertSemanticIdempotencyMatch(tableName, options.idempotencyKey, payload, rowMatch, options.semanticFields);
+  }
   return mapRecord(rowMatch);
 }
 
@@ -948,6 +1164,8 @@ export class AafWriterRepository implements AafWriterOperations {
     return insertReturning(tx.client, TABLES.approvalRequests, row, {
       conflictClause: "on conflict (tenant_id, scope, subject_type, subject_id, policy_version, idempotency_key) do nothing",
       lookup: approvalRequestIdempotencyLookup(input),
+      semanticFields: APPROVAL_REQUEST_SEMANTIC_FIELDS,
+      idempotencyKey: input.idempotencyKey,
     });
   }
 
@@ -988,6 +1206,8 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: APPROVAL_EVIDENCE_LINK_SEMANTIC_FIELDS,
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1024,6 +1244,8 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: APPROVAL_POLICY_EVALUATION_SEMANTIC_FIELDS,
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1061,6 +1283,8 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: APPROVAL_DECISION_SEMANTIC_FIELDS,
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1085,6 +1309,18 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: [
+          "approval_decision_id",
+          "revoked_by_actor_type",
+          "revoked_by_actor_id",
+          "revoked_by_role",
+          "reason",
+          "audit_event_id",
+          "incident_ref",
+          "replacement_request_id",
+          "correlation_id",
+        ],
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1109,6 +1345,19 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: [
+          "superseded_approval_request_id",
+          "superseding_approval_request_id",
+          "superseded_decision_id",
+          "superseding_decision_id",
+          "reason",
+          "created_by_actor_type",
+          "created_by_actor_id",
+          "audit_event_id",
+          "source_ref_id",
+          "correlation_id",
+        ],
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1145,12 +1394,14 @@ export class AafWriterRepository implements AafWriterOperations {
         redaction_label: labels.redaction_label,
         privacy_label: labels.privacy_label,
         retention_class: labels.retention_class,
-        schema_version: optionalPositiveInteger("schemaVersion", input.schemaVersion),
+        schema_version: optionalPositiveInteger("schemaVersion", input.schemaVersion ?? 1),
         ...correlationColumns(input),
       },
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: AUDIT_EVENT_SEMANTIC_FIELDS,
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1205,7 +1456,7 @@ export class AafWriterRepository implements AafWriterOperations {
         package_type: enumValue("packageType", input.packageType, AAF_EVIDENCE_PACKAGE_TYPES),
         subject_type: requiredText("subjectType", input.subjectType),
         subject_id: requiredText("subjectId", input.subjectId),
-        package_version: optionalPositiveInteger("packageVersion", input.packageVersion),
+        package_version: optionalPositiveInteger("packageVersion", input.packageVersion ?? 1),
         status: enumValue("status", input.status ?? "created", EVIDENCE_PACKAGE_STATUSES),
         created_by_actor_type: enumValue("createdByActorType", input.createdByActorType, ACTOR_TYPES),
         created_by_actor_id: requiredText("createdByActorId", input.createdByActorId),
@@ -1224,6 +1475,8 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: EVIDENCE_PACKAGE_SEMANTIC_FIELDS,
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1304,6 +1557,8 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: EVIDENCE_FRESHNESS_CHECK_SEMANTIC_FIELDS,
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1347,6 +1602,18 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: [
+          "superseded_package_id",
+          "superseding_package_id",
+          "reason",
+          "created_by_actor_type",
+          "created_by_actor_id",
+          "audit_event_id",
+          "source_ref_id",
+          "policy_evaluation_id",
+          "correlation_id",
+        ],
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
@@ -1382,6 +1649,8 @@ export class AafWriterRepository implements AafWriterOperations {
       {
         conflictClause: "on conflict (idempotency_key) do nothing",
         lookup: idempotencyLookup(input.idempotencyKey),
+        semanticFields: ACTION_GATE_ATTEMPT_SEMANTIC_FIELDS,
+        idempotencyKey: input.idempotencyKey,
       },
     );
   }
