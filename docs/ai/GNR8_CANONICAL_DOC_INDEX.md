@@ -72,6 +72,11 @@ Canonical audit, approval, and evidence persistence implementation docs:
 - `docs/product/gnr8-audit-approval-persistence-core-verification-closeout.md`
 - `docs/product/gnr8-audit-approval-persistence-core-db-execution-closeout.md`
 
+## AAF-4 Audit And Approval Writer Core
+
+Canonical audit, approval, and evidence writer implementation docs:
+- `docs/product/gnr8-audit-approval-writer-core-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
