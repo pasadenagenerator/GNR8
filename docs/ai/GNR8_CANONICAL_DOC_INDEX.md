@@ -110,6 +110,25 @@ Canonical DDOM readiness snapshot persistence implementation closeout:
 Canonical DDOM readiness snapshot writer implementation closeout:
 - `docs/product/gnr8-ddom-readiness-snapshot-writer-core-closeout.md`
 
+## DDOM-4 Readiness Snapshot Production Caller Architecture
+
+Canonical DDOM readiness snapshot production caller architecture docs:
+- `docs/architecture/gnr8-ddom-readiness-snapshot-production-caller-architecture.md`
+- `docs/architecture/gnr8-ddom-readiness-source-state-contract.md`
+- `docs/architecture/gnr8-ddom-readiness-snapshot-caller-options.md`
+- `docs/product/gnr8-ddom-readiness-snapshot-operator-workflow.md`
+- `docs/product/gnr8-ddom-readiness-snapshot-production-caller-architecture-closeout.md`
+
+## DDOM-5 Readiness Manual Snapshot Caller Core
+
+Canonical DDOM readiness manual stored-state caller implementation:
+- `docs/product/gnr8-ddom-readiness-manual-snapshot-caller-core-closeout.md`
+- `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-caller.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-stored-state-repository.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-stored-state-mapper.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-caller.test.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-caller.integration.test.ts`
+
 ## PTT-1 Publish Target Source Truth Persistence Core
 
 Canonical publish target source truth persistence implementation closeout:
