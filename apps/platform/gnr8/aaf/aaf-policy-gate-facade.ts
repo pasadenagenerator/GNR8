@@ -2,6 +2,7 @@ import "server-only";
 
 import type {
   AafApprovalScope,
+  AafAuditEventFamily,
   AafEvidencePackageType,
   AafGateResult,
   AafPolicyEvaluationResult,
@@ -87,6 +88,7 @@ export type AafGateValidationInput = AafTenantScopeInput &
     currentSubjectWatermark?: string | null;
     sourceRefsRequired?: boolean;
     auditRequired?: boolean;
+    auditEventFamily?: AafAuditEventFamily;
     policyRules?: AafPolicyRules;
     policyIdempotencyKey?: string;
     auditIdempotencyKey?: string;
@@ -628,7 +630,7 @@ export class AafActionGateValidatorFacade {
           ...input,
           idempotencyKey: input.auditIdempotencyKey ?? `${input.idempotencyKey}:audit`,
           eventName: `aaf.gate.${gateResult}`,
-          eventFamily: "system failure/audit failure",
+          eventFamily: input.auditEventFamily ?? "system failure/audit failure",
           severity: gateResult === "allowed" || gateResult === "not_required_by_policy" ? "notice" : "warning",
           replayClass: AAF_SCOPE_REPLAY_CLASS[input.scope],
           policyEvaluationId: policyEvaluation.id,
