@@ -87,6 +87,11 @@ Canonical audit, approval, evidence policy evaluator and non-executing gate faca
 Canonical publish activation dry-run gate adapter closeout:
 - `docs/product/gnr8-audit-approval-publish-gate-dry-run-closeout.md`
 
+## AAF-7 Publish Activation Evidence Builder
+
+Canonical publish activation evidence package builder closeout:
+- `docs/product/gnr8-audit-approval-publish-evidence-builder-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
