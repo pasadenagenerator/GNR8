@@ -70,6 +70,7 @@ export type PublishActivationCanonicalSourceSnapshot = {
 export type PublishActivationDomainReadinessSnapshot = PublishActivationCanonicalSourceSnapshot & {
   readinessStatus: PublishActivationDomainReadinessStatus;
   blockers?: readonly string[];
+  warnings?: readonly string[];
   stale?: boolean;
 };
 
@@ -106,6 +107,9 @@ export type PublishActivationEvidenceReaderInput = AafTenantScopeInput & {
   siteVersionId: string;
   runtimeArtifactId?: string | null;
   intendedPublishTarget: string;
+  trustedPublishEnvironment?: string | null;
+  intendedPublishStage?: string | null;
+  intendedDomain?: string | null;
   contentOverrideStateRequired?: boolean;
   launchSignoffRequiredByPolicy?: boolean;
   publishActivationApprovalRef?: {

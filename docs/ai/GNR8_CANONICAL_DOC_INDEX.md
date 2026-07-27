@@ -110,6 +110,11 @@ Canonical DDOM readiness snapshot persistence implementation closeout:
 Canonical publish target source truth persistence implementation closeout:
 - `docs/product/gnr8-publish-target-source-truth-persistence-core-closeout.md`
 
+## PASR-1 Publish Activation Source Reader Read-Only Core
+
+Canonical publish activation source reader implementation closeout:
+- `docs/product/gnr8-publish-activation-source-reader-read-only-core-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
