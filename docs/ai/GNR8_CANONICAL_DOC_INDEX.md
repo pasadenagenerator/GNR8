@@ -105,6 +105,11 @@ Canonical publish source reader and DDOM snapshot architecture docs:
 Canonical DDOM readiness snapshot persistence implementation closeout:
 - `docs/product/gnr8-ddom-readiness-snapshot-persistence-core-closeout.md`
 
+## PTT-1 Publish Target Source Truth Persistence Core
+
+Canonical publish target source truth persistence implementation closeout:
+- `docs/product/gnr8-publish-target-source-truth-persistence-core-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
