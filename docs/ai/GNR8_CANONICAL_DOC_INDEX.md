@@ -92,6 +92,19 @@ Canonical publish activation dry-run gate adapter closeout:
 Canonical publish activation evidence package builder closeout:
 - `docs/product/gnr8-audit-approval-publish-evidence-builder-closeout.md`
 
+## AAF-8 Publish Source Reader And DDOM Snapshot Architecture
+
+Canonical publish source reader and DDOM snapshot architecture docs:
+- `docs/architecture/gnr8-aaf-publish-source-reader-architecture.md`
+- `docs/architecture/gnr8-ddom-readiness-snapshot-persistence-design.md`
+- `docs/architecture/gnr8-publish-target-source-truth-design.md`
+- `docs/product/gnr8-aaf-publish-source-reader-review-closeout.md`
+
+## DDOM-2 Readiness Snapshot Persistence Core
+
+Canonical DDOM readiness snapshot persistence implementation closeout:
+- `docs/product/gnr8-ddom-readiness-snapshot-persistence-core-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
