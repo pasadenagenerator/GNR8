@@ -105,6 +105,11 @@ Canonical publish source reader and DDOM snapshot architecture docs:
 Canonical DDOM readiness snapshot persistence implementation closeout:
 - `docs/product/gnr8-ddom-readiness-snapshot-persistence-core-closeout.md`
 
+## DDOM-3 Readiness Snapshot Writer Core
+
+Canonical DDOM readiness snapshot writer implementation closeout:
+- `docs/product/gnr8-ddom-readiness-snapshot-writer-core-closeout.md`
+
 ## PTT-1 Publish Target Source Truth Persistence Core
 
 Canonical publish target source truth persistence implementation closeout:
