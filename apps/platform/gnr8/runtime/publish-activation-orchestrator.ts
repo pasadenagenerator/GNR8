@@ -1,4 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { buildDeterministicArtifactBundle } from "@/gnr8/runtime/artifact-builder";
+import {
+  isPublishActivationShadowGateEnabled,
+  observePublishActivationShadowGate,
+  type PublishActivationShadowObserverInput,
+  type PublishActivationShadowResult,
+} from "@/gnr8/aaf/aaf-publish-activation-shadow-observer";
 import {
   evaluatePointerSwitchReadiness,
   evaluatePublishActivationCandidate,
@@ -13,6 +21,8 @@ import {
   createArtifact,
   getActivePointerForSite,
   getArtifactById,
+  getOwnershipSiteSummary,
+  getRuntimeSiteVersionOwnershipSnapshot,
   recordPublishActivationAudit,
   getSiteVersion,
   refreshArtifactForVersionPublishCandidate,
@@ -23,6 +33,134 @@ import { transitionSiteVersionState } from "@/gnr8/runtime/version-lifecycle-enf
 
 function throwPublishActivationFailure(code: PublishActivationFailureCode, message: string, details?: Record<string, unknown>): never {
   throw new Error(`${code}:${JSON.stringify({ message, details: details ?? {} })}`);
+}
+
+export type PublishActivationShadowScope = {
+  tenantId: string;
+  clientId?: string | null;
+  actorRole?: string | null;
+};
+
+export type PublishActivationShadowObserver = (input: PublishActivationShadowObserverInput) => Promise<PublishActivationShadowResult>;
+
+function text(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function publishActivationShadowGateEnabled(override?: boolean): boolean {
+  return override === true || (override !== false && isPublishActivationShadowGateEnabled());
+}
+
+async function resolvePublishActivationShadowScope(input: {
+  siteVersionId: string;
+  providedScope?: PublishActivationShadowScope | null;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<PublishActivationShadowScope | null> {
+  const providedTenantId = text(input.providedScope?.tenantId);
+  if (providedTenantId && input.providedScope?.clientId !== undefined) {
+    return {
+      tenantId: providedTenantId,
+      clientId: text(input.providedScope.clientId),
+      actorRole: text(input.providedScope.actorRole),
+    };
+  }
+
+  const ownership = await getRuntimeSiteVersionOwnershipSnapshot(input.siteVersionId, { dbClient: input.dbClient });
+  const ownershipSite = ownership?.ownershipSiteId
+    ? await getOwnershipSiteSummary(ownership.ownershipSiteId, { dbClient: input.dbClient })
+    : null;
+  const tenantId = providedTenantId ?? text(ownershipSite?.agencyId);
+  if (!tenantId) return null;
+  return {
+    tenantId,
+    clientId: input.providedScope?.clientId === undefined ? text(ownershipSite?.orgId) : text(input.providedScope.clientId),
+    actorRole: text(input.providedScope?.actorRole),
+  };
+}
+
+export async function runPublishActivationShadowGateObservation(input: {
+  enabled?: boolean;
+  siteId: string;
+  siteVersionId: string;
+  runtimeArtifactId: string;
+  actor: string;
+  publishStage: "shadow" | "canary" | "production";
+  scope?: PublishActivationShadowScope | null;
+  dbClient?: RuntimeStoreDbClient;
+  observer?: PublishActivationShadowObserver;
+}): Promise<PublishActivationShadowResult | null> {
+  if (!publishActivationShadowGateEnabled(input.enabled)) return null;
+
+  try {
+    const scope = await resolvePublishActivationShadowScope({
+      siteVersionId: input.siteVersionId,
+      providedScope: input.scope ?? null,
+      dbClient: input.dbClient,
+    });
+    if (!scope) {
+      console.info("[gnr8.aaf.pasr2] publish activation shadow gate unavailable", {
+        shadowOnly: true,
+        enforcementApplied: false,
+        publishActionBlocked: false,
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        runtimeArtifactId: input.runtimeArtifactId,
+        failureReason: "missing_publish_activation_shadow_scope",
+      });
+      return null;
+    }
+
+    const shadowEvaluationId = randomUUID();
+    const observer = input.observer ?? observePublishActivationShadowGate;
+    const result = await observer({
+      tenantId: scope.tenantId,
+      clientId: scope.clientId ?? null,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      runtimeArtifactId: input.runtimeArtifactId,
+      intendedPublishTarget: "production",
+      trustedPublishEnvironment: "production",
+      intendedPublishStage: input.publishStage,
+      contentOverrideStateRequired: false,
+      launchSignoffRequiredByPolicy: false,
+      actorType: "human",
+      actorId: input.actor,
+      actorRole: scope.actorRole ?? "agency_admin",
+      correlationId: `pasr-2-shadow:${shadowEvaluationId}`,
+      idempotencyKey: `pasr-2-shadow:${shadowEvaluationId}`,
+      policyVersion: "PASR-2-shadow",
+    });
+    console.info("[gnr8.aaf.pasr2] publish activation shadow gate observed", {
+      shadowOnly: result.shadowOnly,
+      enforcementApplied: result.enforcementApplied,
+      publishActionBlocked: result.publishActionBlocked,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      runtimeArtifactId: input.runtimeArtifactId,
+      readinessResult: result.readinessResult,
+      missingSourceTruth: result.missingSourceTruth,
+      staleSourceTruth: result.staleSourceTruth,
+      ddomReadinessSnapshotStatus: result.ddomReadinessSnapshotStatus.status,
+      gateResult: result.gateDryRunStatus.gateResult,
+      correlationId: result.correlationId,
+      shadowEvaluationId: result.shadowEvaluationId,
+      failureReason: result.failureReason,
+    });
+    return result;
+  } catch (error) {
+    console.info("[gnr8.aaf.pasr2] publish activation shadow gate failed open", {
+      shadowOnly: true,
+      enforcementApplied: false,
+      publishActionBlocked: false,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      runtimeArtifactId: input.runtimeArtifactId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 export async function executeMigrationPublishActivation(input: {
@@ -148,6 +286,9 @@ export async function publishApprovedSiteVersion(input: {
   actor: string;
   stage?: "shadow" | "canary" | "production";
   dbClient?: RuntimeStoreDbClient;
+  publishActivationShadowGateEnabled?: boolean;
+  publishActivationShadowScope?: PublishActivationShadowScope | null;
+  publishActivationShadowObserver?: PublishActivationShadowObserver;
 }) {
   const dbOptions = { dbClient: input.dbClient };
   const siteVersion = await getSiteVersion(input.siteVersionId, dbOptions);
@@ -243,6 +384,17 @@ export async function publishApprovedSiteVersion(input: {
       activePointer,
     });
     if (pointerReadiness.ok && "code" in pointerReadiness) {
+      await runPublishActivationShadowGateObservation({
+        enabled: input.publishActivationShadowGateEnabled,
+        siteId: siteVersion.siteId,
+        siteVersionId: siteVersion.id,
+        runtimeArtifactId: siteVersion.artifactId,
+        actor: input.actor,
+        publishStage: resolvedPublishStage,
+        scope: input.publishActivationShadowScope ?? null,
+        dbClient: input.dbClient,
+        observer: input.publishActivationShadowObserver,
+      });
       return {
         siteId: siteVersion.siteId,
         siteVersionId: siteVersion.id,
@@ -255,6 +407,18 @@ export async function publishApprovedSiteVersion(input: {
         activationOutcome: pointerReadiness.code,
       };
     }
+
+    await runPublishActivationShadowGateObservation({
+      enabled: input.publishActivationShadowGateEnabled,
+      siteId: siteVersion.siteId,
+      siteVersionId: siteVersion.id,
+      runtimeArtifactId: siteVersion.artifactId,
+      actor: input.actor,
+      publishStage: resolvedPublishStage,
+      scope: input.publishActivationShadowScope ?? null,
+      dbClient: input.dbClient,
+      observer: input.publishActivationShadowObserver,
+    });
 
     let pointerSwitchResult: { switched: boolean; previousActivePointer: { siteVersionId: string; artifactId: string } | null };
     try {
@@ -386,6 +550,18 @@ export async function publishApprovedSiteVersion(input: {
   });
   const pointerOutcome =
     pointerReadiness.ok && "code" in pointerReadiness ? pointerReadiness.code : "atomic_site_pointer_reassignment";
+
+  await runPublishActivationShadowGateObservation({
+    enabled: input.publishActivationShadowGateEnabled,
+    siteId: siteVersion.siteId,
+    siteVersionId: siteVersion.id,
+    runtimeArtifactId: artifact.artifactId,
+    actor: input.actor,
+    publishStage,
+    scope: input.publishActivationShadowScope ?? null,
+    dbClient: input.dbClient,
+    observer: input.publishActivationShadowObserver,
+  });
 
   let pointerSwitchResult: { switched: boolean; previousActivePointer: { siteVersionId: string; artifactId: string } | null };
   try {

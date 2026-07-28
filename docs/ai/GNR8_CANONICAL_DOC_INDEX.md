@@ -150,6 +150,21 @@ Canonical publish target source truth persistence implementation closeout:
 Canonical publish activation source reader implementation closeout:
 - `docs/product/gnr8-publish-activation-source-reader-read-only-core-closeout.md`
 
+## PASR-2 Publish Activation Shadow Gate Integration
+
+Canonical publish activation shadow gate integration closeout:
+- `docs/product/gnr8-publish-activation-shadow-gate-integration-closeout.md`
+- `apps/platform/gnr8/aaf/aaf-publish-activation-shadow-observer.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-activation-shadow-observer.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-activation-shadow-observer.integration.test.ts`
+- `apps/platform/gnr8/runtime/publish-activation-shadow-gate-observation.test.ts`
+- `apps/platform/gnr8/runtime/publish-activation-orchestrator.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-activation-source-reader.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-activation-evidence-builder.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-activation-gate-adapter.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-stored-state-repository.ts`
+- `apps/platform/supabase/migrations/20260727130000_publish_target_source_truth_persistence_core.sql`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
