@@ -129,6 +129,17 @@ Canonical DDOM readiness manual stored-state caller implementation:
 - `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-caller.test.ts`
 - `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-caller.integration.test.ts`
 
+## DDOM-6 Readiness Manual Snapshot Trigger
+
+Canonical controlled manual DDOM readiness snapshot trigger implementation:
+- `docs/product/gnr8-ddom-readiness-manual-snapshot-trigger-closeout.md`
+- `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-trigger.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-trigger.test.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-trigger.integration.test.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-manual-snapshot-caller.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-stored-state-repository.ts`
+- `apps/platform/gnr8/ddom/ddom-readiness-stored-state-mapper.ts`
+
 ## PTT-1 Publish Target Source Truth Persistence Core
 
 Canonical publish target source truth persistence implementation closeout:
