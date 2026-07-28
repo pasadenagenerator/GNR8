@@ -165,6 +165,27 @@ Canonical publish activation shadow gate integration closeout:
 - `apps/platform/gnr8/ddom/ddom-readiness-stored-state-repository.ts`
 - `apps/platform/supabase/migrations/20260727130000_publish_target_source_truth_persistence_core.sql`
 
+## PASR-3 Publish Shadow Result Surfacing Architecture
+
+Canonical publish shadow result surfacing architecture docs:
+- `docs/architecture/gnr8-publish-shadow-result-surfacing-architecture.md`
+- `docs/architecture/gnr8-publish-shadow-result-read-model-contract.md`
+- `docs/product/gnr8-publish-shadow-evidence-review-workflow.md`
+- `docs/product/gnr8-publish-shadow-result-surfacing-closeout.md`
+
+## PASR-4 Publish Shadow Result Read Model Core
+
+Canonical publish shadow result read model core implementation:
+- `docs/product/gnr8-publish-shadow-result-read-model-core-closeout.md`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-repository.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-repository.integration.test.ts`
+- `docs/architecture/gnr8-publish-shadow-result-surfacing-architecture.md`
+- `docs/architecture/gnr8-publish-shadow-result-read-model-contract.md`
+- `docs/product/gnr8-publish-shadow-evidence-review-workflow.md`
+- `docs/product/gnr8-publish-shadow-result-surfacing-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
