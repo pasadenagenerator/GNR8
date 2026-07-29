@@ -231,6 +231,22 @@ Canonical PASR-7 verification closeout and boundary references:
 - `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.ts`
 - `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.ts`
 
+## PASR-8 Ops Inbox Publish Shadow Surfacing
+
+Canonical read-only derived Ops Inbox publish shadow surfacing implementation:
+- `docs/product/gnr8-ops-inbox-publish-shadow-surfacing-closeout.md`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-ops-inbox-view-model.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-ops-inbox-view-model.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-repository.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.ts`
+- `apps/platform/gnr8/aaf/aaf-command-center-publish-shadow-view-model.ts`
+- `apps/platform/gnr8/aaf/aaf-command-center-publish-shadow-view-model.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.test.ts`
+- `docs/product/gnr8-command-center-publish-shadow-surfacing-closeout.md`
+- `docs/product/gnr8-command-center-publish-shadow-surfacing-verification-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
