@@ -45,6 +45,30 @@ Canonical single-site end-to-end implementation gap audit docs:
 - `docs/product/gnr8-single-site-mvp-next-implementation-sequence.md`
 - `docs/product/gnr8-single-site-end-to-end-gap-audit-closeout.md`
 
+## MVP-4 Single-Site State And Source Evidence Spine
+
+Canonical single-site state and source evidence spine implementation design docs:
+- `docs/architecture/gnr8-single-site-state-spine-implementation-design.md`
+- `docs/architecture/gnr8-single-site-state-schema-design.md`
+- `docs/architecture/gnr8-source-evidence-review-schema-design.md`
+- `docs/architecture/gnr8-single-site-state-transition-contract.md`
+- `docs/product/gnr8-single-site-state-evidence-operator-workflow.md`
+- `docs/product/gnr8-single-site-state-evidence-spine-closeout.md`
+
+## MVP-5 Single-Site State And Source Evidence SQL Persistence Core
+
+Canonical single-site state and source evidence SQL persistence implementation:
+- `apps/platform/supabase/migrations/20260729120000_single_site_state_evidence_spine.sql`
+- `apps/platform/gnr8/single-site/single-site-state-evidence-persistence.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-evidence-persistence.integration.test.ts`
+- `docs/product/gnr8-single-site-state-evidence-sql-persistence-closeout.md`
+- `docs/architecture/gnr8-single-site-state-spine-implementation-design.md`
+- `docs/architecture/gnr8-single-site-state-schema-design.md`
+- `docs/architecture/gnr8-source-evidence-review-schema-design.md`
+- `docs/architecture/gnr8-single-site-state-transition-contract.md`
+- `docs/product/gnr8-single-site-state-evidence-operator-workflow.md`
+- `docs/product/gnr8-single-site-state-evidence-spine-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
