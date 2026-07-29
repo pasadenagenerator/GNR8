@@ -69,6 +69,20 @@ Canonical single-site state and source evidence SQL persistence implementation:
 - `docs/product/gnr8-single-site-state-evidence-operator-workflow.md`
 - `docs/product/gnr8-single-site-state-evidence-spine-closeout.md`
 
+## MVP-6 Single-Site State And Source Evidence Writer Core
+
+Canonical single-site state and source evidence writer implementation:
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/source-evidence-review-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.test.ts`
+- `apps/platform/gnr8/single-site/source-evidence-review-service.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.integration.test.ts`
+- `apps/platform/supabase/migrations/20260729120000_single_site_state_evidence_spine.sql`
+- `docs/product/gnr8-single-site-state-evidence-writer-core-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
