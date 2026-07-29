@@ -142,6 +142,10 @@ function publishShadowPanel(model: CommandCenterPublishShadowSurfaceViewModel) {
       <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>{publishShadowSurfaceStateCopy(model)}</p>
       <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>{model.nonEnforcementLabel}</p>
       <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>{model.derivedOnlyLabel}</p>
+      <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>
+        DDOM snapshot gaps must be handled through source-owned DDOM workflows outside PASR. DDOM readiness is not publish activation approval;
+        missing publish activation approval is separate from launch signoff or client approval.
+      </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
         {metric("Shadow Status", model.shadowStatusLabel)}

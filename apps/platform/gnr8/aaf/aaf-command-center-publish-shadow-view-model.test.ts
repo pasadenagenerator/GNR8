@@ -410,6 +410,9 @@ test("hosting detail UI labels shadow surfacing and adds no PASR action controls
   assert.equal(panelSource.includes("Shadow-only"), true);
   assert.equal(panelSource.includes("Non-blocking"), true);
   assert.equal(panelSource.includes("Derived Command Center view"), true);
+  assert.equal(panelSource.includes("source-owned DDOM workflows outside PASR"), true);
+  assert.equal(panelSource.includes("DDOM readiness is not publish activation approval"), true);
+  assert.equal(panelSource.includes("separate from launch signoff or client approval"), true);
   assert.equal(panelSource.includes("<button"), false);
   assert.equal(panelSource.includes("HostingDomainRecheckButton"), false);
 });

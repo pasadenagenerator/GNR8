@@ -221,6 +221,16 @@ Canonical Command Center read-only publish shadow surfacing implementation:
 - `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.test.ts`
 - `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.test.ts`
 
+## PASR-7-VERIFY Command Center Publish Shadow Surfacing Verification
+
+Canonical PASR-7 verification closeout and boundary references:
+- `docs/product/gnr8-command-center-publish-shadow-surfacing-verification-closeout.md`
+- `docs/product/gnr8-command-center-publish-shadow-surfacing-closeout.md`
+- `apps/platform/gnr8/aaf/aaf-command-center-publish-shadow-view-model.ts`
+- `apps/platform/gnr8/aaf/aaf-command-center-publish-shadow-view-model.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.ts`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
