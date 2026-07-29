@@ -14,6 +14,7 @@ import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
 import { getArtifactById, preallocateSiteVersionIdentity } from '@/gnr8/runtime/runtime-store'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { getSuperadminPool } from '@/src/superadmin/db'
+import { recordSingleSiteCaptureSpine, type SingleSiteCaptureSpineEvidenceRefInput } from '@/gnr8/single-site/single-site-capture-spine-adapter'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -113,6 +114,189 @@ function buildScopedImportRuntimeIdentity(input: { sourceUrl: string; clientId: 
   const hex = Buffer.from(bytes).toString('hex')
   const siteVersionId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
   return { siteId, siteVersionId, correlationKey }
+}
+
+function sha256Text(value: string): string {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex')
+}
+
+function captureSpineActor(actorMode: string) {
+  return {
+    actorType: 'system' as const,
+    actorId: `agency:client-scoped-import:${actorMode}`,
+    actorRole: 'capture_import_completion_adapter',
+    actorDisplayLabel: 'Client-scoped import capture spine adapter',
+  }
+}
+
+function captureSpineBaseInput(input: {
+  importUrl: URL
+  clientId: string
+  agencyId: string
+  actorMode: string
+  runtimeSiteId: string
+  siteVersionId: string
+  correlationKey: string
+  snapshotId: string
+  snapshotRunId: string
+}) {
+  return {
+    tenantId: input.agencyId,
+    clientId: input.clientId,
+    runtimeSiteId: input.runtimeSiteId,
+    siteVersionId: input.siteVersionId,
+    runtimeSiteVersionId: input.siteVersionId,
+    sourceUrl: input.importUrl.toString(),
+    canonicalSourceUrl: input.importUrl.toString(),
+    intendedLaunchDomain: normalizeText(input.importUrl.host) || null,
+    idempotencyKey: `single-site-capture:${input.correlationKey}`,
+    migrationIdempotencyKey: `single-site-capture:${input.correlationKey}:migration`,
+    correlationId: input.correlationKey,
+    requestId: input.snapshotRunId,
+    actor: captureSpineActor(input.actorMode),
+    captureRunId: input.snapshotId,
+    renderJobId: input.snapshotId,
+    sourceEvidencePackageKey: `url-import-snapshot:${input.snapshotId}`,
+    sourceWatermark: input.snapshotId,
+    metadataJson: {
+      boundary: 'client_scoped_site_import_route',
+      snapshotId: input.snapshotId,
+    },
+  }
+}
+
+function buildCaptureCompletionEvidenceRefs(input: {
+  sourceUrl: string
+  snapshotId: string
+  rawHtml: string
+  snapshot: Awaited<ReturnType<typeof importPublicSinglePageUrlToSnapshot>>
+}): SingleSiteCaptureSpineEvidenceRefInput[] {
+  const refs: SingleSiteCaptureSpineEvidenceRefInput[] = [
+    {
+      category: 'source_url',
+      sourceEvidenceRefRole: 'source_url',
+      migrationRefRole: 'capture_run',
+      refType: 'url',
+      sourceRecordId: input.sourceUrl,
+      sourceWatermark: input.snapshotId,
+    },
+    {
+      category: 'page',
+      sourceEvidenceRefRole: 'page',
+      refType: 'url_single_page_snapshot',
+      sourceRecordId: `${input.snapshotId}:entry-page`,
+      sourceWatermark: input.snapshotId,
+    },
+    {
+      category: 'dom',
+      sourceEvidenceRefRole: 'raw_html',
+      refType: 'raw_html',
+      sourceRecordId: `${input.snapshotId}:raw-html`,
+      sourceWatermark: input.snapshotId,
+      contentHash: sha256Text(input.rawHtml),
+      mediaType: 'text/html',
+    },
+    {
+      category: 'text',
+      sourceEvidenceRefRole: 'text_extract',
+      refType: 'html_text_source',
+      sourceRecordId: `${input.snapshotId}:raw-html-text`,
+      sourceWatermark: input.snapshotId,
+      contentHash: sha256Text(input.rawHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()),
+      mediaType: 'text/plain',
+    },
+    {
+      category: 'metadata',
+      sourceEvidenceRefRole: 'metadata',
+      refType: 'url_import_metadata',
+      sourceRecordId: `${input.snapshotId}:metadata`,
+      sourceWatermark: input.snapshotId,
+    },
+  ]
+
+  for (const document of input.snapshot.renderedCapture.documents ?? []) {
+    refs.push({
+      category: 'dom',
+      sourceEvidenceRefRole: 'rendered_dom',
+      refType: 'rendered_dom',
+      sourceRecordId: `${input.snapshotId}:rendered-dom`,
+      sourceWatermark: input.snapshotId,
+      contentHash: document.htmlSha256,
+      mediaType: 'text/html',
+      status: input.snapshot.renderedCapture.status === 'available' ? 'present' : 'present_with_warnings',
+    })
+  }
+
+  for (const screenshot of input.snapshot.renderedCapture.screenshots ?? []) {
+    refs.push({
+      category: 'screenshot',
+      sourceEvidenceRefRole: 'screenshot',
+      refType: screenshot.captureType,
+      sourceRecordId: `${input.snapshotId}:screenshot:${screenshot.captureType}`,
+      sourceWatermark: input.snapshotId,
+      mediaType: 'image/png',
+      status: input.snapshot.renderedCapture.status === 'available' ? 'present' : 'present_with_warnings',
+    })
+  }
+
+  const fetchedAssets = (input.snapshot.fetchManifest ?? []).filter((entry) => entry.fetchStatus === 'fetched')
+  for (const [index, asset] of fetchedAssets.entries()) {
+    const isImage = asset.assetKind === 'image'
+    refs.push({
+      category: isImage ? 'image' : 'asset',
+      sourceEvidenceRefRole: isImage ? 'image_asset' : 'asset',
+      refType: asset.assetKind,
+      sourceRecordId: asset.resolvedUrl ?? asset.localPath ?? `${input.snapshotId}:asset:${index + 1}`,
+      sourceWatermark: input.snapshotId,
+      mediaType: asset.contentType,
+      status: asset.httpStatus && asset.httpStatus >= 200 && asset.httpStatus < 300 ? 'present' : 'present_with_warnings',
+    })
+  }
+
+  const fontFamilies = [
+    ...new Set(
+      (input.snapshot.renderedCapture.computedStyleSamples ?? [])
+        .map((sample) => normalizeText(sample.styles.fontFamily))
+        .filter(Boolean),
+    ),
+  ]
+  for (const [index, fontFamily] of fontFamilies.entries()) {
+    refs.push({
+      category: 'font',
+      sourceEvidenceRefRole: 'font_ref',
+      refType: 'computed_font_family',
+      sourceRecordId: `${input.snapshotId}:font:${index + 1}:${sha256Text(fontFamily).slice(0, 12)}`,
+      sourceWatermark: input.snapshotId,
+      status: 'present_with_warnings',
+      metadataJson: { fontFamily },
+    })
+  }
+
+  if ((input.snapshot.renderedCapture.computedStyleSamples ?? []).length > 0) {
+    refs.push({
+      category: 'visual_identity',
+      sourceEvidenceRefRole: 'visual_identity',
+      refType: 'computed_style_samples',
+      sourceRecordId: `${input.snapshotId}:visual-identity`,
+      sourceWatermark: input.snapshotId,
+      status: input.snapshot.renderedCapture.status === 'available' ? 'present' : 'present_with_warnings',
+    })
+  }
+
+  return refs
+}
+
+async function recordCaptureSpineBestEffort(input: Parameters<typeof recordSingleSiteCaptureSpine>[0]): Promise<void> {
+  try {
+    await recordSingleSiteCaptureSpine(input)
+  } catch (error) {
+    console.error('[site-import] SINGLE_SITE_CAPTURE_SPINE_RECORDING_FAILED', {
+      message: error instanceof Error ? error.message : String(error),
+      sourceUrl: input.sourceUrl,
+      correlationId: input.correlationId,
+      outcome: input.outcome,
+    })
+  }
 }
 
 
@@ -354,9 +538,39 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     const intake = snapshot.importIntake ?? null
     const rawHtmlUsable = Boolean((intake?.rawHtmlAvailable ?? false) && (intake?.htmlByteLength ?? 0) > 0)
     const pipelineMode: 'strict' | 'degraded_html_fallback' = !intake?.ok && rawHtmlUsable ? 'degraded_html_fallback' : 'strict'
+    const captureCompletedAt =
+      snapshot.renderedCaptureReliability.job?.completedAt ??
+      snapshot.renderedCaptureReliability.job?.startedAt ??
+      snapshot.renderedCaptureReliability.job?.createdAt ??
+      null
 
     if (!intake?.ok && !rawHtmlUsable) {
       const reasonCode = intake?.reasonCode ?? 'fetch_failed'
+      await recordCaptureSpineBestEffort({
+        outcome: 'failed',
+        ...captureSpineBaseInput({
+          importUrl,
+          clientId,
+          agencyId: actionContext.agencyId,
+          actorMode: actionContext.actorMode,
+          runtimeSiteId: preallocatedIdentity.siteId,
+          siteVersionId: preallocatedIdentity.siteVersionId,
+          correlationKey: runtimeIdentity.correlationKey,
+          snapshotId: snapshot.snapshotId,
+          snapshotRunId: snapshot.snapshotRunId,
+        }),
+        captureStartedAt: snapshot.renderedCaptureReliability.job?.startedAt ?? snapshot.renderedCaptureReliability.job?.createdAt ?? null,
+        captureCompletedAt,
+        evidenceCapturedAt: captureCompletedAt,
+        failureReason: reasonCode,
+        warnings: snapshot.importDiagnostics.issues.filter((issue) => issue.severity === 'warning').map((issue) => ({ code: issue.code, message: issue.message })),
+        blockers: [{ reasonCode, intake }],
+        diagnosticsJson: {
+          reasonCode,
+          importDiagnostics: snapshot.importDiagnostics.summary,
+          renderedCaptureStatus: snapshot.renderedCapture.status,
+        },
+      })
       return NextResponse.json(
         {
           ok: false,
@@ -424,6 +638,58 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     const cmsContentSlots = imported.mode === 'pipeline' ? imported.reporting.cmsContentSlots : null
     const cmsDiagnostics = cmsContentSlots?.diagnostics ?? []
     const multiPageDiscovery = imported.mode === 'pipeline' ? imported.reporting.multiPageDiscovery : imported.diagnostics.multiPageDiscovery
+    await recordCaptureSpineBestEffort({
+      outcome: 'completed',
+      ...captureSpineBaseInput({
+        importUrl,
+        clientId,
+        agencyId: actionContext.agencyId,
+        actorMode: actionContext.actorMode,
+        runtimeSiteId: imported.siteId,
+        siteVersionId: imported.siteVersionId,
+        correlationKey: runtimeIdentity.correlationKey,
+        snapshotId: snapshot.snapshotId,
+        snapshotRunId: snapshot.snapshotRunId,
+      }),
+      siteId: ownershipSiteId,
+      ownershipSiteId,
+      captureStartedAt: snapshot.renderedCaptureReliability.job?.startedAt ?? snapshot.renderedCaptureReliability.job?.createdAt ?? null,
+      captureCompletedAt,
+      evidenceCapturedAt: captureCompletedAt,
+      sourceHash: snapshot.snapshotId,
+      payloadHash: sha256Text(JSON.stringify({
+        sourceUrl: importUrl.toString(),
+        snapshotId: snapshot.snapshotId,
+        renderedCaptureStatus: snapshot.renderedCapture.status,
+        pipelineMode,
+      })),
+      evidenceRefs: buildCaptureCompletionEvidenceRefs({
+        sourceUrl: importUrl.toString(),
+        snapshotId: snapshot.snapshotId,
+        rawHtml,
+        snapshot,
+      }),
+      limitations:
+        pipelineMode === 'degraded_html_fallback'
+          ? [{ code: 'degraded_html_fallback', reason: 'Imported using raw HTML fallback after intake degradation.' }]
+          : snapshot.renderedCapture.status !== 'available'
+            ? [{ code: 'rendered_capture_degraded', status: snapshot.renderedCapture.status }]
+            : [],
+      warnings: [
+        ...snapshot.importDiagnostics.issues
+          .filter((issue) => issue.severity === 'warning')
+          .map((issue) => ({ code: issue.code, message: issue.message })),
+        ...cmsDiagnostics.map((code) => ({ code })),
+      ],
+      diagnosticsJson: {
+        pipelineMode,
+        importDiagnostics: snapshot.importDiagnostics.summary,
+        renderedCaptureStatus: snapshot.renderedCapture.status,
+        renderedCaptureUsed: imported.mode === 'pipeline' ? imported.reporting.renderedCaptureUsed : imported.diagnostics.sourceMode === 'rendered_dom',
+        screenshotCount: snapshot.renderedCapture.screenshots.length,
+        computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
+      },
+    })
 
     return NextResponse.json(
       {

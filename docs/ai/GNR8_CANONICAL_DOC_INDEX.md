@@ -98,6 +98,25 @@ Canonical single-site state read model implementation:
 - `apps/platform/gnr8/single-site/source-evidence-review-service.ts`
 - `docs/product/gnr8-single-site-state-evidence-writer-core-closeout.md`
 
+## MVP-8 Single-Site Capture Spine Integration
+
+Canonical single-site capture completion integration implementation:
+- `apps/platform/gnr8/single-site/single-site-capture-spine-adapter.ts`
+- `apps/platform/gnr8/single-site/single-site-capture-spine-adapter.test.ts`
+- `apps/platform/gnr8/single-site/single-site-capture-spine-adapter.integration.test.ts`
+- `apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts`
+- `docs/product/gnr8-single-site-capture-spine-integration-closeout.md`
+- `apps/platform/supabase/migrations/20260729120000_single_site_state_evidence_spine.sql`
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/source-evidence-review-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `docs/product/gnr8-single-site-state-evidence-sql-persistence-closeout.md`
+- `docs/product/gnr8-single-site-state-evidence-writer-core-closeout.md`
+- `docs/product/gnr8-single-site-state-read-model-core-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

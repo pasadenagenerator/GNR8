@@ -1238,6 +1238,11 @@ export class SingleSiteStateWriterRepository {
     return (result.rows[0] as SingleSiteSourceEvidenceReviewRow | undefined) ?? null;
   }
 
+  async getSourceEvidenceReviewByIdempotencyKey(client: SingleSitePgClient, idempotencyKey: string): Promise<SingleSiteSourceEvidenceReviewRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_source_evidence_reviews where idempotency_key = $1 limit 1", [requiredText("idempotencyKey", idempotencyKey)]);
+    return (result.rows[0] as SingleSiteSourceEvidenceReviewRow | undefined) ?? null;
+  }
+
   async updateSourceEvidenceReviewStatus(client: SingleSitePgClient, input: UpdateSourceEvidenceReviewStatusInput): Promise<SingleSiteSourceEvidenceReviewRow> {
     const actor = input.actor ?? null;
     const result = await client.query(
