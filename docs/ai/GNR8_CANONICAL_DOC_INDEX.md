@@ -26,6 +26,25 @@ Canonical MVP boundary and authority docs:
 - `docs/architecture/gnr8-mvp-operational-state-model.md`
 - `docs/product/gnr8-mvp-boundary-closeout.md`
 
+## MVP-2 Single-Site Migration Realignment
+
+Canonical single-site end-to-end migration MVP realignment docs:
+- `docs/product/gnr8-single-site-migration-mvp-boundary.md`
+- `docs/architecture/gnr8-single-site-migration-mvp-state-model.md`
+- `docs/architecture/gnr8-single-site-migration-mvp-source-of-truth.md`
+- `docs/product/gnr8-single-site-migration-operator-workflow.md`
+- `docs/product/gnr8-single-site-migration-20-site-validation-plan.md`
+- `docs/product/gnr8-single-site-migration-mvp-realignment-closeout.md`
+
+## MVP-3 Single-Site End-To-End Gap Audit
+
+Canonical single-site end-to-end implementation gap audit docs:
+- `docs/product/gnr8-single-site-end-to-end-gap-audit.md`
+- `docs/architecture/gnr8-single-site-end-to-end-implementation-map.md`
+- `docs/product/gnr8-single-site-mvp-critical-blockers.md`
+- `docs/product/gnr8-single-site-mvp-next-implementation-sequence.md`
+- `docs/product/gnr8-single-site-end-to-end-gap-audit-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

@@ -1,0 +1,56 @@
+# GNR8 Single-Site Migration Operator Workflow
+
+MVP-2 operator workflow for migrating one existing website at a time through capture, clone, improvement, billing/hosting activation, domain readiness, publish, verification, rollback readiness, and closeout.
+
+This is documentation only. It does not implement UI, API routes, runtime behavior, publish, rollback, domain/DNS, billing, Stripe, Command Center, Ops Inbox, worker, AI, provider, storage, auth, or client portal changes.
+
+## Workflow
+
+| Step | Operator action | Required evidence | Required approval | Failure/retry handling | Command Center role | Ops Inbox role | Manual in MVP |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1. Select/create client | Choose the client that will own the migrated site or create one through existing client ownership flow. | Client id, agency/client scope, owner/contact metadata. | Admin/superadmin if creating or changing ownership. | Stop if client scope is ambiguous. | Shows selected client and site ownership. | Client/ownership blocker if missing. | Client selection and ownership verification. |
+| 2. Create website migration candidate | Record site name, source URL, intended domain, current platform if known, class, notes, risks, and owner. | Candidate record, source URL, intended domain, initial class/risk flags. | None unless unsupported/high-risk exception is requested. | Return to candidate correction if missing/duplicate/unsupported. | Shows candidate state and next action. | `intake_blocked` or `unsupported_site_class`. | Site-class judgment and priority. |
+| 3. Capture existing website | Run approved capture/import path for source text, images, fonts, visual identity/CGP, layout, structure, metadata, assets, and source evidence. | Capture run refs, rendered DOM/screenshots where available, raw HTML, assets, font/style evidence, metadata, diagnostics. | Job/capture approval according to operator policy. | Retry capture if source/network/tool failure; record degraded evidence if partial. | Shows capture progress and diagnostics. | `capture_degraded` or `source_capture_failed`. | Deciding whether degraded capture is acceptable. |
+| 4. Review source evidence | Confirm capture is complete enough to support a faithful clone. | Evidence package, source refs, capture completeness checklist, limitations. | Evidence exception if proceeding with known gaps. | Return to capture if critical text/assets/fonts/layout/source refs are missing. | Evidence readiness lane. | `source_evidence_review_required`. | Human evidence review. |
+| 5. Generate 1:1 clone | Produce the best possible faithful clone before improvements. | Clone artifact/version refs, asset map, route map, preview URL. | None to generate after evidence accepted. | If generation fails, retry from captured refs or return to capture. | Clone generation state and preview link. | `clone_generation_failed` if represented. | Fidelity goal setting. |
+| 6. Review clone fidelity | Compare clone to source across layout, text, images, fonts, visual identity/CGP, metadata, routes, links, and responsive behavior. | Fidelity checklist, source/clone screenshots, route coverage, asset/font diagnostics, metadata comparison. | Clone acceptance or revision decision. | Send to clone revision until acceptable or defer with exception. | Clone fidelity score/status. | `clone_review_required` or `clone_revision_required`. | Human visual/content QA. |
+| 7. Request revisions if needed | Define exact clone corrections before improvement work. | Revision request, affected pages/assets/content/styles, evidence refs. | Revision approval only if scope/risk changes. | Repeat clone generation/review until accepted or failed. | Revision blocker and owner. | `clone_revision_required`. | Deciding acceptable fidelity. |
+| 8. Generate improvement proposal | Create clear improvement proposal tied to source evidence and business goal. | Proposal artifact, before/after rationale, risks, expected changes, affected pages. | None to draft. | If proposal is weak, revise proposal; do not implement. | Proposal ready/status. | `approval_needed` if awaiting proposal decision. | Human judgment on usefulness. |
+| 9. Approve/reject proposal | Approve, reject, or request changes to proposed improvements. | Approval/rejection record, proposal refs, reviewer, limitations. | Proposal approval is required before implementation. | Rejected proposals stop improvement implementation; revised proposals create new proposal refs. | Proposal decision status. | `approval_needed` until decided. | Client/operator decision. |
+| 10. Implement approved improvements | Apply only approved improvements to create improved version/preview. | Implementation diff, improved version/artifact refs, content override refs, proposal approval refs. | The approved proposal scopes implementation; extra changes require new approval. | Return to implementation/review if defects appear. | Improved implementation progress. | `content_review_required` or implementation blocker. | Scoping changes to approved proposal. |
+| 11. Preview improved website | Generate/review improved preview. | Improved preview URL, smoke/readiness result, visual/content QA evidence. | None to preview. | Fix defects or return to implementation. | Preview readiness lane. | `content_review_required`. | Preview inspection. |
+| 12. Approve content/visual result | Approve final content, visuals, forms/widgets, SEO-critical metadata, and known limitations. | Content/visual approval, diff, preview refs, client/internal reviewer. | Client/content approval where client-visible. | Rework until approved or cancel/defer. | Approval lane. | `approval_needed` or `content_review_required`. | Client/operator signoff. |
+| 13. Prepare domain/DNS readiness | Record domain intent, owner, manual DNS instructions, Vercel/custom-domain readiness where applicable, SSL/readiness visibility, blockers, and freshness. | Domain binding, DNS instruction snapshot, DDOM readiness snapshot/ref, Vercel/custom-domain status, owner/action evidence. | Domain action/exception approval as required. | Recheck/regenerate/collect client DNS evidence; do not treat readiness as publish approval. | Domain lane and blocker detail. | `domain_action_needed` or `dns_verification_failed`. | DNS owner coordination and manual DNS changes. |
+| 14. Create hosting/subscription under selected client | Create MVP-lite website hosting/subscription record and billing/Stripe flow where applicable. | Subscription record, Stripe customer/subscription/payment refs where applicable, plan/price, cost center, margin estimate, audit. | Commercial approval/payment confirmation according to policy. | Stop launch if subscription/payment/record creation fails. | Hosting/subscription status and cost/margin signal. | `subscription_required` or billing blocker. | Commercial setup, payment/account follow-up. |
+| 15. Confirm hosting entitlement | Confirm the selected client/site has active hosting entitlement and internal operating status. | Entitlement record, effective dates, plan/scope, provisioning refs, status. | Hosting entitlement approval only if manual override/exception. | Do not publish if entitlement is missing or inactive. | Hosting entitlement ready badge from source. | `hosting_entitlement_needed`. | Entitlement exception decision. |
+| 16. Confirm launch approval | Confirm business/client launch signoff after content, domain readiness, subscription, and rollback readiness are visible. | Launch approval record, preview evidence, readiness checklist, limitations. | Launch approval. | Launch approval rejection returns to review/improvement or cancels. | Launch approval lane. | `approval_needed`. | Human launch decision. |
+| 17. Publish to domain | Execute governed publish activation for intended domain/target/version. | Publish activation approval, publish target, active pointer before/after plan, domain readiness, hosting entitlement, rollback target, evidence package. | Publish activation approval separate from launch approval. | If publish fails, open incident and retry only after root cause or rollback decision. | Publish lane and live status. | `publish_ready` then `publish_failed` if needed. | Human-triggered publish. |
+| 18. Verify published site | Verify public domain, routes, SSL/readiness, content, metadata, forms/widgets/external links, and runtime health. | Public verification checklist, screenshots, route checks, smoke result, defects. | Post-publish signoff if required by policy. | Defects create incident/rework/rollback path. | Published verification status. | `incident_open`, `publish_failed`, or defect item. | Human public QA. |
+| 19. Confirm rollback readiness | Confirm known-good prior version/content state or recovery plan remains available after publish. | Rollback target refs, content history, recovery plan, incident owner. | Rollback approval only when executing rollback. | If rollback target missing, stop closeout and record blocker. | Rollback readiness. | `recovery_evidence_needed` or `rollback_needed`. | Recovery judgment. |
+| 20. Close out migration | Record final state, metrics, cost/time, approvals, source evidence completeness, defects, and lessons. | Closeout record, audit refs, metrics, final URL, subscription/entitlement refs. | Closeout approval for exceptions/critical incidents. | Reopen only through source-owned incident/change workflow. | Migration closed out state. | Items resolve through canonical transitions. | Narrative closeout and metrics entry. |
+
+## Failure Handling
+
+- Source capture failure returns to `source_capture_started` for retry or to `migration_failed` if source/site class blocks continuation.
+- Source evidence gaps require `source_evidence_review_required` and an explicit exception before clone work can count.
+- Clone fidelity failure returns to `clone_revision_required`.
+- Proposal rejection stops improvement implementation for that proposal.
+- Improvement defects return to implementation or content review.
+- Domain/DNS blockers return to domain readiness; DDOM readiness is not publish approval.
+- Subscription/hosting blockers stop launch until subscription and entitlement are ready.
+- Publish failure opens an incident and may require rollback.
+- Ops Inbox item dismissal alone never resolves the underlying workflow.
+
+## Audit Expectations
+
+Audit must record intake/candidate creation, capture start/complete/failure, evidence review, clone generation, clone review/revision, proposal creation/approval/rejection, improvement implementation, content approval, domain readiness, subscription/hosting activation, launch approval, publish activation, verification, rollback readiness, incidents, cost/margin, and closeout.
+
+## What Remains Manual In MVP
+
+- selecting acceptable site classes;
+- reviewing source evidence and clone fidelity;
+- approving proposals, content, launch, domain exceptions, publish activation, rollback, and cost exceptions;
+- coordinating DNS owner actions and manual DNS changes;
+- confirming commercial setup when Stripe/customer-payment flow is incomplete or manual;
+- deciding whether a defect blocks publish or closeout;
+- final 20-site validation scoring.
