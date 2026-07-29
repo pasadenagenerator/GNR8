@@ -182,6 +182,21 @@ Canonical real clone executor adapter implementation:
 - `docs/product/gnr8-single-site-clone-start-orchestrator-closeout.md`
 - `docs/product/gnr8-single-site-clone-generation-gate-closeout.md`
 
+## MVP-12-VERIFY Single-Site Real Clone Executor Runtime Verification
+
+Canonical runtime-store integration verification for MVP-12:
+- `apps/platform/gnr8/single-site/single-site-real-clone-executor.integration.test.ts`
+- `docs/product/gnr8-single-site-real-clone-executor-runtime-verification-closeout.md`
+- `apps/platform/gnr8/single-site/single-site-real-clone-executor.ts`
+- `apps/platform/gnr8/single-site/single-site-real-clone-executor.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-generation-gate.ts`
+- `apps/platform/gnr8/runtime/runtime-store.ts`
+- `apps/platform/gnr8/runtime/artifact-builder.ts`
+- `docs/product/gnr8-single-site-real-clone-executor-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

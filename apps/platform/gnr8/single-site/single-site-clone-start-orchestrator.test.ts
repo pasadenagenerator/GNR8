@@ -28,6 +28,7 @@ function readModel(input: {
   limitations?: unknown[];
   clientId?: string;
   siteId?: string | null;
+  refs?: SingleSiteMigrationReadModel["refs"]["items"];
 } = {}): SingleSiteMigrationReadModel {
   const state = input.state ?? "source_evidence_review_required";
   const reviewStatus = input.reviewStatus ?? "accepted";
@@ -97,6 +98,14 @@ function readModel(input: {
       cloneBlockingItemCount: 0,
       refs: [],
       events: [],
+    },
+    refs: {
+      totalCount: input.refs?.length ?? 0,
+      activeCount: input.refs?.filter((ref) => !ref.superseded).length ?? 0,
+      staleCount: 0,
+      missingRequiredRolesForNextAction: [],
+      byRole: {},
+      items: input.refs ?? [],
     },
   } as unknown as SingleSiteMigrationReadModel;
 }
@@ -335,12 +344,42 @@ test("executor failure records migration_failed and no completed state", async (
 
 test("idempotent retry does not duplicate transitions when current state already requires review", async () => {
   let currentState: SingleSiteMigrationState = "source_evidence_review_required";
-  const deps = fakeDependencies({ model: () => readModel({ state: currentState }) });
+  const completedRefs: SingleSiteMigrationReadModel["refs"]["items"] = [
+    {
+      id: "ref-version",
+      role: "runtime_site_version_clone",
+      refType: "runtime_site_version_clone",
+      sourceSystem: "gnr8",
+      sourceTable: "gnr8_runtime_site_versions",
+      sourceRecordId: "version-1",
+      sourceWatermark: "watermark-1",
+      capturedAt: null,
+      freshUntil: null,
+      stale: false,
+      superseded: false,
+    },
+    {
+      id: "ref-artifact",
+      role: "runtime_artifact_clone",
+      refType: "runtime_artifact_clone",
+      sourceSystem: "gnr8",
+      sourceTable: "gnr8_runtime_artifacts",
+      sourceRecordId: "artifact-1",
+      sourceWatermark: "watermark-1",
+      capturedAt: null,
+      freshUntil: null,
+      stale: false,
+      superseded: false,
+    },
+  ];
+  const deps = fakeDependencies({ model: () => readModel({ state: currentState, refs: currentState === "clone_review_required" ? completedRefs : [] }) });
   const first = await startSingleSiteCloneGeneration(baseInput(), deps);
   currentState = "clone_review_required";
   const second = await startSingleSiteCloneGeneration(baseInput(), deps);
   assert.equal(first.status, "completed");
   assert.equal(second.status, "idempotent_replay");
+  assert.equal(second.siteVersionRef?.sourceRecordId, "version-1");
+  assert.equal(second.runtimeArtifactRef?.sourceRecordId, "artifact-1");
   assert.equal(deps.executorCalls, 1);
   assert.deepEqual(deps.transitions.map((transition) => transition.toState), [
     "clone_generation_started",

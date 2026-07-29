@@ -226,11 +226,7 @@ function assertRequiredIdentity(input: SingleSiteCloneExecutorInput): void {
 
 function clonePages(sourceVersion: CanonicalSiteVersionSnapshot, actor: string) {
   return sourceVersion.pages.map((page) => ({
-    pageId: deterministicUuid("single-site-clone-page", {
-      sourceSiteVersionId: sourceVersion.id,
-      sourcePageId: page.pageId,
-      path: page.path,
-    }),
+    pageId: page.pageId,
     path: page.path,
     title: page.title,
     structureModel: page.structureModel,

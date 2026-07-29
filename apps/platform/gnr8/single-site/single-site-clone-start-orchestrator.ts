@@ -312,6 +312,22 @@ function refFromTarget(sourceRecordId?: string | null, refType?: string): Single
   return id ? { sourceRecordId: id, refType } : null;
 }
 
+function refFromReadModel(
+  readModel: SingleSiteMigrationReadModel | null,
+  refRole: SingleSiteMigrationRefRole,
+): SingleSiteCloneStartRef | null {
+  const refs = readModel?.refs?.items?.filter((candidate) => candidate.role === refRole && !candidate.superseded) ?? [];
+  const latest = refs[refs.length - 1];
+  if (!latest) return null;
+  return {
+    sourceRecordId: latest.sourceRecordId,
+    refType: latest.refType,
+    sourceSystem: latest.sourceSystem,
+    sourceTable: latest.sourceTable,
+    sourceWatermark: latest.sourceWatermark,
+  };
+}
+
 function sanitizeError(error: unknown): { code: string; message: string } {
   if (error && typeof error === "object") {
     const record = error as Record<string, unknown>;
@@ -481,11 +497,15 @@ export async function startSingleSiteCloneGeneration(
   }
 
   if (isPostCompletionReplay(readModel)) {
+    const siteVersionRef = refFromReadModel(readModel, "runtime_site_version_clone");
+    const runtimeArtifactRef = refFromReadModel(readModel, "runtime_artifact_clone");
     return result({
       status: "idempotent_replay",
       mode,
       allowed: true,
       gate,
+      siteVersionRef,
+      runtimeArtifactRef,
       warnings: warningForGate(gate),
       recommendedNextAction: "review_clone_fidelity",
       mutatesSourceTruth: false,
