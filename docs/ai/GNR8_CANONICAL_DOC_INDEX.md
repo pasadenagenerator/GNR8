@@ -167,6 +167,21 @@ Canonical clone start orchestrator implementation:
 - `docs/architecture/gnr8-single-site-clone-start-boundary-design.md`
 - `docs/architecture/gnr8-single-site-clone-gate-runtime-integration-contract.md`
 
+## MVP-12 Single-Site Real Clone Executor Adapter Core
+
+Canonical real clone executor adapter implementation:
+- `apps/platform/gnr8/single-site/single-site-real-clone-executor.ts`
+- `apps/platform/gnr8/single-site/single-site-real-clone-executor.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-generation-gate.ts`
+- `apps/platform/gnr8/runtime/runtime-store.ts`
+- `apps/platform/gnr8/runtime/artifact-builder.ts`
+- `docs/product/gnr8-single-site-real-clone-executor-closeout.md`
+- `docs/product/gnr8-single-site-clone-start-orchestrator-closeout.md`
+- `docs/product/gnr8-single-site-clone-generation-gate-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

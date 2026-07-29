@@ -84,11 +84,16 @@ export type SingleSiteCloneExecutorResult = {
   runtimeArtifactRef?: SingleSiteCloneStartRef | null;
   rawTemplateArtifactRef?: SingleSiteCloneStartRef | null;
   previewRef?: SingleSiteCloneStartRef | null;
+  targetRefs?: SingleSiteCloneTargetRefs;
   evidenceRefs?: SingleSiteCloneStartRef[];
   sourceRefs?: SingleSiteCloneStartRef[];
   limitations?: unknown[];
   warnings?: string[];
   watermarks?: SingleSiteJsonObject;
+  idempotencyKey?: string | null;
+  operationKey?: string | null;
+  semanticOutputWatermark?: string | null;
+  reusedExisting?: boolean;
   errorCode?: string | null;
   errorMessage?: string | null;
 };
