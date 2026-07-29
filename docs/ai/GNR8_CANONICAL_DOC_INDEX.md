@@ -117,6 +117,36 @@ Canonical single-site capture completion integration implementation:
 - `docs/product/gnr8-single-site-state-evidence-writer-core-closeout.md`
 - `docs/product/gnr8-single-site-state-read-model-core-closeout.md`
 
+## MVP-8-VERIFY Single-Site Capture Spine Integration Verification
+
+Canonical verification closeout for MVP-8 capture completion integration:
+- `docs/product/gnr8-single-site-capture-spine-integration-verification-closeout.md`
+- `apps/platform/gnr8/single-site/single-site-capture-spine-adapter.ts`
+- `apps/platform/gnr8/single-site/single-site-capture-spine-adapter.test.ts`
+- `apps/platform/gnr8/single-site/single-site-capture-spine-adapter.integration.test.ts`
+- `docs/product/gnr8-single-site-capture-spine-integration-closeout.md`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/source-evidence-review-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `docs/product/gnr8-single-site-state-evidence-writer-core-closeout.md`
+- `docs/product/gnr8-single-site-state-read-model-core-closeout.md`
+
+## MVP-9 Single-Site Clone Generation Gate
+
+Canonical clone generation gate implementation:
+- `apps/platform/gnr8/single-site/single-site-clone-generation-gate.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-generation-gate.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-generation-gate.integration.test.ts`
+- `docs/product/gnr8-single-site-clone-generation-gate-closeout.md`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-capture-spine-adapter.ts`
+- `docs/product/gnr8-single-site-state-read-model-core-closeout.md`
+- `docs/product/gnr8-single-site-capture-spine-integration-closeout.md`
+- `docs/product/gnr8-single-site-capture-spine-integration-verification-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
