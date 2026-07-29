@@ -208,6 +208,19 @@ Canonical publish shadow result redaction transformer implementation:
 - `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-repository.ts`
 - `docs/product/gnr8-publish-shadow-result-read-model-core-closeout.md`
 
+## PASR-7 Command Center Publish Shadow Surfacing
+
+Canonical Command Center read-only publish shadow surfacing implementation:
+- `docs/product/gnr8-command-center-publish-shadow-surfacing-closeout.md`
+- `apps/platform/app/gnr8/command-center/hosting/[siteId]/page.tsx`
+- `apps/platform/gnr8/aaf/aaf-command-center-publish-shadow-view-model.ts`
+- `apps/platform/gnr8/aaf/aaf-command-center-publish-shadow-view-model.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-repository.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.test.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.test.ts`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:

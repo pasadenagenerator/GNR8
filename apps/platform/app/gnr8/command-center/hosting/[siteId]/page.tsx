@@ -2,9 +2,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { HostingDomainRecheckButton } from "@/app/gnr8/command-center/hosting/[siteId]/hosting-domain-recheck-button";
+import {
+  getCommandCenterPublishShadowSurfaceViewModel,
+  type CommandCenterPublishShadowSurfaceViewModel,
+} from "@/gnr8/aaf/aaf-command-center-publish-shadow-view-model";
 import type { HostingAssetDiagnosticEntry } from "@/gnr8/runtime/hosting-operations/hosting-asset-diagnostics-read-model";
 import type { HostingReadinessFinding } from "@/gnr8/runtime/hosting-operations/hosting-readiness-drilldown";
 import { getHostingOperationsReadModel } from "@/gnr8/runtime/hosting-operations/hosting-operations-read-model";
+import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
 function text(value: unknown): string {
   const normalized = String(value ?? "").trim();
@@ -102,10 +107,101 @@ function assetDiagnosticsTable(entries: readonly HostingAssetDiagnosticEntry[]) 
   );
 }
 
+function publishShadowField(label: string, value: string) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <dt style={{ marginBottom: 4, fontSize: 12, color: "#64748b" }}>{label}</dt>
+      <dd style={{ margin: 0, fontSize: 13, color: "#111827", fontWeight: 700, wordBreak: "break-word" }}>{text(value)}</dd>
+    </div>
+  );
+}
+
+function publishShadowSurfaceStateCopy(model: CommandCenterPublishShadowSurfaceViewModel): string {
+  if (model.state === "not_applicable") return "No active site version is available for publish shadow lookup.";
+  if (model.state === "empty") return "Shadow is not enabled or no persisted shadow records exist for this site version.";
+  if (model.state === "unavailable") return "Publish shadow read model is unavailable; this derived view is showing a safe fallback.";
+  if (model.state === "forbidden") return "Publish shadow diagnostics are not visible for this actor, scope, or surface.";
+  return model.operatorSummary;
+}
+
+function publishShadowPanel(model: CommandCenterPublishShadowSurfaceViewModel) {
+  return section(
+    "Publish Shadow Readiness",
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 12 }}>
+        <span style={{ border: "1px solid #bae6fd", borderRadius: 8, padding: "6px 10px", background: "#f0f9ff", color: "#075985", fontWeight: 800 }}>
+          Shadow-only
+        </span>
+        <span style={{ border: "1px solid #bbf7d0", borderRadius: 8, padding: "6px 10px", background: "#f0fdf4", color: "#166534", fontWeight: 800 }}>
+          Non-blocking
+        </span>
+        <span style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px", background: "#f8fafc", color: "#334155", fontWeight: 800 }}>
+          Derived Command Center view
+        </span>
+      </div>
+      <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>{publishShadowSurfaceStateCopy(model)}</p>
+      <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>{model.nonEnforcementLabel}</p>
+      <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>{model.derivedOnlyLabel}</p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+        {metric("Shadow Status", model.shadowStatusLabel)}
+        {metric("Severity", model.severityLabel)}
+        {metric("Readiness Result", model.readinessLabel)}
+        {metric("Freshness", model.freshnessLabel)}
+      </div>
+
+      <article style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, display: "grid", gap: 8 }}>
+        <h3 style={{ margin: 0, fontSize: 15, color: "#0f172a" }}>Recommended Next Action</h3>
+        <p style={{ margin: 0, fontSize: 13, color: "#111827", fontWeight: 700 }}>{model.recommendedActionLabel}</p>
+        <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>{model.recommendedActionReasonLabel}</p>
+      </article>
+
+      <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, margin: 0 }}>
+        {publishShadowField("DDOM Status", model.ddomStatusLabel)}
+        {publishShadowField("DDOM Readiness", model.ddomReadinessLabel)}
+        {publishShadowField("DDOM Freshness", model.ddomFreshnessLabel)}
+        {publishShadowField("DDOM Captured", model.ddomCapturedAtLabel)}
+        {publishShadowField("Publish Target", model.publishTargetStatusLabel)}
+        {publishShadowField("Target Environment", model.publishTargetEnvironmentLabel)}
+        {publishShadowField("Target Stage", model.publishTargetStageLabel)}
+        {publishShadowField("Launch Signoff", model.approvalLaunchSignoffLabel)}
+        {publishShadowField("Publish Activation Approval", model.approvalPublishActivationLabel)}
+        {publishShadowField("Approval Decision", model.approvalDecisionStatusLabel)}
+        {publishShadowField("Evidence", model.evidenceStatusLabel)}
+        {publishShadowField("Evidence Freshness", model.evidenceFreshnessLabel)}
+        {publishShadowField("Source Truth", model.sourceTruthSummaryLabel)}
+      </dl>
+
+      <div style={{ display: "grid", gap: 6, fontSize: 13, color: "#374151" }}>
+        <p style={{ margin: 0 }}>
+          <strong>Warnings:</strong> {text(model.warningSummaryLabel)}
+        </p>
+        <p style={{ margin: 0 }}>
+          <strong>Limitations:</strong> {text(model.limitationSummaryLabel)}
+        </p>
+        <p style={{ margin: 0 }}>
+          <strong>Boundary:</strong> {list(model.boundaryLabels)}
+        </p>
+        {model.visibleLinks.length > 0 ? (
+          <p style={{ margin: 0 }}>
+            <strong>Role-safe refs:</strong>{" "}
+            {model.visibleLinks.map((link) => `${link.label}: ${link.ref}`).join(", ")}
+          </p>
+        ) : (
+          <p style={{ margin: 0 }}>
+            <strong>Role-safe refs:</strong> No evidence, source, audit, approval, DDOM, or publish target refs are visible for this projection.
+          </p>
+        )}
+      </div>
+    </div>,
+  );
+}
+
 export default async function CommandCenterHostingSitePage(props: {
   params: Promise<{ siteId: string }>;
 }) {
   const { siteId } = await props.params;
+  const superadminUserId = await requireSuperadminUserIdForPage();
   const model = await getHostingOperationsReadModel(siteId);
 
   if (!model.site.found) {
@@ -134,6 +230,17 @@ export default async function CommandCenterHostingSitePage(props: {
     );
   }
 
+  const publishShadow = await getCommandCenterPublishShadowSurfaceViewModel({
+    actorId: superadminUserId,
+    actorRole: "platform_superadmin",
+    siteId: model.site.runtimeSiteId ?? model.site.siteId,
+    siteVersionId: model.publish.lastPublish?.siteVersionId ?? model.runtime.activeVersion?.id ?? null,
+    runtimeArtifactId: model.publish.lastPublish?.artifactId ?? model.runtime.activeArtifact?.id ?? null,
+    intendedPublishTarget: "production",
+    intendedPublishStage: model.runtime.activeArtifact?.publishStage ?? "production",
+    trustedPublishEnvironment: "production",
+  });
+
   return (
     <>
       <section style={{ border: "1px solid #dbe2ea", background: "#fff", borderRadius: 12, padding: 14 }}>
@@ -151,6 +258,8 @@ export default async function CommandCenterHostingSitePage(props: {
           {metric("Runtime Readiness", model.readiness.state)}
         </div>
       </section>
+
+      {publishShadowPanel(publishShadow)}
 
       {section(
         "Readiness Drilldown",
