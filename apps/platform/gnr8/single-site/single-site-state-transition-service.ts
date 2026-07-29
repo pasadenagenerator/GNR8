@@ -10,6 +10,7 @@ import {
   type SingleSiteRetentionClass,
   type SingleSiteTransitionResult,
   isSingleSiteTerminalState,
+  SingleSiteIdempotencyConflictError,
   SingleSiteTransitionError,
 } from "./single-site-state-contracts";
 import {
@@ -118,6 +119,77 @@ function transitionKey(input: TransitionSingleSiteMigrationInput, fromState: Sin
   return input.transitionKey?.trim() || `${fromState}.${input.toState}`;
 }
 
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableJsonValue);
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const record = value as Record<string, unknown>;
+    return Object.keys(record)
+      .sort((left, right) => left.localeCompare(right))
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = stableJsonValue(record[key]);
+        return acc;
+      }, {});
+  }
+  return value ?? null;
+}
+
+function jsonSemanticValue(value: unknown): string {
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(stableJsonValue(JSON.parse(value)));
+    } catch {
+      return JSON.stringify(stableJsonValue(value));
+    }
+  }
+  return JSON.stringify(stableJsonValue(value));
+}
+
+function textSemanticValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function assertExistingTransitionMatchesInput(
+  input: TransitionSingleSiteMigrationInput,
+  existingEvent: { [key: string]: unknown },
+): void {
+  const attempted: Record<string, unknown> = {
+    transition_key: input.transitionKey ? input.transitionKey.trim() : existingEvent.transition_key,
+    transition_reason: textSemanticValue(input.transitionReason),
+    required_refs_json: input.requiredRefsJson ?? {},
+    before_ref_json: input.beforeRefJson ?? {},
+    after_ref_json: input.afterRefJson ?? {},
+    actor_type: input.actor.actorType,
+    actor_id: textSemanticValue(input.actor.actorId),
+    actor_role: textSemanticValue(input.actor.actorRole),
+    aaf_audit_event_id: textSemanticValue(input.aafAuditEventId),
+    aaf_evidence_package_id: textSemanticValue(input.aafEvidencePackageId),
+    aaf_approval_request_id: textSemanticValue(input.aafApprovalRequestId),
+    aaf_approval_decision_id: textSemanticValue(input.aafApprovalDecisionId),
+    source_watermark: textSemanticValue(input.sourceWatermark),
+    payload_hash: textSemanticValue(input.payloadHash),
+    privacy_label: textSemanticValue(input.privacyLabel) ?? "client_confidential",
+    retention_class: textSemanticValue(input.retentionClass) ?? "compliance_long",
+    metadata_json: input.metadataJson ?? {},
+  };
+  const jsonFields = new Set(["required_refs_json", "before_ref_json", "after_ref_json", "metadata_json"]);
+  const driftedFields = Object.keys(attempted).filter((field) => {
+    const attemptedValue = attempted[field];
+    const existingValue = existingEvent[field];
+    return jsonFields.has(field)
+      ? jsonSemanticValue(attemptedValue) !== jsonSemanticValue(existingValue)
+      : textSemanticValue(attemptedValue) !== textSemanticValue(existingValue);
+  });
+  if (driftedFields.length > 0) {
+    throw new SingleSiteIdempotencyConflictError(
+      "gnr8_single_site_migration_state_events",
+      input.idempotencyKey,
+      driftedFields,
+    );
+  }
+}
+
 export class SingleSiteStateTransitionService {
   constructor(private readonly repository = new SingleSiteStateWriterRepository()) {}
 
@@ -131,15 +203,7 @@ export class SingleSiteStateTransitionService {
         if (existingEvent.migration_id !== input.migrationId || existingEvent.to_state !== input.toState) {
           throw new SingleSiteTransitionError(`transition idempotency key ${input.idempotencyKey} belongs to a different transition`);
         }
-        if (migration.current_state !== input.toState) {
-          await this.repository.updateMigrationCurrentState(tx, {
-            migrationId: input.migrationId,
-            toState: input.toState,
-            latestStateEventId: existingEvent.id,
-            latestSourceEvidenceReviewId: input.sourceEvidenceReviewId ?? undefined,
-            terminalAt: isSingleSiteTerminalState(input.toState) ? new Date().toISOString() : null,
-          });
-        }
+        assertExistingTransitionMatchesInput(input, existingEvent);
         return {
           migrationId: migration.id,
           stateEventId: existingEvent.id,
@@ -147,7 +211,7 @@ export class SingleSiteStateTransitionService {
           toState: existingEvent.to_state,
           fromStage: existingEvent.from_stage ?? migration.current_stage,
           toStage: existingEvent.to_stage,
-          stateVersion: migration.current_state === input.toState ? migration.state_version : migration.state_version + 1,
+          stateVersion: migration.state_version,
           reusedExisting: true,
         };
       }

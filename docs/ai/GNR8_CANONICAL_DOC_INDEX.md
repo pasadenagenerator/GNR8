@@ -147,6 +147,26 @@ Canonical clone generation gate implementation:
 - `docs/product/gnr8-single-site-capture-spine-integration-closeout.md`
 - `docs/product/gnr8-single-site-capture-spine-integration-verification-closeout.md`
 
+## MVP-10 Single-Site Clone Start Boundary Design
+
+Canonical clone start boundary design docs:
+- `docs/architecture/gnr8-single-site-clone-start-boundary-design.md`
+- `docs/architecture/gnr8-single-site-clone-gate-runtime-integration-contract.md`
+- `docs/product/gnr8-single-site-clone-start-operator-workflow.md`
+- `docs/product/gnr8-single-site-clone-start-boundary-closeout.md`
+
+## MVP-11 Single-Site Clone Start Orchestrator Core
+
+Canonical clone start orchestrator implementation:
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-start-orchestrator.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-clone-generation-gate.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `docs/product/gnr8-single-site-clone-start-orchestrator-closeout.md`
+- `docs/architecture/gnr8-single-site-clone-start-boundary-design.md`
+- `docs/architecture/gnr8-single-site-clone-gate-runtime-integration-contract.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
