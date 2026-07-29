@@ -83,6 +83,21 @@ Canonical single-site state and source evidence writer implementation:
 - `apps/platform/supabase/migrations/20260729120000_single_site_state_evidence_spine.sql`
 - `docs/product/gnr8-single-site-state-evidence-writer-core-closeout.md`
 
+## MVP-7 Single-Site State Read Model Core
+
+Canonical single-site state read model implementation:
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.integration.test.ts`
+- `docs/product/gnr8-single-site-state-read-model-core-closeout.md`
+- `apps/platform/supabase/migrations/20260729120000_single_site_state_evidence_spine.sql`
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/source-evidence-review-service.ts`
+- `docs/product/gnr8-single-site-state-evidence-writer-core-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
