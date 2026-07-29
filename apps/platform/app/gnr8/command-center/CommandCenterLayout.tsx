@@ -13,10 +13,11 @@ type Props = {
   children: ReactNode;
 };
 
-type TabKey = "overview" | "sites" | "hosting" | "migration-batches" | "agencies";
+type TabKey = "overview" | "ops-inbox" | "sites" | "hosting" | "migration-batches" | "agencies";
 
 const TABS: WorkspaceTabInput[] = [
   { key: "overview", href: "/gnr8/command-center", label: "Overview" },
+  { key: "ops-inbox", href: "/gnr8/command-center/ops-inbox", label: "Ops Inbox" },
   { key: "sites", href: "/gnr8/command-center/sites", label: "Sites" },
   { key: "hosting", href: "/gnr8/command-center/hosting", label: "Hosting" },
   { key: "migration-batches", href: "/gnr8/command-center/migration-batches", label: "Migration Batches" },
@@ -53,6 +54,13 @@ const COMMAND_CENTER_SHORTCUTS: WorkspaceShortcut[] = [
     icon: "H",
   },
   {
+    id: "open-ops-inbox",
+    label: "Open Ops Inbox",
+    href: "/gnr8/command-center/ops-inbox",
+    description: "Review derived publish shadow work items",
+    icon: "O",
+  },
+  {
     id: "open-migration-batches",
     label: "Open Migration Batches",
     href: "/gnr8/command-center/migration-batches",
@@ -62,6 +70,7 @@ const COMMAND_CENTER_SHORTCUTS: WorkspaceShortcut[] = [
 ];
 
 function resolveActiveTab(pathname: string): TabKey {
+  if (pathname.startsWith("/gnr8/command-center/ops-inbox")) return "ops-inbox";
   if (pathname.startsWith("/gnr8/command-center/sites")) return "sites";
   if (pathname.startsWith("/gnr8/command-center/hosting")) return "hosting";
   if (pathname.startsWith("/gnr8/command-center/migration-batches")) return "migration-batches";
@@ -70,6 +79,10 @@ function resolveActiveTab(pathname: string): TabKey {
 }
 
 function buildCommandCenterBreadcrumbs(activeTab: TabKey): WorkspaceBreadcrumbItem[] {
+  if (activeTab === "ops-inbox") {
+    return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Ops Inbox" }];
+  }
+
   if (activeTab === "sites") {
     return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Sites" }];
   }
@@ -137,6 +150,12 @@ export default function CommandCenterLayout(props: Props) {
       commandPalette={{
         routes: [
           { id: "route-command-center", label: "Command Center", href: "/gnr8/command-center", sublabel: "Key route" },
+          {
+            id: "route-command-center-ops-inbox",
+            label: "Command Center Ops Inbox",
+            href: "/gnr8/command-center/ops-inbox",
+            sublabel: "Key route",
+          },
           { id: "route-command-center-sites", label: "Command Center Sites", href: "/gnr8/command-center/sites", sublabel: "Key route" },
           { id: "route-command-center-hosting", label: "Command Center Hosting", href: "/gnr8/command-center/hosting", sublabel: "Key route" },
           {

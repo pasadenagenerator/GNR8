@@ -247,6 +247,28 @@ Canonical read-only derived Ops Inbox publish shadow surfacing implementation:
 - `docs/product/gnr8-command-center-publish-shadow-surfacing-closeout.md`
 - `docs/product/gnr8-command-center-publish-shadow-surfacing-verification-closeout.md`
 
+## OPS-1 First-Class Internal Ops Inbox Shell
+
+Canonical first-class internal Ops Inbox shell architecture docs:
+- `docs/architecture/gnr8-ops-inbox-first-class-shell-architecture.md`
+- `docs/architecture/gnr8-ops-inbox-derived-work-item-contract.md`
+- `docs/product/gnr8-ops-inbox-operator-workflow.md`
+- `docs/product/gnr8-ops-inbox-first-class-shell-closeout.md`
+
+## OPS-2 Minimal Internal Ops Inbox Shell
+
+Canonical minimal internal Ops Inbox shell implementation:
+- `docs/product/gnr8-ops-inbox-minimal-shell-closeout.md`
+- `apps/platform/app/gnr8/command-center/ops-inbox/page.tsx`
+- `apps/platform/app/gnr8/command-center/ops-inbox/_components/OpsInboxShell.tsx`
+- `apps/platform/app/gnr8/command-center/ops-inbox/ops-inbox-shell.test.tsx`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-ops-inbox-view-model.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-ops-inbox-view-model.test.ts`
+- `docs/architecture/gnr8-ops-inbox-first-class-shell-architecture.md`
+- `docs/architecture/gnr8-ops-inbox-derived-work-item-contract.md`
+- `docs/product/gnr8-ops-inbox-operator-workflow.md`
+- `docs/product/gnr8-ops-inbox-first-class-shell-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
