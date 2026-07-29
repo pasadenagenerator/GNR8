@@ -186,6 +186,28 @@ Canonical publish shadow result read model core implementation:
 - `docs/product/gnr8-publish-shadow-evidence-review-workflow.md`
 - `docs/product/gnr8-publish-shadow-result-surfacing-closeout.md`
 
+## PASR-5 Publish Shadow Access And Redaction Architecture
+
+Canonical publish shadow access and redaction architecture docs:
+- `docs/architecture/gnr8-publish-shadow-access-redaction-architecture.md`
+- `docs/architecture/gnr8-publish-shadow-role-visibility-matrix.md`
+- `docs/product/gnr8-publish-shadow-operator-visibility-workflow.md`
+- `docs/product/gnr8-publish-shadow-access-redaction-closeout.md`
+
+## PASR-6 Publish Shadow Result Redaction Transformer
+
+Canonical publish shadow result redaction transformer implementation:
+- `docs/product/gnr8-publish-shadow-result-redaction-transformer-closeout.md`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-redaction.test.ts`
+- `docs/architecture/gnr8-publish-shadow-access-redaction-architecture.md`
+- `docs/architecture/gnr8-publish-shadow-role-visibility-matrix.md`
+- `docs/product/gnr8-publish-shadow-operator-visibility-workflow.md`
+- `docs/product/gnr8-publish-shadow-access-redaction-closeout.md`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-model.ts`
+- `apps/platform/gnr8/aaf/aaf-publish-shadow-result-read-repository.ts`
+- `docs/product/gnr8-publish-shadow-result-read-model-core-closeout.md`
+
 ## DDOM-1 Domain And DNS Operating Model
 
 Canonical domain and DNS operating model docs:
