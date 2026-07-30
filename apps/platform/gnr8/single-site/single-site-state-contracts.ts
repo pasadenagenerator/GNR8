@@ -124,6 +124,103 @@ export const SINGLE_SITE_CLONE_REVIEW_EVENT_ACTIONS = [
   "comment_added",
 ] as const;
 
+export const SINGLE_SITE_IMPROVEMENT_PROPOSAL_PLAN_STATUSES = [
+  "not_started",
+  "planning_required",
+  "draft",
+  "ready_for_review",
+  "in_review",
+  "changes_requested",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_CATEGORIES = [
+  "content_clarity",
+  "visual_design",
+  "brand_consistency",
+  "conversion",
+  "seo",
+  "aeo",
+  "accessibility",
+  "performance",
+  "mobile_responsive",
+  "information_architecture",
+  "trust_credibility",
+  "forms_and_leads",
+  "analytics_measurement",
+  "technical_cleanup",
+  "legal_or_compliance",
+  "unknown_or_manual",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_RISK_LEVELS = ["low", "medium", "high", "unknown"] as const;
+export const SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS = ["low", "medium", "high", "unknown"] as const;
+export const SINGLE_SITE_IMPROVEMENT_EFFORT_LEVELS = ["small", "medium", "large", "unknown"] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_PROPOSAL_REF_ROLES = [
+  "clone_review",
+  "clone_review_fidelity_finding",
+  "runtime_site_version_clone",
+  "runtime_artifact_clone",
+  "source_evidence_review",
+  "source_evidence_ref",
+  "source_capture_ref",
+  "business_context_ref",
+  "website_understanding_ref",
+  "visual_continuity_ref",
+  "generated_proposal_artifact_ref",
+  "generated_proposal_bundle_ref",
+  "ai_provider_input_ref",
+  "ai_provider_output_ref",
+  "operator_note_ref",
+  "proposal_approval_request",
+  "proposal_approval_decision",
+  "proposal_evidence_package",
+  "implementation_authorization_request",
+  "implementation_authorization_decision",
+  "content_approval_ref",
+  "launch_approval_ref",
+  "external_reference",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_PROPOSAL_EVENT_ACTIONS = [
+  "created",
+  "recommendation_added",
+  "finding_added",
+  "ready_for_review",
+  "review_started",
+  "changes_requested",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+  "implementation_authorization_attached",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_PROPOSAL_FINDING_STATUSES = [
+  "open",
+  "resolved_by_recommendation",
+  "accepted_limitation",
+  "deferred",
+  "superseded",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_PROPOSAL_RECOMMENDATION_STATUSES = [
+  "draft",
+  "ready_for_review",
+  "changes_requested",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "deferred",
+  "superseded",
+] as const;
+
 export const SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES = [
   "unknown",
   "complete",
@@ -351,6 +448,15 @@ export type SingleSiteCloneFidelitySeverity = (typeof SINGLE_SITE_CLONE_FIDELITY
 export type SingleSiteCloneFidelityCategory = (typeof SINGLE_SITE_CLONE_FIDELITY_CATEGORIES)[number];
 export type SingleSiteCloneReviewRefRole = (typeof SINGLE_SITE_CLONE_REVIEW_REF_ROLES)[number];
 export type SingleSiteCloneReviewEventAction = (typeof SINGLE_SITE_CLONE_REVIEW_EVENT_ACTIONS)[number];
+export type SingleSiteImprovementProposalPlanStatus = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_PLAN_STATUSES)[number];
+export type SingleSiteImprovementCategory = (typeof SINGLE_SITE_IMPROVEMENT_CATEGORIES)[number];
+export type SingleSiteImprovementRiskLevel = (typeof SINGLE_SITE_IMPROVEMENT_RISK_LEVELS)[number];
+export type SingleSiteImprovementImpactLevel = (typeof SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS)[number];
+export type SingleSiteImprovementEffortLevel = (typeof SINGLE_SITE_IMPROVEMENT_EFFORT_LEVELS)[number];
+export type SingleSiteImprovementProposalRefRole = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_REF_ROLES)[number];
+export type SingleSiteImprovementProposalEventAction = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_EVENT_ACTIONS)[number];
+export type SingleSiteImprovementProposalFindingStatus = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_FINDING_STATUSES)[number];
+export type SingleSiteImprovementProposalRecommendationStatus = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_RECOMMENDATION_STATUSES)[number];
 export type SingleSiteSourceEvidenceCompletenessStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES)[number];
 export type SingleSiteSourceEvidenceReviewDecision = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_DECISIONS)[number];
 export type SingleSiteEvidenceItemCategory = (typeof SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES)[number];

@@ -413,7 +413,7 @@ test("evidence accepted with limitations preserves limitations", () => {
 
 test("state-specific next actions are projected without enforcing transitions", () => {
   assert.equal(model("clone_review_required").recommendedNextAction.actionKey, "review_clone");
-  assert.equal(model("improvement_proposal_ready").recommendedNextAction.actionKey, "approve_or_reject_proposal");
+  assert.equal(model("improvement_proposal_ready").recommendedNextAction.actionKey, "review_improvement_proposal");
   assert.equal(model("domain_readiness_required").recommendedNextAction.actionKey, "prepare_domain_readiness");
   assert.equal(model("subscription_required").recommendedNextAction.actionKey, "prepare_subscription_hosting");
   assert.equal(model("publish_ready", { refs: [migrationRef("publish_target"), migrationRef("rollback_target"), migrationRef("aaf_approval_decision")] }).recommendedNextAction.actionKey, "prepare_publish");
@@ -443,7 +443,7 @@ test("clone review projection gates proposal readiness and carries limitations",
   assert.deepEqual(readModel.cloneReview.limitations, [{ category: "font", reason: "accepted fallback" }]);
   assert.equal(readModel.cloneReview.cloneAcceptanceReady, true);
   assert.equal(readModel.workflowReadiness.cloneProposalPlanningAllowed, true);
-  assert.equal(readModel.recommendedNextAction.actionKey, "prepare_improvement_proposal_with_limitations");
+  assert.equal(readModel.recommendedNextAction.actionKey, "start_improvement_proposal_planning");
 });
 
 test("retry and rejected clone reviews block proposal planning", () => {

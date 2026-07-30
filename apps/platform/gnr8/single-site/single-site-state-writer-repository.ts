@@ -11,6 +11,15 @@ import {
   SINGLE_SITE_CLONE_REVIEW_EVENT_ACTIONS,
   SINGLE_SITE_CLONE_REVIEW_REF_ROLES,
   SINGLE_SITE_CLONE_REVIEW_STATUSES,
+  SINGLE_SITE_IMPROVEMENT_CATEGORIES,
+  SINGLE_SITE_IMPROVEMENT_EFFORT_LEVELS,
+  SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS,
+  SINGLE_SITE_IMPROVEMENT_PROPOSAL_EVENT_ACTIONS,
+  SINGLE_SITE_IMPROVEMENT_PROPOSAL_FINDING_STATUSES,
+  SINGLE_SITE_IMPROVEMENT_PROPOSAL_PLAN_STATUSES,
+  SINGLE_SITE_IMPROVEMENT_PROPOSAL_RECOMMENDATION_STATUSES,
+  SINGLE_SITE_IMPROVEMENT_PROPOSAL_REF_ROLES,
+  SINGLE_SITE_IMPROVEMENT_RISK_LEVELS,
   SINGLE_SITE_CLOSEOUT_OUTCOMES,
   SINGLE_SITE_CLOSEOUT_STATUSES,
   SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES,
@@ -40,6 +49,15 @@ import {
   type SingleSiteCloseoutStatus,
   type SingleSiteEvidenceItemCategory,
   type SingleSiteEvidenceItemStatus,
+  type SingleSiteImprovementCategory,
+  type SingleSiteImprovementEffortLevel,
+  type SingleSiteImprovementImpactLevel,
+  type SingleSiteImprovementProposalEventAction,
+  type SingleSiteImprovementProposalFindingStatus,
+  type SingleSiteImprovementProposalPlanStatus,
+  type SingleSiteImprovementProposalRecommendationStatus,
+  type SingleSiteImprovementProposalRefRole,
+  type SingleSiteImprovementRiskLevel,
   SingleSiteIdempotencyConflictError,
   type SingleSiteJsonObject,
   type SingleSiteMigrationRefRole,
@@ -431,6 +449,199 @@ export type SingleSiteCloneReviewEventRow = {
   created_at: string;
 };
 
+export type SingleSiteImprovementProposalPlanRow = {
+  id: string;
+  tenant_id: string;
+  client_id: string;
+  site_id: string;
+  migration_id: string;
+  clone_review_id: string;
+  source_evidence_review_id: string;
+  clone_site_version_ref: string;
+  runtime_artifact_ref: string;
+  plan_status: SingleSiteImprovementProposalPlanStatus;
+  plan_version: number;
+  proposal_scope_json: unknown;
+  title: string | null;
+  summary: string | null;
+  limitations_json: unknown;
+  warnings_json: unknown;
+  operator_notes_json: unknown;
+  decision_summary_json: unknown;
+  approval_refs_json: unknown;
+  implementation_authorization_refs_json: unknown;
+  implementation_authorization_attached: boolean;
+  supersedes_plan_id: string | null;
+  superseded_by_plan_id: string | null;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  idempotency_key: string;
+  request_id: string | null;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  semantic_watermark: string | null;
+  payload_hash: string | null;
+  metadata_json: unknown;
+  reviewed_at: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SingleSiteImprovementProposalRefRow = {
+  id: string;
+  plan_id: string;
+  migration_id: string;
+  ref_role: SingleSiteImprovementProposalRefRole;
+  ref_type: string;
+  source_system: string;
+  source_table: string | null;
+  source_record_id: string;
+  source_version: string | null;
+  source_watermark: string | null;
+  semantic_watermark: string | null;
+  content_hash: string | null;
+  media_type: string | null;
+  captured_at: string | null;
+  fresh_until: string | null;
+  evidence_only: boolean;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  correlation_id: string;
+  idempotency_key: string;
+  metadata_json: unknown;
+  created_at: string;
+};
+
+export type SingleSiteImprovementProposalRecommendationRow = {
+  id: string;
+  plan_id: string;
+  migration_id: string;
+  recommendation_key: string;
+  title: string;
+  target_scope: string;
+  target_refs_json: unknown;
+  category: SingleSiteImprovementCategory;
+  risk: SingleSiteImprovementRiskLevel;
+  impact: SingleSiteImprovementImpactLevel;
+  effort: SingleSiteImprovementEffortLevel;
+  confidence: "low" | "medium" | "high";
+  priority: "p0" | "p1" | "p2" | "p3";
+  rationale: string;
+  expected_outcome: string | null;
+  implementation_notes: string | null;
+  exclusions_json: unknown;
+  limitations_json: unknown;
+  linked_finding_ids_json: unknown;
+  source_ref_ids_json: unknown;
+  advisory_ref_ids_json: unknown;
+  recommendation_status: SingleSiteImprovementProposalRecommendationStatus;
+  implementation_authorization_status: string;
+  blocks_proposal_approval: boolean;
+  limitation_accepted: boolean;
+  decision_json: unknown;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  correlation_id: string;
+  idempotency_key: string;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  semantic_watermark: string | null;
+  metadata_json: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SingleSiteImprovementProposalFindingRow = {
+  id: string;
+  plan_id: string;
+  migration_id: string;
+  finding_key: string;
+  category: SingleSiteImprovementCategory;
+  risk: SingleSiteImprovementRiskLevel;
+  impact: SingleSiteImprovementImpactLevel;
+  summary: string;
+  evidence_confidence: "low" | "medium" | "high";
+  finding_status: SingleSiteImprovementProposalFindingStatus;
+  blocks_proposal_approval: boolean;
+  accepted_limitation: boolean;
+  source_ref_ids_json: unknown;
+  clone_fidelity_ref_ids_json: unknown;
+  recommendation_ids_json: unknown;
+  limitation_json: unknown;
+  decision_json: unknown;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  correlation_id: string;
+  idempotency_key: string;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  semantic_watermark: string | null;
+  metadata_json: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SingleSiteImprovementProposalEventRow = {
+  id: string;
+  plan_id: string;
+  migration_id: string;
+  event_index: number;
+  event_action: SingleSiteImprovementProposalEventAction;
+  from_status: SingleSiteImprovementProposalPlanStatus | null;
+  to_status: SingleSiteImprovementProposalPlanStatus | null;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  details_json: unknown;
+  limitations_json: unknown;
+  warnings_json: unknown;
+  approval_refs_json: unknown;
+  implementation_authorization_refs_json: unknown;
+  source_watermark: string | null;
+  semantic_watermark: string | null;
+  payload_hash: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  idempotency_key: string;
+  request_id: string | null;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  metadata_json: unknown;
+  occurred_at: string;
+  created_at: string;
+};
+
+export type SingleSiteImprovementProposalSupersessionRow = {
+  id: string;
+  migration_id: string;
+  superseded_plan_id: string;
+  replacement_plan_id: string | null;
+  supersession_reason: string;
+  source_ref_json: unknown;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  idempotency_key: string;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  semantic_watermark: string | null;
+  metadata_json: unknown;
+  created_at: string;
+};
+
 type InsertableRow = Record<string, unknown>;
 
 export type CreateSingleSiteMigrationInput = SingleSiteWriteEnvelope & {
@@ -767,6 +978,147 @@ export type InsertCloneReviewEventInput = SingleSiteWriteEnvelope & {
   sourceWatermark?: string | null;
   payloadHash?: string | null;
   occurredAt?: string | null;
+};
+
+export type CreateImprovementProposalPlanInput = SingleSiteWriteEnvelope & {
+  tenantId: string;
+  clientId: string;
+  siteId: string;
+  migrationId: string;
+  cloneReviewId: string;
+  sourceEvidenceReviewId: string;
+  cloneSiteVersionRef: string;
+  runtimeArtifactRef: string;
+  planStatus?: SingleSiteImprovementProposalPlanStatus | null;
+  planVersion?: number | null;
+  proposalScopeJson?: SingleSiteJsonObject;
+  title?: string | null;
+  summary?: string | null;
+  limitationsJson?: unknown[];
+  warningsJson?: unknown[];
+  operatorNotesJson?: unknown[];
+  decisionSummaryJson?: SingleSiteJsonObject;
+  approvalRefsJson?: SingleSiteJsonObject;
+  implementationAuthorizationRefsJson?: SingleSiteJsonObject;
+  implementationAuthorizationAttached?: boolean | null;
+  supersedesPlanId?: string | null;
+  actor: SingleSiteActorInput;
+  semanticWatermark?: string | null;
+  payloadHash?: string | null;
+};
+
+export type UpdateImprovementProposalPlanStatusInput = SingleSiteWriteEnvelope & {
+  planId: string;
+  planStatus: SingleSiteImprovementProposalPlanStatus;
+  summary?: string | null;
+  limitationsJson?: unknown[];
+  warningsJson?: unknown[];
+  decisionSummaryJson?: SingleSiteJsonObject;
+  approvalRefsJson?: SingleSiteJsonObject;
+  implementationAuthorizationRefsJson?: SingleSiteJsonObject;
+  implementationAuthorizationAttached?: boolean | null;
+  supersededByPlanId?: string | null;
+  actor?: SingleSiteActorInput | null;
+  reviewedAt?: string | null;
+  decidedAt?: string | null;
+};
+
+export type InsertImprovementProposalRefInput = SingleSiteWriteEnvelope & {
+  planId: string;
+  migrationId: string;
+  refRole: SingleSiteImprovementProposalRefRole;
+  refType: string;
+  sourceSystem?: string | null;
+  sourceTable?: string | null;
+  sourceRecordId: string;
+  sourceVersion?: string | null;
+  sourceWatermark?: string | null;
+  semanticWatermark?: string | null;
+  contentHash?: string | null;
+  mediaType?: string | null;
+  capturedAt?: string | null;
+  freshUntil?: string | null;
+  evidenceOnly?: boolean | null;
+};
+
+export type UpsertImprovementProposalRecommendationInput = SingleSiteWriteEnvelope & {
+  planId: string;
+  migrationId: string;
+  recommendationKey: string;
+  title: string;
+  targetScope?: string | null;
+  targetRefsJson?: unknown[];
+  category: SingleSiteImprovementCategory;
+  risk?: SingleSiteImprovementRiskLevel | null;
+  impact?: SingleSiteImprovementImpactLevel | null;
+  effort?: SingleSiteImprovementEffortLevel | null;
+  confidence?: "low" | "medium" | "high" | null;
+  priority?: "p0" | "p1" | "p2" | "p3" | null;
+  rationale: string;
+  expectedOutcome?: string | null;
+  implementationNotes?: string | null;
+  exclusionsJson?: unknown[];
+  limitationsJson?: unknown[];
+  linkedFindingIdsJson?: unknown[];
+  sourceRefIdsJson?: unknown[];
+  advisoryRefIdsJson?: unknown[];
+  recommendationStatus?: SingleSiteImprovementProposalRecommendationStatus | null;
+  implementationAuthorizationStatus?: string | null;
+  blocksProposalApproval?: boolean | null;
+  limitationAccepted?: boolean | null;
+  decisionJson?: SingleSiteJsonObject;
+  actor: SingleSiteActorInput;
+  semanticWatermark?: string | null;
+};
+
+export type UpsertImprovementProposalFindingInput = SingleSiteWriteEnvelope & {
+  planId: string;
+  migrationId: string;
+  findingKey: string;
+  category: SingleSiteImprovementCategory;
+  risk?: SingleSiteImprovementRiskLevel | null;
+  impact?: SingleSiteImprovementImpactLevel | null;
+  summary: string;
+  evidenceConfidence?: "low" | "medium" | "high" | null;
+  findingStatus?: SingleSiteImprovementProposalFindingStatus | null;
+  blocksProposalApproval?: boolean | null;
+  acceptedLimitation?: boolean | null;
+  sourceRefIdsJson?: unknown[];
+  cloneFidelityRefIdsJson?: unknown[];
+  recommendationIdsJson?: unknown[];
+  limitationJson?: SingleSiteJsonObject;
+  decisionJson?: SingleSiteJsonObject;
+  actor: SingleSiteActorInput;
+  semanticWatermark?: string | null;
+};
+
+export type InsertImprovementProposalEventInput = SingleSiteWriteEnvelope & {
+  planId: string;
+  migrationId: string;
+  eventIndex: number;
+  eventAction: SingleSiteImprovementProposalEventAction;
+  fromStatus?: SingleSiteImprovementProposalPlanStatus | null;
+  toStatus?: SingleSiteImprovementProposalPlanStatus | null;
+  actor: SingleSiteActorInput;
+  detailsJson?: SingleSiteJsonObject;
+  limitationsJson?: unknown[];
+  warningsJson?: unknown[];
+  approvalRefsJson?: SingleSiteJsonObject;
+  implementationAuthorizationRefsJson?: SingleSiteJsonObject;
+  sourceWatermark?: string | null;
+  semanticWatermark?: string | null;
+  payloadHash?: string | null;
+  occurredAt?: string | null;
+};
+
+export type InsertImprovementProposalSupersessionInput = SingleSiteWriteEnvelope & {
+  migrationId: string;
+  supersededPlanId: string;
+  replacementPlanId?: string | null;
+  supersessionReason: string;
+  sourceRefJson?: SingleSiteJsonObject;
+  actor: SingleSiteActorInput;
+  semanticWatermark?: string | null;
 };
 
 function trimText(value: unknown): string | null {
@@ -2104,7 +2456,686 @@ export class SingleSiteStateWriterRepository {
     const result = await client.query("select coalesce(max(event_index), 0) + 1 as event_index from public.gnr8_single_site_clone_review_events where review_id = $1::uuid", [requiredText("reviewId", reviewId)]);
     return Number(result.rows[0]?.event_index ?? 1);
   }
+
+  async createImprovementProposalPlan(
+    client: SingleSitePgClient,
+    input: CreateImprovementProposalPlanInput,
+  ): Promise<{ row: SingleSiteImprovementProposalPlanRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      tenant_id: requiredText("tenantId", input.tenantId),
+      client_id: requiredText("clientId", input.clientId),
+      site_id: requiredText("siteId", input.siteId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      clone_review_id: requiredText("cloneReviewId", input.cloneReviewId),
+      source_evidence_review_id: requiredText("sourceEvidenceReviewId", input.sourceEvidenceReviewId),
+      clone_site_version_ref: requiredText("cloneSiteVersionRef", input.cloneSiteVersionRef),
+      runtime_artifact_ref: requiredText("runtimeArtifactRef", input.runtimeArtifactRef),
+      plan_status: optionalEnumValue("planStatus", input.planStatus, SINGLE_SITE_IMPROVEMENT_PROPOSAL_PLAN_STATUSES) ?? "draft",
+      plan_version: optionalPositiveInteger("planVersion", input.planVersion) ?? 1,
+      proposal_scope_json: jsonObject("proposalScopeJson", input.proposalScopeJson),
+      title: optionalText(input.title),
+      summary: optionalText(input.summary),
+      limitations_json: jsonArray("limitationsJson", input.limitationsJson),
+      warnings_json: jsonArray("warningsJson", input.warningsJson),
+      operator_notes_json: jsonArray("operatorNotesJson", input.operatorNotesJson),
+      decision_summary_json: jsonObject("decisionSummaryJson", input.decisionSummaryJson),
+      approval_refs_json: jsonObject("approvalRefsJson", input.approvalRefsJson),
+      implementation_authorization_refs_json: jsonObject("implementationAuthorizationRefsJson", input.implementationAuthorizationRefsJson),
+      implementation_authorization_attached: Boolean(input.implementationAuthorizationAttached ?? false),
+      supersedes_plan_id: optionalText(input.supersedesPlanId),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      causation_id: optionalText(input.causationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      request_id: optionalText(input.requestId),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      semantic_watermark: optionalText(input.semanticWatermark),
+      payload_hash: optionalText(input.payloadHash),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+    return insertReturning<SingleSiteImprovementProposalPlanRow>(client, "gnr8_single_site_improvement_proposal_plans", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "tenant_id",
+        "client_id",
+        "site_id",
+        "migration_id",
+        "clone_review_id",
+        "source_evidence_review_id",
+        "clone_site_version_ref",
+        "runtime_artifact_ref",
+        "plan_status",
+        "proposal_scope_json",
+        "title",
+        "summary",
+        "limitations_json",
+        "warnings_json",
+        "operator_notes_json",
+        "decision_summary_json",
+        "approval_refs_json",
+        "implementation_authorization_refs_json",
+        "implementation_authorization_attached",
+        "supersedes_plan_id",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "privacy_label",
+        "retention_class",
+        "semantic_watermark",
+        "payload_hash",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async getImprovementProposalPlanById(client: SingleSitePgClient, planId: string): Promise<SingleSiteImprovementProposalPlanRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_improvement_proposal_plans where id = $1::uuid limit 1", [requiredText("planId", planId)]);
+    return (result.rows[0] as SingleSiteImprovementProposalPlanRow | undefined) ?? null;
+  }
+
+  async getImprovementProposalPlanByIdempotencyKey(client: SingleSitePgClient, idempotencyKey: string): Promise<SingleSiteImprovementProposalPlanRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_improvement_proposal_plans where idempotency_key = $1 limit 1", [requiredText("idempotencyKey", idempotencyKey)]);
+    return (result.rows[0] as SingleSiteImprovementProposalPlanRow | undefined) ?? null;
+  }
+
+  async getLatestImprovementProposalPlanForMigration(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteImprovementProposalPlanRow | null> {
+    const result = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_improvement_proposal_plans
+      where migration_id = $1::uuid
+      order by updated_at desc, created_at desc
+      limit 1
+      `,
+      [requiredText("migrationId", migrationId)],
+    );
+    return (result.rows[0] as SingleSiteImprovementProposalPlanRow | undefined) ?? null;
+  }
+
+  async getImprovementProposalPlanBySemanticRefs(
+    client: SingleSitePgClient,
+    input: Pick<CreateImprovementProposalPlanInput, "migrationId" | "cloneReviewId" | "cloneSiteVersionRef" | "runtimeArtifactRef">,
+  ): Promise<SingleSiteImprovementProposalPlanRow | null> {
+    const result = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_improvement_proposal_plans
+      where migration_id = $1::uuid
+        and clone_review_id = $2::uuid
+        and clone_site_version_ref = $3
+        and runtime_artifact_ref = $4
+      order by created_at asc
+      limit 1
+      `,
+      [
+        requiredText("migrationId", input.migrationId),
+        requiredText("cloneReviewId", input.cloneReviewId),
+        requiredText("cloneSiteVersionRef", input.cloneSiteVersionRef),
+        requiredText("runtimeArtifactRef", input.runtimeArtifactRef),
+      ],
+    );
+    return (result.rows[0] as SingleSiteImprovementProposalPlanRow | undefined) ?? null;
+  }
+
+  async updateImprovementProposalPlanStatus(
+    client: SingleSitePgClient,
+    input: UpdateImprovementProposalPlanStatusInput,
+  ): Promise<SingleSiteImprovementProposalPlanRow> {
+    const actor = input.actor ?? null;
+    const result = await client.query(
+      `
+      update public.gnr8_single_site_improvement_proposal_plans
+      set
+        plan_status = $2,
+        plan_version = plan_version + 1,
+        summary = coalesce($3, summary),
+        limitations_json = coalesce($4::jsonb, limitations_json),
+        warnings_json = coalesce($5::jsonb, warnings_json),
+        decision_summary_json = coalesce($6::jsonb, decision_summary_json),
+        approval_refs_json = coalesce($7::jsonb, approval_refs_json),
+        implementation_authorization_refs_json = coalesce($8::jsonb, implementation_authorization_refs_json),
+        implementation_authorization_attached = coalesce($9, implementation_authorization_attached),
+        superseded_by_plan_id = coalesce($10::uuid, superseded_by_plan_id),
+        actor_type = coalesce($11, actor_type),
+        actor_id = coalesce($12, actor_id),
+        actor_role = coalesce($13, actor_role),
+        actor_display_label = coalesce($14, actor_display_label),
+        reviewed_at = coalesce($15::timestamptz, reviewed_at),
+        decided_at = coalesce($16::timestamptz, decided_at),
+        updated_at = now()
+      where id = $1::uuid
+      returning *
+      `,
+      [
+        requiredText("planId", input.planId),
+        enumValue("planStatus", input.planStatus, SINGLE_SITE_IMPROVEMENT_PROPOSAL_PLAN_STATUSES),
+        optionalText(input.summary),
+        input.limitationsJson === undefined ? null : toPostgresValue(jsonArray("limitationsJson", input.limitationsJson)),
+        input.warningsJson === undefined ? null : toPostgresValue(jsonArray("warningsJson", input.warningsJson)),
+        input.decisionSummaryJson === undefined ? null : toPostgresValue(jsonObject("decisionSummaryJson", input.decisionSummaryJson)),
+        input.approvalRefsJson === undefined ? null : toPostgresValue(jsonObject("approvalRefsJson", input.approvalRefsJson)),
+        input.implementationAuthorizationRefsJson === undefined ? null : toPostgresValue(jsonObject("implementationAuthorizationRefsJson", input.implementationAuthorizationRefsJson)),
+        input.implementationAuthorizationAttached ?? null,
+        optionalText(input.supersededByPlanId),
+        actor ? enumValue("actor.actorType", actor.actorType, SINGLE_SITE_ACTOR_TYPES) : null,
+        actor ? requiredText("actor.actorId", actor.actorId) : null,
+        actor ? requiredText("actor.actorRole", actor.actorRole) : null,
+        actor ? optionalText(actor.actorDisplayLabel) : null,
+        timestampText("reviewedAt", input.reviewedAt),
+        timestampText("decidedAt", input.decidedAt),
+      ],
+    );
+    const row = result.rows[0] as SingleSiteImprovementProposalPlanRow | undefined;
+    if (!row) throw new SingleSiteStateWriterError("improvement proposal plan status update did not return a row");
+    return row;
+  }
+
+  async insertImprovementProposalRef(
+    client: SingleSitePgClient,
+    input: InsertImprovementProposalRefInput,
+  ): Promise<{ row: SingleSiteImprovementProposalRefRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      plan_id: requiredText("planId", input.planId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      ref_role: enumValue("refRole", input.refRole, SINGLE_SITE_IMPROVEMENT_PROPOSAL_REF_ROLES),
+      ref_type: requiredText("refType", input.refType),
+      source_system: optionalText(input.sourceSystem) ?? "gnr8",
+      source_table: optionalText(input.sourceTable),
+      source_record_id: requiredText("sourceRecordId", input.sourceRecordId),
+      source_version: optionalText(input.sourceVersion),
+      source_watermark: optionalText(input.sourceWatermark),
+      semantic_watermark: optionalText(input.semanticWatermark),
+      content_hash: optionalText(input.contentHash),
+      media_type: optionalText(input.mediaType),
+      captured_at: timestampText("capturedAt", input.capturedAt),
+      fresh_until: timestampText("freshUntil", input.freshUntil),
+      evidence_only: input.evidenceOnly ?? true,
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      correlation_id: requiredText("correlationId", input.correlationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+    return insertReturning<SingleSiteImprovementProposalRefRow>(client, "gnr8_single_site_improvement_proposal_refs", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "plan_id",
+        "migration_id",
+        "ref_role",
+        "ref_type",
+        "source_system",
+        "source_table",
+        "source_record_id",
+        "source_version",
+        "source_watermark",
+        "semantic_watermark",
+        "content_hash",
+        "media_type",
+        "captured_at",
+        "fresh_until",
+        "evidence_only",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async upsertImprovementProposalRecommendation(
+    client: SingleSitePgClient,
+    input: UpsertImprovementProposalRecommendationInput,
+  ): Promise<SingleSiteImprovementProposalRecommendationRow> {
+    const attempted: InsertableRow = {
+      plan_id: requiredText("planId", input.planId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      recommendation_key: requiredText("recommendationKey", input.recommendationKey),
+      title: requiredText("title", input.title),
+      target_scope: optionalEnumValue("targetScope", input.targetScope, SINGLE_SITE_IMPROVEMENT_PROPOSAL_TARGET_SCOPES) ?? "site",
+      target_refs_json: jsonArray("targetRefsJson", input.targetRefsJson),
+      category: enumValue("category", input.category, SINGLE_SITE_IMPROVEMENT_CATEGORIES),
+      risk: optionalEnumValue("risk", input.risk, SINGLE_SITE_IMPROVEMENT_RISK_LEVELS) ?? "unknown",
+      impact: optionalEnumValue("impact", input.impact, SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS) ?? "unknown",
+      effort: optionalEnumValue("effort", input.effort, SINGLE_SITE_IMPROVEMENT_EFFORT_LEVELS) ?? "unknown",
+      confidence: optionalEnumValue("confidence", input.confidence, SINGLE_SITE_IMPROVEMENT_CONFIDENCE_LEVELS) ?? "medium",
+      priority: optionalEnumValue("priority", input.priority, SINGLE_SITE_IMPROVEMENT_PRIORITIES) ?? "p2",
+      rationale: requiredText("rationale", input.rationale),
+      expected_outcome: optionalText(input.expectedOutcome),
+      implementation_notes: optionalText(input.implementationNotes),
+      exclusions_json: jsonArray("exclusionsJson", input.exclusionsJson),
+      limitations_json: jsonArray("limitationsJson", input.limitationsJson),
+      linked_finding_ids_json: jsonArray("linkedFindingIdsJson", input.linkedFindingIdsJson),
+      source_ref_ids_json: jsonArray("sourceRefIdsJson", input.sourceRefIdsJson),
+      advisory_ref_ids_json: jsonArray("advisoryRefIdsJson", input.advisoryRefIdsJson),
+      recommendation_status: optionalEnumValue("recommendationStatus", input.recommendationStatus, SINGLE_SITE_IMPROVEMENT_PROPOSAL_RECOMMENDATION_STATUSES) ?? "draft",
+      implementation_authorization_status: optionalEnumValue("implementationAuthorizationStatus", input.implementationAuthorizationStatus, SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_STATUSES) ?? "not_requested",
+      blocks_proposal_approval: input.blocksProposalApproval ?? false,
+      limitation_accepted: input.limitationAccepted ?? false,
+      decision_json: jsonObject("decisionJson", input.decisionJson),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      semantic_watermark: optionalText(input.semanticWatermark),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+
+    const existing = await client.query(
+      "select * from public.gnr8_single_site_improvement_proposal_recommendations where idempotency_key = $1 limit 1",
+      [attempted.idempotency_key],
+    );
+    const existingRow = existing.rows[0] as SingleSiteImprovementProposalRecommendationRow | undefined;
+    if (existingRow) {
+      assertSemanticMatch("gnr8_single_site_improvement_proposal_recommendations", String(attempted.idempotency_key), attempted, existingRow, [
+        "plan_id",
+        "migration_id",
+        "recommendation_key",
+        "title",
+        "target_scope",
+        "target_refs_json",
+        "category",
+        "risk",
+        "impact",
+        "effort",
+        "confidence",
+        "priority",
+        "rationale",
+        "expected_outcome",
+        "implementation_notes",
+        "exclusions_json",
+        "limitations_json",
+        "linked_finding_ids_json",
+        "source_ref_ids_json",
+        "advisory_ref_ids_json",
+        "recommendation_status",
+        "implementation_authorization_status",
+        "blocks_proposal_approval",
+        "limitation_accepted",
+        "decision_json",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "privacy_label",
+        "retention_class",
+        "semantic_watermark",
+        "metadata_json",
+      ]);
+      return existingRow;
+    }
+
+    const result = await client.query(
+      `
+      insert into public.gnr8_single_site_improvement_proposal_recommendations (
+        plan_id, migration_id, recommendation_key, title, target_scope, target_refs_json, category, risk, impact,
+        effort, confidence, priority, rationale, expected_outcome, implementation_notes, exclusions_json,
+        limitations_json, linked_finding_ids_json, source_ref_ids_json, advisory_ref_ids_json, recommendation_status,
+        implementation_authorization_status, blocks_proposal_approval, limitation_accepted, decision_json,
+        actor_type, actor_id, actor_role, actor_display_label, correlation_id, idempotency_key, privacy_label,
+        retention_class, semantic_watermark, metadata_json
+      )
+      values (
+        $1::uuid, $2::uuid, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+        $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb, $21, $22, $23, $24, $25::jsonb,
+        $26, $27, $28, $29, $30, $31, $32, $33, $34, $35::jsonb
+      )
+      on conflict (plan_id, recommendation_key) do update set
+        title = excluded.title,
+        target_scope = excluded.target_scope,
+        target_refs_json = excluded.target_refs_json,
+        category = excluded.category,
+        risk = excluded.risk,
+        impact = excluded.impact,
+        effort = excluded.effort,
+        confidence = excluded.confidence,
+        priority = excluded.priority,
+        rationale = excluded.rationale,
+        expected_outcome = excluded.expected_outcome,
+        implementation_notes = excluded.implementation_notes,
+        exclusions_json = excluded.exclusions_json,
+        limitations_json = excluded.limitations_json,
+        linked_finding_ids_json = excluded.linked_finding_ids_json,
+        source_ref_ids_json = excluded.source_ref_ids_json,
+        advisory_ref_ids_json = excluded.advisory_ref_ids_json,
+        recommendation_status = excluded.recommendation_status,
+        implementation_authorization_status = excluded.implementation_authorization_status,
+        blocks_proposal_approval = excluded.blocks_proposal_approval,
+        limitation_accepted = excluded.limitation_accepted,
+        decision_json = excluded.decision_json,
+        actor_type = excluded.actor_type,
+        actor_id = excluded.actor_id,
+        actor_role = excluded.actor_role,
+        actor_display_label = excluded.actor_display_label,
+        semantic_watermark = excluded.semantic_watermark,
+        metadata_json = excluded.metadata_json,
+        updated_at = now()
+      returning *
+      `,
+      [
+        attempted.plan_id,
+        attempted.migration_id,
+        attempted.recommendation_key,
+        attempted.title,
+        attempted.target_scope,
+        toPostgresValue(attempted.target_refs_json),
+        attempted.category,
+        attempted.risk,
+        attempted.impact,
+        attempted.effort,
+        attempted.confidence,
+        attempted.priority,
+        attempted.rationale,
+        attempted.expected_outcome,
+        attempted.implementation_notes,
+        toPostgresValue(attempted.exclusions_json),
+        toPostgresValue(attempted.limitations_json),
+        toPostgresValue(attempted.linked_finding_ids_json),
+        toPostgresValue(attempted.source_ref_ids_json),
+        toPostgresValue(attempted.advisory_ref_ids_json),
+        attempted.recommendation_status,
+        attempted.implementation_authorization_status,
+        attempted.blocks_proposal_approval,
+        attempted.limitation_accepted,
+        toPostgresValue(attempted.decision_json),
+        attempted.actor_type,
+        attempted.actor_id,
+        attempted.actor_role,
+        attempted.actor_display_label,
+        attempted.correlation_id,
+        attempted.idempotency_key,
+        attempted.privacy_label,
+        attempted.retention_class,
+        attempted.semantic_watermark,
+        toPostgresValue(attempted.metadata_json),
+      ],
+    );
+    return result.rows[0] as SingleSiteImprovementProposalRecommendationRow;
+  }
+
+  async upsertImprovementProposalFinding(
+    client: SingleSitePgClient,
+    input: UpsertImprovementProposalFindingInput,
+  ): Promise<SingleSiteImprovementProposalFindingRow> {
+    const attempted: InsertableRow = {
+      plan_id: requiredText("planId", input.planId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      finding_key: requiredText("findingKey", input.findingKey),
+      category: enumValue("category", input.category, SINGLE_SITE_IMPROVEMENT_CATEGORIES),
+      risk: optionalEnumValue("risk", input.risk, SINGLE_SITE_IMPROVEMENT_RISK_LEVELS) ?? "unknown",
+      impact: optionalEnumValue("impact", input.impact, SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS) ?? "unknown",
+      summary: requiredText("summary", input.summary),
+      evidence_confidence: optionalEnumValue("evidenceConfidence", input.evidenceConfidence, SINGLE_SITE_IMPROVEMENT_CONFIDENCE_LEVELS) ?? "medium",
+      finding_status: optionalEnumValue("findingStatus", input.findingStatus, SINGLE_SITE_IMPROVEMENT_PROPOSAL_FINDING_STATUSES) ?? "open",
+      blocks_proposal_approval: input.blocksProposalApproval ?? false,
+      accepted_limitation: input.acceptedLimitation ?? false,
+      source_ref_ids_json: jsonArray("sourceRefIdsJson", input.sourceRefIdsJson),
+      clone_fidelity_ref_ids_json: jsonArray("cloneFidelityRefIdsJson", input.cloneFidelityRefIdsJson),
+      recommendation_ids_json: jsonArray("recommendationIdsJson", input.recommendationIdsJson),
+      limitation_json: jsonObject("limitationJson", input.limitationJson),
+      decision_json: jsonObject("decisionJson", input.decisionJson),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      semantic_watermark: optionalText(input.semanticWatermark),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+
+    const existing = await client.query(
+      "select * from public.gnr8_single_site_improvement_proposal_findings where idempotency_key = $1 limit 1",
+      [attempted.idempotency_key],
+    );
+    const existingRow = existing.rows[0] as SingleSiteImprovementProposalFindingRow | undefined;
+    if (existingRow) {
+      assertSemanticMatch("gnr8_single_site_improvement_proposal_findings", String(attempted.idempotency_key), attempted, existingRow, [
+        "plan_id",
+        "migration_id",
+        "finding_key",
+        "category",
+        "risk",
+        "impact",
+        "summary",
+        "evidence_confidence",
+        "finding_status",
+        "blocks_proposal_approval",
+        "accepted_limitation",
+        "source_ref_ids_json",
+        "clone_fidelity_ref_ids_json",
+        "recommendation_ids_json",
+        "limitation_json",
+        "decision_json",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "privacy_label",
+        "retention_class",
+        "semantic_watermark",
+        "metadata_json",
+      ]);
+      return existingRow;
+    }
+
+    const result = await client.query(
+      `
+      insert into public.gnr8_single_site_improvement_proposal_findings (
+        plan_id, migration_id, finding_key, category, risk, impact, summary, evidence_confidence, finding_status,
+        blocks_proposal_approval, accepted_limitation, source_ref_ids_json, clone_fidelity_ref_ids_json,
+        recommendation_ids_json, limitation_json, decision_json, actor_type, actor_id, actor_role,
+        actor_display_label, correlation_id, idempotency_key, privacy_label, retention_class, semantic_watermark, metadata_json
+      )
+      values (
+        $1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb,
+        $14::jsonb, $15::jsonb, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb
+      )
+      on conflict (plan_id, finding_key) do update set
+        category = excluded.category,
+        risk = excluded.risk,
+        impact = excluded.impact,
+        summary = excluded.summary,
+        evidence_confidence = excluded.evidence_confidence,
+        finding_status = excluded.finding_status,
+        blocks_proposal_approval = excluded.blocks_proposal_approval,
+        accepted_limitation = excluded.accepted_limitation,
+        source_ref_ids_json = excluded.source_ref_ids_json,
+        clone_fidelity_ref_ids_json = excluded.clone_fidelity_ref_ids_json,
+        recommendation_ids_json = excluded.recommendation_ids_json,
+        limitation_json = excluded.limitation_json,
+        decision_json = excluded.decision_json,
+        actor_type = excluded.actor_type,
+        actor_id = excluded.actor_id,
+        actor_role = excluded.actor_role,
+        actor_display_label = excluded.actor_display_label,
+        semantic_watermark = excluded.semantic_watermark,
+        metadata_json = excluded.metadata_json,
+        updated_at = now()
+      returning *
+      `,
+      [
+        attempted.plan_id,
+        attempted.migration_id,
+        attempted.finding_key,
+        attempted.category,
+        attempted.risk,
+        attempted.impact,
+        attempted.summary,
+        attempted.evidence_confidence,
+        attempted.finding_status,
+        attempted.blocks_proposal_approval,
+        attempted.accepted_limitation,
+        toPostgresValue(attempted.source_ref_ids_json),
+        toPostgresValue(attempted.clone_fidelity_ref_ids_json),
+        toPostgresValue(attempted.recommendation_ids_json),
+        toPostgresValue(attempted.limitation_json),
+        toPostgresValue(attempted.decision_json),
+        attempted.actor_type,
+        attempted.actor_id,
+        attempted.actor_role,
+        attempted.actor_display_label,
+        attempted.correlation_id,
+        attempted.idempotency_key,
+        attempted.privacy_label,
+        attempted.retention_class,
+        attempted.semantic_watermark,
+        toPostgresValue(attempted.metadata_json),
+      ],
+    );
+    return result.rows[0] as SingleSiteImprovementProposalFindingRow;
+  }
+
+  async listImprovementProposalRecommendations(client: SingleSitePgClient, planId: string): Promise<SingleSiteImprovementProposalRecommendationRow[]> {
+    const result = await client.query(
+      "select * from public.gnr8_single_site_improvement_proposal_recommendations where plan_id = $1::uuid order by recommendation_key asc",
+      [requiredText("planId", planId)],
+    );
+    return result.rows as SingleSiteImprovementProposalRecommendationRow[];
+  }
+
+  async listImprovementProposalFindings(client: SingleSitePgClient, planId: string): Promise<SingleSiteImprovementProposalFindingRow[]> {
+    const result = await client.query(
+      "select * from public.gnr8_single_site_improvement_proposal_findings where plan_id = $1::uuid order by finding_key asc",
+      [requiredText("planId", planId)],
+    );
+    return result.rows as SingleSiteImprovementProposalFindingRow[];
+  }
+
+  async listImprovementProposalRefs(client: SingleSitePgClient, planId: string): Promise<SingleSiteImprovementProposalRefRow[]> {
+    const result = await client.query(
+      "select * from public.gnr8_single_site_improvement_proposal_refs where plan_id = $1::uuid order by created_at asc, ref_role asc",
+      [requiredText("planId", planId)],
+    );
+    return result.rows as SingleSiteImprovementProposalRefRow[];
+  }
+
+  async getImprovementProposalEventByIdempotencyKey(client: SingleSitePgClient, idempotencyKey: string): Promise<SingleSiteImprovementProposalEventRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_improvement_proposal_events where idempotency_key = $1 limit 1", [requiredText("idempotencyKey", idempotencyKey)]);
+    return (result.rows[0] as SingleSiteImprovementProposalEventRow | undefined) ?? null;
+  }
+
+  async insertImprovementProposalEvent(
+    client: SingleSitePgClient,
+    input: InsertImprovementProposalEventInput,
+  ): Promise<{ row: SingleSiteImprovementProposalEventRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      plan_id: requiredText("planId", input.planId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      event_index: optionalPositiveInteger("eventIndex", input.eventIndex),
+      event_action: enumValue("eventAction", input.eventAction, SINGLE_SITE_IMPROVEMENT_PROPOSAL_EVENT_ACTIONS),
+      from_status: optionalEnumValue("fromStatus", input.fromStatus, SINGLE_SITE_IMPROVEMENT_PROPOSAL_PLAN_STATUSES),
+      to_status: optionalEnumValue("toStatus", input.toStatus, SINGLE_SITE_IMPROVEMENT_PROPOSAL_PLAN_STATUSES),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      details_json: jsonObject("detailsJson", input.detailsJson),
+      limitations_json: jsonArray("limitationsJson", input.limitationsJson),
+      warnings_json: jsonArray("warningsJson", input.warningsJson),
+      approval_refs_json: jsonObject("approvalRefsJson", input.approvalRefsJson),
+      implementation_authorization_refs_json: jsonObject("implementationAuthorizationRefsJson", input.implementationAuthorizationRefsJson),
+      source_watermark: optionalText(input.sourceWatermark),
+      semantic_watermark: optionalText(input.semanticWatermark),
+      payload_hash: optionalText(input.payloadHash),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      causation_id: optionalText(input.causationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      request_id: optionalText(input.requestId),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+      occurred_at: timestampText("occurredAt", input.occurredAt) ?? undefined,
+    };
+    return insertReturning<SingleSiteImprovementProposalEventRow>(client, "gnr8_single_site_improvement_proposal_events", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "plan_id",
+        "migration_id",
+        "event_action",
+        "from_status",
+        "to_status",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "details_json",
+        "limitations_json",
+        "warnings_json",
+        "approval_refs_json",
+        "implementation_authorization_refs_json",
+        "source_watermark",
+        "semantic_watermark",
+        "payload_hash",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async nextImprovementProposalEventIndex(client: SingleSitePgClient, planId: string): Promise<number> {
+    const result = await client.query(
+      "select coalesce(max(event_index), 0) + 1 as event_index from public.gnr8_single_site_improvement_proposal_events where plan_id = $1::uuid",
+      [requiredText("planId", planId)],
+    );
+    return Number(result.rows[0]?.event_index ?? 1);
+  }
+
+  async insertImprovementProposalSupersession(
+    client: SingleSitePgClient,
+    input: InsertImprovementProposalSupersessionInput,
+  ): Promise<{ row: SingleSiteImprovementProposalSupersessionRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      migration_id: requiredText("migrationId", input.migrationId),
+      superseded_plan_id: requiredText("supersededPlanId", input.supersededPlanId),
+      replacement_plan_id: optionalText(input.replacementPlanId),
+      supersession_reason: requiredText("supersessionReason", input.supersessionReason),
+      source_ref_json: jsonObject("sourceRefJson", input.sourceRefJson),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      causation_id: optionalText(input.causationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      semantic_watermark: optionalText(input.semanticWatermark),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+    return insertReturning<SingleSiteImprovementProposalSupersessionRow>(client, "gnr8_single_site_improvement_proposal_supersessions", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "migration_id",
+        "superseded_plan_id",
+        "replacement_plan_id",
+        "supersession_reason",
+        "source_ref_json",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "privacy_label",
+        "retention_class",
+        "semantic_watermark",
+        "metadata_json",
+      ],
+    });
+  }
 }
 
 const SINGLE_SITE_STATE_STAGE_VALUES = Object.values(SINGLE_SITE_STATE_STAGE) as SingleSiteMigrationStage[];
 const SINGLE_SITE_CLONE_REVIEW_ITEM_STATUSES = ["open", "resolved", "accepted_limitation", "superseded"] as const;
+const SINGLE_SITE_IMPROVEMENT_PROPOSAL_TARGET_SCOPES = ["site", "page", "section", "component", "content_slot", "metadata", "asset", "form", "analytics", "unknown"] as const;
+const SINGLE_SITE_IMPROVEMENT_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
+const SINGLE_SITE_IMPROVEMENT_PRIORITIES = ["p0", "p1", "p2", "p3"] as const;
+const SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_STATUSES = ["not_requested", "requested", "authorized", "authorized_with_limitations", "rejected", "expired", "superseded"] as const;

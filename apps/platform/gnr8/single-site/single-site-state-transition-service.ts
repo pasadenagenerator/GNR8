@@ -78,6 +78,7 @@ const ALLOWED_DIRECT_TRANSITIONS = new Set<string>([
   "clone_revision_required->clone_generation_started",
   "clone_review_required->improvement_proposal_started",
   "improvement_proposal_started->improvement_proposal_ready",
+  "improvement_proposal_ready->improvement_proposal_started",
   "improvement_proposal_ready->improvement_proposal_approved",
   "improvement_proposal_ready->improvement_proposal_rejected",
   "improvement_proposal_rejected->improvement_proposal_started",
@@ -344,6 +345,11 @@ export class SingleSiteStateTransitionService {
 
     if (input.toState === "improvement_proposal_approved" && fromState !== "improvement_proposal_ready") {
       missing.push("proposal ready state");
+    }
+    if (input.toState === "improvement_implementation_started") {
+      const proposal = await this.repository.getLatestImprovementProposalPlanForMigration(tx, migration.id);
+      if (!proposal || !["approved", "approved_with_limitations"].includes(proposal.plan_status)) missing.push("approved improvement proposal plan");
+      if (!proposal?.implementation_authorization_attached) missing.push("separate implementation authorization ref");
     }
     if (input.toState === "content_approved" && !["content_review_required", "improved_preview_ready"].includes(fromState)) {
       missing.push("improved preview/content review state");

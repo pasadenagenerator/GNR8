@@ -220,6 +220,20 @@ Canonical improvement proposal planning source-of-truth and transition design do
 - `docs/product/gnr8-single-site-improvement-proposal-operator-workflow.md`
 - `docs/product/gnr8-single-site-improvement-proposal-planning-closeout.md`
 
+## MVP-15 Single-Site Improvement Proposal Planning Core
+
+Canonical improvement proposal planning persistence and server-only service core:
+- `apps/platform/supabase/migrations/20260730143000_single_site_improvement_proposal_planning_core.sql`
+- `apps/platform/gnr8/single-site/improvement-proposal-planning-service.ts`
+- `apps/platform/gnr8/single-site/improvement-proposal-planning-service.test.ts`
+- `apps/platform/gnr8/single-site/improvement-proposal-planning-service.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `docs/product/gnr8-single-site-improvement-proposal-planning-core-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

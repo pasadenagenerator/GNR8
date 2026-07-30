@@ -18,6 +18,10 @@ import type {
   SingleSiteCloneReviewRefRow,
   SingleSiteCloneReviewRow,
   SingleSiteEvidenceItemRow,
+  SingleSiteImprovementProposalFindingRow,
+  SingleSiteImprovementProposalPlanRow,
+  SingleSiteImprovementProposalRecommendationRow,
+  SingleSiteImprovementProposalRefRow,
   SingleSiteMigrationRefRow,
   SingleSiteMigrationRow,
   SingleSitePgClient,
@@ -160,6 +164,12 @@ export class SingleSiteStateReadRepository {
     const cloneReviewItems = latestCloneReview ? await this.readCloneReviewItems(client, latestCloneReview.id) : [];
     const cloneReviewRefs = latestCloneReview ? await this.readCloneReviewRefs(client, latestCloneReview.id) : [];
     const cloneReviewEvents = latestCloneReview ? await this.readCloneReviewEvents(client, latestCloneReview.id) : [];
+    const hasImprovementProposalTables = await this.improvementProposalTablesAvailable(client);
+    const improvementProposalPlans = hasImprovementProposalTables ? await this.readImprovementProposalPlanRows(client, migration.id) : [];
+    const latestImprovementProposalPlan = improvementProposalPlans[0] ?? null;
+    const improvementProposalRecommendations = latestImprovementProposalPlan ? await this.readImprovementProposalRecommendations(client, latestImprovementProposalPlan.id) : [];
+    const improvementProposalFindings = latestImprovementProposalPlan ? await this.readImprovementProposalFindings(client, latestImprovementProposalPlan.id) : [];
+    const improvementProposalRefs = latestImprovementProposalPlan ? await this.readImprovementProposalRefs(client, latestImprovementProposalPlan.id) : [];
 
     return {
       capturedAt,
@@ -179,6 +189,11 @@ export class SingleSiteStateReadRepository {
       cloneReviewItems,
       cloneReviewRefs,
       cloneReviewEvents,
+      improvementProposalPlans,
+      latestImprovementProposalPlan,
+      improvementProposalRecommendations,
+      improvementProposalFindings,
+      improvementProposalRefs,
     };
   }
 
@@ -490,5 +505,77 @@ export class SingleSiteStateReadRepository {
       [reviewId],
     );
     return result.rows as SingleSiteCloneReviewEventRow[];
+  }
+
+  private async readImprovementProposalPlanRows(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteImprovementProposalPlanRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        reviewed_at::text as reviewed_at,
+        decided_at::text as decided_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_improvement_proposal_plans
+      where migration_id = $1::uuid
+      order by public.gnr8_single_site_improvement_proposal_plans.updated_at desc, public.gnr8_single_site_improvement_proposal_plans.created_at desc
+      `,
+      [migrationId],
+    );
+    return result.rows as SingleSiteImprovementProposalPlanRow[];
+  }
+
+  private async improvementProposalTablesAvailable(client: SingleSitePgClient): Promise<boolean> {
+    const result = await client.query("select to_regclass('public.gnr8_single_site_improvement_proposal_plans')::text as table_name");
+    return Boolean(result.rows[0]?.table_name);
+  }
+
+  private async readImprovementProposalRecommendations(client: SingleSitePgClient, planId: string): Promise<SingleSiteImprovementProposalRecommendationRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_improvement_proposal_recommendations
+      where plan_id = $1::uuid
+      order by recommendation_key asc
+      `,
+      [planId],
+    );
+    return result.rows as SingleSiteImprovementProposalRecommendationRow[];
+  }
+
+  private async readImprovementProposalFindings(client: SingleSitePgClient, planId: string): Promise<SingleSiteImprovementProposalFindingRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_improvement_proposal_findings
+      where plan_id = $1::uuid
+      order by finding_key asc
+      `,
+      [planId],
+    );
+    return result.rows as SingleSiteImprovementProposalFindingRow[];
+  }
+
+  private async readImprovementProposalRefs(client: SingleSitePgClient, planId: string): Promise<SingleSiteImprovementProposalRefRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        captured_at::text as captured_at,
+        fresh_until::text as fresh_until,
+        created_at::text as created_at
+      from public.gnr8_single_site_improvement_proposal_refs
+      where plan_id = $1::uuid
+      order by public.gnr8_single_site_improvement_proposal_refs.created_at asc, ref_role asc
+      `,
+      [planId],
+    );
+    return result.rows as SingleSiteImprovementProposalRefRow[];
   }
 }

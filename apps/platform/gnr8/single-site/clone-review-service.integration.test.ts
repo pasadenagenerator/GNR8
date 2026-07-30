@@ -243,7 +243,7 @@ test("clone review service persists and projects fidelity decisions in disposabl
     assert.equal(acceptedModel?.cloneReview.reviewStatus, "accepted");
     assert.equal(acceptedModel?.cloneReview.cloneAcceptanceReady, true);
     assert.equal(acceptedModel?.cloneReview.findingCountsBySeverity.p2_minor, 1);
-    assert.equal(acceptedModel?.recommendedNextAction.actionKey, "prepare_improvement_proposal");
+    assert.equal(acceptedModel?.recommendedNextAction.actionKey, "start_improvement_proposal_planning");
 
     const retrySuffix = randomUUID().replace(/-/g, "").slice(0, 10);
     const retryReady = await createCloneReadyMigration(writer, transitions, sourceReviews, retrySuffix);
@@ -293,7 +293,7 @@ test("clone review service persists and projects fidelity decisions in disposabl
     const limitedModel = await reader.readByMigrationId(limitedReady.migration.id);
     assert.equal(limitedModel?.cloneReview.reviewStatus, "accepted_with_limitations");
     assert.deepEqual(limitedModel?.cloneReview.limitations, [{ category: "font", reason: "source font unavailable; fallback accepted" }]);
-    assert.equal(limitedModel?.recommendedNextAction.actionKey, "prepare_improvement_proposal_with_limitations");
+    assert.equal(limitedModel?.recommendedNextAction.actionKey, "start_improvement_proposal_planning");
 
     const rejectedSuffix = randomUUID().replace(/-/g, "").slice(0, 10);
     const rejectedReady = await createCloneReadyMigration(writer, transitions, sourceReviews, rejectedSuffix);

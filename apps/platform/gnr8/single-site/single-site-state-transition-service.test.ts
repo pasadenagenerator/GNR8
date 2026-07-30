@@ -45,6 +45,8 @@ function fakeRepository(options: {
   cloneReviewStatus?: string;
   cloneProposalAllowed?: boolean;
   cloneLimitations?: unknown[];
+  proposalStatus?: string | null;
+  implementationAuthorizationAttached?: boolean;
 }): never {
   const events: Record<string, unknown>[] = [];
   const refs: Record<string, unknown>[] = [];
@@ -115,6 +117,15 @@ function fakeRepository(options: {
         { ref_role: "source_evidence_review" },
       ];
     },
+    async getLatestImprovementProposalPlanForMigration() {
+      if (options.proposalStatus === null) return null;
+      return {
+        id: "44444444-4444-4444-8444-444444444444",
+        migration_id: MIGRATION_ID,
+        plan_status: options.proposalStatus ?? "approved",
+        implementation_authorization_attached: options.implementationAuthorizationAttached ?? false,
+      };
+    },
   };
   return repo as never;
 }
@@ -167,6 +178,17 @@ test("proposal, publish, closeout, and terminal guardrails block missing prerequ
     () => new SingleSiteStateTransitionService(fakeRepository({ state: "improvement_proposal_started" })).transition(baseInput({ toState: "improvement_proposal_approved", refs: [] })),
     SingleSiteTransitionError,
   );
+  await assert.rejects(
+    () =>
+      new SingleSiteStateTransitionService(
+        fakeRepository({ state: "improvement_proposal_approved", proposalStatus: "approved", implementationAuthorizationAttached: false }),
+      ).transition(baseInput({ toState: "improvement_implementation_started", refs: [] })),
+    /separate implementation authorization ref/,
+  );
+  const implementationStart = await new SingleSiteStateTransitionService(
+    fakeRepository({ state: "improvement_proposal_approved", proposalStatus: "approved_with_limitations", implementationAuthorizationAttached: true }),
+  ).transition(baseInput({ toState: "improvement_implementation_started", refs: [] }));
+  assert.equal(implementationStart.toState, "improvement_implementation_started");
   await assert.rejects(
     () => new SingleSiteStateTransitionService(fakeRepository({ state: "launch_approval_required" })).transition(baseInput({ toState: "publish_ready", refs: [] })),
     /content approval ref/,
