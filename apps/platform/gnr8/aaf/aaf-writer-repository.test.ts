@@ -5,6 +5,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+} from "@gnr8/runtime-contracts";
+
+import {
   AafIdempotencyConflictError,
   AafWriterError,
   AafWriterRepository,
@@ -204,6 +211,44 @@ test("AAF writer preserves idempotency, correlation, actor, subject, scope, and 
   });
   assert.equal(evidence.content_hash, "0123456789abcdef");
   assert.equal(evidence.package_type, "publish_activation_evidence");
+});
+
+test("AAF writer accepts single-site implementation authorization scope vocabulary without side effects", async () => {
+  const { client } = recordingClient();
+  const repository = new AafWriterRepository({ connect: async () => ({}) } as never);
+  const tx = txForClient(client);
+
+  const gateAttempt = await repository.createActionGateAttempt(tx, {
+    ...tenantScope,
+    ...correlation,
+    idempotencyKey: "idem-single-site-implementation-gate",
+    actionKey: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
+    scope: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+    subjectType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+    subjectId: "proposal-plan-1",
+    actorType: "human",
+    actorId: "operator-1",
+    actorRole: "agency_admin",
+    gateResult: "approval_required",
+  });
+  assert.equal(gateAttempt.scope, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE);
+  assert.equal(gateAttempt.action_key, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION);
+
+  const evidence = await repository.createEvidencePackage(tx, {
+    ...tenantScope,
+    ...correlation,
+    idempotencyKey: "idem-single-site-implementation-evidence",
+    packageType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
+    subjectType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+    subjectId: "proposal-plan-1",
+    createdByActorType: "system",
+    createdByActorId: "aaf-writer-test",
+    sourceWatermark: "proposal-plan-1:v1:watermark",
+    freshnessLabel: "fresh",
+    contentHash: "abcdef0123456789",
+  });
+  assert.equal(evidence.package_type, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE);
+  assert.equal(evidence.subject_type, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE);
 });
 
 test("AAF writer returns matching idempotent rows and rejects semantic payload drift", async () => {

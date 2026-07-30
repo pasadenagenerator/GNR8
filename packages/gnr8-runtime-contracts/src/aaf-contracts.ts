@@ -32,6 +32,7 @@ export const AAF_APPROVAL_SCOPES = [
   'incident_recovery',
   'external_workflow_reference_acceptance',
   'ai_advisory_plan_acceptance',
+  'single_site_improvement_implementation_authorization',
 ] as const
 
 export type AafApprovalScope = (typeof AAF_APPROVAL_SCOPES)[number]
@@ -110,6 +111,7 @@ export const AAF_EVIDENCE_PACKAGE_TYPES = [
   'external_workflow_reference_evidence',
   'ai_advisory_review_evidence',
   'incident_recovery_evidence',
+  'single_site_improvement_implementation_authorization_evidence',
 ] as const
 
 export type AafEvidencePackageType = (typeof AAF_EVIDENCE_PACKAGE_TYPES)[number]
@@ -186,6 +188,7 @@ export const AAF_SCOPE_REPLAY_CLASS: Record<AafApprovalScope, AafReplayClass> = 
   incident_recovery: 'not_replayable',
   external_workflow_reference_acceptance: 'not_replayable',
   ai_advisory_plan_acceptance: 'not_replayable',
+  single_site_improvement_implementation_authorization: 'not_replayable',
 }
 
 export const AAF_SCOPE_PROHIBITED_ACTIONS: Record<AafApprovalScope, readonly string[]> = {
@@ -209,4 +212,174 @@ export const AAF_SCOPE_PROHIBITED_ACTIONS: Record<AafApprovalScope, readonly str
   incident_recovery: ['silent_audit_bypass', 'ordinary_replay'],
   external_workflow_reference_acceptance: ['approval_truth', 'action_execution'],
   ai_advisory_plan_acceptance: ['ai_approval', 'ai_execution', 'mutation', 'publish_activation', 'rollback', 'ops_inbox_resolution'],
+  single_site_improvement_implementation_authorization: [
+    'proposal_approval',
+    'clone_review_acceptance',
+    'client_approval',
+    'content_approval',
+    'launch_approval',
+    'publish_activation',
+    'publish_activation_approval',
+    'domain_readiness',
+    'ddom_readiness',
+    'ai_approval',
+    'ai_execution',
+    'provider_output_authorization',
+    'command_center_status',
+    'ops_inbox_resolution',
+    'chat_transcript_authorization',
+    'generated_proposal_bundle_authorization',
+    'runtime_mutation',
+    'content_mutation',
+    'billing_activation',
+    'hosting_activation',
+    'dns_mutation',
+    'domain_action',
+    'rollback',
+  ],
 }
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE =
+  'single_site_improvement_implementation_authorization' as const
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE =
+  'single_site_improvement_implementation_authorization_evidence' as const
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE =
+  'single_site_improvement_proposal_plan' as const
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION =
+  'start_single_site_improvement_implementation' as const
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_SUBJECT_REFS = [
+  'tenant',
+  'client',
+  'site',
+  'single_site_migration',
+  'proposal_plan',
+  'proposal_plan_version',
+  'proposal_plan_semantic_watermark',
+  'proposal_approval_request',
+  'proposal_approval_decision',
+  'proposal_evidence_package',
+  'clone_review',
+  'clone_review_status',
+  'clone_review_watermark',
+  'clone_site_version',
+  'runtime_artifact',
+  'runtime_artifact_watermark',
+  'source_evidence_review',
+  'source_evidence_review_status',
+  'source_evidence_review_watermark',
+  'selected_recommendations',
+  'selected_recommendation_watermarks',
+  'implementation_target',
+  'implementation_attempt_placeholder',
+] as const
+
+export type AafSingleSiteImplementationAuthorizationSubjectRef =
+  (typeof AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_SUBJECT_REFS)[number]
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_EVIDENCE_REFS = [
+  'proposal_plan_snapshot',
+  'proposal_approval',
+  'proposal_approval_limitations',
+  'clone_review_acceptance',
+  'clone_review_limitations',
+  'source_evidence_acceptance',
+  'source_evidence_limitations',
+  'limitations',
+  'selected_recommendations',
+  'risk_impact_effort_summary',
+  'implementation_scope_summary',
+  'implementation_approach',
+  'implementation_non_goals',
+  'operator_notes',
+  'advisory_ai_provider_refs',
+  'generated_proposal_bundle_refs',
+  'audit_timeline_refs',
+] as const
+
+export type AafSingleSiteImplementationAuthorizationEvidenceRef =
+  (typeof AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_EVIDENCE_REFS)[number]
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_PROHIBITED_SUBSTITUTIONS = [
+  'proposal_approval_alone',
+  'clone_review_acceptance',
+  'client_approval',
+  'content_approval',
+  'launch_approval',
+  'publish_activation_approval',
+  'domain_readiness',
+  'ddom_readiness',
+  'ai_provider_output',
+  'command_center_status',
+  'ops_inbox_item',
+  'chat_transcript',
+  'generated_proposal_bundle',
+] as const
+
+export type AafSingleSiteImplementationAuthorizationProhibitedSubstitution =
+  (typeof AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_PROHIBITED_SUBSTITUTIONS)[number]
+
+export type AafScopeContract = {
+  scope: AafApprovalScope
+  purpose: string
+  subjectType: string
+  evidencePackageType: AafEvidencePackageType
+  allowedAction: string
+  replayClass: AafReplayClass
+  humanApprovalReplayable: boolean
+  allowedDecisionStatuses: readonly AafApprovalStatus[]
+  allowedGateResults: readonly AafGateResult[]
+  requiredSubjectRefs: readonly string[]
+  requiredEvidenceRefs: readonly string[]
+  requiredFreshnessBehavior: readonly string[]
+  prohibitedSubstitutions: readonly string[]
+  prohibitedActions: readonly string[]
+}
+
+export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT: AafScopeContract = {
+  scope: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+  purpose:
+    'Authorize a human-approved single-site improvement implementation attempt after proposal approval, without implying downstream content, client, launch, publish, provider, billing, domain, DNS, rollback, or runtime mutation approval.',
+  subjectType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+  evidencePackageType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
+  allowedAction: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
+  replayClass: 'not_replayable',
+  humanApprovalReplayable: false,
+  allowedDecisionStatuses: ['granted', 'rejected', 'revoked', 'expired', 'superseded', 'cancelled'],
+  allowedGateResults: [
+    'allowed',
+    'approval_required',
+    'evidence_missing',
+    'evidence_stale',
+    'approval_stale',
+    'approval_superseded',
+    'approval_revoked',
+    'policy_error',
+    'fail_closed',
+  ],
+  requiredSubjectRefs: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_SUBJECT_REFS,
+  requiredEvidenceRefs: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_EVIDENCE_REFS,
+  requiredFreshnessBehavior: [
+    'proposal_plan_status_current',
+    'proposal_plan_version_current',
+    'proposal_plan_semantic_watermark_current',
+    'proposal_approval_current',
+    'clone_review_acceptance_current',
+    'clone_review_watermark_current',
+    'clone_site_version_current',
+    'runtime_artifact_watermark_current',
+    'source_evidence_review_acceptance_current',
+    'source_evidence_review_watermark_current',
+    'selected_recommendations_current',
+    'selected_recommendation_watermarks_current',
+    'implementation_target_or_attempt_descriptor_current',
+    'policy_version_effective',
+    'decision_not_expired_revoked_or_superseded',
+    'required_audit_timeline_refs_present',
+  ],
+  prohibitedSubstitutions: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_PROHIBITED_SUBSTITUTIONS,
+  prohibitedActions: AAF_SCOPE_PROHIBITED_ACTIONS.single_site_improvement_implementation_authorization,
+} as const

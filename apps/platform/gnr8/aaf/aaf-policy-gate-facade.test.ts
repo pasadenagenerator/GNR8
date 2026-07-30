@@ -5,6 +5,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+  AAF_SCOPE_PROHIBITED_ACTIONS,
+  AAF_SCOPE_REPLAY_CLASS,
+} from "@gnr8/runtime-contracts";
+
+import {
   actionIsProhibitedForScope,
   exactScopeMatches,
   exactSubjectMatches,
@@ -87,6 +95,98 @@ test("prohibited scope overreach preserves AAF scope separation rules", () => {
   assert.equal(actionIsProhibitedForScope("domain_exception", "publish_activation"), true);
   assert.equal(actionIsProhibitedForScope("ai_advisory_plan_acceptance", "ai_execution"), true);
   assert.equal(actionIsProhibitedForScope("publish_activation", "publish.activation"), false);
+});
+
+test("single-site implementation authorization requires exact scope and subject matching", () => {
+  const input = {
+    tenantId: "tenant-1",
+    clientId: "client-1",
+    siteId: "site-1",
+    batchId: null,
+    jobId: null,
+    siteVersionId: null,
+    domainId: null,
+    costCenterId: null,
+  };
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-1",
+      site_id: "site-1",
+      batch_id: null,
+      job_id: null,
+      site_version_id: null,
+      domain_id: null,
+      cost_center_id: null,
+      scope: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+    }),
+    true,
+  );
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-1",
+      site_id: "other-site",
+      batch_id: null,
+      job_id: null,
+      site_version_id: null,
+      domain_id: null,
+      cost_center_id: null,
+      scope: "publish_activation",
+    }),
+    false,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+        subjectId: "proposal-plan-1",
+      },
+      {
+        subject_type: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+        subject_id: "proposal-plan-1",
+      },
+    ),
+    true,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+        subjectId: "proposal-plan-1",
+      },
+      {
+        subject_type: "site_version",
+        subject_id: "proposal-plan-1",
+      },
+    ),
+    false,
+  );
+});
+
+test("single-site implementation authorization does not imply downstream approval scopes", () => {
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE], "not_replayable");
+  assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION), false);
+  for (const prohibitedAction of [
+    "proposal_approval",
+    "clone_review_acceptance",
+    "client_approval",
+    "content_approval",
+    "launch_approval",
+    "publish_activation",
+    "domain_readiness",
+    "ddom_readiness",
+    "ai_execution",
+    "command_center_status",
+    "ops_inbox_resolution",
+    "generated_proposal_bundle_authorization",
+  ]) {
+    assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE, prohibitedAction), true);
+    assert.equal(
+      AAF_SCOPE_PROHIBITED_ACTIONS.single_site_improvement_implementation_authorization.includes(prohibitedAction),
+      true,
+    );
+  }
 });
 
 test("fail-closed persistence failures map without representing an executable action", () => {

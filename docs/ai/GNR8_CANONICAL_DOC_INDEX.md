@@ -234,6 +234,22 @@ Canonical improvement proposal planning persistence and server-only service core
 - `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
 - `docs/product/gnr8-single-site-improvement-proposal-planning-core-closeout.md`
 
+## MVP-16 Single-Site Implementation Authorization Boundary
+
+Canonical implementation authorization boundary design docs:
+- `docs/architecture/gnr8-single-site-implementation-authorization-boundary.md`
+- `docs/architecture/gnr8-single-site-implementation-authorization-aaf-scope-design.md`
+- `docs/architecture/gnr8-single-site-implementation-authorization-transition-contract.md`
+- `docs/product/gnr8-single-site-implementation-authorization-operator-workflow.md`
+- `docs/product/gnr8-single-site-implementation-authorization-boundary-closeout.md`
+
+## MVP-17 Single-Site Implementation Authorization AAF Contracts
+
+Canonical AAF scope/contracts foundation for single-site implementation authorization:
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.ts`
+- `apps/platform/supabase/migrations/20260730170000_aaf_single_site_implementation_authorization_scope.sql`
+- `docs/product/gnr8-single-site-implementation-authorization-aaf-contracts-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

@@ -15,6 +15,14 @@ import {
   AAF_REDACTION_LABELS,
   AAF_REPLAY_CLASSES,
   AAF_RETENTION_CLASSES,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_PROHIBITED_SUBSTITUTIONS,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_EVIDENCE_REFS,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_SUBJECT_REFS,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
   AAF_SCOPE_PROHIBITED_ACTIONS,
   AAF_SCOPE_REPLAY_CLASS,
 } from './aaf-contracts'
@@ -23,9 +31,17 @@ const MIGRATION_PATH = path.resolve(
   process.cwd(),
   'apps/platform/supabase/migrations/20260722120000_aaf_persistence_core.sql',
 )
+const AAF_SCOPE_EXPANSION_MIGRATION_PATH = path.resolve(
+  process.cwd(),
+  'apps/platform/supabase/migrations/20260730170000_aaf_single_site_implementation_authorization_scope.sql',
+)
 
 function readMigration(): string {
   return fs.readFileSync(MIGRATION_PATH, 'utf8')
+}
+
+function readAafVocabularyMigrations(): string {
+  return [MIGRATION_PATH, AAF_SCOPE_EXPANSION_MIGRATION_PATH].map((filePath) => fs.readFileSync(filePath, 'utf8')).join('\n')
 }
 
 function assertSqlContainsAll(values: readonly string[], sql: string): void {
@@ -66,6 +82,7 @@ test('AAF approval statuses, scopes, and policy results remain canonical', () =>
     'incident_recovery',
     'external_workflow_reference_acceptance',
     'ai_advisory_plan_acceptance',
+    'single_site_improvement_implementation_authorization',
   ])
   assert.deepEqual(AAF_POLICY_EVALUATION_RESULTS, [
     'approval_required',
@@ -124,6 +141,7 @@ test('AAF audit and evidence vocabularies remain canonical', () => {
     'external_workflow_reference_evidence',
     'ai_advisory_review_evidence',
     'incident_recovery_evidence',
+    'single_site_improvement_implementation_authorization_evidence',
   ])
 })
 
@@ -170,7 +188,7 @@ test('AAF storage labels and gate results are exposed for persistence consumers'
 })
 
 test('AAF SQL migration contains the canonical enum values', () => {
-  const sql = readMigration()
+  const sql = readAafVocabularyMigrations()
   assertSqlContainsAll(AAF_APPROVAL_STATUSES, sql)
   assertSqlContainsAll(AAF_APPROVAL_SCOPES, sql)
   assertSqlContainsAll(AAF_POLICY_EVALUATION_RESULTS, sql)
@@ -259,6 +277,125 @@ test('scope contract prevents approval-scope overreach', () => {
   assert.equal(AAF_SCOPE_REPLAY_CLASS.rollback, 'forbidden_replay')
   assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.ai_advisory_plan_acceptance.includes('ai_execution'), true)
   assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.ai_advisory_plan_acceptance.includes('publish_activation'), true)
+})
+
+test('single-site implementation authorization contract is explicit and non-replayable', () => {
+  assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE, 'single_site_improvement_implementation_authorization')
+  assert.equal(
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
+    'single_site_improvement_implementation_authorization_evidence',
+  )
+  assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE, 'single_site_improvement_proposal_plan')
+  assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION, 'start_single_site_improvement_implementation')
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE], 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.replayClass, 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.humanApprovalReplayable, false)
+  assert.deepEqual(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.allowedDecisionStatuses, [
+    'granted',
+    'rejected',
+    'revoked',
+    'expired',
+    'superseded',
+    'cancelled',
+  ])
+  assert.equal(
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.allowedGateResults.includes('not_required_by_policy'),
+    false,
+  )
+})
+
+test('single-site implementation authorization pins required subject and evidence refs', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_SUBJECT_REFS, [
+    'tenant',
+    'client',
+    'site',
+    'single_site_migration',
+    'proposal_plan',
+    'proposal_plan_version',
+    'proposal_plan_semantic_watermark',
+    'proposal_approval_request',
+    'proposal_approval_decision',
+    'proposal_evidence_package',
+    'clone_review',
+    'clone_review_status',
+    'clone_review_watermark',
+    'clone_site_version',
+    'runtime_artifact',
+    'runtime_artifact_watermark',
+    'source_evidence_review',
+    'source_evidence_review_status',
+    'source_evidence_review_watermark',
+    'selected_recommendations',
+    'selected_recommendation_watermarks',
+    'implementation_target',
+    'implementation_attempt_placeholder',
+  ])
+  assert.deepEqual(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_EVIDENCE_REFS, [
+    'proposal_plan_snapshot',
+    'proposal_approval',
+    'proposal_approval_limitations',
+    'clone_review_acceptance',
+    'clone_review_limitations',
+    'source_evidence_acceptance',
+    'source_evidence_limitations',
+    'limitations',
+    'selected_recommendations',
+    'risk_impact_effort_summary',
+    'implementation_scope_summary',
+    'implementation_approach',
+    'implementation_non_goals',
+    'operator_notes',
+    'advisory_ai_provider_refs',
+    'generated_proposal_bundle_refs',
+    'audit_timeline_refs',
+  ])
+  assert.deepEqual(
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.requiredSubjectRefs,
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_SUBJECT_REFS,
+  )
+  assert.deepEqual(
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.requiredEvidenceRefs,
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_EVIDENCE_REFS,
+  )
+})
+
+test('single-site implementation authorization prohibits substitute approvals and projections', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_PROHIBITED_SUBSTITUTIONS, [
+    'proposal_approval_alone',
+    'clone_review_acceptance',
+    'client_approval',
+    'content_approval',
+    'launch_approval',
+    'publish_activation_approval',
+    'domain_readiness',
+    'ddom_readiness',
+    'ai_provider_output',
+    'command_center_status',
+    'ops_inbox_item',
+    'chat_transcript',
+    'generated_proposal_bundle',
+  ])
+  for (const prohibitedAction of [
+    'proposal_approval',
+    'clone_review_acceptance',
+    'client_approval',
+    'content_approval',
+    'launch_approval',
+    'publish_activation',
+    'domain_readiness',
+    'ddom_readiness',
+    'ai_approval',
+    'ai_execution',
+    'command_center_status',
+    'ops_inbox_resolution',
+    'chat_transcript_authorization',
+    'generated_proposal_bundle_authorization',
+  ]) {
+    assert.equal(
+      AAF_SCOPE_PROHIBITED_ACTIONS.single_site_improvement_implementation_authorization.includes(prohibitedAction),
+      true,
+    )
+  }
 })
 
 test('AAF migration stores object refs and hashes instead of heavy evidence payloads', () => {
