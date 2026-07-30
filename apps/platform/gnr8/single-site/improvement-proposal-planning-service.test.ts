@@ -81,6 +81,23 @@ function decision(overrides: Partial<ImprovementProposalDecisionInput> = {}): Im
   };
 }
 
+function authorizationValidation(overrides: Record<string, unknown> = {}) {
+  return {
+    valid: true,
+    status: "granted" as const,
+    scope: "single_site_improvement_implementation_authorization",
+    subjectType: "single_site_improvement_proposal_plan",
+    subjectId: PLAN_ID,
+    approvalRequestId: "implementation-authorization-request-1",
+    approvalDecisionId: "auth-decision-2",
+    evidencePackageId: "implementation-authorization-evidence-1",
+    limitations: [],
+    blockerCodes: [],
+    semanticWatermark: "implementation-authorization:watermark",
+    ...overrides,
+  };
+}
+
 function fakeRepository(options: {
   migrationState?: string;
   cloneStatus?: string;
@@ -369,6 +386,7 @@ test("implementation authorization is separate and only attaches after proposal 
         planId: PLAN_ID,
         refType: "aaf_approval_decision",
         sourceRecordId: "auth-decision-1",
+        authorizationValidation: authorizationValidation({ approvalDecisionId: "auth-decision-1" }),
         actor: actor(),
         correlationId: "corr-auth-blocked",
         idempotencyKey: "idem-auth-blocked",
@@ -378,10 +396,36 @@ test("implementation authorization is separate and only attaches after proposal 
 
   const service = new ImprovementProposalPlanningService(fakeRepository({ seedRecommendations: [recommendation()] }));
   await service.approve(decision({ idempotencyKey: "idem-approve-before-auth" }));
+  await assert.rejects(
+    () =>
+      service.attachImplementationAuthorizationRef({
+        planId: PLAN_ID,
+        refType: "aaf_approval_decision",
+        sourceRecordId: "auth-decision-2",
+        actor: actor(),
+        correlationId: "corr-auth-unvalidated",
+        idempotencyKey: "idem-auth-unvalidated",
+      }),
+    /bridge validation/,
+  );
+  await assert.rejects(
+    () =>
+      service.attachImplementationAuthorizationRef({
+        planId: PLAN_ID,
+        refType: "aaf_approval_decision",
+        sourceRecordId: "auth-decision-2",
+        authorizationValidation: authorizationValidation({ scope: "publish_activation" }),
+        actor: actor(),
+        correlationId: "corr-auth-wrong-scope",
+        idempotencyKey: "idem-auth-wrong-scope",
+      }),
+    /exact AAF scope/,
+  );
   const attached = await service.attachImplementationAuthorizationRef({
     planId: PLAN_ID,
     refType: "aaf_approval_decision",
     sourceRecordId: "auth-decision-2",
+    authorizationValidation: authorizationValidation(),
     actor: actor(),
     correlationId: "corr-auth",
     idempotencyKey: "idem-auth",

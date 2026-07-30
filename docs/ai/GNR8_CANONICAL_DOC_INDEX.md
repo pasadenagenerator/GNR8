@@ -250,6 +250,16 @@ Canonical AAF scope/contracts foundation for single-site implementation authoriz
 - `apps/platform/supabase/migrations/20260730170000_aaf_single_site_implementation_authorization_scope.sql`
 - `docs/product/gnr8-single-site-implementation-authorization-aaf-contracts-closeout.md`
 
+## MVP-18 Single-Site Implementation Authorization Bridge Core
+
+Canonical non-executing server-side bridge from approved single-site improvement proposal planning to AAF implementation authorization request/validation:
+- `apps/platform/gnr8/single-site/implementation-authorization-bridge.ts`
+- `apps/platform/gnr8/single-site/implementation-authorization-bridge.test.ts`
+- `apps/platform/gnr8/single-site/implementation-authorization-bridge.integration.test.ts`
+- `apps/platform/gnr8/single-site/improvement-proposal-planning-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `docs/product/gnr8-single-site-implementation-authorization-bridge-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

@@ -30,6 +30,7 @@ import {
   type SingleSiteStateEventRow,
   type SingleSiteStateWriterTx,
 } from "./single-site-state-writer-repository";
+import type { ImplementationAuthorizationValidationResult } from "./implementation-authorization-bridge";
 
 type ProposalEventWithoutIndex = Omit<InsertImprovementProposalEventInput, "eventIndex">;
 
@@ -154,6 +155,7 @@ export type AttachImplementationAuthorizationRefInput = ImprovementProposalPlann
   capturedAt?: string | null;
   freshUntil?: string | null;
   authorizationRefsJson?: SingleSiteJsonObject;
+  authorizationValidation?: ImplementationAuthorizationValidationResult;
 };
 
 export type ImprovementProposalPlanningOperationResult = {
@@ -501,6 +503,10 @@ export class ImprovementProposalPlanningService {
       if (!["approved", "approved_with_limitations"].includes(plan.plan_status)) {
         throw new SingleSiteTransitionError("implementation authorization requires proposal approval");
       }
+      if ((input.refRole ?? "implementation_authorization_decision") !== "implementation_authorization_decision") {
+        throw new SingleSiteTransitionError("implementation authorization readiness requires a validated AAF decision ref");
+      }
+      this.assertValidatedImplementationAuthorization(plan, input);
       const ref = await this.repository.insertImprovementProposalRef(tx, {
         planId: plan.id,
         migrationId: plan.migration_id,
@@ -528,6 +534,12 @@ export class ImprovementProposalPlanningService {
         ...jsonObject(plan.implementation_authorization_refs_json),
         latestImplementationAuthorizationRefId: ref.row.id,
         sourceRecordId: input.sourceRecordId,
+        implementationAuthorizationValidationStatus: input.authorizationValidation?.status,
+        implementationAuthorizationScope: input.authorizationValidation?.scope,
+        implementationAuthorizationRequestId: input.authorizationValidation?.approvalRequestId,
+        implementationAuthorizationDecisionId: input.authorizationValidation?.approvalDecisionId,
+        implementationAuthorizationEvidencePackageId: input.authorizationValidation?.evidencePackageId,
+        implementationAuthorizationLimitations: input.authorizationValidation?.limitations ?? [],
         ...(input.authorizationRefsJson ?? {}),
       };
       const updated = await this.repository.updateImprovementProposalPlanStatus(tx, {
@@ -712,6 +724,23 @@ export class ImprovementProposalPlanningService {
       const stateEventId = await this.recordCoarseProposalStateIfNeeded(tx, migration, updated, status, input, decisionSummaryJson);
       return { plan: updated, eventId: event.id, stateEventId, reusedExisting: event.reusedExisting };
     });
+  }
+
+  private assertValidatedImplementationAuthorization(plan: SingleSiteImprovementProposalPlanRow, input: AttachImplementationAuthorizationRefInput): void {
+    const validation = input.authorizationValidation;
+    if (!validation?.valid) throw new SingleSiteTransitionError("implementation authorization refs require bridge validation");
+    if (!["granted", "granted_with_limitations"].includes(validation.status)) {
+      throw new SingleSiteTransitionError(`implementation authorization validation status ${validation.status} cannot be attached`);
+    }
+    if (validation.scope !== "single_site_improvement_implementation_authorization") {
+      throw new SingleSiteTransitionError("implementation authorization requires exact AAF scope");
+    }
+    if (validation.subjectType !== "single_site_improvement_proposal_plan" || validation.subjectId !== plan.id) {
+      throw new SingleSiteTransitionError("implementation authorization subject does not match proposal plan");
+    }
+    if (validation.approvalDecisionId !== requiredText("sourceRecordId", input.sourceRecordId)) {
+      throw new SingleSiteTransitionError("implementation authorization decision ref does not match validation result");
+    }
   }
 
   private async requiredPlan(tx: SingleSiteStateWriterTx, planId: string): Promise<SingleSiteImprovementProposalPlanRow> {

@@ -498,6 +498,15 @@ export type SingleSiteImprovementProposalPlanningSummary = {
   limitations: unknown[];
   approvalRefs: SingleSiteJsonObject;
   implementationAuthorizationRefs: SingleSiteJsonObject;
+  implementationAuthorizationStatus:
+    | "not_required_yet"
+    | "required"
+    | "requested"
+    | "granted"
+    | "granted_with_limitations"
+    | "invalid"
+    | "stale"
+    | "missing";
   implementationAuthorizationReady: boolean;
   proposalReadiness: {
     cloneAccepted: boolean;
@@ -1069,6 +1078,20 @@ function proposalNextAction(
   return "no_action_required";
 }
 
+function implementationAuthorizationStatus(latest: SingleSiteImprovementProposalPlanRow | null): SingleSiteImprovementProposalPlanningSummary["implementationAuthorizationStatus"] {
+  if (!latest || !["approved", "approved_with_limitations"].includes(latest.plan_status)) return "not_required_yet";
+  const refs = jsonObject(latest.implementation_authorization_refs_json);
+  const validationStatus = String(refs.implementationAuthorizationValidationStatus ?? "");
+  if (["invalid", "stale", "missing"].includes(validationStatus)) {
+    return validationStatus as "invalid" | "stale" | "missing";
+  }
+  if (latest.implementation_authorization_attached) {
+    return validationStatus === "granted_with_limitations" ? "granted_with_limitations" : "granted";
+  }
+  if (refs.implementationAuthorizationRequestId) return "requested";
+  return "required";
+}
+
 function buildImprovementProposalPlanning(
   snapshot: SingleSiteMigrationReadRepositorySnapshot,
   cloneReview: SingleSiteCloneReviewSummary,
@@ -1089,6 +1112,7 @@ function buildImprovementProposalPlanning(
   const proposalDecision = latest ? String(jsonObject(latest.decision_summary_json).decision ?? latest.plan_status) : null;
   const readyForReview = latest?.plan_status === "ready_for_review" || latest?.plan_status === "in_review";
   const approved = latest?.plan_status === "approved" || latest?.plan_status === "approved_with_limitations";
+  const authorizationRefs = jsonObject(latest?.implementation_authorization_refs_json);
   return {
     latestProposalPlanId: latest?.id ?? null,
     proposalStatus: latest?.plan_status ?? "not_started",
@@ -1101,7 +1125,8 @@ function buildImprovementProposalPlanning(
     effortSummary,
     limitations: jsonArray(latest?.limitations_json),
     approvalRefs: jsonObject(latest?.approval_refs_json),
-    implementationAuthorizationRefs: jsonObject(latest?.implementation_authorization_refs_json),
+    implementationAuthorizationRefs: authorizationRefs,
+    implementationAuthorizationStatus: implementationAuthorizationStatus(latest),
     implementationAuthorizationReady: Boolean(latest?.implementation_authorization_attached) && approved,
     proposalReadiness: {
       cloneAccepted: cloneReview.accepted,
