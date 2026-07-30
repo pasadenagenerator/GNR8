@@ -211,6 +211,15 @@ Canonical clone review and fidelity acceptance implementation:
 - `apps/platform/supabase/migrations/20260730120000_single_site_clone_review_core.sql`
 - `docs/product/gnr8-single-site-clone-review-fidelity-acceptance-closeout.md`
 
+## MVP-14 Single-Site Improvement Proposal Planning Architecture
+
+Canonical improvement proposal planning source-of-truth and transition design docs:
+- `docs/architecture/gnr8-single-site-improvement-proposal-planning-architecture.md`
+- `docs/architecture/gnr8-single-site-improvement-proposal-source-of-truth-design.md`
+- `docs/architecture/gnr8-single-site-improvement-proposal-transition-contract.md`
+- `docs/product/gnr8-single-site-improvement-proposal-operator-workflow.md`
+- `docs/product/gnr8-single-site-improvement-proposal-planning-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
