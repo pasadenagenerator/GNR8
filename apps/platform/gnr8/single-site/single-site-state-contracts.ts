@@ -58,6 +58,72 @@ export const SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_STATUSES = [
   "superseded",
 ] as const;
 
+export const SINGLE_SITE_CLONE_REVIEW_STATUSES = [
+  "draft",
+  "ready_for_review",
+  "in_review",
+  "accepted",
+  "accepted_with_limitations",
+  "retry_required",
+  "rejected",
+  "superseded",
+] as const;
+
+export const SINGLE_SITE_CLONE_REVIEW_DECISIONS = [
+  "accept",
+  "accept_with_limitations",
+  "retry_clone",
+  "reject_clone",
+  "supersede",
+] as const;
+
+export const SINGLE_SITE_CLONE_FIDELITY_SEVERITIES = ["p0_blocker", "p1_major", "p2_minor", "p3_note"] as const;
+
+export const SINGLE_SITE_CLONE_FIDELITY_CATEGORIES = [
+  "layout",
+  "content",
+  "image",
+  "asset",
+  "font",
+  "color",
+  "spacing",
+  "responsive",
+  "interaction",
+  "seo_metadata",
+  "accessibility",
+  "performance",
+  "unknown_or_manual",
+] as const;
+
+export const SINGLE_SITE_CLONE_REVIEW_REF_ROLES = [
+  "runtime_site_version_clone",
+  "runtime_artifact_clone",
+  "source_evidence_review",
+  "clone_generation_event",
+  "clone_generation_ref",
+  "source_evidence_ref",
+  "screenshot",
+  "dom",
+  "asset",
+  "fidelity_finding",
+  "limitation",
+  "external_reference",
+] as const;
+
+export const SINGLE_SITE_CLONE_REVIEW_EVENT_ACTIONS = [
+  "created",
+  "ref_added",
+  "finding_added",
+  "ready_for_review",
+  "review_started",
+  "accepted",
+  "accepted_with_limitations",
+  "retry_required",
+  "rejected",
+  "superseded",
+  "comment_added",
+] as const;
+
 export const SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES = [
   "unknown",
   "complete",
@@ -279,6 +345,12 @@ export type SingleSiteMigrationState = (typeof SINGLE_SITE_MIGRATION_STATES)[num
 export type SingleSiteMigrationStage = (typeof SINGLE_SITE_MIGRATION_STAGES)[number];
 export type SingleSiteTerminalState = (typeof SINGLE_SITE_TERMINAL_STATES)[number];
 export type SingleSiteSourceEvidenceReviewStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_STATUSES)[number];
+export type SingleSiteCloneReviewStatus = (typeof SINGLE_SITE_CLONE_REVIEW_STATUSES)[number];
+export type SingleSiteCloneReviewDecision = (typeof SINGLE_SITE_CLONE_REVIEW_DECISIONS)[number];
+export type SingleSiteCloneFidelitySeverity = (typeof SINGLE_SITE_CLONE_FIDELITY_SEVERITIES)[number];
+export type SingleSiteCloneFidelityCategory = (typeof SINGLE_SITE_CLONE_FIDELITY_CATEGORIES)[number];
+export type SingleSiteCloneReviewRefRole = (typeof SINGLE_SITE_CLONE_REVIEW_REF_ROLES)[number];
+export type SingleSiteCloneReviewEventAction = (typeof SINGLE_SITE_CLONE_REVIEW_EVENT_ACTIONS)[number];
 export type SingleSiteSourceEvidenceCompletenessStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES)[number];
 export type SingleSiteSourceEvidenceReviewDecision = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_DECISIONS)[number];
 export type SingleSiteEvidenceItemCategory = (typeof SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES)[number];

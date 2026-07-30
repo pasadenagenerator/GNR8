@@ -6,11 +6,19 @@ import {
   type SingleSiteMigrationReadRepositorySnapshot,
   type SingleSiteRawBlockerRow,
 } from "./single-site-state-read-model";
-import type { SingleSiteMigrationRefRow, SingleSiteMigrationRow, SingleSiteSourceEvidenceReviewRow } from "./single-site-state-writer-repository";
+import type {
+  SingleSiteCloneReviewItemRow,
+  SingleSiteCloneReviewRefRow,
+  SingleSiteCloneReviewRow,
+  SingleSiteMigrationRefRow,
+  SingleSiteMigrationRow,
+  SingleSiteSourceEvidenceReviewRow,
+} from "./single-site-state-writer-repository";
 import type { SingleSiteMigrationState } from "./single-site-state-contracts";
 
 const MIGRATION_ID = "11111111-1111-4111-8111-111111111111";
 const REVIEW_ID = "22222222-2222-4222-8222-222222222222";
+const CLONE_REVIEW_ID = "66666666-6666-4666-8666-666666666666";
 
 function migration(state: SingleSiteMigrationState, overrides: Partial<SingleSiteMigrationRow> = {}): SingleSiteMigrationRow {
   const now = "2026-07-29T12:00:00.000Z";
@@ -170,6 +178,104 @@ function migrationRef(role: SingleSiteMigrationRefRow["ref_role"], sourceRecordI
   };
 }
 
+function cloneReview(overrides: Partial<SingleSiteCloneReviewRow> = {}): SingleSiteCloneReviewRow {
+  const now = "2026-07-29T12:00:00.000Z";
+  return {
+    id: CLONE_REVIEW_ID,
+    migration_id: MIGRATION_ID,
+    client_id: "33333333-3333-4333-8333-333333333333",
+    site_id: "44444444-4444-4444-8444-444444444444",
+    clone_site_version_ref: "clone-version-1",
+    runtime_artifact_ref: "runtime-artifact-1",
+    source_evidence_review_id: REVIEW_ID,
+    clone_generation_ref: "clone-generation-1",
+    clone_generation_event_id: null,
+    review_status: "draft",
+    review_decision: null,
+    proposal_planning_allowed: false,
+    retry_required: false,
+    accepted_with_limitations: false,
+    fidelity_summary_json: {},
+    limitations_json: [],
+    warnings_json: [],
+    blockers_json: [],
+    diagnostics_json: {},
+    reviewer_actor_type: null,
+    reviewer_actor_id: null,
+    reviewer_actor_role: null,
+    reviewer_actor_display_label: null,
+    review_started_at: null,
+    reviewed_at: null,
+    supersedes_review_id: null,
+    superseded_by_review_id: null,
+    correlation_id: "corr-clone-review",
+    causation_id: null,
+    idempotency_key: "idem-clone-review",
+    request_id: null,
+    privacy_label: "client_confidential",
+    retention_class: "compliance_long",
+    metadata_json: {},
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  };
+}
+
+function cloneFinding(overrides: Partial<SingleSiteCloneReviewItemRow> = {}): SingleSiteCloneReviewItemRow {
+  const now = "2026-07-29T12:00:00.000Z";
+  return {
+    id: "clone-finding-1",
+    review_id: CLONE_REVIEW_ID,
+    migration_id: MIGRATION_ID,
+    item_key: "layout-header",
+    fidelity_category: "layout",
+    severity: "p2_minor",
+    status: "open",
+    blocks_acceptance: false,
+    accepted_limitation: false,
+    finding_summary: "Header spacing differs slightly",
+    ref_ids_json: [],
+    limitation_json: {},
+    details_json: {},
+    reviewer_actor_type: "human",
+    reviewer_actor_id: "operator",
+    reviewer_actor_display_label: null,
+    correlation_id: "corr-clone-finding",
+    idempotency_key: "idem-clone-finding",
+    privacy_label: "client_confidential",
+    retention_class: "compliance_long",
+    metadata_json: {},
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  };
+}
+
+function cloneRef(role: SingleSiteCloneReviewRefRow["ref_role"], sourceRecordId = `${role}-1`): SingleSiteCloneReviewRefRow {
+  return {
+    id: `${role}-clone-ref`,
+    review_id: CLONE_REVIEW_ID,
+    migration_id: MIGRATION_ID,
+    ref_role: role,
+    ref_type: role,
+    source_system: "gnr8",
+    source_table: null,
+    source_record_id: sourceRecordId,
+    source_version: null,
+    source_watermark: null,
+    content_hash: null,
+    media_type: null,
+    captured_at: null,
+    fresh_until: null,
+    privacy_label: "client_confidential",
+    retention_class: "compliance_long",
+    correlation_id: "corr-clone-ref",
+    idempotency_key: `idem-clone-ref-${role}`,
+    metadata_json: {},
+    created_at: "2026-07-29T12:00:00.000Z",
+  };
+}
+
 function blocker(overrides: Partial<SingleSiteRawBlockerRow> = {}): SingleSiteRawBlockerRow {
   return {
     id: "blocker-1",
@@ -248,6 +354,11 @@ function snapshot(state: SingleSiteMigrationState, overrides: Partial<SingleSite
     sourceEvidenceItems: [],
     sourceEvidenceRefs: [],
     sourceEvidenceEvents: [],
+    cloneReviews: [],
+    latestCloneReview: null,
+    cloneReviewItems: [],
+    cloneReviewRefs: [],
+    cloneReviewEvents: [],
     ...overrides,
   };
 }
@@ -301,13 +412,45 @@ test("evidence accepted with limitations preserves limitations", () => {
 });
 
 test("state-specific next actions are projected without enforcing transitions", () => {
-  assert.equal(model("clone_review_required").recommendedNextAction.actionKey, "review_clone_fidelity");
+  assert.equal(model("clone_review_required").recommendedNextAction.actionKey, "review_clone");
   assert.equal(model("improvement_proposal_ready").recommendedNextAction.actionKey, "approve_or_reject_proposal");
   assert.equal(model("domain_readiness_required").recommendedNextAction.actionKey, "prepare_domain_readiness");
   assert.equal(model("subscription_required").recommendedNextAction.actionKey, "prepare_subscription_hosting");
   assert.equal(model("publish_ready", { refs: [migrationRef("publish_target"), migrationRef("rollback_target"), migrationRef("aaf_approval_decision")] }).recommendedNextAction.actionKey, "prepare_publish");
   assert.equal(model("published").recommendedNextAction.actionKey, "confirm_rollback_readiness");
   assert.equal(model("rollback_available").recommendedNextAction.actionKey, "close_out_migration");
+});
+
+test("clone review projection gates proposal readiness and carries limitations", () => {
+  const accepted = cloneReview({
+    review_status: "accepted_with_limitations",
+    review_decision: "accept_with_limitations",
+    proposal_planning_allowed: true,
+    accepted_with_limitations: true,
+    limitations_json: [{ category: "font", reason: "accepted fallback" }],
+    reviewed_at: "2026-07-29T12:00:00.000Z",
+  });
+  const readModel = model("clone_review_required", {
+    cloneReviews: [accepted],
+    latestCloneReview: accepted,
+    cloneReviewItems: [cloneFinding()],
+    cloneReviewRefs: [cloneRef("runtime_site_version_clone"), cloneRef("runtime_artifact_clone"), cloneRef("source_evidence_review")],
+    refs: [migrationRef("clone_review", CLONE_REVIEW_ID)],
+  });
+  assert.equal(readModel.cloneReview.reviewStatus, "accepted_with_limitations");
+  assert.equal(readModel.cloneReview.findingCountsBySeverity.p2_minor, 1);
+  assert.equal(readModel.cloneReview.findingCountsByCategory.layout, 1);
+  assert.deepEqual(readModel.cloneReview.limitations, [{ category: "font", reason: "accepted fallback" }]);
+  assert.equal(readModel.cloneReview.cloneAcceptanceReady, true);
+  assert.equal(readModel.workflowReadiness.cloneProposalPlanningAllowed, true);
+  assert.equal(readModel.recommendedNextAction.actionKey, "prepare_improvement_proposal_with_limitations");
+});
+
+test("retry and rejected clone reviews block proposal planning", () => {
+  const retry = cloneReview({ review_status: "retry_required", review_decision: "retry_clone", retry_required: true, reviewed_at: "2026-07-29T12:00:00.000Z" });
+  const rejected = cloneReview({ review_status: "rejected", review_decision: "reject_clone", reviewed_at: "2026-07-29T12:00:00.000Z" });
+  assert.equal(model("clone_review_required", { cloneReviews: [retry], latestCloneReview: retry }).recommendedNextAction.actionKey, "retry_clone_generation");
+  assert.equal(model("clone_review_required", { cloneReviews: [rejected], latestCloneReview: rejected }).recommendedNextAction.actionKey, "resolve_clone_blockers");
 });
 
 test("closed out, failed, and cancelled states are terminal", () => {

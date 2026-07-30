@@ -5,6 +5,12 @@ import {
   SINGLE_SITE_ACTOR_TYPES,
   SINGLE_SITE_BLOCKER_STATUSES,
   SINGLE_SITE_BLOCKER_TYPES,
+  SINGLE_SITE_CLONE_FIDELITY_CATEGORIES,
+  SINGLE_SITE_CLONE_FIDELITY_SEVERITIES,
+  SINGLE_SITE_CLONE_REVIEW_DECISIONS,
+  SINGLE_SITE_CLONE_REVIEW_EVENT_ACTIONS,
+  SINGLE_SITE_CLONE_REVIEW_REF_ROLES,
+  SINGLE_SITE_CLONE_REVIEW_STATUSES,
   SINGLE_SITE_CLOSEOUT_OUTCOMES,
   SINGLE_SITE_CLOSEOUT_STATUSES,
   SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES,
@@ -24,6 +30,12 @@ import {
   type SingleSiteActorType,
   type SingleSiteBlockerStatus,
   type SingleSiteBlockerType,
+  type SingleSiteCloneFidelityCategory,
+  type SingleSiteCloneFidelitySeverity,
+  type SingleSiteCloneReviewDecision,
+  type SingleSiteCloneReviewEventAction,
+  type SingleSiteCloneReviewRefRole,
+  type SingleSiteCloneReviewStatus,
   type SingleSiteCloseoutOutcome,
   type SingleSiteCloseoutStatus,
   type SingleSiteEvidenceItemCategory,
@@ -300,6 +312,125 @@ export type SingleSiteReviewEventRow = {
   created_at: string;
 };
 
+export type SingleSiteCloneReviewRow = {
+  id: string;
+  migration_id: string;
+  client_id: string;
+  site_id: string | null;
+  clone_site_version_ref: string;
+  runtime_artifact_ref: string;
+  source_evidence_review_id: string;
+  clone_generation_ref: string | null;
+  clone_generation_event_id: string | null;
+  review_status: SingleSiteCloneReviewStatus;
+  review_decision: SingleSiteCloneReviewDecision | null;
+  proposal_planning_allowed: boolean;
+  retry_required: boolean;
+  accepted_with_limitations: boolean;
+  fidelity_summary_json: unknown;
+  limitations_json: unknown;
+  warnings_json: unknown;
+  blockers_json: unknown;
+  diagnostics_json: unknown;
+  reviewer_actor_type: SingleSiteActorType | null;
+  reviewer_actor_id: string | null;
+  reviewer_actor_role: string | null;
+  reviewer_actor_display_label: string | null;
+  review_started_at: string | null;
+  reviewed_at: string | null;
+  supersedes_review_id: string | null;
+  superseded_by_review_id: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  idempotency_key: string;
+  request_id: string | null;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  metadata_json: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SingleSiteCloneReviewRefRow = {
+  id: string;
+  review_id: string;
+  migration_id: string;
+  ref_role: SingleSiteCloneReviewRefRole;
+  ref_type: string;
+  source_system: string;
+  source_table: string | null;
+  source_record_id: string;
+  source_version: string | null;
+  source_watermark: string | null;
+  content_hash: string | null;
+  media_type: string | null;
+  captured_at: string | null;
+  fresh_until: string | null;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  correlation_id: string;
+  idempotency_key: string;
+  metadata_json: unknown;
+  created_at: string;
+};
+
+export type SingleSiteCloneReviewItemStatus = "open" | "resolved" | "accepted_limitation" | "superseded";
+
+export type SingleSiteCloneReviewItemRow = {
+  id: string;
+  review_id: string;
+  migration_id: string;
+  item_key: string;
+  fidelity_category: SingleSiteCloneFidelityCategory;
+  severity: SingleSiteCloneFidelitySeverity;
+  status: SingleSiteCloneReviewItemStatus;
+  blocks_acceptance: boolean;
+  accepted_limitation: boolean;
+  finding_summary: string;
+  ref_ids_json: unknown;
+  limitation_json: unknown;
+  details_json: unknown;
+  reviewer_actor_type: SingleSiteActorType | null;
+  reviewer_actor_id: string | null;
+  reviewer_actor_display_label: string | null;
+  correlation_id: string;
+  idempotency_key: string;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  metadata_json: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SingleSiteCloneReviewEventRow = {
+  id: string;
+  review_id: string;
+  migration_id: string;
+  event_index: number;
+  event_action: SingleSiteCloneReviewEventAction;
+  from_status: SingleSiteCloneReviewStatus | null;
+  to_status: SingleSiteCloneReviewStatus | null;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  details_json: unknown;
+  limitations_json: unknown;
+  warnings_json: unknown;
+  blockers_json: unknown;
+  source_watermark: string | null;
+  payload_hash: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  idempotency_key: string;
+  request_id: string | null;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  metadata_json: unknown;
+  occurred_at: string;
+  created_at: string;
+};
+
 type InsertableRow = Record<string, unknown>;
 
 export type CreateSingleSiteMigrationInput = SingleSiteWriteEnvelope & {
@@ -548,6 +679,91 @@ export type InsertSourceEvidenceReviewEventInput = SingleSiteWriteEnvelope & {
   blockersJson?: unknown[];
   aafAuditEventId?: string | null;
   aafApprovalDecisionId?: string | null;
+  sourceWatermark?: string | null;
+  payloadHash?: string | null;
+  occurredAt?: string | null;
+};
+
+export type CreateCloneReviewInput = SingleSiteWriteEnvelope & {
+  migrationId: string;
+  clientId: string;
+  siteId?: string | null;
+  cloneSiteVersionRef: string;
+  runtimeArtifactRef: string;
+  sourceEvidenceReviewId: string;
+  cloneGenerationRef?: string | null;
+  cloneGenerationEventId?: string | null;
+  reviewStatus?: SingleSiteCloneReviewStatus | null;
+  fidelitySummaryJson?: SingleSiteJsonObject;
+  limitationsJson?: unknown[];
+  warningsJson?: unknown[];
+  blockersJson?: unknown[];
+  diagnosticsJson?: SingleSiteJsonObject;
+  supersedesReviewId?: string | null;
+};
+
+export type UpdateCloneReviewStatusInput = SingleSiteWriteEnvelope & {
+  reviewId: string;
+  reviewStatus: SingleSiteCloneReviewStatus;
+  reviewDecision?: SingleSiteCloneReviewDecision | null;
+  proposalPlanningAllowed?: boolean | null;
+  retryRequired?: boolean | null;
+  acceptedWithLimitations?: boolean | null;
+  fidelitySummaryJson?: SingleSiteJsonObject;
+  limitationsJson?: unknown[];
+  warningsJson?: unknown[];
+  blockersJson?: unknown[];
+  diagnosticsJson?: SingleSiteJsonObject;
+  actor?: SingleSiteActorInput | null;
+  reviewStartedAt?: string | null;
+  reviewedAt?: string | null;
+  supersededByReviewId?: string | null;
+};
+
+export type InsertCloneReviewRefInput = SingleSiteWriteEnvelope & {
+  reviewId: string;
+  migrationId: string;
+  refRole: SingleSiteCloneReviewRefRole;
+  refType: string;
+  sourceSystem?: string | null;
+  sourceTable?: string | null;
+  sourceRecordId: string;
+  sourceVersion?: string | null;
+  sourceWatermark?: string | null;
+  contentHash?: string | null;
+  mediaType?: string | null;
+  capturedAt?: string | null;
+  freshUntil?: string | null;
+};
+
+export type UpsertCloneReviewItemInput = SingleSiteWriteEnvelope & {
+  reviewId: string;
+  migrationId: string;
+  itemKey: string;
+  fidelityCategory: SingleSiteCloneFidelityCategory;
+  severity: SingleSiteCloneFidelitySeverity;
+  status?: SingleSiteCloneReviewItemStatus | null;
+  blocksAcceptance?: boolean | null;
+  acceptedLimitation?: boolean | null;
+  findingSummary: string;
+  refIdsJson?: unknown[];
+  limitationJson?: SingleSiteJsonObject;
+  detailsJson?: SingleSiteJsonObject;
+  actor?: Pick<SingleSiteActorInput, "actorType" | "actorId" | "actorDisplayLabel"> | null;
+};
+
+export type InsertCloneReviewEventInput = SingleSiteWriteEnvelope & {
+  reviewId: string;
+  migrationId: string;
+  eventIndex: number;
+  eventAction: SingleSiteCloneReviewEventAction;
+  fromStatus?: SingleSiteCloneReviewStatus | null;
+  toStatus?: SingleSiteCloneReviewStatus | null;
+  actor: SingleSiteActorInput;
+  detailsJson?: SingleSiteJsonObject;
+  limitationsJson?: unknown[];
+  warningsJson?: unknown[];
+  blockersJson?: unknown[];
   sourceWatermark?: string | null;
   payloadHash?: string | null;
   occurredAt?: string | null;
@@ -1520,6 +1736,375 @@ export class SingleSiteStateWriterRepository {
     const result = await client.query("select coalesce(max(event_index), 0) + 1 as event_index from public.gnr8_single_site_source_evidence_review_events where review_id = $1::uuid", [requiredText("reviewId", reviewId)]);
     return Number(result.rows[0]?.event_index ?? 1);
   }
+
+  async createCloneReview(client: SingleSitePgClient, input: CreateCloneReviewInput): Promise<{ row: SingleSiteCloneReviewRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      migration_id: requiredText("migrationId", input.migrationId),
+      client_id: requiredText("clientId", input.clientId),
+      site_id: optionalText(input.siteId),
+      clone_site_version_ref: requiredText("cloneSiteVersionRef", input.cloneSiteVersionRef),
+      runtime_artifact_ref: requiredText("runtimeArtifactRef", input.runtimeArtifactRef),
+      source_evidence_review_id: requiredText("sourceEvidenceReviewId", input.sourceEvidenceReviewId),
+      clone_generation_ref: optionalText(input.cloneGenerationRef),
+      clone_generation_event_id: optionalText(input.cloneGenerationEventId),
+      review_status: optionalEnumValue("reviewStatus", input.reviewStatus, SINGLE_SITE_CLONE_REVIEW_STATUSES) ?? "draft",
+      fidelity_summary_json: jsonObject("fidelitySummaryJson", input.fidelitySummaryJson),
+      limitations_json: jsonArray("limitationsJson", input.limitationsJson),
+      warnings_json: jsonArray("warningsJson", input.warningsJson),
+      blockers_json: jsonArray("blockersJson", input.blockersJson),
+      diagnostics_json: jsonObject("diagnosticsJson", input.diagnosticsJson),
+      supersedes_review_id: optionalText(input.supersedesReviewId),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      causation_id: optionalText(input.causationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      request_id: optionalText(input.requestId),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+    return insertReturning<SingleSiteCloneReviewRow>(client, "gnr8_single_site_clone_reviews", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "migration_id",
+        "client_id",
+        "site_id",
+        "clone_site_version_ref",
+        "runtime_artifact_ref",
+        "source_evidence_review_id",
+        "clone_generation_ref",
+        "clone_generation_event_id",
+        "review_status",
+        "fidelity_summary_json",
+        "limitations_json",
+        "warnings_json",
+        "blockers_json",
+        "diagnostics_json",
+        "supersedes_review_id",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async getCloneReviewById(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteCloneReviewRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_clone_reviews where id = $1::uuid limit 1", [requiredText("reviewId", reviewId)]);
+    return (result.rows[0] as SingleSiteCloneReviewRow | undefined) ?? null;
+  }
+
+  async getLatestCloneReviewForMigration(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteCloneReviewRow | null> {
+    const result = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_clone_reviews
+      where migration_id = $1::uuid
+      order by updated_at desc, created_at desc
+      limit 1
+      `,
+      [requiredText("migrationId", migrationId)],
+    );
+    return (result.rows[0] as SingleSiteCloneReviewRow | undefined) ?? null;
+  }
+
+  async getCloneReviewBySemanticRefs(
+    client: SingleSitePgClient,
+    input: Pick<CreateCloneReviewInput, "migrationId" | "cloneSiteVersionRef" | "runtimeArtifactRef" | "sourceEvidenceReviewId">,
+  ): Promise<SingleSiteCloneReviewRow | null> {
+    const result = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_clone_reviews
+      where migration_id = $1::uuid
+        and clone_site_version_ref = $2
+        and runtime_artifact_ref = $3
+        and source_evidence_review_id = $4::uuid
+      order by created_at asc
+      limit 1
+      `,
+      [
+        requiredText("migrationId", input.migrationId),
+        requiredText("cloneSiteVersionRef", input.cloneSiteVersionRef),
+        requiredText("runtimeArtifactRef", input.runtimeArtifactRef),
+        requiredText("sourceEvidenceReviewId", input.sourceEvidenceReviewId),
+      ],
+    );
+    return (result.rows[0] as SingleSiteCloneReviewRow | undefined) ?? null;
+  }
+
+  async getCloneReviewEventByIdempotencyKey(client: SingleSitePgClient, idempotencyKey: string): Promise<SingleSiteCloneReviewEventRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_clone_review_events where idempotency_key = $1 limit 1", [requiredText("idempotencyKey", idempotencyKey)]);
+    return (result.rows[0] as SingleSiteCloneReviewEventRow | undefined) ?? null;
+  }
+
+  async updateCloneReviewStatus(client: SingleSitePgClient, input: UpdateCloneReviewStatusInput): Promise<SingleSiteCloneReviewRow> {
+    const actor = input.actor ?? null;
+    const result = await client.query(
+      `
+      update public.gnr8_single_site_clone_reviews
+      set
+        review_status = $2,
+        review_decision = $3,
+        proposal_planning_allowed = $4,
+        retry_required = $5,
+        accepted_with_limitations = $6,
+        fidelity_summary_json = coalesce($7::jsonb, fidelity_summary_json),
+        limitations_json = coalesce($8::jsonb, limitations_json),
+        warnings_json = coalesce($9::jsonb, warnings_json),
+        blockers_json = coalesce($10::jsonb, blockers_json),
+        diagnostics_json = coalesce($11::jsonb, diagnostics_json),
+        reviewer_actor_type = coalesce($12, reviewer_actor_type),
+        reviewer_actor_id = coalesce($13, reviewer_actor_id),
+        reviewer_actor_role = coalesce($14, reviewer_actor_role),
+        reviewer_actor_display_label = coalesce($15, reviewer_actor_display_label),
+        review_started_at = coalesce($16::timestamptz, review_started_at),
+        reviewed_at = coalesce($17::timestamptz, reviewed_at),
+        superseded_by_review_id = coalesce($18::uuid, superseded_by_review_id),
+        updated_at = now()
+      where id = $1::uuid
+      returning *
+      `,
+      [
+        requiredText("reviewId", input.reviewId),
+        enumValue("reviewStatus", input.reviewStatus, SINGLE_SITE_CLONE_REVIEW_STATUSES),
+        optionalEnumValue("reviewDecision", input.reviewDecision, SINGLE_SITE_CLONE_REVIEW_DECISIONS),
+        Boolean(input.proposalPlanningAllowed ?? false),
+        Boolean(input.retryRequired ?? false),
+        Boolean(input.acceptedWithLimitations ?? false),
+        input.fidelitySummaryJson === undefined ? null : toPostgresValue(jsonObject("fidelitySummaryJson", input.fidelitySummaryJson)),
+        input.limitationsJson === undefined ? null : toPostgresValue(jsonArray("limitationsJson", input.limitationsJson)),
+        input.warningsJson === undefined ? null : toPostgresValue(jsonArray("warningsJson", input.warningsJson)),
+        input.blockersJson === undefined ? null : toPostgresValue(jsonArray("blockersJson", input.blockersJson)),
+        input.diagnosticsJson === undefined ? null : toPostgresValue(jsonObject("diagnosticsJson", input.diagnosticsJson)),
+        actor ? enumValue("actor.actorType", actor.actorType, SINGLE_SITE_ACTOR_TYPES) : null,
+        actor ? requiredText("actor.actorId", actor.actorId) : null,
+        actor ? requiredText("actor.actorRole", actor.actorRole) : null,
+        actor ? optionalText(actor.actorDisplayLabel) : null,
+        timestampText("reviewStartedAt", input.reviewStartedAt),
+        timestampText("reviewedAt", input.reviewedAt),
+        optionalText(input.supersededByReviewId),
+      ],
+    );
+    const row = result.rows[0] as SingleSiteCloneReviewRow | undefined;
+    if (!row) throw new SingleSiteStateWriterError("clone review status update did not return a row");
+    return row;
+  }
+
+  async insertCloneReviewRef(client: SingleSitePgClient, input: InsertCloneReviewRefInput): Promise<{ row: SingleSiteCloneReviewRefRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      review_id: requiredText("reviewId", input.reviewId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      ref_role: enumValue("refRole", input.refRole, SINGLE_SITE_CLONE_REVIEW_REF_ROLES),
+      ref_type: requiredText("refType", input.refType),
+      source_system: optionalText(input.sourceSystem) ?? "gnr8",
+      source_table: optionalText(input.sourceTable),
+      source_record_id: requiredText("sourceRecordId", input.sourceRecordId),
+      source_version: optionalText(input.sourceVersion),
+      source_watermark: optionalText(input.sourceWatermark),
+      content_hash: optionalText(input.contentHash),
+      media_type: optionalText(input.mediaType),
+      captured_at: timestampText("capturedAt", input.capturedAt),
+      fresh_until: timestampText("freshUntil", input.freshUntil),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      correlation_id: requiredText("correlationId", input.correlationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+    return insertReturning<SingleSiteCloneReviewRefRow>(client, "gnr8_single_site_clone_review_refs", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "review_id",
+        "migration_id",
+        "ref_role",
+        "ref_type",
+        "source_system",
+        "source_table",
+        "source_record_id",
+        "source_version",
+        "source_watermark",
+        "content_hash",
+        "media_type",
+        "captured_at",
+        "fresh_until",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async upsertCloneReviewItem(client: SingleSitePgClient, input: UpsertCloneReviewItemInput): Promise<SingleSiteCloneReviewItemRow> {
+    const attempted: InsertableRow = {
+      review_id: requiredText("reviewId", input.reviewId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      item_key: requiredText("itemKey", input.itemKey),
+      fidelity_category: enumValue("fidelityCategory", input.fidelityCategory, SINGLE_SITE_CLONE_FIDELITY_CATEGORIES),
+      severity: enumValue("severity", input.severity, SINGLE_SITE_CLONE_FIDELITY_SEVERITIES),
+      status: optionalEnumValue("status", input.status, SINGLE_SITE_CLONE_REVIEW_ITEM_STATUSES) ?? "open",
+      blocks_acceptance: input.blocksAcceptance ?? (input.severity === "p0_blocker" || input.severity === "p1_major"),
+      accepted_limitation: input.acceptedLimitation ?? false,
+      finding_summary: requiredText("findingSummary", input.findingSummary),
+      ref_ids_json: jsonArray("refIdsJson", input.refIdsJson),
+      limitation_json: jsonObject("limitationJson", input.limitationJson),
+      details_json: jsonObject("detailsJson", input.detailsJson),
+      reviewer_actor_type: input.actor ? enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES) : null,
+      reviewer_actor_id: input.actor ? requiredText("actor.actorId", input.actor.actorId) : null,
+      reviewer_actor_display_label: input.actor ? optionalText(input.actor.actorDisplayLabel) : null,
+      correlation_id: requiredText("correlationId", input.correlationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+
+    const existing = await client.query(
+      "select * from public.gnr8_single_site_clone_review_items where idempotency_key = $1 limit 1",
+      [attempted.idempotency_key],
+    );
+    const existingRow = existing.rows[0] as SingleSiteCloneReviewItemRow | undefined;
+    if (existingRow) {
+      assertSemanticMatch("gnr8_single_site_clone_review_items", String(attempted.idempotency_key), attempted, existingRow, [
+        "review_id",
+        "migration_id",
+        "item_key",
+        "fidelity_category",
+        "severity",
+        "status",
+        "blocks_acceptance",
+        "accepted_limitation",
+        "finding_summary",
+        "ref_ids_json",
+        "limitation_json",
+        "details_json",
+        "reviewer_actor_type",
+        "reviewer_actor_id",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ]);
+      return existingRow;
+    }
+
+    const result = await client.query(
+      `
+      insert into public.gnr8_single_site_clone_review_items (
+        review_id, migration_id, item_key, fidelity_category, severity, status, blocks_acceptance,
+        accepted_limitation, finding_summary, ref_ids_json, limitation_json, details_json,
+        reviewer_actor_type, reviewer_actor_id, reviewer_actor_display_label, correlation_id, idempotency_key,
+        privacy_label, retention_class, metadata_json
+      )
+      values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20::jsonb)
+      on conflict (review_id, item_key) do update set
+        fidelity_category = excluded.fidelity_category,
+        severity = excluded.severity,
+        status = excluded.status,
+        blocks_acceptance = excluded.blocks_acceptance,
+        accepted_limitation = excluded.accepted_limitation,
+        finding_summary = excluded.finding_summary,
+        ref_ids_json = excluded.ref_ids_json,
+        limitation_json = excluded.limitation_json,
+        details_json = excluded.details_json,
+        reviewer_actor_type = excluded.reviewer_actor_type,
+        reviewer_actor_id = excluded.reviewer_actor_id,
+        reviewer_actor_display_label = excluded.reviewer_actor_display_label,
+        updated_at = now()
+      returning *
+      `,
+      [
+        attempted.review_id,
+        attempted.migration_id,
+        attempted.item_key,
+        attempted.fidelity_category,
+        attempted.severity,
+        attempted.status,
+        attempted.blocks_acceptance,
+        attempted.accepted_limitation,
+        attempted.finding_summary,
+        toPostgresValue(attempted.ref_ids_json),
+        toPostgresValue(attempted.limitation_json),
+        toPostgresValue(attempted.details_json),
+        attempted.reviewer_actor_type,
+        attempted.reviewer_actor_id,
+        attempted.reviewer_actor_display_label,
+        attempted.correlation_id,
+        attempted.idempotency_key,
+        attempted.privacy_label,
+        attempted.retention_class,
+        toPostgresValue(attempted.metadata_json),
+      ],
+    );
+    return result.rows[0] as SingleSiteCloneReviewItemRow;
+  }
+
+  async listCloneReviewItems(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteCloneReviewItemRow[]> {
+    const result = await client.query("select * from public.gnr8_single_site_clone_review_items where review_id = $1::uuid order by item_key asc", [requiredText("reviewId", reviewId)]);
+    return result.rows as SingleSiteCloneReviewItemRow[];
+  }
+
+  async listCloneReviewRefs(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteCloneReviewRefRow[]> {
+    const result = await client.query("select * from public.gnr8_single_site_clone_review_refs where review_id = $1::uuid order by created_at asc, ref_role asc", [requiredText("reviewId", reviewId)]);
+    return result.rows as SingleSiteCloneReviewRefRow[];
+  }
+
+  async insertCloneReviewEvent(client: SingleSitePgClient, input: InsertCloneReviewEventInput): Promise<{ row: SingleSiteCloneReviewEventRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      review_id: requiredText("reviewId", input.reviewId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      event_index: optionalPositiveInteger("eventIndex", input.eventIndex),
+      event_action: enumValue("eventAction", input.eventAction, SINGLE_SITE_CLONE_REVIEW_EVENT_ACTIONS),
+      from_status: optionalEnumValue("fromStatus", input.fromStatus, SINGLE_SITE_CLONE_REVIEW_STATUSES),
+      to_status: optionalEnumValue("toStatus", input.toStatus, SINGLE_SITE_CLONE_REVIEW_STATUSES),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      details_json: jsonObject("detailsJson", input.detailsJson),
+      limitations_json: jsonArray("limitationsJson", input.limitationsJson),
+      warnings_json: jsonArray("warningsJson", input.warningsJson),
+      blockers_json: jsonArray("blockersJson", input.blockersJson),
+      source_watermark: optionalText(input.sourceWatermark),
+      payload_hash: optionalText(input.payloadHash),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      causation_id: optionalText(input.causationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      request_id: optionalText(input.requestId),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+      occurred_at: timestampText("occurredAt", input.occurredAt) ?? undefined,
+    };
+    return insertReturning<SingleSiteCloneReviewEventRow>(client, "gnr8_single_site_clone_review_events", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "review_id",
+        "migration_id",
+        "event_action",
+        "from_status",
+        "to_status",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "details_json",
+        "limitations_json",
+        "warnings_json",
+        "blockers_json",
+        "source_watermark",
+        "payload_hash",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async nextCloneReviewEventIndex(client: SingleSitePgClient, reviewId: string): Promise<number> {
+    const result = await client.query("select coalesce(max(event_index), 0) + 1 as event_index from public.gnr8_single_site_clone_review_events where review_id = $1::uuid", [requiredText("reviewId", reviewId)]);
+    return Number(result.rows[0]?.event_index ?? 1);
+  }
 }
 
 const SINGLE_SITE_STATE_STAGE_VALUES = Object.values(SINGLE_SITE_STATE_STAGE) as SingleSiteMigrationStage[];
+const SINGLE_SITE_CLONE_REVIEW_ITEM_STATUSES = ["open", "resolved", "accepted_limitation", "superseded"] as const;

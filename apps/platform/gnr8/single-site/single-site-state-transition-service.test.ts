@@ -42,6 +42,9 @@ function fakeRepository(options: {
   reviewStatus?: string;
   cloneAllowed?: boolean;
   blockingItems?: boolean;
+  cloneReviewStatus?: string;
+  cloneProposalAllowed?: boolean;
+  cloneLimitations?: unknown[];
 }): never {
   const events: Record<string, unknown>[] = [];
   const refs: Record<string, unknown>[] = [];
@@ -96,6 +99,22 @@ function fakeRepository(options: {
     async listSourceEvidenceReviewItems() {
       return options.blockingItems ? [{ blocks_clone_generation: true }] : [];
     },
+    async getLatestCloneReviewForMigration() {
+      return {
+        id: "33333333-3333-4333-8333-333333333333",
+        migration_id: MIGRATION_ID,
+        review_status: options.cloneReviewStatus ?? "accepted",
+        proposal_planning_allowed: options.cloneProposalAllowed ?? true,
+        limitations_json: options.cloneLimitations ?? [],
+      };
+    },
+    async listCloneReviewRefs() {
+      return [
+        { ref_role: "runtime_site_version_clone" },
+        { ref_role: "runtime_artifact_clone" },
+        { ref_role: "source_evidence_review" },
+      ];
+    },
   };
   return repo as never;
 }
@@ -124,6 +143,26 @@ test("invalid transition and source evidence shortcuts fail closed", async () =>
 });
 
 test("proposal, publish, closeout, and terminal guardrails block missing prerequisites", async () => {
+  await assert.rejects(
+    () =>
+      new SingleSiteStateTransitionService(fakeRepository({ state: "clone_review_required", cloneReviewStatus: "retry_required", cloneProposalAllowed: false })).transition(
+        baseInput({
+          toState: "improvement_proposal_started",
+          refs: [{ refRole: "clone_review", refType: "clone_review", sourceRecordId: "33333333-3333-4333-8333-333333333333", idempotencyKey: "idem-clone-review-ref" }],
+        }),
+      ),
+    /accepted clone review status/,
+  );
+  const proposalStart = await new SingleSiteStateTransitionService(
+    fakeRepository({ state: "clone_review_required", cloneReviewStatus: "accepted_with_limitations", cloneProposalAllowed: true, cloneLimitations: [{ category: "font" }] }),
+  ).transition(
+    baseInput({
+      toState: "improvement_proposal_started",
+      refs: [{ refRole: "clone_review", refType: "clone_review", sourceRecordId: "33333333-3333-4333-8333-333333333333", idempotencyKey: "idem-clone-review-ref-ok" }],
+    }),
+  );
+  assert.equal(proposalStart.toState, "improvement_proposal_started");
+
   await assert.rejects(
     () => new SingleSiteStateTransitionService(fakeRepository({ state: "improvement_proposal_started" })).transition(baseInput({ toState: "improvement_proposal_approved", refs: [] })),
     SingleSiteTransitionError,

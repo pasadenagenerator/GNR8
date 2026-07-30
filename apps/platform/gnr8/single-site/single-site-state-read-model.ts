@@ -1,12 +1,20 @@
 import "server-only";
 
 import {
+  SINGLE_SITE_CLONE_FIDELITY_CATEGORIES,
+  SINGLE_SITE_CLONE_FIDELITY_SEVERITIES,
   SINGLE_SITE_MIGRATION_STAGES,
   SINGLE_SITE_REQUIRED_SOURCE_EVIDENCE_CATEGORIES,
   SINGLE_SITE_STATE_STAGE,
   isSingleSiteTerminalState,
   type SingleSiteBlockerStatus,
   type SingleSiteBlockerType,
+  type SingleSiteCloneFidelityCategory,
+  type SingleSiteCloneFidelitySeverity,
+  type SingleSiteCloneReviewDecision,
+  type SingleSiteCloneReviewEventAction,
+  type SingleSiteCloneReviewRefRole,
+  type SingleSiteCloneReviewStatus,
   type SingleSiteCloseoutOutcome,
   type SingleSiteCloseoutStatus,
   type SingleSiteEvidenceItemCategory,
@@ -24,6 +32,10 @@ import {
   type SingleSiteStageSummaryStatus,
 } from "./single-site-state-contracts";
 import type {
+  SingleSiteCloneReviewEventRow,
+  SingleSiteCloneReviewItemRow,
+  SingleSiteCloneReviewRefRow,
+  SingleSiteCloneReviewRow,
   SingleSiteEvidenceItemRow,
   SingleSiteMigrationRefRow,
   SingleSiteMigrationRow,
@@ -40,7 +52,13 @@ export const SINGLE_SITE_RECOMMENDED_NEXT_ACTIONS = [
   "retry_capture",
   "accept_source_evidence",
   "start_clone_generation",
+  "review_clone",
+  "complete_clone_review",
   "review_clone_fidelity",
+  "retry_clone_generation",
+  "resolve_clone_blockers",
+  "review_latest_clone",
+  "prepare_improvement_proposal_with_limitations",
   "request_clone_revision",
   "prepare_improvement_proposal",
   "approve_or_reject_proposal",
@@ -184,6 +202,11 @@ export type SingleSiteMigrationReadRepositorySnapshot = {
   sourceEvidenceItems: SingleSiteEvidenceItemRow[];
   sourceEvidenceRefs: SingleSiteRawSourceEvidenceRefRow[];
   sourceEvidenceEvents: SingleSiteReviewEventRow[];
+  cloneReviews: SingleSiteCloneReviewRow[];
+  latestCloneReview: SingleSiteCloneReviewRow | null;
+  cloneReviewItems: SingleSiteCloneReviewItemRow[];
+  cloneReviewRefs: SingleSiteCloneReviewRefRow[];
+  cloneReviewEvents: SingleSiteCloneReviewEventRow[];
 };
 
 export type SingleSiteMigrationSummary = {
@@ -360,6 +383,66 @@ export type SingleSiteSourceEvidenceReviewEventSummary = {
   occurredAt: string;
 };
 
+export type SingleSiteCloneReviewRefSummary = {
+  id: string;
+  role: SingleSiteCloneReviewRefRole;
+  refType: string;
+  sourceSystem: string;
+  sourceTable: string | null;
+  sourceRecordId: string;
+  sourceWatermark: string | null;
+  contentHash: string | null;
+  mediaType: string | null;
+  capturedAt: string | null;
+  freshUntil: string | null;
+  stale: boolean;
+};
+
+export type SingleSiteCloneReviewEventSummary = {
+  id: string;
+  eventIndex: number;
+  action: SingleSiteCloneReviewEventAction;
+  fromStatus: SingleSiteCloneReviewStatus | null;
+  toStatus: SingleSiteCloneReviewStatus | null;
+  actorType: string;
+  actorId: string;
+  actorRole: string;
+  occurredAt: string;
+};
+
+export type SingleSiteCloneReviewSummary = {
+  reviewId: string | null;
+  reviewCount: number;
+  reviewStatus: SingleSiteCloneReviewStatus | "missing";
+  reviewDecision: SingleSiteCloneReviewDecision | null;
+  latestCloneReviewRef: string | null;
+  cloneSiteVersionRef: string | null;
+  runtimeArtifactRef: string | null;
+  sourceEvidenceReviewRef: string | null;
+  cloneGenerationRef: string | null;
+  readyForReview: boolean;
+  inReview: boolean;
+  accepted: boolean;
+  acceptedWithLimitations: boolean;
+  retryRequired: boolean;
+  rejected: boolean;
+  superseded: boolean;
+  proposalPlanningAllowed: boolean;
+  cloneAcceptanceReady: boolean;
+  limitations: unknown[];
+  warnings: unknown[];
+  blockers: unknown[];
+  fidelitySummary: SingleSiteJsonObject;
+  findingCount: number;
+  findingCountsBySeverity: Record<SingleSiteCloneFidelitySeverity, number>;
+  findingCountsByCategory: Record<SingleSiteCloneFidelityCategory, number>;
+  openP0P1FindingCount: number;
+  reviewedAt: string | null;
+  reviewerActorId: string | null;
+  refs: SingleSiteCloneReviewRefSummary[];
+  events: SingleSiteCloneReviewEventSummary[];
+};
+
 export type SingleSiteCloseoutSummary = {
   present: boolean;
   closeoutId: string | null;
@@ -406,6 +489,9 @@ export type SingleSiteMvpWorkflowReadinessFlags = {
   cloneGenerationAllowed: boolean;
   cloneBlockedByEvidence: boolean;
   cloneReviewReady: boolean;
+  cloneAccepted: boolean;
+  cloneAcceptedWithLimitations: boolean;
+  cloneProposalPlanningAllowed: boolean;
   proposalApprovalReady: boolean;
   improvementReviewReady: boolean;
   domainReadinessIncomplete: boolean;
@@ -427,6 +513,7 @@ export type SingleSiteMigrationReadModel = SingleSiteReadModelBoundaryFlags & {
   stages: SingleSiteStageSummary[];
   stateHistory: SingleSiteStateHistoryItem[];
   sourceEvidenceReview: SingleSiteSourceEvidenceReviewSummary;
+  cloneReview: SingleSiteCloneReviewSummary;
   evidenceCompleteness: SingleSiteEvidenceCompletenessSummary;
   blockers: SingleSiteBlockerSummary;
   refs: SingleSiteRefSummary;
@@ -495,6 +582,7 @@ function missingRoles(refs: readonly SingleSiteMigrationRefRow[], roles: readonl
 
 function requiredRefsForAction(actionKey: SingleSiteRecommendedNextActionKey): SingleSiteMigrationRefRole[] {
   if (actionKey === "start_clone_generation") return ["source_evidence_review", "source_evidence_package"];
+  if (actionKey === "prepare_improvement_proposal" || actionKey === "prepare_improvement_proposal_with_limitations") return ["clone_review"];
   if (actionKey === "prepare_domain_readiness") return ["ddom_readiness_snapshot"];
   if (actionKey === "prepare_subscription_hosting") return ["subscription", "hosting_entitlement"];
   if (actionKey === "request_launch_approval") return ["content_approval", "ddom_readiness_snapshot", "hosting_entitlement"];
@@ -507,6 +595,7 @@ function requiredRefsForAction(actionKey: SingleSiteRecommendedNextActionKey): S
 function nextActionForState(input: {
   state: SingleSiteMigrationState;
   sourceEvidence: SingleSiteSourceEvidenceReviewSummary;
+  cloneReview: SingleSiteCloneReviewSummary;
   blockers: SingleSiteBlockerSummary;
   closeout: SingleSiteCloseoutSummary;
   refs: readonly SingleSiteMigrationRefRow[];
@@ -520,7 +609,16 @@ function nextActionForState(input: {
     if (input.sourceEvidence.readyForReview || input.sourceEvidence.reviewStatus !== "missing") return "review_source_evidence";
     return "review_source_evidence";
   }
-  if (input.state === "clone_generation_completed" || input.state === "clone_review_required") return "review_clone_fidelity";
+  if (input.state === "clone_generation_completed" || input.state === "clone_review_required") {
+    if (input.cloneReview.reviewStatus === "missing") return "review_clone";
+    if (input.cloneReview.readyForReview || input.cloneReview.inReview || input.cloneReview.reviewStatus === "draft") return "complete_clone_review";
+    if (input.cloneReview.acceptedWithLimitations) return "prepare_improvement_proposal_with_limitations";
+    if (input.cloneReview.accepted) return "prepare_improvement_proposal";
+    if (input.cloneReview.retryRequired) return "retry_clone_generation";
+    if (input.cloneReview.rejected) return "resolve_clone_blockers";
+    if (input.cloneReview.superseded) return "review_latest_clone";
+    return "review_clone";
+  }
   if (input.state === "clone_revision_required") return "request_clone_revision";
   if (input.state === "improvement_proposal_started" || input.state === "improvement_proposal_rejected") return "prepare_improvement_proposal";
   if (input.state === "improvement_proposal_ready") return "approve_or_reject_proposal";
@@ -551,9 +649,15 @@ function actionReason(actionKey: SingleSiteRecommendedNextActionKey, state: Sing
     retry_capture: "Capture or source evidence review indicates retry is required.",
     accept_source_evidence: "Source evidence can be accepted by a reviewer.",
     start_clone_generation: "Source evidence has been accepted and clone generation is the next projected stage.",
+    review_clone: "Clone output is available and needs a canonical clone review.",
+    complete_clone_review: "Clone review has started or is ready and needs a fidelity decision.",
     review_clone_fidelity: "Clone output is available or review is required.",
+    retry_clone_generation: "Clone review requires retry before proposal planning.",
+    resolve_clone_blockers: "Clone review rejected the clone and blockers must be resolved.",
+    review_latest_clone: "Latest clone review was superseded and the replacement review should be checked.",
     request_clone_revision: "Clone review requires a revision before proposal work proceeds.",
     prepare_improvement_proposal: "Proposal artifacts are not ready for approval yet.",
+    prepare_improvement_proposal_with_limitations: "Clone was accepted with limitations that must carry into proposal planning.",
     approve_or_reject_proposal: "Improvement proposal is ready for an operator decision.",
     implement_improvements: "Approved proposal can move into implementation.",
     review_improved_preview: "Improved preview/content needs operator review.",
@@ -572,7 +676,7 @@ function actionReason(actionKey: SingleSiteRecommendedNextActionKey, state: Sing
 
 function ownerRole(actionKey: SingleSiteRecommendedNextActionKey): SingleSiteRecommendedNextAction["ownerRole"] {
   if (["review_source_evidence", "accept_source_evidence"].includes(actionKey)) return "source_evidence_reviewer";
-  if (["review_clone_fidelity", "request_clone_revision"].includes(actionKey)) return "clone_reviewer";
+  if (["review_clone", "complete_clone_review", "review_clone_fidelity", "retry_clone_generation", "resolve_clone_blockers", "review_latest_clone", "request_clone_revision"].includes(actionKey)) return "clone_reviewer";
   if (actionKey === "approve_or_reject_proposal") return "proposal_approver";
   if (actionKey === "prepare_domain_readiness") return "domain_operator";
   if (actionKey === "prepare_subscription_hosting") return "billing_operator";
@@ -779,6 +883,80 @@ function buildSourceEvidence(snapshot: SingleSiteMigrationReadRepositorySnapshot
   };
 }
 
+function buildCloneReview(snapshot: SingleSiteMigrationReadRepositorySnapshot, generatedAt: string): SingleSiteCloneReviewSummary {
+  const latest = snapshot.latestCloneReview;
+  const severityCounts = Object.fromEntries(SINGLE_SITE_CLONE_FIDELITY_SEVERITIES.map((severity) => [severity, 0])) as Record<SingleSiteCloneFidelitySeverity, number>;
+  const categoryCounts = Object.fromEntries(SINGLE_SITE_CLONE_FIDELITY_CATEGORIES.map((category) => [category, 0])) as Record<SingleSiteCloneFidelityCategory, number>;
+  for (const item of snapshot.cloneReviewItems) {
+    severityCounts[item.severity] += 1;
+    categoryCounts[item.fidelity_category] += 1;
+  }
+  const refs = snapshot.cloneReviewRefs.map((ref) => ({
+    id: ref.id,
+    role: ref.ref_role,
+    refType: ref.ref_type,
+    sourceSystem: ref.source_system,
+    sourceTable: ref.source_table,
+    sourceRecordId: ref.source_record_id,
+    sourceWatermark: ref.source_watermark,
+    contentHash: ref.content_hash,
+    mediaType: ref.media_type,
+    capturedAt: timestamp(ref.captured_at),
+    freshUntil: timestamp(ref.fresh_until),
+    stale: isPast(timestamp(ref.fresh_until), generatedAt),
+  }));
+  const events = [...snapshot.cloneReviewEvents]
+    .sort((left, right) => Number(left.event_index) - Number(right.event_index))
+    .map((event) => ({
+      id: event.id,
+      eventIndex: Number(event.event_index),
+      action: event.event_action,
+      fromStatus: event.from_status,
+      toStatus: event.to_status,
+      actorType: event.actor_type,
+      actorId: event.actor_id,
+      actorRole: event.actor_role,
+      occurredAt: timestamp(event.occurred_at) ?? timestamp(event.created_at) ?? "",
+    }));
+  const reviewStatus = latest?.review_status ?? "missing";
+  const accepted = reviewStatus === "accepted" || reviewStatus === "accepted_with_limitations";
+  const openP0P1FindingCount = snapshot.cloneReviewItems.filter(
+    (item) => item.status === "open" && (item.severity === "p0_blocker" || item.severity === "p1_major") && !item.accepted_limitation,
+  ).length;
+  return {
+    reviewId: latest?.id ?? null,
+    reviewCount: snapshot.cloneReviews.length,
+    reviewStatus,
+    reviewDecision: latest?.review_decision ?? null,
+    latestCloneReviewRef: latest?.id ?? null,
+    cloneSiteVersionRef: latest?.clone_site_version_ref ?? null,
+    runtimeArtifactRef: latest?.runtime_artifact_ref ?? null,
+    sourceEvidenceReviewRef: latest?.source_evidence_review_id ?? null,
+    cloneGenerationRef: latest?.clone_generation_ref ?? null,
+    readyForReview: reviewStatus === "ready_for_review",
+    inReview: reviewStatus === "in_review",
+    accepted,
+    acceptedWithLimitations: reviewStatus === "accepted_with_limitations",
+    retryRequired: Boolean(latest?.retry_required) || reviewStatus === "retry_required",
+    rejected: reviewStatus === "rejected",
+    superseded: reviewStatus === "superseded",
+    proposalPlanningAllowed: Boolean(latest?.proposal_planning_allowed) && accepted,
+    cloneAcceptanceReady: Boolean(latest?.proposal_planning_allowed) && accepted && openP0P1FindingCount === 0,
+    limitations: jsonArray(latest?.limitations_json),
+    warnings: jsonArray(latest?.warnings_json),
+    blockers: jsonArray(latest?.blockers_json),
+    fidelitySummary: jsonObject(latest?.fidelity_summary_json),
+    findingCount: snapshot.cloneReviewItems.length,
+    findingCountsBySeverity: severityCounts,
+    findingCountsByCategory: categoryCounts,
+    openP0P1FindingCount,
+    reviewedAt: timestamp(latest?.reviewed_at),
+    reviewerActorId: latest?.reviewer_actor_id ?? null,
+    refs,
+    events,
+  };
+}
+
 function buildRefs(
   refs: readonly SingleSiteMigrationRefRow[],
   generatedAt: string,
@@ -831,6 +1009,7 @@ function buildCloseout(row: SingleSiteRawCloseoutRow | null): SingleSiteCloseout
 function buildReadiness(input: {
   state: SingleSiteMigrationState;
   sourceEvidence: SingleSiteSourceEvidenceReviewSummary;
+  cloneReview: SingleSiteCloneReviewSummary;
   refs: SingleSiteRefSummary;
   closeout: SingleSiteCloseoutSummary;
 }): SingleSiteMvpWorkflowReadinessFlags {
@@ -842,6 +1021,9 @@ function buildReadiness(input: {
     cloneGenerationAllowed: input.sourceEvidence.cloneGenerationAllowed,
     cloneBlockedByEvidence: input.sourceEvidence.cloneBlockedByMissingAcceptance || input.sourceEvidence.cloneBlockingItemCount > 0,
     cloneReviewReady: input.state === "clone_generation_completed" || input.state === "clone_review_required",
+    cloneAccepted: input.cloneReview.accepted,
+    cloneAcceptedWithLimitations: input.cloneReview.acceptedWithLimitations,
+    cloneProposalPlanningAllowed: input.cloneReview.proposalPlanningAllowed,
     proposalApprovalReady: input.state === "improvement_proposal_ready",
     improvementReviewReady: input.state === "improvement_implementation_completed" || input.state === "improved_preview_ready" || input.state === "content_review_required",
     domainReadinessIncomplete: input.state === "content_approved" || input.state === "domain_readiness_required" || !input.refs.byRole.ddom_readiness_snapshot,
@@ -868,9 +1050,11 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
   const blockers = buildBlockers(snapshot.blockers);
   const closeout = buildCloseout(snapshot.closeout);
   const sourceEvidence = buildSourceEvidence(snapshot, generatedAt);
+  const cloneReview = buildCloneReview(snapshot, generatedAt);
   const actionKey = nextActionForState({
     state: snapshot.migration.current_state,
     sourceEvidence: sourceEvidence.review,
+    cloneReview,
     blockers,
     closeout,
     refs: snapshot.refs,
@@ -880,10 +1064,12 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
   const stages = buildStageSummaries(snapshot, generatedAt);
   const staleReview = isPast(sourceEvidence.review.freshUntil, generatedAt);
   const staleSourceEvidenceRefCount = sourceEvidence.review.refs.filter((ref) => ref.stale).length;
+  const staleCloneReviewRefCount = cloneReview.refs.filter((ref) => ref.stale).length;
   const staleStageCount = stages.filter((stage) => stage.stale).length;
   const staleReasons = [
     refs.staleCount > 0 ? "migration_refs_stale" : null,
     staleSourceEvidenceRefCount > 0 ? "source_evidence_refs_stale" : null,
+    staleCloneReviewRefCount > 0 ? "clone_review_refs_stale" : null,
     staleStageCount > 0 ? "stage_summaries_stale" : null,
     staleReview ? "source_evidence_review_stale" : null,
   ].filter((value): value is string => Boolean(value));
@@ -929,6 +1115,7 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
     stages,
     stateHistory: history,
     sourceEvidenceReview: sourceEvidence.review,
+    cloneReview,
     evidenceCompleteness: sourceEvidence.completeness,
     blockers,
     refs,
@@ -954,10 +1141,11 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
       sourceWatermark: snapshot.migration.source_watermark,
       latestReviewWatermark: snapshot.latestSourceEvidenceReview?.source_watermark ?? null,
     },
-    workflowReadiness: buildReadiness({ state: snapshot.migration.current_state, sourceEvidence: sourceEvidence.review, refs, closeout }),
+    workflowReadiness: buildReadiness({ state: snapshot.migration.current_state, sourceEvidence: sourceEvidence.review, cloneReview, refs, closeout }),
     diagnostics: [
       snapshot.migration.current_stage !== SINGLE_SITE_STATE_STAGE[snapshot.migration.current_state] ? "current_stage_does_not_match_contract_state_stage" : null,
       snapshot.sourceEvidenceReviews.length > 1 ? "multiple_source_evidence_reviews_present_latest_review_selected" : null,
+      snapshot.cloneReviews.length > 1 ? "multiple_clone_reviews_present_latest_review_selected" : null,
       snapshot.migration.site_id ? null : "site_id_missing_lookup_by_site_id_requires_ownership_or_runtime_site_id_fallback",
     ].filter((value): value is string => Boolean(value)),
   };

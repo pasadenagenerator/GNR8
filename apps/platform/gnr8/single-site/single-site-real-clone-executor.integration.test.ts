@@ -39,7 +39,12 @@ const MIGRATION_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../supabase/migrations/20260729120000_single_site_state_evidence_spine.sql",
 );
+const CLONE_REVIEW_MIGRATION_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../supabase/migrations/20260730120000_single_site_clone_review_core.sql",
+);
 const MIGRATION_BASENAME = "20260729120000_single_site_state_evidence_spine.sql";
+const CLONE_REVIEW_MIGRATION_BASENAME = "20260730120000_single_site_clone_review_core.sql";
 const REQUIRED_CATEGORIES = ["source_url", "page", "screenshot", "dom", "text", "image", "asset", "font", "visual_identity", "metadata"] as const;
 const SINGLE_SITE_TABLES = [
   "gnr8_single_site_migration_state_events",
@@ -47,6 +52,10 @@ const SINGLE_SITE_TABLES = [
   "gnr8_single_site_source_evidence_reviews",
   "gnr8_single_site_source_evidence_review_items",
   "gnr8_single_site_source_evidence_review_refs",
+  "gnr8_single_site_clone_reviews",
+  "gnr8_single_site_clone_review_refs",
+  "gnr8_single_site_clone_review_items",
+  "gnr8_single_site_clone_review_events",
 ] as const;
 const RUNTIME_SIDE_EFFECT_TABLES = [
   "gnr8_runtime_active_pointers",
@@ -138,7 +147,9 @@ async function startDisposablePostgres(): Promise<DisposablePostgres> {
     }
 
     docker(["cp", MIGRATION_PATH, `${containerName}:/tmp/${MIGRATION_BASENAME}`]);
+    docker(["cp", CLONE_REVIEW_MIGRATION_PATH, `${containerName}:/tmp/${CLONE_REVIEW_MIGRATION_BASENAME}`]);
     docker(["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-h", "127.0.0.1", "-U", user, "-d", database, "-f", `/tmp/${MIGRATION_BASENAME}`]);
+    docker(["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-h", "127.0.0.1", "-U", user, "-d", database, "-f", `/tmp/${CLONE_REVIEW_MIGRATION_BASENAME}`]);
 
     const port = parsePublishedPort(docker(["port", containerName, "5432/tcp"]));
     return {

@@ -197,6 +197,20 @@ Canonical runtime-store integration verification for MVP-12:
 - `apps/platform/gnr8/runtime/artifact-builder.ts`
 - `docs/product/gnr8-single-site-real-clone-executor-closeout.md`
 
+## MVP-13 Single-Site Clone Review And Fidelity Acceptance Core
+
+Canonical clone review and fidelity acceptance implementation:
+- `apps/platform/gnr8/single-site/clone-review-service.ts`
+- `apps/platform/gnr8/single-site/clone-review-service.test.ts`
+- `apps/platform/gnr8/single-site/clone-review-service.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `apps/platform/supabase/migrations/20260730120000_single_site_clone_review_core.sql`
+- `docs/product/gnr8-single-site-clone-review-fidelity-acceptance-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

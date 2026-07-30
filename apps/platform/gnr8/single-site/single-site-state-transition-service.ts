@@ -323,6 +323,25 @@ export class SingleSiteStateTransitionService {
       requireRefs(input, ["source_evidence_review", "source_evidence_package"], missing, "source evidence migration ref");
     }
 
+    if (input.toState === "improvement_proposal_started") {
+      const review = await this.repository.getLatestCloneReviewForMigration(tx, migration.id);
+      if (!review) {
+        missing.push("accepted clone review");
+      } else {
+        if (!["accepted", "accepted_with_limitations"].includes(review.review_status)) missing.push("accepted clone review status");
+        if (!review.proposal_planning_allowed) missing.push("clone review proposal planning allowed");
+        const reviewRefs = await this.repository.listCloneReviewRefs(tx, review.id);
+        const reviewRefRoles = new Set(reviewRefs.map((ref) => ref.ref_role));
+        if (!reviewRefRoles.has("runtime_site_version_clone")) missing.push("clone site version ref");
+        if (!reviewRefRoles.has("runtime_artifact_clone")) missing.push("runtime artifact ref");
+        if (!reviewRefRoles.has("source_evidence_review")) missing.push("source evidence review ref");
+        if (review.review_status === "accepted_with_limitations" && (!Array.isArray(review.limitations_json) || review.limitations_json.length === 0)) {
+          missing.push("accepted clone review limitations");
+        }
+      }
+      requireRefs(input, ["clone_review"], missing, "clone review migration ref");
+    }
+
     if (input.toState === "improvement_proposal_approved" && fromState !== "improvement_proposal_ready") {
       missing.push("proposal ready state");
     }

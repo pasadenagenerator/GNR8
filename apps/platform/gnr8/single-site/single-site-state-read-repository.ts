@@ -13,6 +13,10 @@ import {
   type SingleSiteStateHistoryItem,
 } from "./single-site-state-read-model";
 import type {
+  SingleSiteCloneReviewEventRow,
+  SingleSiteCloneReviewItemRow,
+  SingleSiteCloneReviewRefRow,
+  SingleSiteCloneReviewRow,
   SingleSiteEvidenceItemRow,
   SingleSiteMigrationRefRow,
   SingleSiteMigrationRow,
@@ -151,6 +155,11 @@ export class SingleSiteStateReadRepository {
     const sourceEvidenceItems = latestSourceEvidenceReview ? await this.readSourceEvidenceItems(client, latestSourceEvidenceReview.id) : [];
     const sourceEvidenceRefs = latestSourceEvidenceReview ? await this.readSourceEvidenceRefs(client, latestSourceEvidenceReview.id) : [];
     const sourceEvidenceEvents = latestSourceEvidenceReview ? await this.readSourceEvidenceEvents(client, latestSourceEvidenceReview.id) : [];
+    const cloneReviews = await this.readCloneReviewRows(client, migration.id);
+    const latestCloneReview = cloneReviews[0] ?? null;
+    const cloneReviewItems = latestCloneReview ? await this.readCloneReviewItems(client, latestCloneReview.id) : [];
+    const cloneReviewRefs = latestCloneReview ? await this.readCloneReviewRefs(client, latestCloneReview.id) : [];
+    const cloneReviewEvents = latestCloneReview ? await this.readCloneReviewEvents(client, latestCloneReview.id) : [];
 
     return {
       capturedAt,
@@ -165,6 +174,11 @@ export class SingleSiteStateReadRepository {
       sourceEvidenceItems,
       sourceEvidenceRefs,
       sourceEvidenceEvents,
+      cloneReviews,
+      latestCloneReview,
+      cloneReviewItems,
+      cloneReviewRefs,
+      cloneReviewEvents,
     };
   }
 
@@ -409,5 +423,72 @@ export class SingleSiteStateReadRepository {
       [reviewId],
     );
     return result.rows as SingleSiteReviewEventRow[];
+  }
+
+  private async readCloneReviewRows(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteCloneReviewRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        review_started_at::text as review_started_at,
+        reviewed_at::text as reviewed_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_clone_reviews
+      where migration_id = $1::uuid
+      order by public.gnr8_single_site_clone_reviews.updated_at desc, public.gnr8_single_site_clone_reviews.created_at desc
+      `,
+      [migrationId],
+    );
+    return result.rows as SingleSiteCloneReviewRow[];
+  }
+
+  private async readCloneReviewItems(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteCloneReviewItemRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_clone_review_items
+      where review_id = $1::uuid
+      order by item_key asc
+      `,
+      [reviewId],
+    );
+    return result.rows as SingleSiteCloneReviewItemRow[];
+  }
+
+  private async readCloneReviewRefs(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteCloneReviewRefRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        captured_at::text as captured_at,
+        fresh_until::text as fresh_until,
+        created_at::text as created_at
+      from public.gnr8_single_site_clone_review_refs
+      where review_id = $1::uuid
+      order by public.gnr8_single_site_clone_review_refs.created_at asc, ref_role asc
+      `,
+      [reviewId],
+    );
+    return result.rows as SingleSiteCloneReviewRefRow[];
+  }
+
+  private async readCloneReviewEvents(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteCloneReviewEventRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        occurred_at::text as occurred_at,
+        created_at::text as created_at
+      from public.gnr8_single_site_clone_review_events
+      where review_id = $1::uuid
+      order by event_index asc, public.gnr8_single_site_clone_review_events.occurred_at asc
+      `,
+      [reviewId],
+    );
+    return result.rows as SingleSiteCloneReviewEventRow[];
   }
 }
