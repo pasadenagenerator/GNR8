@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
+import type { ImprovedCandidateDryRunResult } from "./improved-candidate-dry-run-adapter";
 import type {
   ImplementationAuthorizationProposalApprovalRef,
   ImplementationAuthorizationSelectedRecommendationRef,
@@ -34,6 +35,7 @@ import {
   type SingleSiteActorInput,
   type SingleSiteImprovementExecutionAttemptRow,
   type SingleSiteImprovementExecutionEventRow,
+  type SingleSiteImprovementExecutionItemRow,
   type SingleSiteImprovementExecutionRefRow,
   type SingleSiteImprovementProposalPlanRow,
   type SingleSiteImprovementProposalRecommendationRow,
@@ -117,6 +119,19 @@ export type ImprovementExecutionOperationResult = {
   attempt: SingleSiteImprovementExecutionAttemptRow;
   eventId?: string;
   stateEventId?: string;
+  reusedExisting: boolean;
+};
+
+export type RecordImprovedCandidateDryRunResultInput = ImprovementExecutionEnvelope & {
+  attemptId: string;
+  migrationId: string;
+  dryRunResult: ImprovedCandidateDryRunResult;
+};
+
+export type RecordImprovedCandidateDryRunResultOutput = {
+  attempt: SingleSiteImprovementExecutionAttemptRow;
+  items: SingleSiteImprovementExecutionItemRow[];
+  refs: SingleSiteImprovementExecutionRefRow[];
   reusedExisting: boolean;
 };
 
@@ -649,6 +664,156 @@ export class ImprovementExecutionService {
       if (attempt.migration_id !== requiredText("migrationId", input.migrationId)) throw new SingleSiteTransitionError("execution ref migrationId mismatch");
       const ref = await this.repository.insertImprovementExecutionRef(tx, input);
       return { ref: ref.row, reusedExisting: ref.reusedExisting };
+    });
+  }
+
+  async recordImprovedCandidateDryRunResult(input: RecordImprovedCandidateDryRunResultInput): Promise<RecordImprovedCandidateDryRunResultOutput> {
+    return this.repository.withTransaction(async (tx) => {
+      const attempt = await this.requiredMutableAttempt(tx, input.attemptId);
+      if (attempt.migration_id !== requiredText("migrationId", input.migrationId)) throw new SingleSiteTransitionError("dry-run result migrationId mismatch");
+      if (input.dryRunResult.mode !== "dry_run" || !input.dryRunResult.dryRunOnly || input.dryRunResult.runtimeWrites) {
+        throw new SingleSiteTransitionError("only no-write improved candidate dry-run results can be recorded");
+      }
+      const items: SingleSiteImprovementExecutionItemRow[] = [];
+      const refs: SingleSiteImprovementExecutionRefRow[] = [];
+      let reusedExisting = false;
+      const base = {
+        attemptId: attempt.id,
+        migrationId: attempt.migration_id,
+        actor: input.actor,
+        correlationId: input.correlationId,
+        causationId: input.causationId,
+        requestId: input.requestId,
+        privacyLabel: input.privacyLabel,
+        retentionClass: input.retentionClass,
+      };
+      const pushItem = async (item: Parameters<SingleSiteStateWriterRepository["upsertImprovementExecutionItem"]>[1]) => {
+        const row = await this.repository.upsertImprovementExecutionItem(tx, item);
+        items.push(row);
+      };
+      const pushRef = async (ref: RecordImprovementExecutionRefInput) => {
+        const result = await this.repository.insertImprovementExecutionRef(tx, ref);
+        refs.push(result.row);
+        reusedExisting ||= result.reusedExisting;
+      };
+
+      await pushItem({
+        ...base,
+        itemType: "validation_ref",
+        itemKey: "mvp20-validation-result",
+        status: "resolved",
+        detailsJson: {
+          dryRunOnly: true,
+          semanticInputWatermark: input.dryRunResult.watermarks.semanticInputWatermark,
+          validationRef: input.dryRunResult.inputRefs.implementationAuthorizationRefs,
+        },
+        refsJson: [input.dryRunResult.inputRefs.implementationAuthorizationRefs],
+        semanticWatermark: input.dryRunResult.watermarks.semanticInputWatermark,
+        idempotencyKey: `${input.idempotencyKey}:item:dry-run:validation`,
+        metadataJson: input.metadataJson,
+      });
+
+      for (const change of input.dryRunResult.plannedChangeSet.plannedPageChanges.concat(
+        input.dryRunResult.plannedChangeSet.plannedMetadataChanges,
+        input.dryRunResult.plannedChangeSet.plannedAssetChanges,
+        input.dryRunResult.plannedChangeSet.plannedStyleTokenChanges,
+      )) {
+        await pushItem({
+          ...base,
+          itemType: "selected_recommendation",
+          itemKey: `dry-run-applied:${change.recommendationId}`,
+          recommendationId: change.recommendationId,
+          status: "resolved",
+          detailsJson: change as unknown as SingleSiteJsonObject,
+          refsJson: [{ recommendationRef: change.recommendationRef, changeId: change.changeId }],
+          semanticWatermark: input.dryRunResult.watermarks.plannedChangeSetWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:dry-run:applied:${change.recommendationId}`,
+          metadataJson: { ...input.metadataJson, dryRunOnly: true, runtimeMutationPerformed: false },
+        });
+      }
+
+      for (const entry of input.dryRunResult.recommendationsNotApplied) {
+        await pushItem({
+          ...base,
+          itemType: "warning",
+          itemKey: `dry-run-not-applied:${entry.recommendationId}`,
+          recommendationId: entry.recommendationId,
+          status: entry.reason === "unsupported_in_mvp" ? "accepted_limitation" : "open",
+          detailsJson: entry as unknown as SingleSiteJsonObject,
+          refsJson: [{ recommendationRef: entry.recommendationRef }],
+          warningsJson: [entry],
+          semanticWatermark: input.dryRunResult.watermarks.plannedChangeSetWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:dry-run:not-applied:${entry.recommendationId}`,
+          metadataJson: { ...input.metadataJson, dryRunOnly: true, runtimeMutationPerformed: false },
+        });
+      }
+
+      for (const [index, limitation] of input.dryRunResult.limitationsCarriedForward.entries()) {
+        await pushItem({
+          ...base,
+          itemType: "limitation",
+          itemKey: `dry-run-limitation:${index + 1}`,
+          status: "accepted_limitation",
+          limitationJson: limitation,
+          semanticWatermark: input.dryRunResult.watermarks.limitationsWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:dry-run:limitation:${index + 1}`,
+          metadataJson: { ...input.metadataJson, dryRunOnly: true },
+        });
+      }
+
+      for (const [key, sourceRecordId] of [
+        ["planned-change-set", input.dryRunResult.expectedOutputRefs.expectedPlannedChangeSetRef],
+        ["planned-site-version", input.dryRunResult.expectedOutputRefs.expectedImprovedCandidateSiteVersionRef],
+        ["planned-runtime-artifact", input.dryRunResult.expectedOutputRefs.expectedImprovedRuntimeArtifactRef],
+      ] as const) {
+        await pushItem({
+          ...base,
+          itemType: "output_ref",
+          itemKey: `dry-run-output:${key}`,
+          status: "resolved",
+          detailsJson: {
+            dryRunPlaceholder: true,
+            sourceRecordId,
+            semanticOutputWatermark: input.dryRunResult.watermarks.semanticOutputWatermark,
+          },
+          refsJson: [{ sourceRecordId, dryRunPlaceholder: true }],
+          semanticWatermark: input.dryRunResult.watermarks.semanticOutputWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:dry-run:output:${key}`,
+          metadataJson: { ...input.metadataJson, dryRunOnly: true, runtimeMutationPerformed: false },
+        });
+        await pushRef({
+          ...base,
+          refRole: "output_ref",
+          refType: "improved_candidate_dry_run_placeholder",
+          sourceSystem: "gnr8",
+          sourceRecordId,
+          sourceWatermark: input.dryRunResult.watermarks.semanticOutputWatermark,
+          semanticWatermark: input.dryRunResult.watermarks.semanticOutputWatermark,
+          evidenceOnly: true,
+          idempotencyKey: `${input.idempotencyKey}:ref:dry-run:output:${key}`,
+          metadataJson: { ...input.metadataJson, dryRunOnly: true, placeholderKind: key, runtimeMutationPerformed: false },
+        });
+      }
+
+      await pushItem({
+        ...base,
+        itemType: "manual_note",
+        itemKey: "dry-run-operator-review-required",
+        status: "open",
+        detailsJson: {
+          dryRunOnly: true,
+          contentApproved: false,
+          clientApproved: false,
+          launchApproved: false,
+          publishApproved: false,
+          dryRunIsNotImplementationCompletion: true,
+        },
+        semanticWatermark: input.dryRunResult.watermarks.semanticOutputWatermark,
+        idempotencyKey: `${input.idempotencyKey}:item:dry-run:manual-note`,
+        metadataJson: { ...input.metadataJson, dryRunOnly: true },
+      });
+
+      return { attempt, items, refs, reusedExisting };
     });
   }
 

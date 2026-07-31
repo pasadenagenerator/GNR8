@@ -306,6 +306,26 @@ Canonical execution attempt persistence and server-only future executor boundary
 - `apps/platform/gnr8/single-site/improvement-execution-aaf-validator.ts`
 - `docs/product/gnr8-single-site-improvement-execution-persistence-boundary-closeout.md`
 
+## MVP-22 Single-Site Improved Candidate Adapter Design And Dry-Run Contract
+
+Canonical design-only improved candidate adapter, dry-run fixture, primitive map, evidence/watermark contract, operator workflow, and closeout:
+- `docs/architecture/gnr8-single-site-improved-candidate-adapter-design.md`
+- `docs/architecture/gnr8-single-site-improved-candidate-dry-run-contract.md`
+- `docs/architecture/gnr8-single-site-improved-candidate-runtime-primitive-map.md`
+- `docs/architecture/gnr8-single-site-improved-candidate-evidence-watermark-contract.md`
+- `docs/product/gnr8-single-site-improved-candidate-operator-workflow.md`
+- `docs/product/gnr8-single-site-improved-candidate-adapter-readiness-closeout.md`
+
+## MVP-23 Single-Site Improved Candidate Dry-Run Adapter Core
+
+Canonical server-only improved candidate dry-run adapter core:
+- `apps/platform/gnr8/single-site/improved-candidate-dry-run-adapter.ts`
+- `apps/platform/gnr8/single-site/improved-candidate-dry-run-adapter.test.ts`
+- `apps/platform/gnr8/single-site/improved-candidate-dry-run-adapter.integration.test.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.test.ts`
+- `docs/product/gnr8-single-site-improved-candidate-dry-run-adapter-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

@@ -9,6 +9,7 @@ import {
   type CreateOrReuseImprovementExecutionAttemptInput,
   type ImprovementExecutionTransitionInput,
 } from "./improvement-execution-service";
+import type { ImprovedCandidateDryRunResult } from "./improved-candidate-dry-run-adapter";
 import { SingleSiteIdempotencyConflictError, SingleSiteTransitionError } from "./single-site-state-contracts";
 import type { ImprovementExecutionAafValidationResult } from "./improvement-execution-aaf-validator";
 
@@ -459,6 +460,87 @@ test("idempotent retry works and semantic drift conflicts", async () => {
     () => service.markBlocked(transitionInput({ attemptId: attempt.id, idempotencyKey: "idem-block", detailsJson: { blocker: "changed" } })),
     SingleSiteIdempotencyConflictError,
   );
+});
+
+test("records improved candidate dry-run items and placeholder refs without completing attempt", async () => {
+  const repo = fakeRepository() as unknown as { runtimeMutations: unknown[]; providerCalls: unknown[]; publicMutations: unknown[] };
+  const service = new ImprovementExecutionService(repo as never);
+  const attempt = await createReady(service);
+  const dryRunResult = {
+    mode: "dry_run",
+    dryRunOnly: true,
+    runtimeWrites: false,
+    inputRefs: { implementationAuthorizationRefs: { decisionRef: "auth-decision-1" } },
+    plannedChangeSet: {
+      plannedPageChanges: [
+        {
+          recommendationId: RECOMMENDATION_ID,
+          recommendationRef: `gnr8:improvement_recommendation:${RECOMMENDATION_ID}`,
+          changeId: "gnr8:planned_change:abc",
+          changeClass: "text_replacement_plan",
+          category: "content_clarity",
+          target: { pagePath: "/", sectionId: "hero", field: "headline" },
+          currentSourceHash: "current",
+          plannedValueHash: "planned",
+          evidenceRefs: [],
+          limitationRefs: [],
+          executionSupportStatus: "deterministic_supported",
+          noWriteProof: {
+            runtimeWritePerformed: false,
+            activePointerChanged: false,
+            aiProviderCalled: false,
+            generatedProposalBundleCreated: false,
+          },
+        },
+      ],
+      plannedMetadataChanges: [],
+      plannedAssetChanges: [],
+      plannedStyleTokenChanges: [],
+    },
+    recommendationsNotApplied: [
+      {
+        recommendationId: "99999999-9999-4999-8999-999999999999",
+        recommendationRef: "gnr8:improvement_recommendation:99999999-9999-4999-8999-999999999999",
+        category: "visual_design",
+        reason: "unsupported_in_mvp",
+        details: "Unsupported in MVP.",
+        executionSupportStatus: "unsupported",
+        evidenceRefs: [],
+        limitationCarriedForward: { source: "recommendation_not_applied", reason: "unsupported_in_mvp" },
+      },
+    ],
+    limitationsCarriedForward: [{ source: "proposal", limitation: { summary: "Keep brand voice" } }],
+    expectedOutputRefs: {
+      expectedPlannedChangeSetRef: "gnr8:planned_change_set:abc",
+      expectedImprovedCandidateSiteVersionRef: "gnr8:planned_site_version:abc",
+      expectedImprovedRuntimeArtifactRef: "gnr8:planned_runtime_artifact:abc",
+      expectedArtifactBundleSha256: "abc",
+    },
+    watermarks: {
+      semanticInputWatermark: attempt.semantic_input_watermark,
+      plannedChangeSetWatermark: "planned-change-set:abc",
+      limitationsWatermark: "limitations:abc",
+      semanticOutputWatermark: "single-site-improved-candidate-dry-run-output:abc",
+    },
+  } as unknown as ImprovedCandidateDryRunResult;
+  const recorded = await service.recordImprovedCandidateDryRunResult({
+    attemptId: attempt.id,
+    migrationId: attempt.migration_id,
+    dryRunResult,
+    actor: actor(),
+    correlationId: "corr-record-dry-run",
+    idempotencyKey: "idem-record-dry-run",
+  });
+  assert.equal(recorded.attempt.status, "ready");
+  assert.equal(recorded.refs.length, 3);
+  assert.ok(recorded.refs.every((ref) => String((ref as unknown as Record<string, unknown>).sourceRecordId ?? ref.source_record_id).startsWith("gnr8:planned_")));
+  assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "validation_ref"));
+  assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "output_ref"));
+  assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "warning"));
+  assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "manual_note"));
+  assert.deepEqual(repo.runtimeMutations, []);
+  assert.deepEqual(repo.providerCalls, []);
+  assert.deepEqual(repo.publicMutations, []);
 });
 
 test("terminal migration blocks execution changes and semantic watermark is deterministic", async () => {
