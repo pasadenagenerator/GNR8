@@ -221,6 +221,75 @@ export const SINGLE_SITE_IMPROVEMENT_PROPOSAL_RECOMMENDATION_STATUSES = [
   "superseded",
 ] as const;
 
+export const SINGLE_SITE_IMPROVEMENT_EXECUTION_STATUSES = [
+  "draft",
+  "blocked",
+  "ready",
+  "started",
+  "completed",
+  "completed_with_limitations",
+  "failed",
+  "retry_required",
+  "superseded",
+  "cancelled",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_EXECUTION_MODES = ["dry_run", "execute", "replay", "repair"] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_TYPES = [
+  "selected_recommendation",
+  "limitation",
+  "input_ref",
+  "output_ref",
+  "validation_ref",
+  "warning",
+  "error",
+  "manual_note",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_EXECUTION_REF_ROLES = [
+  "proposal_plan",
+  "proposal_approval_request",
+  "proposal_approval_decision",
+  "proposal_evidence_package",
+  "implementation_authorization_request",
+  "implementation_authorization_decision",
+  "implementation_authorization_evidence_package",
+  "aaf_execution_validation_result",
+  "aaf_execution_validation_evidence",
+  "clone_review",
+  "clone_site_version",
+  "clone_runtime_artifact",
+  "source_evidence_review",
+  "selected_recommendation",
+  "limitation",
+  "input_ref",
+  "output_ref",
+  "validation_ref",
+  "audit_event",
+  "supersession",
+  "external_reference",
+] as const;
+
+export const SINGLE_SITE_IMPROVEMENT_EXECUTION_EVENT_ACTIONS = [
+  "created",
+  "proposal_refs_attached",
+  "implementation_authorization_refs_attached",
+  "aaf_execution_validation_attached",
+  "clone_source_refs_attached",
+  "selected_recommendation_attached",
+  "limitation_attached",
+  "blocked",
+  "ready",
+  "started",
+  "completed",
+  "completed_with_limitations",
+  "failed",
+  "retry_required",
+  "cancelled",
+  "superseded",
+] as const;
+
 export const SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES = [
   "unknown",
   "complete",
@@ -352,6 +421,7 @@ export const SINGLE_SITE_MIGRATION_REF_ROLES = [
   "clone_revision",
   "proposal_artifact",
   "proposal_approval",
+  "implementation_execution_attempt",
   "content_approval",
   "domain_binding",
   "ddom_readiness_snapshot",
@@ -457,6 +527,11 @@ export type SingleSiteImprovementProposalRefRole = (typeof SINGLE_SITE_IMPROVEME
 export type SingleSiteImprovementProposalEventAction = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_EVENT_ACTIONS)[number];
 export type SingleSiteImprovementProposalFindingStatus = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_FINDING_STATUSES)[number];
 export type SingleSiteImprovementProposalRecommendationStatus = (typeof SINGLE_SITE_IMPROVEMENT_PROPOSAL_RECOMMENDATION_STATUSES)[number];
+export type SingleSiteImprovementExecutionStatus = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_STATUSES)[number];
+export type SingleSiteImprovementExecutionMode = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_MODES)[number];
+export type SingleSiteImprovementExecutionItemType = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_TYPES)[number];
+export type SingleSiteImprovementExecutionRefRole = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_REF_ROLES)[number];
+export type SingleSiteImprovementExecutionEventAction = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_EVENT_ACTIONS)[number];
 export type SingleSiteSourceEvidenceCompletenessStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES)[number];
 export type SingleSiteSourceEvidenceReviewDecision = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_DECISIONS)[number];
 export type SingleSiteEvidenceItemCategory = (typeof SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES)[number];

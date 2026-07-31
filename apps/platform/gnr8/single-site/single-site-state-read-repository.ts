@@ -19,6 +19,10 @@ import type {
   SingleSiteCloneReviewRow,
   SingleSiteEvidenceItemRow,
   SingleSiteImprovementProposalFindingRow,
+  SingleSiteImprovementExecutionAttemptRow,
+  SingleSiteImprovementExecutionEventRow,
+  SingleSiteImprovementExecutionItemRow,
+  SingleSiteImprovementExecutionRefRow,
   SingleSiteImprovementProposalPlanRow,
   SingleSiteImprovementProposalRecommendationRow,
   SingleSiteImprovementProposalRefRow,
@@ -170,6 +174,12 @@ export class SingleSiteStateReadRepository {
     const improvementProposalRecommendations = latestImprovementProposalPlan ? await this.readImprovementProposalRecommendations(client, latestImprovementProposalPlan.id) : [];
     const improvementProposalFindings = latestImprovementProposalPlan ? await this.readImprovementProposalFindings(client, latestImprovementProposalPlan.id) : [];
     const improvementProposalRefs = latestImprovementProposalPlan ? await this.readImprovementProposalRefs(client, latestImprovementProposalPlan.id) : [];
+    const hasImprovementExecutionTables = await this.improvementExecutionTablesAvailable(client);
+    const improvementExecutionAttempts = hasImprovementExecutionTables ? await this.readImprovementExecutionAttemptRows(client, migration.id) : [];
+    const latestImprovementExecutionAttempt = improvementExecutionAttempts[0] ?? null;
+    const improvementExecutionItems = latestImprovementExecutionAttempt ? await this.readImprovementExecutionItems(client, latestImprovementExecutionAttempt.id) : [];
+    const improvementExecutionRefs = latestImprovementExecutionAttempt ? await this.readImprovementExecutionRefs(client, latestImprovementExecutionAttempt.id) : [];
+    const improvementExecutionEvents = latestImprovementExecutionAttempt ? await this.readImprovementExecutionEvents(client, latestImprovementExecutionAttempt.id) : [];
 
     return {
       capturedAt,
@@ -194,6 +204,11 @@ export class SingleSiteStateReadRepository {
       improvementProposalRecommendations,
       improvementProposalFindings,
       improvementProposalRefs,
+      improvementExecutionAttempts,
+      latestImprovementExecutionAttempt,
+      improvementExecutionItems,
+      improvementExecutionRefs,
+      improvementExecutionEvents,
     };
   }
 
@@ -577,5 +592,78 @@ export class SingleSiteStateReadRepository {
       [planId],
     );
     return result.rows as SingleSiteImprovementProposalRefRow[];
+  }
+
+  private async improvementExecutionTablesAvailable(client: SingleSitePgClient): Promise<boolean> {
+    const result = await client.query("select to_regclass('public.gnr8_single_site_improvement_execution_attempts')::text as table_name");
+    return Boolean(result.rows[0]?.table_name);
+  }
+
+  private async readImprovementExecutionAttemptRows(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteImprovementExecutionAttemptRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        started_at::text as started_at,
+        completed_at::text as completed_at,
+        terminal_at::text as terminal_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_improvement_execution_attempts
+      where migration_id = $1::uuid
+      order by public.gnr8_single_site_improvement_execution_attempts.updated_at desc, public.gnr8_single_site_improvement_execution_attempts.created_at desc
+      `,
+      [migrationId],
+    );
+    return result.rows as SingleSiteImprovementExecutionAttemptRow[];
+  }
+
+  private async readImprovementExecutionItems(client: SingleSitePgClient, attemptId: string): Promise<SingleSiteImprovementExecutionItemRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_improvement_execution_items
+      where attempt_id = $1::uuid
+      order by item_type asc, item_key asc
+      `,
+      [attemptId],
+    );
+    return result.rows as SingleSiteImprovementExecutionItemRow[];
+  }
+
+  private async readImprovementExecutionRefs(client: SingleSitePgClient, attemptId: string): Promise<SingleSiteImprovementExecutionRefRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        captured_at::text as captured_at,
+        fresh_until::text as fresh_until,
+        created_at::text as created_at
+      from public.gnr8_single_site_improvement_execution_refs
+      where attempt_id = $1::uuid
+      order by public.gnr8_single_site_improvement_execution_refs.created_at asc, ref_role asc
+      `,
+      [attemptId],
+    );
+    return result.rows as SingleSiteImprovementExecutionRefRow[];
+  }
+
+  private async readImprovementExecutionEvents(client: SingleSitePgClient, attemptId: string): Promise<SingleSiteImprovementExecutionEventRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        occurred_at::text as occurred_at,
+        created_at::text as created_at
+      from public.gnr8_single_site_improvement_execution_events
+      where attempt_id = $1::uuid
+      order by event_index asc, public.gnr8_single_site_improvement_execution_events.occurred_at asc
+      `,
+      [attemptId],
+    );
+    return result.rows as SingleSiteImprovementExecutionEventRow[];
   }
 }

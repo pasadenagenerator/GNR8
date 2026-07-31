@@ -13,6 +13,11 @@ import {
   SINGLE_SITE_CLONE_REVIEW_STATUSES,
   SINGLE_SITE_IMPROVEMENT_CATEGORIES,
   SINGLE_SITE_IMPROVEMENT_EFFORT_LEVELS,
+  SINGLE_SITE_IMPROVEMENT_EXECUTION_EVENT_ACTIONS,
+  SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_TYPES,
+  SINGLE_SITE_IMPROVEMENT_EXECUTION_MODES,
+  SINGLE_SITE_IMPROVEMENT_EXECUTION_REF_ROLES,
+  SINGLE_SITE_IMPROVEMENT_EXECUTION_STATUSES,
   SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS,
   SINGLE_SITE_IMPROVEMENT_PROPOSAL_EVENT_ACTIONS,
   SINGLE_SITE_IMPROVEMENT_PROPOSAL_FINDING_STATUSES,
@@ -51,6 +56,11 @@ import {
   type SingleSiteEvidenceItemStatus,
   type SingleSiteImprovementCategory,
   type SingleSiteImprovementEffortLevel,
+  type SingleSiteImprovementExecutionEventAction,
+  type SingleSiteImprovementExecutionItemType,
+  type SingleSiteImprovementExecutionMode,
+  type SingleSiteImprovementExecutionRefRole,
+  type SingleSiteImprovementExecutionStatus,
   type SingleSiteImprovementImpactLevel,
   type SingleSiteImprovementProposalEventAction,
   type SingleSiteImprovementProposalFindingStatus,
@@ -642,6 +652,153 @@ export type SingleSiteImprovementProposalSupersessionRow = {
   created_at: string;
 };
 
+export type SingleSiteImprovementExecutionAttemptRow = {
+  id: string;
+  tenant_id: string;
+  client_id: string;
+  site_id: string;
+  migration_id: string;
+  proposal_plan_id: string;
+  proposal_plan_version: number;
+  proposal_plan_semantic_watermark: string;
+  proposal_approval_request_id: string | null;
+  proposal_approval_decision_id: string | null;
+  proposal_evidence_package_id: string | null;
+  implementation_authorization_request_id: string;
+  implementation_authorization_decision_id: string;
+  implementation_authorization_evidence_package_id: string | null;
+  aaf_validation_result_ref: string | null;
+  aaf_validation_evidence_ref: string | null;
+  clone_review_id: string;
+  clone_site_version_ref: string;
+  clone_runtime_artifact_ref: string;
+  source_evidence_review_id: string;
+  selected_recommendation_refs_json: unknown;
+  limitations_json: unknown;
+  execution_mode: SingleSiteImprovementExecutionMode;
+  executor_id: string | null;
+  executor_name: string | null;
+  executor_version: string | null;
+  status: SingleSiteImprovementExecutionStatus;
+  readiness_json: unknown;
+  validation_summary_json: unknown;
+  semantic_input_watermark: string;
+  semantic_output_watermark: string | null;
+  improved_candidate_site_version_ref: string | null;
+  improved_runtime_artifact_ref: string | null;
+  output_refs_json: unknown;
+  failure_json: unknown;
+  audit_refs_json: unknown;
+  supersedes_attempt_id: string | null;
+  superseded_by_attempt_id: string | null;
+  non_approval_boundary_json: unknown;
+  content_approval_granted: boolean;
+  client_approval_granted: boolean;
+  launch_approval_granted: boolean;
+  publish_activation_approval_granted: boolean;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  idempotency_key: string;
+  request_id: string | null;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  payload_hash: string | null;
+  metadata_json: unknown;
+  started_at: string | null;
+  completed_at: string | null;
+  terminal_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SingleSiteImprovementExecutionRefRow = {
+  id: string;
+  attempt_id: string;
+  migration_id: string;
+  ref_role: SingleSiteImprovementExecutionRefRole;
+  ref_type: string;
+  source_system: string;
+  source_table: string | null;
+  source_record_id: string;
+  source_version: string | null;
+  source_watermark: string | null;
+  semantic_watermark: string | null;
+  content_hash: string | null;
+  media_type: string | null;
+  captured_at: string | null;
+  fresh_until: string | null;
+  evidence_only: boolean;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  correlation_id: string;
+  idempotency_key: string;
+  metadata_json: unknown;
+  created_at: string;
+};
+
+export type SingleSiteImprovementExecutionItemRow = {
+  id: string;
+  attempt_id: string;
+  migration_id: string;
+  item_type: SingleSiteImprovementExecutionItemType;
+  item_key: string;
+  recommendation_id: string | null;
+  status: "open" | "resolved" | "accepted_limitation" | "blocked" | "failed" | "superseded";
+  details_json: unknown;
+  refs_json: unknown;
+  limitation_json: unknown;
+  warnings_json: unknown;
+  error_json: unknown;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  correlation_id: string;
+  idempotency_key: string;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  semantic_watermark: string | null;
+  metadata_json: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SingleSiteImprovementExecutionEventRow = {
+  id: string;
+  attempt_id: string;
+  migration_id: string;
+  event_index: number;
+  event_action: SingleSiteImprovementExecutionEventAction;
+  from_status: SingleSiteImprovementExecutionStatus | null;
+  to_status: SingleSiteImprovementExecutionStatus | null;
+  actor_type: SingleSiteActorType;
+  actor_id: string;
+  actor_role: string;
+  actor_display_label: string | null;
+  details_json: unknown;
+  limitations_json: unknown;
+  warnings_json: unknown;
+  validation_summary_json: unknown;
+  output_refs_json: unknown;
+  failure_json: unknown;
+  source_watermark: string | null;
+  semantic_watermark: string | null;
+  payload_hash: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  idempotency_key: string;
+  request_id: string | null;
+  privacy_label: SingleSitePrivacyLabel;
+  retention_class: SingleSiteRetentionClass;
+  metadata_json: unknown;
+  occurred_at: string;
+  created_at: string;
+};
+
 type InsertableRow = Record<string, unknown>;
 
 export type CreateSingleSiteMigrationInput = SingleSiteWriteEnvelope & {
@@ -1119,6 +1276,123 @@ export type InsertImprovementProposalSupersessionInput = SingleSiteWriteEnvelope
   sourceRefJson?: SingleSiteJsonObject;
   actor: SingleSiteActorInput;
   semanticWatermark?: string | null;
+};
+
+export type CreateImprovementExecutionAttemptInput = SingleSiteWriteEnvelope & {
+  tenantId: string;
+  clientId: string;
+  siteId: string;
+  migrationId: string;
+  proposalPlanId: string;
+  proposalPlanVersion: number;
+  proposalPlanSemanticWatermark: string;
+  proposalApprovalRequestId?: string | null;
+  proposalApprovalDecisionId?: string | null;
+  proposalEvidencePackageId?: string | null;
+  implementationAuthorizationRequestId: string;
+  implementationAuthorizationDecisionId: string;
+  implementationAuthorizationEvidencePackageId?: string | null;
+  aafValidationResultRef?: string | null;
+  aafValidationEvidenceRef?: string | null;
+  cloneReviewId: string;
+  cloneSiteVersionRef: string;
+  cloneRuntimeArtifactRef: string;
+  sourceEvidenceReviewId: string;
+  selectedRecommendationRefsJson?: unknown[];
+  limitationsJson?: unknown[];
+  executionMode?: SingleSiteImprovementExecutionMode | null;
+  executorId?: string | null;
+  executorName?: string | null;
+  executorVersion?: string | null;
+  status?: SingleSiteImprovementExecutionStatus | null;
+  readinessJson?: SingleSiteJsonObject;
+  validationSummaryJson?: SingleSiteJsonObject;
+  semanticInputWatermark: string;
+  semanticOutputWatermark?: string | null;
+  improvedCandidateSiteVersionRef?: string | null;
+  improvedRuntimeArtifactRef?: string | null;
+  outputRefsJson?: SingleSiteJsonObject;
+  failureJson?: SingleSiteJsonObject;
+  auditRefsJson?: SingleSiteJsonObject;
+  supersedesAttemptId?: string | null;
+  actor: SingleSiteActorInput;
+  payloadHash?: string | null;
+};
+
+export type UpdateImprovementExecutionAttemptStatusInput = SingleSiteWriteEnvelope & {
+  attemptId: string;
+  status: SingleSiteImprovementExecutionStatus;
+  readinessJson?: SingleSiteJsonObject;
+  validationSummaryJson?: SingleSiteJsonObject;
+  limitationsJson?: unknown[];
+  selectedRecommendationRefsJson?: unknown[];
+  aafValidationResultRef?: string | null;
+  aafValidationEvidenceRef?: string | null;
+  semanticOutputWatermark?: string | null;
+  improvedCandidateSiteVersionRef?: string | null;
+  improvedRuntimeArtifactRef?: string | null;
+  outputRefsJson?: SingleSiteJsonObject;
+  failureJson?: SingleSiteJsonObject;
+  auditRefsJson?: SingleSiteJsonObject;
+  supersededByAttemptId?: string | null;
+  actor?: SingleSiteActorInput | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  terminalAt?: string | null;
+};
+
+export type InsertImprovementExecutionRefInput = SingleSiteWriteEnvelope & {
+  attemptId: string;
+  migrationId: string;
+  refRole: SingleSiteImprovementExecutionRefRole;
+  refType: string;
+  sourceSystem?: string | null;
+  sourceTable?: string | null;
+  sourceRecordId: string;
+  sourceVersion?: string | null;
+  sourceWatermark?: string | null;
+  semanticWatermark?: string | null;
+  contentHash?: string | null;
+  mediaType?: string | null;
+  capturedAt?: string | null;
+  freshUntil?: string | null;
+  evidenceOnly?: boolean | null;
+};
+
+export type UpsertImprovementExecutionItemInput = SingleSiteWriteEnvelope & {
+  attemptId: string;
+  migrationId: string;
+  itemType: SingleSiteImprovementExecutionItemType;
+  itemKey: string;
+  recommendationId?: string | null;
+  status?: "open" | "resolved" | "accepted_limitation" | "blocked" | "failed" | "superseded" | null;
+  detailsJson?: SingleSiteJsonObject;
+  refsJson?: unknown[];
+  limitationJson?: SingleSiteJsonObject;
+  warningsJson?: unknown[];
+  errorJson?: SingleSiteJsonObject;
+  actor: SingleSiteActorInput;
+  semanticWatermark?: string | null;
+};
+
+export type InsertImprovementExecutionEventInput = SingleSiteWriteEnvelope & {
+  attemptId: string;
+  migrationId: string;
+  eventIndex: number;
+  eventAction: SingleSiteImprovementExecutionEventAction;
+  fromStatus?: SingleSiteImprovementExecutionStatus | null;
+  toStatus?: SingleSiteImprovementExecutionStatus | null;
+  actor: SingleSiteActorInput;
+  detailsJson?: SingleSiteJsonObject;
+  limitationsJson?: unknown[];
+  warningsJson?: unknown[];
+  validationSummaryJson?: SingleSiteJsonObject;
+  outputRefsJson?: SingleSiteJsonObject;
+  failureJson?: SingleSiteJsonObject;
+  sourceWatermark?: string | null;
+  semanticWatermark?: string | null;
+  payloadHash?: string | null;
+  occurredAt?: string | null;
 };
 
 function trimText(value: unknown): string | null {
@@ -3131,6 +3405,467 @@ export class SingleSiteStateWriterRepository {
       ],
     });
   }
+
+  async createImprovementExecutionAttempt(
+    client: SingleSitePgClient,
+    input: CreateImprovementExecutionAttemptInput,
+  ): Promise<{ row: SingleSiteImprovementExecutionAttemptRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      tenant_id: requiredText("tenantId", input.tenantId),
+      client_id: requiredText("clientId", input.clientId),
+      site_id: requiredText("siteId", input.siteId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      proposal_plan_id: requiredText("proposalPlanId", input.proposalPlanId),
+      proposal_plan_version: optionalPositiveInteger("proposalPlanVersion", input.proposalPlanVersion),
+      proposal_plan_semantic_watermark: requiredText("proposalPlanSemanticWatermark", input.proposalPlanSemanticWatermark),
+      proposal_approval_request_id: optionalText(input.proposalApprovalRequestId),
+      proposal_approval_decision_id: optionalText(input.proposalApprovalDecisionId),
+      proposal_evidence_package_id: optionalText(input.proposalEvidencePackageId),
+      implementation_authorization_request_id: requiredText("implementationAuthorizationRequestId", input.implementationAuthorizationRequestId),
+      implementation_authorization_decision_id: requiredText("implementationAuthorizationDecisionId", input.implementationAuthorizationDecisionId),
+      implementation_authorization_evidence_package_id: optionalText(input.implementationAuthorizationEvidencePackageId),
+      aaf_validation_result_ref: optionalText(input.aafValidationResultRef),
+      aaf_validation_evidence_ref: optionalText(input.aafValidationEvidenceRef),
+      clone_review_id: requiredText("cloneReviewId", input.cloneReviewId),
+      clone_site_version_ref: requiredText("cloneSiteVersionRef", input.cloneSiteVersionRef),
+      clone_runtime_artifact_ref: requiredText("cloneRuntimeArtifactRef", input.cloneRuntimeArtifactRef),
+      source_evidence_review_id: requiredText("sourceEvidenceReviewId", input.sourceEvidenceReviewId),
+      selected_recommendation_refs_json: jsonArray("selectedRecommendationRefsJson", input.selectedRecommendationRefsJson),
+      limitations_json: jsonArray("limitationsJson", input.limitationsJson),
+      execution_mode: optionalEnumValue("executionMode", input.executionMode, SINGLE_SITE_IMPROVEMENT_EXECUTION_MODES) ?? "dry_run",
+      executor_id: optionalText(input.executorId),
+      executor_name: optionalText(input.executorName),
+      executor_version: optionalText(input.executorVersion),
+      status: optionalEnumValue("status", input.status, SINGLE_SITE_IMPROVEMENT_EXECUTION_STATUSES) ?? "draft",
+      readiness_json: jsonObject("readinessJson", input.readinessJson),
+      validation_summary_json: jsonObject("validationSummaryJson", input.validationSummaryJson),
+      semantic_input_watermark: requiredText("semanticInputWatermark", input.semanticInputWatermark),
+      semantic_output_watermark: optionalText(input.semanticOutputWatermark),
+      improved_candidate_site_version_ref: optionalText(input.improvedCandidateSiteVersionRef),
+      improved_runtime_artifact_ref: optionalText(input.improvedRuntimeArtifactRef),
+      output_refs_json: jsonObject("outputRefsJson", input.outputRefsJson),
+      failure_json: jsonObject("failureJson", input.failureJson),
+      audit_refs_json: jsonObject("auditRefsJson", input.auditRefsJson),
+      supersedes_attempt_id: optionalText(input.supersedesAttemptId),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      causation_id: optionalText(input.causationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      request_id: optionalText(input.requestId),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      payload_hash: optionalText(input.payloadHash),
+      metadata_json: jsonObject("metadataJson", {
+        futureBoundaryFixture: false,
+        runtimeMutationPerformed: false,
+        ...(input.metadataJson ?? {}),
+      }),
+    };
+    return insertReturning<SingleSiteImprovementExecutionAttemptRow>(client, "gnr8_single_site_improvement_execution_attempts", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "tenant_id",
+        "client_id",
+        "site_id",
+        "migration_id",
+        "proposal_plan_id",
+        "proposal_plan_version",
+        "proposal_plan_semantic_watermark",
+        "proposal_approval_request_id",
+        "proposal_approval_decision_id",
+        "proposal_evidence_package_id",
+        "implementation_authorization_request_id",
+        "implementation_authorization_decision_id",
+        "implementation_authorization_evidence_package_id",
+        "clone_review_id",
+        "clone_site_version_ref",
+        "clone_runtime_artifact_ref",
+        "source_evidence_review_id",
+        "selected_recommendation_refs_json",
+        "limitations_json",
+        "execution_mode",
+        "executor_id",
+        "executor_name",
+        "executor_version",
+        "status",
+        "readiness_json",
+        "validation_summary_json",
+        "semantic_input_watermark",
+        "semantic_output_watermark",
+        "improved_candidate_site_version_ref",
+        "improved_runtime_artifact_ref",
+        "output_refs_json",
+        "failure_json",
+        "audit_refs_json",
+        "supersedes_attempt_id",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "privacy_label",
+        "retention_class",
+        "payload_hash",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async getImprovementExecutionAttemptById(client: SingleSitePgClient, attemptId: string): Promise<SingleSiteImprovementExecutionAttemptRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_improvement_execution_attempts where id = $1::uuid limit 1", [requiredText("attemptId", attemptId)]);
+    return (result.rows[0] as SingleSiteImprovementExecutionAttemptRow | undefined) ?? null;
+  }
+
+  async getLatestImprovementExecutionAttemptForMigration(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteImprovementExecutionAttemptRow | null> {
+    const result = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_improvement_execution_attempts
+      where migration_id = $1::uuid
+      order by updated_at desc, created_at desc
+      limit 1
+      `,
+      [requiredText("migrationId", migrationId)],
+    );
+    return (result.rows[0] as SingleSiteImprovementExecutionAttemptRow | undefined) ?? null;
+  }
+
+  async getImprovementExecutionAttemptBySemanticRefs(
+    client: SingleSitePgClient,
+    input: Pick<CreateImprovementExecutionAttemptInput, "migrationId" | "proposalPlanId" | "implementationAuthorizationDecisionId" | "semanticInputWatermark">,
+  ): Promise<SingleSiteImprovementExecutionAttemptRow | null> {
+    const result = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_improvement_execution_attempts
+      where migration_id = $1::uuid
+        and proposal_plan_id = $2::uuid
+        and implementation_authorization_decision_id = $3
+        and semantic_input_watermark = $4
+      order by created_at asc
+      limit 1
+      `,
+      [
+        requiredText("migrationId", input.migrationId),
+        requiredText("proposalPlanId", input.proposalPlanId),
+        requiredText("implementationAuthorizationDecisionId", input.implementationAuthorizationDecisionId),
+        requiredText("semanticInputWatermark", input.semanticInputWatermark),
+      ],
+    );
+    return (result.rows[0] as SingleSiteImprovementExecutionAttemptRow | undefined) ?? null;
+  }
+
+  async updateImprovementExecutionAttemptStatus(
+    client: SingleSitePgClient,
+    input: UpdateImprovementExecutionAttemptStatusInput,
+  ): Promise<SingleSiteImprovementExecutionAttemptRow> {
+    const actor = input.actor ?? null;
+    const result = await client.query(
+      `
+      update public.gnr8_single_site_improvement_execution_attempts
+      set
+        status = $2,
+        readiness_json = coalesce($3::jsonb, readiness_json),
+        validation_summary_json = coalesce($4::jsonb, validation_summary_json),
+        limitations_json = coalesce($5::jsonb, limitations_json),
+        selected_recommendation_refs_json = coalesce($6::jsonb, selected_recommendation_refs_json),
+        aaf_validation_result_ref = coalesce($7, aaf_validation_result_ref),
+        aaf_validation_evidence_ref = coalesce($8, aaf_validation_evidence_ref),
+        semantic_output_watermark = coalesce($9, semantic_output_watermark),
+        improved_candidate_site_version_ref = coalesce($10, improved_candidate_site_version_ref),
+        improved_runtime_artifact_ref = coalesce($11, improved_runtime_artifact_ref),
+        output_refs_json = coalesce($12::jsonb, output_refs_json),
+        failure_json = coalesce($13::jsonb, failure_json),
+        audit_refs_json = coalesce($14::jsonb, audit_refs_json),
+        superseded_by_attempt_id = coalesce($15::uuid, superseded_by_attempt_id),
+        actor_type = coalesce($16, actor_type),
+        actor_id = coalesce($17, actor_id),
+        actor_role = coalesce($18, actor_role),
+        actor_display_label = coalesce($19, actor_display_label),
+        started_at = coalesce($20::timestamptz, started_at),
+        completed_at = coalesce($21::timestamptz, completed_at),
+        terminal_at = coalesce($22::timestamptz, terminal_at),
+        updated_at = now()
+      where id = $1::uuid
+      returning *
+      `,
+      [
+        requiredText("attemptId", input.attemptId),
+        enumValue("status", input.status, SINGLE_SITE_IMPROVEMENT_EXECUTION_STATUSES),
+        input.readinessJson === undefined ? null : toPostgresValue(jsonObject("readinessJson", input.readinessJson)),
+        input.validationSummaryJson === undefined ? null : toPostgresValue(jsonObject("validationSummaryJson", input.validationSummaryJson)),
+        input.limitationsJson === undefined ? null : toPostgresValue(jsonArray("limitationsJson", input.limitationsJson)),
+        input.selectedRecommendationRefsJson === undefined ? null : toPostgresValue(jsonArray("selectedRecommendationRefsJson", input.selectedRecommendationRefsJson)),
+        optionalText(input.aafValidationResultRef),
+        optionalText(input.aafValidationEvidenceRef),
+        optionalText(input.semanticOutputWatermark),
+        optionalText(input.improvedCandidateSiteVersionRef),
+        optionalText(input.improvedRuntimeArtifactRef),
+        input.outputRefsJson === undefined ? null : toPostgresValue(jsonObject("outputRefsJson", input.outputRefsJson)),
+        input.failureJson === undefined ? null : toPostgresValue(jsonObject("failureJson", input.failureJson)),
+        input.auditRefsJson === undefined ? null : toPostgresValue(jsonObject("auditRefsJson", input.auditRefsJson)),
+        optionalText(input.supersededByAttemptId),
+        actor ? enumValue("actor.actorType", actor.actorType, SINGLE_SITE_ACTOR_TYPES) : null,
+        actor ? requiredText("actor.actorId", actor.actorId) : null,
+        actor ? requiredText("actor.actorRole", actor.actorRole) : null,
+        actor ? optionalText(actor.actorDisplayLabel) : null,
+        timestampText("startedAt", input.startedAt),
+        timestampText("completedAt", input.completedAt),
+        timestampText("terminalAt", input.terminalAt),
+      ],
+    );
+    const row = result.rows[0] as SingleSiteImprovementExecutionAttemptRow | undefined;
+    if (!row) throw new SingleSiteStateWriterError("improvement execution attempt status update did not return a row");
+    return row;
+  }
+
+  async insertImprovementExecutionRef(
+    client: SingleSitePgClient,
+    input: InsertImprovementExecutionRefInput,
+  ): Promise<{ row: SingleSiteImprovementExecutionRefRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      attempt_id: requiredText("attemptId", input.attemptId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      ref_role: enumValue("refRole", input.refRole, SINGLE_SITE_IMPROVEMENT_EXECUTION_REF_ROLES),
+      ref_type: requiredText("refType", input.refType),
+      source_system: optionalText(input.sourceSystem) ?? "gnr8",
+      source_table: optionalText(input.sourceTable),
+      source_record_id: requiredText("sourceRecordId", input.sourceRecordId),
+      source_version: optionalText(input.sourceVersion),
+      source_watermark: optionalText(input.sourceWatermark),
+      semantic_watermark: optionalText(input.semanticWatermark),
+      content_hash: optionalText(input.contentHash),
+      media_type: optionalText(input.mediaType),
+      captured_at: timestampText("capturedAt", input.capturedAt),
+      fresh_until: timestampText("freshUntil", input.freshUntil),
+      evidence_only: input.evidenceOnly ?? true,
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      correlation_id: requiredText("correlationId", input.correlationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+    return insertReturning<SingleSiteImprovementExecutionRefRow>(client, "gnr8_single_site_improvement_execution_refs", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "attempt_id",
+        "migration_id",
+        "ref_role",
+        "ref_type",
+        "source_system",
+        "source_table",
+        "source_record_id",
+        "source_version",
+        "source_watermark",
+        "semantic_watermark",
+        "content_hash",
+        "media_type",
+        "captured_at",
+        "fresh_until",
+        "evidence_only",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async upsertImprovementExecutionItem(client: SingleSitePgClient, input: UpsertImprovementExecutionItemInput): Promise<SingleSiteImprovementExecutionItemRow> {
+    const attempted: InsertableRow = {
+      attempt_id: requiredText("attemptId", input.attemptId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      item_type: enumValue("itemType", input.itemType, SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_TYPES),
+      item_key: requiredText("itemKey", input.itemKey),
+      recommendation_id: optionalText(input.recommendationId),
+      status: optionalEnumValue("status", input.status, SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_STATUSES) ?? "open",
+      details_json: jsonObject("detailsJson", input.detailsJson),
+      refs_json: jsonArray("refsJson", input.refsJson),
+      limitation_json: jsonObject("limitationJson", input.limitationJson),
+      warnings_json: jsonArray("warningsJson", input.warningsJson),
+      error_json: jsonObject("errorJson", input.errorJson),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      semantic_watermark: optionalText(input.semanticWatermark),
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+    };
+    const existing = await client.query(
+      "select * from public.gnr8_single_site_improvement_execution_items where idempotency_key = $1 limit 1",
+      [attempted.idempotency_key],
+    );
+    const existingRow = existing.rows[0] as SingleSiteImprovementExecutionItemRow | undefined;
+    if (existingRow) {
+      assertSemanticMatch("gnr8_single_site_improvement_execution_items", String(attempted.idempotency_key), attempted, existingRow, [
+        "attempt_id",
+        "migration_id",
+        "item_type",
+        "item_key",
+        "recommendation_id",
+        "status",
+        "details_json",
+        "refs_json",
+        "limitation_json",
+        "warnings_json",
+        "error_json",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "privacy_label",
+        "retention_class",
+        "semantic_watermark",
+        "metadata_json",
+      ]);
+      return existingRow;
+    }
+    const result = await client.query(
+      `
+      insert into public.gnr8_single_site_improvement_execution_items (
+        attempt_id, migration_id, item_type, item_key, recommendation_id, status, details_json, refs_json,
+        limitation_json, warnings_json, error_json, actor_type, actor_id, actor_role, actor_display_label,
+        correlation_id, idempotency_key, privacy_label, retention_class, semantic_watermark, metadata_json
+      )
+      values ($1::uuid, $2::uuid, $3, $4, $5::uuid, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::jsonb)
+      on conflict (attempt_id, item_type, item_key) do update set
+        recommendation_id = excluded.recommendation_id,
+        status = excluded.status,
+        details_json = excluded.details_json,
+        refs_json = excluded.refs_json,
+        limitation_json = excluded.limitation_json,
+        warnings_json = excluded.warnings_json,
+        error_json = excluded.error_json,
+        actor_type = excluded.actor_type,
+        actor_id = excluded.actor_id,
+        actor_role = excluded.actor_role,
+        actor_display_label = excluded.actor_display_label,
+        semantic_watermark = excluded.semantic_watermark,
+        metadata_json = excluded.metadata_json,
+        updated_at = now()
+      returning *
+      `,
+      [
+        attempted.attempt_id,
+        attempted.migration_id,
+        attempted.item_type,
+        attempted.item_key,
+        attempted.recommendation_id,
+        attempted.status,
+        toPostgresValue(attempted.details_json),
+        toPostgresValue(attempted.refs_json),
+        toPostgresValue(attempted.limitation_json),
+        toPostgresValue(attempted.warnings_json),
+        toPostgresValue(attempted.error_json),
+        attempted.actor_type,
+        attempted.actor_id,
+        attempted.actor_role,
+        attempted.actor_display_label,
+        attempted.correlation_id,
+        attempted.idempotency_key,
+        attempted.privacy_label,
+        attempted.retention_class,
+        attempted.semantic_watermark,
+        toPostgresValue(attempted.metadata_json),
+      ],
+    );
+    return result.rows[0] as SingleSiteImprovementExecutionItemRow;
+  }
+
+  async listImprovementExecutionItems(client: SingleSitePgClient, attemptId: string): Promise<SingleSiteImprovementExecutionItemRow[]> {
+    const result = await client.query(
+      "select * from public.gnr8_single_site_improvement_execution_items where attempt_id = $1::uuid order by item_type asc, item_key asc",
+      [requiredText("attemptId", attemptId)],
+    );
+    return result.rows as SingleSiteImprovementExecutionItemRow[];
+  }
+
+  async listImprovementExecutionRefs(client: SingleSitePgClient, attemptId: string): Promise<SingleSiteImprovementExecutionRefRow[]> {
+    const result = await client.query(
+      "select * from public.gnr8_single_site_improvement_execution_refs where attempt_id = $1::uuid order by created_at asc, ref_role asc",
+      [requiredText("attemptId", attemptId)],
+    );
+    return result.rows as SingleSiteImprovementExecutionRefRow[];
+  }
+
+  async getImprovementExecutionEventByIdempotencyKey(client: SingleSitePgClient, idempotencyKey: string): Promise<SingleSiteImprovementExecutionEventRow | null> {
+    const result = await client.query("select * from public.gnr8_single_site_improvement_execution_events where idempotency_key = $1 limit 1", [requiredText("idempotencyKey", idempotencyKey)]);
+    return (result.rows[0] as SingleSiteImprovementExecutionEventRow | undefined) ?? null;
+  }
+
+  async insertImprovementExecutionEvent(
+    client: SingleSitePgClient,
+    input: InsertImprovementExecutionEventInput,
+  ): Promise<{ row: SingleSiteImprovementExecutionEventRow; reusedExisting: boolean }> {
+    const row: InsertableRow = {
+      attempt_id: requiredText("attemptId", input.attemptId),
+      migration_id: requiredText("migrationId", input.migrationId),
+      event_index: optionalPositiveInteger("eventIndex", input.eventIndex),
+      event_action: enumValue("eventAction", input.eventAction, SINGLE_SITE_IMPROVEMENT_EXECUTION_EVENT_ACTIONS),
+      from_status: optionalEnumValue("fromStatus", input.fromStatus, SINGLE_SITE_IMPROVEMENT_EXECUTION_STATUSES),
+      to_status: optionalEnumValue("toStatus", input.toStatus, SINGLE_SITE_IMPROVEMENT_EXECUTION_STATUSES),
+      actor_type: enumValue("actor.actorType", input.actor.actorType, SINGLE_SITE_ACTOR_TYPES),
+      actor_id: requiredText("actor.actorId", input.actor.actorId),
+      actor_role: requiredText("actor.actorRole", input.actor.actorRole),
+      actor_display_label: optionalText(input.actor.actorDisplayLabel),
+      details_json: jsonObject("detailsJson", input.detailsJson),
+      limitations_json: jsonArray("limitationsJson", input.limitationsJson),
+      warnings_json: jsonArray("warningsJson", input.warningsJson),
+      validation_summary_json: jsonObject("validationSummaryJson", input.validationSummaryJson),
+      output_refs_json: jsonObject("outputRefsJson", input.outputRefsJson),
+      failure_json: jsonObject("failureJson", input.failureJson),
+      source_watermark: optionalText(input.sourceWatermark),
+      semantic_watermark: optionalText(input.semanticWatermark),
+      payload_hash: optionalText(input.payloadHash),
+      correlation_id: requiredText("correlationId", input.correlationId),
+      causation_id: optionalText(input.causationId),
+      idempotency_key: requiredText("idempotencyKey", input.idempotencyKey),
+      request_id: optionalText(input.requestId),
+      privacy_label: optionalEnumValue("privacyLabel", input.privacyLabel, SINGLE_SITE_PRIVACY_LABELS) ?? "client_confidential",
+      retention_class: optionalEnumValue("retentionClass", input.retentionClass, SINGLE_SITE_RETENTION_CLASSES) ?? "compliance_long",
+      metadata_json: jsonObject("metadataJson", input.metadataJson),
+      occurred_at: timestampText("occurredAt", input.occurredAt) ?? undefined,
+    };
+    return insertReturning<SingleSiteImprovementExecutionEventRow>(client, "gnr8_single_site_improvement_execution_events", row, {
+      lookup: { idempotency_key: row.idempotency_key },
+      idempotencyKey: String(row.idempotency_key),
+      semanticFields: [
+        "attempt_id",
+        "migration_id",
+        "event_action",
+        "from_status",
+        "to_status",
+        "actor_type",
+        "actor_id",
+        "actor_role",
+        "details_json",
+        "limitations_json",
+        "warnings_json",
+        "validation_summary_json",
+        "output_refs_json",
+        "failure_json",
+        "source_watermark",
+        "semantic_watermark",
+        "payload_hash",
+        "privacy_label",
+        "retention_class",
+        "metadata_json",
+      ],
+    });
+  }
+
+  async nextImprovementExecutionEventIndex(client: SingleSitePgClient, attemptId: string): Promise<number> {
+    const result = await client.query(
+      "select coalesce(max(event_index), 0) + 1 as event_index from public.gnr8_single_site_improvement_execution_events where attempt_id = $1::uuid",
+      [requiredText("attemptId", attemptId)],
+    );
+    return Number(result.rows[0]?.event_index ?? 1);
+  }
 }
 
 const SINGLE_SITE_STATE_STAGE_VALUES = Object.values(SINGLE_SITE_STATE_STAGE) as SingleSiteMigrationStage[];
@@ -3139,3 +3874,4 @@ const SINGLE_SITE_IMPROVEMENT_PROPOSAL_TARGET_SCOPES = ["site", "page", "section
 const SINGLE_SITE_IMPROVEMENT_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
 const SINGLE_SITE_IMPROVEMENT_PRIORITIES = ["p0", "p1", "p2", "p3"] as const;
 const SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_STATUSES = ["not_requested", "requested", "authorized", "authorized_with_limitations", "rejected", "expired", "superseded"] as const;
+const SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_STATUSES = ["open", "resolved", "accepted_limitation", "blocked", "failed", "superseded"] as const;

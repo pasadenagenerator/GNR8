@@ -112,6 +112,23 @@ function hasJsonRef(value: unknown): boolean {
   return Object.keys(value as Record<string, unknown>).length > 0;
 }
 
+function jsonObject(value: unknown): Record<string, unknown> {
+  if (typeof value === "string") {
+    try {
+      return jsonObject(JSON.parse(value));
+    } catch {
+      return {};
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value) || value instanceof Date) return {};
+  return value as Record<string, unknown>;
+}
+
+function validationAllowsExecutionStart(value: unknown): boolean {
+  const validation = jsonObject(value);
+  return validation.allowed === true && ["allowed", "allowed_with_limitations"].includes(String(validation.mode));
+}
+
 function requireRefs(input: TransitionSingleSiteMigrationInput, roles: readonly SingleSiteMigrationRefRole[], missing: string[], label: string): void {
   if (!hasRef(input, roles)) missing.push(label);
 }
@@ -350,6 +367,17 @@ export class SingleSiteStateTransitionService {
       const proposal = await this.repository.getLatestImprovementProposalPlanForMigration(tx, migration.id);
       if (!proposal || !["approved", "approved_with_limitations"].includes(proposal.plan_status)) missing.push("approved improvement proposal plan");
       if (!proposal?.implementation_authorization_attached) missing.push("separate implementation authorization ref");
+      const executionAttempt = await this.repository.getLatestImprovementExecutionAttemptForMigration(tx, migration.id);
+      if (!executionAttempt) {
+        missing.push("ready improvement execution attempt");
+      } else {
+        if (executionAttempt.status !== "ready") missing.push("ready improvement execution attempt status");
+        if (!validationAllowsExecutionStart(executionAttempt.validation_summary_json)) missing.push("successful execution-time AAF validation result");
+        if (!Array.isArray(executionAttempt.selected_recommendation_refs_json) || executionAttempt.selected_recommendation_refs_json.length === 0) {
+          missing.push("selected recommendation refs");
+        }
+        if (!executionAttempt.semantic_input_watermark) missing.push("implementation scope watermark");
+      }
     }
     if (input.toState === "content_approved" && !["content_review_required", "improved_preview_ready"].includes(fromState)) {
       missing.push("improved preview/content review state");

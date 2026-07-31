@@ -5,6 +5,7 @@ import {
   SINGLE_SITE_CLONE_FIDELITY_SEVERITIES,
   SINGLE_SITE_IMPROVEMENT_CATEGORIES,
   SINGLE_SITE_IMPROVEMENT_EFFORT_LEVELS,
+  SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_TYPES,
   SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS,
   SINGLE_SITE_IMPROVEMENT_RISK_LEVELS,
   SINGLE_SITE_MIGRATION_STAGES,
@@ -25,6 +26,10 @@ import {
   type SingleSiteEvidenceItemStatus,
   type SingleSiteImprovementCategory,
   type SingleSiteImprovementEffortLevel,
+  type SingleSiteImprovementExecutionItemType,
+  type SingleSiteImprovementExecutionMode,
+  type SingleSiteImprovementExecutionRefRole,
+  type SingleSiteImprovementExecutionStatus,
   type SingleSiteImprovementImpactLevel,
   type SingleSiteImprovementProposalPlanStatus,
   type SingleSiteImprovementRiskLevel,
@@ -47,6 +52,10 @@ import type {
   SingleSiteCloneReviewRow,
   SingleSiteEvidenceItemRow,
   SingleSiteImprovementProposalFindingRow,
+  SingleSiteImprovementExecutionAttemptRow,
+  SingleSiteImprovementExecutionEventRow,
+  SingleSiteImprovementExecutionItemRow,
+  SingleSiteImprovementExecutionRefRow,
   SingleSiteImprovementProposalPlanRow,
   SingleSiteImprovementProposalRecommendationRow,
   SingleSiteImprovementProposalRefRow,
@@ -78,6 +87,16 @@ export const SINGLE_SITE_RECOMMENDED_NEXT_ACTIONS = [
   "revise_improvement_proposal",
   "request_implementation_authorization",
   "request_implementation_authorization_with_limitations",
+  "prepare_improvement_execution",
+  "request_or_fix_implementation_authorization",
+  "resolve_execution_authorization_blocker",
+  "start_improvement_execution",
+  "monitor_improvement_execution",
+  "review_improved_version",
+  "review_improved_version_with_limitations",
+  "retry_or_repair_improvement_execution",
+  "retry_improvement_execution",
+  "review_latest_execution_attempt",
   "resolve_or_cancel_proposal",
   "review_latest_proposal",
   "prepare_improvement_proposal_with_limitations",
@@ -234,6 +253,11 @@ export type SingleSiteMigrationReadRepositorySnapshot = {
   improvementProposalRecommendations?: SingleSiteImprovementProposalRecommendationRow[];
   improvementProposalFindings?: SingleSiteImprovementProposalFindingRow[];
   improvementProposalRefs?: SingleSiteImprovementProposalRefRow[];
+  improvementExecutionAttempts?: SingleSiteImprovementExecutionAttemptRow[];
+  latestImprovementExecutionAttempt?: SingleSiteImprovementExecutionAttemptRow | null;
+  improvementExecutionItems?: SingleSiteImprovementExecutionItemRow[];
+  improvementExecutionRefs?: SingleSiteImprovementExecutionRefRow[];
+  improvementExecutionEvents?: SingleSiteImprovementExecutionEventRow[];
 };
 
 export type SingleSiteMigrationSummary = {
@@ -518,6 +542,46 @@ export type SingleSiteImprovementProposalPlanningSummary = {
   nextAction: SingleSiteRecommendedNextActionKey;
 };
 
+export type SingleSiteImprovementExecutionSummary = {
+  latestExecutionAttemptId: string | null;
+  executionStatus: SingleSiteImprovementExecutionStatus | "not_started";
+  executionMode: SingleSiteImprovementExecutionMode | null;
+  implementationAuthorizationValidationSummary: SingleSiteJsonObject;
+  selectedRecommendationCount: number;
+  limitationsCarriedForward: unknown[];
+  improvedCandidateRefs: {
+    siteVersionRef: string | null;
+    runtimeArtifactRef: string | null;
+  };
+  outputRefs: SingleSiteJsonObject;
+  readinessFlags: {
+    proposalApproved: boolean;
+    implementationAuthorizationReady: boolean;
+    executionTimeAafValidationRequired: true;
+    executionTimeAafValidationAllowed: boolean;
+    selectedRecommendationsPresent: boolean;
+    implementationScopeWatermarkPresent: boolean;
+    readyToStart: boolean;
+    runtimeMutationAllowed: false;
+    contentApprovalGranted: false;
+    clientApprovalGranted: false;
+    launchApprovalGranted: false;
+    publishActivationApprovalGranted: false;
+  };
+  itemCountsByType: Record<SingleSiteImprovementExecutionItemType, number>;
+  refs: Array<{
+    id: string;
+    role: SingleSiteImprovementExecutionRefRole;
+    refType: string;
+    sourceSystem: string;
+    sourceTable: string | null;
+    sourceRecordId: string;
+    sourceWatermark: string | null;
+    stale: boolean;
+  }>;
+  nextAction: SingleSiteRecommendedNextActionKey;
+};
+
 export type SingleSiteRecommendedNextAction = {
   actionKey: SingleSiteRecommendedNextActionKey;
   ownerRole: "migration_operator" | "source_evidence_reviewer" | "clone_reviewer" | "proposal_approver" | "domain_operator" | "billing_operator" | "launch_approver" | "release_operator" | "none";
@@ -575,6 +639,7 @@ export type SingleSiteMigrationReadModel = SingleSiteReadModelBoundaryFlags & {
   sourceEvidenceReview: SingleSiteSourceEvidenceReviewSummary;
   cloneReview: SingleSiteCloneReviewSummary;
   improvementProposalPlanning: SingleSiteImprovementProposalPlanningSummary;
+  improvementExecution: SingleSiteImprovementExecutionSummary;
   evidenceCompleteness: SingleSiteEvidenceCompletenessSummary;
   blockers: SingleSiteBlockerSummary;
   refs: SingleSiteRefSummary;
@@ -654,6 +719,17 @@ function requiredRefsForAction(actionKey: SingleSiteRecommendedNextActionKey): S
   if (actionKey === "prepare_subscription_hosting") return ["subscription", "hosting_entitlement"];
   if (actionKey === "request_launch_approval") return ["content_approval", "ddom_readiness_snapshot", "hosting_entitlement"];
   if (actionKey === "prepare_publish") return ["publish_target", "rollback_target", "aaf_approval_decision"];
+  if (
+    actionKey === "start_improvement_execution" ||
+    actionKey === "monitor_improvement_execution" ||
+    actionKey === "review_improved_version" ||
+    actionKey === "review_improved_version_with_limitations" ||
+    actionKey === "retry_or_repair_improvement_execution" ||
+    actionKey === "retry_improvement_execution" ||
+    actionKey === "review_latest_execution_attempt"
+  ) {
+    return ["implementation_execution_attempt"];
+  }
   if (actionKey === "confirm_rollback_readiness") return ["rollback_target"];
   if (actionKey === "close_out_migration") return ["closeout"];
   return [];
@@ -664,6 +740,7 @@ function nextActionForState(input: {
   sourceEvidence: SingleSiteSourceEvidenceReviewSummary;
   cloneReview: SingleSiteCloneReviewSummary;
   proposal: SingleSiteImprovementProposalPlanningSummary;
+  execution: SingleSiteImprovementExecutionSummary;
   blockers: SingleSiteBlockerSummary;
   closeout: SingleSiteCloseoutSummary;
   refs: readonly SingleSiteMigrationRefRow[];
@@ -701,15 +778,16 @@ function nextActionForState(input: {
       if (input.state === "improvement_proposal_rejected") return "resolve_or_cancel_proposal";
       if (input.state === "improvement_proposal_approved") return "request_implementation_authorization";
     }
+    if (input.proposal.proposalReadiness.approved) return input.execution.nextAction;
     return input.proposal.nextAction;
   }
-  if (input.state === "improvement_implementation_started") return "implement_improvements";
+  if (input.state === "improvement_implementation_started") return input.execution.nextAction;
   if (
     input.state === "improvement_implementation_completed" ||
     input.state === "improved_preview_ready" ||
     input.state === "content_review_required"
   ) {
-    return "review_improved_preview";
+    return input.execution.nextAction;
   }
   if (input.state === "content_approved" || input.state === "domain_readiness_required") return "prepare_domain_readiness";
   if (input.state === "domain_readiness_ready" || input.state === "subscription_required" || input.state === "subscription_created") return "prepare_subscription_hosting";
@@ -743,6 +821,16 @@ function actionReason(actionKey: SingleSiteRecommendedNextActionKey, state: Sing
     revise_improvement_proposal: "Reviewer requested proposal changes before approval.",
     request_implementation_authorization: "Proposal plan is approved but implementation authorization remains separate.",
     request_implementation_authorization_with_limitations: "Proposal plan is approved with limitations and still needs separate implementation authorization.",
+    prepare_improvement_execution: "Proposal and implementation authorization are ready; create the governed execution attempt.",
+    request_or_fix_implementation_authorization: "Implementation authorization is missing, stale, invalid, or not attached.",
+    resolve_execution_authorization_blocker: "Execution-time authorization validation is blocked and needs resolution before start.",
+    start_improvement_execution: "Execution attempt is ready and has a successful execution-time authorization validation.",
+    monitor_improvement_execution: "Execution attempt has started and should be monitored.",
+    review_improved_version: "Execution completed and the future improved version review remains separate.",
+    review_improved_version_with_limitations: "Execution completed with limitations and the future improved version review remains separate.",
+    retry_or_repair_improvement_execution: "Execution failed and needs retry or repair planning.",
+    retry_improvement_execution: "Execution attempt is marked retry required.",
+    review_latest_execution_attempt: "Latest execution attempt is cancelled or superseded; review the current replacement.",
     resolve_or_cancel_proposal: "Proposal plan was rejected and must be resolved, superseded, or cancelled.",
     review_latest_proposal: "Proposal plan was superseded and the replacement/latest plan should be reviewed.",
     request_clone_revision: "Clone review requires a revision before proposal work proceeds.",
@@ -775,6 +863,16 @@ function ownerRole(actionKey: SingleSiteRecommendedNextActionKey): SingleSiteRec
       "revise_improvement_proposal",
       "request_implementation_authorization",
       "request_implementation_authorization_with_limitations",
+      "prepare_improvement_execution",
+      "request_or_fix_implementation_authorization",
+      "resolve_execution_authorization_blocker",
+      "start_improvement_execution",
+      "monitor_improvement_execution",
+      "review_improved_version",
+      "review_improved_version_with_limitations",
+      "retry_or_repair_improvement_execution",
+      "retry_improvement_execution",
+      "review_latest_execution_attempt",
       "resolve_or_cancel_proposal",
       "review_latest_proposal",
     ].includes(actionKey)
@@ -1139,6 +1237,85 @@ function buildImprovementProposalPlanning(
   };
 }
 
+function executionNextAction(
+  proposal: SingleSiteImprovementProposalPlanningSummary,
+  latest: SingleSiteImprovementExecutionAttemptRow | null,
+): SingleSiteRecommendedNextActionKey {
+  if (!proposal.proposalReadiness.approved) return proposal.nextAction;
+  if (!proposal.implementationAuthorizationReady || ["invalid", "stale", "missing", "required", "requested"].includes(proposal.implementationAuthorizationStatus)) {
+    return "request_or_fix_implementation_authorization";
+  }
+  if (!latest) return "prepare_improvement_execution";
+  const validation = jsonObject(latest.validation_summary_json);
+  if (latest.status === "blocked" || validation.allowed === false) return "resolve_execution_authorization_blocker";
+  if (latest.status === "draft") return "resolve_execution_authorization_blocker";
+  if (latest.status === "ready") return "start_improvement_execution";
+  if (latest.status === "started") return "monitor_improvement_execution";
+  if (latest.status === "completed") return "review_improved_version";
+  if (latest.status === "completed_with_limitations") return "review_improved_version_with_limitations";
+  if (latest.status === "failed") return "retry_or_repair_improvement_execution";
+  if (latest.status === "retry_required") return "retry_improvement_execution";
+  if (latest.status === "cancelled" || latest.status === "superseded") return "review_latest_execution_attempt";
+  return "prepare_improvement_execution";
+}
+
+function buildImprovementExecution(
+  snapshot: SingleSiteMigrationReadRepositorySnapshot,
+  proposal: SingleSiteImprovementProposalPlanningSummary,
+  generatedAt: string,
+): SingleSiteImprovementExecutionSummary {
+  const latest = snapshot.latestImprovementExecutionAttempt ?? null;
+  const refs = snapshot.improvementExecutionRefs ?? [];
+  const items = snapshot.improvementExecutionItems ?? [];
+  const itemCountsByType = Object.fromEntries(SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_TYPES.map((type) => [type, 0])) as Record<SingleSiteImprovementExecutionItemType, number>;
+  for (const item of items) itemCountsByType[item.item_type] += 1;
+  const selectedRecommendationCount = latest ? jsonArray(latest.selected_recommendation_refs_json).length : 0;
+  const validation = jsonObject(latest?.validation_summary_json);
+  const validationAllowed = validation.allowed === true && ["allowed", "allowed_with_limitations"].includes(String(validation.mode));
+  const implementationScopeWatermarkPresent = Boolean(latest?.semantic_input_watermark);
+  const selectedRecommendationsPresent = selectedRecommendationCount > 0;
+  const readyToStart = latest?.status === "ready" && validationAllowed && selectedRecommendationsPresent && implementationScopeWatermarkPresent;
+  return {
+    latestExecutionAttemptId: latest?.id ?? null,
+    executionStatus: latest?.status ?? "not_started",
+    executionMode: latest?.execution_mode ?? null,
+    implementationAuthorizationValidationSummary: validation,
+    selectedRecommendationCount,
+    limitationsCarriedForward: jsonArray(latest?.limitations_json),
+    improvedCandidateRefs: {
+      siteVersionRef: latest?.improved_candidate_site_version_ref ?? null,
+      runtimeArtifactRef: latest?.improved_runtime_artifact_ref ?? null,
+    },
+    outputRefs: jsonObject(latest?.output_refs_json),
+    readinessFlags: {
+      proposalApproved: proposal.proposalReadiness.approved,
+      implementationAuthorizationReady: proposal.implementationAuthorizationReady,
+      executionTimeAafValidationRequired: true,
+      executionTimeAafValidationAllowed: validationAllowed,
+      selectedRecommendationsPresent,
+      implementationScopeWatermarkPresent,
+      readyToStart,
+      runtimeMutationAllowed: false,
+      contentApprovalGranted: false,
+      clientApprovalGranted: false,
+      launchApprovalGranted: false,
+      publishActivationApprovalGranted: false,
+    },
+    itemCountsByType,
+    refs: refs.map((ref) => ({
+      id: ref.id,
+      role: ref.ref_role,
+      refType: ref.ref_type,
+      sourceSystem: ref.source_system,
+      sourceTable: ref.source_table,
+      sourceRecordId: ref.source_record_id,
+      sourceWatermark: ref.source_watermark,
+      stale: isPast(timestamp(ref.fresh_until), generatedAt),
+    })),
+    nextAction: executionNextAction(proposal, latest),
+  };
+}
+
 function buildRefs(
   refs: readonly SingleSiteMigrationRefRow[],
   generatedAt: string,
@@ -1235,11 +1412,13 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
   const sourceEvidence = buildSourceEvidence(snapshot, generatedAt);
   const cloneReview = buildCloneReview(snapshot, generatedAt);
   const improvementProposalPlanning = buildImprovementProposalPlanning(snapshot, cloneReview);
+  const improvementExecution = buildImprovementExecution(snapshot, improvementProposalPlanning, generatedAt);
   const actionKey = nextActionForState({
     state: snapshot.migration.current_state,
     sourceEvidence: sourceEvidence.review,
     cloneReview,
     proposal: improvementProposalPlanning,
+    execution: improvementExecution,
     blockers,
     closeout,
     refs: snapshot.refs,
@@ -1302,6 +1481,7 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
     sourceEvidenceReview: sourceEvidence.review,
     cloneReview,
     improvementProposalPlanning,
+    improvementExecution,
     evidenceCompleteness: sourceEvidence.completeness,
     blockers,
     refs,

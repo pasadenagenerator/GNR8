@@ -290,6 +290,22 @@ Canonical AAF-only approval decision status vocabulary closeout for implementati
 - `apps/platform/gnr8/aaf/aaf-writer-repository.integration.test.ts`
 - `docs/product/gnr8-aaf-granted-with-limitations-vocabulary-closeout.md`
 
+## MVP-21 Single-Site Improvement Execution Persistence Boundary Core
+
+Canonical execution attempt persistence and server-only future executor boundary core:
+- `apps/platform/supabase/migrations/20260731120000_single_site_improvement_execution_core.sql`
+- `apps/platform/gnr8/single-site/improvement-execution-contracts.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.test.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-writer-repository.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-aaf-validator.ts`
+- `docs/product/gnr8-single-site-improvement-execution-persistence-boundary-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

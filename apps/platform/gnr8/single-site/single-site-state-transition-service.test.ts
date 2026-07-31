@@ -47,6 +47,9 @@ function fakeRepository(options: {
   cloneLimitations?: unknown[];
   proposalStatus?: string | null;
   implementationAuthorizationAttached?: boolean;
+  executionAttemptStatus?: string | null;
+  executionValidationAllowed?: boolean;
+  selectedRecommendationRefs?: unknown[];
 }): never {
   const events: Record<string, unknown>[] = [];
   const refs: Record<string, unknown>[] = [];
@@ -126,6 +129,17 @@ function fakeRepository(options: {
         implementation_authorization_attached: options.implementationAuthorizationAttached ?? false,
       };
     },
+    async getLatestImprovementExecutionAttemptForMigration() {
+      if (options.executionAttemptStatus === null) return null;
+      return {
+        id: "55555555-5555-4555-8555-555555555555",
+        migration_id: MIGRATION_ID,
+        status: options.executionAttemptStatus ?? "ready",
+        validation_summary_json: { allowed: options.executionValidationAllowed ?? true, mode: "allowed" },
+        selected_recommendation_refs_json: options.selectedRecommendationRefs ?? [{ recommendationId: "rec-1" }],
+        semantic_input_watermark: "scope-watermark",
+      };
+    },
   };
   return repo as never;
 }
@@ -189,6 +203,18 @@ test("proposal, publish, closeout, and terminal guardrails block missing prerequ
     fakeRepository({ state: "improvement_proposal_approved", proposalStatus: "approved_with_limitations", implementationAuthorizationAttached: true }),
   ).transition(baseInput({ toState: "improvement_implementation_started", refs: [] }));
   assert.equal(implementationStart.toState, "improvement_implementation_started");
+  await assert.rejects(
+    () =>
+      new SingleSiteStateTransitionService(
+        fakeRepository({
+          state: "improvement_proposal_approved",
+          proposalStatus: "approved",
+          implementationAuthorizationAttached: true,
+          executionAttemptStatus: "draft",
+        }),
+      ).transition(baseInput({ toState: "improvement_implementation_started", refs: [] })),
+    /ready improvement execution attempt status/,
+  );
   await assert.rejects(
     () => new SingleSiteStateTransitionService(fakeRepository({ state: "launch_approval_required" })).transition(baseInput({ toState: "publish_ready", refs: [] })),
     /content approval ref/,
