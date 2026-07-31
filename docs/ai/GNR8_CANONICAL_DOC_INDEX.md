@@ -337,6 +337,15 @@ Canonical server-only real improved candidate creation adapter core:
 - `apps/platform/gnr8/single-site/improvement-execution-service.test.ts`
 - `docs/product/gnr8-single-site-improved-candidate-creation-adapter-closeout.md`
 
+## MVP-25 Single-Site Improved Version Review And Acceptance Core
+
+Canonical server-only improved candidate review and acceptance truth:
+- `apps/platform/gnr8/single-site/improved-version-review-service.ts`
+- `apps/platform/gnr8/single-site/improved-version-review-service.test.ts`
+- `apps/platform/gnr8/single-site/improved-version-review-service.integration.test.ts`
+- `apps/platform/supabase/migrations/20260731143000_single_site_improved_version_review_core.sql`
+- `docs/product/gnr8-single-site-improved-version-review-acceptance-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

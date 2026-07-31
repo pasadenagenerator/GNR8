@@ -16,6 +16,7 @@ export const SINGLE_SITE_MIGRATION_STATES = [
   "improvement_proposal_rejected",
   "improvement_implementation_started",
   "improvement_implementation_completed",
+  "improved_version_review_required",
   "improved_preview_ready",
   "content_review_required",
   "content_approved",
@@ -290,6 +291,80 @@ export const SINGLE_SITE_IMPROVEMENT_EXECUTION_EVENT_ACTIONS = [
   "superseded",
 ] as const;
 
+export const SINGLE_SITE_IMPROVED_VERSION_REVIEW_STATUSES = [
+  "draft",
+  "ready_for_review",
+  "in_review",
+  "accepted",
+  "accepted_with_limitations",
+  "retry_required",
+  "rejected",
+  "superseded",
+  "cancelled",
+] as const;
+
+export const SINGLE_SITE_IMPROVED_VERSION_REVIEW_DECISIONS = [
+  "accept",
+  "accept_with_limitations",
+  "retry_improvement",
+  "reject_improved_version",
+  "supersede",
+  "cancel",
+] as const;
+
+export const SINGLE_SITE_IMPROVED_VERSION_REVIEW_SEVERITIES = ["p0_blocker", "p1_major", "p2_minor", "p3_note"] as const;
+
+export const SINGLE_SITE_IMPROVED_VERSION_REVIEW_CATEGORIES = [
+  "proposal_alignment",
+  "content_accuracy",
+  "visual_quality",
+  "brand_consistency",
+  "seo",
+  "aeo",
+  "accessibility",
+  "performance",
+  "responsive",
+  "interaction",
+  "technical_integrity",
+  "limitation",
+  "manual_note",
+  "unknown_or_manual",
+] as const;
+
+export const SINGLE_SITE_IMPROVED_VERSION_REVIEW_REF_ROLES = [
+  "migration",
+  "client",
+  "site",
+  "proposal_plan",
+  "proposal_approval",
+  "implementation_authorization",
+  "execution_attempt",
+  "improved_candidate_site_version",
+  "improved_runtime_artifact",
+  "clone_site_version",
+  "clone_runtime_artifact",
+  "selected_recommendation",
+  "dry_run_planned_change_set",
+  "source_evidence_review",
+  "limitation",
+  "evidence",
+  "external_reference",
+] as const;
+
+export const SINGLE_SITE_IMPROVED_VERSION_REVIEW_EVENT_ACTIONS = [
+  "created",
+  "ref_added",
+  "finding_added",
+  "ready_for_review",
+  "review_started",
+  "accepted",
+  "accepted_with_limitations",
+  "retry_required",
+  "rejected",
+  "cancelled",
+  "superseded",
+] as const;
+
 export const SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES = [
   "unknown",
   "complete",
@@ -422,6 +497,7 @@ export const SINGLE_SITE_MIGRATION_REF_ROLES = [
   "proposal_artifact",
   "proposal_approval",
   "implementation_execution_attempt",
+  "improved_version_review",
   "content_approval",
   "domain_binding",
   "ddom_readiness_snapshot",
@@ -532,6 +608,12 @@ export type SingleSiteImprovementExecutionMode = (typeof SINGLE_SITE_IMPROVEMENT
 export type SingleSiteImprovementExecutionItemType = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_ITEM_TYPES)[number];
 export type SingleSiteImprovementExecutionRefRole = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_REF_ROLES)[number];
 export type SingleSiteImprovementExecutionEventAction = (typeof SINGLE_SITE_IMPROVEMENT_EXECUTION_EVENT_ACTIONS)[number];
+export type SingleSiteImprovedVersionReviewStatus = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_STATUSES)[number];
+export type SingleSiteImprovedVersionReviewDecision = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_DECISIONS)[number];
+export type SingleSiteImprovedVersionReviewSeverity = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_SEVERITIES)[number];
+export type SingleSiteImprovedVersionReviewCategory = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_CATEGORIES)[number];
+export type SingleSiteImprovedVersionReviewRefRole = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_REF_ROLES)[number];
+export type SingleSiteImprovedVersionReviewEventAction = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_EVENT_ACTIONS)[number];
 export type SingleSiteSourceEvidenceCompletenessStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES)[number];
 export type SingleSiteSourceEvidenceReviewDecision = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_DECISIONS)[number];
 export type SingleSiteEvidenceItemCategory = (typeof SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES)[number];
@@ -566,6 +648,7 @@ export const SINGLE_SITE_STATE_STAGE: Record<SingleSiteMigrationState, SingleSit
   improvement_proposal_rejected: "proposal",
   improvement_implementation_started: "improvement_content",
   improvement_implementation_completed: "improvement_content",
+  improved_version_review_required: "improvement_content",
   improved_preview_ready: "improvement_content",
   content_review_required: "improvement_content",
   content_approved: "improvement_content",

@@ -13,6 +13,12 @@ import {
   type SingleSiteStateHistoryItem,
 } from "./single-site-state-read-model";
 import type {
+  SingleSiteImprovedVersionReviewEventRow,
+  SingleSiteImprovedVersionReviewItemRow,
+  SingleSiteImprovedVersionReviewRefRow,
+  SingleSiteImprovedVersionReviewRow,
+} from "./improved-version-review-service";
+import type {
   SingleSiteCloneReviewEventRow,
   SingleSiteCloneReviewItemRow,
   SingleSiteCloneReviewRefRow,
@@ -129,6 +135,11 @@ export class SingleSiteStateReadRepository {
     return model?.sourceEvidenceReview ?? null;
   }
 
+  async readLatestImprovedVersionReviewForMigration(migrationId: string): Promise<SingleSiteMigrationReadModel["improvedVersionReview"] | null> {
+    const model = await this.readByMigrationId(migrationId);
+    return model?.improvedVersionReview ?? null;
+  }
+
   async readBlockersForMigration(migrationId: string): Promise<SingleSiteMigrationReadModel["blockers"] | null> {
     const model = await this.readByMigrationId(migrationId);
     return model?.blockers ?? null;
@@ -180,6 +191,12 @@ export class SingleSiteStateReadRepository {
     const improvementExecutionItems = latestImprovementExecutionAttempt ? await this.readImprovementExecutionItems(client, latestImprovementExecutionAttempt.id) : [];
     const improvementExecutionRefs = latestImprovementExecutionAttempt ? await this.readImprovementExecutionRefs(client, latestImprovementExecutionAttempt.id) : [];
     const improvementExecutionEvents = latestImprovementExecutionAttempt ? await this.readImprovementExecutionEvents(client, latestImprovementExecutionAttempt.id) : [];
+    const hasImprovedVersionReviewTables = await this.improvedVersionReviewTablesAvailable(client);
+    const improvedVersionReviews = hasImprovedVersionReviewTables ? await this.readImprovedVersionReviewRows(client, migration.id) : [];
+    const latestImprovedVersionReview = improvedVersionReviews[0] ?? null;
+    const improvedVersionReviewItems = latestImprovedVersionReview ? await this.readImprovedVersionReviewItems(client, latestImprovedVersionReview.id) : [];
+    const improvedVersionReviewRefs = latestImprovedVersionReview ? await this.readImprovedVersionReviewRefs(client, latestImprovedVersionReview.id) : [];
+    const improvedVersionReviewEvents = latestImprovedVersionReview ? await this.readImprovedVersionReviewEvents(client, latestImprovedVersionReview.id) : [];
 
     return {
       capturedAt,
@@ -209,6 +226,11 @@ export class SingleSiteStateReadRepository {
       improvementExecutionItems,
       improvementExecutionRefs,
       improvementExecutionEvents,
+      improvedVersionReviews,
+      latestImprovedVersionReview,
+      improvedVersionReviewItems,
+      improvedVersionReviewRefs,
+      improvedVersionReviewEvents,
     };
   }
 
@@ -665,5 +687,77 @@ export class SingleSiteStateReadRepository {
       [attemptId],
     );
     return result.rows as SingleSiteImprovementExecutionEventRow[];
+  }
+
+  private async improvedVersionReviewTablesAvailable(client: SingleSitePgClient): Promise<boolean> {
+    const result = await client.query("select to_regclass('public.gnr8_single_site_improved_version_reviews')::text as table_name");
+    return Boolean(result.rows[0]?.table_name);
+  }
+
+  private async readImprovedVersionReviewRows(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteImprovedVersionReviewRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        review_started_at::text as review_started_at,
+        reviewed_at::text as reviewed_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_improved_version_reviews
+      where migration_id = $1::uuid
+      order by public.gnr8_single_site_improved_version_reviews.updated_at desc, public.gnr8_single_site_improved_version_reviews.created_at desc
+      `,
+      [migrationId],
+    );
+    return result.rows as SingleSiteImprovedVersionReviewRow[];
+  }
+
+  private async readImprovedVersionReviewItems(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteImprovedVersionReviewItemRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_improved_version_review_items
+      where review_id = $1::uuid
+      order by item_key asc
+      `,
+      [reviewId],
+    );
+    return result.rows as SingleSiteImprovedVersionReviewItemRow[];
+  }
+
+  private async readImprovedVersionReviewRefs(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteImprovedVersionReviewRefRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        captured_at::text as captured_at,
+        fresh_until::text as fresh_until,
+        created_at::text as created_at
+      from public.gnr8_single_site_improved_version_review_refs
+      where review_id = $1::uuid
+      order by public.gnr8_single_site_improved_version_review_refs.created_at asc, ref_role asc
+      `,
+      [reviewId],
+    );
+    return result.rows as SingleSiteImprovedVersionReviewRefRow[];
+  }
+
+  private async readImprovedVersionReviewEvents(client: SingleSitePgClient, reviewId: string): Promise<SingleSiteImprovedVersionReviewEventRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        occurred_at::text as occurred_at,
+        created_at::text as created_at
+      from public.gnr8_single_site_improved_version_review_events
+      where review_id = $1::uuid
+      order by event_index asc, public.gnr8_single_site_improved_version_review_events.occurred_at asc
+      `,
+      [reviewId],
+    );
+    return result.rows as SingleSiteImprovedVersionReviewEventRow[];
   }
 }

@@ -84,6 +84,8 @@ const ALLOWED_DIRECT_TRANSITIONS = new Set<string>([
   "improvement_proposal_rejected->improvement_proposal_started",
   "improvement_proposal_approved->improvement_implementation_started",
   "improvement_implementation_started->improvement_implementation_completed",
+  "improvement_implementation_completed->improved_version_review_required",
+  "improved_version_review_required->content_review_required",
   "improvement_implementation_completed->improved_preview_ready",
   "improved_preview_ready->content_review_required",
   "content_review_required->content_approved",
@@ -127,6 +129,11 @@ function jsonObject(value: unknown): Record<string, unknown> {
 function validationAllowsExecutionStart(value: unknown): boolean {
   const validation = jsonObject(value);
   return validation.allowed === true && ["allowed", "allowed_with_limitations"].includes(String(validation.mode));
+}
+
+function reviewAllowsContentApproval(value: unknown): boolean {
+  const review = jsonObject(value);
+  return review.content_approval_ready === true && ["accepted", "accepted_with_limitations"].includes(String(review.review_status));
 }
 
 function requireRefs(input: TransitionSingleSiteMigrationInput, roles: readonly SingleSiteMigrationRefRole[], missing: string[], label: string): void {
@@ -378,6 +385,25 @@ export class SingleSiteStateTransitionService {
         }
         if (!executionAttempt.semantic_input_watermark) missing.push("implementation scope watermark");
       }
+    }
+    if (input.toState === "content_review_required") {
+      const latest = await tx.query(
+        `
+        select *
+        from public.gnr8_single_site_improved_version_reviews
+        where migration_id = $1::uuid
+        order by updated_at desc, created_at desc
+        limit 1
+        `,
+        [migration.id],
+      );
+      const review = latest.rows[0];
+      if (!review) missing.push("accepted improved version review");
+      if (review && !reviewAllowsContentApproval(review)) missing.push("accepted improved version review status");
+      if (review?.review_status === "accepted_with_limitations" && (!Array.isArray(review.limitations_json) || review.limitations_json.length === 0)) {
+        missing.push("accepted improved version review limitations");
+      }
+      requireRefs(input, ["improved_version_review"], missing, "improved version review migration ref");
     }
     if (input.toState === "content_approved" && !["content_review_required", "improved_preview_ready"].includes(fromState)) {
       missing.push("improved preview/content review state");
