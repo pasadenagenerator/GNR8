@@ -1,6 +1,7 @@
 export const AAF_APPROVAL_STATUSES = [
   'requested',
   'granted',
+  'granted_with_limitations',
   'rejected',
   'revoked',
   'expired',
@@ -348,7 +349,7 @@ export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT: AafScopeCont
   allowedAction: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
   replayClass: 'not_replayable',
   humanApprovalReplayable: false,
-  allowedDecisionStatuses: ['granted', 'rejected', 'revoked', 'expired', 'superseded', 'cancelled'],
+  allowedDecisionStatuses: ['granted', 'granted_with_limitations', 'rejected', 'revoked', 'expired', 'superseded', 'cancelled'],
   allowedGateResults: [
     'allowed',
     'approval_required',

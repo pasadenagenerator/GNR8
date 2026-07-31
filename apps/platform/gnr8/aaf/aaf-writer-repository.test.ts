@@ -251,6 +251,29 @@ test("AAF writer accepts single-site implementation authorization scope vocabula
   assert.equal(evidence.subject_type, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE);
 });
 
+test("AAF writer accepts granted_with_limitations approval decisions", async () => {
+  const { client } = recordingClient();
+  const repository = new AafWriterRepository({ connect: async () => ({}) } as never);
+  const tx = txForClient(client);
+
+  const decision = await repository.createApprovalDecision(tx, {
+    ...correlation,
+    idempotencyKey: "idem-granted-with-limitations-decision",
+    approvalRequestId: "approval-request-limited-1",
+    status: "granted_with_limitations",
+    decisionActorType: "human",
+    decisionActorId: "implementation-authorizer",
+    decisionActorRole: "implementation_authorization_approver",
+    policyVersion: "AAF-UNIT",
+    evidencePackageId: "evidence-package-limited-1",
+    reason: "Implementation may proceed only within carried limitations.",
+  });
+
+  assert.equal(decision.status, "granted_with_limitations");
+  assert.equal(decision.approval_request_id, "approval-request-limited-1");
+  assert.equal(decision.evidence_package_id, "evidence-package-limited-1");
+});
+
 test("AAF writer returns matching idempotent rows and rejects semantic payload drift", async () => {
   const { client } = idempotencyAwareRecordingClient();
   const repository = new AafWriterRepository({ connect: async () => ({}) } as never);

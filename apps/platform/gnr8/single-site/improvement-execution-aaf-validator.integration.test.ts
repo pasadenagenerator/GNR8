@@ -6,13 +6,14 @@ import test from "node:test";
 
 import { Pool } from "pg";
 
-import { AafWriterRepository } from "../aaf/aaf-writer-repository";
+import { AafWriterRepository, type AafApprovalDecisionStatus } from "../aaf/aaf-writer-repository";
 import { SingleSiteImplementationAuthorizationBridge, type PrepareImplementationAuthorizationRequestInput } from "./implementation-authorization-bridge";
 import { ImprovementExecutionAafValidator, type ImprovementExecutionAafValidatorInput } from "./improvement-execution-aaf-validator";
 
 const PLATFORM_ROOT = process.cwd().endsWith(`${path.sep}apps${path.sep}platform`) ? process.cwd() : path.resolve(process.cwd(), "apps/platform");
 const AAF_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260722120000_aaf_persistence_core.sql");
 const AAF_SCOPE_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260730170000_aaf_single_site_implementation_authorization_scope.sql");
+const AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260731100000_aaf_granted_with_limitations_status.sql");
 
 type DisposablePostgres = {
   containerName: string;
@@ -73,6 +74,7 @@ async function startDisposablePostgres(): Promise<DisposablePostgres> {
     for (const [name, migrationPath] of [
       ["aaf.sql", AAF_MIGRATION_PATH],
       ["aaf-scope.sql", AAF_SCOPE_MIGRATION_PATH],
+      ["aaf-granted-with-limitations.sql", AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH],
     ] as const) {
       docker(["cp", migrationPath, `${containerName}:/tmp/${name}`]);
       docker(["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-h", "127.0.0.1", "-U", user, "-d", database, "-f", `/tmp/${name}`]);
@@ -199,13 +201,20 @@ async function counts(pool: Pool): Promise<Record<string, number>> {
   return result.rows[0] ?? {};
 }
 
-async function prepareAndDecide(pool: Pool, bridge: SingleSiteImplementationAuthorizationBridge, aafWriter: AafWriterRepository, suffix: string, status = "granted") {
-  const input = prepareInput(suffix);
+async function prepareAndDecide(
+  pool: Pool,
+  bridge: SingleSiteImplementationAuthorizationBridge,
+  aafWriter: AafWriterRepository,
+  suffix: string,
+  status: AafApprovalDecisionStatus = "granted",
+  overrides: Partial<PrepareImplementationAuthorizationRequestInput> = {},
+) {
+  const input = prepareInput(suffix, overrides);
   const prepared = await bridge.prepareImplementationAuthorizationRequest(input);
   const decision = await aafWriter.withTransaction((tx) =>
     aafWriter.createApprovalDecision(tx, {
       approvalRequestId: prepared.approvalRequest.id,
-      status: status as "granted",
+      status,
       decisionActorType: "human",
       decisionActorId: `approver-${suffix}`,
       decisionActorRole: "implementation_authorization_approver",
@@ -237,6 +246,19 @@ test("improvement execution AAF validator is read-only and fail-closed in dispos
     assert.equal(valid.allowed, true, JSON.stringify(valid));
     assert.equal(valid.reasonCode, "authorization_valid");
     assert.deepEqual(afterGrantedValidation, beforeGrantedValidation);
+
+    const limited = await prepareAndDecide(pool, bridge, aafWriter, `${suffix}-limited`, "granted_with_limitations", {
+      limitations: [{ implementation: "hero copy only" }],
+      proposalApprovalRef: {
+        ...prepareInput(`${suffix}-limited`).proposalApprovalRef,
+        limitations: [{ proposal: "preserve original offer" }],
+      },
+    });
+    const limitedValidation = await validator.validateImprovementExecutionAuthorization(executionInput(limited.input, limited.prepared, limited.decision.id));
+    assert.equal(limitedValidation.allowed, true, JSON.stringify(limitedValidation));
+    assert.equal(limitedValidation.mode, "allowed_with_limitations");
+    assert.equal(limitedValidation.reasonCode, "authorization_valid_with_limitations");
+    assert.deepEqual(limitedValidation.limitations, [{ implementation: "hero copy only" }, { proposal: "preserve original offer" }]);
 
     const requestedOnly = await bridge.prepareImplementationAuthorizationRequest(prepareInput(`${suffix}-requested`));
     const requested = await validator.validateImprovementExecutionAuthorization(
@@ -271,7 +293,7 @@ test("improvement execution AAF validator is read-only and fail-closed in dispos
     const wrongScopeDecision = await aafWriter.withTransaction((tx) =>
       aafWriter.createApprovalDecision(tx, {
         approvalRequestId: wrongScopeRequest.id,
-        status: "granted",
+        status: "granted_with_limitations",
         decisionActorType: "human",
         decisionActorId: "wrong-scope-approver",
         decisionActorRole: "release_approver",

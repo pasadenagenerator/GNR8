@@ -35,13 +35,19 @@ const AAF_SCOPE_EXPANSION_MIGRATION_PATH = path.resolve(
   process.cwd(),
   'apps/platform/supabase/migrations/20260730170000_aaf_single_site_implementation_authorization_scope.sql',
 )
+const AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH = path.resolve(
+  process.cwd(),
+  'apps/platform/supabase/migrations/20260731100000_aaf_granted_with_limitations_status.sql',
+)
 
 function readMigration(): string {
   return fs.readFileSync(MIGRATION_PATH, 'utf8')
 }
 
 function readAafVocabularyMigrations(): string {
-  return [MIGRATION_PATH, AAF_SCOPE_EXPANSION_MIGRATION_PATH].map((filePath) => fs.readFileSync(filePath, 'utf8')).join('\n')
+  return [MIGRATION_PATH, AAF_SCOPE_EXPANSION_MIGRATION_PATH, AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH]
+    .map((filePath) => fs.readFileSync(filePath, 'utf8'))
+    .join('\n')
 }
 
 function assertSqlContainsAll(values: readonly string[], sql: string): void {
@@ -54,6 +60,7 @@ test('AAF approval statuses, scopes, and policy results remain canonical', () =>
   assert.deepEqual(AAF_APPROVAL_STATUSES, [
     'requested',
     'granted',
+    'granted_with_limitations',
     'rejected',
     'revoked',
     'expired',
@@ -292,6 +299,7 @@ test('single-site implementation authorization contract is explicit and non-repl
   assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.humanApprovalReplayable, false)
   assert.deepEqual(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.allowedDecisionStatuses, [
     'granted',
+    'granted_with_limitations',
     'rejected',
     'revoked',
     'expired',
@@ -302,6 +310,9 @@ test('single-site implementation authorization contract is explicit and non-repl
     AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.allowedGateResults.includes('not_required_by_policy'),
     false,
   )
+  assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT.allowedGateResults.includes('allowed'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_improvement_implementation_authorization.includes('publish_activation'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_improvement_implementation_authorization.includes('content_approval'), true)
 })
 
 test('single-site implementation authorization pins required subject and evidence refs', () => {

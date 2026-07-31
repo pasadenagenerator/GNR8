@@ -280,6 +280,16 @@ Canonical server-only execution-time AAF validator core for future single-site i
 - `apps/platform/gnr8/single-site/implementation-authorization-bridge.ts`
 - `docs/product/gnr8-single-site-improvement-execution-aaf-validator-closeout.md`
 
+## MVP-20A AAF Granted-With-Limitations Vocabulary Closeout
+
+Canonical AAF-only approval decision status vocabulary closeout for implementation authorization:
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.ts`
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`
+- `apps/platform/supabase/migrations/20260731100000_aaf_granted_with_limitations_status.sql`
+- `apps/platform/gnr8/aaf/aaf-writer-repository.test.ts`
+- `apps/platform/gnr8/aaf/aaf-writer-repository.integration.test.ts`
+- `docs/product/gnr8-aaf-granted-with-limitations-vocabulary-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

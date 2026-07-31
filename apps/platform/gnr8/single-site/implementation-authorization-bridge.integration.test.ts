@@ -18,6 +18,7 @@ import { SingleSiteStateWriterRepository, type SingleSiteStateWriterPool, type S
 const PLATFORM_ROOT = process.cwd().endsWith(`${path.sep}apps${path.sep}platform`) ? process.cwd() : path.resolve(process.cwd(), "apps/platform");
 const AAF_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260722120000_aaf_persistence_core.sql");
 const AAF_SCOPE_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260730170000_aaf_single_site_implementation_authorization_scope.sql");
+const AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260731100000_aaf_granted_with_limitations_status.sql");
 const BASE_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260729120000_single_site_state_evidence_spine.sql");
 const CLONE_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260730120000_single_site_clone_review_core.sql");
 const PROPOSAL_MIGRATION_PATH = path.resolve(PLATFORM_ROOT, "supabase/migrations/20260730143000_single_site_improvement_proposal_planning_core.sql");
@@ -82,6 +83,7 @@ async function startDisposablePostgres(): Promise<DisposablePostgres> {
     for (const [name, migrationPath] of [
       ["aaf.sql", AAF_MIGRATION_PATH],
       ["aaf-scope.sql", AAF_SCOPE_MIGRATION_PATH],
+      ["aaf-granted-with-limitations.sql", AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH],
       ["base.sql", BASE_MIGRATION_PATH],
       ["clone.sql", CLONE_MIGRATION_PATH],
       ["proposal.sql", PROPOSAL_MIGRATION_PATH],
@@ -421,6 +423,29 @@ test("single-site implementation authorization bridge persists AAF request and v
     });
     assert.equal(validation.valid, true, JSON.stringify(validation));
     assert.equal(validation.status, "granted");
+
+    const limitedDecision = await aafWriter.withTransaction((tx) =>
+      aafWriter.createApprovalDecision(tx, {
+        approvalRequestId: prepared.approvalRequest.id,
+        status: "granted_with_limitations",
+        decisionActorType: "human",
+        decisionActorId: "implementation-auth-limited-approver",
+        decisionActorRole: "implementation_authorization_approver",
+        policyVersion: "MVP-18",
+        evidencePackageId: prepared.evidencePackage.id,
+        correlationId: `corr-grant-limited-${suffix}`,
+        idempotencyKey: `idem-grant-limited-${suffix}`,
+      }),
+    );
+    const limitedValidation = await bridge.validateImplementationAuthorizationRef({
+      ...input,
+      implementationAuthorizationDecisionId: limitedDecision.id,
+      approvalRequestId: prepared.approvalRequest.id,
+      evidencePackageId: prepared.evidencePackage.id,
+    });
+    assert.equal(limitedValidation.valid, true, JSON.stringify(limitedValidation));
+    assert.equal(limitedValidation.status, "granted_with_limitations");
+    assert.deepEqual(limitedValidation.limitations, [{ scope: "hero copy only" }, { scope: "hero copy only" }]);
 
     await assert.rejects(
       () =>

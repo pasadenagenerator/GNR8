@@ -12,6 +12,10 @@ import { AafIdempotencyConflictError, AafWriterRepository } from "./aaf-writer-r
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(TEST_DIR, "../../../..");
 const MIGRATION_PATH = path.join(REPO_ROOT, "apps/platform/supabase/migrations/20260722120000_aaf_persistence_core.sql");
+const GRANTED_WITH_LIMITATIONS_MIGRATION_PATH = path.join(
+  REPO_ROOT,
+  "apps/platform/supabase/migrations/20260731100000_aaf_granted_with_limitations_status.sql",
+);
 
 type DisposablePostgres = {
   containerName: string;
@@ -72,22 +76,27 @@ async function startDisposablePostgres(): Promise<DisposablePostgres> {
       }
     }
 
-    docker(["cp", MIGRATION_PATH, `${containerName}:/tmp/20260722120000_aaf_persistence_core.sql`]);
-    docker([
-      "exec",
-      containerName,
-      "psql",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-h",
-      "127.0.0.1",
-      "-U",
-      user,
-      "-d",
-      database,
-      "-f",
-      "/tmp/20260722120000_aaf_persistence_core.sql",
-    ]);
+    for (const [name, migrationPath] of [
+      ["20260722120000_aaf_persistence_core.sql", MIGRATION_PATH],
+      ["20260731100000_aaf_granted_with_limitations_status.sql", GRANTED_WITH_LIMITATIONS_MIGRATION_PATH],
+    ] as const) {
+      docker(["cp", migrationPath, `${containerName}:/tmp/${name}`]);
+      docker([
+        "exec",
+        containerName,
+        "psql",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-h",
+        "127.0.0.1",
+        "-U",
+        user,
+        "-d",
+        database,
+        "-f",
+        `/tmp/${name}`,
+      ]);
+    }
 
     const port = parsePublishedPort(docker(["port", containerName, "5432/tcp"]));
     return {
@@ -337,6 +346,23 @@ test("AAF writer applies migration and writes canonical records transactionally 
     assert.equal(approvalDecisionTx.approvalDecision.audit_event_id, approvalDecisionTx.auditEvent.id);
     assert.equal(approvalDecisionTx.auditEvent.approval_decision_id, approvalDecisionTx.approvalDecision.id);
     assert.equal(approvalDecisionTx.auditRefs.length, 1);
+
+    const limitedDecision = await writer.withTransaction((tx) =>
+      writer.createApprovalDecision(tx, {
+        correlationId,
+        idempotencyKey: `idem-approval-decision-limited-${suffix}`,
+        approvalRequestId: approvalRequestTx.approvalRequest.id,
+        status: "granted_with_limitations",
+        decisionActorType: "human",
+        decisionActorId: "approver-aaf-limited",
+        decisionActorRole: "superadmin",
+        policyVersion: String(bootstrap.policy.version),
+        evidencePackageId: evidenceTx.evidencePackage.id,
+        policyEvaluationId: approvalRequestTx.policyEvaluation.id,
+        reason: "Synthetic limited approval grant.",
+      }),
+    );
+    assert.equal(limitedDecision.status, "granted_with_limitations");
 
     const revocationAudit = await writer.withTransaction((tx) =>
       writer.createAuditEvent(tx, {
@@ -718,6 +744,20 @@ test("AAF writer applies migration and writes canonical records transactionally 
           [approvalRequestTx.approvalRequest.id, String(bootstrap.policy.version), correlationId, `idem-invalid-not-required-${suffix}`],
         ),
       /check constraint "gnr8_aaf_approval_decisions_not_required_policy_ref_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_approval_decisions (
+            approval_request_id, status, decision_actor_type, decision_actor_id, decision_actor_role,
+            policy_version, correlation_id, idempotency_key
+          )
+          values ($1::uuid, 'invalid_status', 'human', 'approver-aaf', 'superadmin', $2, $3, $4)
+          `,
+          [approvalRequestTx.approvalRequest.id, String(bootstrap.policy.version), correlationId, `idem-invalid-status-${suffix}`],
+        ),
+      /check constraint "gnr8_aaf_approval_decisions_status_ck"/,
     );
     await assertDbRejects(
       () =>
