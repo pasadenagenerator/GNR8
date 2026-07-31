@@ -326,6 +326,17 @@ Canonical server-only improved candidate dry-run adapter core:
 - `apps/platform/gnr8/single-site/improvement-execution-service.test.ts`
 - `docs/product/gnr8-single-site-improved-candidate-dry-run-adapter-closeout.md`
 
+## MVP-24 Single-Site Improved Candidate Creation Adapter Core
+
+Canonical server-only real improved candidate creation adapter core:
+- `apps/platform/gnr8/single-site/improved-candidate-creation-adapter.ts`
+- `apps/platform/gnr8/single-site/improved-candidate-creation-adapter.test.ts`
+- `apps/platform/gnr8/single-site/improved-candidate-creation-adapter.integration.test.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-contracts.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.test.ts`
+- `docs/product/gnr8-single-site-improved-candidate-creation-adapter-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

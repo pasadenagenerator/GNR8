@@ -150,3 +150,27 @@ export const IMPROVEMENT_EXECUTION_NO_RUNTIME_MUTATION_BOUNDARY: ImprovementExec
   callsExternalProviders: false,
   createsGeneratedProposalBundles: false,
 };
+
+export type ImprovedCandidateCreationMutationBoundary = {
+  mutatesRuntimeArtifacts: true;
+  mutatesRuntimeSiteVersions: true;
+  mutatesActivePointer: false;
+  publishes: false;
+  callsAiProviders: false;
+  callsExternalProviders: false;
+  createsGeneratedProposalBundles: false;
+  mutatesAcceptedCloneVersion: false;
+  mutatesProductionVersion: false;
+};
+
+export const IMPROVED_CANDIDATE_CREATION_MUTATION_BOUNDARY: ImprovedCandidateCreationMutationBoundary = {
+  mutatesRuntimeArtifacts: true,
+  mutatesRuntimeSiteVersions: true,
+  mutatesActivePointer: false,
+  publishes: false,
+  callsAiProviders: false,
+  callsExternalProviders: false,
+  createsGeneratedProposalBundles: false,
+  mutatesAcceptedCloneVersion: false,
+  mutatesProductionVersion: false,
+};

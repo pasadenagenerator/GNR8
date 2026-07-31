@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import type { ImprovedCandidateDryRunResult } from "./improved-candidate-dry-run-adapter";
+import type { ImprovedCandidateCreationOutput } from "./improved-candidate-creation-adapter";
 import type {
   ImplementationAuthorizationProposalApprovalRef,
   ImplementationAuthorizationSelectedRecommendationRef,
@@ -129,6 +130,19 @@ export type RecordImprovedCandidateDryRunResultInput = ImprovementExecutionEnvel
 };
 
 export type RecordImprovedCandidateDryRunResultOutput = {
+  attempt: SingleSiteImprovementExecutionAttemptRow;
+  items: SingleSiteImprovementExecutionItemRow[];
+  refs: SingleSiteImprovementExecutionRefRow[];
+  reusedExisting: boolean;
+};
+
+export type RecordImprovedCandidateCreationResultInput = ImprovementExecutionEnvelope & {
+  attemptId: string;
+  migrationId: string;
+  creationResult: ImprovedCandidateCreationOutput;
+};
+
+export type RecordImprovedCandidateCreationResultOutput = {
   attempt: SingleSiteImprovementExecutionAttemptRow;
   items: SingleSiteImprovementExecutionItemRow[];
   refs: SingleSiteImprovementExecutionRefRow[];
@@ -811,6 +825,156 @@ export class ImprovementExecutionService {
         semanticWatermark: input.dryRunResult.watermarks.semanticOutputWatermark,
         idempotencyKey: `${input.idempotencyKey}:item:dry-run:manual-note`,
         metadataJson: { ...input.metadataJson, dryRunOnly: true },
+      });
+
+      return { attempt, items, refs, reusedExisting };
+    });
+  }
+
+  async recordImprovedCandidateCreationResult(input: RecordImprovedCandidateCreationResultInput): Promise<RecordImprovedCandidateCreationResultOutput> {
+    return this.repository.withTransaction(async (tx) => {
+      const attempt = await this.requiredMutableAttempt(tx, input.attemptId);
+      if (attempt.migration_id !== requiredText("migrationId", input.migrationId)) throw new SingleSiteTransitionError("improved candidate result migrationId mismatch");
+      if (input.creationResult.mode !== "execute" || !input.creationResult.runtimeWrites || !input.creationResult.runtimeWritePerformed) {
+        throw new SingleSiteTransitionError("only real improved candidate creation results can be recorded");
+      }
+      const items: SingleSiteImprovementExecutionItemRow[] = [];
+      const refs: SingleSiteImprovementExecutionRefRow[] = [];
+      let reusedExisting = false;
+      const base = {
+        attemptId: attempt.id,
+        migrationId: attempt.migration_id,
+        actor: input.actor,
+        correlationId: input.correlationId,
+        causationId: input.causationId,
+        requestId: input.requestId,
+        privacyLabel: input.privacyLabel,
+        retentionClass: input.retentionClass,
+      };
+      const pushItem = async (item: Parameters<SingleSiteStateWriterRepository["upsertImprovementExecutionItem"]>[1]) => {
+        const row = await this.repository.upsertImprovementExecutionItem(tx, item);
+        items.push(row);
+      };
+      const pushRef = async (ref: RecordImprovementExecutionRefInput) => {
+        const result = await this.repository.insertImprovementExecutionRef(tx, ref);
+        refs.push(result.row);
+        reusedExisting ||= result.reusedExisting;
+      };
+
+      await pushItem({
+        ...base,
+        itemType: "validation_ref",
+        itemKey: "mvp20-validation-result-real-creation",
+        status: "resolved",
+        detailsJson: {
+          mvp24ImprovedCandidateCreation: true,
+          semanticInputWatermark: input.creationResult.watermarks.semanticInputWatermark,
+          dryRunMatchWatermark: input.creationResult.watermarks.dryRunMatchWatermark,
+        },
+        semanticWatermark: input.creationResult.watermarks.semanticInputWatermark,
+        idempotencyKey: `${input.idempotencyKey}:item:creation:validation`,
+        metadataJson: { ...input.metadataJson, runtimeMutationPerformed: true },
+      });
+
+      for (const change of input.creationResult.appliedPlannedChanges) {
+        await pushItem({
+          ...base,
+          itemType: "selected_recommendation",
+          itemKey: `creation-applied:${change.recommendationId}`,
+          recommendationId: change.recommendationId,
+          status: "resolved",
+          detailsJson: change as unknown as SingleSiteJsonObject,
+          refsJson: [{ recommendationRef: change.recommendationRef, changeId: change.changeId }],
+          semanticWatermark: input.creationResult.watermarks.appliedChangeSetWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:creation:applied:${change.recommendationId}`,
+          metadataJson: { ...input.metadataJson, runtimeMutationPerformed: true },
+        });
+      }
+
+      for (const entry of input.creationResult.recommendationsNotApplied) {
+        await pushItem({
+          ...base,
+          itemType: "warning",
+          itemKey: `creation-not-applied:${entry.recommendationId}`,
+          recommendationId: entry.recommendationId,
+          status: entry.creationReason === "dry_run_not_applied" && entry.reason === "unsupported_in_mvp" ? "accepted_limitation" : "open",
+          detailsJson: entry as unknown as SingleSiteJsonObject,
+          refsJson: [{ recommendationRef: entry.recommendationRef }],
+          warningsJson: [entry],
+          semanticWatermark: input.creationResult.watermarks.appliedChangeSetWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:creation:not-applied:${entry.recommendationId}`,
+          metadataJson: { ...input.metadataJson, runtimeMutationPerformed: true },
+        });
+      }
+
+      for (const [index, limitation] of input.creationResult.limitationsCarriedForward.entries()) {
+        await pushItem({
+          ...base,
+          itemType: "limitation",
+          itemKey: `creation-limitation:${index + 1}`,
+          status: "accepted_limitation",
+          limitationJson: limitation,
+          semanticWatermark: input.creationResult.watermarks.appliedChangeSetWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:creation:limitation:${index + 1}`,
+          metadataJson: { ...input.metadataJson, runtimeMutationPerformed: true },
+        });
+      }
+
+      for (const [key, sourceRecordId, refType, sourceTable] of [
+        ["improved-candidate-site-version", input.creationResult.targetRefs.improvedCandidateSiteVersionId, "runtime_site_version_improved_candidate", "gnr8_runtime_site_versions"],
+        ["improved-runtime-artifact", input.creationResult.targetRefs.improvedRuntimeArtifactId, "runtime_artifact_improved_candidate", "gnr8_runtime_artifacts"],
+        ["planned-change-set", input.creationResult.refs.plannedChangeSetRef, "improved_candidate_planned_change_set", null],
+      ] as const) {
+        await pushItem({
+          ...base,
+          itemType: "output_ref",
+          itemKey: `creation-output:${key}`,
+          status: "resolved",
+          detailsJson: {
+            sourceRecordId,
+            canonicalRef:
+              key === "improved-candidate-site-version"
+                ? input.creationResult.refs.improvedCandidateSiteVersionRef
+                : key === "improved-runtime-artifact"
+                  ? input.creationResult.refs.improvedRuntimeArtifactRef
+                  : input.creationResult.refs.plannedChangeSetRef,
+            semanticOutputWatermark: input.creationResult.watermarks.semanticOutputWatermark,
+          },
+          refsJson: [{ sourceRecordId, refType }],
+          semanticWatermark: input.creationResult.watermarks.semanticOutputWatermark,
+          idempotencyKey: `${input.idempotencyKey}:item:creation:output:${key}`,
+          metadataJson: { ...input.metadataJson, runtimeMutationPerformed: true, published: false },
+        });
+        await pushRef({
+          ...base,
+          refRole: "output_ref",
+          refType,
+          sourceSystem: "gnr8",
+          sourceTable,
+          sourceRecordId,
+          sourceWatermark: input.creationResult.watermarks.semanticOutputWatermark,
+          semanticWatermark: input.creationResult.watermarks.semanticOutputWatermark,
+          evidenceOnly: false,
+          idempotencyKey: `${input.idempotencyKey}:ref:creation:output:${key}`,
+          metadataJson: { ...input.metadataJson, runtimeMutationPerformed: true, published: false },
+        });
+      }
+
+      await pushItem({
+        ...base,
+        itemType: "manual_note",
+        itemKey: "creation-review-required",
+        status: "open",
+        detailsJson: {
+          improvedVersionReviewRequired: true,
+          contentApproved: false,
+          clientApproved: false,
+          launchApproved: false,
+          publishApproved: false,
+        },
+        semanticWatermark: input.creationResult.watermarks.semanticOutputWatermark,
+        idempotencyKey: `${input.idempotencyKey}:item:creation:manual-note`,
+        metadataJson: { ...input.metadataJson, runtimeMutationPerformed: true, noApprovalGranted: true },
       });
 
       return { attempt, items, refs, reusedExisting };

@@ -10,6 +10,7 @@ import {
   type ImprovementExecutionTransitionInput,
 } from "./improvement-execution-service";
 import type { ImprovedCandidateDryRunResult } from "./improved-candidate-dry-run-adapter";
+import type { ImprovedCandidateCreationOutput } from "./improved-candidate-creation-adapter";
 import { SingleSiteIdempotencyConflictError, SingleSiteTransitionError } from "./single-site-state-contracts";
 import type { ImprovementExecutionAafValidationResult } from "./improvement-execution-aaf-validator";
 
@@ -538,6 +539,88 @@ test("records improved candidate dry-run items and placeholder refs without comp
   assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "output_ref"));
   assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "warning"));
   assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "manual_note"));
+  assert.deepEqual(repo.runtimeMutations, []);
+  assert.deepEqual(repo.providerCalls, []);
+  assert.deepEqual(repo.publicMutations, []);
+});
+
+test("records real improved candidate output refs and items without approval flags", async () => {
+  const repo = fakeRepository() as unknown as { runtimeMutations: unknown[]; providerCalls: unknown[]; publicMutations: unknown[] };
+  const service = new ImprovementExecutionService(repo as never);
+  const attempt = await createReady(service);
+  await service.markStarted(transitionInput({ attemptId: attempt.id, idempotencyKey: "idem-start-for-real-output" }));
+  const creationResult = {
+    mode: "execute",
+    status: "completed",
+    refs: {
+      migrationRef: `gnr8:single_site_migration:${MIGRATION_ID}`,
+      executionAttemptRef: `gnr8:improvement_execution_attempt:${ATTEMPT_ID}`,
+      improvedCandidateSiteVersionRef: "gnr8:site_version:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      improvedRuntimeArtifactRef: "gnr8:runtime_artifact:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      cloneSiteVersionRef: "gnr8:site_version:clone-version-1",
+      cloneRuntimeArtifactRef: "gnr8:runtime_artifact:runtime-artifact-1",
+      proposalPlanRef: `gnr8:proposal_plan:${PLAN_ID}`,
+      implementationAuthorizationRef: "gnr8:implementation_authorization:auth-decision-1",
+      plannedChangeSetRef: "gnr8:planned_change_set:abc",
+    },
+    targetRefs: {
+      runtimeSiteId: "runtime-site-1",
+      improvedCandidateSiteVersionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      improvedRuntimeArtifactId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      cloneSiteVersionId: "clone-version-1",
+      cloneRuntimeArtifactId: "runtime-artifact-1",
+    },
+    appliedPlannedChanges: [
+      {
+        recommendationId: RECOMMENDATION_ID,
+        recommendationRef: `gnr8:improvement_recommendation:${RECOMMENDATION_ID}`,
+        changeId: "gnr8:planned_change:abc",
+        changeClass: "text_replacement_plan",
+        category: "content_clarity",
+        target: { pagePath: "/", sectionId: "hero", field: "heading" },
+        currentSourceHash: "current",
+        plannedValueHash: "planned",
+        evidenceRefs: [],
+        limitationRefs: [],
+        executionSupportStatus: "deterministic_supported",
+        noWriteProof: {
+          runtimeWritePerformed: false,
+          activePointerChanged: false,
+          aiProviderCalled: false,
+          generatedProposalBundleCreated: false,
+        },
+      },
+    ],
+    recommendationsNotApplied: [],
+    limitationsCarriedForward: [],
+    warnings: [],
+    watermarks: {
+      semanticInputWatermark: attempt.semantic_input_watermark,
+      dryRunMatchWatermark: "dry-run-match:abc",
+      appliedChangeSetWatermark: "applied-change-set:abc",
+      runtimeOutputBundleWatermark: "runtime-output-bundle:abc",
+      semanticOutputWatermark: "single-site-improved-candidate-creation-output:abc",
+    },
+    runtimeWrites: true,
+    runtimeWritePerformed: true,
+  } as unknown as ImprovedCandidateCreationOutput;
+  const recorded = await service.recordImprovedCandidateCreationResult({
+    attemptId: attempt.id,
+    migrationId: attempt.migration_id,
+    creationResult,
+    actor: actor(),
+    correlationId: "corr-record-real-output",
+    idempotencyKey: "idem-record-real-output",
+  });
+  assert.equal(recorded.attempt.status, "started");
+  assert.ok(recorded.refs.some((ref) => ((ref as unknown as Record<string, unknown>).refType ?? ref.ref_type) === "runtime_site_version_improved_candidate"));
+  assert.ok(recorded.refs.some((ref) => ((ref as unknown as Record<string, unknown>).refType ?? ref.ref_type) === "runtime_artifact_improved_candidate"));
+  assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "output_ref"));
+  assert.ok(recorded.items.some((item) => ((item as unknown as Record<string, unknown>).itemType ?? item.item_type) === "manual_note"));
+  assert.equal(attempt.content_approval_granted, false);
+  assert.equal(attempt.client_approval_granted, false);
+  assert.equal(attempt.launch_approval_granted, false);
+  assert.equal(attempt.publish_activation_approval_granted, false);
   assert.deepEqual(repo.runtimeMutations, []);
   assert.deepEqual(repo.providerCalls, []);
   assert.deepEqual(repo.publicMutations, []);
