@@ -260,6 +260,26 @@ Canonical non-executing server-side bridge from approved single-site improvement
 - `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
 - `docs/product/gnr8-single-site-implementation-authorization-bridge-closeout.md`
 
+## MVP-19 Single-Site Improvement Execution Architecture And Reuse Map
+
+Canonical design-only architecture, source-of-truth, reuse map, AAF revalidation, transition contract, operator workflow, and closeout for future single-site improvement execution:
+- `docs/architecture/gnr8-single-site-improvement-execution-architecture.md`
+- `docs/architecture/gnr8-single-site-existing-capability-reuse-map.md`
+- `docs/architecture/gnr8-single-site-improvement-execution-source-of-truth.md`
+- `docs/architecture/gnr8-single-site-improvement-execution-transition-contract.md`
+- `docs/architecture/gnr8-single-site-improvement-execution-aaf-revalidation-contract.md`
+- `docs/product/gnr8-single-site-improvement-execution-operator-workflow.md`
+- `docs/product/gnr8-single-site-improvement-execution-readiness-closeout.md`
+
+## MVP-20 Single-Site Improvement Execution AAF Validator Core
+
+Canonical server-only execution-time AAF validator core for future single-site improvement execution:
+- `apps/platform/gnr8/single-site/improvement-execution-aaf-validator.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-aaf-validator.test.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-aaf-validator.integration.test.ts`
+- `apps/platform/gnr8/single-site/implementation-authorization-bridge.ts`
+- `docs/product/gnr8-single-site-improvement-execution-aaf-validator-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

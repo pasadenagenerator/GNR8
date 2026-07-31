@@ -153,12 +153,12 @@ export type ImplementationAuthorizationValidationResult = {
 
 type BridgeWriter = Pick<AafWriterRepository, "createEvidencePackageTransaction" | "createApprovalRequestTransaction" | "withTransaction">;
 
-type ExpectedRefs = {
+export type ImplementationAuthorizationExpectedRefs = {
   subjectRefs: Array<ImplementationAuthorizationSourceRef & { role: string }>;
   evidenceRefs: Array<ImplementationAuthorizationSourceRef & { role: string; itemType: string; displayName: string }>;
 };
 
-type ImplementationAuthorizationSemanticInput = {
+export type ImplementationAuthorizationSemanticInput = {
   migrationId: string;
   clientId: string;
   siteId: string;
@@ -273,7 +273,7 @@ function assertAcceptedReview(field: string, status: string): void {
   }
 }
 
-function semanticWatermark(input: ImplementationAuthorizationSemanticInput): string {
+export function computeImplementationAuthorizationSemanticWatermark(input: ImplementationAuthorizationSemanticInput): string {
   return `single-site-implementation-authorization:${digest({
     migrationId: input.migrationId,
     clientId: input.clientId,
@@ -348,7 +348,7 @@ function assertPrepareInput(input: PrepareImplementationAuthorizationRequestInpu
   text("policyVersion", input.policyVersion);
 }
 
-function expectedRefs(input: PrepareImplementationAuthorizationRequestInput | ValidateImplementationAuthorizationRefInput): ExpectedRefs {
+export function buildExpectedImplementationAuthorizationRefs(input: PrepareImplementationAuthorizationRequestInput | ValidateImplementationAuthorizationRefInput): ImplementationAuthorizationExpectedRefs {
   const proposalPlanId = text("proposalPlanId", input.proposalPlanId);
   const proposalWatermark = text("proposalPlanSemanticWatermark", input.proposalPlanSemanticWatermark);
   const selectedRecommendationWatermark = digest(
@@ -362,7 +362,7 @@ function expectedRefs(input: PrepareImplementationAuthorizationRequestInput | Va
     "implementation_target",
     "gnr8_single_site_improvement_proposal_plans",
     proposalPlanId,
-    semanticWatermark(input),
+    computeImplementationAuthorizationSemanticWatermark(input),
   );
   const attemptPlaceholder = roleRef(
     "implementation_attempt_placeholder",
@@ -443,7 +443,7 @@ function validationFailure(input: ValidateImplementationAuthorizationRefInput, s
     evidencePackageId: input.evidencePackageId ?? null,
     limitations: [],
     blockerCodes,
-    semanticWatermark: semanticWatermark(input),
+    semanticWatermark: computeImplementationAuthorizationSemanticWatermark(input),
   };
 }
 
@@ -487,12 +487,12 @@ function refMatches(row: Record<string, unknown>, expected: ImplementationAuthor
   );
 }
 
-async function hasAllRequestSubjectRefs(client: AafPgClient, approvalRequestId: string, refs: ExpectedRefs["subjectRefs"]): Promise<boolean> {
+async function hasAllRequestSubjectRefs(client: AafPgClient, approvalRequestId: string, refs: ImplementationAuthorizationExpectedRefs["subjectRefs"]): Promise<boolean> {
   const result = await client.query(`select * from public.gnr8_aaf_approval_subject_refs where approval_request_id = $1::uuid`, [approvalRequestId]);
   return refs.every((expected) => result.rows.some((row) => refMatches(row, expected, "bridgeSubjectRole")));
 }
 
-async function hasAllEvidenceRefs(client: AafPgClient, evidencePackageId: string, refs: ExpectedRefs["evidenceRefs"]): Promise<boolean> {
+async function hasAllEvidenceRefs(client: AafPgClient, evidencePackageId: string, refs: ImplementationAuthorizationExpectedRefs["evidenceRefs"]): Promise<boolean> {
   const sourceRefs = await client.query(`select * from public.gnr8_aaf_evidence_package_source_refs where evidence_package_id = $1::uuid`, [evidencePackageId]);
   return refs.every((expected) => sourceRefs.rows.some((row) => refMatches(row, expected, "bridgeEvidenceRole")));
 }
@@ -507,7 +507,7 @@ export class SingleSiteImplementationAuthorizationBridge {
       subjectType: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
       subjectId: text("proposalPlanId", input.proposalPlanId),
     };
-    const sourceWatermark = semanticWatermark(input);
+    const sourceWatermark = computeImplementationAuthorizationSemanticWatermark(input);
     const contentHash = digest({ scope, subject, sourceWatermark });
     const limitations = [
       ...jsonArray(input.limitations),
@@ -515,7 +515,7 @@ export class SingleSiteImplementationAuthorizationBridge {
       ...jsonArray(input.cloneReviewRef.limitations),
       ...jsonArray(input.sourceEvidenceReviewRef.limitations),
     ];
-    const refs = expectedRefs(input);
+    const refs = buildExpectedImplementationAuthorizationRefs(input);
 
     const evidenceTx = await this.writer.createEvidencePackageTransaction({
       evidencePackage: {
@@ -677,10 +677,10 @@ export class SingleSiteImplementationAuthorizationBridge {
 
   async validateImplementationAuthorizationRef(input: ValidateImplementationAuthorizationRefInput): Promise<ImplementationAuthorizationValidationResult> {
     const decisionId = text("implementationAuthorizationDecisionId", input.implementationAuthorizationDecisionId);
-    const expectedWatermark = semanticWatermark(input);
+    const expectedWatermark = computeImplementationAuthorizationSemanticWatermark(input);
     const subjectType = AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE;
     const subjectId = text("proposalPlanId", input.proposalPlanId);
-    const refs = expectedRefs(input);
+    const refs = buildExpectedImplementationAuthorizationRefs(input);
 
     return this.writer.withTransaction(async (tx) => {
       const decision = await readOne(tx.client, `select * from public.gnr8_aaf_approval_decisions where id = $1::uuid`, [decisionId]);
