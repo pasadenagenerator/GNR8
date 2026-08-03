@@ -346,6 +346,16 @@ Canonical server-only improved candidate review and acceptance truth:
 - `apps/platform/supabase/migrations/20260731143000_single_site_improved_version_review_core.sql`
 - `docs/product/gnr8-single-site-improved-version-review-acceptance-closeout.md`
 
+## MVP-26 Single-Site Content Approval Architecture And Source-Of-Truth Design
+
+Canonical design-only content approval boundary, source-of-truth decision, AAF scope recommendation, transition contract, operator workflow, and closeout:
+- `docs/architecture/gnr8-single-site-content-approval-architecture.md`
+- `docs/architecture/gnr8-single-site-content-approval-source-of-truth-design.md`
+- `docs/architecture/gnr8-single-site-content-approval-transition-contract.md`
+- `docs/architecture/gnr8-single-site-content-approval-aaf-scope-design.md`
+- `docs/product/gnr8-single-site-content-approval-operator-workflow.md`
+- `docs/product/gnr8-single-site-content-approval-architecture-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
