@@ -7,6 +7,13 @@ import { randomUUID } from "node:crypto";
 
 import { Pool } from "pg";
 
+import {
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+} from "@gnr8/runtime-contracts";
+
 import { AafIdempotencyConflictError, AafWriterRepository } from "./aaf-writer-repository";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -15,6 +22,10 @@ const MIGRATION_PATH = path.join(REPO_ROOT, "apps/platform/supabase/migrations/2
 const GRANTED_WITH_LIMITATIONS_MIGRATION_PATH = path.join(
   REPO_ROOT,
   "apps/platform/supabase/migrations/20260731100000_aaf_granted_with_limitations_status.sql",
+);
+const CONTENT_APPROVAL_MIGRATION_PATH = path.join(
+  REPO_ROOT,
+  "apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql",
 );
 
 type DisposablePostgres = {
@@ -79,6 +90,7 @@ async function startDisposablePostgres(): Promise<DisposablePostgres> {
     for (const [name, migrationPath] of [
       ["20260722120000_aaf_persistence_core.sql", MIGRATION_PATH],
       ["20260731100000_aaf_granted_with_limitations_status.sql", GRANTED_WITH_LIMITATIONS_MIGRATION_PATH],
+      ["20260803120000_aaf_single_site_content_approval_scope.sql", CONTENT_APPROVAL_MIGRATION_PATH],
     ] as const) {
       docker(["cp", migrationPath, `${containerName}:/tmp/${name}`]);
       docker([
@@ -172,6 +184,23 @@ test("AAF writer applies migration and writes canonical records transactionally 
       return { policy, scopeDefinition };
     });
     assert.equal(bootstrap.scopeDefinition.scope, "publish_activation");
+
+    const contentScopeDefinition = await writer.withTransaction((tx) =>
+      writer.createApprovalScopeDefinition(tx, {
+        scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+        policyKey: String(bootstrap.policy.policy_key),
+        policyVersion: String(bootstrap.policy.version),
+        subjectType: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+        allowedAction: AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
+        prohibitedActions: ["client_approval", "launch_approval", "publish_activation", "domain_readiness", "billing_readiness"],
+        requiredEvidenceType: AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
+        requesterRoles: ["agency_admin"],
+        approverRoles: ["content_operator", "agency_admin", "superadmin"],
+        freshnessRule: { maxAgeHours: 24, exactCandidateRefsRequired: true },
+      }),
+    );
+    assert.equal(contentScopeDefinition.scope, AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE);
+    assert.equal(contentScopeDefinition.required_evidence_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE);
 
     const evidenceAudit = await writer.withTransaction((tx) =>
       writer.createAuditEvent(tx, {
@@ -363,6 +392,28 @@ test("AAF writer applies migration and writes canonical records transactionally 
       }),
     );
     assert.equal(limitedDecision.status, "granted_with_limitations");
+
+    const contentEvidence = await writer.withTransaction((tx) =>
+      writer.createEvidencePackage(tx, {
+        tenantId: scope.tenantId,
+        clientId: scope.clientId,
+        siteId: scope.siteId,
+        siteVersionId: "improved-candidate-version-1",
+        correlationId,
+        idempotencyKey: `idem-content-approval-evidence-${suffix}`,
+        packageType: AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
+        subjectType: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+        subjectId: "improved-review-1",
+        createdByActorType: "system",
+        createdByActorId: "aaf-writer-integration-test",
+        sourceWatermark: `improved-review:${suffix}:1`,
+        freshnessLabel: "fresh",
+        contentHash: `content-approval-${suffix}-0123456789abcdef`,
+        limitationsJson: { carriedForward: ["limitation-1"] },
+      }),
+    );
+    assert.equal(contentEvidence.package_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE);
+    assert.deepEqual(contentEvidence.limitations_json, { carriedForward: ["limitation-1"] });
 
     const revocationAudit = await writer.withTransaction((tx) =>
       writer.createAuditEvent(tx, {
@@ -773,6 +824,35 @@ test("AAF writer applies migration and writes canonical records transactionally 
           [scope.tenantId, subject.subjectId, correlationId, `idem-invalid-fail-closed-${suffix}`],
         ),
       /check constraint "gnr8_aaf_action_gate_attempts_fail_closed_reason_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_approval_requests (
+            tenant_id, scope, subject_type, subject_id, requester_actor_type, requester_actor_id, requester_role,
+            policy_version, correlation_id, idempotency_key
+          )
+          values ($1, 'invalid_scope', 'site_version', $2, 'human', 'operator-aaf', 'agency_admin', $3, $4, $5)
+          `,
+          [scope.tenantId, subject.subjectId, String(bootstrap.policy.version), correlationId, `idem-invalid-scope-${suffix}`],
+        ),
+      /check constraint "gnr8_aaf_approval_requests_scope_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_evidence_packages (
+            tenant_id, package_type, subject_type, subject_id, created_by_actor_type, created_by_actor_id,
+            source_watermark, freshness_label, content_hash, correlation_id, idempotency_key
+          )
+          values ($1, 'invalid_evidence_type', 'site_version', $2, 'system', 'aaf-test',
+            'site-version:1', 'fresh', 'invalid-evidence-hash-0123456789abcdef', $3, $4)
+          `,
+          [scope.tenantId, subject.subjectId, correlationId, `idem-invalid-evidence-type-${suffix}`],
+        ),
+      /check constraint "gnr8_aaf_evidence_packages_type_ck"/,
     );
     await assertDbRejects(
       () =>

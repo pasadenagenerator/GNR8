@@ -15,6 +15,14 @@ import {
   AAF_REDACTION_LABELS,
   AAF_REPLAY_CLASSES,
   AAF_RETENTION_CLASSES,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_PROHIBITED_SUBSTITUTIONS,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
@@ -39,13 +47,22 @@ const AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH = path.resolve(
   process.cwd(),
   'apps/platform/supabase/migrations/20260731100000_aaf_granted_with_limitations_status.sql',
 )
+const AAF_CONTENT_APPROVAL_MIGRATION_PATH = path.resolve(
+  process.cwd(),
+  'apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql',
+)
 
 function readMigration(): string {
   return fs.readFileSync(MIGRATION_PATH, 'utf8')
 }
 
 function readAafVocabularyMigrations(): string {
-  return [MIGRATION_PATH, AAF_SCOPE_EXPANSION_MIGRATION_PATH, AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH]
+  return [
+    MIGRATION_PATH,
+    AAF_SCOPE_EXPANSION_MIGRATION_PATH,
+    AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH,
+    AAF_CONTENT_APPROVAL_MIGRATION_PATH,
+  ]
     .map((filePath) => fs.readFileSync(filePath, 'utf8'))
     .join('\n')
 }
@@ -90,6 +107,7 @@ test('AAF approval statuses, scopes, and policy results remain canonical', () =>
     'external_workflow_reference_acceptance',
     'ai_advisory_plan_acceptance',
     'single_site_improvement_implementation_authorization',
+    'single_site_content_approval',
   ])
   assert.deepEqual(AAF_POLICY_EVALUATION_RESULTS, [
     'approval_required',
@@ -149,6 +167,7 @@ test('AAF audit and evidence vocabularies remain canonical', () => {
     'ai_advisory_review_evidence',
     'incident_recovery_evidence',
     'single_site_improvement_implementation_authorization_evidence',
+    'single_site_content_approval_evidence',
   ])
 })
 
@@ -407,6 +426,172 @@ test('single-site implementation authorization prohibits substitute approvals an
       true,
     )
   }
+})
+
+test('single-site content approval contract is explicit and non-replayable', () => {
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE, 'single_site_content_approval')
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE, 'single_site_content_approval_evidence')
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE, 'single_site_improved_version_review')
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION, 'approve_single_site_content')
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE], 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.replayClass, 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.humanApprovalReplayable, false)
+  assert.deepEqual(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.allowedDecisionStatuses, [
+    'granted',
+    'granted_with_limitations',
+    'rejected',
+    'revoked',
+    'expired',
+    'superseded',
+    'cancelled',
+  ])
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.allowedGateResults.includes('not_required_by_policy'), false)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.allowedGateResults.includes('allowed'), true)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes('content_evidence_package_fresh_not_superseded'), true)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes('limitations_current_and_carried_forward'), true)
+})
+
+test('single-site content approval pins required subject refs to one candidate and migration context', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS, [
+    'tenant',
+    'client',
+    'site',
+    'single_site_migration',
+    'improved_version_review',
+    'improved_version_review_status',
+    'improved_version_review_watermark',
+    'improved_candidate_site_version',
+    'improved_candidate_site_version_watermark',
+    'improved_runtime_artifact',
+    'improved_runtime_artifact_watermark',
+    'proposal_plan',
+    'proposal_approval',
+    'implementation_authorization',
+    'improvement_execution_attempt',
+    'selected_recommendations',
+    'selected_recommendation_watermarks',
+    'source_evidence_review',
+    'source_evidence_review_status',
+    'source_evidence_review_watermark',
+    'clone_review',
+    'clone_review_status',
+    'clone_review_watermark',
+    'clone_site_version',
+    'clone_runtime_artifact',
+    'limitations',
+  ])
+  assert.deepEqual(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredSubjectRefs, AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS)
+})
+
+test('single-site content approval pins required evidence refs without making preview approval truth', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS, [
+    'improved_candidate_rendered_snapshot',
+    'improved_candidate_content_snapshot',
+    'improved_candidate_metadata_snapshot',
+    'recommendation_coverage_summary',
+    'selected_recommendation_application_status',
+    'seo_aeo_metadata_summary',
+    'headings_body_copy_cta_internal_link_review_summary',
+    'alt_text_accessibility_content_caveats',
+    'structured_data_summary',
+    'legal_compliance_notes',
+    'known_limitations',
+    'unresolved_not_applied_recommendations',
+    'operator_review_notes',
+    'audit_timeline_refs',
+  ])
+  assert.deepEqual(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredEvidenceRefs, AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS.includes('improved_candidate_rendered_snapshot'), true)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_PROHIBITED_SUBSTITUTIONS.includes('preview_rendering'), true)
+})
+
+test('single-site content approval prohibits substitute approvals, readiness, projections, and generated output', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_CONTENT_APPROVAL_PROHIBITED_SUBSTITUTIONS, [
+    'improved_version_review_acceptance',
+    'proposal_approval',
+    'implementation_authorization',
+    'source_evidence_review_acceptance',
+    'clone_review_acceptance',
+    'client_approval',
+    'launch_approval',
+    'publish_activation_approval',
+    'domain_readiness',
+    'ddom_readiness',
+    'billing_subscription_readiness',
+    'content_publish_event',
+    'content_rollback_event',
+    'preview_rendering',
+    'public_runtime_rendering',
+    'ai_provider_output',
+    'generated_proposal_bundle',
+    'command_center_status',
+    'ops_inbox_item',
+    'chat_transcript',
+  ])
+  for (const prohibitedAction of [
+    'improved_version_review_acceptance',
+    'proposal_approval',
+    'implementation_authorization',
+    'source_evidence_review_acceptance',
+    'clone_review_acceptance',
+    'client_approval',
+    'launch_approval',
+    'publish_activation',
+    'publish_activation_approval',
+    'domain_readiness',
+    'domain_mutation',
+    'ddom_readiness',
+    'dns_readiness',
+    'dns_mutation',
+    'billing_readiness',
+    'billing_activation',
+    'subscription_readiness',
+    'hosting_activation',
+    'content_publish',
+    'content_rollback',
+    'preview_rendering_approval',
+    'public_runtime_rendering_approval',
+    'runtime_mutation',
+    'site_version_mutation',
+    'active_pointer_mutation',
+    'ai_approval',
+    'ai_execution',
+    'provider_output_authorization',
+    'generated_proposal_bundle_authorization',
+    'command_center_status',
+    'ops_inbox_resolution',
+    'chat_transcript_authorization',
+  ]) {
+    assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes(prohibitedAction), true)
+  }
+})
+
+test('single-site content approval cannot imply adjacent approval scopes', () => {
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.scope === AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE, false)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.evidencePackageType === AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE, false)
+  for (const adjacentScope of [
+    'content_publish',
+    'client_review',
+    'launch_signoff',
+    'publish_activation',
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+  ]) {
+    assert.equal(adjacentScope === AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE, false)
+  }
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes('client_approval'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes('launch_approval'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes('publish_activation'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes('domain_readiness'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes('dns_readiness'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes('billing_readiness'), true)
+  assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes('runtime_mutation'), true)
+})
+
+test('single-site content approval supports scoped limited grants with carried limitations', () => {
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.allowedDecisionStatuses.includes('granted_with_limitations'), true)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS.includes('limitations'), true)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS.includes('known_limitations'), true)
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes('limitations_current_and_carried_forward'), true)
 })
 
 test('AAF migration stores object refs and hashes instead of heavy evidence payloads', () => {

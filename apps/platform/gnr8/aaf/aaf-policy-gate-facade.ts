@@ -9,7 +9,12 @@ import type {
   AafPrivacyLabel,
   AafRetentionClass,
 } from "@gnr8/runtime-contracts";
-import { AAF_SCOPE_PROHIBITED_ACTIONS, AAF_SCOPE_REPLAY_CLASS } from "@gnr8/runtime-contracts";
+import {
+  AAF_SCOPE_PROHIBITED_ACTIONS,
+  AAF_SCOPE_REPLAY_CLASS,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+} from "@gnr8/runtime-contracts";
 
 import {
   AafWriterError,
@@ -154,6 +159,7 @@ type ApprovalDecisionRow = AafRecord & {
   policy_version?: unknown;
   evidence_package_id?: unknown;
   policy_evaluation_id?: unknown;
+  limitations_json?: unknown;
   expires_at?: unknown;
 };
 
@@ -245,8 +251,25 @@ export function mapFreshnessResultToGateResult(result: AafEvidenceFreshnessResul
   return "blocked";
 }
 
-export function mapApprovalStatusToGateResult(status: string): AafGateResult {
+const LIMITED_GRANT_SCOPES = new Set<AafApprovalScope>([
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+]);
+
+function limitationsArePresent(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(value).length > 0;
+}
+
+export function mapApprovalStatusToGateResult(
+  status: string,
+  options: { scope?: AafApprovalScope; limitationsPresent?: boolean } = {},
+): AafGateResult {
   if (status === "granted") return "allowed";
+  if (status === "granted_with_limitations") {
+    if (options.scope && LIMITED_GRANT_SCOPES.has(options.scope) && options.limitationsPresent) return "allowed";
+    return "blocked";
+  }
   if (status === "not_required_by_policy") return "not_required_by_policy";
   if (status === "revoked") return "approval_revoked";
   if (status === "expired") return "approval_stale";
@@ -488,6 +511,7 @@ async function approvalGateResult(
   client: AafPgClient,
   input: AafGateValidationInput,
   policyEvaluation: AafRecord,
+  limitationsPresent: boolean,
   now: Date,
 ): Promise<{ result: AafGateResult; approvalRequest: ApprovalRequestRow | null; approvalDecision: ApprovalDecisionRow | null; blockers: string[] }> {
   const policyGate = policyResultToGateResult(String(policyEvaluation.result) as AafPolicyEvaluationResult);
@@ -546,7 +570,10 @@ async function approvalGateResult(
   if (policyGate === "not_required_by_policy" && text(approvalDecision.status) !== "not_required_by_policy") {
     return { result: "approval_required", approvalRequest, approvalDecision, blockers: ["not_required_decision_missing"] };
   }
-  const statusGate = mapApprovalStatusToGateResult(String(approvalDecision.status));
+  const statusGate = mapApprovalStatusToGateResult(String(approvalDecision.status), {
+    scope: input.scope,
+    limitationsPresent,
+  });
   if (statusGate === "not_required_by_policy") {
     const decisionPolicyEvaluationId = text(approvalDecision.policy_evaluation_id);
     if (!decisionPolicyEvaluationId) return { result: "fail_closed", approvalRequest, approvalDecision, blockers: ["not_required_policy_ref_missing"] };
@@ -596,7 +623,7 @@ export class AafActionGateValidatorFacade {
       const evidenceResult = evidenceGateResult(input, evidence, freshnessCheck, sourceRefsExist, evidenceSuperseded, now);
       const approvalResult =
         evidenceResult.result === "allowed"
-          ? await approvalGateResult(tx.client, input, policyEvaluation, now)
+          ? await approvalGateResult(tx.client, input, policyEvaluation, limitationsArePresent(evidence?.limitations_json), now)
           : { result: evidenceResult.result, approvalRequest: null, approvalDecision: null, blockers: evidenceResult.blockers };
       return { evidenceResult, approvalResult };
     });

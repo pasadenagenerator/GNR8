@@ -356,6 +356,18 @@ Canonical design-only content approval boundary, source-of-truth decision, AAF s
 - `docs/product/gnr8-single-site-content-approval-operator-workflow.md`
 - `docs/product/gnr8-single-site-content-approval-architecture-closeout.md`
 
+## MVP-27 Single-Site Content Approval AAF Contracts
+
+Canonical AAF scope/contracts foundation for single-site content approval:
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.ts`
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`
+- `apps/platform/gnr8/aaf/aaf-policy-gate-facade.ts`
+- `apps/platform/gnr8/aaf/aaf-policy-gate-facade.test.ts`
+- `apps/platform/gnr8/aaf/aaf-writer-repository.test.ts`
+- `apps/platform/gnr8/aaf/aaf-writer-repository.integration.test.ts`
+- `apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql`
+- `docs/product/gnr8-single-site-content-approval-aaf-contracts-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

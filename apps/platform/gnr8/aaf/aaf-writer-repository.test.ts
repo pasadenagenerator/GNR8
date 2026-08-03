@@ -5,6 +5,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
@@ -249,6 +253,46 @@ test("AAF writer accepts single-site implementation authorization scope vocabula
   });
   assert.equal(evidence.package_type, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE);
   assert.equal(evidence.subject_type, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE);
+});
+
+test("AAF writer accepts single-site content approval scope vocabulary without side effects", async () => {
+  const { client } = recordingClient();
+  const repository = new AafWriterRepository({ connect: async () => ({}) } as never);
+  const tx = txForClient(client);
+
+  const gateAttempt = await repository.createActionGateAttempt(tx, {
+    ...tenantScope,
+    ...correlation,
+    idempotencyKey: "idem-single-site-content-approval-gate",
+    actionKey: AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
+    scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+    subjectType: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+    subjectId: "improved-version-review-1",
+    actorType: "human",
+    actorId: "operator-1",
+    actorRole: "agency_admin",
+    gateResult: "approval_required",
+  });
+  assert.equal(gateAttempt.scope, AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE);
+  assert.equal(gateAttempt.action_key, AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION);
+
+  const evidence = await repository.createEvidencePackage(tx, {
+    ...tenantScope,
+    ...correlation,
+    idempotencyKey: "idem-single-site-content-approval-evidence",
+    packageType: AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
+    subjectType: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+    subjectId: "improved-version-review-1",
+    createdByActorType: "system",
+    createdByActorId: "aaf-writer-test",
+    sourceWatermark: "improved-version-review-1:v1:watermark",
+    freshnessLabel: "fresh",
+    contentHash: "fedcba9876543210",
+    limitationsJson: { carriedForward: ["limitation-1"] },
+  });
+  assert.equal(evidence.package_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE);
+  assert.equal(evidence.subject_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE);
+  assert.equal(evidence.limitations_json, '{"carriedForward":["limitation-1"]}');
 });
 
 test("AAF writer accepts granted_with_limitations approval decisions", async () => {

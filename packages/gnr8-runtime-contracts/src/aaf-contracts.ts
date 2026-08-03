@@ -34,6 +34,7 @@ export const AAF_APPROVAL_SCOPES = [
   'external_workflow_reference_acceptance',
   'ai_advisory_plan_acceptance',
   'single_site_improvement_implementation_authorization',
+  'single_site_content_approval',
 ] as const
 
 export type AafApprovalScope = (typeof AAF_APPROVAL_SCOPES)[number]
@@ -113,6 +114,7 @@ export const AAF_EVIDENCE_PACKAGE_TYPES = [
   'ai_advisory_review_evidence',
   'incident_recovery_evidence',
   'single_site_improvement_implementation_authorization_evidence',
+  'single_site_content_approval_evidence',
 ] as const
 
 export type AafEvidencePackageType = (typeof AAF_EVIDENCE_PACKAGE_TYPES)[number]
@@ -190,6 +192,7 @@ export const AAF_SCOPE_REPLAY_CLASS: Record<AafApprovalScope, AafReplayClass> = 
   external_workflow_reference_acceptance: 'not_replayable',
   ai_advisory_plan_acceptance: 'not_replayable',
   single_site_improvement_implementation_authorization: 'not_replayable',
+  single_site_content_approval: 'not_replayable',
 }
 
 export const AAF_SCOPE_PROHIBITED_ACTIONS: Record<AafApprovalScope, readonly string[]> = {
@@ -237,6 +240,40 @@ export const AAF_SCOPE_PROHIBITED_ACTIONS: Record<AafApprovalScope, readonly str
     'dns_mutation',
     'domain_action',
     'rollback',
+  ],
+  single_site_content_approval: [
+    'improved_version_review_acceptance',
+    'proposal_approval',
+    'implementation_authorization',
+    'source_evidence_review_acceptance',
+    'clone_review_acceptance',
+    'client_approval',
+    'launch_approval',
+    'publish_activation',
+    'publish_activation_approval',
+    'domain_readiness',
+    'domain_mutation',
+    'ddom_readiness',
+    'dns_readiness',
+    'dns_mutation',
+    'billing_readiness',
+    'billing_activation',
+    'subscription_readiness',
+    'hosting_activation',
+    'content_publish',
+    'content_rollback',
+    'preview_rendering_approval',
+    'public_runtime_rendering_approval',
+    'runtime_mutation',
+    'site_version_mutation',
+    'active_pointer_mutation',
+    'ai_approval',
+    'ai_execution',
+    'provider_output_authorization',
+    'generated_proposal_bundle_authorization',
+    'command_center_status',
+    'ops_inbox_resolution',
+    'chat_transcript_authorization',
   ],
 }
 
@@ -383,4 +420,142 @@ export const AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_CONTRACT: AafScopeCont
   ],
   prohibitedSubstitutions: AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_PROHIBITED_SUBSTITUTIONS,
   prohibitedActions: AAF_SCOPE_PROHIBITED_ACTIONS.single_site_improvement_implementation_authorization,
+} as const
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE = 'single_site_content_approval' as const
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE = 'single_site_content_approval_evidence' as const
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE = 'single_site_improved_version_review' as const
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION = 'approve_single_site_content' as const
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS = [
+  'tenant',
+  'client',
+  'site',
+  'single_site_migration',
+  'improved_version_review',
+  'improved_version_review_status',
+  'improved_version_review_watermark',
+  'improved_candidate_site_version',
+  'improved_candidate_site_version_watermark',
+  'improved_runtime_artifact',
+  'improved_runtime_artifact_watermark',
+  'proposal_plan',
+  'proposal_approval',
+  'implementation_authorization',
+  'improvement_execution_attempt',
+  'selected_recommendations',
+  'selected_recommendation_watermarks',
+  'source_evidence_review',
+  'source_evidence_review_status',
+  'source_evidence_review_watermark',
+  'clone_review',
+  'clone_review_status',
+  'clone_review_watermark',
+  'clone_site_version',
+  'clone_runtime_artifact',
+  'limitations',
+] as const
+
+export type AafSingleSiteContentApprovalSubjectRef =
+  (typeof AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS)[number]
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS = [
+  'improved_candidate_rendered_snapshot',
+  'improved_candidate_content_snapshot',
+  'improved_candidate_metadata_snapshot',
+  'recommendation_coverage_summary',
+  'selected_recommendation_application_status',
+  'seo_aeo_metadata_summary',
+  'headings_body_copy_cta_internal_link_review_summary',
+  'alt_text_accessibility_content_caveats',
+  'structured_data_summary',
+  'legal_compliance_notes',
+  'known_limitations',
+  'unresolved_not_applied_recommendations',
+  'operator_review_notes',
+  'audit_timeline_refs',
+] as const
+
+export type AafSingleSiteContentApprovalEvidenceRef =
+  (typeof AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS)[number]
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_PROHIBITED_SUBSTITUTIONS = [
+  'improved_version_review_acceptance',
+  'proposal_approval',
+  'implementation_authorization',
+  'source_evidence_review_acceptance',
+  'clone_review_acceptance',
+  'client_approval',
+  'launch_approval',
+  'publish_activation_approval',
+  'domain_readiness',
+  'ddom_readiness',
+  'billing_subscription_readiness',
+  'content_publish_event',
+  'content_rollback_event',
+  'preview_rendering',
+  'public_runtime_rendering',
+  'ai_provider_output',
+  'generated_proposal_bundle',
+  'command_center_status',
+  'ops_inbox_item',
+  'chat_transcript',
+] as const
+
+export type AafSingleSiteContentApprovalProhibitedSubstitution =
+  (typeof AAF_SINGLE_SITE_CONTENT_APPROVAL_PROHIBITED_SUBSTITUTIONS)[number]
+
+export const AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT: AafScopeContract = {
+  scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+  purpose:
+    'Record a human, evidence-backed approval decision that the visible content of one accepted improved single-site candidate is content-ready for later client and launch approval work, without implying client, launch, publish, runtime, domain, DNS, billing, provider, AI, rollback, or UI-derived approval.',
+  subjectType: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+  evidencePackageType: AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
+  allowedAction: AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
+  replayClass: 'not_replayable',
+  humanApprovalReplayable: false,
+  allowedDecisionStatuses: ['granted', 'granted_with_limitations', 'rejected', 'revoked', 'expired', 'superseded', 'cancelled'],
+  allowedGateResults: [
+    'allowed',
+    'approval_required',
+    'evidence_missing',
+    'evidence_stale',
+    'approval_stale',
+    'approval_superseded',
+    'approval_revoked',
+    'policy_error',
+    'fail_closed',
+  ],
+  requiredSubjectRefs: AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS,
+  requiredEvidenceRefs: AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS,
+  requiredFreshnessBehavior: [
+    'improved_version_review_latest_and_accepted',
+    'improved_version_review_watermark_current',
+    'improved_candidate_site_version_current',
+    'improved_candidate_site_version_watermark_current',
+    'improved_runtime_artifact_current',
+    'improved_runtime_artifact_watermark_current',
+    'proposal_plan_current',
+    'proposal_approval_current',
+    'implementation_authorization_current',
+    'improvement_execution_attempt_current',
+    'selected_recommendations_current',
+    'selected_recommendation_watermarks_current',
+    'source_evidence_review_acceptance_current',
+    'source_evidence_review_watermark_current',
+    'clone_review_acceptance_current',
+    'clone_review_watermark_current',
+    'clone_site_version_current',
+    'clone_runtime_artifact_current',
+    'limitations_current_and_carried_forward',
+    'content_evidence_package_fresh_not_superseded',
+    'policy_version_effective',
+    'decision_not_expired_revoked_cancelled_or_superseded',
+    'required_audit_timeline_refs_present',
+  ],
+  prohibitedSubstitutions: AAF_SINGLE_SITE_CONTENT_APPROVAL_PROHIBITED_SUBSTITUTIONS,
+  prohibitedActions: AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval,
 } as const

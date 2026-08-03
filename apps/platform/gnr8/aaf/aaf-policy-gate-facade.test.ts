@@ -5,6 +5,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
@@ -80,6 +84,22 @@ test("freshness results map deterministically to gate results", () => {
 
 test("approval statuses map deterministically to gate results", () => {
   assert.equal(mapApprovalStatusToGateResult("granted"), "allowed");
+  assert.equal(mapApprovalStatusToGateResult("granted_with_limitations"), "blocked");
+  assert.equal(mapApprovalStatusToGateResult("granted_with_limitations", { scope: "publish_activation", limitationsPresent: true }), "blocked");
+  assert.equal(
+    mapApprovalStatusToGateResult("granted_with_limitations", {
+      scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+      limitationsPresent: false,
+    }),
+    "blocked",
+  );
+  assert.equal(
+    mapApprovalStatusToGateResult("granted_with_limitations", {
+      scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+      limitationsPresent: true,
+    }),
+    "allowed",
+  );
   assert.equal(mapApprovalStatusToGateResult("rejected"), "blocked");
   assert.equal(mapApprovalStatusToGateResult("cancelled"), "blocked");
   assert.equal(mapApprovalStatusToGateResult("revoked"), "approval_revoked");
@@ -187,6 +207,143 @@ test("single-site implementation authorization does not imply downstream approva
       true,
     );
   }
+});
+
+test("single-site content approval requires exact scope and subject matching", () => {
+  const input = {
+    tenantId: "tenant-1",
+    clientId: "client-1",
+    siteId: "site-1",
+    batchId: null,
+    jobId: null,
+    siteVersionId: "improved-version-1",
+    domainId: null,
+    costCenterId: null,
+  };
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-1",
+      site_id: "site-1",
+      batch_id: null,
+      job_id: null,
+      site_version_id: "improved-version-1",
+      domain_id: null,
+      cost_center_id: null,
+      scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+    }),
+    true,
+  );
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-1",
+      site_id: "site-1",
+      batch_id: null,
+      job_id: null,
+      site_version_id: "other-improved-version",
+      domain_id: null,
+      cost_center_id: null,
+      scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+    }),
+    false,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+        subjectId: "improved-review-1",
+      },
+      {
+        subject_type: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+        subject_id: "improved-review-1",
+      },
+    ),
+    true,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+        subjectId: "improved-review-1",
+      },
+      {
+        subject_type: "site_version",
+        subject_id: "improved-review-1",
+      },
+    ),
+    false,
+  );
+});
+
+test("single-site content approval fails closed for adjacent approval and readiness substitutions", () => {
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE], "not_replayable");
+  assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE, AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION), false);
+  for (const prohibitedAction of [
+    "improved_version_review_acceptance",
+    "proposal_approval",
+    "implementation_authorization",
+    "source_evidence_review_acceptance",
+    "clone_review_acceptance",
+    "client_approval",
+    "launch_approval",
+    "publish_activation",
+    "publish_activation_approval",
+    "domain_readiness",
+    "domain_mutation",
+    "ddom_readiness",
+    "dns_readiness",
+    "dns_mutation",
+    "billing_readiness",
+    "billing_activation",
+    "subscription_readiness",
+    "hosting_activation",
+    "content_publish",
+    "content_rollback",
+    "preview_rendering_approval",
+    "public_runtime_rendering_approval",
+    "runtime_mutation",
+    "ai_approval",
+    "ai_execution",
+    "provider_output_authorization",
+    "generated_proposal_bundle_authorization",
+    "command_center_status",
+    "ops_inbox_resolution",
+    "chat_transcript_authorization",
+  ]) {
+    assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE, prohibitedAction), true);
+    assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_content_approval.includes(prohibitedAction), true);
+  }
+});
+
+test("single-site content approval does not imply client, launch, publish, domain, DNS, billing, or runtime approval", () => {
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.allowedAction, AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION);
+  for (const forbiddenBoundaryAction of [
+    "client_approval",
+    "launch_approval",
+    "publish_activation",
+    "publish_activation_approval",
+    "domain_readiness",
+    "dns_readiness",
+    "billing_readiness",
+    "runtime_mutation",
+  ]) {
+    assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.prohibitedActions.includes(forbiddenBoundaryAction), true);
+  }
+});
+
+test("single-site content approval limited grants are scoped and require carried limitations", () => {
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.allowedDecisionStatuses.includes("granted_with_limitations"), true);
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredSubjectRefs.includes("limitations"), true);
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredEvidenceRefs.includes("known_limitations"), true);
+  assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes("limitations_current_and_carried_forward"), true);
+  assert.equal(
+    mapApprovalStatusToGateResult("granted_with_limitations", {
+      scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+      limitationsPresent: true,
+    }),
+    "allowed",
+  );
 });
 
 test("fail-closed persistence failures map without representing an executable action", () => {
