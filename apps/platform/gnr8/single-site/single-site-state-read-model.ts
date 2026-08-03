@@ -803,6 +803,12 @@ export type SingleSiteClientApprovalSummary = {
     action: string | null;
     subjectType: string | null;
   };
+  aafValidation: {
+    requestPrepared: boolean;
+    decisionState: "missing" | "request_prepared" | "decision_ref_attached" | "decision_validated" | "decision_invalid";
+    approvedWithLimitations: boolean;
+    limitationsCarriedForward: boolean;
+  };
   reviewerRepresentativeRefs: {
     identityRefs: unknown[];
     representativeRefs: unknown[];
@@ -1801,6 +1807,31 @@ function contentApprovalAafValidation(latest: SingleSiteContentApprovalRow | nul
   };
 }
 
+function clientApprovalAafValidation(latest: SingleSiteClientApprovalRow | null): SingleSiteClientApprovalSummary["aafValidation"] {
+  const requestPrepared = Boolean(latest?.aaf_client_approval_request_id);
+  const decisionId = latest?.aaf_client_approval_decision_id ?? null;
+  const exactShape =
+    latest?.aaf_client_approval_scope === "single_site_client_approval" &&
+    latest?.aaf_client_approval_action === "approve_single_site_client_acceptance" &&
+    latest?.aaf_client_approval_subject_type === "single_site_improved_candidate_client_acceptance";
+  const approved = latest?.status === "approved" || latest?.status === "approved_with_limitations";
+  const decisionState = !decisionId
+    ? requestPrepared
+      ? "request_prepared"
+      : "missing"
+    : !exactShape
+      ? "decision_invalid"
+      : approved
+        ? "decision_validated"
+        : "decision_ref_attached";
+  return {
+    requestPrepared,
+    decisionState,
+    approvedWithLimitations: latest?.status === "approved_with_limitations",
+    limitationsCarriedForward: latest?.status === "approved_with_limitations" && jsonArray(latest.limitations_json).length > 0,
+  };
+}
+
 function clientApprovalNextAction(
   contentApproval: SingleSiteContentApprovalSummary,
   latest: SingleSiteClientApprovalRow | null,
@@ -1946,6 +1977,7 @@ function buildClientApproval(
       action: latest?.aaf_client_approval_action ?? null,
       subjectType: latest?.aaf_client_approval_subject_type ?? null,
     },
+    aafValidation: clientApprovalAafValidation(latest),
     reviewerRepresentativeRefs: {
       identityRefs: jsonArray(latest?.reviewer_identity_refs_json),
       representativeRefs: jsonArray(latest?.reviewer_representative_refs_json),

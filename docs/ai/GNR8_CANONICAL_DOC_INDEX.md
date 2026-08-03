@@ -430,6 +430,16 @@ Canonical server-only client approval workflow persistence, service core, transi
 - `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
 - `docs/product/gnr8-single-site-client-approval-persistence-service-closeout.md`
 
+## MVP-33 Single-Site Client Approval AAF Bridge And Evidence Validation
+
+Canonical server-only, non-executing AAF bridge and exact-scope evidence/decision validation core for single-site client approval:
+- `apps/platform/gnr8/single-site/client-approval-aaf-bridge.ts`
+- `apps/platform/gnr8/single-site/client-approval-aaf-bridge.test.ts`
+- `apps/platform/gnr8/single-site/client-approval-aaf-bridge.integration.test.ts`
+- `apps/platform/gnr8/single-site/client-approval-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `docs/product/gnr8-single-site-client-approval-aaf-bridge-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

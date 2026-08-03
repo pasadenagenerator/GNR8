@@ -26,25 +26,14 @@ import {
   type SingleSiteStateWriterTx,
 } from "./single-site-state-writer-repository";
 import type { SingleSiteContentApprovalRow } from "./content-approval-service";
+import type { ClientApprovalAafValidationResult } from "./client-approval-aaf-bridge";
+
+export type { ClientApprovalAafValidationResult } from "./client-approval-aaf-bridge";
 
 export const CLIENT_APPROVAL_SERVICE_VERSION = "mvp-32-client-approval-service:v1" as const;
 export const CLIENT_APPROVAL_AAF_SCOPE = "single_site_client_approval" as const;
 export const CLIENT_APPROVAL_AAF_ACTION = "approve_single_site_client_acceptance" as const;
 export const CLIENT_APPROVAL_AAF_SUBJECT_TYPE = "single_site_improved_candidate_client_acceptance" as const;
-
-export type ClientApprovalAafValidationResult = {
-  valid: boolean;
-  status: "granted" | "granted_with_limitations" | "rejected" | "revoked" | "expired" | "superseded" | "cancelled";
-  scope: string;
-  subjectType: string;
-  subjectId: string;
-  approvalRequestId: string | null;
-  approvalDecisionId: string;
-  evidencePackageId?: string | null;
-  limitations?: unknown[];
-  blockerCodes?: string[];
-  semanticWatermark?: string | null;
-};
 
 export type ClientApprovalEnvelope = {
   actor: SingleSiteActorInput;
@@ -468,9 +457,8 @@ function assertClientApprovalDecisionRefShape(
   decisionId: string,
   validation: ClientApprovalAafValidationResult | null | undefined,
   allowedStatuses: readonly ("granted" | "granted_with_limitations")[],
-): ClientApprovalAafValidationResult | null {
-  if (!validation) return null;
-  if (!validation.valid) throw new SingleSiteTransitionError("client approval AAF decision validation result is invalid");
+): ClientApprovalAafValidationResult {
+  if (!validation?.valid) throw new SingleSiteTransitionError("client approval AAF decision ref requires successful MVP-33 bridge validation");
   if (validation.scope !== CLIENT_APPROVAL_AAF_SCOPE) throw new SingleSiteTransitionError("validated client approval AAF decision has wrong scope");
   if (validation.subjectType !== CLIENT_APPROVAL_AAF_SUBJECT_TYPE) throw new SingleSiteTransitionError("validated client approval AAF decision has wrong subject type");
   if (validation.approvalDecisionId !== decisionId) throw new SingleSiteTransitionError("validated client approval AAF decision id does not match supplied ref");
@@ -572,7 +560,7 @@ export class ClientApprovalService {
   async createOrReuseClientApproval(input: CreateOrReuseClientApprovalInput): Promise<ClientApprovalOperationResult> {
     return this.repository.withTransaction(async (tx) => {
       if (optionalText(input.aafClientApprovalDecisionId)) {
-        throw new SingleSiteTransitionError("client approval decision refs must be attached after MVP-32 bridge validation");
+        throw new SingleSiteTransitionError("client approval decision refs must be attached after MVP-33 bridge validation");
       }
       const migration = await this.requiredNonTerminalMigration(tx, input.migrationId);
       if (migration.client_id !== requiredText("clientId", input.clientId)) throw new SingleSiteTransitionError("client approval clientId does not match migration");

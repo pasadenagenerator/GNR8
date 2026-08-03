@@ -372,16 +372,20 @@ test("blocks approval without AAF decision, with p0 blockers, and with required 
   const service = new ClientApprovalService(fakeRepository());
   const approval = await createClientApproval(service);
   await assert.rejects(() => service.approve({ clientApprovalId: approval.id, actor: actor(), correlationId: "corr-no-aaf", idempotencyKey: "idem-no-aaf" }), /AAF client approval decision/);
-  await service.attachAafDecisionRef({
-    clientApprovalId: approval.id,
-    migrationId: MIGRATION_ID,
-    refRole: "aaf_client_approval_decision",
-    refType: "aaf_approval_decision",
-    sourceRecordId: "aaf-decision-unvalidated",
-    actor: actor(),
-    correlationId: "corr-unvalidated-aaf",
-    idempotencyKey: "idem-unvalidated-aaf",
-  });
+  await assert.rejects(
+    () =>
+      service.attachAafDecisionRef({
+        clientApprovalId: approval.id,
+        migrationId: MIGRATION_ID,
+        refRole: "aaf_client_approval_decision",
+        refType: "aaf_approval_decision",
+        sourceRecordId: "aaf-decision-unvalidated",
+        actor: actor(),
+        correlationId: "corr-unvalidated-aaf",
+        idempotencyKey: "idem-unvalidated-aaf",
+      }),
+    /MVP-33 bridge validation/,
+  );
   await assert.rejects(
     () =>
       service.attachAafDecisionRef({
