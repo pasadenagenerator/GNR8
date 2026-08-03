@@ -27,25 +27,14 @@ import {
 } from "./single-site-state-writer-repository";
 import type { SingleSiteContentApprovalRow } from "./content-approval-service";
 import type { SingleSiteClientApprovalRow } from "./client-approval-service";
+import type { LaunchApprovalAafValidationResult } from "./launch-approval-aaf-bridge";
+
+export type { LaunchApprovalAafValidationResult } from "./launch-approval-aaf-bridge";
 
 export const LAUNCH_APPROVAL_SERVICE_VERSION = "mvp-34-launch-approval-service:v1" as const;
 export const LAUNCH_APPROVAL_AAF_SCOPE = "single_site_launch_approval" as const;
 export const LAUNCH_APPROVAL_AAF_ACTION = "approve_single_site_launch_readiness" as const;
 export const LAUNCH_APPROVAL_AAF_SUBJECT_TYPE = "single_site_launch_readiness_review" as const;
-
-export type LaunchApprovalAafValidationResult = {
-  valid: boolean;
-  status: "granted" | "granted_with_limitations" | "denied" | string;
-  scope: string;
-  subjectType: string;
-  subjectId: string;
-  approvalRequestId?: string | null;
-  approvalDecisionId: string;
-  evidencePackageId?: string | null;
-  limitations?: unknown[];
-  blockerCodes?: unknown[];
-  semanticWatermark?: string | null;
-};
 
 export type LaunchApprovalEnvelope = {
   actor: SingleSiteActorInput;
@@ -486,9 +475,8 @@ function assertLaunchApprovalDecisionRefShape(
   decisionId: string,
   validation: LaunchApprovalAafValidationResult | null | undefined,
   allowedStatuses: readonly ("granted" | "granted_with_limitations")[],
-): LaunchApprovalAafValidationResult | null {
-  if (!validation) return null;
-  if (!validation.valid) throw new SingleSiteTransitionError("launch approval AAF decision validation was not successful");
+): LaunchApprovalAafValidationResult {
+  if (!validation?.valid) throw new SingleSiteTransitionError("launch approval AAF decision ref requires successful MVP-35 bridge validation");
   if (validation.scope !== LAUNCH_APPROVAL_AAF_SCOPE) throw new SingleSiteTransitionError("validated launch approval AAF decision has wrong scope");
   if (validation.subjectType !== LAUNCH_APPROVAL_AAF_SUBJECT_TYPE) throw new SingleSiteTransitionError("validated launch approval AAF decision has wrong subject type");
   if (validation.approvalDecisionId !== decisionId) throw new SingleSiteTransitionError("validated launch approval AAF decision id does not match supplied ref");
@@ -881,7 +869,7 @@ export class LaunchApprovalService {
           publishReadinessNotGranted: true,
           activePointerChanged: false,
           runtimeMutationPerformedByLaunchApproval: false,
-          aafBridgeValidationDeferredTo: "mvp-35",
+          aafBridgeValidationRequired: "mvp-35",
         },
       },
       [

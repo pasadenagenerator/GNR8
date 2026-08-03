@@ -28,7 +28,10 @@ function validation(decisionId: string, status: "granted" | "granted_with_limita
     subjectId: LAUNCH_APPROVAL_ID,
     approvalDecisionId: decisionId,
     approvalRequestId: "launch-aaf-request-1",
+    evidencePackageId: "launch-aaf-evidence-1",
     limitations: status === "granted_with_limitations" ? [{ summary: "Proceed with tracked launch limitation." }] : [],
+    blockerCodes: [],
+    semanticWatermark: `single-site-launch-approval:${decisionId}`,
   };
 }
 
@@ -301,12 +304,27 @@ test("supports review lifecycle, AAF refs, findings, blocked, approve, approve_w
     correlationId: "corr-aaf-request",
     idempotencyKey: "idem-aaf-request",
   });
+  await assert.rejects(
+    () =>
+      service.attachAafDecisionRef({
+        launchApprovalId: approval.id,
+        migrationId: MIGRATION_ID,
+        refRole: "aaf_launch_approval_decision",
+        refType: "aaf_approval_decision",
+        sourceRecordId: "launch-aaf-decision-raw",
+        actor: actor(),
+        correlationId: "corr-aaf-decision-raw",
+        idempotencyKey: "idem-aaf-decision-raw",
+      }),
+    /MVP-35 bridge validation/,
+  );
   await service.attachAafDecisionRef({
     launchApprovalId: approval.id,
     migrationId: MIGRATION_ID,
     refRole: "aaf_launch_approval_decision",
     refType: "aaf_approval_decision",
     sourceRecordId: "launch-aaf-decision-1",
+    launchApprovalValidation: validation("launch-aaf-decision-1"),
     actor: actor(),
     correlationId: "corr-aaf-decision",
     idempotencyKey: "idem-aaf-decision",
@@ -392,25 +410,34 @@ test("blocks approval without launch AAF decision, readiness placeholders, p0 bl
     refRole: "aaf_launch_approval_decision",
     refType: "aaf_approval_decision",
     sourceRecordId: "launch-aaf-decision-no-readiness",
+    launchApprovalValidation: validation("launch-aaf-decision-no-readiness"),
     actor: actor(),
     correlationId: "corr-no-readiness-aaf",
     idempotencyKey: "idem-no-readiness-aaf",
   });
   await assert.rejects(
-    () => noReadinessService.approve({ launchApprovalId: noReadiness.id, aafLaunchApprovalDecisionId: "launch-aaf-decision-no-readiness", actor: actor(), correlationId: "corr-no-readiness", idempotencyKey: "idem-no-readiness" }),
+    () =>
+      noReadinessService.approve({
+        launchApprovalId: noReadiness.id,
+        aafLaunchApprovalDecisionId: "launch-aaf-decision-no-readiness",
+        launchApprovalValidation: validation("launch-aaf-decision-no-readiness"),
+        actor: actor(),
+        correlationId: "corr-no-readiness",
+        idempotencyKey: "idem-no-readiness",
+      }),
     /missing readiness placeholders/,
   );
 
   const p0Service = new LaunchApprovalService(fakeRepository());
   const p0Approval = await createLaunchApproval(p0Service);
-  await p0Service.attachAafDecisionRef({ launchApprovalId: p0Approval.id, migrationId: MIGRATION_ID, refRole: "aaf_launch_approval_decision", refType: "aaf_approval_decision", sourceRecordId: "launch-aaf-decision-p0", actor: actor(), correlationId: "corr-p0-aaf", idempotencyKey: "idem-p0-aaf" });
+  await p0Service.attachAafDecisionRef({ launchApprovalId: p0Approval.id, migrationId: MIGRATION_ID, refRole: "aaf_launch_approval_decision", refType: "aaf_approval_decision", sourceRecordId: "launch-aaf-decision-p0", launchApprovalValidation: validation("launch-aaf-decision-p0"), actor: actor(), correlationId: "corr-p0-aaf", idempotencyKey: "idem-p0-aaf" });
   await p0Service.addFinding({ launchApprovalId: p0Approval.id, migrationId: MIGRATION_ID, itemKey: "p0", category: "domain_ready", severity: "p0_blocker", findingSummary: "Domain readiness is blocked.", actor: actor(), correlationId: "corr-p0", idempotencyKey: "idem-p0" });
-  await assert.rejects(() => p0Service.approve({ launchApprovalId: p0Approval.id, aafLaunchApprovalDecisionId: "launch-aaf-decision-p0", actor: actor(), correlationId: "corr-p0-approve", idempotencyKey: "idem-p0-approve" }), /p0 blockers/);
+  await assert.rejects(() => p0Service.approve({ launchApprovalId: p0Approval.id, aafLaunchApprovalDecisionId: "launch-aaf-decision-p0", launchApprovalValidation: validation("launch-aaf-decision-p0"), actor: actor(), correlationId: "corr-p0-approve", idempotencyKey: "idem-p0-approve" }), /p0 blockers/);
 
   const blockerService = new LaunchApprovalService(fakeRepository());
   const blockerApproval = await createLaunchApproval(blockerService, { blockerRefsJson: [{ sourceRecordId: "blocked-domain", status: "open" }] });
-  await blockerService.attachAafDecisionRef({ launchApprovalId: blockerApproval.id, migrationId: MIGRATION_ID, refRole: "aaf_launch_approval_decision", refType: "aaf_approval_decision", sourceRecordId: "launch-aaf-decision-blocker", actor: actor(), correlationId: "corr-blocker-aaf", idempotencyKey: "idem-blocker-aaf" });
-  await assert.rejects(() => blockerService.approve({ launchApprovalId: blockerApproval.id, aafLaunchApprovalDecisionId: "launch-aaf-decision-blocker", actor: actor(), correlationId: "corr-blocker-approve", idempotencyKey: "idem-blocker-approve" }), /unresolved blocker refs/);
+  await blockerService.attachAafDecisionRef({ launchApprovalId: blockerApproval.id, migrationId: MIGRATION_ID, refRole: "aaf_launch_approval_decision", refType: "aaf_approval_decision", sourceRecordId: "launch-aaf-decision-blocker", launchApprovalValidation: validation("launch-aaf-decision-blocker"), actor: actor(), correlationId: "corr-blocker-aaf", idempotencyKey: "idem-blocker-aaf" });
+  await assert.rejects(() => blockerService.approve({ launchApprovalId: blockerApproval.id, aafLaunchApprovalDecisionId: "launch-aaf-decision-blocker", launchApprovalValidation: validation("launch-aaf-decision-blocker"), actor: actor(), correlationId: "corr-blocker-approve", idempotencyKey: "idem-blocker-approve" }), /unresolved blocker refs/);
 });
 
 test("idempotent retry works, idempotency drift conflicts, readiness is scoped, and terminal approvals cannot change", async () => {
@@ -424,8 +451,8 @@ test("idempotent retry works, idempotency drift conflicts, readiness is scoped, 
 
   const readyService = new LaunchApprovalService(fakeRepository());
   const readyApproval = await createLaunchApproval(readyService);
-  await readyService.attachAafDecisionRef({ launchApprovalId: readyApproval.id, migrationId: MIGRATION_ID, refRole: "aaf_launch_approval_decision", refType: "aaf_approval_decision", sourceRecordId: "launch-aaf-decision-ready", actor: actor(), correlationId: "corr-ready-aaf", idempotencyKey: "idem-ready-aaf" });
-  await readyService.approve({ launchApprovalId: readyApproval.id, aafLaunchApprovalDecisionId: "launch-aaf-decision-ready", actor: actor(), correlationId: "corr-ready-approve", idempotencyKey: "idem-ready-approve" });
+  await readyService.attachAafDecisionRef({ launchApprovalId: readyApproval.id, migrationId: MIGRATION_ID, refRole: "aaf_launch_approval_decision", refType: "aaf_approval_decision", sourceRecordId: "launch-aaf-decision-ready", launchApprovalValidation: validation("launch-aaf-decision-ready"), actor: actor(), correlationId: "corr-ready-aaf", idempotencyKey: "idem-ready-aaf" });
+  await readyService.approve({ launchApprovalId: readyApproval.id, aafLaunchApprovalDecisionId: "launch-aaf-decision-ready", launchApprovalValidation: validation("launch-aaf-decision-ready"), actor: actor(), correlationId: "corr-ready-approve", idempotencyKey: "idem-ready-approve" });
   const readiness = await readyService.getLaunchApprovalReadiness(MIGRATION_ID);
   assert.equal(readiness.ready, true);
   await assert.rejects(

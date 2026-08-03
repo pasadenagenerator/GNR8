@@ -453,6 +453,16 @@ Canonical server-only launch approval workflow persistence, service core, transi
 - `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
 - `docs/product/gnr8-single-site-launch-approval-persistence-service-closeout.md`
 
+## MVP-35 Single-Site Launch Approval AAF Bridge And Evidence Validation
+
+Canonical server-only, non-executing AAF bridge and exact-scope evidence/decision validation core for single-site launch approval:
+- `apps/platform/gnr8/single-site/launch-approval-aaf-bridge.ts`
+- `apps/platform/gnr8/single-site/launch-approval-aaf-bridge.test.ts`
+- `apps/platform/gnr8/single-site/launch-approval-aaf-bridge.integration.test.ts`
+- `apps/platform/gnr8/single-site/launch-approval-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `docs/product/gnr8-single-site-launch-approval-aaf-bridge-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

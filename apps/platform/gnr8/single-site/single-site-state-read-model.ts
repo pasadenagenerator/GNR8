@@ -905,6 +905,12 @@ export type SingleSiteLaunchApprovalSummary = {
     action: string | null;
     subjectType: string | null;
   };
+  aafValidation: {
+    requestPrepared: boolean;
+    decisionState: "missing" | "request_prepared" | "decision_ref_attached" | "decision_validated" | "decision_invalid";
+    approvedWithLimitations: boolean;
+    limitationsCarriedForward: boolean;
+  };
   improvedCandidateRefs: {
     siteVersionRef: string | null;
     runtimeArtifactRef: string | null;
@@ -1961,6 +1967,31 @@ function clientApprovalAafValidation(latest: SingleSiteClientApprovalRow | null)
   };
 }
 
+function launchApprovalAafValidation(latest: SingleSiteLaunchApprovalRow | null): SingleSiteLaunchApprovalSummary["aafValidation"] {
+  const requestPrepared = Boolean(latest?.aaf_launch_approval_request_id);
+  const decisionId = latest?.aaf_launch_approval_decision_id ?? null;
+  const exactShape =
+    latest?.aaf_launch_approval_scope === "single_site_launch_approval" &&
+    latest?.aaf_launch_approval_action === "approve_single_site_launch_readiness" &&
+    latest?.aaf_launch_approval_subject_type === "single_site_launch_readiness_review";
+  const approved = latest?.status === "approved" || latest?.status === "approved_with_limitations";
+  const decisionState = !decisionId
+    ? requestPrepared
+      ? "request_prepared"
+      : "missing"
+    : !exactShape
+      ? "decision_invalid"
+      : approved
+        ? "decision_validated"
+        : "decision_ref_attached";
+  return {
+    requestPrepared,
+    decisionState,
+    approvedWithLimitations: latest?.status === "approved_with_limitations",
+    limitationsCarriedForward: latest?.status === "approved_with_limitations" && jsonArray(latest.limitations_json).length > 0,
+  };
+}
+
 function clientApprovalNextAction(
   contentApproval: SingleSiteContentApprovalSummary,
   latest: SingleSiteClientApprovalRow | null,
@@ -2216,6 +2247,7 @@ function buildLaunchApproval(
       action: latest?.aaf_launch_approval_action ?? null,
       subjectType: latest?.aaf_launch_approval_subject_type ?? null,
     },
+    aafValidation: launchApprovalAafValidation(latest),
     improvedCandidateRefs: {
       siteVersionRef: latest?.improved_candidate_site_version_ref ?? null,
       runtimeArtifactRef: latest?.improved_runtime_artifact_ref ?? null,
