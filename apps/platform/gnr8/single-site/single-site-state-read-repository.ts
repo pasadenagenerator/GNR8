@@ -19,6 +19,12 @@ import type {
   SingleSiteImprovedVersionReviewRow,
 } from "./improved-version-review-service";
 import type {
+  SingleSiteContentApprovalEventRow,
+  SingleSiteContentApprovalItemRow,
+  SingleSiteContentApprovalRefRow,
+  SingleSiteContentApprovalRow,
+} from "./content-approval-service";
+import type {
   SingleSiteCloneReviewEventRow,
   SingleSiteCloneReviewItemRow,
   SingleSiteCloneReviewRefRow,
@@ -140,6 +146,11 @@ export class SingleSiteStateReadRepository {
     return model?.improvedVersionReview ?? null;
   }
 
+  async readLatestContentApprovalForMigration(migrationId: string): Promise<SingleSiteMigrationReadModel["contentApproval"] | null> {
+    const model = await this.readByMigrationId(migrationId);
+    return model?.contentApproval ?? null;
+  }
+
   async readBlockersForMigration(migrationId: string): Promise<SingleSiteMigrationReadModel["blockers"] | null> {
     const model = await this.readByMigrationId(migrationId);
     return model?.blockers ?? null;
@@ -197,6 +208,12 @@ export class SingleSiteStateReadRepository {
     const improvedVersionReviewItems = latestImprovedVersionReview ? await this.readImprovedVersionReviewItems(client, latestImprovedVersionReview.id) : [];
     const improvedVersionReviewRefs = latestImprovedVersionReview ? await this.readImprovedVersionReviewRefs(client, latestImprovedVersionReview.id) : [];
     const improvedVersionReviewEvents = latestImprovedVersionReview ? await this.readImprovedVersionReviewEvents(client, latestImprovedVersionReview.id) : [];
+    const hasContentApprovalTables = await this.contentApprovalTablesAvailable(client);
+    const contentApprovals = hasContentApprovalTables ? await this.readContentApprovalRows(client, migration.id) : [];
+    const latestContentApproval = contentApprovals[0] ?? null;
+    const contentApprovalItems = latestContentApproval ? await this.readContentApprovalItems(client, latestContentApproval.id) : [];
+    const contentApprovalRefs = latestContentApproval ? await this.readContentApprovalRefs(client, latestContentApproval.id) : [];
+    const contentApprovalEvents = latestContentApproval ? await this.readContentApprovalEvents(client, latestContentApproval.id) : [];
 
     return {
       capturedAt,
@@ -231,6 +248,11 @@ export class SingleSiteStateReadRepository {
       improvedVersionReviewItems,
       improvedVersionReviewRefs,
       improvedVersionReviewEvents,
+      contentApprovals,
+      latestContentApproval,
+      contentApprovalItems,
+      contentApprovalRefs,
+      contentApprovalEvents,
     };
   }
 
@@ -759,5 +781,77 @@ export class SingleSiteStateReadRepository {
       [reviewId],
     );
     return result.rows as SingleSiteImprovedVersionReviewEventRow[];
+  }
+
+  private async contentApprovalTablesAvailable(client: SingleSitePgClient): Promise<boolean> {
+    const result = await client.query("select to_regclass('public.gnr8_single_site_content_approvals')::text as table_name");
+    return Boolean(result.rows[0]?.table_name);
+  }
+
+  private async readContentApprovalRows(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteContentApprovalRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        review_started_at::text as review_started_at,
+        decided_at::text as decided_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_content_approvals
+      where migration_id = $1::uuid
+      order by public.gnr8_single_site_content_approvals.updated_at desc, public.gnr8_single_site_content_approvals.created_at desc
+      `,
+      [migrationId],
+    );
+    return result.rows as SingleSiteContentApprovalRow[];
+  }
+
+  private async readContentApprovalItems(client: SingleSitePgClient, contentApprovalId: string): Promise<SingleSiteContentApprovalItemRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_content_approval_items
+      where content_approval_id = $1::uuid
+      order by item_key asc
+      `,
+      [contentApprovalId],
+    );
+    return result.rows as SingleSiteContentApprovalItemRow[];
+  }
+
+  private async readContentApprovalRefs(client: SingleSitePgClient, contentApprovalId: string): Promise<SingleSiteContentApprovalRefRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        captured_at::text as captured_at,
+        fresh_until::text as fresh_until,
+        created_at::text as created_at
+      from public.gnr8_single_site_content_approval_refs
+      where content_approval_id = $1::uuid
+      order by public.gnr8_single_site_content_approval_refs.created_at asc, ref_role asc
+      `,
+      [contentApprovalId],
+    );
+    return result.rows as SingleSiteContentApprovalRefRow[];
+  }
+
+  private async readContentApprovalEvents(client: SingleSitePgClient, contentApprovalId: string): Promise<SingleSiteContentApprovalEventRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        occurred_at::text as occurred_at,
+        created_at::text as created_at
+      from public.gnr8_single_site_content_approval_events
+      where content_approval_id = $1::uuid
+      order by event_index asc, public.gnr8_single_site_content_approval_events.occurred_at asc
+      `,
+      [contentApprovalId],
+    );
+    return result.rows as SingleSiteContentApprovalEventRow[];
   }
 }

@@ -136,6 +136,26 @@ function reviewAllowsContentApproval(value: unknown): boolean {
   return review.content_approval_ready === true && ["accepted", "accepted_with_limitations"].includes(String(review.review_status));
 }
 
+function contentApprovalAllowsClientOrLaunchApproval(value: unknown): boolean {
+  const approval = jsonObject(value);
+  return approval.client_or_launch_approval_ready === true && ["approved", "approved_with_limitations"].includes(String(approval.status));
+}
+
+async function latestContentApprovalForMigration(tx: unknown, migrationId: string): Promise<Record<string, unknown> | null> {
+  if (!tx || typeof (tx as { query?: unknown }).query !== "function") return null;
+  const latest = await (tx as { query(sql: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[] }> }).query(
+    `
+    select *
+    from public.gnr8_single_site_content_approvals
+    where migration_id = $1::uuid
+    order by updated_at desc, created_at desc
+    limit 1
+    `,
+    [migrationId],
+  );
+  return latest.rows[0] ?? null;
+}
+
 function requireRefs(input: TransitionSingleSiteMigrationInput, roles: readonly SingleSiteMigrationRefRole[], missing: string[], label: string): void {
   if (!hasRef(input, roles)) missing.push(label);
 }
@@ -405,8 +425,18 @@ export class SingleSiteStateTransitionService {
       }
       requireRefs(input, ["improved_version_review"], missing, "improved version review migration ref");
     }
-    if (input.toState === "content_approved" && !["content_review_required", "improved_preview_ready"].includes(fromState)) {
-      missing.push("improved preview/content review state");
+    if (input.toState === "content_approved") {
+      if (!["content_review_required", "improved_preview_ready"].includes(fromState)) {
+        missing.push("improved preview/content review state");
+      }
+      const approval = await latestContentApprovalForMigration(tx, migration.id);
+      if (!approval) missing.push("approved content approval");
+      if (approval && !contentApprovalAllowsClientOrLaunchApproval(approval)) missing.push("approved content approval status");
+      if (!approval?.aaf_content_approval_decision_id && !input.aafApprovalDecisionId) missing.push("AAF content approval decision ref");
+      if (approval?.status === "approved_with_limitations" && (!Array.isArray(approval.limitations_json) || approval.limitations_json.length === 0)) {
+        missing.push("approved content approval limitations");
+      }
+      requireRefs(input, ["content_approval"], missing, "content approval migration ref");
     }
     if (input.toState === "domain_readiness_ready") {
       requireRefs(input, ["ddom_readiness_snapshot"], missing, "DDOM readiness snapshot ref");
@@ -415,6 +445,8 @@ export class SingleSiteStateTransitionService {
       requireRefs(input, ["subscription", "stripe_subscription", "billing_account", "hosting_entitlement"], missing, "billing/subscription/entitlement ref placeholder");
     }
     if (input.toState === "publish_ready") {
+      const approval = await latestContentApprovalForMigration(tx, migration.id);
+      if (!approval || !contentApprovalAllowsClientOrLaunchApproval(approval)) missing.push("approved content approval");
       requireRefs(input, ["content_approval"], missing, "content approval ref");
       requireRefs(input, ["ddom_readiness_snapshot", "domain_binding"], missing, "domain readiness ref");
       requireRefs(input, ["subscription", "hosting_entitlement", "stripe_subscription"], missing, "subscription or hosting entitlement ref");

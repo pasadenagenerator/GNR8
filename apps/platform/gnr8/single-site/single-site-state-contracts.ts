@@ -365,6 +365,95 @@ export const SINGLE_SITE_IMPROVED_VERSION_REVIEW_EVENT_ACTIONS = [
   "superseded",
 ] as const;
 
+export const SINGLE_SITE_CONTENT_APPROVAL_STATUSES = [
+  "not_required_yet",
+  "required",
+  "draft",
+  "ready_for_review",
+  "in_review",
+  "changes_requested",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+] as const;
+
+export const SINGLE_SITE_CONTENT_APPROVAL_DECISIONS = [
+  "approve",
+  "approve_with_limitations",
+  "request_changes",
+  "reject",
+  "supersede",
+  "cancel",
+] as const;
+
+export const SINGLE_SITE_CONTENT_APPROVAL_SEVERITIES = ["p0_blocker", "p1_major", "p2_minor", "p3_note"] as const;
+
+export const SINGLE_SITE_CONTENT_APPROVAL_CATEGORIES = [
+  "content_accuracy",
+  "copy_quality",
+  "metadata",
+  "seo",
+  "aeo",
+  "accessibility",
+  "legal_compliance",
+  "brand_voice",
+  "cta",
+  "internal_links",
+  "structured_data",
+  "translation_or_locale",
+  "limitation",
+  "manual_note",
+  "unknown_or_manual",
+] as const;
+
+export const SINGLE_SITE_CONTENT_APPROVAL_REF_ROLES = [
+  "migration",
+  "client",
+  "site",
+  "improved_version_review",
+  "improved_candidate_site_version",
+  "improved_runtime_artifact",
+  "proposal_plan",
+  "proposal_approval",
+  "implementation_authorization",
+  "execution_attempt",
+  "selected_recommendation",
+  "source_evidence_review",
+  "clone_review",
+  "clone_site_version",
+  "clone_runtime_artifact",
+  "aaf_content_approval_request",
+  "aaf_content_approval_decision",
+  "evidence_package",
+  "rendered_snapshot",
+  "content_snapshot",
+  "metadata_snapshot",
+  "recommendation_coverage",
+  "seo_aeo_accessibility_legal_caveat",
+  "limitation",
+  "unresolved_not_applied_recommendation",
+  "operator_note",
+  "external_reference",
+] as const;
+
+export const SINGLE_SITE_CONTENT_APPROVAL_EVENT_ACTIONS = [
+  "created",
+  "ref_attached",
+  "item_added",
+  "ready_for_review",
+  "review_started",
+  "changes_requested",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+  "aaf_request_attached",
+  "aaf_decision_attached",
+] as const;
+
 export const SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES = [
   "unknown",
   "complete",
@@ -614,6 +703,12 @@ export type SingleSiteImprovedVersionReviewSeverity = (typeof SINGLE_SITE_IMPROV
 export type SingleSiteImprovedVersionReviewCategory = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_CATEGORIES)[number];
 export type SingleSiteImprovedVersionReviewRefRole = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_REF_ROLES)[number];
 export type SingleSiteImprovedVersionReviewEventAction = (typeof SINGLE_SITE_IMPROVED_VERSION_REVIEW_EVENT_ACTIONS)[number];
+export type SingleSiteContentApprovalStatus = (typeof SINGLE_SITE_CONTENT_APPROVAL_STATUSES)[number];
+export type SingleSiteContentApprovalDecision = (typeof SINGLE_SITE_CONTENT_APPROVAL_DECISIONS)[number];
+export type SingleSiteContentApprovalSeverity = (typeof SINGLE_SITE_CONTENT_APPROVAL_SEVERITIES)[number];
+export type SingleSiteContentApprovalCategory = (typeof SINGLE_SITE_CONTENT_APPROVAL_CATEGORIES)[number];
+export type SingleSiteContentApprovalRefRole = (typeof SINGLE_SITE_CONTENT_APPROVAL_REF_ROLES)[number];
+export type SingleSiteContentApprovalEventAction = (typeof SINGLE_SITE_CONTENT_APPROVAL_EVENT_ACTIONS)[number];
 export type SingleSiteSourceEvidenceCompletenessStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES)[number];
 export type SingleSiteSourceEvidenceReviewDecision = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_DECISIONS)[number];
 export type SingleSiteEvidenceItemCategory = (typeof SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES)[number];

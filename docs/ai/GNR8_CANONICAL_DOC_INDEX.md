@@ -375,6 +375,15 @@ Canonical disposable PostgreSQL verification for MVP-27 AAF content approval voc
 - `apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql`
 - `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`
 
+## MVP-28 Single-Site Content Approval Persistence And Service Core
+
+Canonical server-only content approval workflow persistence, service core, transition/read-model projection, focused tests, and closeout:
+- `apps/platform/supabase/migrations/20260803143000_single_site_content_approval_core.sql`
+- `apps/platform/gnr8/single-site/content-approval-service.ts`
+- `apps/platform/gnr8/single-site/content-approval-service.test.ts`
+- `apps/platform/gnr8/single-site/content-approval-service.integration.test.ts`
+- `docs/product/gnr8-single-site-content-approval-persistence-service-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
