@@ -534,6 +534,95 @@ export const SINGLE_SITE_CLIENT_APPROVAL_EVENT_ACTIONS = [
   "aaf_decision_attached",
 ] as const;
 
+export const SINGLE_SITE_LAUNCH_APPROVAL_STATUSES = [
+  "not_required_yet",
+  "required",
+  "draft",
+  "ready_for_review",
+  "in_review",
+  "blocked",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+] as const;
+
+export const SINGLE_SITE_LAUNCH_APPROVAL_DECISIONS = [
+  "approve",
+  "approve_with_limitations",
+  "block",
+  "reject",
+  "supersede",
+  "cancel",
+] as const;
+
+export const SINGLE_SITE_LAUNCH_APPROVAL_SEVERITIES = ["p0_blocker", "p1_major", "p2_minor", "p3_note"] as const;
+
+export const SINGLE_SITE_LAUNCH_APPROVAL_CATEGORIES = [
+  "content_ready",
+  "client_ready",
+  "domain_ready",
+  "billing_ready",
+  "rollback_ready",
+  "qa_ready",
+  "seo_ready",
+  "accessibility_ready",
+  "performance_ready",
+  "limitation",
+  "manual_note",
+  "unknown_or_manual",
+] as const;
+
+export const SINGLE_SITE_LAUNCH_APPROVAL_REF_ROLES = [
+  "migration",
+  "client",
+  "site",
+  "content_approval",
+  "aaf_content_approval_decision",
+  "client_approval",
+  "aaf_client_approval_decision",
+  "improved_version_review",
+  "improved_candidate_site_version",
+  "improved_runtime_artifact",
+  "proposal_plan",
+  "proposal_approval",
+  "implementation_authorization",
+  "execution_attempt",
+  "selected_recommendation",
+  "domain_readiness_placeholder",
+  "billing_hosting_entitlement_placeholder",
+  "rollback_readiness_placeholder",
+  "publish_target_placeholder",
+  "launch_checklist",
+  "blocker",
+  "smoke_qa",
+  "reviewer_identity",
+  "reviewer_representative_role",
+  "aaf_launch_approval_request",
+  "aaf_launch_approval_decision",
+  "evidence_package",
+  "limitation",
+  "operator_note",
+  "external_reference",
+] as const;
+
+export const SINGLE_SITE_LAUNCH_APPROVAL_EVENT_ACTIONS = [
+  "created",
+  "ref_attached",
+  "item_added",
+  "ready_for_review",
+  "review_started",
+  "blocked",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+  "aaf_request_attached",
+  "aaf_decision_attached",
+] as const;
+
 export const SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES = [
   "unknown",
   "complete",
@@ -670,6 +759,7 @@ export const SINGLE_SITE_MIGRATION_REF_ROLES = [
   "improved_version_review",
   "content_approval",
   "client_approval",
+  "launch_approval",
   "domain_binding",
   "ddom_readiness_snapshot",
   "publish_target",
@@ -797,6 +887,12 @@ export type SingleSiteClientApprovalSeverity = (typeof SINGLE_SITE_CLIENT_APPROV
 export type SingleSiteClientApprovalCategory = (typeof SINGLE_SITE_CLIENT_APPROVAL_CATEGORIES)[number];
 export type SingleSiteClientApprovalRefRole = (typeof SINGLE_SITE_CLIENT_APPROVAL_REF_ROLES)[number];
 export type SingleSiteClientApprovalEventAction = (typeof SINGLE_SITE_CLIENT_APPROVAL_EVENT_ACTIONS)[number];
+export type SingleSiteLaunchApprovalStatus = (typeof SINGLE_SITE_LAUNCH_APPROVAL_STATUSES)[number];
+export type SingleSiteLaunchApprovalDecision = (typeof SINGLE_SITE_LAUNCH_APPROVAL_DECISIONS)[number];
+export type SingleSiteLaunchApprovalSeverity = (typeof SINGLE_SITE_LAUNCH_APPROVAL_SEVERITIES)[number];
+export type SingleSiteLaunchApprovalCategory = (typeof SINGLE_SITE_LAUNCH_APPROVAL_CATEGORIES)[number];
+export type SingleSiteLaunchApprovalRefRole = (typeof SINGLE_SITE_LAUNCH_APPROVAL_REF_ROLES)[number];
+export type SingleSiteLaunchApprovalEventAction = (typeof SINGLE_SITE_LAUNCH_APPROVAL_EVENT_ACTIONS)[number];
 export type SingleSiteSourceEvidenceCompletenessStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES)[number];
 export type SingleSiteSourceEvidenceReviewDecision = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_DECISIONS)[number];
 export type SingleSiteEvidenceItemCategory = (typeof SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES)[number];

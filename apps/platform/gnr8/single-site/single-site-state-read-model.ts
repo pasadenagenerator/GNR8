@@ -12,6 +12,8 @@ import {
   SINGLE_SITE_CONTENT_APPROVAL_SEVERITIES,
   SINGLE_SITE_CLIENT_APPROVAL_CATEGORIES,
   SINGLE_SITE_CLIENT_APPROVAL_SEVERITIES,
+  SINGLE_SITE_LAUNCH_APPROVAL_CATEGORIES,
+  SINGLE_SITE_LAUNCH_APPROVAL_SEVERITIES,
   SINGLE_SITE_IMPROVEMENT_IMPACT_LEVELS,
   SINGLE_SITE_IMPROVEMENT_RISK_LEVELS,
   SINGLE_SITE_MIGRATION_STAGES,
@@ -54,6 +56,12 @@ import {
   type SingleSiteClientApprovalRefRole,
   type SingleSiteClientApprovalSeverity,
   type SingleSiteClientApprovalStatus,
+  type SingleSiteLaunchApprovalCategory,
+  type SingleSiteLaunchApprovalDecision,
+  type SingleSiteLaunchApprovalEventAction,
+  type SingleSiteLaunchApprovalRefRole,
+  type SingleSiteLaunchApprovalSeverity,
+  type SingleSiteLaunchApprovalStatus,
   type SingleSiteImprovementImpactLevel,
   type SingleSiteImprovementProposalPlanStatus,
   type SingleSiteImprovementRiskLevel,
@@ -87,6 +95,12 @@ import type {
   SingleSiteClientApprovalRefRow,
   SingleSiteClientApprovalRow,
 } from "./client-approval-service";
+import type {
+  SingleSiteLaunchApprovalEventRow,
+  SingleSiteLaunchApprovalItemRow,
+  SingleSiteLaunchApprovalRefRow,
+  SingleSiteLaunchApprovalRow,
+} from "./launch-approval-service";
 import type {
   SingleSiteCloneReviewEventRow,
   SingleSiteCloneReviewItemRow,
@@ -159,6 +173,15 @@ export const SINGLE_SITE_RECOMMENDED_NEXT_ACTIONS = [
   "prepare_launch_approval_with_limitations",
   "resolve_client_approval_blockers",
   "review_latest_client_approval",
+  "start_launch_approval",
+  "complete_launch_approval_draft",
+  "review_launch_approval",
+  "complete_launch_approval_review",
+  "resolve_launch_blockers",
+  "prepare_domain_billing_publish_readiness",
+  "prepare_domain_billing_publish_readiness_with_limitations",
+  "resolve_launch_approval_blockers",
+  "review_latest_launch_approval",
   "no_action",
   "retry_or_repair_improvement_execution",
   "retry_improvement_execution",
@@ -339,6 +362,11 @@ export type SingleSiteMigrationReadRepositorySnapshot = {
   clientApprovalItems?: SingleSiteClientApprovalItemRow[];
   clientApprovalRefs?: SingleSiteClientApprovalRefRow[];
   clientApprovalEvents?: SingleSiteClientApprovalEventRow[];
+  launchApprovals?: SingleSiteLaunchApprovalRow[];
+  latestLaunchApproval?: SingleSiteLaunchApprovalRow | null;
+  launchApprovalItems?: SingleSiteLaunchApprovalItemRow[];
+  launchApprovalRefs?: SingleSiteLaunchApprovalRefRow[];
+  launchApprovalEvents?: SingleSiteLaunchApprovalEventRow[];
 };
 
 export type SingleSiteMigrationSummary = {
@@ -854,6 +882,75 @@ export type SingleSiteClientApprovalSummary = {
   nextAction: SingleSiteRecommendedNextActionKey;
 };
 
+export type SingleSiteLaunchApprovalSummary = {
+  latestLaunchApprovalId: string | null;
+  latestLaunchApprovalRef: string | null;
+  status: SingleSiteLaunchApprovalStatus | "missing";
+  decision: SingleSiteLaunchApprovalDecision | null;
+  contentApprovalRefs: {
+    contentApprovalId: string | null;
+    contentApprovalStatus: string | null;
+    aafContentApprovalDecisionId: string | null;
+  };
+  clientApprovalRefs: {
+    required: boolean;
+    clientApprovalId: string | null;
+    clientApprovalStatus: string | null;
+    aafClientApprovalDecisionId: string | null;
+  };
+  aafRefs: {
+    requestId: string | null;
+    decisionId: string | null;
+    scope: string | null;
+    action: string | null;
+    subjectType: string | null;
+  };
+  improvedCandidateRefs: {
+    siteVersionRef: string | null;
+    runtimeArtifactRef: string | null;
+  };
+  readinessPlaceholders: {
+    domainReadinessRef: string | null;
+    billingHostingEntitlementRef: string | null;
+    rollbackReadinessRef: string | null;
+    publishTargetRef: string | null;
+  };
+  checklistRefs: unknown[];
+  findingCount: number;
+  countsBySeverity: Record<SingleSiteLaunchApprovalSeverity, number>;
+  countsByCategory: Record<SingleSiteLaunchApprovalCategory, number>;
+  unresolvedBlockerCount: number;
+  limitations: unknown[];
+  readinessWorkReady: boolean;
+  publishReadinessNotGranted: boolean;
+  launchApprovalGranted: boolean;
+  publishActivationApprovalGranted: false;
+  activePointerChanged: false;
+  runtimeMutatedByLaunchApproval: false;
+  refs: Array<{
+    id: string;
+    role: SingleSiteLaunchApprovalRefRole;
+    refType: string;
+    sourceSystem: string;
+    sourceTable: string | null;
+    sourceRecordId: string;
+    sourceWatermark: string | null;
+    stale: boolean;
+  }>;
+  events: Array<{
+    id: string;
+    eventIndex: number;
+    action: SingleSiteLaunchApprovalEventAction;
+    fromStatus: SingleSiteLaunchApprovalStatus | null;
+    toStatus: SingleSiteLaunchApprovalStatus | null;
+    actorType: string;
+    actorId: string;
+    actorRole: string;
+    occurredAt: string;
+  }>;
+  nextAction: SingleSiteRecommendedNextActionKey;
+};
+
 export type SingleSiteRecommendedNextAction = {
   actionKey: SingleSiteRecommendedNextActionKey;
   ownerRole: "migration_operator" | "source_evidence_reviewer" | "clone_reviewer" | "proposal_approver" | "domain_operator" | "billing_operator" | "launch_approver" | "release_operator" | "none";
@@ -915,6 +1012,7 @@ export type SingleSiteMigrationReadModel = SingleSiteReadModelBoundaryFlags & {
   improvedVersionReview: SingleSiteImprovedVersionReviewSummary;
   contentApproval: SingleSiteContentApprovalSummary;
   clientApproval: SingleSiteClientApprovalSummary;
+  launchApproval: SingleSiteLaunchApprovalSummary;
   evidenceCompleteness: SingleSiteEvidenceCompletenessSummary;
   blockers: SingleSiteBlockerSummary;
   refs: SingleSiteRefSummary;
@@ -1036,6 +1134,19 @@ function requiredRefsForAction(actionKey: SingleSiteRecommendedNextActionKey): S
   ) {
     return ["content_approval", "client_approval"];
   }
+  if (
+    actionKey === "start_launch_approval" ||
+    actionKey === "complete_launch_approval_draft" ||
+    actionKey === "review_launch_approval" ||
+    actionKey === "complete_launch_approval_review" ||
+    actionKey === "resolve_launch_blockers" ||
+    actionKey === "prepare_domain_billing_publish_readiness" ||
+    actionKey === "prepare_domain_billing_publish_readiness_with_limitations" ||
+    actionKey === "resolve_launch_approval_blockers" ||
+    actionKey === "review_latest_launch_approval"
+  ) {
+    return ["content_approval", "launch_approval"];
+  }
   if (actionKey === "confirm_rollback_readiness") return ["rollback_target"];
   if (actionKey === "close_out_migration") return ["closeout"];
   return [];
@@ -1050,6 +1161,7 @@ function nextActionForState(input: {
   improvedVersionReview: SingleSiteImprovedVersionReviewSummary;
   contentApproval: SingleSiteContentApprovalSummary;
   clientApproval: SingleSiteClientApprovalSummary;
+  launchApproval: SingleSiteLaunchApprovalSummary;
   blockers: SingleSiteBlockerSummary;
   closeout: SingleSiteCloseoutSummary;
   refs: readonly SingleSiteMigrationRefRow[];
@@ -1106,7 +1218,8 @@ function nextActionForState(input: {
   if (input.state === "client_approval_required") return input.clientApproval.nextAction;
   if (input.state === "domain_readiness_required") return "prepare_domain_readiness";
   if (input.state === "domain_readiness_ready" || input.state === "subscription_required" || input.state === "subscription_created") return "prepare_subscription_hosting";
-  if (input.state === "hosting_entitlement_ready" || input.state === "launch_approval_required") return "request_launch_approval";
+  if (input.state === "hosting_entitlement_ready") return "request_launch_approval";
+  if (input.state === "launch_approval_required") return input.launchApproval.nextAction;
   if (input.state === "publish_ready") return "prepare_publish";
   if (input.state === "published") {
     if (!hasRef(input.refs, ["rollback_target"])) return "confirm_rollback_readiness";
@@ -1166,6 +1279,15 @@ function actionReason(actionKey: SingleSiteRecommendedNextActionKey, state: Sing
     prepare_launch_approval_with_limitations: "Client approval is approved with limitations; launch approval may be prepared separately later with limitations.",
     resolve_client_approval_blockers: "Client approval rejected the candidate and blockers must be resolved before launch approval.",
     review_latest_client_approval: "Latest client approval was superseded and the replacement/latest approval should be checked.",
+    start_launch_approval: "Content and policy-required client approvals are ready and no canonical launch approval exists yet.",
+    complete_launch_approval_draft: "Launch approval draft needs readiness placeholders, checklist refs, findings, limitations, and notes before review.",
+    review_launch_approval: "Launch approval is ready for internal launch readiness review.",
+    complete_launch_approval_review: "Launch approval review is in progress and needs a scoped launch readiness decision.",
+    resolve_launch_blockers: "Launch approval is blocked and blockers must be resolved before readiness work can begin.",
+    prepare_domain_billing_publish_readiness: "Launch approval is approved; domain, billing, and publish readiness architecture may begin separately.",
+    prepare_domain_billing_publish_readiness_with_limitations: "Launch approval is approved with limitations; readiness work may begin separately with limitations tracked.",
+    resolve_launch_approval_blockers: "Launch approval was rejected and launch blockers must be resolved before a later launch approval.",
+    review_latest_launch_approval: "Latest launch approval was superseded and the replacement/latest approval should be reviewed.",
     no_action: "Improved version review was cancelled or no further action is projected in this MVP core.",
     retry_or_repair_improvement_execution: "Execution failed and needs retry or repair planning.",
     retry_improvement_execution: "Execution attempt is marked retry required.",
@@ -1232,6 +1354,13 @@ function ownerRole(actionKey: SingleSiteRecommendedNextActionKey): SingleSiteRec
       "prepare_launch_approval_with_limitations",
       "resolve_client_approval_blockers",
       "review_latest_client_approval",
+      "start_launch_approval",
+      "complete_launch_approval_draft",
+      "review_launch_approval",
+      "complete_launch_approval_review",
+      "resolve_launch_blockers",
+      "resolve_launch_approval_blockers",
+      "review_latest_launch_approval",
       "retry_or_repair_improvement_execution",
       "retry_improvement_execution",
       "review_latest_execution_attempt",
@@ -1243,7 +1372,7 @@ function ownerRole(actionKey: SingleSiteRecommendedNextActionKey): SingleSiteRec
   }
   if (actionKey === "prepare_domain_readiness") return "domain_operator";
   if (actionKey === "prepare_subscription_hosting") return "billing_operator";
-  if (actionKey === "request_launch_approval") return "launch_approver";
+  if (actionKey === "request_launch_approval" || actionKey === "prepare_domain_billing_publish_readiness" || actionKey === "prepare_domain_billing_publish_readiness_with_limitations") return "launch_approver";
   if (["prepare_publish", "verify_published_site", "confirm_rollback_readiness", "close_out_migration"].includes(actionKey)) return "release_operator";
   if (actionKey === "no_action_required" || actionKey === "no_action") return "none";
   return "migration_operator";
@@ -2026,6 +2155,116 @@ function buildClientApproval(
   };
 }
 
+function launchApprovalNextAction(
+  contentApproval: SingleSiteContentApprovalSummary,
+  clientApproval: SingleSiteClientApprovalSummary,
+  latest: SingleSiteLaunchApprovalRow | null,
+): SingleSiteRecommendedNextActionKey {
+  if (!latest) {
+    if (clientApproval.launchApprovalReady || contentApproval.clientLaunchReadiness) return "start_launch_approval";
+    return clientApproval.latestClientApprovalId ? clientApproval.nextAction : contentApproval.nextAction;
+  }
+  if (latest.status === "draft") return "complete_launch_approval_draft";
+  if (latest.status === "ready_for_review") return "review_launch_approval";
+  if (latest.status === "in_review") return "complete_launch_approval_review";
+  if (latest.status === "blocked") return "resolve_launch_blockers";
+  if (latest.status === "approved") return "prepare_domain_billing_publish_readiness";
+  if (latest.status === "approved_with_limitations") return "prepare_domain_billing_publish_readiness_with_limitations";
+  if (latest.status === "rejected") return "resolve_launch_approval_blockers";
+  if (latest.status === "superseded") return "review_latest_launch_approval";
+  if (latest.status === "cancelled") return "no_action";
+  return "start_launch_approval";
+}
+
+function buildLaunchApproval(
+  snapshot: SingleSiteMigrationReadRepositorySnapshot,
+  contentApproval: SingleSiteContentApprovalSummary,
+  clientApproval: SingleSiteClientApprovalSummary,
+  generatedAt: string,
+): SingleSiteLaunchApprovalSummary {
+  const latest = snapshot.latestLaunchApproval ?? null;
+  const items = snapshot.launchApprovalItems ?? [];
+  const refs = snapshot.launchApprovalRefs ?? [];
+  const events = snapshot.launchApprovalEvents ?? [];
+  const countsBySeverity = Object.fromEntries(SINGLE_SITE_LAUNCH_APPROVAL_SEVERITIES.map((severity) => [severity, 0])) as Record<SingleSiteLaunchApprovalSeverity, number>;
+  const countsByCategory = Object.fromEntries(SINGLE_SITE_LAUNCH_APPROVAL_CATEGORIES.map((category) => [category, 0])) as Record<SingleSiteLaunchApprovalCategory, number>;
+  for (const item of items) {
+    countsBySeverity[item.severity] += 1;
+    countsByCategory[item.category] += 1;
+  }
+  const readinessWorkReady = Boolean(latest?.readiness_work_ready) && (latest?.status === "approved" || latest?.status === "approved_with_limitations");
+  return {
+    latestLaunchApprovalId: latest?.id ?? null,
+    latestLaunchApprovalRef: latest?.id ?? null,
+    status: latest?.status ?? "missing",
+    decision: latest?.decision ?? null,
+    contentApprovalRefs: {
+      contentApprovalId: latest?.content_approval_id ?? null,
+      contentApprovalStatus: latest?.content_approval_status ?? null,
+      aafContentApprovalDecisionId: latest?.aaf_content_approval_decision_id ?? null,
+    },
+    clientApprovalRefs: {
+      required: Boolean(latest?.require_client_approval),
+      clientApprovalId: latest?.client_approval_id ?? null,
+      clientApprovalStatus: latest?.client_approval_status ?? null,
+      aafClientApprovalDecisionId: latest?.aaf_client_approval_decision_id ?? null,
+    },
+    aafRefs: {
+      requestId: latest?.aaf_launch_approval_request_id ?? null,
+      decisionId: latest?.aaf_launch_approval_decision_id ?? null,
+      scope: latest?.aaf_launch_approval_scope ?? null,
+      action: latest?.aaf_launch_approval_action ?? null,
+      subjectType: latest?.aaf_launch_approval_subject_type ?? null,
+    },
+    improvedCandidateRefs: {
+      siteVersionRef: latest?.improved_candidate_site_version_ref ?? null,
+      runtimeArtifactRef: latest?.improved_runtime_artifact_ref ?? null,
+    },
+    readinessPlaceholders: {
+      domainReadinessRef: latest?.domain_readiness_ref ?? null,
+      billingHostingEntitlementRef: latest?.billing_hosting_entitlement_ref ?? null,
+      rollbackReadinessRef: latest?.rollback_readiness_ref ?? null,
+      publishTargetRef: latest?.publish_target_ref ?? null,
+    },
+    checklistRefs: jsonArray(latest?.launch_checklist_refs_json),
+    findingCount: items.length,
+    countsBySeverity,
+    countsByCategory,
+    unresolvedBlockerCount: items.filter((item) => item.status === "open" && item.severity === "p0_blocker" && !item.accepted_limitation).length,
+    limitations: jsonArray(latest?.limitations_json),
+    readinessWorkReady,
+    publishReadinessNotGranted: latest?.publish_readiness_not_granted ?? true,
+    launchApprovalGranted: Boolean(latest?.launch_approval_granted) && readinessWorkReady,
+    publishActivationApprovalGranted: false,
+    activePointerChanged: false,
+    runtimeMutatedByLaunchApproval: false,
+    refs: refs.map((ref) => ({
+      id: ref.id,
+      role: ref.ref_role,
+      refType: ref.ref_type,
+      sourceSystem: ref.source_system,
+      sourceTable: ref.source_table,
+      sourceRecordId: ref.source_record_id,
+      sourceWatermark: ref.source_watermark,
+      stale: isPast(timestamp(ref.fresh_until), generatedAt),
+    })),
+    events: [...events]
+      .sort((left, right) => Number(left.event_index) - Number(right.event_index))
+      .map((event) => ({
+        id: event.id,
+        eventIndex: Number(event.event_index),
+        action: event.event_action,
+        fromStatus: event.from_status,
+        toStatus: event.to_status,
+        actorType: event.actor_type,
+        actorId: event.actor_id,
+        actorRole: event.actor_role,
+        occurredAt: timestamp(event.occurred_at) ?? timestamp(event.created_at) ?? "",
+      })),
+    nextAction: launchApprovalNextAction(contentApproval, clientApproval, latest),
+  };
+}
+
 function buildRefs(
   refs: readonly SingleSiteMigrationRefRow[],
   generatedAt: string,
@@ -2082,6 +2321,7 @@ function buildReadiness(input: {
   proposal: SingleSiteImprovementProposalPlanningSummary;
   contentApproval: SingleSiteContentApprovalSummary;
   clientApproval: SingleSiteClientApprovalSummary;
+  launchApproval: SingleSiteLaunchApprovalSummary;
   refs: SingleSiteRefSummary;
   closeout: SingleSiteCloseoutSummary;
 }): SingleSiteMvpWorkflowReadinessFlags {
@@ -2098,9 +2338,9 @@ function buildReadiness(input: {
     cloneProposalPlanningAllowed: input.cloneReview.proposalPlanningAllowed,
     proposalApprovalReady: input.proposal.proposalReadiness.readyForApproval,
     improvementReviewReady: input.state === "improvement_implementation_completed" || input.state === "improved_preview_ready" || input.state === "content_review_required",
-    domainReadinessIncomplete: input.clientApproval.launchApprovalReady && (input.state === "domain_readiness_required" || !input.refs.byRole.ddom_readiness_snapshot),
+    domainReadinessIncomplete: input.launchApproval.readinessWorkReady && (input.state === "domain_readiness_required" || !input.refs.byRole.ddom_readiness_snapshot),
     subscriptionOrHostingIncomplete: input.state === "subscription_required" || !input.refs.byRole.hosting_entitlement,
-    launchApprovalRequired: input.clientApproval.launchApprovalReady && (input.state === "launch_approval_required" || !input.refs.byRole.aaf_approval_decision),
+    launchApprovalRequired: (input.clientApproval.launchApprovalReady || input.contentApproval.clientLaunchReadiness) && !input.launchApproval.readinessWorkReady,
     publishReady: input.state === "publish_ready",
     publishReadinessIncomplete: !input.refs.byRole.publish_target || !input.refs.byRole.rollback_target,
     publishedVerificationRequired: input.state === "published",
@@ -2128,6 +2368,7 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
   const improvedVersionReview = buildImprovedVersionReview(snapshot, improvementExecution, generatedAt);
   const contentApproval = buildContentApproval(snapshot, improvedVersionReview, generatedAt);
   const clientApproval = buildClientApproval(snapshot, contentApproval, generatedAt);
+  const launchApproval = buildLaunchApproval(snapshot, contentApproval, clientApproval, generatedAt);
   const actionKey = nextActionForState({
     state: snapshot.migration.current_state,
     sourceEvidence: sourceEvidence.review,
@@ -2137,6 +2378,7 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
     improvedVersionReview,
     contentApproval,
     clientApproval,
+    launchApproval,
     blockers,
     closeout,
     refs: snapshot.refs,
@@ -2203,6 +2445,7 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
     improvedVersionReview,
     contentApproval,
     clientApproval,
+    launchApproval,
     evidenceCompleteness: sourceEvidence.completeness,
     blockers,
     refs,
@@ -2228,7 +2471,7 @@ export function buildSingleSiteMigrationReadModel(snapshot: SingleSiteMigrationR
       sourceWatermark: snapshot.migration.source_watermark,
       latestReviewWatermark: snapshot.latestSourceEvidenceReview?.source_watermark ?? null,
     },
-    workflowReadiness: buildReadiness({ state: snapshot.migration.current_state, sourceEvidence: sourceEvidence.review, cloneReview, proposal: improvementProposalPlanning, contentApproval, clientApproval, refs, closeout }),
+    workflowReadiness: buildReadiness({ state: snapshot.migration.current_state, sourceEvidence: sourceEvidence.review, cloneReview, proposal: improvementProposalPlanning, contentApproval, clientApproval, launchApproval, refs, closeout }),
     diagnostics: [
       snapshot.migration.current_stage !== SINGLE_SITE_STATE_STAGE[snapshot.migration.current_state] ? "current_stage_does_not_match_contract_state_stage" : null,
       snapshot.sourceEvidenceReviews.length > 1 ? "multiple_source_evidence_reviews_present_latest_review_selected" : null,

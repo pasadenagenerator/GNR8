@@ -31,6 +31,12 @@ import type {
   SingleSiteClientApprovalRow,
 } from "./client-approval-service";
 import type {
+  SingleSiteLaunchApprovalEventRow,
+  SingleSiteLaunchApprovalItemRow,
+  SingleSiteLaunchApprovalRefRow,
+  SingleSiteLaunchApprovalRow,
+} from "./launch-approval-service";
+import type {
   SingleSiteCloneReviewEventRow,
   SingleSiteCloneReviewItemRow,
   SingleSiteCloneReviewRefRow,
@@ -226,6 +232,12 @@ export class SingleSiteStateReadRepository {
     const clientApprovalItems = latestClientApproval ? await this.readClientApprovalItems(client, latestClientApproval.id) : [];
     const clientApprovalRefs = latestClientApproval ? await this.readClientApprovalRefs(client, latestClientApproval.id) : [];
     const clientApprovalEvents = latestClientApproval ? await this.readClientApprovalEvents(client, latestClientApproval.id) : [];
+    const hasLaunchApprovalTables = await this.launchApprovalTablesAvailable(client);
+    const launchApprovals = hasLaunchApprovalTables ? await this.readLaunchApprovalRows(client, migration.id) : [];
+    const latestLaunchApproval = launchApprovals[0] ?? null;
+    const launchApprovalItems = latestLaunchApproval ? await this.readLaunchApprovalItems(client, latestLaunchApproval.id) : [];
+    const launchApprovalRefs = latestLaunchApproval ? await this.readLaunchApprovalRefs(client, latestLaunchApproval.id) : [];
+    const launchApprovalEvents = latestLaunchApproval ? await this.readLaunchApprovalEvents(client, latestLaunchApproval.id) : [];
 
     return {
       capturedAt,
@@ -270,6 +282,11 @@ export class SingleSiteStateReadRepository {
       clientApprovalItems,
       clientApprovalRefs,
       clientApprovalEvents,
+      launchApprovals,
+      latestLaunchApproval,
+      launchApprovalItems,
+      launchApprovalRefs,
+      launchApprovalEvents,
     };
   }
 
@@ -942,5 +959,77 @@ export class SingleSiteStateReadRepository {
       [clientApprovalId],
     );
     return result.rows as SingleSiteClientApprovalEventRow[];
+  }
+
+  private async launchApprovalTablesAvailable(client: SingleSitePgClient): Promise<boolean> {
+    const result = await client.query("select to_regclass('public.gnr8_single_site_launch_approvals')::text as table_name");
+    return Boolean(result.rows[0]?.table_name);
+  }
+
+  private async readLaunchApprovalRows(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteLaunchApprovalRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        review_started_at::text as review_started_at,
+        decided_at::text as decided_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_launch_approvals
+      where migration_id = $1::uuid
+      order by public.gnr8_single_site_launch_approvals.updated_at desc, public.gnr8_single_site_launch_approvals.created_at desc
+      `,
+      [migrationId],
+    );
+    return result.rows as SingleSiteLaunchApprovalRow[];
+  }
+
+  private async readLaunchApprovalItems(client: SingleSitePgClient, launchApprovalId: string): Promise<SingleSiteLaunchApprovalItemRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_launch_approval_items
+      where launch_approval_id = $1::uuid
+      order by item_key asc
+      `,
+      [launchApprovalId],
+    );
+    return result.rows as SingleSiteLaunchApprovalItemRow[];
+  }
+
+  private async readLaunchApprovalRefs(client: SingleSitePgClient, launchApprovalId: string): Promise<SingleSiteLaunchApprovalRefRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        captured_at::text as captured_at,
+        fresh_until::text as fresh_until,
+        created_at::text as created_at
+      from public.gnr8_single_site_launch_approval_refs
+      where launch_approval_id = $1::uuid
+      order by public.gnr8_single_site_launch_approval_refs.created_at asc, ref_role asc
+      `,
+      [launchApprovalId],
+    );
+    return result.rows as SingleSiteLaunchApprovalRefRow[];
+  }
+
+  private async readLaunchApprovalEvents(client: SingleSitePgClient, launchApprovalId: string): Promise<SingleSiteLaunchApprovalEventRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        occurred_at::text as occurred_at,
+        created_at::text as created_at
+      from public.gnr8_single_site_launch_approval_events
+      where launch_approval_id = $1::uuid
+      order by event_index asc, public.gnr8_single_site_launch_approval_events.occurred_at asc
+      `,
+      [launchApprovalId],
+    );
+    return result.rows as SingleSiteLaunchApprovalEventRow[];
   }
 }

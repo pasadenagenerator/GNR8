@@ -440,6 +440,19 @@ Canonical server-only, non-executing AAF bridge and exact-scope evidence/decisio
 - `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
 - `docs/product/gnr8-single-site-client-approval-aaf-bridge-closeout.md`
 
+## MVP-34 Single-Site Launch Approval Persistence And Service Core
+
+Canonical server-only launch approval workflow persistence, service core, transition/read-model projection, focused tests, and closeout:
+- `apps/platform/supabase/migrations/20260803210000_single_site_launch_approval_core.sql`
+- `apps/platform/gnr8/single-site/launch-approval-service.ts`
+- `apps/platform/gnr8/single-site/launch-approval-service.test.ts`
+- `apps/platform/gnr8/single-site/launch-approval-service.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `docs/product/gnr8-single-site-launch-approval-persistence-service-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
