@@ -226,6 +226,25 @@ test('AAF SQL migration contains the canonical enum values', () => {
   assertSqlContainsAll(AAF_GATE_RESULTS, sql)
 })
 
+test('single-site content approval SQL constrains subject, action, and evidence pairings', () => {
+  const sql = fs.readFileSync(AAF_CONTENT_APPROVAL_MIGRATION_PATH, 'utf8')
+  for (const constraintName of [
+    'gnr8_aaf_scope_defs_content_approval_contract_ck',
+    'gnr8_aaf_requests_content_approval_subject_ck',
+    'gnr8_aaf_policy_evals_content_approval_contract_ck',
+    'gnr8_aaf_gate_attempts_content_approval_contract_ck',
+    'gnr8_aaf_evidence_content_approval_subject_ck',
+  ]) {
+    assert.match(sql, new RegExp(constraintName))
+  }
+  assert.match(sql, /scope = 'single_site_content_approval'/)
+  assert.match(sql, /subject_type = 'single_site_improved_version_review'/)
+  assert.match(sql, /action_key = 'approve_single_site_content'/)
+  assert.match(sql, /allowed_action = 'approve_single_site_content'/)
+  assert.match(sql, /required_evidence_type = 'single_site_content_approval_evidence'/)
+  assert.match(sql, /package_type <> 'single_site_content_approval_evidence'/)
+})
+
 test('AAF migration creates the required canonical table surface', () => {
   const sql = readMigration()
   for (const tableName of [

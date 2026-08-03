@@ -368,6 +368,13 @@ Canonical AAF scope/contracts foundation for single-site content approval:
 - `apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql`
 - `docs/product/gnr8-single-site-content-approval-aaf-contracts-closeout.md`
 
+## MVP-27-DB-VERIFY Single-Site Content Approval AAF Contracts DB Verification
+
+Canonical disposable PostgreSQL verification for MVP-27 AAF content approval vocabulary:
+- `docs/product/gnr8-single-site-content-approval-aaf-contracts-db-verification-closeout.md`
+- `apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql`
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
