@@ -20,6 +20,7 @@ export const SINGLE_SITE_MIGRATION_STATES = [
   "improved_preview_ready",
   "content_review_required",
   "content_approved",
+  "client_approval_required",
   "domain_readiness_required",
   "domain_readiness_ready",
   "subscription_required",
@@ -454,6 +455,85 @@ export const SINGLE_SITE_CONTENT_APPROVAL_EVENT_ACTIONS = [
   "aaf_decision_attached",
 ] as const;
 
+export const SINGLE_SITE_CLIENT_APPROVAL_STATUSES = [
+  "not_required_yet",
+  "required",
+  "draft",
+  "ready_for_review",
+  "in_review",
+  "changes_requested",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+] as const;
+
+export const SINGLE_SITE_CLIENT_APPROVAL_DECISIONS = [
+  "approve",
+  "approve_with_limitations",
+  "request_changes",
+  "reject",
+  "supersede",
+  "cancel",
+] as const;
+
+export const SINGLE_SITE_CLIENT_APPROVAL_SEVERITIES = ["p0_blocker", "p1_major", "p2_minor", "p3_note"] as const;
+
+export const SINGLE_SITE_CLIENT_APPROVAL_CATEGORIES = [
+  "business_acceptance",
+  "content_acceptance",
+  "brand_acceptance",
+  "limitation_acceptance",
+  "deferred_recommendation",
+  "legal_or_compliance",
+  "manual_note",
+  "unknown_or_manual",
+] as const;
+
+export const SINGLE_SITE_CLIENT_APPROVAL_REF_ROLES = [
+  "migration",
+  "client",
+  "site",
+  "content_approval",
+  "aaf_content_approval_decision",
+  "improved_version_review",
+  "improved_candidate_site_version",
+  "improved_runtime_artifact",
+  "proposal_plan",
+  "proposal_approval",
+  "implementation_authorization",
+  "execution_attempt",
+  "selected_recommendation",
+  "limitation",
+  "deferred_or_not_applied_recommendation",
+  "reviewer_identity",
+  "reviewer_representative_role",
+  "client_facing_summary",
+  "rendered_snapshot",
+  "aaf_client_approval_request",
+  "aaf_client_approval_decision",
+  "evidence_package",
+  "operator_note",
+  "external_reference",
+] as const;
+
+export const SINGLE_SITE_CLIENT_APPROVAL_EVENT_ACTIONS = [
+  "created",
+  "ref_attached",
+  "item_added",
+  "ready_for_review",
+  "review_started",
+  "changes_requested",
+  "approved",
+  "approved_with_limitations",
+  "rejected",
+  "superseded",
+  "cancelled",
+  "aaf_request_attached",
+  "aaf_decision_attached",
+] as const;
+
 export const SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES = [
   "unknown",
   "complete",
@@ -556,6 +636,7 @@ export const SINGLE_SITE_BLOCKER_TYPES = [
   "clone_revision_required",
   "proposal_approval_needed",
   "content_approval_needed",
+  "client_approval_needed",
   "domain_readiness_missing",
   "domain_readiness_stale",
   "subscription_missing",
@@ -588,6 +669,7 @@ export const SINGLE_SITE_MIGRATION_REF_ROLES = [
   "implementation_execution_attempt",
   "improved_version_review",
   "content_approval",
+  "client_approval",
   "domain_binding",
   "ddom_readiness_snapshot",
   "publish_target",
@@ -709,6 +791,12 @@ export type SingleSiteContentApprovalSeverity = (typeof SINGLE_SITE_CONTENT_APPR
 export type SingleSiteContentApprovalCategory = (typeof SINGLE_SITE_CONTENT_APPROVAL_CATEGORIES)[number];
 export type SingleSiteContentApprovalRefRole = (typeof SINGLE_SITE_CONTENT_APPROVAL_REF_ROLES)[number];
 export type SingleSiteContentApprovalEventAction = (typeof SINGLE_SITE_CONTENT_APPROVAL_EVENT_ACTIONS)[number];
+export type SingleSiteClientApprovalStatus = (typeof SINGLE_SITE_CLIENT_APPROVAL_STATUSES)[number];
+export type SingleSiteClientApprovalDecision = (typeof SINGLE_SITE_CLIENT_APPROVAL_DECISIONS)[number];
+export type SingleSiteClientApprovalSeverity = (typeof SINGLE_SITE_CLIENT_APPROVAL_SEVERITIES)[number];
+export type SingleSiteClientApprovalCategory = (typeof SINGLE_SITE_CLIENT_APPROVAL_CATEGORIES)[number];
+export type SingleSiteClientApprovalRefRole = (typeof SINGLE_SITE_CLIENT_APPROVAL_REF_ROLES)[number];
+export type SingleSiteClientApprovalEventAction = (typeof SINGLE_SITE_CLIENT_APPROVAL_EVENT_ACTIONS)[number];
 export type SingleSiteSourceEvidenceCompletenessStatus = (typeof SINGLE_SITE_SOURCE_EVIDENCE_COMPLETENESS_STATUSES)[number];
 export type SingleSiteSourceEvidenceReviewDecision = (typeof SINGLE_SITE_SOURCE_EVIDENCE_REVIEW_DECISIONS)[number];
 export type SingleSiteEvidenceItemCategory = (typeof SINGLE_SITE_EVIDENCE_ITEM_CATEGORIES)[number];
@@ -747,6 +835,7 @@ export const SINGLE_SITE_STATE_STAGE: Record<SingleSiteMigrationState, SingleSit
   improved_preview_ready: "improvement_content",
   content_review_required: "improvement_content",
   content_approved: "improvement_content",
+  client_approval_required: "improvement_content",
   domain_readiness_required: "domain_commercial_readiness",
   domain_readiness_ready: "domain_commercial_readiness",
   subscription_required: "domain_commercial_readiness",

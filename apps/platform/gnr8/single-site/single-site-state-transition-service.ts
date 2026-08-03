@@ -18,6 +18,7 @@ import {
   type InsertSingleSiteStateEventInput,
   type SingleSiteActorInput,
   type SingleSiteMigrationRow,
+  type SingleSitePgClient,
 } from "./single-site-state-writer-repository";
 
 export type SingleSiteTransitionRefInput = {
@@ -89,6 +90,9 @@ const ALLOWED_DIRECT_TRANSITIONS = new Set<string>([
   "improvement_implementation_completed->improved_preview_ready",
   "improved_preview_ready->content_review_required",
   "content_review_required->content_approved",
+  "content_approved->client_approval_required",
+  "client_approval_required->domain_readiness_required",
+  "client_approval_required->subscription_required",
   "content_approved->domain_readiness_required",
   "content_approved->subscription_required",
   "domain_readiness_required->domain_readiness_ready",
@@ -141,12 +145,36 @@ function contentApprovalAllowsClientOrLaunchApproval(value: unknown): boolean {
   return approval.client_or_launch_approval_ready === true && ["approved", "approved_with_limitations"].includes(String(approval.status));
 }
 
+function clientApprovalAllowsLaunchApproval(value: unknown): boolean {
+  const approval = jsonObject(value);
+  return approval.launch_approval_ready === true && ["approved", "approved_with_limitations"].includes(String(approval.status));
+}
+
 async function latestContentApprovalForMigration(tx: unknown, migrationId: string): Promise<Record<string, unknown> | null> {
   if (!tx || typeof (tx as { query?: unknown }).query !== "function") return null;
   const latest = await (tx as { query(sql: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[] }> }).query(
     `
     select *
     from public.gnr8_single_site_content_approvals
+    where migration_id = $1::uuid
+    order by updated_at desc, created_at desc
+    limit 1
+    `,
+    [migrationId],
+  );
+  return latest.rows[0] ?? null;
+}
+
+async function latestClientApprovalForMigration(tx: unknown, migrationId: string): Promise<Record<string, unknown> | null> {
+  if (!tx || typeof (tx as { query?: unknown }).query !== "function") return null;
+  const table = await (tx as { query(sql: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[] }> }).query(
+    "select to_regclass('public.gnr8_single_site_client_approvals')::text as table_name",
+  );
+  if (!table.rows[0]?.table_name) return null;
+  const latest = await (tx as { query(sql: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[] }> }).query(
+    `
+    select *
+    from public.gnr8_single_site_client_approvals
     where migration_id = $1::uuid
     order by updated_at desc, created_at desc
     limit 1
@@ -328,7 +356,7 @@ export class SingleSiteStateTransitionService {
   }
 
   private async assertTransitionAllowed(
-    tx: Parameters<SingleSiteStateWriterRepository["getMigrationById"]>[0],
+    tx: SingleSitePgClient,
     migration: SingleSiteMigrationRow,
     input: TransitionSingleSiteMigrationInput,
   ): Promise<void> {
@@ -438,8 +466,27 @@ export class SingleSiteStateTransitionService {
       }
       requireRefs(input, ["content_approval"], missing, "content approval migration ref");
     }
+    if (input.toState === "client_approval_required") {
+      if (fromState !== "content_approved") missing.push("content approved state");
+      const approval = await latestContentApprovalForMigration(tx, migration.id);
+      if (!approval) missing.push("approved content approval");
+      if (approval && !contentApprovalAllowsClientOrLaunchApproval(approval)) missing.push("approved content approval status");
+      if (!approval?.aaf_content_approval_decision_id && !input.aafApprovalDecisionId) missing.push("AAF content approval decision ref");
+      if (approval?.status === "approved_with_limitations" && (!Array.isArray(approval.limitations_json) || approval.limitations_json.length === 0)) {
+        missing.push("approved content approval limitations");
+      }
+      requireRefs(input, ["content_approval"], missing, "content approval ref");
+    }
     if (input.toState === "domain_readiness_ready") {
       requireRefs(input, ["ddom_readiness_snapshot"], missing, "DDOM readiness snapshot ref");
+    }
+    if ((input.toState === "domain_readiness_required" || input.toState === "subscription_required") && fromState === "client_approval_required") {
+      const clientApproval = await latestClientApprovalForMigration(tx, migration.id);
+      if (!clientApproval || !clientApprovalAllowsLaunchApproval(clientApproval)) missing.push("approved client approval");
+      if (clientApproval?.status === "approved_with_limitations" && (!Array.isArray(clientApproval.limitations_json) || clientApproval.limitations_json.length === 0)) {
+        missing.push("approved client approval limitations");
+      }
+      requireRefs(input, ["client_approval"], missing, "client approval ref");
     }
     if (input.toState === "subscription_created") {
       requireRefs(input, ["subscription", "stripe_subscription", "billing_account", "hosting_entitlement"], missing, "billing/subscription/entitlement ref placeholder");
@@ -447,7 +494,10 @@ export class SingleSiteStateTransitionService {
     if (input.toState === "publish_ready") {
       const approval = await latestContentApprovalForMigration(tx, migration.id);
       if (!approval || !contentApprovalAllowsClientOrLaunchApproval(approval)) missing.push("approved content approval");
+      const clientApproval = await latestClientApprovalForMigration(tx, migration.id);
+      if (!clientApproval || !clientApprovalAllowsLaunchApproval(clientApproval)) missing.push("approved client approval");
       requireRefs(input, ["content_approval"], missing, "content approval ref");
+      requireRefs(input, ["client_approval"], missing, "client approval ref");
       requireRefs(input, ["ddom_readiness_snapshot", "domain_binding"], missing, "domain readiness ref");
       requireRefs(input, ["subscription", "hosting_entitlement", "stripe_subscription"], missing, "subscription or hosting entitlement ref");
       requireRefs(input, ["aaf_approval_decision", "aaf_approval_request"], missing, "launch approval ref");

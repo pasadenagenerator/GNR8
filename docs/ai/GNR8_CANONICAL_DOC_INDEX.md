@@ -417,6 +417,19 @@ Canonical AAF scope/contracts foundation for single-site client approval and lau
 - `apps/platform/supabase/migrations/20260803170000_aaf_single_site_client_launch_approval_scopes.sql`
 - `docs/product/gnr8-single-site-client-launch-approval-aaf-contracts-closeout.md`
 
+## MVP-32 Single-Site Client Approval Persistence And Service Core
+
+Canonical server-only client approval workflow persistence, service core, transition/read-model projection, focused tests, and closeout:
+- `apps/platform/supabase/migrations/20260803190000_single_site_client_approval_core.sql`
+- `apps/platform/gnr8/single-site/client-approval-service.ts`
+- `apps/platform/gnr8/single-site/client-approval-service.test.ts`
+- `apps/platform/gnr8/single-site/client-approval-service.integration.test.ts`
+- `apps/platform/gnr8/single-site/single-site-state-contracts.ts`
+- `apps/platform/gnr8/single-site/single-site-state-transition-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-repository.ts`
+- `docs/product/gnr8-single-site-client-approval-persistence-service-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

@@ -25,6 +25,12 @@ import type {
   SingleSiteContentApprovalRow,
 } from "./content-approval-service";
 import type {
+  SingleSiteClientApprovalEventRow,
+  SingleSiteClientApprovalItemRow,
+  SingleSiteClientApprovalRefRow,
+  SingleSiteClientApprovalRow,
+} from "./client-approval-service";
+import type {
   SingleSiteCloneReviewEventRow,
   SingleSiteCloneReviewItemRow,
   SingleSiteCloneReviewRefRow,
@@ -214,6 +220,12 @@ export class SingleSiteStateReadRepository {
     const contentApprovalItems = latestContentApproval ? await this.readContentApprovalItems(client, latestContentApproval.id) : [];
     const contentApprovalRefs = latestContentApproval ? await this.readContentApprovalRefs(client, latestContentApproval.id) : [];
     const contentApprovalEvents = latestContentApproval ? await this.readContentApprovalEvents(client, latestContentApproval.id) : [];
+    const hasClientApprovalTables = await this.clientApprovalTablesAvailable(client);
+    const clientApprovals = hasClientApprovalTables ? await this.readClientApprovalRows(client, migration.id) : [];
+    const latestClientApproval = clientApprovals[0] ?? null;
+    const clientApprovalItems = latestClientApproval ? await this.readClientApprovalItems(client, latestClientApproval.id) : [];
+    const clientApprovalRefs = latestClientApproval ? await this.readClientApprovalRefs(client, latestClientApproval.id) : [];
+    const clientApprovalEvents = latestClientApproval ? await this.readClientApprovalEvents(client, latestClientApproval.id) : [];
 
     return {
       capturedAt,
@@ -253,6 +265,11 @@ export class SingleSiteStateReadRepository {
       contentApprovalItems,
       contentApprovalRefs,
       contentApprovalEvents,
+      clientApprovals,
+      latestClientApproval,
+      clientApprovalItems,
+      clientApprovalRefs,
+      clientApprovalEvents,
     };
   }
 
@@ -853,5 +870,77 @@ export class SingleSiteStateReadRepository {
       [contentApprovalId],
     );
     return result.rows as SingleSiteContentApprovalEventRow[];
+  }
+
+  private async clientApprovalTablesAvailable(client: SingleSitePgClient): Promise<boolean> {
+    const result = await client.query("select to_regclass('public.gnr8_single_site_client_approvals')::text as table_name");
+    return Boolean(result.rows[0]?.table_name);
+  }
+
+  private async readClientApprovalRows(client: SingleSitePgClient, migrationId: string): Promise<SingleSiteClientApprovalRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        review_started_at::text as review_started_at,
+        decided_at::text as decided_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_client_approvals
+      where migration_id = $1::uuid
+      order by public.gnr8_single_site_client_approvals.updated_at desc, public.gnr8_single_site_client_approvals.created_at desc
+      `,
+      [migrationId],
+    );
+    return result.rows as SingleSiteClientApprovalRow[];
+  }
+
+  private async readClientApprovalItems(client: SingleSitePgClient, clientApprovalId: string): Promise<SingleSiteClientApprovalItemRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_client_approval_items
+      where client_approval_id = $1::uuid
+      order by item_key asc
+      `,
+      [clientApprovalId],
+    );
+    return result.rows as SingleSiteClientApprovalItemRow[];
+  }
+
+  private async readClientApprovalRefs(client: SingleSitePgClient, clientApprovalId: string): Promise<SingleSiteClientApprovalRefRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        captured_at::text as captured_at,
+        fresh_until::text as fresh_until,
+        created_at::text as created_at
+      from public.gnr8_single_site_client_approval_refs
+      where client_approval_id = $1::uuid
+      order by public.gnr8_single_site_client_approval_refs.created_at asc, ref_role asc
+      `,
+      [clientApprovalId],
+    );
+    return result.rows as SingleSiteClientApprovalRefRow[];
+  }
+
+  private async readClientApprovalEvents(client: SingleSitePgClient, clientApprovalId: string): Promise<SingleSiteClientApprovalEventRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        occurred_at::text as occurred_at,
+        created_at::text as created_at
+      from public.gnr8_single_site_client_approval_events
+      where client_approval_id = $1::uuid
+      order by event_index asc, public.gnr8_single_site_client_approval_events.occurred_at asc
+      `,
+      [clientApprovalId],
+    );
+    return result.rows as SingleSiteClientApprovalEventRow[];
   }
 }
