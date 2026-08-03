@@ -384,6 +384,16 @@ Canonical server-only content approval workflow persistence, service core, trans
 - `apps/platform/gnr8/single-site/content-approval-service.integration.test.ts`
 - `docs/product/gnr8-single-site-content-approval-persistence-service-closeout.md`
 
+## MVP-29 Single-Site Content Approval AAF Bridge And Evidence Validation
+
+Canonical server-only, non-executing AAF bridge and exact-scope evidence/decision validation core for single-site content approval:
+- `apps/platform/gnr8/single-site/content-approval-aaf-bridge.ts`
+- `apps/platform/gnr8/single-site/content-approval-aaf-bridge.test.ts`
+- `apps/platform/gnr8/single-site/content-approval-aaf-bridge.integration.test.ts`
+- `apps/platform/gnr8/single-site/content-approval-service.ts`
+- `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
+- `docs/product/gnr8-single-site-content-approval-aaf-bridge-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

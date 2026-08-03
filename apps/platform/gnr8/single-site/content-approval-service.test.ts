@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ContentApprovalService, type CreateOrReuseContentApprovalInput } from "./content-approval-service";
+import type { ContentApprovalAafValidationResult } from "./content-approval-aaf-bridge";
 import { SingleSiteIdempotencyConflictError } from "./single-site-state-contracts";
 
 const MIGRATION_ID = "11111111-1111-4111-8111-111111111111";
@@ -16,6 +17,22 @@ const CONTENT_APPROVAL_ID = "99999999-9999-4999-8999-999999999999";
 
 function actor() {
   return { actorType: "human" as const, actorId: "content-reviewer", actorRole: "migration_operator" };
+}
+
+function validation(decisionId: string, status: "granted" | "granted_with_limitations" = "granted"): ContentApprovalAafValidationResult {
+  return {
+    valid: true,
+    status,
+    scope: "single_site_content_approval",
+    subjectType: "single_site_improved_version_review",
+    subjectId: REVIEW_ID,
+    approvalRequestId: "aaf-request-1",
+    approvalDecisionId: decisionId,
+    evidencePackageId: "aaf-evidence-1",
+    limitations: status === "granted_with_limitations" ? [{ summary: "Legal disclaimer is operator-accepted." }] : [],
+    blockerCodes: [],
+    semanticWatermark: "single-site-content-approval:test",
+  };
 }
 
 function createInput(overrides: Partial<CreateOrReuseContentApprovalInput> = {}): CreateOrReuseContentApprovalInput {
@@ -285,6 +302,7 @@ test("attaches AAF refs, findings, review lifecycle, approvals, rejection, cance
     refRole: "aaf_content_approval_decision",
     refType: "aaf_approval_decision",
     sourceRecordId: "aaf-decision-1",
+    contentApprovalValidation: validation("aaf-decision-1"),
     actor: actor(),
     correlationId: "corr-aaf-decision",
     idempotencyKey: "idem-aaf-decision",
@@ -305,6 +323,7 @@ test("attaches AAF refs, findings, review lifecycle, approvals, rejection, cance
   const approved = await service.approve({
     contentApprovalId: approval.id,
     aafContentApprovalDecisionId: "aaf-decision-1",
+    contentApprovalValidation: validation("aaf-decision-1"),
     actor: actor(),
     correlationId: "corr-approve",
     idempotencyKey: "idem-approve",
@@ -323,6 +342,7 @@ test("attaches AAF refs, findings, review lifecycle, approvals, rejection, cance
     refRole: "aaf_content_approval_decision",
     refType: "aaf_approval_decision",
     sourceRecordId: "aaf-decision-limited",
+    contentApprovalValidation: validation("aaf-decision-limited", "granted_with_limitations"),
     actor: actor(),
     correlationId: "corr-limited-aaf",
     idempotencyKey: "idem-limited-aaf",
@@ -331,7 +351,7 @@ test("attaches AAF refs, findings, review lifecycle, approvals, rejection, cance
     (await limitedService.approveWithLimitations({
       contentApprovalId: limitedApproval.id,
       aafContentApprovalDecisionId: "aaf-decision-limited",
-      limitationsJson: [{ summary: "Legal disclaimer is operator-accepted." }],
+      contentApprovalValidation: validation("aaf-decision-limited", "granted_with_limitations"),
       actor: actor(),
       correlationId: "corr-limited",
       idempotencyKey: "idem-limited",
@@ -360,6 +380,35 @@ test("blocks approval without AAF decision, with p0 blockers, and with required 
   const service = new ContentApprovalService(fakeRepository());
   const approval = await createContentApproval(service);
   await assert.rejects(() => service.approve({ contentApprovalId: approval.id, actor: actor(), correlationId: "corr-no-aaf", idempotencyKey: "idem-no-aaf" }), /AAF content approval decision/);
+  await assert.rejects(
+    () =>
+      service.attachAafDecisionRef({
+        contentApprovalId: approval.id,
+        migrationId: MIGRATION_ID,
+        refRole: "aaf_content_approval_decision",
+        refType: "aaf_approval_decision",
+        sourceRecordId: "aaf-decision-unvalidated",
+        actor: actor(),
+        correlationId: "corr-unvalidated-aaf",
+        idempotencyKey: "idem-unvalidated-aaf",
+      }),
+    /bridge validation/,
+  );
+  await assert.rejects(
+    () =>
+      service.attachAafDecisionRef({
+        contentApprovalId: approval.id,
+        migrationId: MIGRATION_ID,
+        refRole: "aaf_content_approval_decision",
+        refType: "aaf_approval_decision",
+        sourceRecordId: "aaf-decision-wrong-scope",
+        contentApprovalValidation: { ...validation("aaf-decision-wrong-scope"), scope: "client_review" },
+        actor: actor(),
+        correlationId: "corr-wrong-scope-aaf",
+        idempotencyKey: "idem-wrong-scope-aaf",
+      }),
+    /wrong scope/,
+  );
 
   const p0Service = new ContentApprovalService(fakeRepository());
   const p0Approval = await createContentApproval(p0Service);
@@ -369,6 +418,7 @@ test("blocks approval without AAF decision, with p0 blockers, and with required 
     refRole: "aaf_content_approval_decision",
     refType: "aaf_approval_decision",
     sourceRecordId: "aaf-decision-p0",
+    contentApprovalValidation: validation("aaf-decision-p0"),
     actor: actor(),
     correlationId: "corr-p0-aaf",
     idempotencyKey: "idem-p0-aaf",
@@ -386,7 +436,15 @@ test("blocks approval without AAF decision, with p0 blockers, and with required 
     idempotencyKey: "idem-p0",
   });
   await assert.rejects(
-    () => p0Service.approve({ contentApprovalId: p0Approval.id, aafContentApprovalDecisionId: "aaf-decision-p0", actor: actor(), correlationId: "corr-p0-approve", idempotencyKey: "idem-p0-approve" }),
+    () =>
+      p0Service.approve({
+        contentApprovalId: p0Approval.id,
+        aafContentApprovalDecisionId: "aaf-decision-p0",
+        contentApprovalValidation: validation("aaf-decision-p0"),
+        actor: actor(),
+        correlationId: "corr-p0-approve",
+        idempotencyKey: "idem-p0-approve",
+      }),
     /p0 blockers/,
   );
 
@@ -398,6 +456,7 @@ test("blocks approval without AAF decision, with p0 blockers, and with required 
     refRole: "aaf_content_approval_decision",
     refType: "aaf_approval_decision",
     sourceRecordId: "aaf-decision-rec",
+    contentApprovalValidation: validation("aaf-decision-rec"),
     actor: actor(),
     correlationId: "corr-rec-aaf",
     idempotencyKey: "idem-rec-aaf",
@@ -407,6 +466,7 @@ test("blocks approval without AAF decision, with p0 blockers, and with required 
       recService.approve({
         contentApprovalId: recApproval.id,
         aafContentApprovalDecisionId: "aaf-decision-rec",
+        contentApprovalValidation: validation("aaf-decision-rec"),
         unresolvedNotAppliedRecommendationsJson: [{ required: true, recommendationId: RECOMMENDATION_ID }],
         actor: actor(),
         correlationId: "corr-rec-approve",
@@ -436,11 +496,19 @@ test("idempotent retry works, idempotency drift conflicts, readiness is scoped, 
     refRole: "aaf_content_approval_decision",
     refType: "aaf_approval_decision",
     sourceRecordId: "aaf-decision-ready",
+    contentApprovalValidation: validation("aaf-decision-ready"),
     actor: actor(),
     correlationId: "corr-ready-aaf",
     idempotencyKey: "idem-ready-aaf",
   });
-  await readyService.approve({ contentApprovalId: readyApproval.id, aafContentApprovalDecisionId: "aaf-decision-ready", actor: actor(), correlationId: "corr-ready-approve", idempotencyKey: "idem-ready-approve" });
+  await readyService.approve({
+    contentApprovalId: readyApproval.id,
+    aafContentApprovalDecisionId: "aaf-decision-ready",
+    contentApprovalValidation: validation("aaf-decision-ready"),
+    actor: actor(),
+    correlationId: "corr-ready-approve",
+    idempotencyKey: "idem-ready-approve",
+  });
   const readiness = await readyService.getClientOrLaunchApprovalReadiness(MIGRATION_ID);
   assert.equal(readiness.ready, true);
   await assert.rejects(

@@ -7,6 +7,7 @@ import test from "node:test";
 import { Pool } from "pg";
 
 import { ContentApprovalService } from "./content-approval-service";
+import type { ContentApprovalAafValidationResult } from "./content-approval-aaf-bridge";
 import { ImprovedVersionReviewService } from "./improved-version-review-service";
 import { SingleSiteStateReadRepository, type SingleSiteStateReadPool } from "./single-site-state-read-repository";
 import { SingleSiteStateWriterRepository, type SingleSiteStateWriterPool, type SingleSiteStateWriterTx } from "./single-site-state-writer-repository";
@@ -116,6 +117,22 @@ function readPool(pool: Pool): SingleSiteStateReadPool {
 
 function actor() {
   return { actorType: "human" as const, actorId: "content-approval-integration-operator", actorRole: "migration_operator" };
+}
+
+function validation(decisionId: string, reviewId: string, status: "granted" | "granted_with_limitations" = "granted"): ContentApprovalAafValidationResult {
+  return {
+    valid: true,
+    status,
+    scope: "single_site_content_approval",
+    subjectType: "single_site_improved_version_review",
+    subjectId: reviewId,
+    approvalRequestId: `request-for-${decisionId}`,
+    approvalDecisionId: decisionId,
+    evidencePackageId: `evidence-for-${decisionId}`,
+    limitations: status === "granted_with_limitations" ? [{ summary: "Accepted manual caveat." }] : [],
+    blockerCodes: [],
+    semanticWatermark: `single-site-content-approval:${decisionId}`,
+  };
 }
 
 async function seedCompletedExecution(writer: SingleSiteStateWriterRepository, suffix: string) {
@@ -310,6 +327,7 @@ test("content approval persists, projects, and preserves runtime/publish boundar
       refRole: "aaf_content_approval_decision",
       refType: "aaf_approval_decision",
       sourceRecordId: contentDecisionId,
+      contentApprovalValidation: validation(contentDecisionId, seeded.improvedReview.id),
       actor: actor(),
       correlationId: `corr-content-aaf-decision-${suffix}`,
       idempotencyKey: `idem-content-aaf-decision-${suffix}`,
@@ -333,6 +351,7 @@ test("content approval persists, projects, and preserves runtime/publish boundar
     const approved = await service.approve({
       contentApprovalId: created.contentApproval.id,
       aafContentApprovalDecisionId: contentDecisionId,
+      contentApprovalValidation: validation(contentDecisionId, seeded.improvedReview.id),
       decisionSummaryJson: { decision: "content approved" },
       actor: actor(),
       correlationId: `corr-content-approve-${suffix}`,
@@ -364,6 +383,7 @@ test("content approval persists, projects, and preserves runtime/publish boundar
       refRole: "aaf_content_approval_decision",
       refType: "aaf_approval_decision",
       sourceRecordId: limitedContentDecisionId,
+      contentApprovalValidation: validation(limitedContentDecisionId, limitedSeed.improvedReview.id, "granted_with_limitations"),
       actor: actor(),
       correlationId: `corr-content-aaf-limited-${suffix}`,
       idempotencyKey: `idem-content-aaf-limited-${suffix}`,
@@ -371,7 +391,7 @@ test("content approval persists, projects, and preserves runtime/publish boundar
     const limited = await service.approveWithLimitations({
       contentApprovalId: limitedCreated.contentApproval.id,
       aafContentApprovalDecisionId: limitedContentDecisionId,
-      limitationsJson: [{ summary: "Accepted manual caveat." }],
+      contentApprovalValidation: validation(limitedContentDecisionId, limitedSeed.improvedReview.id, "granted_with_limitations"),
       actor: actor(),
       correlationId: `corr-content-limited-${suffix}`,
       idempotencyKey: `idem-content-limited-${suffix}`,

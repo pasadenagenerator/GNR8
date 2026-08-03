@@ -29,6 +29,7 @@ import {
 import type {
   SingleSiteImprovedVersionReviewRow,
 } from "./improved-version-review-service";
+import type { ContentApprovalAafValidationResult } from "./content-approval-aaf-bridge";
 
 export const CONTENT_APPROVAL_SERVICE_VERSION = "mvp-28-content-approval-service:v1" as const;
 export const CONTENT_APPROVAL_AAF_SCOPE = "single_site_content_approval" as const;
@@ -127,6 +128,7 @@ export type AddContentApprovalFindingInput = ContentApprovalEnvelope & {
 export type ContentApprovalDecisionInput = ContentApprovalEnvelope & {
   contentApprovalId: string;
   aafContentApprovalDecisionId?: string | null;
+  contentApprovalValidation?: ContentApprovalAafValidationResult | null;
   aafScope?: string | null;
   aafAction?: string | null;
   aafSubjectType?: string | null;
@@ -443,6 +445,39 @@ function normalizeAafShape(input: {
   return { scope, action, subjectType };
 }
 
+function assertValidatedContentApprovalDecision(
+  decisionId: string,
+  validation: ContentApprovalAafValidationResult | null | undefined,
+  allowedStatuses: readonly ("granted" | "granted_with_limitations")[],
+): ContentApprovalAafValidationResult {
+  if (!validation?.valid) throw new SingleSiteTransitionError("content approval AAF decision ref requires successful MVP-29 bridge validation");
+  if (validation.scope !== CONTENT_APPROVAL_AAF_SCOPE) throw new SingleSiteTransitionError("validated content approval AAF decision has wrong scope");
+  if (validation.subjectType !== CONTENT_APPROVAL_AAF_SUBJECT_TYPE) throw new SingleSiteTransitionError("validated content approval AAF decision has wrong subject type");
+  if (validation.approvalDecisionId !== decisionId) throw new SingleSiteTransitionError("validated content approval AAF decision id does not match supplied ref");
+  if (!allowedStatuses.includes(validation.status as "granted" | "granted_with_limitations")) {
+    throw new SingleSiteTransitionError(`validated content approval AAF decision status ${validation.status} is not allowed for this operation`);
+  }
+  return validation;
+}
+
+function withCarriedValidationLimitations(
+  input: ContentApprovalDecisionInput,
+  status: SingleSiteContentApprovalStatus,
+): ContentApprovalDecisionInput {
+  if (status !== "approved" && status !== "approved_with_limitations") return input;
+  const decisionId = optionalText(input.aafContentApprovalDecisionId);
+  if (!decisionId) return input;
+  const validation = assertValidatedContentApprovalDecision(
+    decisionId,
+    input.contentApprovalValidation,
+    status === "approved" ? ["granted"] : ["granted_with_limitations"],
+  );
+  if (status !== "approved_with_limitations") return input;
+  const carried = jsonArray(validation.limitations);
+  const supplied = jsonArray(input.limitationsJson);
+  return { ...input, limitationsJson: [...carried, ...supplied] };
+}
+
 function decisionFor(status: SingleSiteContentApprovalStatus): SingleSiteContentApprovalDecision | null {
   if (status === "approved") return "approve";
   if (status === "approved_with_limitations") return "approve_with_limitations";
@@ -516,6 +551,9 @@ export class ContentApprovalService {
 
   async createOrReuseContentApproval(input: CreateOrReuseContentApprovalInput): Promise<ContentApprovalOperationResult> {
     return this.repository.withTransaction(async (tx) => {
+      if (optionalText(input.aafContentApprovalDecisionId)) {
+        throw new SingleSiteTransitionError("content approval decision refs must be attached after MVP-29 bridge validation");
+      }
       const migration = await this.requiredNonTerminalMigration(tx, input.migrationId);
       if (migration.client_id !== requiredText("clientId", input.clientId)) throw new SingleSiteTransitionError("content approval clientId does not match migration");
       if ((migration.site_id ?? "") !== requiredText("siteId", input.siteId)) throw new SingleSiteTransitionError("content approval siteId does not match migration");
@@ -559,8 +597,16 @@ export class ContentApprovalService {
     return result;
   }
 
-  async attachAafDecisionRef(input: RecordContentApprovalRefInput & { aafScope?: string | null; aafAction?: string | null; aafSubjectType?: string | null }): Promise<{ refId: string; eventId: string; reusedExisting: boolean }> {
+  async attachAafDecisionRef(
+    input: RecordContentApprovalRefInput & {
+      contentApprovalValidation?: ContentApprovalAafValidationResult | null;
+      aafScope?: string | null;
+      aafAction?: string | null;
+      aafSubjectType?: string | null;
+    },
+  ): Promise<{ refId: string; eventId: string; reusedExisting: boolean }> {
     normalizeAafShape(input);
+    assertValidatedContentApprovalDecision(input.sourceRecordId, input.contentApprovalValidation, ["granted", "granted_with_limitations"]);
     const result = await this.recordRef({ ...input, refRole: "aaf_content_approval_decision", refType: input.refType || "aaf_approval_decision" });
     await this.patchAafRef(input.contentApprovalId, { decisionId: input.sourceRecordId, input });
     return result;
@@ -1020,6 +1066,7 @@ export class ContentApprovalService {
     status: "changes_requested" | "approved" | "approved_with_limitations" | "rejected" | "superseded" | "cancelled",
   ): Promise<ContentApprovalOperationResult> {
     return this.repository.withTransaction(async (tx) => {
+      const effectiveInput = withCarriedValidationLimitations(input, status);
       const approvalMaybe = await this.getContentApprovalById(tx, requiredText("contentApprovalId", input.contentApprovalId));
       if (!approvalMaybe) throw new SingleSiteTransitionError(`content approval ${input.contentApprovalId} was not found`);
       const eventKey = `${input.idempotencyKey}:event:${status}`;
@@ -1031,16 +1078,16 @@ export class ContentApprovalService {
           eventAction: eventAction(status),
           fromStatus: existingEvent.from_status,
           toStatus: existingEvent.to_status,
-          actor: input.actor,
-          detailsJson: input.detailsJson ?? { reason: input.reason ?? null, replacementContentApprovalId: input.replacementContentApprovalId ?? null },
-          limitationsJson: input.limitationsJson,
-          correlationId: input.correlationId,
-          causationId: input.causationId,
+          actor: effectiveInput.actor,
+          detailsJson: effectiveInput.detailsJson ?? { reason: effectiveInput.reason ?? null, replacementContentApprovalId: effectiveInput.replacementContentApprovalId ?? null },
+          limitationsJson: effectiveInput.limitationsJson,
+          correlationId: effectiveInput.correlationId,
+          causationId: effectiveInput.causationId,
           idempotencyKey: eventKey,
-          requestId: input.requestId,
-          privacyLabel: input.privacyLabel,
-          retentionClass: input.retentionClass,
-          metadataJson: input.metadataJson,
+          requestId: effectiveInput.requestId,
+          privacyLabel: effectiveInput.privacyLabel,
+          retentionClass: effectiveInput.retentionClass,
+          metadataJson: effectiveInput.metadataJson,
         });
         return { contentApproval: approvalMaybe, eventId: existingEvent.id, reusedExisting: true };
       }
@@ -1048,10 +1095,10 @@ export class ContentApprovalService {
       const migration = await this.requiredNonTerminalMigration(tx, approval.migration_id);
       const items = await this.listContentApprovalItems(tx, approval.id);
       const refs = await this.listContentApprovalRefs(tx, approval.id);
-      this.assertDecisionAllowed(status, approval, input, items, refs);
-      const updated = await this.updateContentApprovalStatus(tx, approval, input, status, {
+      this.assertDecisionAllowed(status, approval, effectiveInput, items, refs);
+      const updated = await this.updateContentApprovalStatus(tx, approval, effectiveInput, status, {
         decidedAt: new Date().toISOString(),
-        supersededByContentApprovalId: status === "superseded" ? input.replacementContentApprovalId : undefined,
+        supersededByContentApprovalId: status === "superseded" ? effectiveInput.replacementContentApprovalId : undefined,
       });
       const event = await this.insertEventIfNeeded(tx, {
         contentApprovalId: approval.id,
@@ -1059,19 +1106,19 @@ export class ContentApprovalService {
         eventAction: eventAction(status),
         fromStatus: approval.status,
         toStatus: status,
-        actor: input.actor,
-        detailsJson: input.detailsJson ?? { reason: input.reason ?? null, replacementContentApprovalId: input.replacementContentApprovalId ?? null },
-        limitationsJson: input.limitationsJson,
-        correlationId: input.correlationId,
-        causationId: input.causationId,
+        actor: effectiveInput.actor,
+        detailsJson: effectiveInput.detailsJson ?? { reason: effectiveInput.reason ?? null, replacementContentApprovalId: effectiveInput.replacementContentApprovalId ?? null },
+        limitationsJson: effectiveInput.limitationsJson,
+        correlationId: effectiveInput.correlationId,
+        causationId: effectiveInput.causationId,
         idempotencyKey: eventKey,
-        requestId: input.requestId,
-        privacyLabel: input.privacyLabel,
-        retentionClass: input.retentionClass,
-        metadataJson: input.metadataJson,
+        requestId: effectiveInput.requestId,
+        privacyLabel: effectiveInput.privacyLabel,
+        retentionClass: effectiveInput.retentionClass,
+        metadataJson: effectiveInput.metadataJson,
       });
-      if (status === "superseded") await this.insertSupersession(tx, approval, input);
-      await this.upsertDecisionStageSummary(tx, migration, updated, input);
+      if (status === "superseded") await this.insertSupersession(tx, approval, effectiveInput);
+      await this.upsertDecisionStageSummary(tx, migration, updated, effectiveInput);
       return { contentApproval: updated, eventId: event.id, reusedExisting: event.reusedExisting };
     });
   }
@@ -1088,6 +1135,7 @@ export class ContentApprovalService {
       const aafShape = normalizeAafShape(input);
       const decisionRef = optionalText(input.aafContentApprovalDecisionId) ?? approval.aaf_content_approval_decision_id;
       if (!decisionRef) throw new SingleSiteTransitionError("content approval requires exact-scope AAF content approval decision ref before approval");
+      assertValidatedContentApprovalDecision(decisionRef, input.contentApprovalValidation, status === "approved" ? ["granted"] : ["granted_with_limitations"]);
       const unresolvedP0 = items.filter((item) => item.status === "open" && item.severity === "p0_blocker" && !item.accepted_limitation);
       if (unresolvedP0.length > 0) throw new SingleSiteTransitionError("cannot approve content with unresolved p0 blockers");
       const missingRequiredRecommendations = items.filter(

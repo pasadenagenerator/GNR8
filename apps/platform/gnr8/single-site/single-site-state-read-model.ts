@@ -700,6 +700,12 @@ export type SingleSiteContentApprovalSummary = {
     action: string | null;
     subjectType: string | null;
   };
+  aafValidation: {
+    requestPrepared: boolean;
+    decisionState: "missing" | "request_prepared" | "decision_ref_attached" | "decision_validated" | "decision_invalid";
+    approvedWithLimitations: boolean;
+    limitationsCarriedForward: boolean;
+  };
   evidenceRefs: {
     evidencePackageRefs: unknown[];
     renderedSnapshotRefs: unknown[];
@@ -1634,6 +1640,31 @@ function contentApprovalNextAction(
   return "start_content_approval";
 }
 
+function contentApprovalAafValidation(latest: SingleSiteContentApprovalRow | null): SingleSiteContentApprovalSummary["aafValidation"] {
+  const requestPrepared = Boolean(latest?.aaf_content_approval_request_id);
+  const decisionId = latest?.aaf_content_approval_decision_id ?? null;
+  const exactShape =
+    latest?.aaf_content_approval_scope === "single_site_content_approval" &&
+    latest?.aaf_content_approval_action === "approve_single_site_content" &&
+    latest?.aaf_content_approval_subject_type === "single_site_improved_version_review";
+  const approved = latest?.status === "approved" || latest?.status === "approved_with_limitations";
+  const decisionState = !decisionId
+    ? requestPrepared
+      ? "request_prepared"
+      : "missing"
+    : !exactShape
+      ? "decision_invalid"
+      : approved
+        ? "decision_validated"
+        : "decision_ref_attached";
+  return {
+    requestPrepared,
+    decisionState,
+    approvedWithLimitations: latest?.status === "approved_with_limitations",
+    limitationsCarriedForward: latest?.status === "approved_with_limitations" && jsonArray(latest.limitations_json).length > 0,
+  };
+}
+
 function buildContentApproval(
   snapshot: SingleSiteMigrationReadRepositorySnapshot,
   improvedVersionReview: SingleSiteImprovedVersionReviewSummary,
@@ -1670,6 +1701,7 @@ function buildContentApproval(
       action: latest?.aaf_content_approval_action ?? null,
       subjectType: latest?.aaf_content_approval_subject_type ?? null,
     },
+    aafValidation: contentApprovalAafValidation(latest),
     evidenceRefs: {
       evidencePackageRefs: jsonArray(latest?.evidence_package_refs_json),
       renderedSnapshotRefs: jsonArray(latest?.rendered_snapshot_refs_json),
