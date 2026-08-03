@@ -15,6 +15,15 @@ import {
   AAF_REDACTION_LABELS,
   AAF_REPLAY_CLASSES,
   AAF_RETENTION_CLASSES,
+  AAF_SINGLE_SITE_APPROVAL_SCOPE_CONTRACTS,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_PROHIBITED_SUBSTITUTIONS,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_REQUIRED_EVIDENCE_REFS,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_REQUIRED_SUBJECT_REFS,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
@@ -31,6 +40,14 @@ import {
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_REQUIRED_SUBJECT_REFS,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_PROHIBITED_SUBSTITUTIONS,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_EVIDENCE_REFS,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_SUBJECT_REFS,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
   AAF_SCOPE_PROHIBITED_ACTIONS,
   AAF_SCOPE_REPLAY_CLASS,
 } from './aaf-contracts'
@@ -51,6 +68,10 @@ const AAF_CONTENT_APPROVAL_MIGRATION_PATH = path.resolve(
   process.cwd(),
   'apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql',
 )
+const AAF_CLIENT_LAUNCH_APPROVAL_MIGRATION_PATH = path.resolve(
+  process.cwd(),
+  'apps/platform/supabase/migrations/20260803170000_aaf_single_site_client_launch_approval_scopes.sql',
+)
 
 function readMigration(): string {
   return fs.readFileSync(MIGRATION_PATH, 'utf8')
@@ -62,6 +83,7 @@ function readAafVocabularyMigrations(): string {
     AAF_SCOPE_EXPANSION_MIGRATION_PATH,
     AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH,
     AAF_CONTENT_APPROVAL_MIGRATION_PATH,
+    AAF_CLIENT_LAUNCH_APPROVAL_MIGRATION_PATH,
   ]
     .map((filePath) => fs.readFileSync(filePath, 'utf8'))
     .join('\n')
@@ -108,6 +130,8 @@ test('AAF approval statuses, scopes, and policy results remain canonical', () =>
     'ai_advisory_plan_acceptance',
     'single_site_improvement_implementation_authorization',
     'single_site_content_approval',
+    'single_site_client_approval',
+    'single_site_launch_approval',
   ])
   assert.deepEqual(AAF_POLICY_EVALUATION_RESULTS, [
     'approval_required',
@@ -168,6 +192,8 @@ test('AAF audit and evidence vocabularies remain canonical', () => {
     'incident_recovery_evidence',
     'single_site_improvement_implementation_authorization_evidence',
     'single_site_content_approval_evidence',
+    'single_site_client_approval_evidence',
+    'single_site_launch_approval_evidence',
   ])
 })
 
@@ -243,6 +269,29 @@ test('single-site content approval SQL constrains subject, action, and evidence 
   assert.match(sql, /allowed_action = 'approve_single_site_content'/)
   assert.match(sql, /required_evidence_type = 'single_site_content_approval_evidence'/)
   assert.match(sql, /package_type <> 'single_site_content_approval_evidence'/)
+})
+
+test('single-site client and launch approval SQL constrains subject, action, and evidence pairings', () => {
+  const sql = fs.readFileSync(AAF_CLIENT_LAUNCH_APPROVAL_MIGRATION_PATH, 'utf8')
+  for (const constraintName of [
+    'gnr8_aaf_scope_defs_client_launch_approval_contract_ck',
+    'gnr8_aaf_requests_client_launch_approval_subject_ck',
+    'gnr8_aaf_policy_evals_client_launch_approval_contract_ck',
+    'gnr8_aaf_gate_attempts_client_launch_approval_contract_ck',
+    'gnr8_aaf_evidence_client_launch_approval_subject_ck',
+  ]) {
+    assert.match(sql, new RegExp(constraintName))
+  }
+  assert.match(sql, /scope = 'single_site_client_approval'/)
+  assert.match(sql, /scope = 'single_site_launch_approval'/)
+  assert.match(sql, /subject_type = 'single_site_improved_candidate_client_acceptance'/)
+  assert.match(sql, /subject_type = 'single_site_launch_readiness_review'/)
+  assert.match(sql, /action_key = 'approve_single_site_client_acceptance'/)
+  assert.match(sql, /action_key = 'approve_single_site_launch_readiness'/)
+  assert.match(sql, /required_evidence_type = 'single_site_client_approval_evidence'/)
+  assert.match(sql, /required_evidence_type = 'single_site_launch_approval_evidence'/)
+  assert.match(sql, /package_type = 'single_site_client_approval_evidence'/)
+  assert.match(sql, /package_type = 'single_site_launch_approval_evidence'/)
 })
 
 test('AAF migration creates the required canonical table surface', () => {
@@ -611,6 +660,222 @@ test('single-site content approval supports scoped limited grants with carried l
   assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_SUBJECT_REFS.includes('limitations'), true)
   assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_REQUIRED_EVIDENCE_REFS.includes('known_limitations'), true)
   assert.equal(AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes('limitations_current_and_carried_forward'), true)
+})
+
+test('single-site client approval contract is explicit and non-replayable', () => {
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE, 'single_site_client_approval')
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE, 'single_site_client_approval_evidence')
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE, 'single_site_improved_candidate_client_acceptance')
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION, 'approve_single_site_client_acceptance')
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE], 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.replayClass, 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.humanApprovalReplayable, false)
+  assert.deepEqual(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.allowedDecisionStatuses, [
+    'granted',
+    'granted_with_limitations',
+    'rejected',
+    'revoked',
+    'expired',
+    'superseded',
+    'cancelled',
+  ])
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.allowedGateResults.includes('not_required_by_policy'), false)
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes('limitations_current_and_carried_forward'), true)
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.nonApprovalBoundaries.includes('launch_approval'), true)
+})
+
+test('single-site client approval pins required subject and evidence refs', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_CLIENT_APPROVAL_REQUIRED_SUBJECT_REFS, [
+    'tenant',
+    'client',
+    'site',
+    'single_site_migration',
+    'content_approval',
+    'improved_candidate_site_version',
+    'improved_runtime_artifact',
+    'improved_version_review',
+    'proposal_plan',
+    'proposal_approval',
+    'implementation_authorization',
+    'improvement_execution_attempt',
+    'selected_recommendations',
+    'limitations',
+    'client_or_account_reviewer_identity',
+    'client_or_account_reviewer_representative_role',
+  ])
+  assert.deepEqual(AAF_SINGLE_SITE_CLIENT_APPROVAL_REQUIRED_EVIDENCE_REFS, [
+    'content_approval_decision',
+    'improved_candidate_rendered_snapshot',
+    'client_facing_summary',
+    'limitations_summary',
+    'deferred_or_not_applied_recommendation_summary',
+    'operator_account_notes',
+    'audit_timeline_refs',
+  ])
+  assert.deepEqual(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.requiredSubjectRefs, AAF_SINGLE_SITE_CLIENT_APPROVAL_REQUIRED_SUBJECT_REFS)
+  assert.deepEqual(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.requiredEvidenceRefs, AAF_SINGLE_SITE_CLIENT_APPROVAL_REQUIRED_EVIDENCE_REFS)
+})
+
+test('single-site client approval prohibits adjacent approval, readiness, projection, provider, and transcript substitutions', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_CLIENT_APPROVAL_PROHIBITED_SUBSTITUTIONS, [
+    'content_approval',
+    'improved_version_review_acceptance',
+    'implementation_authorization',
+    'launch_approval',
+    'publish_activation_approval',
+    'domain_readiness',
+    'billing_readiness',
+    'preview_rendering',
+    'public_runtime_rendering',
+    'command_center_status',
+    'ops_inbox_item',
+    'ai_provider_output',
+    'chat_transcript',
+  ])
+  for (const prohibitedAction of [
+    'content_approval',
+    'improved_version_review_acceptance',
+    'implementation_authorization',
+    'launch_approval',
+    'single_site_launch_approval',
+    'publish_activation',
+    'publish_activation_approval',
+    'domain_readiness',
+    'billing_readiness',
+    'preview_rendering_approval',
+    'public_runtime_rendering_approval',
+    'command_center_status',
+    'ops_inbox_resolution',
+    'ai_execution',
+    'provider_output_authorization',
+    'chat_transcript_authorization',
+  ]) {
+    assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_client_approval.includes(prohibitedAction), true)
+  }
+})
+
+test('single-site launch approval contract is explicit and non-replayable', () => {
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE, 'single_site_launch_approval')
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE, 'single_site_launch_approval_evidence')
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE, 'single_site_launch_readiness_review')
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION, 'approve_single_site_launch_readiness')
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE], 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.replayClass, 'not_replayable')
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.humanApprovalReplayable, false)
+  assert.deepEqual(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.allowedDecisionStatuses, [
+    'granted',
+    'granted_with_limitations',
+    'rejected',
+    'revoked',
+    'expired',
+    'superseded',
+    'cancelled',
+  ])
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.allowedGateResults.includes('not_required_by_policy'), false)
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes('limitations_current_and_carried_forward'), true)
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.nonApprovalBoundaries.includes('publish_activation_approval'), true)
+})
+
+test('single-site launch approval pins required subject and evidence refs', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_SUBJECT_REFS, [
+    'tenant',
+    'client',
+    'site',
+    'single_site_migration',
+    'content_approval',
+    'client_approval_if_required',
+    'client_approval_requirement_policy',
+    'improved_candidate_site_version',
+    'improved_runtime_artifact',
+    'domain_readiness_placeholder_or_ref',
+    'billing_hosting_entitlement_placeholder_or_ref',
+    'rollback_readiness_placeholder_or_ref',
+    'publish_target_placeholder_or_ref',
+    'launch_checklist_refs',
+    'limitations',
+  ])
+  assert.deepEqual(AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_EVIDENCE_REFS, [
+    'content_approval_decision',
+    'client_approval_decision_if_required',
+    'pre_launch_checklist_snapshot',
+    'blocker_limitation_summary',
+    'domain_readiness_evidence_refs_if_available',
+    'billing_hosting_readiness_evidence_refs_if_available',
+    'rollback_readiness_evidence_refs_if_available',
+    'smoke_qa_summary_refs_if_available',
+    'operator_launch_notes',
+    'audit_timeline_refs',
+  ])
+  assert.deepEqual(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.requiredSubjectRefs, AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_SUBJECT_REFS)
+  assert.deepEqual(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.requiredEvidenceRefs, AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_EVIDENCE_REFS)
+})
+
+test('single-site launch approval prohibits adjacent approval, readiness, projection, provider, and transcript substitutions', () => {
+  assert.deepEqual(AAF_SINGLE_SITE_LAUNCH_APPROVAL_PROHIBITED_SUBSTITUTIONS, [
+    'content_approval_alone',
+    'client_approval_alone',
+    'implementation_authorization',
+    'publish_activation_approval',
+    'domain_readiness_alone',
+    'billing_readiness_alone',
+    'ddom_readiness',
+    'pasr_shadow_readiness',
+    'ptt_publish_target_readiness',
+    'preview_rendering',
+    'public_runtime_rendering',
+    'command_center_status',
+    'ops_inbox_item',
+    'ai_provider_output',
+    'chat_transcript',
+  ])
+  for (const prohibitedAction of [
+    'content_approval_alone',
+    'client_approval_alone',
+    'implementation_authorization',
+    'publish_activation',
+    'publish_activation_approval',
+    'domain_readiness_alone',
+    'billing_readiness_alone',
+    'ddom_readiness',
+    'pasr_shadow_readiness',
+    'ptt_publish_target_readiness',
+    'preview_rendering_approval',
+    'public_runtime_rendering_approval',
+    'command_center_status',
+    'ops_inbox_resolution',
+    'ai_execution',
+    'provider_output_authorization',
+    'chat_transcript_authorization',
+  ]) {
+    assert.equal(AAF_SCOPE_PROHIBITED_ACTIONS.single_site_launch_approval.includes(prohibitedAction), true)
+  }
+})
+
+test('single-site approval contracts remain exact-scope and cannot imply downstream readiness boundaries', () => {
+  const scopes = AAF_SINGLE_SITE_APPROVAL_SCOPE_CONTRACTS.map((contract) => contract.scope)
+  assert.deepEqual(scopes, [
+    AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+    AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+    AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+    AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+  ])
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.scope === AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.scope, false)
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.evidencePackageType === AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.evidencePackageType, false)
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.prohibitedActions.includes('launch_approval'), true)
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.prohibitedActions.includes('publish_activation'), true)
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.prohibitedActions.includes('domain_readiness'), true)
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.prohibitedActions.includes('billing_readiness'), true)
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.nonApprovalBoundaries.includes('ddom_pasr_ptt_readiness'), true)
+})
+
+test('single-site client and launch approvals support scoped limited grants with carried limitations', () => {
+  for (const contract of [AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT, AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT]) {
+    assert.equal(contract.allowedDecisionStatuses.includes('granted_with_limitations'), true)
+    assert.equal(contract.requiredSubjectRefs.includes('limitations'), true)
+    assert.equal(contract.requiredFreshnessBehavior.includes('limitations_current_and_carried_forward'), true)
+  }
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_REQUIRED_EVIDENCE_REFS.includes('limitations_summary'), true)
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_EVIDENCE_REFS.includes('blocker_limitation_summary'), true)
 })
 
 test('AAF migration stores object refs and hashes instead of heavy evidence payloads', () => {

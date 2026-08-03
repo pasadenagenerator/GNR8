@@ -5,6 +5,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
@@ -13,6 +17,10 @@ import {
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
 } from "@gnr8/runtime-contracts";
 
 import {
@@ -293,6 +301,82 @@ test("AAF writer accepts single-site content approval scope vocabulary without s
   assert.equal(evidence.package_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE);
   assert.equal(evidence.subject_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE);
   assert.equal(evidence.limitations_json, '{"carriedForward":["limitation-1"]}');
+});
+
+test("AAF writer accepts single-site client and launch approval vocabulary without side effects", async () => {
+  const { client } = recordingClient();
+  const repository = new AafWriterRepository({ connect: async () => ({}) } as never);
+  const tx = txForClient(client);
+
+  const clientGateAttempt = await repository.createActionGateAttempt(tx, {
+    ...tenantScope,
+    ...correlation,
+    siteVersionId: "improved-version-1",
+    idempotencyKey: "idem-single-site-client-approval-gate",
+    actionKey: AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION,
+    scope: AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+    subjectType: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+    subjectId: "client-acceptance-1",
+    actorType: "human",
+    actorId: "account-owner-1",
+    actorRole: "account_owner",
+    gateResult: "approval_required",
+  });
+  assert.equal(clientGateAttempt.scope, AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE);
+  assert.equal(clientGateAttempt.action_key, AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION);
+
+  const clientEvidence = await repository.createEvidencePackage(tx, {
+    ...tenantScope,
+    ...correlation,
+    siteVersionId: "improved-version-1",
+    idempotencyKey: "idem-single-site-client-approval-evidence",
+    packageType: AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE,
+    subjectType: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+    subjectId: "client-acceptance-1",
+    createdByActorType: "system",
+    createdByActorId: "aaf-writer-test",
+    sourceWatermark: "client-acceptance-1:v1:watermark",
+    freshnessLabel: "fresh",
+    contentHash: "clientapproval0123456789abcdef",
+    limitationsJson: { carriedForward: ["limitation-1"] },
+  });
+  assert.equal(clientEvidence.package_type, AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE);
+  assert.equal(clientEvidence.subject_type, AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE);
+
+  const launchGateAttempt = await repository.createActionGateAttempt(tx, {
+    ...tenantScope,
+    ...correlation,
+    siteVersionId: "improved-version-1",
+    idempotencyKey: "idem-single-site-launch-approval-gate",
+    actionKey: AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION,
+    scope: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+    subjectType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+    subjectId: "launch-readiness-review-1",
+    actorType: "human",
+    actorId: "operator-1",
+    actorRole: "launch_operator",
+    gateResult: "approval_required",
+  });
+  assert.equal(launchGateAttempt.scope, AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE);
+  assert.equal(launchGateAttempt.action_key, AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION);
+
+  const launchEvidence = await repository.createEvidencePackage(tx, {
+    ...tenantScope,
+    ...correlation,
+    siteVersionId: "improved-version-1",
+    idempotencyKey: "idem-single-site-launch-approval-evidence",
+    packageType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE,
+    subjectType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+    subjectId: "launch-readiness-review-1",
+    createdByActorType: "system",
+    createdByActorId: "aaf-writer-test",
+    sourceWatermark: "launch-readiness-review-1:v1:watermark",
+    freshnessLabel: "fresh",
+    contentHash: "launchapproval0123456789abcdef",
+    limitationsJson: { carriedForward: ["client-limitation-1"] },
+  });
+  assert.equal(launchEvidence.package_type, AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE);
+  assert.equal(launchEvidence.subject_type, AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE);
 });
 
 test("AAF writer accepts granted_with_limitations approval decisions", async () => {

@@ -394,6 +394,29 @@ Canonical server-only, non-executing AAF bridge and exact-scope evidence/decisio
 - `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
 - `docs/product/gnr8-single-site-content-approval-aaf-bridge-closeout.md`
 
+## MVP-30 Single-Site Client And Launch Approval Architecture
+
+Canonical design-only client approval and launch approval boundary, source-of-truth, AAF scope recommendation, transition contract, operator workflow, and closeout:
+- `docs/architecture/gnr8-single-site-client-approval-architecture.md`
+- `docs/architecture/gnr8-single-site-launch-approval-architecture.md`
+- `docs/architecture/gnr8-single-site-client-launch-approval-source-of-truth.md`
+- `docs/architecture/gnr8-single-site-client-launch-approval-transition-contract.md`
+- `docs/architecture/gnr8-single-site-client-launch-approval-aaf-scope-design.md`
+- `docs/product/gnr8-single-site-client-launch-approval-operator-workflow.md`
+- `docs/product/gnr8-single-site-client-launch-approval-architecture-closeout.md`
+
+## MVP-31 Single-Site Client And Launch Approval AAF Contracts
+
+Canonical AAF scope/contracts foundation for single-site client approval and launch approval:
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.ts`
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`
+- `apps/platform/gnr8/aaf/aaf-policy-gate-facade.ts`
+- `apps/platform/gnr8/aaf/aaf-policy-gate-facade.test.ts`
+- `apps/platform/gnr8/aaf/aaf-writer-repository.test.ts`
+- `apps/platform/gnr8/aaf/aaf-writer-repository.integration.test.ts`
+- `apps/platform/supabase/migrations/20260803170000_aaf_single_site_client_launch_approval_scopes.sql`
+- `docs/product/gnr8-single-site-client-launch-approval-aaf-contracts-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

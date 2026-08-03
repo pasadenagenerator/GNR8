@@ -8,10 +8,18 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 
 import {
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_SUBJECT_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
 } from "@gnr8/runtime-contracts";
 
 import { AafIdempotencyConflictError, AafWriterRepository } from "./aaf-writer-repository";
@@ -26,6 +34,10 @@ const GRANTED_WITH_LIMITATIONS_MIGRATION_PATH = path.join(
 const CONTENT_APPROVAL_MIGRATION_PATH = path.join(
   REPO_ROOT,
   "apps/platform/supabase/migrations/20260803120000_aaf_single_site_content_approval_scope.sql",
+);
+const CLIENT_LAUNCH_APPROVAL_MIGRATION_PATH = path.join(
+  REPO_ROOT,
+  "apps/platform/supabase/migrations/20260803170000_aaf_single_site_client_launch_approval_scopes.sql",
 );
 
 type DisposablePostgres = {
@@ -91,6 +103,7 @@ async function startDisposablePostgres(): Promise<DisposablePostgres> {
       ["20260722120000_aaf_persistence_core.sql", MIGRATION_PATH],
       ["20260731100000_aaf_granted_with_limitations_status.sql", GRANTED_WITH_LIMITATIONS_MIGRATION_PATH],
       ["20260803120000_aaf_single_site_content_approval_scope.sql", CONTENT_APPROVAL_MIGRATION_PATH],
+      ["20260803170000_aaf_single_site_client_launch_approval_scopes.sql", CLIENT_LAUNCH_APPROVAL_MIGRATION_PATH],
     ] as const) {
       docker(["cp", migrationPath, `${containerName}:/tmp/${name}`]);
       docker([
@@ -201,6 +214,40 @@ test("AAF writer applies migration and writes canonical records transactionally 
     );
     assert.equal(contentScopeDefinition.scope, AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE);
     assert.equal(contentScopeDefinition.required_evidence_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE);
+
+    const clientScopeDefinition = await writer.withTransaction((tx) =>
+      writer.createApprovalScopeDefinition(tx, {
+        scope: AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+        policyKey: String(bootstrap.policy.policy_key),
+        policyVersion: String(bootstrap.policy.version),
+        subjectType: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+        allowedAction: AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION,
+        prohibitedActions: ["content_approval", "launch_approval", "publish_activation", "domain_readiness", "billing_readiness"],
+        requiredEvidenceType: AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE,
+        requesterRoles: ["agency_admin", "account_owner"],
+        approverRoles: ["account_owner", "agency_admin", "superadmin"],
+        freshnessRule: { exactCandidateRefsRequired: true, limitationsCarryForwardRequired: true },
+      }),
+    );
+    assert.equal(clientScopeDefinition.scope, AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE);
+    assert.equal(clientScopeDefinition.required_evidence_type, AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE);
+
+    const launchScopeDefinition = await writer.withTransaction((tx) =>
+      writer.createApprovalScopeDefinition(tx, {
+        scope: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+        policyKey: String(bootstrap.policy.policy_key),
+        policyVersion: String(bootstrap.policy.version),
+        subjectType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+        allowedAction: AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION,
+        prohibitedActions: ["publish_activation", "domain_readiness", "billing_readiness", "ddom_readiness"],
+        requiredEvidenceType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE,
+        requesterRoles: ["launch_operator", "agency_admin"],
+        approverRoles: ["launch_operator", "agency_admin", "superadmin"],
+        freshnessRule: { exactCandidateRefsRequired: true, readinessRefsAreEvidenceOnly: true },
+      }),
+    );
+    assert.equal(launchScopeDefinition.scope, AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE);
+    assert.equal(launchScopeDefinition.required_evidence_type, AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE);
 
     const evidenceAudit = await writer.withTransaction((tx) =>
       writer.createAuditEvent(tx, {
@@ -414,6 +461,50 @@ test("AAF writer applies migration and writes canonical records transactionally 
     );
     assert.equal(contentEvidence.package_type, AAF_SINGLE_SITE_CONTENT_APPROVAL_EVIDENCE_TYPE);
     assert.deepEqual(contentEvidence.limitations_json, { carriedForward: ["limitation-1"] });
+
+    const clientEvidence = await writer.withTransaction((tx) =>
+      writer.createEvidencePackage(tx, {
+        tenantId: scope.tenantId,
+        clientId: scope.clientId,
+        siteId: scope.siteId,
+        siteVersionId: "improved-candidate-version-1",
+        correlationId,
+        idempotencyKey: `idem-client-approval-evidence-${suffix}`,
+        packageType: AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE,
+        subjectType: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+        subjectId: "client-acceptance-1",
+        createdByActorType: "system",
+        createdByActorId: "aaf-writer-integration-test",
+        sourceWatermark: `client-acceptance:${suffix}:1`,
+        freshnessLabel: "fresh",
+        contentHash: `client-approval-${suffix}-0123456789abcdef`,
+        limitationsJson: { carriedForward: ["limitation-1"] },
+      }),
+    );
+    assert.equal(clientEvidence.package_type, AAF_SINGLE_SITE_CLIENT_APPROVAL_EVIDENCE_TYPE);
+    assert.equal(clientEvidence.subject_type, AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE);
+
+    const launchEvidence = await writer.withTransaction((tx) =>
+      writer.createEvidencePackage(tx, {
+        tenantId: scope.tenantId,
+        clientId: scope.clientId,
+        siteId: scope.siteId,
+        siteVersionId: "improved-candidate-version-1",
+        correlationId,
+        idempotencyKey: `idem-launch-approval-evidence-${suffix}`,
+        packageType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE,
+        subjectType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+        subjectId: "launch-readiness-review-1",
+        createdByActorType: "system",
+        createdByActorId: "aaf-writer-integration-test",
+        sourceWatermark: `launch-readiness:${suffix}:1`,
+        freshnessLabel: "fresh",
+        contentHash: `launch-approval-${suffix}-0123456789abcdef`,
+        limitationsJson: { carriedForward: ["client-limitation-1"] },
+      }),
+    );
+    assert.equal(launchEvidence.package_type, AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE);
+    assert.equal(launchEvidence.subject_type, AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE);
 
     const revocationAudit = await writer.withTransaction((tx) =>
       writer.createAuditEvent(tx, {
@@ -868,6 +959,99 @@ test("AAF writer applies migration and writes canonical records transactionally 
           [scope.tenantId, subject.subjectId, correlationId, `idem-invalid-evidence-hash-${suffix}`],
         ),
       /check constraint "gnr8_aaf_evidence_packages_content_hash_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_approval_scope_definitions (
+            scope, policy_key, policy_version, subject_type, allowed_action, required_evidence_type
+          )
+          values (
+            'single_site_client_approval', $1, $2, 'single_site_launch_readiness_review',
+            'approve_single_site_client_acceptance', 'single_site_client_approval_evidence'
+          )
+          `,
+          [String(bootstrap.policy.policy_key), `AAF-WRITER-${suffix}-bad-client-subject`],
+        ),
+      /check constraint "gnr8_aaf_scope_defs_client_launch_approval_contract_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_approval_scope_definitions (
+            scope, policy_key, policy_version, subject_type, allowed_action, required_evidence_type
+          )
+          values (
+            'single_site_launch_approval', $1, $2, 'single_site_launch_readiness_review',
+            'approve_single_site_client_acceptance', 'single_site_launch_approval_evidence'
+          )
+          `,
+          [String(bootstrap.policy.policy_key), `AAF-WRITER-${suffix}-bad-launch-action`],
+        ),
+      /check constraint "gnr8_aaf_scope_defs_client_launch_approval_contract_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_approval_requests (
+            tenant_id, scope, subject_type, subject_id, requester_actor_type, requester_actor_id, requester_role,
+            policy_version, correlation_id, idempotency_key
+          )
+          values ($1, 'single_site_client_approval', 'single_site_launch_readiness_review', $2, 'human', 'operator-aaf',
+            'agency_admin', $3, $4, $5)
+          `,
+          [scope.tenantId, subject.subjectId, String(bootstrap.policy.version), correlationId, `idem-invalid-client-subject-${suffix}`],
+        ),
+      /check constraint "gnr8_aaf_requests_client_launch_approval_subject_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_approval_policy_evaluations (
+            tenant_id, policy_version, result, scope, action_key, subject_type, subject_id,
+            actor_type, actor_id, actor_role, correlation_id, idempotency_key
+          )
+          values ($1, $2, 'approval_required', 'single_site_launch_approval', 'publish_activation',
+            'single_site_launch_readiness_review', $3, 'human', 'operator-aaf', 'agency_admin', $4, $5)
+          `,
+          [scope.tenantId, String(bootstrap.policy.version), subject.subjectId, correlationId, `idem-invalid-launch-action-${suffix}`],
+        ),
+      /check constraint "gnr8_aaf_policy_evals_client_launch_approval_contract_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_action_gate_attempts (
+            tenant_id, action_key, scope, subject_type, subject_id, actor_type, actor_id, actor_role,
+            gate_result, correlation_id, idempotency_key
+          )
+          values ($1, 'approve_single_site_launch_readiness', 'single_site_client_approval',
+            'single_site_improved_candidate_client_acceptance', $2, 'human', 'operator-aaf', 'agency_admin',
+            'approval_required', $3, $4)
+          `,
+          [scope.tenantId, subject.subjectId, correlationId, `idem-invalid-gate-client-launch-action-${suffix}`],
+        ),
+      /check constraint "gnr8_aaf_gate_attempts_client_launch_approval_contract_ck"/,
+    );
+    await assertDbRejects(
+      () =>
+        pool.query(
+          `
+          insert into public.gnr8_aaf_evidence_packages (
+            tenant_id, package_type, subject_type, subject_id, created_by_actor_type, created_by_actor_id,
+            source_watermark, freshness_label, content_hash, correlation_id, idempotency_key
+          )
+          values ($1, 'single_site_client_approval_evidence', 'single_site_launch_readiness_review', $2, 'system',
+            'aaf-test', 'client-launch-mismatch:1', 'fresh', 'client-launch-mismatch-0123456789abcdef', $3, $4)
+          `,
+          [scope.tenantId, subject.subjectId, correlationId, `idem-invalid-client-evidence-subject-${suffix}`],
+        ),
+      /check constraint "gnr8_aaf_evidence_client_launch_approval_subject_ck"/,
     );
 
     await writer

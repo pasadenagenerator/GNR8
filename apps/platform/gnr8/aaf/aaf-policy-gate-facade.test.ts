@@ -5,6 +5,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_ACTION,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_CONTRACT,
   AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
@@ -12,6 +16,10 @@ import {
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_ACTION,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+  AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
   AAF_SCOPE_PROHIBITED_ACTIONS,
   AAF_SCOPE_REPLAY_CLASS,
 } from "@gnr8/runtime-contracts";
@@ -96,6 +104,20 @@ test("approval statuses map deterministically to gate results", () => {
   assert.equal(
     mapApprovalStatusToGateResult("granted_with_limitations", {
       scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,
+      limitationsPresent: true,
+    }),
+    "allowed",
+  );
+  assert.equal(
+    mapApprovalStatusToGateResult("granted_with_limitations", {
+      scope: AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+      limitationsPresent: true,
+    }),
+    "allowed",
+  );
+  assert.equal(
+    mapApprovalStatusToGateResult("granted_with_limitations", {
+      scope: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
       limitationsPresent: true,
     }),
     "allowed",
@@ -344,6 +366,177 @@ test("single-site content approval limited grants are scoped and require carried
     }),
     "allowed",
   );
+});
+
+test("single-site client approval requires exact scope and subject matching", () => {
+  const input = {
+    tenantId: "tenant-1",
+    clientId: "client-1",
+    siteId: "site-1",
+    batchId: null,
+    jobId: null,
+    siteVersionId: "improved-version-1",
+    domainId: null,
+    costCenterId: null,
+  };
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-1",
+      site_id: "site-1",
+      batch_id: null,
+      job_id: null,
+      site_version_id: "improved-version-1",
+      domain_id: null,
+      cost_center_id: null,
+      scope: AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+    }),
+    true,
+  );
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-1",
+      site_id: "site-1",
+      batch_id: null,
+      job_id: null,
+      site_version_id: "different-version",
+      domain_id: null,
+      cost_center_id: null,
+      scope: AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
+    }),
+    false,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+        subjectId: "client-acceptance-1",
+      },
+      {
+        subject_type: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+        subject_id: "client-acceptance-1",
+      },
+    ),
+    true,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+        subjectId: "client-acceptance-1",
+      },
+      {
+        subject_type: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+        subject_id: "client-acceptance-1",
+      },
+    ),
+    false,
+  );
+});
+
+test("single-site launch approval requires exact scope and subject matching", () => {
+  const input = {
+    tenantId: "tenant-1",
+    clientId: "client-1",
+    siteId: "site-1",
+    batchId: null,
+    jobId: null,
+    siteVersionId: "improved-version-1",
+    domainId: null,
+    costCenterId: null,
+  };
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-1",
+      site_id: "site-1",
+      batch_id: null,
+      job_id: null,
+      site_version_id: "improved-version-1",
+      domain_id: null,
+      cost_center_id: null,
+      scope: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+    }),
+    true,
+  );
+  assert.equal(
+    exactScopeMatches(input, {
+      tenant_id: "tenant-1",
+      client_id: "client-other",
+      site_id: "site-1",
+      batch_id: null,
+      job_id: null,
+      site_version_id: "improved-version-1",
+      domain_id: null,
+      cost_center_id: null,
+      scope: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
+    }),
+    false,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+        subjectId: "launch-review-1",
+      },
+      {
+        subject_type: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+        subject_id: "launch-review-1",
+      },
+    ),
+    true,
+  );
+  assert.equal(
+    exactSubjectMatches(
+      {
+        subjectType: AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+        subjectId: "launch-review-1",
+      },
+      {
+        subject_type: AAF_SINGLE_SITE_CLIENT_APPROVAL_SUBJECT_TYPE,
+        subject_id: "launch-review-1",
+      },
+    ),
+    false,
+  );
+});
+
+test("single-site client approval does not imply launch approval", () => {
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE], "not_replayable");
+  assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE, AAF_SINGLE_SITE_CLIENT_APPROVAL_ACTION), false);
+  assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE, "launch_approval"), true);
+  assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE, "single_site_launch_approval"), true);
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.prohibitedActions.includes("launch_approval"), true);
+});
+
+test("single-site launch approval does not imply publish, domain, DNS, billing, or subscription readiness", () => {
+  assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE], "not_replayable");
+  assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE, AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION), false);
+  for (const prohibitedAction of [
+    "publish_activation",
+    "publish_activation_approval",
+    "domain_readiness",
+    "dns_readiness",
+    "billing_readiness",
+    "subscription_readiness",
+    "ddom_readiness",
+    "pasr_shadow_readiness",
+    "ptt_publish_target_readiness",
+  ]) {
+    assert.equal(actionIsProhibitedForScope(AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE, prohibitedAction), true);
+    assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.prohibitedActions.includes(prohibitedAction), true);
+  }
+});
+
+test("single-site client and launch approval limited grants are scoped and require carried limitations", () => {
+  for (const scope of [AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE, AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE]) {
+    assert.equal(mapApprovalStatusToGateResult("granted_with_limitations", { scope, limitationsPresent: false }), "blocked");
+    assert.equal(mapApprovalStatusToGateResult("granted_with_limitations", { scope, limitationsPresent: true }), "allowed");
+  }
+  assert.equal(AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT.requiredSubjectRefs.includes("limitations"), true);
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.requiredSubjectRefs.includes("limitations"), true);
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_CONTRACT.requiredFreshnessBehavior.includes("limitations_current_and_carried_forward"), true);
 });
 
 test("fail-closed persistence failures map without representing an executable action", () => {
