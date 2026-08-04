@@ -119,6 +119,7 @@ export const AAF_EVIDENCE_PACKAGE_TYPES = [
   'single_site_content_approval_evidence',
   'single_site_client_approval_evidence',
   'single_site_launch_approval_evidence',
+  'single_site_launch_readiness_evidence',
 ] as const
 
 export type AafEvidencePackageType = (typeof AAF_EVIDENCE_PACKAGE_TYPES)[number]
@@ -768,6 +769,8 @@ export const AAF_SINGLE_SITE_CLIENT_APPROVAL_CONTRACT: AafScopeContract = {
 export const AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE = 'single_site_launch_approval' as const
 
 export const AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE = 'single_site_launch_approval_evidence' as const
+
+export const AAF_SINGLE_SITE_LAUNCH_READINESS_EVIDENCE_TYPE = 'single_site_launch_readiness_evidence' as const
 
 export const AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE = 'single_site_launch_readiness_review' as const
 

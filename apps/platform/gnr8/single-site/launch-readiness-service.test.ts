@@ -161,6 +161,19 @@ class FakeLaunchReadinessWriterRepository implements LaunchReadinessWriterReposi
     return this.records.find((item) => item.id === readinessId) ?? null;
   }
 
+  async getReadinessEvidenceById(_tx: LaunchReadinessWriterTx, readinessId: string) {
+    const readiness = await this.getReadinessById(_tx, readinessId);
+    if (!readiness) return null;
+    return {
+      readiness,
+      dimensions: this.dimensions.filter((item) => item.readiness_id === readinessId),
+      refs: this.refs.filter((item) => item.readiness_id === readinessId),
+      blockers: this.blockers.filter((item) => item.readiness_id === readinessId),
+      events: this.events.filter((item) => item.readiness_id === readinessId),
+      closeout: this.closeouts.find((item) => item.readiness_id === readinessId) ?? null,
+    };
+  }
+
   async countOpenP0Blockers(_tx: LaunchReadinessWriterTx, readinessId: string): Promise<number> {
     return this.blockers.filter((item) => item.readiness_id === readinessId && item.severity === "p0_blocker" && item.status === "open").length;
   }

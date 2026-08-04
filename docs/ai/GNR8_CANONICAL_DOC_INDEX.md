@@ -499,6 +499,17 @@ Canonical server-only launch readiness writer repository and service core that c
 - `apps/platform/gnr8/single-site/launch-readiness-service.integration.test.ts`
 - `docs/product/gnr8-single-site-launch-readiness-writer-service-closeout.md`
 
+## MVP-40 Single-Site Launch Readiness AAF Evidence Builder Core
+
+Canonical server-only, non-executing AAF evidence builder core that creates/reuses distinct `single_site_launch_readiness_evidence` packages from persisted launch readiness records without creating approval requests, decisions, gate attempts, DDOM snapshots, provider calls, runtime mutation, publish activation, publish, rollback, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `apps/platform/supabase/migrations/20260804143000_aaf_single_site_launch_readiness_evidence_type.sql`
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-evidence-builder.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-evidence-builder.test.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-evidence-builder.integration.test.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-writer-repository.ts`
+- `docs/product/gnr8-single-site-launch-readiness-evidence-builder-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

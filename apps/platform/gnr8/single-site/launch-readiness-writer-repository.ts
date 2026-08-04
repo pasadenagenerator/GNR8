@@ -215,6 +215,15 @@ export type LaunchReadinessCloseoutRow = {
   created_at: string;
 };
 
+export type LaunchReadinessEvidenceReadModel = {
+  readiness: LaunchReadinessRecordRow;
+  dimensions: LaunchReadinessDimensionRow[];
+  refs: LaunchReadinessRefRow[];
+  blockers: LaunchReadinessBlockerRow[];
+  events: LaunchReadinessEventRow[];
+  closeout: LaunchReadinessCloseoutRow | null;
+};
+
 type InsertableRow = Record<string, unknown>;
 
 function stableJsonValue(value: unknown): unknown {
@@ -453,6 +462,7 @@ export interface LaunchReadinessWriterRepositoryLike {
     input: CreateOrReuseLaunchReadinessCloseoutInput,
   ): Promise<{ row: LaunchReadinessCloseoutRow; reusedExisting: boolean }>;
   getReadinessById(client: SingleSitePgClient, readinessId: string): Promise<LaunchReadinessRecordRow | null>;
+  getReadinessEvidenceById(client: SingleSitePgClient, readinessId: string): Promise<LaunchReadinessEvidenceReadModel | null>;
   countOpenP0Blockers(client: SingleSitePgClient, readinessId: string): Promise<number>;
   nextEventIndex(client: SingleSitePgClient, readinessId: string): Promise<number>;
 }
@@ -785,6 +795,65 @@ export class LaunchReadinessWriterRepository implements LaunchReadinessWriterRep
       requiredText("readinessId", readinessId),
     ]);
     return (result.rows[0] as LaunchReadinessRecordRow | undefined) ?? null;
+  }
+
+  async getReadinessEvidenceById(client: SingleSitePgClient, readinessId: string): Promise<LaunchReadinessEvidenceReadModel | null> {
+    const readiness = await this.getReadinessById(client, readinessId);
+    if (!readiness) return null;
+    const dimensions = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_launch_readiness_dimensions
+      where readiness_id = $1::uuid
+      order by dimension asc
+      `,
+      [requiredText("readinessId", readinessId)],
+    );
+    const refs = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_launch_readiness_refs
+      where readiness_id = $1::uuid
+      order by ref_role asc, source_system asc, source_table asc nulls first, source_type asc, source_record_id asc, source_ref asc
+      `,
+      [readinessId],
+    );
+    const blockers = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_launch_readiness_blockers
+      where readiness_id = $1::uuid
+      order by severity asc, status asc, category asc, description asc, id asc
+      `,
+      [readinessId],
+    );
+    const events = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_launch_readiness_events
+      where readiness_id = $1::uuid
+      order by event_index asc
+      `,
+      [readinessId],
+    );
+    const closeouts = await client.query(
+      `
+      select *
+      from public.gnr8_single_site_launch_readiness_closeouts
+      where readiness_id = $1::uuid
+      order by created_at desc, id desc
+      limit 1
+      `,
+      [readinessId],
+    );
+    return {
+      readiness,
+      dimensions: dimensions.rows as LaunchReadinessDimensionRow[],
+      refs: refs.rows as LaunchReadinessRefRow[],
+      blockers: blockers.rows as LaunchReadinessBlockerRow[],
+      events: events.rows as LaunchReadinessEventRow[],
+      closeout: (closeouts.rows[0] as LaunchReadinessCloseoutRow | undefined) ?? null,
+    };
   }
 
   async countOpenP0Blockers(client: SingleSitePgClient, readinessId: string): Promise<number> {

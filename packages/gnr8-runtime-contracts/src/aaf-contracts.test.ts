@@ -48,6 +48,7 @@ import {
   AAF_SINGLE_SITE_LAUNCH_APPROVAL_REQUIRED_SUBJECT_REFS,
   AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
   AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE,
+  AAF_SINGLE_SITE_LAUNCH_READINESS_EVIDENCE_TYPE,
   AAF_SCOPE_PROHIBITED_ACTIONS,
   AAF_SCOPE_REPLAY_CLASS,
 } from './aaf-contracts'
@@ -72,6 +73,10 @@ const AAF_CLIENT_LAUNCH_APPROVAL_MIGRATION_PATH = path.resolve(
   process.cwd(),
   'apps/platform/supabase/migrations/20260803170000_aaf_single_site_client_launch_approval_scopes.sql',
 )
+const AAF_LAUNCH_READINESS_EVIDENCE_MIGRATION_PATH = path.resolve(
+  process.cwd(),
+  'apps/platform/supabase/migrations/20260804143000_aaf_single_site_launch_readiness_evidence_type.sql',
+)
 
 function readMigration(): string {
   return fs.readFileSync(MIGRATION_PATH, 'utf8')
@@ -84,6 +89,7 @@ function readAafVocabularyMigrations(): string {
     AAF_GRANTED_WITH_LIMITATIONS_MIGRATION_PATH,
     AAF_CONTENT_APPROVAL_MIGRATION_PATH,
     AAF_CLIENT_LAUNCH_APPROVAL_MIGRATION_PATH,
+    AAF_LAUNCH_READINESS_EVIDENCE_MIGRATION_PATH,
   ]
     .map((filePath) => fs.readFileSync(filePath, 'utf8'))
     .join('\n')
@@ -194,6 +200,7 @@ test('AAF audit and evidence vocabularies remain canonical', () => {
     'single_site_content_approval_evidence',
     'single_site_client_approval_evidence',
     'single_site_launch_approval_evidence',
+    'single_site_launch_readiness_evidence',
   ])
 })
 
@@ -757,6 +764,7 @@ test('single-site client approval prohibits adjacent approval, readiness, projec
 test('single-site launch approval contract is explicit and non-replayable', () => {
   assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE, 'single_site_launch_approval')
   assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_EVIDENCE_TYPE, 'single_site_launch_approval_evidence')
+  assert.equal(AAF_SINGLE_SITE_LAUNCH_READINESS_EVIDENCE_TYPE, 'single_site_launch_readiness_evidence')
   assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_SUBJECT_TYPE, 'single_site_launch_readiness_review')
   assert.equal(AAF_SINGLE_SITE_LAUNCH_APPROVAL_ACTION, 'approve_single_site_launch_readiness')
   assert.equal(AAF_SCOPE_REPLAY_CLASS[AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE], 'not_replayable')
