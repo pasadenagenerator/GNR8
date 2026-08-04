@@ -481,6 +481,15 @@ Canonical additive SQL persistence core for single-site launch readiness records
 - `apps/platform/gnr8/single-site/launch-readiness-persistence.integration.test.ts`
 - `docs/product/gnr8-single-site-launch-readiness-persistence-closeout.md`
 
+## MVP-38 Single-Site Launch Readiness Source Reader Core
+
+Canonical server-only, read-only launch readiness source reader core that gathers existing source truth, deterministic refs/watermarks, freshness states, blockers, limitations, missing/stale/unsupported diagnostics, and non-enforcing PASR diagnostics without writing MVP-37 readiness persistence or mutating source systems:
+- `apps/platform/gnr8/single-site/launch-readiness-source-reader.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-source-read-repository.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-source-reader.test.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-source-reader.integration.test.ts`
+- `docs/product/gnr8-single-site-launch-readiness-source-reader-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
