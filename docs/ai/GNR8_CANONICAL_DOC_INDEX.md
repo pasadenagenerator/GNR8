@@ -518,6 +518,14 @@ Canonical server-only, non-executing bridge that validates MVP-40 `single_site_l
 - `apps/platform/gnr8/single-site/publish-activation-request-bridge.integration.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-request-bridge-closeout.md`
 
+## MVP-42 Single-Site Publish Activation Human Decision Workflow Core
+
+Canonical server-only, non-executing human decision workflow core that validates the MVP-41 `publish_activation` / `publish.activation` request and MVP-40 `single_site_launch_readiness_evidence` fail-closed before creating/reusing one exact-scope AAF approval decision, without creating gate attempts, evaluating gates, calling PASR, creating DDOM snapshots, mutating runtime, publishing, rollback, provider calls, billing/domain mutation, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `apps/platform/gnr8/single-site/publish-activation-decision-service.ts`
+- `apps/platform/gnr8/single-site/publish-activation-decision-service.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-decision-service.integration.test.ts`
+- `docs/product/gnr8-single-site-publish-activation-human-decision-workflow-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
