@@ -490,6 +490,15 @@ Canonical server-only, read-only launch readiness source reader core that gather
 - `apps/platform/gnr8/single-site/launch-readiness-source-reader.integration.test.ts`
 - `docs/product/gnr8-single-site-launch-readiness-source-reader-closeout.md`
 
+## MVP-39 Single-Site Launch Readiness Writer And Service Core
+
+Canonical server-only launch readiness writer repository and service core that consumes MVP-38 source packages and writes MVP-37 launch readiness records, dimensions, refs, blockers, events, limitations, and closeouts without creating AAF records, DDOM snapshots, provider calls, runtime mutation, publish activation, publish, rollback, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `apps/platform/gnr8/single-site/launch-readiness-writer-repository.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-service.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-service.test.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-service.integration.test.ts`
+- `docs/product/gnr8-single-site-launch-readiness-writer-service-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
