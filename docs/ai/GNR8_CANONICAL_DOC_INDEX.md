@@ -510,6 +510,14 @@ Canonical server-only, non-executing AAF evidence builder core that creates/reus
 - `apps/platform/gnr8/single-site/launch-readiness-writer-repository.ts`
 - `docs/product/gnr8-single-site-launch-readiness-evidence-builder-closeout.md`
 
+## MVP-41 Single-Site Publish Activation Request Bridge Core
+
+Canonical server-only, non-executing bridge that validates MVP-40 `single_site_launch_readiness_evidence` fail-closed and creates/reuses one exact-scope AAF `publish_activation` / `publish.activation` approval request without creating approval decisions, gate attempts, PASR observations, DDOM snapshots, provider calls, runtime mutation, publish activation enforcement, publish, rollback, billing/domain mutation, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `apps/platform/gnr8/single-site/publish-activation-request-bridge.ts`
+- `apps/platform/gnr8/single-site/publish-activation-request-bridge.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-request-bridge.integration.test.ts`
+- `docs/product/gnr8-single-site-publish-activation-request-bridge-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
