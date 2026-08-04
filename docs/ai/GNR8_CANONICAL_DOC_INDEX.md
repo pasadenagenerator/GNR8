@@ -463,6 +463,24 @@ Canonical server-only, non-executing AAF bridge and exact-scope evidence/decisio
 - `apps/platform/gnr8/single-site/single-site-state-read-model.ts`
 - `docs/product/gnr8-single-site-launch-approval-aaf-bridge-closeout.md`
 
+## MVP-36 Single-Site Launch Readiness Source Of Truth And Evidence Architecture
+
+Canonical documentation-only launch readiness architecture after validated launch approval and before publish activation review:
+- `docs/architecture/gnr8-single-site-launch-readiness-source-of-truth.md`
+- `docs/architecture/gnr8-single-site-launch-readiness-evidence-architecture.md`
+- `docs/architecture/gnr8-single-site-launch-readiness-transition-contract.md`
+- `docs/architecture/gnr8-single-site-launch-readiness-source-reader-design.md`
+- `docs/product/gnr8-single-site-launch-readiness-operator-workflow.md`
+- `docs/product/gnr8-single-site-launch-readiness-architecture-closeout.md`
+
+## MVP-37 Single-Site Launch Readiness Persistence Core
+
+Canonical additive SQL persistence core for single-site launch readiness records, dimensions, durable refs, blockers, lifecycle events, closeouts, append-only protections, RLS posture, and focused validation:
+- `apps/platform/supabase/migrations/20260804120000_single_site_launch_readiness_core.sql`
+- `apps/platform/gnr8/single-site/launch-readiness-persistence.test.ts`
+- `apps/platform/gnr8/single-site/launch-readiness-persistence.integration.test.ts`
+- `docs/product/gnr8-single-site-launch-readiness-persistence-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
