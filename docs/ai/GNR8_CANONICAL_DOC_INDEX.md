@@ -526,6 +526,16 @@ Canonical server-only, non-executing human decision workflow core that validates
 - `apps/platform/gnr8/single-site/publish-activation-decision-service.integration.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-human-decision-workflow-closeout.md`
 
+## MVP-43 Single-Site Publish Activation Decision Read Model And Gate Handoff Core
+
+Canonical server-only, read-only publish activation decision read model and deterministic gate handoff core that reconstructs MVP-41 request + MVP-42 decision + MVP-40 launch readiness evidence before any future gate evaluation, without creating AAF records, creating gate attempts, evaluating gates, calling PASR, creating DDOM snapshots, mutating runtime, publishing, rollback, provider calls, billing/domain mutation, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `apps/platform/gnr8/single-site/publish-activation-decision-read-repository.ts`
+- `apps/platform/gnr8/single-site/publish-activation-decision-read-model.ts`
+- `apps/platform/gnr8/single-site/publish-activation-gate-handoff.ts`
+- `apps/platform/gnr8/single-site/publish-activation-decision-read-model.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-decision-read-model.integration.test.ts`
+- `docs/product/gnr8-single-site-publish-activation-decision-read-model-handoff-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
