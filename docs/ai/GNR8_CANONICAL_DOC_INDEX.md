@@ -607,6 +607,29 @@ Canonical shadow-only integration of the MVP-49 read-only publish activation met
 - `docs/product/gnr8-single-site-publish-activation-enforcement-shadow-integration-closeout.md`
 - `docs/product/gnr8-single-site-publish-activation-enforcement-guard-closeout.md`
 
+## MVP-51 Single-Site Publish Caller Context Architecture
+
+Canonical documentation-only architecture for a future server-only single-site publish wrapper that supplies strict tenant/client/site/migration/candidate/artifact/publish-target/request/decision/gate/handoff metadata to `publishApprovedSiteVersion(...)`, selecting shadow-only wrapper context as the safe future caller path while leaving generic runtime publish callers unchanged and without implementing caller wiring, routes, services, SQL, UI, publish behavior changes, blocking enforcement, AAF record creation, gate reevaluation, PASR invocation, DDOM snapshots, provider calls, billing/domain execution, Command Center actions, Ops Inbox actions, client portal exposure, commit, or push:
+- `docs/architecture/gnr8-single-site-publish-caller-context-architecture.md`
+- `docs/architecture/gnr8-single-site-publish-caller-context-contract.md`
+- `docs/architecture/gnr8-single-site-publish-caller-selection-and-boundaries.md`
+- `docs/product/gnr8-single-site-publish-caller-operator-workflow.md`
+- `docs/product/gnr8-single-site-publish-caller-context-closeout.md`
+
+## MVP-52 Single-Site Publish Wrapper Orchestrator Shadow Core
+
+Canonical server-only, default-off, shadow-only single-site publish wrapper/orchestrator that validates strict single-site context, resolves complete MVP-48 publish activation metadata through the MVP-49 read-only resolver, dry-runs without publishing, and in execute mode calls only the existing `publishApprovedSiteVersion(...)` with complete metadata handoff, while leaving generic publish callers unchanged and without blocking enforcement, gate evaluation, AAF record creation, PASR invocation, DDOM snapshots, provider/DNS/domain/billing calls, direct active pointer/runtime mutation, UI/API/Command Center/Ops Inbox/client portal exposure, SQL migrations, commit, or push:
+- `apps/platform/gnr8/single-site/single-site-publish-wrapper-orchestrator.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-wrapper-orchestrator.test.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-wrapper-orchestrator.integration.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-metadata-resolver.ts`
+- `apps/platform/gnr8/single-site/publish-activation-metadata-handoff.ts`
+- `apps/platform/gnr8/runtime/publish-activation-orchestrator.ts`
+- `docs/product/gnr8-single-site-publish-wrapper-orchestrator-shadow-closeout.md`
+- `docs/product/gnr8-single-site-publish-caller-context-closeout.md`
+- `docs/product/gnr8-single-site-publish-activation-metadata-resolver-closeout.md`
+- `docs/product/gnr8-single-site-publish-activation-metadata-handoff-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
