@@ -580,6 +580,18 @@ Canonical server-only, optional metadata handoff contract and read-only normaliz
 - `apps/platform/gnr8/single-site/publish-activation-metadata-handoff.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-metadata-handoff-closeout.md`
 
+## MVP-49 Single-Site Publish Activation Metadata Resolver Core
+
+Canonical server-only, read-only metadata resolver that reconstructs complete MVP-48 `publishActivationMetadataHandoff` objects from persisted MVP-40/MVP-41/MVP-42/MVP-43/MVP-44/PTT rows using one repeatable-read read-only transaction, without wiring into publish execution, blocking publish, evaluating gates, creating AAF records, invoking PASR, creating DDOM snapshots, calling providers, mutating runtime/active pointers/rollback/billing/domain/DNS state, or exposing UI/API/Command Center/Ops Inbox/client portal behavior:
+- `apps/platform/gnr8/single-site/publish-activation-metadata-resolver.ts`
+- `apps/platform/gnr8/single-site/publish-activation-metadata-resolver.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-metadata-resolver.integration.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-metadata-handoff.ts`
+- `apps/platform/gnr8/single-site/publish-activation-enforcement-guard.ts`
+- `docs/product/gnr8-single-site-publish-activation-metadata-resolver-closeout.md`
+- `docs/product/gnr8-single-site-publish-activation-metadata-handoff-closeout.md`
+- `docs/product/gnr8-single-site-publish-activation-enforcement-guard-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
