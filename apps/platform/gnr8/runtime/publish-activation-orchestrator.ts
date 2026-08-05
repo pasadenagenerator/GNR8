@@ -18,8 +18,15 @@ import {
 } from "@/gnr8/single-site/publish-activation-enforcement-guard";
 import {
   normalizePublishActivationMetadataHandoff,
+  type NormalizedPublishActivationMetadataHandoff,
   type PublishActivationMetadataHandoff,
 } from "@/gnr8/single-site/publish-activation-metadata-handoff";
+import {
+  readAndResolveSingleSitePublishActivationMetadataHandoff,
+  type PublishActivationMetadataResolverActor,
+  type PublishActivationMetadataResolverReadRepositoryLike,
+  type PublishActivationMetadataResolverResult,
+} from "@/gnr8/single-site/publish-activation-metadata-resolver";
 import {
   evaluatePointerSwitchReadiness,
   evaluatePublishActivationCandidate,
@@ -90,16 +97,44 @@ export type PublishActivationEnforcementShadowMetadata = PublishActivationMetada
 
 export type PublishActivationEnforcementShadowGuard = typeof readAndEvaluatePublishActivationEnforcementGuard;
 
+export type PublishActivationMetadataResolverShadowInput = {
+  tenantId?: string | null;
+  clientId?: string | null;
+  migrationId?: string | null;
+  publishEnvironment?: string | null;
+  actorRole?: string | null;
+  actorType?: PublishActivationMetadataResolverActor["actorType"];
+  correlationId?: string | null;
+  idempotencyKey?: string | null;
+  requestId?: string | null;
+  expectedPublishTargetRef?: PublishActivationEnforcementGuardRef | string | null;
+  expectedPublishActivationRequestRef?: string | null;
+  expectedPublishActivationDecisionRef?: string | null;
+  expectedGateAttemptResultRef?: string | null;
+  expectedHandoffWatermark?: string | null;
+  expectedGateInputWatermark?: string | null;
+  maxGateAgeMs?: number | null;
+  allowWarningsWithLimitations?: boolean;
+  evaluatedAt?: string | Date | null;
+  repository?: PublishActivationMetadataResolverReadRepositoryLike;
+};
+
+export type PublishActivationMetadataResolverShadow = typeof readAndResolveSingleSitePublishActivationMetadataHandoff;
+
 export type PublishActivationEnforcementShadowObservation = {
   enabled: true;
   available: boolean;
   shadowOnly: true;
   enforcementApplied: false;
   publishActionBlocked: false;
+  metadataSource: "explicit" | "resolved" | "missing" | "incomplete" | "resolver_error";
+  resolverStatus: "not_needed" | "not_available" | "complete" | "incomplete" | "error";
+  resolverReason: string | null;
   guardMode: PublishActivationEnforcementGuardResult["mode"] | "unavailable" | "error";
   guardAllowed: boolean | null;
   guardReason: string;
   blockerCodes: string[];
+  missingMetadataCodes: string[];
   matchedRefsCount: number;
   safeIds: {
     siteId: string;
@@ -139,6 +174,26 @@ function matchedRefsCount(result: PublishActivationEnforcementGuardResult): numb
   return Object.values(result.matchedRefs).filter((value) => text(value)).length;
 }
 
+function refId(ref: PublishActivationEnforcementGuardRef | string | null | undefined): string | null {
+  if (!ref) return null;
+  if (typeof ref === "string") {
+    const normalized = text(ref);
+    if (!normalized) return null;
+    return text(normalized.split(":").at(-1)) ?? normalized;
+  }
+  return text(ref.sourceRecordId);
+}
+
+function gateAttemptRefId(ref: PublishActivationPersistedGateResultRef | string | null | undefined): string | null {
+  if (!ref) return null;
+  if (typeof ref === "string") return refId(ref);
+  return text(ref.gateAttemptId) ?? refId(ref.gateAttemptRef);
+}
+
+function uniqueSorted(values: readonly (string | null | undefined)[]): string[] {
+  return Array.from(new Set(values.map(text).filter((value): value is string => Boolean(value)))).sort((left, right) => left.localeCompare(right));
+}
+
 function unavailableEnforcementShadowObservation(input: {
   siteId: string;
   siteVersionId: string;
@@ -150,6 +205,10 @@ function unavailableEnforcementShadowObservation(input: {
   idempotencyKey: string | null;
   reason: string;
   blockerCodes: string[];
+  missingMetadataCodes?: string[];
+  metadataSource?: PublishActivationEnforcementShadowObservation["metadataSource"];
+  resolverStatus?: PublishActivationEnforcementShadowObservation["resolverStatus"];
+  resolverReason?: string | null;
   guardMode?: PublishActivationEnforcementShadowObservation["guardMode"];
 }): PublishActivationEnforcementShadowObservation {
   return {
@@ -158,10 +217,14 @@ function unavailableEnforcementShadowObservation(input: {
     shadowOnly: true,
     enforcementApplied: false,
     publishActionBlocked: false,
+    metadataSource: input.metadataSource ?? "missing",
+    resolverStatus: input.resolverStatus ?? "not_available",
+    resolverReason: input.resolverReason ?? null,
     guardMode: input.guardMode ?? "unavailable",
     guardAllowed: null,
     guardReason: input.reason,
     blockerCodes: input.blockerCodes,
+    missingMetadataCodes: input.missingMetadataCodes ?? input.blockerCodes,
     matchedRefsCount: 0,
     safeIds: {
       siteId: input.siteId,
@@ -187,15 +250,124 @@ function enforcementShadowDiagnosticLog(
     shadowOnly: true,
     enforcementApplied: false,
     publishActionBlocked: false,
+    metadataSource: observation.metadataSource,
+    resolverStatus: observation.resolverStatus,
+    resolverReason: observation.resolverReason,
     guardMode: observation.guardMode,
     guardReason: observation.guardReason,
     blockerCodes: observation.blockerCodes,
+    missingMetadataCodes: observation.missingMetadataCodes,
     matchedRefsCount: observation.matchedRefsCount,
     safeIds: observation.safeIds,
     correlationId: observation.correlationId,
     idempotencyKey: observation.idempotencyKey,
     ...extra,
   });
+}
+
+function resolverIdentityMissingCodes(input: {
+  tenantId: unknown;
+  clientId: unknown;
+  migrationId: unknown;
+  publishEnvironment: unknown;
+  actorRole: unknown;
+  correlationId: unknown;
+  idempotencyKey: unknown;
+}): string[] {
+  const required = {
+    tenant_id: input.tenantId,
+    client_id: input.clientId,
+    migration_id: input.migrationId,
+    publish_environment: input.publishEnvironment,
+    actor_role: input.actorRole,
+    correlation_id: input.correlationId,
+    idempotency_key: input.idempotencyKey,
+  };
+  return Object.entries(required)
+    .filter(([, value]) => !text(value))
+    .map(([field]) => `publish_activation_metadata_resolver_shadow_${field}_missing`);
+}
+
+function buildMetadataResolverShadowInput(input: {
+  siteId: string;
+  siteVersionId: string;
+  runtimeArtifactId: string;
+  actor: string;
+  publishStage: "shadow" | "canary" | "production";
+  metadata: NormalizedPublishActivationMetadataHandoff | null;
+  resolverInput?: PublishActivationMetadataResolverShadowInput | null;
+}):
+  | {
+      ok: true;
+      value: Parameters<PublishActivationMetadataResolverShadow>[0];
+    }
+  | {
+      ok: false;
+      missingCodes: string[];
+    } {
+  const resolverInput = input.resolverInput ?? null;
+  const tenantId = text(resolverInput?.tenantId) ?? input.metadata?.tenantId ?? null;
+  const clientId = text(resolverInput?.clientId) ?? input.metadata?.clientId ?? null;
+  const migrationId = text(resolverInput?.migrationId) ?? input.metadata?.migrationId ?? null;
+  const publishEnvironment = text(resolverInput?.publishEnvironment) ?? input.metadata?.publishEnvironment ?? null;
+  const actorRole = text(resolverInput?.actorRole) ?? input.metadata?.actorRole ?? null;
+  const correlationId = text(resolverInput?.correlationId) ?? text(input.metadata?.correlationId);
+  const idempotencyKey = text(resolverInput?.idempotencyKey) ?? text(input.metadata?.idempotencyKey);
+  const missingCodes = resolverIdentityMissingCodes({
+    tenantId,
+    clientId,
+    migrationId,
+    publishEnvironment,
+    actorRole,
+    correlationId,
+    idempotencyKey,
+  });
+  if (missingCodes.length > 0) return { ok: false, missingCodes };
+
+  const expectedGateAttemptResultRef =
+    text(resolverInput?.expectedGateAttemptResultRef) ??
+    gateAttemptRefId(input.metadata?.gateAttemptResultRef) ??
+    null;
+
+  return {
+    ok: true,
+    value: {
+      tenantId: tenantId!,
+      clientId: clientId!,
+      siteId: input.siteId,
+      migrationId: migrationId!,
+      candidateSiteVersionRef: input.metadata?.candidateSiteVersionRef ?? `runtime-site-version:${input.siteVersionId}`,
+      runtimeArtifactRef: input.metadata?.runtimeArtifactRef ?? `runtime-artifact:${input.runtimeArtifactId}`,
+      publishStage: input.publishStage,
+      publishEnvironment: publishEnvironment!,
+      actor: {
+        actorType: resolverInput?.actorType ?? input.metadata?.actorType ?? "human",
+        actorId: input.actor,
+        actorRole: actorRole!,
+      },
+      correlationId: correlationId!,
+      idempotencyKey: idempotencyKey!,
+      expectedPublishTargetRef: resolverInput?.expectedPublishTargetRef ?? input.metadata?.publishTargetRef ?? null,
+      expectedPublishActivationRequestRef:
+        text(resolverInput?.expectedPublishActivationRequestRef) ??
+        input.metadata?.publishActivationRequestRef.id ??
+        input.metadata?.publishActivationRequestRef.ref ??
+        null,
+      expectedPublishActivationDecisionRef:
+        text(resolverInput?.expectedPublishActivationDecisionRef) ??
+        input.metadata?.publishActivationDecisionRef.id ??
+        input.metadata?.publishActivationDecisionRef.ref ??
+        null,
+      expectedGateAttemptResultRef,
+      expectedHandoffWatermark: text(resolverInput?.expectedHandoffWatermark) ?? input.metadata?.handoffWatermark ?? null,
+      expectedGateInputWatermark: text(resolverInput?.expectedGateInputWatermark) ?? input.metadata?.gateInputWatermark ?? null,
+      maxGateAgeMs: resolverInput?.maxGateAgeMs ?? input.metadata?.policy?.maxGateAgeMs,
+      allowWarningsWithLimitations: resolverInput?.allowWarningsWithLimitations ?? input.metadata?.policy?.allowWarningsWithLimitations,
+      evaluatedAt: resolverInput?.evaluatedAt ?? null,
+      requestId: text(resolverInput?.requestId) ?? input.metadata?.requestId ?? null,
+      repository: resolverInput?.repository,
+    },
+  };
 }
 
 async function resolvePublishActivationShadowScope(input: {
@@ -233,6 +405,8 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
   actor: string;
   publishStage: "shadow" | "canary" | "production";
   metadata?: PublishActivationEnforcementShadowMetadata | null;
+  metadataResolverInput?: PublishActivationMetadataResolverShadowInput | null;
+  metadataResolver?: PublishActivationMetadataResolverShadow;
   guard?: PublishActivationEnforcementShadowGuard;
 }): Promise<PublishActivationEnforcementShadowObservation | null> {
   if (!publishActivationEnforcementShadowEnabled(input.enabled)) return null;
@@ -255,22 +429,135 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
     ...handoff.diagnostics.mismatchCodes,
   ];
 
-  if (!handoff.diagnostics.complete || !normalized?.gateAttemptResultRef || !normalized.publishTargetRef || !normalized.candidateSiteVersionRef || !normalized.runtimeArtifactRef) {
+  let effectiveHandoff = handoff;
+  let effectiveNormalized = normalized;
+  let metadataSource: PublishActivationEnforcementShadowObservation["metadataSource"] = handoff.diagnostics.complete ? "explicit" : metadata ? "incomplete" : "missing";
+  let resolverStatus: PublishActivationEnforcementShadowObservation["resolverStatus"] = handoff.diagnostics.complete ? "not_needed" : "not_available";
+  let resolverReason: string | null = handoff.diagnostics.complete ? null : "publish activation metadata resolver shadow identity unavailable";
+  let resolverResult: PublishActivationMetadataResolverResult | null = null;
+
+  if (!handoff.diagnostics.complete) {
+    const resolverSeedMetadata = normalized && metadata
+      ? {
+          ...normalized,
+          actorRole: text(metadata.actorRole) ?? "",
+          correlationId: text(metadata.correlationId) ?? "",
+          idempotencyKey: text(metadata.idempotencyKey) ?? "",
+        }
+      : normalized;
+    const resolverShadowInput = buildMetadataResolverShadowInput({
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      runtimeArtifactId: input.runtimeArtifactId,
+      actor: input.actor,
+      publishStage: input.publishStage,
+      metadata: resolverSeedMetadata,
+      resolverInput: input.metadataResolverInput ?? null,
+    });
+
+    if (!resolverShadowInput.ok) {
+      const observation = unavailableEnforcementShadowObservation({
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        runtimeArtifactId: input.runtimeArtifactId,
+        publishTargetId,
+        gateAttemptId,
+        publishActivationDecisionId,
+        correlationId,
+        idempotencyKey,
+        reason: "publish activation enforcement shadow metadata unavailable",
+        blockerCodes: uniqueSorted([...blockerCodes, ...resolverShadowInput.missingCodes]),
+        missingMetadataCodes: uniqueSorted([...handoff.diagnostics.missingCodes, ...resolverShadowInput.missingCodes]),
+        metadataSource,
+        resolverStatus,
+        resolverReason,
+      });
+      enforcementShadowDiagnosticLog("[gnr8.single-site.mvp50] publish activation metadata resolver shadow unavailable", observation, {
+        metadataHandoffStatus: handoff.diagnostics.status,
+        metadataWarningCodes: handoff.diagnostics.warningCodes,
+      });
+      return observation;
+    }
+
+    try {
+      const resolver = input.metadataResolver ?? readAndResolveSingleSitePublishActivationMetadataHandoff;
+      resolverResult = await resolver(resolverShadowInput.value);
+      resolverStatus = resolverResult.diagnostics.complete ? "complete" : "incomplete";
+      resolverReason = resolverResult.diagnostics.complete
+        ? "publish activation metadata resolved"
+        : "publish activation metadata resolver returned incomplete diagnostics";
+      if (resolverResult.publishActivationMetadataHandoff && resolverResult.diagnostics.complete) {
+        effectiveHandoff = normalizePublishActivationMetadataHandoff(resolverResult.publishActivationMetadataHandoff, {
+          siteId: input.siteId,
+          siteVersionId: input.siteVersionId,
+          runtimeArtifactId: input.runtimeArtifactId,
+          publishStage: input.publishStage,
+        });
+        effectiveNormalized = effectiveHandoff.normalized;
+        metadataSource = effectiveHandoff.diagnostics.complete ? "resolved" : "incomplete";
+      }
+    } catch (error) {
+      const observation = unavailableEnforcementShadowObservation({
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        runtimeArtifactId: input.runtimeArtifactId,
+        publishTargetId,
+        gateAttemptId,
+        publishActivationDecisionId,
+        correlationId,
+        idempotencyKey,
+        reason: "publish activation metadata resolver shadow error",
+        blockerCodes: uniqueSorted([...blockerCodes, "publish_activation_metadata_resolver_shadow_error"]),
+        missingMetadataCodes: handoff.diagnostics.missingCodes,
+        metadataSource: "resolver_error",
+        resolverStatus: "error",
+        resolverReason: error instanceof Error ? error.message : String(error),
+      });
+      enforcementShadowDiagnosticLog("[gnr8.single-site.mvp50] publish activation metadata resolver shadow failed open", observation);
+      return observation;
+    }
+  }
+
+  const effectivePublishTargetId = effectiveHandoff.diagnostics.safeIds.publishTargetId;
+  const effectiveGateAttemptId = effectiveHandoff.diagnostics.safeIds.gateAttemptId;
+  const effectivePublishActivationDecisionId = effectiveHandoff.diagnostics.safeIds.publishActivationDecisionId;
+  const effectiveCorrelationId = effectiveNormalized?.correlationId ?? correlationId;
+  const effectiveIdempotencyKey = effectiveNormalized?.idempotencyKey ?? idempotencyKey;
+  const effectiveBlockerCodes = uniqueSorted([
+    ...effectiveHandoff.diagnostics.missingCodes,
+    ...effectiveHandoff.diagnostics.mismatchCodes,
+    ...(resolverResult?.diagnostics.blockerCodes ?? []),
+    ...(resolverResult?.diagnostics.staleCodes ?? []),
+  ]);
+
+  if (!effectiveHandoff.diagnostics.complete || !effectiveNormalized?.gateAttemptResultRef || !effectiveNormalized.publishTargetRef || !effectiveNormalized.candidateSiteVersionRef || !effectiveNormalized.runtimeArtifactRef) {
     const observation = unavailableEnforcementShadowObservation({
       siteId: input.siteId,
       siteVersionId: input.siteVersionId,
       runtimeArtifactId: input.runtimeArtifactId,
-      publishTargetId,
-      gateAttemptId,
-      publishActivationDecisionId,
-      correlationId,
-      idempotencyKey,
+      publishTargetId: effectivePublishTargetId,
+      gateAttemptId: effectiveGateAttemptId,
+      publishActivationDecisionId: effectivePublishActivationDecisionId,
+      correlationId: effectiveCorrelationId,
+      idempotencyKey: effectiveIdempotencyKey,
       reason: "publish activation enforcement shadow metadata unavailable",
-      blockerCodes,
+      blockerCodes: effectiveBlockerCodes,
+      missingMetadataCodes: uniqueSorted([
+        ...effectiveHandoff.diagnostics.missingCodes,
+        ...(resolverResult?.diagnostics.missingCodes ?? []),
+        ...(resolverResult?.diagnostics.mismatchCodes ?? []),
+      ]),
+      metadataSource,
+      resolverStatus,
+      resolverReason,
     });
-    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp48] publish activation enforcement metadata handoff unavailable", observation, {
-      metadataHandoffStatus: handoff.diagnostics.status,
-      metadataWarningCodes: handoff.diagnostics.warningCodes,
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp50] publish activation enforcement metadata unavailable", observation, {
+      metadataHandoffStatus: effectiveHandoff.diagnostics.status,
+      metadataWarningCodes: effectiveHandoff.diagnostics.warningCodes,
+      resolverBlockerCodes: resolverResult?.diagnostics.blockerCodes ?? [],
+      resolverMissingCodes: resolverResult?.diagnostics.missingCodes ?? [],
+      resolverMismatchCodes: resolverResult?.diagnostics.mismatchCodes ?? [],
+      resolverStaleCodes: resolverResult?.diagnostics.staleCodes ?? [],
     });
     return observation;
   }
@@ -278,33 +565,33 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
   try {
     const guard = input.guard ?? readAndEvaluatePublishActivationEnforcementGuard;
     const result = await guard({
-      tenantId: normalized.tenantId!,
-      clientId: normalized.clientId!,
+      tenantId: effectiveNormalized.tenantId!,
+      clientId: effectiveNormalized.clientId!,
       siteId: input.siteId,
-      migrationId: normalized.migrationId!,
-      candidateSiteVersionRef: normalized.candidateSiteVersionRef,
-      runtimeArtifactRef: normalized.runtimeArtifactRef,
-      publishTargetRef: normalized.publishTargetRef,
+      migrationId: effectiveNormalized.migrationId!,
+      candidateSiteVersionRef: effectiveNormalized.candidateSiteVersionRef,
+      runtimeArtifactRef: effectiveNormalized.runtimeArtifactRef,
+      publishTargetRef: effectiveNormalized.publishTargetRef,
       publishStage: input.publishStage,
-      publishEnvironment: normalized.publishEnvironment!,
+      publishEnvironment: effectiveNormalized.publishEnvironment!,
       publishActivationDecisionRef: {
-        id: publishActivationDecisionId,
-        ref: normalized.publishActivationDecisionRef.ref,
-        status: normalized.publishActivationDecisionRef.status,
+        id: effectivePublishActivationDecisionId,
+        ref: effectiveNormalized.publishActivationDecisionRef.ref,
+        status: effectiveNormalized.publishActivationDecisionRef.status,
       },
-      gateAttemptResultRef: normalized.gateAttemptResultRef,
-      handoffWatermark: normalized.handoffWatermark!,
-      gateInputWatermark: normalized.gateInputWatermark!,
+      gateAttemptResultRef: effectiveNormalized.gateAttemptResultRef,
+      handoffWatermark: effectiveNormalized.handoffWatermark!,
+      gateInputWatermark: effectiveNormalized.gateInputWatermark!,
       actor: {
-        actorType: normalized.actorType,
+        actorType: effectiveNormalized.actorType,
         actorId: input.actor,
-        actorRole: normalized.actorRole,
+        actorRole: effectiveNormalized.actorRole,
       },
-      correlationId: normalized.correlationId,
-      idempotencyKey: normalized.idempotencyKey,
-      requestId: normalized.requestId,
-      policy: normalized.policy,
-      repository: normalized.repository,
+      correlationId: effectiveNormalized.correlationId,
+      idempotencyKey: effectiveNormalized.idempotencyKey,
+      requestId: effectiveNormalized.requestId,
+      policy: effectiveNormalized.policy,
+      repository: effectiveNormalized.repository,
     });
     const observation: PublishActivationEnforcementShadowObservation = {
       enabled: true,
@@ -312,27 +599,31 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
       shadowOnly: true,
       enforcementApplied: false,
       publishActionBlocked: false,
+      metadataSource,
+      resolverStatus,
+      resolverReason,
       guardMode: result.mode,
       guardAllowed: result.allowed,
       guardReason: result.reason,
       blockerCodes: result.blockerCodes,
+      missingMetadataCodes: [],
       matchedRefsCount: matchedRefsCount(result),
       safeIds: {
         siteId: input.siteId,
         siteVersionId: input.siteVersionId,
         runtimeArtifactId: input.runtimeArtifactId,
-        publishTargetId: result.matchedRefs.publishTargetId ?? publishTargetId,
-        gateAttemptId: result.matchedRefs.gateAttemptId ?? gateAttemptId,
-        publishActivationDecisionId: result.matchedRefs.publishActivationDecisionId ?? publishActivationDecisionId,
+        publishTargetId: result.matchedRefs.publishTargetId ?? effectivePublishTargetId,
+        gateAttemptId: result.matchedRefs.gateAttemptId ?? effectiveGateAttemptId,
+        publishActivationDecisionId: result.matchedRefs.publishActivationDecisionId ?? effectivePublishActivationDecisionId,
       },
-      correlationId: result.diagnosticRefs.correlationId ?? correlationId,
-      idempotencyKey: result.diagnosticRefs.idempotencyKey ?? idempotencyKey,
+      correlationId: result.diagnosticRefs.correlationId ?? effectiveCorrelationId,
+      idempotencyKey: result.diagnosticRefs.idempotencyKey ?? effectiveIdempotencyKey,
     };
-    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp48] publish activation enforcement metadata handoff observed", observation, {
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp50] publish activation enforcement metadata observed", observation, {
       guardAllowed: result.allowed,
       guardWouldBlockIfWired: result.flags.publishActionBlockedWouldBlockIfWired,
-      metadataHandoffWatermark: normalized.metadataWatermark,
-      metadataWarningCodes: handoff.diagnostics.warningCodes,
+      metadataHandoffWatermark: effectiveNormalized.metadataWatermark,
+      metadataWarningCodes: effectiveHandoff.diagnostics.warningCodes,
     });
     return observation;
   } catch (error) {
@@ -340,16 +631,19 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
       siteId: input.siteId,
       siteVersionId: input.siteVersionId,
       runtimeArtifactId: input.runtimeArtifactId,
-      publishTargetId,
-      gateAttemptId,
-      publishActivationDecisionId,
-      correlationId,
-      idempotencyKey,
+      publishTargetId: effectivePublishTargetId,
+      gateAttemptId: effectiveGateAttemptId,
+      publishActivationDecisionId: effectivePublishActivationDecisionId,
+      correlationId: effectiveCorrelationId,
+      idempotencyKey: effectiveIdempotencyKey,
       reason: "publish activation enforcement shadow guard error",
       blockerCodes: ["publish_activation_enforcement_shadow_guard_error"],
+      metadataSource,
+      resolverStatus,
+      resolverReason,
       guardMode: "error",
     });
-    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp48] publish activation enforcement metadata handoff failed open", observation, {
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp50] publish activation enforcement metadata guard failed open", observation, {
       error: error instanceof Error ? error.message : String(error),
     });
     return observation;
@@ -568,6 +862,8 @@ export async function publishApprovedSiteVersion(input: {
   publishActivationEnforcementShadowEnabled?: boolean;
   publishActivationMetadataHandoff?: PublishActivationMetadataHandoff | null;
   publishActivationEnforcementShadowMetadata?: PublishActivationEnforcementShadowMetadata | null;
+  publishActivationMetadataResolverShadowInput?: PublishActivationMetadataResolverShadowInput | null;
+  publishActivationMetadataResolverShadow?: PublishActivationMetadataResolverShadow;
   publishActivationEnforcementShadowGuard?: PublishActivationEnforcementShadowGuard;
 }) {
   const dbOptions = { dbClient: input.dbClient };
@@ -683,6 +979,8 @@ export async function publishApprovedSiteVersion(input: {
         actor: input.actor,
         publishStage: resolvedPublishStage,
         metadata: input.publishActivationMetadataHandoff ?? input.publishActivationEnforcementShadowMetadata ?? null,
+        metadataResolverInput: input.publishActivationMetadataResolverShadowInput ?? null,
+        metadataResolver: input.publishActivationMetadataResolverShadow,
         guard: input.publishActivationEnforcementShadowGuard,
       });
       return {
@@ -717,6 +1015,8 @@ export async function publishApprovedSiteVersion(input: {
       actor: input.actor,
       publishStage: resolvedPublishStage,
       metadata: input.publishActivationMetadataHandoff ?? input.publishActivationEnforcementShadowMetadata ?? null,
+      metadataResolverInput: input.publishActivationMetadataResolverShadowInput ?? null,
+      metadataResolver: input.publishActivationMetadataResolverShadow,
       guard: input.publishActivationEnforcementShadowGuard,
     });
 
@@ -870,6 +1170,8 @@ export async function publishApprovedSiteVersion(input: {
     actor: input.actor,
     publishStage,
     metadata: input.publishActivationMetadataHandoff ?? input.publishActivationEnforcementShadowMetadata ?? null,
+    metadataResolverInput: input.publishActivationMetadataResolverShadowInput ?? null,
+    metadataResolver: input.publishActivationMetadataResolverShadow,
     guard: input.publishActivationEnforcementShadowGuard,
   });
 
