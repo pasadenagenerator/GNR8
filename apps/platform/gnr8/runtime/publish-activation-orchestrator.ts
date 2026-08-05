@@ -8,6 +8,15 @@ import {
   type PublishActivationShadowResult,
 } from "@/gnr8/aaf/aaf-publish-activation-shadow-observer";
 import {
+  readAndEvaluatePublishActivationEnforcementGuard,
+  type PublishActivationEnforcementGuardActor,
+  type PublishActivationEnforcementGuardPolicy,
+  type PublishActivationEnforcementGuardReadRepositoryLike,
+  type PublishActivationEnforcementGuardRef,
+  type PublishActivationEnforcementGuardResult,
+  type PublishActivationPersistedGateResultRef,
+} from "@/gnr8/single-site/publish-activation-enforcement-guard";
+import {
   evaluatePointerSwitchReadiness,
   evaluatePublishActivationCandidate,
   type PublishActivationFailureCode,
@@ -43,6 +52,56 @@ export type PublishActivationShadowScope = {
 
 export type PublishActivationShadowObserver = (input: PublishActivationShadowObserverInput) => Promise<PublishActivationShadowResult>;
 
+export type PublishActivationEnforcementShadowMetadata = {
+  tenantId?: string | null;
+  clientId?: string | null;
+  migrationId?: string | null;
+  candidateSiteVersionRef?: PublishActivationEnforcementGuardRef | string | null;
+  runtimeArtifactRef?: PublishActivationEnforcementGuardRef | string | null;
+  publishTargetRef?: PublishActivationEnforcementGuardRef | string | null;
+  publishEnvironment?: string | null;
+  publishActivationDecisionRef?: {
+    id?: string | null;
+    ref?: string | null;
+    status?: string | null;
+  } | null;
+  gateAttemptResultRef?: PublishActivationPersistedGateResultRef | null;
+  handoffWatermark?: string | null;
+  gateInputWatermark?: string | null;
+  actorType?: PublishActivationEnforcementGuardActor["actorType"];
+  actorRole?: string | null;
+  correlationId?: string | null;
+  idempotencyKey?: string | null;
+  requestId?: string | null;
+  policy?: PublishActivationEnforcementGuardPolicy;
+  repository?: PublishActivationEnforcementGuardReadRepositoryLike;
+};
+
+export type PublishActivationEnforcementShadowGuard = typeof readAndEvaluatePublishActivationEnforcementGuard;
+
+export type PublishActivationEnforcementShadowObservation = {
+  enabled: true;
+  available: boolean;
+  shadowOnly: true;
+  enforcementApplied: false;
+  publishActionBlocked: false;
+  guardMode: PublishActivationEnforcementGuardResult["mode"] | "unavailable" | "error";
+  guardAllowed: boolean | null;
+  guardReason: string;
+  blockerCodes: string[];
+  matchedRefsCount: number;
+  safeIds: {
+    siteId: string;
+    siteVersionId: string;
+    runtimeArtifactId: string;
+    publishTargetId: string | null;
+    gateAttemptId: string | null;
+    publishActivationDecisionId: string | null;
+  };
+  correlationId: string | null;
+  idempotencyKey: string | null;
+};
+
 function text(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const normalized = String(value).trim();
@@ -51,6 +110,92 @@ function text(value: unknown): string | null {
 
 function publishActivationShadowGateEnabled(override?: boolean): boolean {
   return override === true || (override !== false && isPublishActivationShadowGateEnabled());
+}
+
+function flagEnabled(value: string | undefined): boolean {
+  return ["1", "true", "enabled", "on", "shadow"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+export function isPublishActivationEnforcementGateShadowEnabled(): boolean {
+  return flagEnabled(process.env.GNR8_SINGLE_SITE_PUBLISH_ACTIVATION_GATE_SHADOW);
+}
+
+function publishActivationEnforcementShadowEnabled(override?: boolean): boolean {
+  return override === true || (override !== false && isPublishActivationEnforcementGateShadowEnabled());
+}
+
+function sourceRecordId(refOrId: PublishActivationEnforcementGuardRef | string | null | undefined): string | null {
+  if (!refOrId) return null;
+  if (typeof refOrId === "string") {
+    const normalized = text(refOrId);
+    if (!normalized) return null;
+    const parts = normalized.split(":");
+    return parts[parts.length - 1] || normalized;
+  }
+  return text(refOrId.sourceRecordId);
+}
+
+function matchedRefsCount(result: PublishActivationEnforcementGuardResult): number {
+  return Object.values(result.matchedRefs).filter((value) => text(value)).length;
+}
+
+function unavailableEnforcementShadowObservation(input: {
+  siteId: string;
+  siteVersionId: string;
+  runtimeArtifactId: string;
+  publishTargetId: string | null;
+  gateAttemptId: string | null;
+  publishActivationDecisionId: string | null;
+  correlationId: string | null;
+  idempotencyKey: string | null;
+  reason: string;
+  blockerCodes: string[];
+  guardMode?: PublishActivationEnforcementShadowObservation["guardMode"];
+}): PublishActivationEnforcementShadowObservation {
+  return {
+    enabled: true,
+    available: false,
+    shadowOnly: true,
+    enforcementApplied: false,
+    publishActionBlocked: false,
+    guardMode: input.guardMode ?? "unavailable",
+    guardAllowed: null,
+    guardReason: input.reason,
+    blockerCodes: input.blockerCodes,
+    matchedRefsCount: 0,
+    safeIds: {
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      runtimeArtifactId: input.runtimeArtifactId,
+      publishTargetId: input.publishTargetId,
+      gateAttemptId: input.gateAttemptId,
+      publishActivationDecisionId: input.publishActivationDecisionId,
+    },
+    correlationId: input.correlationId,
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
+function enforcementShadowDiagnosticLog(
+  message: string,
+  observation: PublishActivationEnforcementShadowObservation,
+  extra?: Record<string, unknown>,
+): void {
+  console.info(message, {
+    shadowEnabled: true,
+    shadowAvailable: observation.available,
+    shadowOnly: true,
+    enforcementApplied: false,
+    publishActionBlocked: false,
+    guardMode: observation.guardMode,
+    guardReason: observation.guardReason,
+    blockerCodes: observation.blockerCodes,
+    matchedRefsCount: observation.matchedRefsCount,
+    safeIds: observation.safeIds,
+    correlationId: observation.correlationId,
+    idempotencyKey: observation.idempotencyKey,
+    ...extra,
+  });
 }
 
 async function resolvePublishActivationShadowScope(input: {
@@ -78,6 +223,155 @@ async function resolvePublishActivationShadowScope(input: {
     clientId: input.providedScope?.clientId === undefined ? text(ownershipSite?.orgId) : text(input.providedScope.clientId),
     actorRole: text(input.providedScope?.actorRole),
   };
+}
+
+export async function runPublishActivationEnforcementShadowObservation(input: {
+  enabled?: boolean;
+  siteId: string;
+  siteVersionId: string;
+  runtimeArtifactId: string;
+  actor: string;
+  publishStage: "shadow" | "canary" | "production";
+  metadata?: PublishActivationEnforcementShadowMetadata | null;
+  guard?: PublishActivationEnforcementShadowGuard;
+}): Promise<PublishActivationEnforcementShadowObservation | null> {
+  if (!publishActivationEnforcementShadowEnabled(input.enabled)) return null;
+
+  const metadata = input.metadata ?? null;
+  const candidateSiteVersionRef =
+    metadata?.candidateSiteVersionRef ?? {
+      role: "candidate_site_version",
+      sourceSystem: "gnr8_runtime",
+      sourceTable: "gnr8_runtime_site_versions",
+      sourceRecordId: input.siteVersionId,
+      sourceRef: `runtime-site-version:${input.siteVersionId}`,
+    };
+  const runtimeArtifactRef =
+    metadata?.runtimeArtifactRef ?? {
+      role: "runtime_artifact",
+      sourceSystem: "gnr8_runtime",
+      sourceTable: "gnr8_runtime_artifacts",
+      sourceRecordId: input.runtimeArtifactId,
+      sourceRef: `runtime-artifact:${input.runtimeArtifactId}`,
+    };
+  const publishTargetId = sourceRecordId(metadata?.publishTargetRef);
+  const gateAttemptId = text(metadata?.gateAttemptResultRef?.gateAttemptId);
+  const publishActivationDecisionId = text(metadata?.publishActivationDecisionRef?.id);
+  const correlationId = text(metadata?.correlationId);
+  const idempotencyKey = text(metadata?.idempotencyKey);
+  const missing = [
+    ["tenant_id", metadata?.tenantId],
+    ["client_id", metadata?.clientId],
+    ["migration_id", metadata?.migrationId],
+    ["candidate_site_version_ref", sourceRecordId(candidateSiteVersionRef)],
+    ["runtime_artifact_ref", sourceRecordId(runtimeArtifactRef)],
+    ["publish_target_ref", publishTargetId],
+    ["publish_environment", metadata?.publishEnvironment],
+    ["publish_activation_decision_ref", publishActivationDecisionId ?? metadata?.publishActivationDecisionRef?.ref],
+    ["gate_attempt_result_ref", gateAttemptId],
+    ["handoff_watermark", metadata?.handoffWatermark],
+    ["gate_input_watermark", metadata?.gateInputWatermark],
+    ["actor_role", metadata?.actorRole],
+    ["correlation_id", correlationId],
+    ["idempotency_key", idempotencyKey],
+  ]
+    .filter(([, value]) => !text(value))
+    .map(([field]) => `publish_activation_enforcement_shadow_${field}_missing`);
+
+  if (missing.length > 0 || !metadata?.gateAttemptResultRef) {
+    const observation = unavailableEnforcementShadowObservation({
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      runtimeArtifactId: input.runtimeArtifactId,
+      publishTargetId,
+      gateAttemptId,
+      publishActivationDecisionId,
+      correlationId,
+      idempotencyKey,
+      reason: "publish activation enforcement shadow metadata unavailable",
+      blockerCodes: missing,
+    });
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp47] publish activation enforcement shadow unavailable", observation);
+    return observation;
+  }
+
+  try {
+    const guard = input.guard ?? readAndEvaluatePublishActivationEnforcementGuard;
+    const result = await guard({
+      tenantId: text(metadata.tenantId)!,
+      clientId: text(metadata.clientId)!,
+      siteId: input.siteId,
+      migrationId: text(metadata.migrationId)!,
+      candidateSiteVersionRef,
+      runtimeArtifactRef,
+      publishTargetRef: metadata.publishTargetRef!,
+      publishStage: input.publishStage,
+      publishEnvironment: text(metadata.publishEnvironment)!,
+      publishActivationDecisionRef: {
+        id: publishActivationDecisionId,
+        ref: text(metadata.publishActivationDecisionRef?.ref),
+        status: text(metadata.publishActivationDecisionRef?.status),
+      },
+      gateAttemptResultRef: metadata.gateAttemptResultRef,
+      handoffWatermark: text(metadata.handoffWatermark)!,
+      gateInputWatermark: text(metadata.gateInputWatermark)!,
+      actor: {
+        actorType: metadata.actorType ?? "human",
+        actorId: input.actor,
+        actorRole: text(metadata.actorRole)!,
+      },
+      correlationId: correlationId!,
+      idempotencyKey: idempotencyKey!,
+      requestId: text(metadata.requestId),
+      policy: metadata.policy,
+      repository: metadata.repository,
+    });
+    const observation: PublishActivationEnforcementShadowObservation = {
+      enabled: true,
+      available: true,
+      shadowOnly: true,
+      enforcementApplied: false,
+      publishActionBlocked: false,
+      guardMode: result.mode,
+      guardAllowed: result.allowed,
+      guardReason: result.reason,
+      blockerCodes: result.blockerCodes,
+      matchedRefsCount: matchedRefsCount(result),
+      safeIds: {
+        siteId: input.siteId,
+        siteVersionId: input.siteVersionId,
+        runtimeArtifactId: input.runtimeArtifactId,
+        publishTargetId: result.matchedRefs.publishTargetId ?? publishTargetId,
+        gateAttemptId: result.matchedRefs.gateAttemptId ?? gateAttemptId,
+        publishActivationDecisionId: result.matchedRefs.publishActivationDecisionId ?? publishActivationDecisionId,
+      },
+      correlationId: result.diagnosticRefs.correlationId ?? correlationId,
+      idempotencyKey: result.diagnosticRefs.idempotencyKey ?? idempotencyKey,
+    };
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp47] publish activation enforcement shadow observed", observation, {
+      guardAllowed: result.allowed,
+      guardWouldBlockIfWired: result.flags.publishActionBlockedWouldBlockIfWired,
+    });
+    return observation;
+  } catch (error) {
+    const observation = unavailableEnforcementShadowObservation({
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      runtimeArtifactId: input.runtimeArtifactId,
+      publishTargetId,
+      gateAttemptId,
+      publishActivationDecisionId,
+      correlationId,
+      idempotencyKey,
+      reason: "publish activation enforcement shadow guard error",
+      blockerCodes: ["publish_activation_enforcement_shadow_guard_error"],
+      guardMode: "error",
+    });
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp47] publish activation enforcement shadow failed open", observation, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return observation;
+  }
 }
 
 export async function runPublishActivationShadowGateObservation(input: {
@@ -289,6 +583,9 @@ export async function publishApprovedSiteVersion(input: {
   publishActivationShadowGateEnabled?: boolean;
   publishActivationShadowScope?: PublishActivationShadowScope | null;
   publishActivationShadowObserver?: PublishActivationShadowObserver;
+  publishActivationEnforcementShadowEnabled?: boolean;
+  publishActivationEnforcementShadowMetadata?: PublishActivationEnforcementShadowMetadata | null;
+  publishActivationEnforcementShadowGuard?: PublishActivationEnforcementShadowGuard;
 }) {
   const dbOptions = { dbClient: input.dbClient };
   const siteVersion = await getSiteVersion(input.siteVersionId, dbOptions);
@@ -395,6 +692,16 @@ export async function publishApprovedSiteVersion(input: {
         dbClient: input.dbClient,
         observer: input.publishActivationShadowObserver,
       });
+      await runPublishActivationEnforcementShadowObservation({
+        enabled: input.publishActivationEnforcementShadowEnabled,
+        siteId: siteVersion.siteId,
+        siteVersionId: siteVersion.id,
+        runtimeArtifactId: siteVersion.artifactId,
+        actor: input.actor,
+        publishStage: resolvedPublishStage,
+        metadata: input.publishActivationEnforcementShadowMetadata ?? null,
+        guard: input.publishActivationEnforcementShadowGuard,
+      });
       return {
         siteId: siteVersion.siteId,
         siteVersionId: siteVersion.id,
@@ -418,6 +725,16 @@ export async function publishApprovedSiteVersion(input: {
       scope: input.publishActivationShadowScope ?? null,
       dbClient: input.dbClient,
       observer: input.publishActivationShadowObserver,
+    });
+    await runPublishActivationEnforcementShadowObservation({
+      enabled: input.publishActivationEnforcementShadowEnabled,
+      siteId: siteVersion.siteId,
+      siteVersionId: siteVersion.id,
+      runtimeArtifactId: siteVersion.artifactId,
+      actor: input.actor,
+      publishStage: resolvedPublishStage,
+      metadata: input.publishActivationEnforcementShadowMetadata ?? null,
+      guard: input.publishActivationEnforcementShadowGuard,
     });
 
     let pointerSwitchResult: { switched: boolean; previousActivePointer: { siteVersionId: string; artifactId: string } | null };
@@ -561,6 +878,16 @@ export async function publishApprovedSiteVersion(input: {
     scope: input.publishActivationShadowScope ?? null,
     dbClient: input.dbClient,
     observer: input.publishActivationShadowObserver,
+  });
+  await runPublishActivationEnforcementShadowObservation({
+    enabled: input.publishActivationEnforcementShadowEnabled,
+    siteId: siteVersion.siteId,
+    siteVersionId: siteVersion.id,
+    runtimeArtifactId: artifact.artifactId,
+    actor: input.actor,
+    publishStage,
+    metadata: input.publishActivationEnforcementShadowMetadata ?? null,
+    guard: input.publishActivationEnforcementShadowGuard,
   });
 
   let pointerSwitchResult: { switched: boolean; previousActivePointer: { siteVersionId: string; artifactId: string } | null };
