@@ -546,6 +546,23 @@ Canonical server-only, non-publishing publish activation gate evaluation core th
 - `apps/platform/gnr8/aaf/aaf-policy-gate-facade.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-gate-evaluation-closeout.md`
 
+## MVP-45 Single-Site Publish Activation Enforcement Architecture
+
+Canonical documentation-only architecture and safety plan for future consumption of MVP-44 gate evaluation results before single-site active pointer mutation, defining the future integration point, runtime contract, fail-closed policy, feature flags, operator workflow, source reread policy, response/audit/rollback behavior, and staged implementation plan without implementing enforcement, route wiring, publish execution, runtime mutation, rollback, provider calls, billing/domain execution, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `docs/architecture/gnr8-single-site-publish-activation-enforcement-architecture.md`
+- `docs/architecture/gnr8-single-site-publish-activation-enforcement-runtime-contract.md`
+- `docs/architecture/gnr8-single-site-publish-activation-enforcement-fail-closed-policy.md`
+- `docs/product/gnr8-single-site-publish-activation-enforcement-operator-workflow.md`
+- `docs/product/gnr8-single-site-publish-activation-enforcement-architecture-closeout.md`
+
+## MVP-46 Single-Site Publish Activation Enforcement Guard Core
+
+Canonical server-only, read-only publish activation enforcement guard core that consumes a future publish intent plus persisted MVP-44 gate result and MVP-43/MVP-44 watermarks to decide whether activation would pass, block, error, or explicitly bypass, without route/orchestrator wiring, publish execution, rollback, active pointer mutation, AAF record creation, gate evaluation, PASR invocation, DDOM snapshots, provider calls, billing/domain mutation, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `apps/platform/gnr8/single-site/publish-activation-enforcement-guard.ts`
+- `apps/platform/gnr8/single-site/publish-activation-enforcement-guard.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-enforcement-guard.integration.test.ts`
+- `docs/product/gnr8-single-site-publish-activation-enforcement-guard-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
