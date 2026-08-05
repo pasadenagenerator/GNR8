@@ -258,6 +258,7 @@ const LIMITED_GRANT_SCOPES = new Set<AafApprovalScope>([
   AAF_SINGLE_SITE_CLIENT_APPROVAL_SCOPE,
   AAF_SINGLE_SITE_LAUNCH_APPROVAL_SCOPE,
   AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE,
+  "publish_activation",
 ]);
 
 function limitationsArePresent(value: unknown): boolean {

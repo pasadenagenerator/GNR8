@@ -93,7 +93,8 @@ test("freshness results map deterministically to gate results", () => {
 test("approval statuses map deterministically to gate results", () => {
   assert.equal(mapApprovalStatusToGateResult("granted"), "allowed");
   assert.equal(mapApprovalStatusToGateResult("granted_with_limitations"), "blocked");
-  assert.equal(mapApprovalStatusToGateResult("granted_with_limitations", { scope: "publish_activation", limitationsPresent: true }), "blocked");
+  assert.equal(mapApprovalStatusToGateResult("granted_with_limitations", { scope: "publish_activation", limitationsPresent: false }), "blocked");
+  assert.equal(mapApprovalStatusToGateResult("granted_with_limitations", { scope: "publish_activation", limitationsPresent: true }), "allowed");
   assert.equal(
     mapApprovalStatusToGateResult("granted_with_limitations", {
       scope: AAF_SINGLE_SITE_CONTENT_APPROVAL_SCOPE,

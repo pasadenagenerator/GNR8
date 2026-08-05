@@ -536,6 +536,16 @@ Canonical server-only, read-only publish activation decision read model and dete
 - `apps/platform/gnr8/single-site/publish-activation-decision-read-model.integration.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-decision-read-model-handoff-closeout.md`
 
+## MVP-44 Single-Site Publish Activation Gate Evaluation Core
+
+Canonical server-only, non-publishing publish activation gate evaluation core that consumes the MVP-43 handoff, validates it fail-closed, builds a deterministic gate input, and creates/reuses only canonical AAF policy/audit/gate attempt records through the AAF gate facade, without creating approval requests/decisions, calling PASR, creating DDOM snapshots, enforcing publish activation, publishing, rollback, mutating runtime/active pointers, provider calls, billing/domain mutation, UI/API, Command Center, Ops Inbox, or client portal exposure:
+- `apps/platform/gnr8/single-site/publish-activation-gate-evaluator.ts`
+- `apps/platform/gnr8/single-site/publish-activation-gate-evaluator.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-gate-evaluator.integration.test.ts`
+- `apps/platform/gnr8/aaf/aaf-policy-gate-facade.ts`
+- `apps/platform/gnr8/aaf/aaf-policy-gate-facade.test.ts`
+- `docs/product/gnr8-single-site-publish-activation-gate-evaluation-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
