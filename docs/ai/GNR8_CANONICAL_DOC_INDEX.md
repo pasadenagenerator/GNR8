@@ -571,6 +571,15 @@ Canonical shadow-only integration of the MVP-46 read-only publish activation enf
 - `docs/product/gnr8-single-site-publish-activation-enforcement-shadow-integration-closeout.md`
 - `docs/product/gnr8-single-site-publish-activation-enforcement-guard-closeout.md`
 
+## MVP-48 Single-Site Publish Activation Metadata Handoff Plumbing
+
+Canonical server-only, optional metadata handoff contract and read-only normalization helper that allows eligible future single-site publish calls to carry persisted MVP-43/MVP-44 publish activation decision, gate, source ref, and watermark metadata into the existing MVP-47/MVP-46 shadow guard observation, without blocking publish, changing active pointer behavior, changing response contracts, reevaluating gates, creating AAF records, invoking PASR, creating DDOM snapshots, calling providers, mutating billing/domain/runtime beyond existing publish behavior, or exposing UI/API/Command Center/Ops Inbox/client portal behavior:
+- `apps/platform/gnr8/runtime/publish-activation-orchestrator.ts`
+- `apps/platform/gnr8/runtime/publish-activation-enforcement-shadow-observation.test.ts`
+- `apps/platform/gnr8/single-site/publish-activation-metadata-handoff.ts`
+- `apps/platform/gnr8/single-site/publish-activation-metadata-handoff.test.ts`
+- `docs/product/gnr8-single-site-publish-activation-metadata-handoff-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

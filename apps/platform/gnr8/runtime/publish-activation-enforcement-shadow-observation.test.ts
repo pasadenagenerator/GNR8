@@ -8,23 +8,49 @@ import {
   type PublishActivationEnforcementShadowGuard,
   type PublishActivationEnforcementShadowMetadata,
 } from "@/gnr8/runtime/publish-activation-orchestrator";
+import { PUBLISH_ACTIVATION_METADATA_HANDOFF_SOURCE_TYPE } from "@/gnr8/single-site/publish-activation-metadata-handoff";
 import type { PublishActivationEnforcementGuardResult } from "@/gnr8/single-site/publish-activation-enforcement-guard";
 
 const ORCHESTRATOR_SOURCE = new URL("./publish-activation-orchestrator.ts", import.meta.url);
 
 function metadata(): PublishActivationEnforcementShadowMetadata {
   return {
+    sourceType: PUBLISH_ACTIVATION_METADATA_HANDOFF_SOURCE_TYPE,
     tenantId: "tenant-test",
     clientId: "client-test",
+    siteId: "site-test",
     migrationId: "migration-test",
+    candidateSiteVersionRef: {
+      role: "candidate_site_version",
+      sourceSystem: "gnr8_runtime",
+      sourceTable: "gnr8_runtime_site_versions",
+      sourceRecordId: "site-version-test",
+      sourceRef: "runtime-site-version:site-version-test",
+      sourceWatermark: "candidate-watermark-test",
+    },
+    runtimeArtifactRef: {
+      role: "runtime_artifact",
+      sourceSystem: "gnr8_runtime",
+      sourceTable: "gnr8_runtime_artifacts",
+      sourceRecordId: "artifact-test",
+      sourceRef: "runtime-artifact:artifact-test",
+      sourceWatermark: "artifact-watermark-test",
+    },
     publishTargetRef: {
       role: "publish_target",
       sourceSystem: "gnr8_publish_target_truth",
       sourceTable: "gnr8_publish_targets",
       sourceRecordId: "publish-target-test",
       sourceRef: "publish-target:publish-target-test",
+      sourceWatermark: "target-watermark-test",
     },
+    publishStage: "production",
     publishEnvironment: "production",
+    publishActivationRequestRef: {
+      id: "request-test",
+      ref: "aaf-request:request-test",
+      status: "requested",
+    },
     publishActivationDecisionRef: {
       id: "decision-test",
       ref: "aaf-decision:decision-test",
@@ -44,8 +70,6 @@ function metadata(): PublishActivationEnforcementShadowMetadata {
     handoffWatermark: "handoff-watermark-test",
     gateInputWatermark: "gate-input-watermark-test",
     actorRole: "agency_admin",
-    correlationId: "corr-test",
-    idempotencyKey: "idem-test",
   };
 }
 
@@ -146,6 +170,9 @@ test("flag on with guard pass remains shadow-only and non-blocking", async () =>
   assert.equal(received[0]?.siteId, "site-test");
   assert.equal(received[0]?.publishStage, "production");
   assert.equal(received[0]?.actor.actorId, "operator-test");
+  assert.equal(received[0]?.requestId, "request-test");
+  assert.match(received[0]?.correlationId ?? "", /^mvp48-correlation:/);
+  assert.match(received[0]?.idempotencyKey ?? "", /^mvp48-idempotency:/);
   assert.equal(result?.available, true);
   assert.equal(result?.guardMode, "pass");
   assert.equal(result?.guardAllowed, true);
@@ -220,13 +247,37 @@ test("missing MVP-43/MVP-44 metadata reports shadow unavailable and does not cal
     actor: "operator-test",
     publishStage: "production",
     metadata: {
+      sourceType: PUBLISH_ACTIVATION_METADATA_HANDOFF_SOURCE_TYPE,
       tenantId: "tenant-test",
     },
     guard,
   });
   assert.equal(calls, 0);
   assert.equal(result?.available, false);
-  assert.match(result?.blockerCodes.join(","), /publish_activation_enforcement_shadow_client_id_missing/);
+  assert.match(result?.blockerCodes.join(","), /publish_activation_metadata_handoff_client_id_missing/);
+  assert.match(result?.blockerCodes.join(","), /publish_activation_metadata_handoff_gate_attempt_result_ref_missing/);
+  assert.equal(result?.publishActionBlocked, false);
+});
+
+test("metadata absent is optional and reports shadow unavailable without changing publish behavior", async () => {
+  let calls = 0;
+  const guard: PublishActivationEnforcementShadowGuard = async () => {
+    calls += 1;
+    return guardResult();
+  };
+  const result = await runPublishActivationEnforcementShadowObservation({
+    enabled: true,
+    siteId: "site-test",
+    siteVersionId: "site-version-test",
+    runtimeArtifactId: "artifact-test",
+    actor: "operator-test",
+    publishStage: "production",
+    metadata: null,
+    guard,
+  });
+  assert.equal(calls, 0);
+  assert.equal(result?.available, false);
+  assert.match(result?.blockerCodes.join(","), /publish_activation_metadata_handoff_missing/);
   assert.equal(result?.publishActionBlocked, false);
 });
 

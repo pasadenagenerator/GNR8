@@ -17,6 +17,10 @@ import {
   type PublishActivationPersistedGateResultRef,
 } from "@/gnr8/single-site/publish-activation-enforcement-guard";
 import {
+  normalizePublishActivationMetadataHandoff,
+  type PublishActivationMetadataHandoff,
+} from "@/gnr8/single-site/publish-activation-metadata-handoff";
+import {
   evaluatePointerSwitchReadiness,
   evaluatePublishActivationCandidate,
   type PublishActivationFailureCode,
@@ -52,14 +56,21 @@ export type PublishActivationShadowScope = {
 
 export type PublishActivationShadowObserver = (input: PublishActivationShadowObserverInput) => Promise<PublishActivationShadowResult>;
 
-export type PublishActivationEnforcementShadowMetadata = {
+export type PublishActivationEnforcementShadowMetadata = PublishActivationMetadataHandoff & {
   tenantId?: string | null;
   clientId?: string | null;
+  siteId?: string | null;
   migrationId?: string | null;
   candidateSiteVersionRef?: PublishActivationEnforcementGuardRef | string | null;
   runtimeArtifactRef?: PublishActivationEnforcementGuardRef | string | null;
   publishTargetRef?: PublishActivationEnforcementGuardRef | string | null;
+  publishStage?: string | null;
   publishEnvironment?: string | null;
+  publishActivationRequestRef?: {
+    id?: string | null;
+    ref?: string | null;
+    status?: string | null;
+  } | null;
   publishActivationDecisionRef?: {
     id?: string | null;
     ref?: string | null;
@@ -122,17 +133,6 @@ export function isPublishActivationEnforcementGateShadowEnabled(): boolean {
 
 function publishActivationEnforcementShadowEnabled(override?: boolean): boolean {
   return override === true || (override !== false && isPublishActivationEnforcementGateShadowEnabled());
-}
-
-function sourceRecordId(refOrId: PublishActivationEnforcementGuardRef | string | null | undefined): string | null {
-  if (!refOrId) return null;
-  if (typeof refOrId === "string") {
-    const normalized = text(refOrId);
-    if (!normalized) return null;
-    const parts = normalized.split(":");
-    return parts[parts.length - 1] || normalized;
-  }
-  return text(refOrId.sourceRecordId);
 }
 
 function matchedRefsCount(result: PublishActivationEnforcementGuardResult): number {
@@ -238,47 +238,24 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
   if (!publishActivationEnforcementShadowEnabled(input.enabled)) return null;
 
   const metadata = input.metadata ?? null;
-  const candidateSiteVersionRef =
-    metadata?.candidateSiteVersionRef ?? {
-      role: "candidate_site_version",
-      sourceSystem: "gnr8_runtime",
-      sourceTable: "gnr8_runtime_site_versions",
-      sourceRecordId: input.siteVersionId,
-      sourceRef: `runtime-site-version:${input.siteVersionId}`,
-    };
-  const runtimeArtifactRef =
-    metadata?.runtimeArtifactRef ?? {
-      role: "runtime_artifact",
-      sourceSystem: "gnr8_runtime",
-      sourceTable: "gnr8_runtime_artifacts",
-      sourceRecordId: input.runtimeArtifactId,
-      sourceRef: `runtime-artifact:${input.runtimeArtifactId}`,
-    };
-  const publishTargetId = sourceRecordId(metadata?.publishTargetRef);
-  const gateAttemptId = text(metadata?.gateAttemptResultRef?.gateAttemptId);
-  const publishActivationDecisionId = text(metadata?.publishActivationDecisionRef?.id);
-  const correlationId = text(metadata?.correlationId);
-  const idempotencyKey = text(metadata?.idempotencyKey);
-  const missing = [
-    ["tenant_id", metadata?.tenantId],
-    ["client_id", metadata?.clientId],
-    ["migration_id", metadata?.migrationId],
-    ["candidate_site_version_ref", sourceRecordId(candidateSiteVersionRef)],
-    ["runtime_artifact_ref", sourceRecordId(runtimeArtifactRef)],
-    ["publish_target_ref", publishTargetId],
-    ["publish_environment", metadata?.publishEnvironment],
-    ["publish_activation_decision_ref", publishActivationDecisionId ?? metadata?.publishActivationDecisionRef?.ref],
-    ["gate_attempt_result_ref", gateAttemptId],
-    ["handoff_watermark", metadata?.handoffWatermark],
-    ["gate_input_watermark", metadata?.gateInputWatermark],
-    ["actor_role", metadata?.actorRole],
-    ["correlation_id", correlationId],
-    ["idempotency_key", idempotencyKey],
-  ]
-    .filter(([, value]) => !text(value))
-    .map(([field]) => `publish_activation_enforcement_shadow_${field}_missing`);
+  const handoff = normalizePublishActivationMetadataHandoff(metadata, {
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    runtimeArtifactId: input.runtimeArtifactId,
+    publishStage: input.publishStage,
+  });
+  const normalized = handoff.normalized;
+  const publishTargetId = handoff.diagnostics.safeIds.publishTargetId;
+  const gateAttemptId = handoff.diagnostics.safeIds.gateAttemptId;
+  const publishActivationDecisionId = handoff.diagnostics.safeIds.publishActivationDecisionId;
+  const correlationId = normalized?.correlationId ?? text(metadata?.correlationId);
+  const idempotencyKey = normalized?.idempotencyKey ?? text(metadata?.idempotencyKey);
+  const blockerCodes = [
+    ...handoff.diagnostics.missingCodes,
+    ...handoff.diagnostics.mismatchCodes,
+  ];
 
-  if (missing.length > 0 || !metadata?.gateAttemptResultRef) {
+  if (!handoff.diagnostics.complete || !normalized?.gateAttemptResultRef || !normalized.publishTargetRef || !normalized.candidateSiteVersionRef || !normalized.runtimeArtifactRef) {
     const observation = unavailableEnforcementShadowObservation({
       siteId: input.siteId,
       siteVersionId: input.siteVersionId,
@@ -289,42 +266,45 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
       correlationId,
       idempotencyKey,
       reason: "publish activation enforcement shadow metadata unavailable",
-      blockerCodes: missing,
+      blockerCodes,
     });
-    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp47] publish activation enforcement shadow unavailable", observation);
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp48] publish activation enforcement metadata handoff unavailable", observation, {
+      metadataHandoffStatus: handoff.diagnostics.status,
+      metadataWarningCodes: handoff.diagnostics.warningCodes,
+    });
     return observation;
   }
 
   try {
     const guard = input.guard ?? readAndEvaluatePublishActivationEnforcementGuard;
     const result = await guard({
-      tenantId: text(metadata.tenantId)!,
-      clientId: text(metadata.clientId)!,
+      tenantId: normalized.tenantId!,
+      clientId: normalized.clientId!,
       siteId: input.siteId,
-      migrationId: text(metadata.migrationId)!,
-      candidateSiteVersionRef,
-      runtimeArtifactRef,
-      publishTargetRef: metadata.publishTargetRef!,
+      migrationId: normalized.migrationId!,
+      candidateSiteVersionRef: normalized.candidateSiteVersionRef,
+      runtimeArtifactRef: normalized.runtimeArtifactRef,
+      publishTargetRef: normalized.publishTargetRef,
       publishStage: input.publishStage,
-      publishEnvironment: text(metadata.publishEnvironment)!,
+      publishEnvironment: normalized.publishEnvironment!,
       publishActivationDecisionRef: {
         id: publishActivationDecisionId,
-        ref: text(metadata.publishActivationDecisionRef?.ref),
-        status: text(metadata.publishActivationDecisionRef?.status),
+        ref: normalized.publishActivationDecisionRef.ref,
+        status: normalized.publishActivationDecisionRef.status,
       },
-      gateAttemptResultRef: metadata.gateAttemptResultRef,
-      handoffWatermark: text(metadata.handoffWatermark)!,
-      gateInputWatermark: text(metadata.gateInputWatermark)!,
+      gateAttemptResultRef: normalized.gateAttemptResultRef,
+      handoffWatermark: normalized.handoffWatermark!,
+      gateInputWatermark: normalized.gateInputWatermark!,
       actor: {
-        actorType: metadata.actorType ?? "human",
+        actorType: normalized.actorType,
         actorId: input.actor,
-        actorRole: text(metadata.actorRole)!,
+        actorRole: normalized.actorRole,
       },
-      correlationId: correlationId!,
-      idempotencyKey: idempotencyKey!,
-      requestId: text(metadata.requestId),
-      policy: metadata.policy,
-      repository: metadata.repository,
+      correlationId: normalized.correlationId,
+      idempotencyKey: normalized.idempotencyKey,
+      requestId: normalized.requestId,
+      policy: normalized.policy,
+      repository: normalized.repository,
     });
     const observation: PublishActivationEnforcementShadowObservation = {
       enabled: true,
@@ -348,9 +328,11 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
       correlationId: result.diagnosticRefs.correlationId ?? correlationId,
       idempotencyKey: result.diagnosticRefs.idempotencyKey ?? idempotencyKey,
     };
-    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp47] publish activation enforcement shadow observed", observation, {
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp48] publish activation enforcement metadata handoff observed", observation, {
       guardAllowed: result.allowed,
       guardWouldBlockIfWired: result.flags.publishActionBlockedWouldBlockIfWired,
+      metadataHandoffWatermark: normalized.metadataWatermark,
+      metadataWarningCodes: handoff.diagnostics.warningCodes,
     });
     return observation;
   } catch (error) {
@@ -367,7 +349,7 @@ export async function runPublishActivationEnforcementShadowObservation(input: {
       blockerCodes: ["publish_activation_enforcement_shadow_guard_error"],
       guardMode: "error",
     });
-    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp47] publish activation enforcement shadow failed open", observation, {
+    enforcementShadowDiagnosticLog("[gnr8.single-site.mvp48] publish activation enforcement metadata handoff failed open", observation, {
       error: error instanceof Error ? error.message : String(error),
     });
     return observation;
@@ -584,6 +566,7 @@ export async function publishApprovedSiteVersion(input: {
   publishActivationShadowScope?: PublishActivationShadowScope | null;
   publishActivationShadowObserver?: PublishActivationShadowObserver;
   publishActivationEnforcementShadowEnabled?: boolean;
+  publishActivationMetadataHandoff?: PublishActivationMetadataHandoff | null;
   publishActivationEnforcementShadowMetadata?: PublishActivationEnforcementShadowMetadata | null;
   publishActivationEnforcementShadowGuard?: PublishActivationEnforcementShadowGuard;
 }) {
@@ -699,7 +682,7 @@ export async function publishApprovedSiteVersion(input: {
         runtimeArtifactId: siteVersion.artifactId,
         actor: input.actor,
         publishStage: resolvedPublishStage,
-        metadata: input.publishActivationEnforcementShadowMetadata ?? null,
+        metadata: input.publishActivationMetadataHandoff ?? input.publishActivationEnforcementShadowMetadata ?? null,
         guard: input.publishActivationEnforcementShadowGuard,
       });
       return {
@@ -733,7 +716,7 @@ export async function publishApprovedSiteVersion(input: {
       runtimeArtifactId: siteVersion.artifactId,
       actor: input.actor,
       publishStage: resolvedPublishStage,
-      metadata: input.publishActivationEnforcementShadowMetadata ?? null,
+      metadata: input.publishActivationMetadataHandoff ?? input.publishActivationEnforcementShadowMetadata ?? null,
       guard: input.publishActivationEnforcementShadowGuard,
     });
 
@@ -886,7 +869,7 @@ export async function publishApprovedSiteVersion(input: {
     runtimeArtifactId: artifact.artifactId,
     actor: input.actor,
     publishStage,
-    metadata: input.publishActivationEnforcementShadowMetadata ?? null,
+    metadata: input.publishActivationMetadataHandoff ?? input.publishActivationEnforcementShadowMetadata ?? null,
     guard: input.publishActivationEnforcementShadowGuard,
   });
 
