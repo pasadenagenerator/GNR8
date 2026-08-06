@@ -630,6 +630,32 @@ Canonical server-only, default-off, shadow-only single-site publish wrapper/orch
 - `docs/product/gnr8-single-site-publish-activation-metadata-resolver-closeout.md`
 - `docs/product/gnr8-single-site-publish-activation-metadata-handoff-closeout.md`
 
+## MVP-53 Single-Site Publish Operator Caller Surface Architecture
+
+Canonical documentation-only architecture selecting the first eligible internal operator caller surface for later MVP-52 wrapper invocation: a hidden/default-off Command Center operator action backed by an internal admin-namespace route, dry-run only in MVP-54 and shadow-publish only in MVP-55 behind an additional flag, while keeping generic runtime publish, Ops Inbox, client portal, provider/domain/DNS/billing/Stripe, AAF/gate, PASR/DDOM, runtime, rollback, Command Center implementation, and publish behavior unchanged:
+- `docs/architecture/gnr8-single-site-publish-operator-caller-surface-architecture.md`
+- `docs/architecture/gnr8-single-site-publish-operator-caller-contract.md`
+- `docs/architecture/gnr8-single-site-publish-operator-access-control.md`
+- `docs/product/gnr8-single-site-publish-operator-workflow.md`
+- `docs/product/gnr8-single-site-publish-operator-caller-surface-closeout.md`
+- `docs/product/gnr8-single-site-publish-wrapper-orchestrator-shadow-closeout.md`
+- `docs/architecture/gnr8-single-site-publish-caller-context-architecture.md`
+- `docs/architecture/gnr8-single-site-publish-caller-context-contract.md`
+- `docs/architecture/gnr8-single-site-publish-caller-selection-and-boundaries.md`
+- `docs/product/gnr8-single-site-publish-caller-context-closeout.md`
+
+## MVP-54 Single-Site Publish Operator Dry-Run Caller
+
+Canonical internal superadmin-only admin API caller surface for validating strict single-site publish context and invoking the MVP-52 wrapper only with `dryRun: true`, while returning a redacted operator-safe result and leaving publish execution, generic runtime publish, client portal, Ops Inbox, AAF/gate records/evaluation, PASR/DDOM, providers/domain/DNS, billing/Stripe, rollback, active pointers, runtime mutation, SQL migrations, commit, and push unchanged:
+- `apps/platform/gnr8/single-site/single-site-publish-operator-dry-run-caller.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-publish/dry-run/single-site-publish-operator-dry-run-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-publish/dry-run/route.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-publish-operator-dry-run-route.test.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-wrapper-orchestrator.ts`
+- `docs/product/gnr8-single-site-publish-operator-dry-run-caller-closeout.md`
+- `docs/product/gnr8-single-site-publish-operator-caller-surface-closeout.md`
+- `docs/product/gnr8-single-site-publish-wrapper-orchestrator-shadow-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
