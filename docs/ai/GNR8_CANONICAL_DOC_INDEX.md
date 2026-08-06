@@ -676,6 +676,19 @@ Canonical separately flagged internal admin API route for platform-superadmin-on
 - `apps/platform/gnr8/single-site/single-site-publish-wrapper-orchestrator.ts`
 - `docs/product/gnr8-single-site-shadow-publish-operator-action-closeout.md`
 
+## MVP-57 Single-Site Publish Operator Action Audit Core
+
+Canonical durable internal non-AAF audit persistence and server-only audit service for MVP-54 dry-run and MVP-56 shadow-publish operator attempts, storing actor, intent, refs, watermarks, mode, requested/preflight/started/completed/failed status, redacted diagnostics, limitation/error summaries, correlation, and idempotency with RLS closed by default and append-only refs/events, while preserving generic publish/client portal/Ops Inbox boundaries and without blocking enforcement, AAF/gate creation/evaluation, PASR/DDOM/provider/domain/DNS/billing/Stripe calls, rollback, direct runtime mutation outside existing MVP-52 wrapper/orchestrator behavior, UI, commit, or push:
+- `apps/platform/supabase/migrations/20260806120000_single_site_publish_operator_action_audit.sql`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-action-audit.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-action-audit.test.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-action-audit.integration.test.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-publish/dry-run/single-site-publish-operator-dry-run-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-publish/shadow-publish/single-site-shadow-publish-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-publish-operator-dry-run-route.test.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-shadow-publish-route.test.ts`
+- `docs/product/gnr8-single-site-publish-operator-action-audit-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

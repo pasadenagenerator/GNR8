@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 
 import { createSingleSitePublishOperatorDryRunRouteHandlers } from "@/app/api/gnr8/admin/single-site-publish/dry-run/single-site-publish-operator-dry-run-route-handlers";
 import { createSingleSiteShadowPublishRouteHandlers } from "@/app/api/gnr8/admin/single-site-publish/shadow-publish/single-site-shadow-publish-route-handlers";
+import type {
+  SingleSitePublishOperatorActionAuditActor,
+  SingleSitePublishOperatorActionAuditInput,
+  SingleSitePublishOperatorActionAuditRow,
+} from "@/gnr8/single-site/single-site-publish-operator-action-audit";
 import type { SingleSitePublishOperatorDryRunRequest } from "@/gnr8/single-site/single-site-publish-operator-dry-run-caller";
 import {
   SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_CALLER_VERSION,
@@ -111,6 +116,102 @@ function request(body: unknown): Request {
   });
 }
 
+type FakeAuditServiceOptions = {
+  failCreate?: boolean;
+  failStarted?: boolean;
+  failComplete?: boolean;
+  failPreflight?: boolean;
+};
+
+function fakeAuditService(options: FakeAuditServiceOptions = {}) {
+  const actions: SingleSitePublishOperatorActionAuditRow[] = [];
+  const events: string[] = [];
+  return {
+    actions,
+    events,
+    async createOrReuseAction(input: SingleSitePublishOperatorActionAuditInput) {
+      if (options.failCreate) throw new Error("audit create failed");
+      const existing = actions.find((action) => action.idempotency_key === input.idempotencyKey);
+      if (existing) return { action: existing, reusedExisting: true, eventActions: ["action_requested" as const], refRoles: [] };
+      const action = {
+        id: `audit-${actions.length + 1}`,
+        tenant_id: input.tenantId,
+        client_id: input.clientId,
+        site_id: input.siteId,
+        migration_id: input.migrationId,
+        mode: input.mode,
+        route_action_source: input.routeActionSource,
+        actor_id: input.actor.actorId,
+        actor_type: input.actor.actorType,
+        actor_role: input.actor.actorRole,
+        confirmation_marker: input.confirmationMarker,
+        candidate_site_version_ref: input.candidateSiteVersionRef,
+        runtime_artifact_ref: input.runtimeArtifactRef,
+        publish_target_ref: input.publishTargetRef,
+        publish_stage: input.publishStage,
+        publish_environment: input.publishEnvironment,
+        launch_readiness_evidence_ref: input.launchReadinessEvidenceRef,
+        publish_activation_request_ref: input.publishActivationRequestRef,
+        publish_activation_decision_ref: input.publishActivationDecisionRef,
+        gate_attempt_result_ref: input.gateAttemptResultRef,
+        handoff_watermark: input.handoffWatermark,
+        gate_input_watermark: input.gateInputWatermark,
+        idempotency_key: input.idempotencyKey,
+        correlation_id: input.correlationId,
+        semantic_fingerprint: "fingerprint",
+        status: "requested",
+        result_summary_json: {},
+        redacted_diagnostics_json: {},
+        limitation_summary_json: {},
+        error_summary_json: {},
+        started_at: "2026-08-06T00:00:00.000Z",
+        completed_at: null,
+        created_at: "2026-08-06T00:00:00.000Z",
+        updated_at: "2026-08-06T00:00:00.000Z",
+        privacy_label: "internal_operational",
+        retention_class: "compliance_long",
+      } satisfies SingleSitePublishOperatorActionAuditRow;
+      actions.push(action);
+      events.push("action_requested");
+      return { action, reusedExisting: false, eventActions: ["action_requested" as const], refRoles: [] };
+    },
+    async markPreflightFailed() {
+      if (options.failPreflight) throw new Error("audit preflight failed");
+      actions.at(-1)!.status = "preflight_failed";
+      events.push("preflight_failed");
+      return actions.at(-1)!;
+    },
+    async markShadowPublishStarted(input: { actor: SingleSitePublishOperatorActionAuditActor }) {
+      if (options.failStarted) throw new Error("audit started failed");
+      assert.equal(input.actor.actorRole, "platform_superadmin");
+      actions.at(-1)!.status = "shadow_publish_started";
+      events.push("shadow_publish_started");
+      return actions.at(-1)!;
+    },
+    async markShadowPublishCompleted() {
+      if (options.failComplete) throw new Error("audit completion failed");
+      actions.at(-1)!.status = "shadow_publish_completed";
+      events.push("shadow_publish_completed");
+      return actions.at(-1)!;
+    },
+    async markShadowPublishFailed() {
+      if (options.failComplete) throw new Error("audit completion failed");
+      actions.at(-1)!.status = "shadow_publish_failed";
+      events.push("shadow_publish_failed");
+      return actions.at(-1)!;
+    },
+    async markDryRunStarted() {
+      if (options.failStarted) throw new Error("audit started failed");
+      events.push("dry_run_started");
+    },
+    async markDryRunCompleted() {
+      if (options.failComplete) throw new Error("audit completion failed");
+      events.push("dry_run_completed");
+      return actions.at(-1)!;
+    },
+  };
+}
+
 function wrapperResult(overrides: Partial<SingleSitePublishWrapperResult> = {}): SingleSitePublishWrapperResult {
   const safeRefs = {
     tenantId: BASE_REQUEST.tenantId,
@@ -208,7 +309,9 @@ function wrapperResult(overrides: Partial<SingleSitePublishWrapperResult> = {}):
 test("feature flag off denies before auth, wrapper, or resolver", async () => {
   let authCalls = 0;
   let wrapperCalls = 0;
+  const auditService = fakeAuditService();
   const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
     isFeatureEnabled: () => false,
     requireSuperadminUserId: async () => {
       authCalls += 1;
@@ -232,6 +335,7 @@ test("feature flag off denies before auth, wrapper, or resolver", async () => {
   assert.equal(body.diagnostics.includes("single_site_shadow_publish_operator_flag_disabled"), true);
   assert.equal(authCalls, 0);
   assert.equal(wrapperCalls, 0);
+  assert.deepEqual(auditService.events, []);
 });
 
 test("unauthorized actors fail closed before wrapper invocation", async () => {
@@ -243,7 +347,9 @@ test("unauthorized actors fail closed before wrapper invocation", async () => {
     new Error("Forbidden: ops inbox actor denied"),
   ]) {
     let wrapperCalls = 0;
+    const auditService = fakeAuditService();
     const handlers = createSingleSiteShadowPublishRouteHandlers({
+      auditService,
       isFeatureEnabled: () => true,
       requireSuperadminUserId: async () => {
         throw error;
@@ -264,12 +370,15 @@ test("unauthorized actors fail closed before wrapper invocation", async () => {
     assert.equal(body.publishMayHaveExecuted, false);
     assert.equal(wrapperCalls, 0);
     assert.equal(response.status === 401 || response.status === 403, true);
+    assert.deepEqual(auditService.events, []);
   }
 });
 
 test("body actor overrides and unknown execution fields are denied before wrapper", async () => {
   let wrapperCalls = 0;
+  const auditService = fakeAuditService();
   const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
     isFeatureEnabled: () => true,
     requireSuperadminUserId: async () => "superadmin-mvp56",
     wrapperDependencies: {
@@ -297,11 +406,14 @@ test("body actor overrides and unknown execution fields are denied before wrappe
   assert.equal(body.diagnostics.includes("single_site_shadow_publish_operator_execution_field_forbidden:dryRun"), true);
   assert.equal(body.publishMayHaveExecuted, false);
   assert.equal(wrapperCalls, 0);
+  assert.deepEqual(auditService.events, ["action_requested", "preflight_failed"]);
 });
 
 test("missing confirmation, wrong mode, and missing refs fail before wrapper", async () => {
   let wrapperCalls = 0;
+  const auditService = fakeAuditService();
   const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
     isFeatureEnabled: () => true,
     requireSuperadminUserId: async () => "superadmin-mvp56",
     wrapperDependencies: {
@@ -331,6 +443,7 @@ test("missing confirmation, wrong mode, and missing refs fail before wrapper", a
   assert.equal(body.diagnostics.includes("single_site_shadow_publish_operator_confirmation_invalid"), true);
   assert.equal(body.publishMayHaveExecuted, false);
   assert.equal(wrapperCalls, 0);
+  assert.deepEqual(auditService.events, ["action_requested", "preflight_failed"]);
 });
 
 test("validator rejects dry-run mode directly", () => {
@@ -346,7 +459,9 @@ test("validator rejects dry-run mode directly", () => {
 });
 
 test("wrapper preflight blocked returns a safe failure without publish execution", async () => {
+  const auditService = fakeAuditService();
   const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
     isFeatureEnabled: () => true,
     requireSuperadminUserId: async () => "superadmin-mvp56",
     wrapperDependencies: {
@@ -388,12 +503,15 @@ test("wrapper preflight blocked returns a safe failure without publish execution
   assert.equal(body.publishOrchestratorStatus, "not_called");
   assert.equal(body.publishMayHaveExecuted, false);
   assert.deepEqual(body.blockerCodes, ["publish_activation_decision_missing"]);
+  assert.deepEqual(auditService.events, ["action_requested", "shadow_publish_started", "shadow_publish_failed"]);
 });
 
 test("valid request calls wrapper execute mode exactly once", async () => {
   const wrapperInputs: SingleSitePublishWrapperInput[] = [];
   const logEvents: Array<{ event: string; details: Record<string, unknown> }> = [];
+  const auditService = fakeAuditService();
   const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
     isFeatureEnabled: () => true,
     requireSuperadminUserId: async () => "superadmin-mvp56",
     wrapperDependencies: {
@@ -426,10 +544,13 @@ test("valid request calls wrapper execute mode exactly once", async () => {
   assert.equal(wrapperInputs[0]!.actor.actorRole, "platform_superadmin");
   assert.equal(wrapperInputs[0]!.actor.actorId, "superadmin-mvp56");
   assert.equal(logEvents.at(-1)?.details.blockingEnforcementApplied, false);
+  assert.deepEqual(auditService.events, ["action_requested", "shadow_publish_started", "shadow_publish_completed"]);
 });
 
 test("publish orchestrator failure is projected safely without rollback or retry", async () => {
+  const auditService = fakeAuditService();
   const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
     isFeatureEnabled: () => true,
     requireSuperadminUserId: async () => "superadmin-mvp56",
     wrapperDependencies: {
@@ -464,10 +585,91 @@ test("publish orchestrator failure is projected safely without rollback or retry
   assert.equal(body.publishMayHaveExecuted, true);
   assert.deepEqual(body.warnings, ["single_site_shadow_publish_warning_redacted"]);
   assert.equal(json.includes("secret_token_mvp56"), false);
+  assert.deepEqual(auditService.events, ["action_requested", "shadow_publish_started", "shadow_publish_failed"]);
+});
+
+test("shadow-publish audit create failure blocks before wrapper execution", async () => {
+  let wrapperCalls = 0;
+  const logEvents: Array<{ event: string; details: Record<string, unknown> }> = [];
+  const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService: fakeAuditService({ failCreate: true }),
+    isFeatureEnabled: () => true,
+    requireSuperadminUserId: async () => "superadmin-mvp56",
+    wrapperDependencies: {
+      publishSingleSiteApprovedCandidateShadow: async () => {
+        wrapperCalls += 1;
+        return wrapperResult();
+      },
+    },
+    log: (event, details) => logEvents.push({ event, details }),
+  });
+
+  const response = await handlers.POST(request(BASE_REQUEST));
+  const body = (await response.json()) as { ok: boolean; error: string; publishMayHaveExecuted: boolean };
+
+  assert.equal(response.status, 500);
+  assert.equal(body.ok, false);
+  assert.equal(body.error, "SINGLE_SITE_SHADOW_PUBLISH_AUDIT_FAILED");
+  assert.equal(body.publishMayHaveExecuted, false);
+  assert.equal(wrapperCalls, 0);
+  assert.equal(logEvents.some((entry) => entry.details.routeStatus === "audit_failed_before_wrapper"), true);
+});
+
+test("shadow-publish started audit failure blocks before wrapper execution", async () => {
+  let wrapperCalls = 0;
+  const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService: fakeAuditService({ failStarted: true }),
+    isFeatureEnabled: () => true,
+    requireSuperadminUserId: async () => "superadmin-mvp56",
+    wrapperDependencies: {
+      publishSingleSiteApprovedCandidateShadow: async () => {
+        wrapperCalls += 1;
+        return wrapperResult();
+      },
+    },
+    log: () => {},
+  });
+
+  const response = await handlers.POST(request(BASE_REQUEST));
+  const body = (await response.json()) as { ok: boolean; error: string; publishMayHaveExecuted: boolean };
+
+  assert.equal(response.status, 500);
+  assert.equal(body.ok, false);
+  assert.equal(body.error, "SINGLE_SITE_SHADOW_PUBLISH_AUDIT_FAILED");
+  assert.equal(body.publishMayHaveExecuted, false);
+  assert.equal(wrapperCalls, 0);
+});
+
+test("shadow-publish completion audit failure logs and preserves wrapper result", async () => {
+  let wrapperCalls = 0;
+  const logEvents: Array<{ event: string; details: Record<string, unknown> }> = [];
+  const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService: fakeAuditService({ failComplete: true }),
+    isFeatureEnabled: () => true,
+    requireSuperadminUserId: async () => "superadmin-mvp56",
+    wrapperDependencies: {
+      publishSingleSiteApprovedCandidateShadow: async () => {
+        wrapperCalls += 1;
+        return wrapperResult();
+      },
+    },
+    log: (event, details) => logEvents.push({ event, details }),
+  });
+
+  const response = await handlers.POST(request(BASE_REQUEST));
+  const body = (await response.json()) as { ok: boolean; routeStatus: string; publishMayHaveExecuted: boolean };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.routeStatus, "shadow_publish_completed");
+  assert.equal(body.publishMayHaveExecuted, true);
+  assert.equal(wrapperCalls, 1);
+  assert.equal(logEvents.some((entry) => entry.event === "shadow_publish_audit_completion_failed" && entry.details.wrapperResultPreserved === true), true);
 });
 
 test("safe response redacts raw wrapper and orchestrator internals", async () => {
   const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService: fakeAuditService(),
     isFeatureEnabled: () => true,
     requireSuperadminUserId: async () => "superadmin-mvp56",
     wrapperDependencies: {
@@ -499,6 +701,7 @@ test("safe response redacts raw wrapper and orchestrator internals", async () =>
 test("MVP-54 dry-run route still calls wrapper dry-run only", async () => {
   const wrapperInputs: SingleSitePublishWrapperInput[] = [];
   const handlers = createSingleSitePublishOperatorDryRunRouteHandlers({
+    auditService: fakeAuditService(),
     requireSuperadminUserId: async () => "superadmin-mvp54",
     wrapperDependencies: {
       publishSingleSiteApprovedCandidateShadow: async (input) => {
