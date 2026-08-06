@@ -656,6 +656,26 @@ Canonical internal superadmin-only admin API caller surface for validating stric
 - `docs/product/gnr8-single-site-publish-operator-caller-surface-closeout.md`
 - `docs/product/gnr8-single-site-publish-wrapper-orchestrator-shadow-closeout.md`
 
+## MVP-55 Single-Site Shadow-Publish Operator Action Architecture
+
+Canonical documentation-only architecture and safety contract for a future separately flagged internal superadmin-only single-site shadow-publish operator action that may invoke the MVP-52 wrapper execute path with complete MVP-48 metadata handoff so the wrapper calls existing `publishApprovedSiteVersion(...)`, while making explicit that publish may execute and active pointer mutation may occur through existing orchestrator behavior, MVP-47/MVP-50 guard diagnostics remain non-blocking, blocking enforcement is not applied, MVP-54 dry-run remains dry-run only, and no route/action/UI/publish/generic route/runtime/provider/domain/DNS/billing/Stripe/Ops Inbox/client portal behavior is implemented or changed in MVP-55:
+- `docs/architecture/gnr8-single-site-shadow-publish-operator-action-architecture.md`
+- `docs/architecture/gnr8-single-site-shadow-publish-execution-contract.md`
+- `docs/architecture/gnr8-single-site-shadow-publish-access-audit-redaction.md`
+- `docs/product/gnr8-single-site-shadow-publish-operator-workflow.md`
+- `docs/product/gnr8-single-site-shadow-publish-operator-action-closeout.md`
+
+## MVP-56 Single-Site Shadow-Publish Internal Admin Route
+
+Canonical separately flagged internal admin API route for platform-superadmin-only single-site shadow-publish execution through the MVP-52 wrapper with `mode: "shadow_publish"` and `dryRun: false`, while preserving default-off behavior, strict confirmation/context validation, redacted response projection, structured safe logging, MVP-54 dry-run non-regression, generic publish/client portal/Ops Inbox boundaries, and no blocking enforcement, AAF/gate creation/evaluation, PASR/DDOM/provider/domain/DNS/billing/Stripe/rollback/direct runtime mutation outside existing wrapper/orchestrator behavior:
+- `apps/platform/gnr8/single-site/single-site-shadow-publish-operator-caller.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-publish/shadow-publish/single-site-shadow-publish-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-publish/shadow-publish/route.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-shadow-publish-route.test.ts`
+- `docs/product/gnr8-single-site-shadow-publish-internal-admin-route-closeout.md`
+- `apps/platform/gnr8/single-site/single-site-publish-wrapper-orchestrator.ts`
+- `docs/product/gnr8-single-site-shadow-publish-operator-action-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
