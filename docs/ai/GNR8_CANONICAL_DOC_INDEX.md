@@ -700,6 +700,16 @@ Canonical internal Command Center read-only panel and SELECT-only projection ove
 - `apps/platform/app/gnr8/command-center/CommandCenterLayout.tsx`
 - `docs/product/gnr8-single-site-publish-operator-readonly-panel-closeout.md`
 
+## MVP-59 Single-Site Publish Operator Read-Only Source Enrichment
+
+Canonical internal Command Center read-only source enrichment for the MVP-58 panel, adding source-owned launch readiness, launch readiness evidence, publish activation request/decision, gate/handoff, metadata completeness, stale/missing/blocker diagnostics, latest MVP-57 audit attempts, and deterministic next-action projection, while preserving source-truth boundaries and without action buttons, forms, publish/dry-run/shadow-publish/retry/approval/rollback controls, blocking enforcement, AAF request/decision creation, gate attempt creation/evaluation, PASR/DDOM/provider/domain/DNS/billing/Stripe/AI calls, active pointer/runtime/publish-target/content/rollback mutation, generic publish route changes, client portal changes, Ops Inbox action changes, commit, or push:
+- `apps/platform/gnr8/single-site/single-site-publish-operator-readonly-projection.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-readonly-projection.test.ts`
+- `apps/platform/app/gnr8/command-center/single-site-publish/page.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/_components/SingleSitePublishOperatorPanel.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/single-site-publish-operator-panel.test.tsx`
+- `docs/product/gnr8-single-site-publish-operator-readonly-source-enrichment-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

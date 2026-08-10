@@ -113,6 +113,15 @@ function codeList(values: readonly string[], empty = "None") {
   );
 }
 
+function boundaryText(boundary: { ownership: string; truthRole: string; enforcing: false; mutating: false }) {
+  return `${boundary.ownership}; ${boundary.truthRole}; non-enforcing; non-mutating`;
+}
+
+function statusBadges(values: readonly string[], empty: string) {
+  if (values.length === 0) return badge(empty, "good");
+  return <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>{values.map((value) => badge(value, statusTone(value)))}</span>;
+}
+
 function attemptSummary(title: string, attempt: SingleSitePublishOperatorActionAttemptProjection | null) {
   if (!attempt) {
     return (
@@ -305,6 +314,104 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
         </div>,
       )}
 
+      {section(
+        "Launch Readiness",
+        <div style={{ display: "grid", gap: 10, fontSize: 13 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {badge(model.launchReadiness.status, statusTone(model.launchReadiness.status))}
+            {badge(`freshness_${model.launchReadiness.freshnessStatus}`, statusTone(model.launchReadiness.freshnessStatus))}
+            {model.launchReadiness.flags.ready ? badge("ready", "good") : null}
+            {model.launchReadiness.flags.readyWithLimitations ? badge("ready_with_limitations", "warn") : null}
+            {model.launchReadiness.flags.blocked ? badge("blocked", "bad") : null}
+            {model.launchReadiness.flags.stale ? badge("stale", "bad") : null}
+            {model.launchReadiness.flags.missing ? badge("missing", "bad") : null}
+          </div>
+          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+            {field("Boundary", boundaryText(model.launchReadiness.boundary))}
+            {field("Readiness Record", model.launchReadiness.recordRef)}
+            {field("Source Watermark", model.launchReadiness.sourceWatermark)}
+            {field("Evidence Package", model.launchReadiness.evidencePackageRef)}
+            {field("Evidence Status", model.launchReadiness.evidencePackageStatus)}
+            {field("Evidence Watermark", model.launchReadiness.evidenceWatermark)}
+          </dl>
+          <div><strong>Required missing dimensions:</strong> {codeList(model.launchReadiness.requiredMissingDimensions, "None")}</div>
+          <div><strong>Stale dimensions:</strong> {codeList(model.launchReadiness.staleDimensions, "None")}</div>
+          <div><strong>Blocked dimensions:</strong> {codeList(model.launchReadiness.blockedDimensions, "None")}</div>
+          <div><strong>Accepted limitations:</strong> {codeList(model.launchReadiness.acceptedLimitations, "None")}</div>
+          {model.launchReadiness.openBlockers.length === 0 ? (
+            <div style={{ color: "#64748b" }}>No open launch readiness blockers are available.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 6 }}>
+              {model.launchReadiness.openBlockers.map((blocker, index) => (
+                <div key={`${blocker.severity}:${blocker.category}:${index}`} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+                    {badge(blocker.severity, statusTone(blocker.severity))}
+                    {badge(blocker.category)}
+                    {badge(blocker.status, statusTone(blocker.status))}
+                  </div>
+                  <div style={{ overflowWrap: "anywhere", color: "#334155" }}>{blocker.description}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>,
+      )}
+
+      {section(
+        "Publish Activation",
+        <div style={{ display: "grid", gap: 12 }}>
+          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+            {field("Request Boundary", boundaryText(model.publishActivationRequest.boundary))}
+            {field("Request Ref", model.publishActivationRequest.ref)}
+            {field("Request Status", model.publishActivationRequest.status)}
+            {field("Request Scope", model.publishActivationRequest.scope)}
+            {field("Request Action", model.publishActivationRequest.action)}
+            {field("Request Subject", `${text(model.publishActivationRequest.subjectType)}:${text(model.publishActivationRequest.subjectId)}`)}
+            {field("Linked Evidence", model.publishActivationRequest.linkedLaunchReadinessEvidenceRef)}
+            {field("Policy Version", model.publishActivationRequest.policyMetadata.policyVersion)}
+            {field("Policy Evaluation", model.publishActivationRequest.policyMetadata.policyEvaluationId)}
+            {field("Decision Boundary", boundaryText(model.publishActivationDecision.boundary))}
+            {field("Decision Ref", model.publishActivationDecision.ref)}
+            {field("Decision Status", model.publishActivationDecision.status)}
+            {field("Decision Projection", model.publishActivationDecision.projection)}
+            {field("Expires", model.publishActivationDecision.expiresAt)}
+          </dl>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {model.publishActivationDecision.granted ? badge("granted", "good") : null}
+            {model.publishActivationDecision.grantedWithLimitations ? badge("granted_with_limitations", "warn") : null}
+            {model.publishActivationDecision.rejected ? badge("rejected", "bad") : null}
+            {model.publishActivationDecision.invalid ? badge("invalid", "bad") : null}
+            {model.publishActivationDecision.revoked ? badge("revoked", "bad") : null}
+            {model.publishActivationDecision.superseded ? badge("superseded", "warn") : null}
+            {model.publishActivationDecision.expired ? badge("expired", "bad") : null}
+          </div>
+          <div><strong>Decision limitations:</strong> {codeList(model.publishActivationDecision.limitations, "None")}</div>
+        </div>,
+      )}
+
+      {section(
+        "Gate And Metadata",
+        <div style={{ display: "grid", gap: 12 }}>
+          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+            {field("Gate Boundary", boundaryText(model.gateHandoffEvaluation.boundary))}
+            {field("Handoff Readiness", model.gateHandoffEvaluation.handoffReadinessStatus)}
+            {field("Handoff Watermark", model.gateHandoffEvaluation.handoffWatermark)}
+            {field("Gate Input Watermark", model.gateHandoffEvaluation.gateInputWatermark)}
+            {field("Gate Result Ref", model.gateHandoffEvaluation.gateResultRef)}
+            {field("Gate Result Status", model.gateHandoffEvaluation.gateResultStatus)}
+            {field("Metadata Boundary", boundaryText(model.metadataResolver.boundary))}
+            {field("Metadata Completeness", model.metadataResolver.completenessStatus)}
+          </dl>
+          <div><strong>Gate blockers:</strong> {codeList(model.gateHandoffEvaluation.gateBlockers, "None")}</div>
+          <div><strong>Gate warnings:</strong> {codeList(model.gateHandoffEvaluation.gateWarnings, "None")}</div>
+          <div><strong>Gate mismatches:</strong> {codeList(model.gateHandoffEvaluation.mismatchIndicators, "None")}</div>
+          <div><strong>Gate conflict:</strong> {statusBadges(model.gateHandoffEvaluation.newerConflict ? ["newer_conflict"] : [], "no_newer_conflict")}</div>
+          <div><strong>Missing metadata:</strong> {codeList(model.metadataResolver.missingMetadataCodes, "None")}</div>
+          <div><strong>Expected/resolved mismatches:</strong> {codeList(model.metadataResolver.expectedResolvedMismatchCodes, "None")}</div>
+          <div><strong>Resolver-safe diagnostics:</strong> {codeList(model.metadataResolver.safeDiagnostics, "None")}</div>
+        </div>,
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
         {attemptSummary("Latest Dry-Run", model.latestDryRun)}
         {attemptSummary("Latest Shadow-Publish", model.latestShadowPublish)}
@@ -328,6 +435,21 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
           <div>
             <strong>Recommended next operator action:</strong> <code>{model.nextAction}</code>
           </div>
+        </div>,
+      )}
+
+      {section(
+        "Audit Projection",
+        <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
+          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+            {field("Boundary", boundaryText(model.operatorAudit.boundary))}
+            {field("Latest Dry-Run Action", model.operatorAudit.latestDryRunActionId)}
+            {field("Latest Shadow-Publish Action", model.operatorAudit.latestShadowPublishActionId)}
+            {field("Recent Attempts", model.operatorAudit.recentAttemptCount)}
+            {field("Any publishMayHaveExecuted", String(model.operatorAudit.persistedResultFlags.anyPublishMayHaveExecuted))}
+            {field("Any runtimeMutation flag", String(model.operatorAudit.persistedResultFlags.anyRuntimeMutationFlag))}
+            {field("Any enforcement flag", String(model.operatorAudit.persistedResultFlags.anyBlockingEnforcementAppliedFlag))}
+          </dl>
         </div>,
       )}
 

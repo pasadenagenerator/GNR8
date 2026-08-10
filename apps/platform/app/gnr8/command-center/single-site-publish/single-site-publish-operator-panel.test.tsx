@@ -16,6 +16,8 @@ const LAYOUT_FILE = new URL("../layout.tsx", import.meta.url);
 const GENERIC_PUBLISH_ROUTE = new URL("../../../api/gnr8/runtime/versions/[siteVersionId]/publish/route.ts", import.meta.url);
 const CLIENT_CONTENT_PUBLISH_ROUTE = new URL("../../../api/gnr8/clients/[clientId]/sites/[siteId]/content/publish/route.ts", import.meta.url);
 const OPS_INBOX_PAGE = new URL("../ops-inbox/page.tsx", import.meta.url);
+const SOURCE_BOUNDARY = { ownership: "source-owned read" as const, truthRole: "source-owned read" as const, enforcing: false as const, mutating: false as const };
+const DERIVED_BOUNDARY = { ownership: "derived-only" as const, truthRole: "derived-only" as const, enforcing: false as const, mutating: false as const };
 
 function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> = {}): SingleSitePublishOperatorReadonlyProjection {
   const attempt = {
@@ -64,7 +66,7 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
   };
 
   return {
-    panelVersion: "mvp-58-single-site-publish-operator-readonly-panel:v1",
+    panelVersion: "mvp-59-single-site-publish-operator-readonly-source-enrichment:v1",
     generatedAt: "2026-08-10T09:01:00.000Z",
     lookup: {
       migrationId: "migration-panel",
@@ -92,6 +94,103 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       gateResult: { ref: "gate-panel", status: "available" },
       handoffWatermark: "handoff-watermark-panel",
       gateInputWatermark: attempt.gateInputWatermark,
+    },
+    sourceBoundaries: {
+      launchReadiness: SOURCE_BOUNDARY,
+      publishActivationRequest: SOURCE_BOUNDARY,
+      publishActivationDecision: SOURCE_BOUNDARY,
+      gateHandoffEvaluation: SOURCE_BOUNDARY,
+      metadataResolver: DERIVED_BOUNDARY,
+      operatorAudit: SOURCE_BOUNDARY,
+      derivedNextAction: DERIVED_BOUNDARY,
+    },
+    launchReadiness: {
+      boundary: SOURCE_BOUNDARY,
+      recordId: "readiness-panel",
+      recordRef: "gnr8:gnr8_single_site_launch_readiness_records:readiness-panel",
+      status: "ready_with_limitations",
+      freshnessStatus: "fresh",
+      sourceWatermark: "wm:readiness-panel",
+      readinessSummary: ["ready_with_limitations"],
+      flags: { ready: false, readyWithLimitations: true, blocked: false, stale: false, missing: false },
+      requiredMissingDimensions: [],
+      staleDimensions: [],
+      blockedDimensions: [],
+      acceptedLimitations: ["operator_visibility_only"],
+      openBlockers: [],
+      evidencePackageRef: "aaf:evidence_package:evidence-panel",
+      evidencePackageStatus: "created",
+      evidenceWatermark: "wm:evidence-panel",
+    },
+    publishActivationRequest: {
+      boundary: SOURCE_BOUNDARY,
+      id: "request-panel",
+      ref: "aaf:approval_request:request-panel",
+      status: "requested",
+      scope: "publish_activation",
+      action: "publish.activation",
+      subjectType: "site_version",
+      subjectId: "candidate-panel",
+      linkedLaunchReadinessEvidenceRef: "aaf:evidence_package:evidence-panel",
+      policyMetadata: {
+        policyVersion: "mvp-41",
+        policyEvaluationId: "policy-request-panel",
+        requestedExpiresAt: null,
+      },
+    },
+    publishActivationDecision: {
+      boundary: SOURCE_BOUNDARY,
+      id: "decision-panel",
+      ref: "aaf:approval_decision:decision-panel",
+      status: "granted_with_limitations",
+      projection: "granted_with_limitations",
+      granted: false,
+      grantedWithLimitations: true,
+      rejected: false,
+      invalid: false,
+      revoked: false,
+      superseded: false,
+      expired: false,
+      expiresAt: null,
+      limitations: ["operator_visibility_only"],
+    },
+    gateHandoffEvaluation: {
+      boundary: SOURCE_BOUNDARY,
+      handoffReadinessStatus: "handoff_ready",
+      handoffWatermark: "handoff-watermark-panel",
+      gateInputWatermark: attempt.gateInputWatermark,
+      gateResultId: "gate-panel",
+      gateResultRef: "aaf:action_gate_attempt:gate-panel",
+      gateResultStatus: "allowed",
+      gateBlockers: [],
+      gateWarnings: [],
+      newerConflict: false,
+      stale: false,
+      mismatchIndicators: [],
+    },
+    metadataResolver: {
+      boundary: DERIVED_BOUNDARY,
+      completenessStatus: "complete",
+      missingMetadataCodes: [],
+      expectedResolvedMismatchCodes: [],
+      safeDiagnostics: [],
+    },
+    operatorAudit: {
+      boundary: SOURCE_BOUNDARY,
+      latestDryRunActionId: attempt.actionId,
+      latestShadowPublishActionId: null,
+      recentAttemptCount: 1,
+      actorCorrelationIdempotencyProjection: [{
+        actionId: attempt.actionId,
+        actorRole: attempt.actor.actorRole,
+        correlationId: attempt.correlationId,
+        idempotencyKey: attempt.idempotencyKey,
+      }],
+      persistedResultFlags: {
+        anyPublishMayHaveExecuted: false,
+        anyRuntimeMutationFlag: false,
+        anyBlockingEnforcementAppliedFlag: false,
+      },
     },
     readinessState: "ready",
     latestDryRun: attempt,
@@ -123,6 +222,12 @@ test("operator panel renders dense read-only status without mutation buttons", (
 
   assert.equal(html.includes("Single-Site Publish Operator Panel"), true);
   assert.equal(html.includes("Read-Only Boundary"), true);
+  assert.equal(html.includes("Launch Readiness"), true);
+  assert.equal(html.includes("Publish Activation"), true);
+  assert.equal(html.includes("Gate And Metadata"), true);
+  assert.equal(html.includes("Audit Projection"), true);
+  assert.equal(html.includes("source-owned read"), true);
+  assert.equal(html.includes("derived-only"), true);
   assert.equal(html.includes("publishes"), true);
   assert.equal(html.includes("runtimeMutation"), true);
   assert.equal(html.includes("enforcementApplied"), true);
@@ -153,6 +258,45 @@ test("operator panel keeps long refs constrained and avoids unsafe diagnostics",
   assert.equal(html.includes("publish_activation_missing_dns_readiness"), true);
   assert.equal(html.includes("rawSqlError"), false);
   assert.equal(html.includes("stackTrace"), false);
+});
+
+test("operator panel renders useful empty states for source and audit gaps", () => {
+  const empty = model({
+    state: "visible",
+    launchReadiness: {
+      ...model().launchReadiness,
+      recordId: null,
+      recordRef: null,
+      status: "missing",
+      freshnessStatus: "missing",
+      flags: { ready: false, readyWithLimitations: false, blocked: false, stale: false, missing: true },
+      evidencePackageRef: null,
+      evidencePackageStatus: "missing",
+      evidenceWatermark: null,
+    },
+    publishActivationRequest: { ...model().publishActivationRequest, id: null, ref: null, status: "missing", linkedLaunchReadinessEvidenceRef: null },
+    publishActivationDecision: { ...model().publishActivationDecision, id: null, ref: null, status: "missing", projection: "missing", grantedWithLimitations: false, limitations: [] },
+    gateHandoffEvaluation: { ...model().gateHandoffEvaluation, handoffReadinessStatus: "missing", gateResultId: null, gateResultRef: null, gateResultStatus: "missing", gateInputWatermark: null },
+    metadataResolver: { ...model().metadataResolver, completenessStatus: "incomplete", missingMetadataCodes: ["launch_readiness_evidence_ref_missing", "publish_activation_request_ref_missing"] },
+    latestDryRun: null,
+    latestShadowPublish: null,
+    timeline: [],
+    operatorAudit: {
+      ...model().operatorAudit,
+      latestDryRunActionId: null,
+      latestShadowPublishActionId: null,
+      recentAttemptCount: 0,
+      actorCorrelationIdempotencyProjection: [],
+    },
+    nextAction: "collect_launch_readiness_evidence",
+  });
+  const html = renderToStaticMarkup(<SingleSitePublishOperatorPanel model={empty} />);
+
+  assert.equal(html.includes("No persisted attempt is available for this lookup."), true);
+  assert.equal(html.includes("No audit attempts match this lookup."), true);
+  assert.equal(html.includes("launch_readiness_evidence_ref_missing"), true);
+  assert.equal(html.includes("<form"), false);
+  assert.equal(html.includes("<button"), false);
 });
 
 test("operator page is superadmin-only and uses the read-only projection", async () => {

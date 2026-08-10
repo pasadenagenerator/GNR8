@@ -151,6 +151,65 @@ test("projection redacts unsafe diagnostics instead of surfacing raw internals",
   assert.equal(model.latestDryRun?.redactedDiagnosticSummary.omittedUnsafeDiagnostics, true);
 });
 
+test("source diagnostics expose only safe codes", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp59" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: {
+        id: "readiness-mvp59",
+        status: "ready",
+        freshness_status: "fresh",
+        semantic_source_watermark: "wm:readiness",
+      },
+      launchReadinessDimensions: [
+        {
+          dimension: "domain_readiness",
+          dimension_status: "ready",
+          freshness_status: "fresh",
+          diagnostics_json: {
+            rawSqlError: "select * from secrets",
+            providerSecret: "OPENAI_API_KEY=abc",
+            safeCode: "domain_ready",
+          },
+          required_for_launch_readiness: true,
+        },
+      ],
+      activePublishActivationDecisionCount: 2,
+    },
+  });
+  const json = JSON.stringify(model);
+
+  assert.equal(json.includes("rawSqlError"), false);
+  assert.equal(json.includes("OPENAI_API_KEY"), false);
+  assert.equal(model.metadataResolver.safeDiagnostics.includes("conflicting_active_publish_activation_decisions"), true);
+});
+
+test("next-action derivation is deterministic across source states", () => {
+  const readySource = {
+    launchReadinessRecord: { id: "readiness-mvp59", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+    launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+  };
+  assert.equal(buildSingleSitePublishOperatorReadonlyProjection({ lookup: { migrationId: "migration-mvp59" }, actions: [], sourceSnapshot: readySource }).nextAction, "request_publish_activation_approval");
+  assert.equal(buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp59" },
+    actions: [],
+    sourceSnapshot: {
+      ...readySource,
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: "candidate-mvp59" },
+    },
+  }).nextAction, "await_publish_activation_decision");
+  assert.equal(buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp59" },
+    actions: [],
+    sourceSnapshot: {
+      ...readySource,
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: "candidate-mvp59" },
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "rejected" },
+    },
+  }).nextAction, "review_rejected_publish_activation");
+});
+
 test("missing metadata produces blocked guidance rather than throwing", () => {
   const model = buildSingleSitePublishOperatorReadonlyProjection({
     lookup: { siteId: "site-mvp58" },
@@ -173,7 +232,7 @@ test("missing metadata produces blocked guidance rather than throwing", () => {
   assert.equal(model.readinessState, "blocked");
   assert.equal(model.governedPublishChain.launchReadinessEvidence.status, "missing");
   assert.equal(model.staleOrMissingMetadataIndicators.includes("launch_readiness_evidence_ref_missing"), true);
-  assert.equal(model.nextAction, "refresh_launch_readiness");
+  assert.equal(model.nextAction, "collect_launch_readiness_evidence");
 });
 
 test("lookup with no audit rows recommends an internal dry-run", () => {
@@ -200,7 +259,123 @@ test("repository uses select-only queries for action, ref, and event reads", asy
   const model = await repository.read({ migrationId: "migration-mvp58" });
 
   assert.equal(model.state, "visible");
-  assert.equal(queries.length, 3);
+  assert.equal(queries.length, 7);
   assert.equal(queries.every((sql) => sql.trim().toLowerCase().startsWith("select")), true);
   assert.equal(queries.some((sql) => /\binsert\b|\bupdate\b|\bdelete\b|\bcreate\b/i.test(sql)), false);
+});
+
+test("launch readiness source records enrich the model", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp59" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: {
+        id: "readiness-mvp59",
+        tenant_id: "tenant-mvp59",
+        client_id: "client-mvp59",
+        site_id: "site-mvp59",
+        migration_id: "migration-mvp59",
+        status: "ready_with_limitations",
+        freshness_status: "fresh",
+        semantic_source_watermark: "wm:readiness",
+        improved_candidate_site_version_ref: "gnr8:gnr8_runtime_site_versions:candidate-mvp59",
+        improved_runtime_artifact_ref: "gnr8:gnr8_runtime_artifacts:artifact-mvp59",
+        limitation_summary_json: [{ code: "dns_waiting_accepted" }],
+      },
+      launchReadinessDimensions: [
+        { dimension: "domain_readiness", dimension_status: "ready_with_limitations", freshness_status: "fresh", limitations_json: ["dns_waiting_accepted"], required_for_launch_readiness: true },
+      ],
+      launchReadinessEvidencePackage: {
+        id: "11111111-1111-4111-8111-111111111111",
+        status: "created",
+        source_watermark: "wm:evidence",
+      },
+    },
+    generatedAt: "2026-08-10T10:00:00.000Z",
+  });
+
+  assert.equal(model.state, "visible");
+  assert.equal(model.identity.tenantId, "tenant-mvp59");
+  assert.equal(model.launchReadiness.status, "ready_with_limitations");
+  assert.equal(model.launchReadiness.flags.readyWithLimitations, true);
+  assert.equal(model.launchReadiness.evidencePackageRef, "aaf:evidence_package:11111111-1111-4111-8111-111111111111");
+  assert.equal(model.nextAction, "request_publish_activation_approval");
+});
+
+test("publish activation request and decision enrich the model", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp59" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp59", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+      publishActivationRequest: {
+        id: "22222222-2222-4222-8222-222222222222",
+        status: "requested",
+        scope: "publish_activation",
+        action_key: "publish.activation",
+        subject_type: "site_version",
+        subject_id: "candidate-mvp59",
+        policy_version: "mvp-41",
+      },
+      publishActivationRequestEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      publishActivationDecision: {
+        id: "33333333-3333-4333-8333-333333333333",
+        status: "granted_with_limitations",
+        limitation_summary_json: ["dns_waiting_accepted"],
+      },
+    },
+    generatedAt: "2026-08-10T10:00:00.000Z",
+  });
+
+  assert.equal(model.publishActivationRequest.ref, "aaf:approval_request:22222222-2222-4222-8222-222222222222");
+  assert.equal(model.publishActivationDecision.projection, "granted_with_limitations");
+  assert.equal(model.publishActivationDecision.grantedWithLimitations, true);
+  assert.equal(model.nextAction, "prepare_gate_evaluation");
+});
+
+test("gate result and handoff enrich the model", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp59" },
+    actions: [action({ status: "dry_run_completed" })],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp59", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: "candidate-mvp59" },
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted" },
+      gateAttempt: {
+        id: "44444444-4444-4444-8444-444444444444",
+        gate_result: "allowed",
+        approval_request_id: "22222222-2222-4222-8222-222222222222",
+        approval_decision_id: "33333333-3333-4333-8333-333333333333",
+        evidence_package_id: "11111111-1111-4111-8111-111111111111",
+        causation_id: `mvp44:single-site-publish-activation-gate-input:${"c".repeat(64)}`,
+      },
+    },
+  });
+
+  assert.equal(model.gateHandoffEvaluation.handoffReadinessStatus, "handoff_ready");
+  assert.equal(model.gateHandoffEvaluation.gateResultStatus, "allowed");
+  assert.equal(model.metadataResolver.completenessStatus, "complete");
+  assert.equal(model.nextAction, "shadow_publish_available");
+});
+
+test("stale, missing, and blocked source data fails closed with deterministic next action", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp59" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp59", status: "stale", freshness_status: "stale", semantic_source_watermark: "wm:readiness" },
+      launchReadinessDimensions: [
+        { dimension: "publish_target", dimension_status: "missing", freshness_status: "missing", required_for_launch_readiness: true },
+        { dimension: "domain_readiness", dimension_status: "blocked", freshness_status: "fresh", required_for_launch_readiness: true },
+      ],
+      launchReadinessBlockers: [{ severity: "p1_major", category: "domain", status: "open", description: "Domain readiness is blocked." }],
+    },
+  });
+
+  assert.equal(model.readinessState, "blocked");
+  assert.deepEqual(model.launchReadiness.requiredMissingDimensions, ["publish_target"]);
+  assert.deepEqual(model.launchReadiness.blockedDimensions, ["domain_readiness"]);
+  assert.equal(model.nextAction, "resolve_launch_readiness_blockers");
 });
