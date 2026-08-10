@@ -689,6 +689,17 @@ Canonical durable internal non-AAF audit persistence and server-only audit servi
 - `apps/platform/app/api/gnr8/admin/_tests/single-site-shadow-publish-route.test.ts`
 - `docs/product/gnr8-single-site-publish-operator-action-audit-closeout.md`
 
+## MVP-58 Single-Site Publish Operator Read-Only Panel
+
+Canonical internal Command Center read-only panel and SELECT-only projection over MVP-57 dry-run/shadow-publish audit records for platform-superadmin visibility into governed single-site publish state, latest audit attempts, safe refs/watermarks, blockers/warnings/limitations, redacted diagnostics, persisted result flags, and recommended next operator action, while preserving generic publish/client portal/Ops Inbox boundaries and without action buttons, publish/dry-run/shadow-publish/retry/approval/rollback controls, blocking enforcement, AAF/gate creation/evaluation, PASR/DDOM/provider/domain/DNS/billing/Stripe calls, active pointer/runtime mutation, commit, or push:
+- `apps/platform/gnr8/single-site/single-site-publish-operator-readonly-projection.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-readonly-projection.test.ts`
+- `apps/platform/app/gnr8/command-center/single-site-publish/page.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/_components/SingleSitePublishOperatorPanel.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/single-site-publish-operator-panel.test.tsx`
+- `apps/platform/app/gnr8/command-center/CommandCenterLayout.tsx`
+- `docs/product/gnr8-single-site-publish-operator-readonly-panel-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
