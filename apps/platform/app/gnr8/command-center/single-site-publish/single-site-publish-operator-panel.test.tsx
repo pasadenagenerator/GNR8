@@ -6,7 +6,11 @@ import ReactDomServer from "react-dom/server";
 
 import type { SingleSitePublishOperatorReadonlyProjection } from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
 
-import { SingleSitePublishOperatorPanel } from "./_components/SingleSitePublishOperatorPanel";
+import {
+  SingleSitePublishOperatorPanel,
+  filterSingleSitePublishOperatorDrilldownRows,
+  filterSingleSitePublishOperatorTimelineRows,
+} from "./_components/SingleSitePublishOperatorPanel";
 
 const { renderToStaticMarkup } = ReactDomServer;
 
@@ -117,6 +121,69 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       staleDimensions: [],
       blockedDimensions: [],
       acceptedLimitations: ["operator_visibility_only"],
+      dimensionDrilldown: [
+        {
+          id: "dimension-ready",
+          group: "ready",
+          label: "publish_target",
+          status: "ready",
+          freshnessStatus: "fresh",
+          severity: null,
+          category: "required",
+          code: "publish_target",
+          ref: "gnr8:gnr8_publish_targets:production",
+          watermark: "wm:target",
+          summary: "ready",
+        },
+        {
+          id: "dimension-blocked",
+          group: "blocked",
+          label: "domain_readiness",
+          status: "blocked",
+          freshnessStatus: "fresh",
+          severity: null,
+          category: "required",
+          code: "domain_readiness_blocked",
+          ref: "gnr8:domain:blocked",
+          watermark: "wm:domain",
+          summary: "Domain readiness blocked.",
+        },
+        {
+          id: "dimension-stale",
+          group: "stale",
+          label: "metadata_snapshot",
+          status: "ready",
+          freshnessStatus: "stale",
+          severity: null,
+          category: "required",
+          code: "metadata_snapshot_stale",
+          ref: "gnr8:metadata:stale",
+          watermark: "wm:metadata",
+          summary: "Metadata source is stale.",
+        },
+        {
+          id: "dimension-missing",
+          group: "missing",
+          label: "billing_attestation",
+          status: "missing",
+          freshnessStatus: "missing",
+          severity: null,
+          category: "required",
+          code: "billing_attestation_missing",
+          ref: null,
+          watermark: null,
+          summary: "Required metadata missing.",
+        },
+      ],
+      dimensionGroups: {
+        ready: ["publish_target"],
+        stale: ["metadata_snapshot_stale"],
+        missing: ["billing_attestation_missing"],
+        blocked: ["domain_readiness_blocked"],
+        optional: [],
+      },
+      blockerCountBySeverity: [{ key: "p1_major", count: 1 }],
+      blockerCountByCategory: [{ key: "domain", count: 1 }],
       openBlockers: [],
       evidencePackageRef: "aaf:evidence_package:evidence-panel",
       evidencePackageStatus: "created",
@@ -132,6 +199,7 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       subjectType: "site_version",
       subjectId: "candidate-panel",
       linkedLaunchReadinessEvidenceRef: "aaf:evidence_package:evidence-panel",
+      evidenceRefs: ["aaf:evidence_package:evidence-panel"],
       policyMetadata: {
         policyVersion: "mvp-41",
         policyEvaluationId: "policy-request-panel",
@@ -153,6 +221,8 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       expired: false,
       expiresAt: null,
       limitations: ["operator_visibility_only"],
+      evidenceRefs: ["aaf:evidence_package:evidence-panel"],
+      indicators: [],
     },
     gateHandoffEvaluation: {
       boundary: SOURCE_BOUNDARY,
@@ -167,6 +237,7 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       newerConflict: false,
       stale: false,
       mismatchIndicators: [],
+      conflictDetails: [],
     },
     metadataResolver: {
       boundary: DERIVED_BOUNDARY,
@@ -174,6 +245,7 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       missingMetadataCodes: [],
       expectedResolvedMismatchCodes: [],
       safeDiagnostics: [],
+      detailRows: [],
     },
     operatorAudit: {
       boundary: SOURCE_BOUNDARY,
@@ -186,6 +258,32 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
         correlationId: attempt.correlationId,
         idempotencyKey: attempt.idempotencyKey,
       }],
+      recentEvents: [
+        {
+          actionId: attempt.actionId,
+          eventAction: "completed",
+          status: "dry_run_completed",
+          actorRole: attempt.actor.actorRole,
+          occurredAt: attempt.completedAt!,
+          resultStatus: "dry_run_ready",
+          reasonCodes: ["dry_run_ready"],
+        },
+      ],
+      timelineSummaries: [
+        {
+          id: attempt.actionId,
+          group: "ready",
+          label: "dry_run",
+          status: "dry_run_completed",
+          freshnessStatus: attempt.updatedAt,
+          severity: null,
+          category: "dry_run_ready",
+          code: "dry_run_ready",
+          ref: attempt.actionId,
+          watermark: attempt.gateInputWatermark,
+          summary: "dry_run:dry_run_completed:dry_run_ready",
+        },
+      ],
       persistedResultFlags: {
         anyPublishMayHaveExecuted: false,
         anyRuntimeMutationFlag: false,
@@ -222,10 +320,19 @@ test("operator panel renders dense read-only status without mutation buttons", (
 
   assert.equal(html.includes("Single-Site Publish Operator Panel"), true);
   assert.equal(html.includes("Read-Only Boundary"), true);
+  assert.equal(html.includes("Display Filters"), true);
   assert.equal(html.includes("Launch Readiness"), true);
   assert.equal(html.includes("Publish Activation"), true);
-  assert.equal(html.includes("Gate And Metadata"), true);
+  assert.equal(html.includes("Gate Handoff"), true);
+  assert.equal(html.includes("Metadata Resolver"), true);
   assert.equal(html.includes("Audit Projection"), true);
+  assert.equal(html.includes("Filtered Diagnostic Rows"), true);
+  assert.equal(html.includes("Blockers only"), true);
+  assert.equal(html.includes("Stale only"), true);
+  assert.equal(html.includes("Missing only"), true);
+  assert.equal(html.includes("Newest first"), true);
+  assert.equal(html.includes("<select"), true);
+  assert.equal(html.includes("<input"), true);
   assert.equal(html.includes("source-owned read"), true);
   assert.equal(html.includes("derived-only"), true);
   assert.equal(html.includes("publishes"), true);
@@ -270,14 +377,37 @@ test("operator panel renders useful empty states for source and audit gaps", () 
       status: "missing",
       freshnessStatus: "missing",
       flags: { ready: false, readyWithLimitations: false, blocked: false, stale: false, missing: true },
+      dimensionDrilldown: [],
+      dimensionGroups: { ready: [], stale: [], missing: [], blocked: [], optional: [] },
+      blockerCountBySeverity: [],
+      blockerCountByCategory: [],
       evidencePackageRef: null,
       evidencePackageStatus: "missing",
       evidenceWatermark: null,
     },
     publishActivationRequest: { ...model().publishActivationRequest, id: null, ref: null, status: "missing", linkedLaunchReadinessEvidenceRef: null },
-    publishActivationDecision: { ...model().publishActivationDecision, id: null, ref: null, status: "missing", projection: "missing", grantedWithLimitations: false, limitations: [] },
-    gateHandoffEvaluation: { ...model().gateHandoffEvaluation, handoffReadinessStatus: "missing", gateResultId: null, gateResultRef: null, gateResultStatus: "missing", gateInputWatermark: null },
-    metadataResolver: { ...model().metadataResolver, completenessStatus: "incomplete", missingMetadataCodes: ["launch_readiness_evidence_ref_missing", "publish_activation_request_ref_missing"] },
+    publishActivationDecision: { ...model().publishActivationDecision, id: null, ref: null, status: "missing", projection: "missing", grantedWithLimitations: false, limitations: [], evidenceRefs: [], indicators: [] },
+    gateHandoffEvaluation: { ...model().gateHandoffEvaluation, handoffReadinessStatus: "missing", gateResultId: null, gateResultRef: null, gateResultStatus: "missing", gateInputWatermark: null, conflictDetails: [] },
+    metadataResolver: {
+      ...model().metadataResolver,
+      completenessStatus: "incomplete",
+      missingMetadataCodes: ["launch_readiness_evidence_ref_missing", "publish_activation_request_ref_missing"],
+      detailRows: [
+        {
+          id: "launch_readiness_evidence_ref_missing",
+          group: "missing",
+          label: "launch_readiness_evidence_ref_missing",
+          status: "missing",
+          freshnessStatus: null,
+          severity: null,
+          category: null,
+          code: "launch_readiness_evidence_ref_missing",
+          ref: null,
+          watermark: null,
+          summary: "Required publish activation metadata is not available.",
+        },
+      ],
+    },
     latestDryRun: null,
     latestShadowPublish: null,
     timeline: [],
@@ -287,6 +417,8 @@ test("operator panel renders useful empty states for source and audit gaps", () 
       latestShadowPublishActionId: null,
       recentAttemptCount: 0,
       actorCorrelationIdempotencyProjection: [],
+      recentEvents: [],
+      timelineSummaries: [],
     },
     nextAction: "collect_launch_readiness_evidence",
   });
@@ -294,9 +426,39 @@ test("operator panel renders useful empty states for source and audit gaps", () 
 
   assert.equal(html.includes("No persisted attempt is available for this lookup."), true);
   assert.equal(html.includes("No audit attempts match this lookup."), true);
+  assert.equal(html.includes("No launch readiness record is available for this lookup."), true);
+  assert.equal(html.includes("No publish activation request is available."), true);
+  assert.equal(html.includes("No publish activation decision is available."), true);
+  assert.equal(html.includes("No gate attempt is available."), true);
+  assert.equal(html.includes("Metadata is incomplete for this lookup."), true);
+  assert.equal(html.includes("No audit event history is available."), true);
   assert.equal(html.includes("launch_readiness_evidence_ref_missing"), true);
   assert.equal(html.includes("<form"), false);
   assert.equal(html.includes("<button"), false);
+});
+
+test("operator panel local filters isolate blocker stale missing and timeline rows", () => {
+  const fixture = model();
+  const rows = [
+    ...fixture.launchReadiness.dimensionDrilldown,
+    ...fixture.metadataResolver.detailRows,
+    ...fixture.operatorAudit.timelineSummaries,
+  ];
+  const blockerRows = filterSingleSitePublishOperatorDrilldownRows(rows, { rowFilter: "blockers" });
+  const staleRows = filterSingleSitePublishOperatorDrilldownRows(rows, { rowFilter: "stale" });
+  const missingRows = filterSingleSitePublishOperatorDrilldownRows(rows, { rowFilter: "missing" });
+  const searchedRows = filterSingleSitePublishOperatorDrilldownRows(rows, { rowFilter: "all", search: "domain_readiness" });
+
+  assert.deepEqual(blockerRows.map((row) => row.code), ["domain_readiness_blocked"]);
+  assert.deepEqual(staleRows.map((row) => row.code), ["metadata_snapshot_stale"]);
+  assert.deepEqual(missingRows.map((row) => row.code), ["billing_attestation_missing"]);
+  assert.deepEqual(searchedRows.map((row) => row.code), ["domain_readiness_blocked"]);
+
+  const shadow = { ...fixture.latestDryRun!, actionId: "00000000-0000-4000-8000-000000000202", mode: "shadow_publish" as const, updatedAt: "2026-08-10T10:00:00.000Z", status: "shadow_publish_completed" as const };
+  const filtered = filterSingleSitePublishOperatorTimelineRows([fixture.latestDryRun!, shadow], { mode: "shadow_publish", sort: "newest", search: "completed" });
+
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].mode, "shadow_publish");
 });
 
 test("operator page is superadmin-only and uses the read-only projection", async () => {

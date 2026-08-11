@@ -1,8 +1,11 @@
+"use client";
+
 import type {
   SingleSitePublishOperatorActionAttemptProjection,
+  SingleSitePublishOperatorDrilldownRow,
   SingleSitePublishOperatorReadonlyProjection,
 } from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
-import React, { type ReactNode } from "react";
+import React, { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 
 type Props = {
   model: SingleSitePublishOperatorReadonlyProjection;
@@ -113,6 +116,30 @@ function codeList(values: readonly string[], empty = "None") {
   );
 }
 
+function countList(values: readonly { key: string; count: number }[], empty = "None") {
+  if (values.length === 0) return <span style={{ color: "#64748b" }}>{empty}</span>;
+  return (
+    <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+      {values.map((value) => (
+        <code
+          key={value.key}
+          style={{
+            border: "1px solid #e5e7eb",
+            borderRadius: 6,
+            background: "#f8fafc",
+            padding: "2px 6px",
+            color: "#111827",
+            fontSize: 12,
+          }}
+          title={`${value.key}:${value.count}`}
+        >
+          {value.key}:{value.count}
+        </code>
+      ))}
+    </span>
+  );
+}
+
 function boundaryText(boundary: { ownership: string; truthRole: string; enforcing: false; mutating: false }) {
   return `${boundary.ownership}; ${boundary.truthRole}; non-enforcing; non-mutating`;
 }
@@ -180,8 +207,107 @@ function attemptSummary(title: string, attempt: SingleSitePublishOperatorActionA
   );
 }
 
-function timeline(model: SingleSitePublishOperatorReadonlyProjection) {
-  if (model.timeline.length === 0) {
+function normalizedSearch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function rowMatchesSearch(row: SingleSitePublishOperatorDrilldownRow, query: string): boolean {
+  if (!query) return true;
+  return [row.id, row.group, row.label, row.status, row.freshnessStatus, row.severity, row.category, row.code, row.ref, row.watermark, row.summary]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(query));
+}
+
+function rowMatchesStatus(row: SingleSitePublishOperatorDrilldownRow, filter: string): boolean {
+  if (filter === "blockers") return row.group === "blocked" || row.status.toLowerCase().includes("blocked") || row.severity?.toLowerCase().includes("p1") === true;
+  if (filter === "stale") return row.group === "stale" || row.status.toLowerCase().includes("stale") || row.freshnessStatus?.toLowerCase().includes("stale") === true;
+  if (filter === "missing") return row.group === "missing" || row.status.toLowerCase().includes("missing");
+  return true;
+}
+
+export function filterSingleSitePublishOperatorDrilldownRows(
+  rows: readonly SingleSitePublishOperatorDrilldownRow[],
+  input: { rowFilter?: string; search?: string },
+): SingleSitePublishOperatorDrilldownRow[] {
+  const query = normalizedSearch(input.search ?? "");
+  return rows.filter((row) => rowMatchesStatus(row, input.rowFilter ?? "all") && rowMatchesSearch(row, query));
+}
+
+export function filterSingleSitePublishOperatorTimelineRows(
+  attempts: readonly SingleSitePublishOperatorActionAttemptProjection[],
+  input: { mode?: string; sort?: string; search?: string },
+): SingleSitePublishOperatorActionAttemptProjection[] {
+  const query = normalizedSearch(input.search ?? "");
+  const mode = input.mode ?? "all";
+  const sort = input.sort ?? "newest";
+  const rows = attempts
+    .filter((attempt) => mode === "all" || attempt.mode === mode)
+    .filter((attempt) => {
+      if (!query) return true;
+      return [
+        attempt.actionId,
+        attempt.mode,
+        attempt.status,
+        attempt.resultStatus,
+        attempt.wrapperStatus,
+        attempt.resolverStatus,
+        attempt.correlationId,
+        attempt.idempotencyKey,
+        attempt.candidateSiteVersionRef,
+        attempt.runtimeArtifactRef,
+        attempt.publishTargetRef,
+        ...attempt.blockerCodes,
+        ...attempt.warningCodes,
+        ...attempt.limitationCodes,
+      ].some((value) => String(value).toLowerCase().includes(query));
+    });
+  return rows.sort((left, right) => {
+    const compared = left.updatedAt.localeCompare(right.updatedAt);
+    return sort === "oldest" ? compared : -compared;
+  });
+}
+
+function drilldownTable(rows: readonly SingleSitePublishOperatorDrilldownRow[], empty: string) {
+  if (rows.length === 0) {
+    return <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>{empty}</p>;
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 760 }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid #e5e7eb", color: "#475569", textAlign: "left" }}>
+            <th style={{ padding: "8px 6px" }}>Group</th>
+            <th style={{ padding: "8px 6px" }}>Label</th>
+            <th style={{ padding: "8px 6px" }}>Status</th>
+            <th style={{ padding: "8px 6px" }}>Freshness</th>
+            <th style={{ padding: "8px 6px" }}>Code</th>
+            <th style={{ padding: "8px 6px" }}>Ref / Watermark</th>
+            <th style={{ padding: "8px 6px" }}>Summary</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+              <td style={{ padding: "8px 6px" }}>{badge(row.group, statusTone(row.group))}</td>
+              <td style={{ padding: "8px 6px", fontFamily: "monospace", overflowWrap: "anywhere" }}>{row.label}</td>
+              <td style={{ padding: "8px 6px" }}>{badge(row.status, statusTone(row.status))}</td>
+              <td style={{ padding: "8px 6px", fontFamily: "monospace" }}>{text(row.freshnessStatus)}</td>
+              <td style={{ padding: "8px 6px", fontFamily: "monospace", overflowWrap: "anywhere" }}>{text(row.code)}</td>
+              <td style={{ padding: "8px 6px", fontFamily: "monospace", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={[row.ref, row.watermark].filter(Boolean).join(" / ")}>
+                {[row.ref, row.watermark].filter(Boolean).join(" / ") || "-"}
+              </td>
+              <td style={{ padding: "8px 6px", color: "#334155", overflowWrap: "anywhere" }}>{row.summary}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function timeline(attempts: readonly SingleSitePublishOperatorActionAttemptProjection[]) {
+  if (attempts.length === 0) {
     return <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>No audit attempts match this lookup.</p>;
   }
 
@@ -200,7 +326,7 @@ function timeline(model: SingleSitePublishOperatorReadonlyProjection) {
           </tr>
         </thead>
         <tbody>
-          {model.timeline.map((attempt) => (
+          {attempts.map((attempt) => (
             <tr key={attempt.actionId} style={{ borderBottom: "1px solid #f1f5f9" }}>
               <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{attempt.updatedAt}</td>
               <td style={{ padding: "8px 6px" }}>{badge(attempt.mode)}</td>
@@ -222,6 +348,29 @@ function timeline(model: SingleSitePublishOperatorReadonlyProjection) {
 }
 
 export function SingleSitePublishOperatorPanel({ model }: Props) {
+  const [rowFilter, setRowFilter] = useState("all");
+  const [timelineMode, setTimelineMode] = useState("all");
+  const [timelineSort, setTimelineSort] = useState("newest");
+  const [search, setSearch] = useState("");
+  const query = normalizedSearch(search);
+  const diagnosticRows = useMemo(
+    () =>
+      filterSingleSitePublishOperatorDrilldownRows([
+        ...model.launchReadiness.dimensionDrilldown,
+        ...model.gateHandoffEvaluation.conflictDetails,
+        ...model.metadataResolver.detailRows,
+        ...model.operatorAudit.timelineSummaries,
+      ], { rowFilter, search }),
+    [model, rowFilter, query],
+  );
+  const filteredTimeline = useMemo(() => {
+    return filterSingleSitePublishOperatorTimelineRows(model.timeline, { mode: timelineMode, sort: timelineSort, search });
+  }, [model.timeline, query, timelineMode, timelineSort]);
+  const onRowFilterChange = (event: ChangeEvent<HTMLSelectElement>) => setRowFilter(event.target.value);
+  const onTimelineModeChange = (event: ChangeEvent<HTMLSelectElement>) => setTimelineMode(event.target.value);
+  const onTimelineSortChange = (event: ChangeEvent<HTMLSelectElement>) => setTimelineSort(event.target.value);
+  const onSearchChange = (event: ChangeEvent<HTMLInputElement>) => setSearch(event.target.value);
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <section style={{ border: "1px solid #dbe2ea", borderRadius: 10, background: "#fff", padding: 14 }}>
@@ -265,6 +414,40 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
           </p>,
         )
       ) : null}
+
+      {section(
+        "Display Filters",
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, fontSize: 13 }}>
+          <label style={{ display: "grid", gap: 4, color: "#475569" }}>
+            Row status
+            <select value={rowFilter} onChange={onRowFilterChange} style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "7px 8px", color: "#111827", background: "#fff" }}>
+              <option value="all">Show all</option>
+              <option value="blockers">Blockers only</option>
+              <option value="stale">Stale only</option>
+              <option value="missing">Missing only</option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 4, color: "#475569" }}>
+            Timeline mode
+            <select value={timelineMode} onChange={onTimelineModeChange} style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "7px 8px", color: "#111827", background: "#fff" }}>
+              <option value="all">All attempts</option>
+              <option value="dry_run">Dry-run only</option>
+              <option value="shadow_publish">Shadow-publish only</option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 4, color: "#475569" }}>
+            Timeline sort
+            <select value={timelineSort} onChange={onTimelineSortChange} style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "7px 8px", color: "#111827", background: "#fff" }}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 4, color: "#475569" }}>
+            Safe ref/code search
+            <input value={search} onChange={onSearchChange} placeholder="Filter visible refs and codes" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #d1d5db", borderRadius: 6, padding: "8px", color: "#111827" }} />
+          </label>
+        </div>,
+      )}
 
       {section(
         "Read-Only Boundary",
@@ -337,7 +520,17 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
           <div><strong>Required missing dimensions:</strong> {codeList(model.launchReadiness.requiredMissingDimensions, "None")}</div>
           <div><strong>Stale dimensions:</strong> {codeList(model.launchReadiness.staleDimensions, "None")}</div>
           <div><strong>Blocked dimensions:</strong> {codeList(model.launchReadiness.blockedDimensions, "None")}</div>
+          <div><strong>Ready dimensions:</strong> {codeList(model.launchReadiness.dimensionGroups.ready, "None")}</div>
+          <div><strong>Optional dimensions:</strong> {codeList(model.launchReadiness.dimensionGroups.optional, "None")}</div>
+          <div><strong>Blocker count by severity:</strong> {countList(model.launchReadiness.blockerCountBySeverity)}</div>
+          <div><strong>Blocker count by category:</strong> {countList(model.launchReadiness.blockerCountByCategory)}</div>
           <div><strong>Accepted limitations:</strong> {codeList(model.launchReadiness.acceptedLimitations, "None")}</div>
+          {model.launchReadiness.flags.missing ? <div style={{ color: "#9a3412" }}>No launch readiness record is available for this lookup.</div> : null}
+          {model.launchReadiness.dimensionDrilldown.length === 0 ? <div style={{ color: "#64748b" }}>No launch readiness dimension rows are available.</div> : null}
+          {drilldownTable(
+            model.launchReadiness.dimensionDrilldown.filter((row) => rowMatchesStatus(row, rowFilter) && rowMatchesSearch(row, query)),
+            "No launch readiness dimensions match the current filters.",
+          )}
           {model.launchReadiness.openBlockers.length === 0 ? (
             <div style={{ color: "#64748b" }}>No open launch readiness blockers are available.</div>
           ) : (
@@ -368,6 +561,7 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
             {field("Request Action", model.publishActivationRequest.action)}
             {field("Request Subject", `${text(model.publishActivationRequest.subjectType)}:${text(model.publishActivationRequest.subjectId)}`)}
             {field("Linked Evidence", model.publishActivationRequest.linkedLaunchReadinessEvidenceRef)}
+            {field("Requested Expiration", model.publishActivationRequest.policyMetadata.requestedExpiresAt)}
             {field("Policy Version", model.publishActivationRequest.policyMetadata.policyVersion)}
             {field("Policy Evaluation", model.publishActivationRequest.policyMetadata.policyEvaluationId)}
             {field("Decision Boundary", boundaryText(model.publishActivationDecision.boundary))}
@@ -385,12 +579,17 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
             {model.publishActivationDecision.superseded ? badge("superseded", "warn") : null}
             {model.publishActivationDecision.expired ? badge("expired", "bad") : null}
           </div>
+          {!model.publishActivationRequest.id ? <div style={{ color: "#9a3412", fontSize: 13 }}>No publish activation request is available.</div> : null}
+          {!model.publishActivationDecision.id ? <div style={{ color: "#9a3412", fontSize: 13 }}>No publish activation decision is available.</div> : null}
+          <div><strong>Request evidence refs:</strong> {codeList(model.publishActivationRequest.evidenceRefs, "None")}</div>
+          <div><strong>Decision evidence refs:</strong> {codeList(model.publishActivationDecision.evidenceRefs, "None")}</div>
           <div><strong>Decision limitations:</strong> {codeList(model.publishActivationDecision.limitations, "None")}</div>
+          <div><strong>Decision indicators:</strong> {codeList(model.publishActivationDecision.indicators, "None")}</div>
         </div>,
       )}
 
       {section(
-        "Gate And Metadata",
+        "Gate Handoff",
         <div style={{ display: "grid", gap: 12 }}>
           <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
             {field("Gate Boundary", boundaryText(model.gateHandoffEvaluation.boundary))}
@@ -399,16 +598,34 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
             {field("Gate Input Watermark", model.gateHandoffEvaluation.gateInputWatermark)}
             {field("Gate Result Ref", model.gateHandoffEvaluation.gateResultRef)}
             {field("Gate Result Status", model.gateHandoffEvaluation.gateResultStatus)}
-            {field("Metadata Boundary", boundaryText(model.metadataResolver.boundary))}
-            {field("Metadata Completeness", model.metadataResolver.completenessStatus)}
           </dl>
+          {!model.gateHandoffEvaluation.gateResultId ? <div style={{ color: "#9a3412", fontSize: 13 }}>No gate attempt is available.</div> : null}
           <div><strong>Gate blockers:</strong> {codeList(model.gateHandoffEvaluation.gateBlockers, "None")}</div>
           <div><strong>Gate warnings:</strong> {codeList(model.gateHandoffEvaluation.gateWarnings, "None")}</div>
           <div><strong>Gate mismatches:</strong> {codeList(model.gateHandoffEvaluation.mismatchIndicators, "None")}</div>
           <div><strong>Gate conflict:</strong> {statusBadges(model.gateHandoffEvaluation.newerConflict ? ["newer_conflict"] : [], "no_newer_conflict")}</div>
+          {drilldownTable(
+            model.gateHandoffEvaluation.conflictDetails.filter((row) => rowMatchesStatus(row, rowFilter) && rowMatchesSearch(row, query)),
+            "No gate conflicts or mismatches match the current filters.",
+          )}
+        </div>,
+      )}
+
+      {section(
+        "Metadata Resolver",
+        <div style={{ display: "grid", gap: 12 }}>
+          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+            {field("Metadata Boundary", boundaryText(model.metadataResolver.boundary))}
+            {field("Metadata Completeness", model.metadataResolver.completenessStatus)}
+          </dl>
+          {model.metadataResolver.completenessStatus !== "complete" ? <div style={{ color: "#9a3412", fontSize: 13 }}>Metadata is incomplete for this lookup.</div> : null}
           <div><strong>Missing metadata:</strong> {codeList(model.metadataResolver.missingMetadataCodes, "None")}</div>
           <div><strong>Expected/resolved mismatches:</strong> {codeList(model.metadataResolver.expectedResolvedMismatchCodes, "None")}</div>
           <div><strong>Resolver-safe diagnostics:</strong> {codeList(model.metadataResolver.safeDiagnostics, "None")}</div>
+          {drilldownTable(
+            model.metadataResolver.detailRows.filter((row) => rowMatchesStatus(row, rowFilter) && rowMatchesSearch(row, query)),
+            "No metadata diagnostics match the current filters.",
+          )}
         </div>,
       )}
 
@@ -450,10 +667,42 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
             {field("Any runtimeMutation flag", String(model.operatorAudit.persistedResultFlags.anyRuntimeMutationFlag))}
             {field("Any enforcement flag", String(model.operatorAudit.persistedResultFlags.anyBlockingEnforcementAppliedFlag))}
           </dl>
+          {model.operatorAudit.recentEvents.length === 0 ? (
+            <div style={{ color: "#64748b" }}>No audit event history is available.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 760 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #e5e7eb", color: "#475569", textAlign: "left" }}>
+                    <th style={{ padding: "8px 6px" }}>Occurred</th>
+                    <th style={{ padding: "8px 6px" }}>Event</th>
+                    <th style={{ padding: "8px 6px" }}>Status</th>
+                    <th style={{ padding: "8px 6px" }}>Actor</th>
+                    <th style={{ padding: "8px 6px" }}>Result</th>
+                    <th style={{ padding: "8px 6px" }}>Codes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.operatorAudit.recentEvents.map((event, index) => (
+                    <tr key={`${event.actionId}:${event.eventAction}:${index}`} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{event.occurredAt}</td>
+                      <td style={{ padding: "8px 6px", fontFamily: "monospace" }}>{event.eventAction}</td>
+                      <td style={{ padding: "8px 6px" }}>{badge(event.status, statusTone(event.status))}</td>
+                      <td style={{ padding: "8px 6px", fontFamily: "monospace" }}>{event.actorRole}</td>
+                      <td style={{ padding: "8px 6px", fontFamily: "monospace" }}>{text(event.resultStatus)}</td>
+                      <td style={{ padding: "8px 6px" }}>{codeList(event.reasonCodes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>,
       )}
 
-      {section("Recent Action Timeline", timeline(model))}
+      {section("Filtered Diagnostic Rows", drilldownTable(diagnosticRows, "No diagnostic rows match the current filters."))}
+
+      {section("Recent Action Timeline", timeline(filteredTimeline))}
     </div>
   );
 }

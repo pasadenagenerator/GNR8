@@ -379,3 +379,81 @@ test("stale, missing, and blocked source data fails closed with deterministic ne
   assert.deepEqual(model.launchReadiness.blockedDimensions, ["domain_readiness"]);
   assert.equal(model.nextAction, "resolve_launch_readiness_blockers");
 });
+
+test("drilldown projection groups dimensions blockers activation gate metadata and audit events", () => {
+  const dryRun = action({
+    id: "00000000-0000-4000-8000-000000000011",
+    updated_at: "2026-08-10T11:00:00.000Z",
+  });
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp60" },
+    actions: [dryRun],
+    events: [
+      {
+        action_id: dryRun.id,
+        event_action: "completed",
+        status: "dry_run_completed",
+        actor_id: "superadmin-mvp60",
+        actor_type: "human",
+        actor_role: "platform_superadmin",
+        result_summary_json: { wrapperDryRunStatus: "dry_run_ready", reasonCode: "dry_run_ready", rawSql: "select * from secrets" },
+        redacted_diagnostics_json: { reasonCode: "safe_event_code", stackTrace: "token stack trace" },
+        error_summary_json: {},
+        correlation_id: "corr-mvp60",
+        causation_id: null,
+        idempotency_key: "idem-mvp60:event",
+        occurred_at: "2026-08-10T11:00:02.000Z",
+        created_at: "2026-08-10T11:00:02.000Z",
+      },
+    ],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp60", status: "stale", freshness_status: "stale", semantic_source_watermark: "wm:readiness" },
+      launchReadinessDimensions: [
+        { id: "dim-ready", dimension: "content_readiness", dimension_status: "ready", freshness_status: "fresh", required_for_launch_readiness: true, semantic_source_watermark: "wm:content" },
+        { id: "dim-stale", dimension: "metadata_snapshot", dimension_status: "ready", freshness_status: "stale", required_for_launch_readiness: true, source_ref: "gnr8:metadata:stale" },
+        { id: "dim-missing", dimension: "publish_target", dimension_status: "missing", freshness_status: "missing", required_for_launch_readiness: true },
+        { id: "dim-optional", dimension: "optional_dns_note", dimension_status: "missing", freshness_status: "missing", required_for_launch_readiness: false },
+      ],
+      launchReadinessBlockers: [
+        { severity: "p1_major", category: "domain", status: "open", description: "Domain blocker." },
+        { severity: "p1_major", category: "metadata", status: "accepted_limitation", description: "Accepted metadata limitation." },
+      ],
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: "candidate-mvp60" },
+      publishActivationRequestEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted_with_limitations", limitation_summary_json: ["accepted_dns_wait"], revoked: true },
+      publishActivationDecisionEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      gateAttempt: {
+        id: "44444444-4444-4444-8444-444444444444",
+        gate_result: "blocked",
+        approval_request_id: "22222222-2222-4222-8222-222222222222",
+        approval_decision_id: "33333333-3333-4333-8333-333333333333",
+        evidence_package_id: "different-evidence",
+        causation_id: `mvp44:single-site-publish-activation-gate-input:${"d".repeat(64)}`,
+      },
+      gatePolicyEvaluation: { blocker_codes: ["gate_policy_blocker"], warning_codes: ["gate_policy_warning"] },
+      conflictingNewerGateAttempts: [{ id: "55555555-5555-4555-8555-555555555555", gate_result: "allowed" }],
+      readFailureCodes: ["source_table_unavailable"],
+    },
+    generatedAt: "2026-08-10T11:01:00.000Z",
+  });
+  const json = JSON.stringify(model);
+
+  assert.deepEqual(model.launchReadiness.dimensionGroups.ready, ["content_readiness"]);
+  assert.deepEqual(model.launchReadiness.dimensionGroups.stale, ["metadata_snapshot"]);
+  assert.deepEqual(model.launchReadiness.dimensionGroups.missing, ["publish_target"]);
+  assert.deepEqual(model.launchReadiness.dimensionGroups.optional, ["optional_dns_note"]);
+  assert.deepEqual(model.launchReadiness.blockerCountBySeverity, [{ key: "p1_major", count: 2 }]);
+  assert.deepEqual(model.launchReadiness.blockerCountByCategory, [{ key: "domain", count: 1 }, { key: "metadata", count: 1 }]);
+  assert.deepEqual(model.publishActivationRequest.evidenceRefs, ["aaf:evidence_package:11111111-1111-4111-8111-111111111111"]);
+  assert.deepEqual(model.publishActivationDecision.evidenceRefs, ["aaf:evidence_package:11111111-1111-4111-8111-111111111111"]);
+  assert.deepEqual(model.publishActivationDecision.indicators, ["decision_invalid", "decision_revoked"]);
+  assert.equal(model.gateHandoffEvaluation.conflictDetails.some((row) => row.code === "gate_evidence_mismatch"), true);
+  assert.equal(model.gateHandoffEvaluation.conflictDetails.some((row) => row.code === "publish_activation_gate_conflict"), true);
+  assert.equal(model.metadataResolver.detailRows.some((row) => row.code === "source_table_unavailable"), true);
+  assert.equal(model.operatorAudit.recentEvents[0].reasonCodes.includes("safe_event_code"), true);
+  assert.equal(model.operatorAudit.timelineSummaries[0].label, "dry_run");
+  assert.equal(json.includes("rawSql"), false);
+  assert.equal(json.includes("stackTrace"), false);
+  assert.equal(json.includes("token stack trace"), false);
+});

@@ -168,6 +168,35 @@ export type SingleSitePublishOperatorActionAttemptProjection = {
   }>;
 };
 
+export type SingleSitePublishOperatorCodeCount = {
+  key: string;
+  count: number;
+};
+
+export type SingleSitePublishOperatorDrilldownRow = {
+  id: string;
+  group: "ready" | "stale" | "missing" | "blocked" | "optional" | "warning" | "info";
+  label: string;
+  status: string;
+  freshnessStatus: string | null;
+  severity: string | null;
+  category: string | null;
+  code: string | null;
+  ref: string | null;
+  watermark: string | null;
+  summary: string;
+};
+
+export type SingleSitePublishOperatorAuditEventProjection = {
+  actionId: string;
+  eventAction: string;
+  status: string;
+  actorRole: string;
+  occurredAt: string;
+  resultStatus: string | null;
+  reasonCodes: string[];
+};
+
 export type SingleSitePublishOperatorReadonlyProjection = {
   panelVersion: typeof SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_VERSION;
   generatedAt: string;
@@ -226,6 +255,16 @@ export type SingleSitePublishOperatorReadonlyProjection = {
     staleDimensions: string[];
     blockedDimensions: string[];
     acceptedLimitations: string[];
+    dimensionDrilldown: SingleSitePublishOperatorDrilldownRow[];
+    dimensionGroups: {
+      ready: string[];
+      stale: string[];
+      missing: string[];
+      blocked: string[];
+      optional: string[];
+    };
+    blockerCountBySeverity: SingleSitePublishOperatorCodeCount[];
+    blockerCountByCategory: SingleSitePublishOperatorCodeCount[];
     openBlockers: Array<{
       severity: string;
       category: string;
@@ -246,6 +285,7 @@ export type SingleSitePublishOperatorReadonlyProjection = {
     subjectType: string | null;
     subjectId: string | null;
     linkedLaunchReadinessEvidenceRef: string | null;
+    evidenceRefs: string[];
     policyMetadata: {
       policyVersion: string | null;
       policyEvaluationId: string | null;
@@ -267,6 +307,8 @@ export type SingleSitePublishOperatorReadonlyProjection = {
     expired: boolean;
     expiresAt: string | null;
     limitations: string[];
+    evidenceRefs: string[];
+    indicators: string[];
   };
   gateHandoffEvaluation: {
     boundary: SingleSitePublishOperatorSourceBoundary;
@@ -281,6 +323,7 @@ export type SingleSitePublishOperatorReadonlyProjection = {
     newerConflict: boolean;
     stale: boolean;
     mismatchIndicators: string[];
+    conflictDetails: SingleSitePublishOperatorDrilldownRow[];
   };
   metadataResolver: {
     boundary: SingleSitePublishOperatorSourceBoundary;
@@ -288,6 +331,7 @@ export type SingleSitePublishOperatorReadonlyProjection = {
     missingMetadataCodes: string[];
     expectedResolvedMismatchCodes: string[];
     safeDiagnostics: string[];
+    detailRows: SingleSitePublishOperatorDrilldownRow[];
   };
   operatorAudit: {
     boundary: SingleSitePublishOperatorSourceBoundary;
@@ -300,6 +344,8 @@ export type SingleSitePublishOperatorReadonlyProjection = {
       correlationId: string;
       idempotencyKey: string;
     }>;
+    recentEvents: SingleSitePublishOperatorAuditEventProjection[];
+    timelineSummaries: SingleSitePublishOperatorDrilldownRow[];
     persistedResultFlags: {
       anyPublishMayHaveExecuted: boolean;
       anyRuntimeMutationFlag: boolean;
@@ -469,6 +515,67 @@ function safeFreeformList(values: readonly unknown[]): string[] {
         .filter((value): value is string => Boolean(value)),
     ),
   ).sort((left, right) => left.localeCompare(right));
+}
+
+function codeCounts(values: readonly (string | null | undefined)[]): SingleSitePublishOperatorCodeCount[] {
+  const counts = new Map<string, number>();
+  values.forEach((value) => {
+    const code = safeCode(value);
+    if (!code) return;
+    counts.set(code, (counts.get(code) ?? 0) + 1);
+  });
+  return [...counts.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
+}
+
+function drilldownRow(input: {
+  id: string | null | undefined;
+  group: SingleSitePublishOperatorDrilldownRow["group"];
+  label: string | null | undefined;
+  status?: string | null;
+  freshnessStatus?: string | null;
+  severity?: string | null;
+  category?: string | null;
+  code?: string | null;
+  ref?: string | null;
+  watermark?: string | null;
+  summary?: string | null;
+}): SingleSitePublishOperatorDrilldownRow {
+  const label = safeText(input.label, "unknown");
+  const code = safeCode(input.code ?? label);
+  return {
+    id: safeText(input.id ?? input.ref ?? input.code ?? label),
+    group: input.group,
+    label,
+    status: safeText(input.status ?? input.group),
+    freshnessStatus: input.freshnessStatus ? safeText(input.freshnessStatus) : null,
+    severity: input.severity ? safeText(input.severity) : null,
+    category: input.category ? safeText(input.category) : null,
+    code,
+    ref: input.ref ? safeText(input.ref) : null,
+    watermark: input.watermark ? safeText(input.watermark) : null,
+    summary: safeText(input.summary ?? input.status ?? input.group, "available"),
+  };
+}
+
+function rowSourceRef(row: SingleSitePublishOperatorSourceRow | null | undefined): string | null {
+  return (
+    rowText(row, "source_ref") ??
+    sourceRef(safeText(row?.source_table, "source"), rowText(row, "source_record_id")) ??
+    sourceRef(safeText(row?.ref_table, "source"), rowText(row, "ref_id"))
+  );
+}
+
+function groupForDimension(row: SingleSitePublishOperatorSourceRow): SingleSitePublishOperatorDrilldownRow["group"] {
+  const status = rowText(row, "dimension_status") ?? "missing";
+  const freshness = rowText(row, "freshness_status") ?? "unknown";
+  const required = booleanValue(row.required_for_launch_readiness);
+  if (status === "blocked") return "blocked";
+  if (status === "stale" || freshness === "stale") return "stale";
+  if (!required) return "optional";
+  if (status === "missing") return "missing";
+  return "ready";
 }
 
 function expiredAt(value: unknown, nowIso: string): boolean {
@@ -772,6 +879,29 @@ function launchReadinessSection(snapshot: SingleSitePublishOperatorSourceSnapsho
     ...Object.values(rowJsonObject(record, "readiness_summary_json")),
     ...rowJsonArray(record, "blocker_summary_json"),
   ]);
+  const dimensionDrilldown = dimensions.map((dimension) => {
+    const group = groupForDimension(dimension);
+    const dimensionName = rowSafeText(dimension, "dimension");
+    return drilldownRow({
+      id: rowText(dimension, "id") ?? dimensionName,
+      group,
+      label: dimensionName,
+      status: rowText(dimension, "dimension_status") ?? "missing",
+      freshnessStatus: rowText(dimension, "freshness_status") ?? "unknown",
+      category: booleanValue(dimension.required_for_launch_readiness) ? "required" : "optional",
+      code: dimensionName,
+      ref: rowSourceRef(dimension),
+      watermark: rowText(dimension, "semantic_source_watermark") ?? rowText(dimension, "source_watermark"),
+      summary: safeStringList(rowJsonArray(dimension, "diagnostics_json")).join(", ") || rowText(dimension, "dimension_status") || group,
+    });
+  });
+  const dimensionGroups = {
+    ready: codeList(dimensionDrilldown.filter((dimension) => dimension.group === "ready").map((dimension) => dimension.code ?? dimension.label)),
+    stale: codeList(dimensionDrilldown.filter((dimension) => dimension.group === "stale").map((dimension) => dimension.code ?? dimension.label)),
+    missing: codeList(dimensionDrilldown.filter((dimension) => dimension.group === "missing").map((dimension) => dimension.code ?? dimension.label)),
+    blocked: codeList(dimensionDrilldown.filter((dimension) => dimension.group === "blocked").map((dimension) => dimension.code ?? dimension.label)),
+    optional: codeList(dimensionDrilldown.filter((dimension) => dimension.group === "optional").map((dimension) => dimension.code ?? dimension.label)),
+  };
 
   return {
     boundary: SOURCE_OWNED_READ_BOUNDARY,
@@ -792,6 +922,10 @@ function launchReadinessSection(snapshot: SingleSitePublishOperatorSourceSnapsho
     staleDimensions: codeList(staleDimensions),
     blockedDimensions: codeList(blockedDimensions),
     acceptedLimitations: safeStringList(limitationValues),
+    dimensionDrilldown,
+    dimensionGroups,
+    blockerCountBySeverity: codeCounts(openBlockers.map((blocker) => blocker.severity)),
+    blockerCountByCategory: codeCounts(openBlockers.map((blocker) => blocker.category)),
     openBlockers,
     evidencePackageRef: sourceRef("aaf:evidence_package", rowText(evidence, "id")),
     evidencePackageStatus: rowText(evidence, "status") ?? "missing",
@@ -803,6 +937,9 @@ function publishActivationRequestSection(snapshot: SingleSitePublishOperatorSour
   const request = snapshot?.publishActivationRequest ?? null;
   const evidenceLink = (snapshot?.publishActivationRequestEvidenceLinks ?? [])[0] ?? null;
   const policy = rowJsonObject(request, "policy_metadata_json");
+  const evidenceRefs = codeList(
+    (snapshot?.publishActivationRequestEvidenceLinks ?? []).map((link) => sourceRef("aaf:evidence_package", rowText(link, "evidence_package_id"))),
+  );
   return {
     boundary: SOURCE_OWNED_READ_BOUNDARY,
     id: rowText(request, "id"),
@@ -813,6 +950,7 @@ function publishActivationRequestSection(snapshot: SingleSitePublishOperatorSour
     subjectType: rowText(request, "subject_type"),
     subjectId: rowText(request, "subject_id"),
     linkedLaunchReadinessEvidenceRef: sourceRef("aaf:evidence_package", rowText(evidenceLink, "evidence_package_id")),
+    evidenceRefs,
     policyMetadata: {
       policyVersion: rowText(request, "policy_version") ?? text(policy.policyVersion),
       policyEvaluationId: rowText(request, "policy_evaluation_id") ?? text(policy.policyEvaluationId),
@@ -845,6 +983,15 @@ function publishActivationDecisionSection(
     ...rowJsonArray(decision, "limitation_summary_json"),
     ...rowJsonArray(decision, "limitations_json"),
   ]);
+  const evidenceRefs = codeList(
+    (snapshot?.publishActivationDecisionEvidenceLinks ?? []).map((link) => sourceRef("aaf:evidence_package", rowText(link, "evidence_package_id"))),
+  );
+  const indicators = codeList(
+    revoked ? "decision_revoked" : null,
+    superseded ? "decision_superseded" : null,
+    expired ? "decision_expired" : null,
+    invalid ? "decision_invalid" : null,
+  );
   return {
     boundary: SOURCE_OWNED_READ_BOUNDARY,
     id: rowText(decision, "id"),
@@ -860,6 +1007,8 @@ function publishActivationDecisionSection(
     expired,
     expiresAt: rowText(decision, "expires_at"),
     limitations,
+    evidenceRefs,
+    indicators,
   };
 }
 
@@ -897,6 +1046,26 @@ function gateSection(
       ? "gate_evidence_mismatch"
       : null,
   );
+  const conflictDetails = [
+    ...mismatchIndicators.map((code) => drilldownRow({
+      id: code,
+      group: "blocked" as const,
+      label: code,
+      status: "mismatch",
+      code,
+      summary: "Persisted gate row does not match the current request, decision, or evidence reference.",
+    })),
+    ...(snapshot?.conflictingNewerGateAttempts ?? []).map((row, index) => drilldownRow({
+      id: rowText(row, "id") ?? `newer_gate_attempt_${index + 1}`,
+      group: "warning" as const,
+      label: "newer_gate_attempt",
+      status: rowText(row, "gate_result") ?? "available",
+      code: "publish_activation_gate_conflict",
+      ref: sourceRef("aaf:action_gate_attempt", rowText(row, "id")),
+      watermark: gateInputWatermarkFromGate(row),
+      summary: "A newer persisted gate attempt exists for this activation scope.",
+    })),
+  ];
   return {
     boundary: SOURCE_OWNED_READ_BOUNDARY,
     handoffReadinessStatus,
@@ -910,6 +1079,7 @@ function gateSection(
     newerConflict: (snapshot?.conflictingNewerGateAttempts ?? []).length > 0,
     stale: false,
     mismatchIndicators,
+    conflictDetails,
   };
 }
 
@@ -941,12 +1111,39 @@ function metadataResolverSection(
     gate.gateBlockers,
     gate.gateWarnings,
   );
+  const detailRows = [
+    ...missing.map((code) => drilldownRow({
+      id: code,
+      group: "missing" as const,
+      label: code,
+      status: "missing",
+      code,
+      summary: "Required publish activation metadata is not available in the read-only projection.",
+    })),
+    ...mismatches.map((code) => drilldownRow({
+      id: code,
+      group: "blocked" as const,
+      label: code,
+      status: "mismatch",
+      code,
+      summary: "Resolved metadata conflicts with the current source-owned publish chain.",
+    })),
+    ...safeDiagnostics.map((code) => drilldownRow({
+      id: code,
+      group: code.includes("stale") ? "stale" as const : "warning" as const,
+      label: code,
+      status: "diagnostic",
+      code,
+      summary: "Safe resolver diagnostic derived from persisted source status.",
+    })),
+  ];
   return {
     boundary: DERIVED_ONLY_BOUNDARY,
     completenessStatus: missing.length === 0 && mismatches.length === 0 ? "complete" : "incomplete",
     missingMetadataCodes: missing,
     expectedResolvedMismatchCodes: mismatches,
     safeDiagnostics,
+    detailRows,
   };
 }
 
@@ -954,7 +1151,34 @@ function operatorAuditSection(
   attempts: readonly SingleSitePublishOperatorActionAttemptProjection[],
   latestDryRun: SingleSitePublishOperatorActionAttemptProjection | null,
   latestShadowPublish: SingleSitePublishOperatorActionAttemptProjection | null,
+  events: readonly SingleSitePublishOperatorAuditEventRow[] = [],
 ): SingleSitePublishOperatorReadonlyProjection["operatorAudit"] {
+  const recentEvents = events.slice(0, 24).map((event) => {
+    const result = jsonObject(event.result_summary_json);
+    const diagnostics = jsonObject(event.redacted_diagnostics_json);
+    const errors = jsonObject(event.error_summary_json);
+    return {
+      actionId: safeText(event.action_id),
+      eventAction: safeText(event.event_action),
+      status: safeText(event.status),
+      actorRole: safeText(event.actor_role),
+      occurredAt: safeText(event.occurred_at),
+      resultStatus: text(valueFromRecords("routeStatus", result) ?? valueFromRecords("wrapperStatus", result) ?? valueFromRecords("wrapperDryRunStatus", result)),
+      reasonCodes: codeList(result.reasonCode, result.blockerCodes, diagnostics.reasonCode, diagnostics.blockerCodes, errors.reasonCode, errors.blockerCodes),
+    };
+  });
+  const timelineSummaries = attempts.map((attempt) => drilldownRow({
+    id: attempt.actionId,
+    group: attempt.blockerCodes.length > 0 || attempt.status.includes("failed") ? "blocked" : attempt.warningCodes.length > 0 ? "warning" : "ready",
+    label: attempt.mode,
+    status: attempt.status,
+    freshnessStatus: attempt.updatedAt,
+    category: attempt.resultStatus,
+    code: attempt.blockerCodes[0] ?? attempt.warningCodes[0] ?? attempt.resultStatus,
+    ref: attempt.actionId,
+    watermark: attempt.gateInputWatermark,
+    summary: `${attempt.mode}:${attempt.status}:${attempt.resultStatus}`,
+  }));
   return {
     boundary: SOURCE_OWNED_READ_BOUNDARY,
     latestDryRunActionId: latestDryRun?.actionId ?? null,
@@ -966,6 +1190,8 @@ function operatorAuditSection(
       correlationId: attempt.correlationId,
       idempotencyKey: attempt.idempotencyKey,
     })),
+    recentEvents,
+    timelineSummaries,
     persistedResultFlags: {
       anyPublishMayHaveExecuted: attempts.some((attempt) => attempt.persistedMutationFlags.publishMayHaveExecuted === true),
       anyRuntimeMutationFlag: attempts.some((attempt) => attempt.persistedMutationFlags.runtimeMutation === true),
@@ -1001,7 +1227,7 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
   const publishActivationDecision = publishActivationDecisionSection(input.sourceSnapshot, generatedAt);
   const gateHandoffEvaluation = gateSection(input.sourceSnapshot, publishActivationDecision, launchReadiness);
   const metadataResolver = metadataResolverSection(input.sourceSnapshot, launchReadiness, publishActivationRequest, publishActivationDecision, gateHandoffEvaluation, publishContext);
-  const operatorAudit = operatorAuditSection(attempts, latestDryRun, latestShadowPublish);
+  const operatorAudit = operatorAuditSection(attempts, latestDryRun, latestShadowPublish, input.events ?? []);
   const sourceCompleteMetadata = metadataResolver.completenessStatus === "complete";
   const auditCompleteMetadata = latestCompleteMetadata(primary);
   const completeMetadata = sourceCompleteMetadata || auditCompleteMetadata;
