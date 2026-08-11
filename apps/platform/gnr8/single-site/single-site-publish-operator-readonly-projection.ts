@@ -8,7 +8,7 @@ import type {
 } from "./single-site-publish-operator-action-audit";
 
 export const SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_VERSION =
-  "mvp-59-single-site-publish-operator-readonly-source-enrichment:v1" as const;
+  "mvp-61-single-site-publish-operator-readonly-runbook:v1" as const;
 
 export const SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS = {
   readOnly: true,
@@ -187,6 +187,52 @@ export type SingleSitePublishOperatorDrilldownRow = {
   summary: string;
 };
 
+export type SingleSitePublishOperatorRunbookSeverity = "info" | "warning" | "blocked" | "critical";
+
+export type SingleSitePublishOperatorRunbookSourceOwner =
+  | "launch_readiness"
+  | "publish_activation_request"
+  | "publish_activation_decision"
+  | "gate_evaluation"
+  | "metadata_resolver"
+  | "operator_audit"
+  | "runtime_candidate"
+  | "publish_target"
+  | "unknown";
+
+export type SingleSitePublishOperatorRunbookEntry = {
+  code: string;
+  severity: SingleSitePublishOperatorRunbookSeverity;
+  sourceOwner: SingleSitePublishOperatorRunbookSourceOwner;
+  title: string;
+  diagnosticExplanation: string;
+  safeNextInspectionHint: string;
+  requiredUpstreamSource: SingleSitePublishOperatorRunbookSourceOwner | null;
+  blocking: boolean;
+  stale: boolean;
+  missing: boolean;
+  conflict: boolean;
+  relatedSafeRefs: string[];
+  relatedSafeCodes: string[];
+  readOnly: true;
+  actionAvailable: false;
+};
+
+export type SingleSitePublishOperatorRunbookSummary = {
+  totalEntries: number;
+  blockingEntries: number;
+  staleEntries: number;
+  missingEntries: number;
+  conflictEntries: number;
+  severityCounts: SingleSitePublishOperatorCodeCount[];
+  sourceOwnerCounts: SingleSitePublishOperatorCodeCount[];
+  topBlockingReason: Pick<
+    SingleSitePublishOperatorRunbookEntry,
+    "code" | "severity" | "sourceOwner" | "title" | "safeNextInspectionHint"
+  > | null;
+  recommendedInspectionOrder: SingleSitePublishOperatorRunbookSourceOwner[];
+};
+
 export type SingleSitePublishOperatorAuditEventProjection = {
   actionId: string;
   eventAction: string;
@@ -360,6 +406,8 @@ export type SingleSitePublishOperatorReadonlyProjection = {
   warningCodes: string[];
   limitationCodes: string[];
   staleOrMissingMetadataIndicators: string[];
+  runbookSummary: SingleSitePublishOperatorRunbookSummary;
+  runbookEntries: SingleSitePublishOperatorRunbookEntry[];
   nextAction: SingleSitePublishOperatorNextAction;
   flags: typeof SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS;
 };
@@ -731,6 +779,609 @@ function deriveMissingMetadata(attempt: SingleSitePublishOperatorActionAttemptPr
   if (isMissingRef(attempt.gateInputWatermark)) indicators.push("gate_input_watermark_missing");
   if (attempt.resolverStatus === "incomplete") indicators.push("resolver_metadata_incomplete");
   return indicators;
+}
+
+const RUNBOOK_SEVERITY_RANK: Record<SingleSitePublishOperatorRunbookSeverity, number> = {
+  critical: 0,
+  blocked: 1,
+  warning: 2,
+  info: 3,
+};
+
+const RUNBOOK_SOURCE_OWNER_RANK: Record<SingleSitePublishOperatorRunbookSourceOwner, number> = {
+  launch_readiness: 0,
+  runtime_candidate: 1,
+  publish_target: 2,
+  publish_activation_request: 3,
+  publish_activation_decision: 4,
+  gate_evaluation: 5,
+  metadata_resolver: 6,
+  operator_audit: 7,
+  unknown: 8,
+};
+
+function safeRunbookRef(value: string | null | undefined): string | null {
+  const normalized = text(value);
+  if (!normalized) return null;
+  if (/secret|token|password|credential|stripe|payment|billing|sql|stack|provider|payload|raw|DATABASE_URL|OPENAI_API_KEY/i.test(normalized)) return "redacted";
+  return safeText(normalized);
+}
+
+function runbookEntry(input: {
+  code: string;
+  severity: SingleSitePublishOperatorRunbookSeverity;
+  sourceOwner: SingleSitePublishOperatorRunbookSourceOwner;
+  title: string;
+  diagnosticExplanation: string;
+  safeNextInspectionHint: string;
+  requiredUpstreamSource?: SingleSitePublishOperatorRunbookSourceOwner | null;
+  blocking?: boolean;
+  stale?: boolean;
+  missing?: boolean;
+  conflict?: boolean;
+  relatedSafeRefs?: readonly (string | null | undefined)[];
+  relatedSafeCodes?: readonly unknown[];
+}): SingleSitePublishOperatorRunbookEntry {
+  return {
+    code: safeCode(input.code) ?? "UNKNOWN_RUNBOOK_ENTRY",
+    severity: input.severity,
+    sourceOwner: input.sourceOwner,
+    title: safeText(input.title),
+    diagnosticExplanation: safeText(input.diagnosticExplanation),
+    safeNextInspectionHint: safeText(input.safeNextInspectionHint),
+    requiredUpstreamSource: input.requiredUpstreamSource ?? null,
+    blocking: input.blocking ?? (input.severity === "blocked" || input.severity === "critical"),
+    stale: input.stale ?? false,
+    missing: input.missing ?? false,
+    conflict: input.conflict ?? false,
+    relatedSafeRefs: codeList((input.relatedSafeRefs ?? []).map(safeRunbookRef)),
+    relatedSafeCodes: codeList(...(input.relatedSafeCodes ?? [])),
+    readOnly: true,
+    actionAvailable: false,
+  };
+}
+
+function sortRunbookEntries(entries: readonly SingleSitePublishOperatorRunbookEntry[]): SingleSitePublishOperatorRunbookEntry[] {
+  return [...entries].sort((left, right) => {
+    const severity = RUNBOOK_SEVERITY_RANK[left.severity] - RUNBOOK_SEVERITY_RANK[right.severity];
+    if (severity !== 0) return severity;
+    const source = RUNBOOK_SOURCE_OWNER_RANK[left.sourceOwner] - RUNBOOK_SOURCE_OWNER_RANK[right.sourceOwner];
+    if (source !== 0) return source;
+    return left.code.localeCompare(right.code);
+  });
+}
+
+function buildRunbookSummary(entries: readonly SingleSitePublishOperatorRunbookEntry[]): SingleSitePublishOperatorRunbookSummary {
+  const sorted = sortRunbookEntries(entries);
+  const topBlockingEntry = sorted.find((entry) => entry.blocking) ?? null;
+  const recommendedInspectionOrder = Array.from(
+    new Set(sorted.filter((entry) => entry.blocking || entry.severity === "warning").map((entry) => entry.sourceOwner)),
+  );
+  const topBlockingReason = topBlockingEntry
+    ? {
+        code: topBlockingEntry.code,
+        severity: topBlockingEntry.severity,
+        sourceOwner: topBlockingEntry.sourceOwner,
+        title: topBlockingEntry.title,
+        safeNextInspectionHint: topBlockingEntry.safeNextInspectionHint,
+      }
+    : null;
+
+  return {
+    totalEntries: entries.length,
+    blockingEntries: entries.filter((entry) => entry.blocking).length,
+    staleEntries: entries.filter((entry) => entry.stale).length,
+    missingEntries: entries.filter((entry) => entry.missing).length,
+    conflictEntries: entries.filter((entry) => entry.conflict).length,
+    severityCounts: codeCounts(entries.map((entry) => entry.severity)),
+    sourceOwnerCounts: codeCounts(entries.map((entry) => entry.sourceOwner)),
+    topBlockingReason,
+    recommendedInspectionOrder,
+  };
+}
+
+export function buildSingleSitePublishOperatorRunbook(input: {
+  state: SingleSitePublishOperatorReadonlyProjection["state"];
+  identity: SingleSitePublishOperatorReadonlyProjection["identity"];
+  publishContext: SingleSitePublishOperatorReadonlyProjection["publishContext"];
+  launch: SingleSitePublishOperatorReadonlyProjection["launchReadiness"];
+  request: SingleSitePublishOperatorReadonlyProjection["publishActivationRequest"];
+  decision: SingleSitePublishOperatorReadonlyProjection["publishActivationDecision"];
+  gate: SingleSitePublishOperatorReadonlyProjection["gateHandoffEvaluation"];
+  metadata: SingleSitePublishOperatorReadonlyProjection["metadataResolver"];
+  operatorAudit: SingleSitePublishOperatorReadonlyProjection["operatorAudit"];
+  latestDryRun: SingleSitePublishOperatorActionAttemptProjection | null;
+  latestShadowPublish: SingleSitePublishOperatorActionAttemptProjection | null;
+  nextAction: SingleSitePublishOperatorNextAction;
+}): { entries: SingleSitePublishOperatorRunbookEntry[]; summary: SingleSitePublishOperatorRunbookSummary } {
+  const entries: SingleSitePublishOperatorRunbookEntry[] = [];
+  const add = (entry: SingleSitePublishOperatorRunbookEntry) => entries.push(entry);
+  const launchRefs = [input.launch.recordRef, input.launch.evidencePackageRef, input.launch.sourceWatermark, input.launch.evidenceWatermark];
+  const requestRefs = [input.request.ref, input.request.linkedLaunchReadinessEvidenceRef, ...input.request.evidenceRefs];
+  const decisionRefs = [input.decision.ref, ...input.decision.evidenceRefs];
+  const gateRefs = [input.gate.gateResultRef, input.gate.handoffWatermark, input.gate.gateInputWatermark];
+
+  if (input.state === "lookup_required") {
+    add(runbookEntry({
+      code: "RUNBOOK_LOOKUP_REQUIRED",
+      severity: "info",
+      sourceOwner: "unknown",
+      title: "Lookup is required",
+      diagnosticExplanation: "The panel has not loaded a publish-path projection because no lookup key was provided.",
+      safeNextInspectionHint: "Inspect the Command Center URL query for migrationId, siteId, or candidateSiteVersionRef.",
+      blocking: false,
+      missing: true,
+    }));
+  }
+
+  if (input.launch.flags.missing) {
+    add(runbookEntry({
+      code: "LAUNCH_READINESS_RECORD_MISSING",
+      severity: "blocked",
+      sourceOwner: "launch_readiness",
+      title: "Launch readiness record is missing",
+      diagnosticExplanation: "Publish readiness cannot be trusted until the launch readiness source row exists for this lookup.",
+      safeNextInspectionHint: "Inspect the launch readiness source reader output for the selected migration, site, and candidate refs.",
+      requiredUpstreamSource: "launch_readiness",
+      missing: true,
+      relatedSafeRefs: launchRefs,
+    }));
+  }
+  if (input.launch.flags.blocked) {
+    add(runbookEntry({
+      code: "LAUNCH_READINESS_BLOCKED",
+      severity: "blocked",
+      sourceOwner: "launch_readiness",
+      title: "Launch readiness is blocked",
+      diagnosticExplanation: "One or more launch readiness dimensions or source blockers prevents publish readiness.",
+      safeNextInspectionHint: "Inspect open launch readiness blockers and blocked dimension rows before reviewing approval state.",
+      requiredUpstreamSource: "launch_readiness",
+      relatedSafeRefs: launchRefs,
+      relatedSafeCodes: [input.launch.blockedDimensions, input.launch.openBlockers.map((blocker) => blocker.category)],
+    }));
+  }
+  if (input.launch.flags.stale) {
+    add(runbookEntry({
+      code: "LAUNCH_READINESS_STALE",
+      severity: "blocked",
+      sourceOwner: "launch_readiness",
+      title: "Launch readiness is stale",
+      diagnosticExplanation: "The launch readiness source is stale, so current publish safety cannot be inferred from it.",
+      safeNextInspectionHint: "Inspect freshness status and source watermarks for stale launch readiness dimensions.",
+      requiredUpstreamSource: "launch_readiness",
+      stale: true,
+      relatedSafeRefs: launchRefs,
+      relatedSafeCodes: input.launch.staleDimensions,
+    }));
+  }
+  if (input.launch.requiredMissingDimensions.length > 0) {
+    add(runbookEntry({
+      code: "LAUNCH_REQUIRED_DIMENSIONS_MISSING",
+      severity: "blocked",
+      sourceOwner: "launch_readiness",
+      title: "Required launch readiness dimensions are missing",
+      diagnosticExplanation: "The readiness record is incomplete because required dimensions are absent.",
+      safeNextInspectionHint: "Inspect missing required dimension rows and their source refs in launch readiness.",
+      requiredUpstreamSource: "launch_readiness",
+      missing: true,
+      relatedSafeRefs: launchRefs,
+      relatedSafeCodes: input.launch.requiredMissingDimensions,
+    }));
+  }
+  if (input.launch.openBlockers.some((blocker) => /^p0/i.test(blocker.severity) && blocker.status === "open")) {
+    add(runbookEntry({
+      code: "LAUNCH_P0_BLOCKER_OPEN",
+      severity: "critical",
+      sourceOwner: "launch_readiness",
+      title: "Open P0 launch blocker",
+      diagnosticExplanation: "A P0 launch readiness blocker is open; publish readiness must be treated as unsafe.",
+      safeNextInspectionHint: "Inspect the P0 launch readiness blocker category and source-owned blocker row.",
+      requiredUpstreamSource: "launch_readiness",
+      relatedSafeRefs: launchRefs,
+      relatedSafeCodes: input.launch.openBlockers.filter((blocker) => /^p0/i.test(blocker.severity)).map((blocker) => blocker.category),
+    }));
+  }
+  if (input.launch.flags.readyWithLimitations) {
+    add(runbookEntry({
+      code: "LAUNCH_READY_WITH_LIMITATIONS",
+      severity: "warning",
+      sourceOwner: "launch_readiness",
+      title: "Launch readiness has accepted limitations",
+      diagnosticExplanation: "Launch readiness is not fully clean; limitations are accepted in the source state but should be understood before publish.",
+      safeNextInspectionHint: "Inspect accepted limitation codes and linked launch readiness evidence.",
+      requiredUpstreamSource: "launch_readiness",
+      blocking: false,
+      relatedSafeRefs: launchRefs,
+      relatedSafeCodes: input.launch.acceptedLimitations,
+    }));
+  }
+
+  if (!input.request.id) {
+    add(runbookEntry({
+      code: "PUBLISH_ACTIVATION_REQUEST_MISSING",
+      severity: "blocked",
+      sourceOwner: "publish_activation_request",
+      title: "Publish activation request is missing",
+      diagnosticExplanation: "Publish activation cannot proceed without a source-owned approval request for this site version.",
+      safeNextInspectionHint: "Inspect AAF approval request reads for publish_activation scope and site_version subject.",
+      requiredUpstreamSource: "publish_activation_request",
+      missing: true,
+      relatedSafeRefs: requestRefs,
+    }));
+  } else {
+    if (["requested", "pending", "open", "submitted"].includes(input.request.status)) {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_REQUEST_PENDING",
+        severity: "warning",
+        sourceOwner: "publish_activation_request",
+        title: "Publish activation request is pending",
+        diagnosticExplanation: "The request exists but has not produced a usable granted decision yet.",
+        safeNextInspectionHint: "Inspect the request status, requested expiration, and linked evidence refs.",
+        requiredUpstreamSource: "publish_activation_decision",
+        blocking: !input.decision.granted && !input.decision.grantedWithLimitations,
+        relatedSafeRefs: requestRefs,
+      }));
+    }
+    if (input.request.scope !== "publish_activation" || input.request.action !== "publish.activation" || input.request.subjectType !== "site_version") {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_REQUEST_SCOPE_MISMATCH",
+        severity: "blocked",
+        sourceOwner: "publish_activation_request",
+        title: "Publish activation request has the wrong scope",
+        diagnosticExplanation: "The request row does not match the expected publish activation scope, action, or subject type.",
+        safeNextInspectionHint: "Inspect request scope, action_key, subject_type, and subject_id against the selected candidate.",
+        requiredUpstreamSource: "publish_activation_request",
+        conflict: true,
+        relatedSafeRefs: requestRefs,
+        relatedSafeCodes: [input.request.scope, input.request.action, input.request.subjectType],
+      }));
+    }
+    if (!input.request.linkedLaunchReadinessEvidenceRef || input.request.evidenceRefs.length === 0) {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_REQUEST_EVIDENCE_MISSING",
+        severity: "blocked",
+        sourceOwner: "publish_activation_request",
+        title: "Publish activation request is missing linked evidence",
+        diagnosticExplanation: "The request does not carry the launch readiness evidence refs needed for safe interpretation.",
+        safeNextInspectionHint: "Inspect approval evidence link rows for the request and launch readiness evidence package.",
+        requiredUpstreamSource: "launch_readiness",
+        missing: true,
+        relatedSafeRefs: requestRefs,
+      }));
+    }
+  }
+
+  if (!input.decision.id) {
+    add(runbookEntry({
+      code: "PUBLISH_ACTIVATION_DECISION_MISSING",
+      severity: "blocked",
+      sourceOwner: "publish_activation_decision",
+      title: "Publish activation decision is missing",
+      diagnosticExplanation: "No granted publish activation decision is available for the current request.",
+      safeNextInspectionHint: "Inspect AAF approval decision reads for the linked publish activation request.",
+      requiredUpstreamSource: "publish_activation_decision",
+      missing: true,
+      relatedSafeRefs: decisionRefs,
+    }));
+  } else {
+    if (input.decision.rejected) {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_DECISION_REJECTED",
+        severity: "blocked",
+        sourceOwner: "publish_activation_decision",
+        title: "Publish activation decision was rejected",
+        diagnosticExplanation: "The source-owned decision explicitly rejects publish activation.",
+        safeNextInspectionHint: "Inspect decision status, decision evidence refs, and rejection-safe indicator codes.",
+        requiredUpstreamSource: "publish_activation_decision",
+        relatedSafeRefs: decisionRefs,
+      }));
+    }
+    if (input.decision.revoked) {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_DECISION_REVOKED",
+        severity: "blocked",
+        sourceOwner: "publish_activation_decision",
+        title: "Publish activation decision was revoked",
+        diagnosticExplanation: "A revoked decision cannot be used to establish publish readiness.",
+        safeNextInspectionHint: "Inspect the decision revocation indicator and linked decision ref.",
+        requiredUpstreamSource: "publish_activation_decision",
+        conflict: true,
+        relatedSafeRefs: decisionRefs,
+        relatedSafeCodes: input.decision.indicators,
+      }));
+    }
+    if (input.decision.superseded) {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_DECISION_SUPERSEDED",
+        severity: "blocked",
+        sourceOwner: "publish_activation_decision",
+        title: "Publish activation decision was superseded",
+        diagnosticExplanation: "A superseded decision is not the active source-owned approval for publish activation.",
+        safeNextInspectionHint: "Inspect supersession indicators and locate the current decision in AAF reads.",
+        requiredUpstreamSource: "publish_activation_decision",
+        conflict: true,
+        relatedSafeRefs: decisionRefs,
+        relatedSafeCodes: input.decision.indicators,
+      }));
+    }
+    if (input.decision.expired) {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_DECISION_EXPIRED",
+        severity: "blocked",
+        sourceOwner: "publish_activation_decision",
+        title: "Publish activation decision expired",
+        diagnosticExplanation: "The approval decision is outside its validity window and cannot establish readiness.",
+        safeNextInspectionHint: "Inspect decision expiration timestamp and current generatedAt timestamp.",
+        requiredUpstreamSource: "publish_activation_decision",
+        stale: true,
+        relatedSafeRefs: [...decisionRefs, input.decision.expiresAt],
+        relatedSafeCodes: input.decision.indicators,
+      }));
+    }
+    if (input.decision.grantedWithLimitations) {
+      add(runbookEntry({
+        code: "PUBLISH_ACTIVATION_GRANTED_WITH_LIMITATIONS",
+        severity: "warning",
+        sourceOwner: "publish_activation_decision",
+        title: "Publish activation was granted with limitations",
+        diagnosticExplanation: "The decision is granted, but limitations should be inspected before interpreting readiness as clean.",
+        safeNextInspectionHint: "Inspect decision limitation codes and linked evidence refs.",
+        requiredUpstreamSource: "publish_activation_decision",
+        blocking: false,
+        relatedSafeRefs: decisionRefs,
+        relatedSafeCodes: input.decision.limitations,
+      }));
+    }
+  }
+
+  if (!input.gate.gateResultId) {
+    add(runbookEntry({
+      code: "GATE_RESULT_MISSING",
+      severity: "blocked",
+      sourceOwner: "gate_evaluation",
+      title: "Gate result is missing",
+      diagnosticExplanation: "No persisted gate result is available for the current publish activation chain.",
+      safeNextInspectionHint: "Inspect AAF action gate attempt reads and gate input watermark refs.",
+      requiredUpstreamSource: "gate_evaluation",
+      missing: true,
+      relatedSafeRefs: gateRefs,
+    }));
+  }
+  if (input.gate.gateResultId && (input.gate.gateBlockers.length > 0 || !["allowed", "warning", "allowed_with_warnings"].includes(input.gate.gateResultStatus))) {
+    add(runbookEntry({
+      code: "GATE_EVALUATION_BLOCKED",
+      severity: "blocked",
+      sourceOwner: "gate_evaluation",
+      title: "Gate evaluation is blocked",
+      diagnosticExplanation: "The persisted gate result or policy evaluation contains blockers.",
+      safeNextInspectionHint: "Inspect gate blocker codes, policy evaluation ref, and gate result status.",
+      requiredUpstreamSource: "gate_evaluation",
+      relatedSafeRefs: gateRefs,
+      relatedSafeCodes: [input.gate.gateBlockers, input.gate.gateResultStatus],
+    }));
+  }
+  if (input.gate.stale) {
+    add(runbookEntry({
+      code: "GATE_EVALUATION_STALE",
+      severity: "blocked",
+      sourceOwner: "gate_evaluation",
+      title: "Gate evaluation is stale",
+      diagnosticExplanation: "The gate result is marked stale and may not describe current publish activation inputs.",
+      safeNextInspectionHint: "Inspect gate timestamps and source watermarks for the selected gate attempt.",
+      requiredUpstreamSource: "gate_evaluation",
+      stale: true,
+      relatedSafeRefs: gateRefs,
+    }));
+  }
+  if (input.gate.gateWarnings.length > 0) {
+    add(runbookEntry({
+      code: "GATE_WARNING_WITH_LIMITATIONS",
+      severity: "warning",
+      sourceOwner: "gate_evaluation",
+      title: "Gate evaluation has warnings",
+      diagnosticExplanation: "The gate did not hard-block, but warning codes limit how readiness should be interpreted.",
+      safeNextInspectionHint: "Inspect gate warning codes alongside launch and decision limitations.",
+      requiredUpstreamSource: "gate_evaluation",
+      blocking: false,
+      relatedSafeRefs: gateRefs,
+      relatedSafeCodes: input.gate.gateWarnings,
+    }));
+  }
+  if (input.gate.newerConflict) {
+    add(runbookEntry({
+      code: "GATE_NEWER_CONFLICT",
+      severity: "critical",
+      sourceOwner: "gate_evaluation",
+      title: "Newer gate conflict exists",
+      diagnosticExplanation: "A newer persisted gate attempt exists for the activation scope, so the current gate result may be superseded.",
+      safeNextInspectionHint: "Inspect newer gate conflict rows and compare safe gate refs/watermarks.",
+      requiredUpstreamSource: "gate_evaluation",
+      conflict: true,
+      relatedSafeRefs: gateRefs,
+      relatedSafeCodes: ["publish_activation_gate_conflict"],
+    }));
+  }
+  if (input.gate.mismatchIndicators.length > 0 || (input.gate.handoffWatermark && input.gate.gateInputWatermark && input.gate.handoffWatermark !== input.gate.gateInputWatermark)) {
+    add(runbookEntry({
+      code: "GATE_HANDOFF_WATERMARK_MISMATCH",
+      severity: "critical",
+      sourceOwner: "gate_evaluation",
+      title: "Gate handoff watermark mismatch",
+      diagnosticExplanation: "Gate metadata does not line up with the current request, decision, evidence, or handoff watermark.",
+      safeNextInspectionHint: "Inspect gate mismatch indicators, handoff watermark, and gate input watermark together.",
+      requiredUpstreamSource: "gate_evaluation",
+      conflict: true,
+      relatedSafeRefs: gateRefs,
+      relatedSafeCodes: input.gate.mismatchIndicators,
+    }));
+  }
+
+  const runtimeMissing = input.metadata.missingMetadataCodes.filter((code) => code.includes("candidate_site_version") || code.includes("runtime_artifact"));
+  const targetMissing = input.metadata.missingMetadataCodes.filter((code) => code.includes("publish_target"));
+  if (runtimeMissing.length > 0) {
+    add(runbookEntry({
+      code: "RUNTIME_CANDIDATE_METADATA_MISSING",
+      severity: "blocked",
+      sourceOwner: "runtime_candidate",
+      title: "Runtime candidate metadata is missing",
+      diagnosticExplanation: "Candidate site version or runtime artifact refs are missing from the safe projection.",
+      safeNextInspectionHint: "Inspect candidate site version and runtime artifact refs in the metadata resolver section.",
+      requiredUpstreamSource: "runtime_candidate",
+      missing: true,
+      relatedSafeRefs: [input.publishContext.candidateSiteVersionRef, input.publishContext.runtimeArtifactRef],
+      relatedSafeCodes: runtimeMissing,
+    }));
+  }
+  if (targetMissing.length > 0) {
+    add(runbookEntry({
+      code: "PUBLISH_TARGET_METADATA_MISSING",
+      severity: "blocked",
+      sourceOwner: "publish_target",
+      title: "Publish target metadata is missing",
+      diagnosticExplanation: "The publish target ref is missing, so the panel cannot safely interpret target readiness.",
+      safeNextInspectionHint: "Inspect publish target source truth reads and the publish target ref.",
+      requiredUpstreamSource: "publish_target",
+      missing: true,
+      relatedSafeRefs: [input.publishContext.publishTargetRef],
+      relatedSafeCodes: targetMissing,
+    }));
+  }
+  if (input.metadata.completenessStatus === "incomplete") {
+    add(runbookEntry({
+      code: "METADATA_RESOLVER_INCOMPLETE",
+      severity: "blocked",
+      sourceOwner: "metadata_resolver",
+      title: "Metadata resolver is incomplete",
+      diagnosticExplanation: "Required publish activation metadata is missing or inconsistent in the read-only projection.",
+      safeNextInspectionHint: "Inspect missing metadata codes and resolver detail rows before reading audit outcomes.",
+      requiredUpstreamSource: "metadata_resolver",
+      missing: input.metadata.missingMetadataCodes.length > 0,
+      conflict: input.metadata.expectedResolvedMismatchCodes.length > 0,
+      relatedSafeCodes: [input.metadata.missingMetadataCodes, input.metadata.expectedResolvedMismatchCodes],
+    }));
+  }
+  if (!input.identity.tenantId || !input.identity.clientId || !input.identity.siteId || !input.publishContext.candidateSiteVersionRef) {
+    add(runbookEntry({
+      code: "METADATA_STRICT_IDENTITY_MISSING",
+      severity: "blocked",
+      sourceOwner: "metadata_resolver",
+      title: "Strict identity metadata is missing",
+      diagnosticExplanation: "Tenant, client, site, or candidate identity is incomplete, making cross-source interpretation unsafe.",
+      safeNextInspectionHint: "Inspect identity and target fields for missing tenant/client/site/candidate refs.",
+      requiredUpstreamSource: "metadata_resolver",
+      missing: true,
+      relatedSafeRefs: [input.identity.tenantId, input.identity.clientId, input.identity.siteId, input.publishContext.candidateSiteVersionRef],
+    }));
+  }
+  if (input.metadata.expectedResolvedMismatchCodes.length > 0) {
+    add(runbookEntry({
+      code: "METADATA_EXPECTED_REF_MISMATCH",
+      severity: "critical",
+      sourceOwner: "metadata_resolver",
+      title: "Expected ref mismatch",
+      diagnosticExplanation: "Resolved metadata conflicts with expected publish activation refs.",
+      safeNextInspectionHint: "Inspect expected/resolved mismatch codes and compare only safe refs in the panel.",
+      requiredUpstreamSource: "metadata_resolver",
+      conflict: true,
+      relatedSafeCodes: input.metadata.expectedResolvedMismatchCodes,
+    }));
+  }
+  if (input.metadata.missingMetadataCodes.some((code) => code.includes("read_failure") || code.includes("source_table_unavailable"))) {
+    add(runbookEntry({
+      code: "METADATA_RESOLVER_READ_FAILURE",
+      severity: "blocked",
+      sourceOwner: "metadata_resolver",
+      title: "Metadata resolver read failed",
+      diagnosticExplanation: "A read-only source projection failed or a source table was unavailable.",
+      safeNextInspectionHint: "Inspect resolver read failure codes and database read availability without retrying from this panel.",
+      requiredUpstreamSource: "metadata_resolver",
+      relatedSafeCodes: input.metadata.missingMetadataCodes,
+    }));
+  }
+
+  if (!input.latestDryRun) {
+    add(runbookEntry({
+      code: "AUDIT_DRY_RUN_NOT_RECORDED",
+      severity: "warning",
+      sourceOwner: "operator_audit",
+      title: "No dry-run is recorded yet",
+      diagnosticExplanation: "The operator audit history has no persisted dry-run attempt for this lookup.",
+      safeNextInspectionHint: "Inspect audit timeline and source refs to confirm whether a dry-run record should exist.",
+      requiredUpstreamSource: "operator_audit",
+      blocking: false,
+      missing: true,
+    }));
+  } else if (input.latestDryRun.status.includes("failed") || input.latestDryRun.resultStatus.includes("failed") || input.latestDryRun.resultStatus.includes("preflight_blocked")) {
+    add(runbookEntry({
+      code: "AUDIT_LATEST_DRY_RUN_FAILED",
+      severity: "blocked",
+      sourceOwner: "operator_audit",
+      title: "Latest dry-run failed",
+      diagnosticExplanation: "The latest persisted dry-run did not complete readiness checks successfully.",
+      safeNextInspectionHint: "Inspect latest dry-run blocker codes, wrapper status, resolver status, and redacted diagnostic codes.",
+      requiredUpstreamSource: "operator_audit",
+      relatedSafeRefs: [input.latestDryRun.actionId, input.latestDryRun.correlationId],
+      relatedSafeCodes: [input.latestDryRun.blockerCodes, input.latestDryRun.redactedDiagnosticSummary.reasonCodes],
+    }));
+  }
+  if (input.nextAction === "shadow_publish_available" && !input.latestShadowPublish) {
+    add(runbookEntry({
+      code: "AUDIT_SHADOW_PUBLISH_AVAILABLE_NOT_RUN",
+      severity: "info",
+      sourceOwner: "operator_audit",
+      title: "Shadow publish is available but not recorded",
+      diagnosticExplanation: "The read-only projection indicates shadow publish could be a future upstream action, but this panel provides no action control.",
+      safeNextInspectionHint: "Inspect the latest dry-run and governed publish chain before using any external source-owned workflow.",
+      requiredUpstreamSource: "operator_audit",
+      blocking: false,
+      relatedSafeRefs: [input.latestDryRun?.actionId],
+    }));
+  }
+  if (input.latestShadowPublish && input.latestShadowPublish.status !== "shadow_publish_completed") {
+    add(runbookEntry({
+      code: "AUDIT_LATEST_SHADOW_PUBLISH_FAILED",
+      severity: "blocked",
+      sourceOwner: "operator_audit",
+      title: "Latest shadow publish did not complete",
+      diagnosticExplanation: "The latest persisted shadow-publish attempt is not completed and needs audit inspection.",
+      safeNextInspectionHint: "Inspect shadow-publish blocker codes, wrapper status, and redacted diagnostic codes.",
+      requiredUpstreamSource: "operator_audit",
+      relatedSafeRefs: [input.latestShadowPublish.actionId, input.latestShadowPublish.correlationId],
+      relatedSafeCodes: [input.latestShadowPublish.blockerCodes, input.latestShadowPublish.redactedDiagnosticSummary.reasonCodes],
+    }));
+  }
+  if (input.latestShadowPublish?.status === "shadow_publish_completed") {
+    add(runbookEntry({
+      code: "AUDIT_SHADOW_PUBLISH_COMPLETED",
+      severity: "info",
+      sourceOwner: "operator_audit",
+      title: "Latest shadow publish completed",
+      diagnosticExplanation: "The latest persisted shadow publish completed; this is evidence only and does not create an action in the panel.",
+      safeNextInspectionHint: "Inspect completed shadow-publish audit refs if final publish readiness needs evidence review.",
+      requiredUpstreamSource: "operator_audit",
+      blocking: false,
+      relatedSafeRefs: [input.latestShadowPublish.actionId, input.latestShadowPublish.correlationId],
+    }));
+  }
+  if (input.operatorAudit.persistedResultFlags.anyRuntimeMutationFlag || input.operatorAudit.persistedResultFlags.anyBlockingEnforcementAppliedFlag) {
+    add(runbookEntry({
+      code: "AUDIT_PERSISTED_MUTATION_FLAG_PRESENT",
+      severity: "critical",
+      sourceOwner: "operator_audit",
+      title: "Persisted audit mutation flag is present",
+      diagnosticExplanation: "A persisted audit record carries a runtime mutation or enforcement flag; the panel remains read-only, but the audit source needs inspection.",
+      safeNextInspectionHint: "Inspect latest audit attempts and persisted result flags without using this panel for any action.",
+      requiredUpstreamSource: "operator_audit",
+      conflict: true,
+      relatedSafeCodes: [
+        input.operatorAudit.persistedResultFlags.anyRuntimeMutationFlag ? "runtime_mutation_flag_present" : null,
+        input.operatorAudit.persistedResultFlags.anyBlockingEnforcementAppliedFlag ? "blocking_enforcement_flag_present" : null,
+      ],
+    }));
+  }
+
+  const sortedEntries = sortRunbookEntries(entries);
+  return { entries: sortedEntries, summary: buildRunbookSummary(sortedEntries) };
 }
 
 function deriveNextAction(input: {
@@ -1255,6 +1906,20 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
     missingMetadata,
     hasSourceRows,
   });
+  const runbook = buildSingleSitePublishOperatorRunbook({
+    state,
+    identity,
+    publishContext,
+    launch: launchReadiness,
+    request: publishActivationRequest,
+    decision: publishActivationDecision,
+    gate: gateHandoffEvaluation,
+    metadata: metadataResolver,
+    operatorAudit,
+    latestDryRun,
+    latestShadowPublish,
+    nextAction,
+  });
 
   return {
     panelVersion: SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_VERSION,
@@ -1318,6 +1983,8 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
     warningCodes,
     limitationCodes,
     staleOrMissingMetadataIndicators: missingMetadata,
+    runbookSummary: runbook.summary,
+    runbookEntries: runbook.entries,
     nextAction,
     flags: SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS,
   };

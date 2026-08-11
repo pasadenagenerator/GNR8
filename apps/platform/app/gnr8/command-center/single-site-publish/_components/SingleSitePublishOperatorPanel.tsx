@@ -4,6 +4,8 @@ import type {
   SingleSitePublishOperatorActionAttemptProjection,
   SingleSitePublishOperatorDrilldownRow,
   SingleSitePublishOperatorReadonlyProjection,
+  SingleSitePublishOperatorRunbookEntry,
+  SingleSitePublishOperatorRunbookSeverity,
 } from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
 import React, { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 
@@ -59,12 +61,115 @@ function statusTone(value: string): "neutral" | "good" | "warn" | "bad" {
   return "neutral";
 }
 
+function severityTone(value: SingleSitePublishOperatorRunbookSeverity): "neutral" | "good" | "warn" | "bad" {
+  if (value === "critical" || value === "blocked") return "bad";
+  if (value === "warning") return "warn";
+  return "neutral";
+}
+
 function section(title: string, children: ReactNode) {
   return (
     <section style={{ border: "1px solid #dbe2ea", borderRadius: 10, background: "#fff", padding: 14 }}>
       <h2 style={{ margin: "0 0 10px", fontSize: 18, color: "#0f172a" }}>{title}</h2>
       {children}
     </section>
+  );
+}
+
+function runbookEntriesBySeverityAndSource(entries: readonly SingleSitePublishOperatorRunbookEntry[]) {
+  const groups = new Map<string, SingleSitePublishOperatorRunbookEntry[]>();
+  entries.forEach((entry) => {
+    const key = `${entry.severity}:${entry.sourceOwner}`;
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  });
+  return [...groups.entries()].map(([key, groupEntries]) => {
+    const [severity, sourceOwner] = key.split(":");
+    return { severity: severity as SingleSitePublishOperatorRunbookSeverity, sourceOwner, entries: groupEntries };
+  });
+}
+
+function diagnosticRunbook(model: SingleSitePublishOperatorReadonlyProjection) {
+  const groups = runbookEntriesBySeverityAndSource(model.runbookEntries);
+  const top = model.runbookSummary.topBlockingReason;
+
+  return (
+    <div style={{ display: "grid", gap: 12, fontSize: 13 }}>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+        {field("Total Entries", model.runbookSummary.totalEntries)}
+        {field("Blocking Entries", model.runbookSummary.blockingEntries)}
+        {field("Stale Entries", model.runbookSummary.staleEntries)}
+        {field("Missing Entries", model.runbookSummary.missingEntries)}
+        {field("Conflict Entries", model.runbookSummary.conflictEntries)}
+      </dl>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Severity counts:</strong>
+          <div>{countList(model.runbookSummary.severityCounts)}</div>
+        </div>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Source owner counts:</strong>
+          <div>{countList(model.runbookSummary.sourceOwnerCounts)}</div>
+        </div>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Inspection order:</strong>
+          <div>{codeList(model.runbookSummary.recommendedInspectionOrder, "No blocking or warning sources")}</div>
+        </div>
+      </div>
+      {top ? (
+        <div style={{ border: "1px solid #fecaca", borderRadius: 8, background: "#fff1f2", padding: 10, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+            {badge(top.severity, severityTone(top.severity))}
+            {badge(top.sourceOwner)}
+            <code style={{ overflowWrap: "anywhere", fontSize: 12 }}>{top.code}</code>
+          </div>
+          <div style={{ fontWeight: 800, color: "#991b1b", overflowWrap: "anywhere" }}>{top.title}</div>
+          <div style={{ marginTop: 4, color: "#334155", overflowWrap: "anywhere" }}>{top.safeNextInspectionHint}</div>
+        </div>
+      ) : (
+        <div style={{ border: "1px solid #bbf7d0", borderRadius: 8, background: "#f0fdf4", padding: 10, color: "#166534" }}>
+          No blocking runbook reason is active.
+        </div>
+      )}
+      {groups.length === 0 ? (
+        <p style={{ margin: 0, color: "#64748b" }}>No diagnostic runbook entries are active for this projection.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {groups.map((group) => (
+            <div key={`${group.severity}:${group.sourceOwner}`} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                {badge(group.severity, severityTone(group.severity))}
+                {badge(group.sourceOwner)}
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {group.entries.map((entry) => (
+                  <div key={entry.code} style={{ borderTop: "1px solid #f1f5f9", paddingTop: 8, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 900, color: "#0f172a", overflowWrap: "anywhere" }}>{entry.title}</div>
+                        <code style={{ display: "block", marginTop: 2, color: "#475569", fontSize: 12, overflowWrap: "anywhere" }}>{entry.code}</code>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {entry.blocking ? badge("blocking", "bad") : badge("non_blocking")}
+                        {entry.stale ? badge("stale", "warn") : null}
+                        {entry.missing ? badge("missing", "bad") : null}
+                        {entry.conflict ? badge("conflict", "bad") : null}
+                        {badge("read_only", "good")}
+                        {badge("no_action")}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 6, color: "#334155", overflowWrap: "anywhere" }}>{entry.diagnosticExplanation}</div>
+                    <div style={{ marginTop: 4, color: "#0f172a", overflowWrap: "anywhere" }}><strong>Inspect:</strong> {entry.safeNextInspectionHint}</div>
+                    <div style={{ marginTop: 4 }}><strong>Upstream:</strong> <code>{text(entry.requiredUpstreamSource)}</code></div>
+                    <div style={{ marginTop: 4 }}><strong>Safe refs:</strong> {codeList(entry.relatedSafeRefs)}</div>
+                    <div style={{ marginTop: 4 }}><strong>Safe codes:</strong> {codeList(entry.relatedSafeCodes)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -496,6 +601,8 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
           </dl>
         </div>,
       )}
+
+      {section("Diagnostics Runbook", diagnosticRunbook(model))}
 
       {section(
         "Launch Readiness",

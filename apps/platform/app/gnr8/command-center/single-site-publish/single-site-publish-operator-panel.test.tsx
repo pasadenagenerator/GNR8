@@ -70,7 +70,7 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
   };
 
   return {
-    panelVersion: "mvp-59-single-site-publish-operator-readonly-source-enrichment:v1",
+    panelVersion: "mvp-61-single-site-publish-operator-readonly-runbook:v1",
     generatedAt: "2026-08-10T09:01:00.000Z",
     lookup: {
       migrationId: "migration-panel",
@@ -298,6 +298,59 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
     warningCodes: [],
     limitationCodes: ["read_only_panel"],
     staleOrMissingMetadataIndicators: [],
+    runbookSummary: {
+      totalEntries: 2,
+      blockingEntries: 1,
+      staleEntries: 0,
+      missingEntries: 0,
+      conflictEntries: 0,
+      severityCounts: [{ key: "blocked", count: 1 }, { key: "info", count: 1 }],
+      sourceOwnerCounts: [{ key: "launch_readiness", count: 1 }, { key: "operator_audit", count: 1 }],
+      topBlockingReason: {
+        code: "LAUNCH_READINESS_BLOCKED",
+        severity: "blocked",
+        sourceOwner: "launch_readiness",
+        title: "Launch readiness is blocked",
+        safeNextInspectionHint: "Inspect open launch readiness blockers and blocked dimension rows before reviewing approval state.",
+      },
+      recommendedInspectionOrder: ["launch_readiness"],
+    },
+    runbookEntries: [
+      {
+        code: "LAUNCH_READINESS_BLOCKED",
+        severity: "blocked",
+        sourceOwner: "launch_readiness",
+        title: "Launch readiness is blocked",
+        diagnosticExplanation: "One or more launch readiness dimensions or source blockers prevents publish readiness.",
+        safeNextInspectionHint: "Inspect open launch readiness blockers and blocked dimension rows before reviewing approval state.",
+        requiredUpstreamSource: "launch_readiness",
+        blocking: true,
+        stale: false,
+        missing: false,
+        conflict: false,
+        relatedSafeRefs: ["gnr8:gnr8_single_site_launch_readiness_records:readiness-panel"],
+        relatedSafeCodes: ["domain_readiness_blocked"],
+        readOnly: true,
+        actionAvailable: false,
+      },
+      {
+        code: "AUDIT_SHADOW_PUBLISH_AVAILABLE_NOT_RUN",
+        severity: "info",
+        sourceOwner: "operator_audit",
+        title: "Shadow publish is available but not recorded",
+        diagnosticExplanation: "The read-only projection indicates shadow publish could be a future upstream action, but this panel provides no action control.",
+        safeNextInspectionHint: "Inspect the latest dry-run and governed publish chain before using any external source-owned workflow.",
+        requiredUpstreamSource: "operator_audit",
+        blocking: false,
+        stale: false,
+        missing: false,
+        conflict: false,
+        relatedSafeRefs: [attempt.actionId],
+        relatedSafeCodes: [],
+        readOnly: true,
+        actionAvailable: false,
+      },
+    ],
     nextAction: "shadow_publish_available",
     flags: {
       readOnly: true,
@@ -321,6 +374,14 @@ test("operator panel renders dense read-only status without mutation buttons", (
   assert.equal(html.includes("Single-Site Publish Operator Panel"), true);
   assert.equal(html.includes("Read-Only Boundary"), true);
   assert.equal(html.includes("Display Filters"), true);
+  assert.equal(html.includes("Diagnostics Runbook"), true);
+  assert.equal(html.includes("Severity counts"), true);
+  assert.equal(html.includes("Source owner counts"), true);
+  assert.equal(html.includes("Inspection order"), true);
+  assert.equal(html.includes("Launch readiness is blocked"), true);
+  assert.equal(html.includes("LAUNCH_READINESS_BLOCKED"), true);
+  assert.equal(html.includes("read only"), true);
+  assert.equal(html.includes("no action"), true);
   assert.equal(html.includes("Launch Readiness"), true);
   assert.equal(html.includes("Publish Activation"), true);
   assert.equal(html.includes("Gate Handoff"), true);
@@ -339,6 +400,7 @@ test("operator panel renders dense read-only status without mutation buttons", (
   assert.equal(html.includes("runtimeMutation"), true);
   assert.equal(html.includes("enforcementApplied"), true);
   assert.equal(html.includes("<button"), false);
+  assert.equal(html.includes("<form"), false);
   assert.equal(html.includes("Approve"), false);
   assert.equal(html.includes("Retry"), false);
   assert.equal(html.includes("Rollback"), false);
@@ -435,6 +497,30 @@ test("operator panel renders useful empty states for source and audit gaps", () 
   assert.equal(html.includes("launch_readiness_evidence_ref_missing"), true);
   assert.equal(html.includes("<form"), false);
   assert.equal(html.includes("<button"), false);
+});
+
+test("operator panel renders empty diagnostics runbook state", () => {
+  const clean = model({
+    runbookSummary: {
+      totalEntries: 0,
+      blockingEntries: 0,
+      staleEntries: 0,
+      missingEntries: 0,
+      conflictEntries: 0,
+      severityCounts: [],
+      sourceOwnerCounts: [],
+      topBlockingReason: null,
+      recommendedInspectionOrder: [],
+    },
+    runbookEntries: [],
+  });
+  const html = renderToStaticMarkup(<SingleSitePublishOperatorPanel model={clean} />);
+
+  assert.equal(html.includes("No blocking runbook reason is active."), true);
+  assert.equal(html.includes("No diagnostic runbook entries are active for this projection."), true);
+  assert.equal(html.includes("No blocking or warning sources"), true);
+  assert.equal(html.includes("<button"), false);
+  assert.equal(html.includes("<form"), false);
 });
 
 test("operator panel local filters isolate blocker stale missing and timeline rows", () => {

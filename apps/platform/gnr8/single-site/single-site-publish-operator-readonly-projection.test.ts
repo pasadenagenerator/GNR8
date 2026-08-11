@@ -457,3 +457,208 @@ test("drilldown projection groups dimensions blockers activation gate metadata a
   assert.equal(json.includes("stackTrace"), false);
   assert.equal(json.includes("token stack trace"), false);
 });
+
+function runbookEntry(
+  model: ReturnType<typeof buildSingleSitePublishOperatorReadonlyProjection>,
+  code: string,
+) {
+  return model.runbookEntries.find((entry) => entry.code === code);
+}
+
+test("runbook maps launch readiness blockers stale missing P0 and limitations", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp61", status: "ready_with_limitations", freshness_status: "stale", semantic_source_watermark: "wm:readiness" },
+      launchReadinessDimensions: [
+        { dimension: "domain_readiness", dimension_status: "blocked", freshness_status: "fresh", required_for_launch_readiness: true },
+        { dimension: "content_readiness", dimension_status: "missing", freshness_status: "missing", required_for_launch_readiness: true },
+        { dimension: "metadata_snapshot", dimension_status: "ready", freshness_status: "stale", required_for_launch_readiness: true },
+      ],
+      launchReadinessBlockers: [
+        { severity: "p0_critical", category: "domain", status: "open", description: "Critical domain blocker." },
+      ],
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+    },
+  });
+
+  assert.equal(runbookEntry(model, "LAUNCH_P0_BLOCKER_OPEN")?.severity, "critical");
+  assert.equal(runbookEntry(model, "LAUNCH_P0_BLOCKER_OPEN")?.sourceOwner, "launch_readiness");
+  assert.equal(runbookEntry(model, "LAUNCH_READINESS_BLOCKED")?.blocking, true);
+  assert.equal(runbookEntry(model, "LAUNCH_READINESS_STALE")?.stale, true);
+  assert.equal(runbookEntry(model, "LAUNCH_REQUIRED_DIMENSIONS_MISSING")?.missing, true);
+  assert.equal(runbookEntry(model, "LAUNCH_READY_WITH_LIMITATIONS")?.severity, "warning");
+  assert.equal(model.runbookSummary.topBlockingReason?.code, "LAUNCH_P0_BLOCKER_OPEN");
+  assert.equal(model.runbookSummary.recommendedInspectionOrder[0], "launch_readiness");
+});
+
+test("runbook maps publish activation request gaps and scope conflicts", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp61", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+      publishActivationRequest: {
+        id: "22222222-2222-4222-8222-222222222222",
+        status: "pending",
+        scope: "content_approval",
+        action_key: "content.approve",
+        subject_type: "migration",
+        subject_id: "migration-mvp61",
+      },
+    },
+  });
+
+  assert.equal(runbookEntry(model, "PUBLISH_ACTIVATION_REQUEST_PENDING")?.severity, "warning");
+  assert.equal(runbookEntry(model, "PUBLISH_ACTIVATION_REQUEST_PENDING")?.blocking, true);
+  assert.equal(runbookEntry(model, "PUBLISH_ACTIVATION_REQUEST_SCOPE_MISMATCH")?.sourceOwner, "publish_activation_request");
+  assert.equal(runbookEntry(model, "PUBLISH_ACTIVATION_REQUEST_SCOPE_MISMATCH")?.conflict, true);
+  assert.equal(runbookEntry(model, "PUBLISH_ACTIVATION_REQUEST_EVIDENCE_MISSING")?.missing, true);
+});
+
+test("runbook maps missing request and decision states", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp61", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+    },
+  });
+
+  assert.equal(runbookEntry(model, "PUBLISH_ACTIVATION_REQUEST_MISSING")?.severity, "blocked");
+  assert.equal(runbookEntry(model, "PUBLISH_ACTIVATION_DECISION_MISSING")?.severity, "blocked");
+});
+
+test("runbook maps rejected revoked superseded expired and limited decisions", () => {
+  const baseSnapshot = {
+    launchReadinessRecord: { id: "readiness-mvp61", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+    launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+    publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: "candidate-mvp61" },
+    publishActivationRequestEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+  };
+  const rejected = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [],
+    sourceSnapshot: { ...baseSnapshot, publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "rejected" } },
+  });
+  const invalid = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [],
+    sourceSnapshot: {
+      ...baseSnapshot,
+      publishActivationDecision: {
+        id: "33333333-3333-4333-8333-333333333333",
+        status: "granted_with_limitations",
+        revoked: true,
+        superseded: true,
+        expires_at: "2026-08-01T00:00:00.000Z",
+        limitation_summary_json: ["limited_dns_window"],
+      },
+    },
+    generatedAt: "2026-08-10T00:00:00.000Z",
+  });
+  const limited = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [],
+    sourceSnapshot: {
+      ...baseSnapshot,
+      publishActivationDecision: {
+        id: "33333333-3333-4333-8333-333333333333",
+        status: "granted_with_limitations",
+        limitation_summary_json: ["limited_dns_window"],
+      },
+    },
+    generatedAt: "2026-08-10T00:00:00.000Z",
+  });
+
+  assert.equal(runbookEntry(rejected, "PUBLISH_ACTIVATION_DECISION_REJECTED")?.blocking, true);
+  assert.equal(runbookEntry(invalid, "PUBLISH_ACTIVATION_DECISION_REVOKED")?.severity, "blocked");
+  assert.equal(runbookEntry(invalid, "PUBLISH_ACTIVATION_DECISION_SUPERSEDED")?.conflict, true);
+  assert.equal(runbookEntry(invalid, "PUBLISH_ACTIVATION_DECISION_EXPIRED")?.stale, true);
+  assert.equal(runbookEntry(limited, "PUBLISH_ACTIVATION_GRANTED_WITH_LIMITATIONS")?.severity, "warning");
+});
+
+test("runbook maps gate blocked warnings conflicts and watermark mismatches", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [action({ handoff_watermark: "handoff-watermark-a" })],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp61", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: "candidate-mvp61" },
+      publishActivationRequestEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted" },
+      gateAttempt: {
+        id: "44444444-4444-4444-8444-444444444444",
+        gate_result: "blocked",
+        approval_request_id: "22222222-2222-4222-8222-222222222222",
+        approval_decision_id: "different-decision",
+        evidence_package_id: "different-evidence",
+        causation_id: `mvp44:single-site-publish-activation-gate-input:${"e".repeat(64)}`,
+        created_at: "2026-08-10T12:00:00.000Z",
+      },
+      gatePolicyEvaluation: { blocker_codes: ["gate_policy_blocker"], warning_codes: ["gate_policy_warning"] },
+      conflictingNewerGateAttempts: [{ id: "55555555-5555-4555-8555-555555555555", gate_result: "allowed" }],
+    },
+  });
+
+  assert.equal(runbookEntry(model, "GATE_EVALUATION_BLOCKED")?.sourceOwner, "gate_evaluation");
+  assert.equal(runbookEntry(model, "GATE_WARNING_WITH_LIMITATIONS")?.severity, "warning");
+  assert.equal(runbookEntry(model, "GATE_NEWER_CONFLICT")?.severity, "critical");
+  assert.equal(runbookEntry(model, "GATE_HANDOFF_WATERMARK_MISMATCH")?.conflict, true);
+});
+
+test("runbook maps metadata incomplete identity gaps target gaps and read failures", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp61", status: "ready", freshness_status: "fresh", semantic_source_watermark: "wm:readiness" },
+      readFailureCodes: ["source_table_unavailable"],
+    },
+  });
+
+  assert.equal(runbookEntry(model, "RUNTIME_CANDIDATE_METADATA_MISSING")?.sourceOwner, "runtime_candidate");
+  assert.equal(runbookEntry(model, "PUBLISH_TARGET_METADATA_MISSING")?.sourceOwner, "publish_target");
+  assert.equal(runbookEntry(model, "METADATA_RESOLVER_INCOMPLETE")?.missing, true);
+  assert.equal(runbookEntry(model, "METADATA_STRICT_IDENTITY_MISSING")?.severity, "blocked");
+  assert.equal(runbookEntry(model, "METADATA_RESOLVER_READ_FAILURE")?.sourceOwner, "metadata_resolver");
+});
+
+test("runbook maps audit dry-run shadow publish and redacts unsafe refs", () => {
+  const failedDryRun = action({
+    candidate_site_version_ref: "OPENAI_API_KEY=abc",
+    status: "preflight_failed",
+    result_summary_json: { wrapperDryRunStatus: "preflight_blocked", resolverStatus: "incomplete", blockerCodes: ["preflight_failed"] },
+    limitation_summary_json: { blockerCodes: ["preflight_failed"], warningCodes: [], limitationCodes: [] },
+    redacted_diagnostics_json: { reasonCode: "safe_preflight_code", stackTrace: "stack trace with token" },
+  });
+  const failedShadow = action({
+    id: "00000000-0000-4000-8000-000000000099",
+    mode: "shadow_publish",
+    status: "shadow_publish_failed",
+    result_summary_json: { wrapperStatus: "shadow_publish_failed", blockerCodes: ["shadow_failed"] },
+    limitation_summary_json: { blockerCodes: ["shadow_failed"], warningCodes: [], limitationCodes: [] },
+    updated_at: "2026-08-10T08:20:01.000Z",
+  });
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [failedDryRun, failedShadow],
+  });
+  const json = JSON.stringify(model.runbookEntries);
+
+  assert.equal(runbookEntry(model, "AUDIT_LATEST_DRY_RUN_FAILED")?.blocking, true);
+  assert.equal(runbookEntry(model, "AUDIT_LATEST_SHADOW_PUBLISH_FAILED")?.severity, "blocked");
+  assert.equal(json.includes("safe_preflight_code"), true);
+  assert.equal(json.includes("OPENAI_API_KEY"), false);
+  assert.equal(json.includes("stack trace"), false);
+
+  const completed = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp61" },
+    actions: [action(), action({ id: "00000000-0000-4000-8000-000000000100", mode: "shadow_publish", status: "shadow_publish_completed", updated_at: "2026-08-10T08:30:01.000Z" })],
+  });
+  assert.equal(runbookEntry(completed, "AUDIT_SHADOW_PUBLISH_COMPLETED")?.severity, "info");
+});
