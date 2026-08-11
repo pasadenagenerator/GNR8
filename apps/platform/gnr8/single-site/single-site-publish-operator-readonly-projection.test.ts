@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   SingleSitePublishOperatorReadonlyProjectionRepository,
+  buildSingleSitePublishOperatorDiagnosticSnapshot,
   buildSingleSitePublishOperatorReadonlyProjection,
   type SingleSitePublishOperatorAuditRefRow,
 } from "./single-site-publish-operator-readonly-projection";
@@ -149,6 +150,114 @@ test("projection redacts unsafe diagnostics instead of surfacing raw internals",
   assert.equal(json.includes("providerSecret"), false);
   assert.equal(json.includes("OPENAI_API_KEY"), false);
   assert.equal(model.latestDryRun?.redactedDiagnosticSummary.omittedUnsafeDiagnostics, true);
+});
+
+test("diagnostic snapshot is deterministic except for generated timestamp and exposes a stable semantic watermark", () => {
+  const first = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp62" },
+    actions: [action()],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const second = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp62" },
+    actions: [action()],
+    generatedAt: "2026-08-10T12:05:00.000Z",
+  });
+
+  assert.notEqual(first.diagnosticSnapshot.snapshotGeneratedAt, second.diagnosticSnapshot.snapshotGeneratedAt);
+  assert.equal(first.diagnosticSnapshot.snapshotWatermark, second.diagnosticSnapshot.snapshotWatermark);
+  assert.equal(JSON.stringify({ ...first.diagnosticSnapshot.exportSafeJsonPreview, snapshotGeneratedAt: "ignored" }), JSON.stringify({ ...second.diagnosticSnapshot.exportSafeJsonPreview, snapshotGeneratedAt: "ignored" }));
+  assert.equal(first.diagnosticSnapshot.snapshotVersion, "mvp-62-single-site-publish-operator-readonly-diagnostic-snapshot:v1");
+  assert.equal(first.diagnosticSnapshot.flags.readOnly, true);
+  assert.equal(first.diagnosticSnapshot.flags.exportSafe, true);
+  assert.equal(first.diagnosticSnapshot.flags.actionAvailable, false);
+  assert.equal(first.diagnosticSnapshot.flags.publishes, false);
+  assert.equal(first.diagnosticSnapshot.flags.runtimeMutation, false);
+  assert.equal(first.diagnosticSnapshot.flags.enforcementApplied, false);
+});
+
+test("diagnostic snapshot includes required summaries safe refs source labels and runbook alignment", () => {
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp62" },
+    actions: [action({ result_summary_json: { wrapperDryRunStatus: "preflight_blocked", resolverStatus: "incomplete", blockerCodes: ["publish_activation_metadata_incomplete"] } })],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp62", status: "blocked", freshness_status: "stale", semantic_source_watermark: "wm:readiness-mvp62" },
+      launchReadinessDimensions: [
+        { dimension: "domain_readiness", dimension_status: "blocked", freshness_status: "fresh", required_for_launch_readiness: true },
+        { dimension: "publish_target", dimension_status: "missing", freshness_status: "missing", required_for_launch_readiness: true },
+      ],
+      launchReadinessBlockers: [{ severity: "p0_critical", category: "domain", status: "open", description: "Blocked." }],
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence-mvp62" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: "candidate-mvp62" },
+      publishActivationRequestEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted_with_limitations", limitation_summary_json: ["dns_waiting_accepted"] },
+      publishActivationDecisionEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      gateAttempt: {
+        id: "44444444-4444-4444-8444-444444444444",
+        gate_result: "blocked",
+        causation_id: `mvp44:single-site-publish-activation-gate-input:${"f".repeat(64)}`,
+      },
+      gatePolicyEvaluation: { blocker_codes: ["gate_policy_blocker"], warning_codes: ["gate_policy_warning"] },
+    },
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const snapshot = model.diagnosticSnapshot;
+
+  assert.equal(snapshot.launchReadinessSummary.status, "blocked");
+  assert.equal(snapshot.publishActivationRequestSummary.ref, "aaf:approval_request:22222222-2222-4222-8222-222222222222");
+  assert.equal(snapshot.publishActivationDecisionSummary.projection, "granted_with_limitations");
+  assert.equal(snapshot.gateHandoffSummary.gateResultStatus, "blocked");
+  assert.equal(snapshot.metadataResolverSummary.completenessStatus, "complete");
+  assert.equal(snapshot.auditSummary.latestDryRunStatus, "dry_run_completed");
+  assert.equal(snapshot.runbookSummary.topBlockingReason?.code, model.runbookSummary.topBlockingReason?.code);
+  assert.equal(snapshot.topBlockingReason?.code, "LAUNCH_P0_BLOCKER_OPEN");
+  assert.deepEqual(snapshot.recommendedInspectionOrder, model.runbookSummary.recommendedInspectionOrder);
+  assert.equal(snapshot.safeReferences.some((ref) => ref.key === "launch_readiness_record" && ref.sourceWatermark === "wm:readiness-mvp62"), true);
+  assert.equal(snapshot.safeReferences.some((ref) => ref.key === "publish_activation_decision" && ref.ref === "aaf:approval_decision:33333333-3333-4333-8333-333333333333"), true);
+  assert.equal(snapshot.sourceLabels.sourceOwnedReads.includes("launch_readiness"), true);
+  assert.equal(snapshot.sourceLabels.derivedOnly.includes("metadata_resolver"), true);
+  assert.equal(snapshot.freshnessMissingStaleSummary.missingCodes.includes("LAUNCH_REQUIRED_DIMENSIONS_MISSING"), true);
+});
+
+test("diagnostic snapshot redacts unsafe values and empty states stay export-safe", () => {
+  const unsafe = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { candidateSiteVersionRef: "OPENAI_API_KEY=abc" },
+    actions: [
+      action({
+        tenant_id: "DATABASE_URL=postgres://secret",
+        client_id: "client-safe",
+        candidate_site_version_ref: "OPENAI_API_KEY=abc",
+        status: "preflight_failed",
+        result_summary_json: { wrapperDryRunStatus: "preflight_blocked", resolverStatus: "incomplete", blockerCodes: ["preflight_failed"] },
+        limitation_summary_json: { blockerCodes: ["preflight_failed"], warningCodes: [], limitationCodes: [] },
+        redacted_diagnostics_json: { reasonCode: "safe_code", rawSql: "select * from secrets", stackTrace: "token stack trace" },
+      }),
+    ],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const unsafeJson = JSON.stringify(unsafe.diagnosticSnapshot);
+
+  assert.equal(unsafeJson.includes("OPENAI_API_KEY"), false);
+  assert.equal(unsafeJson.includes("DATABASE_URL"), false);
+  assert.equal(unsafeJson.includes("select * from secrets"), false);
+  assert.equal(unsafeJson.includes("stack trace"), false);
+  assert.equal(unsafeJson.includes("preflight_failed"), true);
+
+  const empty = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: {},
+    actions: [],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const rebuilt = buildSingleSitePublishOperatorDiagnosticSnapshot(
+    (({ diagnosticSnapshot: _diagnosticSnapshot, ...projection }) => projection)(empty),
+    { snapshotGeneratedAt: "2026-08-10T12:10:00.000Z" },
+  );
+
+  assert.equal(empty.state, "lookup_required");
+  assert.equal(empty.diagnosticSnapshot.flags.exportSafe, true);
+  assert.equal(empty.diagnosticSnapshot.safeReferences.length, 10);
+  assert.equal(empty.diagnosticSnapshot.topBlockingReason?.code, "LAUNCH_READINESS_RECORD_MISSING");
+  assert.equal(rebuilt.snapshotWatermark, empty.diagnosticSnapshot.snapshotWatermark);
 });
 
 test("source diagnostics expose only safe codes", () => {

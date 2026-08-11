@@ -6,6 +6,7 @@ import type {
   SingleSitePublishOperatorReadonlyProjection,
   SingleSitePublishOperatorRunbookEntry,
   SingleSitePublishOperatorRunbookSeverity,
+  SingleSitePublishOperatorSafeReference,
 } from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
 import React, { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 
@@ -169,6 +170,105 @@ function diagnosticRunbook(model: SingleSitePublishOperatorReadonlyProjection) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function safeReferenceGrid(refs: readonly SingleSitePublishOperatorSafeReference[]) {
+  if (refs.length === 0) return <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>No safe references are available.</p>;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
+      {refs.map((ref) => (
+        <div key={ref.key} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+            {badge(ref.boundaryLabel === "source-owned read" ? "source_owned" : "derived_only", ref.boundaryLabel === "source-owned read" ? "good" : "neutral")}
+            {badge(ref.sourceOwner)}
+          </div>
+          <div style={{ color: "#475569", fontSize: 12, fontWeight: 800 }}>{ref.label}</div>
+          <code style={{ display: "block", marginTop: 4, color: "#0f172a", fontSize: 12, overflowWrap: "anywhere" }}>{text(ref.ref)}</code>
+          {ref.sourceWatermark ? (
+            <code style={{ display: "block", marginTop: 6, color: "#64748b", fontSize: 11, overflowWrap: "anywhere" }}>{ref.sourceWatermark}</code>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function diagnosticSnapshot(model: SingleSitePublishOperatorReadonlyProjection) {
+  const snapshot = model.diagnosticSnapshot;
+  const top = snapshot.topBlockingReason;
+  const preview = JSON.stringify(snapshot.exportSafeJsonPreview, null, 2);
+
+  return (
+    <div style={{ display: "grid", gap: 12, fontSize: 13 }}>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+        {field("Snapshot Watermark", snapshot.snapshotWatermark)}
+        {field("Snapshot Version", snapshot.snapshotVersion)}
+        {field("Snapshot Generated", snapshot.snapshotGeneratedAt)}
+        {field("Current Next Action", model.nextAction)}
+        {field("Top Blocking Reason", top ? top.code : "none")}
+        {field("Read Only", String(snapshot.flags.readOnly))}
+        {field("Export Safe", String(snapshot.flags.exportSafe))}
+        {field("Action Available", String(snapshot.flags.actionAvailable))}
+      </dl>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Severity counts:</strong>
+          <div>{countList(snapshot.runbookSummary.severityCounts)}</div>
+        </div>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Source owner counts:</strong>
+          <div>{countList(snapshot.runbookSummary.sourceOwnerCounts)}</div>
+        </div>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Freshness/missing/conflict:</strong>
+          <div>{countList([
+            { key: "stale", count: snapshot.freshnessMissingStaleSummary.staleCount },
+            { key: "missing", count: snapshot.freshnessMissingStaleSummary.missingCount },
+            { key: "conflict", count: snapshot.freshnessMissingStaleSummary.conflictCount },
+          ])}</div>
+        </div>
+      </div>
+      {top ? (
+        <div style={{ border: "1px solid #fecaca", borderRadius: 8, background: "#fff1f2", padding: 10, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+            {badge(top.severity, severityTone(top.severity))}
+            {badge(top.sourceOwner)}
+            <code style={{ fontSize: 12, overflowWrap: "anywhere" }}>{top.code}</code>
+          </div>
+          <div style={{ color: "#991b1b", fontWeight: 900, overflowWrap: "anywhere" }}>{top.title}</div>
+          <div style={{ marginTop: 4, color: "#334155", overflowWrap: "anywhere" }}>{top.safeNextInspectionHint}</div>
+        </div>
+      ) : (
+        <div style={{ border: "1px solid #bbf7d0", borderRadius: 8, background: "#f0fdf4", padding: 10, color: "#166534" }}>
+          No blocking reason is present in the diagnostic snapshot.
+        </div>
+      )}
+      <div style={{ display: "grid", gap: 6 }}>
+        <strong>Key safe refs:</strong>
+        {safeReferenceGrid(snapshot.safeReferences)}
+      </div>
+      <details style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, minWidth: 0 }}>
+        <summary style={{ cursor: "pointer", color: "#0f172a", fontWeight: 900 }}>Export-safe JSON preview</summary>
+        <pre
+          style={{
+            margin: "10px 0 0",
+            maxHeight: 360,
+            overflow: "auto",
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+            border: "1px solid #f1f5f9",
+            borderRadius: 8,
+            background: "#f8fafc",
+            padding: 10,
+            color: "#111827",
+            fontSize: 11,
+          }}
+        >
+          {preview}
+        </pre>
+      </details>
     </div>
   );
 }
@@ -603,6 +703,8 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
       )}
 
       {section("Diagnostics Runbook", diagnosticRunbook(model))}
+
+      {section("Diagnostic Snapshot", diagnosticSnapshot(model))}
 
       {section(
         "Launch Readiness",

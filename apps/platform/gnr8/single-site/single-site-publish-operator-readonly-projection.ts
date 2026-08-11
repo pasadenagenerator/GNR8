@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { getSuperadminPool } from "../../src/superadmin/db";
 import type {
   SingleSitePublishOperatorActionAuditMode,
@@ -9,6 +11,9 @@ import type {
 
 export const SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_VERSION =
   "mvp-61-single-site-publish-operator-readonly-runbook:v1" as const;
+
+export const SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_VERSION =
+  "mvp-62-single-site-publish-operator-readonly-diagnostic-snapshot:v1" as const;
 
 export const SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS = {
   readOnly: true,
@@ -233,6 +238,130 @@ export type SingleSitePublishOperatorRunbookSummary = {
   recommendedInspectionOrder: SingleSitePublishOperatorRunbookSourceOwner[];
 };
 
+export type SingleSitePublishOperatorSafeReference = {
+  key: string;
+  label: string;
+  ref: string | null;
+  sourceOwner: SingleSitePublishOperatorRunbookSourceOwner;
+  boundaryLabel: "source-owned read" | "derived-only";
+  sourceWatermark: string | null;
+};
+
+export type SingleSitePublishOperatorDiagnosticSnapshot = {
+  snapshotVersion: typeof SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_VERSION;
+  snapshotGeneratedAt: string;
+  snapshotWatermark: string;
+  sourceWatermarks: Record<string, string>;
+  flags: {
+    readOnly: true;
+    exportSafe: true;
+    actionAvailable: false;
+    publishes: false;
+    runtimeMutation: false;
+    enforcementApplied: false;
+  };
+  safeIdentity: SingleSitePublishOperatorReadonlyProjection["identity"];
+  lookup: SingleSitePublishOperatorReadonlyProjection["lookup"];
+  candidateArtifactPublishTargetRefs: {
+    candidateSiteVersionRef: string | null;
+    runtimeArtifactRef: string | null;
+    publishTargetRef: string | null;
+    publishStage: string | null;
+    publishEnvironment: string | null;
+  };
+  launchReadinessSummary: {
+    status: string;
+    freshnessStatus: string;
+    recordRef: string | null;
+    evidencePackageRef: string | null;
+    ready: boolean;
+    readyWithLimitations: boolean;
+    blocked: boolean;
+    stale: boolean;
+    missing: boolean;
+    requiredMissingDimensions: string[];
+    staleDimensions: string[];
+    blockedDimensions: string[];
+    acceptedLimitations: string[];
+    sourceLabel: "source-owned read";
+  };
+  publishActivationRequestSummary: {
+    ref: string | null;
+    status: string;
+    scope: string | null;
+    action: string | null;
+    subjectType: string | null;
+    linkedLaunchReadinessEvidenceRef: string | null;
+    evidenceRefs: string[];
+    sourceLabel: "source-owned read";
+  };
+  publishActivationDecisionSummary: {
+    ref: string | null;
+    status: string;
+    projection: SingleSitePublishOperatorReadonlyProjection["publishActivationDecision"]["projection"];
+    granted: boolean;
+    grantedWithLimitations: boolean;
+    rejected: boolean;
+    invalid: boolean;
+    revoked: boolean;
+    superseded: boolean;
+    expired: boolean;
+    limitations: string[];
+    indicators: string[];
+    sourceLabel: "source-owned read";
+  };
+  gateHandoffSummary: {
+    handoffReadinessStatus: SingleSitePublishOperatorReadonlyProjection["gateHandoffEvaluation"]["handoffReadinessStatus"];
+    gateResultRef: string | null;
+    gateResultStatus: string;
+    handoffWatermark: string | null;
+    gateInputWatermark: string | null;
+    gateBlockers: string[];
+    gateWarnings: string[];
+    newerConflict: boolean;
+    stale: boolean;
+    mismatchIndicators: string[];
+    sourceLabel: "source-owned read";
+  };
+  metadataResolverSummary: {
+    completenessStatus: SingleSitePublishOperatorReadonlyProjection["metadataResolver"]["completenessStatus"];
+    missingMetadataCodes: string[];
+    expectedResolvedMismatchCodes: string[];
+    safeDiagnostics: string[];
+    sourceLabel: "derived-only";
+  };
+  auditSummary: {
+    latestDryRunActionId: string | null;
+    latestShadowPublishActionId: string | null;
+    recentAttemptCount: number;
+    latestDryRunStatus: string | null;
+    latestShadowPublishStatus: string | null;
+    persistedResultFlags: SingleSitePublishOperatorReadonlyProjection["operatorAudit"]["persistedResultFlags"];
+    sourceLabel: "source-owned read";
+  };
+  runbookSummary: SingleSitePublishOperatorRunbookSummary;
+  topBlockingReason: SingleSitePublishOperatorRunbookSummary["topBlockingReason"];
+  recommendedInspectionOrder: SingleSitePublishOperatorRunbookSourceOwner[];
+  blockerCodes: string[];
+  warningCodes: string[];
+  limitationCodes: string[];
+  staleOrMissingMetadataIndicators: string[];
+  freshnessMissingStaleSummary: {
+    staleCount: number;
+    missingCount: number;
+    conflictCount: number;
+    staleCodes: string[];
+    missingCodes: string[];
+    conflictCodes: string[];
+  };
+  sourceLabels: {
+    sourceOwnedReads: SingleSitePublishOperatorRunbookSourceOwner[];
+    derivedOnly: SingleSitePublishOperatorRunbookSourceOwner[];
+  };
+  safeReferences: SingleSitePublishOperatorSafeReference[];
+  exportSafeJsonPreview: Record<string, unknown>;
+};
+
 export type SingleSitePublishOperatorAuditEventProjection = {
   actionId: string;
   eventAction: string;
@@ -408,6 +537,7 @@ export type SingleSitePublishOperatorReadonlyProjection = {
   staleOrMissingMetadataIndicators: string[];
   runbookSummary: SingleSitePublishOperatorRunbookSummary;
   runbookEntries: SingleSitePublishOperatorRunbookEntry[];
+  diagnosticSnapshot: SingleSitePublishOperatorDiagnosticSnapshot;
   nextAction: SingleSitePublishOperatorNextAction;
   flags: typeof SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS;
 };
@@ -878,6 +1008,297 @@ function buildRunbookSummary(entries: readonly SingleSitePublishOperatorRunbookE
     topBlockingReason,
     recommendedInspectionOrder,
   };
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object" || value instanceof Date) return value;
+  return Object.keys(value as Record<string, unknown>)
+    .sort((left, right) => left.localeCompare(right))
+    .reduce<Record<string, unknown>>((acc, key) => {
+      acc[key] = canonicalize((value as Record<string, unknown>)[key]);
+      return acc;
+    }, {});
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalize(value));
+}
+
+function stableSnapshotWatermark(content: unknown): string {
+  return `single-site-publish-operator-diagnostic-snapshot:${createHash("sha256").update(canonicalJson(content)).digest("hex")}`;
+}
+
+function safeSnapshotString(value: string | null | undefined): string | null {
+  const normalized = safeRunbookRef(value);
+  if (!normalized || normalized === UNKNOWN_REF) return null;
+  return normalized;
+}
+
+function safeSnapshotReference(input: SingleSitePublishOperatorSafeReference): SingleSitePublishOperatorSafeReference {
+  return {
+    key: safeCode(input.key) ?? "unknown_ref",
+    label: safeText(input.label),
+    ref: safeSnapshotString(input.ref),
+    sourceOwner: input.sourceOwner,
+    boundaryLabel: input.boundaryLabel,
+    sourceWatermark: safeSnapshotString(input.sourceWatermark),
+  };
+}
+
+function safeSnapshotReferences(model: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot">): SingleSitePublishOperatorSafeReference[] {
+  return [
+    safeSnapshotReference({
+      key: "launch_readiness_record",
+      label: "Launch readiness record ref",
+      ref: model.launchReadiness.recordRef,
+      sourceOwner: "launch_readiness",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: model.launchReadiness.sourceWatermark,
+    }),
+    safeSnapshotReference({
+      key: "launch_readiness_evidence",
+      label: "Launch readiness evidence ref",
+      ref: model.launchReadiness.evidencePackageRef ?? model.governedPublishChain.launchReadinessEvidence.ref,
+      sourceOwner: "launch_readiness",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: model.launchReadiness.evidenceWatermark,
+    }),
+    safeSnapshotReference({
+      key: "publish_activation_request",
+      label: "Publish activation request ref",
+      ref: model.publishActivationRequest.ref ?? model.governedPublishChain.publishActivationRequest.ref,
+      sourceOwner: "publish_activation_request",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: null,
+    }),
+    safeSnapshotReference({
+      key: "publish_activation_decision",
+      label: "Publish activation decision ref",
+      ref: model.publishActivationDecision.ref ?? model.governedPublishChain.publishActivationDecision.ref,
+      sourceOwner: "publish_activation_decision",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: null,
+    }),
+    safeSnapshotReference({
+      key: "gate_result",
+      label: "Gate result ref",
+      ref: model.gateHandoffEvaluation.gateResultRef ?? model.governedPublishChain.gateResult.ref,
+      sourceOwner: "gate_evaluation",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: model.gateHandoffEvaluation.gateInputWatermark ?? model.governedPublishChain.gateInputWatermark,
+    }),
+    safeSnapshotReference({
+      key: "candidate_site_version",
+      label: "Candidate version ref",
+      ref: model.publishContext.candidateSiteVersionRef,
+      sourceOwner: "runtime_candidate",
+      boundaryLabel: "derived-only",
+      sourceWatermark: null,
+    }),
+    safeSnapshotReference({
+      key: "runtime_artifact",
+      label: "Runtime artifact ref",
+      ref: model.publishContext.runtimeArtifactRef,
+      sourceOwner: "runtime_candidate",
+      boundaryLabel: "derived-only",
+      sourceWatermark: null,
+    }),
+    safeSnapshotReference({
+      key: "publish_target",
+      label: "Publish target ref",
+      ref: model.publishContext.publishTargetRef,
+      sourceOwner: "publish_target",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: null,
+    }),
+    safeSnapshotReference({
+      key: "latest_dry_run_audit",
+      label: "Latest dry-run audit ref",
+      ref: model.operatorAudit.latestDryRunActionId,
+      sourceOwner: "operator_audit",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: model.latestDryRun?.gateInputWatermark ?? null,
+    }),
+    safeSnapshotReference({
+      key: "latest_shadow_publish_audit",
+      label: "Latest shadow-publish audit ref",
+      ref: model.operatorAudit.latestShadowPublishActionId,
+      sourceOwner: "operator_audit",
+      boundaryLabel: "source-owned read",
+      sourceWatermark: model.latestShadowPublish?.gateInputWatermark ?? null,
+    }),
+  ].sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function sourceWatermarksFromSafeReferences(refs: readonly SingleSitePublishOperatorSafeReference[]): Record<string, string> {
+  return refs.reduce<Record<string, string>>((acc, ref) => {
+    if (ref.sourceWatermark) acc[ref.key] = ref.sourceWatermark;
+    return acc;
+  }, {});
+}
+
+function sanitizeSnapshotValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeSnapshotValue);
+  }
+  if (!value || typeof value !== "object" || value instanceof Date) {
+    if (typeof value === "string" && UNSAFE_VALUE.test(value)) return "redacted";
+    return value;
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [key, entry]) => {
+    if (UNSAFE_KEY.test(key)) {
+      acc[key] = "redacted";
+      return acc;
+    }
+    acc[key] = sanitizeSnapshotValue(entry);
+    return acc;
+  }, {});
+}
+
+export function buildSingleSitePublishOperatorDiagnosticSnapshot(
+  model: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot">,
+  input: { snapshotGeneratedAt?: string | null } = {},
+): SingleSitePublishOperatorDiagnosticSnapshot {
+  const safeReferences = safeSnapshotReferences(model);
+  const freshnessMissingStaleSummary = {
+    staleCount: model.runbookSummary.staleEntries,
+    missingCount: model.runbookSummary.missingEntries,
+    conflictCount: model.runbookSummary.conflictEntries,
+    staleCodes: codeList(model.runbookEntries.filter((entry) => entry.stale).map((entry) => entry.code), model.launchReadiness.staleDimensions),
+    missingCodes: codeList(model.runbookEntries.filter((entry) => entry.missing).map((entry) => entry.code), model.staleOrMissingMetadataIndicators),
+    conflictCodes: codeList(model.runbookEntries.filter((entry) => entry.conflict).map((entry) => entry.code), model.metadataResolver.expectedResolvedMismatchCodes),
+  };
+  const semanticSnapshot = {
+    snapshotVersion: SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_VERSION,
+    sourceWatermarks: sourceWatermarksFromSafeReferences(safeReferences),
+    flags: {
+      readOnly: true,
+      exportSafe: true,
+      actionAvailable: false,
+      publishes: false,
+      runtimeMutation: false,
+      enforcementApplied: false,
+    },
+    safeIdentity: {
+      tenantId: safeSnapshotString(model.identity.tenantId),
+      clientId: safeSnapshotString(model.identity.clientId),
+      siteId: safeSnapshotString(model.identity.siteId),
+      migrationId: safeSnapshotString(model.identity.migrationId),
+    },
+    lookup: {
+      migrationId: safeSnapshotString(model.lookup.migrationId),
+      siteId: safeSnapshotString(model.lookup.siteId),
+      candidateSiteVersionRef: safeSnapshotString(model.lookup.candidateSiteVersionRef),
+    },
+    candidateArtifactPublishTargetRefs: {
+      candidateSiteVersionRef: safeSnapshotString(model.publishContext.candidateSiteVersionRef),
+      runtimeArtifactRef: safeSnapshotString(model.publishContext.runtimeArtifactRef),
+      publishTargetRef: safeSnapshotString(model.publishContext.publishTargetRef),
+      publishStage: safeSnapshotString(model.publishContext.publishStage),
+      publishEnvironment: safeSnapshotString(model.publishContext.publishEnvironment),
+    },
+    launchReadinessSummary: {
+      status: model.launchReadiness.status,
+      freshnessStatus: model.launchReadiness.freshnessStatus,
+      recordRef: safeSnapshotString(model.launchReadiness.recordRef),
+      evidencePackageRef: safeSnapshotString(model.launchReadiness.evidencePackageRef),
+      ready: model.launchReadiness.flags.ready,
+      readyWithLimitations: model.launchReadiness.flags.readyWithLimitations,
+      blocked: model.launchReadiness.flags.blocked,
+      stale: model.launchReadiness.flags.stale,
+      missing: model.launchReadiness.flags.missing,
+      requiredMissingDimensions: model.launchReadiness.requiredMissingDimensions,
+      staleDimensions: model.launchReadiness.staleDimensions,
+      blockedDimensions: model.launchReadiness.blockedDimensions,
+      acceptedLimitations: model.launchReadiness.acceptedLimitations,
+      sourceLabel: "source-owned read" as const,
+    },
+    publishActivationRequestSummary: {
+      ref: safeSnapshotString(model.publishActivationRequest.ref),
+      status: model.publishActivationRequest.status,
+      scope: safeSnapshotString(model.publishActivationRequest.scope),
+      action: safeSnapshotString(model.publishActivationRequest.action),
+      subjectType: safeSnapshotString(model.publishActivationRequest.subjectType),
+      linkedLaunchReadinessEvidenceRef: safeSnapshotString(model.publishActivationRequest.linkedLaunchReadinessEvidenceRef),
+      evidenceRefs: model.publishActivationRequest.evidenceRefs.map(safeSnapshotString).filter((ref): ref is string => Boolean(ref)),
+      sourceLabel: "source-owned read" as const,
+    },
+    publishActivationDecisionSummary: {
+      ref: safeSnapshotString(model.publishActivationDecision.ref),
+      status: model.publishActivationDecision.status,
+      projection: model.publishActivationDecision.projection,
+      granted: model.publishActivationDecision.granted,
+      grantedWithLimitations: model.publishActivationDecision.grantedWithLimitations,
+      rejected: model.publishActivationDecision.rejected,
+      invalid: model.publishActivationDecision.invalid,
+      revoked: model.publishActivationDecision.revoked,
+      superseded: model.publishActivationDecision.superseded,
+      expired: model.publishActivationDecision.expired,
+      limitations: model.publishActivationDecision.limitations,
+      indicators: model.publishActivationDecision.indicators,
+      sourceLabel: "source-owned read" as const,
+    },
+    gateHandoffSummary: {
+      handoffReadinessStatus: model.gateHandoffEvaluation.handoffReadinessStatus,
+      gateResultRef: safeSnapshotString(model.gateHandoffEvaluation.gateResultRef),
+      gateResultStatus: model.gateHandoffEvaluation.gateResultStatus,
+      handoffWatermark: safeSnapshotString(model.governedPublishChain.handoffWatermark),
+      gateInputWatermark: safeSnapshotString(model.gateHandoffEvaluation.gateInputWatermark ?? model.governedPublishChain.gateInputWatermark),
+      gateBlockers: model.gateHandoffEvaluation.gateBlockers,
+      gateWarnings: model.gateHandoffEvaluation.gateWarnings,
+      newerConflict: model.gateHandoffEvaluation.newerConflict,
+      stale: model.gateHandoffEvaluation.stale,
+      mismatchIndicators: model.gateHandoffEvaluation.mismatchIndicators,
+      sourceLabel: "source-owned read" as const,
+    },
+    metadataResolverSummary: {
+      completenessStatus: model.metadataResolver.completenessStatus,
+      missingMetadataCodes: model.metadataResolver.missingMetadataCodes,
+      expectedResolvedMismatchCodes: model.metadataResolver.expectedResolvedMismatchCodes,
+      safeDiagnostics: model.metadataResolver.safeDiagnostics,
+      sourceLabel: "derived-only" as const,
+    },
+    auditSummary: {
+      latestDryRunActionId: safeSnapshotString(model.operatorAudit.latestDryRunActionId),
+      latestShadowPublishActionId: safeSnapshotString(model.operatorAudit.latestShadowPublishActionId),
+      recentAttemptCount: model.operatorAudit.recentAttemptCount,
+      latestDryRunStatus: model.latestDryRun?.status ?? null,
+      latestShadowPublishStatus: model.latestShadowPublish?.status ?? null,
+      persistedResultFlags: model.operatorAudit.persistedResultFlags,
+      sourceLabel: "source-owned read" as const,
+    },
+    runbookSummary: model.runbookSummary,
+    topBlockingReason: model.runbookSummary.topBlockingReason,
+    recommendedInspectionOrder: model.runbookSummary.recommendedInspectionOrder,
+    blockerCodes: model.blockerCodes,
+    warningCodes: model.warningCodes,
+    limitationCodes: model.limitationCodes,
+    staleOrMissingMetadataIndicators: model.staleOrMissingMetadataIndicators,
+    freshnessMissingStaleSummary,
+    sourceLabels: {
+      sourceOwnedReads: codeList("launch_readiness", "publish_activation_request", "publish_activation_decision", "gate_evaluation", "operator_audit", "publish_target") as SingleSitePublishOperatorRunbookSourceOwner[],
+      derivedOnly: codeList("metadata_resolver", "runtime_candidate") as SingleSitePublishOperatorRunbookSourceOwner[],
+    },
+    safeReferences,
+  };
+  const sanitizedSemanticSnapshot = sanitizeSnapshotValue(semanticSnapshot) as Omit<
+    SingleSitePublishOperatorDiagnosticSnapshot,
+    "snapshotGeneratedAt" | "snapshotWatermark" | "exportSafeJsonPreview"
+  >;
+  const snapshotWatermark = stableSnapshotWatermark(sanitizedSemanticSnapshot);
+  const snapshotGeneratedAt = input.snapshotGeneratedAt ?? model.generatedAt;
+  const snapshot = {
+    ...sanitizedSemanticSnapshot,
+    snapshotGeneratedAt,
+    snapshotWatermark,
+    exportSafeJsonPreview: {
+      ...sanitizedSemanticSnapshot,
+      snapshotGeneratedAt,
+      snapshotWatermark,
+    },
+  };
+  return sanitizeSnapshotValue(snapshot) as SingleSitePublishOperatorDiagnosticSnapshot;
 }
 
 export function buildSingleSitePublishOperatorRunbook(input: {
@@ -1921,7 +2342,7 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
     nextAction,
   });
 
-  return {
+  const projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot"> = {
     panelVersion: SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_VERSION,
     generatedAt,
     lookup: {
@@ -1987,6 +2408,11 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
     runbookEntries: runbook.entries,
     nextAction,
     flags: SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS,
+  };
+
+  return {
+    ...projection,
+    diagnosticSnapshot: buildSingleSitePublishOperatorDiagnosticSnapshot(projection),
   };
 }
 

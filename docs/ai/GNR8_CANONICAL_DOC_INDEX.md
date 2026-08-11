@@ -730,6 +730,15 @@ Canonical internal Command Center read-only diagnostic runbook for the MVP-58/MV
 - `apps/platform/app/gnr8/command-center/single-site-publish/single-site-publish-operator-panel.test.tsx`
 - `docs/product/gnr8-single-site-publish-operator-readonly-runbook-closeout.md`
 
+## MVP-62 Single-Site Publish Operator Read-Only Diagnostic Snapshot
+
+Canonical internal Command Center read-only diagnostic snapshot layer for the MVP-58/MVP-59/MVP-60/MVP-61 single-site publish operator panel, adding deterministic export-safe snapshot construction, stable semantic snapshot watermarking that excludes volatile generated timestamps, safe source watermarks, display-only safe refs/cross-links, compact collapsible redacted JSON preview, source-owned versus derived-only labels, and explicit `readOnly: true` / `exportSafe: true` / `actionAvailable: false` / `publishes: false` / `runtimeMutation: false` / `enforcementApplied: false` flags, while preserving source-truth boundaries and without action buttons, forms, downloads, POST routes, publish/dry-run/shadow-publish/retry/approval/rollback controls, blocking enforcement, AAF request/decision creation, gate attempt creation/evaluation, PASR/DDOM/provider/domain/DNS/billing/Stripe/AI calls, active pointer/runtime/publish-target/content/rollback mutation, generic publish route changes, client portal changes, Ops Inbox action changes, commit, or push:
+- `apps/platform/gnr8/single-site/single-site-publish-operator-readonly-projection.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-readonly-projection.test.ts`
+- `apps/platform/app/gnr8/command-center/single-site-publish/_components/SingleSitePublishOperatorPanel.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/single-site-publish-operator-panel.test.tsx`
+- `docs/product/gnr8-single-site-publish-operator-readonly-diagnostic-snapshot-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

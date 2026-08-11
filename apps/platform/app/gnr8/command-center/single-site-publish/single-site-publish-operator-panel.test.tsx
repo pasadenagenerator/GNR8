@@ -4,7 +4,10 @@ import test from "node:test";
 import React from "react";
 import ReactDomServer from "react-dom/server";
 
-import type { SingleSitePublishOperatorReadonlyProjection } from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
+import type {
+  SingleSitePublishOperatorDiagnosticSnapshot,
+  SingleSitePublishOperatorReadonlyProjection,
+} from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
 
 import {
   SingleSitePublishOperatorPanel,
@@ -22,6 +25,145 @@ const CLIENT_CONTENT_PUBLISH_ROUTE = new URL("../../../api/gnr8/clients/[clientI
 const OPS_INBOX_PAGE = new URL("../ops-inbox/page.tsx", import.meta.url);
 const SOURCE_BOUNDARY = { ownership: "source-owned read" as const, truthRole: "source-owned read" as const, enforcing: false as const, mutating: false as const };
 const DERIVED_BOUNDARY = { ownership: "derived-only" as const, truthRole: "derived-only" as const, enforcing: false as const, mutating: false as const };
+
+function snapshotFixture(projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot">): SingleSitePublishOperatorDiagnosticSnapshot {
+  return {
+    snapshotVersion: "mvp-62-single-site-publish-operator-readonly-diagnostic-snapshot:v1",
+    snapshotGeneratedAt: projection.generatedAt,
+    snapshotWatermark: `single-site-publish-operator-diagnostic-snapshot:${"a".repeat(64)}`,
+    sourceWatermarks: {
+      launch_readiness_record: projection.launchReadiness.sourceWatermark ?? "wm:readiness-panel",
+      launch_readiness_evidence: projection.launchReadiness.evidenceWatermark ?? "wm:evidence-panel",
+      gate_result: projection.governedPublishChain.gateInputWatermark ?? "wm:gate-panel",
+    },
+    flags: {
+      readOnly: true,
+      exportSafe: true,
+      actionAvailable: false,
+      publishes: false,
+      runtimeMutation: false,
+      enforcementApplied: false,
+    },
+    safeIdentity: projection.identity,
+    lookup: projection.lookup,
+    candidateArtifactPublishTargetRefs: projection.publishContext,
+    launchReadinessSummary: {
+      status: projection.launchReadiness.status,
+      freshnessStatus: projection.launchReadiness.freshnessStatus,
+      recordRef: projection.launchReadiness.recordRef,
+      evidencePackageRef: projection.launchReadiness.evidencePackageRef,
+      ready: projection.launchReadiness.flags.ready,
+      readyWithLimitations: projection.launchReadiness.flags.readyWithLimitations,
+      blocked: projection.launchReadiness.flags.blocked,
+      stale: projection.launchReadiness.flags.stale,
+      missing: projection.launchReadiness.flags.missing,
+      requiredMissingDimensions: projection.launchReadiness.requiredMissingDimensions,
+      staleDimensions: projection.launchReadiness.staleDimensions,
+      blockedDimensions: projection.launchReadiness.blockedDimensions,
+      acceptedLimitations: projection.launchReadiness.acceptedLimitations,
+      sourceLabel: "source-owned read",
+    },
+    publishActivationRequestSummary: {
+      ref: projection.publishActivationRequest.ref,
+      status: projection.publishActivationRequest.status,
+      scope: projection.publishActivationRequest.scope,
+      action: projection.publishActivationRequest.action,
+      subjectType: projection.publishActivationRequest.subjectType,
+      linkedLaunchReadinessEvidenceRef: projection.publishActivationRequest.linkedLaunchReadinessEvidenceRef,
+      evidenceRefs: projection.publishActivationRequest.evidenceRefs,
+      sourceLabel: "source-owned read",
+    },
+    publishActivationDecisionSummary: {
+      ref: projection.publishActivationDecision.ref,
+      status: projection.publishActivationDecision.status,
+      projection: projection.publishActivationDecision.projection,
+      granted: projection.publishActivationDecision.granted,
+      grantedWithLimitations: projection.publishActivationDecision.grantedWithLimitations,
+      rejected: projection.publishActivationDecision.rejected,
+      invalid: projection.publishActivationDecision.invalid,
+      revoked: projection.publishActivationDecision.revoked,
+      superseded: projection.publishActivationDecision.superseded,
+      expired: projection.publishActivationDecision.expired,
+      limitations: projection.publishActivationDecision.limitations,
+      indicators: projection.publishActivationDecision.indicators,
+      sourceLabel: "source-owned read",
+    },
+    gateHandoffSummary: {
+      handoffReadinessStatus: projection.gateHandoffEvaluation.handoffReadinessStatus,
+      gateResultRef: projection.gateHandoffEvaluation.gateResultRef,
+      gateResultStatus: projection.gateHandoffEvaluation.gateResultStatus,
+      handoffWatermark: projection.governedPublishChain.handoffWatermark,
+      gateInputWatermark: projection.governedPublishChain.gateInputWatermark,
+      gateBlockers: projection.gateHandoffEvaluation.gateBlockers,
+      gateWarnings: projection.gateHandoffEvaluation.gateWarnings,
+      newerConflict: projection.gateHandoffEvaluation.newerConflict,
+      stale: projection.gateHandoffEvaluation.stale,
+      mismatchIndicators: projection.gateHandoffEvaluation.mismatchIndicators,
+      sourceLabel: "source-owned read",
+    },
+    metadataResolverSummary: {
+      completenessStatus: projection.metadataResolver.completenessStatus,
+      missingMetadataCodes: projection.metadataResolver.missingMetadataCodes,
+      expectedResolvedMismatchCodes: projection.metadataResolver.expectedResolvedMismatchCodes,
+      safeDiagnostics: projection.metadataResolver.safeDiagnostics,
+      sourceLabel: "derived-only",
+    },
+    auditSummary: {
+      latestDryRunActionId: projection.operatorAudit.latestDryRunActionId,
+      latestShadowPublishActionId: projection.operatorAudit.latestShadowPublishActionId,
+      recentAttemptCount: projection.operatorAudit.recentAttemptCount,
+      latestDryRunStatus: projection.latestDryRun?.status ?? null,
+      latestShadowPublishStatus: projection.latestShadowPublish?.status ?? null,
+      persistedResultFlags: projection.operatorAudit.persistedResultFlags,
+      sourceLabel: "source-owned read",
+    },
+    runbookSummary: projection.runbookSummary,
+    topBlockingReason: projection.runbookSummary.topBlockingReason,
+    recommendedInspectionOrder: projection.runbookSummary.recommendedInspectionOrder,
+    blockerCodes: projection.blockerCodes,
+    warningCodes: projection.warningCodes,
+    limitationCodes: projection.limitationCodes,
+    staleOrMissingMetadataIndicators: projection.staleOrMissingMetadataIndicators,
+    freshnessMissingStaleSummary: {
+      staleCount: projection.runbookSummary.staleEntries,
+      missingCount: projection.runbookSummary.missingEntries,
+      conflictCount: projection.runbookSummary.conflictEntries,
+      staleCodes: [],
+      missingCodes: projection.staleOrMissingMetadataIndicators,
+      conflictCodes: projection.metadataResolver.expectedResolvedMismatchCodes,
+    },
+    sourceLabels: {
+      sourceOwnedReads: ["launch_readiness", "publish_activation_request", "publish_activation_decision", "gate_evaluation", "operator_audit", "publish_target"],
+      derivedOnly: ["metadata_resolver", "runtime_candidate"],
+    },
+    safeReferences: [
+      { key: "launch_readiness_record", label: "Launch readiness record ref", ref: projection.launchReadiness.recordRef, sourceOwner: "launch_readiness", boundaryLabel: "source-owned read", sourceWatermark: projection.launchReadiness.sourceWatermark },
+      { key: "launch_readiness_evidence", label: "Launch readiness evidence ref", ref: projection.launchReadiness.evidencePackageRef, sourceOwner: "launch_readiness", boundaryLabel: "source-owned read", sourceWatermark: projection.launchReadiness.evidenceWatermark },
+      { key: "publish_activation_request", label: "Publish activation request ref", ref: projection.publishActivationRequest.ref, sourceOwner: "publish_activation_request", boundaryLabel: "source-owned read", sourceWatermark: null },
+      { key: "publish_activation_decision", label: "Publish activation decision ref", ref: projection.publishActivationDecision.ref, sourceOwner: "publish_activation_decision", boundaryLabel: "source-owned read", sourceWatermark: null },
+      { key: "gate_result", label: "Gate result ref", ref: projection.gateHandoffEvaluation.gateResultRef, sourceOwner: "gate_evaluation", boundaryLabel: "source-owned read", sourceWatermark: projection.governedPublishChain.gateInputWatermark },
+      { key: "candidate_site_version", label: "Candidate version ref", ref: projection.publishContext.candidateSiteVersionRef, sourceOwner: "runtime_candidate", boundaryLabel: "derived-only", sourceWatermark: null },
+      { key: "runtime_artifact", label: "Runtime artifact ref", ref: projection.publishContext.runtimeArtifactRef, sourceOwner: "runtime_candidate", boundaryLabel: "derived-only", sourceWatermark: null },
+      { key: "publish_target", label: "Publish target ref", ref: projection.publishContext.publishTargetRef, sourceOwner: "publish_target", boundaryLabel: "source-owned read", sourceWatermark: null },
+      { key: "latest_dry_run_audit", label: "Latest dry-run audit ref", ref: projection.operatorAudit.latestDryRunActionId, sourceOwner: "operator_audit", boundaryLabel: "source-owned read", sourceWatermark: projection.latestDryRun?.gateInputWatermark ?? null },
+      { key: "latest_shadow_publish_audit", label: "Latest shadow-publish audit ref", ref: projection.operatorAudit.latestShadowPublishActionId, sourceOwner: "operator_audit", boundaryLabel: "source-owned read", sourceWatermark: projection.latestShadowPublish?.gateInputWatermark ?? null },
+    ],
+    exportSafeJsonPreview: {
+      snapshotVersion: "mvp-62-single-site-publish-operator-readonly-diagnostic-snapshot:v1",
+      snapshotGeneratedAt: projection.generatedAt,
+      snapshotWatermark: `single-site-publish-operator-diagnostic-snapshot:${"a".repeat(64)}`,
+      flags: {
+        readOnly: true,
+        exportSafe: true,
+        actionAvailable: false,
+        publishes: false,
+        runtimeMutation: false,
+        enforcementApplied: false,
+      },
+      topBlockingReason: projection.runbookSummary.topBlockingReason,
+    },
+  };
+}
 
 function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> = {}): SingleSitePublishOperatorReadonlyProjection {
   const attempt = {
@@ -69,7 +211,8 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
     refs: [],
   };
 
-  return {
+  const { diagnosticSnapshot: overriddenDiagnosticSnapshot, ...projectionOverrides } = overrides;
+  const projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot"> = {
     panelVersion: "mvp-61-single-site-publish-operator-readonly-runbook:v1",
     generatedAt: "2026-08-10T09:01:00.000Z",
     lookup: {
@@ -364,7 +507,12 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       createsDdomSnapshots: false,
       providerCalls: false,
     },
-    ...overrides,
+    ...projectionOverrides,
+  };
+
+  return {
+    ...projection,
+    diagnosticSnapshot: overriddenDiagnosticSnapshot ?? snapshotFixture(projection),
   };
 }
 
@@ -375,6 +523,15 @@ test("operator panel renders dense read-only status without mutation buttons", (
   assert.equal(html.includes("Read-Only Boundary"), true);
   assert.equal(html.includes("Display Filters"), true);
   assert.equal(html.includes("Diagnostics Runbook"), true);
+  assert.equal(html.includes("Diagnostic Snapshot"), true);
+  assert.equal(html.includes("Snapshot Watermark"), true);
+  assert.equal(html.includes("Snapshot Version"), true);
+  assert.equal(html.includes("Snapshot Generated"), true);
+  assert.equal(html.includes("Current Next Action"), true);
+  assert.equal(html.includes("Key safe refs"), true);
+  assert.equal(html.includes("Export-safe JSON preview"), true);
+  assert.equal(html.includes("single-site-publish-operator-diagnostic-snapshot:"), true);
+  assert.equal(html.includes("mvp-62-single-site-publish-operator-readonly-diagnostic-snapshot:v1"), true);
   assert.equal(html.includes("Severity counts"), true);
   assert.equal(html.includes("Source owner counts"), true);
   assert.equal(html.includes("Inspection order"), true);
@@ -399,6 +556,11 @@ test("operator panel renders dense read-only status without mutation buttons", (
   assert.equal(html.includes("publishes"), true);
   assert.equal(html.includes("runtimeMutation"), true);
   assert.equal(html.includes("enforcementApplied"), true);
+  assert.equal(html.includes("exportSafe"), true);
+  assert.equal(html.includes("actionAvailable"), true);
+  assert.equal(html.includes("Launch readiness record ref"), true);
+  assert.equal(html.includes("Publish activation decision ref"), true);
+  assert.equal(html.includes("Latest dry-run audit ref"), true);
   assert.equal(html.includes("<button"), false);
   assert.equal(html.includes("<form"), false);
   assert.equal(html.includes("Approve"), false);
@@ -424,9 +586,11 @@ test("operator panel keeps long refs constrained and avoids unsafe diagnostics",
   assert.equal(html.includes("text-overflow:ellipsis"), true);
   assert.equal(html.includes("white-space:nowrap"), true);
   assert.equal(html.includes("candidate-version-ref-"), true);
+  assert.equal(html.includes("white-space:pre-wrap"), true);
   assert.equal(html.includes("publish_activation_missing_dns_readiness"), true);
   assert.equal(html.includes("rawSqlError"), false);
   assert.equal(html.includes("stackTrace"), false);
+  assert.equal(html.includes("OPENAI_API_KEY"), false);
 });
 
 test("operator panel renders useful empty states for source and audit gaps", () => {
@@ -495,6 +659,8 @@ test("operator panel renders useful empty states for source and audit gaps", () 
   assert.equal(html.includes("Metadata is incomplete for this lookup."), true);
   assert.equal(html.includes("No audit event history is available."), true);
   assert.equal(html.includes("launch_readiness_evidence_ref_missing"), true);
+  assert.equal(html.includes("Diagnostic Snapshot"), true);
+  assert.equal(html.includes("Export-safe JSON preview"), true);
   assert.equal(html.includes("<form"), false);
   assert.equal(html.includes("<button"), false);
 });
@@ -566,6 +732,7 @@ test("operator panel source has no action controls or mutation route calls", asy
   assert.equal(source.includes("<button"), false);
   assert.equal(source.includes("fetch("), false);
   assert.equal(source.includes("method: \"POST\""), false);
+  assert.equal(source.includes("download"), false);
   assert.equal(source.includes("approve"), false);
   assert.equal(source.includes("retry"), false);
   assert.equal(source.includes("rollback"), false);
