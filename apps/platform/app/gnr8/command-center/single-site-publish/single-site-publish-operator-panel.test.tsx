@@ -5,6 +5,8 @@ import React from "react";
 import ReactDomServer from "react-dom/server";
 
 import type {
+  SingleSitePublishOperatorDiagnosticSnapshotDiff,
+  SingleSitePublishOperatorDiagnosticSnapshotDiffChange,
   SingleSitePublishOperatorDiagnosticSnapshot,
   SingleSitePublishOperatorReadonlyProjection,
 } from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
@@ -26,7 +28,7 @@ const OPS_INBOX_PAGE = new URL("../ops-inbox/page.tsx", import.meta.url);
 const SOURCE_BOUNDARY = { ownership: "source-owned read" as const, truthRole: "source-owned read" as const, enforcing: false as const, mutating: false as const };
 const DERIVED_BOUNDARY = { ownership: "derived-only" as const, truthRole: "derived-only" as const, enforcing: false as const, mutating: false as const };
 
-function snapshotFixture(projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot">): SingleSitePublishOperatorDiagnosticSnapshot {
+function snapshotFixture(projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot" | "diagnosticSnapshotDiff">): SingleSitePublishOperatorDiagnosticSnapshot {
   return {
     snapshotVersion: "mvp-62-single-site-publish-operator-readonly-diagnostic-snapshot:v1",
     snapshotGeneratedAt: projection.generatedAt,
@@ -120,6 +122,7 @@ function snapshotFixture(projection: Omit<SingleSitePublishOperatorReadonlyProje
     runbookSummary: projection.runbookSummary,
     topBlockingReason: projection.runbookSummary.topBlockingReason,
     recommendedInspectionOrder: projection.runbookSummary.recommendedInspectionOrder,
+    currentNextAction: projection.nextAction,
     blockerCodes: projection.blockerCodes,
     warningCodes: projection.warningCodes,
     limitationCodes: projection.limitationCodes,
@@ -162,6 +165,113 @@ function snapshotFixture(projection: Omit<SingleSitePublishOperatorReadonlyProje
       },
       topBlockingReason: projection.runbookSummary.topBlockingReason,
     },
+  };
+}
+
+function diffChange(overrides: Partial<SingleSitePublishOperatorDiagnosticSnapshotDiffChange>): SingleSitePublishOperatorDiagnosticSnapshotDiffChange {
+  return {
+    category: "readiness_status",
+    label: "Readiness status",
+    baselineValue: "blocked",
+    currentValue: "ready_with_limitations",
+    severity: "improved",
+    ...overrides,
+  };
+}
+
+function diffFixture(
+  projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot" | "diagnosticSnapshotDiff">,
+  snapshot: SingleSitePublishOperatorDiagnosticSnapshot,
+): SingleSitePublishOperatorDiagnosticSnapshotDiff {
+  const topRegression = diffChange({
+    category: "blocker_codes",
+    label: "Blocker codes",
+    baselineValue: null,
+    currentValue: "domain_readiness_blocked",
+    severity: "regressed",
+  });
+  const topImprovement = diffChange({
+    category: "metadata_completeness",
+    label: "Metadata completeness",
+    baselineValue: "incomplete",
+    currentValue: projection.metadataResolver.completenessStatus,
+    severity: "improved",
+  });
+  return {
+    diffSchemaVersion: "mvp-63-single-site-publish-operator-readonly-snapshot-diff:v1",
+    currentSnapshotWatermark: snapshot.snapshotWatermark,
+    currentSnapshotGeneratedAt: snapshot.snapshotGeneratedAt,
+    baseline: {
+      type: projection.latestDryRun ? "latest_dry_run_audit" : "none",
+      ref: projection.latestDryRun?.actionId ?? null,
+      status: projection.latestDryRun?.status ?? null,
+      watermark: projection.latestDryRun?.gateInputWatermark ?? null,
+      generatedAt: projection.latestDryRun?.updatedAt ?? null,
+      missingReason: projection.latestDryRun ? null : "no previous diagnostic snapshot or comparable audit summary is available",
+    },
+    comparableBaselineMetadata: {
+      available: Boolean(projection.latestDryRun),
+      type: projection.latestDryRun ? "latest_dry_run_audit" : "none",
+      ref: projection.latestDryRun?.actionId ?? null,
+      status: projection.latestDryRun?.status ?? null,
+      watermark: projection.latestDryRun?.gateInputWatermark ?? null,
+    },
+    changedCategories: ["blocker_codes", "metadata_completeness", "source_watermark:launch_readiness_record"],
+    severity: "regressed",
+    summaryCounts: {
+      improved: 1,
+      regressed: 1,
+      changed: 1,
+      unchanged: 4,
+      unknown: 0,
+      addedBlockerCodes: 1,
+      removedBlockerCodes: 1,
+      addedWarningCodes: 1,
+      removedWarningCodes: 1,
+      addedLimitationCodes: 1,
+      removedLimitationCodes: 1,
+    },
+    topRegression,
+    topImprovement,
+    addedBlockerCodes: ["domain_readiness_blocked"],
+    removedBlockerCodes: ["old_gate_blocker"],
+    addedWarningCodes: ["dns_waiting"],
+    removedWarningCodes: ["old_warning"],
+    addedLimitationCodes: ["read_only_panel"],
+    removedLimitationCodes: ["old_limitation"],
+    staleOrMissingChanges: {
+      addedCodes: ["metadata_snapshot_stale"],
+      removedCodes: ["launch_readiness_evidence_ref_missing"],
+      severity: "changed",
+    },
+    readinessStatusChange: diffChange({ category: "readiness_status", label: "Readiness status", baselineValue: "blocked", currentValue: projection.launchReadiness.status, severity: "improved" }),
+    requestStatusChange: diffChange({ category: "request_status", label: "Request status", baselineValue: "missing", currentValue: projection.publishActivationRequest.status, severity: "improved" }),
+    decisionStatusChange: diffChange({ category: "decision_status", label: "Decision status", baselineValue: "granted", currentValue: projection.publishActivationDecision.status, severity: "changed" }),
+    gateStatusChange: diffChange({ category: "gate_status", label: "Gate status", baselineValue: "allowed", currentValue: projection.gateHandoffEvaluation.gateResultStatus, severity: "unchanged" }),
+    metadataCompletenessChange: topImprovement,
+    nextActionChange: diffChange({ category: "next_action", label: "Next action", baselineValue: "run_internal_dry_run", currentValue: projection.nextAction, severity: "changed" }),
+    topBlockerChange: topRegression,
+    sourceWatermarkChanges: [
+      diffChange({
+        category: "source_watermark:launch_readiness_record",
+        label: "Source watermark: launch_readiness_record",
+        baselineValue: "wm:old-readiness-panel",
+        currentValue: projection.launchReadiness.sourceWatermark,
+        severity: "changed",
+      }),
+    ],
+    safeRefChanges: [
+      diffChange({
+        category: "safe_ref:candidate_site_version",
+        label: "Safe ref: candidate_site_version",
+        baselineValue: `gnr8:gnr8_runtime_site_versions:${"old-candidate-ref-".repeat(8)}`,
+        currentValue: projection.publishContext.candidateSiteVersionRef,
+        severity: "changed",
+      }),
+    ],
+    readOnly: true,
+    actionAvailable: false,
+    mutatesSourceTruth: false,
   };
 }
 
@@ -211,8 +321,8 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
     refs: [],
   };
 
-  const { diagnosticSnapshot: overriddenDiagnosticSnapshot, ...projectionOverrides } = overrides;
-  const projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot"> = {
+  const { diagnosticSnapshot: overriddenDiagnosticSnapshot, diagnosticSnapshotDiff: overriddenDiagnosticSnapshotDiff, ...projectionOverrides } = overrides;
+  const projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot" | "diagnosticSnapshotDiff"> = {
     panelVersion: "mvp-61-single-site-publish-operator-readonly-runbook:v1",
     generatedAt: "2026-08-10T09:01:00.000Z",
     lookup: {
@@ -510,9 +620,11 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
     ...projectionOverrides,
   };
 
+  const diagnosticSnapshot = overriddenDiagnosticSnapshot ?? snapshotFixture(projection);
   return {
     ...projection,
-    diagnosticSnapshot: overriddenDiagnosticSnapshot ?? snapshotFixture(projection),
+    diagnosticSnapshot,
+    diagnosticSnapshotDiff: overriddenDiagnosticSnapshotDiff ?? diffFixture(projection, diagnosticSnapshot),
   };
 }
 
@@ -524,6 +636,24 @@ test("operator panel renders dense read-only status without mutation buttons", (
   assert.equal(html.includes("Display Filters"), true);
   assert.equal(html.includes("Diagnostics Runbook"), true);
   assert.equal(html.includes("Diagnostic Snapshot"), true);
+  assert.equal(html.includes("Snapshot Diff"), true);
+  assert.equal(html.includes("Baseline Type"), true);
+  assert.equal(html.includes("Current Watermark"), true);
+  assert.equal(html.includes("Top regression"), true);
+  assert.equal(html.includes("Top improvement"), true);
+  assert.equal(html.includes("Changed categories"), true);
+  assert.equal(html.includes("Added blockers"), true);
+  assert.equal(html.includes("Removed blockers"), true);
+  assert.equal(html.includes("Added warnings"), true);
+  assert.equal(html.includes("Removed warnings"), true);
+  assert.equal(html.includes("Added limitations"), true);
+  assert.equal(html.includes("Removed limitations"), true);
+  assert.equal(html.includes("Status changes"), true);
+  assert.equal(html.includes("Source watermark changes"), true);
+  assert.equal(html.includes("Safe ref changes"), true);
+  assert.equal(html.includes("regressed"), true);
+  assert.equal(html.includes("improved"), true);
+  assert.equal(html.includes("changed"), true);
   assert.equal(html.includes("Snapshot Watermark"), true);
   assert.equal(html.includes("Snapshot Version"), true);
   assert.equal(html.includes("Snapshot Generated"), true);
@@ -567,6 +697,33 @@ test("operator panel renders dense read-only status without mutation buttons", (
   assert.equal(html.includes("Retry"), false);
   assert.equal(html.includes("Rollback"), false);
   assert.equal(html.includes("Shadow-Publish</button>"), false);
+});
+
+test("operator panel renders snapshot diff no-baseline state safely", () => {
+  const empty = model({
+    latestDryRun: null,
+    latestShadowPublish: null,
+    timeline: [],
+    operatorAudit: {
+      ...model().operatorAudit,
+      latestDryRunActionId: null,
+      latestShadowPublishActionId: null,
+      recentAttemptCount: 0,
+      actorCorrelationIdempotencyProjection: [],
+      recentEvents: [],
+      timelineSummaries: [],
+    },
+  });
+  const html = renderToStaticMarkup(<SingleSitePublishOperatorPanel model={empty} />);
+
+  assert.equal(html.includes("Snapshot Diff"), true);
+  assert.equal(html.includes("No comparable baseline is available."), true);
+  assert.equal(html.includes("no previous diagnostic snapshot or comparable audit summary is available"), true);
+  assert.equal(html.includes("Action Available"), true);
+  assert.equal(html.includes(">false<"), true);
+  assert.equal(html.includes("<button"), false);
+  assert.equal(html.includes("<form"), false);
+  assert.equal(html.includes("fetch("), false);
 });
 
 test("operator panel keeps long refs constrained and avoids unsafe diagnostics", () => {

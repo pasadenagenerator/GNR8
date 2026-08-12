@@ -2,6 +2,8 @@
 
 import type {
   SingleSitePublishOperatorActionAttemptProjection,
+  SingleSitePublishOperatorDiagnosticSnapshotDiffChange,
+  SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity,
   SingleSitePublishOperatorDrilldownRow,
   SingleSitePublishOperatorReadonlyProjection,
   SingleSitePublishOperatorRunbookEntry,
@@ -65,6 +67,13 @@ function statusTone(value: string): "neutral" | "good" | "warn" | "bad" {
 function severityTone(value: SingleSitePublishOperatorRunbookSeverity): "neutral" | "good" | "warn" | "bad" {
   if (value === "critical" || value === "blocked") return "bad";
   if (value === "warning") return "warn";
+  return "neutral";
+}
+
+function diffTone(value: SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity): "neutral" | "good" | "warn" | "bad" {
+  if (value === "improved") return "good";
+  if (value === "regressed") return "bad";
+  if (value === "changed" || value === "unknown") return "warn";
   return "neutral";
 }
 
@@ -269,6 +278,102 @@ function diagnosticSnapshot(model: SingleSitePublishOperatorReadonlyProjection) 
           {preview}
         </pre>
       </details>
+    </div>
+  );
+}
+
+function changeLine(change: SingleSitePublishOperatorDiagnosticSnapshotDiffChange) {
+  return (
+    <div key={change.category} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, minWidth: 0 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+        {badge(change.severity, diffTone(change.severity))}
+        <strong style={{ color: "#0f172a" }}>{change.label}</strong>
+      </div>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+        {field("Baseline", change.baselineValue)}
+        {field("Current", change.currentValue)}
+      </dl>
+    </div>
+  );
+}
+
+function snapshotDiff(model: SingleSitePublishOperatorReadonlyProjection) {
+  const diff = model.diagnosticSnapshotDiff;
+  const statusChanges = [
+    diff.readinessStatusChange,
+    diff.requestStatusChange,
+    diff.decisionStatusChange,
+    diff.gateStatusChange,
+    diff.metadataCompletenessChange,
+    diff.nextActionChange,
+    diff.topBlockerChange,
+  ].filter((change) => change.severity !== "unchanged");
+
+  return (
+    <div style={{ display: "grid", gap: 12, fontSize: 13 }}>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+        {field("Baseline Type", diff.baseline.type)}
+        {field("Baseline Ref", diff.baseline.ref)}
+        {field("Baseline Status", diff.baseline.status)}
+        {field("Baseline Watermark", diff.baseline.watermark)}
+        {field("Current Watermark", diff.currentSnapshotWatermark)}
+        {field("Diff Severity", diff.severity)}
+        {field("Read Only", String(diff.readOnly))}
+        {field("Action Available", String(diff.actionAvailable))}
+      </dl>
+      {!diff.comparableBaselineMetadata.available ? (
+        <div style={{ border: "1px solid #fed7aa", borderRadius: 8, background: "#fff7ed", padding: 10, color: "#9a3412", minWidth: 0 }}>
+          No comparable baseline is available. {text(diff.baseline.missingReason)}
+        </div>
+      ) : null}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Summary counts:</strong>
+          <div>{countList([
+            { key: "improved", count: diff.summaryCounts.improved },
+            { key: "regressed", count: diff.summaryCounts.regressed },
+            { key: "changed", count: diff.summaryCounts.changed },
+            { key: "unknown", count: diff.summaryCounts.unknown },
+          ])}</div>
+        </div>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Top regression:</strong>
+          {diff.topRegression ? changeLine(diff.topRegression) : <span style={{ color: "#64748b" }}>None</span>}
+        </div>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Top improvement:</strong>
+          {diff.topImprovement ? changeLine(diff.topImprovement) : <span style={{ color: "#64748b" }}>None</span>}
+        </div>
+      </div>
+      <div><strong>Changed categories:</strong> {codeList(diff.changedCategories, "None")}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        <div><strong>Added blockers:</strong> {codeList(diff.addedBlockerCodes, "None")}</div>
+        <div><strong>Removed blockers:</strong> {codeList(diff.removedBlockerCodes, "None")}</div>
+        <div><strong>Added warnings:</strong> {codeList(diff.addedWarningCodes, "None")}</div>
+        <div><strong>Removed warnings:</strong> {codeList(diff.removedWarningCodes, "None")}</div>
+        <div><strong>Added limitations:</strong> {codeList(diff.addedLimitationCodes, "None")}</div>
+        <div><strong>Removed limitations:</strong> {codeList(diff.removedLimitationCodes, "None")}</div>
+        <div><strong>Added stale/missing:</strong> {codeList(diff.staleOrMissingChanges.addedCodes, "None")}</div>
+        <div><strong>Removed stale/missing:</strong> {codeList(diff.staleOrMissingChanges.removedCodes, "None")}</div>
+      </div>
+      {statusChanges.length === 0 ? (
+        <div style={{ color: "#64748b" }}>No status changes were detected against the comparable baseline.</div>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          <strong>Status changes:</strong>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
+            {statusChanges.map(changeLine)}
+          </div>
+        </div>
+      )}
+      <div style={{ display: "grid", gap: 8 }}>
+        <strong>Source watermark changes:</strong>
+        {diff.sourceWatermarkChanges.length === 0 ? <span style={{ color: "#64748b" }}>None</span> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>{diff.sourceWatermarkChanges.map(changeLine)}</div>}
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        <strong>Safe ref changes:</strong>
+        {diff.safeRefChanges.length === 0 ? <span style={{ color: "#64748b" }}>None</span> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>{diff.safeRefChanges.map(changeLine)}</div>}
+      </div>
     </div>
   );
 }
@@ -705,6 +810,8 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
       {section("Diagnostics Runbook", diagnosticRunbook(model))}
 
       {section("Diagnostic Snapshot", diagnosticSnapshot(model))}
+
+      {section("Snapshot Diff", snapshotDiff(model))}
 
       {section(
         "Launch Readiness",

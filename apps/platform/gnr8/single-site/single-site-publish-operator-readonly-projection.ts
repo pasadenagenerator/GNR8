@@ -15,6 +15,9 @@ export const SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_VERSION =
 export const SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_VERSION =
   "mvp-62-single-site-publish-operator-readonly-diagnostic-snapshot:v1" as const;
 
+export const SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_DIFF_VERSION =
+  "mvp-63-single-site-publish-operator-readonly-snapshot-diff:v1" as const;
+
 export const SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS = {
   readOnly: true,
   publishes: false,
@@ -86,6 +89,7 @@ export type SingleSitePublishOperatorAuditProjectionInput = {
   refs?: SingleSitePublishOperatorAuditRefRow[];
   events?: SingleSitePublishOperatorAuditEventRow[];
   sourceSnapshot?: SingleSitePublishOperatorSourceSnapshot | null;
+  previousDiagnosticSnapshot?: SingleSitePublishOperatorDiagnosticSnapshot | null;
   generatedAt?: string | null;
 };
 
@@ -342,6 +346,7 @@ export type SingleSitePublishOperatorDiagnosticSnapshot = {
   runbookSummary: SingleSitePublishOperatorRunbookSummary;
   topBlockingReason: SingleSitePublishOperatorRunbookSummary["topBlockingReason"];
   recommendedInspectionOrder: SingleSitePublishOperatorRunbookSourceOwner[];
+  currentNextAction: SingleSitePublishOperatorNextAction;
   blockerCodes: string[];
   warningCodes: string[];
   limitationCodes: string[];
@@ -360,6 +365,89 @@ export type SingleSitePublishOperatorDiagnosticSnapshot = {
   };
   safeReferences: SingleSitePublishOperatorSafeReference[];
   exportSafeJsonPreview: Record<string, unknown>;
+};
+
+export type SingleSitePublishOperatorDiagnosticSnapshotDiffBaselineType =
+  | "previous_snapshot"
+  | "latest_dry_run_audit"
+  | "latest_shadow_publish_audit"
+  | "audit_result_summary"
+  | "none";
+
+export type SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity =
+  | "improved"
+  | "regressed"
+  | "changed"
+  | "unchanged"
+  | "unknown";
+
+export type SingleSitePublishOperatorDiagnosticSnapshotDiffChange = {
+  category: string;
+  label: string;
+  baselineValue: string | null;
+  currentValue: string | null;
+  severity: SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity;
+};
+
+export type SingleSitePublishOperatorDiagnosticSnapshotDiff = {
+  diffSchemaVersion: typeof SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_DIFF_VERSION;
+  currentSnapshotWatermark: string;
+  currentSnapshotGeneratedAt: string;
+  baseline: {
+    type: SingleSitePublishOperatorDiagnosticSnapshotDiffBaselineType;
+    ref: string | null;
+    status: string | null;
+    watermark: string | null;
+    generatedAt: string | null;
+    missingReason: string | null;
+  };
+  comparableBaselineMetadata: {
+    available: boolean;
+    type: SingleSitePublishOperatorDiagnosticSnapshotDiffBaselineType;
+    ref: string | null;
+    status: string | null;
+    watermark: string | null;
+  };
+  changedCategories: string[];
+  severity: SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity;
+  summaryCounts: {
+    improved: number;
+    regressed: number;
+    changed: number;
+    unchanged: number;
+    unknown: number;
+    addedBlockerCodes: number;
+    removedBlockerCodes: number;
+    addedWarningCodes: number;
+    removedWarningCodes: number;
+    addedLimitationCodes: number;
+    removedLimitationCodes: number;
+  };
+  topRegression: SingleSitePublishOperatorDiagnosticSnapshotDiffChange | null;
+  topImprovement: SingleSitePublishOperatorDiagnosticSnapshotDiffChange | null;
+  addedBlockerCodes: string[];
+  removedBlockerCodes: string[];
+  addedWarningCodes: string[];
+  removedWarningCodes: string[];
+  addedLimitationCodes: string[];
+  removedLimitationCodes: string[];
+  staleOrMissingChanges: {
+    addedCodes: string[];
+    removedCodes: string[];
+    severity: SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity;
+  };
+  readinessStatusChange: SingleSitePublishOperatorDiagnosticSnapshotDiffChange;
+  requestStatusChange: SingleSitePublishOperatorDiagnosticSnapshotDiffChange;
+  decisionStatusChange: SingleSitePublishOperatorDiagnosticSnapshotDiffChange;
+  gateStatusChange: SingleSitePublishOperatorDiagnosticSnapshotDiffChange;
+  metadataCompletenessChange: SingleSitePublishOperatorDiagnosticSnapshotDiffChange;
+  nextActionChange: SingleSitePublishOperatorDiagnosticSnapshotDiffChange;
+  topBlockerChange: SingleSitePublishOperatorDiagnosticSnapshotDiffChange;
+  sourceWatermarkChanges: SingleSitePublishOperatorDiagnosticSnapshotDiffChange[];
+  safeRefChanges: SingleSitePublishOperatorDiagnosticSnapshotDiffChange[];
+  readOnly: true;
+  actionAvailable: false;
+  mutatesSourceTruth: false;
 };
 
 export type SingleSitePublishOperatorAuditEventProjection = {
@@ -538,6 +626,7 @@ export type SingleSitePublishOperatorReadonlyProjection = {
   runbookSummary: SingleSitePublishOperatorRunbookSummary;
   runbookEntries: SingleSitePublishOperatorRunbookEntry[];
   diagnosticSnapshot: SingleSitePublishOperatorDiagnosticSnapshot;
+  diagnosticSnapshotDiff: SingleSitePublishOperatorDiagnosticSnapshotDiff;
   nextAction: SingleSitePublishOperatorNextAction;
   flags: typeof SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS;
 };
@@ -1046,7 +1135,12 @@ function safeSnapshotReference(input: SingleSitePublishOperatorSafeReference): S
   };
 }
 
-function safeSnapshotReferences(model: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot">): SingleSitePublishOperatorSafeReference[] {
+type SingleSitePublishOperatorReadonlyProjectionWithoutDerivedSnapshots = Omit<
+  SingleSitePublishOperatorReadonlyProjection,
+  "diagnosticSnapshot" | "diagnosticSnapshotDiff"
+>;
+
+function safeSnapshotReferences(model: SingleSitePublishOperatorReadonlyProjectionWithoutDerivedSnapshots): SingleSitePublishOperatorSafeReference[] {
   return [
     safeSnapshotReference({
       key: "launch_readiness_record",
@@ -1157,7 +1251,7 @@ function sanitizeSnapshotValue(value: unknown): unknown {
 }
 
 export function buildSingleSitePublishOperatorDiagnosticSnapshot(
-  model: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot">,
+  model: SingleSitePublishOperatorReadonlyProjectionWithoutDerivedSnapshots,
   input: { snapshotGeneratedAt?: string | null } = {},
 ): SingleSitePublishOperatorDiagnosticSnapshot {
   const safeReferences = safeSnapshotReferences(model);
@@ -1271,6 +1365,7 @@ export function buildSingleSitePublishOperatorDiagnosticSnapshot(
     runbookSummary: model.runbookSummary,
     topBlockingReason: model.runbookSummary.topBlockingReason,
     recommendedInspectionOrder: model.runbookSummary.recommendedInspectionOrder,
+    currentNextAction: model.nextAction,
     blockerCodes: model.blockerCodes,
     warningCodes: model.warningCodes,
     limitationCodes: model.limitationCodes,
@@ -1299,6 +1394,501 @@ export function buildSingleSitePublishOperatorDiagnosticSnapshot(
     },
   };
   return sanitizeSnapshotValue(snapshot) as SingleSitePublishOperatorDiagnosticSnapshot;
+}
+
+type ComparableDiagnosticState = {
+  baselineType: SingleSitePublishOperatorDiagnosticSnapshotDiffBaselineType;
+  ref: string | null;
+  status: string | null;
+  watermark: string | null;
+  generatedAt: string | null;
+  blockerCodes: string[];
+  warningCodes: string[];
+  limitationCodes: string[];
+  staleOrMissingCodes: string[];
+  readinessStatus: string | null;
+  requestStatus: string | null;
+  decisionStatus: string | null;
+  decisionRank: number | null;
+  gateStatus: string | null;
+  gateRank: number | null;
+  metadataCompleteness: string | null;
+  nextAction: string | null;
+  topBlocker: string | null;
+  sourceWatermarks: Record<string, string>;
+  safeRefs: Record<string, string>;
+};
+
+function safeDiffValue(value: unknown): string | null {
+  const normalized = text(value);
+  if (!normalized) return null;
+  if (UNSAFE_VALUE.test(normalized)) return "redacted";
+  return normalized.slice(0, 512);
+}
+
+function firstCode(values: readonly string[]): string | null {
+  return codeList(values)[0] ?? null;
+}
+
+function snapshotDecisionRank(snapshot: SingleSitePublishOperatorDiagnosticSnapshot): number {
+  const decision = snapshot.publishActivationDecisionSummary;
+  if (decision.rejected || decision.revoked || decision.invalid || decision.expired || decision.superseded) return 0;
+  if (decision.granted) return 3;
+  if (decision.grantedWithLimitations) return 2;
+  if (decision.projection === "missing" || decision.status === "missing") return 1;
+  return 1;
+}
+
+function gateRank(status: string | null | undefined): number {
+  const normalized = text(status)?.toLowerCase();
+  if (!normalized) return 1;
+  if (normalized === "allowed") return 3;
+  if (normalized === "warning" || normalized === "allowed_with_warnings") return 2;
+  if (normalized === "missing" || normalized === "ref_available" || normalized === "available") return 1;
+  if (normalized.includes("blocked") || normalized.includes("failed") || normalized.includes("denied") || normalized.includes("rejected")) return 0;
+  return 1;
+}
+
+function statusRank(value: string | null | undefined): number {
+  const normalized = text(value)?.toLowerCase();
+  if (!normalized) return 1;
+  if (normalized === "ready" || normalized === "complete" || normalized === "completed" || normalized === "allowed" || normalized === "available") return 3;
+  if (normalized.includes("with_limitations") || normalized.includes("warning")) return 2;
+  if (normalized.includes("missing") || normalized.includes("blocked") || normalized.includes("failed") || normalized.includes("rejected") || normalized.includes("revoked") || normalized.includes("stale") || normalized.includes("incomplete")) return 0;
+  return 1;
+}
+
+function nextActionRank(value: string | null | undefined): number {
+  const normalized = text(value);
+  if (!normalized) return 1;
+  if (normalized === "no_action") return 4;
+  if (normalized === "shadow_publish_available") return 3;
+  if (normalized === "run_internal_dry_run") return 2;
+  if (normalized.startsWith("resolve_") || normalized.startsWith("review_")) return 0;
+  if (normalized.startsWith("collect_") || normalized.startsWith("request_") || normalized.startsWith("await_") || normalized.startsWith("prepare_")) return 1;
+  return 1;
+}
+
+function statusChangeSeverity(
+  baselineValue: string | null,
+  currentValue: string | null,
+  baselineRank: number | null,
+  currentRank: number | null,
+): SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity {
+  if (baselineValue === currentValue) return "unchanged";
+  if (baselineRank === null || currentRank === null) return "changed";
+  if (currentRank > baselineRank) return "improved";
+  if (currentRank < baselineRank) return "regressed";
+  return "changed";
+}
+
+function setChangeSeverity(
+  added: readonly string[],
+  removed: readonly string[],
+  category: "blocker" | "warning" | "limitation" | "stale_or_missing",
+): SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity {
+  if (added.length === 0 && removed.length === 0) return "unchanged";
+  if (category === "warning") return "changed";
+  if (added.length > 0 && removed.length === 0) return "regressed";
+  if (removed.length > 0 && added.length === 0) return "improved";
+  if (category === "blocker" || category === "stale_or_missing") return "regressed";
+  return "changed";
+}
+
+function diffSets(current: readonly string[], baseline: readonly string[]): { added: string[]; removed: string[] } {
+  const currentSet = new Set(codeList(current));
+  const baselineSet = new Set(codeList(baseline));
+  return {
+    added: [...currentSet].filter((code) => !baselineSet.has(code)).sort((left, right) => left.localeCompare(right)),
+    removed: [...baselineSet].filter((code) => !currentSet.has(code)).sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+function refsByKey(refs: readonly SingleSitePublishOperatorSafeReference[]): Record<string, string> {
+  return refs.reduce<Record<string, string>>((acc, ref) => {
+    const safeKey = safeCode(ref.key);
+    const safeRef = safeDiffValue(ref.ref);
+    if (safeKey && safeRef) acc[safeKey] = safeRef;
+    return acc;
+  }, {});
+}
+
+function snapshotComparableState(
+  snapshot: SingleSitePublishOperatorDiagnosticSnapshot,
+  baselineType: SingleSitePublishOperatorDiagnosticSnapshotDiffBaselineType,
+): ComparableDiagnosticState {
+  return {
+    baselineType,
+    ref: safeDiffValue(snapshot.snapshotWatermark),
+    status: safeDiffValue(snapshot.launchReadinessSummary.status),
+    watermark: safeDiffValue(snapshot.snapshotWatermark),
+    generatedAt: safeDiffValue(snapshot.snapshotGeneratedAt),
+    blockerCodes: codeList(snapshot.blockerCodes),
+    warningCodes: codeList(snapshot.warningCodes, snapshot.gateHandoffSummary.gateWarnings),
+    limitationCodes: codeList(snapshot.limitationCodes, snapshot.launchReadinessSummary.acceptedLimitations, snapshot.publishActivationDecisionSummary.limitations),
+    staleOrMissingCodes: codeList(
+      snapshot.staleOrMissingMetadataIndicators,
+      snapshot.freshnessMissingStaleSummary.staleCodes,
+      snapshot.freshnessMissingStaleSummary.missingCodes,
+      snapshot.freshnessMissingStaleSummary.conflictCodes,
+    ),
+    readinessStatus: safeDiffValue(snapshot.launchReadinessSummary.status),
+    requestStatus: safeDiffValue(snapshot.publishActivationRequestSummary.status),
+    decisionStatus: safeDiffValue(`${snapshot.publishActivationDecisionSummary.projection}:${snapshot.publishActivationDecisionSummary.status}`),
+    decisionRank: snapshotDecisionRank(snapshot),
+    gateStatus: safeDiffValue(snapshot.gateHandoffSummary.gateResultStatus),
+    gateRank: gateRank(snapshot.gateHandoffSummary.gateResultStatus),
+    metadataCompleteness: safeDiffValue(snapshot.metadataResolverSummary.completenessStatus),
+    nextAction: safeDiffValue(snapshot.currentNextAction),
+    topBlocker: safeDiffValue(snapshot.topBlockingReason?.code ?? firstCode(snapshot.blockerCodes)),
+    sourceWatermarks: Object.fromEntries(
+      Object.entries(snapshot.sourceWatermarks)
+        .map(([key, value]) => [safeCode(key), safeDiffValue(value)])
+        .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1]))
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ),
+    safeRefs: refsByKey(snapshot.safeReferences),
+  };
+}
+
+function auditAttemptComparableState(
+  attempt: SingleSitePublishOperatorActionAttemptProjection,
+  baselineType: SingleSitePublishOperatorDiagnosticSnapshotDiffBaselineType,
+): ComparableDiagnosticState {
+  const complete = latestCompleteMetadata(attempt);
+  const gateStatus = attempt.blockerCodes.length > 0 || attempt.resultStatus.includes("blocked") || attempt.status.includes("failed")
+    ? "blocked"
+    : statusFromRef(attempt.gateAttemptResultRef, complete, "missing");
+  return {
+    baselineType,
+    ref: safeDiffValue(attempt.actionId),
+    status: safeDiffValue(attempt.status),
+    watermark: safeDiffValue(attempt.gateInputWatermark) ?? safeDiffValue(attempt.handoffWatermark),
+    generatedAt: safeDiffValue(attempt.updatedAt),
+    blockerCodes: codeList(attempt.blockerCodes),
+    warningCodes: codeList(attempt.warningCodes),
+    limitationCodes: codeList(attempt.limitationCodes),
+    staleOrMissingCodes: codeList(deriveMissingMetadata(attempt)),
+    readinessStatus: safeDiffValue(attempt.resultStatus),
+    requestStatus: safeDiffValue(statusFromRef(attempt.publishActivationRequestRef, complete, "missing")),
+    decisionStatus: safeDiffValue(statusFromRef(attempt.publishActivationDecisionRef, complete, "missing_or_pending")),
+    decisionRank: statusRank(statusFromRef(attempt.publishActivationDecisionRef, complete, "missing_or_pending")),
+    gateStatus: safeDiffValue(gateStatus),
+    gateRank: gateRank(gateStatus),
+    metadataCompleteness: complete ? "complete" : "incomplete",
+    nextAction: null,
+    topBlocker: safeDiffValue(firstCode(attempt.blockerCodes)),
+    sourceWatermarks: Object.fromEntries(
+      [
+        ["handoff_watermark", safeDiffValue(attempt.handoffWatermark)],
+        ["gate_input_watermark", safeDiffValue(attempt.gateInputWatermark)],
+        ...attempt.refs.map((ref) => [safeCode(ref.role), safeDiffValue(ref.sourceWatermark)] as const),
+      ]
+        .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1]))
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ),
+    safeRefs: Object.fromEntries(
+      [
+        ["candidate_site_version", safeDiffValue(attempt.candidateSiteVersionRef)],
+        ["runtime_artifact", safeDiffValue(attempt.runtimeArtifactRef)],
+        ["publish_target", safeDiffValue(attempt.publishTargetRef)],
+        ["launch_readiness_evidence", safeDiffValue(attempt.launchReadinessEvidenceRef)],
+        ["publish_activation_request", safeDiffValue(attempt.publishActivationRequestRef)],
+        ["publish_activation_decision", safeDiffValue(attempt.publishActivationDecisionRef)],
+        ["gate_result", safeDiffValue(attempt.gateAttemptResultRef)],
+      ]
+        .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1] && entry[1] !== UNKNOWN_REF))
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  };
+}
+
+function diffChange(input: {
+  category: string;
+  label: string;
+  baselineValue: string | null;
+  currentValue: string | null;
+  severity: SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity;
+}): SingleSitePublishOperatorDiagnosticSnapshotDiffChange {
+  return {
+    category: safeCode(input.category) ?? "unknown",
+    label: safeText(input.label),
+    baselineValue: safeDiffValue(input.baselineValue),
+    currentValue: safeDiffValue(input.currentValue),
+    severity: input.severity,
+  };
+}
+
+function mapChanges(
+  categoryPrefix: string,
+  labelPrefix: string,
+  current: Record<string, string>,
+  baseline: Record<string, string>,
+): SingleSitePublishOperatorDiagnosticSnapshotDiffChange[] {
+  const keys = Array.from(new Set([...Object.keys(current), ...Object.keys(baseline)])).sort((left, right) => left.localeCompare(right));
+  return keys
+    .map((key) => diffChange({
+      category: `${categoryPrefix}:${key}`,
+      label: `${labelPrefix}: ${key}`,
+      baselineValue: baseline[key] ?? null,
+      currentValue: current[key] ?? null,
+      severity: baseline[key] === current[key] ? "unchanged" : "changed",
+    }))
+    .filter((change) => change.severity !== "unchanged");
+}
+
+function rankDiffSeverity(severity: SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity): number {
+  return { regressed: 0, improved: 1, changed: 2, unknown: 3, unchanged: 4 }[severity];
+}
+
+function topChange(
+  changes: readonly SingleSitePublishOperatorDiagnosticSnapshotDiffChange[],
+  severity: SingleSitePublishOperatorDiagnosticSnapshotDiffSeverity,
+): SingleSitePublishOperatorDiagnosticSnapshotDiffChange | null {
+  return [...changes]
+    .filter((change) => change.severity === severity)
+    .sort((left, right) => left.category.localeCompare(right.category))[0] ?? null;
+}
+
+export function buildSingleSitePublishOperatorDiagnosticSnapshotDiff(input: {
+  currentSnapshot: SingleSitePublishOperatorDiagnosticSnapshot;
+  previousSnapshot?: SingleSitePublishOperatorDiagnosticSnapshot | null;
+  baselineAuditAttempt?: SingleSitePublishOperatorActionAttemptProjection | null;
+  baselineType?: Exclude<SingleSitePublishOperatorDiagnosticSnapshotDiffBaselineType, "previous_snapshot" | "none"> | null;
+  missingBaselineReason?: string | null;
+}): SingleSitePublishOperatorDiagnosticSnapshotDiff {
+  const current = snapshotComparableState(input.currentSnapshot, "previous_snapshot");
+  const baseline = input.previousSnapshot
+    ? snapshotComparableState(input.previousSnapshot, "previous_snapshot")
+    : input.baselineAuditAttempt
+      ? auditAttemptComparableState(input.baselineAuditAttempt, input.baselineType ?? (input.baselineAuditAttempt.mode === "shadow_publish" ? "latest_shadow_publish_audit" : "latest_dry_run_audit"))
+      : null;
+
+  if (!baseline) {
+    const missingReason = safeDiffValue(input.missingBaselineReason ?? "no previous diagnostic snapshot or comparable audit summary is available");
+    const unknown = diffChange({
+      category: "baseline",
+      label: "Comparable baseline",
+      baselineValue: null,
+      currentValue: current.watermark,
+      severity: "unknown",
+    });
+    return sanitizeSnapshotValue({
+      diffSchemaVersion: SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_DIFF_VERSION,
+      currentSnapshotWatermark: current.watermark ?? input.currentSnapshot.snapshotWatermark,
+      currentSnapshotGeneratedAt: input.currentSnapshot.snapshotGeneratedAt,
+      baseline: {
+        type: "none",
+        ref: null,
+        status: null,
+        watermark: null,
+        generatedAt: null,
+        missingReason,
+      },
+      comparableBaselineMetadata: {
+        available: false,
+        type: "none",
+        ref: null,
+        status: null,
+        watermark: null,
+      },
+      changedCategories: [],
+      severity: "unknown",
+      summaryCounts: {
+        improved: 0,
+        regressed: 0,
+        changed: 0,
+        unchanged: 0,
+        unknown: 1,
+        addedBlockerCodes: 0,
+        removedBlockerCodes: 0,
+        addedWarningCodes: 0,
+        removedWarningCodes: 0,
+        addedLimitationCodes: 0,
+        removedLimitationCodes: 0,
+      },
+      topRegression: null,
+      topImprovement: null,
+      addedBlockerCodes: [],
+      removedBlockerCodes: [],
+      addedWarningCodes: [],
+      removedWarningCodes: [],
+      addedLimitationCodes: [],
+      removedLimitationCodes: [],
+      staleOrMissingChanges: { addedCodes: [], removedCodes: [], severity: "unknown" },
+      readinessStatusChange: unknown,
+      requestStatusChange: unknown,
+      decisionStatusChange: unknown,
+      gateStatusChange: unknown,
+      metadataCompletenessChange: unknown,
+      nextActionChange: unknown,
+      topBlockerChange: unknown,
+      sourceWatermarkChanges: [],
+      safeRefChanges: [],
+      readOnly: true,
+      actionAvailable: false,
+      mutatesSourceTruth: false,
+    }) as SingleSitePublishOperatorDiagnosticSnapshotDiff;
+  }
+
+  const blockerDiff = diffSets(current.blockerCodes, baseline.blockerCodes);
+  const warningDiff = diffSets(current.warningCodes, baseline.warningCodes);
+  const limitationDiff = diffSets(current.limitationCodes, baseline.limitationCodes);
+  const staleOrMissingDiff = diffSets(current.staleOrMissingCodes, baseline.staleOrMissingCodes);
+
+  const statusChanges = [
+    diffChange({
+      category: "readiness_status",
+      label: "Readiness status",
+      baselineValue: baseline.readinessStatus,
+      currentValue: current.readinessStatus,
+      severity: statusChangeSeverity(baseline.readinessStatus, current.readinessStatus, statusRank(baseline.readinessStatus), statusRank(current.readinessStatus)),
+    }),
+    diffChange({
+      category: "request_status",
+      label: "Request status",
+      baselineValue: baseline.requestStatus,
+      currentValue: current.requestStatus,
+      severity: statusChangeSeverity(baseline.requestStatus, current.requestStatus, statusRank(baseline.requestStatus), statusRank(current.requestStatus)),
+    }),
+    diffChange({
+      category: "decision_status",
+      label: "Decision status",
+      baselineValue: baseline.decisionStatus,
+      currentValue: current.decisionStatus,
+      severity: statusChangeSeverity(baseline.decisionStatus, current.decisionStatus, baseline.decisionRank, current.decisionRank),
+    }),
+    diffChange({
+      category: "gate_status",
+      label: "Gate status",
+      baselineValue: baseline.gateStatus,
+      currentValue: current.gateStatus,
+      severity: statusChangeSeverity(baseline.gateStatus, current.gateStatus, baseline.gateRank, current.gateRank),
+    }),
+    diffChange({
+      category: "metadata_completeness",
+      label: "Metadata completeness",
+      baselineValue: baseline.metadataCompleteness,
+      currentValue: current.metadataCompleteness,
+      severity: statusChangeSeverity(baseline.metadataCompleteness, current.metadataCompleteness, statusRank(baseline.metadataCompleteness), statusRank(current.metadataCompleteness)),
+    }),
+    diffChange({
+      category: "next_action",
+      label: "Next action",
+      baselineValue: baseline.nextAction,
+      currentValue: current.nextAction,
+      severity: statusChangeSeverity(baseline.nextAction, current.nextAction, baseline.nextAction ? nextActionRank(baseline.nextAction) : null, current.nextAction ? nextActionRank(current.nextAction) : null),
+    }),
+    diffChange({
+      category: "top_blocker",
+      label: "Top blocker",
+      baselineValue: baseline.topBlocker,
+      currentValue: current.topBlocker,
+      severity: current.topBlocker === baseline.topBlocker ? "unchanged" : current.topBlocker && !baseline.topBlocker ? "regressed" : !current.topBlocker && baseline.topBlocker ? "improved" : "changed",
+    }),
+  ] as const;
+
+  const setChanges = [
+    diffChange({
+      category: "blocker_codes",
+      label: "Blocker codes",
+      baselineValue: baseline.blockerCodes.join(",") || null,
+      currentValue: current.blockerCodes.join(",") || null,
+      severity: setChangeSeverity(blockerDiff.added, blockerDiff.removed, "blocker"),
+    }),
+    diffChange({
+      category: "warning_codes",
+      label: "Warning codes",
+      baselineValue: baseline.warningCodes.join(",") || null,
+      currentValue: current.warningCodes.join(",") || null,
+      severity: setChangeSeverity(warningDiff.added, warningDiff.removed, "warning"),
+    }),
+    diffChange({
+      category: "limitation_codes",
+      label: "Limitation codes",
+      baselineValue: baseline.limitationCodes.join(",") || null,
+      currentValue: current.limitationCodes.join(",") || null,
+      severity: setChangeSeverity(limitationDiff.added, limitationDiff.removed, "limitation"),
+    }),
+    diffChange({
+      category: "stale_or_missing",
+      label: "Stale or missing metadata",
+      baselineValue: baseline.staleOrMissingCodes.join(",") || null,
+      currentValue: current.staleOrMissingCodes.join(",") || null,
+      severity: setChangeSeverity(staleOrMissingDiff.added, staleOrMissingDiff.removed, "stale_or_missing"),
+    }),
+  ];
+  const sourceWatermarkChanges = mapChanges("source_watermark", "Source watermark", current.sourceWatermarks, baseline.sourceWatermarks);
+  const safeRefChanges = mapChanges("safe_ref", "Safe ref", current.safeRefs, baseline.safeRefs);
+  const allChanges = [...statusChanges, ...setChanges, ...sourceWatermarkChanges, ...safeRefChanges];
+  const actionableChanges = allChanges.filter((change) => change.severity !== "unchanged");
+  const severity = actionableChanges
+    .map((change) => change.severity)
+    .sort((left, right) => rankDiffSeverity(left) - rankDiffSeverity(right))[0] ?? "unchanged";
+  const changedCategories = actionableChanges
+    .map((change) => change.category)
+    .sort((left, right) => left.localeCompare(right));
+
+  return sanitizeSnapshotValue({
+    diffSchemaVersion: SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_DIFF_VERSION,
+    currentSnapshotWatermark: current.watermark ?? input.currentSnapshot.snapshotWatermark,
+    currentSnapshotGeneratedAt: input.currentSnapshot.snapshotGeneratedAt,
+    baseline: {
+      type: baseline.baselineType,
+      ref: baseline.ref,
+      status: baseline.status,
+      watermark: baseline.watermark,
+      generatedAt: baseline.generatedAt,
+      missingReason: null,
+    },
+    comparableBaselineMetadata: {
+      available: true,
+      type: baseline.baselineType,
+      ref: baseline.ref,
+      status: baseline.status,
+      watermark: baseline.watermark,
+    },
+    changedCategories,
+    severity,
+    summaryCounts: {
+      improved: allChanges.filter((change) => change.severity === "improved").length,
+      regressed: allChanges.filter((change) => change.severity === "regressed").length,
+      changed: allChanges.filter((change) => change.severity === "changed").length,
+      unchanged: allChanges.filter((change) => change.severity === "unchanged").length,
+      unknown: allChanges.filter((change) => change.severity === "unknown").length,
+      addedBlockerCodes: blockerDiff.added.length,
+      removedBlockerCodes: blockerDiff.removed.length,
+      addedWarningCodes: warningDiff.added.length,
+      removedWarningCodes: warningDiff.removed.length,
+      addedLimitationCodes: limitationDiff.added.length,
+      removedLimitationCodes: limitationDiff.removed.length,
+    },
+    topRegression: topChange(actionableChanges, "regressed"),
+    topImprovement: topChange(actionableChanges, "improved"),
+    addedBlockerCodes: blockerDiff.added,
+    removedBlockerCodes: blockerDiff.removed,
+    addedWarningCodes: warningDiff.added,
+    removedWarningCodes: warningDiff.removed,
+    addedLimitationCodes: limitationDiff.added,
+    removedLimitationCodes: limitationDiff.removed,
+    staleOrMissingChanges: {
+      addedCodes: staleOrMissingDiff.added,
+      removedCodes: staleOrMissingDiff.removed,
+      severity: setChangeSeverity(staleOrMissingDiff.added, staleOrMissingDiff.removed, "stale_or_missing"),
+    },
+    readinessStatusChange: statusChanges[0],
+    requestStatusChange: statusChanges[1],
+    decisionStatusChange: statusChanges[2],
+    gateStatusChange: statusChanges[3],
+    metadataCompletenessChange: statusChanges[4],
+    nextActionChange: statusChanges[5],
+    topBlockerChange: statusChanges[6],
+    sourceWatermarkChanges,
+    safeRefChanges,
+    readOnly: true,
+    actionAvailable: false,
+    mutatesSourceTruth: false,
+  }) as SingleSitePublishOperatorDiagnosticSnapshotDiff;
 }
 
 export function buildSingleSitePublishOperatorRunbook(input: {
@@ -2342,7 +2932,7 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
     nextAction,
   });
 
-  const projection: Omit<SingleSitePublishOperatorReadonlyProjection, "diagnosticSnapshot"> = {
+  const projection: SingleSitePublishOperatorReadonlyProjectionWithoutDerivedSnapshots = {
     panelVersion: SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_VERSION,
     generatedAt,
     lookup: {
@@ -2410,9 +3000,24 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
     flags: SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS,
   };
 
+  const diagnosticSnapshot = buildSingleSitePublishOperatorDiagnosticSnapshot(projection);
+  const baselineAuditAttempt = latestShadowPublish ?? latestDryRun;
+  const diagnosticSnapshotDiff = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: diagnosticSnapshot,
+    previousSnapshot: input.previousDiagnosticSnapshot,
+    baselineAuditAttempt,
+    baselineType: baselineAuditAttempt
+      ? baselineAuditAttempt.mode === "shadow_publish"
+        ? "latest_shadow_publish_audit"
+        : "latest_dry_run_audit"
+      : null,
+    missingBaselineReason: "no previous diagnostic snapshot, dry-run audit summary, shadow-publish audit summary, or audit result summary is available",
+  });
+
   return {
     ...projection,
-    diagnosticSnapshot: buildSingleSitePublishOperatorDiagnosticSnapshot(projection),
+    diagnosticSnapshot,
+    diagnosticSnapshotDiff,
   };
 }
 

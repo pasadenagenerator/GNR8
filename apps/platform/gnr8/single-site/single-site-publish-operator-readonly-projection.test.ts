@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   SingleSitePublishOperatorReadonlyProjectionRepository,
   buildSingleSitePublishOperatorDiagnosticSnapshot,
+  buildSingleSitePublishOperatorDiagnosticSnapshotDiff,
   buildSingleSitePublishOperatorReadonlyProjection,
   type SingleSitePublishOperatorAuditRefRow,
 } from "./single-site-publish-operator-readonly-projection";
@@ -258,6 +259,228 @@ test("diagnostic snapshot redacts unsafe values and empty states stay export-saf
   assert.equal(empty.diagnosticSnapshot.safeReferences.length, 10);
   assert.equal(empty.diagnosticSnapshot.topBlockingReason?.code, "LAUNCH_READINESS_RECORD_MISSING");
   assert.equal(rebuilt.snapshotWatermark, empty.diagnosticSnapshot.snapshotWatermark);
+});
+
+test("snapshot diff returns safe unknown state when no comparable baseline exists", () => {
+  const current = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: {},
+    actions: [],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const diff = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: current.diagnosticSnapshot,
+    missingBaselineReason: "no comparable baseline in test",
+  });
+
+  assert.equal(diff.diffSchemaVersion, "mvp-63-single-site-publish-operator-readonly-snapshot-diff:v1");
+  assert.equal(diff.baseline.type, "none");
+  assert.equal(diff.severity, "unknown");
+  assert.equal(diff.summaryCounts.unknown, 1);
+  assert.equal(diff.readOnly, true);
+  assert.equal(diff.actionAvailable, false);
+  assert.equal(diff.mutatesSourceTruth, false);
+});
+
+test("snapshot diff classifies blockers added and removed", () => {
+  const clean = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [action({ limitation_summary_json: { blockerCodes: [], warningCodes: [], limitationCodes: [] } })],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const blocked = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [
+      action({
+        result_summary_json: { wrapperDryRunStatus: "preflight_blocked", resolverStatus: "complete", blockerCodes: ["gate_policy_blocker"] },
+        limitation_summary_json: { blockerCodes: ["gate_policy_blocker"], warningCodes: [], limitationCodes: [] },
+      }),
+    ],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+
+  const added = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: blocked.diagnosticSnapshot,
+    previousSnapshot: clean.diagnosticSnapshot,
+  });
+  const removed = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: clean.diagnosticSnapshot,
+    previousSnapshot: blocked.diagnosticSnapshot,
+  });
+
+  assert.deepEqual(added.addedBlockerCodes, ["gate_policy_blocker"]);
+  assert.equal(added.severity, "regressed");
+  assert.equal(added.topRegression?.category, "blocker_codes");
+  assert.deepEqual(removed.removedBlockerCodes, ["gate_policy_blocker"]);
+  assert.equal(removed.topImprovement?.category, "blocker_codes");
+});
+
+test("snapshot diff treats stale or missing metadata resolved as improved", () => {
+  const missing = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [action({ launch_readiness_evidence_ref: "unknown", publish_activation_decision_ref: "unknown", gate_attempt_result_ref: "unknown", result_summary_json: { resolverStatus: "incomplete" } })],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const complete = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [action()],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp63", status: "ready", freshness_status: "fresh", improved_candidate_site_version_ref: "gnr8:gnr8_runtime_site_versions:site-version-mvp58", improved_runtime_artifact_ref: "gnr8:gnr8_runtime_artifacts:artifact-mvp58" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version" },
+      publishActivationRequestEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted" },
+      publishActivationDecisionEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      gateAttempt: { id: "44444444-4444-4444-8444-444444444444", gate_result: "allowed", causation_id: `mvp44:single-site-publish-activation-gate-input:${"e".repeat(64)}` },
+      publishTarget: { id: "production", publish_stage: "production", environment: "production" },
+    },
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+
+  const diff = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: complete.diagnosticSnapshot,
+    previousSnapshot: missing.diagnosticSnapshot,
+  });
+
+  assert.equal(diff.staleOrMissingChanges.removedCodes.length > 0, true);
+  assert.equal(diff.staleOrMissingChanges.severity, "improved");
+  assert.equal(diff.metadataCompletenessChange.severity, "improved");
+});
+
+test("snapshot diff classifies decision revoked or rejected as regressed", () => {
+  const granted = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp63", status: "ready", freshness_status: "fresh" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version" },
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted" },
+    },
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const revoked = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp63", status: "ready", freshness_status: "fresh" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version" },
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted", revoked: true },
+    },
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+
+  const diff = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: revoked.diagnosticSnapshot,
+    previousSnapshot: granted.diagnosticSnapshot,
+  });
+
+  assert.equal(diff.decisionStatusChange.severity, "regressed");
+  assert.equal(diff.changedCategories.includes("decision_status"), true);
+});
+
+test("snapshot diff classifies gate blocked after allowed as regressed", () => {
+  const allowed = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp63", status: "ready", freshness_status: "fresh" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version" },
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted" },
+      gateAttempt: { id: "44444444-4444-4444-8444-444444444444", gate_result: "allowed" },
+    },
+  });
+  const blocked = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp63", status: "ready", freshness_status: "fresh" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version" },
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted" },
+      gateAttempt: { id: "44444444-4444-4444-8444-444444444444", gate_result: "blocked" },
+    },
+  });
+
+  const diff = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: blocked.diagnosticSnapshot,
+    previousSnapshot: allowed.diagnosticSnapshot,
+  });
+
+  assert.equal(diff.gateStatusChange.severity, "regressed");
+});
+
+test("snapshot diff classifies metadata completeness improved and watermark-only changes as changed", () => {
+  const incomplete = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [action({ result_summary_json: { resolverStatus: "incomplete" } })],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const complete = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: "migration-mvp63" },
+    actions: [action()],
+    sourceSnapshot: {
+      launchReadinessRecord: { id: "readiness-mvp63", status: "ready", freshness_status: "fresh", improved_candidate_site_version_ref: "gnr8:gnr8_runtime_site_versions:site-version-mvp58", improved_runtime_artifact_ref: "gnr8:gnr8_runtime_artifacts:artifact-mvp58", semantic_source_watermark: "wm:current" },
+      launchReadinessEvidencePackage: { id: "11111111-1111-4111-8111-111111111111", status: "created", source_watermark: "wm:evidence" },
+      publishActivationRequest: { id: "22222222-2222-4222-8222-222222222222", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version" },
+      publishActivationRequestEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      publishActivationDecision: { id: "33333333-3333-4333-8333-333333333333", status: "granted" },
+      publishActivationDecisionEvidenceLinks: [{ evidence_package_id: "11111111-1111-4111-8111-111111111111" }],
+      gateAttempt: { id: "44444444-4444-4444-8444-444444444444", gate_result: "allowed", causation_id: `mvp44:single-site-publish-activation-gate-input:${"e".repeat(64)}` },
+      publishTarget: { id: "production", publish_stage: "production", environment: "production" },
+    },
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const improved = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: complete.diagnosticSnapshot,
+    previousSnapshot: incomplete.diagnosticSnapshot,
+  });
+  const watermarkOnlyBaseline = {
+    ...complete.diagnosticSnapshot,
+    snapshotWatermark: `single-site-publish-operator-diagnostic-snapshot:${"b".repeat(64)}`,
+    sourceWatermarks: { ...complete.diagnosticSnapshot.sourceWatermarks, launch_readiness_record: "wm:previous" },
+  };
+  const changed = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: complete.diagnosticSnapshot,
+    previousSnapshot: watermarkOnlyBaseline,
+  });
+
+  assert.equal(improved.metadataCompletenessChange.severity, "improved");
+  assert.equal(changed.severity, "changed");
+  assert.equal(changed.sourceWatermarkChanges.some((change) => change.category === "source_watermark:launch_readiness_record"), true);
+});
+
+test("snapshot diff redacts unsafe values and is deterministic", () => {
+  const unsafe = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { candidateSiteVersionRef: "OPENAI_API_KEY=abc" },
+    actions: [
+      action({
+        tenant_id: "DATABASE_URL=postgres://secret",
+        candidate_site_version_ref: "OPENAI_API_KEY=abc",
+        result_summary_json: { resolverStatus: "incomplete", blockerCodes: ["safe_blocker"], rawPayload: "token secret" },
+        limitation_summary_json: { blockerCodes: ["safe_blocker"], warningCodes: [], limitationCodes: [] },
+        redacted_diagnostics_json: { reasonCode: "safe_reason", rawSql: "select * from secrets", stackTrace: "token stack trace" },
+      }),
+    ],
+    generatedAt: "2026-08-10T12:00:00.000Z",
+  });
+  const first = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: unsafe.diagnosticSnapshot,
+    baselineAuditAttempt: unsafe.latestDryRun,
+  });
+  const second = buildSingleSitePublishOperatorDiagnosticSnapshotDiff({
+    currentSnapshot: unsafe.diagnosticSnapshot,
+    baselineAuditAttempt: unsafe.latestDryRun,
+  });
+  const json = JSON.stringify(first);
+
+  assert.deepEqual(first, second);
+  assert.equal(json.includes("OPENAI_API_KEY"), false);
+  assert.equal(json.includes("DATABASE_URL"), false);
+  assert.equal(json.includes("select * from secrets"), false);
+  assert.equal(json.includes("stack trace"), false);
+  assert.equal(json.includes("safe_blocker"), true);
 });
 
 test("source diagnostics expose only safe codes", () => {
