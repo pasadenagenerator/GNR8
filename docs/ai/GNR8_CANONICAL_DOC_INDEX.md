@@ -808,6 +808,21 @@ Canonical documentation-only precommit validation and commit-prep closeout for t
 Canonical local-only release branch, push, deploy, migration, and online verification readiness closeout for the single-site MVP cutline bundle, confirming the expected committed docs/index HEAD, current branch and remote state, local deploy-trigger evidence, release branch strategy, push blocker, required deploy/migration/online-verification gates, required migration set, online verification decision, and boundary confirmations while preserving the boundary of no deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, publish/shadow-publish, env flag changes, implementation changes, or runtime mutation:
 - `docs/product/gnr8-single-site-mvp-cutline-7-release-readiness-closeout.md`
 
+## MVP-CUTLINE-9 Release Branch Review Closeout
+
+Canonical read-only release branch, CI/check visibility, preview evidence, and next-action review for `codex/single-site-mvp-cutline-release`, recording local/upstream branch alignment, main state as locally and remotely visible at that time, absence of checked-in CI/deploy config, unavailable GitHub CLI check visibility, unknown preview/deploy status from local evidence, manual GitHub/deployment review gates, online verification blockers, validation commands, and boundary confirmations while preserving the boundary of no deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, env flag changes, publish/shadow-publish, PR creation, branch push, or runtime mutation:
+- `docs/product/gnr8-single-site-mvp-cutline-9-release-branch-review-closeout.md`
+
+## MVP-CUTLINE-11 Main Deployment Readiness Audit
+
+Canonical local-only post-main-merge deployment and migration readiness audit for the single-site MVP cutline release, confirming current branch/head, `origin/main` at `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`, release branch ancestry, local `main` behind/ahead status, clean worktree, local-only deployment inference, required migration readiness table, env/flag readiness, one-site rehearsal readiness decision, human checklist, online verification blockers, and boundary confirmations while preserving the boundary of no deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, env flag changes, publish/shadow-publish, branch deletion, PR creation, online verification, or runtime mutation:
+- `docs/product/gnr8-single-site-mvp-cutline-11-main-deployment-readiness-audit.md`
+
+## MVP-CUTLINE-12 Deployment Status Go/No-Go
+
+Canonical local-only manual deployment status and migration/env go/no-go record for `origin/main` `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`, recording missing human deployment status as `blocked_waiting_for_manual_deploy_status`, local branch/head and main ahead/behind state, local main fast-forward safety, `migration_no_go_deploy_unknown`, `env_no_go_unknown`, `blocked_waiting_for_deploy_status`, the next human checklist, online verification blocker, and boundary confirmations while preserving the boundary of no deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, env flag changes, publish/shadow-publish, online verification, branch deletion, or runtime mutation:
+- `docs/product/gnr8-single-site-mvp-cutline-12-deployment-status-go-no-go.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

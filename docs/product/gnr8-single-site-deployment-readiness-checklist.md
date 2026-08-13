@@ -100,6 +100,37 @@ Online verification is triggered only after:
 - [ ] superadmin auth is verified;
 - [ ] dry-run preflight has passed or failed with an expected source-truth blocker.
 
+## Post-Main Landing Gate
+
+MVP-CUTLINE-11 reviewed the post-merge state after the release branch landed on
+`main`. Before any online verification, confirm these main-line gates:
+
+- [ ] GitHub `main` is `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`.
+- [ ] The deployment target is running `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`.
+- [ ] Deployment status is healthy in the deployment platform or GitHub deployment UI.
+- [ ] Local `main` has been fast-forwarded only if local work needs the updated branch state.
+- [ ] All 18 required migrations in this checklist are applied to the intended target environment.
+- [ ] Env/flag posture matches the approved rehearsal mode.
+- [ ] One real site and all required refs are selected, or first-rehearsal exceptions are recorded.
+
+If any of these are unknown, online verification remains blocked.
+
+## Manual Deployment Status Gate
+
+MVP-CUTLINE-12 recorded `blocked_waiting_for_manual_deploy_status` because
+human deployment status for `origin/main`
+`ba0d070cb77da5fb8fc3618469c567c5aeb4b356` was not provided.
+
+Current gate decisions:
+
+- Migration gate: `migration_no_go_deploy_unknown`.
+- Env/auth gate: `env_no_go_unknown`.
+- One-site rehearsal readiness: `blocked_waiting_for_deploy_status`.
+
+Before migration/env gate execution, a human must confirm deploy status, deploy
+target, deploy health, and whether any unexpected deploy/provider activity
+occurred.
+
 ## Online Checklist
 
 - [ ] Open the Command Center panel with selected refs.

@@ -7,8 +7,9 @@ Scope: short operator sequence for the first deployed one-site rehearsal.
 
 Do not start online verification until all are true:
 
+- GitHub `main` is confirmed at `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`;
 - release commit has been reviewed and pushed by a human-approved release step;
-- deployment target is running the intended commit SHA;
+- deployment target is running the intended commit SHA, expected after MVP-CUTLINE-11 to be `ba0d070cb77da5fb8fc3618469c567c5aeb4b356` unless a later approved commit supersedes it;
 - required Supabase migrations have been applied in chronological order to the target environment;
 - post-migration catalog checks passed;
 - `SUPERADMIN_EMAILS` includes the named rehearsal operator;
@@ -16,6 +17,10 @@ Do not start online verification until all are true:
 - `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` is off unless shadow-publish has explicit approval;
 - selected `tenantId`, `clientId`, `siteId`, `migrationId`, candidate refs, runtime artifact ref, publish target ref, launch readiness evidence ref, publish activation request/decision/gate refs, handoff watermark, and gate input watermark are known;
 - seeded or bypassed source-truth records are listed as MVP exceptions before the run.
+
+MVP-CUTLINE-11 status: online verification remains blocked until manual deploy confirmation, target migration application/readback, env/flag verification, superadmin auth verification, and selected site data are complete.
+
+MVP-CUTLINE-12 status: online verification remains blocked because manual deployment status for `origin/main` `ba0d070cb77da5fb8fc3618469c567c5aeb4b356` was not provided. Current readiness is `blocked_waiting_for_deploy_status`; migration is `migration_no_go_deploy_unknown`; env/auth is `env_no_go_unknown`.
 
 ## Operator Sequence
 
