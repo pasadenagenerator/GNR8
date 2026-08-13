@@ -803,6 +803,11 @@ Canonical documentation-only commit/deploy/migration application bundle plan for
 Canonical documentation-only precommit validation and commit-prep closeout for the single-site MVP rehearsal docs/index bundle, recording docs/index scope verification, diff review, focused static checks, focused tests, TypeScript no-emit context, infeasible checks, post-validation boundary confirmations, online verification posture, and the next milestone while preserving the boundary of no implementation changes, SQL changes, package changes, push, deploy, Supabase migration application, production/staging Supabase call, provider/DNS/domain/billing/Stripe/Vercel/Openprovider action, publish, rollback, active-pointer mutation, or runtime behavior change:
 - `docs/product/gnr8-single-site-mvp-cutline-6-commit-prep-closeout.md`
 
+## MVP-CUTLINE-7 Release Branch Push And Deploy/Migration Readiness Gates
+
+Canonical local-only release branch, push, deploy, migration, and online verification readiness closeout for the single-site MVP cutline bundle, confirming the expected committed docs/index HEAD, current branch and remote state, local deploy-trigger evidence, release branch strategy, push blocker, required deploy/migration/online-verification gates, required migration set, online verification decision, and boundary confirmations while preserving the boundary of no deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, publish/shadow-publish, env flag changes, implementation changes, or runtime mutation:
+- `docs/product/gnr8-single-site-mvp-cutline-7-release-readiness-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
