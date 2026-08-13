@@ -782,6 +782,32 @@ Canonical narrow internal superadmin-only operator action facade and admin API r
 - `apps/platform/app/api/gnr8/admin/_tests/single-site-mvp-operator-action-route.test.ts`
 - `docs/product/gnr8-single-site-mvp-minimal-operator-action-surface-closeout.md`
 
+## MVP-CUTLINE-4 One-Site Rehearsal And Deployment Readiness Plan
+
+Canonical documentation-only deployment and one-site rehearsal readiness plan for the first real single-site MVP rehearsal, inventorying current committed scope, required migrations, env flags, internal routes/panels, source-truth data requirements, online verification trigger/checklist, success criteria, stop criteria, shadow-publish versus MVP acceptance boundaries, and the recommended next milestone, while preserving the boundary of no runtime behavior changes, SQL changes, route/UI/service/worker/provider changes, commits, pushes, deploys, migration applications, provider calls, DNS/domain actions, billing/Stripe actions, Vercel/Openprovider actions, or production/staging Supabase calls:
+- `docs/product/gnr8-single-site-one-site-rehearsal-plan.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/architecture/gnr8-single-site-mvp-migration-and-env-inventory.md`
+- `docs/product/gnr8-single-site-mvp-cutline-4-closeout.md`
+
+## MVP-CUTLINE-5 Commit/Deploy/Migration Bundle Plan
+
+Canonical documentation-only commit/deploy/migration application bundle plan for the first one-site MVP rehearsal, classifying current git status, current docs-only uncommitted files, already committed implementation baseline, bundle inventory by single-site area, ordered migration application plan, focused precommit validation plan, env/feature-flag posture, human approval gates, online operator verification sequence, risks, split-commit recommendation, and closeout confirmations, while preserving the boundary of no staging, commits, pushes, deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, implementation changes, or runtime behavior changes:
+- `docs/product/gnr8-single-site-mvp-commit-bundle-plan.md`
+- `docs/product/gnr8-single-site-mvp-precommit-validation-plan.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/product/gnr8-single-site-mvp-cutline-5-closeout.md`
+
+## MVP-CUTLINE-6 Human-Reviewed Commit Prep
+
+Canonical documentation-only precommit validation and commit-prep closeout for the single-site MVP rehearsal docs/index bundle, recording docs/index scope verification, diff review, focused static checks, focused tests, TypeScript no-emit context, infeasible checks, post-validation boundary confirmations, online verification posture, and the next milestone while preserving the boundary of no implementation changes, SQL changes, package changes, push, deploy, Supabase migration application, production/staging Supabase call, provider/DNS/domain/billing/Stripe/Vercel/Openprovider action, publish, rollback, active-pointer mutation, or runtime behavior change:
+- `docs/product/gnr8-single-site-mvp-cutline-6-commit-prep-closeout.md`
+
+## MVP-CUTLINE-7 Release Branch Push And Deploy/Migration Readiness Gates
+
+Canonical local-only release branch, push, deploy, migration, and online verification readiness closeout for the single-site MVP cutline bundle, confirming the expected committed docs/index HEAD, current branch and remote state, local deploy-trigger evidence, release branch strategy, push blocker, required deploy/migration/online-verification gates, required migration set, online verification decision, and boundary confirmations while preserving the boundary of no deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, publish/shadow-publish, env flag changes, implementation changes, or runtime mutation:
+- `docs/product/gnr8-single-site-mvp-cutline-7-release-readiness-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
