@@ -748,6 +748,40 @@ Canonical internal Command Center read-only snapshot diff layer for the MVP-62 d
 - `apps/platform/app/gnr8/command-center/single-site-publish/single-site-publish-operator-panel.test.tsx`
 - `docs/product/gnr8-single-site-publish-operator-readonly-snapshot-diff-closeout.md`
 
+## MVP-64 Single-Site Publish Diagnostic Snapshot History Design
+
+Canonical documentation-only architecture, redaction/retention contract, operator workflow, and closeout for future safe persisted diagnostic snapshot history behind the internal single-site publish operator panel, defining derived-only historical observation semantics, source-of-truth boundaries, stale snapshot labeling, future table shapes for snapshots/refs/events, allowed and forbidden stored data, internal-only privacy, short operational retention, idempotency and semantic watermark strategy, future MVP-63 baseline selection from persisted snapshots, and explicit guardrails against treating snapshots as source truth, approval truth, AAF truth, audit truth, publish authority, enforcement authority, client-facing export, Ops Inbox action state, or mutation authority, while preserving the MVP-64 boundary of no SQL, tables, services, routes, UI, APIs, workers, providers, runtime behavior, persistence, downloads, action buttons, Command Center actions, Ops Inbox actions, client portal exposure, external provider calls, commit, or push:
+- `docs/architecture/gnr8-single-site-publish-diagnostic-snapshot-history-architecture.md`
+- `docs/architecture/gnr8-single-site-publish-diagnostic-snapshot-redaction-retention-contract.md`
+- `docs/product/gnr8-single-site-publish-diagnostic-snapshot-history-operator-workflow.md`
+- `docs/product/gnr8-single-site-publish-diagnostic-snapshot-history-closeout.md`
+
+## MVP-CUTLINE-1 Single-Site MVP Acceptance Cutline And End-To-End Path Audit
+
+Canonical documentation-only acceptance cutline, gap audit, final task plan, and closeout for stopping diagnostic/governance expansion and defining the shortest safe path to a real one-site-at-a-time internal MVP. MVP-CUTLINE-1 explicitly pauses MVP-65 diagnostic snapshot persistence, freezes non-essential read-only/AAF/Ops Inbox/client portal/autonomous/batch work, defines must-have/should-have/deferred/dangerous-before-20-site-validation boundaries, identifies the remaining end-to-end orchestration/operator/readiness/deploy/20-site validation gaps, and sets the online verification trigger after commit, push, deployment, Supabase migrations, seeded real-site flow, and operator route availability. This phase does not implement SQL, services, routes, runtime behavior, UI, workers, providers, diagnostics, snapshots, persistence, external calls, commit, or push:
+- `docs/architecture/gnr8-single-site-mvp-acceptance-cutline.md`
+- `docs/architecture/gnr8-single-site-mvp-end-to-end-gap-audit.md`
+- `docs/product/gnr8-single-site-mvp-final-task-plan.md`
+- `docs/product/gnr8-single-site-mvp-cutline-closeout.md`
+
+## MVP-CUTLINE-2 Single-Site MVP End-To-End Orchestration Service
+
+Canonical server-only read-only orchestration contract/service for projecting the single-site MVP path from source capture through closeout, deriving deterministic step/status state, carrying source-owned blockers/warnings/limitations, and identifying one advisory next operation without adding SQL, UI, routes, Command Center buttons, action surfaces, AAF writes, gate evaluation, provider/PASR/DDOM/billing/domain/DNS calls, publish/shadow-publish/dry-run execution, runtime/active-pointer/publish-target/rollback mutation, generic publish route changes, client portal changes, Ops Inbox changes, commit, or push:
+- `apps/platform/gnr8/single-site/single-site-mvp-orchestration-service.ts`
+- `apps/platform/gnr8/single-site/single-site-mvp-orchestration-service.test.ts`
+- `docs/product/gnr8-single-site-mvp-end-to-end-orchestration-service-closeout.md`
+
+## MVP-CUTLINE-3 Single-Site MVP Minimal Operator Action Surface
+
+Canonical narrow internal superadmin-only operator action facade and admin API routes for reading MVP orchestration status, preflighting requested next operations, executing only existing MVP-54 dry-run and MVP-56 shadow-publish caller logic under their current strict confirmation/feature-flag contracts, returning manual/not-implemented responses for all other operation keys, and preserving boundaries against UI buttons, generic publish route changes, client portal/Ops Inbox changes, SQL migrations, AAF writes, gate evaluation, PASR/DDOM calls, providers, DNS/domain, Vercel/Openprovider/Stripe/AI/billing/payment calls, and direct runtime/publish-target/active-pointer/rollback/public-runtime mutation:
+- `apps/platform/gnr8/single-site/single-site-mvp-operator-action-facade.ts`
+- `apps/platform/gnr8/single-site/single-site-mvp-operator-action-facade.test.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-mvp/single-site-mvp-operator-action-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-mvp/status/route.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-mvp/action/route.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-mvp-operator-action-route.test.ts`
+- `docs/product/gnr8-single-site-mvp-minimal-operator-action-surface-closeout.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
