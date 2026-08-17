@@ -131,6 +131,194 @@ Before migration/env gate execution, a human must confirm deploy status, deploy
 target, deploy health, and whether any unexpected deploy/provider activity
 occurred.
 
+## Deployment Confirmation Intake Gate
+
+MVP-CUTLINE-13 recorded human-provided deployment and environment intake for
+`origin/main` `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`.
+
+Current intake decisions:
+
+- Deployment target/health gate: `manually_confirmed_production_healthy`.
+- Commit-match gate: `needs_manual_commit_reconciliation` because Vercel was reported as showing deployed commit `88c0a3b`.
+- Env presence gate: `baseline_presence_confirmed_shadow_flags_off`.
+- Superadmin gate: `manual_operator_access_confirmed`.
+- Supabase target gate: `production_target_confirmed_backup_restore_unknown`.
+- Migration gate: `not_approved_backup_restore_unknown_commit_reconciliation_required`.
+- First rehearsal site gate: `site_selected_refs_missing`.
+
+Do not apply migrations until the Vercel commit value is reconciled or explicitly
+accepted by the release owner, production backup/restore posture is known, and a
+separate migration execution phase is approved.
+
+## Vercel Commit Reconciliation Gate
+
+MVP-CUTLINE-14 reconciled the manually reported Vercel commit `88c0a3b` as
+`88c0a3b0dfa8a10ab3c94748b533e6664fc637cb`, a known same-repository commit on
+`origin/codex/single-site-mvp-cutline-release`.
+
+Current reconciliation decisions:
+
+- Commit lookup: `found_on_release_branch`.
+- Relationship to `origin/main` `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`: not equal, not ancestor, not descendant.
+- Main/ref state: `origin/main` remained `ba0d070cb77da5fb8fc3618469c567c5aeb4b356` after fetch.
+- Migration gate: `migration_gate_blocked_wrong_deploy_ref`.
+- Backup/restore gate: `blocked_backup_restore_posture_unknown`.
+- Online verification gate: `blocked_deploy_ref_and_migration_posture`.
+
+Do not apply migrations or run online verification until the release owner
+accepts production intentionally deploying the release branch at
+`88c0a3b0dfa8a10ab3c94748b533e6664fc637cb`, or production is corrected to the
+intended `origin/main` commit and the deployed SHA is recorded. Production
+Supabase backup/restore posture and a separate migration execution approval are
+still required in either case.
+
+## Production Deploy Ref Decision Gate
+
+MVP-CUTLINE-15 inspected local Git refs and the human-provided current known
+state before any Supabase migration or online verification work.
+
+Current production ref decisions:
+
+- Reported deployed SHA classification: `on_release_branch_only`.
+- Production deployment decision: `wait / unknown`.
+- Exact production ref outcome: `production_ref_still_blocked`.
+- Migration gate: `migration_gate_blocked_wrong_deploy_ref`.
+- Backup/restore posture: `backup_restore_unknown`.
+- Backup/restore gate: `blocked_backup_restore_posture_unknown`.
+- Online verification gate: `blocked_deploy_ref_and_migration_posture`.
+
+Do not apply migrations, run dry-run, run shadow-publish, or run online
+verification until a human release owner explicitly accepts the release-branch
+production deployment or confirms production has been corrected to the intended
+`origin/main` ref. Production backup/restore posture and a separate migration
+execution approval are still required even after the deployment ref is resolved.
+
+## Supabase Pro Upgrade Backup Gate
+
+MVP-CUTLINE-16B recorded the human decision: "Supabase will be upgraded to Pro,
+which enables backups."
+
+Current backup and migration decisions:
+
+- Backup/restore posture: `backup_restore_pending_pro_upgrade`.
+- Migration gate: `migration_gate_blocked_waiting_for_pro_backup_confirmation`.
+- Migration approval: `not_approved`.
+- Online verification gate: `blocked_waiting_for_pro_backup_confirmation`.
+
+Production Supabase Free Plan currently reports project backups unavailable.
+The safe path is to upgrade the production Supabase project to Pro before any
+migration phase. Backup/restore is not confirmed until the Pro upgrade is
+complete and backups are visible in Supabase Dashboard > production project >
+Database > Backups.
+
+Exact human follow-up needed before migrations:
+
+- Upgrade the production Supabase project to Pro.
+- Open Supabase Dashboard > production project > Database > Backups.
+- Confirm at least one visible backup or visible backup/PITR capability.
+- Report the backup status back before migrations.
+
+No migrations are approved now. Online verification remains blocked. The
+production deployment ref decision may still need separate reconciliation.
+
+## Supabase Pro Backup Confirmation Gate
+
+MVP-CUTLINE-16C recorded human-provided Supabase screenshot evidence from the
+production project Database > Backups page after the Pro upgrade.
+
+Current backup, migration, and verification decisions:
+
+- Backup/restore posture: `backup_restore_confirmed`.
+- Visible backup evidence: scheduled backups are visible, and multiple physical backups have visible Restore buttons.
+- Latest visible backup: `17 Aug 2026 03:08:21 (+0000)`.
+- Storage caveat: Supabase Storage objects are not included in database backups.
+- Migration gate: `migration_gate_blocked_wrong_deploy_ref_backup_confirmed`.
+- Migration approval: `not_approved`.
+- Online verification gate: `blocked_deploy_ref_and_migration_approval`.
+
+Database backups are confirmed for SQL migration backup posture. Supabase
+Storage objects remain outside database backups and must stay documented for any
+future restore planning. Because no separate human input has resolved the prior
+production deployment ref mismatch, migrations remain unapproved until the
+production deploy ref gate is explicitly resolved and a later migration
+execution task grants approval.
+
+## Production Deploy Ref Resolution And Migration Plan
+
+MVP-CUTLINE-17 inspected local Git refs and prepared the exact migration
+execution plan without applying migrations.
+
+Current deploy-ref and migration decisions:
+
+- Backup/restore posture: `backup_restore_confirmed`.
+- Latest visible backup: `17 Aug 2026 03:08:21 (+0000)`.
+- Storage caveat: Supabase Storage objects are not included in database backups.
+- Production deployment ref decision: `production_ref_still_blocked`.
+- Migration gate: `migration_gate_blocked_wrong_deploy_ref_backup_confirmed`.
+- Migration approval: `not_approved`.
+- Online verification gate: `blocked_deploy_ref_and_migration_approval`.
+
+Local ref inspection confirmed current HEAD and
+`origin/codex/single-site-mvp-cutline-release` at
+`88c0a3b0dfa8a10ab3c94748b533e6664fc637cb`, while `origin/main` remains
+`ba0d070cb77da5fb8fc3618469c567c5aeb4b356`. Because this phase did not receive
+a new Vercel deployment SHA, did not receive explicit confirmation that
+production was redeployed to main, and did not receive explicit acceptance that
+production may intentionally remain on the release branch, the production deploy
+ref remains unresolved.
+
+The 18 required migrations are planned in chronological repository order only.
+Do not apply migrations until the production deploy ref gate is explicitly
+resolved and a separate migration execution approval is recorded.
+
+## Production Deploy Ref Confirmed Gate
+
+MVP-CUTLINE-18B recorded human confirmation that both Vercel production
+projects now deploy from `main` at
+`ba0d070cb77da5fb8fc3618469c567c5aeb4b356`.
+
+Current deploy-ref, backup, migration, and verification decisions:
+
+- Production deployment ref decision: `production_ref_corrected_to_main`.
+- `gnr8-platform` production ref: `main` / `ba0d070`.
+- `gnr8-worker` production ref: `main` / `ba0d070`.
+- `origin/main`: `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`.
+- Commit `ba0d070`: `ba0d070cb77da5fb8fc3618469c567c5aeb4b356`, resolving to `origin/main`.
+- Backup/restore posture: `backup_restore_confirmed`.
+- Latest visible backup: `17 Aug 2026 03:08:21 (+0000)`.
+- Storage caveat: Supabase Storage objects are not included in database backups.
+- Migration gate: `migration_gate_ready_for_execution_approval`.
+- Migration approval: `not_approved`.
+- Online verification gate: `blocked_until_migrations_applied_and_verified`.
+
+The prior production deploy-ref blocker is resolved for migration planning
+purposes. Migrations remain unapplied and unapproved until a separate migration
+execution approval explicitly names the target environment and operation.
+
+## Migration Execution Approval Intake Gate
+
+MVP-CUTLINE-19 recorded migration execution approval intake after production
+deploy refs and production database backup posture were confirmed.
+
+Current approval, migration, and verification decisions:
+
+- Exact approval sentence present: yes.
+- Approval sentence: `I approve applying the 18 production Supabase migrations for GNR8 single-site MVP.`
+- Migration approval: `migration_execution_approved_pending_run`.
+- Next migration gate: `migration_execution_ready`.
+- Required migration count: 18.
+- First migration: `20260722120000_aaf_persistence_core.sql`.
+- Last migration: `20260806120000_single_site_publish_operator_action_audit.sql`.
+- Backup/restore posture: `backup_restore_confirmed`.
+- Latest visible backup: `17 Aug 2026 03:08:21 (+0000)`.
+- Storage caveat: Supabase Storage objects are not included in database backups.
+- Online verification status: `blocked_until_migrations_applied_and_verified`.
+
+This approval intake does not apply migrations. The next migration gate is ready
+for a separate execution phase that applies only the 18 confirmed migration
+files in chronological order, records post-migration readback, and keeps online
+verification blocked until migration application and verification are complete.
+
 ## Online Checklist
 
 - [ ] Open the Command Center panel with selected refs.
