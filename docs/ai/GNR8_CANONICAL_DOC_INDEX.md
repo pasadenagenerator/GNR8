@@ -822,6 +822,13 @@ Canonical read-only online verification preflight after production migrations, c
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## MVP-CUTLINE-22 Rehearsal Candidate Source-Truth Plan
+
+Canonical no-mutation source-truth plan for producing the first production-safe single-site rehearsal candidate, recommending a real selected production site through the canonical client-scoped import/capture-spine workflow, classifying implemented callable workflows, manual/operator-required workflows, missing implementation, unsafe paths, minimum dry-run records/refs, exact human input, and the online verification blocker while preserving the boundary of no production data writes, source capture, clone, proposal, approval, launch readiness, AAF request/decision/gate, dry-run, shadow-publish, runtime publish, provider/DNS/domain/billing/Stripe/Openprovider mutation, env mutation, deploy, migration, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-22-rehearsal-candidate-source-truth-plan.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

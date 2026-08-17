@@ -85,6 +85,14 @@ Status as of 2026-08-17: the first read-only online verification preflight compl
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-21-online-verification-preflight.md`.
 
+### MVP-CUTLINE-22 Rehearsal Candidate Source-Truth Plan
+
+Status as of 2026-08-17: source-truth planning completed with no production mutation. The recommended first candidate path is a real selected production site created later through the canonical client-scoped import and capture-spine workflow, not a legacy import, inferred existing runtime site, seeded internal test, or exception fixture by default.
+
+Online verification remains blocked until a candidate has at minimum tenant/client/site/migration identity, source evidence, accepted source evidence review, clone/review refs, proposal and implementation authorization refs, improved candidate and review refs, content/client/launch approval refs, launch readiness evidence, publish activation request/decision/gate refs, handoff and gate input watermarks, and the exact dry-run request refs.
+
+Plan: `docs/product/gnr8-single-site-mvp-cutline-22-rehearsal-candidate-source-truth-plan.md`.
+
 ## Environment Flags
 
 Baseline non-flag environment required for the internal surfaces:
@@ -126,10 +134,13 @@ Online verification is triggered only after:
 - [ ] all required Supabase migrations are applied to the target environment;
 - [ ] env flags are set according to the approved rehearsal mode;
 - [ ] selected site data exists or explicit MVP exceptions are recorded;
+- [ ] CUTLINE-22 candidate source-truth requirements are satisfied for the selected site;
 - [ ] superadmin auth is verified;
 - [ ] dry-run preflight has passed or failed with an expected source-truth blocker.
 
 CUTLINE-21 result: migration/catalog, app health, worker health, and superadmin panel prerequisites were confirmed, but selected site data does not exist in production. Governed dry-run remains blocked until a source-truth rehearsal candidate is created or identified.
+
+CUTLINE-22 result: the next source-owned path is defined, but no candidate was created. Governed dry-run and online verification remain blocked until the future candidate creation milestone records the required source-truth chain.
 
 ## Online Checklist
 

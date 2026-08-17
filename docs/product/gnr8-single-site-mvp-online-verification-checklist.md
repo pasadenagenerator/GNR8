@@ -16,6 +16,7 @@ Do not start online verification until all are true:
 - `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` is off unless shadow-publish has explicit approval;
 - selected `tenantId`, `clientId`, `siteId`, `migrationId`, candidate refs, runtime artifact ref, publish target ref, launch readiness evidence ref, publish activation request/decision/gate refs, handoff watermark, and gate input watermark are known;
 - seeded or bypassed source-truth records are listed as MVP exceptions before the run.
+- CUTLINE-22 source-truth candidate plan is satisfied: the selected candidate was created or identified through an approved source-owned path, and real/test/exception posture is recorded.
 
 ## Operator Sequence
 
@@ -117,6 +118,18 @@ Production online preflight status: complete for read-only health/auth/catalog/s
 - Shadow-publish/runtime publish/provider/env/deploy/migration mutations: none.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-21-online-verification-preflight.md`.
+
+## CUTLINE-22 Rehearsal Candidate Source-Truth Record
+
+Production candidate planning status: complete for no-mutation planning only. No source capture, clone, proposal, approval, launch readiness, publish activation request/decision/gate, dry-run, shadow-publish, runtime publish, provider, env, deploy, or migration mutation occurred.
+
+- Recommended candidate path: real selected production site.
+- Future candidate creation path: canonical `POST /api/gnr8/agency/clients/[clientId]/sites/import` client-scoped import, which calls the single-site capture spine adapter after separate human approval.
+- Not recommended by default: seeded internal test site, inferred existing runtime site, legacy import, or explicit MVP exception fixture.
+- Required before dry-run: concrete tenant/client/site/migration identity; source evidence and accepted evidence review; clone/review; proposal; implementation authorization; improved candidate/review; content/client/launch approvals; launch readiness evidence; publish activation request/decision/gate; handoff and gate input watermarks; idempotency/correlation refs.
+- Online verification status: blocked until the future candidate exists and read-only source-truth verification confirms the required refs.
+
+Plan: `docs/product/gnr8-single-site-mvp-cutline-22-rehearsal-candidate-source-truth-plan.md`.
 
 ## Stop Criteria
 
