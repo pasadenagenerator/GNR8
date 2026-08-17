@@ -98,6 +98,26 @@ Production migration prerequisite status: complete for the database/catalog gate
 - Boundary: CUTLINE-20 did not run online verification, dry-run, shadow-publish, runtime publish, deploy, Vercel/provider/DNS/domain/billing/Stripe/Openprovider calls, or env mutation.
 - Next gate before online verification: confirm deploy health on `ba0d070`, env flag posture, superadmin auth, and selected source-truth site data or explicit MVP exceptions.
 
+## CUTLINE-21 Online Verification Preflight Record
+
+Production online preflight status: complete for read-only health/auth/catalog/source-truth readiness, with governed dry-run blocked by missing site data.
+
+- Platform health: `GET https://app.pasadenagenerator.com/` returned HTTP 200 from Vercel and rendered the GNR8 platform shell.
+- Worker health: `GET https://gnr8-worker.vercel.app/health` returned HTTP 200 with `ok: true`, `service: gnr8-worker`, and `status: ready`.
+- Deploy ref: production was supplied as `main / ba0d070`; exact platform/worker commit was not independently observable through public headers or local Vercel metadata.
+- Env flags: available production env artifact has `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` missing and `GNR8_SINGLE_SITE_PUBLISH_ACTIVATION_GATE_SHADOW` missing.
+- Superadmin auth: `/gnr8/command-center/single-site-publish` loaded in the in-app browser and rendered `Superadmin Workspace`.
+- Panel: `Single-Site Publish Operator Panel` rendered read-only, lookup-required, and with mutation boundary flags false.
+- Status route: unauthenticated live `GET /api/gnr8/admin/single-site-mvp/status` returned HTTP 401 `SUPERADMIN_REQUIRED`, redactions, and mutation flags false.
+- Action route: unauthenticated live `POST /api/gnr8/admin/single-site-mvp/action` returned HTTP 401 `SUPERADMIN_REQUIRED`, redactions, and mutation flags false. Authenticated JSON probe was not completed because the in-app browser blocked direct `/api/...` navigation and did not expose page-scope network APIs.
+- Production read-only DB readback: 18/18 required migration versions present; expected core tables visible; publish target row is `production / production / active / ptt-1`.
+- Candidate source truth: missing. Production counts were `gnr8_single_site_migrations=0`, `migrations_with_site=0`, `gnr8_single_site_launch_readiness_records=0`, `operator_actions=0`.
+- Dry-run readiness: `dry_run_blocked_missing_site_data`.
+- Dry-run run: no. The exact approval sentence was absent.
+- Shadow-publish/runtime publish/provider/env/deploy/migration mutations: none.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-21-online-verification-preflight.md`.
+
 ## Stop Criteria
 
 Stop immediately if:

@@ -815,6 +815,13 @@ Canonical production Supabase migration execution and read-only catalog verifica
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## MVP-CUTLINE-21 Online Verification Preflight
+
+Canonical read-only online verification preflight after production migrations, confirming platform and worker health, safe single-site feature flag posture from the available production env artifact, superadmin Command Center panel access, unauthenticated admin endpoint fail-closed behavior, production migration-history/catalog/readback state, production publish target `production / active / ptt-1`, absence of selected single-site source-truth rows, dry-run readiness decision `dry_run_blocked_missing_site_data`, and the boundary of no dry-run, shadow-publish, runtime publish, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, env mutation, deploy, migration application, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-21-online-verification-preflight.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

@@ -69,6 +69,22 @@ Status as of 2026-08-17: the production Supabase migration gate for the single-s
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-20-production-migration-execution-closeout.md`.
 
+### MVP-CUTLINE-21 Online Verification Preflight
+
+Status as of 2026-08-17: the first read-only online verification preflight completed with a governed dry-run no-go: `dry_run_blocked_missing_site_data`.
+
+- Platform app health: `GET https://app.pasadenagenerator.com/` returned HTTP 200 from Vercel and rendered the GNR8 shell.
+- Worker health: `GET https://gnr8-worker.vercel.app/health` returned HTTP 200 with `{"ok":true,"service":"gnr8-worker","status":"ready"}`.
+- Deploy ref posture: production was supplied as `main / ba0d070`, but exact commit was not independently observable from public HTTP headers or local Vercel metadata in this workspace.
+- Safe flag posture from the available production env artifact: `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` missing and `GNR8_SINGLE_SITE_PUBLISH_ACTIVATION_GATE_SHADOW` missing.
+- Superadmin auth and panel: `/gnr8/command-center/single-site-publish` loaded in the in-app browser as `Superadmin Workspace`; the panel rendered `read only`, `state lookup required`, and all mutation boundary flags false.
+- Admin endpoint safety: unauthenticated `GET /api/gnr8/admin/single-site-mvp/status` and unauthenticated `POST /api/gnr8/admin/single-site-mvp/action` both returned HTTP 401 `SUPERADMIN_REQUIRED`, redactions, and all mutation flags false.
+- Production read-only DB source truth: 18/18 required migration versions remained present; `gnr8_publish_targets` contained `production / production / active / ptt-1`; candidate source-truth rows were missing (`gnr8_single_site_migrations=0`, launch readiness records `0`, operator audit rows `0`).
+- Dry-run: not run because the exact approval sentence was absent and no selected site/migration source truth exists.
+- Shadow-publish/runtime publish: not run.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-21-online-verification-preflight.md`.
+
 ## Environment Flags
 
 Baseline non-flag environment required for the internal surfaces:
@@ -112,6 +128,8 @@ Online verification is triggered only after:
 - [ ] selected site data exists or explicit MVP exceptions are recorded;
 - [ ] superadmin auth is verified;
 - [ ] dry-run preflight has passed or failed with an expected source-truth blocker.
+
+CUTLINE-21 result: migration/catalog, app health, worker health, and superadmin panel prerequisites were confirmed, but selected site data does not exist in production. Governed dry-run remains blocked until a source-truth rehearsal candidate is created or identified.
 
 ## Online Checklist
 
