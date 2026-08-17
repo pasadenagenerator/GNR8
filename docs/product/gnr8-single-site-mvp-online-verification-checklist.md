@@ -9,8 +9,8 @@ Do not start online verification until all are true:
 
 - release commit has been reviewed and pushed by a human-approved release step;
 - deployment target is running the intended commit SHA;
-- required Supabase migrations have been applied in chronological order to the target environment;
-- post-migration catalog checks passed;
+- required Supabase migrations have been applied in chronological order to the target environment; CUTLINE-20 completed this prerequisite for production project `ujfbpzugdsdmroqvhfvn` on 2026-08-17;
+- post-migration catalog checks passed; CUTLINE-20 readback found 76/76 expected tables present, RLS enabled on all expected tables, 49/49 expected append-only triggers present, and no missing AAF vocabulary tokens;
 - `SUPERADMIN_EMAILS` includes the named rehearsal operator;
 - baseline Supabase/database env values point at the intended target environment;
 - `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` is off unless shadow-publish has explicit approval;
@@ -87,6 +87,16 @@ The one-site rehearsal passes as a route/deploy rehearsal when:
 - shadow-publish is either safely blocked by default or runs only after explicit approval.
 
 The site counts toward MVP validation only when real source-owned flow produced required approvals/readiness/gate truth, online verification passed, no unsafe exceptions were used, and the closeout records that it is validation-counting.
+
+## CUTLINE-20 Migration Prerequisite Record
+
+Production migration prerequisite status: complete for the database/catalog gate only.
+
+- Applied migration set: the 18 migrations listed in `docs/product/gnr8-single-site-deployment-readiness-checklist.md`, in chronological order from `20260722120000_aaf_persistence_core.sql` through `20260806120000_single_site_publish_operator_action_audit.sql`.
+- Target: production Supabase project `ujfbpzugdsdmroqvhfvn`, database host `aws-1-eu-west-1.pooler.supabase.com`, database `postgres`.
+- Readback: migration history matched local and remote for all 18 required versions after execution.
+- Boundary: CUTLINE-20 did not run online verification, dry-run, shadow-publish, runtime publish, deploy, Vercel/provider/DNS/domain/billing/Stripe/Openprovider calls, or env mutation.
+- Next gate before online verification: confirm deploy health on `ba0d070`, env flag posture, superadmin auth, and selected source-truth site data or explicit MVP exceptions.
 
 ## Stop Criteria
 

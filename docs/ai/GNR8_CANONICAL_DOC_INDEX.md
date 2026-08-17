@@ -808,6 +808,13 @@ Canonical documentation-only precommit validation and commit-prep closeout for t
 Canonical local-only release branch, push, deploy, migration, and online verification readiness closeout for the single-site MVP cutline bundle, confirming the expected committed docs/index HEAD, current branch and remote state, local deploy-trigger evidence, release branch strategy, push blocker, required deploy/migration/online-verification gates, required migration set, online verification decision, and boundary confirmations while preserving the boundary of no deploys, Supabase migration applications, production/staging Supabase calls, provider/DNS/domain/billing/Stripe/Vercel/Openprovider actions, publish/shadow-publish, env flag changes, implementation changes, or runtime mutation:
 - `docs/product/gnr8-single-site-mvp-cutline-7-release-readiness-closeout.md`
 
+## MVP-CUTLINE-20 Production Supabase Migration Execution
+
+Canonical production Supabase migration execution and read-only catalog verification closeout for the single-site MVP migration prerequisite, reconciling the 18 required migration filenames, applying the approved chronological migration set to production project `ujfbpzugdsdmroqvhfvn`, confirming migration-history readback, table/RLS/trigger/AAF vocabulary catalog checks, and preserving the boundary against deploys, env changes, Vercel/provider/DNS/domain/billing/Stripe/Openprovider calls, dry-run, shadow-publish, runtime publish, online verification, commits, or pushes:
+- `docs/product/gnr8-single-site-mvp-cutline-20-production-migration-execution-closeout.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

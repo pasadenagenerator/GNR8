@@ -56,6 +56,19 @@ Apply migrations in repository order. Required before the one-site rehearsal and
 
 Do not apply migrations to production or staging during MVP-CUTLINE-4. This checklist is for the next release step.
 
+### MVP-CUTLINE-20 Production Migration Status
+
+Status as of 2026-08-17: the production Supabase migration gate for the single-site MVP is complete.
+
+- Migration count reconciliation: passed; the current checklist resolved the required set as 18 migrations.
+- Target: production Supabase project `ujfbpzugdsdmroqvhfvn`, database host `aws-1-eu-west-1.pooler.supabase.com`, database `postgres`.
+- Execution: all 18 required migrations were applied by `supabase db push --linked --yes`; no migration failed or was skipped.
+- Post-migration readback: passed; 76 expected tables were present, RLS was enabled on all expected tables, 49 expected append-only triggers were present, and AAF vocabulary/contract constraints contained the required single-site approval and launch-readiness evidence vocabulary.
+- Backup posture used for the gate: recorded evidence `backup_restore_confirmed`, latest visible backup `17 Aug 2026 03:08:21 (+0000)`; Supabase Storage objects remain outside database backups.
+- Online verification gate: unblocked for the migration/catalog prerequisite only. Deploy, env flag, superadmin auth, selected site data, dry-run, shadow-publish, provider, DNS/domain, billing, Vercel/Openprovider, and runtime publish verification were not performed in CUTLINE-20.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-20-production-migration-execution-closeout.md`.
+
 ## Environment Flags
 
 Baseline non-flag environment required for the internal surfaces:
