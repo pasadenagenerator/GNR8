@@ -914,6 +914,38 @@ Canonical clone generation and clone review closeout for the accepted first prod
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## MVP-CUTLINE-30 Proposal Planning For Accepted Clone
+
+Canonical proposal planning closeout for the accepted first production single-site rehearsal clone, recording exact proposal-planning approval present, safe path `ImprovementProposalPlanningService.createOrReuseProposalPlan(...)` plus `addFinding(...)`, `addRecommendation(...)`, and `markReadyForReview(...)`, proposal plan `f541075c-4641-4f70-b5ff-64a8af071571`, proposal status `ready_for_review`, four selected recommendations, four findings, categories `content_clarity`, `conversion`, `mobile_responsive`, and `trust_credibility`, proposal semantic watermark `sha256:22fd5d1cfbb488a3153cd6ddba186ea7f2b8676a6c96521ae8f4d98771f8a42a`, proposal approval required next, online verification status `proposal_plan_created_pending_approval`, forbidden implementation/improved-review/approval/readiness/publish/AAF counts remaining zero, runtime active pointers unchanged at `6`, selected runtime active pointers `0`, and the boundary of no implementation authorization, improvement execution, improved candidate creation, approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-30-proposal-planning-accepted-clone.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-31 Proposal Approval
+
+Canonical proposal approval closeout for the first production single-site rehearsal plan, recording exact proposal-approval authorization present, safe path `ImprovementProposalPlanningService.approve(...)`, proposal plan `f541075c-4641-4f70-b5ff-64a8af071571`, proposal status `ready_for_review` -> `approved`, plan version `2` -> `3`, proposal approval event `f7320eae-2426-4c8e-ab91-0cfdac135d82`, proposal approval state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642`, four accepted recommendation ids, proposal semantic watermark `sha256:22fd5d1cfbb488a3153cd6ddba186ea7f2b8676a6c96521ae8f4d98771f8a42a`, implementation authorization required next, online verification status `proposal_approved_pending_implementation_authorization`, forbidden implementation-authorization/improvement/improved-review/content-client-launch/readiness/publish/AAF counts remaining zero, selected site runtime active pointers `0`, and the boundary of no implementation authorization, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-31-proposal-approval.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-32 Implementation Authorization Request
+
+Canonical prepared-but-blocked implementation authorization request closeout for the first production single-site rehearsal plan, recording exact authorization-request approval present, read-only production preflight with proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` approved at version `3`, proposal approval event `f7320eae-2426-4c8e-ab91-0cfdac135d82`, state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642`, four expected accepted recommendation ids matched, existing bridge path `SingleSiteImplementationAuthorizationBridge.prepareImplementationAuthorizationRequest(...)` inspected, requested prompt scope `single_site_implementation_authorization` differing from installed bridge scope `single_site_improvement_implementation_authorization`, production proposal approval refs being proposal-event refs rather than bridge-required AAF proposal approval request/decision/evidence refs, no AAF evidence package or approval request created, prepared request semantic watermark `single-site-implementation-authorization-prepared-request:0080ccebb14b10e47572f2057a639c8ad97457d54a67d680ac6208beb5bd1fad`, online verification status `implementation_authorization_request_blocked`, forbidden AAF request/decision/gate/improvement/improved-review/content-client-launch/readiness/publish counts remaining zero, runtime active pointers unchanged at `6`, selected site runtime active pointers `0`, and the boundary of no authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-32-implementation-authorization-request.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-33 Implementation Authorization Bridge Alignment
+
+Canonical local bridge-alignment closeout for preparing exact-scope implementation authorization requests from proposal-event approval evidence, recording canonical scope `single_site_improvement_implementation_authorization`, shorter scope `single_site_implementation_authorization` rejected, bridge input extended to accept explicit proposal-event refs `f7320eae-2426-4c8e-ab91-0cfdac135d82` and state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642` as evidence for proposal plan `f541075c-4641-4f70-b5ff-64a8af071571`, proposal-event approval kept evidence-only and not treated as implementation authorization decision truth, no SQL migration required, focused bridge test, AAF contract test, and focused TypeScript no-emit passed, broad platform TypeScript no-emit still blocked by unrelated existing fixture diagnostics with no touched-file diagnostics, online verification status remaining `implementation_authorization_request_blocked` until bridge code deploy and later authorized retry, production AAF evidence/request/decision/gate rows created by this task `0`, and the boundary of no production Supabase write, authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-33-implementation-authorization-bridge-alignment.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `apps/platform/gnr8/single-site/implementation-authorization-bridge.ts`
+- `apps/platform/gnr8/single-site/implementation-authorization-bridge.test.ts`
+- `apps/platform/gnr8/single-site/improvement-execution-service.ts`
+- `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

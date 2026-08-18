@@ -27,6 +27,9 @@ Do not start online verification until all are true:
 - CUTLINE-27A supported UI surface is deployed before use: `/gnr8/command-center/single-site-publish/source-capture` exposes only the superadmin source-capture form, requires exact confirmation, and posts only to the admin source-capture route.
 - CUTLINE-28 source evidence review was complete before clone work: review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3` is `accepted`, and source evidence was sufficient for clone.
 - CUTLINE-29 clone generation/review is complete before proposal planning: clone review `79176567-4911-4900-bc86-0fefa6043fbe` is `accepted`, clone version `6b172a5b-200e-471c-9599-5dc70f04ea53` and artifact `929106cd-fa19-47eb-9582-ce6931d0e370` are recorded, and no proposal/improvement/approval/readiness/publish work has started.
+- CUTLINE-30 proposal planning is complete before proposal approval, implementation authorization, or improvement execution: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` is `ready_for_review` with four selected recommendations, four findings, and no downstream approval/execution/readiness/publish/AAF mutation.
+- CUTLINE-31 proposal approval is complete before implementation authorization or improvement execution: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` is `approved`, proposal approval event `f7320eae-2426-4c8e-ab91-0cfdac135d82` is recorded, and no implementation authorization/execution/readiness/publish/AAF mutation exists.
+- CUTLINE-32 implementation authorization request preparation is blocked before AAF row creation: the exact request sentence is present, proposal approval and recommendation refs are confirmed, but the current bridge cannot create truthful AAF rows from proposal-event approval refs or the prompt scope alias.
 
 ## Operator Sequence
 
@@ -341,6 +344,102 @@ Production clone generation/review status: accepted. CUTLINE-29 used existing se
 - Boundary: no proposal planning, implementation authorization, improvement execution, approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-29-one-site-clone-generation-review.md`.
+
+## CUTLINE-30 Proposal Planning For Accepted Clone
+
+Production proposal planning status: `ready_for_review`. CUTLINE-30 used the existing server-only proposal planning service for the accepted first rehearsal clone.
+
+- Exact proposal-planning approval sentence: present.
+- Path used: `ImprovementProposalPlanningService.createOrReuseProposalPlan(...)`, then `addFinding(...)`, `addRecommendation(...)`, and `markReadyForReview(...)`.
+- Proposal planning idempotency/correlation base: `gnr8-cutline-30-chs-si-proposal-planning-20260818`.
+- Proposal plan id: `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Proposal status: `ready_for_review`; plan version `2`.
+- Selected recommendations count: `4`; findings count: `4`.
+- Categories: `content_clarity`, `conversion`, `mobile_responsive`, and `trust_credibility`.
+- Warnings: upstream source capture warnings carried as non-blocking planning context; proposal approval is required next.
+- Limitations/blockers: none recorded.
+- Proposal semantic watermark: `sha256:22fd5d1cfbb488a3153cd6ddba186ea7f2b8676a6c96521ae8f4d98771f8a42a`.
+- Proposal approval required next: yes.
+- Migration impact: `current_state=improvement_proposal_ready`, `current_stage=proposal`, `implementationAuthorizationAttached=false`.
+- Forbidden downstream counts: implementation execution attempts `0`, improved version reviews `0`, content/client/launch approvals `0`, launch readiness records `0`, publish operator actions `0`, AAF approval requests/decisions/gate attempts `0`, runtime active pointers unchanged at `6`, selected runtime active pointers `0`.
+- Online verification status: `proposal_plan_created_pending_approval`.
+- Boundary: no implementation authorization, improvement execution, improved candidate creation, approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-30-proposal-planning-accepted-clone.md`.
+
+## CUTLINE-31 Proposal Approval
+
+Production proposal approval status: `approved`. CUTLINE-31 used the existing server-only proposal planning service for the ready-for-review proposal plan.
+
+- Exact proposal-approval authorization sentence: present.
+- Path used: `ImprovementProposalPlanningService.approve(...)`.
+- Proposal approval idempotency/correlation base: `gnr8-cutline-31-chs-si-proposal-approval-20260818`.
+- Proposal plan id: `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Proposal status before: `ready_for_review`; plan version `2`.
+- Proposal status after: `approved`; plan version `3`.
+- Proposal approval event id: `f7320eae-2426-4c8e-ab91-0cfdac135d82`.
+- Proposal approval state event id: `54ace8d6-401c-4ade-9ad2-ec4539dc3642`.
+- Accepted recommendations count: `4`.
+- Accepted recommendation ids: `73de9484-1461-4476-b677-f41d7a839df7`, `86342f67-7cce-43de-823f-ea0f4adc1a41`, `0be61bde-6568-4f33-8499-4d5eade70837`, and `a61e857e-89c1-4ab1-bdc1-581a24e824c1`.
+- Findings count remained `4`.
+- Warnings: implementation authorization remains required before improvement execution; recommendation rows remain planning records until a later authorized implementation phase creates work items.
+- Limitations/blockers: none observed in the proposal approval workflow.
+- Proposal semantic watermark: `sha256:22fd5d1cfbb488a3153cd6ddba186ea7f2b8676a6c96521ae8f4d98771f8a42a`.
+- Implementation authorization required next: yes.
+- Migration impact: `current_state=improvement_proposal_approved`, `current_stage=proposal`, `implementation_authorization_attached=false`.
+- Forbidden downstream counts: implementation authorization proposal refs `0`, implementation execution attempts `0`, improved version reviews `0`, content/client/launch approvals `0`, launch readiness records `0`, publish operator actions `0`, AAF approval requests/decisions/gate attempts `0`, selected site runtime active pointers `0`.
+- Online verification status: `proposal_approved_pending_implementation_authorization`.
+- Boundary: no implementation authorization, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-31-proposal-approval.md`.
+
+## CUTLINE-32 Implementation Authorization Request
+
+Production implementation authorization request status: `blocked_before_aaf_row_creation`. CUTLINE-32 inspected the existing non-executing bridge and performed read-only production preflight, then stopped before creating AAF rows.
+
+- Exact authorization-request approval sentence: present.
+- Blocked CUTLINE-32 prompt scope: `single_site_implementation_authorization`.
+- Canonical installed bridge scope: `single_site_improvement_implementation_authorization`.
+- Path inspected: `SingleSiteImplementationAuthorizationBridge.prepareImplementationAuthorizationRequest(...)`.
+- Proposal plan id: `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Proposal status: `approved`; plan version `3`.
+- Proposal approval event id: `f7320eae-2426-4c8e-ab91-0cfdac135d82`.
+- Proposal approval state event id: `54ace8d6-401c-4ade-9ad2-ec4539dc3642`.
+- Accepted recommendation count: `4`; expected refs matched.
+- AAF evidence package id: not created.
+- AAF approval request id: not created.
+- Policy/evidence refs: prepared only; no persisted AAF request/evidence refs exist.
+- Prepared request semantic watermark: `single-site-implementation-authorization-prepared-request:0080ccebb14b10e47572f2057a639c8ad97457d54a67d680ac6208beb5bd1fad`.
+- Blocking reason: production proposal approval refs are proposal-event refs, not the bridge-required AAF proposal approval request/decision/evidence refs.
+- Required decision next: no authorization decision can be made until a valid exact-scope AAF request/evidence package exists.
+- Forbidden downstream counts: AAF evidence packages `0`, AAF approval requests `0`, AAF approval decisions `0`, AAF gate attempts `0`, implementation execution attempts `0`, improved version reviews `0`, content/client/launch approvals `0`, launch readiness records `0`, publish operator actions `0`, runtime active pointers `6`, selected runtime active pointers `0`.
+- Online verification status: `implementation_authorization_request_blocked`.
+- Boundary: no authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-32-implementation-authorization-request.md`.
+
+## CUTLINE-33 Implementation Authorization Bridge Alignment
+
+Local implementation authorization bridge alignment status: complete. Production implementation authorization request status remains `blocked_before_aaf_row_creation` until the bridge code is deployed and a later authorized retry runs.
+
+- Canonical scope confirmed: `single_site_improvement_implementation_authorization`.
+- Wrong shorter scope rejected: `single_site_implementation_authorization`.
+- Path updated: `SingleSiteImplementationAuthorizationBridge.prepareImplementationAuthorizationRequest(...)`.
+- Proposal-event approval evidence accepted locally: yes.
+- Supported proposal-event evidence refs: proposal approval event `f7320eae-2426-4c8e-ab91-0cfdac135d82` and state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642`.
+- Proposal-event approval semantics: evidence only for preparing the implementation authorization request; not a substitute for implementation authorization decision truth.
+- Exact-scope request semantics preserved: request scope remains `single_site_improvement_implementation_authorization`; evidence package type remains `single_site_improvement_implementation_authorization_evidence`.
+- SQL migration required: no.
+- Bridge code deploy required before retry: yes.
+- Production AAF evidence package id: not created.
+- Production AAF approval request id: not created.
+- Production AAF approval decision id: not created.
+- Production AAF gate attempt id: not created.
+- Improvement execution attempts and improved candidate versions: not created.
+- Online verification status remains: `implementation_authorization_request_blocked`.
+- Boundary: no production Supabase write, authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-33-implementation-authorization-bridge-alignment.md`.
 
 ## Stop Criteria
 

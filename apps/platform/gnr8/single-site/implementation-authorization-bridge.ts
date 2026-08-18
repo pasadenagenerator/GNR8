@@ -34,13 +34,36 @@ export type ImplementationAuthorizationSourceRef = {
   metadataJson?: AafJsonObject;
 };
 
-export type ImplementationAuthorizationProposalApprovalRef = {
+export type ImplementationAuthorizationAafProposalApprovalRef = {
+  approvalSource?: "aaf";
   approvalRequestId: string;
   approvalDecisionId: string;
   evidencePackageId: string;
   sourceWatermark: string;
   limitations?: unknown[];
+  proposalEventId?: never;
+  stateEventId?: never;
 };
+
+export type ImplementationAuthorizationProposalEventApprovalRef = {
+  approvalSource: "proposal_event";
+  proposalEventId: string;
+  stateEventId: string;
+  sourceWatermark: string;
+  sourceTable?: string | null;
+  stateEventSourceTable?: string | null;
+  proposalStatus?: "approved" | "approved_with_limitations" | string;
+  eventAction?: "approved" | "approved_with_limitations" | string;
+  limitations?: unknown[];
+  metadataJson?: AafJsonObject;
+  approvalRequestId?: never;
+  approvalDecisionId?: never;
+  evidencePackageId?: never;
+};
+
+export type ImplementationAuthorizationProposalApprovalRef =
+  | ImplementationAuthorizationAafProposalApprovalRef
+  | ImplementationAuthorizationProposalEventApprovalRef;
 
 export type ImplementationAuthorizationSelectedRecommendationRef = ImplementationAuthorizationSourceRef & {
   recommendationId: string;
@@ -273,6 +296,101 @@ function assertAcceptedReview(field: string, status: string): void {
   }
 }
 
+function proposalApprovalSource(input: ImplementationAuthorizationProposalApprovalRef | undefined): "aaf" | "proposal_event" {
+  if (input?.approvalSource === "proposal_event") return "proposal_event";
+  return "aaf";
+}
+
+function proposalApprovalLimitations(input: ImplementationAuthorizationProposalApprovalRef | undefined): unknown[] {
+  return jsonArray(input?.limitations);
+}
+
+function proposalApprovalSubjectRefs(
+  input: PrepareImplementationAuthorizationRequestInput | ValidateImplementationAuthorizationRefInput,
+): Array<ImplementationAuthorizationSourceRef & { role: string }> {
+  const proposalApproval = input.proposalApprovalRef;
+  const approvalSource = proposalApprovalSource(proposalApproval);
+  if (approvalSource === "proposal_event") {
+    const eventRef = proposalApproval as ImplementationAuthorizationProposalEventApprovalRef;
+    return [
+      roleRef(
+        "proposal_approval_event",
+        optionalText(eventRef.sourceTable) ?? "gnr8_single_site_improvement_proposal_events",
+        eventRef.proposalEventId,
+        eventRef.sourceWatermark,
+      ),
+      roleRef(
+        "proposal_approval_state_event",
+        optionalText(eventRef.stateEventSourceTable) ?? "gnr8_single_site_migration_state_events",
+        eventRef.stateEventId,
+        eventRef.sourceWatermark,
+      ),
+    ];
+  }
+
+  const aafRef = proposalApproval as ImplementationAuthorizationAafProposalApprovalRef;
+  return [
+    roleRef("proposal_approval_request", "gnr8_aaf_approval_requests", aafRef.approvalRequestId, aafRef.sourceWatermark),
+    roleRef("proposal_approval_decision", "gnr8_aaf_approval_decisions", aafRef.approvalDecisionId, aafRef.sourceWatermark),
+    roleRef("proposal_evidence_package", "gnr8_aaf_evidence_packages", aafRef.evidencePackageId, aafRef.sourceWatermark),
+  ];
+}
+
+function proposalApprovalEvidenceRefs(
+  input: PrepareImplementationAuthorizationRequestInput | ValidateImplementationAuthorizationRefInput,
+): Array<ImplementationAuthorizationSourceRef & { role: string; itemType: string; displayName: string }> {
+  const proposalApproval = input.proposalApprovalRef;
+  const approvalSource = proposalApprovalSource(proposalApproval);
+  if (approvalSource === "proposal_event") {
+    const eventRef = proposalApproval as ImplementationAuthorizationProposalEventApprovalRef;
+    const eventSourceTable = optionalText(eventRef.sourceTable) ?? "gnr8_single_site_improvement_proposal_events";
+    const stateEventSourceTable = optionalText(eventRef.stateEventSourceTable) ?? "gnr8_single_site_migration_state_events";
+    const metadataJson = {
+      ...(eventRef.metadataJson ?? {}),
+      proposalApprovalEvidenceSource: "proposal_event",
+      evidenceOnlyForImplementationAuthorization: true,
+      implementationAuthorizationDecisionSubstitution: false,
+    };
+    return [
+      evidenceRoleRef(
+        "proposal_approval",
+        "proposal_approval_ref",
+        "Proposal approval",
+        {
+          ...roleRef("proposal_approval", eventSourceTable, eventRef.proposalEventId, eventRef.sourceWatermark),
+          metadataJson,
+        },
+      ),
+      evidenceRoleRef(
+        "proposal_approval_state_event",
+        "proposal_approval_state_event_ref",
+        "Proposal approval state event",
+        {
+          ...roleRef("proposal_approval_state_event", stateEventSourceTable, eventRef.stateEventId, eventRef.sourceWatermark),
+          metadataJson,
+        },
+      ),
+    ];
+  }
+
+  const aafRef = proposalApproval as ImplementationAuthorizationAafProposalApprovalRef;
+  return [
+    evidenceRoleRef(
+      "proposal_approval",
+      "proposal_approval_ref",
+      "Proposal approval",
+      {
+        ...roleRef("proposal_approval", "gnr8_aaf_approval_decisions", aafRef.approvalDecisionId, aafRef.sourceWatermark),
+        metadataJson: {
+          proposalApprovalEvidenceSource: "aaf",
+          evidenceOnlyForImplementationAuthorization: true,
+          implementationAuthorizationDecisionSubstitution: false,
+        },
+      },
+    ),
+  ];
+}
+
 export function computeImplementationAuthorizationSemanticWatermark(input: ImplementationAuthorizationSemanticInput): string {
   return `single-site-implementation-authorization:${digest({
     migrationId: input.migrationId,
@@ -311,10 +429,23 @@ function assertPrepareInput(input: PrepareImplementationAuthorizationRequestInpu
   if (!["approved", "approved_with_limitations"].includes(input.proposalStatus)) {
     throw new Error("implementation authorization requires an approved proposal plan");
   }
-  text("proposalApprovalRef.approvalRequestId", input.proposalApprovalRef?.approvalRequestId);
-  text("proposalApprovalRef.approvalDecisionId", input.proposalApprovalRef?.approvalDecisionId);
-  text("proposalApprovalRef.evidencePackageId", input.proposalApprovalRef?.evidencePackageId);
   text("proposalApprovalRef.sourceWatermark", input.proposalApprovalRef?.sourceWatermark);
+  if (proposalApprovalSource(input.proposalApprovalRef) === "proposal_event") {
+    const eventRef = input.proposalApprovalRef as ImplementationAuthorizationProposalEventApprovalRef;
+    text("proposalApprovalRef.proposalEventId", eventRef.proposalEventId);
+    text("proposalApprovalRef.stateEventId", eventRef.stateEventId);
+    if (eventRef.proposalStatus && !["approved", "approved_with_limitations"].includes(eventRef.proposalStatus)) {
+      throw new Error("proposalApprovalRef.proposalStatus must be approved or approved_with_limitations");
+    }
+    if (eventRef.eventAction && !["approved", "approved_with_limitations"].includes(eventRef.eventAction)) {
+      throw new Error("proposalApprovalRef.eventAction must be approved or approved_with_limitations");
+    }
+  } else {
+    const aafRef = input.proposalApprovalRef as ImplementationAuthorizationAafProposalApprovalRef;
+    text("proposalApprovalRef.approvalRequestId", aafRef?.approvalRequestId);
+    text("proposalApprovalRef.approvalDecisionId", aafRef?.approvalDecisionId);
+    text("proposalApprovalRef.evidencePackageId", aafRef?.evidencePackageId);
+  }
   text("cloneReviewRef.sourceRecordId", input.cloneReviewRef?.sourceRecordId);
   text("cloneReviewRef.sourceWatermark", input.cloneReviewRef?.sourceWatermark);
   assertAcceptedReview("cloneReviewRef.reviewStatus", String(input.cloneReviewRef?.reviewStatus));
@@ -378,9 +509,7 @@ export function buildExpectedImplementationAuthorizationRefs(input: PrepareImple
     roleRef("proposal_plan", "gnr8_single_site_improvement_proposal_plans", proposalPlanId, proposalWatermark),
     roleRef("proposal_plan_version", "gnr8_single_site_improvement_proposal_plans", proposalPlanId, proposalWatermark, input.proposalPlanVersion),
     roleRef("proposal_plan_semantic_watermark", "gnr8_single_site_improvement_proposal_plans", proposalPlanId, proposalWatermark),
-    roleRef("proposal_approval_request", "gnr8_aaf_approval_requests", input.proposalApprovalRef.approvalRequestId, input.proposalApprovalRef.sourceWatermark),
-    roleRef("proposal_approval_decision", "gnr8_aaf_approval_decisions", input.proposalApprovalRef.approvalDecisionId, input.proposalApprovalRef.sourceWatermark),
-    roleRef("proposal_evidence_package", "gnr8_aaf_evidence_packages", input.proposalApprovalRef.evidencePackageId, input.proposalApprovalRef.sourceWatermark),
+    ...proposalApprovalSubjectRefs(input),
     roleRef("clone_review", input.cloneReviewRef.sourceTable, input.cloneReviewRef.sourceRecordId, input.cloneReviewRef.sourceWatermark, input.cloneReviewRef.sourceVersion),
     roleRef("clone_review_status", input.cloneReviewRef.sourceTable, input.cloneReviewRef.sourceRecordId, input.cloneReviewRef.sourceWatermark),
     roleRef("clone_review_watermark", input.cloneReviewRef.sourceTable, input.cloneReviewRef.sourceRecordId, input.cloneReviewRef.sourceWatermark),
@@ -398,7 +527,7 @@ export function buildExpectedImplementationAuthorizationRefs(input: PrepareImple
 
   const evidenceRefs = [
     evidenceRoleRef("proposal_plan_snapshot", "proposal_plan_snapshot", "Proposal plan snapshot", roleRef("proposal_plan_snapshot", "gnr8_single_site_improvement_proposal_plans", proposalPlanId, proposalWatermark, input.proposalPlanVersion)),
-    evidenceRoleRef("proposal_approval", "proposal_approval_ref", "Proposal approval", roleRef("proposal_approval", "gnr8_aaf_approval_decisions", input.proposalApprovalRef.approvalDecisionId, input.proposalApprovalRef.sourceWatermark)),
+    ...proposalApprovalEvidenceRefs(input),
     evidenceRoleRef("clone_review_acceptance", "clone_review_acceptance_ref", "Clone review acceptance", roleRef("clone_review_acceptance", input.cloneReviewRef.sourceTable, input.cloneReviewRef.sourceRecordId, input.cloneReviewRef.sourceWatermark)),
     evidenceRoleRef("source_evidence_acceptance", "source_evidence_acceptance_ref", "Source evidence acceptance", roleRef("source_evidence_acceptance", input.sourceEvidenceReviewRef.sourceTable, input.sourceEvidenceReviewRef.sourceRecordId, input.sourceEvidenceReviewRef.sourceWatermark)),
     evidenceRoleRef("selected_recommendations", "selected_recommendations", "Selected recommendations", roleRef("selected_recommendations", "gnr8_single_site_improvement_proposal_recommendations", proposalPlanId, selectedRecommendationWatermark)),
@@ -511,7 +640,7 @@ export class SingleSiteImplementationAuthorizationBridge {
     const contentHash = digest({ scope, subject, sourceWatermark });
     const limitations = [
       ...jsonArray(input.limitations),
-      ...jsonArray(input.proposalApprovalRef.limitations),
+      ...proposalApprovalLimitations(input.proposalApprovalRef),
       ...jsonArray(input.cloneReviewRef.limitations),
       ...jsonArray(input.sourceEvidenceReviewRef.limitations),
     ];
@@ -534,7 +663,7 @@ export class SingleSiteImplementationAuthorizationBridge {
         contentHash,
         limitationsJson: {
           limitations,
-          proposalApprovalLimitations: jsonArray(input.proposalApprovalRef.limitations),
+          proposalApprovalLimitations: proposalApprovalLimitations(input.proposalApprovalRef),
           cloneLimitations: jsonArray(input.cloneReviewRef.limitations),
           sourceEvidenceLimitations: jsonArray(input.sourceEvidenceReviewRef.limitations),
           implementationScopeSummary: input.implementationScopeSummary,

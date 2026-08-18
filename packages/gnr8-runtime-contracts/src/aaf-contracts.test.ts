@@ -382,6 +382,7 @@ test('scope contract prevents approval-scope overreach', () => {
 
 test('single-site implementation authorization contract is explicit and non-replayable', () => {
   assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE, 'single_site_improvement_implementation_authorization')
+  assert.equal(AAF_APPROVAL_SCOPES.includes('single_site_implementation_authorization' as never), false)
   assert.equal(
     AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE,
     'single_site_improvement_implementation_authorization_evidence',

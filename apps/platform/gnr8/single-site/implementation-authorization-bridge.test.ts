@@ -40,6 +40,7 @@ function baseInput(overrides: Partial<PrepareImplementationAuthorizationRequestI
     proposalPlanSemanticWatermark: "proposal-plan:v3:watermark",
     proposalStatus: "approved",
     proposalApprovalRef: {
+      approvalSource: "aaf",
       approvalRequestId: "proposal-approval-request",
       approvalDecisionId: "proposal-approval-decision",
       evidencePackageId: "proposal-approval-evidence",
@@ -124,6 +125,8 @@ class FakeAafWriter {
     approvalPolicyEvaluations: [],
     auditEvents: [],
     approvalDecisions: [],
+    aafGateAttempts: [],
+    improvementExecutionAttempts: [],
     approvalRevocations: [],
     approvalSupersessionLinks: [],
     evidencePackageSupersession: [],
@@ -270,7 +273,18 @@ test("bridge blocks unapproved proposals and missing required refs", async () =>
   const bridge = new SingleSiteImplementationAuthorizationBridge(new FakeAafWriter() as never);
   await assert.rejects(() => bridge.prepareImplementationAuthorizationRequest(baseInput({ proposalStatus: "draft" })), /approved proposal/);
   await assert.rejects(
-    () => bridge.prepareImplementationAuthorizationRequest(baseInput({ proposalApprovalRef: { ...baseInput().proposalApprovalRef, approvalDecisionId: "" } })),
+    () =>
+      bridge.prepareImplementationAuthorizationRequest(
+        baseInput({
+          proposalApprovalRef: {
+            approvalSource: "aaf",
+            approvalRequestId: "proposal-approval-request",
+            approvalDecisionId: "",
+            evidencePackageId: "proposal-approval-evidence",
+            sourceWatermark: "proposal-approval:watermark",
+          },
+        }),
+      ),
     /proposalApprovalRef\.approvalDecisionId/,
   );
   await assert.rejects(() => bridge.prepareImplementationAuthorizationRequest(baseInput({ cloneReviewRef: { ...baseInput().cloneReviewRef, sourceRecordId: "" } })), /cloneReviewRef\.sourceRecordId/);
@@ -282,6 +296,7 @@ test("bridge blocks unapproved proposals and missing required refs", async () =>
 test("bridge builds exact-scope evidence and request records without approval decisions", async () => {
   const writer = new FakeAafWriter();
   const prepared = await new SingleSiteImplementationAuthorizationBridge(writer as never).prepareImplementationAuthorizationRequest(baseInput());
+  assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE, "single_site_improvement_implementation_authorization");
   assert.equal(prepared.scope, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE);
   assert.equal(prepared.subjectType, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE);
   assert.equal(prepared.evidencePackage.package_type, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE);
@@ -291,6 +306,57 @@ test("bridge builds exact-scope evidence and request records without approval de
   assert.ok(prepared.subjectRefs.some((ref) => (ref.metadata_json as Record<string, unknown>).bridgeSubjectRole === "clone_site_version"));
   assert.ok(prepared.evidenceSourceRefs.some((ref) => (ref.metadata_json as Record<string, unknown>).bridgeEvidenceRole === "implementation_scope_summary"));
   assert.equal(writer.rows.approvalDecisions.length, 0);
+  assert.equal(writer.rows.aafGateAttempts.length, 0);
+  assert.equal(writer.rows.improvementExecutionAttempts.length, 0);
+});
+
+test("bridge accepts proposal-event approval refs as evidence-only preparation inputs", async () => {
+  const writer = new FakeAafWriter();
+  const input = baseInput({
+    proposalPlanId: "f541075c-4641-4f70-b5ff-64a8af071571",
+    proposalPlanSemanticWatermark: "sha256:22fd5d1cfbb488a3153cd6ddba186ea7f2b8676a6c96521ae8f4d98771f8a42a",
+    proposalApprovalRef: {
+      approvalSource: "proposal_event",
+      proposalEventId: "f7320eae-2426-4c8e-ab91-0cfdac135d82",
+      stateEventId: "54ace8d6-401c-4ade-9ad2-ec4539dc3642",
+      proposalStatus: "approved",
+      eventAction: "approved",
+      sourceWatermark: "proposal-approved:f541075c-4641-4f70-b5ff-64a8af071571:v3",
+      limitations: [],
+    },
+    selectedRecommendationRefs: [
+      {
+        ...source("gnr8_single_site_improvement_proposal_recommendations", "73de9484-1461-4476-b677-f41d7a839df7"),
+        recommendationId: "73de9484-1461-4476-b677-f41d7a839df7",
+      },
+      {
+        ...source("gnr8_single_site_improvement_proposal_recommendations", "86342f67-7cce-43de-823f-ea0f4adc1a41"),
+        recommendationId: "86342f67-7cce-43de-823f-ea0f4adc1a41",
+      },
+      {
+        ...source("gnr8_single_site_improvement_proposal_recommendations", "0be61bde-6568-4f33-8499-4d5eade70837"),
+        recommendationId: "0be61bde-6568-4f33-8499-4d5eade70837",
+      },
+      {
+        ...source("gnr8_single_site_improvement_proposal_recommendations", "a61e857e-89c1-4ab1-bdc1-581a24e824c1"),
+        recommendationId: "a61e857e-89c1-4ab1-bdc1-581a24e824c1",
+      },
+    ],
+  });
+
+  const prepared = await new SingleSiteImplementationAuthorizationBridge(writer as never).prepareImplementationAuthorizationRequest(input);
+  assert.equal(prepared.approvalRequest.scope, "single_site_improvement_implementation_authorization");
+  assert.equal(prepared.evidencePackage.package_type, "single_site_improvement_implementation_authorization_evidence");
+  assert.equal(prepared.approvalRequest.status, "requested");
+  assert.ok(prepared.subjectRefs.some((ref) => (ref.metadata_json as Record<string, unknown>).bridgeSubjectRole === "proposal_approval_event"));
+  assert.ok(prepared.subjectRefs.some((ref) => (ref.metadata_json as Record<string, unknown>).bridgeSubjectRole === "proposal_approval_state_event"));
+  const proposalApprovalEvidence = prepared.evidenceSourceRefs.find((ref) => (ref.metadata_json as Record<string, unknown>).bridgeEvidenceRole === "proposal_approval");
+  assert.equal(proposalApprovalEvidence?.source_table, "gnr8_single_site_improvement_proposal_events");
+  assert.equal(proposalApprovalEvidence?.source_record_id, "f7320eae-2426-4c8e-ab91-0cfdac135d82");
+  assert.equal((proposalApprovalEvidence?.metadata_json as Record<string, unknown>).implementationAuthorizationDecisionSubstitution, false);
+  assert.equal(writer.rows.approvalDecisions.length, 0);
+  assert.equal(writer.rows.aafGateAttempts.length, 0);
+  assert.equal(writer.rows.improvementExecutionAttempts.length, 0);
 });
 
 test("bridge reuses evidence and request rows idempotently and rejects drift", async () => {
@@ -318,7 +384,7 @@ test("bridge validates exact-scope granted decisions and preserves limited grant
 });
 
 test("bridge rejects wrong scopes and prohibited approval substitutions", async () => {
-  for (const scope of ["content_publish", "client_review", "launch_signoff", "publish_activation", "ai_advisory_plan_acceptance"]) {
+  for (const scope of ["single_site_implementation_authorization", "content_publish", "client_review", "launch_signoff", "publish_activation", "ai_advisory_plan_acceptance"]) {
     const writer = new FakeAafWriter();
     const bridge = new SingleSiteImplementationAuthorizationBridge(writer as never);
     const request = writer.rows.approvalRequests.push({
@@ -366,4 +432,38 @@ test("bridge has no runtime, proposal bundle, publish, domain, billing, provider
   assert.deepEqual(writer.generatedProposalBundles, []);
   assert.deepEqual(writer.publishDomainBillingProviderCalls, []);
   assert.deepEqual(writer.rows.approvalDecisions, []);
+  assert.deepEqual(writer.rows.aafGateAttempts, []);
+  assert.deepEqual(writer.rows.improvementExecutionAttempts, []);
+});
+
+test("bridge rejects missing proposal-event approval evidence", async () => {
+  const bridge = new SingleSiteImplementationAuthorizationBridge(new FakeAafWriter() as never);
+  await assert.rejects(
+    () =>
+      bridge.prepareImplementationAuthorizationRequest(
+        baseInput({
+          proposalApprovalRef: {
+            approvalSource: "proposal_event",
+            proposalEventId: "",
+            stateEventId: "54ace8d6-401c-4ade-9ad2-ec4539dc3642",
+            sourceWatermark: "proposal-approved:watermark",
+          },
+        }),
+      ),
+    /proposalApprovalRef\.proposalEventId/,
+  );
+  await assert.rejects(
+    () =>
+      bridge.prepareImplementationAuthorizationRequest(
+        baseInput({
+          proposalApprovalRef: {
+            approvalSource: "proposal_event",
+            proposalEventId: "f7320eae-2426-4c8e-ab91-0cfdac135d82",
+            stateEventId: "",
+            sourceWatermark: "proposal-approved:watermark",
+          },
+        }),
+      ),
+    /proposalApprovalRef\.stateEventId/,
+  );
 });

@@ -57,7 +57,7 @@ The rehearsal needs one exact site identity and a complete source-owned chain. T
 | Clone site version/artifact refs | Required before clone review | Must be produced by clone/runtime flow for a meaningful online rehearsal. |
 | Accepted clone review | Required before proposal/improvement path | Should be produced through real clone review service. Seeding is acceptable only to unblock route rehearsal, not MVP acceptance. |
 | Proposal plan and approval | Required before implementation authorization | Proposal plan should be produced by proposal planning service. Approval may be seeded only with explicit exception policy. |
-| Implementation authorization | Required before improvement execution | Must be AAF-scoped `single_site_implementation_authorization` truth or explicit exception. |
+| Implementation authorization | Required before improvement execution | Must be AAF-scoped `single_site_improvement_implementation_authorization` truth or explicit exception. |
 | Improved candidate version/artifact refs | Required for publish dry-run/shadow-publish | Must be a real runtime candidate/artifact pair. Seeded refs are not acceptable for publish execution. |
 | Improved version review | Required before content approval | Should be produced by real improved version review. |
 | Content approval | Required before client/launch approval | Must include single-site content approval truth and matching AAF scope when used by the flow. |

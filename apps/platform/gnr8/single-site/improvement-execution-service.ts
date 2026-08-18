@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type { ImprovedCandidateDryRunResult } from "./improved-candidate-dry-run-adapter";
 import type { ImprovedCandidateCreationOutput } from "./improved-candidate-creation-adapter";
 import type {
+  ImplementationAuthorizationAafProposalApprovalRef,
   ImplementationAuthorizationProposalApprovalRef,
   ImplementationAuthorizationSelectedRecommendationRef,
   ImplementationAuthorizationSourceRef,
@@ -229,9 +230,10 @@ export function computeImprovementExecutionSemanticInputWatermark(input: {
   return `single-site-improvement-execution:${digest(input)}`;
 }
 
-function proposalApprovalRef(plan: SingleSiteImprovementProposalPlanRow): ImplementationAuthorizationProposalApprovalRef {
+function proposalApprovalRef(plan: SingleSiteImprovementProposalPlanRow): ImplementationAuthorizationAafProposalApprovalRef {
   const refs = jsonObject(plan.approval_refs_json);
   return {
+    approvalSource: "aaf",
     approvalRequestId: requiredText("proposal approval request ref", refs.approvalRequestId ?? refs.proposalApprovalRequestId),
     approvalDecisionId: requiredText("proposal approval decision ref", refs.approvalDecisionId ?? refs.proposalApprovalDecisionId),
     evidencePackageId: requiredText("proposal approval evidence ref", refs.evidencePackageId ?? refs.proposalEvidencePackageId),
@@ -1153,7 +1155,7 @@ export class ImprovementExecutionService {
     tx: SingleSiteStateWriterTx,
     attempt: SingleSiteImprovementExecutionAttemptRow,
     plan: SingleSiteImprovementProposalPlanRow,
-    proposalApproval: ImplementationAuthorizationProposalApprovalRef,
+    proposalApproval: ImplementationAuthorizationAafProposalApprovalRef,
     auth: { requestId: string; decisionId: string; evidencePackageId: string | null },
     input: CreateOrReuseImprovementExecutionAttemptInput,
   ): Promise<void> {
