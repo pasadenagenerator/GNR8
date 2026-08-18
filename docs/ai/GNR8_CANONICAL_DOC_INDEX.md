@@ -829,6 +829,37 @@ Canonical no-mutation source-truth plan for producing the first production-safe 
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## MVP-CUTLINE-23 One-Site Source Capture Authorization Readback
+
+Canonical source-capture authorization and readback stop record for the first production single-site rehearsal candidate, confirming the exact source-capture approval sentence, concrete selected `clientId`, source URL/domain, rehearsal posture, selected agency/client readback, and action-time authenticated POST confirmation were present; recording read-only platform/worker health and before/after source-truth counts; identifying that the only available authenticated browser session could not resolve agency scope for the client-scoped import workflow; and preserving the boundary of no import/capture POST, production DB write, source-truth row creation, proposal, clone acceptance, improvement execution, approval, launch readiness, AAF request/decision/gate, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, env mutation, deploy, migration, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-23-one-site-source-capture-readback.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-24 Agency Import Route Context Resolution
+
+Canonical no-mutation route/auth context diagnosis for the first production single-site source-capture workflow, establishing that the client import page is membership-scoped and lacks a superadmin/admin-view page context, while the canonical client-scoped import POST route already supports superadmin/admin-view action context when the JSON body supplies `agencyId`; confirming the selected client/agency relationship from prior read-only evidence, classifying the browser posture as superadmin-capable but not agency-scoped for the importer page, selecting either the existing route-context path with fresh exact later confirmation or a new narrow no-mutation admin import preflight wrapper, and preserving the boundary of no import/capture POST, production DB write, deploy, migration, env mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-24-agency-import-route-context-resolution.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-25 One-Site Source Capture Admin-View Execution
+
+Canonical stopped-before-mutation execution record for the first production single-site source-capture attempt through the existing admin-view capable route, confirming the exact fresh action-time approval sentence, selected client/agency/source/posture, route contract, app/worker health, superadmin page auth, and before/after production DB counts; documenting that no import/capture POST reached the network because the authenticated browser execution surface could not issue the required same-origin JSON POST and the importer page still failed closed on agency scope; and preserving the boundary of no production DB write, source-truth row creation, launch readiness, AAF request/decision/gate, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, env mutation, deploy, migration, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-25-one-site-source-capture-admin-view-execution.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-26 Authenticated Admin-View Import Execution Surface
+
+Canonical narrow authenticated superadmin-only admin-view import execution surface for a future exactly-one production single-site MVP source capture, requiring strict body fields, rejecting unknown fields and actor overrides, enforcing the exact confirmation sentence and `internal test` rehearsal posture, delegating only to the existing canonical scoped import route with `url`, `agencyId`, and `adminView: true`, returning a redacted operator-safe projection, and preserving the boundary of no production import/capture execution in CUTLINE-26, no UI/client route, no dry-run, shadow-publish, runtime publish, launch readiness, AAF decision/gate behavior, provider/DNS/domain/billing/Stripe/Openprovider mutation, env mutation, deploy, migration, commit, or push:
+- `apps/platform/app/api/gnr8/admin/single-site-mvp/source-capture/source-capture-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-mvp/source-capture/route.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-mvp-source-capture-route.test.ts`
+- `docs/product/gnr8-single-site-mvp-cutline-26-authenticated-admin-view-import-execution-surface.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

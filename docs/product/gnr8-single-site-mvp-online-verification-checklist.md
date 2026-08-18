@@ -17,6 +17,10 @@ Do not start online verification until all are true:
 - selected `tenantId`, `clientId`, `siteId`, `migrationId`, candidate refs, runtime artifact ref, publish target ref, launch readiness evidence ref, publish activation request/decision/gate refs, handoff watermark, and gate input watermark are known;
 - seeded or bypassed source-truth records are listed as MVP exceptions before the run.
 - CUTLINE-22 source-truth candidate plan is satisfied: the selected candidate was created or identified through an approved source-owned path, and real/test/exception posture is recorded.
+- CUTLINE-23 source-capture gate is satisfied: the exact source-capture approval sentence, concrete `clientId`, selected source URL/domain, rehearsal posture, and authenticated agency route context are all present before the canonical import/capture route is called.
+- CUTLINE-24 route-context resolution is applied: the importer page is not used as agency-scope proof for a superadmin-only session; any later source capture either uses the existing canonical POST route with body `agencyId` after fresh exact confirmation, or first implements a narrow no-mutation superadmin import preflight wrapper.
+- CUTLINE-25 execution-surface blocker is resolved: a supported authenticated admin-view API-request path exists for the exact canonical import POST without exposing or manually handling browser cookies/session state.
+- CUTLINE-26 admin execution surface is deployed before use: `POST /api/gnr8/admin/single-site-mvp/source-capture` requires superadmin auth, strict request body, exact confirmation, and delegates only to the canonical import route.
 
 ## Operator Sequence
 
@@ -130,6 +134,84 @@ Production candidate planning status: complete for no-mutation planning only. No
 - Online verification status: blocked until the future candidate exists and read-only source-truth verification confirms the required refs.
 
 Plan: `docs/product/gnr8-single-site-mvp-cutline-22-rehearsal-candidate-source-truth-plan.md`.
+
+## CUTLINE-23 One-Site Source Capture Authorization Readback
+
+Production source-capture status: blocked before mutation by authenticated route context. No import/capture POST, source-truth DB write, launch readiness, publish activation, dry-run, shadow-publish, runtime publish, provider, env, deploy, migration, commit, or push occurred.
+
+- Exact source-capture approval sentence: present.
+- Required selected `clientId`: `e61d1982-068f-4d84-bb6f-c3fbfc93f39b`.
+- Required selected source URL/domain: `https://www.chs.si/`.
+- Required rehearsal posture: `internal test`.
+- Selected client/agency: `Glazura Glizon`, agency `6a09c2d9-12c3-4c19-a466-0c29ae2f723e`.
+- Authenticated POST action-time confirmation: present.
+- Platform health: `HEAD https://app.pasadenagenerator.com/` returned HTTP 200 from Vercel.
+- Worker health: `GET https://gnr8-worker.vercel.app/health` returned HTTP 200 with `ok: true`, `service: gnr8-worker`, and `status: ready`.
+- Canonical source-capture route inspected: `POST /api/gnr8/agency/clients/[clientId]/sites/import`.
+- Route request contract: route `clientId` UUID, JSON body `url`, authenticated `run_migration` agency action context, and body `agencyId` for superadmin/admin-view route context.
+- Route-context blocker: the available authenticated browser session rendered `Agency scope is unavailable for this client import workflow.`
+- Canonical import/capture POST attempts sent by this task: `0`.
+- Created/returned refs: none.
+- Before/after read-only counts: unchanged; single-site migrations, source evidence rows, launch readiness rows, publish operator action rows, AAF approval requests/decisions, and AAF gate attempts all remained `0`.
+- Online verification status: `blocked_route_auth_context_unavailable`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-23-one-site-source-capture-readback.md`.
+
+## CUTLINE-24 Agency Import Route Context Resolution
+
+Production source-capture status: still blocked before mutation, but the route/auth context root cause is resolved. No import/capture POST, source-truth DB write, launch readiness, publish activation, dry-run, shadow-publish, runtime publish, provider, env, deploy, migration, commit, or push occurred.
+
+- Root cause: the rendered import page requires `resolveCurrentUserAgencyForPage(...)` membership scope and does not implement superadmin/admin-view page context.
+- API posture: `POST /api/gnr8/agency/clients/[clientId]/sites/import` can resolve superadmin/admin-view action context through `requireAgencyActionContext(...)` when body `agencyId` is supplied.
+- Client/agency relationship: exists from CUTLINE-23 read-only production readback; selected client `Glazura Glizon` belongs to agency `6a09c2d9-12c3-4c19-a466-0c29ae2f723e`.
+- Current auth context: superadmin-capable but not agency-scoped for the importer page; exact membership error code was not exposed by the page.
+- Safest later retry: fresh exact confirmation, then exactly one canonical POST with route `clientId=e61d1982-068f-4d84-bb6f-c3fbfc93f39b` and body `agencyId=6a09c2d9-12c3-4c19-a466-0c29ae2f723e`, `adminView=true`, `url=https://www.chs.si/`.
+- Alternative safe milestone: implement a narrow no-mutation superadmin admin import preflight/wrapper before any retry.
+- CUTLINE-24 canonical import/capture POST attempts sent: `0`.
+- Online verification status: `blocked_pending_fresh_source_capture_confirmation`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-24-agency-import-route-context-resolution.md`.
+
+## CUTLINE-25 One-Site Source Capture Admin-View Execution
+
+Production source-capture status: blocked before mutation by authenticated POST execution surface. No import/capture POST, source-truth DB write, launch readiness, publish activation, dry-run, shadow-publish, runtime publish, provider, env, deploy, migration, commit, or push occurred.
+
+- Exact action-time approval sentence: present.
+- Required selected `clientId`: `e61d1982-068f-4d84-bb6f-c3fbfc93f39b`.
+- Required selected source URL/domain: `https://www.chs.si/`.
+- Required rehearsal posture: `internal test`.
+- Selected client/agency: `Glazura Glizon`, agency `6a09c2d9-12c3-4c19-a466-0c29ae2f723e`.
+- Platform health: `HEAD https://app.pasadenagenerator.com/` returned HTTP 200 from Vercel.
+- Worker health: `GET https://gnr8-worker.vercel.app/health` returned HTTP 200 with `ok: true`, `service: gnr8-worker`, and `status: ready`.
+- Canonical source-capture route inspected: `POST /api/gnr8/agency/clients/[clientId]/sites/import`.
+- Route request contract: route `clientId` UUID, JSON body `url`, authenticated `run_migration` agency action context, and body `agencyId` for superadmin/admin-view route context; body `adminView` is accepted for success redirect context.
+- Auth proof: `/gnr8/command-center/single-site-publish` loaded as `Superadmin Workspace`.
+- Execution blocker: direct API navigation was blocked by the browser surface, page evaluation did not expose `fetch`, `XMLHttpRequest`, or `navigator.sendBeacon`, and the importer page still rendered `Agency scope is unavailable for this client import workflow.`
+- Canonical import/capture POSTs that reached the network: `0`.
+- Created/returned refs: none.
+- Before/after read-only counts: unchanged; selected source-domain sites, single-site migrations, source evidence rows, launch readiness rows, publish operator action rows, AAF approval requests/decisions, and AAF gate attempts all remained `0`.
+- Online verification status: `blocked_authenticated_post_execution_surface_unavailable`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-25-one-site-source-capture-admin-view-execution.md`.
+
+## CUTLINE-26 Authenticated Admin-View Import Execution Surface
+
+Production source-capture status: still not executed. CUTLINE-26 implemented the narrow authenticated execution surface locally so a later task can run exactly one approved production source capture without browser page-fetch support.
+
+- New route: `POST /api/gnr8/admin/single-site-mvp/source-capture`.
+- Auth: existing superadmin API guard via `requireSuperadminUserId()`.
+- Required body: `clientId`, `agencyId`, `url`, `rehearsalPosture`, `explicitConfirmation`, `idempotencyKey`, and `correlationId`.
+- Required confirmation: `I approve sending exactly one production import/capture POST for the selected GNR8 single-site MVP rehearsal site.`
+- Accepted rehearsal posture: `internal test`.
+- Unknown request fields and actor overrides are rejected before delegation.
+- Valid requests delegate exactly once to `POST /api/gnr8/agency/clients/[clientId]/sites/import` with `url`, `agencyId`, and `adminView: true`.
+- Response is an operator-safe redacted projection; raw HTML, preview HTML, content-slot materialization, raw SQL errors, stack traces, provider secrets, billing/payment data, and request actor overrides are omitted.
+- Mutation flags for dry-run, shadow-publish, publish, runtime mutation, provider calls, billing calls, domain/DNS calls, AAF records, gate attempts, gate evaluation, and launch readiness are false at the admin surface.
+- CUTLINE-26 production import/capture POSTs sent: `0`.
+- Deploy, migration, Supabase/Vercel/provider/env/online verification actions performed: none.
+- Online verification status: `blocked_pending_cutline_27_fresh_confirmation_and_exactly_one_source_capture`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-26-authenticated-admin-view-import-execution-surface.md`.
 
 ## Stop Criteria
 
