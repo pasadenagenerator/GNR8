@@ -893,6 +893,27 @@ Canonical browser-clickable superadmin-only execution surface for the deployed a
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## MVP-CUTLINE-27C One-Site Source-Capture Post-Submit Readback
+
+Canonical read-only production DB readback after the human submitted exactly one source-capture request through the deployed superadmin UI, confirming selected site `a03fcb5b-6ad9-4b19-a682-4c06f998881a`, selected migration `682a09fd-8fd5-4f73-93b8-54f5d4067c63`, source evidence review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3`, selected source-domain/migration/source-evidence counts changing from zero to first source-truth rows, launch readiness/publish operator action/AAF request/AAF decision/AAF gate counts remaining zero, runtime active pointers unchanged at `6`, online verification status `source_capture_completed_pending_review_or_next_step`, and the boundary of no second source-capture POST, no production mutation by Codex, no dry-run, no shadow-publish, no runtime publish, no rollback, no active pointer mutation, no provider/DNS/domain/billing/Stripe/Openprovider mutation, no deploy, no migration, no env mutation, no commit, and no push:
+- `docs/product/gnr8-single-site-mvp-cutline-27c-one-site-source-capture-post-submit-readback.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-28 Source Evidence Operator Review
+
+Canonical source evidence operator review closeout for the first production single-site rehearsal site, recording source evidence review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3` moving from `ready_for_review` to `accepted` through the existing `SourceEvidenceReviewService.accept(...)` workflow; confirming all ten required evidence categories were present, warnings were non-blocking, no P0 blockers existed, one production source-review event `c7b33fae-d62d-40ac-b8d9-74758db328cd` was inserted, review `clone_generation_allowed=true`, online verification status `source_evidence_review_accepted_pending_clone`, and the boundary of no clone/proposal/improvement/approval/launch-readiness/dry-run/shadow-publish/runtime-publish/rollback/active-pointer/provider/DNS/domain/billing/Stripe/Openprovider/deploy/migration/env/commit/push mutation:
+- `docs/product/gnr8-single-site-mvp-cutline-28-source-evidence-operator-review.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-29 One-Site Clone Generation And Review
+
+Canonical clone generation and clone review closeout for the accepted first production single-site rehearsal evidence, recording exact clone-generation approval present, safe path `startSingleSiteCloneGeneration(..., { executor: singleSiteRealCloneExecutor })` plus `CloneReviewService.createOrReuseReview(...)` and `CloneReviewService.accept(...)`, clone runtime site version `6b172a5b-200e-471c-9599-5dc70f04ea53`, clone runtime artifact `929106cd-fa19-47eb-9582-ce6931d0e370`, clone semantic output watermark `sha256:b27fb986be0366de66a1577e0d1771fbc053affa5b7329a0294e2f0c7fae5522`, clone review `79176567-4911-4900-bc86-0fefa6043fbe` accepted with `proposal_planning_allowed=true`, online verification status `clone_review_accepted_pending_proposal`, forbidden proposal/improvement/approval/readiness/publish/AAF counts remaining zero, runtime active pointers unchanged at `6`, selected runtime active pointers `0`, and the boundary of no proposal planning, implementation authorization, improvement execution, approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-29-one-site-clone-generation-review.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

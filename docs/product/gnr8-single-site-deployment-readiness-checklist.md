@@ -10,6 +10,8 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm the release includes MVP-CUTLINE-3 operator action facade and admin routes.
 - [ ] Confirm the release includes MVP-CUTLINE-26 authenticated admin-view import execution surface.
 - [ ] Confirm the release includes MVP-CUTLINE-27A browser-clickable superadmin source-capture execution surface.
+- [ ] Confirm MVP-CUTLINE-28 source evidence operator review was recorded before clone/proposal/improvement work.
+- [ ] Confirm MVP-CUTLINE-29 clone generation/review is recorded before proposal planning.
 - [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
@@ -209,6 +211,41 @@ Status as of 2026-08-18: exact source-capture approval was present and preflight
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-27-one-site-source-capture-execution-readback.md`.
 
+### MVP-CUTLINE-28 Source Evidence Operator Review
+
+Status as of 2026-08-18: source evidence operator review passed for the first production single-site rehearsal site. The existing `SourceEvidenceReviewService.accept(...)` workflow accepted review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3` for `https://www.chs.si/`.
+
+- Status before: `ready_for_review`; status after: `accepted`.
+- Decision after: `accept`; `clone_generation_allowed=true`.
+- Evidence sufficiency: all ten required categories were present; `font` was `present_with_warnings`; no item blocked clone generation.
+- Warnings accepted as non-blocking source-review warnings: rendered capture partial/timeout, stabilization timeout, primary stylesheet warning, image rewrite skips, unsupported-scheme assets, low-confidence content/section slot inference.
+- Production source-review rows written: one review update and one `accepted` source evidence review event `c7b33fae-d62d-40ac-b8d9-74758db328cd`.
+- Migration state/readiness impact: migration remained `source_evidence_review_required` / `source_evidence_review`; source review now permits a later clone milestone, but clone was not started.
+- Forbidden downstream counts after review: clone reviews `0`, proposal plans `0`, improvement attempts `0`, content/client/launch approvals `0`, launch readiness `0`, publish operator actions `0`, AAF approval requests/decisions/gate attempts `0`, runtime active pointers unchanged at `6`.
+- Online verification status: `source_evidence_review_accepted_pending_clone`.
+- Production data writes outside source-review rows, deploys, migrations, env mutations, provider calls, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, commits, and pushes: none.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-28-source-evidence-operator-review.md`.
+
+### MVP-CUTLINE-29 One-Site Clone Generation And Review
+
+Status as of 2026-08-18: clone generation and clone review passed for the accepted first production single-site rehearsal source evidence.
+
+- Exact clone-generation approval sentence: present.
+- Path used: `startSingleSiteCloneGeneration(..., { executor: singleSiteRealCloneExecutor })`, then `CloneReviewService.createOrReuseReview(...)` and `CloneReviewService.accept(...)`.
+- Clone generation idempotency/correlation id: `gnr8-cutline-29-chs-si-clone-generation-20260818`.
+- Clone runtime site version: `6b172a5b-200e-471c-9599-5dc70f04ea53`.
+- Clone runtime artifact: `929106cd-fa19-47eb-9582-ce6931d0e370`.
+- Clone semantic output watermark: `sha256:b27fb986be0366de66a1577e0d1771fbc053affa5b7329a0294e2f0c7fae5522`.
+- Clone review id: `79176567-4911-4900-bc86-0fefa6043fbe`; status `accepted`; decision `accept`; `proposal_planning_allowed=true`.
+- Clone review events: created `4719d8fa-ed77-4c3e-ac77-eccdeea4f4a7`, accepted `3458772b-772b-432d-8ec8-d3d97061a10d`.
+- Migration state after clone: `clone_review_required` / `clone`.
+- Forbidden downstream counts after review: proposal plans `0`, improvement attempts `0`, improved reviews `0`, content/client/launch approvals `0`, launch readiness `0`, publish operator actions `0`, AAF approval requests/decisions/gate attempts `0`, runtime active pointers unchanged at `6`, selected runtime active pointers `0`.
+- Online verification status: `clone_review_accepted_pending_proposal`.
+- Boundary: no proposal planning, implementation authorization, improvement execution, approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-29-one-site-clone-generation-review.md`.
+
 ## Environment Flags
 
 Baseline non-flag environment required for the internal surfaces:
@@ -274,6 +311,12 @@ CUTLINE-26C result: production route deployment is verified and the gate is reco
 CUTLINE-27 result: exact approval was present, route deployment gate and selected input were confirmed, app and worker health returned HTTP 200, and read-only before counts were clean. The task stopped before POST because authenticated superadmin page auth was available only through the in-app browser, while no supported browser/API surface could issue the required JSON POST. Source-capture/import POSTs sent remained `0`; after counts were unchanged, and online verification remains blocked with `blocked_authenticated_superadmin_api_request_context_unavailable`.
 
 CUTLINE-27A result: a supported browser-clickable execution surface now exists locally at `/gnr8/command-center/single-site-publish/source-capture` under the superadmin-only Command Center. It accepts only `clientId`, `agencyId`, `url`, `rehearsalPosture`, `idempotencyKey`, `correlationId`, and `explicitConfirmation`; disables execution until the exact confirmation sentence is entered; posts only to `POST /api/gnr8/admin/single-site-mvp/source-capture`; and renders only redacted response/status. No production source-capture POST, deploy, migration, env mutation, provider/DNS/domain/billing mutation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, AAF decision, gate attempt, commit, or push occurred.
+
+CUTLINE-27C result: the human-submitted deployed superadmin UI source-capture request was verified by read-only production DB readback. The selected `www.chs.si` site exists with `siteId=a03fcb5b-6ad9-4b19-a682-4c06f998881a`; the selected single-site migration exists with `migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`; source evidence review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3` is `ready_for_review`; selected migration refs/events and source evidence refs/items now exist; launch readiness, publish operator actions, AAF approval requests, AAF approval decisions, and AAF gate attempts remain `0`; runtime active pointers remain `6`. Online verification status is `source_capture_completed_pending_review_or_next_step`. Codex performed no production mutation, second source-capture POST, deploy, migration, env mutation, provider/DNS/domain/billing mutation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, commit, or push in CUTLINE-27C.
+
+CUTLINE-28 result: source evidence review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3` was accepted through `SourceEvidenceReviewService.accept(...)`; `clone_generation_allowed=true`; no clone/proposal/improvement/readiness/publish work occurred; online verification status moved to `source_evidence_review_accepted_pending_clone`.
+
+CUTLINE-29 result: clone generation and clone review were completed through existing server-only clone workflows. Clone version `6b172a5b-200e-471c-9599-5dc70f04ea53` and artifact `929106cd-fa19-47eb-9582-ce6931d0e370` were generated, clone review `79176567-4911-4900-bc86-0fefa6043fbe` was accepted with no P0 blockers, and `proposal_planning_allowed=true`. Forbidden downstream counts remained clean and runtime active pointers remained unchanged at `6`. Online verification status is `clone_review_accepted_pending_proposal`.
 
 ## Online Checklist
 

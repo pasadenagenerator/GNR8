@@ -25,6 +25,8 @@ Do not start online verification until all are true:
 - CUTLINE-26C route deployment gate is satisfied: `source_capture_route_deployed` is recorded, source-capture approval remains `not_approved`, and no valid authenticated source-capture body has been sent.
 - CUTLINE-27 execution blocker is resolved: a supported authenticated superadmin API-request surface exists for the deployed admin source-capture route without exposing or manually handling browser cookies/session state.
 - CUTLINE-27A supported UI surface is deployed before use: `/gnr8/command-center/single-site-publish/source-capture` exposes only the superadmin source-capture form, requires exact confirmation, and posts only to the admin source-capture route.
+- CUTLINE-28 source evidence review was complete before clone work: review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3` is `accepted`, and source evidence was sufficient for clone.
+- CUTLINE-29 clone generation/review is complete before proposal planning: clone review `79176567-4911-4900-bc86-0fefa6043fbe` is `accepted`, clone version `6b172a5b-200e-471c-9599-5dc70f04ea53` and artifact `929106cd-fa19-47eb-9582-ce6931d0e370` are recorded, and no proposal/improvement/approval/readiness/publish work has started.
 
 ## Operator Sequence
 
@@ -36,16 +38,18 @@ Do not start online verification until all are true:
 | 4 | Open `/gnr8/command-center/single-site-publish` with selected refs | Panel loads read-only readiness/audit state | Panel is public, client-facing, missing auth, or shows dry-run/shadow-publish/runtime publish/provider/rollback/approval/gate action controls |
 | 5 | Save initial panel evidence | Screenshot/notes include selected refs, blockers, warnings, latest audit state | Unsafe diagnostics/secrets are visible |
 | 6 | With fresh exact approval, open `/gnr8/command-center/single-site-publish/source-capture` and submit exactly one source-capture request | Redacted response/status returns from `POST /api/gnr8/admin/single-site-mvp/source-capture` | Button enables without exact confirmation, actor overrides are exposed, raw response data appears, or more than one POST is sent |
-| 7 | Call `GET /api/gnr8/admin/single-site-mvp/status` with selected ids/refs | Redacted status returns next operation, blockers, warnings, limitations, mutation flags false | Raw SQL/stack/secrets appear or auth fails unexpectedly |
-| 8 | Call `POST /api/gnr8/admin/single-site-mvp/action` with `actionMode: "preflight"` and current `requestedOperationKey` | Expected allow/block reason | Preflight allows an operation that source truth should block |
-| 9 | Run dry-run through the action route or direct MVP-54 route | Response says dry-run/non-publishing/non-mutating, or blocks with expected source-truth reason | Dry-run mutates runtime, publish target, active pointer, provider, DNS/domain, billing, Stripe, Vercel, or Openprovider state |
-| 10 | Inspect audit | Operator audit action/refs/events exist for dry-run/preflight | Audit missing or contains unsafe raw diagnostics |
-| 11 | Refresh Command Center panel | Latest audit/readiness projection reflects the route result | Panel projection differs materially from route result without explanation |
-| 12 | Decide whether to stop at dry-run | Human records pass/fix/stop decision | Any stop criterion has occurred |
-| 13 | Optional: enable `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` only after explicit approval | Flag value is recorded with approver and timestamp | Approval missing or dry-run did not pass |
-| 14 | Optional: run shadow-publish with confirmation accepting active-pointer mutation and no automatic rollback | Route returns redacted wrapper/orchestrator result and safe before/after refs | Shadow-publish executes without approval, exposes unsafe data, or touches unexpected systems |
-| 15 | Optional: verify online result | Active pointer/public or preview behavior matches returned before/after refs | Pointer/public behavior does not match response |
-| 16 | Record outcome | Closeout includes correlation id, idempotency key, route status, wrapper/resolver/gate status, audit id, pointer refs, screenshots/URLs, and seeded exceptions | Outcome cannot be reproduced or evidence is incomplete |
+| 7 | Perform source evidence operator review before clone | Review becomes `accepted` or blocked through the source-review workflow | Evidence is missing, degraded without an accepted limitation path, or any P0 source-evidence blocker exists |
+| 8 | With fresh exact approval, run clone generation and clone review | Clone version/artifact and accepted clone review are recorded; proposal planning becomes allowed by clone review only | Clone generation path is missing, source review is not accepted, clone refs are missing, or P0 clone blockers exist |
+| 9 | Call `GET /api/gnr8/admin/single-site-mvp/status` with selected ids/refs | Redacted status returns next operation, blockers, warnings, limitations, mutation flags false | Raw SQL/stack/secrets appear or auth fails unexpectedly |
+| 10 | Call `POST /api/gnr8/admin/single-site-mvp/action` with `actionMode: "preflight"` and current `requestedOperationKey` | Expected allow/block reason | Preflight allows an operation that source truth should block |
+| 11 | Run dry-run through the action route or direct MVP-54 route | Response says dry-run/non-publishing/non-mutating, or blocks with expected source-truth reason | Dry-run mutates runtime, publish target, active pointer, provider, DNS/domain, billing, Stripe, Vercel, or Openprovider state |
+| 12 | Inspect audit | Operator audit action/refs/events exist for dry-run/preflight | Audit missing or contains unsafe raw diagnostics |
+| 13 | Refresh Command Center panel | Latest audit/readiness projection reflects the route result | Panel projection differs materially from route result without explanation |
+| 14 | Decide whether to stop at dry-run | Human records pass/fix/stop decision | Any stop criterion has occurred |
+| 15 | Optional: enable `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` only after explicit approval | Flag value is recorded with approver and timestamp | Approval missing or dry-run did not pass |
+| 16 | Optional: run shadow-publish with confirmation accepting active-pointer mutation and no automatic rollback | Route returns redacted wrapper/orchestrator result and safe before/after refs | Shadow-publish executes without approval, exposes unsafe data, or touches unexpected systems |
+| 17 | Optional: verify online result | Active pointer/public or preview behavior matches returned before/after refs | Pointer/public behavior does not match response |
+| 18 | Record outcome | Closeout includes correlation id, idempotency key, route status, wrapper/resolver/gate status, audit id, pointer refs, screenshots/URLs, and seeded exceptions | Outcome cannot be reproduced or evidence is incomplete |
 
 ## Required Request Evidence
 
@@ -285,6 +289,58 @@ Production source-capture status: still not executed. CUTLINE-27A implemented a 
 - Online verification status: `blocked_pending_cutline_27a_commit_push_deploy_then_fresh_exact_source_capture_approval`.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-27a-supported-authenticated-source-capture-execution-surface.md`.
+
+## CUTLINE-27C One-Site Source-Capture Post-Submit Readback
+
+Production source-capture readback status: passed. The human reported exactly one successful deployed superadmin UI submit to `POST /api/gnr8/admin/single-site-mvp/source-capture`; CUTLINE-27C did not submit source capture again and performed only read-only production DB verification.
+
+- Readback transaction: `repeatable read read only`, `transaction_read_only=on`, read at `2026-08-18 08:51:49.738039+00`.
+- Selected site row: `siteId=a03fcb5b-6ad9-4b19-a682-4c06f998881a`, `domain=www.chs.si`, `status=draft`, `created_at=2026-08-18 08:45:01.101164+00`.
+- Selected migration: `migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`, `current_state=source_evidence_review_required`, `current_stage=source_evidence_review`, `runtime_site_id=site_57d9665a3a5867edf6ef`, `runtime_site_version_id=14e6ff38-eef3-4790-8ffb-f72aa5d6cd35`.
+- Source evidence: review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3`, package `url-import-snapshot:imported-url-site-6cba4d2b35d630b5`, watermark `imported-url-site-6cba4d2b35d630b5`, `completeness_status=complete_with_warnings`, `review_status=ready_for_review`.
+- Before/after counts from prior zero baseline: selected source-domain sites `0 -> 1`, selected migrations `0 -> 1`, migration refs `0 -> 4`, migration events `0 -> 3`, source evidence reviews `0 -> 1`, source evidence refs `0 -> 38`, source evidence items `0 -> 10`.
+- Forbidden downstream counts: launch readiness `0`, publish operator actions `0`, AAF approval requests `0`, AAF approval decisions `0`, AAF gate attempts `0`, runtime active pointers unchanged at `6`.
+- Online verification status: `source_capture_completed_pending_review_or_next_step`.
+- Boundary: no source-capture POST, second POST, production data mutation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push was performed by Codex.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-27c-one-site-source-capture-post-submit-readback.md`.
+
+## CUTLINE-28 Source Evidence Operator Review
+
+Production source evidence review status: accepted. CUTLINE-28 used the existing server-only source evidence review service to record the operator decision for review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3`.
+
+- Status before: `ready_for_review`; status after: `accepted`.
+- Decision: `accept`; `clone_generation_allowed=true`; `accepted_degraded_capture=false`; `retry_required=false`.
+- Source evidence package: `url-import-snapshot:imported-url-site-6cba4d2b35d630b5`; watermark `imported-url-site-6cba4d2b35d630b5`.
+- Evidence reviewed: `source_url`, `page`, `screenshot`, `dom`, `text`, `image`, `asset`, `font`, `visual_identity`, and `metadata` items. All required categories were present; `font` was `present_with_warnings`; no item blocked clone generation.
+- Refs reviewed: source URL, page snapshot, raw HTML, rendered DOM, text extract, metadata, desktop viewport/fullpage screenshots, 5 image assets, 2 style assets, 21 scripts, font ref, and computed style samples.
+- Event written: source evidence review event `c7b33fae-d62d-40ac-b8d9-74758db328cd`, event action `accepted`, transition `ready_for_review -> accepted`.
+- Migration impact: migration remains `source_evidence_review_required` / `source_evidence_review`; clone eligibility is unlocked by the review, but no clone was started.
+- Forbidden downstream counts: clone reviews `0`, proposal plans `0`, improvement attempts `0`, content/client/launch approvals `0`, launch readiness `0`, publish operator actions `0`, AAF approval requests/decisions/gate attempts `0`, runtime active pointers unchanged at `6`.
+- Online verification status: `source_evidence_review_accepted_pending_clone`.
+- Boundary: no clone, proposal, improvement, approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-28-source-evidence-operator-review.md`.
+
+## CUTLINE-29 One-Site Clone Generation And Review
+
+Production clone generation/review status: accepted. CUTLINE-29 used existing server-only clone workflows for the accepted first rehearsal source evidence.
+
+- Exact clone-generation approval sentence: present.
+- Path used: `startSingleSiteCloneGeneration(..., { executor: singleSiteRealCloneExecutor })`, then `CloneReviewService.createOrReuseReview(...)` and `CloneReviewService.accept(...)`.
+- Clone generation idempotency/correlation id: `gnr8-cutline-29-chs-si-clone-generation-20260818`.
+- Source evidence gate: `allowed`, reason `source_evidence_accepted`.
+- Clone runtime site version: `6b172a5b-200e-471c-9599-5dc70f04ea53`, state `DRAFT`, source runtime site `site_57d9665a3a5867edf6ef`.
+- Clone runtime artifact: `929106cd-fa19-47eb-9582-ce6931d0e370`, publish stage `shadow`, bundle SHA `9826cb82a4bec74103a29657176807edb370ea564ef11fa21078b8d1b3eedaa6`.
+- Clone semantic output watermark: `sha256:b27fb986be0366de66a1577e0d1771fbc053affa5b7329a0294e2f0c7fae5522`.
+- Clone review id: `79176567-4911-4900-bc86-0fefa6043fbe`; status `accepted`; decision `accept`; `proposal_planning_allowed=true`.
+- Clone review events: created `4719d8fa-ed77-4c3e-ac77-eccdeea4f4a7`, accepted `3458772b-772b-432d-8ec8-d3d97061a10d`.
+- Migration impact: migration moved only through `clone_generation_started`, `clone_generation_completed`, and `clone_review_required`; no proposal state transition occurred.
+- Forbidden downstream counts: proposal plans `0`, implementation execution attempts `0`, improved version reviews `0`, content/client/launch approvals `0`, launch readiness records `0`, publish operator actions `0`, AAF approval requests/decisions/gate attempts `0`, runtime active pointers unchanged at `6`, selected runtime active pointers `0`.
+- Online verification status: `clone_review_accepted_pending_proposal`.
+- Boundary: no proposal planning, implementation authorization, improvement execution, approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-29-one-site-clone-generation-review.md`.
 
 ## Stop Criteria
 
