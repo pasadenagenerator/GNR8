@@ -9,6 +9,8 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm the release includes MVP-CUTLINE-2 orchestration service files.
 - [ ] Confirm the release includes MVP-CUTLINE-3 operator action facade and admin routes.
 - [ ] Confirm the release includes MVP-CUTLINE-26 authenticated admin-view import execution surface.
+- [ ] Confirm the release includes MVP-CUTLINE-27A browser-clickable superadmin source-capture execution surface.
+- [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
 - [ ] Confirm the release includes Command Center read-only publish operator panel through MVP-64 committed scope.
@@ -176,6 +178,37 @@ Status as of 2026-08-18: route commit/push readiness recorded. The route impleme
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-26b-source-capture-route-commit-deploy-readiness.md`.
 
+### MVP-CUTLINE-26C Source-Capture Route Deployment Verification
+
+Status as of 2026-08-18: deployment verification recorded. The human confirmed Vercel `gnr8-platform` production branch `main` and deployed SHA `c97bee1`. Local git resolves `c97bee1` to `c97bee1bfa26aef7755ffa73d9b75aa7120c60cd`, matching `origin/main` and `c97bee1b`; `1cc2d495` is an ancestor of that commit and contains the CUTLINE-26 route bundle.
+
+- Deployment gate: `source_capture_route_deployed`.
+- Route bundle containment: deployed commit includes `POST /api/gnr8/admin/single-site-mvp/source-capture`, its handler, and focused route tests.
+- Safe unauthenticated production preflight: bare no-auth `POST https://app.pasadenagenerator.com/api/gnr8/admin/single-site-mvp/source-capture` returned HTTP 401 from Vercel with `x-matched-path: /api/gnr8/admin/single-site-mvp/source-capture`, route version `mvp-cutline-26-authenticated-admin-view-import-execution-surface:v1`, `SUPERADMIN_REQUIRED`, and all mutation flags false.
+- Source-capture approval for CUTLINE-26C: `not_approved`.
+- Source-capture POSTs with a valid authenticated body: `0`.
+- `chs.si` import/capture POSTs sent: `0`.
+- Online verification status: `blocked_pending_cutline_27_exact_source_capture_approval_and_successful_one_request_import_capture`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-26c-source-capture-route-deployment-verification.md`.
+
+### MVP-CUTLINE-27 One-Site Source Capture Execution Readback
+
+Status as of 2026-08-18: exact source-capture approval was present and preflight passed, but execution stopped before production mutation because no supported authenticated superadmin API-request surface was available to send the required JSON POST through the deployed admin route.
+
+- Exact approval sentence: present.
+- Deployment gate: `source_capture_route_deployed`.
+- Selected client/source: `Glazura Glizon`, `clientId=e61d1982-068f-4d84-bb6f-c3fbfc93f39b`, `agencyId=6a09c2d9-12c3-4c19-a466-0c29ae2f723e`, `url=https://www.chs.si/`, rehearsal posture `internal test`.
+- Intended route: `POST https://app.pasadenagenerator.com/api/gnr8/admin/single-site-mvp/source-capture`.
+- Route version: `mvp-cutline-26-authenticated-admin-view-import-execution-surface:v1`.
+- Auth proof: `/gnr8/command-center/single-site-publish` rendered `Superadmin Workspace`.
+- Execution blocker: the browser surface could prove superadmin page auth but could not issue the JSON POST; page evaluation is read-only/no outbound request API, and same-origin `javascript:` execution was blocked by Browser Use security policy.
+- Source-capture/import POSTs sent: `0`.
+- Before/after read-only counts: unchanged; selected source-domain sites, single-site migrations, source evidence rows, launch readiness rows, publish operator action rows, AAF approval requests/decisions/gate attempts remained `0`; runtime active pointers remained `6`.
+- Online verification status: `blocked_authenticated_superadmin_api_request_context_unavailable`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-27-one-site-source-capture-execution-readback.md`.
+
 ## Environment Flags
 
 Baseline non-flag environment required for the internal surfaces:
@@ -236,10 +269,16 @@ CUTLINE-26 result: a supported superadmin-only admin-view import execution surfa
 
 CUTLINE-26B result: the route bundle is present on `main` and `origin/main` at `1cc2d495`; Vercel auto-deploy is expected but not verified by this task. Online verification remains blocked until production is confirmed to be running the pushed route commit and CUTLINE-27 receives fresh exact source-capture approval.
 
+CUTLINE-26C result: production route deployment is verified and the gate is recorded as `source_capture_route_deployed`. The human-confirmed Vercel production branch/SHA is `main` / `c97bee1`, which resolves locally to `c97bee1bfa26aef7755ffa73d9b75aa7120c60cd` and contains route bundle commit `1cc2d495`. A safe unauthenticated preflight returned HTTP 401 from the deployed route with all mutation flags false. Source-capture approval remains `not_approved`, no valid authenticated source-capture body was sent, and online verification remains blocked until CUTLINE-27 receives exact approval and exactly one import/capture request succeeds.
+
+CUTLINE-27 result: exact approval was present, route deployment gate and selected input were confirmed, app and worker health returned HTTP 200, and read-only before counts were clean. The task stopped before POST because authenticated superadmin page auth was available only through the in-app browser, while no supported browser/API surface could issue the required JSON POST. Source-capture/import POSTs sent remained `0`; after counts were unchanged, and online verification remains blocked with `blocked_authenticated_superadmin_api_request_context_unavailable`.
+
+CUTLINE-27A result: a supported browser-clickable execution surface now exists locally at `/gnr8/command-center/single-site-publish/source-capture` under the superadmin-only Command Center. It accepts only `clientId`, `agencyId`, `url`, `rehearsalPosture`, `idempotencyKey`, `correlationId`, and `explicitConfirmation`; disables execution until the exact confirmation sentence is entered; posts only to `POST /api/gnr8/admin/single-site-mvp/source-capture`; and renders only redacted response/status. No production source-capture POST, deploy, migration, env mutation, provider/DNS/domain/billing mutation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, AAF decision, gate attempt, commit, or push occurred.
+
 ## Online Checklist
 
 - [ ] Open the Command Center panel with selected refs.
-- [ ] Confirm panel is read-only and shows no action buttons.
+- [ ] Confirm panel remains superadmin-only and shows only the gated source-capture execution button, with no dry-run, shadow-publish, runtime publish, provider, rollback, approval, gate, AAF decision, or active-pointer controls.
 - [ ] Run status route and save redacted response.
 - [ ] Run action preflight and save redacted response.
 - [ ] Run dry-run through action route or direct MVP-54 route.

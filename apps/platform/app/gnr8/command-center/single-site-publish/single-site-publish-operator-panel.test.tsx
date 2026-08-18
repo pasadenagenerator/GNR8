@@ -10,17 +10,28 @@ import type {
   SingleSitePublishOperatorDiagnosticSnapshot,
   SingleSitePublishOperatorReadonlyProjection,
 } from "@/gnr8/single-site/single-site-publish-operator-readonly-projection";
+import {
+  createSingleSiteMvpSourceCaptureRedactedResult,
+  createSingleSiteMvpSourceCaptureRequestBody,
+  hasExactSingleSiteMvpSourceCaptureConfirmation,
+  SINGLE_SITE_MVP_SOURCE_CAPTURE_ALLOWED_FIELDS,
+  SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION,
+  SINGLE_SITE_MVP_SOURCE_CAPTURE_ROUTE_PATH,
+} from "@/gnr8/single-site/single-site-mvp-source-capture-execution-contract";
 
 import {
   SingleSitePublishOperatorPanel,
   filterSingleSitePublishOperatorDrilldownRows,
   filterSingleSitePublishOperatorTimelineRows,
 } from "./_components/SingleSitePublishOperatorPanel";
+import { SingleSiteMvpSourceCaptureExecutionSurface } from "./_components/SingleSiteMvpSourceCaptureExecutionSurface";
 
 const { renderToStaticMarkup } = ReactDomServer;
 
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const PANEL_FILE = new URL("./_components/SingleSitePublishOperatorPanel.tsx", import.meta.url);
+const SOURCE_CAPTURE_SURFACE_FILE = new URL("./_components/SingleSiteMvpSourceCaptureExecutionSurface.tsx", import.meta.url);
+const SOURCE_CAPTURE_PAGE_FILE = new URL("./source-capture/page.tsx", import.meta.url);
 const LAYOUT_FILE = new URL("../layout.tsx", import.meta.url);
 const GENERIC_PUBLISH_ROUTE = new URL("../../../api/gnr8/runtime/versions/[siteVersionId]/publish/route.ts", import.meta.url);
 const CLIENT_CONTENT_PUBLISH_ROUTE = new URL("../../../api/gnr8/clients/[clientId]/sites/[siteId]/content/publish/route.ts", import.meta.url);
@@ -844,6 +855,133 @@ test("operator panel renders empty diagnostics runbook state", () => {
   assert.equal(html.includes("No blocking or warning sources"), true);
   assert.equal(html.includes("<button"), false);
   assert.equal(html.includes("<form"), false);
+});
+
+test("source capture execution surface renders superadmin-only browser form disabled without exact confirmation", () => {
+  const html = renderToStaticMarkup(<SingleSiteMvpSourceCaptureExecutionSurface />);
+
+  assert.equal(html.includes("Source Capture Execution"), true);
+  assert.equal(html.includes("Superadmin-only source-capture request surface"), true);
+  assert.equal(html.includes(SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION), true);
+  assert.equal(html.includes("Send Source Capture POST"), true);
+  assert.equal(html.includes("<form"), true);
+  assert.equal(html.includes("disabled=\"\""), true);
+  for (const fieldName of SINGLE_SITE_MVP_SOURCE_CAPTURE_ALLOWED_FIELDS) {
+    assert.equal(html.includes(`name="${fieldName}"`), true);
+  }
+});
+
+test("source capture execution contract enables only with exact confirmation", () => {
+  assert.equal(
+    hasExactSingleSiteMvpSourceCaptureConfirmation({ explicitConfirmation: "approved" }),
+    false,
+  );
+  assert.equal(
+    hasExactSingleSiteMvpSourceCaptureConfirmation({
+      explicitConfirmation: SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION,
+    }),
+    true,
+  );
+});
+
+test("source capture execution request body contains only allowed fields and no actor override", () => {
+  const body = createSingleSiteMvpSourceCaptureRequestBody({
+    clientId: " e61d1982-068f-4d84-bb6f-c3fbfc93f39b ",
+    agencyId: " 6a09c2d9-12c3-4c19-a466-0c29ae2f723e ",
+    url: " https://www.chs.si/ ",
+    rehearsalPosture: " internal test ",
+    idempotencyKey: " idem ",
+    correlationId: " corr ",
+    explicitConfirmation: ` ${SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION} `,
+  });
+
+  assert.deepEqual(Object.keys(body).sort(), [...SINGLE_SITE_MVP_SOURCE_CAPTURE_ALLOWED_FIELDS].sort());
+  assert.deepEqual(body, {
+    clientId: "e61d1982-068f-4d84-bb6f-c3fbfc93f39b",
+    agencyId: "6a09c2d9-12c3-4c19-a466-0c29ae2f723e",
+    url: "https://www.chs.si/",
+    rehearsalPosture: "internal test",
+    idempotencyKey: "idem",
+    correlationId: "corr",
+    explicitConfirmation: SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION,
+  });
+  assert.equal("actor" in body, false);
+  assert.equal("actorId" in body, false);
+  assert.equal("superadminUserId" in body, false);
+});
+
+test("source capture execution surface targets only the admin source-capture route", async () => {
+  const source = await readFile(SOURCE_CAPTURE_SURFACE_FILE, "utf8");
+
+  assert.equal(SINGLE_SITE_MVP_SOURCE_CAPTURE_ROUTE_PATH, "/api/gnr8/admin/single-site-mvp/source-capture");
+  assert.equal(source.includes("fetch(SINGLE_SITE_MVP_SOURCE_CAPTURE_ROUTE_PATH"), true);
+  assert.equal(source.includes("method: \"POST\""), true);
+  assert.equal(source.includes("/api/gnr8/agency/clients"), false);
+  assert.equal(source.includes("adminView"), false);
+});
+
+test("source capture command center page is superadmin-only", async () => {
+  const [sourceCapturePageSource, layoutSource] = await Promise.all([
+    readFile(SOURCE_CAPTURE_PAGE_FILE, "utf8"),
+    readFile(LAYOUT_FILE, "utf8"),
+  ]);
+
+  assert.equal(sourceCapturePageSource.includes("requireSuperadminUserIdForPage"), true);
+  assert.equal(layoutSource.includes("requireSuperadminUserIdForPage"), true);
+  assert.equal(sourceCapturePageSource.includes("SingleSiteMvpSourceCaptureExecutionSurface"), true);
+  assert.equal(sourceCapturePageSource.includes("POST("), false);
+});
+
+test("source capture execution surface exposes no actor override or adjacent operation controls", async () => {
+  const source = await readFile(SOURCE_CAPTURE_SURFACE_FILE, "utf8");
+  const html = renderToStaticMarkup(<SingleSiteMvpSourceCaptureExecutionSurface />);
+  const combined = `${source}\n${html}`;
+
+  assert.doesNotMatch(combined, /name=["'](?:actor|actorId|actorRole|actorType|role|userId|principal|superadminUserId)["']/);
+  assert.doesNotMatch(combined, /dry-run|dry_run|shadow-publish|shadow_publish|runtime publish|rollback|openprovider|stripe|vercel|domain|dns|billing/i);
+  assert.doesNotMatch(combined, /AAF decision|gate attempt|active pointer/i);
+});
+
+test("source capture execution redacted result omits raw response material", () => {
+  const result = createSingleSiteMvpSourceCaptureRedactedResult({
+    httpStatus: 200,
+    body: {
+      ok: true,
+      diagnostics: ["SITE_IMPORT_SITE_CREATE_COMPLETED"],
+      redactions: ["rawHtml", "stackTraces"],
+      mutationFlags: {
+        dryRun: false,
+        shadowPublish: false,
+        publishes: false,
+        runtimeMutation: false,
+        providerCalls: false,
+      },
+      rawHtml: "<html>must not leak</html>",
+      stackTrace: "must not leak",
+      siteId: "site-secret-ish",
+    },
+  });
+  const serialized = JSON.stringify(result);
+
+  assert.deepEqual(Object.keys(result).sort(), [
+    "diagnosticsCount",
+    "error",
+    "httpStatus",
+    "mutationFlagsStatus",
+    "ok",
+    "redactionsCount",
+    "resultStatus",
+    "route",
+  ].sort());
+  assert.equal(result.route, SINGLE_SITE_MVP_SOURCE_CAPTURE_ROUTE_PATH);
+  assert.equal(result.httpStatus, 200);
+  assert.equal(result.ok, true);
+  assert.equal(result.resultStatus, "redacted_response_received");
+  assert.equal(result.diagnosticsCount, 1);
+  assert.equal(result.redactionsCount, 2);
+  assert.equal(result.mutationFlagsStatus, "all_false");
+  assert.equal(serialized.includes("must not leak"), false);
+  assert.equal(serialized.includes("site-secret-ish"), false);
 });
 
 test("operator panel local filters isolate blocker stale missing and timeline rows", () => {

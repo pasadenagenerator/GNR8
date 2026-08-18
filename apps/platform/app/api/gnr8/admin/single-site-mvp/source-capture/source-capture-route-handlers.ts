@@ -1,8 +1,8 @@
 import { POST as postCanonicalScopedSiteImport } from "@/app/api/gnr8/agency/clients/[clientId]/sites/import/route";
+import { SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION } from "@/gnr8/single-site/single-site-mvp-source-capture-execution-contract";
 import { requireSuperadminUserId } from "@/src/auth/require-superadmin-user-id";
 
-export const SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION =
-  "I approve sending exactly one production import/capture POST for the selected GNR8 single-site MVP rehearsal site.";
+export { SINGLE_SITE_MVP_SOURCE_CAPTURE_CONFIRMATION };
 
 export const SINGLE_SITE_MVP_SOURCE_CAPTURE_ROUTE_VERSION =
   "mvp-cutline-26-authenticated-admin-view-import-execution-surface:v1" as const;

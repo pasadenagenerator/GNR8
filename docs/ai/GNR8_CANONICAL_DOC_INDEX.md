@@ -867,6 +867,32 @@ Canonical commit/push and deploy-readiness closeout for the CUTLINE-26 admin sou
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## MVP-CUTLINE-26C Source-Capture Route Deployment Verification
+
+Canonical deployment verification closeout for the CUTLINE-26 admin source-capture route, recording the human-confirmed Vercel `gnr8-platform` production branch `main` and deployed SHA `c97bee1`, local resolution to `c97bee1bfa26aef7755ffa73d9b75aa7120c60cd`, containment of route bundle commit `1cc2d495`, safe unauthenticated production preflight returning HTTP 401 with route version `mvp-cutline-26-authenticated-admin-view-import-execution-surface:v1`, deployment gate `source_capture_route_deployed`, source-capture approval `not_approved`, online verification blocked until CUTLINE-27 exact approval and one successful import/capture request, and the boundary of no valid authenticated source-capture body, no `chs.si` import/capture POST, no production data writes, no deploy, no migration, no env mutation, no provider/DNS/domain/billing/Stripe/Openprovider mutation, no dry-run, no shadow-publish, no runtime publish, no rollback, no active pointer mutation, no commit, and no push:
+- `docs/product/gnr8-single-site-mvp-cutline-26c-source-capture-route-deployment-verification.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-27 One-Site Source Capture Execution Readback
+
+Canonical blocked-before-mutation closeout for the approved CUTLINE-27 one-site source-capture execution attempt, recording exact approval present, deployment gate `source_capture_route_deployed`, selected `Glazura Glizon` client/agency/source/posture/idempotency/correlation values, production app and worker HTTP 200 health, read-only before/after production DB counts unchanged, authenticated superadmin page proof, blocked authenticated API-request execution context, source-capture/import POST count `0`, no returned site/migration/source-evidence refs, online verification status `blocked_authenticated_superadmin_api_request_context_unavailable`, and the boundary of no production source-truth writes, no old agency page import route call, no launch readiness, no approval, no AAF decision/gate attempt, no dry-run, no shadow-publish, no runtime publish, no rollback, no active pointer mutation, no provider/DNS/domain/billing/Stripe/Openprovider mutation, no deploy, no migration, no env mutation, no commit, and no push:
+- `docs/product/gnr8-single-site-mvp-cutline-27-one-site-source-capture-execution-readback.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+## MVP-CUTLINE-27A Supported Authenticated Source-Capture Execution Surface
+
+Canonical browser-clickable superadmin-only execution surface for the deployed admin source-capture route, adding a gated `Source Capture Execution` page under `/gnr8/command-center/single-site-publish/source-capture`; accepting only `clientId`, `agencyId`, `url`, `rehearsalPosture`, `idempotencyKey`, `correlationId`, and `explicitConfirmation`; disabling execution until the exact confirmation sentence is entered; submitting only to `POST /api/gnr8/admin/single-site-mvp/source-capture`; rendering only redacted response/status; preserving the existing route validations and actor override rejection; and preserving the boundary of no production source-capture POST, no `chs.si` import/capture POST, no production data write, no deploy, no migration, no env mutation, no dry-run, no shadow-publish, no runtime publish, no rollback, no active pointer mutation, no provider/DNS/domain/billing/Stripe/Openprovider mutation, no AAF decision, no gate attempt, no commit, and no push:
+- `apps/platform/gnr8/single-site/single-site-mvp-source-capture-execution-contract.ts`
+- `apps/platform/app/gnr8/command-center/single-site-publish/source-capture/page.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/_components/SingleSiteMvpSourceCaptureExecutionSurface.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/_components/SingleSitePublishOperatorPanel.tsx`
+- `apps/platform/app/gnr8/command-center/single-site-publish/single-site-publish-operator-panel.test.tsx`
+- `docs/product/gnr8-single-site-mvp-cutline-27a-supported-authenticated-source-capture-execution-surface.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:
