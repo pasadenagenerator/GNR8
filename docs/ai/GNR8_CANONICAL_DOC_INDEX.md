@@ -860,6 +860,13 @@ Canonical narrow authenticated superadmin-only admin-view import execution surfa
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## MVP-CUTLINE-26B Source-Capture Route Commit Deploy Readiness
+
+Canonical commit/push and deploy-readiness closeout for the CUTLINE-26 admin source-capture route, confirming exact commit/push approval, branch/ref posture, route bundle commit `1cc2d495` on `main` and `origin/main`, limited changed scope, focused validation plan, expected-but-unverified Vercel auto-deploy posture, remaining production deployment verification requirement, and the boundary of no source-capture route call, no `chs.si` import/capture POST, no production data writes, no dry-run, no shadow-publish, no runtime publish, no rollback, no active pointer mutation, no migrations, no env mutation, no provider/DNS/domain/billing/Stripe/Openprovider mutation, and no AAF decision or gate attempt:
+- `docs/product/gnr8-single-site-mvp-cutline-26b-source-capture-route-commit-deploy-readiness.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

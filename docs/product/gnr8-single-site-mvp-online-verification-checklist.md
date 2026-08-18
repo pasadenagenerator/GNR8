@@ -21,6 +21,7 @@ Do not start online verification until all are true:
 - CUTLINE-24 route-context resolution is applied: the importer page is not used as agency-scope proof for a superadmin-only session; any later source capture either uses the existing canonical POST route with body `agencyId` after fresh exact confirmation, or first implements a narrow no-mutation superadmin import preflight wrapper.
 - CUTLINE-25 execution-surface blocker is resolved: a supported authenticated admin-view API-request path exists for the exact canonical import POST without exposing or manually handling browser cookies/session state.
 - CUTLINE-26 admin execution surface is deployed before use: `POST /api/gnr8/admin/single-site-mvp/source-capture` requires superadmin auth, strict request body, exact confirmation, and delegates only to the canonical import route.
+- CUTLINE-26B commit/deploy readiness is satisfied: the route bundle is pushed to the intended production branch/ref, deployment has completed, and the deployed commit is verified before any source-capture POST.
 
 ## Operator Sequence
 
@@ -212,6 +213,20 @@ Production source-capture status: still not executed. CUTLINE-26 implemented the
 - Online verification status: `blocked_pending_cutline_27_fresh_confirmation_and_exactly_one_source_capture`.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-26-authenticated-admin-view-import-execution-surface.md`.
+
+## CUTLINE-26B Source-Capture Route Commit Deploy Readiness
+
+Production source-capture status: still not executed. The route bundle commit is present on `main` and `origin/main` as `1cc2d495`, and this task records deploy readiness without manually deploying or calling the route.
+
+- Exact commit/push approval sentence: present.
+- Branch/ref: `main` / `origin/main`.
+- Deployment posture: Vercel auto-deploy from `main` is expected, but deploy completion was not verified in CUTLINE-26B.
+- Production route verification needed: yes, after deployment is confirmed.
+- Source-capture POSTs sent: `0`.
+- Production data writes, deploys, migrations, env mutations, provider calls, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, AAF decisions, and gate attempts: none.
+- Online verification status: `blocked_pending_deployed_route_commit_verification_and_cutline_27_fresh_confirmation`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-26b-source-capture-route-commit-deploy-readiness.md`.
 
 ## Stop Criteria
 

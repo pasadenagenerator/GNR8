@@ -162,6 +162,20 @@ Status as of 2026-08-18: implemented locally with focused tests and docs. No pro
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-26-authenticated-admin-view-import-execution-surface.md`.
 
+### MVP-CUTLINE-26B Source-Capture Route Commit Deploy Readiness
+
+Status as of 2026-08-18: route commit/push readiness recorded. The route implementation bundle from production baseline `ba0d070` through `1cc2d495` is present on `main` and `origin/main` in this workspace. No manual deploy was run and no production source-capture request was sent.
+
+- Exact commit/push approval sentence: present.
+- Route bundle commit: `1cc2d495`.
+- Branch/ref: `main` / `origin/main`.
+- Deployment posture: Vercel auto-deploy from `main` is expected, but deployment status was not verified in CUTLINE-26B.
+- Scope: admin source-capture route, route handler, route tests, docs/index/checklists only.
+- Still needed before source capture: verify production is running the pushed commit, then obtain fresh exact action-time approval for exactly one source-capture POST.
+- Production data writes, deploys, migrations, env mutations, provider calls, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, AAF decisions, and gate attempts: none.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-26b-source-capture-route-commit-deploy-readiness.md`.
+
 ## Environment Flags
 
 Baseline non-flag environment required for the internal surfaces:
@@ -219,6 +233,8 @@ CUTLINE-24 result: the missing agency scope is explained. The importer page is m
 CUTLINE-25 result: fresh exact confirmation and route contract were present, but the available authenticated execution surface could not send the required canonical JSON POST without unsupported cookie/session handling. Online verification remains blocked until a supported authenticated admin-view import execution surface exists and a future task receives fresh exact confirmation for exactly one POST.
 
 CUTLINE-26 result: a supported superadmin-only admin-view import execution surface now exists locally and is tested, but it was not deployed and was not called against production. Online verification remains blocked until CUTLINE-27 receives fresh exact confirmation and sends exactly one source-capture request through the deployed route.
+
+CUTLINE-26B result: the route bundle is present on `main` and `origin/main` at `1cc2d495`; Vercel auto-deploy is expected but not verified by this task. Online verification remains blocked until production is confirmed to be running the pushed route commit and CUTLINE-27 receives fresh exact source-capture approval.
 
 ## Online Checklist
 
