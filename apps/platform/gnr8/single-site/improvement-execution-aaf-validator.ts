@@ -11,7 +11,10 @@ import {
   SingleSiteImplementationAuthorizationBridge,
   buildExpectedImplementationAuthorizationRefs,
   computeImplementationAuthorizationSemanticWatermark,
+  semanticReplayFromEvidence,
+  validationInputFromReplay,
   type ImplementationAuthorizationProposalApprovalRef,
+  type ImplementationAuthorizationSemanticReplayContract,
   type ImplementationAuthorizationSelectedRecommendationRef,
   type ImplementationAuthorizationSourceRef,
   type SingleSiteImplementationAuthorizationActor,
@@ -172,6 +175,13 @@ type DetailRows = {
   freshness: Record<string, unknown> | null;
   conflictingDecisionIds: string[];
 };
+
+function replayForDetails(details: DetailRows): ImplementationAuthorizationSemanticReplayContract | null {
+  if (!details.evidence) return null;
+  const replay = semanticReplayFromEvidence(details.evidence);
+  if (!replay.replay) return null;
+  return replay.replay;
+}
 
 function optionalText(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -335,7 +345,7 @@ function mapBridgeReason(blockerCodes: string[]): ImprovementExecutionAafReasonC
   if (/scope/.test(joined)) return "wrong_scope";
   if (/subject/.test(joined)) return "wrong_subject";
   if (/required_evidence_refs_missing|evidence_package_missing|approval_evidence_missing|approval_evidence_link_missing/.test(joined)) return "evidence_missing";
-  if (/evidence|freshness|watermark|policy_version/.test(joined)) return "evidence_stale";
+  if (/evidence|freshness|watermark|policy_version|semantic_replay|replay|semanticInput|replayRoles/.test(joined)) return "evidence_stale";
   if (/revocation|approval_revoked/.test(joined)) return "approval_revoked";
   if (/supersession|approval_superseded/.test(joined)) return "approval_superseded";
   if (/expired/.test(joined)) return "approval_expired";
@@ -406,7 +416,8 @@ function detailResult(input: ImprovementExecutionAafValidatorInput, details: Det
   | "staleRefs"
   | "prohibitedSubstitutionFlags"
 > {
-  const validationInput = bridgeInput(input);
+  const replay = replayForDetails(details);
+  const validationInput = replay ? validationInputFromReplay(bridgeInput(input), replay) : bridgeInput(input);
   const expected = buildExpectedImplementationAuthorizationRefs(validationInput);
   const semanticWatermark = computeImplementationAuthorizationSemanticWatermark(validationInput);
   const matchedSubjectRefs = expected.subjectRefs
@@ -429,8 +440,16 @@ function detailResult(input: ImprovementExecutionAafValidatorInput, details: Det
   const staleEvidence = expected.evidenceRefs
     .filter((ref) => details.evidenceRefs.some((row) => metadataRole(row, "bridgeEvidenceRole") === ref.role) && !details.evidenceRefs.some((row) => refMatches(row, ref, "bridgeEvidenceRole")))
     .map((ref) => ref.role);
-  const proposalWatermarkMatched = ![...missingSubject, ...staleSubject, ...missingEvidence, ...staleEvidence].some((role) => /proposal/.test(role));
-  const selectedRecommendationWatermarkMatched = ![...missingSubject, ...staleSubject, ...missingEvidence, ...staleEvidence].some((role) => /selected_recommendation/.test(role));
+  const replaySemantic = replay?.semanticInput;
+  const replayRecommendations = new Map((replaySemantic?.selectedRecommendationRefs ?? []).map((ref) => [ref.recommendationId, ref.sourceWatermark]));
+  const proposalWatermarkMatched =
+    (!replaySemantic || optionalText(input.proposalPlanSemanticWatermark) === optionalText(replaySemantic.proposalPlanSemanticWatermark)) &&
+    ![...missingSubject, ...staleSubject, ...missingEvidence, ...staleEvidence].some((role) => /proposal/.test(role));
+  const selectedRecommendationWatermarkMatched =
+    (!replaySemantic ||
+      input.selectedRecommendationRefs.every((ref) => replayRecommendations.get(ref.recommendationId) === ref.sourceWatermark) &&
+        input.selectedRecommendationRefs.length === replayRecommendations.size) &&
+    ![...missingSubject, ...staleSubject, ...missingEvidence, ...staleEvidence].some((role) => /selected_recommendation/.test(role));
   const implementationScopeWatermarkMatched =
     optionalText(input.implementationScopeWatermark) === null ||
     details.evidenceRefs.some(
@@ -600,6 +619,8 @@ export class ImprovementExecutionAafValidator {
     if (detail.missingRefs.evidence.length > 0) return block(normalizedInput, "evidence_missing", ["required_evidence_refs_missing"], detail);
     if (detail.staleRefs.subject.length > 0) return block(normalizedInput, "subject_ref_mismatch", ["required_subject_refs_mismatched"], detail);
     if (detail.staleRefs.evidence.length > 0) return block(normalizedInput, "source_watermark_mismatch", ["required_evidence_refs_mismatched"], detail);
+    if (!detail.driftResult.proposalWatermarkMatched) return block(normalizedInput, "evidence_stale", ["proposal_semantic_replay_mismatch"], detail);
+    if (!detail.driftResult.selectedRecommendationWatermarkMatched) return block(normalizedInput, "selected_recommendation_drift", ["selected_recommendation_semantic_replay_mismatch"], detail);
     if (!detail.driftResult.implementationScopeWatermarkMatched) return block(normalizedInput, "proposal_scope_drift", ["implementation_scope_watermark_mismatch"], detail);
     if (detail.freshnessResult.status !== "fresh") return block(normalizedInput, "evidence_stale", ["evidence_freshness_not_fresh"], detail);
     if (detail.matchedAafRequestDecisionRefs.scope !== AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE) return block(normalizedInput, "wrong_scope", ["approval_scope_mismatch"], detail);

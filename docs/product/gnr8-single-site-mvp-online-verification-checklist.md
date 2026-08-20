@@ -36,6 +36,7 @@ Do not start online verification until all are true:
 - CUTLINE-37 authorized improvement execution is blocked before retry: no execution attempt or improved candidate exists because MVP-21 requires an attached implementation authorization ref on proposal plan `f541075c-4641-4f70-b5ff-64a8af071571`.
 - CUTLINE-37A implementation authorization ref attachment is complete before retry: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` has `implementation_authorization_attached=true` with granted AAF request/decision/evidence refs, and no execution attempt or improved candidate exists.
 - CUTLINE-38 authorized improvement execution retry is blocked before persistence: attached AAF refs read back as granted/fresh/exact-scope, but MVP-20 validation blocks on semantic replay mismatch before MVP-21 attempt creation.
+- CUTLINE-39 MVP-20 semantic replay reconciliation is complete locally before any further retry: future authorization evidence stores a canonical replay contract, old production AAF refs without that contract are not reusable, and CUTLINE-40 must create a fresh request/decision after deployment.
 
 ## Operator Sequence
 
@@ -575,6 +576,19 @@ Production improvement execution retry status: `blocked`. Exact approval was pre
 - Boundary: no execution attempt, improved candidate, improved review acceptance, content/client/launch approval, launch readiness, publish activation request/decision/gate, publish dry-run, shadow-publish, runtime publish, active pointer mutation, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-38-authorized-improvement-execution-retry.md`.
+
+## CUTLINE-39 MVP-20 Semantic Replay Reconciliation
+
+Local replay contract status: `fixed_pending_deploy`. Future implementation authorization evidence packages store `implementationAuthorizationSemanticReplay` in existing AAF evidence package JSON so MVP-20 can replay the original authorization semantic input exactly.
+
+- Root cause: CUTLINE-35 evidence/request rows stored the final semantic watermark but did not persist the full canonical authorization semantic input, including operator notes, implementation target/attempt placeholder, scope/non-goal replay fields, and original freshness policy/version data.
+- Fix: the bridge writes a versioned replay contract, and execution-time validation uses that stored contract while preserving fail-closed stale/revoked/superseded/expired/wrong-scope checks.
+- SQL migration: not required; existing JSON fields are sufficient.
+- Existing production AAF request/decision/evidence refs: not reusable under the fixed contract because they do not contain stored replay data.
+- Required next path: deploy this fix, then CUTLINE-40 creates a fresh implementation authorization request/evidence package and obtains a fresh human AAF decision before retrying MVP-20.
+- Boundary: no production AAF row mutation, improvement execution, improved candidate, dry-run, shadow-publish, runtime publish, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-39-mvp20-semantic-replay-reconciliation.md`.
 
 ## Stop Criteria
 

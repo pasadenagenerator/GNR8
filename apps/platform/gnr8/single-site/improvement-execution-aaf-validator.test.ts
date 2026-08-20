@@ -144,6 +144,7 @@ class FakeAafStore {
     approvalRevocations: [],
     approvalSupersessionLinks: [],
     evidencePackageSupersession: [],
+    improvementExecutionAttempts: [],
   };
   runtimeMutations: unknown[] = [];
   generatedProposalBundles: unknown[] = [];
@@ -278,14 +279,18 @@ class FakeAafStore {
   }
 }
 
-async function preparedScenario(status = "granted", prepareOverrides: Partial<PrepareImplementationAuthorizationRequestInput> = {}) {
+async function preparedScenario(status = "granted", prepareOverrides: Partial<PrepareImplementationAuthorizationRequestInput> = {}, decisionOverrides: Partial<AafRecord> = {}) {
   const store = new FakeAafStore();
   const bridge = new SingleSiteImplementationAuthorizationBridge(store as never);
   const validator = new ImprovementExecutionAafValidator(store as never);
   const prepareInput = basePrepareInput(prepareOverrides);
   const prepared = await bridge.prepareImplementationAuthorizationRequest(prepareInput);
-  const decision = store.grant(prepared.approvalRequest.id, prepared.evidencePackage.id, status);
+  const decision = store.grant(prepared.approvalRequest.id, prepared.evidencePackage.id, status, decisionOverrides);
   return { store, bridge, validator, prepareInput, prepared, decision };
+}
+
+function storedReplay(scenario: Awaited<ReturnType<typeof preparedScenario>>): Record<string, unknown> {
+  return (scenario.store.rows.evidencePackages[0]!.limitations_json as Record<string, unknown>).implementationAuthorizationSemanticReplay as Record<string, unknown>;
 }
 
 test("execution-time validator allows granted exact-scope authorization and mutates nothing", async () => {
@@ -301,9 +306,54 @@ test("execution-time validator allows granted exact-scope authorization and muta
   assert.equal(result.mutatesSourceTruth, false);
   assert.equal(result.nonExecuting, true);
   assert.deepEqual(Object.fromEntries(Object.entries(scenario.store.rows).map(([table, rows]) => [table, rows.length])), beforeCounts);
+  assert.equal(scenario.store.rows.improvementExecutionAttempts.length, 0);
   assert.deepEqual(scenario.store.runtimeMutations, []);
   assert.deepEqual(scenario.store.generatedProposalBundles, []);
   assert.deepEqual(scenario.store.providerCalls, []);
+});
+
+test("execution-time validator replays the original authorization semantic input exactly", async () => {
+  const scenario = await preparedScenario(
+    "granted",
+    {
+      policyVersion: "MVP-18",
+      operatorNotes: [{ note: "Original operator note stored at authorization time." }],
+      implementationAttemptPlaceholderRef: "authorization-placeholder-1",
+    },
+    { policy_version: "MVP-18" },
+  );
+  const result = await scenario.validator.validateImprovementExecutionAuthorization(
+    executionInput(scenario.prepareInput, scenario.decision, scenario.prepared, {
+      operatorNotes: [],
+      policyVersion: "MVP-20-validator",
+    }),
+  );
+  assert.equal(result.allowed, true);
+  assert.equal(result.freshnessResult.expectedSemanticWatermark, scenario.prepared.semanticWatermark);
+  assert.equal(result.freshnessResult.actualEvidenceWatermark, scenario.prepared.semanticWatermark);
+  assert.equal(result.freshnessResult.actualFreshnessWatermark, scenario.prepared.semanticWatermark);
+  assert.equal(scenario.store.rows.improvementExecutionAttempts.length, 0);
+});
+
+test("execution-time validator accepts proposal-event approval evidence only with stored replay", async () => {
+  const scenario = await preparedScenario("granted", {
+    proposalApprovalRef: {
+      approvalSource: "proposal_event",
+      proposalEventId: "proposal-event-approved-1",
+      stateEventId: "proposal-state-event-approved-1",
+      proposalStatus: "approved",
+      eventAction: "approved",
+      sourceWatermark: "proposal-event-approved:v4",
+      limitations: [],
+    },
+  });
+  const proposalEvidence = scenario.prepared.evidenceSourceRefs.find((ref) => (ref.metadata_json as Record<string, unknown>).bridgeEvidenceRole === "proposal_approval");
+  assert.equal((proposalEvidence?.metadata_json as Record<string, unknown>).evidenceOnlyForImplementationAuthorization, true);
+  assert.equal((proposalEvidence?.metadata_json as Record<string, unknown>).implementationAuthorizationDecisionSubstitution, false);
+  const result = await scenario.validator.validateImprovementExecutionAuthorization(executionInput(scenario.prepareInput, scenario.decision, scenario.prepared));
+  assert.equal(result.allowed, true);
+  assert.equal(result.prohibitedSubstitutionFlags.proposalApproval, false);
+  assert.equal(scenario.store.rows.improvementExecutionAttempts.length, 0);
 });
 
 test("execution-time validator carries granted_with_limitations when represented by the backing store", async () => {
@@ -440,6 +490,68 @@ test("execution-time validator blocks missing subject/evidence refs and subject 
   assert.equal(missingEvidenceResult.allowed, false);
   assert.equal(missingEvidenceResult.reasonCode, "evidence_missing");
   assert.equal(missingEvidenceResult.missingRefs.evidence.includes("proposal_approval"), true);
+});
+
+test("execution-time validator blocks missing stored replay data", async () => {
+  const scenario = await preparedScenario();
+  delete (scenario.store.rows.evidencePackages[0]!.limitations_json as Record<string, unknown>).implementationAuthorizationSemanticReplay;
+  const result = await scenario.validator.validateImprovementExecutionAuthorization(executionInput(scenario.prepareInput, scenario.decision, scenario.prepared));
+  assert.equal(result.allowed, false);
+  assert.equal(result.reasonCode, "evidence_stale");
+  assert.deepEqual(result.blockerCodes, ["semantic_replay_missing"]);
+  assert.equal(scenario.store.rows.improvementExecutionAttempts.length, 0);
+});
+
+test("execution-time validator blocks missing operator notes, scope, and non-goal replay fields", async () => {
+  for (const [field, mutate, blocker] of [
+    [
+      "operator_notes",
+      (replay: Record<string, unknown>) => {
+        delete (replay.semanticInput as Record<string, unknown>).operatorNotes;
+      },
+      "semanticInput.operatorNotes_missing",
+    ],
+    [
+      "implementation_scope_summary",
+      (replay: Record<string, unknown>) => {
+        delete (replay.semanticInput as Record<string, unknown>).implementationScopeSummary;
+      },
+      "semanticInput.implementationScopeSummary_missing",
+    ],
+    [
+      "implementation_non_goals",
+      (replay: Record<string, unknown>) => {
+        (replay.semanticInput as Record<string, unknown>).implementationNonGoals = [];
+      },
+      "semanticInput.implementationNonGoals_missing",
+    ],
+  ] as const) {
+    const scenario = await preparedScenario();
+    mutate(storedReplay(scenario));
+    const result = await scenario.validator.validateImprovementExecutionAuthorization(executionInput(scenario.prepareInput, scenario.decision, scenario.prepared));
+    assert.equal(result.allowed, false, field);
+    assert.equal(result.reasonCode, "evidence_stale", field);
+    assert.equal(result.blockerCodes.includes(blocker), true, field);
+    assert.equal(scenario.store.rows.improvementExecutionAttempts.length, 0, field);
+  }
+});
+
+test("execution-time validator blocks mismatched stored replay data", async () => {
+  const scenario = await preparedScenario();
+  (storedReplay(scenario).semanticInput as Record<string, unknown>).implementationScopeSummary = "Changed after authorization.";
+  const result = await scenario.validator.validateImprovementExecutionAuthorization(executionInput(scenario.prepareInput, scenario.decision, scenario.prepared));
+  assert.equal(result.allowed, false);
+  assert.equal(result.reasonCode, "evidence_stale");
+  assert.deepEqual(result.blockerCodes, ["semantic_replay_watermark_mismatch"]);
+  assert.equal(scenario.store.rows.improvementExecutionAttempts.length, 0);
+
+  const roleScenario = await preparedScenario();
+  (((storedReplay(roleScenario).replayRoles as Record<string, unknown>).implementationTargetRef as Record<string, unknown>)).sourceWatermark = "changed-target-watermark";
+  const roleResult = await roleScenario.validator.validateImprovementExecutionAuthorization(executionInput(roleScenario.prepareInput, roleScenario.decision, roleScenario.prepared));
+  assert.equal(roleResult.allowed, false);
+  assert.equal(roleResult.reasonCode, "evidence_stale");
+  assert.deepEqual(roleResult.blockerCodes, ["semantic_replay_implementation_target_mismatch"]);
+  assert.equal(roleScenario.store.rows.improvementExecutionAttempts.length, 0);
 });
 
 test("execution-time validator rechecks proposal, recommendation, and implementation scope watermarks", async () => {

@@ -206,6 +206,30 @@ export type ImplementationAuthorizationSemanticInput = {
   policyVersion: string;
 };
 
+export const IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_CONTRACT = "single_site_implementation_authorization_semantic_replay";
+export const IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_VERSION = 1;
+
+export type ImplementationAuthorizationSemanticReplayContract = {
+  contract: typeof IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_CONTRACT;
+  version: typeof IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_VERSION;
+  semanticWatermark: string;
+  semanticInput: ImplementationAuthorizationSemanticInput;
+  replayRoles: {
+    implementationTargetRef: ImplementationAuthorizationSourceRef & { role: "implementation_target" };
+    implementationAttemptPlaceholderRef: ImplementationAuthorizationSourceRef & { role: "implementation_attempt_placeholder" };
+    implementationScopeSummary: string;
+    implementationNonGoals: string[];
+    operatorNotes: unknown[];
+  };
+  freshnessCheck: {
+    policyVersion: string;
+    result: "fresh";
+    currentSourceWatermark: string;
+    checkedByActorType: "system";
+    checkedByActorId: "single-site-implementation-authorization-bridge";
+  };
+};
+
 function text(field: string, value: unknown): string {
   if (value === undefined || value === null || String(value).trim().length === 0) {
     throw new Error(`${field} is required`);
@@ -418,6 +442,68 @@ export function computeImplementationAuthorizationSemanticWatermark(input: Imple
   })}`;
 }
 
+function semanticInput(input: PrepareImplementationAuthorizationRequestInput | ValidateImplementationAuthorizationRefInput): ImplementationAuthorizationSemanticInput {
+  return {
+    migrationId: input.migrationId,
+    clientId: input.clientId,
+    siteId: input.siteId,
+    proposalPlanId: input.proposalPlanId,
+    proposalPlanVersion: input.proposalPlanVersion,
+    proposalPlanSemanticWatermark: input.proposalPlanSemanticWatermark,
+    proposalApprovalRef: input.proposalApprovalRef,
+    cloneReviewRef: input.cloneReviewRef,
+    cloneSiteVersionRef: input.cloneSiteVersionRef,
+    runtimeArtifactRef: input.runtimeArtifactRef,
+    sourceEvidenceReviewRef: input.sourceEvidenceReviewRef,
+    selectedRecommendationRefs: input.selectedRecommendationRefs,
+    implementationScopeSummary: input.implementationScopeSummary,
+    implementationNonGoals: input.implementationNonGoals,
+    riskImpactEffortSummary: input.riskImpactEffortSummary,
+    limitations: input.limitations ?? [],
+    operatorNotes: input.operatorNotes ?? [],
+    advisoryAiProviderRefs: input.advisoryAiProviderRefs ?? [],
+    auditTimelineRefs: input.auditTimelineRefs ?? [],
+    implementationTargetRef: input.implementationTargetRef ?? null,
+    implementationAttemptPlaceholderRef: input.implementationAttemptPlaceholderRef ?? null,
+    policyVersion: input.policyVersion,
+  };
+}
+
+export function buildImplementationAuthorizationSemanticReplay(
+  input: PrepareImplementationAuthorizationRequestInput | ValidateImplementationAuthorizationRefInput,
+): ImplementationAuthorizationSemanticReplayContract {
+  const canonicalInput = semanticInput(input);
+  const semanticWatermark = computeImplementationAuthorizationSemanticWatermark(canonicalInput);
+  const refs = buildExpectedImplementationAuthorizationRefs(input);
+  const implementationTargetRef = refs.subjectRefs.find((ref): ref is ImplementationAuthorizationSourceRef & { role: "implementation_target" } => ref.role === "implementation_target");
+  const implementationAttemptPlaceholderRef = refs.subjectRefs.find(
+    (ref): ref is ImplementationAuthorizationSourceRef & { role: "implementation_attempt_placeholder" } => ref.role === "implementation_attempt_placeholder",
+  );
+  if (!implementationTargetRef) throw new Error("implementation_target replay ref is required");
+  if (!implementationAttemptPlaceholderRef) throw new Error("implementation_attempt_placeholder replay ref is required");
+
+  return stableJsonValue({
+    contract: IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_CONTRACT,
+    version: IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_VERSION,
+    semanticWatermark,
+    semanticInput: canonicalInput,
+    replayRoles: {
+      implementationTargetRef,
+      implementationAttemptPlaceholderRef,
+      implementationScopeSummary: canonicalInput.implementationScopeSummary,
+      implementationNonGoals: canonicalInput.implementationNonGoals,
+      operatorNotes: canonicalInput.operatorNotes ?? [],
+    },
+    freshnessCheck: {
+      policyVersion: canonicalInput.policyVersion,
+      result: "fresh",
+      currentSourceWatermark: semanticWatermark,
+      checkedByActorType: "system",
+      checkedByActorId: "single-site-implementation-authorization-bridge",
+    },
+  }) as ImplementationAuthorizationSemanticReplayContract;
+}
+
 function assertPrepareInput(input: PrepareImplementationAuthorizationRequestInput): void {
   text("tenantId", input.tenantId);
   text("clientId", input.clientId);
@@ -576,6 +662,30 @@ function validationFailure(input: ValidateImplementationAuthorizationRefInput, s
   };
 }
 
+function validationFailureWithWatermark(
+  input: ValidateImplementationAuthorizationRefInput,
+  semanticWatermark: string,
+  status: ImplementationAuthorizationValidationStatus,
+  blockerCodes: string[],
+  scope: string | null = null,
+  subjectType: string | null = null,
+  subjectId: string | null = null,
+): ImplementationAuthorizationValidationResult {
+  return {
+    valid: false,
+    status,
+    scope,
+    subjectType,
+    subjectId,
+    approvalRequestId: input.approvalRequestId ?? null,
+    approvalDecisionId: input.implementationAuthorizationDecisionId ?? null,
+    evidencePackageId: input.evidencePackageId ?? null,
+    limitations: [],
+    blockerCodes,
+    semanticWatermark,
+  };
+}
+
 function rowText(row: Record<string, unknown> | null, field: string): string | null {
   return optionalText(row?.[field]);
 }
@@ -616,6 +726,114 @@ function refMatches(row: Record<string, unknown>, expected: ImplementationAuthor
   );
 }
 
+function replayRefValid(value: unknown): value is ImplementationAuthorizationSourceRef & { role: string } {
+  const ref = jsonObject(value);
+  return Boolean(optionalText(ref.role) && optionalText(ref.sourceTable) && optionalText(ref.sourceRecordId) && optionalText(ref.sourceWatermark));
+}
+
+export function semanticReplayFromEvidence(evidence: Record<string, unknown>): { replay: ImplementationAuthorizationSemanticReplayContract | null; blockerCodes: string[] } {
+  const limitationsJson = jsonObject(evidence.limitations_json);
+  const replay = jsonObject(limitationsJson.implementationAuthorizationSemanticReplay);
+  if (Object.keys(replay).length === 0) return { replay: null, blockerCodes: ["semantic_replay_missing"] };
+  if (replay.contract !== IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_CONTRACT || replay.version !== IMPLEMENTATION_AUTHORIZATION_SEMANTIC_REPLAY_VERSION) {
+    return { replay: null, blockerCodes: ["semantic_replay_contract_mismatch"] };
+  }
+
+  const replayRoles = jsonObject(replay.replayRoles);
+  const semantic = jsonObject(replay.semanticInput) as Partial<ImplementationAuthorizationSemanticInput>;
+  const freshnessCheck = jsonObject(replay.freshnessCheck);
+  const requiredSemanticTextFields = [
+    ["semanticInput.migrationId", semantic.migrationId],
+    ["semanticInput.clientId", semantic.clientId],
+    ["semanticInput.siteId", semantic.siteId],
+    ["semanticInput.proposalPlanId", semantic.proposalPlanId],
+    ["semanticInput.proposalPlanVersion", semantic.proposalPlanVersion],
+    ["semanticInput.proposalPlanSemanticWatermark", semantic.proposalPlanSemanticWatermark],
+    ["semanticInput.implementationScopeSummary", semantic.implementationScopeSummary],
+    ["semanticInput.policyVersion", semantic.policyVersion],
+    ["semanticWatermark", replay.semanticWatermark],
+    ["freshnessCheck.policyVersion", freshnessCheck.policyVersion],
+    ["freshnessCheck.currentSourceWatermark", freshnessCheck.currentSourceWatermark],
+  ];
+  const missing = requiredSemanticTextFields.filter(([, value]) => !optionalText(value)).map(([field]) => `${field}_missing`);
+  if (!Array.isArray(semantic.implementationNonGoals) || semantic.implementationNonGoals.length === 0) missing.push("semanticInput.implementationNonGoals_missing");
+  if (!Object.prototype.hasOwnProperty.call(semantic, "operatorNotes") || !Array.isArray(semantic.operatorNotes)) missing.push("semanticInput.operatorNotes_missing");
+  if (!replayRefValid(replayRoles.implementationTargetRef)) missing.push("replayRoles.implementationTargetRef_missing");
+  if (!replayRefValid(replayRoles.implementationAttemptPlaceholderRef)) missing.push("replayRoles.implementationAttemptPlaceholderRef_missing");
+  if (missing.length > 0) return { replay: null, blockerCodes: missing };
+
+  const candidate = replay as unknown as ImplementationAuthorizationSemanticReplayContract;
+  const recomputed = computeImplementationAuthorizationSemanticWatermark(candidate.semanticInput);
+  if (recomputed !== candidate.semanticWatermark) return { replay: null, blockerCodes: ["semantic_replay_watermark_mismatch"] };
+  const expectedTargetRef = candidate.semanticInput.implementationTargetRef ?? roleRef(
+    "implementation_target",
+    "gnr8_single_site_improvement_proposal_plans",
+    text("semanticInput.proposalPlanId", candidate.semanticInput.proposalPlanId),
+    candidate.semanticWatermark,
+  );
+  const expectedAttemptPlaceholderRef = roleRef(
+    "implementation_attempt_placeholder",
+    "gnr8_single_site_improvement_authorization_attempts",
+    optionalText(candidate.semanticInput.implementationAttemptPlaceholderRef) ?? text("semanticInput.proposalPlanId", candidate.semanticInput.proposalPlanId),
+    expectedTargetRef.sourceWatermark,
+  );
+  const replayTargetRef = replayRoles.implementationTargetRef as ImplementationAuthorizationSourceRef & { role: string };
+  const replayAttemptPlaceholderRef = replayRoles.implementationAttemptPlaceholderRef as ImplementationAuthorizationSourceRef & { role: string };
+  if (JSON.stringify(stableJsonValue(replayTargetRef)) !== JSON.stringify(stableJsonValue({ role: "implementation_target", ...expectedTargetRef }))) {
+    return { replay: null, blockerCodes: ["semantic_replay_implementation_target_mismatch"] };
+  }
+  if (JSON.stringify(stableJsonValue(replayAttemptPlaceholderRef)) !== JSON.stringify(stableJsonValue(expectedAttemptPlaceholderRef))) {
+    return { replay: null, blockerCodes: ["semantic_replay_implementation_attempt_placeholder_mismatch"] };
+  }
+  if (JSON.stringify(stableJsonValue(replayRoles.implementationScopeSummary)) !== JSON.stringify(stableJsonValue(candidate.semanticInput.implementationScopeSummary))) {
+    return { replay: null, blockerCodes: ["semantic_replay_scope_summary_mismatch"] };
+  }
+  if (JSON.stringify(stableJsonValue(replayRoles.implementationNonGoals)) !== JSON.stringify(stableJsonValue(candidate.semanticInput.implementationNonGoals))) {
+    return { replay: null, blockerCodes: ["semantic_replay_non_goals_mismatch"] };
+  }
+  if (JSON.stringify(stableJsonValue(replayRoles.operatorNotes)) !== JSON.stringify(stableJsonValue(candidate.semanticInput.operatorNotes ?? []))) {
+    return { replay: null, blockerCodes: ["semantic_replay_operator_notes_mismatch"] };
+  }
+  if (optionalText(evidence.source_watermark) !== candidate.semanticWatermark) return { replay: null, blockerCodes: ["semantic_replay_evidence_watermark_mismatch"] };
+  if (candidate.freshnessCheck.policyVersion !== candidate.semanticInput.policyVersion) return { replay: null, blockerCodes: ["semantic_replay_policy_version_mismatch"] };
+  if (candidate.freshnessCheck.currentSourceWatermark !== candidate.semanticWatermark) return { replay: null, blockerCodes: ["semantic_replay_freshness_watermark_mismatch"] };
+  return { replay: candidate, blockerCodes: [] };
+}
+
+export function validationInputFromReplay(
+  input: ValidateImplementationAuthorizationRefInput,
+  replay: ImplementationAuthorizationSemanticReplayContract,
+): ValidateImplementationAuthorizationRefInput {
+  return {
+    tenantId: input.tenantId,
+    clientId: replay.semanticInput.clientId,
+    siteId: replay.semanticInput.siteId,
+    migrationId: replay.semanticInput.migrationId,
+    proposalPlanId: replay.semanticInput.proposalPlanId,
+    proposalPlanVersion: replay.semanticInput.proposalPlanVersion,
+    proposalPlanSemanticWatermark: replay.semanticInput.proposalPlanSemanticWatermark,
+    proposalApprovalRef: replay.semanticInput.proposalApprovalRef,
+    cloneReviewRef: replay.semanticInput.cloneReviewRef,
+    cloneSiteVersionRef: replay.semanticInput.cloneSiteVersionRef,
+    runtimeArtifactRef: replay.semanticInput.runtimeArtifactRef,
+    sourceEvidenceReviewRef: replay.semanticInput.sourceEvidenceReviewRef,
+    selectedRecommendationRefs: replay.semanticInput.selectedRecommendationRefs,
+    implementationScopeSummary: replay.semanticInput.implementationScopeSummary,
+    implementationNonGoals: replay.semanticInput.implementationNonGoals,
+    riskImpactEffortSummary: replay.semanticInput.riskImpactEffortSummary,
+    limitations: replay.semanticInput.limitations,
+    operatorNotes: replay.semanticInput.operatorNotes,
+    advisoryAiProviderRefs: replay.semanticInput.advisoryAiProviderRefs,
+    auditTimelineRefs: replay.semanticInput.auditTimelineRefs,
+    implementationTargetRef: replay.semanticInput.implementationTargetRef,
+    implementationAttemptPlaceholderRef: replay.semanticInput.implementationAttemptPlaceholderRef,
+    implementationAuthorizationDecisionId: input.implementationAuthorizationDecisionId,
+    approvalRequestId: input.approvalRequestId,
+    evidencePackageId: input.evidencePackageId,
+    policyVersion: replay.semanticInput.policyVersion,
+  };
+}
+
 async function hasAllRequestSubjectRefs(client: AafPgClient, approvalRequestId: string, refs: ImplementationAuthorizationExpectedRefs["subjectRefs"]): Promise<boolean> {
   const result = await client.query(`select * from public.gnr8_aaf_approval_subject_refs where approval_request_id = $1::uuid`, [approvalRequestId]);
   return refs.every((expected) => result.rows.some((row) => refMatches(row, expected, "bridgeSubjectRole")));
@@ -645,6 +863,7 @@ export class SingleSiteImplementationAuthorizationBridge {
       ...jsonArray(input.sourceEvidenceReviewRef.limitations),
     ];
     const refs = buildExpectedImplementationAuthorizationRefs(input);
+    const semanticReplay = buildImplementationAuthorizationSemanticReplay(input);
 
     const evidenceTx = await this.writer.createEvidencePackageTransaction({
       evidencePackage: {
@@ -668,6 +887,7 @@ export class SingleSiteImplementationAuthorizationBridge {
           sourceEvidenceLimitations: jsonArray(input.sourceEvidenceReviewRef.limitations),
           implementationScopeSummary: input.implementationScopeSummary,
           implementationNonGoals: input.implementationNonGoals,
+          implementationAuthorizationSemanticReplay: semanticReplay,
         },
         privacyLabel: "client_confidential",
         redactionLabel: "none",
@@ -775,6 +995,7 @@ export class SingleSiteImplementationAuthorizationBridge {
           implementationScopeSummary: input.implementationScopeSummary,
           implementationNonGoals: input.implementationNonGoals,
           riskImpactEffortSummary: input.riskImpactEffortSummary,
+          implementationAuthorizationSemanticReplay: semanticReplay,
           nonExecuting: true,
         },
         privacyLabel: "client_confidential",
@@ -806,10 +1027,8 @@ export class SingleSiteImplementationAuthorizationBridge {
 
   async validateImplementationAuthorizationRef(input: ValidateImplementationAuthorizationRefInput): Promise<ImplementationAuthorizationValidationResult> {
     const decisionId = text("implementationAuthorizationDecisionId", input.implementationAuthorizationDecisionId);
-    const expectedWatermark = computeImplementationAuthorizationSemanticWatermark(input);
+    const fallbackWatermark = computeImplementationAuthorizationSemanticWatermark(input);
     const subjectType = AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE;
-    const subjectId = text("proposalPlanId", input.proposalPlanId);
-    const refs = buildExpectedImplementationAuthorizationRefs(input);
 
     return this.writer.withTransaction(async (tx) => {
       const decision = await readOne(tx.client, `select * from public.gnr8_aaf_approval_decisions where id = $1::uuid`, [decisionId]);
@@ -831,20 +1050,17 @@ export class SingleSiteImplementationAuthorizationBridge {
         approvalRequestId: requestId,
         approvalDecisionId: decisionId,
         evidencePackageId,
-        semanticWatermark: expectedWatermark,
+        semanticWatermark: fallbackWatermark,
       };
 
       if (requestScope !== AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE) {
         return { ...baseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["approval_scope_mismatch"] };
       }
-      if (!sameScope(input, request) || requestSubjectType !== subjectType || requestSubjectId !== subjectId) {
+      if (!sameScope(input, request) || requestSubjectType !== subjectType || requestSubjectId !== text("proposalPlanId", input.proposalPlanId)) {
         return { ...baseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["approval_subject_mismatch"] };
       }
       if (input.approvalRequestId && requestId !== input.approvalRequestId) {
         return { ...baseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["approval_request_mismatch"] };
-      }
-      if (rowText(request, "policy_version") !== text("policyVersion", input.policyVersion) || rowText(decision, "policy_version") !== text("policyVersion", input.policyVersion)) {
-        return { ...baseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["policy_version_mismatch"] };
       }
       if (!["granted", "granted_with_limitations"].includes(String(decisionStatus))) {
         const status = ["rejected", "revoked", "expired", "superseded", "cancelled"].includes(String(decisionStatus))
@@ -861,34 +1077,49 @@ export class SingleSiteImplementationAuthorizationBridge {
 
       const evidence = await readOne(tx.client, `select * from public.gnr8_aaf_evidence_packages where id = $1::uuid`, [evidencePackageId]);
       if (!evidence) return { ...baseResult, valid: false, status: "missing" as const, limitations: [], blockerCodes: ["evidence_package_missing"] };
+      const replayResult = semanticReplayFromEvidence(evidence);
+      if (!replayResult.replay) {
+        return validationFailureWithWatermark(input, rowText(evidence, "source_watermark") ?? fallbackWatermark, "stale", replayResult.blockerCodes, requestScope, requestSubjectType, requestSubjectId);
+      }
+      const effectiveInput = validationInputFromReplay(input, replayResult.replay);
+      const expectedWatermark = replayResult.replay.semanticWatermark;
+      const refs = buildExpectedImplementationAuthorizationRefs(effectiveInput);
+      const effectiveBaseResult = { ...baseResult, semanticWatermark: expectedWatermark };
+
+      if (!sameScope(effectiveInput, request) || requestSubjectId !== text("proposalPlanId", effectiveInput.proposalPlanId)) {
+        return { ...effectiveBaseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["approval_subject_mismatch"] };
+      }
+      if (rowText(request, "policy_version") !== text("policyVersion", effectiveInput.policyVersion) || rowText(decision, "policy_version") !== text("policyVersion", effectiveInput.policyVersion)) {
+        return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["policy_version_mismatch"] };
+      }
       if (
         rowText(evidence, "package_type") !== AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE ||
-        !sameScope(input, evidence) ||
+        !sameScope(effectiveInput, evidence) ||
         rowText(evidence, "subject_type") !== subjectType ||
-        rowText(evidence, "subject_id") !== subjectId
+        rowText(evidence, "subject_id") !== text("proposalPlanId", effectiveInput.proposalPlanId)
       ) {
-        return { ...baseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["evidence_scope_or_subject_mismatch"] };
+        return { ...effectiveBaseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["evidence_scope_or_subject_mismatch"] };
       }
       if (["invalid", "superseded"].includes(String(rowText(evidence, "status")))) {
-        return { ...baseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: [`evidence_${rowText(evidence, "status")}`] };
+        return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: [`evidence_${rowText(evidence, "status")}`] };
       }
       if (rowText(evidence, "source_watermark") !== expectedWatermark) {
-        return { ...baseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["evidence_watermark_mismatch"] };
+        return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["evidence_watermark_mismatch"] };
       }
       const now = Date.now();
       const evidenceExpiresAt = optionalText(evidence.expires_at);
       const decisionExpiresAt = optionalText(decision.expires_at);
       if ((evidenceExpiresAt && new Date(evidenceExpiresAt).getTime() <= now) || (decisionExpiresAt && new Date(decisionExpiresAt).getTime() <= now)) {
-        return { ...baseResult, valid: false, status: "expired" as const, limitations: [], blockerCodes: ["authorization_expired"] };
+        return { ...effectiveBaseResult, valid: false, status: "expired" as const, limitations: [], blockerCodes: ["authorization_expired"] };
       }
       if (await exists(tx.client, `select exists(select 1 from public.gnr8_aaf_approval_revocations where approval_decision_id = $1::uuid)`, [decisionId])) {
-        return { ...baseResult, valid: false, status: "revoked" as const, limitations: [], blockerCodes: ["approval_revocation_linked"] };
+        return { ...effectiveBaseResult, valid: false, status: "revoked" as const, limitations: [], blockerCodes: ["approval_revocation_linked"] };
       }
       if (await exists(tx.client, `select exists(select 1 from public.gnr8_aaf_approval_supersession_links where superseded_decision_id = $1::uuid)`, [decisionId])) {
-        return { ...baseResult, valid: false, status: "superseded" as const, limitations: [], blockerCodes: ["approval_supersession_linked"] };
+        return { ...effectiveBaseResult, valid: false, status: "superseded" as const, limitations: [], blockerCodes: ["approval_supersession_linked"] };
       }
       if (await exists(tx.client, `select exists(select 1 from public.gnr8_aaf_evidence_package_supersession where superseded_package_id = $1::uuid)`, [evidencePackageId])) {
-        return { ...baseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["evidence_supersession_linked"] };
+        return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["evidence_supersession_linked"] };
       }
       const freshness = await readOne(
         tx.client,
@@ -903,21 +1134,24 @@ export class SingleSiteImplementationAuthorizationBridge {
       );
       if (freshness) {
         if (rowText(freshness, "result") !== "fresh") {
-          return { ...baseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: [`freshness_${rowText(freshness, "result")}`] };
+          return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: [`freshness_${rowText(freshness, "result")}`] };
+        }
+        if (rowText(freshness, "policy_version") !== replayResult.replay.freshnessCheck.policyVersion) {
+          return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["freshness_policy_version_mismatch"] };
         }
         const freshnessExpiresAt = optionalText(freshness.expires_at);
         if (freshnessExpiresAt && new Date(freshnessExpiresAt).getTime() <= now) {
-          return { ...baseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["freshness_expired"] };
+          return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["freshness_expired"] };
         }
         if (rowText(freshness, "current_source_watermark") !== expectedWatermark) {
-          return { ...baseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["freshness_watermark_mismatch"] };
+          return { ...effectiveBaseResult, valid: false, status: "stale" as const, limitations: [], blockerCodes: ["freshness_watermark_mismatch"] };
         }
       }
       if (!(await hasAllRequestSubjectRefs(tx.client, requestId ?? "", refs.subjectRefs))) {
-        return { ...baseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["required_subject_refs_missing_or_mismatched"] };
+        return { ...effectiveBaseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["required_subject_refs_missing_or_mismatched"] };
       }
       if (!(await hasAllEvidenceRefs(tx.client, evidencePackageId, refs.evidenceRefs))) {
-        return { ...baseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["required_evidence_refs_missing_or_mismatched"] };
+        return { ...effectiveBaseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["required_evidence_refs_missing_or_mismatched"] };
       }
       const evidenceLink = await exists(
         tx.client,
@@ -925,12 +1159,12 @@ export class SingleSiteImplementationAuthorizationBridge {
         [requestId, evidencePackageId],
       );
       if (!evidenceLink) {
-        return { ...baseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["approval_evidence_link_missing"] };
+        return { ...effectiveBaseResult, valid: false, status: "invalid" as const, limitations: [], blockerCodes: ["approval_evidence_link_missing"] };
       }
 
       const limitationsJson = jsonObject(evidence.limitations_json);
       return {
-        ...baseResult,
+        ...effectiveBaseResult,
         valid: true,
         status: decisionStatus as "granted" | "granted_with_limitations",
         limitations: jsonArray(limitationsJson.limitations),

@@ -994,6 +994,14 @@ Canonical blocked production improvement execution retry closeout for the approv
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 - `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
 
+## MVP-CUTLINE-39 MVP-20 Semantic Replay Reconciliation
+
+Canonical local semantic replay reconciliation for MVP-20 implementation authorization validation, recording root cause that CUTLINE-35 AAF evidence/request rows persisted the final semantic watermark but not the full original authorization semantic input, including implementation target, implementation attempt placeholder, scope summary, non-goals, operator notes, and original freshness policy/version data; fixed future bridge writes by storing a versioned `implementationAuthorizationSemanticReplay` contract in existing AAF evidence package JSON; fixed execution-time validation by replaying stored canonical authorization semantic input and stored authorization policy version while preserving fail-closed stale/revoked/superseded/expired/wrong-scope/wrong-subject/wrong-evidence checks; no SQL migration required; proposal-event approval refs remain evidence only; missing or mismatched replay data blocks; existing production AAF request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`, decision `12adb404-b9f6-4961-aa7a-63e24e023b12`, and evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3` cannot be reused because they lack the new stored replay contract; CUTLINE-40 must create a fresh implementation authorization request/evidence package and obtain a fresh decision after deployment; focused bridge tests, MVP-20 validator tests, and focused TypeScript no-emit passed; and the boundary of no production AAF mutation, improvement execution attempt, improved candidate creation, content/client/launch approval chain, launch readiness, publish activation request/decision/gate, publish dry-run, shadow-publish, runtime publish, provider/DNS/domain/billing mutation, active pointer mutation, deploy, production migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-39-mvp20-semantic-replay-reconciliation.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

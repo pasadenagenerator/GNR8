@@ -10,6 +10,7 @@ import {
 import { AafIdempotencyConflictError, type AafRecord } from "../aaf/aaf-writer-repository";
 import {
   SingleSiteImplementationAuthorizationBridge,
+  buildImplementationAuthorizationSemanticReplay,
   type PrepareImplementationAuthorizationRequestInput,
   type ValidateImplementationAuthorizationRefInput,
 } from "./implementation-authorization-bridge";
@@ -295,13 +296,26 @@ test("bridge blocks unapproved proposals and missing required refs", async () =>
 
 test("bridge builds exact-scope evidence and request records without approval decisions", async () => {
   const writer = new FakeAafWriter();
-  const prepared = await new SingleSiteImplementationAuthorizationBridge(writer as never).prepareImplementationAuthorizationRequest(baseInput());
+  const input = baseInput();
+  const prepared = await new SingleSiteImplementationAuthorizationBridge(writer as never).prepareImplementationAuthorizationRequest(input);
+  const replay = (prepared.evidencePackage.limitations_json as Record<string, unknown>).implementationAuthorizationSemanticReplay as Record<string, unknown>;
+  const replayRoles = replay.replayRoles as Record<string, unknown>;
+  const replayFreshness = replay.freshnessCheck as Record<string, unknown>;
   assert.equal(AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE, "single_site_improvement_implementation_authorization");
   assert.equal(prepared.scope, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE);
   assert.equal(prepared.subjectType, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SUBJECT_TYPE);
   assert.equal(prepared.evidencePackage.package_type, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_EVIDENCE_TYPE);
   assert.equal(prepared.approvalRequest.scope, AAF_SINGLE_SITE_IMPLEMENTATION_AUTHORIZATION_SCOPE);
   assert.equal(prepared.approvalRequest.status, "requested");
+  assert.deepEqual(replay, buildImplementationAuthorizationSemanticReplay(input) as unknown as Record<string, unknown>);
+  assert.equal(replay.semanticWatermark, prepared.semanticWatermark);
+  assert.equal((replayRoles.implementationTargetRef as Record<string, unknown>).role, "implementation_target");
+  assert.equal((replayRoles.implementationAttemptPlaceholderRef as Record<string, unknown>).role, "implementation_attempt_placeholder");
+  assert.equal(replayRoles.implementationScopeSummary, input.implementationScopeSummary);
+  assert.deepEqual(replayRoles.implementationNonGoals, input.implementationNonGoals);
+  assert.deepEqual(replayRoles.operatorNotes, input.operatorNotes);
+  assert.equal(replayFreshness.policyVersion, input.policyVersion);
+  assert.equal(replayFreshness.currentSourceWatermark, prepared.semanticWatermark);
   assert.ok(prepared.subjectRefs.some((ref) => (ref.metadata_json as Record<string, unknown>).bridgeSubjectRole === "proposal_plan"));
   assert.ok(prepared.subjectRefs.some((ref) => (ref.metadata_json as Record<string, unknown>).bridgeSubjectRole === "clone_site_version"));
   assert.ok(prepared.evidenceSourceRefs.some((ref) => (ref.metadata_json as Record<string, unknown>).bridgeEvidenceRole === "implementation_scope_summary"));
@@ -375,6 +389,12 @@ test("bridge validates exact-scope granted decisions and preserves limited grant
   assert.equal(valid.valid, true);
   assert.equal(valid.status, "granted");
   assert.deepEqual(valid.limitations, [{ carryForward: "source font unavailable" }, { proposal: "approved copy recommendations only" }]);
+  const replayedPolicy = await granted.bridge.validateImplementationAuthorizationRef({
+    ...validationInput(granted.input, granted.decision.id, granted.prepared.approvalRequest.id, granted.prepared.evidencePackage.id),
+    policyVersion: "MVP-20-validator",
+  });
+  assert.equal(replayedPolicy.valid, true);
+  assert.equal(replayedPolicy.semanticWatermark, granted.prepared.semanticWatermark);
 
   const limited = await preparedWithGrant("granted_with_limitations");
   const limitedValid = await limited.bridge.validateImplementationAuthorizationRef(validationInput(limited.input, limited.decision.id, limited.prepared.approvalRequest.id, limited.prepared.evidencePackage.id));
