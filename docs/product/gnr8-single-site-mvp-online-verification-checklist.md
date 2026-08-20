@@ -33,6 +33,9 @@ Do not start online verification until all are true:
 - CUTLINE-34B implementation authorization bridge deployment gate is satisfied before request retry: `implementation_authorization_bridge_deployed` is recorded for deployed SHA `2caf3f8` / `2caf3f82745484200f9b10997f7f360f6c0c6366`; retry remains `not_run`.
 - CUTLINE-35 implementation authorization request/evidence creation is complete before any authorization decision or improvement execution: AAF request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` is `requested` with evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`; no downstream decision/gate/execution/readiness/publish mutation exists.
 - CUTLINE-36 human AAF implementation authorization decision is complete before improvement execution: decision `12adb404-b9f6-4961-aa7a-63e24e023b12` is `granted` for request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` and evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`; no gate/execution/improved-review/content-client-launch/readiness/publish mutation exists.
+- CUTLINE-37 authorized improvement execution is blocked before retry: no execution attempt or improved candidate exists because MVP-21 requires an attached implementation authorization ref on proposal plan `f541075c-4641-4f70-b5ff-64a8af071571`.
+- CUTLINE-37A implementation authorization ref attachment is complete before retry: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` has `implementation_authorization_attached=true` with granted AAF request/decision/evidence refs, and no execution attempt or improved candidate exists.
+- CUTLINE-38 authorized improvement execution retry is blocked before persistence: attached AAF refs read back as granted/fresh/exact-scope, but MVP-20 validation blocks on semantic replay mismatch before MVP-21 attempt creation.
 
 ## Operator Sequence
 
@@ -512,6 +515,66 @@ Production AAF implementation authorization decision status: `granted`. CUTLINE-
 - Boundary: no AAF gate attempt, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-36-human-aaf-implementation-authorization-decision.md`.
+
+## CUTLINE-37 Authorized Improvement Execution Candidate Readback
+
+Production improvement execution status: `blocked`. Exact approval was present, and the task stopped before improved candidate creation.
+
+- Workflow path used: MVP-20 validator, then MVP-21 execution attempt creation service.
+- MVP-20 validation result: `blocked`, reason `evidence_stale`, blocker `evidence_watermark_mismatch`.
+- MVP-21 execution result: blocked before attempt creation with `improvement execution requires implementation authorization ref`.
+- Proposal plan attachment readback: `implementation_authorization_attached=false`, `implementation_authorization_refs_json={}`.
+- Improvement execution attempts before/after: `0` / `0`.
+- Improved candidate site version/artifact: not created.
+- Forbidden downstream counts remained `0` for improved reviews, content/client/launch approvals, launch readiness, and publish operator actions.
+- Runtime active pointers remained unchanged at `6`; selected runtime active pointers remained `0`.
+- Online verification status: `improvement_execution_blocked`.
+- Boundary: no improved review acceptance, approval chain, launch readiness, publish dry-run, shadow-publish, runtime publish, active pointer mutation, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-37-authorized-improvement-execution-candidate-readback.md`.
+
+## CUTLINE-37A Attach Implementation Authorization Refs
+
+Production implementation authorization attachment status: `attached`. The task stopped before improvement execution.
+
+- Exact attachment approval sentence: present.
+- Workflow path used: direct read-only AAF validity readback, then `ImprovementProposalPlanningService.attachImplementationAuthorizationRef(...)`.
+- Proposal plan attachment before/after: `implementation_authorization_attached=false` / `true`.
+- Plan version before/after: `3` / `4`.
+- Proposal implementation authorization ref id: `94ee9cf8-2efd-49a0-b821-28a2d5ca7348`.
+- Proposal event id: `5e7dc7ef-0ad5-4fb5-a763-c5a5c830d2ce`.
+- Attached request/evidence/decision refs: `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`, `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`, `12adb404-b9f6-4961-aa7a-63e24e023b12`.
+- Attached semantic watermark: `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`.
+- MVP-20 validation after attachment: not run; semantic replay was not feasible from persisted AAF rows because operator-note hash inputs are not echoed. Future improvement execution must rerun execution-time validation with exact authorization input.
+- Forbidden downstream counts remained `0` for improvement execution attempts, improved reviews, content/client/launch approvals, launch readiness, and AAF gate attempts.
+- Runtime active pointers remained unchanged at `6`; selected runtime active pointers remained `0`.
+- Online verification status: `implementation_authorization_attached_pending_improvement_execution`.
+- Boundary: no improvement execution attempt, improved candidate, approval chain, launch readiness, publish dry-run, shadow-publish, runtime publish, active pointer mutation, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-37a-attach-implementation-authorization-refs.md`.
+
+## CUTLINE-38 Authorized Improvement Execution Retry
+
+Production improvement execution retry status: `blocked`. Exact approval was present, attached implementation authorization refs were read back, and the task stopped before execution attempt persistence.
+
+- Exact improvement-execution approval sentence: present.
+- Proposal attachment readback: `implementation_authorization_attached=true`, latest proposal implementation authorization ref `94ee9cf8-2efd-49a0-b821-28a2d5ca7348`, proposal authorization attach event `5e7dc7ef-0ad5-4fb5-a763-c5a5c830d2ce`.
+- Attached AAF refs: request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`, decision `12adb404-b9f6-4961-aa7a-63e24e023b12`, evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`, semantic watermark `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`.
+- AAF decision readback: `granted`, scope `single_site_improvement_implementation_authorization`, subject `single_site_improvement_proposal_plan` / `f541075c-4641-4f70-b5ff-64a8af071571`, evidence freshness `fresh`, no expiry, no limitations.
+- Workflow path used: `ImprovementExecutionAafValidator.validateImprovementExecutionAuthorization(...)` only. MVP-21 improvement execution, MVP-23 improved candidate dry-run, and MVP-24 improved candidate creation were not run because MVP-20 blocked.
+- MVP-20 validation result: `allowed=false`, mode `blocked`, reason `evidence_stale`, blocker code `policy_version_mismatch`; freshness status `unknown`.
+- Validation drift/stale refs: semantic watermark mismatch on `implementation_target`, `implementation_attempt_placeholder`, `implementation_scope_summary`, `implementation_non_goals`, `operator_notes`, and `semantic_watermark`; stale refs include `implementation_target`, `implementation_attempt_placeholder`, `implementation_scope_summary`, `implementation_non_goals`, `operator_notes`, and `freshness_check`.
+- Reconstruction note: the expected attached authorization watermark is `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`, but the best reconstructable semantic input produced `single-site-implementation-authorization:1949f45661be2cae6bf32419177ac7d658192eb198fbb97551e90458b130749b`; persisted AAF rows do not echo the original operator-note hash inputs needed for exact replay.
+- Improvement execution attempt id: none; attempts remained `0`.
+- Improved candidate site version/artifact: none.
+- Applied/not-applied recommendations: not applicable because execution did not reach dry-run or creation.
+- Semantic output watermark: none.
+- Forbidden downstream counts remained `0` for improved version reviews, content/client/launch approvals, launch readiness, publish operator actions, AAF gate attempts, and publish activation requests.
+- Runtime active pointers remained unchanged at `6`; selected runtime active pointers remained `0`.
+- Online verification status: `improvement_execution_blocked`.
+- Boundary: no execution attempt, improved candidate, improved review acceptance, content/client/launch approval, launch readiness, publish activation request/decision/gate, publish dry-run, shadow-publish, runtime publish, active pointer mutation, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-38-authorized-improvement-execution-retry.md`.
 
 ## Stop Criteria
 
