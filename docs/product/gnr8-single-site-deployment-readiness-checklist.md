@@ -15,6 +15,9 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm MVP-CUTLINE-30 proposal planning is recorded before proposal approval, implementation authorization, or improvement execution.
 - [ ] Confirm MVP-CUTLINE-31 proposal approval is recorded before implementation authorization or improvement execution.
 - [ ] Confirm MVP-CUTLINE-32 implementation authorization request preparation is recorded before any authorization decision or improvement execution.
+- [ ] Confirm MVP-CUTLINE-34B implementation authorization bridge deployment verification is recorded before retrying implementation authorization request creation.
+- [ ] Confirm MVP-CUTLINE-35 implementation authorization request/evidence creation is recorded before any authorization decision or improvement execution.
+- [ ] Confirm MVP-CUTLINE-36 human AAF implementation authorization decision is recorded before any improvement execution.
 - [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
@@ -324,6 +327,74 @@ Status as of 2026-08-18: local bridge alignment is complete and tested; no produ
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-33-implementation-authorization-bridge-alignment.md`.
 
+### MVP-CUTLINE-34B Implementation Authorization Bridge Deployment Verification
+
+Status as of 2026-08-18: CUTLINE-33 bridge alignment deployment verification is complete; authorization request retry remains unrun.
+
+- Human-reported `gnr8-platform` production branch/SHA: `main` / `2caf3f8`.
+- Resolved SHA: `2caf3f82745484200f9b10997f7f360f6c0c6366`.
+- Git refs: local `main`, local `origin/main`, and remote `refs/heads/main` all resolve to `2caf3f82745484200f9b10997f7f360f6c0c6366`.
+- SHA on `origin/main`: yes.
+- Bridge alignment files present at deployed SHA: `implementation-authorization-bridge.ts`, `implementation-authorization-bridge.test.ts`, and `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`.
+- Bridge alignment confirmed at deployed SHA: canonical scope `single_site_improvement_implementation_authorization`, shorter scope rejected, proposal-event approval refs accepted as evidence only, and evidence package type preserved as `single_site_improvement_implementation_authorization_evidence`.
+- Safe production app health: `HEAD https://app.pasadenagenerator.com/` returned HTTP `200` from Vercel.
+- Deployment gate: `implementation_authorization_bridge_deployed`.
+- Implementation authorization request retry: `not_run`.
+- Production AAF evidence packages, approval requests, decisions, and gate attempts created by this task: `0`.
+- Forbidden downstream work remained unrun: authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, and push.
+- Online verification status remains: `implementation_authorization_request_blocked` until CUTLINE-35 retry creates exact-scope AAF request/evidence rows.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-34b-implementation-authorization-bridge-deployment-verification.md`.
+
+### MVP-CUTLINE-35 Implementation Authorization Request Creation
+
+Status as of 2026-08-18: production AAF implementation authorization request/evidence creation passed through the deployed/current bridge, then stopped before authorization decision.
+
+- Exact authorization-request approval sentence: present.
+- Path used: `SingleSiteImplementationAuthorizationBridge.prepareImplementationAuthorizationRequest(...)` via `AafWriterRepository`.
+- Deployment gate: `implementation_authorization_bridge_deployed`.
+- Proposal plan id: `f541075c-4641-4f70-b5ff-64a8af071571`; status `approved`; version `3`.
+- Accepted recommendation refs matched expected four ids.
+- AAF evidence package id: `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`.
+- AAF approval request id: `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`.
+- Request status: `requested`.
+- Scope/action: `single_site_improvement_implementation_authorization` / `start_single_site_improvement_implementation`.
+- Prompt requested action label: `authorize_single_site_improvement_implementation`; deployed canonical contract action is `start_single_site_improvement_implementation`.
+- Semantic watermark: `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`.
+- Freshness/expiry: `fresh`; evidence/request/freshness expiry `null`.
+- Proposal-event approval evidence-only refs recorded: proposal event `f7320eae-2426-4c8e-ab91-0cfdac135d82` and state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642`; `implementationAuthorizationDecisionSubstitution=false`.
+- Forbidden downstream counts after readback: AAF approval decisions `0`, AAF gate attempts `0`, improvement attempts `0`, improved reviews `0`, content/client/launch approvals `0`, launch readiness `0`, publish operator actions `0`, runtime active pointers unchanged at `6`, selected runtime active pointers `0`.
+- Required decision next: create a separate human AAF approval decision for request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` before any improvement execution.
+- Online verification status: `implementation_authorization_requested_pending_decision`.
+- Boundary: no authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-35-implementation-authorization-request-creation.md`.
+
+### MVP-CUTLINE-36 Human AAF Implementation Authorization Decision
+
+Status as of 2026-08-20: production AAF implementation authorization decision is granted for the existing exact-scope request, then stopped before improvement execution.
+
+- Exact grant approval sentence: present.
+- Path used: `AafWriterRepository.createApprovalDecisionTransaction(...)`.
+- Deterministic idempotency/correlation base: `gnr8-cutline-36-chs-si-implementation-authorization-decision-20260818`.
+- AAF approval decision id: `12adb404-b9f6-4961-aa7a-63e24e023b12`.
+- Decision status: `granted`.
+- AAF approval request id: `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`.
+- AAF evidence package id: `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`.
+- Decision evidence link id: `364698fe-08e0-4bb6-b8cf-f4bda20a583f`.
+- Audit event id: `ecebbc77-e924-4ed5-be4f-18b0b7352f4f`; audit refs `76565aaf-24ba-482e-ba6d-ac99f06011e9`, `24a2ea4b-0f53-4ee7-b822-634bee4570ca`, `7dabe73d-38a7-4273-a264-b2d63db9713c`, and `1c64555e-8d25-4531-918b-1383dd7ebb53`.
+- Scope/action: `single_site_improvement_implementation_authorization` / `start_single_site_improvement_implementation`.
+- Subject type/id: `single_site_improvement_proposal_plan` / `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Policy version/result: `MVP-18` / `approval_required`; policy evaluation `fcc739bf-b1be-4e40-86d9-aae45abc9949`.
+- Semantic watermark: `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`.
+- Freshness/expiry: `fresh`; decision/request/evidence/freshness expiry `null`.
+- Limitations: none carried in the evidence `limitations` array.
+- Forbidden downstream counts after readback: AAF gate attempts `0`, improvement execution attempts `0`, improved version reviews `0`, content approvals `0`, client approvals `0`, launch approvals `0`, launch readiness `0`, publish operator actions `0`, runtime active pointers unchanged at `6`, selected runtime active pointers `0`.
+- Online verification status: `implementation_authorization_granted_pending_improvement_execution`.
+- Boundary: no AAF gate attempt, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-36-human-aaf-implementation-authorization-decision.md`.
+
 ## Environment Flags
 
 Baseline non-flag environment required for the internal surfaces:
@@ -403,6 +474,12 @@ CUTLINE-31 result: proposal approval was completed through `ImprovementProposalP
 CUTLINE-32 result: implementation authorization request preparation was attempted only after the exact authorization-request sentence was confirmed, but the task stopped before AAF row creation. Read-only production preflight confirmed proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` is `approved` with four expected recommendations, but the current proposal approval refs are proposal-event refs and the prompt scope does not match the installed bridge scope. No AAF evidence package, AAF approval request, authorization decision, gate attempt, improvement execution, approval chain, launch readiness, publish action, or active pointer mutation occurred. Online verification status is `implementation_authorization_request_blocked`.
 
 CUTLINE-33 result: local bridge code now accepts proposal-event approval refs as explicit evidence for exact-scope implementation authorization request preparation while preserving the separate implementation authorization decision boundary. The canonical scope is `single_site_improvement_implementation_authorization`; the shorter `single_site_implementation_authorization` is rejected in focused tests. No SQL migration is required, no production AAF rows were created, and a bridge code deploy is required before retrying CUTLINE-32 in production.
+
+CUTLINE-34B result: implementation authorization bridge deployment is verified. The human-reported `gnr8-platform` production branch/SHA is `main` / `2caf3f8`, resolving to `2caf3f82745484200f9b10997f7f360f6c0c6366`; local `main`, local `origin/main`, and remote `refs/heads/main` all resolve to the same commit. The deployed SHA is on `origin/main` and contains the CUTLINE-33 bridge alignment files with canonical scope/evidence-only behavior. Safe production app health returned HTTP `200`. Deployment gate is `implementation_authorization_bridge_deployed`; authorization request retry remains `not_run`; online verification remains `implementation_authorization_request_blocked` until CUTLINE-35 creates exact-scope AAF request/evidence rows.
+
+CUTLINE-35 result: production AAF implementation authorization evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3` and approval request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` were created/reused by the deployed/current bridge for scope `single_site_improvement_implementation_authorization`, persisted canonical action `start_single_site_improvement_implementation`, status `requested`, and semantic watermark `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`. Proposal-event approval refs are evidence only. Online verification is now `implementation_authorization_requested_pending_decision`; the next required milestone is a separate human AAF approval decision.
+
+CUTLINE-36 result: production AAF implementation authorization decision `12adb404-b9f6-4961-aa7a-63e24e023b12` is `granted` for request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` and evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`, using `AafWriterRepository.createApprovalDecisionTransaction(...)`. Decision audit event `ecebbc77-e924-4ed5-be4f-18b0b7352f4f` and decision evidence link `364698fe-08e0-4bb6-b8cf-f4bda20a583f` were created. Online verification is now `implementation_authorization_granted_pending_improvement_execution`; the next required milestone is separately authorized improvement execution.
 
 ## Online Checklist
 

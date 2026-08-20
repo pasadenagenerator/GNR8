@@ -30,6 +30,9 @@ Do not start online verification until all are true:
 - CUTLINE-30 proposal planning is complete before proposal approval, implementation authorization, or improvement execution: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` is `ready_for_review` with four selected recommendations, four findings, and no downstream approval/execution/readiness/publish/AAF mutation.
 - CUTLINE-31 proposal approval is complete before implementation authorization or improvement execution: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` is `approved`, proposal approval event `f7320eae-2426-4c8e-ab91-0cfdac135d82` is recorded, and no implementation authorization/execution/readiness/publish/AAF mutation exists.
 - CUTLINE-32 implementation authorization request preparation is blocked before AAF row creation: the exact request sentence is present, proposal approval and recommendation refs are confirmed, but the current bridge cannot create truthful AAF rows from proposal-event approval refs or the prompt scope alias.
+- CUTLINE-34B implementation authorization bridge deployment gate is satisfied before request retry: `implementation_authorization_bridge_deployed` is recorded for deployed SHA `2caf3f8` / `2caf3f82745484200f9b10997f7f360f6c0c6366`; retry remains `not_run`.
+- CUTLINE-35 implementation authorization request/evidence creation is complete before any authorization decision or improvement execution: AAF request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` is `requested` with evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`; no downstream decision/gate/execution/readiness/publish mutation exists.
+- CUTLINE-36 human AAF implementation authorization decision is complete before improvement execution: decision `12adb404-b9f6-4961-aa7a-63e24e023b12` is `granted` for request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` and evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`; no gate/execution/improved-review/content-client-launch/readiness/publish mutation exists.
 
 ## Operator Sequence
 
@@ -440,6 +443,75 @@ Local implementation authorization bridge alignment status: complete. Production
 - Boundary: no production Supabase write, authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider call, deploy, migration, env mutation, commit, or push.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-33-implementation-authorization-bridge-alignment.md`.
+
+## CUTLINE-34B Implementation Authorization Bridge Deployment Verification
+
+Production implementation authorization bridge deployment status: `implementation_authorization_bridge_deployed`. The authorization request retry remains `not_run`.
+
+- Human-reported `gnr8-platform` production branch/SHA: `main` / `2caf3f8`.
+- Resolved SHA: `2caf3f82745484200f9b10997f7f360f6c0c6366`.
+- SHA on `origin/main`: yes; local `main`, local `origin/main`, and remote `refs/heads/main` all resolve to the deployed commit.
+- CUTLINE-33 bridge alignment files at deployed SHA: `apps/platform/gnr8/single-site/implementation-authorization-bridge.ts`, `apps/platform/gnr8/single-site/implementation-authorization-bridge.test.ts`, and `packages/gnr8-runtime-contracts/src/aaf-contracts.test.ts`.
+- Alignment verified at deployed SHA: canonical scope `single_site_improvement_implementation_authorization`, shorter scope rejected, proposal-event approval refs accepted as evidence-only preparation inputs, request scope preserved, and evidence package type `single_site_improvement_implementation_authorization_evidence` preserved.
+- Safe production app health: `HEAD https://app.pasadenagenerator.com/` returned HTTP `200` from Vercel.
+- Production AAF evidence package id: not created.
+- Production AAF approval request id: not created.
+- Production AAF approval decision id: not created.
+- Production AAF gate attempt id: not created.
+- Authorization decision, improvement execution, improved candidate creation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, and push: not run.
+- Online verification status remains: `implementation_authorization_request_blocked` until CUTLINE-35 retry creates exact-scope AAF request/evidence rows.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-34b-implementation-authorization-bridge-deployment-verification.md`.
+
+## CUTLINE-35 Implementation Authorization Request Creation
+
+Production AAF implementation authorization request status: `requested`. CUTLINE-35 created or reused the exact-scope evidence/request rows through the deployed/current bridge, then stopped before authorization decision.
+
+- Exact authorization-request approval sentence: present.
+- Workflow path: `SingleSiteImplementationAuthorizationBridge.prepareImplementationAuthorizationRequest(...)` via `AafWriterRepository`.
+- Deployment gate: `implementation_authorization_bridge_deployed`.
+- Proposal plan id: `f541075c-4641-4f70-b5ff-64a8af071571`; status `approved`; version `3`.
+- Accepted recommendation count: `4`; expected refs matched.
+- AAF evidence package id: `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`.
+- AAF approval request id: `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`.
+- Request status: `requested`.
+- Scope/action: `single_site_improvement_implementation_authorization` / `start_single_site_improvement_implementation`.
+- Prompt requested action label: `authorize_single_site_improvement_implementation`; deployed canonical contract action is `start_single_site_improvement_implementation`.
+- Evidence package type: `single_site_improvement_implementation_authorization_evidence`.
+- Subject type/id: `single_site_improvement_proposal_plan` / `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Policy/evidence refs: evidence link `7f6ee915-a2df-434b-bb3a-50ad564a66a7`, policy evaluation `fcc739bf-b1be-4e40-86d9-aae45abc9949`, audit event `4a0b7532-4a4b-41aa-9c7b-d29c25e5cfe0`.
+- Semantic watermark: `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`.
+- Freshness/expiry: `fresh`; evidence package, request, and freshness expiry are `null`.
+- Proposal-event approval evidence-only refs: proposal event `f7320eae-2426-4c8e-ab91-0cfdac135d82` and state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642`; `implementationAuthorizationDecisionSubstitution=false`.
+- Required decision next: create a separate human AAF approval decision for request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83` before any improvement execution.
+- Forbidden downstream counts: AAF approval decisions `0`, AAF gate attempts `0`, implementation execution attempts `0`, improved version reviews `0`, content/client/launch approvals `0`, launch readiness records `0`, publish operator actions `0`, runtime active pointers `6`, selected runtime active pointers `0`.
+- Online verification status: `implementation_authorization_requested_pending_decision`.
+- Boundary: no authorization decision, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-35-implementation-authorization-request-creation.md`.
+
+## CUTLINE-36 Human AAF Implementation Authorization Decision
+
+Production AAF implementation authorization decision status: `granted`. CUTLINE-36 created one exact-scope human AAF approval decision for the existing request, then stopped before improvement execution.
+
+- Exact grant approval sentence: present.
+- Workflow path: `AafWriterRepository.createApprovalDecisionTransaction(...)`.
+- Deterministic idempotency/correlation base: `gnr8-cutline-36-chs-si-implementation-authorization-decision-20260818`.
+- AAF approval decision id: `12adb404-b9f6-4961-aa7a-63e24e023b12`.
+- Decision status: `granted`.
+- Request/evidence linkage: request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`; evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`; decision evidence link `364698fe-08e0-4bb6-b8cf-f4bda20a583f`.
+- Scope/action: `single_site_improvement_implementation_authorization` / `start_single_site_improvement_implementation`.
+- Subject type/id: `single_site_improvement_proposal_plan` / `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Policy version/result: `MVP-18` / `approval_required`; policy evaluation `fcc739bf-b1be-4e40-86d9-aae45abc9949`.
+- Semantic watermark: `single-site-implementation-authorization:d5339d4f0df08b75858506161f5584be83da934a1147865423a243f6b40fe321`.
+- Freshness/expiry: evidence `fresh`; decision, request, evidence package, and freshness expiry are `null`.
+- Audit event/ref: event `ecebbc77-e924-4ed5-be4f-18b0b7352f4f`, replay class `not_replayable`; audit refs `76565aaf-24ba-482e-ba6d-ac99f06011e9`, `24a2ea4b-0f53-4ee7-b822-634bee4570ca`, `7dabe73d-38a7-4273-a264-b2d63db9713c`, and `1c64555e-8d25-4531-918b-1383dd7ebb53`.
+- Limitations: none carried in the evidence `limitations` array.
+- Forbidden downstream counts after readback: AAF gate attempts `0`, implementation execution attempts `0`, improved version reviews `0`, content/client/launch approvals `0`, launch readiness records `0`, publish operator actions `0`, runtime active pointers `6`, selected runtime active pointers `0`.
+- Online verification status: `implementation_authorization_granted_pending_improvement_execution`.
+- Boundary: no AAF gate attempt, improvement execution, improved candidate creation, content/client/launch approval chain, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-36-human-aaf-implementation-authorization-decision.md`.
 
 ## Stop Criteria
 
