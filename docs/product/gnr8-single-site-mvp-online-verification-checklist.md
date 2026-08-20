@@ -37,6 +37,9 @@ Do not start online verification until all are true:
 - CUTLINE-37A implementation authorization ref attachment is complete before retry: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` has `implementation_authorization_attached=true` with granted AAF request/decision/evidence refs, and no execution attempt or improved candidate exists.
 - CUTLINE-38 authorized improvement execution retry is blocked before persistence: attached AAF refs read back as granted/fresh/exact-scope, but MVP-20 validation blocks on semantic replay mismatch before MVP-21 attempt creation.
 - CUTLINE-39 MVP-20 semantic replay reconciliation is complete locally before any further retry: future authorization evidence stores a canonical replay contract, old production AAF refs without that contract are not reusable, and CUTLINE-40 must create a fresh request/decision after deployment.
+- CUTLINE-39C MVP-20 semantic replay fix deployment gate is satisfied before CUTLINE-40: `mvp20_semantic_replay_fix_deployed` is recorded for deployed SHA `023a5d4` / `023a5d4fcd37485ac17d739150e8d163218e3b7a`; fresh authorization request status remains `not_created`; improvement execution retry remains `not_run`.
+- CUTLINE-40 fresh implementation authorization request/evidence is complete before fresh decision or execution retry: AAF request `0b3a888e-cc6a-4cc1-bc53-476d70a20144` is `requested` with evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489` and stored replay contract version `1`; no fresh decision, gate attempt, improvement execution, candidate, approval, readiness, publish, provider, deploy, migration, env, or active-pointer mutation exists.
+- CUTLINE-41 fresh human AAF implementation authorization decision is complete before proposal attach-ref or execution retry: decision `5b4a4f19-a3dc-472e-8d2f-c65a126fadb0` is `granted` for request `0b3a888e-cc6a-4cc1-bc53-476d70a20144` and evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489`; no attach-ref, gate attempt, improvement execution, candidate, approval, readiness, publish, provider, deploy, migration, env, or active-pointer mutation exists.
 
 ## Operator Sequence
 
@@ -589,6 +592,70 @@ Local replay contract status: `fixed_pending_deploy`. Future implementation auth
 - Boundary: no production AAF row mutation, improvement execution, improved candidate, dry-run, shadow-publish, runtime publish, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-39-mvp20-semantic-replay-reconciliation.md`.
+
+## CUTLINE-39C MVP-20 Semantic Replay Fix Deployment Verification
+
+Production deployment status: `mvp20_semantic_replay_fix_deployed`. The human-confirmed Vercel `gnr8-platform` production deployment is branch `main` at short SHA `023a5d4`, which resolves to `023a5d4fcd37485ac17d739150e8d163218e3b7a`. Local `main`, local `origin/main`, and remote `refs/heads/main` all resolve to that same commit.
+
+- SHA on origin/main: yes.
+- Deployed fix evidence: commit `023a5d4fcd37485ac17d739150e8d163218e3b7a` contains the CUTLINE-39 semantic replay fix in `implementation-authorization-bridge.ts`, `improvement-execution-aaf-validator.ts`, `implementation-authorization-bridge.test.ts`, and `improvement-execution-aaf-validator.test.ts`.
+- Safe production app health: `HEAD https://app.pasadenagenerator.com/` returned HTTP `200` from Vercel with `x-matched-path: /[[...slug]]`.
+- Fresh authorization request status: `not_created`.
+- Improvement execution retry status: `not_run`.
+- Existing AAF refs are not reusable: request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`, decision `12adb404-b9f6-4961-aa7a-63e24e023b12`, and evidence `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3` lack stored replay data.
+- Online verification status: `blocked_pending_cutline_40_fresh_aaf_request_decision_with_replay_data`.
+- Boundary: no production AAF write, fresh authorization request/decision, attach refs, improvement execution, improved candidate, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-39c-mvp20-semantic-replay-fix-deployment-verification.md`.
+
+## CUTLINE-40 Fresh Implementation Authorization Request With Replay Data
+
+Production request status: `requested`. The replay-fixed bridge created fresh exact-scope production AAF rows under idempotency base `gnr8-cutline-40-chs-si-implementation-authorization-request-replay-v2-20260820`.
+
+- Exact fresh request approval sentence: present.
+- Workflow path: `SingleSiteImplementationAuthorizationBridge.prepareImplementationAuthorizationRequest(...)` via `AafWriterRepository`.
+- Fresh AAF approval request: `0b3a888e-cc6a-4cc1-bc53-476d70a20144`.
+- Fresh AAF evidence package: `b4ddb218-ce37-42ab-b2f3-433138df6489`.
+- Scope/action: `single_site_improvement_implementation_authorization` / `start_single_site_improvement_implementation`.
+- Subject: `single_site_improvement_proposal_plan` / `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Evidence type: `single_site_improvement_implementation_authorization_evidence`.
+- Semantic watermark: `single-site-implementation-authorization:c90369e375923aee86e6b5f0f637901bd3cc9e24e071aaa41e605a674971aeb7`.
+- Replay object: present, contract `single_site_implementation_authorization_semantic_replay`, version `1`.
+- Replay roles/components present: implementation target ref, implementation attempt placeholder ref, scope summary, non-goals, operator notes, and freshness check.
+- Freshness/expiry: freshness result `fresh`; request/evidence/freshness expiry `null`.
+- Proposal-event approval evidence only: proposal approval event `f7320eae-2426-4c8e-ab91-0cfdac135d82` and state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642` have `evidenceOnlyForImplementationAuthorization=true` and `implementationAuthorizationDecisionSubstitution=false`.
+- Old rows reused: no. Old request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`, decision `12adb404-b9f6-4961-aa7a-63e24e023b12`, and evidence `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3` remain non-reusable because old evidence lacks replay data.
+- Forbidden downstream counts: fresh decisions `0`, AAF gate attempts `0`, improvement attempts `0`, improved reviews `0`, content/client/launch approvals `0`, launch readiness `0`, publish operator actions `0`, runtime active pointers unchanged at `6`, selected active pointers `0`.
+- Required decision next: separate human AAF decision for fresh request `0b3a888e-cc6a-4cc1-bc53-476d70a20144`.
+- Online verification status: `fresh_implementation_authorization_requested_pending_decision`.
+- Boundary: no human decision, approval grant, AAF gate attempt, proposal attach refs, improvement execution, improved candidate, content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-40-fresh-implementation-authorization-request-replay-data.md`.
+
+## CUTLINE-41 Fresh Human AAF Implementation Authorization Decision
+
+Production decision status: `granted`. The fresh human decision was recorded for the replay-backed implementation authorization request under idempotency base `gnr8-cutline-41-chs-si-fresh-implementation-authorization-decision-replay-v2-20260820`.
+
+- Exact fresh grant approval sentence: present.
+- Workflow path: `AafWriterRepository.createApprovalDecisionTransaction(...)`.
+- Fresh AAF approval decision: `5b4a4f19-a3dc-472e-8d2f-c65a126fadb0`.
+- Fresh AAF approval decision ref: `aaf:approval_decision:5b4a4f19-a3dc-472e-8d2f-c65a126fadb0`.
+- Fresh AAF approval request: `0b3a888e-cc6a-4cc1-bc53-476d70a20144`.
+- Fresh AAF evidence package: `b4ddb218-ce37-42ab-b2f3-433138df6489`.
+- Decision evidence link: `c360081e-2913-422d-b5a9-3fe90cbbbc5c`.
+- Decision audit event: `cc287a3a-1a56-505c-979a-7cee89a58699`.
+- Audit refs: `4eab7abe-6917-4bde-9a89-0cc8108b8360`, `01e763ae-58dc-4f8f-bb70-7ed5e446ac76`, `33d6258e-a67e-4422-948d-a4b1bdd12426`, `169c4675-6962-470a-a49a-ec20fb40ae1a`, `49b9d29b-f86b-4b79-9286-83a12af8de2a`, `b3e450be-5b37-4c32-bb9e-411891aec58b`, `b61c0a03-9d2d-41c2-8486-88d0a115e6dd`.
+- Scope/action: `single_site_improvement_implementation_authorization` / `start_single_site_improvement_implementation`.
+- Subject: `single_site_improvement_proposal_plan` / `f541075c-4641-4f70-b5ff-64a8af071571`.
+- Replay object: present, contract `single_site_implementation_authorization_semantic_replay`, version `1`.
+- Semantic watermark: `single-site-implementation-authorization:c90369e375923aee86e6b5f0f637901bd3cc9e24e071aaa41e605a674971aeb7`.
+- Policy version/result: `MVP-18` / `approval_required`; no separate `policy_id` row linked on request.
+- Freshness/expiry: decision and evidence freshness `fresh`; decision/request/evidence/freshness expiry `null`.
+- Forbidden downstream counts: AAF gate attempts `0`, improvement attempts `0`, improved reviews `0`, content/client/launch approvals `0`, downstream AAF content/client/launch approval decisions `0`, launch readiness `0`, publish operator actions `0`, runtime active pointers unchanged at `6`, selected active pointers `0`, active pointer fingerprint unchanged.
+- Online verification status: `fresh_implementation_authorization_granted_pending_attach_refs`.
+- Boundary: no proposal attach refs, AAF gate attempt, improvement execution, improved candidate, content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-41-fresh-human-aaf-implementation-authorization-decision.md`.
 
 ## Stop Criteria
 
