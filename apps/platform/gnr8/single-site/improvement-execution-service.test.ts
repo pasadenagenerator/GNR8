@@ -134,16 +134,20 @@ function validation(overrides: Partial<ImprovementExecutionAafValidationResult> 
 
 function fakeRepository(options: {
   migrationState?: string;
+  migrationClientId?: string;
+  migrationSiteId?: string;
   proposalStatus?: string;
+  approvalRefsJson?: Record<string, unknown>;
   implementationAuthorizationAttached?: boolean;
   implementationAuthorizationValidationStatus?: string;
+  implementationAuthorizationRefsJson?: Record<string, unknown>;
   selectedRecommendations?: Record<string, unknown>[];
 } = {}): never {
   const migration = {
     id: MIGRATION_ID,
     tenant_id: "tenant-test",
-    client_id: CLIENT_ID,
-    site_id: SITE_ID,
+    client_id: options.migrationClientId ?? CLIENT_ID,
+    site_id: options.migrationSiteId ?? SITE_ID,
     current_state: options.migrationState ?? "improvement_proposal_approved",
     current_stage: "proposal",
     state_version: 7,
@@ -161,14 +165,14 @@ function fakeRepository(options: {
     plan_status: options.proposalStatus ?? "approved",
     plan_version: 3,
     semantic_watermark: "proposal-plan-watermark",
-    approval_refs_json: {
+    approval_refs_json: options.approvalRefsJson ?? {
       approvalRequestId: "proposal-approval-request-1",
       approvalDecisionId: "proposal-approval-decision-1",
       evidencePackageId: "proposal-evidence-1",
       sourceWatermark: "proposal-approval-watermark",
       limitations: [{ proposal: "preserve offer" }],
     },
-    implementation_authorization_refs_json: {
+    implementation_authorization_refs_json: options.implementationAuthorizationRefsJson ?? {
       implementationAuthorizationRequestId: "auth-request-1",
       implementationAuthorizationDecisionId: "auth-decision-1",
       implementationAuthorizationEvidencePackageId: "auth-evidence-1",
@@ -300,6 +304,7 @@ function fakeRepository(options: {
     async listImprovementExecutionRefs() {
       return refs;
     },
+    executionRefs: refs,
     async getImprovementExecutionEventByIdempotencyKey(_tx: unknown, idempotencyKey: string) {
       return events.find((event) => event.idempotency_key === idempotencyKey) ?? null;
     },
@@ -351,6 +356,25 @@ function fakeRepository(options: {
   return repo as never;
 }
 
+function proposalEventApprovalRefs(overrides: Record<string, unknown> = {}) {
+  return {
+    approvalSource: "proposal_event",
+    proposalEventId: "proposal-event-approved-1",
+    stateEventId: "proposal-state-event-approved-1",
+    proposalStatus: "approved",
+    eventAction: "approved",
+    sourceWatermark: "proposal-approved:44444444-4444-4444-8444-444444444444:v3",
+    proposalPlanId: PLAN_ID,
+    migrationId: MIGRATION_ID,
+    clientId: CLIENT_ID,
+    siteId: SITE_ID,
+    tenantId: "tenant-test",
+    proposalPlanSemanticWatermark: "proposal-plan-watermark",
+    limitations: [{ proposalEvent: "approved event evidence" }],
+    ...overrides,
+  };
+}
+
 async function createReady(service: ImprovementExecutionService) {
   const created = await service.createOrReuseExecutionAttempt(createInput());
   const ready = await service.markReady({
@@ -378,6 +402,86 @@ test("create or reuse attempt requires approved proposal, authorization, selecte
     /implementation authorization ref/,
   );
   await assert.rejects(() => new ImprovementExecutionService(fakeRepository()).createOrReuseExecutionAttempt(createInput({ selectedRecommendationRefs: [] })), /selected recommendations/);
+});
+
+test("create attempt accepts proposal-event approval evidence without substituting implementation authorization refs", async () => {
+  const repo = fakeRepository({ approvalRefsJson: proposalEventApprovalRefs() }) as unknown as { executionRefs: Record<string, unknown>[]; runtimeMutations: unknown[]; providerCalls: unknown[]; publicMutations: unknown[] };
+  const created = await new ImprovementExecutionService(repo as never).createOrReuseExecutionAttempt(createInput());
+  assert.equal(created.attempt.proposal_approval_request_id, null);
+  assert.equal(created.attempt.proposal_approval_decision_id, "proposal-event-approved-1");
+  assert.equal(created.attempt.proposal_evidence_package_id, "proposal-state-event-approved-1");
+  assert.equal(created.attempt.implementation_authorization_request_id, "auth-request-1");
+  assert.equal(created.attempt.implementation_authorization_decision_id, "auth-decision-1");
+  assert.equal(created.attempt.implementation_authorization_evidence_package_id, "auth-evidence-1");
+  assert.deepEqual(created.attempt.limitations_json, [{ plan: "keep brand voice" }, { proposalEvent: "approved event evidence" }, { authorization: "hero only" }]);
+  assert.ok(
+    repo.executionRefs.some(
+      (ref) =>
+        ref.refRole === "proposal_approval_decision" &&
+        ref.refType === "proposal_approval_event" &&
+        ref.sourceTable === "gnr8_single_site_improvement_proposal_events" &&
+        ref.sourceRecordId === "proposal-event-approved-1" &&
+        (ref.metadataJson as Record<string, unknown>).implementationAuthorizationDecisionSubstitution === false,
+    ),
+  );
+  assert.deepEqual(repo.runtimeMutations, []);
+  assert.deepEqual(repo.providerCalls, []);
+  assert.deepEqual(repo.publicMutations, []);
+});
+
+test("create attempt still accepts AAF-shaped proposal approval refs", async () => {
+  const created = await new ImprovementExecutionService(fakeRepository()).createOrReuseExecutionAttempt(createInput());
+  assert.equal(created.attempt.proposal_approval_request_id, "proposal-approval-request-1");
+  assert.equal(created.attempt.proposal_approval_decision_id, "proposal-approval-decision-1");
+  assert.equal(created.attempt.proposal_evidence_package_id, "proposal-evidence-1");
+});
+
+test("create attempt blocks missing, unapproved, and wrong-scope proposal-event approval evidence", async () => {
+  await assert.rejects(
+    () => new ImprovementExecutionService(fakeRepository({ approvalRefsJson: proposalEventApprovalRefs({ proposalEventId: "" }) })).createOrReuseExecutionAttempt(createInput()),
+    /proposal approval event ref/,
+  );
+  await assert.rejects(
+    () => new ImprovementExecutionService(fakeRepository({ approvalRefsJson: proposalEventApprovalRefs({ eventAction: "rejected" }) })).createOrReuseExecutionAttempt(createInput()),
+    /proposal approval event action/,
+  );
+  await assert.rejects(
+    () => new ImprovementExecutionService(fakeRepository({ approvalRefsJson: proposalEventApprovalRefs({ proposalPlanId: "wrong-plan" }) })).createOrReuseExecutionAttempt(createInput()),
+    /proposal approval event plan id/,
+  );
+  await assert.rejects(
+    () => new ImprovementExecutionService(fakeRepository({ approvalRefsJson: proposalEventApprovalRefs({ proposalPlanSemanticWatermark: "stale-proposal-watermark" }) })).createOrReuseExecutionAttempt(createInput()),
+    /proposal approval event proposal watermark/,
+  );
+});
+
+test("create attempt blocks stale auth refs, missing validation, and proposal-event auth substitution", async () => {
+  await assert.rejects(
+    () => new ImprovementExecutionService(fakeRepository({ implementationAuthorizationValidationStatus: "" })).createOrReuseExecutionAttempt(createInput()),
+    /fresh MVP-20 implementation authorization validation/,
+  );
+  await assert.rejects(
+    () => new ImprovementExecutionService(fakeRepository()).createOrReuseExecutionAttempt(createInput({ implementationAuthorizationRef: { ...createInput().implementationAuthorizationRef, approvalDecisionId: "old-auth-decision" } })),
+    /implementation authorization decision ref does not match attached proposal refs/,
+  );
+  await assert.rejects(
+    () =>
+      new ImprovementExecutionService(fakeRepository()).createOrReuseExecutionAttempt(
+        createInput({
+          implementationAuthorizationRef: {
+            approvalDecisionId: "proposal-event-approved-1",
+            sourceRecordId: "proposal-event-approved-1",
+            sourceTable: "gnr8_single_site_improvement_proposal_events",
+            scope: "proposal_approval",
+          },
+        }),
+      ),
+    /implementation authorization ref must be an AAF approval decision/,
+  );
+  await assert.rejects(
+    () => new ImprovementExecutionService(fakeRepository({ migrationClientId: "99999999-9999-4999-8999-999999999999" })).createOrReuseExecutionAttempt(createInput()),
+    /clientId does not match migration/,
+  );
 });
 
 test("execution start requires successful MVP-20 validation and rejects invalid or stale authorization", async () => {

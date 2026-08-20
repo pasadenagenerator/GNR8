@@ -657,6 +657,62 @@ Production decision status: `granted`. The fresh human decision was recorded for
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-41-fresh-human-aaf-implementation-authorization-decision.md`.
 
+## CUTLINE-42 Attach Fresh Implementation Authorization Refs
+
+Production attachment status: `fresh_implementation_authorization_attached_pending_improvement_execution`. The fresh granted replay-backed implementation authorization refs are now attached to the approved proposal under idempotency base `gnr8-cutline-42-chs-si-attach-fresh-implementation-authorization-replay-v2-20260820`.
+
+- Exact fresh attachment approval sentence: present.
+- Workflow path: direct read-only AAF/replay readback, `SingleSiteImplementationAuthorizationBridge.validateImplementationAuthorizationRef(...)`, then `ImprovementProposalPlanningService.attachImplementationAuthorizationRef(...)`.
+- Old attached refs before: request `c27957ac-2fdd-4e5f-809f-e5a16e9a8f83`, decision `12adb404-b9f6-4961-aa7a-63e24e023b12`, evidence package `042a8233-5f36-4b9d-a9ee-6ca218b7c9e3`, old proposal auth ref `94ee9cf8-2efd-49a0-b821-28a2d5ca7348`.
+- Fresh attached refs after: request `0b3a888e-cc6a-4cc1-bc53-476d70a20144`, decision `5b4a4f19-a3dc-472e-8d2f-c65a126fadb0`, evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489`, proposal auth ref `21fd1ce8-0531-4f40-a944-1f46d481f395`, proposal event `635188b5-5720-4be0-bf38-0478f573f23a`.
+- Proposal status/version: `approved`; initial attachment moved version `4` -> `5`, and idempotent readback stayed `5` -> `5`.
+- Replay object: present, contract `single_site_implementation_authorization_semantic_replay`, version `1`.
+- Attached replay watermark: `single-site-implementation-authorization:c90369e375923aee86e6b5f0f637901bd3cc9e24e071aaa41e605a674971aeb7`.
+- AAF readback: scope/action `single_site_improvement_implementation_authorization` / `start_single_site_improvement_implementation`, decision `granted`, evidence freshness `fresh`, request/decision/evidence/freshness expiry `null`, supersessions/revocations `0`.
+- MVP-20 validation after attachment: `allowed=true`, mode `allowed`, reason `authorization_valid`, blocker codes `[]`, all replay drift checks matched.
+- Forbidden downstream counts: improvement attempts `0`, improved candidate artifacts created by this step `0`, improved reviews `0`, content/client/launch approvals `0`, launch readiness `0`, publish operator actions `0`, AAF gate attempts `0`, downstream AAF content/client/launch decisions `0`, runtime active pointers unchanged at `6`, selected active pointers `0`, active pointer fingerprint unchanged.
+- Online verification status: `fresh_implementation_authorization_attached_pending_improvement_execution`.
+- Boundary: no improvement execution, improved candidate, content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy/redeploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-42-attach-fresh-implementation-authorization-refs.md`.
+
+## CUTLINE-43 Authorized Improvement Execution Candidate Readback
+
+Production execution status: `improvement_execution_blocked`. Exact improvement-execution approval was present, and execution-time MVP-20 validation passed using the fresh replay-backed attached refs, but the existing MVP-21 execution service blocked before attempt creation.
+
+- Exact improvement-execution approval sentence: present.
+- Workflow path: MVP-20 `ImprovementExecutionAafValidator.validateImprovementExecutionAuthorization(...)`, then MVP-21 `ImprovementExecutionService.createOrReuseExecutionAttempt(...)`.
+- Fresh attached refs readback: request `0b3a888e-cc6a-4cc1-bc53-476d70a20144`, decision `5b4a4f19-a3dc-472e-8d2f-c65a126fadb0`, evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489`, proposal auth ref `21fd1ce8-0531-4f40-a944-1f46d481f395`, replay contract/version `single_site_implementation_authorization_semantic_replay` / `1`, replay watermark `single-site-implementation-authorization:c90369e375923aee86e6b5f0f637901bd3cc9e24e071aaa41e605a674971aeb7`.
+- AAF decision readback: `granted`, exact scope `single_site_improvement_implementation_authorization`, subject `single_site_improvement_proposal_plan` / `f541075c-4641-4f70-b5ff-64a8af071571`, matching request/evidence, replay object present, freshness `fresh`, no expiry, revocations `0`, decision supersessions `0`, evidence supersessions `0`.
+- MVP-20 validation result: `allowed=true`, mode `allowed`, reason `authorization_valid`, blocker codes `[]`, freshness `fresh`, proposal/selected recommendation/scope/semantic watermark drift checks all matched.
+- MVP-21 blocker: `proposal approval request ref is required`.
+- Cause: proposal approval is persisted as proposal-event evidence, while MVP-21 still expects AAF-shaped proposal approval request/decision/evidence fields in proposal `approval_refs_json`.
+- `improvementExecutionAttemptId`: not created.
+- Execution status/mode: `blocked_before_attempt_creation` / `execute`.
+- Improved candidate site version ref: not created.
+- Improved runtime artifact ref: not created.
+- Applied/not-applied recommendations: none; MVP-23 and MVP-24 did not run.
+- Semantic output watermark: not created.
+- Forbidden downstream counts: improvement attempts `0`, improved review acceptances `0`, improved reviews `0`, content/client/launch approvals `0`, launch readiness `0`, publish operator actions `0`, publish activation requests/decisions `0`, AAF gate attempts `0`.
+- Runtime active pointer status: unchanged, total `6`, selected site `0`, fingerprint `67f2f987170cbf15dcd4733ac174a2df6e73bb7f0079f68c5818a79a08a5eeab`.
+- Boundary: no execution attempt, improved candidate, improved version review acceptance, approval chain, launch readiness, publish activation request/decision/gate, publish dry-run, shadow-publish, runtime publish, provider/DNS/domain/billing mutation, active pointer mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-43-authorized-improvement-execution-candidate-readback.md`.
+
+## CUTLINE-44 MVP-21 Proposal Approval Ref Alignment
+
+Local alignment status: `mvp21_proposal_event_approval_ref_supported_locally`. This did not rerun production improvement execution.
+
+- Path updated: `ImprovementExecutionService.createOrReuseExecutionAttempt(...)` proposal approval prerequisite handling.
+- Supported proposal approval shapes after local alignment: existing AAF-shaped proposal approval request/decision/evidence refs and proposal-event approval evidence refs with `approvalSource: "proposal_event"`, `proposalEventId`, and `stateEventId`.
+- Evidence boundary: proposal-event approval evidence may satisfy only the proposal-approval prerequisite. It cannot satisfy implementation authorization request, implementation authorization decision, implementation authorization evidence, AAF gate, improvement execution approval, content/client/launch approval, publish approval, or runtime mutation authorization.
+- Fail-closed cases covered locally: missing proposal approval event/ref, unapproved proposal/event status, wrong proposal identity/watermark metadata, missing fresh MVP-20 validation status, stale/mismatched implementation authorization refs, wrong implementation authorization scope/source, and proposal-event ref used as implementation authorization substitute.
+- Validation: focused MVP-21 service tests passed 13/13; implementation authorization bridge and MVP-20 validator tests passed 22/22; touched-file TypeScript diagnostics are clean.
+- SQL migration required: no.
+- Boundary: no production rows, execution attempts, improved candidates, AAF rows, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider action, deploy, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-44-mvp21-proposal-approval-ref-alignment.md`.
+
 ## Stop Criteria
 
 Stop immediately if:

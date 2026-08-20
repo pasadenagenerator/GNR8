@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import type { ImprovedCandidateDryRunResult } from "./improved-candidate-dry-run-adapter";
 import type { ImprovedCandidateCreationOutput } from "./improved-candidate-creation-adapter";
 import type {
-  ImplementationAuthorizationAafProposalApprovalRef,
+  ImplementationAuthorizationProposalEventApprovalRef,
   ImplementationAuthorizationProposalApprovalRef,
   ImplementationAuthorizationSelectedRecommendationRef,
   ImplementationAuthorizationSourceRef,
@@ -230,8 +230,47 @@ export function computeImprovementExecutionSemanticInputWatermark(input: {
   return `single-site-improvement-execution:${digest(input)}`;
 }
 
-function proposalApprovalRef(plan: SingleSiteImprovementProposalPlanRow): ImplementationAuthorizationAafProposalApprovalRef {
+function assertOptionalMatch(field: string, actual: unknown, expected: string): void {
+  const text = optionalText(actual);
+  if (text && text !== expected) throw new SingleSiteTransitionError(`${field} does not match proposal plan`);
+}
+
+function assertApprovedStatus(field: string, value: unknown): void {
+  const status = optionalText(value);
+  if (status && !["approved", "approved_with_limitations"].includes(status)) {
+    throw new SingleSiteTransitionError(`${field} must be approved or approved_with_limitations`);
+  }
+}
+
+function isProposalEventApprovalRef(ref: ImplementationAuthorizationProposalApprovalRef): ref is ImplementationAuthorizationProposalEventApprovalRef {
+  return ref.approvalSource === "proposal_event";
+}
+
+function proposalApprovalRef(plan: SingleSiteImprovementProposalPlanRow): ImplementationAuthorizationProposalApprovalRef {
   const refs = jsonObject(plan.approval_refs_json);
+  const proposalEventId = optionalText(refs.proposalEventId ?? refs.proposalApprovalEventId ?? refs.approvalEventId);
+  if (refs.approvalSource === "proposal_event" || proposalEventId) {
+    assertApprovedStatus("proposal approval event status", refs.proposalStatus ?? plan.plan_status);
+    assertApprovedStatus("proposal approval event action", refs.eventAction);
+    assertOptionalMatch("proposal approval event plan id", refs.proposalPlanId, plan.id);
+    assertOptionalMatch("proposal approval event migration id", refs.migrationId, plan.migration_id);
+    assertOptionalMatch("proposal approval event client id", refs.clientId, plan.client_id);
+    assertOptionalMatch("proposal approval event site id", refs.siteId, plan.site_id);
+    assertOptionalMatch("proposal approval event tenant id", refs.tenantId, plan.tenant_id);
+    assertOptionalMatch("proposal approval event proposal watermark", refs.proposalPlanSemanticWatermark, requiredText("proposal semantic watermark", plan.semantic_watermark));
+    return {
+      approvalSource: "proposal_event",
+      proposalEventId: requiredText("proposal approval event ref", proposalEventId),
+      stateEventId: requiredText("proposal approval state event ref", refs.stateEventId ?? refs.proposalApprovalStateEventId),
+      sourceWatermark: requiredText("proposal approval source watermark", refs.sourceWatermark ?? refs.proposalApprovalWatermark ?? plan.semantic_watermark),
+      sourceTable: optionalText(refs.sourceTable) ?? "gnr8_single_site_improvement_proposal_events",
+      stateEventSourceTable: optionalText(refs.stateEventSourceTable) ?? "gnr8_single_site_migration_state_events",
+      proposalStatus: optionalText(refs.proposalStatus ?? plan.plan_status) ?? plan.plan_status,
+      eventAction: optionalText(refs.eventAction) ?? undefined,
+      limitations: jsonArray(refs.limitations),
+      metadataJson: jsonObject(refs.metadataJson),
+    };
+  }
   return {
     approvalSource: "aaf",
     approvalRequestId: requiredText("proposal approval request ref", refs.approvalRequestId ?? refs.proposalApprovalRequestId),
@@ -250,9 +289,29 @@ function implementationAuthorizationRefs(plan: SingleSiteImprovementProposalPlan
   validationStatus: string | null;
 } {
   const refs = jsonObject(plan.implementation_authorization_refs_json);
+  const inputSourceTable = optionalText(input.sourceTable);
+  if (inputSourceTable && inputSourceTable !== "gnr8_aaf_approval_decisions") {
+    throw new SingleSiteTransitionError("implementation authorization ref must be an AAF approval decision");
+  }
+  const inputScope = optionalText(input.scope);
+  if (inputScope && inputScope !== "single_site_improvement_implementation_authorization") {
+    throw new SingleSiteTransitionError("implementation authorization requires exact AAF scope");
+  }
   const requestId = input.approvalRequestId ?? optionalText(refs.implementationAuthorizationRequestId);
   const decisionId = input.approvalDecisionId ?? input.sourceRecordId ?? optionalText(refs.implementationAuthorizationDecisionId);
   const evidencePackageId = input.evidencePackageId ?? optionalText(refs.implementationAuthorizationEvidencePackageId);
+  const storedRequestId = optionalText(refs.implementationAuthorizationRequestId);
+  const storedDecisionId = optionalText(refs.implementationAuthorizationDecisionId);
+  const storedEvidencePackageId = optionalText(refs.implementationAuthorizationEvidencePackageId);
+  if (input.approvalRequestId && storedRequestId && input.approvalRequestId !== storedRequestId) {
+    throw new SingleSiteTransitionError("implementation authorization request ref does not match attached proposal refs");
+  }
+  if ((input.approvalDecisionId || input.sourceRecordId) && storedDecisionId && (input.approvalDecisionId ?? input.sourceRecordId) !== storedDecisionId) {
+    throw new SingleSiteTransitionError("implementation authorization decision ref does not match attached proposal refs");
+  }
+  if (input.evidencePackageId && storedEvidencePackageId && input.evidencePackageId !== storedEvidencePackageId) {
+    throw new SingleSiteTransitionError("implementation authorization evidence ref does not match attached proposal refs");
+  }
   return {
     requestId: requiredText("implementation authorization request ref", requestId),
     decisionId: requiredText("implementation authorization decision ref", decisionId),
@@ -332,7 +391,10 @@ export class ImprovementExecutionService {
       const plan = await this.requiredApprovedProposal(tx, input.proposalPlanId, migration.id);
       const selected = await this.requiredSelectedRecommendations(tx, plan, input.selectedRecommendationRefs);
       const auth = implementationAuthorizationRefs(plan, input.implementationAuthorizationRef);
-      if (!["granted", "granted_with_limitations"].includes(auth.validationStatus ?? "granted")) {
+      if (!auth.validationStatus) {
+        throw new SingleSiteTransitionError("fresh MVP-20 implementation authorization validation is required");
+      }
+      if (!["granted", "granted_with_limitations"].includes(auth.validationStatus)) {
         throw new SingleSiteTransitionError(`implementation authorization validation status ${auth.validationStatus} cannot create execution attempt`);
       }
       const proposalApproval = proposalApprovalRef(plan);
@@ -366,9 +428,9 @@ export class ImprovementExecutionService {
             proposalPlanId: plan.id,
             proposalPlanVersion: plan.plan_version,
             proposalPlanSemanticWatermark: requiredText("proposal semantic watermark", plan.semantic_watermark),
-            proposalApprovalRequestId: proposalApproval.approvalRequestId,
-            proposalApprovalDecisionId: proposalApproval.approvalDecisionId,
-            proposalEvidencePackageId: proposalApproval.evidencePackageId,
+            proposalApprovalRequestId: isProposalEventApprovalRef(proposalApproval) ? null : proposalApproval.approvalRequestId,
+            proposalApprovalDecisionId: isProposalEventApprovalRef(proposalApproval) ? proposalApproval.proposalEventId : proposalApproval.approvalDecisionId,
+            proposalEvidencePackageId: isProposalEventApprovalRef(proposalApproval) ? proposalApproval.stateEventId : proposalApproval.evidencePackageId,
             implementationAuthorizationRequestId: auth.requestId,
             implementationAuthorizationDecisionId: auth.decisionId,
             implementationAuthorizationEvidencePackageId: auth.evidencePackageId,
@@ -1155,29 +1217,38 @@ export class ImprovementExecutionService {
     tx: SingleSiteStateWriterTx,
     attempt: SingleSiteImprovementExecutionAttemptRow,
     plan: SingleSiteImprovementProposalPlanRow,
-    proposalApproval: ImplementationAuthorizationAafProposalApprovalRef,
+    proposalApproval: ImplementationAuthorizationProposalApprovalRef,
     auth: { requestId: string; decisionId: string; evidencePackageId: string | null },
     input: CreateOrReuseImprovementExecutionAttemptInput,
   ): Promise<void> {
-    const refs: Array<[SingleSiteImprovementExecutionRefRole, string, string, string | null]> = [
-      ["proposal_plan", "proposal_plan", plan.id, plan.semantic_watermark],
-      ["proposal_approval_request", "aaf_approval_request", proposalApproval.approvalRequestId, proposalApproval.sourceWatermark],
-      ["proposal_approval_decision", "aaf_approval_decision", proposalApproval.approvalDecisionId, proposalApproval.sourceWatermark],
-      ["proposal_evidence_package", "aaf_evidence_package", proposalApproval.evidencePackageId, proposalApproval.sourceWatermark],
-      ["implementation_authorization_request", "aaf_approval_request", auth.requestId, attempt.semantic_input_watermark],
-      ["implementation_authorization_decision", "aaf_approval_decision", auth.decisionId, attempt.semantic_input_watermark],
-      ["clone_review", "clone_review", plan.clone_review_id, plan.semantic_watermark],
-      ["clone_site_version", "runtime_site_version_clone", plan.clone_site_version_ref, plan.semantic_watermark],
-      ["clone_runtime_artifact", "runtime_artifact_clone", plan.runtime_artifact_ref, plan.semantic_watermark],
-      ["source_evidence_review", "source_evidence_review", plan.source_evidence_review_id, plan.semantic_watermark],
+    const proposalApprovalRefs: Array<[SingleSiteImprovementExecutionRefRole, string, string, string, string | null]> = isProposalEventApprovalRef(proposalApproval)
+      ? [
+          ["proposal_approval_decision", "proposal_approval_event", optionalText(proposalApproval.sourceTable) ?? "gnr8_single_site_improvement_proposal_events", proposalApproval.proposalEventId, proposalApproval.sourceWatermark],
+          ["proposal_evidence_package", "proposal_approval_state_event", optionalText(proposalApproval.stateEventSourceTable) ?? "gnr8_single_site_migration_state_events", proposalApproval.stateEventId, proposalApproval.sourceWatermark],
+        ]
+      : [
+          ["proposal_approval_request", "aaf_approval_request", "gnr8_aaf_approval_requests", proposalApproval.approvalRequestId, proposalApproval.sourceWatermark],
+          ["proposal_approval_decision", "aaf_approval_decision", "gnr8_aaf_approval_decisions", proposalApproval.approvalDecisionId, proposalApproval.sourceWatermark],
+          ["proposal_evidence_package", "aaf_evidence_package", "gnr8_aaf_evidence_packages", proposalApproval.evidencePackageId, proposalApproval.sourceWatermark],
+        ];
+    const refs: Array<[SingleSiteImprovementExecutionRefRole, string, string | null, string, string | null]> = [
+      ["proposal_plan", "proposal_plan", "gnr8_single_site_improvement_proposal_plans", plan.id, plan.semantic_watermark],
+      ...proposalApprovalRefs,
+      ["implementation_authorization_request", "aaf_approval_request", "gnr8_aaf_approval_requests", auth.requestId, attempt.semantic_input_watermark],
+      ["implementation_authorization_decision", "aaf_approval_decision", "gnr8_aaf_approval_decisions", auth.decisionId, attempt.semantic_input_watermark],
+      ["clone_review", "clone_review", "gnr8_single_site_clone_reviews", plan.clone_review_id, plan.semantic_watermark],
+      ["clone_site_version", "runtime_site_version_clone", "runtime_site_versions", plan.clone_site_version_ref, plan.semantic_watermark],
+      ["clone_runtime_artifact", "runtime_artifact_clone", "runtime_artifacts", plan.runtime_artifact_ref, plan.semantic_watermark],
+      ["source_evidence_review", "source_evidence_review", "gnr8_single_site_source_evidence_reviews", plan.source_evidence_review_id, plan.semantic_watermark],
     ];
-    if (auth.evidencePackageId) refs.push(["implementation_authorization_evidence_package", "aaf_evidence_package", auth.evidencePackageId, attempt.semantic_input_watermark]);
-    for (const [index, [refRole, refType, sourceRecordId, sourceWatermark]] of refs.entries()) {
+    if (auth.evidencePackageId) refs.push(["implementation_authorization_evidence_package", "aaf_evidence_package", "gnr8_aaf_evidence_packages", auth.evidencePackageId, attempt.semantic_input_watermark]);
+    for (const [index, [refRole, refType, sourceTable, sourceRecordId, sourceWatermark]] of refs.entries()) {
       await this.repository.insertImprovementExecutionRef(tx, {
         attemptId: attempt.id,
         migrationId: attempt.migration_id,
         refRole,
         refType,
+        sourceTable,
         sourceRecordId,
         sourceWatermark,
         semanticWatermark: attempt.semantic_input_watermark,
@@ -1187,7 +1258,17 @@ export class ImprovementExecutionService {
         requestId: input.requestId,
         privacyLabel: input.privacyLabel,
         retentionClass: input.retentionClass,
-        metadataJson: { ...input.metadataJson, evidenceOnly: true },
+        metadataJson: {
+          ...input.metadataJson,
+          evidenceOnly: true,
+          ...(isProposalEventApprovalRef(proposalApproval) && refRole.startsWith("proposal_")
+            ? {
+                proposalApprovalEvidenceSource: "proposal_event",
+                evidenceOnlyForImplementationAuthorization: true,
+                implementationAuthorizationDecisionSubstitution: false,
+              }
+            : {}),
+        },
       });
     }
   }
