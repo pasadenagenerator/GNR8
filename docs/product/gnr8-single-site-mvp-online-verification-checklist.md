@@ -40,6 +40,8 @@ Do not start online verification until all are true:
 - CUTLINE-39C MVP-20 semantic replay fix deployment gate is satisfied before CUTLINE-40: `mvp20_semantic_replay_fix_deployed` is recorded for deployed SHA `023a5d4` / `023a5d4fcd37485ac17d739150e8d163218e3b7a`; fresh authorization request status remains `not_created`; improvement execution retry remains `not_run`.
 - CUTLINE-40 fresh implementation authorization request/evidence is complete before fresh decision or execution retry: AAF request `0b3a888e-cc6a-4cc1-bc53-476d70a20144` is `requested` with evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489` and stored replay contract version `1`; no fresh decision, gate attempt, improvement execution, candidate, approval, readiness, publish, provider, deploy, migration, env, or active-pointer mutation exists.
 - CUTLINE-41 fresh human AAF implementation authorization decision is complete before proposal attach-ref or execution retry: decision `5b4a4f19-a3dc-472e-8d2f-c65a126fadb0` is `granted` for request `0b3a888e-cc6a-4cc1-bc53-476d70a20144` and evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489`; no attach-ref, gate attempt, improvement execution, candidate, approval, readiness, publish, provider, deploy, migration, env, or active-pointer mutation exists.
+- CUTLINE-44C MVP-21 proposal approval ref alignment deployment gate is satisfied before CUTLINE-45: `mvp21_proposal_approval_ref_alignment_deployed` is recorded for deployed SHA `ed06b61` / `ed06b61c93c78af54432fd01eb3af412c1e2abc3`; improvement execution retry remains `not_run`, and online verification is `ready_for_cutline_45_fresh_improvement_execution_retry`.
+- CUTLINE-45A proposal refs and execution are complete before review/approval/readiness/publish: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` carries proposal event `f7320eae-2426-4c8e-ab91-0cfdac135d82` and state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642`; execution attempt `6dc259c1-b659-4d64-95f2-3858803eb470` is `completed_with_limitations`; improved candidate site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` and artifact `1f80138a-39c2-4210-ac61-16200e5a2254` exist; no review/approval/readiness/publish/active-pointer/provider mutation occurred.
 
 ## Operator Sequence
 
@@ -712,6 +714,75 @@ Local alignment status: `mvp21_proposal_event_approval_ref_supported_locally`. T
 - Boundary: no production rows, execution attempts, improved candidates, AAF rows, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider action, deploy, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-44-mvp21-proposal-approval-ref-alignment.md`.
+
+## CUTLINE-44B MVP-21 Alignment Deployment Verification
+
+Deployment verification status: `blocked_pending_cutline_44b_vercel_deployed_sha_confirmation`.
+
+- Human-reported deployment context: commit, push, and Vercel production deploy were already performed after CUTLINE-44.
+- Human-reported deployed SHA: not available in the task text, local docs, local Vercel metadata, or local CLI metadata.
+- Local `HEAD`, local `origin/main`, and remote `refs/heads/main`: `ed06b61c93c78af54432fd01eb3af412c1e2abc3`.
+- Candidate commit subject: `Align MVP-21 approval refs`.
+- Candidate SHA on `origin/main`: yes.
+- CUTLINE-44 candidate files present at `ed06b61c93c78af54432fd01eb3af412c1e2abc3`: `apps/platform/gnr8/single-site/improvement-execution-service.ts` and `apps/platform/gnr8/single-site/improvement-execution-service.test.ts`.
+- Alignment evidence at candidate SHA: MVP-21 accepts `approvalSource: "proposal_event"` proposal approval evidence for the proposal-approval prerequisite, preserves AAF-shaped proposal approval refs, and blocks proposal-event substitution for implementation authorization.
+- Safe production app health: `HEAD https://app.pasadenagenerator.com/` returned HTTP `200` from Vercel with `x-matched-path: /[[...slug]]`.
+- Deployment gate: `blocked_deployed_sha_missing_cutline_44`, because no exact deployed SHA was available to resolve locally and tie to the CUTLINE-44 files.
+- Improvement execution retry status: `not_run`.
+- Boundary: no production improvement execution, execution attempt, improved candidate, AAF row, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider action, Vercel mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-44b-mvp21-alignment-deployment-verification.md`.
+
+## CUTLINE-44C MVP-21 Alignment Deployed SHA Confirmation
+
+Deployment verification status: `mvp21_proposal_approval_ref_alignment_deployed`.
+
+- Human-confirmed production branch/SHA: `main` / `ed06b61`.
+- Resolved full SHA: `ed06b61c93c78af54432fd01eb3af412c1e2abc3`.
+- CUTLINE-44B candidate match: yes, exact full-SHA match.
+- SHA on `origin/main`: yes.
+- Commit subject: `Align MVP-21 approval refs`.
+- CUTLINE-44 files present at deployed SHA: `apps/platform/gnr8/single-site/improvement-execution-service.ts` and `apps/platform/gnr8/single-site/improvement-execution-service.test.ts`.
+- Alignment evidence at deployed SHA: MVP-21 accepts proposal-event approval evidence for the proposal-approval prerequisite while keeping proposal-event evidence out of implementation authorization truth.
+- Improvement execution retry status: `not_run`.
+- Online verification status: `ready_for_cutline_45_fresh_improvement_execution_retry`.
+- Boundary: no production improvement execution, execution attempt, improved candidate, AAF row, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider action, Vercel mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-44c-mvp21-alignment-deployed-sha-confirmation.md`.
+
+## CUTLINE-45 Improvement Execution Candidate Readback
+
+Production retry status: `improvement_execution_blocked_pending_proposal_approval_event_ref_persistence`.
+
+- Exact improvement-execution approval sentence: present.
+- Deployment gates entering retry: `mvp20_semantic_replay_fix_deployed` and `mvp21_proposal_approval_ref_alignment_deployed`.
+- Preflight: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` is `approved` version `5`; fresh implementation authorization refs are attached; AAF request `0b3a888e-cc6a-4cc1-bc53-476d70a20144`, decision `5b4a4f19-a3dc-472e-8d2f-c65a126fadb0`, and evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489` are present; replay watermark matched `single-site-implementation-authorization:c90369e375923aee86e6b5f0f637901bd3cc9e24e071aaa41e605a674971aeb7`.
+- MVP-20 validation: `allowed=true`, mode `allowed`, reason `authorization_valid`, blocker codes `[]`; proposal, selected recommendation, implementation scope, and semantic watermark checks matched.
+- MVP-21 result: exactly one `ImprovementExecutionService.createOrReuseExecutionAttempt(...)` call was made and blocked before persistence with `proposal approval request ref is required`.
+- Persisted blocker detail: proposal approval event `f7320eae-2426-4c8e-ab91-0cfdac135d82` and proposal approval state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642` exist, but proposal plan `approval_refs_json` does not carry `proposalEventId` / `stateEventId`, so the service still falls through to the AAF-shaped proposal approval branch for this plan.
+- Candidate readback: no `improvementExecutionAttemptId`; no improved candidate site version; no improved runtime artifact; no applied/not-applied recommendation rows; no semantic output watermark.
+- Forbidden downstream counts after retry: improved review/acceptance `0`, content approvals `0`, client approvals `0`, launch approvals `0`, launch readiness records `0`, publish operator actions `0`, downstream AAF approval requests/decisions `0`, publish activation requests/decisions `0`, downstream AAF gate attempts `0`.
+- Active pointers: selected site `0` before/after; total runtime active pointers `6` before/after; fingerprint `03825da8ea15570a6abe3e331f529f7a` unchanged.
+- Boundary: no improved candidate review acceptance, content/client/launch approval, launch readiness, publish activation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-45-improvement-execution-candidate-readback.md`.
+
+## CUTLINE-45A Reconcile Proposal Refs And Execute
+
+Production execution status: `improved_candidate_created_pending_review_no_publish`.
+
+- Exact approval sentence: present.
+- Proposal ref reconciliation: `approval_refs_json` was updated from metadata-only proposal approval refs to include `approvalSource=proposal_event`, `proposalEventId=f7320eae-2426-4c8e-ab91-0cfdac135d82`, and `stateEventId=54ace8d6-401c-4ade-9ad2-ec4539dc3642`.
+- MVP-20 validation: `allowed=true`, mode `allowed`, reason `authorization_valid`, blocker codes `[]`.
+- MVP-21 execution attempt: `6dc259c1-b659-4d64-95f2-3858803eb470`, status `completed_with_limitations`, execution mode `execute`.
+- Improved candidate refs: site version `gnr8:site_version:a3f9493e-9da4-4ef8-8608-154fe6d25a0f`; runtime artifact `gnr8:runtime_artifact:1f80138a-39c2-4210-ac61-16200e5a2254`.
+- Semantic output watermark: `single-site-improved-candidate-creation-output:33927ef17c44860377b45e6f367d30df45ed2fec4f8bebafe3ba8aa97b67f612`.
+- Recommendations applied: none. Not applied: `0be61bde-6568-4f33-8499-4d5eade70837` (`unsupported_in_mvp`), `73de9484-1461-4476-b677-f41d7a839df7` (`requires_operator_input`), `86342f67-7cce-43de-823f-ea0f4adc1a41` (`requires_operator_input`), `a61e857e-89c1-4ab1-bdc1-581a24e824c1` (`unsupported_in_mvp`).
+- Final forbidden downstream counts: improved reviews `0`, content approvals `0`, client approvals `0`, launch approvals `0`, launch readiness `0`, publish operator actions `0`, downstream AAF requests/decisions/gates `0`.
+- Active pointers: total `6`; selected runtime site `0`.
+- Boundary: no improved candidate review acceptance, content/client/launch approval, launch readiness, publish activation, publish dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-45a-reconcile-proposal-refs-and-execute.md`.
 
 ## Stop Criteria
 
