@@ -1082,6 +1082,22 @@ Canonical production reconciliation and authorized improvement execution closeou
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 - `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
 
+## MVP-CUTLINE-46 Improved Candidate Review
+
+Canonical production improved candidate review closeout for `chs.si`, recording exact approval sentence present, read-only preflight integrity for execution attempt `6dc259c1-b659-4d64-95f2-3858803eb470`, improved candidate site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, runtime artifact `1f80138a-39c2-4210-ac61-16200e5a2254`, runtime site `site_57d9665a3a5867edf6ef`, review id `bc642626-1242-427a-96ed-8003b881e71c`, decision/status `accept_with_limitations` / `accepted_with_limitations`, decision event id `0c09ae9b-5e8c-475e-ac9d-b6304bcf1e5c`, accepted limitations for four unapplied recommendations without inventing applied changes, content approval eligibility next with limitations, active pointers unchanged at total `6` and selected/candidate `0`, forbidden downstream approval/readiness/publish/AAF counts `0`, online verification status `improved_candidate_reviewed_accepted_with_limitations_pending_content_approval_no_publish`, and the boundary of no content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-46-improved-candidate-review.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
+## MVP-CUTLINE-47 Content Approval
+
+Canonical production content approval closeout for the accepted-with-limitations `chs.si` improved candidate, recording exact approval sentence present, deterministic idempotency/correlation base `gnr8-cutline-47-chs-si-content-approval-20260821`, workflow path `ContentApprovalService.createOrReuseContentApproval(...)`, `SingleSiteContentApprovalAafBridge.prepareContentApprovalRequest(...)`, `AafWriterRepository.createApprovalDecisionTransaction(...)`, bridge validation, AAF request/decision ref attachment, and `ContentApprovalService.approveWithLimitations(...)`, content approval `319c360a-d7d4-4a3e-9c3b-6daecd930e02` with status/decision `approved_with_limitations` / `approve_with_limitations`, AAF request `437e05f9-df87-4bb7-8478-466495c06fd1`, AAF decision `67ec5313-a122-456c-8476-7abd9fb772e5` with status `granted_with_limitations`, evidence package `dca2c91e-3449-4ec9-aba9-833f22ccccf8`, decision evidence link `2594e39f-29bb-4469-8655-47fe2b38f7b1`, request audit event `5d1a40bd-20fc-4df0-9979-5c770021efb9`, decision audit event `fd6445aa-69aa-4fae-a269-0b091d9f3134`, service decision event `1b54da3c-5cd5-430b-91fb-61177f92a506`, AAF validation `valid=true` with blocker codes `[]`, four unique CUTLINE-46 accepted limitations carried forward without inventing applied changes, warning that persisted limitation JSON repeats the same unique set due MVP-29 validation/service merge behavior, client approval eligibility next `ready=true` with missing requirements `[]`, migration state `content_approved`, active pointers unchanged at total `6` and selected/candidate `0`, forbidden downstream client/launch/readiness/publish/AAF gate counts `0`, online verification status `content_approval_granted_with_limitations_pending_client_approval_no_publish`, and the boundary of no client approval, launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-47-content-approval.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

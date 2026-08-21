@@ -784,6 +784,47 @@ Production execution status: `improved_candidate_created_pending_review_no_publi
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-45a-reconcile-proposal-refs-and-execute.md`.
 
+## CUTLINE-46 Improved Candidate Review
+
+Production verification status: `improved_candidate_reviewed_accepted_with_limitations_pending_content_approval_no_publish`.
+
+- Exact approval sentence: present.
+- Candidate integrity: passed. Attempt `6dc259c1-b659-4d64-95f2-3858803eb470` belonged to the selected migration/client/site/proposal chain and was `completed_with_limitations`; candidate site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` was `DRAFT`; runtime artifact `1f80138a-39c2-4210-ac61-16200e5a2254` belonged to the candidate and had `publish_stage=shadow`.
+- Improved version review id: `bc642626-1242-427a-96ed-8003b881e71c`.
+- Decision/status: `accept_with_limitations` / `accepted_with_limitations`.
+- Decision event id: `0c09ae9b-5e8c-475e-ac9d-b6304bcf1e5c`; total review event count `8`; review ref count `17`; missing required review ref roles `[]`.
+- Limitations accepted: all four selected recommendations were not applied and were carried forward as accepted limitations: `0be61bde-6568-4f33-8499-4d5eade70837` (`unsupported_in_mvp`), `73de9484-1461-4476-b677-f41d7a839df7` (`requires_operator_input`), `86342f67-7cce-43de-823f-ea0f4adc1a41` (`requires_operator_input`), `a61e857e-89c1-4ab1-bdc1-581a24e824c1` (`unsupported_in_mvp`).
+- Blockers recorded: none. Warning recorded: `MVP_CONTINUATION_WITH_UNAPPLIED_RECOMMENDATIONS`.
+- Eligible for content approval next: yes, with limitations; no content approval row/request was created.
+- Active pointers: before total `6`, selected runtime site `0`, candidate refs `0`; after total `6`, selected runtime site `0`, candidate refs `0`.
+- Forbidden downstream counts after readback: content approvals `0`, client approvals `0`, launch approvals `0`, launch readiness records `0`, publish operator actions `0`, downstream AAF requests `0`, downstream AAF decisions `0`, downstream AAF gates `0`, publish activation requests/decisions `0`.
+- Boundary: no content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-46-improved-candidate-review.md`.
+
+## CUTLINE-47 Content Approval
+
+Production verification status: `content_approval_granted_with_limitations_pending_client_approval_no_publish`.
+
+- Exact approval sentence: present.
+- Content approval workflow path: `ContentApprovalService.createOrReuseContentApproval(...)` -> `SingleSiteContentApprovalAafBridge.prepareContentApprovalRequest(...)` -> `AafWriterRepository.createApprovalDecisionTransaction(...)` -> `SingleSiteContentApprovalAafBridge.validateContentApprovalDecisionRef(...)` -> `ContentApprovalService.attachAafRequestRef(...)` -> `ContentApprovalService.attachAafDecisionRef(...)` -> `ContentApprovalService.approveWithLimitations(...)`.
+- Content approval id/status/decision: `319c360a-d7d4-4a3e-9c3b-6daecd930e02` / `approved_with_limitations` / `approve_with_limitations`.
+- AAF request id: `437e05f9-df87-4bb7-8478-466495c06fd1`; status `requested`; scope `single_site_content_approval`; subject `single_site_improved_version_review` / `bc642626-1242-427a-96ed-8003b881e71c`; policy `MVP-29`.
+- AAF decision id: `67ec5313-a122-456c-8476-7abd9fb772e5`; status `granted_with_limitations`; policy `MVP-29`.
+- Evidence package id: `dca2c91e-3449-4ec9-aba9-833f22ccccf8`; type `single_site_content_approval_evidence`; freshness `fresh`.
+- Evidence/audit refs: decision evidence link `2594e39f-29bb-4469-8655-47fe2b38f7b1`, request audit event `5d1a40bd-20fc-4df0-9979-5c770021efb9`, decision audit event `fd6445aa-69aa-4fae-a269-0b091d9f3134`, service decision event `1b54da3c-5cd5-430b-91fb-61177f92a506`.
+- AAF validation: `valid=true`, status `granted_with_limitations`, blocker codes `[]`, semantic watermark `single-site-content-approval:5507cbc4cff4acbd2c3cc8c161fc1668df640465e1e2006f5663b2e1b3c756fb`.
+- Limitations carried forward: four unique CUTLINE-46 accepted limitations for recommendations `0be61bde-6568-4f33-8499-4d5eade70837` (`unsupported_in_mvp`), `73de9484-1461-4476-b677-f41d7a839df7` (`requires_operator_input`), `86342f67-7cce-43de-823f-ea0f4adc1a41` (`requires_operator_input`), and `a61e857e-89c1-4ab1-bdc1-581a24e824c1` (`unsupported_in_mvp`).
+- Warning: persisted `limitations_json` repeats the same unique four-limitation set because the MVP-29 bridge validation carried prior limitations and the service merge also preserved supplied limitations. No additional recommendation or applied content change was introduced.
+- Blockers: none.
+- Client approval eligibility next: yes; content readiness returned `ready=true`, missing requirements `[]`.
+- Migration state after approval: `content_approved`; stage `improvement_content`.
+- Active pointers: before total `6`, selected runtime site `0`, candidate refs `0`; after total `6`, selected runtime site `0`, candidate refs `0`.
+- Forbidden downstream counts after readback: client approvals `0`, launch approvals `0`, launch readiness records `0`, publish operator actions `0`, downstream AAF requests `0`, downstream AAF decisions `0`, downstream AAF gates `0`, publish activation requests/decisions `0`.
+- Boundary: no client approval request/decision, launch approval request/decision, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-47-content-approval.md`.
+
 ## Stop Criteria
 
 Stop immediately if:

@@ -26,6 +26,8 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm MVP-CUTLINE-40 fresh implementation authorization request/evidence with replay data is recorded before any fresh human decision or improvement execution retry.
 - [ ] Confirm MVP-CUTLINE-41 fresh human AAF implementation authorization decision with replay data is recorded before attaching refs or retrying improvement execution.
 - [ ] Confirm MVP-CUTLINE-45A proposal approval refs reconciliation and authorized improvement execution candidate readback are recorded before any improved candidate review, approval, readiness, or publish work.
+- [ ] Confirm MVP-CUTLINE-46 improved candidate review is accepted with limitations before any content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-47 content approval is granted with limitations before any client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
@@ -118,6 +120,40 @@ Status as of 2026-08-21: the approved `chs.si` proposal approval refs were recon
 - Boundary: no improved candidate review acceptance, content/client/launch approval, launch readiness, publish activation, publish dry-run, shadow-publish, runtime publish, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-45a-reconcile-proposal-refs-and-execute.md`.
+
+### MVP-CUTLINE-46 Improved Candidate Review
+
+Status as of 2026-08-21: the CUTLINE-45A improved `chs.si` candidate was reviewed and accepted with limitations for MVP continuation.
+
+- Exact approval sentence: present.
+- Improved version review id: `bc642626-1242-427a-96ed-8003b881e71c`.
+- Review decision/status: `accept_with_limitations` / `accepted_with_limitations`.
+- Decision event id: `0c09ae9b-5e8c-475e-ac9d-b6304bcf1e5c`.
+- Candidate integrity: valid draft/shadow continuation artifact; site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, artifact `1f80138a-39c2-4210-ac61-16200e5a2254`, runtime site `site_57d9665a3a5867edf6ef`.
+- Accepted limitations: four unapplied recommendations carried forward; no applied changes invented.
+- Content approval eligibility next: yes, with limitations.
+- Active pointers after review: total `6`, selected runtime site `0`, candidate refs `0`.
+- Forbidden downstream counts after review: content approvals `0`, client approvals `0`, launch approvals `0`, launch readiness records `0`, publish operator actions `0`, downstream AAF requests/decisions/gates `0`, publish activation requests/decisions `0`.
+- Boundary: no content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-46-improved-candidate-review.md`.
+
+### MVP-CUTLINE-47 Content Approval
+
+Status as of 2026-08-21: content approval for the accepted-with-limitations `chs.si` improved candidate was granted with limitations.
+
+- Exact approval sentence: present.
+- Workflow path: `ContentApprovalService.createOrReuseContentApproval(...)`, `SingleSiteContentApprovalAafBridge.prepareContentApprovalRequest(...)`, `AafWriterRepository.createApprovalDecisionTransaction(...)`, bridge validation, AAF request/decision ref attachment, and `ContentApprovalService.approveWithLimitations(...)`.
+- Content approval id/status: `319c360a-d7d4-4a3e-9c3b-6daecd930e02` / `approved_with_limitations`.
+- AAF request/decision/evidence: `437e05f9-df87-4bb7-8478-466495c06fd1` / `67ec5313-a122-456c-8476-7abd9fb772e5` / `dca2c91e-3449-4ec9-aba9-833f22ccccf8`.
+- Decision evidence/audit refs: evidence link `2594e39f-29bb-4469-8655-47fe2b38f7b1`, request audit `5d1a40bd-20fc-4df0-9979-5c770021efb9`, decision audit `fd6445aa-69aa-4fae-a269-0b091d9f3134`, service decision event `1b54da3c-5cd5-430b-91fb-61177f92a506`.
+- Client approval eligibility next: yes; readiness returned `ready=true`, missing requirements `[]`.
+- Active pointers after approval: total `6`, selected runtime site `0`, candidate refs `0`.
+- Forbidden downstream counts after approval: client approvals `0`, launch approvals `0`, launch readiness records `0`, publish operator actions `0`, downstream AAF requests/decisions/gates `0`, publish activation requests/decisions `0`.
+- Warning: unique carried-forward limitation set matches CUTLINE-46, but the persisted limitation JSON repeats that same set due the MVP-29 validation/service merge behavior; no extra recommendation or applied-change claim was introduced.
+- Boundary: no client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-47-content-approval.md`.
 
 ### MVP-CUTLINE-22 Rehearsal Candidate Source-Truth Plan
 
