@@ -631,6 +631,7 @@ function mapPublishTarget(
     });
   }
   const blockers: string[] = [];
+  const warnings: string[] = [];
   const trustedEnvironment = text(policy?.trustedPublishEnvironment) ?? DEFAULT_ENVIRONMENT;
   const intendedStage = text(policy?.intendedPublishStage) ?? DEFAULT_STAGE;
   const allowedStages = stringArray(row.allowed_artifact_stages);
@@ -639,7 +640,7 @@ function mapPublishTarget(
   if (!["active", "disabled", "retired"].includes(row.status)) blockers.push("publish_target_status_unknown");
   if (row.environment !== trustedEnvironment) blockers.push("publish_target_environment_mismatch");
   if (row.publish_stage !== intendedStage) blockers.push("publish_target_stage_mismatch");
-  if (artifact?.publish_stage && allowedStages.length > 0 && !allowedStages.includes(artifact.publish_stage)) blockers.push("artifact_stage_not_allowed_by_target");
+  if (artifact?.publish_stage && allowedStages.length > 0 && !allowedStages.includes(artifact.publish_stage)) warnings.push("artifact_stage_pending_publish_activation_for_target");
   return dimension({
     dimension: "publish_target",
     status: blockers.length > 0 ? "blocked" : "ready",
@@ -657,6 +658,7 @@ function mapPublishTarget(
     sourceCapturedAt: row.updated_at,
     blockers,
     limitations: stringArray(row.limitations_json),
+    warnings,
     diagnostics: {
       status: row.status,
       environment: row.environment,
@@ -997,7 +999,7 @@ export class SingleSiteLaunchReadinessSourceReader {
       review: improvedReview,
       siteVersion,
       artifact,
-      expectedSiteId: input.siteId,
+      expectedSiteId: siteVersion?.site_id ?? artifact?.site_id ?? input.siteId,
       expectedVersionRef: input.improvedCandidateSiteVersionRef,
       expectedArtifactRef: input.improvedRuntimeArtifactRef,
     });

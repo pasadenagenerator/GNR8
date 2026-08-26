@@ -42,6 +42,11 @@ Do not start online verification until all are true:
 - CUTLINE-41 fresh human AAF implementation authorization decision is complete before proposal attach-ref or execution retry: decision `5b4a4f19-a3dc-472e-8d2f-c65a126fadb0` is `granted` for request `0b3a888e-cc6a-4cc1-bc53-476d70a20144` and evidence package `b4ddb218-ce37-42ab-b2f3-433138df6489`; no attach-ref, gate attempt, improvement execution, candidate, approval, readiness, publish, provider, deploy, migration, env, or active-pointer mutation exists.
 - CUTLINE-44C MVP-21 proposal approval ref alignment deployment gate is satisfied before CUTLINE-45: `mvp21_proposal_approval_ref_alignment_deployed` is recorded for deployed SHA `ed06b61` / `ed06b61c93c78af54432fd01eb3af412c1e2abc3`; improvement execution retry remains `not_run`, and online verification is `ready_for_cutline_45_fresh_improvement_execution_retry`.
 - CUTLINE-45A proposal refs and execution are complete before review/approval/readiness/publish: proposal plan `f541075c-4641-4f70-b5ff-64a8af071571` carries proposal event `f7320eae-2426-4c8e-ab91-0cfdac135d82` and state event `54ace8d6-401c-4ade-9ad2-ec4539dc3642`; execution attempt `6dc259c1-b659-4d64-95f2-3858803eb470` is `completed_with_limitations`; improved candidate site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` and artifact `1f80138a-39c2-4210-ac61-16200e5a2254` exist; no review/approval/readiness/publish/active-pointer/provider mutation occurred.
+- CUTLINE-46 improved candidate review is complete before content/client/launch approval: review `bc642626-1242-427a-96ed-8003b881e71c` is `accepted_with_limitations`, and four unapplied recommendations are carried as accepted limitations.
+- CUTLINE-47 content approval is complete before client/launch approval: content approval `319c360a-d7d4-4a3e-9c3b-6daecd930e02` is `approved_with_limitations`, AAF decision `67ec5313-a122-456c-8476-7abd9fb772e5` is `granted_with_limitations`, and client approval is eligible next.
+- CUTLINE-48 client approval is complete before launch approval: client approval `f764ee08-b912-458f-a25e-a26d2921ef7c` is `approved_with_limitations`, AAF decision `b8001dfa-0d8e-40be-bdc3-18544530a0e9` is `granted_with_limitations`, and launch approval is eligible next.
+- CUTLINE-49 launch approval is complete before launch readiness: launch approval `1880858f-bf44-46af-8f00-cb80b5a1ef2f` is `approved_with_limitations`, AAF decision `6c930318-be52-4aea-af87-e1bc7b84094f` is `granted_with_limitations`, launch readiness eligibility is `ready=true` with missing requirements `[]`, and no launch readiness/publish/runtime/active-pointer mutation occurred.
+- CUTLINE-50 launch readiness evidence is complete before publish activation request: readiness `17121fc3-db6c-40ad-bb4f-b3acb2213d5f` is `ready_with_limitations` / `fresh`, evidence package `17f10140-b31f-4c32-a673-13b95543fdd2` exists with watermark `single-site-launch-readiness:3d346b059d9d9b3b814abf22cbf464bf02b3434977a5ef51322a559876a9b203`, publish activation request eligibility is `ready=true`, and no publish activation/gate/publish/runtime/active-pointer mutation occurred.
 
 ## Operator Sequence
 
@@ -824,6 +829,49 @@ Production verification status: `content_approval_granted_with_limitations_pendi
 - Boundary: no client approval request/decision, launch approval request/decision, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-47-content-approval.md`.
+
+## CUTLINE-48 Client Approval
+
+Production verification status: `client_approval_granted_with_limitations_pending_launch_approval_no_publish`.
+
+- Exact approval sentence: present.
+- Client approval workflow path: `ClientApprovalService.createOrReuseClientApproval(...)` -> `SingleSiteClientApprovalAafBridge.prepareClientApprovalRequest(...)` -> `AafWriterRepository.createApprovalDecisionTransaction(...)` -> `SingleSiteClientApprovalAafBridge.validateClientApprovalDecisionRef(...)` -> `ClientApprovalService.attachAafRequestRef(...)` -> `ClientApprovalService.attachAafDecisionRef(...)` -> `ClientApprovalService.markReadyForReview(...)` -> `ClientApprovalService.startReview(...)` -> `ClientApprovalService.approveWithLimitations(...)`.
+- Client approval id/status/decision: `f764ee08-b912-458f-a25e-a26d2921ef7c` / `approved_with_limitations` / `approve_with_limitations`.
+- AAF request id: `9c4597b0-9706-478c-b4da-5a02a82da0dd`; status `requested`; scope `single_site_client_approval`; subject `single_site_improved_candidate_client_acceptance` / `f764ee08-b912-458f-a25e-a26d2921ef7c`; policy `MVP-33`.
+- AAF decision id: `b8001dfa-0d8e-40be-bdc3-18544530a0e9`; status `granted_with_limitations`; policy `MVP-33`.
+- Evidence package id: `2d41f7ea-2f76-4982-bcf6-65310e9d9589`; type `single_site_client_approval_evidence`; freshness `fresh`.
+- Evidence/audit refs: decision evidence link `a8b019b5-59f6-42c0-9dff-d517b2693589`, request audit event `25506ccf-933e-4c7b-8ce9-ebbf1d57a957`, decision audit event `adb2decb-23af-4dc0-aa5b-97063be03d9e`, service decision event `e9d4ba66-041f-40de-877b-3a72b9cee60e`.
+- AAF validation: `valid=true`, status `granted_with_limitations`, blocker codes `[]`, semantic watermark `single-site-client-approval:7ac1d34a501d7168963902ba789a72f9329824eee69ef8a51c5a7e22d4e1c45b`.
+- Limitations carried forward: four unique CUTLINE-46/CUTLINE-47 accepted limitations for recommendations `0be61bde-6568-4f33-8499-4d5eade70837` (`unsupported_in_mvp`), `73de9484-1461-4476-b677-f41d7a839df7` (`requires_operator_input`), `86342f67-7cce-43de-823f-ea0f4adc1a41` (`requires_operator_input`), and `a61e857e-89c1-4ab1-bdc1-581a24e824c1` (`unsupported_in_mvp`).
+- Warning: persisted client approval `limitations_json` has `32` rows because the previous repeated limitation JSON was carried through MVP-33 bridge validation and the service approval merge. The unique four-limitation set is intact; no additional recommendation or applied content change was introduced.
+- Blockers: none.
+- Launch approval eligibility next: yes; client approval readiness returned `ready=true`, missing requirements `[]`.
+- Migration state after approval: `client_approval_required`; stage `improvement_content`; latest state event `61bb0038-54d1-40ce-8632-f49ef6eb01f7`.
+- Active pointers: before total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`; after total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after readback: launch approvals `0`, launch readiness records `0`, publish activation requests/decisions `0`, launch approval AAF requests/decisions `0`, downstream AAF gates `0`, forbidden migration refs `0`.
+- Boundary: no launch approval request/decision, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-48-client-approval.md`.
+
+## CUTLINE-50 Launch Readiness Evidence
+
+Production verification status: `launch_readiness_ready_with_limitations_evidence_created_pending_publish_activation_request_no_publish`.
+
+- Exact approval sentence: present.
+- Launch readiness workflow path: `readSingleSiteLaunchReadinessSources(...)` -> MVP rehearsal limitation adaptation for actually missing accepted source-truth exceptions -> `LaunchReadinessService.recordLaunchReadinessFromSources(...)` -> supplemental AAF decision watermark refs -> `buildLaunchReadinessEvidencePackage(...)`.
+- Launch readiness record id/status/freshness: `17121fc3-db6c-40ad-bb4f-b3acb2213d5f` / `ready_with_limitations` / `fresh`.
+- Dimension summary: required launch/content/client approval and improved candidate dimensions are `ready_with_limitations`; publish target and preview smoke QA are `ready`; domain/DDOM, DNS operator evidence, Vercel/SSL, billing, hosting, and rollback are `ready_with_limitations` under accepted MVP rehearsal source-truth limitations; Stripe is `not_applicable`; audit timeline and PASR diagnostics are non-enforcing.
+- Accepted limitations, unique only: four carried-forward candidate recommendation limitations plus MVP rehearsal limitations for missing billing, DNS operator evidence, domain/DDOM, rollback, hosting entitlement, and Vercel/SSL source truth.
+- Blockers/warnings: open blockers `0`, open P0 blockers `0`; warning-level artifact stage remains pre-publish `shadow` while target `production` is active.
+- Readiness watermark: `sha256:078fbec8b80984c3525f232222b822e357294c017d25af361edf2f9e83911ae4`.
+- Evidence package id/ref: `17f10140-b31f-4c32-a673-13b95543fdd2` / `aaf:evidence_package:17f10140-b31f-4c32-a673-13b95543fdd2`.
+- Evidence watermark/freshness: `single-site-launch-readiness:3d346b059d9d9b3b814abf22cbf464bf02b3434977a5ef51322a559876a9b203` / `partial_timeline`.
+- Publish activation request eligibility next: `ready=true`, missing requirements `[]`.
+- Active pointers: before total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`; after total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after readback: publish operator actions `0`, publish activation requests `0`, publish activation decisions `0`, downstream AAF gates `0`.
+- Boundary: no publish activation request/decision, AAF gate attempt, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-50-launch-readiness-evidence.md`.
 
 ## Stop Criteria
 

@@ -483,12 +483,14 @@ test("required client approval missing blocks and client approval not required m
   assert.equal(notRequired.repo.calls.includes("readClientApproval"), false);
 });
 
-test("publish target missing, disabled, retired, stage mismatch, and disallowed artifact stage are blockers", async () => {
+test("publish target missing, disabled, retired, and stage mismatch block while artifact stage mismatch warns", async () => {
   assert.equal((await read({ publishTarget: null })).result.dimensions.publish_target.status, "missing");
   assert.ok((await read({ publishTarget: target({ status: "disabled" }) })).result.blockerSummaries.includes("disabled_publish_target"));
   assert.ok((await read({ publishTarget: target({ status: "retired" }) })).result.blockerSummaries.includes("retired_publish_target"));
   assert.ok((await read({ publishTarget: target({ publish_stage: "shadow" }) })).result.blockerSummaries.includes("publish_target_stage_mismatch"));
-  assert.ok((await read({ publishTarget: target({ allowed_artifact_stages: ["shadow"] }) })).result.blockerSummaries.includes("artifact_stage_not_allowed_by_target"));
+  const artifactStageMismatch = await read({ publishTarget: target({ allowed_artifact_stages: ["shadow"] }) });
+  assert.equal(artifactStageMismatch.result.dimensions.publish_target.status, "ready");
+  assert.ok(artifactStageMismatch.result.warnings.includes("artifact_stage_pending_publish_activation_for_target"));
 });
 
 test("DDOM ready, stale, and missing snapshots map to expected launch readiness states", async () => {

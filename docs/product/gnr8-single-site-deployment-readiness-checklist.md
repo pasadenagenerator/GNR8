@@ -28,6 +28,9 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm MVP-CUTLINE-45A proposal approval refs reconciliation and authorized improvement execution candidate readback are recorded before any improved candidate review, approval, readiness, or publish work.
 - [ ] Confirm MVP-CUTLINE-46 improved candidate review is accepted with limitations before any content/client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm MVP-CUTLINE-47 content approval is granted with limitations before any client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-48 client approval is granted with limitations before any launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-49 launch approval is granted with limitations before any launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-50 launch readiness evidence is created with `ready_with_limitations` before any publish activation request, gate, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
@@ -154,6 +157,59 @@ Status as of 2026-08-21: content approval for the accepted-with-limitations `chs
 - Boundary: no client/launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-47-content-approval.md`.
+
+### MVP-CUTLINE-48 Client Approval
+
+Status as of 2026-08-21: client approval for the content-approved-with-limitations `chs.si` improved candidate was granted with limitations for the internal MVP rehearsal.
+
+- Exact approval sentence: present.
+- Workflow path: `ClientApprovalService.createOrReuseClientApproval(...)`, `SingleSiteClientApprovalAafBridge.prepareClientApprovalRequest(...)`, `AafWriterRepository.createApprovalDecisionTransaction(...)`, bridge validation, AAF request/decision ref attachment, and `ClientApprovalService.approveWithLimitations(...)`.
+- Client approval id/status: `f764ee08-b912-458f-a25e-a26d2921ef7c` / `approved_with_limitations`.
+- AAF request/decision/evidence: `9c4597b0-9706-478c-b4da-5a02a82da0dd` / `b8001dfa-0d8e-40be-bdc3-18544530a0e9` / `2d41f7ea-2f76-4982-bcf6-65310e9d9589`.
+- Evidence/audit refs: decision evidence link `a8b019b5-59f6-42c0-9dff-d517b2693589`, request audit `25506ccf-933e-4c7b-8ce9-ebbf1d57a957`, decision audit `adb2decb-23af-4dc0-aa5b-97063be03d9e`, service decision event `e9d4ba66-041f-40de-877b-3a72b9cee60e`.
+- Launch approval eligibility next: yes; readiness returned `ready=true`, missing requirements `[]`.
+- Active pointers after approval: total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after approval: launch approvals `0`, launch readiness records `0`, publish activation requests/decisions `0`, launch approval AAF requests/decisions `0`, downstream AAF gates `0`, forbidden migration refs `0`.
+- Warning: unique carried-forward limitation set matches CUTLINE-46/CUTLINE-47, but the persisted client approval limitation JSON repeats that set through MVP-33 validation/service merge behavior; no extra recommendation or applied-change claim was introduced.
+- Boundary: no launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-48-client-approval.md`.
+
+### MVP-CUTLINE-49 Launch Approval
+
+Status as of 2026-08-21: launch approval for the client-approved-with-limitations `chs.si` improved candidate was granted with limitations for the internal MVP rehearsal.
+
+- Exact approval sentence: present.
+- Workflow path: `LaunchApprovalService.createOrReuseLaunchApproval(...)`, `SingleSiteLaunchApprovalAafBridge.prepareLaunchApprovalRequest(...)`, `AafWriterRepository.createApprovalDecisionTransaction(...)`, bridge validation, AAF request/decision ref attachment, and `LaunchApprovalService.approveWithLimitations(...)`.
+- Launch approval id/status: `1880858f-bf44-46af-8f00-cb80b5a1ef2f` / `approved_with_limitations`.
+- AAF request/decision/evidence: `1f051e47-a61b-49ed-8bb1-77b8ac4a200a` / `6c930318-be52-4aea-af87-e1bc7b84094f` / `1dc141ba-b40a-4bae-a68a-3aa85f81b755`.
+- Evidence/audit refs: decision evidence link `bc07da6d-4c4a-486b-9195-64a4746f19fc`, request audit `9e50f265-b50d-487b-8008-829958797689`, decision audit `5b6d5b74-42fa-4ef7-a0c3-76327e08c544`, service decision event `200648eb-6c47-401c-ba09-64bdd24eb275`.
+- Launch readiness eligibility next: yes; readiness returned `ready=true`, missing requirements `[]`.
+- Active pointers after approval: total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after approval: launch readiness records/dimensions/refs/blockers/events `0`, publish operator actions `0`, publish activation requests/decisions `0`, downstream AAF gates `0`.
+- Warning: unique carried-forward limitation set matches CUTLINE-46/CUTLINE-47/CUTLINE-48, but the persisted launch approval limitation JSON repeats that set through MVP-35 validation and MVP-34 service merge behavior; no extra recommendation or applied-change claim was introduced.
+- Boundary: no launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-49-launch-approval.md`.
+
+### MVP-CUTLINE-50 Launch Readiness Evidence
+
+Status as of 2026-08-26: launch readiness for the launch-approved-with-limitations `chs.si` improved candidate was recorded as `ready_with_limitations`, and launch readiness evidence was created for the internal MVP rehearsal.
+
+- Exact approval sentence: present.
+- Workflow path: `readSingleSiteLaunchReadinessSources(...)`, MVP rehearsal limitation adaptation for actually missing accepted source-truth exceptions, `LaunchReadinessService.recordLaunchReadinessFromSources(...)`, supplemental AAF decision watermark refs, and `buildLaunchReadinessEvidencePackage(...)`.
+- Launch readiness record id/status/freshness: `17121fc3-db6c-40ad-bb4f-b3acb2213d5f` / `ready_with_limitations` / `fresh`.
+- Launch readiness evidence package id/ref: `17f10140-b31f-4c32-a673-13b95543fdd2` / `aaf:evidence_package:17f10140-b31f-4c32-a673-13b95543fdd2`.
+- Readiness/evidence watermarks: `sha256:078fbec8b80984c3525f232222b822e357294c017d25af361edf2f9e83911ae4` / `single-site-launch-readiness:3d346b059d9d9b3b814abf22cbf464bf02b3434977a5ef51322a559876a9b203`.
+- Evidence freshness: `partial_timeline`.
+- Accepted limitations: four unique candidate limitations plus MVP rehearsal limits for missing billing, DNS operator evidence, domain/DDOM, rollback, hosting entitlement, and Vercel/SSL source truth. No smoke QA limitation was added because preview smoke refs were present.
+- Open blockers: none; open P0 blockers `0`.
+- Publish activation request eligibility next: yes; `ready=true`, missing requirements `[]`.
+- Active pointers after readiness/evidence: total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after readback: publish operator actions `0`, publish activation requests `0`, publish activation decisions `0`, downstream AAF gates `0`.
+- Boundary: no publish activation request/decision, AAF gate attempt, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-50-launch-readiness-evidence.md`.
 
 ### MVP-CUTLINE-22 Rehearsal Candidate Source-Truth Plan
 

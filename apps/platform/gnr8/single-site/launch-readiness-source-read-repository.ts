@@ -361,7 +361,7 @@ export class LaunchReadinessSourceReadRepository implements LaunchReadinessSourc
         limitations_json,
         findings_summary_json,
         decision_summary_json,
-        semantic_watermark,
+        null::text as semantic_watermark,
         payload_hash,
         created_at::text,
         updated_at::text
@@ -410,7 +410,7 @@ export class LaunchReadinessSourceReadRepository implements LaunchReadinessSourc
         limitations_json,
         unresolved_not_applied_recommendations_json,
         findings_summary_json,
-        semantic_watermark,
+        null::text as semantic_watermark,
         payload_hash,
         created_at::text,
         updated_at::text
@@ -467,7 +467,7 @@ export class LaunchReadinessSourceReadRepository implements LaunchReadinessSourc
         limitations_json,
         deferred_or_not_applied_recommendation_refs_json,
         findings_summary_json,
-        semantic_watermark,
+        null::text as semantic_watermark,
         payload_hash,
         created_at::text,
         updated_at::text
@@ -512,7 +512,7 @@ export class LaunchReadinessSourceReadRepository implements LaunchReadinessSourc
         warnings_json,
         blockers_json,
         diagnostics_json,
-        semantic_watermark,
+        null::text as semantic_watermark,
         payload_hash,
         created_at::text,
         updated_at::text
@@ -520,8 +520,16 @@ export class LaunchReadinessSourceReadRepository implements LaunchReadinessSourc
       where migration_id::text = $1
         and client_id::text = $2
         and site_id::text = $3
-        and improved_candidate_site_version_ref = $4
-        and improved_runtime_artifact_ref = $5
+        and (
+          improved_candidate_site_version_ref = $4
+          or improved_candidate_site_version_ref = concat('gnr8:site_version:', $4)
+          or improved_candidate_site_version_ref = concat('gnr8:gnr8_runtime_site_versions:', $4)
+        )
+        and (
+          improved_runtime_artifact_ref = $5
+          or improved_runtime_artifact_ref = concat('gnr8:runtime_artifact:', $5)
+          or improved_runtime_artifact_ref = concat('gnr8:gnr8_runtime_artifacts:', $5)
+        )
       order by
         (review_status in ('accepted', 'accepted_with_limitations')) desc,
         updated_at desc,
@@ -705,11 +713,11 @@ export class LaunchReadinessSourceReadRepository implements LaunchReadinessSourc
         source_record_id,
         source_version,
         source_watermark,
-        semantic_watermark,
-        content_hash,
+        null::text as semantic_watermark,
+        null::text as content_hash,
         captured_at::text,
         fresh_until::text,
-        evidence_only,
+        true as evidence_only,
         metadata_json,
         created_at::text
       from public.gnr8_single_site_migration_refs
