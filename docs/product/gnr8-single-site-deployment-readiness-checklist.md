@@ -34,6 +34,7 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm MVP-CUTLINE-51 publish activation request and human decision are recorded with `granted_with_limitations` before any gate evaluation, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm MVP-CUTLINE-52 publish activation gate evaluation is recorded with `allowed` / `warning` before any operator dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm MVP-CUTLINE-53 operator dry-run is recorded before any shadow-publish, runtime publish, rollback, provider/domain/billing mutation, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-54 metadata diagnosis is resolved by a deployed MVP-54/CUTLINE-3 caller contract that can carry canonical source watermarks before rerunning governed dry-run.
 - [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
@@ -264,6 +265,21 @@ Status as of 2026-08-27: governed operator dry-run was recorded for the CUTLINE-
 - Boundary: no shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-53-operator-dry-run.md`.
+
+### MVP-CUTLINE-54 Dry-Run Metadata Mismatch Resolution
+
+Status as of 2026-08-27: read-only diagnosis found the persisted production source truth coherent, but no governed dry-run rerun was performed.
+
+- Exact approval sentence: present.
+- CUTLINE-53 root cause: submitted string refs and field shape could not satisfy MVP-49's source-watermark comparison. The existing MVP-54/CUTLINE-3 caller converts string refs to synthetic `ref:<table>:<id>` watermarks, while production evidence expects persisted candidate/artifact/target watermarks.
+- Additional submitted metadata fixes required: `publishEnvironment` must be `production` rather than target status `active`; MVP-49 gate validation expects raw gate id `e2993dcb-8a9f-4e31-b499-d4d6b8d739de`.
+- Read-only resolver probe with full persisted ref objects: `complete`, with blocker/missing/mismatch/stale codes `[]`.
+- Rerun performed: no; the existing governed caller cannot carry the canonical watermarked refs without a narrow contract fix.
+- Active pointers: selected runtime site `0 -> 0`.
+- Forbidden downstream counts after diagnosis: new CUTLINE-54 operator actions `0`, shadow-publish actions `0`, CUTLINE-54 AAF request/decision/gate rows `0/0/0`, forbidden migration refs `0`, site publish events for candidate `0`.
+- Boundary: no dry-run rerun, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-54-dry-run-metadata-mismatch-resolution.md`.
 
 ### MVP-CUTLINE-22 Rehearsal Candidate Source-Truth Plan
 

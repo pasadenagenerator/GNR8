@@ -1143,6 +1143,22 @@ Canonical production publish activation gate evaluation closeout for the approve
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 - `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
 
+## MVP-CUTLINE-53 Operator Dry-Run
+
+Canonical production governed operator dry-run closeout for the gate-approved-with-warnings `chs.si` candidate, recording exact approval sentence present, MVP-CUTLINE-3 facade preflight through MVP-54 audited dry-run route/caller, MVP-52 wrapper with `dryRun=true`, MVP-49 resolver, MVP-57 audit persistence, operator action `d9432ad3-0d3c-4424-a3ba-1edca6b18e5e`, dry-run result `ok=false`, wrapper `preflight_blocked`, resolver `incomplete`, blockers for candidate/artifact/target/gate/handoff/stage metadata mismatch plus wrapper resolver incomplete, expected non-enforcing dry-run warnings, shadow-publish eligibility no, selected runtime site active pointers unchanged at `0`, forbidden downstream counts clean, online verification status `operator_dry_run_completed_resolver_mismatch_no_publish`, and the boundary of no shadow-publish, runtime publish, rollback, active pointer mutation, provider/domain/DNS/billing mutation, deploy, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-53-operator-dry-run.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
+## MVP-CUTLINE-54 Dry-Run Metadata Mismatch Resolution
+
+Canonical read-only diagnosis of the CUTLINE-53 governed operator dry-run metadata mismatches, recording exact approval sentence present, production readback of the CUTLINE-53 audit action/refs/events and persisted gate, policy, decision, readiness, evidence, candidate, artifact, and publish target rows, no persisted source-truth conflict, direct MVP-49 resolver probe with full canonical source refs/watermarks returning `complete` with no blocker/missing/mismatch/stale codes, root cause that the current MVP-CUTLINE-3/MVP-54 governed caller accepts string refs only and therefore cannot carry the persisted source watermarks required by MVP-49 for candidate/artifact/publish-target equality, additional field-shape fixes for `publishEnvironment=production` and raw gate attempt id input, no governed rerun performed, online verification status `operator_dry_run_metadata_contract_mismatch_no_rerun_no_publish`, selected runtime site active pointers unchanged at `0`, forbidden downstream counts clean, and the boundary of no new operator action, dry-run rerun, shadow-publish, runtime publish, rollback, active pointer mutation, provider/domain/DNS/billing mutation, deploy, migration, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-54-dry-run-metadata-mismatch-resolution.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
 ## BMF-1 Bulk Migration Factory
 
 Canonical Bulk Migration Factory design docs:

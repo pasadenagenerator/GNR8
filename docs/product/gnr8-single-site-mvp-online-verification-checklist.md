@@ -928,6 +928,23 @@ Production verification status: `operator_dry_run_completed_resolver_mismatch_no
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-53-operator-dry-run.md`.
 
+## CUTLINE-54 Dry-Run Metadata Mismatch Resolution
+
+Production verification status: `operator_dry_run_metadata_contract_mismatch_no_rerun_no_publish`.
+
+- Exact approval sentence: present.
+- Diagnosis path: read-only production DB readback of CUTLINE-53 operator action/refs/events, persisted gate/policy/decision/readiness/evidence/candidate/artifact/target rows, plus a read-only MVP-49 resolver probe with full persisted source refs and watermarks.
+- Root cause: production refs are coherent, but the existing MVP-CUTLINE-3/MVP-54 governed dry-run request contract accepts string refs only. MVP-49 requires persisted `source_watermark` equality for candidate, artifact, and publish target refs; string refs normalize to synthetic `ref:<table>:<id>` watermarks.
+- Additional CUTLINE-53 shape issues: `publishEnvironment=active` should be `production`; target status is `active`. `expectedGateAttemptResultRef` was submitted as an AAF ref but MVP-49 validation expects raw gate id `e2993dcb-8a9f-4e31-b499-d4d6b8d739de`.
+- Read-only resolver probe result with canonical full refs: resolver `complete`; blocker/missing/mismatch/stale codes `[]`; warnings limited to expected non-enforcing dry-run/readiness limitation warnings.
+- Rerun performed: no, because forcing a rerun through the current governed caller would reproduce source-watermark mismatches.
+- Shadow-publish eligibility next: no; first deploy a narrow MVP-54/CUTLINE-3 contract fix that carries canonical watermarked refs, then rerun governed dry-run once.
+- Active pointers: selected runtime site `0 -> 0`.
+- Forbidden downstream counts after diagnosis: new CUTLINE-54 operator actions `0`, shadow-publish actions `0`, CUTLINE-54 AAF request/decision/gate rows `0/0/0`, forbidden migration refs `0`, site publish events for candidate `0`, candidate state `DRAFT`.
+- Boundary: no dry-run rerun, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-54-dry-run-metadata-mismatch-resolution.md`.
+
 ## Stop Criteria
 
 Stop immediately if:
