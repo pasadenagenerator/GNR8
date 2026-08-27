@@ -518,6 +518,7 @@ Canonical server-only, non-executing bridge that validates MVP-40 `single_site_l
 - `apps/platform/gnr8/single-site/publish-activation-request-bridge.test.ts`
 - `apps/platform/gnr8/single-site/publish-activation-request-bridge.integration.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-request-bridge-closeout.md`
+- `docs/product/gnr8-single-site-mvp-cutline-51-publish-activation-approval.md`
 
 ## MVP-42 Single-Site Publish Activation Human Decision Workflow Core
 
@@ -526,6 +527,7 @@ Canonical server-only, non-executing human decision workflow core that validates
 - `apps/platform/gnr8/single-site/publish-activation-decision-service.test.ts`
 - `apps/platform/gnr8/single-site/publish-activation-decision-service.integration.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-human-decision-workflow-closeout.md`
+- `docs/product/gnr8-single-site-mvp-cutline-51-publish-activation-approval.md`
 
 ## MVP-43 Single-Site Publish Activation Decision Read Model And Gate Handoff Core
 
@@ -546,6 +548,7 @@ Canonical server-only, non-publishing publish activation gate evaluation core th
 - `apps/platform/gnr8/aaf/aaf-policy-gate-facade.ts`
 - `apps/platform/gnr8/aaf/aaf-policy-gate-facade.test.ts`
 - `docs/product/gnr8-single-site-publish-activation-gate-evaluation-closeout.md`
+- `docs/product/gnr8-single-site-mvp-cutline-52-publish-activation-gate-evaluation.md`
 
 ## MVP-45 Single-Site Publish Activation Enforcement Architecture
 
@@ -1111,6 +1114,30 @@ Canonical production client approval closeout for the content-approved-with-limi
 
 Canonical production launch approval closeout for the client-approved-with-limitations `chs.si` improved candidate, recording exact approval sentence present, deterministic idempotency/correlation base `gnr8-cutline-49-chs-si-launch-approval-20260821`, workflow path `LaunchApprovalService.createOrReuseLaunchApproval(...)`, `SingleSiteLaunchApprovalAafBridge.prepareLaunchApprovalRequest(...)`, `AafWriterRepository.createApprovalDecisionTransaction(...)`, bridge validation, AAF request/decision ref attachment, and `LaunchApprovalService.approveWithLimitations(...)`, launch approval `1880858f-bf44-46af-8f00-cb80b5a1ef2f` with status/decision `approved_with_limitations` / `approve_with_limitations`, AAF request `1f051e47-a61b-49ed-8bb1-77b8ac4a200a`, AAF decision `6c930318-be52-4aea-af87-e1bc7b84094f` with status `granted_with_limitations`, evidence package `1dc141ba-b40a-4bae-a68a-3aa85f81b755`, decision evidence link `bc07da6d-4c4a-486b-9195-64a4746f19fc`, request audit event `9e50f265-b50d-487b-8008-829958797689`, decision audit event `5b6d5b74-42fa-4ef7-a0c3-76327e08c544`, service decision event `200648eb-6c47-401c-ba09-64bdd24eb275`, AAF validation `valid=true` with blocker codes `[]`, four unique CUTLINE-46/CUTLINE-47/CUTLINE-48 accepted limitations carried forward without inventing applied changes, warning that persisted limitation JSON repeats the same unique set through MVP-35 validation and MVP-34 service merge behavior, launch readiness eligibility next `ready=true` with missing requirements `[]`, migration state `launch_approval_required`, active pointers unchanged at total `6` and selected/candidate `0`, forbidden launch-readiness/publish/AAF gate counts `0`, online verification status `launch_approval_granted_with_limitations_pending_launch_readiness_no_publish`, and the boundary of no launch readiness, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, env mutation, commit, or push:
 - `docs/product/gnr8-single-site-mvp-cutline-49-launch-approval.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
+## MVP-CUTLINE-50 Launch Readiness Evidence
+
+Canonical production launch readiness evidence closeout for the launch-approved-with-limitations `chs.si` improved candidate, recording exact approval sentence present, workflow path `readSingleSiteLaunchReadinessSources(...)` -> MVP rehearsal limitation adaptation -> `LaunchReadinessService.recordLaunchReadinessFromSources(...)` -> supplemental AAF decision watermark refs -> `buildLaunchReadinessEvidencePackage(...)`, launch readiness record `17121fc3-db6c-40ad-bb4f-b3acb2213d5f` with `ready_with_limitations` / `fresh`, evidence package `17f10140-b31f-4c32-a673-13b95543fdd2` with ref `aaf:evidence_package:17f10140-b31f-4c32-a673-13b95543fdd2`, readiness/evidence watermarks `sha256:078fbec8b80984c3525f232222b822e357294c017d25af361edf2f9e83911ae4` / `single-site-launch-readiness:3d346b059d9d9b3b814abf22cbf464bf02b3434977a5ef51322a559876a9b203`, evidence freshness `partial_timeline`, canonical limitations for four unapplied recommendations plus missing billing, DNS operator evidence, domain/DDOM, rollback, hosting entitlement, and Vercel/SSL source truth, publish activation request eligibility next, active pointers unchanged at total `6` and selected/candidate `0`, online verification status `launch_readiness_ready_with_limitations_evidence_created_pending_publish_activation_request_no_publish`, and the boundary of no publish activation request/decision, AAF gate attempt, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/domain/DNS/billing mutation, deploy, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-50-launch-readiness-evidence.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
+## MVP-CUTLINE-51 Publish Activation Approval
+
+Canonical production publish activation approval closeout for the launch-ready-with-limitations `chs.si` candidate, recording exact approval sentence present, request workflow `SingleSitePublishActivationRequestBridge.preparePublishActivationRequestFromLaunchReadiness(...)`, decision workflow `SingleSitePublishActivationDecisionService.recordPublishActivationDecision(...)`, request `4f273f5d-63e2-40f5-a3be-377bfc8d9380` / `aaf:approval_request:4f273f5d-63e2-40f5-a3be-377bfc8d9380` with `requested`, `publish_activation`, `publish.activation`, subject `site_version:a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, request watermark `single-site-publish-activation-request:fed30dbde86621d1e01274bb06564921bd6f596408681e302e10c0793e351b6a`, decision `53e9cba6-74ac-44b4-bfba-57826f037f71` / `aaf:approval_decision:53e9cba6-74ac-44b4-bfba-57826f037f71` with `granted_with_limitations`, decision watermark `single-site-publish-activation-decision:5952a37e18442479424e1fde1bf57648531b4f9b8f38252fd2a9c7bc644b6626`, direct launch readiness evidence package `17f10140-b31f-4c32-a673-13b95543fdd2`, read model `decision_granted_with_limitations`, gate eligibility next, active pointers unchanged, online verification status `publish_activation_request_decision_granted_with_limitations_gate_evaluation_eligible_no_publish`, and the boundary of no gate evaluation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/domain/DNS/billing mutation, deploy, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-51-publish-activation-approval.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
+
+## MVP-CUTLINE-52 Publish Activation Gate Evaluation
+
+Canonical production publish activation gate evaluation closeout for the approved-with-limitations `chs.si` candidate, recording exact approval sentence present, deterministic idempotency/correlation base `gnr8-cutline-52-chs-si-publish-activation-gate-20260826`, handoff/read-model path `buildPublishActivationDecisionReadModel(...)` via `PublishActivationDecisionReadRepository` -> `buildPublishActivationGateHandoff(...)`, gate evaluator path `SingleSitePublishActivationGateEvaluator.evaluatePublishActivationGateFromHandoff(...)` -> `AafActionGateValidatorFacade.validateGate(...)`, read model `decision_granted_with_limitations`, handoff `handoff_ready`, gate attempt `e2993dcb-8a9f-4e31-b499-d4d6b8d739de` / `aaf:action_gate_attempt:e2993dcb-8a9f-4e31-b499-d4d6b8d739de`, gate result/status `allowed` / `warning`, policy evaluation `2e2d62a9-87ab-4d50-bbe0-372a9d1f0e4f` / `approval_required`, audit event `351f1922-9f3e-4056-9c8e-ee4598f62432` / `aaf.gate.allowed`, handoff watermark `single-site-publish-activation-gate-handoff:bfbf793f9110306f2403e8e306fac8fb66af09c1bf07c999dfc4d7800d98441f`, gate input watermark `single-site-publish-activation-gate-input:cf92da520741ce06bc7b9051f5253275888f150676b15cf3aa9d6adf15cb42f8`, canonical CUTLINE-50 limitations carried forward with raw duplicate/non-enforcing diagnostics called out separately, operator dry-run eligibility next, active pointers unchanged at total `6` and selected/candidate `0`, forbidden downstream counts clean, online verification status `publish_activation_gate_warning_operator_dry_run_eligible_no_publish`, and the boundary of no operator dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/domain/DNS/billing mutation, deploy, env mutation, commit, or push:
+- `docs/product/gnr8-single-site-mvp-cutline-52-publish-activation-gate-evaluation.md`
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 - `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`

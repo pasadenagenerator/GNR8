@@ -31,6 +31,8 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm MVP-CUTLINE-48 client approval is granted with limitations before any launch approval, launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm MVP-CUTLINE-49 launch approval is granted with limitations before any launch readiness, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm MVP-CUTLINE-50 launch readiness evidence is created with `ready_with_limitations` before any publish activation request, gate, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-51 publish activation request and human decision are recorded with `granted_with_limitations` before any gate evaluation, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-52 publish activation gate evaluation is recorded with `allowed` / `warning` before any operator dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
@@ -210,6 +212,41 @@ Status as of 2026-08-26: launch readiness for the launch-approved-with-limitatio
 - Boundary: no publish activation request/decision, AAF gate attempt, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-50-launch-readiness-evidence.md`.
+
+### MVP-CUTLINE-51 Publish Activation Approval
+
+Status as of 2026-08-26: publish activation request and human decision for the launch-ready-with-limitations `chs.si` candidate were recorded, making the chain eligible for gate evaluation next.
+
+- Exact approval sentence: present.
+- Workflow paths: `SingleSitePublishActivationRequestBridge.preparePublishActivationRequestFromLaunchReadiness(...)` and `SingleSitePublishActivationDecisionService.recordPublishActivationDecision(...)`.
+- Publish activation request id/ref/status: `4f273f5d-63e2-40f5-a3be-377bfc8d9380` / `aaf:approval_request:4f273f5d-63e2-40f5-a3be-377bfc8d9380` / `requested`.
+- Publish activation decision id/ref/status: `53e9cba6-74ac-44b4-bfba-57826f037f71` / `aaf:approval_decision:53e9cba6-74ac-44b4-bfba-57826f037f71` / `granted_with_limitations`.
+- Direct evidence ref: `aaf:evidence_package:17f10140-b31f-4c32-a673-13b95543fdd2`; no wrapper evidence was created.
+- Gate evaluation eligibility next: yes; read model status `decision_granted_with_limitations`, next action `prepare_gate_evaluation`.
+- Active pointers after approval: total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after approval: publish operator actions `0`, downstream AAF gate attempts `0`, runtime publish events absent, runtime active site versions absent.
+- Boundary: no gate evaluation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-51-publish-activation-approval.md`.
+
+### MVP-CUTLINE-52 Publish Activation Gate Evaluation
+
+Status as of 2026-08-27: publish activation gate evaluation for the approved-with-limitations `chs.si` candidate was recorded, making the chain eligible for operator dry-run next.
+
+- Exact approval sentence: present.
+- Handoff/read-model path: `buildPublishActivationDecisionReadModel(...)` via `PublishActivationDecisionReadRepository` -> `buildPublishActivationGateHandoff(...)`.
+- Gate evaluator path: `SingleSitePublishActivationGateEvaluator.evaluatePublishActivationGateFromHandoff(...)` -> `AafActionGateValidatorFacade.validateGate(...)`.
+- Gate attempt id/ref: `e2993dcb-8a9f-4e31-b499-d4d6b8d739de` / `aaf:action_gate_attempt:e2993dcb-8a9f-4e31-b499-d4d6b8d739de`.
+- Gate result/status: `allowed` / `warning`; policy evaluation `2e2d62a9-87ab-4d50-bbe0-372a9d1f0e4f` returned `approval_required`, blocker codes `[]`.
+- Audit/event ref: `351f1922-9f3e-4056-9c8e-ee4598f62432` / `aaf.gate.allowed`.
+- Handoff/gate input watermarks: `single-site-publish-activation-gate-handoff:bfbf793f9110306f2403e8e306fac8fb66af09c1bf07c999dfc4d7800d98441f` / `single-site-publish-activation-gate-input:cf92da520741ce06bc7b9051f5253275888f150676b15cf3aa9d6adf15cb42f8`.
+- Canonical CUTLINE-50 limitations carried forward: four unapplied recommendation limitations plus missing billing subscription source truth, DNS operator evidence, domain/DDOM source truth, rollback readiness source truth, site-scoped hosting entitlement truth, and Vercel custom domain SSL state.
+- Warning: raw persisted source payloads still include duplicate limitation forms plus non-enforcing diagnostics `durable_audit_timeline_refs_missing` and `pasr_shadow_diagnostics_missing`; these are not counted as canonical CUTLINE-50 carried-forward limitations.
+- Active pointers after gate: total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after gate: publish operator actions/events/refs `0/0/0`, runtime active pointer refs for candidate `0`, runtime publish events absent, site publish events for candidate `0`, rollback events absent, DDOM readiness snapshots/refs `0/0`, non-activation gate attempts for candidate `0`.
+- Boundary: no operator dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-52-publish-activation-gate-evaluation.md`.
 
 ### MVP-CUTLINE-22 Rehearsal Candidate Source-Truth Plan
 

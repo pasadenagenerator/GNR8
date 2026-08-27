@@ -47,6 +47,8 @@ Do not start online verification until all are true:
 - CUTLINE-48 client approval is complete before launch approval: client approval `f764ee08-b912-458f-a25e-a26d2921ef7c` is `approved_with_limitations`, AAF decision `b8001dfa-0d8e-40be-bdc3-18544530a0e9` is `granted_with_limitations`, and launch approval is eligible next.
 - CUTLINE-49 launch approval is complete before launch readiness: launch approval `1880858f-bf44-46af-8f00-cb80b5a1ef2f` is `approved_with_limitations`, AAF decision `6c930318-be52-4aea-af87-e1bc7b84094f` is `granted_with_limitations`, launch readiness eligibility is `ready=true` with missing requirements `[]`, and no launch readiness/publish/runtime/active-pointer mutation occurred.
 - CUTLINE-50 launch readiness evidence is complete before publish activation request: readiness `17121fc3-db6c-40ad-bb4f-b3acb2213d5f` is `ready_with_limitations` / `fresh`, evidence package `17f10140-b31f-4c32-a673-13b95543fdd2` exists with watermark `single-site-launch-readiness:3d346b059d9d9b3b814abf22cbf464bf02b3434977a5ef51322a559876a9b203`, publish activation request eligibility is `ready=true`, and no publish activation/gate/publish/runtime/active-pointer mutation occurred.
+- CUTLINE-51 publish activation approval is complete before gate evaluation: request `4f273f5d-63e2-40f5-a3be-377bfc8d9380` is `requested`, decision `53e9cba6-74ac-44b4-bfba-57826f037f71` is `granted_with_limitations`, direct launch readiness evidence link uses `aaf:evidence_package:17f10140-b31f-4c32-a673-13b95543fdd2`, gate evaluation eligibility is `ready=true`, and no gate/dry-run/shadow-publish/runtime/active-pointer mutation occurred.
+- CUTLINE-52 publish activation gate evaluation is complete before operator dry-run: gate attempt `e2993dcb-8a9f-4e31-b499-d4d6b8d739de` is `allowed`, evaluator status is `warning`, policy evaluation `2e2d62a9-87ab-4d50-bbe0-372a9d1f0e4f` has blocker codes `[]`, and no dry-run/shadow-publish/runtime/active-pointer mutation occurred.
 
 ## Operator Sequence
 
@@ -62,14 +64,15 @@ Do not start online verification until all are true:
 | 8 | With fresh exact approval, run clone generation and clone review | Clone version/artifact and accepted clone review are recorded; proposal planning becomes allowed by clone review only | Clone generation path is missing, source review is not accepted, clone refs are missing, or P0 clone blockers exist |
 | 9 | Call `GET /api/gnr8/admin/single-site-mvp/status` with selected ids/refs | Redacted status returns next operation, blockers, warnings, limitations, mutation flags false | Raw SQL/stack/secrets appear or auth fails unexpectedly |
 | 10 | Call `POST /api/gnr8/admin/single-site-mvp/action` with `actionMode: "preflight"` and current `requestedOperationKey` | Expected allow/block reason | Preflight allows an operation that source truth should block |
-| 11 | Run dry-run through the action route or direct MVP-54 route | Response says dry-run/non-publishing/non-mutating, or blocks with expected source-truth reason | Dry-run mutates runtime, publish target, active pointer, provider, DNS/domain, billing, Stripe, Vercel, or Openprovider state |
-| 12 | Inspect audit | Operator audit action/refs/events exist for dry-run/preflight | Audit missing or contains unsafe raw diagnostics |
-| 13 | Refresh Command Center panel | Latest audit/readiness projection reflects the route result | Panel projection differs materially from route result without explanation |
-| 14 | Decide whether to stop at dry-run | Human records pass/fix/stop decision | Any stop criterion has occurred |
-| 15 | Optional: enable `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` only after explicit approval | Flag value is recorded with approver and timestamp | Approval missing or dry-run did not pass |
-| 16 | Optional: run shadow-publish with confirmation accepting active-pointer mutation and no automatic rollback | Route returns redacted wrapper/orchestrator result and safe before/after refs | Shadow-publish executes without approval, exposes unsafe data, or touches unexpected systems |
-| 17 | Optional: verify online result | Active pointer/public or preview behavior matches returned before/after refs | Pointer/public behavior does not match response |
-| 18 | Record outcome | Closeout includes correlation id, idempotency key, route status, wrapper/resolver/gate status, audit id, pointer refs, screenshots/URLs, and seeded exceptions | Outcome cannot be reproduced or evidence is incomplete |
+| 11 | Run publish activation gate evaluation only after CUTLINE-51 refs are present | AAF gate attempt/result is recorded without publishing | Gate runs without CUTLINE-51 refs, mutates runtime, or changes active pointers |
+| 12 | Run dry-run through the action route or direct MVP-54 route | Response says dry-run/non-publishing/non-mutating, or blocks with expected source-truth reason | Dry-run mutates runtime, publish target, active pointer, provider, DNS/domain, billing, Stripe, Vercel, or Openprovider state |
+| 13 | Inspect audit | Operator audit action/refs/events exist for dry-run/preflight | Audit missing or contains unsafe raw diagnostics |
+| 14 | Refresh Command Center panel | Latest audit/readiness projection reflects the route result | Panel projection differs materially from route result without explanation |
+| 15 | Decide whether to stop at dry-run | Human records pass/fix/stop decision | Any stop criterion has occurred |
+| 16 | Optional: enable `GNR8_SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_ACTION` only after explicit approval | Flag value is recorded with approver and timestamp | Approval missing or dry-run did not pass |
+| 17 | Optional: run shadow-publish with confirmation accepting active-pointer mutation and no automatic rollback | Route returns redacted wrapper/orchestrator result and safe before/after refs | Shadow-publish executes without approval, exposes unsafe data, or touches unexpected systems |
+| 18 | Optional: verify online result | Active pointer/public or preview behavior matches returned before/after refs | Pointer/public behavior does not match response |
+| 19 | Record outcome | Closeout includes correlation id, idempotency key, route status, wrapper/resolver/gate status, audit id, pointer refs, screenshots/URLs, and seeded exceptions | Outcome cannot be reproduced or evidence is incomplete |
 
 ## Required Request Evidence
 
@@ -872,6 +875,40 @@ Production verification status: `launch_readiness_ready_with_limitations_evidenc
 - Boundary: no publish activation request/decision, AAF gate attempt, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-50-launch-readiness-evidence.md`.
+
+## CUTLINE-51 Publish Activation Approval
+
+Production verification status: `publish_activation_request_decision_granted_with_limitations_gate_evaluation_eligible_no_publish`.
+
+- Request id/ref/status: `4f273f5d-63e2-40f5-a3be-377bfc8d9380` / `aaf:approval_request:4f273f5d-63e2-40f5-a3be-377bfc8d9380` / `requested`.
+- Decision id/ref/status: `53e9cba6-74ac-44b4-bfba-57826f037f71` / `aaf:approval_decision:53e9cba6-74ac-44b4-bfba-57826f037f71` / `granted_with_limitations`.
+- Direct evidence ref: `aaf:evidence_package:17f10140-b31f-4c32-a673-13b95543fdd2`.
+- Read model: `decision_granted_with_limitations`, `valid=true`, next action `prepare_gate_evaluation`.
+- Boundary: no gate evaluation, dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-51-publish-activation-approval.md`.
+
+## CUTLINE-52 Publish Activation Gate Evaluation
+
+Production verification status: `publish_activation_gate_warning_operator_dry_run_eligible_no_publish`.
+
+- Exact approval sentence: present.
+- Handoff/read-model path: `buildPublishActivationDecisionReadModel(...)` via `PublishActivationDecisionReadRepository` -> `buildPublishActivationGateHandoff(...)`.
+- Gate evaluator path: `SingleSitePublishActivationGateEvaluator.evaluatePublishActivationGateFromHandoff(...)` -> `AafActionGateValidatorFacade.validateGate(...)`.
+- Read model/handoff: `decision_granted_with_limitations`, `valid=true`, `handoff_ready`.
+- Gate attempt id/ref: `e2993dcb-8a9f-4e31-b499-d4d6b8d739de` / `aaf:action_gate_attempt:e2993dcb-8a9f-4e31-b499-d4d6b8d739de`.
+- Gate result/status: `allowed` / `warning`.
+- Policy evaluation id/ref/result: `2e2d62a9-87ab-4d50-bbe0-372a9d1f0e4f` / `aaf:policy_evaluation:2e2d62a9-87ab-4d50-bbe0-372a9d1f0e4f` / `approval_required`.
+- Audit/event ref: `351f1922-9f3e-4056-9c8e-ee4598f62432` / `aaf:audit_event:351f1922-9f3e-4056-9c8e-ee4598f62432`, event `aaf.gate.allowed`.
+- Handoff/gate input watermarks: `single-site-publish-activation-gate-handoff:bfbf793f9110306f2403e8e306fac8fb66af09c1bf07c999dfc4d7800d98441f` / `single-site-publish-activation-gate-input:cf92da520741ce06bc7b9051f5253275888f150676b15cf3aa9d6adf15cb42f8`.
+- Canonical limitations carried forward: four unapplied recommendation limitations plus missing billing subscription source truth, DNS operator evidence, domain/DDOM source truth, rollback readiness source truth, site-scoped hosting entitlement truth, and Vercel custom domain SSL state.
+- Blockers/warnings: blocker codes `[]`; warnings `non_enforcing_gate_evaluation`, `no_publish_execution`, `limitations_carried_forward`, plus the raw source-payload diagnostic warning that duplicate/non-enforcing `durable_audit_timeline_refs_missing` and `pasr_shadow_diagnostics_missing` remain outside the canonical limitation set.
+- Operator dry-run eligibility next: yes.
+- Active pointers: before total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`; after total `6`, selected runtime site `0`, selected site `0`, candidate refs `0`.
+- Forbidden downstream counts after readback: publish operator actions/events/refs `0/0/0`, runtime active pointer refs for candidate `0`, runtime publish events absent, site publish events for candidate `0`, rollback events absent, DDOM readiness snapshots/refs `0/0`, non-activation gate attempts for candidate `0`.
+- Boundary: no operator dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-52-publish-activation-gate-evaluation.md`.
 
 ## Stop Criteria
 
