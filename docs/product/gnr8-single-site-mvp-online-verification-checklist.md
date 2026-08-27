@@ -910,6 +910,24 @@ Production verification status: `publish_activation_gate_warning_operator_dry_ru
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-52-publish-activation-gate-evaluation.md`.
 
+## CUTLINE-53 Operator Dry-Run
+
+Production verification status: `operator_dry_run_completed_resolver_mismatch_no_publish`.
+
+- Exact approval sentence: present.
+- Workflow path: MVP-CUTLINE-3 facade preflight -> MVP-54 audited dry-run route/caller -> MVP-52 wrapper with `dryRun=true` -> MVP-49 resolver -> MVP-57 audit persistence.
+- Operator action id/ref/status: `d9432ad3-0d3c-4424-a3ba-1edca6b18e5e` / `gnr8:single_site_publish_operator_action:d9432ad3-0d3c-4424-a3ba-1edca6b18e5e` / `dry_run_completed`.
+- Dry-run status/result: HTTP `200`, `ok=false`, `preflightStatus=wrapper_blocked`, `wrapperStatus=preflight_blocked`, `resolverStatus=incomplete`.
+- Guard/shadow diagnostics: no shadow-publish or publish orchestrator call; warnings `enforcement_not_applied_in_mvp46`, `limitations_carried_forward`, `limitations_explicitly_accepted_by_policy`, `no_publish_execution`, `read_only_guard_evaluated`.
+- Blockers: `improved_candidate_site_version_ref_mismatch`, `improved_runtime_artifact_ref_mismatch`, `publish_activation_gate_mismatch`, `publish_activation_handoff_watermark_mismatch`, `publish_activation_stage_mismatch`, `publish_target_ref_mismatch`, `single_site_publish_wrapper_resolver_incomplete`.
+- Canonical limitations carried forward: four unapplied recommendation limitations plus missing billing subscription source truth, DNS operator evidence, domain/DDOM source truth, rollback readiness source truth, site-scoped hosting entitlement truth, and Vercel custom domain SSL state.
+- Shadow-publish eligibility next: no; read-only projection next action is `resolve_gate_blockers`.
+- Active pointers: selected runtime site `0 -> 0`.
+- Forbidden downstream counts after readback: shadow-publish actions `0`, runtime publish/rollback audit rows for candidate `0`, CUTLINE-53 AAF gate/request/decision rows `0/0/0`, forbidden migration refs `0`, candidate state unchanged `DRAFT`.
+- Boundary: no shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-53-operator-dry-run.md`.
+
 ## Stop Criteria
 
 Stop immediately if:

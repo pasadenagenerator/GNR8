@@ -33,6 +33,7 @@ Scope: checklist for the first one-site MVP rehearsal.
 - [ ] Confirm MVP-CUTLINE-50 launch readiness evidence is created with `ready_with_limitations` before any publish activation request, gate, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm MVP-CUTLINE-51 publish activation request and human decision are recorded with `granted_with_limitations` before any gate evaluation, dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
 - [ ] Confirm MVP-CUTLINE-52 publish activation gate evaluation is recorded with `allowed` / `warning` before any operator dry-run, shadow-publish, runtime publish, rollback, or active pointer work.
+- [ ] Confirm MVP-CUTLINE-53 operator dry-run is recorded before any shadow-publish, runtime publish, rollback, provider/domain/billing mutation, or active pointer work.
 - [ ] Confirm the production deployment gate is recorded as `source_capture_route_deployed` before any source-capture POST.
 - [ ] Confirm the release includes MVP-54 dry-run route and MVP-56 shadow-publish route.
 - [ ] Confirm the release includes MVP-57 operator action audit migration/service integration.
@@ -247,6 +248,22 @@ Status as of 2026-08-27: publish activation gate evaluation for the approved-wit
 - Boundary: no operator dry-run, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-52-publish-activation-gate-evaluation.md`.
+
+### MVP-CUTLINE-53 Operator Dry-Run
+
+Status as of 2026-08-27: governed operator dry-run was recorded for the CUTLINE-52 gate-approved-with-warnings `chs.si` candidate and returned a safe actionable blocked result.
+
+- Exact approval sentence: present.
+- Workflow path: MVP-CUTLINE-3 facade preflight -> MVP-54 audited dry-run route/caller -> MVP-52 wrapper with `dryRun=true` -> MVP-49 resolver -> MVP-57 audit persistence.
+- Operator action id/ref/status: `d9432ad3-0d3c-4424-a3ba-1edca6b18e5e` / `gnr8:single_site_publish_operator_action:d9432ad3-0d3c-4424-a3ba-1edca6b18e5e` / `dry_run_completed`.
+- Dry-run result: `ok=false`, `preflightStatus=wrapper_blocked`, `wrapperStatus=preflight_blocked`, `resolverStatus=incomplete`.
+- Blockers: improved candidate site version ref mismatch, improved runtime artifact ref mismatch, publish activation gate mismatch, handoff watermark mismatch, publish stage mismatch, publish target ref mismatch, and resolver incomplete.
+- Shadow-publish eligibility next: no; read-only projection next action is `resolve_gate_blockers`.
+- Active pointers: selected runtime site `0 -> 0`.
+- Forbidden downstream counts after readback: shadow-publish actions `0`, runtime publish/rollback audit rows for candidate `0`, CUTLINE-53 AAF gate/request/decision rows `0/0/0`, forbidden migration refs `0`, candidate state unchanged `DRAFT`.
+- Boundary: no shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-53-operator-dry-run.md`.
 
 ### MVP-CUTLINE-22 Rehearsal Candidate Source-Truth Plan
 

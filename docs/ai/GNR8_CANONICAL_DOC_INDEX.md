@@ -659,6 +659,7 @@ Canonical internal superadmin-only admin API caller surface for validating stric
 - `docs/product/gnr8-single-site-publish-operator-dry-run-caller-closeout.md`
 - `docs/product/gnr8-single-site-publish-operator-caller-surface-closeout.md`
 - `docs/product/gnr8-single-site-publish-wrapper-orchestrator-shadow-closeout.md`
+- `docs/product/gnr8-single-site-mvp-cutline-53-operator-dry-run.md`
 
 ## MVP-55 Single-Site Shadow-Publish Operator Action Architecture
 
