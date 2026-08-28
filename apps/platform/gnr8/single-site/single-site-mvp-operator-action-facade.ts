@@ -376,7 +376,7 @@ function existingCallerBody(input: SingleSiteMvpOperatorActionInput, mode: "dry_
     expectedPublishActivationRequestRef: text(input.expectedPublishActivationRequestRef),
     expectedPublishActivationDecisionRef: text(input.expectedPublishActivationDecisionRef),
     expectedGateAttemptResultRef: text(input.expectedGateAttemptResultRef),
-    ...(mode === "dry_run" && text(input.expectedGateAttemptResultDisplayRef)
+    ...(text(input.expectedGateAttemptResultDisplayRef)
       ? { expectedGateAttemptResultDisplayRef: text(input.expectedGateAttemptResultDisplayRef) }
       : {}),
     expectedHandoffWatermark: text(input.expectedHandoffWatermark),

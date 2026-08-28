@@ -7,6 +7,7 @@ import {
   type SingleSitePublishWrapperInput,
   type SingleSitePublishWrapperResult,
 } from "./single-site-publish-wrapper-orchestrator";
+import type { PublishActivationEnforcementGuardRef } from "./publish-activation-enforcement-guard";
 
 export const SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_CALLER_VERSION =
   "mvp-56-single-site-shadow-publish-operator-caller:v1" as const;
@@ -48,21 +49,24 @@ export type SingleSiteShadowPublishOperatorConfirmation = {
   expectedPublishTargetRef: string;
 };
 
+export type SingleSiteShadowPublishOperatorCanonicalRef = PublishActivationEnforcementGuardRef | string;
+
 export type SingleSiteShadowPublishOperatorRequest = {
   mode: "shadow_publish";
   tenantId: string;
   clientId: string;
   siteId: string;
   migrationId: string;
-  candidateSiteVersionRef: string;
-  runtimeArtifactRef: string;
-  expectedPublishTargetRef: string;
+  candidateSiteVersionRef: SingleSiteShadowPublishOperatorCanonicalRef;
+  runtimeArtifactRef: SingleSiteShadowPublishOperatorCanonicalRef;
+  expectedPublishTargetRef: SingleSiteShadowPublishOperatorCanonicalRef;
   publishStage: "shadow" | "canary" | "production";
   publishEnvironment: string;
-  expectedLaunchReadinessEvidenceRef: string;
+  expectedLaunchReadinessEvidenceRef: SingleSiteShadowPublishOperatorCanonicalRef;
   expectedPublishActivationRequestRef: string;
   expectedPublishActivationDecisionRef: string;
   expectedGateAttemptResultRef: string;
+  expectedGateAttemptResultDisplayRef?: string | null;
   expectedHandoffWatermark: string;
   expectedGateInputWatermark: string;
   operatorConfirmation: SingleSiteShadowPublishOperatorConfirmation;
@@ -153,23 +157,28 @@ const REQUIRED_STRING_FIELDS = [
   "clientId",
   "siteId",
   "migrationId",
-  "candidateSiteVersionRef",
-  "runtimeArtifactRef",
-  "expectedPublishTargetRef",
   "publishEnvironment",
-  "expectedLaunchReadinessEvidenceRef",
   "expectedPublishActivationRequestRef",
   "expectedPublishActivationDecisionRef",
-  "expectedGateAttemptResultRef",
   "expectedHandoffWatermark",
   "expectedGateInputWatermark",
   "idempotencyKey",
   "correlationId",
 ] as const;
 
+const REQUIRED_REF_FIELDS = [
+  "candidateSiteVersionRef",
+  "runtimeArtifactRef",
+  "expectedPublishTargetRef",
+  "expectedLaunchReadinessEvidenceRef",
+] as const;
+
 const ALLOWED_KEYS = new Set([
   "mode",
   ...REQUIRED_STRING_FIELDS,
+  ...REQUIRED_REF_FIELDS,
+  "expectedGateAttemptResultRef",
+  "expectedGateAttemptResultDisplayRef",
   "publishStage",
   "operatorConfirmation",
   "allowWarningsWithLimitations",
@@ -217,10 +226,153 @@ function nullableText(value: unknown): string | null {
   return normalized ? normalized : null;
 }
 
-function sourceId(value: string): string {
-  const normalized = text(value);
+function sourceIdFromText(value: string): string {
+  const normalized = value.trim();
   const parts = normalized.split(":");
   return text(parts[parts.length - 1]) || normalized;
+}
+
+function sourceId(value: SingleSiteShadowPublishOperatorCanonicalRef | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") return sourceIdFromText(value);
+  return text(value.sourceRecordId);
+}
+
+function sourceRef(value: SingleSiteShadowPublishOperatorCanonicalRef | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") return text(value);
+  return text(value.sourceRef) || text(value.sourceRecordId);
+}
+
+export function displaySingleSiteShadowPublishOperatorRef(value: SingleSiteShadowPublishOperatorCanonicalRef | null | undefined): string {
+  return sourceRef(value) || sourceId(value);
+}
+
+function normalizedRef(
+  value: unknown,
+  defaults: { role: string; sourceTable: string },
+): SingleSiteShadowPublishOperatorCanonicalRef | null {
+  if (typeof value === "string") return text(value) || null;
+  if (!isRecord(value)) return null;
+  const sourceRecordId = text(value.sourceRecordId);
+  if (!sourceRecordId) return null;
+  return {
+    role: nullableText(value.role) ?? defaults.role,
+    sourceSystem: nullableText(value.sourceSystem) ?? "gnr8",
+    sourceTable: nullableText(value.sourceTable) ?? defaults.sourceTable,
+    sourceRecordId,
+    sourceRef: nullableText(value.sourceRef) ?? sourceRecordId,
+    sourceVersion: nullableText(value.sourceVersion),
+    sourceWatermark: nullableText(value.sourceWatermark),
+    contentHash: nullableText(value.contentHash),
+    metadataJson: isRecord(value.metadataJson) ? value.metadataJson : undefined,
+  };
+}
+
+function metadataString(ref: SingleSiteShadowPublishOperatorCanonicalRef | null | undefined, key: string): string {
+  if (!ref || typeof ref === "string" || !isRecord(ref.metadataJson)) return "";
+  return text(ref.metadataJson[key]);
+}
+
+function validateCanonicalRef(
+  field: string,
+  value: SingleSiteShadowPublishOperatorCanonicalRef,
+  input: Record<string, unknown>,
+): string[] {
+  if (typeof value === "string") return [];
+  const errors: string[] = [];
+  const id = sourceId(value);
+  const ref = sourceRef(value);
+  if (sourceIdFromText(ref) !== id) errors.push(`single_site_shadow_publish_operator_${field}_mismatch`);
+  const sourceSystem = text(value.sourceSystem);
+  if (sourceSystem && sourceSystem !== "gnr8" && sourceSystem !== "aaf") {
+    errors.push(`single_site_shadow_publish_operator_${field}_source_system_mismatch`);
+  }
+  for (const identityField of ["tenantId", "clientId", "siteId", "migrationId"] as const) {
+    const marker = metadataString(value, identityField);
+    if (marker && marker !== text(input[identityField])) {
+      errors.push(`single_site_shadow_publish_operator_${field}_${identityField}_mismatch`);
+    }
+  }
+  if (field === "expectedPublishTargetRef") {
+    const targetEnvironment = metadataString(value, "environment");
+    const targetStage = metadataString(value, "publishStage") || metadataString(value, "publish_stage");
+    const targetStatus = metadataString(value, "status");
+    if (sourceId(value) === "production") {
+      if (text(input.publishEnvironment) !== "production") errors.push("single_site_shadow_publish_operator_publish_environment_mismatch");
+      if (text(input.publishStage) !== "production") errors.push("single_site_shadow_publish_operator_publish_stage_mismatch");
+    }
+    if (targetEnvironment && targetEnvironment !== text(input.publishEnvironment)) errors.push("single_site_shadow_publish_operator_publish_environment_mismatch");
+    if (targetStage && targetStage !== text(input.publishStage)) errors.push("single_site_shadow_publish_operator_publish_stage_mismatch");
+    if (targetStatus && targetStatus !== "active") errors.push("single_site_shadow_publish_operator_publish_target_status_mismatch");
+  }
+  return errors;
+}
+
+function gateAttemptId(value: unknown): string {
+  if (typeof value === "string") {
+    const normalized = text(value);
+    return normalized.includes(":") ? "" : normalized;
+  }
+  if (!isRecord(value)) return "";
+  return text(value.gateAttemptId) || text(value.sourceRecordId);
+}
+
+function gateAttemptDisplayRef(value: unknown): string | null {
+  if (typeof value === "string") return null;
+  if (!isRecord(value)) return null;
+  return nullableText(value.gateAttemptRef) ?? nullableText(value.sourceRef);
+}
+
+function refSourceIdFromUnknown(value: unknown): string {
+  const ref = normalizedRef(value, { role: "comparison", sourceTable: "comparison" });
+  return ref ? sourceId(ref) : "";
+}
+
+function validateGateAttemptRef(value: unknown, input: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  const gateId = gateAttemptId(value);
+  if (!gateId) {
+    errors.push("single_site_shadow_publish_operator_expectedGateAttemptResultRef_raw_id_required");
+    return errors;
+  }
+  if (typeof value === "string") return errors;
+  if (!isRecord(value)) {
+    errors.push("single_site_shadow_publish_operator_expectedGateAttemptResultRef_invalid");
+    return errors;
+  }
+  const displayRef = gateAttemptDisplayRef(value);
+  if (displayRef && sourceIdFromText(displayRef) !== gateId) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_ref_mismatch");
+  }
+  for (const identityField of ["tenantId", "clientId", "siteId", "migrationId"] as const) {
+    const marker = text(value[identityField]);
+    if (marker && marker !== text(input[identityField])) {
+      errors.push(`single_site_shadow_publish_operator_gate_attempt_${identityField}_mismatch`);
+    }
+  }
+  if (text(value.publishStage) && text(value.publishStage) !== text(input.publishStage)) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_publish_stage_mismatch");
+  }
+  if (text(value.publishEnvironment) && text(value.publishEnvironment) !== text(input.publishEnvironment)) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_publish_environment_mismatch");
+  }
+  if (text(value.semanticHandoffWatermark) && text(value.semanticHandoffWatermark) !== text(input.expectedHandoffWatermark)) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_handoff_watermark_mismatch");
+  }
+  if (text(value.semanticGateInputWatermark) && text(value.semanticGateInputWatermark) !== text(input.expectedGateInputWatermark)) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_gate_input_watermark_mismatch");
+  }
+  if (refSourceIdFromUnknown(value.candidateSiteVersionRef) && refSourceIdFromUnknown(value.candidateSiteVersionRef) !== refSourceIdFromUnknown(input.candidateSiteVersionRef)) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_candidate_site_version_ref_mismatch");
+  }
+  if (refSourceIdFromUnknown(value.runtimeArtifactRef) && refSourceIdFromUnknown(value.runtimeArtifactRef) !== refSourceIdFromUnknown(input.runtimeArtifactRef)) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_runtime_artifact_ref_mismatch");
+  }
+  if (refSourceIdFromUnknown(value.publishTargetRef) && refSourceIdFromUnknown(value.publishTargetRef) !== refSourceIdFromUnknown(input.expectedPublishTargetRef)) {
+    errors.push("single_site_shadow_publish_operator_gate_attempt_publish_target_ref_mismatch");
+  }
+  return errors;
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {
@@ -265,9 +417,9 @@ function validateConfirmation(
   if (confirmation.blockingEnforcementApplied !== false) return null;
   if (confirmation.noAutomaticRollback !== true) return null;
   if (confirmation.migrationId !== text(input.migrationId)) return null;
-  if (sourceId(confirmation.candidateSiteVersionRef) !== sourceId(text(input.candidateSiteVersionRef))) return null;
-  if (sourceId(confirmation.runtimeArtifactRef) !== sourceId(text(input.runtimeArtifactRef))) return null;
-  if (sourceId(confirmation.expectedPublishTargetRef) !== sourceId(text(input.expectedPublishTargetRef))) return null;
+  if (sourceIdFromText(confirmation.candidateSiteVersionRef) !== refSourceIdFromUnknown(input.candidateSiteVersionRef)) return null;
+  if (sourceIdFromText(confirmation.runtimeArtifactRef) !== refSourceIdFromUnknown(input.runtimeArtifactRef)) return null;
+  if (sourceIdFromText(confirmation.expectedPublishTargetRef) !== refSourceIdFromUnknown(input.expectedPublishTargetRef)) return null;
   return confirmation as SingleSiteShadowPublishOperatorConfirmation;
 }
 
@@ -289,6 +441,18 @@ export function validateSingleSiteShadowPublishOperatorRequest(
   for (const field of REQUIRED_STRING_FIELDS) {
     if (!text(body[field])) errors.push(`single_site_shadow_publish_operator_${field}_missing`);
   }
+  const canonicalRefs = {
+    candidateSiteVersionRef: normalizedRef(body.candidateSiteVersionRef, { role: "candidate_site_version", sourceTable: "gnr8_runtime_site_versions" }),
+    runtimeArtifactRef: normalizedRef(body.runtimeArtifactRef, { role: "runtime_artifact", sourceTable: "gnr8_runtime_artifacts" }),
+    expectedPublishTargetRef: normalizedRef(body.expectedPublishTargetRef, { role: "publish_target", sourceTable: "gnr8_publish_targets" }),
+    expectedLaunchReadinessEvidenceRef: normalizedRef(body.expectedLaunchReadinessEvidenceRef, { role: "launch_readiness_evidence", sourceTable: "gnr8_aaf_evidence_packages" }),
+  };
+  for (const field of REQUIRED_REF_FIELDS) {
+    const refValue = canonicalRefs[field];
+    if (!refValue || !sourceId(refValue)) errors.push(`single_site_shadow_publish_operator_${field}_missing`);
+    else errors.push(...validateCanonicalRef(field, refValue, body));
+  }
+  errors.push(...validateGateAttemptRef(body.expectedGateAttemptResultRef, body));
   if (!["shadow", "canary", "production"].includes(text(body.publishStage))) {
     errors.push("single_site_shadow_publish_operator_publishStage_invalid");
   }
@@ -322,15 +486,18 @@ export function validateSingleSiteShadowPublishOperatorRequest(
       clientId: text(body.clientId),
       siteId: text(body.siteId),
       migrationId: text(body.migrationId),
-      candidateSiteVersionRef: text(body.candidateSiteVersionRef),
-      runtimeArtifactRef: text(body.runtimeArtifactRef),
-      expectedPublishTargetRef: text(body.expectedPublishTargetRef),
+      candidateSiteVersionRef: canonicalRefs.candidateSiteVersionRef!,
+      runtimeArtifactRef: canonicalRefs.runtimeArtifactRef!,
+      expectedPublishTargetRef: canonicalRefs.expectedPublishTargetRef!,
       publishStage: text(body.publishStage) as SingleSiteShadowPublishOperatorRequest["publishStage"],
       publishEnvironment: text(body.publishEnvironment),
-      expectedLaunchReadinessEvidenceRef: text(body.expectedLaunchReadinessEvidenceRef),
+      expectedLaunchReadinessEvidenceRef: canonicalRefs.expectedLaunchReadinessEvidenceRef!,
       expectedPublishActivationRequestRef: text(body.expectedPublishActivationRequestRef),
       expectedPublishActivationDecisionRef: text(body.expectedPublishActivationDecisionRef),
-      expectedGateAttemptResultRef: text(body.expectedGateAttemptResultRef),
+      expectedGateAttemptResultRef: gateAttemptId(body.expectedGateAttemptResultRef),
+      ...(nullableText(body.expectedGateAttemptResultDisplayRef) || gateAttemptDisplayRef(body.expectedGateAttemptResultRef)
+        ? { expectedGateAttemptResultDisplayRef: nullableText(body.expectedGateAttemptResultDisplayRef) ?? gateAttemptDisplayRef(body.expectedGateAttemptResultRef) }
+        : {}),
       expectedHandoffWatermark: text(body.expectedHandoffWatermark),
       expectedGateInputWatermark: text(body.expectedGateInputWatermark),
       operatorConfirmation: confirmation,

@@ -9,6 +9,7 @@ import {
   type SingleSitePublishOperatorDryRunSafeResult,
 } from "./single-site-publish-operator-dry-run-caller";
 import type { SingleSiteShadowPublishOperatorRequest, SingleSiteShadowPublishOperatorSafeResult } from "./single-site-shadow-publish-operator-caller";
+import { displaySingleSiteShadowPublishOperatorRef } from "./single-site-shadow-publish-operator-caller";
 import { SingleSiteIdempotencyConflictError } from "./single-site-state-contracts";
 
 export const SINGLE_SITE_PUBLISH_OPERATOR_ACTION_AUDIT_VERSION =
@@ -525,15 +526,15 @@ export function buildSingleSitePublishOperatorActionAuditInputFromShadowPublishR
     routeActionSource: input.routeActionSource ?? "api/gnr8/admin/single-site-publish/shadow-publish",
     actor: input.actor,
     confirmationMarker: confirmationMarker(input.request.operatorConfirmation, "shadow_publish"),
-    candidateSiteVersionRef: input.request.candidateSiteVersionRef,
-    runtimeArtifactRef: input.request.runtimeArtifactRef,
-    publishTargetRef: input.request.expectedPublishTargetRef,
+    candidateSiteVersionRef: displaySingleSiteShadowPublishOperatorRef(input.request.candidateSiteVersionRef),
+    runtimeArtifactRef: displaySingleSiteShadowPublishOperatorRef(input.request.runtimeArtifactRef),
+    publishTargetRef: displaySingleSiteShadowPublishOperatorRef(input.request.expectedPublishTargetRef),
     publishStage: input.request.publishStage,
     publishEnvironment: input.request.publishEnvironment,
-    launchReadinessEvidenceRef: input.request.expectedLaunchReadinessEvidenceRef,
+    launchReadinessEvidenceRef: displaySingleSiteShadowPublishOperatorRef(input.request.expectedLaunchReadinessEvidenceRef),
     publishActivationRequestRef: input.request.expectedPublishActivationRequestRef,
     publishActivationDecisionRef: input.request.expectedPublishActivationDecisionRef,
-    gateAttemptResultRef: input.request.expectedGateAttemptResultRef,
+    gateAttemptResultRef: input.request.expectedGateAttemptResultDisplayRef ?? input.request.expectedGateAttemptResultRef,
     handoffWatermark: input.request.expectedHandoffWatermark,
     gateInputWatermark: input.request.expectedGateInputWatermark,
     idempotencyKey: input.request.idempotencyKey,

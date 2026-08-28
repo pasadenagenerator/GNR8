@@ -108,6 +108,19 @@ const DRY_RUN_REQUEST: SingleSitePublishOperatorDryRunRequest = {
   allowWarningsWithLimitations: true,
 };
 
+function canonicalRef(sourceTable: string, sourceRecordId: string, sourceWatermark: string, metadataJson: Record<string, unknown> = {}) {
+  return {
+    role: sourceTable === "gnr8_runtime_site_versions" ? "candidate_site_version" : sourceTable === "gnr8_runtime_artifacts" ? "runtime_artifact" : "publish_target",
+    sourceSystem: "gnr8",
+    sourceTable,
+    sourceRecordId,
+    sourceRef: `gnr8:${sourceTable}:${sourceRecordId}`,
+    sourceVersion: "persisted:v1",
+    sourceWatermark,
+    metadataJson,
+  };
+}
+
 function request(body: unknown): Request {
   return new Request("https://app.test/api/gnr8/admin/single-site-publish/shadow-publish", {
     method: "POST",
@@ -545,6 +558,75 @@ test("valid request calls wrapper execute mode exactly once", async () => {
   assert.equal(wrapperInputs[0]!.actor.actorId, "superadmin-mvp56");
   assert.equal(logEvents.at(-1)?.details.blockingEnforcementApplied, false);
   assert.deepEqual(auditService.events, ["action_requested", "shadow_publish_started", "shadow_publish_completed"]);
+});
+
+test("canonical persisted metadata reaches shadow-publish wrapper without synthetic string fallback", async () => {
+  const wrapperInputs: SingleSitePublishWrapperInput[] = [];
+  const auditService = fakeAuditService();
+  const canonicalRequest = {
+    ...BASE_REQUEST,
+    candidateSiteVersionRef: canonicalRef("gnr8_runtime_site_versions", "site-version-mvp56", "updated_at:2026-08-28 08:30:00+00", {
+      tenantId: BASE_REQUEST.tenantId,
+      clientId: BASE_REQUEST.clientId,
+      siteId: BASE_REQUEST.siteId,
+      migrationId: BASE_REQUEST.migrationId,
+    }),
+    runtimeArtifactRef: canonicalRef("gnr8_runtime_artifacts", "artifact-mvp56", "bundle_sha256:artifact-mvp56", {
+      tenantId: BASE_REQUEST.tenantId,
+      clientId: BASE_REQUEST.clientId,
+      siteId: BASE_REQUEST.siteId,
+      migrationId: BASE_REQUEST.migrationId,
+    }),
+    expectedPublishTargetRef: canonicalRef("gnr8_publish_targets", "production", "ptt-1:gnr8_publish_targets:production", {
+      environment: "production",
+      publishStage: "production",
+      status: "active",
+    }),
+    expectedLaunchReadinessEvidenceRef: canonicalRef("gnr8_aaf_evidence_packages", "evidence-mvp56", `single-site-launch-readiness:${"e".repeat(64)}`),
+    expectedGateAttemptResultRef: {
+      gateAttemptId: "gate-mvp56",
+      gateAttemptRef: "aaf:action_gate_attempt:gate-mvp56",
+      tenantId: BASE_REQUEST.tenantId,
+      clientId: BASE_REQUEST.clientId,
+      siteId: BASE_REQUEST.siteId,
+      migrationId: BASE_REQUEST.migrationId,
+      candidateSiteVersionRef: "gnr8:gnr8_runtime_site_versions:site-version-mvp56",
+      runtimeArtifactRef: "gnr8:gnr8_runtime_artifacts:artifact-mvp56",
+      publishTargetRef: "gnr8:gnr8_publish_targets:production",
+      publishStage: "production",
+      publishEnvironment: "production",
+      semanticHandoffWatermark: BASE_REQUEST.expectedHandoffWatermark,
+      semanticGateInputWatermark: BASE_REQUEST.expectedGateInputWatermark,
+    },
+  };
+  const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
+    isFeatureEnabled: () => true,
+    requireSuperadminUserId: async () => "superadmin-mvp56",
+    wrapperDependencies: {
+      publishSingleSiteApprovedCandidateShadow: async (input) => {
+        wrapperInputs.push(input);
+        return wrapperResult();
+      },
+    },
+    log: () => {},
+  });
+
+  const response = await handlers.POST(request(canonicalRequest));
+  const body = (await response.json()) as Record<string, unknown>;
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(wrapperInputs.length, 1);
+  assert.equal(wrapperInputs[0]!.dryRun, false);
+  assert.equal(typeof wrapperInputs[0]!.candidateSiteVersionRef, "object");
+  assert.equal(typeof wrapperInputs[0]!.runtimeArtifactRef, "object");
+  assert.equal(typeof wrapperInputs[0]!.expectedPublishTargetRef, "object");
+  assert.equal((wrapperInputs[0]!.candidateSiteVersionRef as { sourceWatermark: string }).sourceWatermark, "updated_at:2026-08-28 08:30:00+00");
+  assert.equal((wrapperInputs[0]!.runtimeArtifactRef as { sourceWatermark: string }).sourceWatermark, "bundle_sha256:artifact-mvp56");
+  assert.equal(wrapperInputs[0]!.expectedGateAttemptResultRef, "gate-mvp56");
+  assert.equal(auditService.actions[0]!.candidate_site_version_ref, "gnr8:gnr8_runtime_site_versions:site-version-mvp56");
+  assert.equal(auditService.actions[0]!.gate_attempt_result_ref, "aaf:action_gate_attempt:gate-mvp56");
 });
 
 test("publish orchestrator failure is projected safely without rollback or retry", async () => {

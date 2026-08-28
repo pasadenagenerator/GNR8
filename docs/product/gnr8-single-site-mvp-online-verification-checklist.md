@@ -965,7 +965,7 @@ Closeout: `docs/product/gnr8-single-site-mvp-cutline-55-governed-dry-run-contrac
 
 ## CUTLINE-55B Governed Dry-Run Contract Fix Deployment
 
-Production verification status: `pending_governed_dry_run_contract_fix_deployed_sha`.
+Production verification status: `dry_run_ready_shadow_publish_eligible_pending_fresh_approval`.
 
 - Exact commit/push/deploy verification approval sentence: present.
 - Deployment target: commit the CUTLINE-55 governed dry-run contract fix, push `main`, wait for Vercel `gnr8-platform` production deployment, then verify the deployed SHA locally.
@@ -974,6 +974,65 @@ Production verification status: `pending_governed_dry_run_contract_fix_deployed_
 - Boundary: no shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, migration, env mutation, new dry-run, new AAF request/decision/gate, or new launch readiness is approved in CUTLINE-55B.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-55b-governed-dry-run-contract-fix-deployment.md`.
+
+## CUTLINE-56 Shadow-Publish Readback
+
+Production verification status: `shadow_publish_preflight_blocked_candidate_draft_no_publish`.
+
+- Exact approval sentence: present.
+- Preflight result: blocked before action creation because candidate site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` is `DRAFT`.
+- Previously successful governed dry-run remains valid as readback evidence: action `882304c9-fc52-4c3c-9cd3-533d9ebf1eed`, `ok=true`, wrapper `dry_run_ready`, resolver `complete`, blockers `[]`.
+- Gate/readiness/approval source truth still matched: gate `e2993dcb-8a9f-4e31-b499-d4d6b8d739de` is `allowed`; decision `53e9cba6-74ac-44b4-bfba-57826f037f71` is `granted_with_limitations`; readiness `17121fc3-db6c-40ad-bb4f-b3acb2213d5f` is `ready_with_limitations`; evidence package `17f10140-b31f-4c32-a673-13b95543fdd2` carries watermark `single-site-launch-readiness:3d346b059d9d9b3b814abf22cbf464bf02b3434977a5ef51322a559876a9b203`.
+- Operator action id/ref: none created for `gnr8-cutline-56-chs-si-shadow-publish-20260828`.
+- Shadow-publish/runtime publish/wrapper publish call: not run.
+- Active pointer selected runtime site: `0 -> 0`; candidate refs stayed `0`.
+- Public online check: `https://www.chs.si/` returned HTTP `200` with title `Home | CHS`, representing the existing public site.
+- Candidate preview check: platform preview URL returned HTTP `403` with `Unable to resolve agency scope for site version`.
+- Forbidden downstream confirmation: no CUTLINE-56 provider/domain/DNS/billing/Stripe/Openprovider, AAF, DDOM, active pointer, rollback, migration, env, deploy, commit, push, or second publish action occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-56-shadow-publish-readback.md`.
+
+## CUTLINE-57 Candidate Promotion And Shadow-Publish Retry
+
+Production verification status: `shadow_publish_wrapper_preflight_blocked_after_candidate_promotion`.
+
+- Exact approval sentence: present.
+- Candidate promotion workflow: existing `transitionSiteVersionState(...)` lifecycle workflow, using `DRAFT -> READY_FOR_REVIEW -> APPROVED`.
+- Candidate site version: `a3f9493e-9da4-4ef8-8608-154fe6d25a0f`.
+- Runtime artifact: `1f80138a-39c2-4210-ac61-16200e5a2254`.
+- Candidate state: `DRAFT -> APPROVED`.
+- Candidate publishable after promotion: yes.
+- Artifact binding unchanged: yes.
+- Active pointer before shadow-publish retry: `0`.
+- Shadow-publish retry: yes, exactly once.
+- Operator action id/ref: `58200758-fe05-40a0-9f5e-5317849c9176` / `gnr8-cutline-57-chs-si-shadow-publish-retry-20260828`.
+- Shadow-publish result: `shadow_publish_failed`, route `wrapper_preflight_blocked`, wrapper `preflight_blocked`, resolver `incomplete`, publish orchestrator `not_called`, `publishMayHaveExecuted=false`.
+- Active pointer after retry: `0`, target `none`.
+- Public/runtime verification: platform health HTTP `200`; `https://www.chs.si/` HTTP `200` on existing public site; candidate preview HTTP `403` with agency-scope error.
+- Blockers: `improved_candidate_site_version_ref_mismatch`, `improved_runtime_artifact_ref_mismatch`, `publish_activation_gate_mismatch`, `publish_activation_gate_stale`, `publish_activation_handoff_watermark_mismatch`, `publish_target_ref_mismatch`, `single_site_publish_wrapper_resolver_incomplete`.
+- Warnings/limitations: `limitations_carried_forward`, `single_site_shadow_publish_warning_redacted`; accepted limitations preserved.
+- Forbidden downstream confirmation: no provider, DNS, domain, billing, Stripe, Openprovider, rollback, runtime publish, active pointer, migration, env, deploy, commit, push, new approval, new launch readiness, new publish activation request/decision, or new gate attempt mutation occurred. CUTLINE-57 downstream AAF request/decision/gate counts stayed `0/0/0`.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-57-candidate-publishable-promotion-shadow-publish-retry.md`.
+
+## CUTLINE-58 Post-Promotion Publish Chain Refresh And Shadow-Publish Retry
+
+Production verification status: `shadow_publish_orchestrator_failed_after_post_promotion_chain_refresh`.
+
+- Exact approval sentence: present.
+- Root cause confirmation: candidate promotion changed the candidate source watermark to `updated_at:2026-08-28 09:09:52.683474+00`, making the old readiness/evidence/gate chain stale; the shadow-publish caller also lacked the CUTLINE-55 canonical metadata support present in governed dry-run.
+- Code fix needed: yes; shadow-publish caller/facade/audit now preserve canonical persisted refs/watermarks through the wrapper while keeping redacted audit output.
+- Validation: focused tests passed `47/47`; focused touched-file TypeScript passed.
+- Refreshed readiness/evidence: readiness `f1be154d-5533-4f88-ad5a-0ca3deaa50fc` is `ready_with_limitations` / `fresh`; evidence `193bc66e-f9e0-482e-abd1-3fa04356d24e` has watermark `single-site-launch-readiness:ea0b2dd1f214c27740feb12f04f3635c260bfa425747013b7ed62fdf91454d25`.
+- Refreshed publish activation: request `1487a4a7-24bb-469e-9ebf-75315f7b538e`; decision `19d1a96d-97ef-4f6b-ab65-38682b5f8751`, `granted_with_limitations`.
+- Refreshed gate: attempt `aaee77bc-2caa-428d-8b3e-848e3622befd`, result `allowed`, evaluation `warning`, blockers `[]`.
+- Governed dry-run: action `dc2f19ca-00ca-4881-85ae-fb701eafa9ac`, `ok=true`, wrapper `dry_run_ready`, resolver `complete`, metadata complete, blockers `[]`.
+- Shadow-publish retry: action `9d0f1a3d-cb00-4fb7-8b2f-64c19f86084b`, `shadow_publish_failed`, route `publish_orchestrator_failed`, wrapper `orchestrator_failed`, resolver `complete`, publish orchestrator `failed`, blocker `single_site_publish_wrapper_orchestrator_failed`.
+- Active pointer selected runtime site: `0 -> 0`; target `none`.
+- Public/runtime verification: `https://www.chs.si/` returned HTTP `200`; host binding readback is `www.chs.si` / `ACTIVE` / `shadow`; GNR8 runtime activation remains incomplete because selected runtime site `site_57d9665a3a5867edf6ef` has no active pointer.
+- Forbidden downstream confirmation: no second shadow-publish, rollback, provider/DNS/domain/billing/Stripe/Openprovider mutation, migration, env mutation, deploy, commit, or push occurred. Runtime site version/artifact/provider/host-binding/domain-binding sentinels did not move.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-58-post-promotion-publish-chain-refresh-shadow-publish.md`.
 
 ## Stop Criteria
 
