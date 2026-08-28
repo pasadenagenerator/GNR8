@@ -249,12 +249,57 @@ test("non-executable advisory operations return manual or not implemented", asyn
 
 test("dry-run execution delegates only after correct confirmation validates", async () => {
   const calls: unknown[] = [];
+  const canonicalCandidateRef = {
+    role: "candidate_site_version",
+    sourceSystem: "gnr8",
+    sourceTable: "gnr8_runtime_site_versions",
+    sourceRecordId: "site-version-cutline-3",
+    sourceRef: "gnr8:gnr8_runtime_site_versions:site-version-cutline-3",
+    sourceVersion: "persisted:v1",
+    sourceWatermark: "updated_at:2026-08-21 06:18:00.763932+00",
+    metadataJson: {
+      tenantId: BASE_INPUT.tenantId,
+      clientId: BASE_INPUT.clientId,
+      siteId: BASE_INPUT.siteId,
+      migrationId: BASE_INPUT.migrationId,
+    },
+  };
+  const canonicalEvidenceRef = {
+    role: "launch_readiness_evidence",
+    sourceSystem: "aaf",
+    sourceTable: "gnr8_aaf_evidence_packages",
+    sourceRecordId: "evidence-cutline-3",
+    sourceRef: "aaf:evidence_package:evidence-cutline-3",
+    sourceVersion: "persisted:v1",
+    sourceWatermark: `single-site-launch-readiness:${"d".repeat(64)}`,
+  };
   const result = await executeSingleSiteMvpOperatorAction(
-    { ...BASE_INPUT, requestedOperationKey: "run_operator_dry_run", explicitConfirmation: DRY_RUN_CONFIRMATION },
+    {
+      ...BASE_INPUT,
+      candidateVersionRef: canonicalCandidateRef,
+      expectedLaunchReadinessEvidenceRef: canonicalEvidenceRef,
+      requestedOperationKey: "run_operator_dry_run",
+      explicitConfirmation: DRY_RUN_CONFIRMATION,
+      expectedGateAttemptResultRef: "gate-cutline-3",
+      expectedGateAttemptResultDisplayRef: "aaf:action_gate_attempt:gate-cutline-3",
+    },
     {
       ...depsFor("run_operator_dry_run"),
       async runSingleSitePublishOperatorDryRun(input) {
         calls.push(input);
+        assert.equal(typeof input.request.candidateSiteVersionRef, "object");
+        assert.deepEqual(input.request.candidateSiteVersionRef, {
+          ...canonicalCandidateRef,
+          contentHash: null,
+        });
+        assert.equal(input.request.expectedGateAttemptResultRef, "gate-cutline-3");
+        assert.equal(input.request.expectedGateAttemptResultDisplayRef, "aaf:action_gate_attempt:gate-cutline-3");
+        assert.equal(typeof input.request.expectedLaunchReadinessEvidenceRef, "object");
+        assert.deepEqual(input.request.expectedLaunchReadinessEvidenceRef, {
+          ...canonicalEvidenceRef,
+          contentHash: null,
+          metadataJson: undefined,
+        });
         return {
           ok: true,
           callerVersion: SINGLE_SITE_PUBLISH_OPERATOR_DRY_RUN_CALLER_VERSION,

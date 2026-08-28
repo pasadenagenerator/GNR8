@@ -3,7 +3,11 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import { getSuperadminPool } from "../../src/superadmin/db";
-import type { SingleSitePublishOperatorDryRunRequest, SingleSitePublishOperatorDryRunSafeResult } from "./single-site-publish-operator-dry-run-caller";
+import {
+  displaySingleSitePublishOperatorDryRunRef,
+  type SingleSitePublishOperatorDryRunRequest,
+  type SingleSitePublishOperatorDryRunSafeResult,
+} from "./single-site-publish-operator-dry-run-caller";
 import type { SingleSiteShadowPublishOperatorRequest, SingleSiteShadowPublishOperatorSafeResult } from "./single-site-shadow-publish-operator-caller";
 import { SingleSiteIdempotencyConflictError } from "./single-site-state-contracts";
 
@@ -414,6 +418,14 @@ function textFromBody(body: unknown, key: string): string | null {
   return text(body[key]);
 }
 
+function refTextFromBody(body: unknown, key: string): string | null {
+  if (!isRecord(body)) return null;
+  const value = body[key];
+  if (typeof value === "string") return text(value);
+  if (!isRecord(value)) return null;
+  return text(value.sourceRef) ?? text(value.gateAttemptRef) ?? text(value.sourceRecordId) ?? text(value.gateAttemptId);
+}
+
 function safeRequestIdempotency(input: {
   mode: SingleSitePublishOperatorActionAuditMode;
   routeActionSource: string;
@@ -483,15 +495,15 @@ export function buildSingleSitePublishOperatorActionAuditInputFromDryRunRequest(
     routeActionSource: input.routeActionSource ?? "api/gnr8/admin/single-site-publish/dry-run",
     actor: input.actor,
     confirmationMarker: confirmationMarker(input.request.operatorConfirmation, "dry_run"),
-    candidateSiteVersionRef: input.request.candidateSiteVersionRef,
-    runtimeArtifactRef: input.request.runtimeArtifactRef,
-    publishTargetRef: input.request.expectedPublishTargetRef,
+    candidateSiteVersionRef: displaySingleSitePublishOperatorDryRunRef(input.request.candidateSiteVersionRef),
+    runtimeArtifactRef: displaySingleSitePublishOperatorDryRunRef(input.request.runtimeArtifactRef),
+    publishTargetRef: displaySingleSitePublishOperatorDryRunRef(input.request.expectedPublishTargetRef),
     publishStage: input.request.publishStage,
     publishEnvironment: input.request.publishEnvironment,
-    launchReadinessEvidenceRef: input.request.expectedLaunchReadinessEvidenceRef,
+    launchReadinessEvidenceRef: displaySingleSitePublishOperatorDryRunRef(input.request.expectedLaunchReadinessEvidenceRef),
     publishActivationRequestRef: input.request.expectedPublishActivationRequestRef,
     publishActivationDecisionRef: input.request.expectedPublishActivationDecisionRef,
-    gateAttemptResultRef: input.request.expectedGateAttemptResultRef,
+    gateAttemptResultRef: input.request.expectedGateAttemptResultDisplayRef ?? input.request.expectedGateAttemptResultRef,
     handoffWatermark: input.request.expectedHandoffWatermark,
     gateInputWatermark: input.request.expectedGateInputWatermark,
     idempotencyKey: input.request.idempotencyKey,
@@ -549,15 +561,15 @@ export function buildSingleSitePublishOperatorActionAuditInputFromPreflightFailu
     routeActionSource,
     actor: input.actor,
     confirmationMarker: confirmationMarker(isRecord(input.body) ? input.body.operatorConfirmation : null, input.mode),
-    candidateSiteVersionRef: textFromBody(input.body, "candidateSiteVersionRef") ?? UNKNOWN_REF,
-    runtimeArtifactRef: textFromBody(input.body, "runtimeArtifactRef") ?? UNKNOWN_REF,
-    publishTargetRef: textFromBody(input.body, "expectedPublishTargetRef") ?? UNKNOWN_REF,
+    candidateSiteVersionRef: refTextFromBody(input.body, "candidateSiteVersionRef") ?? UNKNOWN_REF,
+    runtimeArtifactRef: refTextFromBody(input.body, "runtimeArtifactRef") ?? UNKNOWN_REF,
+    publishTargetRef: refTextFromBody(input.body, "expectedPublishTargetRef") ?? UNKNOWN_REF,
     publishStage: textFromBody(input.body, "publishStage") ?? UNKNOWN_REF,
     publishEnvironment: textFromBody(input.body, "publishEnvironment") ?? UNKNOWN_REF,
-    launchReadinessEvidenceRef: textFromBody(input.body, "expectedLaunchReadinessEvidenceRef") ?? UNKNOWN_REF,
+    launchReadinessEvidenceRef: refTextFromBody(input.body, "expectedLaunchReadinessEvidenceRef") ?? UNKNOWN_REF,
     publishActivationRequestRef: textFromBody(input.body, "expectedPublishActivationRequestRef") ?? UNKNOWN_REF,
     publishActivationDecisionRef: textFromBody(input.body, "expectedPublishActivationDecisionRef") ?? UNKNOWN_REF,
-    gateAttemptResultRef: textFromBody(input.body, "expectedGateAttemptResultRef") ?? UNKNOWN_REF,
+    gateAttemptResultRef: refTextFromBody(input.body, "expectedGateAttemptResultRef") ?? UNKNOWN_REF,
     handoffWatermark: textFromBody(input.body, "expectedHandoffWatermark") ?? UNKNOWN_REF,
     gateInputWatermark: textFromBody(input.body, "expectedGateInputWatermark") ?? UNKNOWN_REF,
     idempotencyKey,

@@ -13,6 +13,7 @@ import {
   validateSingleSitePublishOperatorDryRunRequest,
   type SingleSitePublishOperatorDryRunCallerDependencies,
   type SingleSitePublishOperatorDryRunActor,
+  type SingleSitePublishOperatorDryRunCanonicalRef,
   type SingleSitePublishOperatorDryRunSafeResult,
 } from "./single-site-publish-operator-dry-run-caller";
 import {
@@ -117,9 +118,9 @@ export type SingleSiteMvpOperatorActionInput = {
   clientId: string;
   siteId: string;
   migrationId?: string | null;
-  candidateVersionRef?: string | null;
-  runtimeArtifactRef?: string | null;
-  publishTargetRef?: string | null;
+  candidateVersionRef?: SingleSitePublishOperatorDryRunCanonicalRef | null;
+  runtimeArtifactRef?: SingleSitePublishOperatorDryRunCanonicalRef | null;
+  publishTargetRef?: SingleSitePublishOperatorDryRunCanonicalRef | null;
   requestedOperationKey?: SingleSiteMvpNextOperationKey | string | null;
   actor: SingleSiteMvpOperatorActor;
   correlationId?: string | null;
@@ -127,10 +128,11 @@ export type SingleSiteMvpOperatorActionInput = {
   explicitConfirmation?: unknown;
   publishStage?: "shadow" | "canary" | "production" | string | null;
   publishEnvironment?: string | null;
-  expectedLaunchReadinessEvidenceRef?: string | null;
+  expectedLaunchReadinessEvidenceRef?: SingleSitePublishOperatorDryRunCanonicalRef | null;
   expectedPublishActivationRequestRef?: string | null;
   expectedPublishActivationDecisionRef?: string | null;
   expectedGateAttemptResultRef?: string | null;
+  expectedGateAttemptResultDisplayRef?: string | null;
   expectedHandoffWatermark?: string | null;
   expectedGateInputWatermark?: string | null;
   allowWarningsWithLimitations?: boolean;
@@ -209,6 +211,12 @@ function text(value: unknown): string {
 function nullableText(value: unknown): string | null {
   const normalized = text(value);
   return normalized ? normalized : null;
+}
+
+function refDisplayText(value: SingleSitePublishOperatorDryRunCanonicalRef | null | undefined): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return nullableText(value);
+  return nullableText(value.sourceRef) ?? nullableText(value.sourceRecordId);
 }
 
 function identityErrors(input: Pick<SingleSiteMvpOperatorActionInput, "tenantId" | "clientId" | "siteId" | "actor">): string[] {
@@ -342,9 +350,9 @@ async function readStatus(
       clientId: text(input.clientId),
       siteId: text(input.siteId),
       migrationId: nullableText(input.migrationId),
-      candidateVersionRef: nullableText(input.candidateVersionRef),
-      runtimeArtifactRef: nullableText(input.runtimeArtifactRef),
-      publishTargetRef: nullableText(input.publishTargetRef),
+      candidateVersionRef: refDisplayText(input.candidateVersionRef),
+      runtimeArtifactRef: refDisplayText(input.runtimeArtifactRef),
+      publishTargetRef: refDisplayText(input.publishTargetRef),
       actor: input.actor,
       correlationId: nullableText(input.correlationId),
     },
@@ -359,15 +367,18 @@ function existingCallerBody(input: SingleSiteMvpOperatorActionInput, mode: "dry_
     clientId: text(input.clientId),
     siteId: text(input.siteId),
     migrationId: text(input.migrationId),
-    candidateSiteVersionRef: text(input.candidateVersionRef),
-    runtimeArtifactRef: text(input.runtimeArtifactRef),
-    expectedPublishTargetRef: text(input.publishTargetRef),
+    candidateSiteVersionRef: input.candidateVersionRef,
+    runtimeArtifactRef: input.runtimeArtifactRef,
+    expectedPublishTargetRef: input.publishTargetRef,
     publishStage: text(input.publishStage),
     publishEnvironment: text(input.publishEnvironment),
-    expectedLaunchReadinessEvidenceRef: text(input.expectedLaunchReadinessEvidenceRef),
+    expectedLaunchReadinessEvidenceRef: input.expectedLaunchReadinessEvidenceRef,
     expectedPublishActivationRequestRef: text(input.expectedPublishActivationRequestRef),
     expectedPublishActivationDecisionRef: text(input.expectedPublishActivationDecisionRef),
     expectedGateAttemptResultRef: text(input.expectedGateAttemptResultRef),
+    ...(mode === "dry_run" && text(input.expectedGateAttemptResultDisplayRef)
+      ? { expectedGateAttemptResultDisplayRef: text(input.expectedGateAttemptResultDisplayRef) }
+      : {}),
     expectedHandoffWatermark: text(input.expectedHandoffWatermark),
     expectedGateInputWatermark: text(input.expectedGateInputWatermark),
     operatorConfirmation: input.explicitConfirmation,

@@ -64,6 +64,19 @@ const BASE_REQUEST: SingleSitePublishOperatorDryRunRequest = {
   allowWarningsWithLimitations: true,
 };
 
+function canonicalRef(sourceTable: string, sourceRecordId: string, sourceWatermark: string, metadataJson: Record<string, unknown> = {}) {
+  return {
+    role: sourceTable === "gnr8_runtime_site_versions" ? "candidate_site_version" : sourceTable === "gnr8_runtime_artifacts" ? "runtime_artifact" : "publish_target",
+    sourceSystem: "gnr8",
+    sourceTable,
+    sourceRecordId,
+    sourceRef: `gnr8:${sourceTable}:${sourceRecordId}`,
+    sourceVersion: "persisted:v1",
+    sourceWatermark,
+    metadataJson,
+  };
+}
+
 function request(body: unknown): Request {
   return new Request("https://app.test/api/gnr8/admin/single-site-publish/dry-run", {
     method: "POST",
@@ -314,6 +327,144 @@ test("authorized superadmin can run single-site publish operator dry-run", async
   assert.equal(wrapperInputs[0]!.actor.actorRole, "platform_superadmin");
   assert.equal(wrapperInputs[0]!.actor.actorId, "superadmin-mvp54");
   assert.deepEqual(auditService.events, ["action_requested", "dry_run_started", "dry_run_completed"]);
+});
+
+test("canonical persisted metadata reaches the wrapper without synthetic string fallback", async () => {
+  const wrapperInputs: SingleSitePublishWrapperInput[] = [];
+  const auditService = fakeAuditService();
+  const canonicalRequest = {
+    ...BASE_REQUEST,
+    candidateSiteVersionRef: canonicalRef("gnr8_runtime_site_versions", "site-version-mvp54", "updated_at:2026-08-21 06:18:00.763932+00", {
+      tenantId: BASE_REQUEST.tenantId,
+      clientId: BASE_REQUEST.clientId,
+      siteId: BASE_REQUEST.siteId,
+      migrationId: BASE_REQUEST.migrationId,
+    }),
+    runtimeArtifactRef: canonicalRef("gnr8_runtime_artifacts", "artifact-mvp54", "bundle_sha256:artifact-mvp54", {
+      tenantId: BASE_REQUEST.tenantId,
+      clientId: BASE_REQUEST.clientId,
+      siteId: BASE_REQUEST.siteId,
+      migrationId: BASE_REQUEST.migrationId,
+    }),
+    expectedPublishTargetRef: canonicalRef("gnr8_publish_targets", "production", "ptt-1:gnr8_publish_targets:production", {
+      environment: "production",
+      publishStage: "production",
+      status: "active",
+    }),
+    expectedLaunchReadinessEvidenceRef: canonicalRef("gnr8_aaf_evidence_packages", "evidence-mvp54", `single-site-launch-readiness:${"d".repeat(64)}`),
+    expectedGateAttemptResultRef: {
+      gateAttemptId: "gate-mvp54",
+      gateAttemptRef: "aaf:action_gate_attempt:gate-mvp54",
+      tenantId: BASE_REQUEST.tenantId,
+      clientId: BASE_REQUEST.clientId,
+      siteId: BASE_REQUEST.siteId,
+      migrationId: BASE_REQUEST.migrationId,
+      candidateSiteVersionRef: "gnr8:gnr8_runtime_site_versions:site-version-mvp54",
+      runtimeArtifactRef: "gnr8:gnr8_runtime_artifacts:artifact-mvp54",
+      publishTargetRef: "gnr8:gnr8_publish_targets:production",
+      publishStage: "production",
+      publishEnvironment: "production",
+      semanticHandoffWatermark: BASE_REQUEST.expectedHandoffWatermark,
+      semanticGateInputWatermark: BASE_REQUEST.expectedGateInputWatermark,
+    },
+  };
+  const handlers = createSingleSitePublishOperatorDryRunRouteHandlers({
+    auditService,
+    requireSuperadminUserId: async () => "superadmin-mvp54",
+    wrapperDependencies: {
+      publishSingleSiteApprovedCandidateShadow: async (input) => {
+        wrapperInputs.push(input);
+        return wrapperResult();
+      },
+    },
+  });
+
+  const response = await handlers.POST(request(canonicalRequest));
+  const body = (await response.json()) as Record<string, unknown>;
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(wrapperInputs.length, 1);
+  assert.equal(typeof wrapperInputs[0]!.candidateSiteVersionRef, "object");
+  assert.equal(typeof wrapperInputs[0]!.runtimeArtifactRef, "object");
+  assert.equal(typeof wrapperInputs[0]!.expectedPublishTargetRef, "object");
+  assert.equal((wrapperInputs[0]!.candidateSiteVersionRef as { sourceWatermark: string }).sourceWatermark, "updated_at:2026-08-21 06:18:00.763932+00");
+  assert.equal((wrapperInputs[0]!.runtimeArtifactRef as { sourceWatermark: string }).sourceWatermark, "bundle_sha256:artifact-mvp54");
+  assert.equal(wrapperInputs[0]!.expectedGateAttemptResultRef, "gate-mvp54");
+  assert.equal(auditService.actions[0]!.gate_attempt_result_ref, "aaf:action_gate_attempt:gate-mvp54");
+});
+
+test("dry-run contract rejects display gate refs in the raw gate id slot", () => {
+  const validation = validateSingleSitePublishOperatorDryRunRequest({
+    ...BASE_REQUEST,
+    expectedGateAttemptResultRef: "aaf:action_gate_attempt:gate-mvp54",
+  });
+
+  assert.equal(validation.valid, false);
+  if (validation.valid) return;
+  assert.equal(validation.errors.includes("single_site_publish_operator_expectedGateAttemptResultRef_raw_id_required"), true);
+});
+
+test("production publish target requires production stage and environment", () => {
+  const validation = validateSingleSitePublishOperatorDryRunRequest({
+    ...BASE_REQUEST,
+    publishStage: "shadow",
+    publishEnvironment: "preview",
+    expectedPublishTargetRef: canonicalRef("gnr8_publish_targets", "production", "ptt-1:gnr8_publish_targets:production", {
+      environment: "production",
+      publishStage: "production",
+      status: "active",
+    }),
+  });
+
+  assert.equal(validation.valid, false);
+  if (validation.valid) return;
+  assert.equal(validation.errors.includes("single_site_publish_operator_publish_environment_mismatch"), true);
+  assert.equal(validation.errors.includes("single_site_publish_operator_publish_stage_mismatch"), true);
+});
+
+test("mismatched canonical candidate, artifact, target, gate, and watermarks are rejected before wrapper invocation", async () => {
+  let wrapperCalls = 0;
+  const handlers = createSingleSitePublishOperatorDryRunRouteHandlers({
+    auditService: fakeAuditService(),
+    requireSuperadminUserId: async () => "superadmin-mvp54",
+    wrapperDependencies: {
+      publishSingleSiteApprovedCandidateShadow: async () => {
+        wrapperCalls += 1;
+        return wrapperResult();
+      },
+    },
+  });
+
+  const response = await handlers.POST(request({
+    ...BASE_REQUEST,
+    candidateSiteVersionRef: canonicalRef("gnr8_runtime_site_versions", "site-version-mvp54", "updated_at:canonical", { siteId: "wrong-site" }),
+    runtimeArtifactRef: canonicalRef("gnr8_runtime_artifacts", "artifact-mvp54", "bundle_sha256:canonical", { migrationId: "wrong-migration" }),
+    expectedPublishTargetRef: canonicalRef("gnr8_publish_targets", "production", "ptt-1:gnr8_publish_targets:production", { environment: "production", publishStage: "production", status: "disabled" }),
+    expectedGateAttemptResultRef: {
+      gateAttemptId: "gate-mvp54",
+      gateAttemptRef: "aaf:action_gate_attempt:other-gate",
+      tenantId: "wrong-tenant",
+      candidateSiteVersionRef: "gnr8:gnr8_runtime_site_versions:other-version",
+      runtimeArtifactRef: "gnr8:gnr8_runtime_artifacts:other-artifact",
+      publishTargetRef: "gnr8:gnr8_publish_targets:shadow",
+      semanticHandoffWatermark: "single-site-publish-activation-gate-handoff:wrong",
+      semanticGateInputWatermark: `single-site-publish-activation-gate-input:${"f".repeat(64)}`,
+    },
+  }));
+  const body = (await response.json()) as { diagnostics: string[] };
+
+  assert.equal(response.status, 400);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_candidateSiteVersionRef_siteId_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_runtimeArtifactRef_migrationId_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_publish_target_status_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_gate_attempt_ref_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_gate_attempt_handoff_watermark_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_gate_attempt_gate_input_watermark_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_gate_attempt_candidate_site_version_ref_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_gate_attempt_runtime_artifact_ref_mismatch"), true);
+  assert.equal(body.diagnostics.includes("single_site_publish_operator_gate_attempt_publish_target_ref_mismatch"), true);
+  assert.equal(wrapperCalls, 0);
 });
 
 test("unauthorized actors fail closed before wrapper invocation", async () => {

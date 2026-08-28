@@ -284,6 +284,52 @@ test("POST preflight and execute derive actor server-side", async () => {
   assert.equal(seen[1]!.actor.actorId, "superadmin-route");
 });
 
+test("POST action preserves canonical dry-run refs for facade execution", async () => {
+  const seen: SingleSiteMvpOperatorActionInput[] = [];
+  const canonicalCandidateRef = {
+    role: "candidate_site_version",
+    sourceSystem: "gnr8",
+    sourceTable: "gnr8_runtime_site_versions",
+    sourceRecordId: "site-version-route",
+    sourceRef: "gnr8:gnr8_runtime_site_versions:site-version-route",
+    sourceWatermark: "updated_at:2026-08-21 06:18:00.763932+00",
+  };
+  const canonicalEvidenceRef = {
+    role: "launch_readiness_evidence",
+    sourceSystem: "aaf",
+    sourceTable: "gnr8_aaf_evidence_packages",
+    sourceRecordId: "evidence-route",
+    sourceRef: "aaf:evidence_package:evidence-route",
+    sourceWatermark: `single-site-launch-readiness:${"d".repeat(64)}`,
+  };
+  const handlers = createSingleSiteMvpOperatorActionRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-route",
+    async executeSingleSiteMvpOperatorAction(input) {
+      seen.push(input);
+      return facadeOutput({ requestedOperation: input.requestedOperationKey ?? null, reasonCode: "execution_completed" });
+    },
+  });
+
+  const response = await handlers.POST(
+    request("https://app.test/api/gnr8/admin/single-site-mvp/action", {
+      actionMode: "execute",
+      tenantId: "tenant-route",
+      clientId: "client-route",
+      siteId: "site-route",
+      requestedOperationKey: "run_operator_dry_run",
+      candidateVersionRef: canonicalCandidateRef,
+      expectedLaunchReadinessEvidenceRef: canonicalEvidenceRef,
+      expectedGateAttemptResultDisplayRef: "aaf:action_gate_attempt:gate-route",
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(seen.length, 1);
+  assert.deepEqual(seen[0]!.candidateVersionRef, canonicalCandidateRef);
+  assert.deepEqual(seen[0]!.expectedLaunchReadinessEvidenceRef, canonicalEvidenceRef);
+  assert.equal(seen[0]!.expectedGateAttemptResultDisplayRef, "aaf:action_gate_attempt:gate-route");
+});
+
 test("GET and POST reject unsafe query or body fields", async () => {
   const handlers = createSingleSiteMvpOperatorActionRouteHandlers({
     requireSuperadminUserId: async () => "superadmin-route",

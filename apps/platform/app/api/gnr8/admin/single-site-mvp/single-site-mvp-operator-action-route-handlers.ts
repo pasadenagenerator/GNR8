@@ -48,6 +48,7 @@ const ACTION_BODY_KEYS = new Set([
   "expectedPublishActivationRequestRef",
   "expectedPublishActivationDecisionRef",
   "expectedGateAttemptResultRef",
+  "expectedGateAttemptResultDisplayRef",
   "expectedHandoffWatermark",
   "expectedGateInputWatermark",
   "allowWarningsWithLimitations",
@@ -69,6 +70,12 @@ const FORBIDDEN_ACTOR_KEYS = new Set([
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function refValue(value: unknown): SingleSiteMvpOperatorActionInput["candidateVersionRef"] {
+  if (typeof value === "string") return text(value) || null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Exclude<SingleSiteMvpOperatorActionInput["candidateVersionRef"], string | null | undefined>;
 }
 
 function statusForAuthError(error: unknown): number {
@@ -166,9 +173,9 @@ function inputFromRecord(record: Record<string, unknown>, actorId: string): Sing
     clientId: text(record.clientId),
     siteId: text(record.siteId),
     migrationId: text(record.migrationId) || null,
-    candidateVersionRef: text(record.candidateVersionRef) || null,
-    runtimeArtifactRef: text(record.runtimeArtifactRef) || null,
-    publishTargetRef: text(record.publishTargetRef) || null,
+    candidateVersionRef: refValue(record.candidateVersionRef),
+    runtimeArtifactRef: refValue(record.runtimeArtifactRef),
+    publishTargetRef: refValue(record.publishTargetRef),
     requestedOperationKey: text(record.requestedOperationKey) || null,
     actor: {
       actorType: "human",
@@ -180,10 +187,11 @@ function inputFromRecord(record: Record<string, unknown>, actorId: string): Sing
     explicitConfirmation: record.explicitConfirmation,
     publishStage: text(record.publishStage) || null,
     publishEnvironment: text(record.publishEnvironment) || null,
-    expectedLaunchReadinessEvidenceRef: text(record.expectedLaunchReadinessEvidenceRef) || null,
+    expectedLaunchReadinessEvidenceRef: refValue(record.expectedLaunchReadinessEvidenceRef),
     expectedPublishActivationRequestRef: text(record.expectedPublishActivationRequestRef) || null,
     expectedPublishActivationDecisionRef: text(record.expectedPublishActivationDecisionRef) || null,
     expectedGateAttemptResultRef: text(record.expectedGateAttemptResultRef) || null,
+    expectedGateAttemptResultDisplayRef: text(record.expectedGateAttemptResultDisplayRef) || null,
     expectedHandoffWatermark: text(record.expectedHandoffWatermark) || null,
     expectedGateInputWatermark: text(record.expectedGateInputWatermark) || null,
     ...(typeof record.allowWarningsWithLimitations === "boolean"

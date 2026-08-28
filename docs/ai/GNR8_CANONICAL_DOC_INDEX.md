@@ -1411,6 +1411,24 @@ Canonical domain and DNS operating model docs:
 - `docs/product/gnr8-domain-dns-operator-workflow.md`
 - `docs/product/gnr8-domain-dns-operating-model-closeout.md`
 
+## CUTLINE-55 Governed Dry-Run Contract Fix
+
+Canonical local governed dry-run contract fix and production dry-run rerun closeout:
+- `docs/product/gnr8-single-site-mvp-cutline-55-governed-dry-run-contract-fix.md`
+- `docs/product/gnr8-single-site-mvp-cutline-55b-governed-dry-run-contract-fix-deployment.md`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-dry-run-caller.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-action-audit.ts`
+- `apps/platform/gnr8/single-site/single-site-mvp-operator-action-facade.ts`
+- `apps/platform/app/api/gnr8/admin/single-site-mvp/single-site-mvp-operator-action-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-publish-operator-dry-run-route.test.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/single-site-mvp-operator-action-route.test.ts`
+- `apps/platform/gnr8/single-site/single-site-mvp-operator-action-facade.test.ts`
+- `apps/platform/gnr8/single-site/single-site-publish-operator-action-audit.test.ts`
+
+Canonical result: exact approval sentence present; MVP-54 now preserves canonical persisted refs/source watermarks through the MVP-CUTLINE-3 governed dry-run path while keeping legacy string compatibility, raw gate id enforcement, production target stage/environment checks, dry-run-only execution, and redacted audit projection. One approved production dry-run audit action was created: `882304c9-fc52-4c3c-9cd3-533d9ebf1eed` / `gnr8:single_site_publish_operator_action:882304c9-fc52-4c3c-9cd3-533d9ebf1eed`; route result `ok=true`, wrapper `dry_run_ready`, resolver `complete`, blockers `[]`, metadata mismatches `[]`; active pointers stayed total `6 -> 6`, selected runtime site `0 -> 0`, selected canonical site `0 -> 0`, candidate refs `0 -> 0`; shadow-publish actions stayed `0`; CUTLINE-55 AAF request/decision/gate rows stayed `0/0/0`; no shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, deploy, migration, env mutation, commit, or push occurred.
+
+CUTLINE-55B deployment verification is the commit/push/production deployed-SHA follow-up for this fix. It records deployment gate target `governed_dry_run_contract_fix_deployed` and online verification target `dry_run_ready_shadow_publish_eligible_pending_fresh_approval`; shadow-publish still requires separate fresh approval.
+
 ## Secondary
 
 - `SYSTEM.md`

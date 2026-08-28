@@ -945,6 +945,36 @@ Production verification status: `operator_dry_run_metadata_contract_mismatch_no_
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-54-dry-run-metadata-mismatch-resolution.md`.
 
+## CUTLINE-55 Governed Dry-Run Contract Fix
+
+Production verification status: `operator_dry_run_ready_canonical_metadata_no_publish`.
+
+- Exact approval sentence: present.
+- Contract behavior: MVP-54 now accepts canonical persisted ref objects or legacy strings; MVP-CUTLINE-3 preserves canonical refs into the dry-run caller; audit persistence stores safe display strings only.
+- Governed rerun path: MVP-CUTLINE-3 facade preflight -> MVP-54 audited dry-run route/caller -> MVP-52 wrapper with `dryRun=true` -> MVP-49 resolver -> MVP-57 audit persistence.
+- Operator action id/ref/status: `882304c9-fc52-4c3c-9cd3-533d9ebf1eed` / `gnr8:single_site_publish_operator_action:882304c9-fc52-4c3c-9cd3-533d9ebf1eed` / `dry_run_completed`.
+- Dry-run result: HTTP `200`, `ok=true`, `preflightStatus=caller_validated`, `wrapperStatus=dry_run_ready`, `resolverStatus=complete`.
+- Metadata completeness: complete, missing `[]`, mismatches `[]`, warnings `[]`.
+- Blockers/warnings: blockers `[]`; warnings `enforcement_not_applied_in_mvp46`, `limitations_carried_forward`, `limitations_explicitly_accepted_by_policy`, `no_publish_execution`, `read_only_guard_evaluated`.
+- Active pointers: total `6 -> 6`, selected runtime site `0 -> 0`, selected canonical site `0 -> 0`, candidate refs `0 -> 0`.
+- Forbidden downstream counts after readback: shadow-publish actions for candidate `0`, CUTLINE-55 AAF request/decision/gate rows `0/0/0`, DDOM readiness snapshots/refs `0/0`, runtime active pointer refs for candidate `0`.
+- Shadow-publish eligibility next: yes from this dry-run result, but only after separate fresh approval, deployed contract fix if using hosted routes, and existing feature flag/boundary checks.
+- Boundary: no shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, deploy, migration, env mutation, commit, or push occurred.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-55-governed-dry-run-contract-fix.md`.
+
+## CUTLINE-55B Governed Dry-Run Contract Fix Deployment
+
+Production verification status: `pending_governed_dry_run_contract_fix_deployed_sha`.
+
+- Exact commit/push/deploy verification approval sentence: present.
+- Deployment target: commit the CUTLINE-55 governed dry-run contract fix, push `main`, wait for Vercel `gnr8-platform` production deployment, then verify the deployed SHA locally.
+- Deployment gate target: `governed_dry_run_contract_fix_deployed`.
+- Online verification target after deployed-SHA verification: `dry_run_ready_shadow_publish_eligible_pending_fresh_approval`.
+- Boundary: no shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, migration, env mutation, new dry-run, new AAF request/decision/gate, or new launch readiness is approved in CUTLINE-55B.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-55b-governed-dry-run-contract-fix-deployment.md`.
+
 ## Stop Criteria
 
 Stop immediately if:

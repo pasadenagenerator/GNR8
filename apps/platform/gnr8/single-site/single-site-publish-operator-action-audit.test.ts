@@ -54,8 +54,22 @@ const DRY_RUN_REQUEST: SingleSitePublishOperatorDryRunRequest = {
 };
 
 const SHADOW_REQUEST: SingleSiteShadowPublishOperatorRequest = {
-  ...DRY_RUN_REQUEST,
   mode: "shadow_publish",
+  tenantId: DRY_RUN_REQUEST.tenantId,
+  clientId: DRY_RUN_REQUEST.clientId,
+  siteId: DRY_RUN_REQUEST.siteId,
+  migrationId: DRY_RUN_REQUEST.migrationId,
+  candidateSiteVersionRef: "gnr8:gnr8_runtime_site_versions:site-version-mvp57",
+  runtimeArtifactRef: "gnr8:gnr8_runtime_artifacts:artifact-mvp57",
+  expectedPublishTargetRef: "gnr8:gnr8_publish_targets:production",
+  publishStage: DRY_RUN_REQUEST.publishStage,
+  publishEnvironment: DRY_RUN_REQUEST.publishEnvironment,
+  expectedLaunchReadinessEvidenceRef: "aaf:evidence_package:evidence-mvp57",
+  expectedPublishActivationRequestRef: DRY_RUN_REQUEST.expectedPublishActivationRequestRef,
+  expectedPublishActivationDecisionRef: DRY_RUN_REQUEST.expectedPublishActivationDecisionRef,
+  expectedGateAttemptResultRef: DRY_RUN_REQUEST.expectedGateAttemptResultRef,
+  expectedHandoffWatermark: DRY_RUN_REQUEST.expectedHandoffWatermark,
+  expectedGateInputWatermark: DRY_RUN_REQUEST.expectedGateInputWatermark,
   operatorConfirmation: {
     mode: "shadow_publish",
     shadowPublish: true,
@@ -69,6 +83,8 @@ const SHADOW_REQUEST: SingleSiteShadowPublishOperatorRequest = {
     runtimeArtifactRef: "artifact-mvp57",
     expectedPublishTargetRef: "production",
   },
+  idempotencyKey: DRY_RUN_REQUEST.idempotencyKey,
+  correlationId: DRY_RUN_REQUEST.correlationId,
 };
 
 class FakeAuditRepository implements SingleSitePublishOperatorActionAuditRepositoryLike {
