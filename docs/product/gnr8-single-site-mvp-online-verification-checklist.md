@@ -1034,6 +1034,31 @@ Production verification status: `shadow_publish_orchestrator_failed_after_post_p
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-58-post-promotion-publish-chain-refresh-shadow-publish.md`.
 
+## CUTLINE-59 Shadow-Publish Orchestrator Failure Diagnosis
+
+Production verification status: `shadow_publish_orchestrator_failure_diagnosed_missing_page_migration_governance_no_retry`.
+
+- Shadow-publish retry in CUTLINE-59: no.
+- CUTLINE-58 local contract fix preserved: yes; the checked-out shadow-publish caller/facade/audit/route test files still contain the canonical persisted metadata handoff support, and `git status --short` was clean at task start.
+- Failed CUTLINE-58 action: `9d0f1a3d-cb00-4fb7-8b2f-64c19f86084b`, `shadow_publish_failed`, route `publish_orchestrator_failed`, wrapper `orchestrator_failed`, resolver `complete`, publish orchestrator `failed`.
+- Exact local runtime failure: `publish-enforcement requires page migration governance on site version pages`.
+- Failing path: `publishSingleSiteApprovedCandidateShadow(...)` prepared complete metadata and called `publishApprovedSiteVersion(...)`; `publishApprovedSiteVersion(...)` entered the `APPROVED` branch and failed in `evaluatePublishEnforcement(...)` before artifact refresh or active pointer switch.
+- Publish input shape: `siteVersionId=a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, `stage=production`, `publishActivationShadowGateEnabled=false`, `publishActivationEnforcementShadowEnabled=true`, complete normalized metadata handoff.
+- Candidate state: `APPROVED`.
+- Artifact binding: still `1f80138a-39c2-4210-ac61-16200e5a2254`.
+- Artifact state: lineage matches candidate, root path exists, root HTML length `11770`, but persisted artifact stage and artifact-governance publish stage are both `shadow`.
+- Missing runtime-store field: candidate page rows have no `migration_governance`, which the current publish enforcement recalculation requires.
+- Refreshed readiness/evidence: readiness `f1be154d-5533-4f88-ad5a-0ca3deaa50fc` is `ready_with_limitations` / `fresh`; evidence `193bc66e-f9e0-482e-abd1-3fa04356d24e` is `created` with freshness `partial_timeline`.
+- Refreshed publish activation: request `1487a4a7-24bb-469e-9ebf-75315f7b538e` is `requested`; decision `19d1a96d-97ef-4f6b-ab65-38682b5f8751` is `granted_with_limitations`.
+- Refreshed gate: `aaee77bc-2caa-428d-8b3e-848e3622befd`, `allowed`, no fail-closed reason, blockers `[]`.
+- Refreshed dry-run: `dc2f19ca-00ca-4881-85ae-fb701eafa9ac`, `dry_run_completed`, `ok=true`, wrapper `dry_run_ready`, resolver `complete`, metadata complete, blockers `[]`.
+- Active pointer selected runtime site: `0 -> 0`, expected unchanged.
+- Host binding: `www.chs.si` / `ACTIVE` / `shadow`.
+- Code fix in CUTLINE-59: no; changing stage semantics, inferring page governance from artifact summaries, or repairing production rows requires a separate reviewed task.
+- Forbidden mutation confirmation: no shadow-publish retry, runtime publish, rollback, active pointer switch, provider/DNS/domain/billing/Stripe/Openprovider mutation, migration, env mutation, deploy, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-59-shadow-publish-orchestrator-failure-diagnosis.md`.
+
 ## Stop Criteria
 
 Stop immediately if:
