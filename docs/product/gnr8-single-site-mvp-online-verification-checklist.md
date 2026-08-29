@@ -1059,6 +1059,26 @@ Production verification status: `shadow_publish_orchestrator_failure_diagnosed_m
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-59-shadow-publish-orchestrator-failure-diagnosis.md`.
 
+## CUTLINE-60 Page Migration Governance Remediation Diagnosis
+
+Production verification status: `page_migration_governance_remediation_blocked_no_dry_run`.
+
+- Exact approval sentence: present.
+- Remediation performed: no; stopped before mutation because no existing safe source-truth workflow supports this candidate repair.
+- Candidate state: `APPROVED`.
+- Candidate/artifact: `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` / `1f80138a-39c2-4210-ac61-16200e5a2254`, lineage-valid and still bound.
+- Page governance before/after: `0/1 -> 0/1`.
+- Sibling/source version page governance: version `1` `0/1`, version `2` `0/1`.
+- Raw imported/template artifact evidence for candidate: missing; existing imported-runtime reconciliation materializer cannot reconstruct governance safely.
+- Existing improved-candidate regeneration path: not sufficient; it clones `page.migrationGovernance` from the clone version, which is also empty.
+- Dry-run rerun: no; prerequisite candidate page governance was not met.
+- Last known good governed dry-run remains `dc2f19ca-00ca-4881-85ae-fb701eafa9ac`, `ok=true`, wrapper `dry_run_ready`, resolver `complete`, blockers `[]`.
+- Shadow-publish eligibility next: not restored; implement a canonical page-governance remediation/regeneration workflow, then rerun readback and only then rerun governed dry-run.
+- Active pointer selected runtime site: `0 -> 0`.
+- Forbidden mutation confirmation: no shadow-publish, runtime publish, rollback, active pointer switch, provider/DNS/domain/billing/Stripe/Openprovider mutation, migration, env mutation, deploy, commit, or push.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-60-page-migration-governance-remediation.md`.
+
 ## Stop Criteria
 
 Stop immediately if:
