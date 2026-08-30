@@ -1079,6 +1079,32 @@ Production verification status: `page_migration_governance_remediation_blocked_n
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-60-page-migration-governance-remediation.md`.
 
+## CUTLINE-61 Source-Owned Page Governance Remediation
+
+Production verification status: `page_governance_remediated_dry_run_blocked_stale_publish_metadata`.
+
+- Exact approval sentence: present.
+- Remediation workflow added: `SourceOwnedPageGovernanceRemediation`, source-owned and fail-closed.
+- Remediation path: `createSourceOwnedPageGovernanceRemediationPlan(...)` -> `applySourceOwnedPageGovernanceRemediation(...)` -> `materializePageMigrationGovernanceForSiteVersion(...)`.
+- Required page governance shape: `pageStructuralConfidence`, `weakSectionIds`, `structuralAnomalies`, `pageMigrationGate`, `pageRolloutPolicy`, `pageEnforcement`.
+- Source evidence identity: source review `40c0b86c-0349-4b7c-89c2-bfdef7e9fea3`, source package `url-import-snapshot:imported-url-site-6cba4d2b35d630b5`, source watermark `imported-url-site-6cba4d2b35d630b5`.
+- Source evidence spine readback: `38` source review refs, `13` review events, `10` required evidence items, no missing required evidence categories.
+- Migration spine readback: `14` migration refs and `16` migration events.
+- Page governance before/after: `0/1 -> 1/1`.
+- Required governance fields present after: yes.
+- Governance identity matches source/client/site/migration/candidate/artifact: yes.
+- Candidate/artifact after: `APPROVED`, artifact `1f80138a-39c2-4210-ac61-16200e5a2254` unchanged.
+- Selected runtime active pointer: `0 -> 0`.
+- Governed dry-run rerun: yes, action `3fdef831-4897-4605-9f17-6ae00c888894`.
+- Dry-run result: `ok=false`, wrapper `preflight_blocked`, resolver `incomplete`.
+- Dry-run blockers: `publish_activation_gate_input_watermark_mismatch`, `publish_activation_gate_stale`, `publish_activation_handoff_watermark_mismatch`, `publish_target_ref_mismatch`, `single_site_publish_wrapper_resolver_incomplete`.
+- Dry-run safety flags: publishes `false`, runtime mutation `false`, creates AAF records `false`, creates gate attempt `false`, evaluates gate `false`.
+- CUTLINE-61 AAF request/decision/gate counts: `0/0/0`.
+- Forbidden mutation confirmation: no shadow-publish, runtime publish, rollback, active pointer switch, provider/DNS/domain/billing/Stripe/Openprovider mutation, migration, env mutation, deploy, commit, or push.
+- Shadow-publish eligibility next: not restored; publish metadata chain must be refreshed after the remediation workflow is committed, pushed, and deployed.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-61-source-owned-page-governance-remediation.md`.
+
 ## Stop Criteria
 
 Stop immediately if:
