@@ -49,6 +49,7 @@ Do not start online verification until all are true:
 - CUTLINE-50 launch readiness evidence is complete before publish activation request: readiness `17121fc3-db6c-40ad-bb4f-b3acb2213d5f` is `ready_with_limitations` / `fresh`, evidence package `17f10140-b31f-4c32-a673-13b95543fdd2` exists with watermark `single-site-launch-readiness:3d346b059d9d9b3b814abf22cbf464bf02b3434977a5ef51322a559876a9b203`, publish activation request eligibility is `ready=true`, and no publish activation/gate/publish/runtime/active-pointer mutation occurred.
 - CUTLINE-51 publish activation approval is complete before gate evaluation: request `4f273f5d-63e2-40f5-a3be-377bfc8d9380` is `requested`, decision `53e9cba6-74ac-44b4-bfba-57826f037f71` is `granted_with_limitations`, direct launch readiness evidence link uses `aaf:evidence_package:17f10140-b31f-4c32-a673-13b95543fdd2`, gate evaluation eligibility is `ready=true`, and no gate/dry-run/shadow-publish/runtime/active-pointer mutation occurred.
 - CUTLINE-52 publish activation gate evaluation is complete before operator dry-run: gate attempt `e2993dcb-8a9f-4e31-b499-d4d6b8d739de` is `allowed`, evaluator status is `warning`, policy evaluation `2e2d62a9-87ab-4d50-bbe0-372a9d1f0e4f` has blocker codes `[]`, and no dry-run/shadow-publish/runtime/active-pointer mutation occurred.
+- CUTLINE-62 refreshed governed dry-run final readback is complete before any shadow-publish retry: action `ad9660dd-c474-431c-a4ef-f935302c946b` is the only CUTLINE-62 dry-run action, `ok=true`, resolver `complete`, wrapper `dry_run_ready`, gate `cee202bb-e99c-4b5b-8839-876a54a1ba35` is `allowed`, selected active pointer remains absent, and CUTLINE-62 shadow-publish action count is `0`.
 
 ## Operator Sequence
 
@@ -1104,6 +1105,22 @@ Production verification status: `page_governance_remediated_dry_run_blocked_stal
 - Shadow-publish eligibility next: not restored; publish metadata chain must be refreshed after the remediation workflow is committed, pushed, and deployed.
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-61-source-owned-page-governance-remediation.md`.
+
+## CUTLINE-62 Cleanup And Final Readback
+
+Production verification status: `ready_for_shadow_publish_retry_pending_fresh_approval`.
+
+- Commit/deploy SHA supplied for the successful CUTLINE-62 run: `4ec3c575d1e92ce4b9c4488b534ed2b5f4c15541`.
+- Refreshed readiness/evidence/request/decision/gate refs: `0401bdbe-2d00-42d4-96ca-d29efc4e3e8e`, `18726904-e8df-4b4e-b397-f5a0dd72245a`, `0940467e-f890-4e7d-a149-39a6b95074b4`, `de02949d-5a02-4a83-adf1-595f5b2ed3f4`, `cee202bb-e99c-4b5b-8839-876a54a1ba35`.
+- Read-only rollback-wrapped verification found exactly one CUTLINE-62 dry-run action: `ad9660dd-c474-431c-a4ef-f935302c946b`.
+- Dry-run result: `ok=true`, wrapper `dry_run_ready`, resolver `complete`, diagnostics blockers `[]`.
+- Gate `cee202bb-e99c-4b5b-8839-876a54a1ba35`: `allowed`, policy blockers `[]`.
+- Selected runtime active pointer, candidate active pointer, and artifact active pointer counts: `0/0/0`.
+- CUTLINE-62 shadow-publish action count: `0`.
+- Cleanup readback: no `tmp-cutline62` files were present.
+- Forbidden mutation confirmation: no metadata refresh rerun, dry-run rerun, shadow-publish, runtime publish, rollback, active pointer mutation, provider/DNS/domain/billing/Stripe/Openprovider mutation, migration, env mutation, deploy, production data mutation, or production cleanup write.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-62-cleanup-and-final-readback-closeout.md`.
 
 ## Stop Criteria
 
