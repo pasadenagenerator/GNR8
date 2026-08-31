@@ -1122,6 +1122,47 @@ Production verification status: `ready_for_shadow_publish_retry_pending_fresh_ap
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-62-cleanup-and-final-readback-closeout.md`.
 
+## CUTLINE-63 Controlled Shadow-Publish Retry
+
+Production verification status: `shadow_publish_completed_pending_public_verification_and_mvp_closeout`.
+
+- Exact approval sentence: present.
+- Production deployment health before the run: platform HTTP `200`; worker health HTTP `200`, `ok=true`, `service=gnr8-worker`, `status=ready`.
+- Read-only preflight: candidate `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` was `APPROVED`, artifact `1f80138a-39c2-4210-ac61-16200e5a2254` was bound, page `migration_governance` was `1/1`, CUTLINE-62 dry-run `ad9660dd-c474-431c-a4ef-f935302c946b` was `ok=true`, resolver `complete`, wrapper `dry_run_ready`, and gate `cee202bb-e99c-4b5b-8839-876a54a1ba35` was `allowed`.
+- Active pointer before run: `0` for runtime site `site_57d9665a3a5867edf6ef`.
+- CUTLINE-63 shadow-publish action before run: `0`.
+- Shadow-publish action: `6c44f0ac-5546-448b-9e04-a07aa179f92f` / `gnr8:single_site_publish_operator_action:6c44f0ac-5546-448b-9e04-a07aa179f92f`.
+- Route result: HTTP `200`, `ok=true`, route `shadow_publish_completed`, preflight `caller_validated`, resolver `complete`, wrapper `published_via_existing_orchestrator`, orchestrator `called`, pointer switch `atomic_site_pointer_reassignment`.
+- Active pointer after run: `1`, target `site_57d9665a3a5867edf6ef -> a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, updated `2026-08-30T17:11:16.948Z`.
+- Existing orchestrator runtime state readback: candidate moved `APPROVED -> PUBLISHED`; bound artifact publish stage moved `shadow -> production`.
+- Expected audit/runtime deltas: shadow-publish actions `0 -> 1`, operator actions `7 -> 8`, refs `99 -> 111`, events `37 -> 43`, runtime active pointers `6 -> 7`.
+- Untouched counts: AAF requests `8 -> 8`, AAF decisions `8 -> 8`, AAF gates `3 -> 3`, publish targets `1 -> 1`, provider approvals `2 -> 2`, provider handoffs `2 -> 2`, provider jobs `0 -> 0`, host bindings `22 -> 22`, domain host bindings `4 -> 4`.
+- Public/read-only URL evidence after the run: `https://www.chs.si/` HTTP `200`, `https://app.pasadenagenerator.com/` HTTP `200`, worker health HTTP `200` with `ok=true`.
+- Forbidden mutation confirmation: no rollback, no second shadow-publish, no dry-run rerun, no provider/DNS/domain/billing/Stripe/Openprovider mutation, no migration, no env mutation, no deploy.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-63-controlled-shadow-publish-retry.md`.
+
+## CUTLINE-64 Post-Shadow-Publish Public Verification
+
+Production verification status: `one_site_internal_mvp_rehearsal_accepted_pending_20_site_validation`.
+
+- Git status at task start: docs/index only; modified canonical index, deployment readiness checklist, online verification checklist, and untracked CUTLINE-63 closeout.
+- Production DB verification: read-only transaction with explicit rollback.
+- Active pointer readback: `site_57d9665a3a5867edf6ef -> a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, active artifact `1f80138a-39c2-4210-ac61-16200e5a2254`, updated `2026-08-30 17:11:16.948547+00`.
+- Candidate readback: `a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, state `PUBLISHED`, artifact binding `1f80138a-39c2-4210-ac61-16200e5a2254`.
+- Artifact readback: `1f80138a-39c2-4210-ac61-16200e5a2254`, site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f`, publish stage `production`.
+- CUTLINE-63 action readback: action `6c44f0ac-5546-448b-9e04-a07aa179f92f`, mode/status `shadow_publish` / `shadow_publish_completed`, `ok=true`, route `shadow_publish_completed`, preflight `caller_validated`, wrapper `published_via_existing_orchestrator`, orchestrator `called`.
+- Boundary counts: CUTLINE-63 shadow-publish actions `1`, CUTLINE-62 shadow-publish actions `0`, operator actions/refs/events `8/111/43`, runtime active pointers `7`, selected candidate/candidate/artifact pointer counts `1/1/1`.
+- Mutation-boundary counts: AAF requests/decisions/gates `8/8/3`, publish targets `1`, provider approvals/handoffs/jobs `2/2/0`, runtime host bindings/domain host bindings `22/4`, rollback table absent, billing subscription tables absent.
+- No newer operator action after CUTLINE-63: latest operator action remains `6c44f0ac-5546-448b-9e04-a07aa179f92f`; operator actions after CUTLINE-63 `0`; shadow-publish actions after CUTLINE-63 `0`.
+- Public site check: `https://www.chs.si/` HTTP `200`, title `Home | CHS`, substantial CHS body content.
+- Platform health: `https://app.pasadenagenerator.com/` HTTP `200`, title `GNR8 Platform`.
+- Worker health: `https://gnr8-worker.vercel.app/health` HTTP `200`, `ok=true`, `service=gnr8-worker`, `status=ready`.
+- Browser screenshot: `/private/tmp/gnr8-cutline64-chs-public-screenshot.png`; rendered page visually nonblank with CHS header/hero visible and cookie/privacy banner present.
+- Forbidden mutation confirmation: no rollback, no second shadow-publish, no active pointer mutation, no runtime publish mutation, no provider/DNS/domain/billing/Stripe/Openprovider mutation, no migration, no env mutation, no app/runtime code change, no manual deploy, no broad refactor, no broad test sweep.
+
+Closeout: `docs/product/gnr8-single-site-mvp-cutline-64-post-shadow-publish-public-verification-closeout.md`.
+
 ## Stop Criteria
 
 Stop immediately if:
