@@ -363,6 +363,42 @@ function model(overrides: Partial<SingleSitePublishOperatorReadonlyProjection> =
       handoffWatermark: "handoff-watermark-panel",
       gateInputWatermark: attempt.gateInputWatermark,
     },
+    internalMvpAcceptance: {
+      visible: false,
+      boundary: DERIVED_BOUNDARY,
+      source: "bounded_chs_single_site_rehearsal_evidence",
+      status: "Internal MVP evidence incomplete",
+      finalAcceptedStatus: "one_site_internal_mvp_rehearsal_accepted_pending_20_site_validation",
+      productStatus: "internal_single_site_mvp_accepted",
+      clientName: "Glazura Glizon",
+      clientId: "e61d1982-068f-4d84-bb6f-c3fbfc93f39b",
+      siteHost: "chs.si",
+      publicUrl: "https://www.chs.si/",
+      activePointer: "unknown",
+      candidateStatus: "unknown",
+      artifactStage: "unknown",
+      dryRun: "unknown",
+      shadowPublish: "unknown",
+      limitations: "unknown",
+      nextPhase: "optional 20-site validation",
+      safeRefs: {
+        migrationId: "682a09fd-8fd5-4f73-93b8-54f5d4067c63",
+        ownershipSiteId: "a03fcb5b-6ad9-4b19-a682-4c06f998881a",
+        runtimeSiteId: "site_57d9665a3a5867edf6ef",
+        candidateSiteVersionRef: "gnr8:gnr8_runtime_site_versions:a3f9493e-9da4-4ef8-8608-154fe6d25a0f",
+        runtimeArtifactRef: "gnr8:gnr8_runtime_artifacts:1f80138a-39c2-4210-ac61-16200e5a2254",
+        shadowPublishActionId: "6c44f0ac-5546-448b-9e04-a07aa179f92f",
+      },
+      evidence: {
+        acceptedContextMatched: false,
+        activePointerTargetsCandidate: false,
+        candidatePublished: false,
+        artifactProduction: false,
+        dryRunPassed: false,
+        shadowPublishCompleted: false,
+        limitationsAccepted: false,
+      },
+    },
     sourceBoundaries: {
       launchReadiness: SOURCE_BOUNDARY,
       publishActivationRequest: SOURCE_BOUNDARY,
@@ -708,6 +744,50 @@ test("operator panel renders dense read-only status without mutation buttons", (
   assert.equal(html.includes("Retry"), false);
   assert.equal(html.includes("Rollback"), false);
   assert.equal(html.includes("Shadow-Publish</button>"), false);
+});
+
+test("operator panel renders accepted CHS internal MVP rehearsal summary read-only", () => {
+  const accepted = model({
+    internalMvpAcceptance: {
+      ...model().internalMvpAcceptance,
+      visible: true,
+      status: "Internal single-site MVP accepted",
+      activePointer: "live",
+      candidateStatus: "PUBLISHED",
+      artifactStage: "production",
+      dryRun: "passed",
+      shadowPublish: "completed",
+      limitations: "accepted with limitations",
+      evidence: {
+        acceptedContextMatched: true,
+        activePointerTargetsCandidate: true,
+        candidatePublished: true,
+        artifactProduction: true,
+        dryRunPassed: true,
+        shadowPublishCompleted: true,
+        limitationsAccepted: true,
+      },
+    },
+  });
+  const html = renderToStaticMarkup(<SingleSitePublishOperatorPanel model={accepted} />);
+
+  assert.equal(html.includes("Internal MVP Rehearsal"), true);
+  assert.equal(html.includes("Internal single-site MVP accepted"), true);
+  assert.equal(html.includes("chs.si"), true);
+  assert.equal(html.includes("https://www.chs.si/"), true);
+  assert.equal(html.includes("Glazura Glizon"), true);
+  assert.equal(html.includes("active pointer live"), true);
+  assert.equal(html.includes("PUBLISHED"), true);
+  assert.equal(html.includes("production"), true);
+  assert.equal(html.includes("passed"), true);
+  assert.equal(html.includes("completed"), true);
+  assert.equal(html.includes("accepted with limitations"), true);
+  assert.equal(html.includes("optional 20-site validation"), true);
+  assert.equal(html.includes("bounded_chs_single_site_rehearsal_evidence"), true);
+  assert.equal(html.includes("6c44f0ac-5546-448b-9e04-a07aa179f92f"), true);
+  assert.equal(html.includes("<button"), false);
+  assert.equal(html.includes("<form"), false);
+  assert.equal(html.includes("method=&quot;POST&quot;"), false);
 });
 
 test("operator panel renders snapshot diff no-baseline state safely", () => {

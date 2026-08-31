@@ -459,6 +459,61 @@ function statusBadges(values: readonly string[], empty: string) {
   return <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>{values.map((value) => badge(value, statusTone(value)))}</span>;
 }
 
+function internalMvpAcceptanceSection(model: SingleSitePublishOperatorReadonlyProjection) {
+  const acceptance = model.internalMvpAcceptance;
+  if (!acceptance.visible) return null;
+
+  return section(
+    "Internal MVP Rehearsal",
+    <div style={{ display: "grid", gap: 12, fontSize: 13 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {badge(acceptance.productStatus, acceptance.status === "Internal single-site MVP accepted" ? "good" : "warn")}
+        {badge(acceptance.activePointer === "live" ? "active_pointer_live" : `active_pointer_${acceptance.activePointer}`, acceptance.activePointer === "live" ? "good" : "warn")}
+        {badge(`candidate_${acceptance.candidateStatus}`, statusTone(acceptance.candidateStatus))}
+        {badge(`artifact_${acceptance.artifactStage}`, statusTone(acceptance.artifactStage))}
+        {badge(`dry_run_${acceptance.dryRun}`, acceptance.dryRun === "passed" ? "good" : "warn")}
+        {badge(`shadow_publish_${acceptance.shadowPublish}`, acceptance.shadowPublish === "completed" ? "good" : "warn")}
+      </div>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+        {field("Status", acceptance.status)}
+        {field("Site", acceptance.siteHost)}
+        {field("Client", acceptance.clientName)}
+        {field("Active Pointer", acceptance.activePointer)}
+        {field("Candidate Status", acceptance.candidateStatus)}
+        {field("Artifact Stage", acceptance.artifactStage)}
+        {field("Dry-Run", acceptance.dryRun)}
+        {field("Shadow-Publish", acceptance.shadowPublish)}
+        {field("Limitations", acceptance.limitations)}
+        {field("Next Phase", acceptance.nextPhase)}
+      </dl>
+      <div>
+        <strong>Public URL:</strong>{" "}
+        <a href={acceptance.publicUrl} target="_blank" rel="noreferrer" style={{ color: "#0f766e", fontWeight: 800 }}>
+          {acceptance.publicUrl}
+        </a>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Evidence checks:</strong>
+          {codeList(
+            Object.entries(acceptance.evidence)
+              .filter(([, value]) => value)
+              .map(([key]) => key),
+            "None",
+          )}
+        </div>
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          <strong>Safe refs:</strong>
+          {codeList(Object.values(acceptance.safeRefs))}
+        </div>
+      </div>
+      <div style={{ color: "#475569" }}>
+        Boundary: {boundaryText(acceptance.boundary)}; source: <code>{acceptance.source}</code>; final status: <code>{acceptance.finalAcceptedStatus}</code>
+      </div>
+    </div>,
+  );
+}
+
 function attemptSummary(title: string, attempt: SingleSitePublishOperatorActionAttemptProjection | null) {
   if (!attempt) {
     return (
@@ -724,6 +779,8 @@ export function SingleSitePublishOperatorPanel({ model }: Props) {
           </p>,
         )
       ) : null}
+
+      {internalMvpAcceptanceSection(model)}
 
       {section(
         "Display Filters",

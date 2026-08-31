@@ -18,6 +18,24 @@ export const SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_VERSION =
 export const SINGLE_SITE_PUBLISH_OPERATOR_DIAGNOSTIC_SNAPSHOT_DIFF_VERSION =
   "mvp-63-single-site-publish-operator-readonly-snapshot-diff:v1" as const;
 
+export const SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE = {
+  clientName: "Glazura Glizon",
+  clientId: "e61d1982-068f-4d84-bb6f-c3fbfc93f39b",
+  agencyId: "6a09c2d9-12c3-4c19-a466-0c29ae2f723e",
+  ownershipSiteId: "a03fcb5b-6ad9-4b19-a682-4c06f998881a",
+  migrationId: "682a09fd-8fd5-4f73-93b8-54f5d4067c63",
+  runtimeSiteId: "site_57d9665a3a5867edf6ef",
+  siteHost: "chs.si",
+  publicUrl: "https://www.chs.si/",
+  candidateSiteVersionId: "a3f9493e-9da4-4ef8-8608-154fe6d25a0f",
+  runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+  shadowPublishActionId: "6c44f0ac-5546-448b-9e04-a07aa179f92f",
+  finalAcceptedStatus: "one_site_internal_mvp_rehearsal_accepted_pending_20_site_validation",
+  productStatus: "internal_single_site_mvp_accepted",
+  displayStatus: "Internal single-site MVP accepted",
+  nextPhase: "optional 20-site validation",
+} as const;
+
 export const SINGLE_SITE_PUBLISH_OPERATOR_READONLY_PANEL_FLAGS = {
   readOnly: true,
   publishes: false,
@@ -119,6 +137,10 @@ export type SingleSitePublishOperatorSourceSnapshot = {
   gatePolicyEvaluation?: SingleSitePublishOperatorSourceRow | null;
   conflictingNewerGateAttempts?: SingleSitePublishOperatorSourceRow[];
   publishTarget?: SingleSitePublishOperatorSourceRow | null;
+  runtimeSite?: SingleSitePublishOperatorSourceRow | null;
+  runtimeSiteVersion?: SingleSitePublishOperatorSourceRow | null;
+  runtimeArtifact?: SingleSitePublishOperatorSourceRow | null;
+  runtimeActivePointer?: SingleSitePublishOperatorSourceRow | null;
   readFailureCodes?: string[];
 };
 
@@ -489,6 +511,42 @@ export type SingleSitePublishOperatorReadonlyProjection = {
     gateResult: { ref: string | null; status: string };
     handoffWatermark: string | null;
     gateInputWatermark: string | null;
+  };
+  internalMvpAcceptance: {
+    visible: boolean;
+    boundary: SingleSitePublishOperatorSourceBoundary;
+    source: "bounded_chs_single_site_rehearsal_evidence";
+    status: string;
+    finalAcceptedStatus: string;
+    productStatus: string;
+    clientName: string;
+    clientId: string;
+    siteHost: string;
+    publicUrl: string;
+    activePointer: "live" | "not_live" | "unknown";
+    candidateStatus: string;
+    artifactStage: string;
+    dryRun: "passed" | "not_passed" | "unknown";
+    shadowPublish: "completed" | "not_completed" | "unknown";
+    limitations: "accepted with limitations" | "not accepted" | "unknown";
+    nextPhase: string;
+    safeRefs: {
+      migrationId: string;
+      ownershipSiteId: string;
+      runtimeSiteId: string;
+      candidateSiteVersionRef: string;
+      runtimeArtifactRef: string;
+      shadowPublishActionId: string;
+    };
+    evidence: {
+      acceptedContextMatched: boolean;
+      activePointerTargetsCandidate: boolean;
+      candidatePublished: boolean;
+      artifactProduction: boolean;
+      dryRunPassed: boolean;
+      shadowPublishCompleted: boolean;
+      limitationsAccepted: boolean;
+    };
   };
   sourceBoundaries: {
     launchReadiness: SingleSitePublishOperatorSourceBoundary;
@@ -2509,6 +2567,104 @@ function sourcePublishContext(
   };
 }
 
+function isAcceptedMvpId(value: string | null | undefined, expected: string): boolean {
+  const normalized = text(value);
+  return normalized === expected || sourceId(normalized) === expected;
+}
+
+function deriveInternalMvpAcceptance(input: {
+  lookup: SingleSitePublishOperatorReadonlyProjection["lookup"];
+  identity: SingleSitePublishOperatorReadonlyProjection["identity"];
+  publishContext: SingleSitePublishOperatorReadonlyProjection["publishContext"];
+  launchReadiness: SingleSitePublishOperatorReadonlyProjection["launchReadiness"];
+  publishActivationDecision: SingleSitePublishOperatorReadonlyProjection["publishActivationDecision"];
+  latestDryRun: SingleSitePublishOperatorActionAttemptProjection | null;
+  latestShadowPublish: SingleSitePublishOperatorActionAttemptProjection | null;
+  sourceSnapshot?: SingleSitePublishOperatorSourceSnapshot | null;
+}): SingleSitePublishOperatorReadonlyProjection["internalMvpAcceptance"] {
+  const evidence = SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE;
+  const runtimeSiteId =
+    rowText(input.sourceSnapshot?.runtimeSite, "id") ??
+    rowText(input.sourceSnapshot?.runtimeSiteVersion, "site_id") ??
+    rowText(input.sourceSnapshot?.runtimeArtifact, "site_id") ??
+    rowText(input.sourceSnapshot?.runtimeActivePointer, "site_id") ??
+    null;
+  const candidateId = sourceId(input.publishContext.candidateSiteVersionRef);
+  const artifactId = sourceId(input.publishContext.runtimeArtifactRef);
+  const acceptedContextMatched =
+    isAcceptedMvpId(input.lookup.migrationId ?? input.identity.migrationId, evidence.migrationId) &&
+    (isAcceptedMvpId(input.identity.clientId, evidence.clientId) || !input.identity.clientId) &&
+    (
+      isAcceptedMvpId(input.identity.siteId, evidence.ownershipSiteId) ||
+      isAcceptedMvpId(input.lookup.siteId, evidence.ownershipSiteId) ||
+      isAcceptedMvpId(runtimeSiteId, evidence.runtimeSiteId) ||
+      !input.identity.siteId
+    ) &&
+    isAcceptedMvpId(candidateId, evidence.candidateSiteVersionId) &&
+    isAcceptedMvpId(artifactId, evidence.runtimeArtifactId);
+  const activePointerTargetsCandidate =
+    isAcceptedMvpId(rowText(input.sourceSnapshot?.runtimeActivePointer, "active_site_version_id"), evidence.candidateSiteVersionId) &&
+    isAcceptedMvpId(rowText(input.sourceSnapshot?.runtimeActivePointer, "active_artifact_id"), evidence.runtimeArtifactId);
+  const candidatePublished = rowText(input.sourceSnapshot?.runtimeSiteVersion, "state") === "PUBLISHED";
+  const artifactProduction = rowText(input.sourceSnapshot?.runtimeArtifact, "publish_stage") === "production";
+  const dryRunPassed = input.latestDryRun?.status === "dry_run_completed" && input.latestDryRun.blockerCodes.length === 0;
+  const shadowPublishCompleted =
+    input.latestShadowPublish?.status === "shadow_publish_completed" &&
+    (input.latestShadowPublish.actionId === evidence.shadowPublishActionId ||
+      (isAcceptedMvpId(input.latestShadowPublish.candidateSiteVersionRef, evidence.candidateSiteVersionId) &&
+        isAcceptedMvpId(input.latestShadowPublish.runtimeArtifactRef, evidence.runtimeArtifactId)));
+  const limitationsAccepted =
+    input.launchReadiness.flags.readyWithLimitations ||
+    input.publishActivationDecision.grantedWithLimitations ||
+    input.launchReadiness.acceptedLimitations.length > 0 ||
+    input.publishActivationDecision.limitations.length > 0;
+  const allAcceptedEvidence =
+    acceptedContextMatched &&
+    activePointerTargetsCandidate &&
+    candidatePublished &&
+    artifactProduction &&
+    dryRunPassed &&
+    shadowPublishCompleted &&
+    limitationsAccepted;
+
+  return {
+    visible: acceptedContextMatched || input.lookup.migrationId === evidence.migrationId,
+    boundary: DERIVED_ONLY_BOUNDARY,
+    source: "bounded_chs_single_site_rehearsal_evidence",
+    status: allAcceptedEvidence ? evidence.displayStatus : "Internal MVP evidence incomplete",
+    finalAcceptedStatus: evidence.finalAcceptedStatus,
+    productStatus: evidence.productStatus,
+    clientName: evidence.clientName,
+    clientId: evidence.clientId,
+    siteHost: evidence.siteHost,
+    publicUrl: evidence.publicUrl,
+    activePointer: activePointerTargetsCandidate ? "live" : input.sourceSnapshot?.runtimeActivePointer ? "not_live" : "unknown",
+    candidateStatus: rowText(input.sourceSnapshot?.runtimeSiteVersion, "state") ?? "unknown",
+    artifactStage: rowText(input.sourceSnapshot?.runtimeArtifact, "publish_stage") ?? "unknown",
+    dryRun: dryRunPassed ? "passed" : input.latestDryRun ? "not_passed" : "unknown",
+    shadowPublish: shadowPublishCompleted ? "completed" : input.latestShadowPublish ? "not_completed" : "unknown",
+    limitations: limitationsAccepted ? "accepted with limitations" : acceptedContextMatched ? "not accepted" : "unknown",
+    nextPhase: evidence.nextPhase,
+    safeRefs: {
+      migrationId: evidence.migrationId,
+      ownershipSiteId: evidence.ownershipSiteId,
+      runtimeSiteId: evidence.runtimeSiteId,
+      candidateSiteVersionRef: `gnr8:gnr8_runtime_site_versions:${evidence.candidateSiteVersionId}`,
+      runtimeArtifactRef: `gnr8:gnr8_runtime_artifacts:${evidence.runtimeArtifactId}`,
+      shadowPublishActionId: evidence.shadowPublishActionId,
+    },
+    evidence: {
+      acceptedContextMatched,
+      activePointerTargetsCandidate,
+      candidatePublished,
+      artifactProduction,
+      dryRunPassed,
+      shadowPublishCompleted,
+      limitationsAccepted,
+    },
+  };
+}
+
 function launchReadinessSection(snapshot: SingleSitePublishOperatorSourceSnapshot | null | undefined): SingleSitePublishOperatorReadonlyProjection["launchReadiness"] {
   const record = snapshot?.launchReadinessRecord ?? null;
   const evidence = snapshot?.launchReadinessEvidencePackage ?? null;
@@ -2890,6 +3046,16 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
   const gateHandoffEvaluation = gateSection(input.sourceSnapshot, publishActivationDecision, launchReadiness);
   const metadataResolver = metadataResolverSection(input.sourceSnapshot, launchReadiness, publishActivationRequest, publishActivationDecision, gateHandoffEvaluation, publishContext);
   const operatorAudit = operatorAuditSection(attempts, latestDryRun, latestShadowPublish, input.events ?? []);
+  const internalMvpAcceptance = deriveInternalMvpAcceptance({
+    lookup: { migrationId, siteId, candidateSiteVersionRef },
+    identity,
+    publishContext,
+    launchReadiness,
+    publishActivationDecision,
+    latestDryRun,
+    latestShadowPublish,
+    sourceSnapshot: input.sourceSnapshot,
+  });
   const sourceCompleteMetadata = metadataResolver.completenessStatus === "complete";
   const auditCompleteMetadata = latestCompleteMetadata(primary);
   const completeMetadata = sourceCompleteMetadata || auditCompleteMetadata;
@@ -2963,6 +3129,7 @@ export function buildSingleSitePublishOperatorReadonlyProjection(
       handoffWatermark: gateHandoffEvaluation.handoffWatermark ?? primary?.handoffWatermark ?? null,
       gateInputWatermark: gateHandoffEvaluation.gateInputWatermark ?? primary?.gateInputWatermark ?? null,
     },
+    internalMvpAcceptance,
     sourceBoundaries: {
       launchReadiness: SOURCE_OWNED_READ_BOUNDARY,
       publishActivationRequest: SOURCE_OWNED_READ_BOUNDARY,
@@ -3331,6 +3498,53 @@ export class SingleSitePublishOperatorReadonlyProjectionRepository {
     const publishTarget = publishTargetId
       ? (await client.query("select * from public.gnr8_publish_targets where id = $1::text limit 1", [publishTargetId])).rows[0] ?? null
       : null;
+    const runtimeSiteVersion = isUuid(candidateId)
+      ? (await client.query(
+          `
+            select id::text as id, site_id::text as site_id, state::text as state, artifact_id::text as artifact_id,
+              version_no::int as version_no, renderer_compatibility_version::text as renderer_compatibility_version,
+              updated_at::text as updated_at, created_at::text as created_at
+            from public.gnr8_runtime_site_versions
+            where id = $1::uuid
+            limit 1
+          `,
+          [candidateId],
+        )).rows[0] ?? null
+      : null;
+    const artifactId = sourceId(text(primary?.runtime_artifact_ref)) ?? rowText(runtimeSiteVersion, "artifact_id");
+    const runtimeArtifact = isUuid(artifactId)
+      ? (await client.query(
+          `
+            select id::text as id, site_id::text as site_id, site_version_id::text as site_version_id,
+              renderer_compatibility_version::text as renderer_compatibility_version, bundle_sha256::text as bundle_sha256,
+              publish_stage::text as publish_stage, shadow_restricted::boolean as shadow_restricted,
+              created_at::text as created_at
+            from public.gnr8_runtime_artifacts
+            where id = $1::uuid
+            limit 1
+          `,
+          [artifactId],
+        )).rows[0] ?? null
+      : null;
+    const runtimeSiteId =
+      rowText(runtimeSiteVersion, "site_id") ??
+      rowText(runtimeArtifact, "site_id") ??
+      (text(primary?.site_id)?.startsWith("site_") ? text(primary?.site_id) : null);
+    const runtimeSite = runtimeSiteId
+      ? (await client.query("select id::text as id, source_host::text as source_host, created_at::text as created_at from public.gnr8_runtime_sites where id = $1::text limit 1", [runtimeSiteId])).rows[0] ?? null
+      : null;
+    const runtimeActivePointer = runtimeSiteId
+      ? (await client.query(
+          `
+            select site_id::text as site_id, active_site_version_id::text as active_site_version_id,
+              active_artifact_id::text as active_artifact_id, updated_at::text as updated_at
+            from public.gnr8_runtime_active_pointers
+            where site_id = $1::text
+            limit 1
+          `,
+          [runtimeSiteId],
+        )).rows[0] ?? null
+      : null;
 
     return {
       transactionCapturedAt,
@@ -3349,6 +3563,10 @@ export class SingleSitePublishOperatorReadonlyProjectionRepository {
       gatePolicyEvaluation,
       conflictingNewerGateAttempts,
       publishTarget,
+      runtimeSite,
+      runtimeSiteVersion,
+      runtimeArtifact,
+      runtimeActivePointer,
     };
   }
 }

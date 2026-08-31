@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE,
   SingleSitePublishOperatorReadonlyProjectionRepository,
   buildSingleSitePublishOperatorDiagnosticSnapshot,
   buildSingleSitePublishOperatorDiagnosticSnapshotDiff,
@@ -126,6 +127,95 @@ test("read-only projection maps latest dry-run and shadow-publish audit rows saf
   assert.equal(model.flags.runtimeMutation, false);
   assert.equal(model.flags.enforcementApplied, false);
   assert.equal(model.nextAction, "no_action");
+});
+
+test("projection derives accepted CHS internal MVP rehearsal from read-only evidence", () => {
+  const accepted = SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE;
+  const dryRun = action({
+    id: "11111111-1111-4111-8111-111111111111",
+    tenant_id: "tenant-chs",
+    client_id: accepted.clientId,
+    site_id: accepted.ownershipSiteId,
+    migration_id: accepted.migrationId,
+    candidate_site_version_ref: `gnr8:gnr8_runtime_site_versions:${accepted.candidateSiteVersionId}`,
+    runtime_artifact_ref: `gnr8:gnr8_runtime_artifacts:${accepted.runtimeArtifactId}`,
+    status: "dry_run_completed",
+    result_summary_json: {
+      resolverStatus: "complete",
+      wrapperDryRunStatus: "dry_run_ready",
+      blockerCodes: [],
+      limitationCodes: ["accepted_with_limitations"],
+      publishes: false,
+      runtimeMutation: false,
+      blockingEnforcementApplied: false,
+    },
+  });
+  const shadow = action({
+    ...dryRun,
+    id: accepted.shadowPublishActionId,
+    mode: "shadow_publish",
+    route_action_source: "api/gnr8/admin/single-site-publish/shadow-publish",
+    status: "shadow_publish_completed",
+    result_summary_json: {
+      resolverStatus: "complete",
+      routeStatus: "shadow_publish_completed",
+      wrapperStatus: "published_via_existing_orchestrator",
+      publishOrchestratorStatus: "called",
+      blockerCodes: [],
+      limitationCodes: ["accepted_with_limitations"],
+      publishes: false,
+      runtimeMutation: false,
+      blockingEnforcementApplied: false,
+      publishMayHaveExecuted: true,
+    },
+    updated_at: "2026-08-28T08:10:01.000Z",
+  });
+
+  const model = buildSingleSitePublishOperatorReadonlyProjection({
+    lookup: { migrationId: accepted.migrationId },
+    actions: [dryRun, shadow],
+    sourceSnapshot: {
+      launchReadinessRecord: {
+        id: "22222222-2222-4222-8222-222222222222",
+        tenant_id: "tenant-chs",
+        client_id: accepted.clientId,
+        site_id: accepted.ownershipSiteId,
+        migration_id: accepted.migrationId,
+        status: "ready_with_limitations",
+        freshness_status: "fresh",
+        improved_candidate_site_version_ref: `gnr8:gnr8_runtime_site_versions:${accepted.candidateSiteVersionId}`,
+        improved_runtime_artifact_ref: `gnr8:gnr8_runtime_artifacts:${accepted.runtimeArtifactId}`,
+        limitation_summary_json: ["accepted_with_limitations"],
+      },
+      launchReadinessEvidencePackage: { id: "33333333-3333-4333-8333-333333333333", status: "created" },
+      publishActivationRequest: { id: "44444444-4444-4444-8444-444444444444", status: "requested", scope: "publish_activation", action_key: "publish.activation", subject_type: "site_version", subject_id: accepted.candidateSiteVersionId },
+      publishActivationRequestEvidenceLinks: [{ evidence_package_id: "33333333-3333-4333-8333-333333333333" }],
+      publishActivationDecision: { id: "55555555-5555-4555-8555-555555555555", status: "granted_with_limitations", limitation_summary_json: ["accepted_with_limitations"] },
+      publishActivationDecisionEvidenceLinks: [{ evidence_package_id: "33333333-3333-4333-8333-333333333333" }],
+      gateAttempt: { id: "66666666-6666-4666-8666-666666666666", gate_result: "allowed", causation_id: `mvp44:single-site-publish-activation-gate-input:${"c".repeat(64)}` },
+      publishTarget: { id: "production", publish_stage: "production", environment: "production" },
+      runtimeSite: { id: accepted.runtimeSiteId, source_host: accepted.publicUrl },
+      runtimeSiteVersion: { id: accepted.candidateSiteVersionId, site_id: accepted.runtimeSiteId, state: "PUBLISHED", artifact_id: accepted.runtimeArtifactId },
+      runtimeArtifact: { id: accepted.runtimeArtifactId, site_id: accepted.runtimeSiteId, site_version_id: accepted.candidateSiteVersionId, publish_stage: "production" },
+      runtimeActivePointer: { site_id: accepted.runtimeSiteId, active_site_version_id: accepted.candidateSiteVersionId, active_artifact_id: accepted.runtimeArtifactId },
+    },
+    generatedAt: "2026-08-28T08:12:00.000Z",
+  });
+
+  assert.equal(model.internalMvpAcceptance.visible, true);
+  assert.equal(model.internalMvpAcceptance.status, "Internal single-site MVP accepted");
+  assert.equal(model.internalMvpAcceptance.siteHost, "chs.si");
+  assert.equal(model.internalMvpAcceptance.publicUrl, "https://www.chs.si/");
+  assert.equal(model.internalMvpAcceptance.activePointer, "live");
+  assert.equal(model.internalMvpAcceptance.candidateStatus, "PUBLISHED");
+  assert.equal(model.internalMvpAcceptance.artifactStage, "production");
+  assert.equal(model.internalMvpAcceptance.dryRun, "passed");
+  assert.equal(model.internalMvpAcceptance.shadowPublish, "completed");
+  assert.equal(model.internalMvpAcceptance.limitations, "accepted with limitations");
+  assert.equal(model.internalMvpAcceptance.nextPhase, "optional 20-site validation");
+  assert.equal(model.internalMvpAcceptance.evidence.activePointerTargetsCandidate, true);
+  assert.equal(model.flags.publishes, false);
+  assert.equal(model.flags.runtimeMutation, false);
 });
 
 test("projection redacts unsafe diagnostics instead of surfacing raw internals", () => {
