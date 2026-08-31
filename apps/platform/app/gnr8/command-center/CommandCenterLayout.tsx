@@ -13,13 +13,18 @@ type Props = {
   children: ReactNode;
 };
 
-type TabKey = "overview" | "ops-inbox" | "sites" | "hosting" | "single-site-publish" | "migration-batches" | "agencies";
+type TabKey = "overview" | "ops-inbox" | "sites" | "hosting" | "single-site-studio" | "single-site-publish" | "migration-batches" | "agencies";
 
 const TABS: WorkspaceTabInput[] = [
   { key: "overview", href: "/gnr8/command-center", label: "Overview" },
   { key: "ops-inbox", href: "/gnr8/command-center/ops-inbox", label: "Ops Inbox" },
   { key: "sites", href: "/gnr8/command-center/sites", label: "Sites" },
   { key: "hosting", href: "/gnr8/command-center/hosting", label: "Hosting" },
+  {
+    key: "single-site-studio",
+    href: "/gnr8/command-center/single-site-studio?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63",
+    label: "Single-Site Studio",
+  },
   { key: "single-site-publish", href: "/gnr8/command-center/single-site-publish", label: "Single-Site Publish" },
   { key: "migration-batches", href: "/gnr8/command-center/migration-batches", label: "Migration Batches" },
   { key: "agencies", href: "/gnr8/command-center/agencies", label: "Agencies" },
@@ -74,6 +79,7 @@ function resolveActiveTab(pathname: string): TabKey {
   if (pathname.startsWith("/gnr8/command-center/ops-inbox")) return "ops-inbox";
   if (pathname.startsWith("/gnr8/command-center/sites")) return "sites";
   if (pathname.startsWith("/gnr8/command-center/hosting")) return "hosting";
+  if (pathname.startsWith("/gnr8/command-center/single-site-studio")) return "single-site-studio";
   if (pathname.startsWith("/gnr8/command-center/single-site-publish")) return "single-site-publish";
   if (pathname.startsWith("/gnr8/command-center/migration-batches")) return "migration-batches";
   if (pathname.startsWith("/gnr8/command-center/agencies")) return "agencies";
@@ -95,6 +101,10 @@ function buildCommandCenterBreadcrumbs(activeTab: TabKey): WorkspaceBreadcrumbIt
 
   if (activeTab === "hosting") {
     return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Hosting" }];
+  }
+
+  if (activeTab === "single-site-studio") {
+    return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Single-Site Studio" }];
   }
 
   if (activeTab === "single-site-publish") {
@@ -164,6 +174,12 @@ export default function CommandCenterLayout(props: Props) {
           },
           { id: "route-command-center-sites", label: "Command Center Sites", href: "/gnr8/command-center/sites", sublabel: "Key route" },
           { id: "route-command-center-hosting", label: "Command Center Hosting", href: "/gnr8/command-center/hosting", sublabel: "Key route" },
+          {
+            id: "route-command-center-single-site-studio",
+            label: "Command Center Single-Site Studio",
+            href: "/gnr8/command-center/single-site-studio?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63",
+            sublabel: "Key route",
+          },
           {
             id: "route-command-center-single-site-publish",
             label: "Command Center Single-Site Publish",
