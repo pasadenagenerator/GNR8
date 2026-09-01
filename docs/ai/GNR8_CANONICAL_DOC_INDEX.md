@@ -1463,6 +1463,19 @@ CUTLINE-64 post-shadow-publish public verification accepts the one-site internal
 - `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
 - `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
 
+## AIRSHIP-1 Single-Site Editor Foundation
+
+Canonical Airship single-site editor foundation record:
+- `docs/product/gnr8-airship-single-site-editor-foundation-closeout.md`
+
+Canonical implementation:
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.ts`
+- `apps/platform/app/gnr8/airship/single-site/page.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.test.tsx`
+
+Canonical result: Airship exposes the accepted `chs.si` MVP rehearsal as a read-only product-facing editor foundation at `/gnr8/airship/single-site?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`, with imported-site metadata, source/live links, original clone preview, current improved/published preview, AI improvement status, and a structured AI improvement draft panel. The current accepted MVP has no deterministic editable AI content deltas, so the panel states `No concrete editable AI changes have been generated yet.` and shows the accepted recommendation/limitation source material. No production content mutation, source capture, publish, dry-run, shadow-publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, migration, env change, or broad refactor was introduced. Final status is `airship_single_site_editor_foundation_visible`.
+
 ## Secondary
 
 - `SYSTEM.md`
