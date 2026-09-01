@@ -827,9 +827,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     if (rawDbOptions) rawDbReadCount += 1;
     const agencyId = await previewRouteDependencies.resolveAgencyIdForSiteVersion(siteVersionId, rawDbOptions);
     if (!agencyId) {
-      return (response = new Response(JSON.stringify({ error: "Unable to resolve agency scope for site version." }), {
+      const html = toPreviewFallbackHtml({
+        statusTitle: "Internal Preview Unavailable",
+        message: "Unable to resolve agency scope for this site version.",
+        details: [
+          `site_version_id=${siteVersionId}`,
+          "The preview route did not find canonical ownership or sibling runtime-site ownership for this version.",
+        ],
+      });
+      return (response = new Response(html, {
         status: 403,
-        headers: { "content-type": "application/json; charset=utf-8" },
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       }));
     }
     await previewRouteDependencies.requireAgencyActionContext({

@@ -56,6 +56,7 @@ function section(title: string, children: ReactNode) {
 }
 
 function previewCard(preview: SingleSiteStudioPreviewState) {
+  const statusLabel = preview.available ? "internal_preview" : "internal_preview_unavailable";
   return (
     <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -65,7 +66,7 @@ function previewCard(preview: SingleSiteStudioPreviewState) {
             {preview.siteVersionId ? `Runtime site version ${preview.siteVersionId}` : "No runtime site version ref"}
           </div>
         </div>
-        {statusBadge(preview.available ? "preview_route_available" : "preview_route_unavailable", preview.available ? "good" : "warn")}
+        {statusBadge(statusLabel, preview.available ? "good" : "warn")}
       </div>
       {preview.available && preview.route ? (
         <div style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#fff", minHeight: 380 }}>
@@ -78,7 +79,7 @@ function previewCard(preview: SingleSiteStudioPreviewState) {
         </div>
       ) : (
         <div style={{ border: "1px solid #fcd34d", borderRadius: 8, background: "#fffbeb", padding: 12, color: "#92400e", fontSize: 13 }}>
-          <strong>Preview route unavailable.</strong> {preview.unavailableReason}
+          <strong>Internal preview unavailable.</strong> {preview.unavailableReason}
         </div>
       )}
       <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.45 }}>{preview.authNote}</div>
@@ -160,7 +161,7 @@ export function SingleSiteStudio({ model }: Props) {
           )}
           {fact("MVP status", statusBadge(model.summary.mvpStatus, summaryTone))}
           {fact(
-            "Live site",
+            "Live published site",
             <a href={model.summary.liveSiteUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
               {model.summary.liveSiteUrl}
             </a>,
@@ -168,6 +169,9 @@ export function SingleSiteStudio({ model }: Props) {
           {fact("Active pointer", statusBadge(model.summary.activePointer, summaryTone))}
           {fact("Published candidate", statusBadge(model.summary.publishedCandidate, summaryTone))}
         </dl>
+        <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, color: "#475569", fontSize: 13, lineHeight: 1.45 }}>
+          Live site is the published CHS production domain. Original clone and improved candidate are superadmin-only internal GNR8 previews. This MVP proved the governed workflow; meaningful AI content improvement remains a next product phase.
+        </div>
       </section>
 
       <section style={{ display: "grid", gap: 12 }}>

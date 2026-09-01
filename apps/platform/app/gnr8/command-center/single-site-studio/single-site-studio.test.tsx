@@ -13,11 +13,13 @@ const { renderToStaticMarkup } = ReactDomServer;
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const ORIGINAL_CLONE_VERSION_ID = "6b172a5b-200e-471c-9599-5dc70f04ea53";
 const IMPROVED_CANDIDATE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
+const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const COMPONENT_FILE = new URL("./single-site-studio.tsx", import.meta.url);
 const LAYOUT_FILE = new URL("../layout.tsx", import.meta.url);
 const COMMAND_CENTER_LAYOUT_FILE = new URL("../CommandCenterLayout.tsx", import.meta.url);
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/single-site-studio-readonly-projection.ts", import.meta.url);
+const INTERNAL_PREVIEW_ROUTE_FILE = new URL("../../../../app/api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts", import.meta.url);
 
 function studioModel(): SingleSiteStudioReadonlyProjection {
   return {
@@ -57,7 +59,7 @@ function studioModel(): SingleSiteStudioReadonlyProjection {
         label: "Original clone preview",
         siteVersionId: ORIGINAL_CLONE_VERSION_ID,
         runtimeArtifactId: "929106cd-fa19-47eb-9582-ce6931d0e370",
-        route: `/api/gnr8/runtime/versions/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`,
+        route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`,
         mode: "transformed",
         available: true,
         unavailableReason: null,
@@ -67,7 +69,7 @@ function studioModel(): SingleSiteStudioReadonlyProjection {
         label: "Improved candidate preview",
         siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
         runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
-        route: `/api/gnr8/runtime/versions/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`,
+        route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`,
         mode: "transformed",
         available: true,
         unavailableReason: null,
@@ -78,15 +80,15 @@ function studioModel(): SingleSiteStudioReadonlyProjection {
       { label: "Original imported site", status: "source captured", detail: "https://www.chs.si/", href: "https://www.chs.si/" },
       {
         label: "Generated clone",
-        status: "accepted",
+        status: "internal preview",
         detail: `Runtime site version ${ORIGINAL_CLONE_VERSION_ID}`,
-        href: `/api/gnr8/runtime/versions/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`,
+        href: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`,
       },
       {
         label: "Improved candidate",
-        status: "PUBLISHED",
+        status: "internal preview",
         detail: `Runtime site version ${IMPROVED_CANDIDATE_VERSION_ID}`,
-        href: `/api/gnr8/runtime/versions/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`,
+        href: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`,
       },
       { label: "Live published version", status: "live", detail: "https://www.chs.si/", href: "https://www.chs.si/" },
     ],
@@ -185,9 +187,33 @@ test("single-site studio embeds authenticated runtime preview endpoints when ref
   const html = renderToStaticMarkup(<SingleSiteStudio model={studioModel()} />);
 
   assert.equal(html.includes("Original clone preview"), true);
-  assert.equal(html.includes(`/api/gnr8/runtime/versions/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`), true);
+  assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes("Improved candidate preview"), true);
-  assert.equal(html.includes(`/api/gnr8/runtime/versions/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`), true);
+  assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`), true);
+});
+
+test("single-site studio never uses the live CHS production URL as a preview iframe src", () => {
+  const html = renderToStaticMarkup(<SingleSiteStudio model={studioModel()} />);
+
+  assert.equal(html.includes('src="https://www.chs.si/"'), false);
+  assert.equal(html.includes(`src="${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed"`), true);
+  assert.equal(html.includes(`src="${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed"`), true);
+  assert.equal(html.includes("Live published site"), true);
+});
+
+test("single-site studio preview error state is not labeled as available", () => {
+  const model = studioModel();
+  model.previews.originalClone = {
+    ...model.previews.originalClone,
+    route: null,
+    available: false,
+    unavailableReason: "Internal preview unavailable: unable to resolve agency scope for this site version.",
+  };
+  const html = renderToStaticMarkup(<SingleSiteStudio model={model} />);
+
+  assert.equal(html.includes("Internal preview unavailable"), true);
+  assert.equal(html.includes("preview route available"), false);
+  assert.equal(html.includes("preview_route_available"), false);
 });
 
 test("single-site studio keeps diagnostics out of the product surface", () => {
@@ -209,6 +235,17 @@ test("single-site studio route and layout are superadmin-gated", async () => {
   assert.equal(routeLayoutSource.includes('redirect("/superadmin")'), true);
 });
 
+test("single-site studio internal preview proxy is superadmin-gated and GET-only", async () => {
+  const routeSource = await readFile(INTERNAL_PREVIEW_ROUTE_FILE, "utf8");
+
+  assert.equal(routeSource.includes("requireSuperadminUserId()"), true);
+  assert.equal(routeSource.includes("runtimePreviewGET"), true);
+  assert.equal(routeSource.includes("export async function GET"), true);
+  assert.equal(routeSource.includes("export async function POST"), false);
+  assert.equal(routeSource.includes("publish"), false);
+  assert.equal(routeSource.includes("rollback"), false);
+});
+
 test("single-site studio is read-only and introduces no mutation action surface", async () => {
   const [pageSource, componentSource, projectionSource] = await Promise.all([
     readFile(PAGE_FILE, "utf8"),
@@ -223,6 +260,9 @@ test("single-site studio is read-only and introduces no mutation action surface"
   assert.equal(newSurface.includes("publishes: false"), true);
   assert.equal(newSurface.includes("fetch("), false);
   assert.equal(newSurface.includes('method="post"'), false);
+  assert.equal(newSurface.includes("Publish candidate"), false);
+  assert.equal(newSurface.includes("Rollback"), false);
+  assert.equal(newSurface.includes("Run provider"), false);
   assert.equal(newSurface.includes("runBulkMigrationActions"), false);
   assert.equal(newSurface.includes("shadowPublish"), false);
   assert.equal(newSurface.includes("dry-run"), false);

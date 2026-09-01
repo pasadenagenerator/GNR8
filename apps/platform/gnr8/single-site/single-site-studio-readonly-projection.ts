@@ -18,6 +18,7 @@ export const SINGLE_SITE_STUDIO_READONLY_PROJECTION_VERSION = "mvp-ui-1-single-s
 const CHS_MIGRATION_ID = SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.migrationId;
 const CHS_ORIGINAL_CLONE_SITE_VERSION_ID = "6b172a5b-200e-471c-9599-5dc70f04ea53";
 const CHS_ORIGINAL_CLONE_ARTIFACT_ID = "929106cd-fa19-47eb-9582-ce6931d0e370";
+const STUDIO_INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
 
 const CHS_RECOMMENDATION_FALLBACK = [
   {
@@ -214,7 +215,7 @@ function previewState(input: {
   runtimeArtifactId: string | null;
 }): SingleSiteStudioPreviewState {
   const route = input.siteVersionId
-    ? `/api/gnr8/runtime/versions/${encodeURIComponent(input.siteVersionId)}/preview?mode=transformed`
+    ? `${STUDIO_INTERNAL_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(input.siteVersionId)}/preview?mode=transformed`
     : null;
   return {
     label: input.label,
@@ -225,10 +226,10 @@ function previewState(input: {
     available: Boolean(route),
     unavailableReason: route
       ? null
-      : "Preview route unavailable: missing runtime site version ref for this stage.",
+      : "Internal preview unavailable: missing runtime site version ref for this stage.",
     authNote: route
-      ? "Authenticated runtime preview route exists; it requires agency action context and may render Preview Access Denied with Unable to resolve agency scope for site version when that context is unavailable."
-      : "No authenticated runtime preview route can be constructed without a site version id.",
+      ? "Superadmin-only internal GNR8 preview. This is not the live CHS production domain."
+      : "No internal GNR8 preview route can be constructed without a site version id.",
   };
 }
 
@@ -377,15 +378,15 @@ export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput)
       },
       {
         label: "Generated clone",
-        status: labelize(input.stateModel?.cloneReview.reviewStatus ?? "accepted"),
+        status: "internal preview",
         detail: originalCloneSiteVersionId ? `Runtime site version ${originalCloneSiteVersionId}` : "Clone runtime site version unavailable",
-        href: originalCloneSiteVersionId ? `/api/gnr8/runtime/versions/${encodeURIComponent(originalCloneSiteVersionId)}/preview?mode=transformed` : null,
+        href: originalCloneSiteVersionId ? `${STUDIO_INTERNAL_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(originalCloneSiteVersionId)}/preview?mode=transformed` : null,
       },
       {
         label: "Improved candidate",
-        status: publishedCandidate,
+        status: "internal preview",
         detail: improvedCandidateSiteVersionId ? `Runtime site version ${improvedCandidateSiteVersionId}` : "Improved candidate runtime site version unavailable",
-        href: improvedCandidateSiteVersionId ? `/api/gnr8/runtime/versions/${encodeURIComponent(improvedCandidateSiteVersionId)}/preview?mode=transformed` : null,
+        href: improvedCandidateSiteVersionId ? `${STUDIO_INTERNAL_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(improvedCandidateSiteVersionId)}/preview?mode=transformed` : null,
       },
       {
         label: "Live published version",

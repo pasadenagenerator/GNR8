@@ -1,5 +1,5 @@
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
-import { resolveAgencyIdForSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
+import { resolveAgencyIdForPreviewSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import {
   getRawTemplateSiteArtifact,
   getRawImportedSiteArtifact,
@@ -17,7 +17,7 @@ type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId:
 
 type PreviewAssetRouteDependencies = {
   resolveDomainSiteVersionForHost: typeof resolveDomainSiteVersionForHost;
-  resolveAgencyIdForSiteVersion: typeof resolveAgencyIdForSiteVersion;
+  resolveAgencyIdForSiteVersion: typeof resolveAgencyIdForPreviewSiteVersion;
   requireAgencyActionContext: typeof requireAgencyActionContext;
   getRawTemplateSiteArtifact: typeof getRawTemplateSiteArtifact;
   getRawImportedSiteArtifact: typeof getRawImportedSiteArtifact;
@@ -29,7 +29,7 @@ type PreviewAssetRouteDependencies = {
 
 const defaultDependencies: PreviewAssetRouteDependencies = {
   resolveDomainSiteVersionForHost,
-  resolveAgencyIdForSiteVersion,
+  resolveAgencyIdForSiteVersion: resolveAgencyIdForPreviewSiteVersion,
   requireAgencyActionContext,
   getRawTemplateSiteArtifact,
   getRawImportedSiteArtifact,

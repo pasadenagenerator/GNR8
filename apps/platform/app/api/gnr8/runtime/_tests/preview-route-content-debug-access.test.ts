@@ -107,6 +107,31 @@ test("preview route: __debug=content denied renders normal preview without debug
   }
 });
 
+test("preview route: unresolved agency scope renders an internal preview unavailable page", async () => {
+  const restoreDeps = setPreviewRouteDependenciesForTest({
+    resolveAgencyIdForSiteVersion: async () => null,
+    requireAgencyActionContext: async () => {
+      throw new Error("requireAgencyActionContext should not be called");
+    },
+    renderSiteVersionPreview: async () => {
+      throw new Error("renderSiteVersionPreview should not be called");
+    },
+  });
+  try {
+    const response = await GET(new Request("https://app.pasadenagenerator.com/api/gnr8/runtime/versions/sv_preview_1/preview?mode=transformed"), {
+      params: Promise.resolve({ siteVersionId: "sv_preview_1" }),
+    });
+    const html = await response.text();
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+    assert.match(html, /Internal Preview Unavailable/);
+    assert.match(html, /Unable to resolve agency scope for this site version/);
+    assert.doesNotMatch(html, /preview route available/i);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("preview route: __debug=content granted renders debug panel", async () => {
   const restoreDeps = mockPreviewDeps(true);
   try {
