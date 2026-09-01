@@ -2940,6 +2940,163 @@ test('transformed diagnostic-only output fails cleanly when no raw route fallbac
   })
 })
 
+test('transformed diagnostic-only output uses lineage raw imported preview when target raw artifact is unavailable', async () => {
+  const sourceSiteVersionId = '14e6ff38-eef3-4790-8ffb-f72aa5d6cd35'
+  const calls = {
+    getSiteVersion: 0,
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    getSiteVersionArtifactBinding: 0,
+    getArtifactById: 0,
+  }
+  const rawHtml = '<!doctype html><html><body><main><h1>CHS captured source preview</h1><p>Internal raw imported capture.</p></main></body></html>'
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      calls.getSiteVersion += 1
+      return {
+        id: 'sv-target-diagnostic',
+        siteId: 'site-chs',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        pages: [],
+        importProvenanceSummary: {
+          kind: 'runtime_import_provenance_summary_v1',
+          sourceMode: 'rendered_dom',
+          importFidelityStatus: 'high_fidelity_import',
+          renderedCaptureStatus: 'available',
+          renderedDomQuality: 'strong',
+          screenshotCount: 1,
+          computedStyleSampleCount: 1,
+          renderedCapture: {
+            used: true,
+            status: 'available',
+            quality: 'strong',
+            domLength: 1000,
+            nodeCount: 100,
+            styleSampleCount: 1,
+            styleCoverage: 1,
+            screenshots: { viewport: true, fullPage: true },
+            execution: {
+              runtimeKind: 'nodejs',
+              environmentSupported: true,
+              browserPackageAvailable: true,
+              browserBinaryAvailable: true,
+              environmentStatus: 'supported',
+              failureCategory: 'none',
+              failureCode: null,
+              browserLaunch: 'succeeded',
+              navigation: 'succeeded',
+              dom: 'captured',
+              screenshot: 'captured',
+              styleSampling: 'captured',
+            },
+          },
+          importDiagnosticCodes: [],
+          captureEvidence: {
+            selectedSourceHtmlPath: 'index.html',
+            responseHtmlPath: 'index.html',
+            entryHtmlPath: 'index.html',
+            renderedCaptureManifestPath: null,
+            acquisitionEvidencePath: null,
+            renderedDomPath: 'rendered/dom.html',
+            computedStylesPath: null,
+            renderedViewportScreenshotPath: null,
+            renderedFullpageScreenshotPath: null,
+            screenshotPaths: [],
+          },
+          styleSignals: null,
+          singleSiteCloneExecutor: {
+            sourceSiteVersionRef: `gnr8:site_version:${sourceSiteVersionId}`,
+          },
+        },
+      } as any
+    },
+    getRawImportedSiteArtifact: async (siteVersionId) => {
+      calls.getRawImportedSiteArtifact += 1
+      if (siteVersionId !== sourceSiteVersionId) return null
+      return {
+        artifactType: 'raw_imported_site',
+        siteId: 'site-chs',
+        siteVersionId,
+        entryHtmlPath: 'index.html',
+        assetBasePath: '/',
+        fileMap: {
+          'index.html': { mediaType: 'text/html', sizeBytes: rawHtml.length, sha256: 'sha-index' },
+        },
+        metadata: {
+          assetSummary: { persistedAssetCount: 1, externalFallbackAssetCount: 0 },
+        },
+      } as any
+    },
+    getRawTemplateSiteArtifact: async () => {
+      calls.getRawTemplateSiteArtifact += 1
+      return null
+    },
+    getRawTemplateSiteAsset: async (input) => {
+      calls.getRawTemplateSiteAsset += 1
+      return input.siteVersionId === sourceSiteVersionId && input.filePath === 'index.html'
+        ? ({ bytes: Buffer.from(rawHtml), sizeBytes: rawHtml.length, mediaType: 'text/html', sha256: 'sha-index' } as any)
+        : null
+    },
+    listContentSlots: async () => [],
+    listContentOverrides: async () => [],
+    getSiteVersionArtifactBinding: async () => {
+      calls.getSiteVersionArtifactBinding += 1
+      return { siteId: 'site-chs', artifactId: 'artifact-diagnostic-target' }
+    },
+    getArtifactById: async () => {
+      calls.getArtifactById += 1
+      return {
+        id: 'artifact-diagnostic-target',
+        siteId: 'site-chs',
+        siteVersionId: 'sv-target-diagnostic',
+        rendererCompatibilityVersion: 'gnr8-renderer-v1',
+        htmlByPath: {
+          '/': '<html><body><main><h1>Recovered Section 1</h1><p>raw-block:html&gt;body</p><p>CAPTURE_DRIVEN_HERO_LIFT_APPLIED</p></main></body></html>',
+        },
+        bundleSha256: 'x',
+        compiledTokenStyles: '',
+        assetFingerprintMap: {},
+        manifest: {},
+        publishStage: 'production',
+        shadowRestricted: false,
+        artifactGovernance: {},
+      } as any
+    },
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-target-diagnostic',
+      path: '/',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-diagnostic-lineage-raw',
+    })
+
+    assert.equal(preview.source, 'raw_template_site')
+    assert.equal(preview.siteVersionId, 'sv-target-diagnostic')
+    assert.equal(preview.fallbackUsed, true)
+    assert.equal(preview.html.includes('CHS captured source preview'), true)
+    assertNoTransformedDiagnosticContent(preview.html)
+    assert.equal(
+      preview.previewRuntimeSummary.previewDiagnostics.includes('TRANSFORMED_PREVIEW_LINEAGE_RAW_IMPORT_FALLBACK_USED'),
+      true,
+    )
+  } finally {
+    restore()
+  }
+
+  assert.deepEqual(calls, {
+    getSiteVersion: 1,
+    getRawImportedSiteArtifact: 2,
+    getRawTemplateSiteArtifact: 1,
+    getRawTemplateSiteAsset: 1,
+    getSiteVersionArtifactBinding: 1,
+    getArtifactById: 1,
+  })
+})
+
 test('transformed preview annotation is idempotent for repeated hydration helper calls', () => {
   const summary = {
     previewMode: 'react_preview_degraded',

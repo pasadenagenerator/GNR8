@@ -434,6 +434,7 @@ export const TRANSFORMED_PREVIEW_DIAGNOSTIC = {
   TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED: 'TRANSFORMED_PREVIEW_RAW_RESOLUTION_SKIPPED',
   TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED: 'TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED',
   TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED: 'TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED',
+  TRANSFORMED_PREVIEW_LINEAGE_RAW_IMPORT_FALLBACK_USED: 'TRANSFORMED_PREVIEW_LINEAGE_RAW_IMPORT_FALLBACK_USED',
   TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE: 'TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE',
 } as const
 
@@ -2818,6 +2819,40 @@ function detectTransformedPreviewVisibleDiagnosticContent(html: string): { block
   }
 }
 
+function sourceIdFromRef(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  const parts = normalized.split(':')
+  const candidate = parts[parts.length - 1] ?? normalized
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate) ? candidate : null
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function lineageRawImportSiteVersionIds(input: {
+  siteVersionId: string
+  importProvenanceSummary?: RuntimeImportProvenanceSummary | null
+}): string[] {
+  const provenance = objectRecord(input.importProvenanceSummary)
+  if (!provenance) return []
+  const ids = new Set<string>()
+  const add = (value: unknown) => {
+    const id = sourceIdFromRef(value)
+    if (id && id !== input.siteVersionId) ids.add(id)
+  }
+
+  const singleSiteCloneExecutor = objectRecord(provenance.singleSiteCloneExecutor)
+  add(singleSiteCloneExecutor?.sourceSiteVersionRef)
+
+  const improvedCandidateCreationAdapter = objectRecord(provenance.improvedCandidateCreationAdapter)
+  add(improvedCandidateCreationAdapter?.sourceSiteVersionRef)
+
+  return [...ids]
+}
+
 function annotateTransformedPreviewHtml(input: { html: string; summary: PreviewRuntimeSummary }): string {
   const attributes = transformedPreviewDiagnosticAttributes(input.summary)
   const serialized = serializeAttributes(attributes)
@@ -3032,40 +3067,40 @@ async function resolveTransformedDiagnosticContentFallback(input: {
         requestedPath: input.requestedPath,
         reasonCode: 'RAW_ROUTE_PREVIEW_UNAVAILABLE',
       })
-      return null
-    }
-    const rawDiagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(rawPreview.html)
-    if (rawDiagnosticContent.blocked) {
-      console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE}`, {
-        requestCorrelationKey: input.context.requestCorrelationKey,
-        siteId: input.siteVersion.siteId,
-        siteVersionId: input.siteVersion.id,
-        requestedPath: input.requestedPath,
-        reasonCode: 'RAW_ROUTE_PREVIEW_CONTAINED_DIAGNOSTIC_CONTENT',
-        matchedPatterns: rawDiagnosticContent.matchedPatterns,
-      })
-      return null
-    }
-    console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED}`, {
-      requestCorrelationKey: input.context.requestCorrelationKey,
-      siteId: input.siteVersion.siteId,
-      siteVersionId: input.siteVersion.id,
-      requestedPath: input.requestedPath,
-      selectedPath: rawPreview.path,
-      blockedTransformedPath: input.diagnosticError.resolvedPath,
-    })
-    return {
-      ...rawPreview,
-      fallbackUsed: true,
-      previewRuntimeSummary: {
-        ...rawPreview.previewRuntimeSummary,
-        previewDiagnostics: withSortedDiagnostics([
-          ...(input.fallbackSummary?.previewDiagnostics ?? []),
-          ...rawPreview.previewRuntimeSummary.previewDiagnostics,
-          ...blockedDiagnostics,
-          TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED,
-        ]),
-      },
+    } else {
+      const rawDiagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(rawPreview.html)
+      if (rawDiagnosticContent.blocked) {
+        console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE}`, {
+          requestCorrelationKey: input.context.requestCorrelationKey,
+          siteId: input.siteVersion.siteId,
+          siteVersionId: input.siteVersion.id,
+          requestedPath: input.requestedPath,
+          reasonCode: 'RAW_ROUTE_PREVIEW_CONTAINED_DIAGNOSTIC_CONTENT',
+          matchedPatterns: rawDiagnosticContent.matchedPatterns,
+        })
+      } else {
+        console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED}`, {
+          requestCorrelationKey: input.context.requestCorrelationKey,
+          siteId: input.siteVersion.siteId,
+          siteVersionId: input.siteVersion.id,
+          requestedPath: input.requestedPath,
+          selectedPath: rawPreview.path,
+          blockedTransformedPath: input.diagnosticError.resolvedPath,
+        })
+        return {
+          ...rawPreview,
+          fallbackUsed: true,
+          previewRuntimeSummary: {
+            ...rawPreview.previewRuntimeSummary,
+            previewDiagnostics: withSortedDiagnostics([
+              ...(input.fallbackSummary?.previewDiagnostics ?? []),
+              ...rawPreview.previewRuntimeSummary.previewDiagnostics,
+              ...blockedDiagnostics,
+              TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_RAW_ROUTE_FALLBACK_USED,
+            ]),
+          },
+        }
+      }
     }
   } catch (error) {
     if (error instanceof SiteVersionPreviewUnavailableError) {
@@ -3076,10 +3111,79 @@ async function resolveTransformedDiagnosticContentFallback(input: {
         requestedPath: input.requestedPath,
         reasonCode: error.code,
       })
-      return null
+    } else {
+      throw error
     }
-    throw error
   }
+
+  for (const sourceSiteVersionId of lineageRawImportSiteVersionIds({
+    siteVersionId: input.siteVersion.id,
+    importProvenanceSummary: input.siteVersion.importProvenanceSummary,
+  })) {
+    try {
+      const rawPreview = await renderRawTemplateSiteVersionPreview({
+        siteVersion: input.siteVersion,
+        siteVersionId: sourceSiteVersionId,
+        requestedPath: input.requestedPath,
+        routeMapServingEnabled: true,
+        previewTruth: input.previewTruth,
+        fallbackSummary: input.fallbackSummary,
+        context: input.context,
+      })
+      if (!rawPreview) continue
+      const rawDiagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(rawPreview.html)
+      if (rawDiagnosticContent.blocked) {
+        console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE}`, {
+          requestCorrelationKey: input.context.requestCorrelationKey,
+          siteId: input.siteVersion.siteId,
+          siteVersionId: input.siteVersion.id,
+          sourceSiteVersionId,
+          requestedPath: input.requestedPath,
+          reasonCode: 'LINEAGE_RAW_ROUTE_PREVIEW_CONTAINED_DIAGNOSTIC_CONTENT',
+          matchedPatterns: rawDiagnosticContent.matchedPatterns,
+        })
+        continue
+      }
+      console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_LINEAGE_RAW_IMPORT_FALLBACK_USED}`, {
+        requestCorrelationKey: input.context.requestCorrelationKey,
+        siteId: input.siteVersion.siteId,
+        siteVersionId: input.siteVersion.id,
+        sourceSiteVersionId,
+        requestedPath: input.requestedPath,
+        selectedPath: rawPreview.path,
+        blockedTransformedPath: input.diagnosticError.resolvedPath,
+      })
+      return {
+        ...rawPreview,
+        siteVersionId: input.siteVersion.id,
+        fallbackUsed: true,
+        previewRuntimeSummary: {
+          ...rawPreview.previewRuntimeSummary,
+          previewDiagnostics: withSortedDiagnostics([
+            ...(input.fallbackSummary?.previewDiagnostics ?? []),
+            ...rawPreview.previewRuntimeSummary.previewDiagnostics,
+            ...blockedDiagnostics,
+            TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_LINEAGE_RAW_IMPORT_FALLBACK_USED,
+          ]),
+        },
+      }
+    } catch (error) {
+      if (error instanceof SiteVersionPreviewUnavailableError) {
+        console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_FALLBACK_UNAVAILABLE}`, {
+          requestCorrelationKey: input.context.requestCorrelationKey,
+          siteId: input.siteVersion.siteId,
+          siteVersionId: input.siteVersion.id,
+          sourceSiteVersionId,
+          requestedPath: input.requestedPath,
+          reasonCode: error.code,
+        })
+        continue
+      }
+      throw error
+    }
+  }
+
+  return null
 }
 
 async function renderDebugSiteVersionPreview(input: {
