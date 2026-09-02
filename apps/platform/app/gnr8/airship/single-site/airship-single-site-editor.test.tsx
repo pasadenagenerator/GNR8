@@ -7,6 +7,10 @@ import ReactDomServer from "react-dom/server";
 import type { AirshipSingleSiteEditorReadonlyProjection } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 
 import { AirshipSingleSiteEditor } from "./airship-single-site-editor";
+import {
+  applyAirshipSingleSiteLocalDraftEdit,
+  initialAirshipSingleSiteLocalDraftFields,
+} from "./airship-single-site-local-draft-editor";
 
 const { renderToStaticMarkup } = ReactDomServer;
 
@@ -16,7 +20,9 @@ const IMPROVED_CANDIDATE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
 const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const COMPONENT_FILE = new URL("./airship-single-site-editor.tsx", import.meta.url);
+const LOCAL_EDITOR_FILE = new URL("./airship-single-site-local-draft-editor.tsx", import.meta.url);
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/airship-single-site-editor-readonly-projection.ts", import.meta.url);
+const PREVIEW_ROUTE_FILE = new URL("../../../api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts", import.meta.url);
 
 function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
   return {
@@ -32,7 +38,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
     mvpStatus: "Internal single-site MVP accepted",
     aiImprovementStatus: {
       label: "Editable AI draft generated",
-      detail: "3 proposed Airship draft edit(s) generated for the imported homepage. Draft edits are read-only in this phase and are not applied to the live site.",
+      detail: "3 proposed Airship draft edit(s) generated for the imported CHS homepage. Browser edits are local-only and are not applied to the live site.",
       deterministicEditableChangesGenerated: true,
     },
     previews: {
@@ -69,46 +75,46 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         {
           id: "airship-chs-home-hero-headline",
           targetSectionPage: "Homepage / hero headline",
-          currentTextContentSummary: "The imported homepage hero/title is source-derived and reads as the company name, `TRANSPORTI MAVER D.O.O.`, before the service value is clear.",
-          proposedTextContent: "Prevozi vozil po Evropi od leta 1982",
-          reasonForChange: "Lead with the concrete service and longevity so visitors understand the offer before reading supporting company details.",
+          currentTextContentSummary: "Captured CHS homepage evidence includes the hero line `Less risk. More control. Better IT.` and the CHS identity in the page title and footer.",
+          proposedTextContent: "Less risk. More control. Better IT.",
+          reasonForChange: "Keep the first-viewport headline anchored to CHS source copy and make the CHS identity explicit without introducing outside claims.",
           status: "proposed",
-          previewImpact: "AI draft preview headline changes from a company-name-only first impression to a service-led transport promise.",
+          previewImpact: "AI draft preview opens with the CHS homepage headline instead of unrelated company or transport copy.",
         },
         {
           id: "airship-chs-home-hero-value-proposition",
           targetSectionPage: "Homepage / hero subheading",
-          currentTextContentSummary: "The source text explains the fleet and European coverage later in the page: 15 auto transporters, EU destinations, EU 6 trucks, direct delivery, guarded parking, and workshop support.",
-          proposedTextContent: "S 15 avtotransporterji za Nemcijo, Italijo, Spanijo, Svico in Francijo poskrbimo za zanesljiv prevzem, zbirnik in dostavo vozil do stranke ali varovanega parkirisca.",
-          reasonForChange: "Condense the strongest source facts into one first-viewport value proposition without adding new claims outside the imported content.",
+          currentTextContentSummary: "Captured CHS source evidence says CHS delivers advanced solutions in cybersecurity, data systems, and hybrid infrastructure across the Adriatic region.",
+          proposedTextContent: "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
+          reasonForChange: "Condense the source-supported service description into a clearer first-viewport value proposition.",
           status: "proposed",
-          previewImpact: "AI draft preview adds a scannable service summary under the hero headline.",
+          previewImpact: "AI draft preview explains CHS's IT focus in one scannable line under the headline.",
         },
         {
           id: "airship-chs-home-contact-cta",
           targetSectionPage: "Homepage / contact call-to-action",
-          currentTextContentSummary: "A safe contact target exists in the source material: the homepage includes `Kontakt`, phone links, and email links for Transporti Maver.",
-          proposedTextContent: "Posljite povprasevanje za prevoz vozila",
+          currentTextContentSummary: "Captured CHS source evidence includes `Contact us`, `sales@chs.si`, and a homepage contact form.",
+          proposedTextContent: "Contact CHS at sales@chs.si",
           reasonForChange: "Make the contact action outcome-specific while keeping it tied to the existing contact section and source contact channels.",
           status: "proposed",
-          previewImpact: "AI draft preview shows a clearer primary contact CTA; it is not wired to mutate or publish production content.",
+          previewImpact: "AI draft preview shows a clearer CHS contact CTA; it is not wired to mutate or publish production content.",
         },
       ],
       draftPreview: {
         label: "AI draft preview",
         appliedToLiveSite: false,
-        persistence: "generated_read_only",
-        note: "Generated Airship draft preview only. These proposed edits are not live, not published, and not persisted as production content.",
+        persistence: "browser_local_only",
+        note: "Local Airship draft preview only. Browser edits are not live, not published, and not persisted as production content.",
         hero: {
-          eyebrow: "TRANSPORTI MAVER D.O.O.",
-          headline: "Prevozi vozil po Evropi od leta 1982",
-          subheading: "S 15 avtotransporterji za Nemcijo, Italijo, Spanijo, Svico in Francijo poskrbimo za zanesljiv prevzem, zbirnik in dostavo vozil do stranke ali varovanega parkirisca.",
-          primaryCtaLabel: "Posljite povprasevanje za prevoz vozila",
-          secondaryContactText: "+386 (0)1 366 38 36 - transporti.maver@siol.net",
+          eyebrow: "CHS d.o.o.",
+          headline: "Less risk. More control. Better IT.",
+          subheading: "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
+          primaryCtaLabel: "Contact CHS at sales@chs.si",
+          secondaryContactText: "Parmova ulica 51, Ljubljana",
         },
       },
       controlMode: "disabled_read_only_generated_draft",
-      controlNote: "Accept, reject, and save are disabled because this Airship phase generates a read-only draft preview without production persistence.",
+      controlNote: "Accept, reject, and save are disabled because this Airship phase supports browser-local draft editing only; persistence is not enabled.",
       recommendationMaterial: [
         {
           id: "0be61bde-6568-4f33-8499-4d5eade70837",
@@ -172,6 +178,8 @@ test("airship single-site editor renders original and current improved previews 
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes('src="https://www.chs.si/"'), false);
+  assert.equal(html.includes("If this frame shows a connection-session error"), true);
+  assert.equal(html.includes("The draft editor below remains usable."), true);
 });
 
 test("airship single-site editor shows concrete proposed draft rows", () => {
@@ -186,31 +194,71 @@ test("airship single-site editor shows concrete proposed draft rows", () => {
   assert.equal(html.includes("Status"), true);
   assert.equal(html.includes("Preview impact"), true);
   assert.equal(html.includes("Homepage / hero headline"), true);
-  assert.equal(html.includes("Prevozi vozil po Evropi od leta 1982"), true);
+  assert.equal(html.includes("Less risk. More control. Better IT."), true);
   assert.equal(html.includes("Homepage / hero subheading"), true);
-  assert.equal(html.includes("S 15 avtotransporterji za Nemcijo"), true);
+  assert.equal(html.includes("Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region."), true);
   assert.equal(html.includes("Homepage / contact call-to-action"), true);
-  assert.equal(html.includes("Posljite povprasevanje za prevoz vozila"), true);
+  assert.equal(html.includes("Contact CHS at sales@chs.si"), true);
   assert.equal(html.includes("proposed"), true);
 });
 
-test("airship single-site editor renders the generated draft preview as not live and not persisted", () => {
+test("airship single-site editor renders the local draft editor as not live and not persisted", () => {
   const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
-  assert.equal(html.includes("Generated Airship draft preview only"), true);
+  assert.equal(html.includes("Local draft editor"), true);
+  assert.equal(html.includes("Editable hero headline"), true);
+  assert.equal(html.includes("Editable hero subheading"), true);
+  assert.equal(html.includes("Editable contact CTA"), true);
+  assert.equal(html.includes("Local Airship draft preview only"), true);
   assert.equal(html.includes("not live, not published, and not persisted as production content"), true);
-  assert.equal(html.includes("generated read-only draft"), true);
-  assert.equal(html.includes("generated read only"), true);
-  assert.equal(html.includes("TRANSPORTI MAVER D.O.O."), true);
+  assert.equal(html.includes("local draft only, not saved to production"), true);
+  assert.equal(html.includes("browser local only"), true);
+  assert.equal(html.includes("CHS d.o.o."), true);
 });
 
 test("airship single-site editor labels non-persisted draft controls honestly", () => {
   const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
-  assert.equal(html.includes("Accept draft disabled"), true);
-  assert.equal(html.includes("Reject draft disabled"), true);
-  assert.equal(html.includes("Save edit disabled"), true);
-  assert.equal(html.includes("read-only draft preview without production persistence"), true);
+  assert.equal(html.includes("Accept disabled"), true);
+  assert.equal(html.includes("Reject disabled"), true);
+  assert.equal(html.includes("Save disabled - persistence not enabled"), true);
+  assert.equal(html.includes("browser-local draft editing only; persistence is not enabled"), true);
+});
+
+test("airship local draft field edits update the draft preview model immediately", () => {
+  const model = airshipModel();
+  const draftPreview = model.draftPanel.draftPreview;
+  assert.ok(draftPreview);
+  const initialFields = initialAirshipSingleSiteLocalDraftFields(draftPreview);
+
+  assert.deepEqual(initialFields, {
+    headline: "Less risk. More control. Better IT.",
+    subheading: "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
+    primaryCtaLabel: "Contact CHS at sales@chs.si",
+  });
+
+  const edited = applyAirshipSingleSiteLocalDraftEdit({
+    drafts: model.draftPanel.drafts,
+    draftPreview,
+    fields: {
+      headline: "CHS helps modernize enterprise IT",
+      subheading: "Cybersecurity, data systems, and hybrid infrastructure expertise for regional teams.",
+      primaryCtaLabel: "Email sales@chs.si",
+    },
+  });
+
+  assert.equal(edited.draftPreview.hero.headline, "CHS helps modernize enterprise IT");
+  assert.equal(edited.draftPreview.hero.subheading, "Cybersecurity, data systems, and hybrid infrastructure expertise for regional teams.");
+  assert.equal(edited.draftPreview.hero.primaryCtaLabel, "Email sales@chs.si");
+  assert.equal(edited.drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.status, "edited");
+  assert.equal(edited.drafts.find((draft) => draft.id === "airship-chs-home-contact-cta")?.proposedTextContent, "Email sales@chs.si");
+});
+
+test("airship single-site editor CHS draft contains no Maver transport copy", () => {
+  const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
+
+  assert.doesNotMatch(html, /TRANSPORTI MAVER|Transporti Maver|transporti\.maver|transportimaver/i);
+  assert.doesNotMatch(html, /Prevozi vozil|prevoz vozil|avtotransporter|vehicle transport/i);
 });
 
 test("airship single-site route is superadmin-gated and defaults to the CHS migration", async () => {
@@ -222,12 +270,13 @@ test("airship single-site route is superadmin-gated and defaults to the CHS migr
 });
 
 test("airship single-site foundation adds no production mutation action surface", async () => {
-  const [pageSource, componentSource, projectionSource] = await Promise.all([
+  const [pageSource, componentSource, localEditorSource, projectionSource] = await Promise.all([
     readFile(PAGE_FILE, "utf8"),
     readFile(COMPONENT_FILE, "utf8"),
+    readFile(LOCAL_EDITOR_FILE, "utf8"),
     readFile(PROJECTION_FILE, "utf8"),
   ]);
-  const source = `${pageSource}\n${componentSource}\n${projectionSource}`;
+  const source = `${pageSource}\n${componentSource}\n${localEditorSource}\n${projectionSource}`;
 
   assert.equal(source.includes("mutatesProductionData: false"), true);
   assert.equal(source.includes("activePointerMutation: false"), true);
@@ -237,4 +286,14 @@ test("airship single-site foundation adds no production mutation action surface"
   assert.equal(source.includes("Run provider"), false);
   assert.equal(source.includes("Rollback"), false);
   assert.equal(source.includes("Publish candidate"), false);
+});
+
+test("airship preview route gives EMAXCONNSESSION a compact retry surface", async () => {
+  const routeSource = await readFile(PREVIEW_ROUTE_FILE, "utf8");
+
+  assert.equal(routeSource.includes("EMAXCONNSESSION"), true);
+  assert.equal(routeSource.includes("Preview temporarily unavailable"), true);
+  assert.equal(routeSource.includes("The internal preview could not get a database session."), true);
+  assert.equal(routeSource.includes("local draft editing is still available"), true);
+  assert.equal(routeSource.includes("status: 503"), true);
 });

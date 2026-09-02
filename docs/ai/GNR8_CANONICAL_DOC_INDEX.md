@@ -1487,7 +1487,22 @@ Canonical implementation:
 - `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.tsx`
 - `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.test.tsx`
 
-Canonical result: Airship now exposes three concrete generated/read-only proposed homepage edits for the imported `chs.si` page at `/gnr8/airship/single-site?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`: hero headline, hero value proposition, and contact CTA. The AI improvement draft panel renders the proposed edit rows instead of the empty state, includes target/current/proposed/reason/status/preview-impact fields, and shows a separate AI draft preview labeled as proposed changes that are not live, not published, and not persisted. Original clone preview remains the imported/clone baseline, current improved/published preview remains the current candidate preview, and the live site link remains separate. Accept draft, Reject draft, and Save edit are disabled with honest non-persistence labels. No production content mutation, source capture, publish, dry-run, shadow-publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, migration, env change, or broad refactor was introduced. Final status is `airship_first_concrete_ai_draft_visible`.
+Canonical result: Superseded for CHS draft identity by AIRSHIP-2B. The original AIRSHIP-2 record introduced the first concrete draft surface, but its documented draft copy was later found to contain Transporti Maver vehicle-transport content and must not be used as CHS source material. Final status is `superseded_by_airship_chs_draft_identity_fixed_local_editor_working`.
+
+## AIRSHIP-2B CHS Draft Identity And Local Editor
+
+Canonical Airship CHS draft identity and local editor record:
+- `docs/product/gnr8-airship-chs-draft-identity-local-editor-closeout.md`
+
+Canonical implementation:
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.ts`
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.test.ts`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-local-draft-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.test.tsx`
+- `apps/platform/app/api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts`
+
+Canonical result: Airship now generates CHS-only proposed homepage edits for `/gnr8/airship/single-site?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`: `Less risk. More control. Better IT.`, `Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.`, and `Contact CHS at sales@chs.si`. The CHS draft projection includes guardrails that reject Maver transport copy. The Airship UI provides browser-local editing for the hero headline, subheading, and contact CTA, with immediate local preview updates and no production persistence. Accept and Reject remain disabled; Save remains disabled and labeled `Save disabled - persistence not enabled`. Internal preview route `EMAXCONNSESSION` errors render a compact retry message. The live site remains a separate outbound link to `https://www.chs.si/`. No production content mutation, source capture, publish, dry-run, shadow-publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, migration, env change, or broad refactor was introduced. Final status is `airship_chs_draft_identity_fixed_local_editor_working`.
 
 ## Secondary
 

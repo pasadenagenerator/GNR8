@@ -28,7 +28,7 @@ export type AirshipSingleSiteImprovementDraft = {
 export type AirshipSingleSiteDraftPreview = {
   label: "AI draft preview";
   appliedToLiveSite: false;
-  persistence: "generated_read_only";
+  persistence: "browser_local_only";
   note: string;
   hero: {
     eyebrow: string;
@@ -96,6 +96,17 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
     activePointerMutation: false;
   };
 };
+
+export const AIRSHIP_CHS_FORBIDDEN_DRAFT_PATTERNS = [
+  /transporti\s+maver/i,
+  /maver/i,
+  /prevozi\s+vozil/i,
+  /prevozi\s+po\s+evropi/i,
+  /avto\s*transporter/i,
+  /avtotransporter/i,
+  /prevoz\s+vozil/i,
+  /transportimaver/i,
+] as const;
 
 type AirshipBuildInput = {
   migrationId?: string | null;
@@ -170,35 +181,49 @@ function recommendationMaterial(recommendations: SingleSiteStudioRecommendation[
 function chsDrafts(migrationId: string | null): AirshipSingleSiteImprovementDraft[] {
   if (migrationId !== AIRSHIP_CHS_MIGRATION_ID) return [];
 
-  return [
+  const drafts: AirshipSingleSiteImprovementDraft[] = [
     {
       id: "airship-chs-home-hero-headline",
       targetSectionPage: "Homepage / hero headline",
-      currentTextContentSummary: "The imported homepage hero/title is source-derived and reads as the company name, `TRANSPORTI MAVER D.O.O.`, before the service value is clear.",
-      proposedTextContent: "Prevozi vozil po Evropi od leta 1982",
-      reasonForChange: "Lead with the concrete service and longevity so visitors understand the offer before reading supporting company details.",
+      currentTextContentSummary: "Captured CHS homepage evidence includes the hero line `Less risk. More control. Better IT.` and the CHS identity in the page title and footer.",
+      proposedTextContent: "Less risk. More control. Better IT.",
+      reasonForChange: "Keep the first-viewport headline anchored to CHS source copy and make the CHS identity explicit without introducing outside claims.",
       status: "proposed",
-      previewImpact: "AI draft preview headline changes from a company-name-only first impression to a service-led transport promise.",
+      previewImpact: "AI draft preview opens with the CHS homepage headline instead of unrelated company or transport copy.",
     },
     {
       id: "airship-chs-home-hero-value-proposition",
       targetSectionPage: "Homepage / hero subheading",
-      currentTextContentSummary: "The source text explains the fleet and European coverage later in the page: 15 auto transporters, EU destinations, EU 6 trucks, direct delivery, guarded parking, and workshop support.",
-      proposedTextContent: "S 15 avtotransporterji za Nemcijo, Italijo, Spanijo, Svico in Francijo poskrbimo za zanesljiv prevzem, zbirnik in dostavo vozil do stranke ali varovanega parkirisca.",
-      reasonForChange: "Condense the strongest source facts into one first-viewport value proposition without adding new claims outside the imported content.",
+      currentTextContentSummary: "Captured CHS source evidence says CHS delivers advanced solutions in cybersecurity, data systems, and hybrid infrastructure across the Adriatic region.",
+      proposedTextContent: "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
+      reasonForChange: "Condense the source-supported service description into a clearer first-viewport value proposition.",
       status: "proposed",
-      previewImpact: "AI draft preview adds a scannable service summary under the hero headline.",
+      previewImpact: "AI draft preview explains CHS's IT focus in one scannable line under the headline.",
     },
     {
       id: "airship-chs-home-contact-cta",
       targetSectionPage: "Homepage / contact call-to-action",
-      currentTextContentSummary: "A safe contact target exists in the source material: the homepage includes `Kontakt`, phone links, and email links for Transporti Maver.",
-      proposedTextContent: "Posljite povprasevanje za prevoz vozila",
-      reasonForChange: "Make the contact action outcome-specific while keeping it tied to the existing contact section and source contact channels.",
+      currentTextContentSummary: "Captured CHS source evidence includes `Contact us`, `sales@chs.si`, and a homepage contact form.",
+      proposedTextContent: "Contact CHS at sales@chs.si",
+      reasonForChange: "Make the contact action clearer while staying tied to source-supported CHS contact evidence.",
       status: "proposed",
-      previewImpact: "AI draft preview shows a clearer primary contact CTA; it is not wired to mutate or publish production content.",
+      previewImpact: "AI draft preview shows a clearer CHS contact CTA; it is not wired to mutate or publish production content.",
     },
   ];
+
+  assertChsDraftIdentity(drafts);
+  return drafts;
+}
+
+export function airshipChsDraftContainsForbiddenMaverCopy(value: unknown): boolean {
+  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  return AIRSHIP_CHS_FORBIDDEN_DRAFT_PATTERNS.some((pattern) => pattern.test(serialized));
+}
+
+function assertChsDraftIdentity(drafts: AirshipSingleSiteImprovementDraft[]) {
+  if (airshipChsDraftContainsForbiddenMaverCopy(drafts)) {
+    throw new Error("Airship CHS draft identity violation: Maver transport copy is not allowed in CHS drafts.");
+  }
 }
 
 function draftPreview(drafts: AirshipSingleSiteImprovementDraft[]): AirshipSingleSiteDraftPreview | null {
@@ -210,14 +235,14 @@ function draftPreview(drafts: AirshipSingleSiteImprovementDraft[]): AirshipSingl
   return {
     label: "AI draft preview",
     appliedToLiveSite: false,
-    persistence: "generated_read_only",
-    note: "Generated Airship draft preview only. These proposed edits are not live, not published, and not persisted as production content.",
+    persistence: "browser_local_only",
+    note: "Local Airship draft preview only. Browser edits are not live, not published, and not persisted as production content.",
     hero: {
-      eyebrow: "TRANSPORTI MAVER D.O.O.",
+      eyebrow: "CHS d.o.o.",
       headline,
       subheading,
       primaryCtaLabel,
-      secondaryContactText: "+386 (0)1 366 38 36 - transporti.maver@siol.net",
+      secondaryContactText: "Parmova ulica 51, Ljubljana",
     },
   };
 }
@@ -242,7 +267,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     aiImprovementStatus: {
       label: deterministicEditableChangesGenerated ? "Editable AI draft generated" : "No concrete editable AI changes generated",
       detail: drafts.length > 0
-        ? `${drafts.length} proposed Airship draft edit(s) generated for the imported homepage. Draft edits are read-only in this phase and are not applied to the live site.`
+        ? `${drafts.length} proposed Airship draft edit(s) generated for the imported CHS homepage. Browser edits are local-only and are not applied to the live site.`
         : input.studioModel.improvementSummary.headline,
       deterministicEditableChangesGenerated,
     },
@@ -261,7 +286,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
       drafts,
       draftPreview: draftPreview(drafts),
       controlMode: "disabled_read_only_generated_draft",
-      controlNote: "Accept, reject, and save are disabled because this Airship phase generates a read-only draft preview without production persistence.",
+      controlNote: "Accept, reject, and save are disabled because this Airship phase supports browser-local draft editing only; persistence is not enabled.",
       recommendationMaterial: recommendationMaterial(input.studioModel.improvementSummary.recommendations),
     },
     flags: {

@@ -2,11 +2,11 @@ import React, { type ReactNode } from "react";
 
 import type {
   AirshipSingleSiteEditorReadonlyProjection,
-  AirshipSingleSiteDraftPreview,
-  AirshipSingleSiteImprovementDraft,
   AirshipSingleSiteRecommendationMaterial,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 import type { SingleSiteStudioPreviewState } from "@/gnr8/single-site/single-site-studio-readonly-projection";
+
+import { AirshipSingleSiteLocalDraftEditor } from "./airship-single-site-local-draft-editor";
 
 type Props = {
   model: AirshipSingleSiteEditorReadonlyProjection;
@@ -63,6 +63,10 @@ function section(title: string, children: ReactNode) {
 }
 
 function preview(previewState: Omit<SingleSiteStudioPreviewState, "label"> & { label: string }) {
+  const retryCopy = previewState.available
+    ? "If this frame shows a connection-session error, refresh the Airship page or open the internal preview again. The draft editor below remains usable."
+    : null;
+
   return (
     <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start", flexWrap: "wrap" }}>
@@ -75,13 +79,18 @@ function preview(previewState: Omit<SingleSiteStudioPreviewState, "label"> & { l
         {badge(previewState.available ? "internal_preview" : "internal_preview_unavailable", previewState.available ? "good" : "warn")}
       </div>
       {previewState.available && previewState.route ? (
-        <div style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#fff", minHeight: 360 }}>
+        <div style={{ position: "relative", border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#fff", minHeight: 360 }}>
           <iframe
             title={previewState.label}
             src={previewState.route}
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
             style={{ display: "block", width: "100%", height: 360, border: 0, background: "#fff" }}
           />
+          {retryCopy ? (
+            <div style={{ borderTop: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", fontSize: 12, lineHeight: 1.45, padding: "8px 10px" }}>
+              {retryCopy}
+            </div>
+          ) : null}
         </div>
       ) : (
         <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", padding: 12, color: "#92400e", fontSize: 13 }}>
@@ -132,67 +141,6 @@ function field(label: string, value: string, multiline = false) {
         />
       )}
     </label>
-  );
-}
-
-function draftRow(draft: AirshipSingleSiteImprovementDraft) {
-  return (
-    <article key={draft.id} style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 12, display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "start", flexWrap: "wrap" }}>
-        <strong style={{ color: "#0f172a", fontSize: 14 }}>{draft.targetSectionPage}</strong>
-        {badge(draft.status, draft.status === "accepted" ? "good" : draft.status === "rejected" ? "warn" : "neutral")}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-        {field("Target section/page", draft.targetSectionPage)}
-        {field("Status", draft.status)}
-        {field("Current text/content summary", draft.currentTextContentSummary, true)}
-        {field("Proposed text/content", draft.proposedTextContent, true)}
-        {field("Reason for change", draft.reasonForChange, true)}
-        {field("Preview impact", draft.previewImpact, true)}
-      </div>
-    </article>
-  );
-}
-
-function draftPreview(previewState: AirshipSingleSiteDraftPreview) {
-  return (
-    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start", flexWrap: "wrap" }}>
-        <div>
-          <h3 style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>{previewState.label}</h3>
-          <div style={{ marginTop: 3, color: "#64748b", fontSize: 12 }}>
-            Proposed changes only - generated read-only draft
-          </div>
-        </div>
-        {badge(previewState.persistence, "warn")}
-      </div>
-      <div style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#ecfeff", minHeight: 360 }}>
-        <div style={{ minHeight: 360, display: "grid", alignContent: "center", gap: 16, padding: 28, background: "linear-gradient(135deg, #ecfeff 0%, #ffffff 58%, #fefce8 100%)" }}>
-          <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 }}>
-            {previewState.hero.eyebrow}
-          </div>
-          <h3 style={{ margin: 0, maxWidth: 760, color: "#0f172a", fontSize: 36, lineHeight: 1.06 }}>
-            {previewState.hero.headline}
-          </h3>
-          <p style={{ margin: 0, maxWidth: 760, color: "#334155", fontSize: 17, lineHeight: 1.55 }}>
-            {previewState.hero.subheading}
-          </p>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            {previewState.hero.primaryCtaLabel ? (
-              <span style={{ display: "inline-flex", border: "1px solid #0f766e", borderRadius: 8, background: "#0f766e", color: "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900 }}>
-                {previewState.hero.primaryCtaLabel}
-              </span>
-            ) : null}
-            {previewState.hero.secondaryContactText ? (
-              <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
-                {previewState.hero.secondaryContactText}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>{previewState.note}</div>
-    </div>
   );
 }
 
@@ -265,35 +213,24 @@ export function AirshipSingleSiteEditor({ model }: Props) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
           {preview(model.previews.originalClone)}
           {preview({ ...model.previews.currentImprovedPublished, label: "Current improved/published preview" })}
-          {model.draftPanel.draftPreview ? draftPreview(model.draftPanel.draftPreview) : null}
         </div>,
       )}
 
       {section(
         model.draftPanel.title,
-        <div style={{ display: "grid", gap: 12 }}>
-          {model.draftPanel.drafts.length > 0 ? (
-            <div style={{ display: "grid", gap: 10 }}>{model.draftPanel.drafts.map(draftRow)}</div>
+        <>
+          {model.draftPanel.drafts.length > 0 && model.draftPanel.draftPreview ? (
+            <AirshipSingleSiteLocalDraftEditor
+              drafts={model.draftPanel.drafts}
+              draftPreview={model.draftPanel.draftPreview}
+              controlNote={model.draftPanel.controlNote}
+            />
           ) : (
             <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", color: "#92400e", padding: 12, fontSize: 14, fontWeight: 850 }}>
               {model.draftPanel.emptyMessage}
             </div>
           )}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button type="button" disabled style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#64748b", padding: "9px 12px", fontSize: 13, fontWeight: 850 }}>
-              Accept draft disabled
-            </button>
-            <button type="button" disabled style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#64748b", padding: "9px 12px", fontSize: 13, fontWeight: 850 }}>
-              Reject draft disabled
-            </button>
-            <button type="button" disabled style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#64748b", padding: "9px 12px", fontSize: 13, fontWeight: 850 }}>
-              Save edit disabled
-            </button>
-          </div>
-          <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.45 }}>
-            {model.draftPanel.controlNote}
-          </div>
-        </div>,
+        </>,
       )}
 
       {section(

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildAirshipSingleSiteEditorReadonlyProjection } from "./airship-single-site-editor-readonly-projection";
+import {
+  airshipChsDraftContainsForbiddenMaverCopy,
+  buildAirshipSingleSiteEditorReadonlyProjection,
+} from "./airship-single-site-editor-readonly-projection";
 import type { SingleSiteStudioReadonlyProjection } from "./single-site-studio-readonly-projection";
 
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
@@ -68,7 +71,7 @@ const studioProjection: SingleSiteStudioReadonlyProjection = {
   },
 };
 
-test("airship projection generates the first concrete CHS AI draft and preview read-only", () => {
+test("airship projection generates the first concrete CHS AI draft and local-only preview", () => {
   const model = buildAirshipSingleSiteEditorReadonlyProjection({
     migrationId: CHS_MIGRATION_ID,
     studioModel: studioProjection,
@@ -79,16 +82,32 @@ test("airship projection generates the first concrete CHS AI draft and preview r
   assert.equal(model.aiImprovementStatus.deterministicEditableChangesGenerated, true);
   assert.equal(model.draftPanel.drafts.length, 3);
   assert.equal(model.draftPanel.drafts.every((draft) => draft.status === "proposed"), true);
+  assert.equal(airshipChsDraftContainsForbiddenMaverCopy(model.draftPanel.drafts), false);
+  assert.equal(airshipChsDraftContainsForbiddenMaverCopy(model.draftPanel.draftPreview), false);
   assert.equal(
     model.draftPanel.drafts.map((draft) => draft.targetSectionPage).join("|"),
     "Homepage / hero headline|Homepage / hero subheading|Homepage / contact call-to-action",
   );
-  assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent === "Prevozi vozil po Evropi od leta 1982"), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent === "Less risk. More control. Better IT."), true);
+  assert.equal(
+    model.draftPanel.drafts.some((draft) =>
+      draft.proposedTextContent === "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region."
+    ),
+    true,
+  );
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent === "Contact CHS at sales@chs.si"), true);
   assert.equal(model.draftPanel.draftPreview?.label, "AI draft preview");
   assert.equal(model.draftPanel.draftPreview?.appliedToLiveSite, false);
-  assert.equal(model.draftPanel.draftPreview?.persistence, "generated_read_only");
+  assert.equal(model.draftPanel.draftPreview?.persistence, "browser_local_only");
   assert.equal(model.draftPanel.controlMode, "disabled_read_only_generated_draft");
   assert.equal(model.flags.mutatesProductionData, false);
   assert.equal(model.flags.publishes, false);
   assert.equal(model.flags.activePointerMutation, false);
+});
+
+test("airship CHS draft guard detects Maver transport identity leaks", () => {
+  assert.equal(airshipChsDraftContainsForbiddenMaverCopy("TRANSPORTI MAVER D.O.O."), true);
+  assert.equal(airshipChsDraftContainsForbiddenMaverCopy("Prevozi vozil po Evropi od leta 1982"), true);
+  assert.equal(airshipChsDraftContainsForbiddenMaverCopy("15 avtotransporterjev"), true);
+  assert.equal(airshipChsDraftContainsForbiddenMaverCopy("CHS d.o.o. enterprise IT"), false);
 });
