@@ -102,6 +102,58 @@ function preview(previewState: Omit<SingleSiteStudioPreviewState, "label"> & { l
   );
 }
 
+function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjection) {
+  const candidate = model.previews.airshipDraftCandidate;
+  if (!candidate) {
+    return (
+      <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", color: "#92400e", padding: 12, fontSize: 13, lineHeight: 1.45 }}>
+        <strong>Airship draft candidate unavailable.</strong> Saved draft edits have not yet been materialized as a separate internal preview candidate.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+      {preview(candidate)}
+      <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 12, display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {badge(candidate.statusLabel, "warn")}
+          {badge("accepted/saved edits applied", "good")}
+          {badge("rejected CTA not applied", "neutral")}
+        </div>
+        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
+          {fact("Draft candidate", candidate.siteVersionId)}
+          {fact("Preview artifact", candidate.runtimeArtifactId)}
+          {fact("Source live/published version", candidate.sourceLiveSiteVersionId)}
+          {fact("Draft", `${candidate.draftId} v${candidate.draftVersion}`)}
+        </dl>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: "#0369a1", fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Applied</div>
+            <ul style={{ margin: 0, paddingLeft: 18, color: "#0f172a", fontSize: 13, lineHeight: 1.5 }}>
+              {candidate.appliedEdits.map((edit) => (
+                <li key={edit.draftEditId}>
+                  <strong>{edit.targetSectionPage}:</strong> {edit.appliedTextContent}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Skipped</div>
+            <ul style={{ margin: 0, paddingLeft: 18, color: "#0f172a", fontSize: 13, lineHeight: 1.5 }}>
+              {candidate.skippedEdits.map((edit) => (
+                <li key={edit.draftEditId}>
+                  <strong>{edit.targetSectionPage}:</strong> {edit.skippedTextContent} ({edit.reason})
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function field(label: string, value: string, multiline = false) {
   return (
     <label style={{ display: "grid", gap: 5, minWidth: 0, color: "#475569", fontSize: 12, fontWeight: 850 }}>
@@ -211,8 +263,8 @@ export function AirshipSingleSiteEditor({ model }: Props) {
       {section(
         "Previews",
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
-          {preview(model.previews.originalClone)}
-          {preview({ ...model.previews.currentImprovedPublished, label: "Current improved/published preview" })}
+          {preview({ ...model.previews.currentLivePublished, label: "Current live/published preview" })}
+          {airshipCandidateSummary(model)}
         </div>,
       )}
 

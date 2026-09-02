@@ -13,6 +13,7 @@ const siteVersion = {
   createdAt: "2026-03-21T00:00:00.000Z",
   rendererCompatibilityVersion: "gnr8-renderer-v1",
   artifactId: null,
+  importProvenanceSummary: null,
   pages: [
     {
       id: "pv_1",
@@ -220,6 +221,42 @@ test("artifact-builder renders visible legacy summary v2 with grouped recognizab
   assert.match(html, /class="gnr8-card"/);
   assert.match(html, /class="gnr8-grid"/);
   assert.doesNotMatch(html, /"html"\s*:/);
+});
+
+test("artifact-builder renders Airship draft hero override in legacy summary preview", () => {
+  const legacySiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            legacy: {
+              airshipDraftHeroOverride: {
+                headline: "CHS helps modernize secure enterprise IT",
+                subheading: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
+              },
+              htmlSummary: {
+                extractedText:
+                  "CHS d.o.o. Less risk. More control. Better IT. Contact us sales@chs.si Parmova ulica 51, Ljubljana.",
+                extractedImageSrcs: [],
+                extractedLinks: [{ href: "/kontakt", label: "Contact us" }],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: legacySiteVersion, renderMode: "PREVIEW" });
+  const html = out.htmlByPath["/"] ?? "";
+  assert.match(html, /<h1[^>]*>CHS helps modernize secure enterprise IT<\/h1>/);
+  assert.match(html, /Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region\./);
+  assert.doesNotMatch(html, /Contact CHS at sales@chs\.si/);
 });
 
 test("artifact-builder prefers reachable uploads variants over paired shadow asset aliases", () => {

@@ -170,6 +170,60 @@ test("airship projection reloads saved draft edits from persistent storage", () 
   assert.equal(model.flags.mutatesProductionData, false);
 });
 
+test("airship projection exposes a saved draft candidate as internal preview only", () => {
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: studioProjection,
+    airshipDraftCandidate: {
+      label: "New Airship draft candidate preview",
+      siteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
+      runtimeArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
+      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7/preview?mode=transformed`,
+      mode: "transformed",
+      available: true,
+      unavailableReason: null,
+      authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+      statusLabel: "Not live, internal preview only",
+      sourceLiveSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+      draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
+      draftVersion: 5,
+      appliedEdits: [
+        {
+          draftEditId: "airship-chs-home-hero-headline",
+          targetSectionPage: "Homepage / hero headline",
+          appliedTextContent: "CHS helps modernize secure enterprise IT",
+        },
+        {
+          draftEditId: "airship-chs-home-hero-value-proposition",
+          targetSectionPage: "Homepage / hero subheading",
+          appliedTextContent: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
+        },
+      ],
+      skippedEdits: [
+        {
+          draftEditId: "airship-chs-home-contact-cta",
+          targetSectionPage: "Homepage / contact call-to-action",
+          skippedTextContent: "Contact CHS at sales@chs.si",
+          reason: "rejected",
+        },
+      ],
+    },
+    generatedAt: "2026-09-02T00:04:00.000Z",
+  });
+
+  assert.equal(model.previews.currentLivePublished.siteVersionId, IMPROVED_CANDIDATE_VERSION_ID);
+  assert.equal(model.previews.airshipDraftCandidate?.statusLabel, "Not live, internal preview only");
+  assert.equal(model.previews.airshipDraftCandidate?.appliedEdits[0]?.appliedTextContent, "CHS helps modernize secure enterprise IT");
+  assert.equal(
+    model.previews.airshipDraftCandidate?.appliedEdits[1]?.appliedTextContent,
+    "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
+  );
+  assert.equal(model.previews.airshipDraftCandidate?.skippedEdits[0]?.skippedTextContent, "Contact CHS at sales@chs.si");
+  assert.equal(model.flags.publishes, false);
+  assert.equal(model.flags.activePointerMutation, false);
+});
+
 test("airship CHS draft guard detects Maver transport identity leaks", () => {
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy("TRANSPORTI MAVER D.O.O."), true);
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy("Prevozi vozil po Evropi od leta 1982"), true);

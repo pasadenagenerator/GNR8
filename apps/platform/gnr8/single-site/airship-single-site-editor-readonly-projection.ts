@@ -13,6 +13,10 @@ import {
   AIRSHIP_SINGLE_SITE_DRAFT_SERVICE_VERSION,
   type AirshipSingleSiteDraftRecord,
 } from "./airship-single-site-draft-service";
+import {
+  readLatestAirshipSingleSiteDraftCandidatePreview,
+  type AirshipDraftCandidatePreviewRef,
+} from "./airship-single-site-draft-candidate-service";
 
 export const AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION = "airship-1-single-site-editor-readonly:v1" as const;
 
@@ -83,6 +87,8 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
   previews: {
     originalClone: SingleSiteStudioReadonlyProjection["previews"]["originalClone"];
     currentImprovedPublished: SingleSiteStudioReadonlyProjection["previews"]["improvedCandidate"];
+    currentLivePublished: SingleSiteStudioReadonlyProjection["previews"]["improvedCandidate"];
+    airshipDraftCandidate: AirshipDraftCandidatePreviewRef | null;
   };
   links: {
     liveSite: string;
@@ -134,6 +140,7 @@ type AirshipBuildInput = {
   migrationId?: string | null;
   studioModel: SingleSiteStudioReadonlyProjection;
   persistedDraft?: AirshipSingleSiteDraftRecord | null;
+  airshipDraftCandidate?: AirshipDraftCandidatePreviewRef | null;
   generatedAt?: string | null;
 };
 
@@ -342,6 +349,8 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     previews: {
       originalClone: input.studioModel.previews.originalClone,
       currentImprovedPublished: input.studioModel.previews.improvedCandidate,
+      currentLivePublished: input.studioModel.previews.improvedCandidate,
+      airshipDraftCandidate: input.airshipDraftCandidate ?? null,
     },
     links: {
       liveSite: input.studioModel.summary.liveSiteUrl,
@@ -390,10 +399,20 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
   } catch {
     persistedDraft = null;
   }
+  let airshipDraftCandidate: AirshipDraftCandidatePreviewRef | null = null;
+  try {
+    airshipDraftCandidate = await readLatestAirshipSingleSiteDraftCandidatePreview({
+      migrationId,
+      draftId: persistedDraft?.id ?? null,
+    });
+  } catch {
+    airshipDraftCandidate = null;
+  }
   return buildAirshipSingleSiteEditorReadonlyProjection({
     migrationId,
     studioModel,
     persistedDraft,
+    airshipDraftCandidate,
     generatedAt: studioModel.generatedAt,
   });
 }

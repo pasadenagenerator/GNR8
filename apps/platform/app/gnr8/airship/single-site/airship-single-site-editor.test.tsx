@@ -69,6 +69,51 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         unavailableReason: null,
         authNote: "Authenticated runtime preview route exists.",
       },
+      currentLivePublished: {
+        label: "Improved candidate preview",
+        siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+        runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+        route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`,
+        mode: "transformed",
+        available: true,
+        unavailableReason: null,
+        authNote: "Authenticated runtime preview route exists.",
+      },
+      airshipDraftCandidate: {
+        label: "New Airship draft candidate preview",
+        siteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
+        runtimeArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
+        route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7/preview?mode=transformed`,
+        mode: "transformed",
+        available: true,
+        unavailableReason: null,
+        authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+        statusLabel: "Not live, internal preview only",
+        sourceLiveSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+        sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+        draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
+        draftVersion: 5,
+        appliedEdits: [
+          {
+            draftEditId: "airship-chs-home-hero-headline",
+            targetSectionPage: "Homepage / hero headline",
+            appliedTextContent: "CHS helps modernize secure enterprise IT",
+          },
+          {
+            draftEditId: "airship-chs-home-hero-value-proposition",
+            targetSectionPage: "Homepage / hero subheading",
+            appliedTextContent: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
+          },
+        ],
+        skippedEdits: [
+          {
+            draftEditId: "airship-chs-home-contact-cta",
+            targetSectionPage: "Homepage / contact call-to-action",
+            skippedTextContent: "Contact CHS at sales@chs.si",
+            reason: "rejected",
+          },
+        ],
+      },
     },
     links: {
       liveSite: "https://www.chs.si/",
@@ -185,15 +230,20 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("Open live site"), true);
 });
 
-test("airship single-site editor renders original and current improved previews with internal routes", () => {
+test("airship single-site editor renders live published and Airship draft candidate previews with internal routes", () => {
   const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
-  assert.equal(html.includes("Original clone preview"), true);
-  assert.equal(html.includes("Current improved/published preview"), true);
+  assert.equal(html.includes("Current live/published preview"), true);
+  assert.equal(html.includes("New Airship draft candidate preview"), true);
+  assert.equal(html.includes("Not live, internal preview only"), true);
+  assert.equal(html.includes("accepted/saved edits applied"), true);
+  assert.equal(html.includes("rejected CTA not applied"), true);
+  assert.equal(html.includes("CHS helps modernize secure enterprise IT"), true);
+  assert.equal(html.includes("Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region."), true);
   assert.equal(html.includes("AI draft preview"), true);
   assert.equal(html.includes("Saved Airship draft"), true);
-  assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`), true);
+  assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7/preview?mode=transformed`), true);
   assert.equal(html.includes('src="https://www.chs.si/"'), false);
   assert.equal(html.includes("If this frame shows a connection-session error"), true);
   assert.equal(html.includes("The draft editor below remains usable."), true);

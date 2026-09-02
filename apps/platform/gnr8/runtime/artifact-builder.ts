@@ -35,10 +35,25 @@ type LegacySummaryTheme = {
   accentSoft: string;
 };
 
+type AirshipDraftHeroOverride = {
+  headline: string;
+  subheading: string;
+};
+
 function readLegacyHtmlSummary(sectionProps: Record<string, unknown>): LegacyHtmlSummary | null {
   const raw = sectionProps.htmlSummary;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   return raw as LegacyHtmlSummary;
+}
+
+function readAirshipDraftHeroOverride(sectionProps: Record<string, unknown>): AirshipDraftHeroOverride | null {
+  const raw = sectionProps.airshipDraftHeroOverride;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const headline = asNonEmptyString(record.headline);
+  const subheading = asNonEmptyString(record.subheading);
+  if (!headline || !subheading) return null;
+  return { headline, subheading };
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -542,9 +557,11 @@ function renderLegacySummaryHtml(input: {
   const links = readSummaryLinks(summary);
   if (!text && imageSrcs.length === 0 && links.length === 0) return "";
 
+  const airshipDraftHero = readAirshipDraftHeroOverride(sectionProps);
   const sentences = uniqueByCaseFold(splitIntoSentences(text ?? "").map(normalizeSentenceForDisplay).filter((line) => line.length > 0));
-  const heroHeading = pickHeroHeading(sentences) ?? "Company Overview";
+  const heroHeading = airshipDraftHero?.headline ?? pickHeroHeading(sentences) ?? "Company Overview";
   const intro =
+    airshipDraftHero?.subheading ??
     sentences.find(
       (line) => line !== heroHeading && line.length >= 45 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line),
     ) ?? null;
