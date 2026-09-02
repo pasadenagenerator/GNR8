@@ -25,6 +25,20 @@ export type AirshipSingleSiteImprovementDraft = {
   previewImpact: string;
 };
 
+export type AirshipSingleSiteDraftPreview = {
+  label: "AI draft preview";
+  appliedToLiveSite: false;
+  persistence: "generated_read_only";
+  note: string;
+  hero: {
+    eyebrow: string;
+    headline: string;
+    subheading: string;
+    primaryCtaLabel: string | null;
+    secondaryContactText: string | null;
+  };
+};
+
 export type AirshipSingleSiteRecommendationMaterial = {
   id: string;
   key: string;
@@ -67,6 +81,9 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
     title: "AI improvement draft";
     emptyMessage: "No concrete editable AI changes have been generated yet.";
     drafts: AirshipSingleSiteImprovementDraft[];
+    draftPreview: AirshipSingleSiteDraftPreview | null;
+    controlMode: "disabled_read_only_generated_draft";
+    controlNote: string;
     recommendationMaterial: AirshipSingleSiteRecommendationMaterial[];
   };
   flags: {
@@ -150,11 +167,66 @@ function recommendationMaterial(recommendations: SingleSiteStudioRecommendation[
   }));
 }
 
+function chsDrafts(migrationId: string | null): AirshipSingleSiteImprovementDraft[] {
+  if (migrationId !== AIRSHIP_CHS_MIGRATION_ID) return [];
+
+  return [
+    {
+      id: "airship-chs-home-hero-headline",
+      targetSectionPage: "Homepage / hero headline",
+      currentTextContentSummary: "The imported homepage hero/title is source-derived and reads as the company name, `TRANSPORTI MAVER D.O.O.`, before the service value is clear.",
+      proposedTextContent: "Prevozi vozil po Evropi od leta 1982",
+      reasonForChange: "Lead with the concrete service and longevity so visitors understand the offer before reading supporting company details.",
+      status: "proposed",
+      previewImpact: "AI draft preview headline changes from a company-name-only first impression to a service-led transport promise.",
+    },
+    {
+      id: "airship-chs-home-hero-value-proposition",
+      targetSectionPage: "Homepage / hero subheading",
+      currentTextContentSummary: "The source text explains the fleet and European coverage later in the page: 15 auto transporters, EU destinations, EU 6 trucks, direct delivery, guarded parking, and workshop support.",
+      proposedTextContent: "S 15 avtotransporterji za Nemcijo, Italijo, Spanijo, Svico in Francijo poskrbimo za zanesljiv prevzem, zbirnik in dostavo vozil do stranke ali varovanega parkirisca.",
+      reasonForChange: "Condense the strongest source facts into one first-viewport value proposition without adding new claims outside the imported content.",
+      status: "proposed",
+      previewImpact: "AI draft preview adds a scannable service summary under the hero headline.",
+    },
+    {
+      id: "airship-chs-home-contact-cta",
+      targetSectionPage: "Homepage / contact call-to-action",
+      currentTextContentSummary: "A safe contact target exists in the source material: the homepage includes `Kontakt`, phone links, and email links for Transporti Maver.",
+      proposedTextContent: "Posljite povprasevanje za prevoz vozila",
+      reasonForChange: "Make the contact action outcome-specific while keeping it tied to the existing contact section and source contact channels.",
+      status: "proposed",
+      previewImpact: "AI draft preview shows a clearer primary contact CTA; it is not wired to mutate or publish production content.",
+    },
+  ];
+}
+
+function draftPreview(drafts: AirshipSingleSiteImprovementDraft[]): AirshipSingleSiteDraftPreview | null {
+  const headline = drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.proposedTextContent;
+  const subheading = drafts.find((draft) => draft.id === "airship-chs-home-hero-value-proposition")?.proposedTextContent;
+  const primaryCtaLabel = drafts.find((draft) => draft.id === "airship-chs-home-contact-cta")?.proposedTextContent ?? null;
+  if (!headline || !subheading) return null;
+
+  return {
+    label: "AI draft preview",
+    appliedToLiveSite: false,
+    persistence: "generated_read_only",
+    note: "Generated Airship draft preview only. These proposed edits are not live, not published, and not persisted as production content.",
+    hero: {
+      eyebrow: "TRANSPORTI MAVER D.O.O.",
+      headline,
+      subheading,
+      primaryCtaLabel,
+      secondaryContactText: "+386 (0)1 366 38 36 - transporti.maver@siol.net",
+    },
+  };
+}
+
 export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBuildInput): AirshipSingleSiteEditorReadonlyProjection {
   const migrationId = text(input.migrationId) ?? input.studioModel.migrationId;
   const routeHref = `/gnr8/airship/single-site${migrationId ? `?migrationId=${encodeURIComponent(migrationId)}` : ""}`;
-  const deterministicEditableChangesGenerated = input.studioModel.improvementSummary.noDeterministicContentChanges === false;
-  const drafts: AirshipSingleSiteImprovementDraft[] = [];
+  const drafts = chsDrafts(migrationId);
+  const deterministicEditableChangesGenerated = drafts.length > 0 || input.studioModel.improvementSummary.noDeterministicContentChanges === false;
 
   return {
     version: AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION,
@@ -169,7 +241,9 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     mvpStatus: input.studioModel.summary.mvpStatus,
     aiImprovementStatus: {
       label: deterministicEditableChangesGenerated ? "Editable AI draft generated" : "No concrete editable AI changes generated",
-      detail: input.studioModel.improvementSummary.headline,
+      detail: drafts.length > 0
+        ? `${drafts.length} proposed Airship draft edit(s) generated for the imported homepage. Draft edits are read-only in this phase and are not applied to the live site.`
+        : input.studioModel.improvementSummary.headline,
       deterministicEditableChangesGenerated,
     },
     previews: {
@@ -185,6 +259,9 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
       title: "AI improvement draft",
       emptyMessage: "No concrete editable AI changes have been generated yet.",
       drafts,
+      draftPreview: draftPreview(drafts),
+      controlMode: "disabled_read_only_generated_draft",
+      controlNote: "Accept, reject, and save are disabled because this Airship phase generates a read-only draft preview without production persistence.",
       recommendationMaterial: recommendationMaterial(input.studioModel.improvementSummary.recommendations),
     },
     flags: {

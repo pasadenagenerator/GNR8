@@ -2,6 +2,7 @@ import React, { type ReactNode } from "react";
 
 import type {
   AirshipSingleSiteEditorReadonlyProjection,
+  AirshipSingleSiteDraftPreview,
   AirshipSingleSiteImprovementDraft,
   AirshipSingleSiteRecommendationMaterial,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
@@ -153,6 +154,48 @@ function draftRow(draft: AirshipSingleSiteImprovementDraft) {
   );
 }
 
+function draftPreview(previewState: AirshipSingleSiteDraftPreview) {
+  return (
+    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start", flexWrap: "wrap" }}>
+        <div>
+          <h3 style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>{previewState.label}</h3>
+          <div style={{ marginTop: 3, color: "#64748b", fontSize: 12 }}>
+            Proposed changes only - generated read-only draft
+          </div>
+        </div>
+        {badge(previewState.persistence, "warn")}
+      </div>
+      <div style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#ecfeff", minHeight: 360 }}>
+        <div style={{ minHeight: 360, display: "grid", alignContent: "center", gap: 16, padding: 28, background: "linear-gradient(135deg, #ecfeff 0%, #ffffff 58%, #fefce8 100%)" }}>
+          <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 }}>
+            {previewState.hero.eyebrow}
+          </div>
+          <h3 style={{ margin: 0, maxWidth: 760, color: "#0f172a", fontSize: 36, lineHeight: 1.06 }}>
+            {previewState.hero.headline}
+          </h3>
+          <p style={{ margin: 0, maxWidth: 760, color: "#334155", fontSize: 17, lineHeight: 1.55 }}>
+            {previewState.hero.subheading}
+          </p>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {previewState.hero.primaryCtaLabel ? (
+              <span style={{ display: "inline-flex", border: "1px solid #0f766e", borderRadius: 8, background: "#0f766e", color: "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900 }}>
+                {previewState.hero.primaryCtaLabel}
+              </span>
+            ) : null}
+            {previewState.hero.secondaryContactText ? (
+              <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
+                {previewState.hero.secondaryContactText}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>{previewState.note}</div>
+    </div>
+  );
+}
+
 function recommendationRow(item: AirshipSingleSiteRecommendationMaterial) {
   return (
     <article key={item.id} style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 12, display: "grid", gap: 10 }}>
@@ -222,6 +265,7 @@ export function AirshipSingleSiteEditor({ model }: Props) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
           {preview(model.previews.originalClone)}
           {preview({ ...model.previews.currentImprovedPublished, label: "Current improved/published preview" })}
+          {model.draftPanel.draftPreview ? draftPreview(model.draftPanel.draftPreview) : null}
         </div>,
       )}
 
@@ -237,14 +281,17 @@ export function AirshipSingleSiteEditor({ model }: Props) {
           )}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button type="button" disabled style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#64748b", padding: "9px 12px", fontSize: 13, fontWeight: 850 }}>
-              Accept draft
+              Accept draft disabled
             </button>
             <button type="button" disabled style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#64748b", padding: "9px 12px", fontSize: 13, fontWeight: 850 }}>
-              Reject draft
+              Reject draft disabled
             </button>
             <button type="button" disabled style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#64748b", padding: "9px 12px", fontSize: 13, fontWeight: 850 }}>
-              Save edit
+              Save edit disabled
             </button>
+          </div>
+          <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.45 }}>
+            {model.draftPanel.controlNote}
           </div>
         </div>,
       )}

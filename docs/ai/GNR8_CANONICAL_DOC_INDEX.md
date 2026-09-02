@@ -1476,6 +1476,19 @@ Canonical implementation:
 
 Canonical result: Airship exposes the accepted `chs.si` MVP rehearsal as a read-only product-facing editor foundation at `/gnr8/airship/single-site?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`, with imported-site metadata, source/live links, original clone preview, current improved/published preview, AI improvement status, and a structured AI improvement draft panel. The current accepted MVP has no deterministic editable AI content deltas, so the panel states `No concrete editable AI changes have been generated yet.` and shows the accepted recommendation/limitation source material. No production content mutation, source capture, publish, dry-run, shadow-publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, migration, env change, or broad refactor was introduced. Final status is `airship_single_site_editor_foundation_visible`.
 
+## AIRSHIP-2 First Concrete AI Draft
+
+Canonical Airship first concrete AI draft record:
+- `docs/product/gnr8-airship-first-concrete-ai-draft-closeout.md`
+
+Canonical implementation:
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.ts`
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.test.ts`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.test.tsx`
+
+Canonical result: Airship now exposes three concrete generated/read-only proposed homepage edits for the imported `chs.si` page at `/gnr8/airship/single-site?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`: hero headline, hero value proposition, and contact CTA. The AI improvement draft panel renders the proposed edit rows instead of the empty state, includes target/current/proposed/reason/status/preview-impact fields, and shows a separate AI draft preview labeled as proposed changes that are not live, not published, and not persisted. Original clone preview remains the imported/clone baseline, current improved/published preview remains the current candidate preview, and the live site link remains separate. Accept draft, Reject draft, and Save edit are disabled with honest non-persistence labels. No production content mutation, source capture, publish, dry-run, shadow-publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, migration, env change, or broad refactor was introduced. Final status is `airship_first_concrete_ai_draft_visible`.
+
 ## Secondary
 
 - `SYSTEM.md`

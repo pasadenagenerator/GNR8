@@ -31,9 +31,9 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
     liveSiteLabel: "Live site",
     mvpStatus: "Internal single-site MVP accepted",
     aiImprovementStatus: {
-      label: "No concrete editable AI changes generated",
-      detail: "Accepted with limitations; no deterministic content changes were applied in this MVP rehearsal.",
-      deterministicEditableChangesGenerated: false,
+      label: "Editable AI draft generated",
+      detail: "3 proposed Airship draft edit(s) generated for the imported homepage. Draft edits are read-only in this phase and are not applied to the live site.",
+      deterministicEditableChangesGenerated: true,
     },
     previews: {
       originalClone: {
@@ -65,7 +65,50 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
     draftPanel: {
       title: "AI improvement draft",
       emptyMessage: "No concrete editable AI changes have been generated yet.",
-      drafts: [],
+      drafts: [
+        {
+          id: "airship-chs-home-hero-headline",
+          targetSectionPage: "Homepage / hero headline",
+          currentTextContentSummary: "The imported homepage hero/title is source-derived and reads as the company name, `TRANSPORTI MAVER D.O.O.`, before the service value is clear.",
+          proposedTextContent: "Prevozi vozil po Evropi od leta 1982",
+          reasonForChange: "Lead with the concrete service and longevity so visitors understand the offer before reading supporting company details.",
+          status: "proposed",
+          previewImpact: "AI draft preview headline changes from a company-name-only first impression to a service-led transport promise.",
+        },
+        {
+          id: "airship-chs-home-hero-value-proposition",
+          targetSectionPage: "Homepage / hero subheading",
+          currentTextContentSummary: "The source text explains the fleet and European coverage later in the page: 15 auto transporters, EU destinations, EU 6 trucks, direct delivery, guarded parking, and workshop support.",
+          proposedTextContent: "S 15 avtotransporterji za Nemcijo, Italijo, Spanijo, Svico in Francijo poskrbimo za zanesljiv prevzem, zbirnik in dostavo vozil do stranke ali varovanega parkirisca.",
+          reasonForChange: "Condense the strongest source facts into one first-viewport value proposition without adding new claims outside the imported content.",
+          status: "proposed",
+          previewImpact: "AI draft preview adds a scannable service summary under the hero headline.",
+        },
+        {
+          id: "airship-chs-home-contact-cta",
+          targetSectionPage: "Homepage / contact call-to-action",
+          currentTextContentSummary: "A safe contact target exists in the source material: the homepage includes `Kontakt`, phone links, and email links for Transporti Maver.",
+          proposedTextContent: "Posljite povprasevanje za prevoz vozila",
+          reasonForChange: "Make the contact action outcome-specific while keeping it tied to the existing contact section and source contact channels.",
+          status: "proposed",
+          previewImpact: "AI draft preview shows a clearer primary contact CTA; it is not wired to mutate or publish production content.",
+        },
+      ],
+      draftPreview: {
+        label: "AI draft preview",
+        appliedToLiveSite: false,
+        persistence: "generated_read_only",
+        note: "Generated Airship draft preview only. These proposed edits are not live, not published, and not persisted as production content.",
+        hero: {
+          eyebrow: "TRANSPORTI MAVER D.O.O.",
+          headline: "Prevozi vozil po Evropi od leta 1982",
+          subheading: "S 15 avtotransporterji za Nemcijo, Italijo, Spanijo, Svico in Francijo poskrbimo za zanesljiv prevzem, zbirnik in dostavo vozil do stranke ali varovanega parkirisca.",
+          primaryCtaLabel: "Posljite povprasevanje za prevoz vozila",
+          secondaryContactText: "+386 (0)1 366 38 36 - transporti.maver@siol.net",
+        },
+      },
+      controlMode: "disabled_read_only_generated_draft",
+      controlNote: "Accept, reject, and save are disabled because this Airship phase generates a read-only draft preview without production persistence.",
       recommendationMaterial: [
         {
           id: "0be61bde-6568-4f33-8499-4d5eade70837",
@@ -115,7 +158,7 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("https://www.chs.si/"), true);
   assert.equal(html.includes("Internal single-site MVP accepted"), true);
   assert.equal(html.includes("AI improvement status"), true);
-  assert.equal(html.includes("No concrete editable AI changes generated"), true);
+  assert.equal(html.includes("Editable AI draft generated"), true);
   assert.equal(html.includes("Open live site"), true);
 });
 
@@ -124,46 +167,50 @@ test("airship single-site editor renders original and current improved previews 
 
   assert.equal(html.includes("Original clone preview"), true);
   assert.equal(html.includes("Current improved/published preview"), true);
+  assert.equal(html.includes("AI draft preview"), true);
+  assert.equal(html.includes("Proposed changes only"), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes('src="https://www.chs.si/"'), false);
 });
 
-test("airship single-site editor shows a structured draft panel and honest empty state", () => {
+test("airship single-site editor shows concrete proposed draft rows", () => {
   const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
   assert.equal(html.includes("AI improvement draft"), true);
-  assert.equal(html.includes("No concrete editable AI changes have been generated yet."), true);
+  assert.equal(html.includes("No concrete editable AI changes have been generated yet."), false);
   assert.equal(html.includes("Target section/page"), true);
   assert.equal(html.includes("Current text/content summary"), true);
   assert.equal(html.includes("Proposed text/content"), true);
   assert.equal(html.includes("Reason for change"), true);
   assert.equal(html.includes("Status"), true);
   assert.equal(html.includes("Preview impact"), true);
-  assert.equal(html.includes("Clarify service positioning copy"), true);
-  assert.equal(html.includes("No exact replacement text or content block has been generated."), true);
+  assert.equal(html.includes("Homepage / hero headline"), true);
+  assert.equal(html.includes("Prevozi vozil po Evropi od leta 1982"), true);
+  assert.equal(html.includes("Homepage / hero subheading"), true);
+  assert.equal(html.includes("S 15 avtotransporterji za Nemcijo"), true);
+  assert.equal(html.includes("Homepage / contact call-to-action"), true);
+  assert.equal(html.includes("Posljite povprasevanje za prevoz vozila"), true);
+  assert.equal(html.includes("proposed"), true);
 });
 
-test("airship single-site editor can render concrete draft rows as structured editable data", () => {
-  const model = airshipModel();
-  model.draftPanel.drafts = [
-    {
-      id: "draft-home-hero-copy",
-      targetSectionPage: "Homepage hero",
-      currentTextContentSummary: "Existing hero copy is preserved from the imported source.",
-      proposedTextContent: "Ceramic solutions for durable, precise industrial surfaces.",
-      reasonForChange: "Clarifies service positioning in the first viewport.",
-      status: "edited",
-      previewImpact: "Would update the current improved preview hero copy after an explicit save flow exists.",
-    },
-  ];
-  const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={model} />);
+test("airship single-site editor renders the generated draft preview as not live and not persisted", () => {
+  const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
-  assert.equal(html.includes("Homepage hero"), true);
-  assert.equal(html.includes("Ceramic solutions for durable, precise industrial surfaces."), true);
-  assert.equal(html.includes("Clarifies service positioning in the first viewport."), true);
-  assert.equal(html.includes("edited"), true);
-  assert.equal(html.includes("No concrete editable AI changes have been generated yet."), false);
+  assert.equal(html.includes("Generated Airship draft preview only"), true);
+  assert.equal(html.includes("not live, not published, and not persisted as production content"), true);
+  assert.equal(html.includes("generated read-only draft"), true);
+  assert.equal(html.includes("generated read only"), true);
+  assert.equal(html.includes("TRANSPORTI MAVER D.O.O."), true);
+});
+
+test("airship single-site editor labels non-persisted draft controls honestly", () => {
+  const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
+
+  assert.equal(html.includes("Accept draft disabled"), true);
+  assert.equal(html.includes("Reject draft disabled"), true);
+  assert.equal(html.includes("Save edit disabled"), true);
+  assert.equal(html.includes("read-only draft preview without production persistence"), true);
 });
 
 test("airship single-site route is superadmin-gated and defaults to the CHS migration", async () => {
