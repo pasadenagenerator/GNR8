@@ -5,6 +5,7 @@ import {
   airshipChsDraftContainsForbiddenMaverCopy,
   buildAirshipSingleSiteEditorReadonlyProjection,
 } from "./airship-single-site-editor-readonly-projection";
+import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
 import type { SingleSiteStudioReadonlyProjection } from "./single-site-studio-readonly-projection";
 
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
@@ -25,6 +26,13 @@ const studioProjection: SingleSiteStudioReadonlyProjection = {
     liveSiteUrl: "https://www.chs.si/",
     activePointer: "live",
     publishedCandidate: "PUBLISHED",
+  },
+  sourceTruth: {
+    tenantId: "tenant-chs",
+    clientId: "client-chs",
+    siteId: "site-chs",
+    ownershipSiteId: null,
+    runtimeSiteId: "runtime-chs",
   },
   import: {
     inputUrl: "https://www.chs.si/",
@@ -99,10 +107,67 @@ test("airship projection generates the first concrete CHS AI draft and local-onl
   assert.equal(model.draftPanel.draftPreview?.label, "AI draft preview");
   assert.equal(model.draftPanel.draftPreview?.appliedToLiveSite, false);
   assert.equal(model.draftPanel.draftPreview?.persistence, "browser_local_only");
-  assert.equal(model.draftPanel.controlMode, "disabled_read_only_generated_draft");
+  assert.equal(model.draftPanel.controlMode, "persistent_airship_draft");
+  assert.equal(model.draftPanel.persistence.label, "Unsaved Airship draft");
   assert.equal(model.flags.mutatesProductionData, false);
+  assert.equal(model.flags.mutatesDraftData, true);
   assert.equal(model.flags.publishes, false);
   assert.equal(model.flags.activePointerMutation, false);
+});
+
+test("airship projection reloads saved draft edits from persistent storage", () => {
+  const persistedDraft: AirshipSingleSiteDraftRecord = {
+    id: "draft-chs-projection",
+    migrationId: CHS_MIGRATION_ID,
+    tenantId: "tenant-chs",
+    clientId: "client-chs",
+    siteId: "site-chs",
+    agencyId: null,
+    sourceUrl: "https://www.chs.si/",
+    targetSiteVersionRefs: {
+      originalCloneSiteVersionId: ORIGINAL_CLONE_VERSION_ID,
+      originalCloneRuntimeArtifactId: "929106cd-fa19-47eb-9582-ce6931d0e370",
+      improvedCandidateSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      improvedCandidateRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    },
+    draftEdits: [
+      {
+        id: "airship-chs-home-hero-headline",
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Captured CHS homepage evidence includes the hero line.",
+        proposedTextContent: "CHS helps modernize enterprise IT",
+        reasonForChange: "Operator saved draft copy.",
+        status: "edited",
+        previewImpact: "Saved headline appears in Airship draft preview only.",
+      },
+    ],
+    draftStatus: "draft",
+    version: 3,
+    semanticWatermark: "airship-single-site-editor-draft:projection",
+    metadata: {
+      liveBoundary: "not_applied_to_live_site",
+    },
+    createdByActorId: "superadmin-projection",
+    updatedByActorId: "superadmin-projection",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-02T00:00:00.000Z",
+    updatedAt: "2026-09-02T00:03:00.000Z",
+  };
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: studioProjection,
+    persistedDraft,
+    generatedAt: "2026-09-02T00:03:00.000Z",
+  });
+
+  assert.equal(model.draftPanel.persistence.label, "Saved Airship draft");
+  assert.equal(model.draftPanel.persistence.draftId, "draft-chs-projection");
+  assert.equal(model.draftPanel.drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.proposedTextContent, "CHS helps modernize enterprise IT");
+  assert.equal(model.draftPanel.draftPreview?.persistence, "saved_airship_draft");
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS helps modernize enterprise IT");
+  assert.equal(model.draftPanel.draftPreview?.appliedToLiveSite, false);
+  assert.equal(model.flags.mutatesProductionData, false);
 });
 
 test("airship CHS draft guard detects Maver transport identity leaks", () => {

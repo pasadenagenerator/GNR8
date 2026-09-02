@@ -221,9 +221,11 @@ export function AirshipSingleSiteEditor({ model }: Props) {
         <>
           {model.draftPanel.drafts.length > 0 && model.draftPanel.draftPreview ? (
             <AirshipSingleSiteLocalDraftEditor
+              migrationId={model.migrationId}
               drafts={model.draftPanel.drafts}
               draftPreview={model.draftPanel.draftPreview}
               controlNote={model.draftPanel.controlNote}
+              persistence={model.draftPanel.persistence}
             />
           ) : (
             <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", color: "#92400e", padding: 12, fontSize: 14, fontWeight: 850 }}>

@@ -90,6 +90,13 @@ export type SingleSiteStudioReadonlyProjection = {
     activePointer: "live" | "not_live" | "unknown";
     publishedCandidate: string;
   };
+  sourceTruth?: {
+    tenantId: string | null;
+    clientId: string | null;
+    siteId: string | null;
+    ownershipSiteId: string | null;
+    runtimeSiteId: string | null;
+  } | null;
   import: {
     inputUrl: string;
     captured: boolean;
@@ -350,6 +357,15 @@ export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput)
       activePointer,
       publishedCandidate,
     },
+    sourceTruth: input.stateModel
+      ? {
+          tenantId: input.stateModel.migration.tenantId,
+          clientId: input.stateModel.migration.clientId,
+          siteId: input.stateModel.migration.siteId,
+          ownershipSiteId: input.stateModel.migration.ownershipSiteId,
+          runtimeSiteId: input.stateModel.migration.runtimeSiteId,
+        }
+      : null,
     import: {
       inputUrl: sourceUrl,
       captured: Boolean(input.stateModel?.sourceEvidenceReview.reviewId),

@@ -9943,3 +9943,9 @@ Start every new thread with:
 # WVT-1 Update
 
 WVT-1 code introduces `website_version_thumbnail` as a private immutable presentation artifact in `importProvenanceSummary`, with deterministic IDs, read-only superadmin serving, Workspace projection, Evolution projection, and a dry-run ODV CLI. No production thumbnail materialization has been performed.
+
+# AIRSHIP-3 Update
+
+AIRSHIP-3 adds persistent draft-only storage and review controls for the `chs.si` single-site Airship editor. The saved draft path is `public.gnr8_airship_single_site_editor_drafts` with append-only events in `public.gnr8_airship_single_site_editor_draft_events`; UI controls save draft text and mark individual draft edits accepted/rejected. Airship labels remain `Saved Airship draft`, `Not applied to live site`, and `Not published`. No Airship draft state is applied to runtime site versions or live `https://www.chs.si/`, and no publish, dry-run, shadow-publish, rollback, source capture, provider/DNS/domain/billing mutation, env change, or active pointer mutation is authorized by AIRSHIP-3.
+
+Production verification for AIRSHIP-3 applied migration `20260902120000_airship_single_site_editor_drafts.sql`, recorded version `20260902120000` in `supabase_migrations.schema_migrations`, and created/updated draft `f9b31666-b3b0-4455-8650-4a8c7304a559` for migration `682a09fd-8fd5-4f73-93b8-54f5d4067c63`. Reload/readback returned the saved draft and draft-only preview. The CHS active pointer remained unchanged at active site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` and artifact `1f80138a-39c2-4210-ac61-16200e5a2254`.

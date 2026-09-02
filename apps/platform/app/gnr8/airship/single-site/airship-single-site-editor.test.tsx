@@ -33,6 +33,13 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
     migrationId: CHS_MIGRATION_ID,
     importedSite: "chs.si",
     sourceUrl: "https://www.chs.si/",
+    studioSourceTruth: {
+      tenantId: "tenant-chs",
+      clientId: "client-chs",
+      siteId: "site-chs",
+      ownershipSiteId: null,
+      runtimeSiteId: "runtime-chs",
+    },
     liveSiteUrl: "https://www.chs.si/",
     liveSiteLabel: "Live site",
     mvpStatus: "Internal single-site MVP accepted",
@@ -113,8 +120,17 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
           secondaryContactText: "Parmova ulica 51, Ljubljana",
         },
       },
-      controlMode: "disabled_read_only_generated_draft",
-      controlNote: "Accept, reject, and save are disabled because this Airship phase supports browser-local draft editing only; persistence is not enabled.",
+      controlMode: "persistent_airship_draft",
+      controlNote: "Save, accept, and reject update only the saved Airship draft workspace. Not applied to live site. Not published.",
+      persistence: {
+        label: "Unsaved Airship draft",
+        draftId: null,
+        draftStatus: null,
+        version: null,
+        lastSavedAt: null,
+        notAppliedToLiveSite: true,
+        notPublished: true,
+      },
       recommendationMaterial: [
         {
           id: "0be61bde-6568-4f33-8499-4d5eade70837",
@@ -143,8 +159,9 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
       ],
     },
     flags: {
-      readOnly: true,
+      readOnly: false,
       mutatesProductionData: false,
+      mutatesDraftData: true,
       imports: false,
       publishes: false,
       dryRuns: false,
@@ -174,7 +191,7 @@ test("airship single-site editor renders original and current improved previews 
   assert.equal(html.includes("Original clone preview"), true);
   assert.equal(html.includes("Current improved/published preview"), true);
   assert.equal(html.includes("AI draft preview"), true);
-  assert.equal(html.includes("Proposed changes only"), true);
+  assert.equal(html.includes("Saved Airship draft"), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${ORIGINAL_CLONE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes('src="https://www.chs.si/"'), false);
@@ -202,27 +219,26 @@ test("airship single-site editor shows concrete proposed draft rows", () => {
   assert.equal(html.includes("proposed"), true);
 });
 
-test("airship single-site editor renders the local draft editor as not live and not persisted", () => {
+test("airship single-site editor renders persistent draft controls as not live and not published", () => {
   const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
-  assert.equal(html.includes("Local draft editor"), true);
-  assert.equal(html.includes("Editable hero headline"), true);
-  assert.equal(html.includes("Editable hero subheading"), true);
-  assert.equal(html.includes("Editable contact CTA"), true);
-  assert.equal(html.includes("Local Airship draft preview only"), true);
-  assert.equal(html.includes("not live, not published, and not persisted as production content"), true);
-  assert.equal(html.includes("local draft only, not saved to production"), true);
+  assert.equal(html.includes("Saved Airship draft"), true);
+  assert.equal(html.includes("Save edit"), true);
+  assert.equal(html.includes("Accept draft edit"), true);
+  assert.equal(html.includes("Reject draft edit"), true);
+  assert.equal(html.includes("Not applied to live site"), true);
+  assert.equal(html.includes("Not published"), true);
   assert.equal(html.includes("browser local only"), true);
   assert.equal(html.includes("CHS d.o.o."), true);
 });
 
-test("airship single-site editor labels non-persisted draft controls honestly", () => {
+test("airship single-site editor labels draft persistence honestly", () => {
   const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
-  assert.equal(html.includes("Accept disabled"), true);
-  assert.equal(html.includes("Reject disabled"), true);
-  assert.equal(html.includes("Save disabled - persistence not enabled"), true);
-  assert.equal(html.includes("browser-local draft editing only; persistence is not enabled"), true);
+  assert.equal(html.includes("Unsaved Airship draft"), true);
+  assert.equal(html.includes("Save, accept, and reject update only the saved Airship draft workspace"), true);
+  assert.equal(html.includes("Not applied to live site"), true);
+  assert.equal(html.includes("Not published"), true);
 });
 
 test("airship local draft field edits update the draft preview model immediately", () => {
@@ -279,8 +295,8 @@ test("airship single-site foundation adds no production mutation action surface"
   const source = `${pageSource}\n${componentSource}\n${localEditorSource}\n${projectionSource}`;
 
   assert.equal(source.includes("mutatesProductionData: false"), true);
+  assert.equal(source.includes("mutatesDraftData: true"), true);
   assert.equal(source.includes("activePointerMutation: false"), true);
-  assert.equal(source.includes("fetch("), false);
   assert.equal(source.includes('method="post"'), false);
   assert.equal(source.includes("runtimePreviewGET"), false);
   assert.equal(source.includes("Run provider"), false);

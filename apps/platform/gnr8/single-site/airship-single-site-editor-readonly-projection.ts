@@ -8,6 +8,11 @@ import {
   type SingleSiteStudioReadonlyProjection,
   type SingleSiteStudioRecommendation,
 } from "./single-site-studio-readonly-projection";
+import {
+  AirshipSingleSiteDraftService,
+  AIRSHIP_SINGLE_SITE_DRAFT_SERVICE_VERSION,
+  type AirshipSingleSiteDraftRecord,
+} from "./airship-single-site-draft-service";
 
 export const AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION = "airship-1-single-site-editor-readonly:v1" as const;
 
@@ -28,7 +33,7 @@ export type AirshipSingleSiteImprovementDraft = {
 export type AirshipSingleSiteDraftPreview = {
   label: "AI draft preview";
   appliedToLiveSite: false;
-  persistence: "browser_local_only";
+  persistence: "browser_local_only" | "saved_airship_draft";
   note: string;
   hero: {
     eyebrow: string;
@@ -60,6 +65,13 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
   migrationId: string | null;
   importedSite: string;
   sourceUrl: string;
+  studioSourceTruth: {
+    tenantId: string | null;
+    clientId: string | null;
+    siteId: string | null;
+    ownershipSiteId: string | null;
+    runtimeSiteId: string | null;
+  } | null;
   liveSiteUrl: string;
   liveSiteLabel: string;
   mvpStatus: string;
@@ -82,13 +94,23 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
     emptyMessage: "No concrete editable AI changes have been generated yet.";
     drafts: AirshipSingleSiteImprovementDraft[];
     draftPreview: AirshipSingleSiteDraftPreview | null;
-    controlMode: "disabled_read_only_generated_draft";
+    controlMode: "persistent_airship_draft";
     controlNote: string;
+    persistence: {
+      label: "Saved Airship draft" | "Unsaved Airship draft";
+      draftId: string | null;
+      draftStatus: string | null;
+      version: number | null;
+      lastSavedAt: string | null;
+      notAppliedToLiveSite: true;
+      notPublished: true;
+    };
     recommendationMaterial: AirshipSingleSiteRecommendationMaterial[];
   };
   flags: {
-    readOnly: true;
+    readOnly: false;
     mutatesProductionData: false;
+    mutatesDraftData: true;
     imports: false;
     publishes: false;
     dryRuns: false;
@@ -111,6 +133,7 @@ export const AIRSHIP_CHS_FORBIDDEN_DRAFT_PATTERNS = [
 type AirshipBuildInput = {
   migrationId?: string | null;
   studioModel: SingleSiteStudioReadonlyProjection;
+  persistedDraft?: AirshipSingleSiteDraftRecord | null;
   generatedAt?: string | null;
 };
 
@@ -178,7 +201,7 @@ function recommendationMaterial(recommendations: SingleSiteStudioRecommendation[
   }));
 }
 
-function chsDrafts(migrationId: string | null): AirshipSingleSiteImprovementDraft[] {
+export function chsDrafts(migrationId: string | null): AirshipSingleSiteImprovementDraft[] {
   if (migrationId !== AIRSHIP_CHS_MIGRATION_ID) return [];
 
   const drafts: AirshipSingleSiteImprovementDraft[] = [
@@ -226,17 +249,57 @@ function assertChsDraftIdentity(drafts: AirshipSingleSiteImprovementDraft[]) {
   }
 }
 
-function draftPreview(drafts: AirshipSingleSiteImprovementDraft[]): AirshipSingleSiteDraftPreview | null {
-  const headline = drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.proposedTextContent;
-  const subheading = drafts.find((draft) => draft.id === "airship-chs-home-hero-value-proposition")?.proposedTextContent;
-  const primaryCtaLabel = drafts.find((draft) => draft.id === "airship-chs-home-contact-cta")?.proposedTextContent ?? null;
+function persistedDraftForMigration(draft: AirshipSingleSiteDraftRecord | null | undefined, migrationId: string | null): AirshipSingleSiteDraftRecord | null {
+  if (!draft || !migrationId || draft.migrationId !== migrationId) return null;
+  if (airshipChsDraftContainsForbiddenMaverCopy(draft.draftEdits)) return null;
+  return draft;
+}
+
+function mergePersistedDrafts(
+  generatedDrafts: AirshipSingleSiteImprovementDraft[],
+  persistedDraft: AirshipSingleSiteDraftRecord | null,
+): AirshipSingleSiteImprovementDraft[] {
+  if (!persistedDraft) return generatedDrafts;
+  const generatedById = new Map(generatedDrafts.map((draft) => [draft.id, draft]));
+  return generatedDrafts.map((generated) => {
+    const persisted = persistedDraft.draftEdits.find((draft) => draft.id === generated.id);
+    if (!persisted) return generated;
+    return {
+      ...generated,
+      proposedTextContent: persisted.proposedTextContent,
+      status: persisted.status,
+    };
+  }).filter((draft) => generatedById.has(draft.id));
+}
+
+function effectivePreviewText(
+  draftId: string,
+  drafts: AirshipSingleSiteImprovementDraft[],
+  generatedDrafts: AirshipSingleSiteImprovementDraft[],
+): string | null {
+  const draft = drafts.find((item) => item.id === draftId);
+  if (!draft) return null;
+  if (draft.status !== "rejected") return draft.proposedTextContent;
+  return generatedDrafts.find((item) => item.id === draftId)?.proposedTextContent ?? null;
+}
+
+function draftPreview(
+  drafts: AirshipSingleSiteImprovementDraft[],
+  generatedDrafts: AirshipSingleSiteImprovementDraft[],
+  persistedDraft: AirshipSingleSiteDraftRecord | null,
+): AirshipSingleSiteDraftPreview | null {
+  const headline = effectivePreviewText("airship-chs-home-hero-headline", drafts, generatedDrafts);
+  const subheading = effectivePreviewText("airship-chs-home-hero-value-proposition", drafts, generatedDrafts);
+  const primaryCtaLabel = effectivePreviewText("airship-chs-home-contact-cta", drafts, generatedDrafts);
   if (!headline || !subheading) return null;
 
   return {
     label: "AI draft preview",
     appliedToLiveSite: false,
-    persistence: "browser_local_only",
-    note: "Local Airship draft preview only. Browser edits are not live, not published, and not persisted as production content.",
+    persistence: persistedDraft ? "saved_airship_draft" : "browser_local_only",
+    note: persistedDraft
+      ? "Saved Airship draft preview only. Not applied to live site. Not published."
+      : "Unsaved Airship draft preview only. Browser edits are not live, not published, and not persisted as production content.",
     hero: {
       eyebrow: "CHS d.o.o.",
       headline,
@@ -250,7 +313,9 @@ function draftPreview(drafts: AirshipSingleSiteImprovementDraft[]): AirshipSingl
 export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBuildInput): AirshipSingleSiteEditorReadonlyProjection {
   const migrationId = text(input.migrationId) ?? input.studioModel.migrationId;
   const routeHref = `/gnr8/airship/single-site${migrationId ? `?migrationId=${encodeURIComponent(migrationId)}` : ""}`;
-  const drafts = chsDrafts(migrationId);
+  const generatedDrafts = chsDrafts(migrationId);
+  const persistedDraft = persistedDraftForMigration(input.persistedDraft, migrationId);
+  const drafts = mergePersistedDrafts(generatedDrafts, persistedDraft);
   const deterministicEditableChangesGenerated = drafts.length > 0 || input.studioModel.improvementSummary.noDeterministicContentChanges === false;
 
   return {
@@ -261,13 +326,16 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     migrationId,
     importedSite: input.studioModel.summary.site,
     sourceUrl: input.studioModel.summary.sourceUrl,
+    studioSourceTruth: input.studioModel.sourceTruth ?? null,
     liveSiteUrl: input.studioModel.summary.liveSiteUrl,
     liveSiteLabel: "Live site",
     mvpStatus: input.studioModel.summary.mvpStatus,
     aiImprovementStatus: {
       label: deterministicEditableChangesGenerated ? "Editable AI draft generated" : "No concrete editable AI changes generated",
       detail: drafts.length > 0
-        ? `${drafts.length} proposed Airship draft edit(s) generated for the imported CHS homepage. Browser edits are local-only and are not applied to the live site.`
+        ? persistedDraft
+          ? `${drafts.length} Airship draft edit(s) loaded from persistent draft storage. Saved Airship draft. Not applied to live site. Not published.`
+          : `${drafts.length} proposed Airship draft edit(s) generated for the imported CHS homepage. Browser edits are local-only and are not applied to the live site.`
         : input.studioModel.improvementSummary.headline,
       deterministicEditableChangesGenerated,
     },
@@ -284,14 +352,24 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
       title: "AI improvement draft",
       emptyMessage: "No concrete editable AI changes have been generated yet.",
       drafts,
-      draftPreview: draftPreview(drafts),
-      controlMode: "disabled_read_only_generated_draft",
-      controlNote: "Accept, reject, and save are disabled because this Airship phase supports browser-local draft editing only; persistence is not enabled.",
+      draftPreview: draftPreview(drafts, generatedDrafts, persistedDraft),
+      controlMode: "persistent_airship_draft",
+      controlNote: "Save, accept, and reject update only the saved Airship draft workspace. Not applied to live site. Not published.",
+      persistence: {
+        label: persistedDraft ? "Saved Airship draft" : "Unsaved Airship draft",
+        draftId: persistedDraft?.id ?? null,
+        draftStatus: persistedDraft?.draftStatus ?? null,
+        version: persistedDraft?.version ?? null,
+        lastSavedAt: persistedDraft?.updatedAt ?? null,
+        notAppliedToLiveSite: true,
+        notPublished: true,
+      },
       recommendationMaterial: recommendationMaterial(input.studioModel.improvementSummary.recommendations),
     },
     flags: {
-      readOnly: true,
+      readOnly: false,
       mutatesProductionData: false,
+      mutatesDraftData: true,
       imports: false,
       publishes: false,
       dryRuns: false,
@@ -306,5 +384,53 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
 }): Promise<AirshipSingleSiteEditorReadonlyProjection> {
   const migrationId = text(input.migrationId) ?? AIRSHIP_CHS_MIGRATION_ID;
   const studioModel = await getSingleSiteStudioReadonlyProjection({ migrationId });
-  return buildAirshipSingleSiteEditorReadonlyProjection({ migrationId, studioModel });
+  let persistedDraft: AirshipSingleSiteDraftRecord | null = null;
+  try {
+    persistedDraft = await new AirshipSingleSiteDraftService().readCurrentDraft(migrationId);
+  } catch {
+    persistedDraft = null;
+  }
+  return buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId,
+    studioModel,
+    persistedDraft,
+    generatedAt: studioModel.generatedAt,
+  });
+}
+
+export function buildAirshipSingleSiteDraftSeed(input: {
+  model: AirshipSingleSiteEditorReadonlyProjection;
+}): Omit<import("./airship-single-site-draft-service").AirshipSingleSiteDraftSeed, "draftEdits"> & {
+  draftEdits: import("./airship-single-site-draft-service").AirshipSingleSiteDraftEdit[];
+} {
+  return {
+    migrationId: text(input.model.migrationId) ?? AIRSHIP_CHS_MIGRATION_ID,
+    tenantId: input.model.studioSourceTruth?.tenantId ?? null,
+    clientId: input.model.studioSourceTruth?.clientId ?? null,
+    siteId: input.model.studioSourceTruth?.siteId ?? null,
+    agencyId: null,
+    sourceUrl: input.model.sourceUrl,
+    targetSiteVersionRefs: {
+      originalCloneSiteVersionId: input.model.previews.originalClone.siteVersionId,
+      originalCloneRuntimeArtifactId: input.model.previews.originalClone.runtimeArtifactId,
+      improvedCandidateSiteVersionId: input.model.previews.currentImprovedPublished.siteVersionId,
+      improvedCandidateRuntimeArtifactId: input.model.previews.currentImprovedPublished.runtimeArtifactId,
+    },
+    draftEdits: input.model.draftPanel.drafts.map((draft) => ({
+      id: draft.id,
+      targetSectionPage: draft.targetSectionPage,
+      currentTextContentSummary: draft.currentTextContentSummary,
+      proposedTextContent: draft.proposedTextContent,
+      reasonForChange: draft.reasonForChange,
+      status: draft.status === "accepted" || draft.status === "rejected" || draft.status === "edited" ? draft.status : "proposed",
+      previewImpact: draft.previewImpact,
+    })),
+    metadata: {
+      serviceVersion: AIRSHIP_SINGLE_SITE_DRAFT_SERVICE_VERSION,
+      projectionVersion: AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION,
+      previewPersistence: input.model.draftPanel.draftPreview?.persistence ?? "browser_local_only",
+      liveSiteUrl: input.model.liveSiteUrl,
+      liveBoundary: "not_applied_to_live_site",
+    },
+  };
 }

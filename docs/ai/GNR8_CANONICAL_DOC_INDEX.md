@@ -1504,6 +1504,26 @@ Canonical implementation:
 
 Canonical result: Airship now generates CHS-only proposed homepage edits for `/gnr8/airship/single-site?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`: `Less risk. More control. Better IT.`, `Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.`, and `Contact CHS at sales@chs.si`. The CHS draft projection includes guardrails that reject Maver transport copy. The Airship UI provides browser-local editing for the hero headline, subheading, and contact CTA, with immediate local preview updates and no production persistence. Accept and Reject remain disabled; Save remains disabled and labeled `Save disabled - persistence not enabled`. Internal preview route `EMAXCONNSESSION` errors render a compact retry message. The live site remains a separate outbound link to `https://www.chs.si/`. No production content mutation, source capture, publish, dry-run, shadow-publish, rollback, active pointer mutation, provider/DNS/domain/billing mutation, migration, env change, or broad refactor was introduced. Final status is `airship_chs_draft_identity_fixed_local_editor_working`.
 
+## AIRSHIP-3 Draft Persistence And Review Controls
+
+Canonical Airship draft persistence and review controls record:
+- `docs/product/gnr8-airship-draft-persistence-review-controls-closeout.md`
+
+Canonical implementation:
+- `apps/platform/supabase/migrations/20260902120000_airship_single_site_editor_drafts.sql`
+- `apps/platform/gnr8/single-site/airship-single-site-draft-service.ts`
+- `apps/platform/gnr8/single-site/airship-single-site-draft-service.test.ts`
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.ts`
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.test.ts`
+- `apps/platform/app/api/gnr8/admin/airship/single-site/drafts/route.ts`
+- `apps/platform/app/api/gnr8/admin/airship/single-site/drafts/airship-single-site-drafts-route-handlers.ts`
+- `apps/platform/app/api/gnr8/admin/_tests/airship-single-site-drafts-route.test.ts`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-local-draft-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.test.tsx`
+
+Canonical result: Airship now has persistent draft-only storage for the accepted `chs.si` single-site editor. Operators can edit proposed AI copy, save it, reload it, and mark individual draft edits accepted or rejected. The Airship draft preview reflects saved or locally edited draft state while preserving explicit labels: `Saved Airship draft`, `Not applied to live site`, and `Not published`. Draft rows are stored in `public.gnr8_airship_single_site_editor_drafts` with append-only review events in `public.gnr8_airship_single_site_editor_draft_events`; RLS is closed by default with no public/client grants. Production migration `20260902120000_airship_single_site_editor_drafts.sql` was applied and recorded as version `20260902120000`; production draft `f9b31666-b3b0-4455-8650-4a8c7304a559` was saved/reloaded for migration `682a09fd-8fd5-4f73-93b8-54f5d4067c63`. The CHS active pointer remained unchanged at active site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` and artifact `1f80138a-39c2-4210-ac61-16200e5a2254`. No live CHS content mutation, runtime version mutation, source capture, publish, dry-run, shadow-publish, rollback, provider/DNS/domain/billing mutation, env change, or active pointer mutation is introduced. Final status is `airship_draft_persistence_and_review_controls_working`.
+
 ## Secondary
 
 - `SYSTEM.md`
