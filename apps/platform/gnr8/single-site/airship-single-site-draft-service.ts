@@ -213,6 +213,10 @@ function semanticWatermark(input: {
   return `airship-single-site-editor-draft:${digest}`;
 }
 
+function stableDigest(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
+}
+
 function seedWithSafeValues(seed: AirshipSingleSiteDraftSeed): AirshipSingleSiteDraftSeed {
   return {
     migrationId: text("migrationId", seed.migrationId, { max: 80 }) ?? "",
@@ -560,7 +564,7 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
   ): Promise<void> {
     const idempotencySeed = `${input.event.idempotencyKey}:${input.action}:${input.draftEditId ?? "draft"}`;
     const idempotencyKey =
-      idempotencySeed.length <= 240 ? idempotencySeed : `airship:${input.draft.migrationId}:${hashJson(idempotencySeed)}`;
+      idempotencySeed.length <= 240 ? idempotencySeed : `airship:${input.draft.migrationId}:${stableDigest(idempotencySeed)}`;
 
     await client.query(
       `
