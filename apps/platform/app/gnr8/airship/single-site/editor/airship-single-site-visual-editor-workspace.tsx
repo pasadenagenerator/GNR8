@@ -30,6 +30,21 @@ type Props = {
     notAppliedToLiveSite: true;
     notPublished: true;
   };
+  aiProviderStatus: AirshipOpenAIProviderStatus;
+};
+
+type AirshipOpenAIProviderStatus = {
+  provider: "openai";
+  scope: "airship_editor";
+  ownerScope: "internal_superadmin";
+  connected: boolean;
+  status: "missing" | "connected" | "revoked" | "encryption_not_configured";
+  maskedKey: string | null;
+  model: string;
+  lastTestedAt: string | null;
+  lastTestStatus: "passed" | "failed" | null;
+  updatedAt: string | null;
+  canUseAiCommands: boolean;
 };
 
 export type AirshipHeroEditorFields = {
@@ -62,6 +77,20 @@ type DraftActionResponse = {
   error?: string;
 };
 
+type ProviderActionResponse = {
+  ok?: boolean;
+  providerStatus?: AirshipOpenAIProviderStatus;
+  error?: string;
+  diagnostics?: string[];
+};
+
+type AICommandActionResponse = {
+  ok?: boolean;
+  result?: AirshipCommandResult;
+  error?: string;
+  diagnostics?: string[];
+};
+
 type TextFieldKey = "headline" | "subheading" | "ctaLabel";
 
 const HEADLINE_DRAFT_ID = "airship-chs-home-hero-headline";
@@ -69,6 +98,7 @@ const SUBHEADING_DRAFT_ID = "airship-chs-home-hero-value-proposition";
 const CTA_DRAFT_ID = "airship-chs-home-contact-cta";
 
 const STYLE_LOCAL_ONLY_MESSAGE = "Style changes are local preview only. Not live. Not published.";
+const CONNECT_OPENAI_MESSAGE = "Connect OpenAI to use AI commands.";
 
 const tintOptions = [
   { label: "Ice", value: "#ecfeff" },
@@ -235,11 +265,15 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [fields, setFields] = useState(() => initialAirshipHeroEditorFields(props.draftPreview));
   const [editableDrafts, setEditableDrafts] = useState(() => props.drafts);
   const [busy, setBusy] = useState(false);
+  const [providerBusy, setProviderBusy] = useState(false);
   const [command, setCommand] = useState("");
   const [message, setMessage] = useState(() =>
     `${props.persistence.label}. Draft editor. Internal preview only. Not live. Not published.`,
   );
   const [draftMeta, setDraftMeta] = useState(() => props.persistence);
+  const [providerStatus, setProviderStatus] = useState(() => props.aiProviderStatus);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [modelInput, setModelInput] = useState(() => props.aiProviderStatus.model || "gpt-5");
 
   const selectedDrafts = useMemo(
     () => editableDrafts.filter((draft) => draft.id === HEADLINE_DRAFT_ID || draft.id === SUBHEADING_DRAFT_ID || draft.id === CTA_DRAFT_ID),
@@ -293,13 +327,11 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     }
   }
 
-  async function runCommand() {
-    const result = applyAirshipHeroCommand(fields, command);
-    setCommand("");
+  function applyCommandResult(result: AirshipCommandResult) {
     setFields(result.fields);
     if (!result.supported) {
       setMessage(result.message);
-      return;
+      return false;
     }
     for (const field of result.changedTextFields) {
       const draftId = draftIdForField(field);
@@ -309,8 +341,98 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       );
     }
     setMessage(result.message);
+    return true;
+  }
+
+  async function runDeterministicCommand() {
+    const result = applyAirshipHeroCommand(fields, command);
+    const shouldSave = applyCommandResult(result);
+    if (!shouldSave) {
+      if (!providerStatus.canUseAiCommands) setMessage(CONNECT_OPENAI_MESSAGE);
+      return;
+    }
     if (result.changedTextFields.length > 0) {
       await saveAllTextEdits(result.fields, result.changedTextFields);
+    }
+  }
+
+  async function runProviderCommand() {
+    if (!props.migrationId) throw new Error("airship_migration_id_missing");
+    setBusy(true);
+    setMessage("Running OpenAI command for Airship draft only...");
+    try {
+      const response = await fetch("/api/gnr8/admin/airship/single-site/ai-command", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          migrationId: props.migrationId,
+          command,
+          fields,
+        }),
+      });
+      const payload = await response.json() as AICommandActionResponse;
+      if (!response.ok || !payload.ok || !payload.result) {
+        if (payload.error === "AIRSHIP_OPENAI_PROVIDER_MISSING") {
+          setProviderStatus((current) => ({ ...current, connected: false, canUseAiCommands: false, status: "missing", maskedKey: null }));
+          setMessage(CONNECT_OPENAI_MESSAGE);
+          return;
+        }
+        throw new Error(payload.error || "airship_ai_command_failed");
+      }
+      const shouldSave = applyCommandResult(payload.result);
+      if (shouldSave && payload.result.changedTextFields.length > 0) {
+        await saveAllTextEdits(payload.result.fields, payload.result.changedTextFields);
+      }
+    } catch {
+      setMessage("OpenAI command failed. No live site changes were made; deterministic commands still work locally.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runCommand() {
+    if (!command.trim()) return;
+    if (providerStatus.canUseAiCommands) {
+      const sentCommand = command;
+      setCommand("");
+      await runProviderCommand().catch(() => {
+        setCommand(sentCommand);
+        setMessage("OpenAI command failed. No live site changes were made.");
+      });
+      return;
+    }
+    await runDeterministicCommand();
+    setCommand("");
+  }
+
+  async function submitProviderAction(actionMode: "save_openai" | "test_openai" | "revoke_openai") {
+    setProviderBusy(true);
+    try {
+      const response = await fetch("/api/gnr8/admin/airship/ai/provider", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actionMode,
+          apiKey: actionMode === "save_openai" ? apiKeyInput : undefined,
+          model: modelInput,
+        }),
+      });
+      const payload = await response.json() as ProviderActionResponse;
+      if (!response.ok || !payload.ok || !payload.providerStatus) {
+        throw new Error(payload.error || "airship_openai_provider_action_failed");
+      }
+      setProviderStatus(payload.providerStatus);
+      setModelInput(payload.providerStatus.model);
+      if (actionMode === "save_openai") setApiKeyInput("");
+      setMessage(
+        actionMode === "revoke_openai"
+          ? "OpenAI key revoked. AI commands are disconnected; no live site changes were made."
+          : "OpenAI provider status updated. AI commands remain Airship draft only.",
+      );
+    } catch {
+      setMessage("OpenAI provider action failed. No API key was exposed to the browser response, and no live site changes were made.");
+    } finally {
+      setProviderBusy(false);
     }
   }
 
@@ -417,9 +539,36 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
 
           <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, display: "grid", gap: 8 }}>
             <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>AI command</div>
+            <div style={{ color: providerStatus.canUseAiCommands ? "#166534" : "#92400e", fontSize: 12, lineHeight: 1.45 }}>
+              {providerStatus.canUseAiCommands
+                ? `OpenAI connected (${providerStatus.maskedKey ?? "masked key"}, ${providerStatus.model}).`
+                : CONNECT_OPENAI_MESSAGE}
+            </div>
             <textarea rows={3} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="spremeni CTA v Kontaktirajte CHS" style={inputStyle(true)} />
             <button type="button" disabled={busy || command.trim().length === 0} onClick={() => void runCommand()} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: busy || command.trim().length === 0 ? "#f8fafc" : "#1d4ed8", color: busy || command.trim().length === 0 ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, cursor: busy || command.trim().length === 0 ? "not-allowed" : "pointer" }}>
               Apply command
+            </button>
+          </div>
+
+          <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, display: "grid", gap: 8 }}>
+            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>OpenAI provider</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {badge(providerStatus.canUseAiCommands ? "Connected" : providerStatus.status === "encryption_not_configured" ? "Encryption setup needed" : "Not connected", providerStatus.canUseAiCommands ? "good" : "warn")}
+              {providerStatus.maskedKey ? badge(providerStatus.maskedKey, "neutral") : null}
+              {providerStatus.lastTestStatus ? badge(`Test ${providerStatus.lastTestStatus}`, providerStatus.lastTestStatus === "passed" ? "good" : "warn") : null}
+            </div>
+            {controlLabel("API key", <input type="password" autoComplete="off" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder="sk-..." style={inputStyle()} />)}
+            {controlLabel("Model", <input value={modelInput} onChange={(event) => setModelInput(event.target.value)} placeholder="gpt-5" style={inputStyle()} />)}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button type="button" disabled={providerBusy || apiKeyInput.trim().length === 0} onClick={() => void submitProviderAction("save_openai")} style={{ border: "1px solid #0f766e", borderRadius: 8, background: providerBusy || apiKeyInput.trim().length === 0 ? "#f8fafc" : "#0f766e", color: providerBusy || apiKeyInput.trim().length === 0 ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 13, fontWeight: 900, cursor: providerBusy || apiKeyInput.trim().length === 0 ? "not-allowed" : "pointer" }}>
+                Save key
+              </button>
+              <button type="button" disabled={providerBusy || !providerStatus.canUseAiCommands} onClick={() => void submitProviderAction("test_openai")} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: providerBusy || !providerStatus.canUseAiCommands ? "#f8fafc" : "#1d4ed8", color: providerBusy || !providerStatus.canUseAiCommands ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 13, fontWeight: 900, cursor: providerBusy || !providerStatus.canUseAiCommands ? "not-allowed" : "pointer" }}>
+                Test connection
+              </button>
+            </div>
+            <button type="button" disabled={providerBusy || !providerStatus.canUseAiCommands} onClick={() => void submitProviderAction("revoke_openai")} style={{ border: "1px solid #b91c1c", borderRadius: 8, background: providerBusy || !providerStatus.canUseAiCommands ? "#f8fafc" : "#fff", color: providerBusy || !providerStatus.canUseAiCommands ? "#94a3b8" : "#b91c1c", padding: "10px 13px", fontSize: 13, fontWeight: 900, cursor: providerBusy || !providerStatus.canUseAiCommands ? "not-allowed" : "pointer" }}>
+              Revoke key
             </button>
           </div>
 

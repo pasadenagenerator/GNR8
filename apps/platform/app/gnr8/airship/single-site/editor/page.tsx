@@ -1,4 +1,5 @@
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
+import { AirshipOpenAIByokProviderService } from "@/gnr8/single-site/airship-openai-byok-provider";
 import {
   AIRSHIP_CHS_MIGRATION_ID,
   getAirshipSingleSiteEditorReadonlyProjection,
@@ -28,6 +29,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
   const model = await getAirshipSingleSiteEditorReadonlyProjection({
     migrationId: param(searchParams?.migrationId) ?? AIRSHIP_CHS_MIGRATION_ID,
   });
+  const aiProviderStatus = await new AirshipOpenAIByokProviderService().status();
 
   if (model.draftPanel.drafts.length === 0 || !model.draftPanel.draftPreview) {
     return (
@@ -62,6 +64,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}
       persistence={model.draftPanel.persistence}
+      aiProviderStatus={aiProviderStatus}
     />
   );
 }

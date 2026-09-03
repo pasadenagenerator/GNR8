@@ -359,6 +359,19 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}
       persistence={model.draftPanel.persistence}
+      aiProviderStatus={{
+        provider: "openai",
+        scope: "airship_editor",
+        ownerScope: "internal_superadmin",
+        connected: false,
+        status: "missing",
+        maskedKey: null,
+        model: "gpt-5",
+        lastTestedAt: null,
+        lastTestStatus: null,
+        updatedAt: null,
+        canUseAiCommands: false,
+      }}
     />,
   );
 
@@ -377,6 +390,11 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Background tint"), true);
   assert.equal(html.includes("CTA color"), true);
   assert.equal(html.includes("AI command"), true);
+  assert.equal(html.includes("Connect OpenAI to use AI commands"), true);
+  assert.equal(html.includes("OpenAI provider"), true);
+  assert.equal(html.includes("Save key"), true);
+  assert.equal(html.includes("Test connection"), true);
+  assert.equal(html.includes("Revoke key"), true);
   assert.equal(html.includes("Apply command"), true);
   assert.equal(html.includes("Save text edits"), true);
 });
