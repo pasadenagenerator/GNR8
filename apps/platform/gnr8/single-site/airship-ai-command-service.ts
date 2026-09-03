@@ -146,6 +146,31 @@ function parseProviderJson(outputText: string): Record<string, unknown> | null {
   }
 }
 
+function extractOpenAIResponsesOutputText(body: { output_text?: unknown; output?: unknown }): string {
+  const sdkText = text(body.output_text, 8000);
+  if (sdkText) return sdkText;
+
+  const chunks: string[] = [];
+  const visit = (value: unknown) => {
+    if (!value || chunks.join("").length >= 8000) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    if (record.type === "output_text") {
+      const chunk = text(record.text, 8000 - chunks.join("").length);
+      if (chunk) chunks.push(chunk);
+      return;
+    }
+    if (Array.isArray(record.content)) visit(record.content);
+    if (Array.isArray(record.output)) visit(record.output);
+  };
+  visit(body.output);
+  return chunks.join("\n").slice(0, 8000);
+}
+
 function buildPrompt(input: { command: string; fields: AirshipHeroAICommandFields }): string {
   return [
     "You are editing the internal Airship draft preview for CHS d.o.o. (chs.si).",
@@ -170,7 +195,6 @@ async function defaultOpenAIResponsesCaller(input: { apiKey: string; model: stri
       model: input.model,
       input: input.prompt,
       store: false,
-      temperature: 0.2,
       max_output_tokens: 700,
       metadata: {
         gnr8_feature: "airship_editor",
@@ -181,7 +205,7 @@ async function defaultOpenAIResponsesCaller(input: { apiKey: string; model: stri
   const body = await response.json().catch(() => ({})) as { output_text?: unknown; output?: unknown };
   return {
     status: response.status,
-    outputText: text(body.output_text, 8000) || JSON.stringify(body.output ?? ""),
+    outputText: extractOpenAIResponsesOutputText(body),
   };
 }
 

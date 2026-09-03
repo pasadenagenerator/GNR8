@@ -116,6 +116,59 @@ test("airship AI command route returns draft-only normalized changes and no raw 
   assert.equal(bodyText.includes("Current fields"), false);
 });
 
+test("airship AI command default OpenAI caller uses REST-safe request and output parsing", async () => {
+  const previousFetch = globalThis.fetch;
+  let outboundBody: Record<string, unknown> | null = null;
+  globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    outboundBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    return new Response(JSON.stringify({
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({
+                fields: fields({ headline: "CHS delivers clearer, more confident enterprise IT" }),
+                message: "Headline strengthened.",
+              }),
+            },
+          ],
+        },
+      ],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const service = new AirshipAICommandService({
+      providerService: {
+        async readServerCredential() {
+          return { apiKey: "sk-test-server-only-command-key", model: "gpt-5", credentialId: "credential-command" };
+        },
+        async markTestResult() {},
+      },
+    });
+    const result = await service.run({
+      command: "naredi naslov bolj jasen in bolj samozavesten",
+      fields: fields(),
+      actorId: "superadmin-airship",
+    });
+
+    assert.equal(outboundBody?.model, "gpt-5");
+    assert.equal(outboundBody?.store, false);
+    assert.equal(outboundBody?.max_output_tokens, 700);
+    assert.equal(Object.hasOwn(outboundBody ?? {}, "temperature"), false);
+    assert.deepEqual(result.changedTextFields, ["headline"]);
+    assert.equal(result.provider, "openai");
+    assert.equal(result.rawProviderPayloadsPersisted, false);
+    assert.equal(result.mutationFlags.draftDataMutation, true);
+    assert.equal(result.mutationFlags.liveSiteMutation, false);
+    assert.equal(result.mutationFlags.activePointerMutation, false);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("airship AI command route reports missing provider without mutating drafts or live runtime", async () => {
   const handlers = createAirshipAICommandRouteHandlers({
     requireSuperadminUserId: async () => "superadmin-airship",
