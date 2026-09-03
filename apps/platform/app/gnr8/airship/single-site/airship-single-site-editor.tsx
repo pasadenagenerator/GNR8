@@ -228,6 +228,9 @@ export function AirshipSingleSiteEditor({ model }: Props) {
             <h1 style={{ margin: "4px 0 0", color: "#0f172a", fontSize: 30, lineHeight: 1.1 }}>chs.si single-site editor</h1>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <a href={model.links.airshipEditor} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: "#1d4ed8", color: "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, textDecoration: "none" }}>
+              Open Airship Editor
+            </a>
             <a href={model.links.liveSite} target="_blank" rel="noreferrer" style={{ border: "1px solid #0f766e", borderRadius: 8, background: "#0f766e", color: "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, textDecoration: "none" }}>
               Open live site
             </a>

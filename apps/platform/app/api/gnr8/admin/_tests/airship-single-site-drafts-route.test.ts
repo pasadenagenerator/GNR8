@@ -124,6 +124,7 @@ function model(): AirshipSingleSiteEditorReadonlyProjection {
     },
     links: {
       liveSite: "https://www.chs.si/",
+      airshipEditor: `/gnr8/airship/single-site/editor?migrationId=${MIGRATION_ID}`,
       singleSiteStudio: `/gnr8/command-center/single-site-studio?migrationId=${MIGRATION_ID}`,
       diagnostics: `/gnr8/command-center/single-site-publish?migrationId=${MIGRATION_ID}`,
     },

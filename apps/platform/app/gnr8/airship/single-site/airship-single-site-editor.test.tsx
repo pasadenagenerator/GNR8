@@ -11,6 +11,12 @@ import {
   applyAirshipSingleSiteLocalDraftEdit,
   initialAirshipSingleSiteLocalDraftFields,
 } from "./airship-single-site-local-draft-editor";
+import {
+  AirshipSingleSiteVisualEditorWorkspace,
+  applyAirshipHeroCommand,
+  applyAirshipHeroTextFieldEdit,
+  initialAirshipHeroEditorFields,
+} from "./editor/airship-single-site-visual-editor-workspace";
 
 const { renderToStaticMarkup } = ReactDomServer;
 
@@ -21,6 +27,8 @@ const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versio
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const COMPONENT_FILE = new URL("./airship-single-site-editor.tsx", import.meta.url);
 const LOCAL_EDITOR_FILE = new URL("./airship-single-site-local-draft-editor.tsx", import.meta.url);
+const VISUAL_EDITOR_PAGE_FILE = new URL("./editor/page.tsx", import.meta.url);
+const VISUAL_EDITOR_FILE = new URL("./editor/airship-single-site-visual-editor-workspace.tsx", import.meta.url);
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/airship-single-site-editor-readonly-projection.ts", import.meta.url);
 const PREVIEW_ROUTE_FILE = new URL("../../../api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts", import.meta.url);
 
@@ -117,6 +125,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
     },
     links: {
       liveSite: "https://www.chs.si/",
+      airshipEditor: `/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`,
       singleSiteStudio: `/gnr8/command-center/single-site-studio?migrationId=${CHS_MIGRATION_ID}`,
       diagnostics: `/gnr8/command-center/single-site-publish?migrationId=${CHS_MIGRATION_ID}`,
     },
@@ -227,6 +236,8 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("Internal single-site MVP accepted"), true);
   assert.equal(html.includes("AI improvement status"), true);
   assert.equal(html.includes("Editable AI draft generated"), true);
+  assert.equal(html.includes("Open Airship Editor"), true);
+  assert.equal(html.includes(`/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`), true);
   assert.equal(html.includes("Open live site"), true);
 });
 
@@ -320,6 +331,121 @@ test("airship local draft field edits update the draft preview model immediately
   assert.equal(edited.drafts.find((draft) => draft.id === "airship-chs-home-contact-cta")?.proposedTextContent, "Email sales@chs.si");
 });
 
+test("airship visual editor route is superadmin-gated and renders the workspace", async () => {
+  const pageSource = await readFile(VISUAL_EDITOR_PAGE_FILE, "utf8");
+
+  assert.equal(pageSource.includes("requireSuperadminUserIdForPage()"), true);
+  assert.equal(pageSource.includes("getAirshipSingleSiteEditorReadonlyProjection"), true);
+  assert.equal(pageSource.includes("AirshipSingleSiteVisualEditorWorkspace"), true);
+  assert.equal(pageSource.includes("AIRSHIP_CHS_MIGRATION_ID"), true);
+});
+
+test("airship visual editor renders draft canvas, sidebar controls, labels, and AI command box", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={model.migrationId}
+      importedSite={model.importedSite}
+      sourceUrl={model.sourceUrl}
+      liveSiteUrl={model.liveSiteUrl}
+      draftCandidate={{
+        siteVersionId: model.previews.airshipDraftCandidate?.siteVersionId ?? null,
+        runtimeArtifactId: model.previews.airshipDraftCandidate?.runtimeArtifactId ?? null,
+        route: model.previews.airshipDraftCandidate?.route ?? null,
+        draftId: model.previews.airshipDraftCandidate?.draftId ?? null,
+        draftVersion: model.previews.airshipDraftCandidate?.draftVersion ?? null,
+      }}
+      draftPreview={model.draftPanel.draftPreview}
+      drafts={model.draftPanel.drafts}
+      persistence={model.draftPanel.persistence}
+    />,
+  );
+
+  assert.equal(html.includes("Draft editor"), true);
+  assert.equal(html.includes("Internal preview only"), true);
+  assert.equal(html.includes("Not live"), true);
+  assert.equal(html.includes("Not published"), true);
+  assert.equal(html.includes("Changes are saved to Airship draft only"), true);
+  assert.equal(html.includes("Style changes are local preview only"), true);
+  assert.equal(html.includes("Homepage hero/intro"), true);
+  assert.equal(html.includes("H1/headline text"), true);
+  assert.equal(html.includes("Subheading/body text"), true);
+  assert.equal(html.includes("CTA label"), true);
+  assert.equal(html.includes("Hero top padding"), true);
+  assert.equal(html.includes("Hero bottom padding"), true);
+  assert.equal(html.includes("Background tint"), true);
+  assert.equal(html.includes("CTA color"), true);
+  assert.equal(html.includes("AI command"), true);
+  assert.equal(html.includes("Apply command"), true);
+  assert.equal(html.includes("Save text edits"), true);
+});
+
+test("airship visual editor headline edit updates preview fields", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const fields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview);
+  const edited = applyAirshipHeroTextFieldEdit({
+    fields,
+    drafts: model.draftPanel.drafts,
+    field: "headline",
+    value: "CHS secures enterprise IT",
+  });
+
+  assert.equal(edited.fields.headline, "CHS secures enterprise IT");
+  assert.equal(edited.drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.proposedTextContent, "CHS secures enterprise IT");
+  assert.equal(edited.drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.status, "edited");
+  assert.equal(fields.subheading, "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.");
+});
+
+test("airship visual editor AI command updates supported text and style fields", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const fields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview);
+
+  const cta = applyAirshipHeroCommand(fields, "spremeni CTA v Kontaktirajte CHS");
+  assert.equal(cta.supported, true);
+  assert.equal(cta.fields.ctaLabel, "Kontaktirajte CHS");
+  assert.deepEqual(cta.changedTextFields, ["ctaLabel"]);
+  assert.equal(cta.message.includes("Text changes are saved to Airship draft only"), true);
+
+  const spacing = applyAirshipHeroCommand(fields, "povečaj spodnji odmik pri H1");
+  assert.equal(spacing.supported, true);
+  assert.equal(spacing.fields.bottomPadding, fields.bottomPadding + 12);
+  assert.deepEqual(spacing.changedStyleFields, ["bottomPadding"]);
+  assert.equal(spacing.message.includes("Style changes are local preview only"), true);
+
+  const prominent = applyAirshipHeroCommand(fields, "make CTA more prominent");
+  assert.equal(prominent.supported, true);
+  assert.equal(prominent.fields.ctaColor, "#1d4ed8");
+  assert.equal(prominent.changedStyleFields.includes("ctaColor"), true);
+});
+
+test("airship visual editor AI command rejects unsupported commands helpfully", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const fields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview);
+  const result = applyAirshipHeroCommand(fields, "publish this to chs.si");
+
+  assert.equal(result.supported, false);
+  assert.equal(result.fields, fields);
+  assert.equal(result.message.includes("Command not supported yet"), true);
+});
+
+test("airship visual editor keeps live CHS separate from internal draft preview", async () => {
+  const [pageSource, componentSource] = await Promise.all([
+    readFile(VISUAL_EDITOR_PAGE_FILE, "utf8"),
+    readFile(VISUAL_EDITOR_FILE, "utf8"),
+  ]);
+  const source = `${pageSource}\n${componentSource}`;
+
+  assert.equal(source.includes("liveSiteUrl"), true);
+  assert.equal(source.includes("Live remains separate"), true);
+  assert.equal(source.includes("Not live"), true);
+  assert.equal(source.includes("Not published"), true);
+  assert.doesNotMatch(source, /publishApprovedSiteVersion|active_site_version_id|gnr8_runtime_active_pointers|shadow-publish|dry-run|rollback/i);
+});
+
 test("airship single-site editor CHS draft contains no Maver transport copy", () => {
   const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={airshipModel()} />);
 
@@ -336,13 +462,14 @@ test("airship single-site route is superadmin-gated and defaults to the CHS migr
 });
 
 test("airship single-site foundation adds no production mutation action surface", async () => {
-  const [pageSource, componentSource, localEditorSource, projectionSource] = await Promise.all([
+  const [pageSource, componentSource, localEditorSource, visualEditorSource, projectionSource] = await Promise.all([
     readFile(PAGE_FILE, "utf8"),
     readFile(COMPONENT_FILE, "utf8"),
     readFile(LOCAL_EDITOR_FILE, "utf8"),
+    readFile(VISUAL_EDITOR_FILE, "utf8"),
     readFile(PROJECTION_FILE, "utf8"),
   ]);
-  const source = `${pageSource}\n${componentSource}\n${localEditorSource}\n${projectionSource}`;
+  const source = `${pageSource}\n${componentSource}\n${localEditorSource}\n${visualEditorSource}\n${projectionSource}`;
 
   assert.equal(source.includes("mutatesProductionData: false"), true);
   assert.equal(source.includes("mutatesDraftData: true"), true);

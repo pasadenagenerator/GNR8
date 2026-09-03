@@ -92,6 +92,7 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
   };
   links: {
     liveSite: string;
+    airshipEditor: string;
     singleSiteStudio: string;
     diagnostics: string | null;
   };
@@ -354,6 +355,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     },
     links: {
       liveSite: input.studioModel.summary.liveSiteUrl,
+      airshipEditor: `/gnr8/airship/single-site/editor${migrationId ? `?migrationId=${encodeURIComponent(migrationId)}` : ""}`,
       singleSiteStudio: `/gnr8/command-center/single-site-studio${migrationId ? `?migrationId=${encodeURIComponent(migrationId)}` : ""}`,
       diagnostics: input.studioModel.diagnosticsHref,
     },

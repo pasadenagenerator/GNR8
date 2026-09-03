@@ -1524,6 +1524,21 @@ Canonical implementation:
 
 Canonical result: Airship now has persistent draft-only storage for the accepted `chs.si` single-site editor. Operators can edit proposed AI copy, save it, reload it, and mark individual draft edits accepted or rejected. The Airship draft preview reflects saved or locally edited draft state while preserving explicit labels: `Saved Airship draft`, `Not applied to live site`, and `Not published`. Draft rows are stored in `public.gnr8_airship_single_site_editor_drafts` with append-only review events in `public.gnr8_airship_single_site_editor_draft_events`; RLS is closed by default with no public/client grants. Production migration `20260902120000_airship_single_site_editor_drafts.sql` was applied and recorded as version `20260902120000`; production draft `f9b31666-b3b0-4455-8650-4a8c7304a559` was saved/reloaded for migration `682a09fd-8fd5-4f73-93b8-54f5d4067c63`. The CHS active pointer remained unchanged at active site version `a3f9493e-9da4-4ef8-8608-154fe6d25a0f` and artifact `1f80138a-39c2-4210-ac61-16200e5a2254`. No live CHS content mutation, runtime version mutation, source capture, publish, dry-run, shadow-publish, rollback, provider/DNS/domain/billing mutation, env change, or active pointer mutation is introduced. Final status is `airship_draft_persistence_and_review_controls_working`.
 
+## AIRSHIP-5 Openable CHS Visual Editor Workspace
+
+Canonical Airship visual editor workspace record:
+- `docs/product/gnr8-airship-visual-editor-workspace-openable-chs-si-closeout.md`
+
+Canonical implementation:
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.ts`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/editor/page.tsx`
+- `apps/platform/app/gnr8/airship/single-site/editor/airship-single-site-visual-editor-workspace.tsx`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.test.tsx`
+- `apps/platform/app/api/gnr8/admin/_tests/airship-single-site-drafts-route.test.ts`
+
+Canonical result: The existing Airship single-site page now exposes a primary `Open Airship Editor` action for the accepted CHS migration, opening `/gnr8/airship/single-site/editor?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`. The new superadmin-gated editor route renders a real visual workspace with a draft preview canvas, selected `Homepage hero/intro` controls, and a deterministic draft-only AI command box. H1/headline, subheading/body, and CTA label text save through the existing Airship draft-only persistence path; hero spacing, background tint, and CTA color are local preview-only and labeled as such. Required labels include `Draft editor`, `Internal preview only`, `Not live`, `Not published`, `Changes are saved to Airship draft only`, and `Style changes are local preview only`. No live CHS content mutation, runtime version mutation, source capture, publish, dry-run, shadow-publish, rollback, provider/DNS/domain/billing mutation, env change, or active pointer mutation is introduced. Final status is `airship_visual_editor_workspace_openable_for_chs_si`.
+
 ## Secondary
 
 - `SYSTEM.md`
