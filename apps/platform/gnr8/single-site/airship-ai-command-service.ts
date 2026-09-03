@@ -169,6 +169,7 @@ async function defaultOpenAIResponsesCaller(input: { apiKey: string; model: stri
     body: JSON.stringify({
       model: input.model,
       input: input.prompt,
+      store: false,
       temperature: 0.2,
       max_output_tokens: 700,
       metadata: {
