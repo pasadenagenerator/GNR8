@@ -9,7 +9,7 @@ type ActionMode = "save_openai" | "test_openai" | "revoke_openai";
 type RouteDeps = {
   requireSuperadminUserId: () => Promise<string>;
   service: Pick<AirshipOpenAIByokProviderService, "status" | "save" | "revoke" | "readServerCredential" | "markTestResult">;
-  fetchModels: (apiKey: string) => Promise<{ ok: boolean; status: number }>;
+  testOpenAIConnection: (apiKey: string, model: string) => Promise<{ ok: boolean; status: number; diagnostic: string }>;
 };
 
 type ActionBody = Record<string, unknown> & {
@@ -54,12 +54,13 @@ function mutationFlags(draftDataMutation: boolean) {
   };
 }
 
-function failure(status: number, error: string, diagnostics: string[]): Response {
+function failure(status: number, error: string, diagnostics: string[], providerStatus?: AirshipOpenAIProviderStatus | null): Response {
   return Response.json(
     {
       ok: false,
       error,
       diagnostics,
+      ...(providerStatus ? { providerStatus } : {}),
       provider: "openai",
       scope: "airship_editor",
       mutationFlags: mutationFlags(false),
@@ -94,19 +95,37 @@ function bodyRecord(body: unknown): ActionBody | null {
   return body as ActionBody;
 }
 
-async function defaultFetchModels(apiKey: string): Promise<{ ok: boolean; status: number }> {
-  const response = await fetch("https://api.openai.com/v1/models", {
-    method: "GET",
-    headers: { authorization: `Bearer ${apiKey}` },
+function diagnosticForOpenAITestStatus(status: number): string {
+  if (status === 401) return "airship_openai_provider_key_rejected";
+  if (status === 403) return "airship_openai_provider_access_denied";
+  if (status === 404) return "airship_openai_provider_model_unavailable";
+  if (status === 429) return "airship_openai_provider_quota_or_rate_limited";
+  if (status >= 500) return "airship_openai_provider_upstream_unavailable";
+  return `airship_openai_provider_test_failed_status_${status}`;
+}
+
+async function defaultTestOpenAIConnection(apiKey: string, model: string): Promise<{ ok: boolean; status: number; diagnostic: string }> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      input: "Return exactly OK.",
+      store: false,
+      max_output_tokens: 16,
+    }),
   });
-  return { ok: response.ok, status: response.status };
+  return { ok: response.ok, status: response.status, diagnostic: diagnosticForOpenAITestStatus(response.status) };
 }
 
 export function createAirshipOpenAIProviderRouteHandlers(deps: Partial<RouteDeps> = {}) {
   const resolvedDeps: RouteDeps = {
     requireSuperadminUserId,
     service: deps.service ?? new AirshipOpenAIByokProviderService(),
-    fetchModels: deps.fetchModels ?? defaultFetchModels,
+    testOpenAIConnection: deps.testOpenAIConnection ?? defaultTestOpenAIConnection,
     ...deps,
   };
 
@@ -118,7 +137,11 @@ export function createAirshipOpenAIProviderRouteHandlers(deps: Partial<RouteDeps
         return failure(statusForAuthError(error), "SUPERADMIN_REQUIRED", ["airship_openai_provider_superadmin_required"]);
       }
 
-      return success(await resolvedDeps.service.status());
+      try {
+        return success(await resolvedDeps.service.status());
+      } catch {
+        return failure(500, "AIRSHIP_OPENAI_PROVIDER_STATUS_FAILED", ["airship_openai_provider_status_failed"]);
+      }
     },
 
     async POST(request: Request): Promise<Response> {
@@ -140,19 +163,26 @@ export function createAirshipOpenAIProviderRouteHandlers(deps: Partial<RouteDeps
         if (actionMode === "save_openai") {
           const apiKey = text(body.apiKey);
           if (!apiKey) return failure(400, "INVALID_AIRSHIP_OPENAI_PROVIDER_BODY", ["airship_openai_api_key_missing"]);
-          return success(await resolvedDeps.service.save({ apiKey, model: body.model, actorId }));
+          const statusPayload = await resolvedDeps.service.save({ apiKey, model: body.model, actorId });
+          if (!statusPayload.connected || !statusPayload.maskedKey || statusPayload.provider !== "openai") {
+            return failure(500, "AIRSHIP_OPENAI_PROVIDER_READBACK_FAILED", ["airship_openai_provider_readback_failed"], statusPayload);
+          }
+          return success(statusPayload);
         }
         if (actionMode === "test_openai") {
           const credential = await resolvedDeps.service.readServerCredential();
           if (!credential) return failure(409, "AIRSHIP_OPENAI_PROVIDER_MISSING", ["airship_openai_provider_missing"]);
-          const testResult = await resolvedDeps.fetchModels(credential.apiKey);
+          const testResult = await resolvedDeps.testOpenAIConnection(credential.apiKey, credential.model);
           await resolvedDeps.service.markTestResult({
             credentialId: credential.credentialId,
             passed: testResult.ok,
             actorId,
             statusCode: testResult.status,
           });
-          if (!testResult.ok) return failure(502, "AIRSHIP_OPENAI_PROVIDER_TEST_FAILED", ["airship_openai_provider_test_failed"]);
+          if (!testResult.ok) {
+            const statusPayload = await resolvedDeps.service.status().catch(() => null);
+            return failure(502, "AIRSHIP_OPENAI_PROVIDER_TEST_FAILED", ["airship_openai_provider_test_failed", testResult.diagnostic], statusPayload);
+          }
           return success(await resolvedDeps.service.status());
         }
         if (actionMode === "revoke_openai") {
@@ -167,8 +197,15 @@ export function createAirshipOpenAIProviderRouteHandlers(deps: Partial<RouteDeps
         if (message === "airship_openai_api_key_invalid") {
           return failure(400, "INVALID_AIRSHIP_OPENAI_PROVIDER_BODY", ["airship_openai_api_key_invalid"]);
         }
-        return failure(500, "AIRSHIP_OPENAI_PROVIDER_ACTION_FAILED", ["airship_openai_provider_action_failed"]);
+        if (message === "airship_openai_provider_readback_failed") {
+          return failure(500, "AIRSHIP_OPENAI_PROVIDER_READBACK_FAILED", ["airship_openai_provider_readback_failed"]);
+        }
+        return failure(500, "AIRSHIP_OPENAI_PROVIDER_ACTION_FAILED", ["airship_openai_provider_storage_failed"]);
       }
     },
   };
 }
+
+export const airshipOpenAIProviderTestDiagnostics = {
+  diagnosticForOpenAITestStatus,
+};

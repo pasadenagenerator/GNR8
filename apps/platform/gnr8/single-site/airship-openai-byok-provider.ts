@@ -20,6 +20,7 @@ export type AirshipOpenAIProviderStatus = {
   model: string;
   lastTestedAt: string | null;
   lastTestStatus: "passed" | "failed" | null;
+  createdAt: string | null;
   updatedAt: string | null;
   canUseAiCommands: boolean;
 };
@@ -383,40 +384,37 @@ export class AirshipOpenAIByokProviderService {
         model: AIRSHIP_OPENAI_DEFAULT_MODEL,
         lastTestedAt: null,
         lastTestStatus: null,
+        createdAt: null,
         updatedAt: null,
         canUseAiCommands: false,
       };
     }
 
-    try {
-      const credential = await this.repository.readActiveCredential();
-      if (!credential) return missingAirshipOpenAIProviderStatus();
-      return {
-        provider: "openai",
-        scope: "airship_editor",
-        ownerScope: "internal_superadmin",
-        connected: true,
-        status: "connected",
-        maskedKey: credential.maskedKey,
-        model: credential.model,
-        lastTestedAt: credential.lastTestedAt,
-        lastTestStatus: credential.lastTestStatus,
-        updatedAt: credential.updatedAt,
-        canUseAiCommands: true,
-      };
-    } catch {
-      return missingAirshipOpenAIProviderStatus();
-    }
+    const credential = await this.repository.readActiveCredential();
+    if (!credential) return missingAirshipOpenAIProviderStatus();
+    return connectedAirshipOpenAIProviderStatus(credential);
   }
 
   async save(input: { apiKey: string; model?: unknown; actorId: string }): Promise<AirshipOpenAIProviderStatus> {
     const encrypted = encryptAirshipOpenAIKey(input.apiKey);
-    await this.repository.upsertCredential({
+    const savedCredential = await this.repository.upsertCredential({
       ...encrypted,
       model: normalizeAirshipOpenAIModel(input.model),
       actorId: input.actorId,
     });
-    return this.status();
+    const readback = await this.repository.readActiveCredential();
+    if (
+      !readback ||
+      readback.id !== savedCredential.id ||
+      readback.status !== "active" ||
+      readback.provider !== "openai" ||
+      readback.scope !== "airship_editor" ||
+      readback.ownerScope !== "internal_superadmin" ||
+      readback.secretFingerprintSha256 !== encrypted.secretFingerprintSha256
+    ) {
+      throw new Error("airship_openai_provider_readback_failed");
+    }
+    return connectedAirshipOpenAIProviderStatus(readback);
   }
 
   async revoke(actorId: string): Promise<AirshipOpenAIProviderStatus> {
@@ -459,7 +457,25 @@ export function missingAirshipOpenAIProviderStatus(status: "missing" | "revoked"
     model: AIRSHIP_OPENAI_DEFAULT_MODEL,
     lastTestedAt: null,
     lastTestStatus: null,
+    createdAt: null,
     updatedAt: null,
     canUseAiCommands: false,
+  };
+}
+
+export function connectedAirshipOpenAIProviderStatus(credential: AirshipOpenAIProviderCredential): AirshipOpenAIProviderStatus {
+  return {
+    provider: "openai",
+    scope: "airship_editor",
+    ownerScope: "internal_superadmin",
+    connected: true,
+    status: "connected",
+    maskedKey: credential.maskedKey,
+    model: credential.model,
+    lastTestedAt: credential.lastTestedAt,
+    lastTestStatus: credential.lastTestStatus,
+    createdAt: credential.createdAt,
+    updatedAt: credential.updatedAt,
+    canUseAiCommands: true,
   };
 }

@@ -369,6 +369,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
         model: "gpt-5",
         lastTestedAt: null,
         lastTestStatus: null,
+        createdAt: null,
         updatedAt: null,
         canUseAiCommands: false,
       }}
@@ -397,6 +398,16 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Revoke key"), true);
   assert.equal(html.includes("Apply command"), true);
   assert.equal(html.includes("Save text edits"), true);
+});
+
+test("airship visual editor provider UI waits for backend-confirmed connection state", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+
+  assert.equal(visualEditorSource.includes("isAirshipOpenAIProviderConnected"), true);
+  assert.equal(visualEditorSource.includes("OpenAI key saved and connected after backend readback"), true);
+  assert.equal(visualEditorSource.includes("OpenAI key save did not confirm a backend connection"), true);
+  assert.equal(visualEditorSource.includes("providerConnectedActionDisabled"), true);
+  assert.equal(visualEditorSource.includes("OpenAI provider status updated. AI commands remain Airship draft only."), false);
 });
 
 test("airship visual editor headline edit updates preview fields", () => {
