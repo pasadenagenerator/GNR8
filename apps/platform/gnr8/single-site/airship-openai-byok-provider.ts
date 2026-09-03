@@ -15,7 +15,7 @@ export type AirshipOpenAIProviderStatus = {
   scope: "airship_editor";
   ownerScope: "internal_superadmin";
   connected: boolean;
-  status: "missing" | "connected" | "revoked" | "encryption_not_configured";
+  status: "missing" | "connected" | "revoked" | "encryption_not_configured" | "read_error";
   maskedKey: string | null;
   model: string;
   lastTestedAt: string | null;
@@ -217,10 +217,25 @@ export class PostgresAirshipOpenAIByokRepository implements AirshipOpenAIByokRep
     try {
       const result = await client.query(
         `
-        select *, last_tested_at::text as last_tested_at, created_at::text as created_at, updated_at::text as updated_at
-        from public.gnr8_airship_ai_provider_credentials
-        where credential_scope_key = $1 and provider = 'openai' and scope = 'airship_editor' and owner_scope = 'internal_superadmin'
-        order by updated_at desc
+        select
+          c.id,
+          c.provider,
+          c.scope,
+          c.owner_scope,
+          c.encrypted_secret,
+          c.encryption_iv,
+          c.encryption_tag,
+          c.secret_fingerprint_sha256,
+          c.masked_secret,
+          c.model,
+          c.status,
+          c.last_tested_at::text as last_tested_at,
+          c.last_test_status,
+          c.created_at::text as created_at,
+          c.updated_at::text as updated_at
+        from public.gnr8_airship_ai_provider_credentials as c
+        where c.credential_scope_key = $1 and c.provider = 'openai' and c.scope = 'airship_editor' and c.owner_scope = 'internal_superadmin'
+        order by c.updated_at desc
         limit 1
         `,
         [ACTIVE_SCOPE_KEY],
@@ -390,7 +405,12 @@ export class AirshipOpenAIByokProviderService {
       };
     }
 
-    const credential = await this.repository.readActiveCredential();
+    let credential: AirshipOpenAIProviderCredential | null;
+    try {
+      credential = await this.repository.readActiveCredential();
+    } catch {
+      return readErrorAirshipOpenAIProviderStatus();
+    }
     if (!credential) return missingAirshipOpenAIProviderStatus();
     return connectedAirshipOpenAIProviderStatus(credential);
   }
@@ -453,6 +473,23 @@ export function missingAirshipOpenAIProviderStatus(status: "missing" | "revoked"
     ownerScope: "internal_superadmin",
     connected: false,
     status,
+    maskedKey: null,
+    model: AIRSHIP_OPENAI_DEFAULT_MODEL,
+    lastTestedAt: null,
+    lastTestStatus: null,
+    createdAt: null,
+    updatedAt: null,
+    canUseAiCommands: false,
+  };
+}
+
+export function readErrorAirshipOpenAIProviderStatus(): AirshipOpenAIProviderStatus {
+  return {
+    provider: "openai",
+    scope: "airship_editor",
+    ownerScope: "internal_superadmin",
+    connected: false,
+    status: "read_error",
     maskedKey: null,
     model: AIRSHIP_OPENAI_DEFAULT_MODEL,
     lastTestedAt: null,

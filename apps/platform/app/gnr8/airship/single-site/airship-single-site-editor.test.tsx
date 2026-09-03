@@ -338,6 +338,7 @@ test("airship visual editor route is superadmin-gated and renders the workspace"
   assert.equal(pageSource.includes("getAirshipSingleSiteEditorReadonlyProjection"), true);
   assert.equal(pageSource.includes("AirshipSingleSiteVisualEditorWorkspace"), true);
   assert.equal(pageSource.includes("AIRSHIP_CHS_MIGRATION_ID"), true);
+  assert.equal(pageSource.includes("readErrorAirshipOpenAIProviderStatus"), true);
 });
 
 test("airship visual editor renders draft canvas, sidebar controls, labels, and AI command box", () => {
@@ -398,6 +399,46 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Revoke key"), true);
   assert.equal(html.includes("Apply command"), true);
   assert.equal(html.includes("Save text edits"), true);
+});
+
+test("airship visual editor renders safe provider read error state without exposing keys", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={model.migrationId}
+      importedSite={model.importedSite}
+      sourceUrl={model.sourceUrl}
+      liveSiteUrl={model.liveSiteUrl}
+      draftCandidate={null}
+      draftPreview={model.draftPanel.draftPreview}
+      drafts={model.draftPanel.drafts}
+      persistence={model.draftPanel.persistence}
+      aiProviderStatus={{
+        provider: "openai",
+        scope: "airship_editor",
+        ownerScope: "internal_superadmin",
+        connected: false,
+        status: "read_error",
+        maskedKey: null,
+        model: "gpt-5",
+        lastTestedAt: null,
+        lastTestStatus: null,
+        createdAt: null,
+        updatedAt: null,
+        canUseAiCommands: false,
+      }}
+    />,
+  );
+
+  assert.equal(html.includes("Status read failed"), true);
+  assert.equal(html.includes("OpenAI provider status could not be read"), true);
+  assert.equal(html.includes("Provider status read failed. The editor remains available"), true);
+  assert.equal(html.includes("AI commands stay disabled"), true);
+  assert.equal(html.includes("Airship visual editor workspace"), true);
+  assert.equal(html.includes("sk-test"), false);
+  assert.equal(html.includes("ORDER BY"), false);
+  assert.equal(html.includes("encrypted"), false);
 });
 
 test("airship visual editor provider UI waits for backend-confirmed connection state", async () => {

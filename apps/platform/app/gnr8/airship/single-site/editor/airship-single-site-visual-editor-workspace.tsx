@@ -38,7 +38,7 @@ type AirshipOpenAIProviderStatus = {
   scope: "airship_editor";
   ownerScope: "internal_superadmin";
   connected: boolean;
-  status: "missing" | "connected" | "revoked" | "encryption_not_configured";
+  status: "missing" | "connected" | "revoked" | "encryption_not_configured" | "read_error";
   maskedKey: string | null;
   model: string;
   lastTestedAt: string | null;
@@ -249,6 +249,26 @@ function providerDiagnosticMessage(error: string | undefined, diagnostics: strin
   if (codes.has("airship_openai_provider_missing")) return CONNECT_OPENAI_MESSAGE;
   if (codes.has("airship_openai_provider_storage_failed")) return "OpenAI key storage failed on the server.";
   return "OpenAI provider action failed.";
+}
+
+function providerConnectionMessage(status: AirshipOpenAIProviderStatus): string {
+  if (isAirshipOpenAIProviderConnected(status)) {
+    return `OpenAI connected (${status.maskedKey ?? "masked key"}, ${status.model}).`;
+  }
+  if (status.status === "read_error") {
+    return "OpenAI provider status could not be read. AI commands are disabled until the backend status read succeeds.";
+  }
+  if (status.status === "encryption_not_configured") {
+    return "OpenAI key storage is not configured on the server.";
+  }
+  return CONNECT_OPENAI_MESSAGE;
+}
+
+function providerBadgeLabel(status: AirshipOpenAIProviderStatus): string {
+  if (isAirshipOpenAIProviderConnected(status)) return "Connected";
+  if (status.status === "encryption_not_configured") return "Encryption setup needed";
+  if (status.status === "read_error") return "Status read failed";
+  return "Not connected";
 }
 
 function draftIdForField(field: "headline" | "subheading" | "ctaLabel"): string {
@@ -574,9 +594,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, display: "grid", gap: 8 }}>
             <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>AI command</div>
             <div style={{ color: providerConnected ? "#166534" : "#92400e", fontSize: 12, lineHeight: 1.45 }}>
-              {providerConnected
-                ? `OpenAI connected (${providerStatus.maskedKey ?? "masked key"}, ${providerStatus.model}).`
-                : CONNECT_OPENAI_MESSAGE}
+              {providerConnectionMessage(providerStatus)}
             </div>
             <textarea rows={3} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="spremeni CTA v Kontaktirajte CHS" style={inputStyle(true)} />
             <button type="button" disabled={busy || command.trim().length === 0} onClick={() => void runCommand()} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: busy || command.trim().length === 0 ? "#f8fafc" : "#1d4ed8", color: busy || command.trim().length === 0 ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, cursor: busy || command.trim().length === 0 ? "not-allowed" : "pointer" }}>
@@ -587,10 +605,15 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, display: "grid", gap: 8 }}>
             <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>OpenAI provider</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {badge(providerConnected ? "Connected" : providerStatus.status === "encryption_not_configured" ? "Encryption setup needed" : "Not connected", providerConnected ? "good" : "warn")}
+              {badge(providerBadgeLabel(providerStatus), providerConnected ? "good" : "warn")}
               {providerStatus.maskedKey ? badge(providerStatus.maskedKey, "neutral") : null}
               {providerStatus.lastTestStatus ? badge(`Test ${providerStatus.lastTestStatus}`, providerStatus.lastTestStatus === "passed" ? "good" : "warn") : null}
             </div>
+            {providerStatus.status === "read_error" ? (
+              <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>
+                Provider status read failed. The editor remains available; no API key is shown, and AI commands stay disabled.
+              </div>
+            ) : null}
             {providerStatus.updatedAt ? (
               <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.45 }}>
                 Updated {providerStatus.updatedAt}.
