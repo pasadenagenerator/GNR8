@@ -455,6 +455,45 @@ test("airship visual editor renders safe provider read error state without expos
   assert.equal(html.includes("encrypted"), false);
 });
 
+test("airship visual editor renders connected provider status from backend readback", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={model.migrationId}
+      importedSite={model.importedSite}
+      sourceUrl={model.sourceUrl}
+      liveSiteUrl={model.liveSiteUrl}
+      draftCandidate={null}
+      draftPreview={model.draftPanel.draftPreview}
+      drafts={model.draftPanel.drafts}
+      persistence={model.draftPanel.persistence}
+      aiProviderStatus={{
+        provider: "openai",
+        scope: "airship_editor",
+        ownerScope: "internal_superadmin",
+        connected: true,
+        status: "connected",
+        maskedKey: "sk-...safe",
+        model: "gpt-5",
+        lastTestedAt: null,
+        lastTestStatus: "passed",
+        createdAt: "2026-09-03T00:00:00.000Z",
+        updatedAt: "2026-09-04T00:00:00.000Z",
+        canUseAiCommands: true,
+      }}
+    />,
+  );
+
+  assert.equal(html.includes("Connected"), true);
+  assert.equal(html.includes("OpenAI connected (sk-...safe, gpt-5)."), true);
+  assert.equal(html.includes("Test passed"), true);
+  assert.equal(html.includes("sk-test"), false);
+  assert.equal(html.includes("safe-secret"), false);
+  assert.equal(html.includes("Status read failed"), false);
+  assert.equal(html.includes("Connect OpenAI to use AI commands"), false);
+});
+
 test("airship visual editor provider UI waits for backend-confirmed connection state", async () => {
   const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
 

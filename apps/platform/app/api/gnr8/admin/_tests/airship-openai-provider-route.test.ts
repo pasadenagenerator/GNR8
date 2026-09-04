@@ -188,6 +188,83 @@ test("airship OpenAI provider repository releases the client when active credent
   assert.equal(releaseCount, 1);
 });
 
+test("airship OpenAI provider status reads safe metadata through service-role without pg checkout", async () => {
+  const previousSecret = process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV];
+  process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV] = "test-encryption-secret-value-with-32-chars";
+  try {
+    const calls: Array<{ name: string; args: unknown[] }> = [];
+    let pgCheckouts = 0;
+    const builder = {
+      select(...args: unknown[]) {
+        calls.push({ name: "select", args });
+        return builder;
+      },
+      eq(...args: unknown[]) {
+        calls.push({ name: "eq", args });
+        return builder;
+      },
+      order(...args: unknown[]) {
+        calls.push({ name: "order", args });
+        return builder;
+      },
+      limit(...args: unknown[]) {
+        calls.push({ name: "limit", args });
+        return builder;
+      },
+      async maybeSingle() {
+        calls.push({ name: "maybeSingle", args: [] });
+        return {
+          data: {
+            id: "00000000-0000-4000-8000-000000000005",
+            provider: "openai",
+            scope: "airship_editor",
+            owner_scope: "internal_superadmin",
+            masked_secret: "sk-...safe",
+            model: "gpt-5",
+            status: "active",
+            last_tested_at: null,
+            last_test_status: "passed",
+            created_at: "2026-09-03T00:00:00.000Z",
+            updated_at: "2026-09-04T00:00:00.000Z",
+          },
+          error: null,
+        };
+      },
+    };
+    const repository = new PostgresAirshipOpenAIByokRepository({
+      connect: async () => {
+        pgCheckouts += 1;
+        throw new Error("status_path_should_not_checkout_pg");
+      },
+    } as never, () => ({
+      from(table: string) {
+        calls.push({ name: "from", args: [table] });
+        return builder;
+      },
+    }));
+    const status = await new AirshipOpenAIByokProviderService(repository).status();
+    const selectColumns = String(calls.find((call) => call.name === "select")?.args[0] ?? "");
+
+    assert.equal(status.connected, true);
+    assert.equal(status.canUseAiCommands, true);
+    assert.equal(status.maskedKey, "sk-...safe");
+    assert.equal(status.lastTestStatus, "passed");
+    assert.equal(pgCheckouts, 0);
+    assert.equal(selectColumns.includes("masked_secret"), true);
+    assert.equal(selectColumns.includes("encrypted_secret"), false);
+    assert.equal(selectColumns.includes("encryption_iv"), false);
+    assert.equal(selectColumns.includes("encryption_tag"), false);
+    assert.deepEqual(calls.filter((call) => call.name === "eq").map((call) => call.args), [
+      ["credential_scope_key", "openai:airship_editor:internal_superadmin"],
+      ["provider", "openai"],
+      ["scope", "airship_editor"],
+      ["owner_scope", "internal_superadmin"],
+    ]);
+  } finally {
+    restoreEnv(AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV, previousSecret);
+  }
+});
+
 test("airship OpenAI provider repository rolls back and releases when test status update fails", async () => {
   const queries: string[] = [];
   let releaseCount = 0;

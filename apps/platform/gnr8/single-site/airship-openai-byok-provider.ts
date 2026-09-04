@@ -3,6 +3,7 @@ import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { getSuperadminPool } from "@/src/superadmin/db";
+import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 import type { SingleSitePgClient } from "./single-site-state-writer-repository";
 
 export const AIRSHIP_OPENAI_BYOK_PROVIDER_VERSION = "airship-6-openai-byok-provider:v1" as const;
@@ -43,7 +44,13 @@ export type AirshipOpenAIProviderCredential = {
   updatedAt: string;
 };
 
+type AirshipOpenAIProviderStatusCredential = Pick<
+  AirshipOpenAIProviderCredential,
+  "id" | "provider" | "scope" | "ownerScope" | "maskedKey" | "model" | "status" | "lastTestedAt" | "lastTestStatus" | "createdAt" | "updatedAt"
+>;
+
 export type AirshipOpenAIByokRepository = {
+  readActiveCredentialStatus?(): Promise<AirshipOpenAIProviderStatusCredential | null>;
   readActiveCredential(): Promise<AirshipOpenAIProviderCredential | null>;
   upsertCredential(input: StoredCredentialInput): Promise<AirshipOpenAIProviderCredential>;
   markTestResult(input: { credentialId: string; passed: boolean; actorId: string; summary: Record<string, unknown> }): Promise<void>;
@@ -144,6 +151,22 @@ function rowToCredential(row: Record<string, unknown>): AirshipOpenAIProviderCre
   };
 }
 
+function rowToStatusCredential(row: Record<string, unknown>): AirshipOpenAIProviderStatusCredential {
+  return {
+    id: String(row.id),
+    provider: "openai",
+    scope: "airship_editor",
+    ownerScope: "internal_superadmin",
+    maskedKey: String(row.masked_secret),
+    model: normalizeAirshipOpenAIModel(row.model),
+    status: row.status === "revoked" ? "revoked" : "active",
+    lastTestedAt: dateText(row.last_tested_at),
+    lastTestStatus: row.last_test_status === "passed" || row.last_test_status === "failed" ? row.last_test_status : null,
+    createdAt: dateText(row.created_at) ?? "",
+    updatedAt: dateText(row.updated_at) ?? "",
+  };
+}
+
 function encryptionSecretFromEnv(): string {
   const secret =
     text(process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV], 400) ||
@@ -210,10 +233,81 @@ async function withTransaction<T>(pool: PoolLike, fn: (client: SingleSitePgClien
 }
 
 export class PostgresAirshipOpenAIByokRepository implements AirshipOpenAIByokRepository {
-  constructor(private readonly pool: PoolLike = getSuperadminPool()) {}
+  constructor(
+    private readonly pool: PoolLike | null = null,
+    private readonly getStatusClient: () => { from: (table: string) => unknown } | null = getSupabaseServiceRoleClient,
+  ) {}
+
+  private getPool(): PoolLike {
+    return this.pool ?? getSuperadminPool();
+  }
+
+  async readActiveCredentialStatus(): Promise<AirshipOpenAIProviderStatusCredential | null> {
+    const client = this.getStatusClient();
+    if (!client) return this.readLatestCredentialStatusViaPg();
+
+    const result = await (client.from("gnr8_airship_ai_provider_credentials") as {
+      select: (columns: string) => {
+        eq: (column: string, value: string) => {
+          eq: (column: string, value: string) => {
+            eq: (column: string, value: string) => {
+              eq: (column: string, value: string) => {
+                order: (column: string, options: { ascending: boolean }) => {
+                  limit: (count: number) => {
+                    maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: { code?: string } | null }>;
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+    })
+      .select("id,provider,scope,owner_scope,masked_secret,model,status,last_tested_at,last_test_status,created_at,updated_at")
+      .eq("credential_scope_key", ACTIVE_SCOPE_KEY)
+      .eq("provider", "openai")
+      .eq("scope", "airship_editor")
+      .eq("owner_scope", "internal_superadmin")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (result.error) throw new Error(`airship_openai_provider_status_read_failed:${result.error.code ?? "unknown"}`);
+    return result.data ? rowToStatusCredential(result.data) : null;
+  }
+
+  private async readLatestCredentialStatusViaPg(): Promise<AirshipOpenAIProviderStatusCredential | null> {
+    const client = await this.getPool().connect();
+    try {
+      const result = await client.query(
+        `
+        select
+          c.id,
+          c.provider,
+          c.scope,
+          c.owner_scope,
+          c.masked_secret,
+          c.model,
+          c.status,
+          c.last_tested_at::text as last_tested_at,
+          c.last_test_status,
+          c.created_at::text as created_at,
+          c.updated_at::text as updated_at
+        from public.gnr8_airship_ai_provider_credentials as c
+        where c.credential_scope_key = $1 and c.provider = 'openai' and c.scope = 'airship_editor' and c.owner_scope = 'internal_superadmin'
+        order by c.updated_at desc
+        limit 1
+        `,
+        [ACTIVE_SCOPE_KEY],
+      ) as QueryResult<Record<string, unknown>>;
+      return result.rows[0] ? rowToStatusCredential(result.rows[0]) : null;
+    } finally {
+      client.release?.();
+    }
+  }
 
   async readActiveCredential(): Promise<AirshipOpenAIProviderCredential | null> {
-    const client = await this.pool.connect();
+    const client = await this.getPool().connect();
     try {
       const result = await client.query(
         `
@@ -248,7 +342,7 @@ export class PostgresAirshipOpenAIByokRepository implements AirshipOpenAIByokRep
   }
 
   async upsertCredential(input: StoredCredentialInput): Promise<AirshipOpenAIProviderCredential> {
-    return withTransaction(this.pool, async (client) => {
+    return withTransaction(this.getPool(), async (client) => {
       const existing = await client.query(
         "select id from public.gnr8_airship_ai_provider_credentials where credential_scope_key = $1 limit 1",
         [ACTIVE_SCOPE_KEY],
@@ -310,7 +404,7 @@ export class PostgresAirshipOpenAIByokRepository implements AirshipOpenAIByokRep
   }
 
   async markTestResult(input: { credentialId: string; passed: boolean; actorId: string; summary: Record<string, unknown> }): Promise<void> {
-    return withTransaction(this.pool, async (client) => {
+    return withTransaction(this.getPool(), async (client) => {
       await client.query(
         `
         update public.gnr8_airship_ai_provider_credentials
@@ -329,7 +423,7 @@ export class PostgresAirshipOpenAIByokRepository implements AirshipOpenAIByokRep
   }
 
   async revokeCredential(input: { actorId: string }): Promise<void> {
-    return withTransaction(this.pool, async (client) => {
+    return withTransaction(this.getPool(), async (client) => {
       const result = await client.query(
         `
         update public.gnr8_airship_ai_provider_credentials
@@ -349,7 +443,7 @@ export class PostgresAirshipOpenAIByokRepository implements AirshipOpenAIByokRep
   }
 
   async insertEvent(input: AirshipOpenAIProviderEventInput): Promise<void> {
-    return withTransaction(this.pool, async (client) => {
+    return withTransaction(this.getPool(), async (client) => {
       await this.insertEventInTx(client, input);
     });
   }
@@ -405,14 +499,14 @@ export class AirshipOpenAIByokProviderService {
       };
     }
 
-    let credential: AirshipOpenAIProviderCredential | null;
     try {
-      credential = await this.repository.readActiveCredential();
+      const credential = this.repository.readActiveCredentialStatus
+        ? await this.repository.readActiveCredentialStatus()
+        : await this.repository.readActiveCredential();
+      return airshipOpenAIProviderStatusFromCredential(credential);
     } catch {
       return readErrorAirshipOpenAIProviderStatus();
     }
-    if (!credential) return missingAirshipOpenAIProviderStatus();
-    return connectedAirshipOpenAIProviderStatus(credential);
   }
 
   async save(input: { apiKey: string; model?: unknown; actorId: string }): Promise<AirshipOpenAIProviderStatus> {
@@ -500,7 +594,7 @@ export function readErrorAirshipOpenAIProviderStatus(): AirshipOpenAIProviderSta
   };
 }
 
-export function connectedAirshipOpenAIProviderStatus(credential: AirshipOpenAIProviderCredential): AirshipOpenAIProviderStatus {
+export function connectedAirshipOpenAIProviderStatus(credential: AirshipOpenAIProviderStatusCredential): AirshipOpenAIProviderStatus {
   return {
     provider: "openai",
     scope: "airship_editor",
@@ -515,4 +609,19 @@ export function connectedAirshipOpenAIProviderStatus(credential: AirshipOpenAIPr
     updatedAt: credential.updatedAt,
     canUseAiCommands: true,
   };
+}
+
+function airshipOpenAIProviderStatusFromCredential(credential: AirshipOpenAIProviderStatusCredential | null): AirshipOpenAIProviderStatus {
+  if (!credential) return missingAirshipOpenAIProviderStatus();
+  if (credential.status === "revoked") {
+    return {
+      ...missingAirshipOpenAIProviderStatus("revoked"),
+      model: credential.model,
+      lastTestedAt: credential.lastTestedAt,
+      lastTestStatus: credential.lastTestStatus,
+      createdAt: credential.createdAt,
+      updatedAt: credential.updatedAt,
+    };
+  }
+  return connectedAirshipOpenAIProviderStatus(credential);
 }
