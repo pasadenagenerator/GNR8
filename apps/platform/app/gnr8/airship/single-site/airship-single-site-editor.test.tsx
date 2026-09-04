@@ -378,9 +378,23 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   );
 
   assert.equal(html.includes("Draft editor"), true);
+  assert.equal(html.includes("Section navigator"), true);
+  assert.equal(html.includes("Hero / intro"), true);
+  assert.equal(html.includes("CTA"), true);
+  assert.equal(html.includes("Source material"), true);
+  assert.equal(html.includes("Desktop"), true);
+  assert.equal(html.includes("Tablet"), true);
+  assert.equal(html.includes("Mobile"), true);
+  assert.equal(html.includes("Draft only"), true);
   assert.equal(html.includes("Internal preview only"), true);
   assert.equal(html.includes("Not live"), true);
   assert.equal(html.includes("Not published"), true);
+  assert.equal(html.includes("Live site unchanged"), true);
+  assert.equal(html.includes("Open internal preview"), true);
+  assert.equal(html.includes("Open live site"), true);
+  assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);
+  assert.equal(html.includes("Selected: Hero / intro"), true);
+  assert.equal(html.includes("Details"), true);
   assert.equal(html.includes("Changes are saved to Airship draft only"), true);
   assert.equal(html.includes("Style changes are local preview only"), true);
   assert.equal(html.includes("Homepage hero/intro"), true);

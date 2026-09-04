@@ -93,6 +93,8 @@ type AICommandActionResponse = {
 };
 
 type TextFieldKey = "headline" | "subheading" | "ctaLabel";
+type EditorSectionKey = "hero" | "cta" | "source";
+type EditorViewportKey = "desktop" | "tablet" | "mobile";
 
 const HEADLINE_DRAFT_ID = "airship-chs-home-hero-headline";
 const SUBHEADING_DRAFT_ID = "airship-chs-home-hero-value-proposition";
@@ -113,6 +115,18 @@ const ctaOptions = [
   { label: "Blue", value: "#1d4ed8" },
   { label: "Ink", value: "#111827" },
   { label: "Emerald", value: "#047857" },
+];
+
+const sectionOptions: Array<{ key: EditorSectionKey; label: string; detail: string }> = [
+  { key: "hero", label: "Hero / intro", detail: "Headline, subheading, spacing, tint" },
+  { key: "cta", label: "CTA", detail: "Primary action label and color" },
+  { key: "source", label: "Source material", detail: "CHS evidence and internal draft refs" },
+];
+
+const viewportOptions: Array<{ key: EditorViewportKey; label: string; width: number }> = [
+  { key: "desktop", label: "Desktop", width: 1100 },
+  { key: "tablet", label: "Tablet", width: 760 },
+  { key: "mobile", label: "Mobile", width: 390 },
 ];
 
 export function initialAirshipHeroEditorFields(preview: AirshipSingleSiteDraftPreview): AirshipHeroEditorFields {
@@ -231,6 +245,32 @@ function inputStyle(multiline = false): CSSProperties {
   };
 }
 
+function actionButtonStyle(input: {
+  tone?: "primary" | "neutral" | "danger";
+  disabled?: boolean;
+  selected?: boolean;
+  compact?: boolean;
+} = {}): CSSProperties {
+  const tone = input.tone ?? "neutral";
+  const palette = {
+    primary: { border: "#1d4ed8", background: "#1d4ed8", color: "#fff" },
+    neutral: { border: "#cbd5e1", background: "#fff", color: "#0f172a" },
+    danger: { border: "#b91c1c", background: "#fff", color: "#b91c1c" },
+  }[tone];
+  return {
+    border: `1px solid ${input.disabled ? "#dbe3ee" : input.selected ? "#1d4ed8" : palette.border}`,
+    borderRadius: 8,
+    background: input.disabled ? "#f8fafc" : input.selected ? "#eff6ff" : palette.background,
+    color: input.disabled ? "#94a3b8" : input.selected ? "#1d4ed8" : palette.color,
+    padding: input.compact ? "7px 10px" : "9px 12px",
+    fontSize: 13,
+    fontWeight: 850,
+    cursor: input.disabled ? "not-allowed" : "pointer",
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+  };
+}
+
 function isAirshipOpenAIProviderConnected(status: AirshipOpenAIProviderStatus): boolean {
   return status.provider === "openai" && status.status === "connected" && status.connected && status.canUseAiCommands && Boolean(status.maskedKey);
 }
@@ -315,9 +355,12 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [providerStatus, setProviderStatus] = useState(() => props.aiProviderStatus);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [modelInput, setModelInput] = useState(() => props.aiProviderStatus.model || "gpt-5");
+  const [selectedSection, setSelectedSection] = useState<EditorSectionKey>("hero");
+  const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
   const providerConnected = isAirshipOpenAIProviderConnected(providerStatus);
   const providerSaveDisabled = providerBusy || providerStatus.status === "encryption_not_configured" || apiKeyInput.trim().length === 0 || modelInput.trim().length === 0;
   const providerConnectedActionDisabled = providerBusy || !providerConnected;
+  const selectedViewport = viewportOptions.find((option) => option.key === viewport) ?? viewportOptions[0];
 
   const selectedDrafts = useMemo(
     () => editableDrafts.filter((draft) => draft.id === HEADLINE_DRAFT_ID || draft.id === SUBHEADING_DRAFT_ID || draft.id === CTA_DRAFT_ID),
@@ -491,161 +534,649 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   }
 
   return (
-    <main style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr) auto", minHeight: "100vh", background: "#f8fafc", color: "#0f172a" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap", borderBottom: "1px solid #dbe3ee", background: "#fff", padding: "14px 18px" }}>
-        <div style={{ display: "grid", gap: 5 }}>
-          <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Draft editor</div>
-          <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15 }}>Airship visual editor workspace</h1>
+    <main className="airship-workspace">
+      <style>{`
+        .airship-workspace {
+          display: grid;
+          grid-template-rows: auto minmax(0, 1fr);
+          min-height: 100vh;
+          background: #e5e7eb;
+          color: #0f172a;
+          font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        .airship-toolbar {
+          display: grid;
+          grid-template-columns: minmax(190px, 1fr) auto minmax(220px, 1fr);
+          gap: 12px;
+          align-items: center;
+          min-height: 58px;
+          border-bottom: 1px solid #cbd5e1;
+          background: #ffffff;
+          padding: 10px 14px;
+        }
+        .airship-toolbar-group {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          min-width: 0;
+          flex-wrap: wrap;
+        }
+        .airship-toolbar-group:last-child {
+          justify-content: flex-end;
+        }
+        .airship-title {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+        .airship-title h1 {
+          margin: 0;
+          overflow: hidden;
+          color: #0f172a;
+          font-size: 16px;
+          line-height: 1.2;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .airship-kicker {
+          color: #475569;
+          font-size: 11px;
+          font-weight: 900;
+          line-height: 1.2;
+          text-transform: uppercase;
+        }
+        .airship-device-toggle {
+          display: inline-grid;
+          grid-auto-flow: column;
+          gap: 4px;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          background: #f8fafc;
+          padding: 3px;
+        }
+        .airship-shell {
+          display: grid;
+          grid-template-columns: 232px minmax(0, 1fr) 360px;
+          min-height: 0;
+        }
+        .airship-left,
+        .airship-inspector {
+          overflow: auto;
+          background: #ffffff;
+        }
+        .airship-left {
+          border-right: 1px solid #cbd5e1;
+          padding: 14px;
+        }
+        .airship-inspector {
+          border-left: 1px solid #cbd5e1;
+          padding: 14px;
+        }
+        .airship-panel-title {
+          display: grid;
+          gap: 4px;
+          margin-bottom: 14px;
+        }
+        .airship-panel-title h2 {
+          margin: 0;
+          color: #0f172a;
+          font-size: 15px;
+          line-height: 1.25;
+        }
+        .airship-muted {
+          color: #64748b;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .airship-section-list {
+          display: grid;
+          gap: 7px;
+        }
+        .airship-section-button {
+          display: grid;
+          gap: 4px;
+          width: 100%;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #ffffff;
+          padding: 10px;
+          color: #0f172a;
+          text-align: left;
+          cursor: pointer;
+        }
+        .airship-section-button[data-selected="true"] {
+          border-color: #1d4ed8;
+          background: #eff6ff;
+          box-shadow: inset 3px 0 0 #1d4ed8;
+        }
+        .airship-section-button strong {
+          font-size: 13px;
+          line-height: 1.25;
+        }
+        .airship-section-button span {
+          color: #64748b;
+          font-size: 11px;
+          line-height: 1.35;
+        }
+        .airship-left-meta {
+          display: grid;
+          gap: 8px;
+          margin-top: 14px;
+          border-top: 1px solid #e2e8f0;
+          padding-top: 14px;
+        }
+        .airship-canvas {
+          min-width: 0;
+          overflow: auto;
+          background:
+            linear-gradient(#d1d5db 1px, transparent 1px),
+            linear-gradient(90deg, #d1d5db 1px, transparent 1px),
+            #eef2f7;
+          background-size: 28px 28px;
+          padding: 18px;
+        }
+        .airship-canvas-bar {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          align-items: center;
+          margin: 0 auto 12px;
+          max-width: 1100px;
+          flex-wrap: wrap;
+        }
+        .airship-frame-shell {
+          margin: 0 auto;
+          border: 1px solid #94a3b8;
+          border-radius: 8px;
+          background: #0f172a;
+          box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+          overflow: hidden;
+        }
+        .airship-frame-top {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          align-items: center;
+          min-height: 32px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+          padding: 0 12px;
+          color: #cbd5e1;
+          font-size: 11px;
+          font-weight: 800;
+        }
+        .airship-frame-page {
+          overflow: hidden;
+          background: #ffffff;
+        }
+        .airship-preview-hero {
+          position: relative;
+          display: grid;
+          align-content: center;
+          gap: 18px;
+          min-height: 498px;
+          outline: 2px solid transparent;
+          outline-offset: -2px;
+          transition: outline-color 120ms ease, box-shadow 120ms ease;
+        }
+        .airship-preview-hero[data-selected="true"] {
+          outline-color: #1d4ed8;
+          box-shadow: inset 0 0 0 9999px rgba(29, 78, 216, 0.025);
+        }
+        .airship-selection-chip {
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          display: inline-flex;
+          border: 1px solid #bfdbfe;
+          border-radius: 8px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          padding: 4px 7px;
+          font-size: 11px;
+          font-weight: 900;
+          line-height: 1.2;
+        }
+        .airship-preview-eyebrow {
+          color: #0f766e;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0;
+          text-transform: uppercase;
+        }
+        .airship-preview-headline {
+          margin: 0;
+          max-width: 820px;
+          color: #0f172a;
+          font-size: 46px;
+          line-height: 1.04;
+        }
+        .airship-preview-copy {
+          margin: 0;
+          max-width: 760px;
+          color: #334155;
+          font-size: 18px;
+          line-height: 1.55;
+        }
+        .airship-cta-row {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .airship-preview-cta {
+          display: inline-flex;
+          border-radius: 8px;
+          color: #ffffff;
+          padding: 12px 15px;
+          font-size: 14px;
+          font-weight: 900;
+          outline: 2px solid transparent;
+          outline-offset: 3px;
+        }
+        .airship-preview-cta[data-selected="true"] {
+          outline-color: #1d4ed8;
+        }
+        .airship-source-strip {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: center;
+          border-top: 1px solid #e2e8f0;
+          background: #f8fafc;
+          padding: 12px 16px;
+          cursor: pointer;
+          outline: 2px solid transparent;
+          outline-offset: -2px;
+        }
+        .airship-source-strip[data-selected="true"] {
+          outline-color: #1d4ed8;
+          background: #eff6ff;
+        }
+        .airship-inspector-content {
+          display: grid;
+          gap: 13px;
+          align-content: start;
+        }
+        .airship-control-group {
+          display: grid;
+          gap: 10px;
+          border-top: 1px solid #e2e8f0;
+          padding-top: 12px;
+        }
+        .airship-two-up {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+        .airship-status {
+          border: 1px solid #bae6fd;
+          border-radius: 8px;
+          background: #f0f9ff;
+          color: #075985;
+          padding: 10px;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .airship-details {
+          display: grid;
+          gap: 8px;
+          border-top: 1px solid #e2e8f0;
+          padding-top: 12px;
+        }
+        .airship-details summary {
+          color: #334155;
+          font-size: 12px;
+          font-weight: 900;
+          cursor: pointer;
+        }
+        .airship-detail-list {
+          display: grid;
+          gap: 6px;
+          color: #64748b;
+          font-size: 12px;
+          line-height: 1.45;
+          word-break: break-word;
+        }
+        @media (max-width: 1120px) {
+          .airship-toolbar {
+            grid-template-columns: 1fr;
+          }
+          .airship-toolbar-group:last-child {
+            justify-content: flex-start;
+          }
+          .airship-shell {
+            grid-template-columns: 190px minmax(0, 1fr);
+          }
+          .airship-inspector {
+            grid-column: 1 / -1;
+            border-top: 1px solid #cbd5e1;
+            border-left: 0;
+          }
+        }
+        @media (max-width: 760px) {
+          .airship-shell {
+            grid-template-columns: 1fr;
+          }
+          .airship-left {
+            border-right: 0;
+            border-bottom: 1px solid #cbd5e1;
+          }
+          .airship-section-list {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          .airship-canvas {
+            padding: 12px;
+          }
+          .airship-preview-headline {
+            font-size: 34px;
+          }
+        }
+      `}</style>
+
+      <header className="airship-toolbar">
+        <div className="airship-toolbar-group">
+          <a
+            href={`/gnr8/airship/single-site${props.migrationId ? `?migrationId=${encodeURIComponent(props.migrationId)}` : ""}`}
+            style={actionButtonStyle({ compact: true })}
+          >
+            Back to Airship
+          </a>
+          <div className="airship-title">
+            <div className="airship-kicker">Draft editor</div>
+            <h1>Airship visual editor workspace</h1>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {badge("Internal preview only", "warn")}
+
+        <div className="airship-toolbar-group" aria-label="Device viewport controls">
+          <div className="airship-device-toggle">
+            {viewportOptions.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setViewport(option.key)}
+                style={actionButtonStyle({ selected: viewport === option.key, compact: true })}
+                aria-pressed={viewport === option.key}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="airship-toolbar-group">
+          {badge("Draft only", "good")}
+          {badge(draftMeta.label, draftMeta.draftId ? "good" : "warn")}
+          {badge(providerBadgeLabel(providerStatus), providerConnected ? "good" : "warn")}
           {badge("Not live", "warn")}
           {badge("Not published", "warn")}
-          <a href={`/gnr8/airship/single-site${props.migrationId ? `?migrationId=${encodeURIComponent(props.migrationId)}` : ""}`} style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", color: "#334155", padding: "9px 12px", fontSize: 13, fontWeight: 850, textDecoration: "none" }}>
-            Back to Airship
+          {badge("Live site unchanged", "neutral")}
+          {props.draftCandidate?.route ? (
+            <a href={props.draftCandidate.route} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true })}>
+              Open internal preview
+            </a>
+          ) : null}
+          <a href={props.liveSiteUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true })}>
+            Open live site
           </a>
         </div>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(300px, 360px)", gap: 0, minHeight: 0 }}>
-        <section aria-label="Draft preview canvas" style={{ minWidth: 0, overflow: "auto", padding: 18 }}>
-          <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {badge("Changes are saved to Airship draft only", "good")}
-              {badge(STYLE_LOCAL_ONLY_MESSAGE, "neutral")}
-            </div>
-            <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.45 }}>
-              Source {props.importedSite} from {props.sourceUrl}. Live remains separate at {props.liveSiteUrl}.
-            </div>
+      <div className="airship-shell">
+        <aside className="airship-left" aria-label="Section navigator">
+          <div className="airship-panel-title">
+            <div className="airship-kicker">Section navigator</div>
+            <h2>{props.importedSite}</h2>
+            <div className="airship-muted">Live site unchanged. Text saves update the Airship draft only.</div>
           </div>
-          <div data-airship-editor-canvas="hero" style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
-            <div
-              style={{
-                display: "grid",
-                alignContent: "center",
-                gap: 18,
-                minHeight: 520,
-                padding: `${fields.topPadding}px 44px ${fields.bottomPadding}px`,
-                background: `linear-gradient(135deg, ${fields.backgroundTint} 0%, #ffffff 60%, #e0f2fe 100%)`,
-              }}
-            >
-              <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 }}>{props.draftPreview.hero.eyebrow}</div>
-              <h2 data-airship-editor-preview="headline" style={{ margin: 0, maxWidth: 820, color: "#0f172a", fontSize: 46, lineHeight: 1.04 }}>
-                {fields.headline}
-              </h2>
-              <p data-airship-editor-preview="subheading" style={{ margin: 0, maxWidth: 760, color: "#334155", fontSize: 18, lineHeight: 1.55 }}>
-                {fields.subheading}
-              </p>
-              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                {fields.ctaLabel ? (
-                  <span data-airship-editor-preview="cta" style={{ display: "inline-flex", border: `1px solid ${fields.ctaColor}`, borderRadius: 8, background: fields.ctaColor, color: "#fff", padding: "12px 15px", fontSize: 14, fontWeight: 900 }}>
-                    {fields.ctaLabel}
+
+          <div className="airship-section-list">
+            {sectionOptions.map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                className="airship-section-button"
+                data-selected={selectedSection === section.key}
+                onClick={() => setSelectedSection(section.key)}
+              >
+                <strong>{section.label}</strong>
+                <span>{section.detail}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="airship-left-meta">
+            {badge("Changes are saved to Airship draft only", "good")}
+            {badge(STYLE_LOCAL_ONLY_MESSAGE, "neutral")}
+            <div className="airship-muted">Source {props.importedSite} from {props.sourceUrl}.</div>
+          </div>
+        </aside>
+
+        <section className="airship-canvas" aria-label="Draft preview canvas">
+          <div className="airship-canvas-bar">
+            <div className="airship-toolbar-group">
+              {badge(`${selectedViewport.label} canvas`, "neutral")}
+              {badge(`${selectedViewport.width}px frame`, "neutral")}
+            </div>
+            <div className="airship-muted">Internal canvas preview. Live remains separate at {props.liveSiteUrl}.</div>
+          </div>
+
+          <div
+            className="airship-frame-shell"
+            style={{ width: selectedViewport.width, maxWidth: "100%" }}
+            data-airship-editor-viewport={viewport}
+          >
+            <div className="airship-frame-top">
+              <span>{props.draftPreview.label}</span>
+              <span>Draft only / Not live</span>
+            </div>
+            <div className="airship-frame-page">
+              <section
+                data-airship-editor-canvas="hero"
+                data-selected={selectedSection === "hero"}
+                className="airship-preview-hero"
+                aria-label="Homepage hero/intro"
+                onClick={() => setSelectedSection("hero")}
+                style={{
+                  padding: `${fields.topPadding}px ${viewport === "mobile" ? 22 : 44}px ${fields.bottomPadding}px`,
+                  background: `linear-gradient(135deg, ${fields.backgroundTint} 0%, #ffffff 58%, #dbeafe 100%)`,
+                }}
+              >
+                {selectedSection === "hero" ? <span className="airship-selection-chip">Selected: Hero / intro</span> : null}
+                <div className="airship-preview-eyebrow">{props.draftPreview.hero.eyebrow}</div>
+                <h2
+                  data-airship-editor-preview="headline"
+                  className="airship-preview-headline"
+                  style={{ fontSize: viewport === "mobile" ? 34 : viewport === "tablet" ? 40 : 46 }}
+                >
+                  {fields.headline}
+                </h2>
+                <p
+                  data-airship-editor-preview="subheading"
+                  className="airship-preview-copy"
+                  style={{ fontSize: viewport === "mobile" ? 16 : 18 }}
+                >
+                  {fields.subheading}
+                </p>
+                <div className="airship-cta-row">
+                  {fields.ctaLabel ? (
+                    <button
+                      type="button"
+                      data-airship-editor-preview="cta"
+                      data-selected={selectedSection === "cta"}
+                      className="airship-preview-cta"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedSection("cta");
+                      }}
+                      style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor }}
+                    >
+                      {fields.ctaLabel}
+                    </button>
+                  ) : null}
+                  {props.draftPreview.hero.secondaryContactText ? (
+                    <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
+                      {props.draftPreview.hero.secondaryContactText}
+                    </span>
+                  ) : null}
+                </div>
+              </section>
+              <button
+                type="button"
+                className="airship-source-strip"
+                data-selected={selectedSection === "source"}
+                onClick={() => setSelectedSection("source")}
+              >
+                <span>
+                  <strong>Source material</strong>
+                  <span style={{ display: "block", color: "#64748b", fontSize: 12, marginTop: 2 }}>
+                    CHS draft evidence stays inside the internal editor workspace.
                   </span>
-                ) : null}
-                {props.draftPreview.hero.secondaryContactText ? <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>{props.draftPreview.hero.secondaryContactText}</span> : null}
-              </div>
+                </span>
+                <span style={{ color: "#0f766e", fontSize: 12, fontWeight: 900 }}>Draft only</span>
+              </button>
             </div>
           </div>
         </section>
 
-        <aside aria-label="Selected section controls" style={{ display: "grid", alignContent: "start", gap: 14, borderLeft: "1px solid #dbe3ee", background: "#fff", padding: 16, overflow: "auto" }}>
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Selected section</div>
-            <h2 style={{ margin: 0, fontSize: 18, lineHeight: 1.2 }}>Homepage hero/intro</h2>
-            <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.45 }}>
-              {draftMeta.draftId ? `Draft ${draftMeta.draftId}` : "Draft will be created on first text save"}. {draftMeta.version ? `Version ${draftMeta.version}.` : ""}
-            </div>
-            {props.draftCandidate ? (
-              <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.45 }}>
-                Candidate {props.draftCandidate.siteVersionId ?? "unavailable"}.
-                {props.draftCandidate.runtimeArtifactId ? ` Artifact ${props.draftCandidate.runtimeArtifactId}.` : ""}
-                {props.draftCandidate.draftId ? ` Source draft ${props.draftCandidate.draftId}.` : ""}
+        <aside className="airship-inspector" aria-label="Selected section controls">
+          <div className="airship-inspector-content">
+            <div className="airship-panel-title">
+              <div className="airship-kicker">Selected section</div>
+              <h2>{sectionOptions.find((section) => section.key === selectedSection)?.label ?? "Hero / intro"}</h2>
+              <div className="airship-muted">
+                {draftMeta.lastSavedAt ? `Last saved ${draftMeta.lastSavedAt}. ` : "Draft will be created on first text save. "}
+                Draft only. Not live. Not published.
               </div>
-            ) : (
-              <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>
-                No materialized Airship candidate is required for this editor preview.
-              </div>
-            )}
-          </div>
-
-          {controlLabel("H1/headline text", <textarea rows={3} value={fields.headline} onChange={(event) => updateTextField("headline", event.target.value)} style={inputStyle(true)} />)}
-          {controlLabel("Subheading/body text", <textarea rows={5} value={fields.subheading} onChange={(event) => updateTextField("subheading", event.target.value)} style={inputStyle(true)} />)}
-          {controlLabel("CTA label", <input value={fields.ctaLabel} onChange={(event) => updateTextField("ctaLabel", event.target.value)} style={inputStyle()} />)}
-
-          {controlLabel("Hero top padding", <input type="range" min={24} max={140} value={fields.topPadding} onChange={(event) => setFields((current) => ({ ...current, topPadding: clampSpacing(Number(event.target.value)) }))} />)}
-          {controlLabel("Hero bottom padding", <input type="range" min={24} max={140} value={fields.bottomPadding} onChange={(event) => setFields((current) => ({ ...current, bottomPadding: clampSpacing(Number(event.target.value)) }))} />)}
-          {controlLabel(
-            "Background tint",
-            <select value={fields.backgroundTint} onChange={(event) => setFields((current) => ({ ...current, backgroundTint: event.target.value }))} style={inputStyle()}>
-              {tintOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>,
-          )}
-          {controlLabel(
-            "CTA color",
-            <select value={fields.ctaColor} onChange={(event) => setFields((current) => ({ ...current, ctaColor: event.target.value }))} style={inputStyle()}>
-              {ctaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>,
-          )}
-
-          <button type="button" disabled={busy} onClick={() => void saveAllTextEdits()} style={{ border: "1px solid #0f766e", borderRadius: 8, background: busy ? "#f8fafc" : "#0f766e", color: busy ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, cursor: busy ? "not-allowed" : "pointer" }}>
-            Save text edits
-          </button>
-
-          <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, display: "grid", gap: 8 }}>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>AI command</div>
-            <div style={{ color: providerConnected ? "#166534" : "#92400e", fontSize: 12, lineHeight: 1.45 }}>
-              {providerConnectionMessage(providerStatus)}
             </div>
-            <textarea rows={3} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="spremeni CTA v Kontaktirajte CHS" style={inputStyle(true)} />
-            <button type="button" disabled={busy || command.trim().length === 0} onClick={() => void runCommand()} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: busy || command.trim().length === 0 ? "#f8fafc" : "#1d4ed8", color: busy || command.trim().length === 0 ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, cursor: busy || command.trim().length === 0 ? "not-allowed" : "pointer" }}>
-              Apply command
-            </button>
-          </div>
 
-          <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, display: "grid", gap: 8 }}>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>OpenAI provider</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {badge(providerBadgeLabel(providerStatus), providerConnected ? "good" : "warn")}
-              {providerStatus.maskedKey ? badge(providerStatus.maskedKey, "neutral") : null}
-              {providerStatus.lastTestStatus ? badge(`Test ${providerStatus.lastTestStatus}`, providerStatus.lastTestStatus === "passed" ? "good" : "warn") : null}
-            </div>
-            {providerStatus.status === "read_error" ? (
-              <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>
-                Provider status read failed. The editor remains available; no API key is shown, and AI commands stay disabled.
+            {selectedSection === "hero" ? (
+              <div className="airship-control-group" style={{ borderTop: 0, paddingTop: 0 }}>
+                {controlLabel("H1/headline text", <textarea rows={3} value={fields.headline} onChange={(event) => updateTextField("headline", event.target.value)} style={inputStyle(true)} />)}
+                {controlLabel("Subheading/body text", <textarea rows={5} value={fields.subheading} onChange={(event) => updateTextField("subheading", event.target.value)} style={inputStyle(true)} />)}
+                {controlLabel("CTA label", <input value={fields.ctaLabel} onChange={(event) => updateTextField("ctaLabel", event.target.value)} style={inputStyle()} />)}
+                {controlLabel("Hero top padding", <input type="range" min={24} max={140} value={fields.topPadding} onChange={(event) => setFields((current) => ({ ...current, topPadding: clampSpacing(Number(event.target.value)) }))} />)}
+                {controlLabel("Hero bottom padding", <input type="range" min={24} max={140} value={fields.bottomPadding} onChange={(event) => setFields((current) => ({ ...current, bottomPadding: clampSpacing(Number(event.target.value)) }))} />)}
+                {controlLabel(
+                  "Background tint",
+                  <select value={fields.backgroundTint} onChange={(event) => setFields((current) => ({ ...current, backgroundTint: event.target.value }))} style={inputStyle()}>
+                    {tintOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>,
+                )}
+                {controlLabel(
+                  "CTA color",
+                  <select value={fields.ctaColor} onChange={(event) => setFields((current) => ({ ...current, ctaColor: event.target.value }))} style={inputStyle()}>
+                    {ctaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>,
+                )}
               </div>
             ) : null}
-            {providerStatus.updatedAt ? (
-              <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.45 }}>
-                Updated {providerStatus.updatedAt}.
+
+            {selectedSection === "cta" ? (
+              <div className="airship-control-group" style={{ borderTop: 0, paddingTop: 0 }}>
+                {controlLabel("CTA label", <input value={fields.ctaLabel} onChange={(event) => updateTextField("ctaLabel", event.target.value)} style={inputStyle()} />)}
+                {controlLabel(
+                  "CTA color",
+                  <select value={fields.ctaColor} onChange={(event) => setFields((current) => ({ ...current, ctaColor: event.target.value }))} style={inputStyle()}>
+                    {ctaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>,
+                )}
+                <div className="airship-muted">CTA text saves to the Airship draft. CTA color updates this preview only.</div>
               </div>
             ) : null}
-            {controlLabel("API key", <input type="password" autoComplete="off" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder="sk-..." style={inputStyle()} />)}
-            {controlLabel("Model", <input value={modelInput} onChange={(event) => setModelInput(event.target.value)} placeholder="gpt-5" style={inputStyle()} />)}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <button type="button" disabled={providerSaveDisabled} onClick={() => void submitProviderAction("save_openai")} style={{ border: "1px solid #0f766e", borderRadius: 8, background: providerSaveDisabled ? "#f8fafc" : "#0f766e", color: providerSaveDisabled ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 13, fontWeight: 900, cursor: providerSaveDisabled ? "not-allowed" : "pointer" }}>
-                Save key
-              </button>
-              <button type="button" disabled={providerConnectedActionDisabled} onClick={() => void submitProviderAction("test_openai")} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: providerConnectedActionDisabled ? "#f8fafc" : "#1d4ed8", color: providerConnectedActionDisabled ? "#94a3b8" : "#fff", padding: "10px 13px", fontSize: 13, fontWeight: 900, cursor: providerConnectedActionDisabled ? "not-allowed" : "pointer" }}>
-                Test connection
+
+            {selectedSection === "source" ? (
+              <div className="airship-control-group" style={{ borderTop: 0, paddingTop: 0 }}>
+                {controlLabel("Imported site", <input readOnly value={props.importedSite} style={inputStyle()} />)}
+                {controlLabel("Source URL", <input readOnly value={props.sourceUrl} style={inputStyle()} />)}
+                {controlLabel("Live site URL", <input readOnly value={props.liveSiteUrl} style={inputStyle()} />)}
+                <div className="airship-muted">Live site link is separate from the internal preview/canvas. Live site unchanged.</div>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void saveAllTextEdits()}
+              style={actionButtonStyle({ tone: "primary", disabled: busy })}
+            >
+              Save text edits
+            </button>
+
+            <div className="airship-control-group">
+              <div className="airship-kicker">AI command</div>
+              <div style={{ color: providerConnected ? "#166534" : "#92400e", fontSize: 12, lineHeight: 1.45 }}>
+                {providerConnectionMessage(providerStatus)}
+              </div>
+              <textarea rows={3} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="spremeni CTA v Kontaktirajte CHS" style={inputStyle(true)} />
+              <button
+                type="button"
+                disabled={busy || command.trim().length === 0}
+                onClick={() => void runCommand()}
+                style={actionButtonStyle({ tone: "primary", disabled: busy || command.trim().length === 0 })}
+              >
+                Apply command
               </button>
             </div>
-            <button type="button" disabled={providerConnectedActionDisabled} onClick={() => void submitProviderAction("revoke_openai")} style={{ border: "1px solid #b91c1c", borderRadius: 8, background: providerConnectedActionDisabled ? "#f8fafc" : "#fff", color: providerConnectedActionDisabled ? "#94a3b8" : "#b91c1c", padding: "10px 13px", fontSize: 13, fontWeight: 900, cursor: providerConnectedActionDisabled ? "not-allowed" : "pointer" }}>
-              Revoke key
-            </button>
-          </div>
 
-          <div role="status" style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", color: "#075985", padding: 10, fontSize: 12, lineHeight: 1.45 }}>
-            {message}
-          </div>
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Editable draft fields</div>
-            {selectedDrafts.map((draft) => (
-              <div key={draft.id} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 8, fontSize: 12, lineHeight: 1.4 }}>
-                <strong>{draft.targetSectionPage}</strong>
-                <div style={{ color: "#64748b" }}>{draft.status}</div>
+            <div className="airship-control-group">
+              <div className="airship-kicker">OpenAI provider</div>
+              <div className="airship-toolbar-group">
+                {badge(providerBadgeLabel(providerStatus), providerConnected ? "good" : "warn")}
+                {providerStatus.maskedKey ? badge(providerStatus.maskedKey, "neutral") : null}
+                {providerStatus.lastTestStatus ? badge(`Test ${providerStatus.lastTestStatus}`, providerStatus.lastTestStatus === "passed" ? "good" : "warn") : null}
               </div>
-            ))}
+              {providerStatus.status === "read_error" ? (
+                <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>
+                  Provider status read failed. The editor remains available; no API key is shown, and AI commands stay disabled.
+                </div>
+              ) : null}
+              {controlLabel("API key", <input type="password" autoComplete="off" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder="sk-..." style={inputStyle()} />)}
+              {controlLabel("Model", <input value={modelInput} onChange={(event) => setModelInput(event.target.value)} placeholder="gpt-5" style={inputStyle()} />)}
+              <div className="airship-two-up">
+                <button type="button" disabled={providerSaveDisabled} onClick={() => void submitProviderAction("save_openai")} style={actionButtonStyle({ tone: "primary", disabled: providerSaveDisabled })}>
+                  Save key
+                </button>
+                <button type="button" disabled={providerConnectedActionDisabled} onClick={() => void submitProviderAction("test_openai")} style={actionButtonStyle({ tone: "primary", disabled: providerConnectedActionDisabled })}>
+                  Test connection
+                </button>
+              </div>
+              <button type="button" disabled={providerConnectedActionDisabled} onClick={() => void submitProviderAction("revoke_openai")} style={actionButtonStyle({ tone: "danger", disabled: providerConnectedActionDisabled })}>
+                Revoke key
+              </button>
+            </div>
+
+            <div role="status" className="airship-status">
+              {message}
+            </div>
+
+            <details className="airship-details">
+              <summary>Details</summary>
+              <div className="airship-detail-list">
+                <div>{draftMeta.draftId ? `Draft ${draftMeta.draftId}` : "No saved draft id yet"}</div>
+                <div>{draftMeta.version ? `Version ${draftMeta.version}` : "No saved version yet"}</div>
+                {props.draftCandidate ? (
+                  <>
+                    <div>Candidate {props.draftCandidate.siteVersionId ?? "unavailable"}</div>
+                    <div>Artifact {props.draftCandidate.runtimeArtifactId ?? "unavailable"}</div>
+                    <div>Source draft {props.draftCandidate.draftId ?? "unavailable"}</div>
+                  </>
+                ) : (
+                  <div>No materialized Airship candidate is required for this editor preview.</div>
+                )}
+                <div>Provider updated {providerStatus.updatedAt ?? "not yet"}</div>
+              </div>
+            </details>
+
+            <div className="airship-details">
+              <div className="airship-kicker">Editable draft fields</div>
+              <div className="airship-detail-list">
+                {selectedDrafts.map((draft) => (
+                  <div key={draft.id}>
+                    <strong>{draft.targetSectionPage}</strong> - {draft.status}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </aside>
       </div>
