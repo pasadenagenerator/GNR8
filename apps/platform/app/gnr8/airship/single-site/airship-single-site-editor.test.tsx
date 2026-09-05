@@ -15,7 +15,11 @@ import {
   AirshipSingleSiteVisualEditorWorkspace,
   applyAirshipHeroCommand,
   applyAirshipHeroTextFieldEdit,
+  deriveAirshipDraftSaveState,
   initialAirshipHeroEditorFields,
+  resetAirshipSectionStyleToSavedValues,
+  resetAirshipSectionTextToSavedValues,
+  undoAirshipEditorLastLocalChange,
 } from "./editor/airship-single-site-visual-editor-workspace";
 
 const { renderToStaticMarkup } = ReactDomServer;
@@ -392,10 +396,16 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Tablet"), true);
   assert.equal(html.includes("Mobile"), true);
   assert.equal(html.includes("Draft only"), true);
+  assert.equal(html.includes("Draft state"), true);
+  assert.equal(html.includes("Unsaved changes"), true);
   assert.equal(html.includes("Internal preview only"), true);
   assert.equal(html.includes("Not live"), true);
   assert.equal(html.includes("Not published"), true);
   assert.equal(html.includes("Live site unchanged"), true);
+  assert.equal(html.includes("Airship draft"), true);
+  assert.equal(html.includes("Published candidate"), true);
+  assert.equal(html.includes("Live CHS site"), true);
+  assert.equal(html.includes("Text and style saves persist here"), true);
   assert.equal(html.includes("Open internal preview"), true);
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);
@@ -414,6 +424,13 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Hero bottom padding"), true);
   assert.equal(html.includes("Background tint"), true);
   assert.equal(html.includes("CTA color"), true);
+  assert.equal(html.includes("Persists to Airship draft on save"), true);
+  assert.equal(html.includes("Style autosaves to Airship draft"), true);
+  assert.equal(html.includes("Draft-only recovery"), true);
+  assert.equal(html.includes("Undo last local change"), true);
+  assert.equal(html.includes("Reset selected section style"), true);
+  assert.equal(html.includes("Reset selected section text"), true);
+  assert.equal(html.includes("Recent changes"), true);
   assert.equal(html.includes("AI command"), true);
   assert.equal(html.includes("Connect OpenAI to use AI commands"), true);
   assert.equal(html.includes("OpenAI provider"), true);
@@ -530,6 +547,95 @@ test("airship visual editor headline edit updates preview fields", () => {
   assert.equal(fields.subheading, "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.");
 });
 
+test("airship visual editor derives saved, unsaved, saving, and failed draft states", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const savedFields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview, {
+    heroTopPadding: 92,
+    heroBottomPadding: 108,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
+
+  assert.equal(deriveAirshipDraftSaveState({ fields: savedFields, savedFields }), "saved");
+  assert.equal(deriveAirshipDraftSaveState({ fields: { ...savedFields, headline: "CHS secures enterprise IT" }, savedFields }), "unsaved");
+  assert.equal(deriveAirshipDraftSaveState({ fields: { ...savedFields, ctaColor: "#111827" }, savedFields }), "unsaved");
+  assert.equal(deriveAirshipDraftSaveState({ fields: savedFields, savedFields, saving: true }), "saving");
+  assert.equal(deriveAirshipDraftSaveState({ fields: savedFields, savedFields, saveFailed: true }), "failed");
+});
+
+test("airship visual editor undo restores the previous local snapshot without draft or live actions", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const fields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview);
+  const edited = applyAirshipHeroTextFieldEdit({
+    fields,
+    drafts: model.draftPanel.drafts,
+    field: "headline",
+    value: "CHS secures enterprise IT",
+  });
+
+  const undone = undoAirshipEditorLastLocalChange({
+    undoStack: [{ fields, drafts: model.draftPanel.drafts }],
+    fallback: edited,
+  });
+
+  assert.equal(undone.undone, true);
+  assert.equal(undone.fields.headline, "Less risk. More control. Better IT.");
+  assert.equal(undone.drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.proposedTextContent, "Less risk. More control. Better IT.");
+  assert.equal(undone.undoStack.length, 0);
+});
+
+test("airship visual editor resets selected section text and style to saved values", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const savedFields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview, {
+    heroTopPadding: 92,
+    heroBottomPadding: 108,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
+  const changedFields = {
+    ...savedFields,
+    headline: "Local headline",
+    subheading: "Local subheading",
+    ctaLabel: "Local CTA",
+    topPadding: 64,
+    bottomPadding: 66,
+    backgroundTint: "#ffffff",
+    ctaColor: "#111827",
+  };
+  const changedText = applyAirshipHeroTextFieldEdit({
+    fields: changedFields,
+    drafts: model.draftPanel.drafts,
+    field: "headline",
+    value: "Local headline",
+  });
+
+  const resetText = resetAirshipSectionTextToSavedValues({
+    section: "cta",
+    fields: changedText.fields,
+    drafts: changedText.drafts,
+    savedFields,
+  });
+  assert.deepEqual(resetText.changedFields, ["ctaLabel"]);
+  assert.equal(resetText.fields.ctaLabel, savedFields.ctaLabel);
+  assert.equal(resetText.fields.headline, "Local headline");
+
+  const resetStyle = resetAirshipSectionStyleToSavedValues({
+    section: "hero",
+    fields: changedFields,
+    drafts: model.draftPanel.drafts,
+    savedFields,
+  });
+  assert.deepEqual(resetStyle.changedFields, ["topPadding", "bottomPadding", "backgroundTint", "ctaColor"]);
+  assert.equal(resetStyle.fields.topPadding, 92);
+  assert.equal(resetStyle.fields.bottomPadding, 108);
+  assert.equal(resetStyle.fields.backgroundTint, "#eef6ff");
+  assert.equal(resetStyle.fields.ctaColor, "#1d4ed8");
+  assert.equal(resetStyle.drafts, model.draftPanel.drafts);
+});
+
 test("airship visual editor AI command updates supported text and style fields", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);
@@ -568,6 +674,36 @@ test("airship visual editor hydrates persisted style settings for reload readbac
   assert.equal(fields.backgroundTint, "#eef6ff");
   assert.equal(fields.ctaColor, "#1d4ed8");
   assert.equal(fields.headline, "Less risk. More control. Better IT.");
+});
+
+test("airship visual editor reload starts from saved draft text and style values", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const reloadedFields = initialAirshipHeroEditorFields({
+    ...model.draftPanel.draftPreview,
+    hero: {
+      ...model.draftPanel.draftPreview.hero,
+      headline: "Saved CHS headline",
+      subheading: "Saved CHS subheading.",
+      primaryCtaLabel: "Saved CTA",
+    },
+  }, {
+    heroTopPadding: 84,
+    heroBottomPadding: 96,
+    backgroundTint: "#fefce8",
+    ctaColor: "#047857",
+  });
+
+  assert.deepEqual(reloadedFields, {
+    headline: "Saved CHS headline",
+    subheading: "Saved CHS subheading.",
+    ctaLabel: "Saved CTA",
+    topPadding: 84,
+    bottomPadding: 96,
+    backgroundTint: "#fefce8",
+    ctaColor: "#047857",
+  });
+  assert.equal(deriveAirshipDraftSaveState({ fields: reloadedFields, savedFields: reloadedFields }), "saved");
 });
 
 test("airship visual editor AI command rejects unsupported commands helpfully", () => {
@@ -628,6 +764,16 @@ test("airship single-site foundation adds no production mutation action surface"
   assert.equal(source.includes("Run provider"), false);
   assert.equal(source.includes("Rollback"), false);
   assert.equal(source.includes("Publish candidate"), false);
+});
+
+test("airship visual editor adds no publish, dry-run, shadow, rollback, source capture, or active-pointer action control", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+
+  assert.doesNotMatch(visualEditorSource, /publishApprovedSiteVersion|Publish candidate|shadow-publish|dry-run|Rollback|source capture/i);
+  assert.doesNotMatch(visualEditorSource, /active_site_version_id|gnr8_runtime_active_pointers|switchActivePointer|active pointer mutation/i);
+  assert.equal(visualEditorSource.includes("Undo last local change"), true);
+  assert.equal(visualEditorSource.includes("Reset selected section style"), true);
+  assert.equal(visualEditorSource.includes("Reset selected section text"), true);
 });
 
 test("airship preview route gives EMAXCONNSESSION a compact retry surface", async () => {
