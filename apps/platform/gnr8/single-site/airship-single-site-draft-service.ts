@@ -21,6 +21,13 @@ export type AirshipSingleSiteDraftEdit = {
   previewImpact: string;
 };
 
+export type AirshipSingleSiteDraftStyleSettings = {
+  heroTopPadding: number;
+  heroBottomPadding: number;
+  backgroundTint: "#ecfeff" | "#eef6ff" | "#fefce8" | "#ffffff";
+  ctaColor: "#0f766e" | "#1d4ed8" | "#111827" | "#047857";
+};
+
 export type AirshipSingleSiteDraftActor = {
   actorId: string;
   actorType: "human" | "system";
@@ -47,6 +54,7 @@ export type AirshipSingleSiteDraftSeed = {
     previewPersistence?: string;
     liveSiteUrl?: string;
     liveBoundary?: "not_applied_to_live_site";
+    styleSettings?: Partial<AirshipSingleSiteDraftStyleSettings>;
   };
 };
 
@@ -76,6 +84,7 @@ export type AirshipSingleSiteDraftRepository = {
   readCurrentDraftByMigrationId(migrationId: string): Promise<AirshipSingleSiteDraftRecord | null>;
   createOrReuseDraft(input: AirshipSingleSiteDraftCreateInput): Promise<AirshipSingleSiteDraftRecord>;
   updateDraftEditText(input: AirshipSingleSiteDraftEditTextInput): Promise<AirshipSingleSiteDraftRecord>;
+  updateDraftStyleSettings(input: AirshipSingleSiteDraftStyleSettingsInput): Promise<AirshipSingleSiteDraftRecord>;
   markDraftEditAccepted(input: AirshipSingleSiteDraftEditDecisionInput): Promise<AirshipSingleSiteDraftRecord>;
   markDraftEditRejected(input: AirshipSingleSiteDraftEditDecisionInput): Promise<AirshipSingleSiteDraftRecord>;
 };
@@ -101,6 +110,13 @@ export type AirshipSingleSiteDraftEditDecisionInput = AirshipSingleSiteDraftSeed
   idempotencyKey?: string | null;
 };
 
+export type AirshipSingleSiteDraftStyleSettingsInput = AirshipSingleSiteDraftSeed & {
+  styleSettings: Partial<AirshipSingleSiteDraftStyleSettings>;
+  actor: AirshipSingleSiteDraftActor;
+  correlationId?: string | null;
+  idempotencyKey?: string | null;
+};
+
 type QueryResult<T> = {
   rows: T[];
 };
@@ -109,8 +125,18 @@ type PoolLike = {
   connect(): Promise<SingleSitePgClient & { release?: () => void }>;
 };
 
-const SAFE_METADATA_KEYS = new Set(["serviceVersion", "projectionVersion", "previewPersistence", "liveSiteUrl", "liveBoundary"]);
+export const DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS: AirshipSingleSiteDraftStyleSettings = {
+  heroTopPadding: 72,
+  heroBottomPadding: 72,
+  backgroundTint: "#ecfeff",
+  ctaColor: "#0f766e",
+};
+
+const AIRSHIP_STYLE_DRAFT_EDIT_ID = "airship-editor-style-settings";
+const SAFE_METADATA_KEYS = new Set(["serviceVersion", "projectionVersion", "previewPersistence", "liveSiteUrl", "liveBoundary", "styleSettings"]);
 const UNSAFE_METADATA_VALUE = /secret|password|credential|token|cookie|billing|stripe|payment|openprovider|raw sql|stack trace|database_url|openai_api_key/i;
+const SAFE_BACKGROUND_TINTS = new Set<AirshipSingleSiteDraftStyleSettings["backgroundTint"]>(["#ecfeff", "#eef6ff", "#fefce8", "#ffffff"]);
+const SAFE_CTA_COLORS = new Set<AirshipSingleSiteDraftStyleSettings["ctaColor"]>(["#0f766e", "#1d4ed8", "#111827", "#047857"]);
 
 function text(field: string, value: unknown, options: { max?: number; nullable?: boolean } = {}): string | null {
   if (value === undefined || value === null) {
@@ -131,11 +157,50 @@ function safeMetadata(metadata: AirshipSingleSiteDraftSeed["metadata"]): Record<
   for (const [key, value] of Object.entries(metadata ?? {})) {
     if (!SAFE_METADATA_KEYS.has(key)) continue;
     if (value === undefined || value === null) continue;
+    if (key === "styleSettings") {
+      safe.styleSettings = sanitizeDraftStyleSettings(value);
+      continue;
+    }
     const normalized = String(value).trim();
     if (!normalized || UNSAFE_METADATA_VALUE.test(normalized)) continue;
     safe[key] = normalized;
   }
   return safe;
+}
+
+function metadataWithPreservedStyleSettings(
+  seedMetadata: AirshipSingleSiteDraftSeed["metadata"],
+  currentMetadata: Record<string, unknown>,
+): Record<string, unknown> {
+  const safe = safeMetadata(seedMetadata);
+  const currentStyleSettings = sanitizeDraftStyleSettings(currentMetadata.styleSettings);
+  const seedStyleSettings = safe.styleSettings as AirshipSingleSiteDraftStyleSettings | undefined;
+  return {
+    ...safe,
+    styleSettings: seedStyleSettings ?? currentStyleSettings,
+  };
+}
+
+function numberInRange(value: unknown, fallback: number): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(24, Math.min(140, Math.round(numeric)));
+}
+
+export function sanitizeDraftStyleSettings(value: unknown): AirshipSingleSiteDraftStyleSettings {
+  const record = jsonObject(value);
+  const backgroundTint = SAFE_BACKGROUND_TINTS.has(record.backgroundTint as AirshipSingleSiteDraftStyleSettings["backgroundTint"])
+    ? record.backgroundTint as AirshipSingleSiteDraftStyleSettings["backgroundTint"]
+    : DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS.backgroundTint;
+  const ctaColor = SAFE_CTA_COLORS.has(record.ctaColor as AirshipSingleSiteDraftStyleSettings["ctaColor"])
+    ? record.ctaColor as AirshipSingleSiteDraftStyleSettings["ctaColor"]
+    : DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS.ctaColor;
+  return {
+    heroTopPadding: numberInRange(record.heroTopPadding, DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS.heroTopPadding),
+    heroBottomPadding: numberInRange(record.heroBottomPadding, DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS.heroBottomPadding),
+    backgroundTint,
+    ctaColor,
+  };
 }
 
 function jsonObject(value: unknown): Record<string, unknown> {
@@ -368,6 +433,29 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
     });
   }
 
+  async updateDraftStyleSettings(input: AirshipSingleSiteDraftStyleSettingsInput): Promise<AirshipSingleSiteDraftRecord> {
+    const draft = await this.createOrReuseDraft(input);
+    const styleSettings = sanitizeDraftStyleSettings(input.styleSettings);
+    const event = eventInput(input);
+    return withTransaction(this.pool, async (client) => {
+      const current = await this.readCurrentDraftInTx(client, draft.migrationId);
+      if (!current) throw new Error("airship_draft_missing_after_create");
+      const metadata = {
+        ...current.metadata,
+        styleSettings,
+      };
+      const updated = await this.updateDraftMetadata(client, current, metadata, event.actorId);
+      await this.insertEvent(client, {
+        draft: updated,
+        action: "edit_saved",
+        draftEditId: AIRSHIP_STYLE_DRAFT_EDIT_ID,
+        event,
+        summary: { draftEditId: AIRSHIP_STYLE_DRAFT_EDIT_ID, savedAirshipDraft: true, styleSettingsSaved: true, notAppliedToLiveSite: true, notPublished: true },
+      });
+      return updated;
+    });
+  }
+
   async markDraftEditAccepted(input: AirshipSingleSiteDraftEditDecisionInput): Promise<AirshipSingleSiteDraftRecord> {
     return this.markDraftEdit(input, "accepted", "edit_accepted");
   }
@@ -509,7 +597,7 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
         seed.sourceUrl,
         JSON.stringify(seed.targetSiteVersionRefs),
         watermark,
-        JSON.stringify(seed.metadata),
+        JSON.stringify(metadataWithPreservedStyleSettings(seed.metadata, current.metadata)),
         actorId,
       ],
     ) as QueryResult<Record<string, unknown>>;
@@ -548,6 +636,38 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
       returning *, accepted_at::text as accepted_at, rejected_at::text as rejected_at, created_at::text as created_at, updated_at::text as updated_at
       `,
       [current.id, JSON.stringify(draftEdits), draftStatus, nextVersion, watermark, actorId],
+    ) as QueryResult<Record<string, unknown>>;
+    return rowToRecord(result.rows[0]);
+  }
+
+  private async updateDraftMetadata(
+    client: SingleSitePgClient,
+    current: AirshipSingleSiteDraftRecord,
+    metadata: Record<string, unknown>,
+    actorId: string,
+  ): Promise<AirshipSingleSiteDraftRecord> {
+    const nextVersion = current.version + 1;
+    const watermark = semanticWatermark({
+      migrationId: current.migrationId,
+      sourceUrl: current.sourceUrl,
+      targetSiteVersionRefs: current.targetSiteVersionRefs,
+      draftEdits: current.draftEdits,
+      draftStatus: current.draftStatus,
+      version: nextVersion,
+    });
+    const result = await client.query(
+      `
+      update public.gnr8_airship_single_site_editor_drafts
+      set
+        version = $2,
+        semantic_watermark = $3,
+        metadata_json = $4::jsonb,
+        updated_by_actor_id = $5,
+        updated_at = now()
+      where id = $1::uuid
+      returning *, accepted_at::text as accepted_at, rejected_at::text as rejected_at, created_at::text as created_at, updated_at::text as updated_at
+      `,
+      [current.id, nextVersion, watermark, JSON.stringify(safeMetadata(metadata as AirshipSingleSiteDraftSeed["metadata"])), actorId],
     ) as QueryResult<Record<string, unknown>>;
     return rowToRecord(result.rows[0]);
   }
@@ -635,6 +755,14 @@ export class AirshipSingleSiteDraftService {
       ...seedWithSafeValues(input),
       draftEditId: text("draftEditId", input.draftEditId, { max: 160 }) ?? "",
       proposedTextContent: text("proposedTextContent", input.proposedTextContent, { max: 5000 }) ?? "",
+    });
+  }
+
+  updateDraftStyleSettings(input: AirshipSingleSiteDraftStyleSettingsInput): Promise<AirshipSingleSiteDraftRecord> {
+    return this.repository.updateDraftStyleSettings({
+      ...input,
+      ...seedWithSafeValues(input),
+      styleSettings: sanitizeDraftStyleSettings(input.styleSettings),
     });
   }
 

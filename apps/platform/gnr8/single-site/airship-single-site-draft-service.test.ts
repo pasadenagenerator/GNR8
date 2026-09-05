@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   AirshipSingleSiteDraftService,
   AIRSHIP_SINGLE_SITE_DRAFT_SERVICE_VERSION,
+  DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS,
+  sanitizeDraftStyleSettings,
   type AirshipSingleSiteDraftCreateInput,
   type AirshipSingleSiteDraftRecord,
   type AirshipSingleSiteDraftRepository,
@@ -56,6 +58,7 @@ function createInput(): AirshipSingleSiteDraftCreateInput {
       previewPersistence: "browser_local_only",
       liveSiteUrl: "https://www.chs.si/",
       liveBoundary: "not_applied_to_live_site",
+      styleSettings: DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS,
     },
     actor: {
       actorId: "superadmin-test",
@@ -115,6 +118,19 @@ function fakeRepository() {
       });
       return current;
     },
+    async updateDraftStyleSettings(nextInput) {
+      calls.push("update_style_settings");
+      current = record(nextInput, {
+        id: current.id,
+        draftEdits: current.draftEdits,
+        metadata: {
+          ...current.metadata,
+          styleSettings: sanitizeDraftStyleSettings(nextInput.styleSettings),
+        },
+        version: current.version + 1,
+      });
+      return current;
+    },
     async markDraftEditAccepted(nextInput) {
       calls.push(`accept:${nextInput.draftEditId}`);
       current = record(nextInput, {
@@ -154,6 +170,23 @@ test("airship draft service exposes create, read, edit save, accept, and reject 
     })).draftEdits[0]?.proposedTextContent,
     "CHS helps modernize enterprise IT",
   );
+  assert.deepEqual(
+    (await service.updateDraftStyleSettings({
+      ...input,
+      styleSettings: {
+        heroTopPadding: 92,
+        heroBottomPadding: 108,
+        backgroundTint: "#eef6ff",
+        ctaColor: "#1d4ed8",
+      },
+    })).metadata.styleSettings,
+    {
+      heroTopPadding: 92,
+      heroBottomPadding: 108,
+      backgroundTint: "#eef6ff",
+      ctaColor: "#1d4ed8",
+    },
+  );
   assert.equal((await service.markDraftEditAccepted({ ...input, draftEditId: "airship-chs-home-hero-headline" })).draftEdits[0]?.status, "accepted");
   assert.equal((await service.markDraftEditRejected({ ...input, draftEditId: "airship-chs-home-contact-cta" })).draftEdits[1]?.status, "rejected");
 
@@ -161,9 +194,28 @@ test("airship draft service exposes create, read, edit save, accept, and reject 
     `read:${MIGRATION_ID}`,
     "create_or_reuse",
     "update:airship-chs-home-hero-headline",
+    "update_style_settings",
     "accept:airship-chs-home-hero-headline",
     "reject:airship-chs-home-contact-cta",
   ]);
+});
+
+test("airship draft service sanitizes style settings to safe draft fields", () => {
+  assert.deepEqual(
+    sanitizeDraftStyleSettings({
+      heroTopPadding: 999,
+      heroBottomPadding: 4,
+      backgroundTint: "url(secret)",
+      ctaColor: "#ff00ff",
+      ignored: "value",
+    }),
+    {
+      heroTopPadding: 140,
+      heroBottomPadding: 24,
+      backgroundTint: "#ecfeff",
+      ctaColor: "#0f766e",
+    },
+  );
 });
 
 test("airship draft service rejects missing required edit text before repository write", async () => {

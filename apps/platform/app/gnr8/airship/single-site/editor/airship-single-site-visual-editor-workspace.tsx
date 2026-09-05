@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState, type CSSProperties } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type {
   AirshipSingleSiteDraftPreview,
+  AirshipSingleSiteDraftStyleSettings,
   AirshipSingleSiteImprovementDraft,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 
@@ -27,6 +28,7 @@ type Props = {
     draftStatus: string | null;
     version: number | null;
     lastSavedAt: string | null;
+    styleSettings: AirshipSingleSiteDraftStyleSettings;
     notAppliedToLiveSite: true;
     notPublished: true;
   };
@@ -74,6 +76,7 @@ type DraftActionResponse = {
     version: number;
     updatedAt: string;
     draftEdits: AirshipSingleSiteImprovementDraft[];
+    metadata?: Record<string, unknown>;
   } | null;
   error?: string;
 };
@@ -100,7 +103,7 @@ const HEADLINE_DRAFT_ID = "airship-chs-home-hero-headline";
 const SUBHEADING_DRAFT_ID = "airship-chs-home-hero-value-proposition";
 const CTA_DRAFT_ID = "airship-chs-home-contact-cta";
 
-const STYLE_LOCAL_ONLY_MESSAGE = "Style changes are local preview only. Not live. Not published.";
+const STYLE_DRAFT_SAVED_MESSAGE = "Style changes are saved to Airship draft only. Not live. Not published.";
 const CONNECT_OPENAI_MESSAGE = "Connect OpenAI to use AI commands.";
 
 const tintOptions = [
@@ -129,15 +132,27 @@ const viewportOptions: Array<{ key: EditorViewportKey; label: string; width: num
   { key: "mobile", label: "Mobile", width: 390 },
 ];
 
-export function initialAirshipHeroEditorFields(preview: AirshipSingleSiteDraftPreview): AirshipHeroEditorFields {
+function styleKey(fields: Pick<AirshipHeroEditorFields, "topPadding" | "bottomPadding" | "backgroundTint" | "ctaColor">): string {
+  return JSON.stringify({
+    heroTopPadding: fields.topPadding,
+    heroBottomPadding: fields.bottomPadding,
+    backgroundTint: fields.backgroundTint,
+    ctaColor: fields.ctaColor,
+  });
+}
+
+export function initialAirshipHeroEditorFields(
+  preview: AirshipSingleSiteDraftPreview,
+  styleSettings?: AirshipSingleSiteDraftStyleSettings,
+): AirshipHeroEditorFields {
   return {
     headline: preview.hero.headline,
     subheading: preview.hero.subheading,
     ctaLabel: preview.hero.primaryCtaLabel ?? "",
-    topPadding: 72,
-    bottomPadding: 72,
-    backgroundTint: "#ecfeff",
-    ctaColor: "#0f766e",
+    topPadding: styleSettings?.heroTopPadding ?? 72,
+    bottomPadding: styleSettings?.heroBottomPadding ?? 72,
+    backgroundTint: styleSettings?.backgroundTint ?? "#ecfeff",
+    ctaColor: styleSettings?.ctaColor ?? "#0f766e",
   };
 }
 
@@ -197,7 +212,7 @@ export function applyAirshipHeroCommand(fields: AirshipHeroEditorFields, rawComm
   }
 
   const textMessage = changedTextFields.length > 0 ? "Text changes are saved to Airship draft only." : "";
-  const styleMessage = changedStyleFields.length > 0 ? STYLE_LOCAL_ONLY_MESSAGE : "";
+  const styleMessage = changedStyleFields.length > 0 ? STYLE_DRAFT_SAVED_MESSAGE : "";
   return {
     fields: next,
     changedTextFields,
@@ -343,7 +358,7 @@ function mergeServerDrafts(current: AirshipSingleSiteImprovementDraft[], serverD
 }
 
 export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
-  const [fields, setFields] = useState(() => initialAirshipHeroEditorFields(props.draftPreview));
+  const [fields, setFields] = useState(() => initialAirshipHeroEditorFields(props.draftPreview, props.persistence.styleSettings));
   const [editableDrafts, setEditableDrafts] = useState(() => props.drafts);
   const [busy, setBusy] = useState(false);
   const [providerBusy, setProviderBusy] = useState(false);
@@ -357,6 +372,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [modelInput, setModelInput] = useState(() => props.aiProviderStatus.model || "gpt-5");
   const [selectedSection, setSelectedSection] = useState<EditorSectionKey>("hero");
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
+  const savedStyleKeyRef = useRef(styleKey(initialAirshipHeroEditorFields(props.draftPreview, props.persistence.styleSettings)));
+  const styleSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const providerConnected = isAirshipOpenAIProviderConnected(providerStatus);
   const providerSaveDisabled = providerBusy || providerStatus.status === "encryption_not_configured" || apiKeyInput.trim().length === 0 || modelInput.trim().length === 0;
   const providerConnectedActionDisabled = providerBusy || !providerConnected;
@@ -371,6 +388,19 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     setFields((current) => applyAirshipHeroTextFieldEdit({ fields: current, drafts: editableDrafts, field, value }).fields);
     setEditableDrafts((current) => applyAirshipHeroTextFieldEdit({ fields, drafts: current, field, value }).drafts);
     setMessage("Unsaved draft editor text change. Not live. Not published.");
+  }
+
+  function selectSection(section: EditorSectionKey) {
+    setSelectedSection(section);
+  }
+
+  function updateStyleField(field: "topPadding" | "bottomPadding" | "backgroundTint" | "ctaColor", value: string | number) {
+    setFields((current) => {
+      if (field === "topPadding") return { ...current, topPadding: clampSpacing(Number(value)) };
+      if (field === "bottomPadding") return { ...current, bottomPadding: clampSpacing(Number(value)) };
+      if (field === "backgroundTint") return { ...current, backgroundTint: String(value) };
+      return { ...current, ctaColor: String(value) };
+    });
   }
 
   async function saveDraftText(draftId: string, proposedTextContent: string) {
@@ -394,10 +424,68 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       draftStatus: payload.draft.draftStatus,
       version: payload.draft.version,
       lastSavedAt: payload.draft.updatedAt,
+      styleSettings: {
+        heroTopPadding: fields.topPadding,
+        heroBottomPadding: fields.bottomPadding,
+        backgroundTint: fields.backgroundTint as AirshipSingleSiteDraftStyleSettings["backgroundTint"],
+        ctaColor: fields.ctaColor as AirshipSingleSiteDraftStyleSettings["ctaColor"],
+      },
       notAppliedToLiveSite: true,
       notPublished: true,
     });
   }
+
+  const saveStyleSettings = useCallback(async (nextFields: AirshipHeroEditorFields) => {
+    if (!props.migrationId) throw new Error("airship_migration_id_missing");
+    const response = await fetch("/api/gnr8/admin/airship/single-site/drafts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actionMode: "update_style_settings",
+        migrationId: props.migrationId,
+        styleSettings: {
+          heroTopPadding: nextFields.topPadding,
+          heroBottomPadding: nextFields.bottomPadding,
+          backgroundTint: nextFields.backgroundTint,
+          ctaColor: nextFields.ctaColor,
+        },
+      }),
+    });
+    const payload = await response.json() as DraftActionResponse;
+    if (!response.ok || !payload.ok || !payload.draft) throw new Error(payload.error || "airship_draft_style_save_failed");
+    const savedStyleSettings = payload.draft.metadata?.styleSettings as AirshipSingleSiteDraftStyleSettings | undefined;
+    setDraftMeta({
+      label: "Saved Airship draft",
+      draftId: payload.draft.id,
+      draftStatus: payload.draft.draftStatus,
+      version: payload.draft.version,
+      lastSavedAt: payload.draft.updatedAt,
+      styleSettings: savedStyleSettings ?? {
+        heroTopPadding: nextFields.topPadding,
+        heroBottomPadding: nextFields.bottomPadding,
+        backgroundTint: nextFields.backgroundTint as AirshipSingleSiteDraftStyleSettings["backgroundTint"],
+        ctaColor: nextFields.ctaColor as AirshipSingleSiteDraftStyleSettings["ctaColor"],
+      },
+      notAppliedToLiveSite: true,
+      notPublished: true,
+    });
+    savedStyleKeyRef.current = styleKey(nextFields);
+  }, [props.migrationId]);
+
+  useEffect(() => {
+    const nextStyleKey = styleKey(fields);
+    if (nextStyleKey === savedStyleKeyRef.current) return undefined;
+    if (styleSaveTimeoutRef.current) clearTimeout(styleSaveTimeoutRef.current);
+    styleSaveTimeoutRef.current = setTimeout(() => {
+      setMessage("Saving style changes to Airship draft only...");
+      void saveStyleSettings(fields)
+        .then(() => setMessage(STYLE_DRAFT_SAVED_MESSAGE))
+        .catch(() => setMessage("Airship style save failed. Editor preview changed locally only; no live site changes were made."));
+    }, 350);
+    return () => {
+      if (styleSaveTimeoutRef.current) clearTimeout(styleSaveTimeoutRef.current);
+    };
+  }, [fields, saveStyleSettings]);
 
   async function saveAllTextEdits(nextFields = fields, changedFields: Array<"headline" | "subheading" | "ctaLabel"> = ["headline", "subheading", "ctaLabel"]) {
     setBusy(true);
@@ -936,7 +1024,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 type="button"
                 className="airship-section-button"
                 data-selected={selectedSection === section.key}
-                onClick={() => setSelectedSection(section.key)}
+                onClick={() => selectSection(section.key)}
               >
                 <strong>{section.label}</strong>
                 <span>{section.detail}</span>
@@ -946,7 +1034,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
 
           <div className="airship-left-meta">
             {badge("Changes are saved to Airship draft only", "good")}
-            {badge(STYLE_LOCAL_ONLY_MESSAGE, "neutral")}
+            {badge(STYLE_DRAFT_SAVED_MESSAGE, "neutral")}
             <div className="airship-muted">Source {props.importedSite} from {props.sourceUrl}.</div>
           </div>
         </aside>
@@ -975,7 +1063,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 data-selected={selectedSection === "hero"}
                 className="airship-preview-hero"
                 aria-label="Homepage hero/intro"
-                onClick={() => setSelectedSection("hero")}
+                onClick={() => selectSection("hero")}
                 style={{
                   padding: `${fields.topPadding}px ${viewport === "mobile" ? 22 : 44}px ${fields.bottomPadding}px`,
                   background: `linear-gradient(135deg, ${fields.backgroundTint} 0%, #ffffff 58%, #dbeafe 100%)`,
@@ -997,7 +1085,15 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 >
                   {fields.subheading}
                 </p>
-                <div className="airship-cta-row">
+                <div
+                  className="airship-cta-row"
+                  data-airship-editor-canvas="cta"
+                  data-selected={selectedSection === "cta"}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    selectSection("cta");
+                  }}
+                >
                   {fields.ctaLabel ? (
                     <button
                       type="button"
@@ -1006,7 +1102,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                       className="airship-preview-cta"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setSelectedSection("cta");
+                        selectSection("cta");
                       }}
                       style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor }}
                     >
@@ -1023,8 +1119,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               <button
                 type="button"
                 className="airship-source-strip"
+                data-airship-editor-canvas="source"
                 data-selected={selectedSection === "source"}
-                onClick={() => setSelectedSection("source")}
+                onClick={() => selectSection("source")}
               >
                 <span>
                   <strong>Source material</strong>
@@ -1054,17 +1151,17 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 {controlLabel("H1/headline text", <textarea rows={3} value={fields.headline} onChange={(event) => updateTextField("headline", event.target.value)} style={inputStyle(true)} />)}
                 {controlLabel("Subheading/body text", <textarea rows={5} value={fields.subheading} onChange={(event) => updateTextField("subheading", event.target.value)} style={inputStyle(true)} />)}
                 {controlLabel("CTA label", <input value={fields.ctaLabel} onChange={(event) => updateTextField("ctaLabel", event.target.value)} style={inputStyle()} />)}
-                {controlLabel("Hero top padding", <input type="range" min={24} max={140} value={fields.topPadding} onChange={(event) => setFields((current) => ({ ...current, topPadding: clampSpacing(Number(event.target.value)) }))} />)}
-                {controlLabel("Hero bottom padding", <input type="range" min={24} max={140} value={fields.bottomPadding} onChange={(event) => setFields((current) => ({ ...current, bottomPadding: clampSpacing(Number(event.target.value)) }))} />)}
+                {controlLabel("Hero top padding", <input type="range" min={24} max={140} value={fields.topPadding} onChange={(event) => updateStyleField("topPadding", event.target.value)} />)}
+                {controlLabel("Hero bottom padding", <input type="range" min={24} max={140} value={fields.bottomPadding} onChange={(event) => updateStyleField("bottomPadding", event.target.value)} />)}
                 {controlLabel(
                   "Background tint",
-                  <select value={fields.backgroundTint} onChange={(event) => setFields((current) => ({ ...current, backgroundTint: event.target.value }))} style={inputStyle()}>
+                  <select value={fields.backgroundTint} onChange={(event) => updateStyleField("backgroundTint", event.target.value)} style={inputStyle()}>
                     {tintOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>,
                 )}
                 {controlLabel(
                   "CTA color",
-                  <select value={fields.ctaColor} onChange={(event) => setFields((current) => ({ ...current, ctaColor: event.target.value }))} style={inputStyle()}>
+                  <select value={fields.ctaColor} onChange={(event) => updateStyleField("ctaColor", event.target.value)} style={inputStyle()}>
                     {ctaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>,
                 )}
@@ -1076,11 +1173,11 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 {controlLabel("CTA label", <input value={fields.ctaLabel} onChange={(event) => updateTextField("ctaLabel", event.target.value)} style={inputStyle()} />)}
                 {controlLabel(
                   "CTA color",
-                  <select value={fields.ctaColor} onChange={(event) => setFields((current) => ({ ...current, ctaColor: event.target.value }))} style={inputStyle()}>
+                  <select value={fields.ctaColor} onChange={(event) => updateStyleField("ctaColor", event.target.value)} style={inputStyle()}>
                     {ctaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>,
                 )}
-                <div className="airship-muted">CTA text saves to the Airship draft. CTA color updates this preview only.</div>
+                <div className="airship-muted">CTA text and color save to the Airship draft only.</div>
               </div>
             ) : null}
 

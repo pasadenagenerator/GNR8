@@ -182,6 +182,12 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         draftStatus: null,
         version: null,
         lastSavedAt: null,
+        styleSettings: {
+          heroTopPadding: 72,
+          heroBottomPadding: 72,
+          backgroundTint: "#ecfeff",
+          ctaColor: "#0f766e",
+        },
         notAppliedToLiveSite: true,
         notPublished: true,
       },
@@ -393,10 +399,13 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Open internal preview"), true);
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="hero"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="cta"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="source"'), true);
   assert.equal(html.includes("Selected: Hero / intro"), true);
   assert.equal(html.includes("Details"), true);
   assert.equal(html.includes("Changes are saved to Airship draft only"), true);
-  assert.equal(html.includes("Style changes are local preview only"), true);
+  assert.equal(html.includes("Style changes are saved to Airship draft only"), true);
   assert.equal(html.includes("Homepage hero/intro"), true);
   assert.equal(html.includes("H1/headline text"), true);
   assert.equal(html.includes("Subheading/body text"), true);
@@ -536,12 +545,29 @@ test("airship visual editor AI command updates supported text and style fields",
   assert.equal(spacing.supported, true);
   assert.equal(spacing.fields.bottomPadding, fields.bottomPadding + 12);
   assert.deepEqual(spacing.changedStyleFields, ["bottomPadding"]);
-  assert.equal(spacing.message.includes("Style changes are local preview only"), true);
+  assert.equal(spacing.message.includes("Style changes are saved to Airship draft only"), true);
 
   const prominent = applyAirshipHeroCommand(fields, "make CTA more prominent");
   assert.equal(prominent.supported, true);
   assert.equal(prominent.fields.ctaColor, "#1d4ed8");
   assert.equal(prominent.changedStyleFields.includes("ctaColor"), true);
+});
+
+test("airship visual editor hydrates persisted style settings for reload readback", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const fields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview, {
+    heroTopPadding: 92,
+    heroBottomPadding: 108,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
+
+  assert.equal(fields.topPadding, 92);
+  assert.equal(fields.bottomPadding, 108);
+  assert.equal(fields.backgroundTint, "#eef6ff");
+  assert.equal(fields.ctaColor, "#1d4ed8");
+  assert.equal(fields.headline, "Less risk. More control. Better IT.");
 });
 
 test("airship visual editor AI command rejects unsupported commands helpfully", () => {

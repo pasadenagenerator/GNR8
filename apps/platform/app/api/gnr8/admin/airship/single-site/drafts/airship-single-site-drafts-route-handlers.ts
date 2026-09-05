@@ -2,6 +2,7 @@ import {
   AirshipSingleSiteDraftService,
   type AirshipSingleSiteDraftActor,
   type AirshipSingleSiteDraftRecord,
+  type AirshipSingleSiteDraftStyleSettings,
 } from "@/gnr8/single-site/airship-single-site-draft-service";
 import {
   AIRSHIP_CHS_MIGRATION_ID,
@@ -10,12 +11,12 @@ import {
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 import { requireSuperadminUserId } from "@/src/auth/require-superadmin-user-id";
 
-type ActionMode = "create_or_reuse" | "update_edit" | "mark_accepted" | "mark_rejected";
+type ActionMode = "create_or_reuse" | "update_edit" | "update_style_settings" | "mark_accepted" | "mark_rejected";
 
 type RouteDeps = {
   requireSuperadminUserId: () => Promise<string>;
   getAirshipSingleSiteEditorReadonlyProjection: typeof getAirshipSingleSiteEditorReadonlyProjection;
-  service: Pick<AirshipSingleSiteDraftService, "readCurrentDraft" | "createOrReuseDraft" | "updateDraftEditText" | "markDraftEditAccepted" | "markDraftEditRejected">;
+  service: Pick<AirshipSingleSiteDraftService, "readCurrentDraft" | "createOrReuseDraft" | "updateDraftEditText" | "updateDraftStyleSettings" | "markDraftEditAccepted" | "markDraftEditRejected">;
 };
 
 type ActionBody = Record<string, unknown> & {
@@ -23,12 +24,13 @@ type ActionBody = Record<string, unknown> & {
   migrationId?: unknown;
   draftEditId?: unknown;
   proposedTextContent?: unknown;
+  styleSettings?: unknown;
   correlationId?: unknown;
   idempotencyKey?: unknown;
 };
 
 const GET_QUERY_KEYS = new Set(["migrationId"]);
-const POST_BODY_KEYS = new Set(["actionMode", "migrationId", "draftEditId", "proposedTextContent", "correlationId", "idempotencyKey"]);
+const POST_BODY_KEYS = new Set(["actionMode", "migrationId", "draftEditId", "proposedTextContent", "styleSettings", "correlationId", "idempotencyKey"]);
 const FORBIDDEN_ACTOR_KEYS = new Set(["actor", "actorId", "actorRole", "actorType", "role", "userId", "principal", "superadminUserId"]);
 
 function text(value: unknown): string {
@@ -120,6 +122,11 @@ function draftEditRequired(actionMode: ActionMode): boolean {
   return actionMode === "update_edit" || actionMode === "mark_accepted" || actionMode === "mark_rejected";
 }
 
+function styleSettings(value: unknown): Partial<AirshipSingleSiteDraftStyleSettings> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Partial<AirshipSingleSiteDraftStyleSettings>;
+}
+
 async function seedForMigration(
   deps: RouteDeps,
   migrationId: string,
@@ -180,7 +187,7 @@ export function createAirshipSingleSiteDraftsRouteHandlers(deps: Partial<RouteDe
       }
 
       const actionMode = text(body.actionMode) as ActionMode;
-      if (actionMode !== "create_or_reuse" && actionMode !== "update_edit" && actionMode !== "mark_accepted" && actionMode !== "mark_rejected") {
+      if (actionMode !== "create_or_reuse" && actionMode !== "update_edit" && actionMode !== "update_style_settings" && actionMode !== "mark_accepted" && actionMode !== "mark_rejected") {
         return failure(400, "INVALID_AIRSHIP_SINGLE_SITE_DRAFT_BODY", ["airship_single_site_draft_action_mode_invalid"]);
       }
       const migrationId = text(body.migrationId) || AIRSHIP_CHS_MIGRATION_ID;
@@ -209,6 +216,11 @@ export function createAirshipSingleSiteDraftsRouteHandlers(deps: Partial<RouteDe
                   draftEditId,
                   proposedTextContent: text(body.proposedTextContent),
                 })
+              : actionMode === "update_style_settings"
+                ? await resolvedDeps.service.updateDraftStyleSettings({
+                    ...common,
+                    styleSettings: styleSettings(body.styleSettings),
+                  })
               : actionMode === "mark_accepted"
                 ? await resolvedDeps.service.markDraftEditAccepted({ ...common, draftEditId })
                 : await resolvedDeps.service.markDraftEditRejected({ ...common, draftEditId });

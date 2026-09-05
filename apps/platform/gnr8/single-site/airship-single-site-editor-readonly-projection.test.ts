@@ -109,6 +109,12 @@ test("airship projection generates the first concrete CHS AI draft and local-onl
   assert.equal(model.draftPanel.draftPreview?.persistence, "browser_local_only");
   assert.equal(model.draftPanel.controlMode, "persistent_airship_draft");
   assert.equal(model.draftPanel.persistence.label, "Unsaved Airship draft");
+  assert.deepEqual(model.draftPanel.persistence.styleSettings, {
+    heroTopPadding: 72,
+    heroBottomPadding: 72,
+    backgroundTint: "#ecfeff",
+    ctaColor: "#0f766e",
+  });
   assert.equal(model.flags.mutatesProductionData, false);
   assert.equal(model.flags.mutatesDraftData, true);
   assert.equal(model.flags.publishes, false);
@@ -146,6 +152,12 @@ test("airship projection reloads saved draft edits from persistent storage", () 
     semanticWatermark: "airship-single-site-editor-draft:projection",
     metadata: {
       liveBoundary: "not_applied_to_live_site",
+      styleSettings: {
+        heroTopPadding: 96,
+        heroBottomPadding: 104,
+        backgroundTint: "#eef6ff",
+        ctaColor: "#1d4ed8",
+      },
     },
     createdByActorId: "superadmin-projection",
     updatedByActorId: "superadmin-projection",
@@ -163,6 +175,12 @@ test("airship projection reloads saved draft edits from persistent storage", () 
 
   assert.equal(model.draftPanel.persistence.label, "Saved Airship draft");
   assert.equal(model.draftPanel.persistence.draftId, "draft-chs-projection");
+  assert.deepEqual(model.draftPanel.persistence.styleSettings, {
+    heroTopPadding: 96,
+    heroBottomPadding: 104,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
   assert.equal(model.draftPanel.drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.proposedTextContent, "CHS helps modernize enterprise IT");
   assert.equal(model.draftPanel.draftPreview?.persistence, "saved_airship_draft");
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS helps modernize enterprise IT");

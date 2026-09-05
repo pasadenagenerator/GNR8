@@ -11,7 +11,10 @@ import {
 import {
   AirshipSingleSiteDraftService,
   AIRSHIP_SINGLE_SITE_DRAFT_SERVICE_VERSION,
+  DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS,
+  sanitizeDraftStyleSettings,
   type AirshipSingleSiteDraftRecord,
+  type AirshipSingleSiteDraftStyleSettings,
 } from "./airship-single-site-draft-service";
 import {
   readLatestAirshipSingleSiteDraftCandidatePreview,
@@ -19,6 +22,7 @@ import {
 } from "./airship-single-site-draft-candidate-service";
 
 export const AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION = "airship-1-single-site-editor-readonly:v1" as const;
+export type { AirshipSingleSiteDraftStyleSettings };
 
 export const AIRSHIP_CHS_MIGRATION_ID = SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.migrationId;
 
@@ -109,6 +113,7 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
       draftStatus: string | null;
       version: number | null;
       lastSavedAt: string | null;
+      styleSettings: AirshipSingleSiteDraftStyleSettings;
       notAppliedToLiveSite: true;
       notPublished: true;
     };
@@ -263,6 +268,12 @@ function persistedDraftForMigration(draft: AirshipSingleSiteDraftRecord | null |
   return draft;
 }
 
+function persistedStyleSettings(draft: AirshipSingleSiteDraftRecord | null): AirshipSingleSiteDraftStyleSettings {
+  return draft
+    ? sanitizeDraftStyleSettings(draft.metadata.styleSettings)
+    : DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS;
+}
+
 function mergePersistedDrafts(
   generatedDrafts: AirshipSingleSiteImprovementDraft[],
   persistedDraft: AirshipSingleSiteDraftRecord | null,
@@ -324,6 +335,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
   const generatedDrafts = chsDrafts(migrationId);
   const persistedDraft = persistedDraftForMigration(input.persistedDraft, migrationId);
   const drafts = mergePersistedDrafts(generatedDrafts, persistedDraft);
+  const styleSettings = persistedStyleSettings(persistedDraft);
   const deterministicEditableChangesGenerated = drafts.length > 0 || input.studioModel.improvementSummary.noDeterministicContentChanges === false;
 
   return {
@@ -372,6 +384,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
         draftStatus: persistedDraft?.draftStatus ?? null,
         version: persistedDraft?.version ?? null,
         lastSavedAt: persistedDraft?.updatedAt ?? null,
+        styleSettings,
         notAppliedToLiveSite: true,
         notPublished: true,
       },
@@ -452,6 +465,7 @@ export function buildAirshipSingleSiteDraftSeed(input: {
       previewPersistence: input.model.draftPanel.draftPreview?.persistence ?? "browser_local_only",
       liveSiteUrl: input.model.liveSiteUrl,
       liveBoundary: "not_applied_to_live_site",
+      styleSettings: input.model.draftPanel.persistence.styleSettings,
     },
   };
 }

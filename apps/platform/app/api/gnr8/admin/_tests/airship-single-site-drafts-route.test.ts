@@ -156,6 +156,12 @@ function model(): AirshipSingleSiteEditorReadonlyProjection {
         draftStatus: null,
         version: null,
         lastSavedAt: null,
+        styleSettings: {
+          heroTopPadding: 72,
+          heroBottomPadding: 72,
+          backgroundTint: "#ecfeff",
+          ctaColor: "#0f766e",
+        },
         notAppliedToLiveSite: true,
         notPublished: true,
       },
@@ -191,6 +197,9 @@ test("airship draft GET requires superadmin before draft read", async () => {
       async updateDraftEditText() {
         return draftRecord();
       },
+      async updateDraftStyleSettings() {
+        return draftRecord();
+      },
       async markDraftEditAccepted() {
         return draftRecord();
       },
@@ -221,6 +230,10 @@ test("airship draft POST rejects actor overrides and does not execute service", 
         return draftRecord();
       },
       async updateDraftEditText() {
+        actionCalls += 1;
+        return draftRecord();
+      },
+      async updateDraftStyleSettings() {
         actionCalls += 1;
         return draftRecord();
       },
@@ -274,6 +287,9 @@ test("airship draft POST saves edit text through superadmin-only draft service",
           })),
         });
       },
+      async updateDraftStyleSettings() {
+        return draftRecord();
+      },
       async markDraftEditAccepted() {
         return draftRecord();
       },
@@ -296,6 +312,79 @@ test("airship draft POST saves edit text through superadmin-only draft service",
   assert.equal(observedActorId, "superadmin-route");
   assert.equal(observedProposedText, "CHS helps modernize enterprise IT");
   assert.equal(body.draft.draftEdits[0]?.proposedTextContent, "CHS helps modernize enterprise IT");
+  assert.equal(body.mutationFlags.liveSiteMutation, false);
+  assert.equal(body.mutationFlags.runtimeVersionMutation, false);
+  assert.equal(body.mutationFlags.activePointerMutation, false);
+  assert.equal(body.mutationFlags.publishes, false);
+  assert.equal(body.labels.includes("Saved Airship draft"), true);
+  assert.equal(body.labels.includes("Not applied to live site"), true);
+  assert.equal(body.labels.includes("Not published"), true);
+});
+
+test("airship draft POST saves style settings to draft metadata only", async () => {
+  let observedActorId = "";
+  let observedStyleSettings: unknown = null;
+  const handlers = createAirshipSingleSiteDraftsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-route",
+    getAirshipSingleSiteEditorReadonlyProjection: async () => model(),
+    service: {
+      async readCurrentDraft() {
+        return draftRecord();
+      },
+      async createOrReuseDraft() {
+        return draftRecord();
+      },
+      async updateDraftEditText() {
+        return draftRecord();
+      },
+      async updateDraftStyleSettings(input) {
+        observedActorId = input.actor.actorId;
+        observedStyleSettings = input.styleSettings;
+        return draftRecord({
+          version: 3,
+          metadata: {
+            liveBoundary: "not_applied_to_live_site",
+            styleSettings: input.styleSettings,
+          },
+        });
+      },
+      async markDraftEditAccepted() {
+        return draftRecord();
+      },
+      async markDraftEditRejected() {
+        return draftRecord();
+      },
+    },
+  });
+
+  const response = await handlers.POST(request("https://app.test/api/gnr8/admin/airship/single-site/drafts", {
+    actionMode: "update_style_settings",
+    migrationId: MIGRATION_ID,
+    styleSettings: {
+      heroTopPadding: 96,
+      heroBottomPadding: 104,
+      backgroundTint: "#eef6ff",
+      ctaColor: "#1d4ed8",
+    },
+  }));
+  const body = await response.json() as { ok: boolean; draft: AirshipSingleSiteDraftRecord; mutationFlags: Record<string, boolean>; labels: string[] };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(observedActorId, "superadmin-route");
+  assert.deepEqual(observedStyleSettings, {
+    heroTopPadding: 96,
+    heroBottomPadding: 104,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
+  assert.deepEqual(body.draft.metadata.styleSettings, {
+    heroTopPadding: 96,
+    heroBottomPadding: 104,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
+  assert.equal(body.mutationFlags.draftDataMutation, true);
   assert.equal(body.mutationFlags.liveSiteMutation, false);
   assert.equal(body.mutationFlags.runtimeVersionMutation, false);
   assert.equal(body.mutationFlags.activePointerMutation, false);
