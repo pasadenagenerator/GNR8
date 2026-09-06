@@ -846,8 +846,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         .airship-workspace {
           display: grid;
           grid-template-rows: auto minmax(0, 1fr);
-          height: 100vh;
-          min-height: 100vh;
+          height: calc(100vh - 76px);
+          min-height: 0;
           width: 100%;
           max-width: 100vw;
           overflow: hidden;

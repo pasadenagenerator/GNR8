@@ -495,6 +495,8 @@ test("airship visual editor shell bounds the floating inspector and page overflo
   const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
 
   assert.equal(visualEditorSource.includes("max-width: 100vw"), true);
+  assert.equal(visualEditorSource.includes("height: calc(100vh - 76px)"), true);
+  assert.equal(visualEditorSource.includes("min-height: 0"), true);
   assert.equal(visualEditorSource.includes("overflow: hidden"), true);
   assert.equal(visualEditorSource.includes(".airship-inspector {"), true);
   assert.equal(visualEditorSource.includes("right: 20px"), true);
