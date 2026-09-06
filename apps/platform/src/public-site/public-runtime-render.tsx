@@ -426,6 +426,16 @@ export async function renderPublicPathResponse(input: {
     path: input.path,
   });
 
+  if (input.path === "/" && (isPlatformAppHost(normalizedHost) || !normalizedHost)) {
+    logPublicDomainAppShellFallback({
+      host: normalizedHost,
+      rawHost,
+      path: input.path,
+      reason: "domain_not_found",
+    });
+    return appShellHtmlResponse();
+  }
+
   if (isShadowAssetPath(input.path)) {
     const assetResponse = await renderShadowAssetResponse({ host: normalizedHost, path: input.path });
     if (assetResponse) return assetResponse;

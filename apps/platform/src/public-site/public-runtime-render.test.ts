@@ -981,6 +981,25 @@ test("public runtime root on platform host without active domain binding: return
   }
 });
 
+test("public runtime root on platform host: app shell fallback does not depend on runtime store", async () => {
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () => {
+      throw new Error("runtime store should not be queried for platform root");
+    },
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
+      throw new Error("artifact store should not be queried for platform root");
+    },
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "app.pasadenagenerator.com", path: "/" });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /WEB AGENCY OS/);
+  } finally {
+    restoreDeps();
+  }
+});
+
 test("host normalization lowercases and strips protocol/port/trailing slash", () => {
   assert.equal(normalizePublicDomainHost("HTTPS://Beauty-Clinic.PasadenaGenerator.com:443/"), "beauty-clinic.pasadenagenerator.com");
   assert.equal(normalizePublicDomainHost("beauty-clinic.pasadenagenerator.com:3000"), "beauty-clinic.pasadenagenerator.com");
