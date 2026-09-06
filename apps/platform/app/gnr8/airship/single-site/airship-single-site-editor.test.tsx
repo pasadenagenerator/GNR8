@@ -389,9 +389,17 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
 
   assert.equal(html.includes("Draft editor"), true);
   assert.equal(html.includes("Section navigator"), true);
+  assert.equal(html.includes("Floating inspector panel"), true);
+  assert.equal(html.includes("Inspector tabs"), true);
+  assert.equal(html.includes("Agent"), true);
+  assert.equal(html.includes("Edit"), true);
+  assert.equal(html.includes("CSS"), true);
+  assert.equal(html.includes("DOM"), true);
   assert.equal(html.includes("Hero / intro"), true);
   assert.equal(html.includes("CTA"), true);
   assert.equal(html.includes("Source material"), true);
+  assert.equal(html.includes("Canvas editor controls"), true);
+  assert.equal(html.includes("Select"), true);
   assert.equal(html.includes("Desktop"), true);
   assert.equal(html.includes("Tablet"), true);
   assert.equal(html.includes("Mobile"), true);
@@ -408,6 +416,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Text and style saves persist here"), true);
   assert.equal(html.includes("Open internal preview"), true);
   assert.equal(html.includes("Open live site"), true);
+  assert.equal(html.includes("Save draft"), true);
   assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="hero"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="cta"'), true);
@@ -426,19 +435,20 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("CTA color"), true);
   assert.equal(html.includes("Persists to Airship draft on save"), true);
   assert.equal(html.includes("Style autosaves to Airship draft"), true);
-  assert.equal(html.includes("Draft-only recovery"), true);
+  assert.equal(html.includes("Spacing, tint, and CTA color are safe draft style controls only"), true);
   assert.equal(html.includes("Undo last local change"), true);
   assert.equal(html.includes("Reset selected section style"), true);
   assert.equal(html.includes("Reset selected section text"), true);
   assert.equal(html.includes("Recent changes"), true);
   assert.equal(html.includes("AI command"), true);
   assert.equal(html.includes("Connect OpenAI to use AI commands"), true);
+  assert.equal(html.includes("No OpenAI command request is sent"), true);
   assert.equal(html.includes("OpenAI provider"), true);
-  assert.equal(html.includes("Save key"), true);
-  assert.equal(html.includes("Test connection"), true);
-  assert.equal(html.includes("Revoke key"), true);
   assert.equal(html.includes("Apply command"), true);
-  assert.equal(html.includes("Save text edits"), true);
+  assert.equal(html.includes("Save text edits to Airship draft"), true);
+  assert.equal(html.includes("Save key"), false);
+  assert.equal(html.includes("Test connection"), false);
+  assert.equal(html.includes("Revoke key"), false);
 });
 
 test("airship visual editor renders safe provider read error state without exposing keys", () => {
@@ -481,6 +491,22 @@ test("airship visual editor renders safe provider read error state without expos
   assert.equal(html.includes("encrypted"), false);
 });
 
+test("airship visual editor shell bounds the floating inspector and page overflow", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+
+  assert.equal(visualEditorSource.includes("max-width: 100vw"), true);
+  assert.equal(visualEditorSource.includes("overflow: hidden"), true);
+  assert.equal(visualEditorSource.includes(".airship-inspector {"), true);
+  assert.equal(visualEditorSource.includes("right: 20px"), true);
+  assert.equal(visualEditorSource.includes("max-width: calc(100vw - 132px)"), true);
+  assert.equal(visualEditorSource.includes("max-height: calc(100% - 112px)"), true);
+  assert.equal(visualEditorSource.includes(".airship-inspector-body"), true);
+  assert.equal(visualEditorSource.includes("overflow: auto"), true);
+  assert.equal(visualEditorSource.includes(".airship-bottom-toolbar"), true);
+  assert.equal(visualEditorSource.includes("max-width: calc(100% - 40px)"), true);
+  assert.equal(visualEditorSource.includes("padding: 20px 408px 112px 28px"), true);
+});
+
 test("airship visual editor renders connected provider status from backend readback", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);
@@ -520,13 +546,16 @@ test("airship visual editor renders connected provider status from backend readb
   assert.equal(html.includes("Connect OpenAI to use AI commands"), false);
 });
 
-test("airship visual editor provider UI waits for backend-confirmed connection state", async () => {
+test("airship visual editor provider status stays read-only and commands never call OpenAI", async () => {
   const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
 
   assert.equal(visualEditorSource.includes("isAirshipOpenAIProviderConnected"), true);
-  assert.equal(visualEditorSource.includes("OpenAI key saved and connected after backend readback"), true);
-  assert.equal(visualEditorSource.includes("OpenAI key save did not confirm a backend connection"), true);
-  assert.equal(visualEditorSource.includes("providerConnectedActionDisabled"), true);
+  assert.equal(visualEditorSource.includes("Provider readback is shown from backend status only"), true);
+  assert.equal(visualEditorSource.includes("No OpenAI command request is sent"), true);
+  assert.equal(visualEditorSource.includes("/api/gnr8/admin/airship/single-site/ai-command"), false);
+  assert.equal(visualEditorSource.includes("runProviderCommand"), false);
+  assert.equal(visualEditorSource.includes("submitProviderAction"), false);
+  assert.equal(visualEditorSource.includes("Save key"), false);
   assert.equal(visualEditorSource.includes("OpenAI provider status updated. AI commands remain Airship draft only."), false);
 });
 
