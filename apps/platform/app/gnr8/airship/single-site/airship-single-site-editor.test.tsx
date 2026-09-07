@@ -13,12 +13,18 @@ import {
 } from "./airship-single-site-local-draft-editor";
 import {
   AirshipSingleSiteVisualEditorWorkspace,
+  airshipCanvasSelectorForSection,
   applyAirshipHeroCommand,
   applyAirshipHeroTextFieldEdit,
+  deriveAirshipSelectedElementMetadata,
   deriveAirshipDraftSaveState,
+  deriveAirshipStyleValueRows,
   initialAirshipHeroEditorFields,
+  mappedAirshipDraftFieldIdsForSection,
   resetAirshipSectionStyleToSavedValues,
   resetAirshipSectionTextToSavedValues,
+  sectionStyleFields,
+  sectionTextFields,
   undoAirshipEditorLastLocalChange,
 } from "./editor/airship-single-site-visual-editor-workspace";
 
@@ -421,21 +427,29 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes('data-airship-editor-canvas="hero"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="cta"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="source"'), true);
-  assert.equal(html.includes("Selected: Hero / intro"), true);
-  assert.equal(html.includes("Details"), true);
+  assert.equal(html.includes("Selected canvas element"), true);
+  assert.equal(html.includes("region / homepage hero intro"), true);
+  assert.equal(html.includes("Selected element metadata"), true);
+  assert.equal(html.includes("Mapped draft field ids"), true);
+  assert.equal(html.includes("Internal refs"), true);
+  assert.equal(html.includes("canvas selector"), true);
+  assert.equal(html.includes('[data-airship-editor-canvas=&quot;hero&quot;]'), true);
   assert.equal(html.includes("Changes are saved to Airship draft only"), true);
   assert.equal(html.includes("Style changes are saved to Airship draft only"), true);
   assert.equal(html.includes("Homepage hero/intro"), true);
   assert.equal(html.includes("H1/headline text"), true);
   assert.equal(html.includes("Subheading/body text"), true);
-  assert.equal(html.includes("CTA label"), true);
+  assert.equal(html.includes("CTA label"), false);
+  assert.equal(html.includes("Current CSS values"), true);
+  assert.equal(html.includes("padding-top"), true);
+  assert.equal(html.includes("background-tint"), true);
   assert.equal(html.includes("Hero top padding"), true);
   assert.equal(html.includes("Hero bottom padding"), true);
   assert.equal(html.includes("Background tint"), true);
-  assert.equal(html.includes("CTA color"), true);
+  assert.equal(html.includes("CTA color"), false);
   assert.equal(html.includes("Persists to Airship draft on save"), true);
   assert.equal(html.includes("Style autosaves to Airship draft"), true);
-  assert.equal(html.includes("Spacing, tint, and CTA color are safe draft style controls only"), true);
+  assert.equal(html.includes("Selected style controls are safe draft style controls only"), true);
   assert.equal(html.includes("Undo last local change"), true);
   assert.equal(html.includes("Reset selected section style"), true);
   assert.equal(html.includes("Reset selected section text"), true);
@@ -449,6 +463,103 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Save key"), false);
   assert.equal(html.includes("Test connection"), false);
   assert.equal(html.includes("Revoke key"), false);
+});
+
+test("airship visual editor exposes focused canvas click targets for hero, CTA, and source selection", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+
+  assert.equal(airshipCanvasSelectorForSection("hero"), '[data-airship-editor-canvas="hero"]');
+  assert.equal(airshipCanvasSelectorForSection("cta"), '[data-airship-editor-canvas="cta"]');
+  assert.equal(airshipCanvasSelectorForSection("source"), '[data-airship-editor-canvas="source"]');
+  assert.equal(visualEditorSource.includes('data-airship-editor-canvas="hero"'), true);
+  assert.equal(visualEditorSource.includes('data-airship-editor-canvas="cta"'), true);
+  assert.equal(visualEditorSource.includes('data-airship-editor-canvas="source"'), true);
+  assert.equal(visualEditorSource.includes('onClick={() => selectSection("hero")}'), true);
+  assert.equal(visualEditorSource.includes('selectSection("cta");'), true);
+  assert.equal(visualEditorSource.includes('onClick={() => selectSection("source")}'), true);
+  assert.equal(visualEditorSource.includes("event.stopPropagation();"), true);
+});
+
+test("airship visual editor keeps left rail and canvas selection wired to the same section keys", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+
+  assert.equal(visualEditorSource.includes("data-airship-editor-rail-target"), true);
+  assert.equal(visualEditorSource.includes("data-selected={selectedSection === section.key}"), true);
+  assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"hero\"}"), true);
+  assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"cta\"}"), true);
+  assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"source\"}"), true);
+  assert.equal(visualEditorSource.includes("aria-controls={deriveAirshipSelectedElementMetadata"), true);
+});
+
+test("airship visual editor derives selected element DOM metadata per section", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const base = {
+    migrationId: model.migrationId,
+    importedSite: model.importedSite,
+    sourceUrl: model.sourceUrl,
+    liveSiteUrl: model.liveSiteUrl,
+    viewportLabel: "Desktop",
+    viewportWidth: 1100,
+    draftMeta: model.draftPanel.persistence,
+    draftCandidate: {
+      siteVersionId: model.previews.airshipDraftCandidate?.siteVersionId ?? null,
+      runtimeArtifactId: model.previews.airshipDraftCandidate?.runtimeArtifactId ?? null,
+      route: model.previews.airshipDraftCandidate?.route ?? null,
+      draftId: model.previews.airshipDraftCandidate?.draftId ?? null,
+      draftVersion: model.previews.airshipDraftCandidate?.draftVersion ?? null,
+    },
+  };
+
+  const hero = deriveAirshipSelectedElementMetadata({ ...base, section: "hero" });
+  assert.equal(hero.domSectionId, "airship-preview-hero-intro");
+  assert.equal(hero.role, "region / homepage hero intro");
+  assert.deepEqual(hero.mappedDraftFieldIds, [
+    "airship-chs-home-hero-headline",
+    "airship-chs-home-hero-value-proposition",
+  ]);
+  assert.equal(hero.sourceStatus, "source-supported hero draft fields");
+  assert.equal(hero.internalRefs.some((ref) => ref.label === "live url" && ref.value === "https://www.chs.si/"), true);
+
+  const cta = deriveAirshipSelectedElementMetadata({ ...base, section: "cta" });
+  assert.equal(cta.domSectionId, "airship-preview-primary-cta");
+  assert.equal(cta.role, "button / primary action");
+  assert.deepEqual(cta.mappedDraftFieldIds, ["airship-chs-home-contact-cta"]);
+
+  const source = deriveAirshipSelectedElementMetadata({ ...base, section: "source" });
+  assert.equal(source.domSectionId, "airship-preview-source-material");
+  assert.equal(source.role, "source evidence strip");
+  assert.equal(source.sourceStatus, "source material readback only");
+  assert.deepEqual(source.mappedDraftFieldIds, [
+    "airship-chs-home-hero-headline",
+    "airship-chs-home-hero-value-proposition",
+    "airship-chs-home-contact-cta",
+  ]);
+});
+
+test("airship visual editor inspector scopes Edit and CSS fields to the selected section", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const fields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview);
+
+  assert.deepEqual(sectionTextFields("hero"), ["headline", "subheading"]);
+  assert.deepEqual(sectionTextFields("cta"), ["ctaLabel"]);
+  assert.deepEqual(sectionTextFields("source"), []);
+  assert.deepEqual(sectionStyleFields("hero"), ["topPadding", "bottomPadding", "backgroundTint"]);
+  assert.deepEqual(sectionStyleFields("cta"), ["ctaColor"]);
+  assert.deepEqual(sectionStyleFields("source"), []);
+  assert.deepEqual(mappedAirshipDraftFieldIdsForSection("cta"), ["airship-chs-home-contact-cta"]);
+
+  assert.deepEqual(deriveAirshipStyleValueRows("hero", fields), [
+    { label: "padding-top", value: "72px" },
+    { label: "padding-bottom", value: "72px" },
+    { label: "background-tint", value: "#ecfeff" },
+  ]);
+  assert.deepEqual(deriveAirshipStyleValueRows("cta", fields), [
+    { label: "background-color", value: "#0f766e" },
+    { label: "border-color", value: "#0f766e" },
+    { label: "border-radius", value: "8px" },
+  ]);
 });
 
 test("airship visual editor renders safe provider read error state without exposing keys", () => {
@@ -659,11 +770,11 @@ test("airship visual editor resets selected section text and style to saved valu
     drafts: model.draftPanel.drafts,
     savedFields,
   });
-  assert.deepEqual(resetStyle.changedFields, ["topPadding", "bottomPadding", "backgroundTint", "ctaColor"]);
+  assert.deepEqual(resetStyle.changedFields, ["topPadding", "bottomPadding", "backgroundTint"]);
   assert.equal(resetStyle.fields.topPadding, 92);
   assert.equal(resetStyle.fields.bottomPadding, 108);
   assert.equal(resetStyle.fields.backgroundTint, "#eef6ff");
-  assert.equal(resetStyle.fields.ctaColor, "#1d4ed8");
+  assert.equal(resetStyle.fields.ctaColor, "#111827");
   assert.equal(resetStyle.drafts, model.draftPanel.drafts);
 });
 
