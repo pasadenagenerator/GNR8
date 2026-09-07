@@ -1150,6 +1150,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           flex-wrap: wrap;
         }
         .airship-frame-shell {
+          width: min(var(--airship-frame-width), calc(100vw - 544px));
           margin: 0 auto;
           border: 1px solid #94a3b8;
           border-radius: 8px;
@@ -1517,6 +1518,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           .airship-canvas-scroll {
             padding-right: 28px;
           }
+          .airship-frame-shell {
+            width: min(var(--airship-frame-width), 100%);
+          }
           .airship-inspector {
             position: relative;
             inset: auto;
@@ -1638,7 +1642,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
 
             <div
               className="airship-frame-shell"
-              style={{ width: selectedViewport.width }}
+              style={{ "--airship-frame-width": `${selectedViewport.width}px` } as CSSProperties}
               data-airship-editor-viewport={viewport}
             >
               <div className="airship-frame-top">
