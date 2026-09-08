@@ -11,6 +11,7 @@ import {
   getActivePointerForSite,
   getArtifactById,
   getSiteVersion,
+  refreshArtifactForVersionPublishCandidate,
 } from "../runtime/runtime-store";
 import { getSuperadminPool } from "@/src/superadmin/db";
 import {
@@ -35,6 +36,7 @@ type RuntimePrimitiveDeps = {
   createSiteVersionFromMigration: typeof createSiteVersionFromMigration;
   buildDeterministicArtifactBundle: typeof buildDeterministicArtifactBundle;
   createArtifact: typeof createArtifact;
+  refreshArtifactForVersionPublishCandidate: typeof refreshArtifactForVersionPublishCandidate;
   bindArtifactToVersion: typeof bindArtifactToVersion;
 };
 
@@ -114,6 +116,7 @@ const defaultRuntimeDeps: RuntimePrimitiveDeps = {
   createSiteVersionFromMigration,
   buildDeterministicArtifactBundle,
   createArtifact,
+  refreshArtifactForVersionPublishCandidate,
   bindArtifactToVersion,
 };
 
@@ -487,7 +490,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const verifiedVersion = existingTarget ?? await deps.getSiteVersion(candidateVersion.siteVersionId);
   if (!verifiedVersion) throw new Error(`airship_draft_candidate_version_not_found:${candidateVersion.siteVersionId}`);
   const artifactBundle = deps.buildDeterministicArtifactBundle({ siteVersion: verifiedVersion, renderMode: "PREVIEW" });
-  const artifact = await deps.createArtifact({
+  const artifactInput = {
     siteId: artifactBundle.siteId,
     siteVersionId: artifactBundle.siteVersionId,
     rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
@@ -500,7 +503,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
       sourceKind: "airship_single_site_draft_candidate",
       airshipSingleSiteDraftCandidate: provenance,
     },
-    publishStage: "shadow",
+    publishStage: "shadow" as const,
     shadowRestricted: false,
     artifactGovernance: {
       pageGateState: ["AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY"],
@@ -509,9 +512,15 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
       siteGateState: "AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY",
       siteRolloutPolicyState: "AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE",
       siteEnforcementState: { shadow: "ALLOW", canary: "REVIEW", production: "REVIEW" },
-      publishStage: "shadow",
+      publishStage: "shadow" as const,
     },
-  });
+  };
+  const artifact = existingTarget?.artifactId
+    ? await deps.refreshArtifactForVersionPublishCandidate({
+        ...artifactInput,
+        artifactId: existingTarget.artifactId,
+      }).then(() => ({ artifactId: existingTarget.artifactId! }))
+    : await deps.createArtifact(artifactInput);
   await deps.bindArtifactToVersion({
     siteVersionId: candidateVersion.siteVersionId,
     artifactId: artifact.artifactId,

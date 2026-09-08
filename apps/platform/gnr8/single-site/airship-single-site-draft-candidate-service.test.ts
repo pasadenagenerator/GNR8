@@ -260,6 +260,39 @@ function fakeDeps() {
       artifactBySiteVersion.set(input.siteVersionId, TARGET_ARTIFACT_ID);
       return { artifactId: TARGET_ARTIFACT_ID };
     },
+    refreshArtifactForVersionPublishCandidate: async (input: {
+      siteId: string;
+      siteVersionId: string;
+      artifactId: string;
+      rendererCompatibilityVersion: string;
+      bundleSha256: string;
+      htmlByPath: Record<string, string>;
+      compiledTokenStyles: string;
+      assetFingerprintMap: Record<string, string>;
+      manifest: Record<string, unknown>;
+      publishStage: RuntimeArtifact["publishStage"];
+      shadowRestricted: boolean;
+      artifactGovernance: RuntimeArtifact["artifactGovernance"];
+    }) => {
+      calls.push("refreshArtifactForVersionPublishCandidate");
+      const current = artifacts.get(input.artifactId);
+      assert.ok(current);
+      assert.equal(current.siteId, input.siteId);
+      assert.equal(current.siteVersionId, input.siteVersionId);
+      artifacts.set(input.artifactId, {
+        ...current,
+        rendererCompatibilityVersion: input.rendererCompatibilityVersion,
+        bundleSha256: input.bundleSha256,
+        htmlByPath: input.htmlByPath,
+        compiledTokenStyles: input.compiledTokenStyles,
+        assetFingerprintMap: input.assetFingerprintMap,
+        manifest: input.manifest,
+        publishStage: input.publishStage,
+        shadowRestricted: input.shadowRestricted,
+        artifactGovernance: input.artifactGovernance,
+      });
+      return { affectedRows: 1 };
+    },
     bindArtifactToVersion: async (input: { siteVersionId: string; artifactId: string }) => {
       calls.push("bindArtifactToVersion");
       const version = versions.get(input.siteVersionId);
@@ -356,6 +389,7 @@ test("reuses an existing matching Airship draft candidate and keeps active point
   assert.equal(second.candidateRuntimeArtifactId, first.candidateRuntimeArtifactId);
   assert.equal(second.activePointerChanged, false);
   assert.equal(deps.calls.filter((call) => call === "createSiteVersionFromMigration").length, 1);
+  assert.equal(deps.calls.filter((call) => call === "refreshArtifactForVersionPublishCandidate").length, 1);
 });
 
 test("applies saved CTA text when the CTA draft edit is accepted", async () => {
