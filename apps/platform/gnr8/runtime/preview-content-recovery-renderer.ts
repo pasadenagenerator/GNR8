@@ -45,6 +45,14 @@ type RecoverySectionSummary = {
   links: RecoveryLink[];
   images: RecoveryImage[];
 };
+type AirshipDraftHeroOverride = { headline: string; subheading: string };
+type AirshipDraftStyleOverride = {
+  heroTopPadding: number;
+  heroBottomPadding: number;
+  backgroundTint: string;
+  ctaColor: string;
+};
+type AirshipDraftCtaOverride = { label: string };
 
 function escapeHtml(value: string): string {
   return value
@@ -75,6 +83,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isPlaceholderPreviewText(value: string): boolean {
+  return /^\[(?:hero|section|preview|content)\s+body\]$/i.test(value.trim());
+}
+
 function stripTags(value: string): string {
   return value.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ").replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -100,6 +112,38 @@ function sanitizeHref(rawHref: string): string | null {
     return `/${href.replace(/^\/+/, "")}`;
   }
   return null;
+}
+
+function readAirshipDraftHeroOverride(sectionProps: Record<string, unknown>): AirshipDraftHeroOverride | null {
+  const raw = sectionProps.airshipDraftHeroOverride;
+  if (!isRecord(raw)) return null;
+  const headline = asNonEmptyString(raw.headline);
+  const subheading = asNonEmptyString(raw.subheading);
+  if (!headline || !subheading) return null;
+  return { headline, subheading };
+}
+
+function readAirshipDraftStyleOverride(sectionProps: Record<string, unknown>): AirshipDraftStyleOverride | null {
+  const raw = sectionProps.airshipDraftStyleOverride;
+  if (!isRecord(raw)) return null;
+  const heroTopPadding = Number(raw.heroTopPadding);
+  const heroBottomPadding = Number(raw.heroBottomPadding);
+  const backgroundTint = asNonEmptyString(raw.backgroundTint);
+  const ctaColor = asNonEmptyString(raw.ctaColor);
+  if (!Number.isFinite(heroTopPadding) || !Number.isFinite(heroBottomPadding) || !backgroundTint || !ctaColor) return null;
+  return {
+    heroTopPadding: Math.max(24, Math.min(140, Math.round(heroTopPadding))),
+    heroBottomPadding: Math.max(24, Math.min(140, Math.round(heroBottomPadding))),
+    backgroundTint,
+    ctaColor,
+  };
+}
+
+function readAirshipDraftCtaOverride(sectionProps: Record<string, unknown>): AirshipDraftCtaOverride | null {
+  const raw = sectionProps.airshipDraftCtaOverride;
+  if (!isRecord(raw)) return null;
+  const label = asNonEmptyString(raw.label);
+  return label ? { label } : null;
 }
 
 function isSafeInlineImage(src: string): boolean {
@@ -232,6 +276,7 @@ function collectSectionText(sectionEntries: RecoverySectionEntry[]): {
   function pushParagraph(value: unknown) {
     const text = asNonEmptyString(value);
     if (!text) return;
+    if (isPlaceholderPreviewText(text)) return;
     const key = text.toLowerCase();
     if (paragraphSeen.has(key)) return;
     paragraphSeen.add(key);
@@ -351,6 +396,8 @@ function collectLinksFromSectionProps(sectionProps: Record<string, unknown>): Re
   push(sectionProps.ctaHref, sectionProps.ctaLabel);
   push(sectionProps.href, sectionProps.label ?? sectionProps.title ?? sectionProps.text);
   push(sectionProps.url, sectionProps.label ?? sectionProps.title ?? sectionProps.text);
+  const airshipCta = readAirshipDraftCtaOverride(sectionProps);
+  if (airshipCta) push("#contact", airshipCta.label);
 
   const htmlSummary = isRecord(sectionProps.htmlSummary) ? sectionProps.htmlSummary : null;
   if (htmlSummary && Array.isArray(htmlSummary.extractedLinks)) {
@@ -390,11 +437,16 @@ function summarizeSectionEvidence(sectionEntries: RecoverySectionEntry[]): Recov
 
   for (const entry of sectionEntries) {
     const props = isRecord(entry.sectionProps) ? entry.sectionProps : {};
-    const role = sectionRoleFromType(entry.sectionType);
+    const airshipHero = readAirshipDraftHeroOverride(props);
+    const role = airshipHero ? "hero" : sectionRoleFromType(entry.sectionType);
     const heading =
+      airshipHero?.headline ??
       pickStringCandidate(props, ["headline", "heading", "title", "h1", "h2"]) ??
       asNonEmptyString((isRecord(props.htmlSummary) ? props.htmlSummary.extractedText : null) ?? null);
-    const paragraph = pickStringCandidate(props, ["subheadline", "summary", "description", "text", "body", "paragraph"]);
+    const paragraphCandidate =
+      airshipHero?.subheading ??
+      pickStringCandidate(props, ["subheading", "subheadline", "summary", "description", "text", "body", "paragraph"]);
+    const paragraph = paragraphCandidate && !isPlaceholderPreviewText(paragraphCandidate) ? paragraphCandidate : null;
     out.push({
       role,
       heading,
@@ -405,6 +457,19 @@ function summarizeSectionEvidence(sectionEntries: RecoverySectionEntry[]): Recov
   }
 
   return out;
+}
+
+function firstAirshipDraftStyleOverride(sectionEntries: RecoverySectionEntry[]): AirshipDraftStyleOverride | null {
+  for (const entry of sectionEntries) {
+    const props = isRecord(entry.sectionProps) ? entry.sectionProps : {};
+    const style = readAirshipDraftStyleOverride(props);
+    if (style) return style;
+  }
+  return null;
+}
+
+function hasAirshipDraftCtaOverride(sectionEntries: RecoverySectionEntry[]): boolean {
+  return sectionEntries.some((entry) => readAirshipDraftCtaOverride(isRecord(entry.sectionProps) ? entry.sectionProps : {}) != null);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -478,6 +543,8 @@ export function renderContentRecoveryPreview(input: {
   const diagnostics: ContentRecoveryDiagnosticCode[] = ["CONTENT_RECOVERY_MODE_ACTIVE", "CONTENT_RECOVERY_HERO_SYNTHESIZED"];
 
   const snapshotHtml = input.snapshotHtml ?? collectSnapshotHtmlCandidate(input.sectionEntries) ?? "";
+  const airshipStyle = firstAirshipDraftStyleOverride(input.sectionEntries);
+  const airshipCta = hasAirshipDraftCtaOverride(input.sectionEntries);
   const sectionEvidence = summarizeSectionEvidence(input.sectionEntries);
   const extracted = collectSectionText(input.sectionEntries);
 
@@ -493,6 +560,7 @@ export function renderContentRecoveryPreview(input: {
   const headings = [...htmlHeadings, ...extracted.headings];
   const paragraphs = [...htmlParagraphs, ...extracted.paragraphs, ...extracted.extractedText]
     .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter((value) => !isPlaceholderPreviewText(value))
     .filter((value) => value.length >= 20);
   const links = [...htmlLinks, ...extracted.links];
   const images = [...htmlImages, ...extracted.images];
@@ -506,13 +574,14 @@ export function renderContentRecoveryPreview(input: {
   const heroSection = orderedSectionEvidence.find((section) => section.role === "hero") ?? null;
   const ctaSections = orderedSectionEvidence.filter((section) => section.role === "cta");
   const ctaLinksFromSections = ctaSections.flatMap((section) => section.links);
+  const linksFromSections = orderedSectionEvidence.flatMap((section) => section.links);
   const contentSectionEvidence = orderedSectionEvidence.filter((section) => section.role === "content" || section.role === "hero");
   const orderedHeadings = [...contentSectionEvidence.map((section) => section.heading).filter((value): value is string => Boolean(value)), ...dedupedHeadings];
   const orderedParagraphs = [
     ...contentSectionEvidence.map((section) => section.paragraph).filter((value): value is string => Boolean(value)),
     ...dedupedParagraphs,
   ];
-  const mergedLinks = [...ctaLinksFromSections, ...dedupedLinks];
+  const mergedLinks = [...ctaLinksFromSections, ...linksFromSections, ...dedupedLinks];
   const mergedImages = [...orderedSectionEvidence.flatMap((section) => section.images), ...dedupedImages];
   const dedupedOrderedHeadings = [...new Set(orderedHeadings.map((value) => value.trim()).filter(Boolean))].slice(0, 10);
   const dedupedOrderedParagraphs = [...new Set(orderedParagraphs.map((value) => value.trim()).filter(Boolean))].slice(0, 16);
@@ -537,7 +606,10 @@ export function renderContentRecoveryPreview(input: {
 
   const lines: string[] = [];
   lines.push(`<main data-gnr8-render-mode="content-recovery" data-gnr8-page-path="${escapeHtml(input.page.path)}">`);
-  lines.push('  <section data-gnr8-recovery-block="hero">');
+  const heroStyle = airshipStyle
+    ? ` style="padding: ${airshipStyle.heroTopPadding}px 16px ${airshipStyle.heroBottomPadding}px; background: ${escapeHtml(airshipStyle.backgroundTint)}; --gnr8-accent: ${escapeHtml(airshipStyle.ctaColor)};" data-airship-draft-style-preview="true"`
+    : "";
+  lines.push(`  <section data-gnr8-recovery-block="hero"${heroStyle}>`);
   lines.push(`    <h1>${escapeHtml(heroHeadline)}</h1>`);
   lines.push(`    <p>${escapeHtml(heroSupporting)}</p>`);
   if (input.selectedSourceHtmlPath) {
@@ -555,7 +627,7 @@ export function renderContentRecoveryPreview(input: {
     lines.push('  </section>');
   }
 
-  if (dedupedMergedLinks.length > 0 && ctaSections.length > 0) {
+  if (dedupedMergedLinks.length > 0 && (ctaSections.length > 0 || airshipCta)) {
     const primaryCta = dedupedMergedLinks[0]!;
     lines.push('  <section data-gnr8-recovery-block="cta">');
     lines.push("    <h3>Primary Action</h3>");

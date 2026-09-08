@@ -179,6 +179,62 @@ test("content recovery renderer uses section hierarchy evidence for hero and CTA
   assert.ok(rendered.diagnostics.includes("CONTENT_RECOVERY_CTA_PLACED"));
 });
 
+test("content recovery renderer prefers Airship draft overrides over generic hero placeholders", () => {
+  const page = buildPage({
+    sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+    sectionProps: {
+      legacy: {
+        body: "[hero body]",
+        airshipDraftHeroOverride: {
+          headline: "CHS helps modernize and secure enterprise IT",
+          subheading: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.",
+        },
+        airshipDraftStyleOverride: {
+          heroTopPadding: 89,
+          heroBottomPadding: 72,
+          backgroundTint: "#ecfeff",
+          ctaColor: "#0f766e",
+        },
+        airshipDraftCtaOverride: {
+          label: "Contact Us",
+        },
+        htmlSummary: {
+          extractedText: "CHS d.o.o. Less risk. More control. Better IT.",
+          extractedLinks: [{ href: "/kontakt", label: "Contact" }],
+          extractedImageSrcs: [],
+        },
+      },
+    },
+    migrationGovernance: {
+      pageStructuralConfidence: 0.2,
+      weakSectionIds: ["legacy"],
+      structuralAnomalies: [],
+      pageMigrationGate: { stage: "gate", overallStatus: "pass", checks: [] } as any,
+      pageRolloutPolicy: { stage: "policy", overallStatus: "pass", checks: [] } as any,
+      pageEnforcement: {
+        shadow: { allow: true, reasons: [] },
+        canary: { allow: true, reasons: [] },
+        production: { allow: true, reasons: [] },
+      } as any,
+    },
+  });
+
+  const rendered = renderContentRecoveryPreview({
+    page,
+    sectionEntries: [{ sectionId: "legacy", sectionType: "legacy.html", sectionProps: page.contentModel.sectionProps.legacy ?? {} }],
+  });
+
+  assert.match(rendered.html, /<h1>CHS helps modernize and secure enterprise IT<\/h1>/);
+  assert.match(rendered.html, /Cybersecurity, data systems, and hybrid infrastructure support for teams across the region\./);
+  assert.match(rendered.html, /data-airship-draft-style-preview="true"/);
+  assert.match(rendered.html, /padding: 89px 16px 72px/);
+  assert.match(rendered.html, /background: #ecfeff/);
+  assert.match(rendered.html, /--gnr8-accent: #0f766e/);
+  assert.match(rendered.html, /href="#contact"/);
+  assert.match(rendered.html, /Contact Us/);
+  assert.doesNotMatch(rendered.html, /<p>\[hero body\]<\/p>/);
+});
+
 test("content recovery renderer always embeds original section props payload", () => {
   const page = buildPage({
     sections: [{ id: "intro", type: "content.basic", order: 0 }],
