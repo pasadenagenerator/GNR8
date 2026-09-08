@@ -20,6 +20,11 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function normalizeFiniteNumber(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 type TransformedAssemblyDiagnostics = NonNullable<PreviewRuntimeSummary["transformedAssemblyDiagnostics"]>;
 
 type RuntimeSectionProjection = {
@@ -685,6 +690,16 @@ function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparat
     .sort((a, b) => normalizePagePath(a.path).localeCompare(normalizePagePath(b.path)) || a.pageId.localeCompare(b.pageId))[0]?.styleTokens ?? {};
   const headingFamily = normalizeText(firstPageStyleTokens["typography.heading.fontFamily"]);
   const bodyFamily = normalizeText(firstPageStyleTokens["typography.body.fontFamily"]) || headingFamily;
+  const airshipHeroBackgroundTint = normalizeText(firstPageStyleTokens["airship.hero.backgroundTint"]);
+  const airshipCtaColor = normalizeText(firstPageStyleTokens["airship.cta.color"]);
+  const airshipHeroPaddingTop = normalizeFiniteNumber(firstPageStyleTokens["airship.hero.paddingTop"]);
+  const airshipHeroPaddingBottom = normalizeFiniteNumber(firstPageStyleTokens["airship.hero.paddingBottom"]);
+  const airshipTokenProvenance = {
+    source: "import" as const,
+    sourceId: input.siteVersion.id,
+    rationale: "Airship draft preview style token projected from runtime page model.",
+    confidence: 0.95,
+  };
 
   return {
     finalSiteModel: {
@@ -735,6 +750,28 @@ function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparat
             },
           ],
         },
+        ...(airshipHeroBackgroundTint
+          ? [
+              {
+                id: "airship-hero-background-tint",
+                name: "airship.hero.backgroundTint",
+                semanticRole: "airship.hero.backgroundTint",
+                valueHex8: airshipHeroBackgroundTint,
+                provenance: [airshipTokenProvenance],
+              },
+            ]
+          : []),
+        ...(airshipCtaColor
+          ? [
+              {
+                id: "airship-cta-color",
+                name: "airship.cta.color",
+                semanticRole: "airship.cta.color",
+                valueHex8: airshipCtaColor,
+                provenance: [airshipTokenProvenance],
+              },
+            ]
+          : []),
       ],
       typography: [
         ...(headingFamily
@@ -780,7 +817,28 @@ function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparat
             ]
           : []),
       ],
-      spacing: [],
+      spacing: [
+        ...(airshipHeroPaddingTop != null
+          ? [
+              {
+                id: "airship-hero-padding-top",
+                name: "airship.hero.paddingTop",
+                px: airshipHeroPaddingTop,
+                provenance: [airshipTokenProvenance],
+              },
+            ]
+          : []),
+        ...(airshipHeroPaddingBottom != null
+          ? [
+              {
+                id: "airship-hero-padding-bottom",
+                name: "airship.hero.paddingBottom",
+                px: airshipHeroPaddingBottom,
+                provenance: [airshipTokenProvenance],
+              },
+            ]
+          : []),
+      ],
       surface: {
         radiusScalePx: [0, 4, 8, 12],
         borderStyle: "subtle",

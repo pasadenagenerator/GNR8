@@ -351,7 +351,12 @@ test("transformed hero maps saved draft subheading into body slot", () => {
               },
             },
           },
-          styleTokens: {},
+          styleTokens: {
+            "airship.cta.color": "#0f766e",
+            "airship.hero.backgroundTint": "#ecfeff",
+            "airship.hero.paddingTop": 89,
+            "airship.hero.paddingBottom": 72,
+          },
           assetGraph: [],
           semanticSignals: [],
           source: "migration",
@@ -372,6 +377,10 @@ test("transformed hero maps saved draft subheading into body slot", () => {
     component?.slots?.body?.resolvedValue?.value,
     "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.",
   );
+  assert.equal(prepared.reactRenderSiteModel?.theme.tokenGroups.colors.tokens["airship-cta-color"], "#0f766e");
+  assert.equal(prepared.reactRenderSiteModel?.theme.tokenGroups.colors.tokens["airship-hero-background-tint"], "#ecfeff");
+  assert.equal(prepared.reactRenderSiteModel?.theme.tokenGroups.spacing.tokens["airship-hero-padding-top"], 89);
+  assert.equal(prepared.reactRenderSiteModel?.theme.tokenGroups.spacing.tokens["airship-hero-padding-bottom"], 72);
 
   const userFacingModelText = JSON.stringify(component);
   assert.equal(userFacingModelText.includes("[hero body]"), false);

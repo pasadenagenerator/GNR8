@@ -101,6 +101,35 @@ function buildScopedTypographyCss(theme: ReactRenderTheme): string {
   return rules.join("\n");
 }
 
+function buildScopedAirshipCss(theme: ReactRenderTheme): string {
+  const colorTokens = (theme.tokenGroups.colors?.tokens ?? {}) as Record<string, unknown>;
+  const spacingTokens = (theme.tokenGroups.spacing?.tokens ?? {}) as Record<string, unknown>;
+  const hasHeroTint = typeof colorTokens["airship-hero-background-tint"] === "string";
+  const hasCtaColor = typeof colorTokens["airship-cta-color"] === "string";
+  const hasHeroPaddingTop = typeof spacingTokens["airship-hero-padding-top"] === "number";
+  const hasHeroPaddingBottom = typeof spacingTokens["airship-hero-padding-bottom"] === "number";
+  const rules: string[] = [];
+
+  if (hasHeroTint || hasHeroPaddingTop || hasHeroPaddingBottom) {
+    const declarations = [
+      hasHeroTint ? "background-color: var(--gnr8-color-airship-hero-background-tint);" : null,
+      hasHeroPaddingTop ? "padding-top: var(--gnr8-space-airship-hero-padding-top);" : null,
+      hasHeroPaddingBottom ? "padding-bottom: var(--gnr8-space-airship-hero-padding-bottom);" : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    rules.push(`[data-gnr8-theme-boundary="site"] [data-gnr8-semantic-role="hero"] { ${declarations} }`);
+  }
+
+  if (hasCtaColor) {
+    rules.push(
+      `[data-gnr8-theme-boundary="site"] [data-gnr8-render-kind="render.hero"] a { background-color: var(--gnr8-color-airship-cta-color); color: #ffffff; }`,
+    );
+  }
+
+  return rules.join("\n");
+}
+
 export type ThemeProviderProps = {
   theme: ReactRenderTheme;
   children: ReactNode;
@@ -108,6 +137,7 @@ export type ThemeProviderProps = {
 
 export function ThemeBoundaryProvider({ theme, children }: ThemeProviderProps) {
   const typographyCss = buildScopedTypographyCss(theme);
+  const airshipCss = buildScopedAirshipCss(theme);
   return (
     <div
       data-gnr8-theme-boundary="site"
@@ -115,6 +145,7 @@ export function ThemeBoundaryProvider({ theme, children }: ThemeProviderProps) {
       style={buildThemeCssVariables(theme)}
     >
       {typographyCss ? <style>{typographyCss}</style> : null}
+      {airshipCss ? <style>{airshipCss}</style> : null}
       {children}
     </div>
   );
