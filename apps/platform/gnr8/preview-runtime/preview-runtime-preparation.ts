@@ -168,6 +168,8 @@ function pickSectionProps(input: {
     "description",
     "text",
     "copy",
+    "subheading",
+    "subheadline",
     "subtitle",
     "heroBody",
     "image",
@@ -215,7 +217,8 @@ function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
 
   const heading = pickValue(sectionProps, ["heading", "headline", "title", "heroTitle"]) ?? null;
   const body =
-    pickValue(sectionProps, ["body", "description", "text", "copy", "subtitle", "heroBody"]) ?? (textFromSummary || null);
+    pickValue(sectionProps, ["body", "description", "text", "copy", "subheading", "subheadline", "subtitle", "heroBody"]) ??
+    (textFromSummary || null);
   const image = pickImageValue(sectionProps, ["image", "imageSrc", "media", "heroImage"]) ??
     (firstImageFromSummary ? { src: firstImageFromSummary, alt: null } : null);
   const ctaLabel = pickValue(sectionProps, ["ctaLabel", "buttonLabel", "label", "primaryCtaLabel"]) ?? null;
@@ -279,7 +282,7 @@ function sectionTextForFingerprint(sectionProps: Record<string, unknown>): strin
   const htmlSummary = isRecord(sectionProps.htmlSummary) ? sectionProps.htmlSummary : null;
   return [
     pickValue(sectionProps, ["heading", "headline", "title", "heroTitle"]),
-    pickValue(sectionProps, ["body", "description", "text", "copy", "subtitle", "heroBody"]),
+    pickValue(sectionProps, ["body", "description", "text", "copy", "subheading", "subheadline", "subtitle", "heroBody"]),
     normalizeText(htmlSummary?.extractedText),
   ]
     .filter(Boolean)

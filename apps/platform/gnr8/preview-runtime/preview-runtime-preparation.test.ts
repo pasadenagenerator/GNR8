@@ -320,6 +320,64 @@ test("preview/runtime summary records deterministic content-resolution counts", 
   assert.equal(Array.isArray(prepared.summary.contentResolutionDiagnostics), true);
 });
 
+test("transformed hero maps saved draft subheading into body slot", () => {
+  const prepared = preparePreviewRuntime({
+    siteVersion: {
+      id: "sv-airship-draft-candidate",
+      siteId: "site-airship",
+      versionNo: 12,
+      state: "DRAFT",
+      source: "migration",
+      actor: "test",
+      createdAt: "2026-09-08T00:00:00.000Z",
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      artifactId: null,
+      pages: [
+        {
+          id: "pv-home",
+          siteVersionId: "sv-airship-draft-candidate",
+          pageId: "page-home",
+          path: "/",
+          title: "Home",
+          structureModel: {
+            sections: [{ id: "sec-hero", type: "hero", order: 0 }],
+          },
+          contentModel: {
+            sectionProps: {
+              "sec-hero": {
+                headline: "CHS helps modernize and secure enterprise IT",
+                subheading: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.",
+                ctaLabel: "Contact Us",
+              },
+            },
+          },
+          styleTokens: {},
+          assetGraph: [],
+          semanticSignals: [],
+          source: "migration",
+          actor: "test",
+          createdAt: "2026-09-08T00:00:00.000Z",
+        },
+      ],
+    },
+    routePath: "/",
+  });
+
+  const renderedElement = prepared.renderedSiteElement as { props?: { siteModel?: { pages?: any[] } } };
+  const component = renderedElement.props?.siteModel?.pages[0]?.sections[0]?.components[0];
+  assert.equal(component?.props.heading, "CHS helps modernize and secure enterprise IT");
+  assert.equal(component?.props.body, "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.");
+  assert.equal(component?.props.ctas?.[0]?.label, "Contact Us");
+  assert.equal(
+    component?.slots?.body?.resolvedValue?.value,
+    "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.",
+  );
+
+  const userFacingModelText = JSON.stringify(component);
+  assert.equal(userFacingModelText.includes("[hero body]"), false);
+  assert.equal(userFacingModelText.includes("Cybersecurity, data systems"), true);
+});
+
 test("family render mode is surfaced when deterministic family truth exists", () => {
   const prepared = preparePreviewRuntime({
     siteVersion: {
