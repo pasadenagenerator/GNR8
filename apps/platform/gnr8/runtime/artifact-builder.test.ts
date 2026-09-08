@@ -57,6 +57,34 @@ test("artifact-builder preview mode marks noindex", () => {
   assert.ok(preview.htmlByPath["/"]?.includes("noindex"));
 });
 
+test("artifact-builder renders Airship saved subheading instead of generic hero placeholder", () => {
+  const candidateSiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        contentModel: {
+          sectionProps: {
+            hero: {
+              headline: "CHS helps modernize and secure enterprise IT",
+              body: "[hero body]",
+              subheading: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.",
+              ctaLabel: "Contact Us",
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const preview = buildDeterministicArtifactBundle({ siteVersion: candidateSiteVersion, renderMode: "PREVIEW" });
+  const html = preview.htmlByPath["/"] ?? "";
+  assert.match(html, /CHS helps modernize and secure enterprise IT/);
+  assert.match(html, /Cybersecurity, data systems, and hybrid infrastructure support for teams across the region\./);
+  assert.doesNotMatch(html, /<h2[^>]*>\[hero body\]<\/h2>/);
+  assert.doesNotMatch(html, /<p[^>]*>\[hero body\]<\/p>/);
+});
+
 test("artifact-builder renders visible faq.basic fallback plus section payload script", () => {
   const faqSiteVersion = {
     ...siteVersion,

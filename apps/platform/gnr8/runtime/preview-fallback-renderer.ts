@@ -17,6 +17,10 @@ function asNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function isPlaceholderPreviewText(value: string): boolean {
+  return /^\[(?:hero|section|preview|content)\s+body\]$/i.test(value.trim())
+}
+
 function collectStringsByKeys(input: {
   value: unknown
   keys: Set<string>
@@ -93,6 +97,37 @@ function collectAllStrings(value: unknown, max: number): string[] {
 
   walk(value)
   return out
+}
+
+function collectDirectStringsByKeys(input: {
+  record: Record<string, unknown>
+  keys: string[]
+  max: number
+}): string[] {
+  const collected: string[] = []
+  const seen = new Set<string>()
+  const entries = new Map(Object.entries(input.record).map(([key, value]) => [key.toLowerCase(), value]))
+
+  function push(value: unknown) {
+    const text = asNonEmptyString(value)
+    if (!text) return
+    const folded = text.toLowerCase()
+    if (seen.has(folded)) return
+    seen.add(folded)
+    collected.push(text)
+  }
+
+  for (const key of input.keys) {
+    const value = entries.get(key.toLowerCase())
+    if (Array.isArray(value)) {
+      for (const item of value) push(item)
+    } else {
+      push(value)
+    }
+    if (collected.length >= input.max) break
+  }
+
+  return collected.slice(0, input.max)
 }
 
 type LinkItem = { href: string; label: string }
@@ -401,9 +436,16 @@ function renderFooter(sectionType: string, sectionProps: Record<string, unknown>
 
 function renderHero(sectionType: string, sectionProps: Record<string, unknown>): string {
   const title =
-    collectStringsByKeys({ value: sectionProps, keys: new Set(['headline', 'heading', 'title']), max: 1 })[0] ?? 'Hero'
+    collectDirectStringsByKeys({ record: sectionProps, keys: ['headline', 'heading', 'title'], max: 1 })[0] ??
+    sectionTitle(sectionProps, 'Hero')
   const body =
-    collectStringsByKeys({ value: sectionProps, keys: new Set(['subheadline', 'subtitle', 'description', 'body', 'text']), max: 2 })
+    collectDirectStringsByKeys({
+      record: sectionProps,
+      keys: ['subheading', 'subheadline', 'subtitle', 'description', 'body', 'text'],
+      max: 3,
+    })
+      .filter((paragraph) => !isPlaceholderPreviewText(paragraph))
+      .slice(0, 2)
   const links = collectLinks(sectionProps, 4)
   const images = collectImages(sectionProps, 2)
 
