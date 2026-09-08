@@ -210,6 +210,26 @@ function pickSectionProps(input: {
   );
 }
 
+function firstAirshipDraftStyleOverride(siteVersion: PreviewRuntimePreparationInput["siteVersion"]): Record<string, unknown> | null {
+  for (const page of siteVersion.pages
+    .slice()
+    .sort((a, b) => normalizePagePath(a.path).localeCompare(normalizePagePath(b.path)) || a.pageId.localeCompare(b.pageId))) {
+    const content = isRecord(page.contentModel) ? page.contentModel : {};
+    const sectionPropsById = isRecord((content as { sectionProps?: unknown }).sectionProps)
+      ? ((content as { sectionProps: Record<string, unknown> }).sectionProps)
+      : {};
+
+    for (const sectionId of Object.keys(sectionPropsById).sort((a, b) => a.localeCompare(b))) {
+      const sectionProps = sectionPropsById[sectionId];
+      if (!isRecord(sectionProps)) continue;
+      const override = sectionProps.airshipDraftStyleOverride;
+      if (isRecord(override)) return override;
+    }
+  }
+
+  return null;
+}
+
 function pickSectionSlotValues(sectionProps: Record<string, unknown>): {
   [key: string]: unknown;
 } {
@@ -690,10 +710,16 @@ function buildFinalSiteModelFromRuntimeSiteVersion(input: PreviewRuntimePreparat
     .sort((a, b) => normalizePagePath(a.path).localeCompare(normalizePagePath(b.path)) || a.pageId.localeCompare(b.pageId))[0]?.styleTokens ?? {};
   const headingFamily = normalizeText(firstPageStyleTokens["typography.heading.fontFamily"]);
   const bodyFamily = normalizeText(firstPageStyleTokens["typography.body.fontFamily"]) || headingFamily;
-  const airshipHeroBackgroundTint = normalizeText(firstPageStyleTokens["airship.hero.backgroundTint"]);
-  const airshipCtaColor = normalizeText(firstPageStyleTokens["airship.cta.color"]);
-  const airshipHeroPaddingTop = normalizeFiniteNumber(firstPageStyleTokens["airship.hero.paddingTop"]);
-  const airshipHeroPaddingBottom = normalizeFiniteNumber(firstPageStyleTokens["airship.hero.paddingBottom"]);
+  const airshipDraftStyleOverride = firstAirshipDraftStyleOverride(input.siteVersion);
+  const airshipHeroBackgroundTint =
+    normalizeText(firstPageStyleTokens["airship.hero.backgroundTint"]) || normalizeText(airshipDraftStyleOverride?.backgroundTint);
+  const airshipCtaColor = normalizeText(firstPageStyleTokens["airship.cta.color"]) || normalizeText(airshipDraftStyleOverride?.ctaColor);
+  const airshipHeroPaddingTop =
+    normalizeFiniteNumber(firstPageStyleTokens["airship.hero.paddingTop"]) ??
+    normalizeFiniteNumber(airshipDraftStyleOverride?.heroTopPadding ?? airshipDraftStyleOverride?.paddingTop);
+  const airshipHeroPaddingBottom =
+    normalizeFiniteNumber(firstPageStyleTokens["airship.hero.paddingBottom"]) ??
+    normalizeFiniteNumber(airshipDraftStyleOverride?.heroBottomPadding ?? airshipDraftStyleOverride?.paddingBottom);
   const airshipTokenProvenance = {
     source: "import" as const,
     sourceId: input.siteVersion.id,
