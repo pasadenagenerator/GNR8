@@ -206,6 +206,12 @@ test("airship projection exposes a saved draft candidate as internal preview onl
       sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
       draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
       draftVersion: 5,
+      styleSettings: {
+        heroTopPadding: 96,
+        heroBottomPadding: 104,
+        backgroundTint: "#eef6ff",
+        ctaColor: "#1d4ed8",
+      },
       appliedEdits: [
         {
           draftEditId: "airship-chs-home-hero-headline",
@@ -238,6 +244,7 @@ test("airship projection exposes a saved draft candidate as internal preview onl
     "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
   );
   assert.equal(model.previews.airshipDraftCandidate?.skippedEdits[0]?.skippedTextContent, "Contact CHS at sales@chs.si");
+  assert.equal(model.previews.airshipDraftCandidate?.styleSettings.ctaColor, "#1d4ed8");
   assert.equal(model.flags.publishes, false);
   assert.equal(model.flags.activePointerMutation, false);
 });

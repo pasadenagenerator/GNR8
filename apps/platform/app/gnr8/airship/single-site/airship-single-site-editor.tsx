@@ -6,6 +6,7 @@ import type {
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 import type { SingleSiteStudioPreviewState } from "@/gnr8/single-site/single-site-studio-readonly-projection";
 
+import { AirshipDraftCandidateAction } from "./airship-draft-candidate-action";
 import { AirshipSingleSiteLocalDraftEditor } from "./airship-single-site-local-draft-editor";
 
 type Props = {
@@ -106,14 +107,28 @@ function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjectio
   const candidate = model.previews.airshipDraftCandidate;
   if (!candidate) {
     return (
-      <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", color: "#92400e", padding: 12, fontSize: 13, lineHeight: 1.45 }}>
-        <strong>Airship draft candidate unavailable.</strong> Saved draft edits have not yet been materialized as a separate internal preview candidate.
+      <div style={{ display: "grid", gap: 10 }}>
+        <AirshipDraftCandidateAction
+          migrationId={model.migrationId}
+          savedDraftId={model.draftPanel.persistence.draftId}
+          savedDraftVersion={model.draftPanel.persistence.version}
+          initialCandidate={null}
+        />
+        <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", color: "#92400e", padding: 12, fontSize: 13, lineHeight: 1.45 }}>
+          <strong>Airship draft candidate unavailable.</strong> Saved draft edits have not yet been materialized as a separate internal preview candidate.
+        </div>
       </div>
     );
   }
 
   return (
     <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+      <AirshipDraftCandidateAction
+        migrationId={model.migrationId}
+        savedDraftId={model.draftPanel.persistence.draftId}
+        savedDraftVersion={model.draftPanel.persistence.version}
+        initialCandidate={candidate}
+      />
       {preview(candidate)}
       <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 12, display: "grid", gap: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

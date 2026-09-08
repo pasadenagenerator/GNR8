@@ -111,6 +111,12 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
         draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
         draftVersion: 5,
+        styleSettings: {
+          heroTopPadding: 96,
+          heroBottomPadding: 104,
+          backgroundTint: "#eef6ff",
+          ctaColor: "#1d4ed8",
+        },
         appliedEdits: [
           {
             draftEditId: "airship-chs-home-hero-headline",
@@ -263,6 +269,9 @@ test("airship single-site editor renders live published and Airship draft candid
   assert.equal(html.includes("Current live/published preview"), true);
   assert.equal(html.includes("New Airship draft candidate preview"), true);
   assert.equal(html.includes("Not live, internal preview only"), true);
+  assert.equal(html.includes("Saved draft to internal preview"), true);
+  assert.equal(html.includes("Apply saved draft to preview"), true);
+  assert.equal(html.includes("Open latest internal preview candidate"), true);
   assert.equal(html.includes("accepted/saved edits applied"), true);
   assert.equal(html.includes("rejected CTA not applied"), true);
   assert.equal(html.includes("CHS helps modernize secure enterprise IT"), true);
@@ -372,6 +381,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
         route: model.previews.airshipDraftCandidate?.route ?? null,
         draftId: model.previews.airshipDraftCandidate?.draftId ?? null,
         draftVersion: model.previews.airshipDraftCandidate?.draftVersion ?? null,
+        statusLabel: model.previews.airshipDraftCandidate?.statusLabel ?? null,
       }}
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}
@@ -421,6 +431,8 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Live CHS site"), true);
   assert.equal(html.includes("Text and style saves persist here"), true);
   assert.equal(html.includes("Open internal preview"), true);
+  assert.equal(html.includes("Apply saved draft to preview"), true);
+  assert.equal(html.includes("Latest preview draft v5"), true);
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes("Save draft"), true);
   assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);

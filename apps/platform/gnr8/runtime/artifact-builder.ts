@@ -40,6 +40,17 @@ type AirshipDraftHeroOverride = {
   subheading: string;
 };
 
+type AirshipDraftStyleOverride = {
+  heroTopPadding: number;
+  heroBottomPadding: number;
+  backgroundTint: string;
+  ctaColor: string;
+};
+
+type AirshipDraftCtaOverride = {
+  label: string;
+};
+
 function readLegacyHtmlSummary(sectionProps: Record<string, unknown>): LegacyHtmlSummary | null {
   const raw = sectionProps.htmlSummary;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -54,6 +65,32 @@ function readAirshipDraftHeroOverride(sectionProps: Record<string, unknown>): Ai
   const subheading = asNonEmptyString(record.subheading);
   if (!headline || !subheading) return null;
   return { headline, subheading };
+}
+
+function readAirshipDraftStyleOverride(sectionProps: Record<string, unknown>): AirshipDraftStyleOverride | null {
+  const raw = sectionProps.airshipDraftStyleOverride;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const heroTopPadding = Number(record.heroTopPadding);
+  const heroBottomPadding = Number(record.heroBottomPadding);
+  const backgroundTint = asNonEmptyString(record.backgroundTint);
+  const ctaColor = asNonEmptyString(record.ctaColor);
+  if (!Number.isFinite(heroTopPadding) || !Number.isFinite(heroBottomPadding) || !backgroundTint || !ctaColor) {
+    return null;
+  }
+  return {
+    heroTopPadding: Math.max(24, Math.min(140, Math.round(heroTopPadding))),
+    heroBottomPadding: Math.max(24, Math.min(140, Math.round(heroBottomPadding))),
+    backgroundTint,
+    ctaColor,
+  };
+}
+
+function readAirshipDraftCtaOverride(sectionProps: Record<string, unknown>): AirshipDraftCtaOverride | null {
+  const raw = sectionProps.airshipDraftCtaOverride;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const label = asNonEmptyString((raw as Record<string, unknown>).label);
+  return label ? { label } : null;
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -558,6 +595,8 @@ function renderLegacySummaryHtml(input: {
   if (!text && imageSrcs.length === 0 && links.length === 0) return "";
 
   const airshipDraftHero = readAirshipDraftHeroOverride(sectionProps);
+  const airshipDraftStyle = readAirshipDraftStyleOverride(sectionProps);
+  const airshipDraftCta = readAirshipDraftCtaOverride(sectionProps);
   const sentences = uniqueByCaseFold(splitIntoSentences(text ?? "").map(normalizeSentenceForDisplay).filter((line) => line.length > 0));
   const heroHeading = airshipDraftHero?.headline ?? pickHeroHeading(sentences) ?? "Company Overview";
   const intro =
@@ -569,7 +608,15 @@ function renderLegacySummaryHtml(input: {
   const services = pickServices(sentences);
   const heroImages = selectRankedImages(imageSrcs);
   const contact = extractContact({ text, links });
-  const theme = resolveLegacySummaryTheme({ styleTokens, summaryText: text });
+  const baseTheme = resolveLegacySummaryTheme({ styleTokens, summaryText: text });
+  const theme = airshipDraftStyle
+    ? {
+        ...baseTheme,
+        bg: airshipDraftStyle.backgroundTint,
+        accent: airshipDraftStyle.ctaColor,
+        accentSoft: airshipDraftStyle.backgroundTint,
+      }
+    : baseTheme;
   const slovenianSignals = /(naše|prevozi|kontakt|o nas|galerija|kamion|podjetje)/i.test(text ?? "");
   const labels = slovenianSignals
     ? { about: "O Podjetju", services: "Storitve", contact: "Kontakt", overview: "Prevozi Po Evropi" }
@@ -583,8 +630,11 @@ function renderLegacySummaryHtml(input: {
     .slice(0, 6);
 
   const lines: string[] = [];
+  const sectionPadding = airshipDraftStyle
+    ? `${airshipDraftStyle.heroTopPadding}px 16px ${airshipDraftStyle.heroBottomPadding}px`
+    : "clamp(18px, 3vw, 32px) 16px 52px";
   lines.push(
-    `<section data-gnr8-legacy-summary="visible-v2" style="max-width: 1120px; margin: 0 auto; padding: clamp(18px, 3vw, 32px) 16px 52px; color: ${escapeHtml(theme.text)};">`,
+    `<section data-gnr8-legacy-summary="visible-v2" data-airship-draft-style-preview="${airshipDraftStyle ? "true" : "false"}" style="max-width: 1120px; margin: 0 auto; padding: ${escapeHtml(sectionPadding)}; color: ${escapeHtml(theme.text)};">`,
   );
   lines.push("  <style>");
   lines.push(
@@ -597,6 +647,7 @@ function renderLegacySummaryHtml(input: {
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-grid img { width: 100%; aspect-ratio: 5 / 4; object-fit: cover; display: block; border-radius: 12px; border: 1px solid var(--gnr8-border); background: #eef4f8; box-shadow: 0 8px 20px rgba(15, 35, 52, 0.12); }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-section { margin-top: 16px; }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-section h2 { margin: 0 0 8px; font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--gnr8-accent); }');
+  lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-primary-cta { display: inline-flex; width: fit-content; margin-top: 16px; border: 1px solid var(--gnr8-accent); border-radius: 8px; background: var(--gnr8-accent); color: #ffffff; padding: 10px 14px; font-weight: 800; text-decoration: none; }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] ul { margin: 0; padding-left: 18px; }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] li { margin: 0 0 6px; }');
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] a { color: var(--gnr8-accent); text-underline-offset: 2px; }');
@@ -608,6 +659,9 @@ function renderLegacySummaryHtml(input: {
   lines.push(`    <h1 class="gnr8-title">${escapeHtml(heroHeading)}</h1>`);
   if (intro) {
     lines.push(`    <p style="margin: 10px 0 0; font-size: 1.03rem;">${escapeHtml(intro)}</p>`);
+  }
+  if (airshipDraftCta) {
+    lines.push(`    <a class="gnr8-primary-cta" href="#contact">${escapeHtml(airshipDraftCta.label)}</a>`);
   }
   if (heroImages.length > 0) {
     lines.push('    <div class="gnr8-grid">');

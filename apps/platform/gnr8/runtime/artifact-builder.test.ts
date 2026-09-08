@@ -239,6 +239,15 @@ test("artifact-builder renders Airship draft hero override in legacy summary pre
                 headline: "CHS helps modernize secure enterprise IT",
                 subheading: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
               },
+              airshipDraftStyleOverride: {
+                heroTopPadding: 96,
+                heroBottomPadding: 104,
+                backgroundTint: "#eef6ff",
+                ctaColor: "#1d4ed8",
+              },
+              airshipDraftCtaOverride: {
+                label: "Email CHS sales",
+              },
               htmlSummary: {
                 extractedText:
                   "CHS d.o.o. Less risk. More control. Better IT. Contact us sales@chs.si Parmova ulica 51, Ljubljana.",
@@ -256,6 +265,11 @@ test("artifact-builder renders Airship draft hero override in legacy summary pre
   const html = out.htmlByPath["/"] ?? "";
   assert.match(html, /<h1[^>]*>CHS helps modernize secure enterprise IT<\/h1>/);
   assert.match(html, /Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region\./);
+  assert.match(html, /data-airship-draft-style-preview="true"/);
+  assert.match(html, /padding: 96px 16px 104px/);
+  assert.match(html, /--gnr8-bg: #eef6ff/);
+  assert.match(html, /--gnr8-accent: #1d4ed8/);
+  assert.match(html, /class="gnr8-primary-cta" href="#contact">Email CHS sales<\/a>/);
   assert.doesNotMatch(html, /Contact CHS at sales@chs\.si/);
 });
 

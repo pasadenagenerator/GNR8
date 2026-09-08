@@ -13,7 +13,12 @@ import {
   getSiteVersion,
 } from "../runtime/runtime-store";
 import { getSuperadminPool } from "@/src/superadmin/db";
-import type { AirshipSingleSiteDraftEdit, AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
+import {
+  sanitizeDraftStyleSettings,
+  type AirshipSingleSiteDraftEdit,
+  type AirshipSingleSiteDraftRecord,
+  type AirshipSingleSiteDraftStyleSettings,
+} from "./airship-single-site-draft-service";
 
 export const AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION = "airship-4-draft-candidate-service:v1" as const;
 
@@ -49,6 +54,7 @@ export type AirshipDraftCandidatePreviewRef = {
   sourceLiveRuntimeArtifactId: string;
   draftId: string;
   draftVersion: number;
+  styleSettings: AirshipSingleSiteDraftStyleSettings;
   appliedEdits: Array<{
     draftEditId: string;
     targetSectionPage: string;
@@ -73,6 +79,7 @@ export type AirshipDraftCandidateCreationOutput = {
   candidateSiteVersionId: string;
   candidateRuntimeArtifactId: string;
   previewRoute: string;
+  styleSettings: AirshipSingleSiteDraftStyleSettings;
   appliedEdits: AirshipDraftCandidatePreviewRef["appliedEdits"];
   skippedEdits: AirshipDraftCandidatePreviewRef["skippedEdits"];
   activePointerBefore: { siteVersionId: string; artifactId: string } | null;
@@ -90,6 +97,7 @@ type AirshipDraftCandidateProvenance = {
   sourceLiveRuntimeArtifactId: string;
   semanticInputWatermark: string;
   candidateSiteVersionId: string;
+  styleSettings: AirshipSingleSiteDraftStyleSettings;
   appliedEditIds: string[];
   skippedEditIds: string[];
   appliedEdits: AirshipDraftCandidatePreviewRef["appliedEdits"];
@@ -162,6 +170,10 @@ function rejectedEdit(edit: AirshipSingleSiteDraftEdit | undefined): AirshipSing
   return edit?.status === "rejected" ? edit : null;
 }
 
+function styleSettingsFromDraft(draft: AirshipSingleSiteDraftRecord): AirshipSingleSiteDraftStyleSettings {
+  return sanitizeDraftStyleSettings(draft.metadata.styleSettings);
+}
+
 function sectionProps(page: CanonicalPageVersionInput): Record<string, Record<string, unknown>> {
   const props = page.contentModel.sectionProps;
   if (!props || typeof props !== "object" || Array.isArray(props)) return {};
@@ -214,7 +226,9 @@ function applyAirshipHeroEdits(input: {
   actor: string;
   headline: string;
   subheading: string;
+  ctaLabel: string | null;
   rejectedCtaText: string | null;
+  styleSettings: AirshipSingleSiteDraftStyleSettings;
 }): CanonicalPageVersionInput[] {
   return input.sourceVersion.pages.map((sourcePage, index) => {
     const page: CanonicalPageVersionInput = {
@@ -234,15 +248,35 @@ function applyAirshipHeroEdits(input: {
 
     const targetSectionId = firstEditableSectionId(page);
     const currentSectionProps = objectValue(sectionProps(page)[targetSectionId]);
+    const baseSectionProps = {
+      ...currentSectionProps,
+      airshipDraftHeroOverride: {
+        headline: input.headline,
+        subheading: input.subheading,
+      },
+      airshipDraftStyleOverride: {
+        heroTopPadding: input.styleSettings.heroTopPadding,
+        heroBottomPadding: input.styleSettings.heroBottomPadding,
+        backgroundTint: input.styleSettings.backgroundTint,
+        ctaColor: input.styleSettings.ctaColor,
+      },
+    };
+    const sectionPropsWithCta = input.ctaLabel
+      ? withTextField({
+          props: {
+            ...baseSectionProps,
+            airshipDraftCtaOverride: {
+              label: input.ctaLabel,
+            },
+          },
+          preferredKeys: ["ctaLabel", "primaryCtaLabel", "buttonLabel", "cta", "label"],
+          fallbackKey: "ctaLabel",
+          value: input.ctaLabel,
+        })
+      : baseSectionProps;
     const nextSectionProps = withTextField({
       props: withTextField({
-        props: {
-          ...currentSectionProps,
-          airshipDraftHeroOverride: {
-            headline: input.headline,
-            subheading: input.subheading,
-          },
-        },
+        props: sectionPropsWithCta,
         preferredKeys: ["headline", "heading", "title"],
         fallbackKey: "headline",
         value: input.headline,
@@ -258,6 +292,13 @@ function applyAirshipHeroEdits(input: {
         ...sectionProps(page),
         [targetSectionId]: stripRejectedCtaText(nextSectionProps, input.rejectedCtaText) as Record<string, unknown>,
       },
+    };
+    page.styleTokens = {
+      ...page.styleTokens,
+      "airship.hero.paddingTop": `${input.styleSettings.heroTopPadding}px`,
+      "airship.hero.paddingBottom": `${input.styleSettings.heroBottomPadding}px`,
+      "airship.hero.backgroundTint": input.styleSettings.backgroundTint,
+      "airship.cta.color": input.styleSettings.ctaColor,
     };
     if (!page.semanticSignals.some((signal) => signal.label === "airship.draft_candidate.internal_preview_only")) {
       page.semanticSignals = [
@@ -290,6 +331,7 @@ function toPreviewRef(input: {
   sourceLiveSiteVersionId: string;
   sourceLiveRuntimeArtifactId: string;
   draft: AirshipSingleSiteDraftRecord;
+  styleSettings: AirshipSingleSiteDraftStyleSettings;
   appliedEdits: AirshipDraftCandidatePreviewRef["appliedEdits"];
   skippedEdits: AirshipDraftCandidatePreviewRef["skippedEdits"];
 }): AirshipDraftCandidatePreviewRef {
@@ -307,6 +349,7 @@ function toPreviewRef(input: {
     sourceLiveRuntimeArtifactId: input.sourceLiveRuntimeArtifactId,
     draftId: input.draft.id,
     draftVersion: input.draft.version,
+    styleSettings: input.styleSettings,
     appliedEdits: input.appliedEdits,
     skippedEdits: input.skippedEdits,
   };
@@ -316,6 +359,7 @@ export function airshipDraftCandidateSemanticInput(input: {
   draft: AirshipSingleSiteDraftRecord;
   sourceLiveSiteVersionId: string;
   sourceLiveRuntimeArtifactId: string;
+  styleSettings: AirshipSingleSiteDraftStyleSettings;
   appliedEdits: AirshipDraftCandidatePreviewRef["appliedEdits"];
   skippedEdits: AirshipDraftCandidatePreviewRef["skippedEdits"];
 }): string {
@@ -326,6 +370,7 @@ export function airshipDraftCandidateSemanticInput(input: {
     draftVersion: input.draft.version,
     sourceLiveSiteVersionId: input.sourceLiveSiteVersionId,
     sourceLiveRuntimeArtifactId: input.sourceLiveRuntimeArtifactId,
+    styleSettings: input.styleSettings,
     appliedEdits: input.appliedEdits,
     skippedEdits: input.skippedEdits,
   })}`;
@@ -357,9 +402,10 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const subheadingEdit = acceptedOrSavedEdit(input.draft.draftEdits.find((edit) => edit.id === SUBHEADING_DRAFT_ID));
   if (!headlineEdit) throw new Error("accepted_headline_required");
   if (!subheadingEdit) throw new Error("saved_subheading_required");
+  const ctaEdit = acceptedOrSavedEdit(input.draft.draftEdits.find((edit) => edit.id === CTA_DRAFT_ID));
   const rejectedCta = rejectedEdit(input.draft.draftEdits.find((edit) => edit.id === CTA_DRAFT_ID));
 
-  const appliedEdits = [headlineEdit, subheadingEdit].map((edit) => ({
+  const appliedEdits = [headlineEdit, subheadingEdit, ctaEdit].filter((edit): edit is AirshipSingleSiteDraftEdit => Boolean(edit)).map((edit) => ({
     draftEditId: edit.id,
     targetSectionPage: edit.targetSectionPage,
     appliedTextContent: edit.proposedTextContent,
@@ -372,10 +418,12 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
         reason: "rejected" as const,
       }]
     : [];
+  const styleSettings = styleSettingsFromDraft(input.draft);
   const semanticInputWatermark = airshipDraftCandidateSemanticInput({
     draft: input.draft,
     sourceLiveSiteVersionId,
     sourceLiveRuntimeArtifactId,
+    styleSettings,
     appliedEdits,
     skippedEdits,
   });
@@ -398,7 +446,9 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
     actor,
     headline: headlineEdit.proposedTextContent,
     subheading: subheadingEdit.proposedTextContent,
+    ctaLabel: ctaEdit?.proposedTextContent ?? null,
     rejectedCtaText: rejectedCta?.proposedTextContent ?? null,
+    styleSettings,
   });
   const provenance: AirshipDraftCandidateProvenance = {
     serviceVersion: AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION,
@@ -409,6 +459,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
     sourceLiveRuntimeArtifactId,
     semanticInputWatermark,
     candidateSiteVersionId: targetCandidateSiteVersionId,
+    styleSettings,
     appliedEditIds: appliedEdits.map((edit) => edit.draftEditId),
     skippedEditIds: skippedEdits.map((edit) => edit.draftEditId),
     appliedEdits,
@@ -482,6 +533,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
     candidateSiteVersionId: candidateVersion.siteVersionId,
     candidateRuntimeArtifactId: artifact.artifactId,
     previewRoute: previewRoute(candidateVersion.siteVersionId),
+    styleSettings,
     appliedEdits,
     skippedEdits,
     activePointerBefore,
@@ -537,6 +589,7 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
     sourceLiveRuntimeArtifactId: provenance.sourceLiveRuntimeArtifactId,
     draftId: provenance.draftId,
     draftVersion: provenance.draftVersion,
+    styleSettings: provenance.styleSettings ?? sanitizeDraftStyleSettings(null),
     appliedEdits: provenance.appliedEdits ?? [],
     skippedEdits: provenance.skippedEdits ?? [],
   };

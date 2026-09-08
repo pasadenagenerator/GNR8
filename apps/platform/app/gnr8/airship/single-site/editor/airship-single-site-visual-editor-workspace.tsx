@@ -19,6 +19,7 @@ type Props = {
     route: string | null;
     draftId: string | null;
     draftVersion: number | null;
+    statusLabel?: string | null;
   } | null;
   draftPreview: AirshipSingleSiteDraftPreview;
   drafts: AirshipSingleSiteImprovementDraft[];
@@ -87,6 +88,8 @@ type EditorSectionKey = "hero" | "cta" | "source";
 type EditorViewportKey = "desktop" | "tablet" | "mobile";
 type InspectorTabKey = "agent" | "edit" | "css" | "dom";
 type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
+type CandidateApplyState = "idle" | "creating" | "created" | "failed";
+type PreviewCandidateState = NonNullable<Props["draftCandidate"]>;
 
 export type AirshipSelectedElementMetadata = {
   section: EditorSectionKey;
@@ -111,6 +114,12 @@ type RecentChange = {
   scope: "text" | "style" | "command" | "undo" | "reset" | "draft";
   state: "local" | "saved";
   createdAt: string;
+};
+
+type DraftCandidateActionResponse = {
+  ok?: boolean;
+  candidate?: PreviewCandidateState & { status: "created" | "reused" };
+  error?: string;
 };
 
 const HEADLINE_DRAFT_ID = "airship-chs-home-hero-headline";
@@ -629,6 +638,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   );
   const [saveState, setSaveState] = useState<DraftSaveState>(() => props.persistence.draftId ? "saved" : "unsaved");
   const [draftMeta, setDraftMeta] = useState(() => props.persistence);
+  const [previewCandidate, setPreviewCandidate] = useState<PreviewCandidateState | null>(() => props.draftCandidate);
+  const [candidateApplyState, setCandidateApplyState] = useState<CandidateApplyState>("idle");
   const [providerStatus] = useState(() => props.aiProviderStatus);
   const [selectedSection, setSelectedSection] = useState<EditorSectionKey>("hero");
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
@@ -650,7 +661,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     viewportLabel: selectedViewport.label,
     viewportWidth: selectedViewport.width,
     draftMeta,
-    draftCandidate: props.draftCandidate,
+    draftCandidate: previewCandidate,
   });
   const selectedStyleValueRows = deriveAirshipStyleValueRows(selectedSection, fields);
 
@@ -865,6 +876,44 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       setMessage("Airship draft save failed. Editor preview changed locally only; no live site changes were made.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function createInternalPreviewCandidate() {
+    if (!props.migrationId || !draftMeta.draftId || saveState !== "saved" || busy || candidateApplyState === "creating") {
+      setMessage("Save the Airship draft first, then create the internal preview candidate. Not live. Not published.");
+      return;
+    }
+    clearPendingStyleSave();
+    setCandidateApplyState("creating");
+    setMessage("Creating internal preview candidate from the saved Airship draft...");
+    try {
+      const response = await fetch("/api/gnr8/admin/airship/single-site/draft-candidate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actionMode: "create_internal_preview_candidate",
+          migrationId: props.migrationId,
+          idempotencyKey: `airship-preview-candidate:${props.migrationId}:${draftMeta.draftId}:${draftMeta.version ?? "unknown"}`,
+        }),
+      });
+      const payload = await response.json() as DraftCandidateActionResponse;
+      if (!response.ok || !payload.ok || !payload.candidate) throw new Error(payload.error || "airship_preview_candidate_failed");
+      setPreviewCandidate(payload.candidate);
+      setCandidateApplyState("created");
+      setMessage(
+        payload.candidate.status === "reused"
+          ? `Reused internal preview candidate for saved draft v${payload.candidate.draftVersion}. Not live. Not published.`
+          : `Created internal preview candidate for saved draft v${payload.candidate.draftVersion}. Not live. Not published.`,
+      );
+      recordChange({
+        label: "Created internal preview candidate",
+        scope: "draft",
+        state: "saved",
+      });
+    } catch {
+      setCandidateApplyState("failed");
+      setMessage("Internal preview candidate creation failed. No live site or active pointer changed.");
     }
   }
 
@@ -1581,6 +1630,16 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         <div className="airship-toolbar-group">
           {badge("Draft only", "good")}
           {badge(saveStateStatus.label, saveStateStatus.tone)}
+          {badge(
+            previewCandidate?.route
+              ? `Latest preview draft v${previewCandidate.draftVersion ?? "?"}`
+              : candidateApplyState === "failed"
+                ? "Preview failed"
+                : candidateApplyState === "creating"
+                  ? "Creating preview"
+                  : "No preview candidate",
+            previewCandidate?.route ? "good" : candidateApplyState === "creating" ? "neutral" : "warn",
+          )}
           {badge(providerBadgeLabel(providerStatus), providerConnected ? "good" : "warn")}
           {badge("Not live", "warn")}
           {badge("Not published", "warn")}
@@ -1613,7 +1672,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   viewportLabel: selectedViewport.label,
                   viewportWidth: selectedViewport.width,
                   draftMeta,
-                  draftCandidate: props.draftCandidate,
+                  draftCandidate: previewCandidate,
                 }).domSectionId}
                 onClick={() => selectSection(section.key)}
               >
@@ -1786,8 +1845,22 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
             >
               Save draft
             </button>
-            {props.draftCandidate?.route ? (
-              <a aria-label="Open internal preview" href={props.draftCandidate.route} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true })}>
+            <button
+              type="button"
+              aria-label="Apply saved draft to preview"
+              aria-busy={candidateApplyState === "creating"}
+              disabled={busy || candidateApplyState === "creating" || saveState !== "saved" || !draftMeta.draftId}
+              onClick={() => void createInternalPreviewCandidate()}
+              style={actionButtonStyle({
+                tone: "primary",
+                disabled: busy || candidateApplyState === "creating" || saveState !== "saved" || !draftMeta.draftId,
+                compact: true,
+              })}
+            >
+              {candidateApplyState === "creating" ? "Creating preview..." : "Apply saved draft to preview"}
+            </button>
+            {previewCandidate?.route ? (
+              <a aria-label="Open internal preview" href={previewCandidate.route} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true })}>
                 Internal preview
               </a>
             ) : null}

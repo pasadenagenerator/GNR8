@@ -65,6 +65,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
         route: model.previews.airshipDraftCandidate.route,
         draftId: model.previews.airshipDraftCandidate.draftId,
         draftVersion: model.previews.airshipDraftCandidate.draftVersion,
+        statusLabel: model.previews.airshipDraftCandidate.statusLabel,
       } : null}
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}

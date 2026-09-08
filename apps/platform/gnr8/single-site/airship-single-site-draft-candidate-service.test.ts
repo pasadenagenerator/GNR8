@@ -62,7 +62,15 @@ function savedDraft(): AirshipSingleSiteDraftRecord {
     draftStatus: "mixed",
     version: 5,
     semanticWatermark: "airship-single-site-editor-draft:test",
-    metadata: { liveBoundary: "not_applied_to_live_site" },
+    metadata: {
+      liveBoundary: "not_applied_to_live_site",
+      styleSettings: {
+        heroTopPadding: 96,
+        heroBottomPadding: 104,
+        backgroundTint: "#eef6ff",
+        ctaColor: "#1d4ed8",
+      },
+    },
     createdByActorId: "superadmin",
     updatedByActorId: "superadmin",
     acceptedAt: null,
@@ -205,7 +213,8 @@ function fakeDeps() {
     buildDeterministicArtifactBundle: (input: { siteVersion: CanonicalSiteVersionSnapshot; renderMode: RenderMode }) => {
       calls.push("buildDeterministicArtifactBundle");
       const props = input.siteVersion.pages[0]?.contentModel.sectionProps.hero as Record<string, unknown>;
-      const html = `<html><body><h1>${String(props.headline ?? "")}</h1><p>${String(props.subheading ?? "")}</p><span>${String(props.cta ?? "")}</span></body></html>`;
+      const style = props.airshipDraftStyleOverride as Record<string, unknown> | undefined;
+      const html = `<html><body style="background:${String(style?.backgroundTint ?? "")}"><h1>${String(props.headline ?? "")}</h1><p>${String(props.subheading ?? "")}</p><button style="background:${String(style?.ctaColor ?? "")}">${String(props.cta ?? "")}</button></body></html>`;
       return {
         siteId: input.siteVersion.siteId,
         siteVersionId: input.siteVersion.id,
@@ -292,6 +301,16 @@ test("creates an internal Airship draft candidate from live/published version an
     candidate?.pages[0]?.contentModel.sectionProps.hero?.subheading,
     "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
   );
+  assert.deepEqual(candidate?.pages[0]?.contentModel.sectionProps.hero?.airshipDraftStyleOverride, {
+    heroTopPadding: 96,
+    heroBottomPadding: 104,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
+  assert.equal(candidate?.pages[0]?.styleTokens["airship.hero.paddingTop"], "96px");
+  assert.equal(candidate?.pages[0]?.styleTokens["airship.hero.paddingBottom"], "104px");
+  assert.equal(candidate?.pages[0]?.styleTokens["airship.hero.backgroundTint"], "#eef6ff");
+  assert.equal(candidate?.pages[0]?.styleTokens["airship.cta.color"], "#1d4ed8");
   assert.equal(candidate?.pages[0]?.contentModel.sectionProps.hero?.cta, "Contact us");
   assert.equal(deps.versions.get(LIVE_VERSION_ID)?.pages[0]?.contentModel.sectionProps.hero?.headline, "Less risk. More control. Better IT.");
 
@@ -300,8 +319,16 @@ test("creates an internal Airship draft candidate from live/published version an
   assert.equal(artifact?.artifactGovernance.siteGateState, "AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY");
   assert.match(artifact?.htmlByPath["/"] ?? "", /CHS helps modernize secure enterprise IT/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region\./);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /background:#eef6ff/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /background:#1d4ed8/);
   assert.doesNotMatch(artifact?.htmlByPath["/"] ?? "", /Contact CHS at sales@chs\.si/);
   assert.equal((artifact?.manifest.airshipSingleSiteDraftCandidate as { published?: boolean } | undefined)?.published, false);
+  assert.deepEqual(output.styleSettings, {
+    heroTopPadding: 96,
+    heroBottomPadding: 104,
+    backgroundTint: "#eef6ff",
+    ctaColor: "#1d4ed8",
+  });
   assert.deepEqual([...new Set(deps.calls.map((call) => call.split(":")[0]))].sort(), [
     "bindArtifactToVersion",
     "buildDeterministicArtifactBundle",
@@ -329,4 +356,36 @@ test("reuses an existing matching Airship draft candidate and keeps active point
   assert.equal(second.candidateRuntimeArtifactId, first.candidateRuntimeArtifactId);
   assert.equal(second.activePointerChanged, false);
   assert.equal(deps.calls.filter((call) => call === "createSiteVersionFromMigration").length, 1);
+});
+
+test("applies saved CTA text when the CTA draft edit is accepted", async () => {
+  const deps = fakeDeps();
+  const draft = savedDraft();
+  draft.draftEdits = draft.draftEdits.map((edit) =>
+    edit.id === "airship-chs-home-contact-cta" ? { ...edit, status: "accepted", proposedTextContent: "Email CHS sales" } : edit,
+  );
+  draft.draftStatus = "accepted";
+  draft.version = 6;
+
+  const output = await createAirshipSingleSiteDraftCandidate(
+    {
+      draft,
+      actor: "superadmin",
+      targetCandidateSiteVersionId: TARGET_VERSION_ID,
+    },
+    deps,
+  );
+
+  const candidate = deps.versions.get(TARGET_VERSION_ID);
+  const artifact = deps.artifacts.get(TARGET_ARTIFACT_ID);
+  assert.deepEqual(output.appliedEdits.map((edit) => edit.draftEditId), [
+    "airship-chs-home-hero-headline",
+    "airship-chs-home-hero-value-proposition",
+    "airship-chs-home-contact-cta",
+  ]);
+  assert.deepEqual(output.skippedEdits, []);
+  assert.equal(candidate?.pages[0]?.contentModel.sectionProps.hero?.cta, "Email CHS sales");
+  assert.equal((candidate?.pages[0]?.contentModel.sectionProps.hero?.airshipDraftCtaOverride as { label?: string } | undefined)?.label, "Email CHS sales");
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Email CHS sales/);
+  assert.doesNotMatch(artifact?.htmlByPath["/"] ?? "", /Contact us/);
 });
