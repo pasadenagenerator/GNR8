@@ -13,7 +13,7 @@ type Props = {
   children: ReactNode;
 };
 
-type TabKey = "overview" | "ops-inbox" | "sites" | "hosting" | "single-site-studio" | "single-site-publish" | "migration-batches" | "agencies";
+type TabKey = "overview" | "ops-inbox" | "sites" | "hosting" | "single-site-studio" | "single-site-publish" | "migration-batches" | "agencies" | "ai-settings";
 
 const TABS: WorkspaceTabInput[] = [
   { key: "overview", href: "/gnr8/command-center", label: "Overview" },
@@ -28,6 +28,7 @@ const TABS: WorkspaceTabInput[] = [
   { key: "single-site-publish", href: "/gnr8/command-center/single-site-publish", label: "Single-Site Publish" },
   { key: "migration-batches", href: "/gnr8/command-center/migration-batches", label: "Migration Batches" },
   { key: "agencies", href: "/gnr8/command-center/agencies", label: "Agencies" },
+  { key: "ai-settings", href: "/gnr8/command-center/ai-settings", label: "AI Settings" },
 ];
 
 const COMMAND_CENTER_SHORTCUTS: WorkspaceShortcut[] = [
@@ -67,6 +68,13 @@ const COMMAND_CENTER_SHORTCUTS: WorkspaceShortcut[] = [
     icon: "O",
   },
   {
+    id: "open-ai-settings",
+    label: "AI Settings",
+    href: "/gnr8/command-center/ai-settings",
+    description: "Review agency-level AI provider and Airship profile metadata",
+    icon: "AI",
+  },
+  {
     id: "open-migration-batches",
     label: "Open Migration Batches",
     href: "/gnr8/command-center/migration-batches",
@@ -83,6 +91,7 @@ function resolveActiveTab(pathname: string): TabKey {
   if (pathname.startsWith("/gnr8/command-center/single-site-publish")) return "single-site-publish";
   if (pathname.startsWith("/gnr8/command-center/migration-batches")) return "migration-batches";
   if (pathname.startsWith("/gnr8/command-center/agencies")) return "agencies";
+  if (pathname.startsWith("/gnr8/command-center/ai-settings")) return "ai-settings";
   return "overview";
 }
 
@@ -113,6 +122,10 @@ function buildCommandCenterBreadcrumbs(activeTab: TabKey): WorkspaceBreadcrumbIt
 
   if (activeTab === "migration-batches") {
     return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Migration Batches" }];
+  }
+
+  if (activeTab === "ai-settings") {
+    return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "AI Settings" }];
   }
 
   return [{ label: "Command Center", href: "/gnr8/command-center" }, { label: "Overview" }];
@@ -196,6 +209,12 @@ export default function CommandCenterLayout(props: Props) {
             id: "route-command-center-agencies",
             label: "Command Center Agencies",
             href: "/gnr8/command-center/agencies",
+            sublabel: "Key route",
+          },
+          {
+            id: "route-command-center-ai-settings",
+            label: "Command Center AI Settings",
+            href: "/gnr8/command-center/ai-settings",
             sublabel: "Key route",
           },
         ],

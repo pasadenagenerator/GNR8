@@ -7,6 +7,10 @@ import type {
   AirshipSingleSiteDraftStyleSettings,
   AirshipSingleSiteImprovementDraft,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
+import type {
+  AirshipAgentProfileSelection,
+  AirshipOpenAIProviderStatusReadModel,
+} from "@/gnr8/single-site/airship-agent-profile-types";
 
 type Props = {
   migrationId: string | null;
@@ -33,22 +37,8 @@ type Props = {
     notAppliedToLiveSite: true;
     notPublished: true;
   };
-  aiProviderStatus: AirshipOpenAIProviderStatus;
-};
-
-type AirshipOpenAIProviderStatus = {
-  provider: "openai";
-  scope: "airship_editor";
-  ownerScope: "internal_superadmin";
-  connected: boolean;
-  status: "missing" | "connected" | "revoked" | "encryption_not_configured" | "read_error";
-  maskedKey: string | null;
-  model: string;
-  lastTestedAt: string | null;
-  lastTestStatus: "passed" | "failed" | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-  canUseAiCommands: boolean;
+  aiProviderStatus: AirshipOpenAIProviderStatusReadModel;
+  agentProfileSelection: AirshipAgentProfileSelection;
 };
 
 export type AirshipHeroEditorFields = {
@@ -362,11 +352,11 @@ function actionButtonStyle(input: {
   };
 }
 
-function isAirshipOpenAIProviderConnected(status: AirshipOpenAIProviderStatus): boolean {
+function isAirshipOpenAIProviderConnected(status: AirshipOpenAIProviderStatusReadModel): boolean {
   return status.provider === "openai" && status.status === "connected" && status.connected && status.canUseAiCommands && Boolean(status.maskedKey);
 }
 
-function providerConnectionMessage(status: AirshipOpenAIProviderStatus): string {
+function providerConnectionMessage(status: AirshipOpenAIProviderStatusReadModel): string {
   if (isAirshipOpenAIProviderConnected(status)) {
     return `OpenAI connected (${status.maskedKey ?? "masked key"}, ${status.model}).`;
   }
@@ -379,7 +369,7 @@ function providerConnectionMessage(status: AirshipOpenAIProviderStatus): string 
   return CONNECT_OPENAI_MESSAGE;
 }
 
-function providerBadgeLabel(status: AirshipOpenAIProviderStatus): string {
+function providerBadgeLabel(status: AirshipOpenAIProviderStatusReadModel): string {
   if (isAirshipOpenAIProviderConnected(status)) return "Connected";
   if (status.status === "encryption_not_configured") return "Encryption setup needed";
   if (status.status === "read_error") return "Status read failed";
@@ -641,6 +631,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [previewCandidate, setPreviewCandidate] = useState<PreviewCandidateState | null>(() => props.draftCandidate);
   const [candidateApplyState, setCandidateApplyState] = useState<CandidateApplyState>("idle");
   const [providerStatus] = useState(() => props.aiProviderStatus);
+  const [agentProfileSelection] = useState(() => props.agentProfileSelection);
   const [selectedSection, setSelectedSection] = useState<EditorSectionKey>("hero");
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
   const [inspectorTab, setInspectorTab] = useState<InspectorTabKey>("agent");
@@ -664,6 +655,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     draftCandidate: previewCandidate,
   });
   const selectedStyleValueRows = deriveAirshipStyleValueRows(selectedSection, fields);
+  const activeAgentProfile = agentProfileSelection.activeProfile;
 
   const selectedDrafts = useMemo(
     () => {
@@ -1928,6 +1920,40 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                     <strong>Live CHS site</strong>
                     <span>Separate and unchanged.</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="airship-control-group">
+                <div className="airship-kicker">Active Airship profile</div>
+                {activeAgentProfile ? (
+                  <>
+                    <div className="airship-toolbar-group">
+                      {badge(activeAgentProfile.profileName, activeAgentProfile.enabled ? "good" : "warn")}
+                      {activeAgentProfile.defaultProfile ? badge("Default profile", "good") : null}
+                      {badge(activeAgentProfile.costPosture, activeAgentProfile.costPosture === "best" ? "warn" : activeAgentProfile.costPosture === "cheap" ? "neutral" : "good")}
+                    </div>
+                    <div className="airship-scope-grid" aria-label="Selected agency/default Airship profile">
+                      <div className="airship-scope-cell">
+                        <strong>Provider</strong>
+                        <span>{activeAgentProfile.provider}</span>
+                      </div>
+                      <div className="airship-scope-cell">
+                        <strong>Model</strong>
+                        <span>{activeAgentProfile.model}</span>
+                      </div>
+                      <div className="airship-scope-cell">
+                        <strong>Purpose</strong>
+                        <span>{activeAgentProfile.purpose}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>
+                    Airship agent profile unavailable. The editor remains available; AI commands stay disabled.
+                  </div>
+                )}
+                <div className="airship-muted">
+                  Profile metadata is agency-level configuration. This tab does not inspect provider keys or run external AI calls.
                 </div>
               </div>
 

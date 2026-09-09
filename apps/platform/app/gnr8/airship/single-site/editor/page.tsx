@@ -1,8 +1,8 @@
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 import {
-  AirshipOpenAIByokProviderService,
-  readErrorAirshipOpenAIProviderStatus,
-} from "@/gnr8/single-site/airship-openai-byok-provider";
+  readAirshipAgencyAISettings,
+  unavailableAirshipAgencyAISettingsReadModel,
+} from "@/gnr8/single-site/airship-agent-profile-settings";
 import {
   AIRSHIP_CHS_MIGRATION_ID,
   getAirshipSingleSiteEditorReadonlyProjection,
@@ -32,9 +32,8 @@ export default async function AirshipSingleSiteEditorPage(props: {
   const model = await getAirshipSingleSiteEditorReadonlyProjection({
     migrationId: param(searchParams?.migrationId) ?? AIRSHIP_CHS_MIGRATION_ID,
   });
-  const aiProviderStatus = await new AirshipOpenAIByokProviderService()
-    .status()
-    .catch(() => readErrorAirshipOpenAIProviderStatus());
+  const aiSettings = await readAirshipAgencyAISettings()
+    .catch(() => unavailableAirshipAgencyAISettingsReadModel());
 
   if (model.draftPanel.drafts.length === 0 || !model.draftPanel.draftPreview) {
     return (
@@ -70,7 +69,8 @@ export default async function AirshipSingleSiteEditorPage(props: {
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}
       persistence={model.draftPanel.persistence}
-      aiProviderStatus={aiProviderStatus}
+      aiProviderStatus={aiSettings.openAIProviderStatus}
+      agentProfileSelection={aiSettings.selectedAirshipProfile}
     />
   );
 }

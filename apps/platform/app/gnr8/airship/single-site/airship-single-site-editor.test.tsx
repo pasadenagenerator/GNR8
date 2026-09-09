@@ -5,6 +5,7 @@ import React from "react";
 import ReactDomServer from "react-dom/server";
 
 import type { AirshipSingleSiteEditorReadonlyProjection } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
+import type { AirshipAgentProfileSelection } from "@/gnr8/single-site/airship-agent-profile-types";
 
 import { AirshipSingleSiteEditor } from "./airship-single-site-editor";
 import {
@@ -41,6 +42,27 @@ const VISUAL_EDITOR_PAGE_FILE = new URL("./editor/page.tsx", import.meta.url);
 const VISUAL_EDITOR_FILE = new URL("./editor/airship-single-site-visual-editor-workspace.tsx", import.meta.url);
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/airship-single-site-editor-readonly-projection.ts", import.meta.url);
 const PREVIEW_ROUTE_FILE = new URL("../../../api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts", import.meta.url);
+
+function selectedAirshipProfile(overrides: Partial<AirshipAgentProfileSelection> = {}): AirshipAgentProfileSelection {
+  return {
+    status: "selected" as const,
+    activeProfile: {
+      profileId: "airship-editor-default",
+      profileName: "Airship Editor Default",
+      provider: "openai" as const,
+      model: "gpt-5",
+      purpose: "airship_editor" as const,
+      costPosture: "balanced" as const,
+      enabled: true,
+      defaultProfile: true,
+      providerConnectionStatus: "connected" as const,
+      canUseAiCommands: true,
+      source: "derived_from_openai_byok_status" as const,
+    },
+    diagnostics: ["airship_agent_default_profile_selected"],
+    ...overrides,
+  };
+}
 
 function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
   return {
@@ -363,7 +385,8 @@ test("airship visual editor route is superadmin-gated and renders the workspace"
   assert.equal(pageSource.includes("getAirshipSingleSiteEditorReadonlyProjection"), true);
   assert.equal(pageSource.includes("AirshipSingleSiteVisualEditorWorkspace"), true);
   assert.equal(pageSource.includes("AIRSHIP_CHS_MIGRATION_ID"), true);
-  assert.equal(pageSource.includes("readErrorAirshipOpenAIProviderStatus"), true);
+  assert.equal(pageSource.includes("readAirshipAgencyAISettings"), true);
+  assert.equal(pageSource.includes("agentProfileSelection={aiSettings.selectedAirshipProfile}"), true);
 });
 
 test("airship visual editor renders draft canvas, sidebar controls, labels, and AI command box", () => {
@@ -400,6 +423,11 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
         updatedAt: null,
         canUseAiCommands: false,
       }}
+      agentProfileSelection={selectedAirshipProfile({
+        status: "unavailable",
+        activeProfile: null,
+        diagnostics: ["airship_agent_default_profile_unavailable"],
+      })}
     />,
   );
 
@@ -469,6 +497,8 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("AI command"), true);
   assert.equal(html.includes("Connect OpenAI to use AI commands"), true);
   assert.equal(html.includes("No OpenAI command request is sent"), true);
+  assert.equal(html.includes("Active Airship profile"), true);
+  assert.equal(html.includes("Airship agent profile unavailable"), true);
   assert.equal(html.includes("OpenAI provider"), true);
   assert.equal(html.includes("Apply command"), true);
   assert.equal(html.includes("Save text edits to Airship draft"), true);
@@ -601,6 +631,11 @@ test("airship visual editor renders safe provider read error state without expos
         updatedAt: null,
         canUseAiCommands: false,
       }}
+      agentProfileSelection={selectedAirshipProfile({
+        status: "unavailable",
+        activeProfile: null,
+        diagnostics: ["airship_agent_profile_read_failed"],
+      })}
     />,
   );
 
@@ -608,6 +643,7 @@ test("airship visual editor renders safe provider read error state without expos
   assert.equal(html.includes("OpenAI provider status could not be read"), true);
   assert.equal(html.includes("Provider status read failed. The editor remains available"), true);
   assert.equal(html.includes("AI commands stay disabled"), true);
+  assert.equal(html.includes("Airship agent profile unavailable"), true);
   assert.equal(html.includes("Airship visual editor workspace"), true);
   assert.equal(html.includes("sk-test"), false);
   assert.equal(html.includes("ORDER BY"), false);
@@ -659,12 +695,17 @@ test("airship visual editor renders connected provider status from backend readb
         updatedAt: "2026-09-04T00:00:00.000Z",
         canUseAiCommands: true,
       }}
+      agentProfileSelection={selectedAirshipProfile()}
     />,
   );
 
   assert.equal(html.includes("Connected"), true);
   assert.equal(html.includes("OpenAI connected (sk-...safe, gpt-5)."), true);
   assert.equal(html.includes("Test passed"), true);
+  assert.equal(html.includes("Active Airship profile"), true);
+  assert.equal(html.includes("Airship Editor Default"), true);
+  assert.equal(html.includes("Selected agency/default Airship profile"), true);
+  assert.equal(html.includes("airship_editor"), true);
   assert.equal(html.includes("sk-test"), false);
   assert.equal(html.includes("safe-secret"), false);
   assert.equal(html.includes("Status read failed"), false);
