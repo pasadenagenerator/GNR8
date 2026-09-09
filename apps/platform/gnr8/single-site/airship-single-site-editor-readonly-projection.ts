@@ -758,19 +758,23 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
   const migrationId = text(input.migrationId);
   const studioModel = await getSingleSiteStudioReadonlyProjection({ migrationId });
   let persistedDraft: AirshipSingleSiteDraftRecord | null = null;
-  try {
-    persistedDraft = await new AirshipSingleSiteDraftService().readCurrentDraft(migrationId);
-  } catch {
-    persistedDraft = null;
+  if (migrationId) {
+    try {
+      persistedDraft = await new AirshipSingleSiteDraftService().readCurrentDraft(migrationId);
+    } catch {
+      persistedDraft = null;
+    }
   }
   let airshipDraftCandidate: AirshipDraftCandidatePreviewRef | null = null;
-  try {
-    airshipDraftCandidate = await readLatestAirshipSingleSiteDraftCandidatePreview({
-      migrationId,
-      draftId: persistedDraft?.id ?? null,
-    });
-  } catch {
-    airshipDraftCandidate = null;
+  if (migrationId) {
+    try {
+      airshipDraftCandidate = await readLatestAirshipSingleSiteDraftCandidatePreview({
+        migrationId,
+        draftId: persistedDraft?.id ?? null,
+      });
+    } catch {
+      airshipDraftCandidate = null;
+    }
   }
   return buildAirshipSingleSiteEditorReadonlyProjection({
     migrationId,

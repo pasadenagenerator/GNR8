@@ -417,3 +417,73 @@ test("airship projection handles missing or partial source evidence without CHS 
   assert.equal(JSON.stringify(model).includes("Less risk. More control. Better IT."), false);
   assert.equal(JSON.stringify(model).includes("Contact CHS"), false);
 });
+
+test("airship projection with missing migration id stays unavailable and does not fall back to CHS", () => {
+  const studioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    migrationId: null,
+    diagnosticsHref: "/gnr8/command-center/single-site-publish",
+    summary: {
+      site: "Imported single-site",
+      sourceUrl: "Source URL unavailable",
+      mvpStatus: "Internal single-site MVP status unavailable",
+      liveSiteUrl: "Source URL unavailable",
+      activePointer: "unknown",
+      publishedCandidate: "unknown",
+    },
+    sourceTruth: null,
+    import: {
+      inputUrl: "Source URL unavailable",
+      captured: false,
+      status: "unavailable",
+    },
+    sourceEvidence: [],
+    previews: {
+      originalClone: {
+        label: "Original clone preview",
+        siteVersionId: null,
+        runtimeArtifactId: null,
+        route: null,
+        mode: "transformed",
+        available: false,
+        unavailableReason: "Internal preview unavailable: missing runtime site version ref for this stage.",
+        authNote: "No internal GNR8 preview route can be constructed without a site version id.",
+      },
+      improvedCandidate: {
+        label: "Improved candidate preview",
+        siteVersionId: null,
+        runtimeArtifactId: null,
+        route: null,
+        mode: "transformed",
+        available: false,
+        unavailableReason: "Internal preview unavailable: missing runtime site version ref for this stage.",
+        authNote: "No internal GNR8 preview route can be constructed without a site version id.",
+      },
+    },
+    improvementSummary: {
+      headline: "Internal single-site improvement status unavailable",
+      appliedCount: 0,
+      limitationCount: 0,
+      noDeterministicContentChanges: true,
+      recommendations: [],
+    },
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: null,
+    studioModel,
+  });
+
+  assert.equal(model.migrationId, null);
+  assert.equal(model.routeHref, "/gnr8/airship/single-site");
+  assert.equal(model.links.airshipEditor, "/gnr8/airship/single-site/editor");
+  assert.equal(model.importedSite, "Imported single-site");
+  assert.equal(model.importedSiteModel.sourceEvidenceSummary.status, "missing_evidence");
+  assert.equal(model.importedSiteModel.latestDraft.draftId, null);
+  assert.equal(model.importedSiteModel.latestInternalPreviewCandidate, null);
+  assert.equal(model.draftPanel.drafts.length, 0);
+  assert.equal(model.draftPanel.draftPreview, null);
+  assert.equal(JSON.stringify(model).includes(CHS_MIGRATION_ID), false);
+  assert.equal(JSON.stringify(model).includes("Less risk. More control. Better IT."), false);
+  assert.equal(JSON.stringify(model).includes("Contact CHS"), false);
+});
