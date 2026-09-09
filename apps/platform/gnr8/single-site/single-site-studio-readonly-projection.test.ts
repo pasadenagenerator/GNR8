@@ -22,8 +22,24 @@ test("single-site studio projection uses internal preview routes for CHS clone a
     model.previews.improvedCandidate.route,
     `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`,
   );
-  assert.equal(model.previews.originalClone.authNote.includes("not the live CHS production domain"), true);
-  assert.equal(model.previews.improvedCandidate.authNote.includes("not the live CHS production domain"), true);
+  assert.equal(model.previews.originalClone.authNote.includes("not the live production domain"), true);
+  assert.equal(model.previews.improvedCandidate.authNote.includes("not the live production domain"), true);
   assert.equal(model.summary.liveSiteUrl, "https://www.chs.si/");
   assert.equal(model.comparison.find((item) => item.label === "Live published version")?.href, "https://www.chs.si/");
+});
+
+test("single-site studio projection does not give unknown migrations CHS fallback identity", () => {
+  const model = buildSingleSiteStudioReadonlyProjection({
+    migrationId: "11111111-2222-4333-8444-555555555555",
+    generatedAt: "2026-08-31T00:00:00.000Z",
+  });
+  const serialized = JSON.stringify(model);
+
+  assert.equal(model.summary.site, "Imported single-site");
+  assert.equal(model.summary.sourceUrl, "Source URL unavailable");
+  assert.equal(model.summary.liveSiteUrl, "Source URL unavailable");
+  assert.equal(model.summary.activePointer, "unknown");
+  assert.equal(model.summary.publishedCandidate, "unknown");
+  assert.equal(serialized.includes("chs.si"), false);
+  assert.equal(serialized.includes("CHS"), false);
 });

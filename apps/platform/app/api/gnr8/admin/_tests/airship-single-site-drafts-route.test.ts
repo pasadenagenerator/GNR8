@@ -74,6 +74,60 @@ function model(): AirshipSingleSiteEditorReadonlyProjection {
     migrationId: MIGRATION_ID,
     importedSite: "chs.si",
     sourceUrl: "https://www.chs.si/",
+    importedSiteModel: {
+      siteLabel: "chs.si",
+      sourceUrl: "https://www.chs.si/",
+      liveUrl: "https://www.chs.si/",
+      sourceEvidenceSummary: {
+        status: "source_supported",
+        detail: "3 source evidence item(s) available for chs.si.",
+        evidenceItems: [
+          { label: "Hero headline", status: "present", detail: "Captured CHS homepage evidence includes hero headline `Less risk. More control. Better IT.`." },
+          { label: "Service positioning", status: "present", detail: "Captured CHS source evidence includes value proposition `Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.`." },
+          { label: "Contact action", status: "present", detail: "Captured CHS contact evidence includes `Contact CHS at sales@chs.si`, `sales@chs.si`, and a homepage contact form." },
+        ],
+      },
+      editableSections: [
+        {
+          key: "hero",
+          label: "Hero / intro",
+          detail: "Headline, subheading, spacing, tint",
+          mappedDraftFieldIds: ["airship-chs-home-hero-headline"],
+          sourceStatus: "source-supported hero draft fields",
+        },
+        {
+          key: "cta",
+          label: "CTA",
+          detail: "Primary action label and color",
+          mappedDraftFieldIds: [],
+          sourceStatus: "CTA draft field unavailable from source evidence",
+        },
+        {
+          key: "source",
+          label: "Source material",
+          detail: "Imported-site evidence and internal draft refs",
+          mappedDraftFieldIds: ["airship-chs-home-hero-headline"],
+          sourceStatus: "source material readback only",
+        },
+      ],
+      draftFields: [
+        { fieldKey: "headline", draftId: "airship-chs-home-hero-headline", label: "Homepage / hero headline", sectionKey: "hero", sourceStatus: "source-supported" },
+      ],
+      latestDraft: {
+        draftId: null,
+        draftStatus: null,
+        version: null,
+        lastSavedAt: null,
+      },
+      latestInternalPreviewCandidate: null,
+      publishedVersionRefs: {
+        siteVersionId: "a3f9493e-9da4-4ef8-8608-154fe6d25a0f",
+        runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+        liveUrl: "https://www.chs.si/",
+        activePointer: "live",
+        publishedCandidate: "PUBLISHED",
+      },
+    },
     studioSourceTruth: {
       tenantId: "tenant-chs",
       clientId: "client-chs",
@@ -215,6 +269,42 @@ test("airship draft GET requires superadmin before draft read", async () => {
   assert.equal(response.status, 403);
   assert.equal(readCalls, 0);
   assert.equal(body.diagnostics.includes("airship_single_site_draft_superadmin_required"), true);
+});
+
+test("airship draft GET requires an explicit migration id", async () => {
+  let readCalls = 0;
+  const handlers = createAirshipSingleSiteDraftsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-route",
+    service: {
+      async readCurrentDraft() {
+        readCalls += 1;
+        return draftRecord();
+      },
+      async createOrReuseDraft() {
+        return draftRecord();
+      },
+      async updateDraftEditText() {
+        return draftRecord();
+      },
+      async updateDraftStyleSettings() {
+        return draftRecord();
+      },
+      async markDraftEditAccepted() {
+        return draftRecord();
+      },
+      async markDraftEditRejected() {
+        return draftRecord();
+      },
+    },
+  });
+
+  const response = await handlers.GET(request("https://app.test/api/gnr8/admin/airship/single-site/drafts"));
+  const body = await response.json() as { diagnostics: string[]; mutationFlags: { draftDataMutation: boolean } };
+
+  assert.equal(response.status, 400);
+  assert.equal(readCalls, 0);
+  assert.equal(body.diagnostics.includes("airship_single_site_draft_migration_id_required"), true);
+  assert.equal(body.mutationFlags.draftDataMutation, false);
 });
 
 test("airship draft POST rejects actor overrides and does not execute service", async () => {

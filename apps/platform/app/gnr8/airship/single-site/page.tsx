@@ -1,6 +1,5 @@
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 import {
-  AIRSHIP_CHS_MIGRATION_ID,
   getAirshipSingleSiteEditorReadonlyProjection,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 
@@ -25,7 +24,7 @@ export default async function AirshipSingleSitePage(props: {
   await requireSuperadminUserIdForPage();
   const searchParams = props.searchParams ? await props.searchParams : undefined;
   const model = await getAirshipSingleSiteEditorReadonlyProjection({
-    migrationId: param(searchParams?.migrationId) ?? AIRSHIP_CHS_MIGRATION_ID,
+    migrationId: param(searchParams?.migrationId),
   });
 
   return <AirshipSingleSiteEditor model={model} />;

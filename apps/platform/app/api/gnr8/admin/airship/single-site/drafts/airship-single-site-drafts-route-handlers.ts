@@ -5,7 +5,6 @@ import {
   type AirshipSingleSiteDraftStyleSettings,
 } from "@/gnr8/single-site/airship-single-site-draft-service";
 import {
-  AIRSHIP_CHS_MIGRATION_ID,
   buildAirshipSingleSiteDraftSeed,
   getAirshipSingleSiteEditorReadonlyProjection,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
@@ -160,7 +159,8 @@ export function createAirshipSingleSiteDraftsRouteHandlers(deps: Partial<RouteDe
         return failure(400, "INVALID_AIRSHIP_SINGLE_SITE_DRAFT_QUERY", queryErrors);
       }
 
-      const migrationId = text(queryRecord.migrationId) || AIRSHIP_CHS_MIGRATION_ID;
+      const migrationId = text(queryRecord.migrationId);
+      if (!migrationId) return failure(400, "INVALID_AIRSHIP_SINGLE_SITE_DRAFT_QUERY", ["airship_single_site_draft_migration_id_required"]);
       try {
         const draft = await resolvedDeps.service.readCurrentDraft(migrationId);
         return success(draft);
@@ -190,7 +190,10 @@ export function createAirshipSingleSiteDraftsRouteHandlers(deps: Partial<RouteDe
       if (actionMode !== "create_or_reuse" && actionMode !== "update_edit" && actionMode !== "update_style_settings" && actionMode !== "mark_accepted" && actionMode !== "mark_rejected") {
         return failure(400, "INVALID_AIRSHIP_SINGLE_SITE_DRAFT_BODY", ["airship_single_site_draft_action_mode_invalid"]);
       }
-      const migrationId = text(body.migrationId) || AIRSHIP_CHS_MIGRATION_ID;
+      const migrationId = text(body.migrationId);
+      if (!migrationId) {
+        return failure(400, "INVALID_AIRSHIP_SINGLE_SITE_DRAFT_BODY", ["airship_single_site_draft_migration_id_required"]);
+      }
       const draftEditId = text(body.draftEditId);
       if (draftEditRequired(actionMode) && !draftEditId) {
         return failure(400, "INVALID_AIRSHIP_SINGLE_SITE_DRAFT_BODY", ["airship_single_site_draft_edit_id_missing"]);

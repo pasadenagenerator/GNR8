@@ -25,10 +25,6 @@ export const AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION = "airship-4-dr
 
 export const AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions" as const;
 
-const HEADLINE_DRAFT_ID = "airship-chs-home-hero-headline";
-const SUBHEADING_DRAFT_ID = "airship-chs-home-hero-value-proposition";
-const CTA_DRAFT_ID = "airship-chs-home-contact-cta";
-
 type RuntimePrimitiveDeps = {
   getSiteVersion: typeof getSiteVersion;
   getArtifactById: typeof getArtifactById;
@@ -171,6 +167,23 @@ function acceptedOrSavedEdit(edit: AirshipSingleSiteDraftEdit | undefined): Airs
 
 function rejectedEdit(edit: AirshipSingleSiteDraftEdit | undefined): AirshipSingleSiteDraftEdit | null {
   return edit?.status === "rejected" ? edit : null;
+}
+
+type AirshipDraftFieldKey = "headline" | "subheading" | "ctaLabel";
+
+function draftFieldKey(draft: Pick<AirshipSingleSiteDraftEdit, "id" | "targetSectionPage"> & {
+  fieldKey?: unknown;
+}): AirshipDraftFieldKey | null {
+  if (draft.fieldKey === "headline" || draft.fieldKey === "subheading" || draft.fieldKey === "ctaLabel") return draft.fieldKey;
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/cta|call.to.action|button|contact/.test(haystack)) return "ctaLabel";
+  if (/subheading|subheadline|subtitle|value.proposition|body|description/.test(haystack)) return "subheading";
+  if (/headline|heading|hero|h1|title/.test(haystack)) return "headline";
+  return null;
+}
+
+function draftEditForField(drafts: AirshipSingleSiteDraftEdit[], fieldKey: AirshipDraftFieldKey): AirshipSingleSiteDraftEdit | undefined {
+  return drafts.find((draft) => draftFieldKey(draft) === fieldKey);
 }
 
 function styleSettingsFromDraft(draft: AirshipSingleSiteDraftRecord): AirshipSingleSiteDraftStyleSettings {
@@ -401,12 +414,13 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   if (!sourceArtifact) throw new Error(`source_live_runtime_artifact_not_found:${sourceLiveRuntimeArtifactId}`);
   if (sourceArtifact.siteVersionId !== sourceVersion.id) throw new Error("source_live_runtime_artifact_version_mismatch");
 
-  const headlineEdit = acceptedOrSavedEdit(input.draft.draftEdits.find((edit) => edit.id === HEADLINE_DRAFT_ID));
-  const subheadingEdit = acceptedOrSavedEdit(input.draft.draftEdits.find((edit) => edit.id === SUBHEADING_DRAFT_ID));
+  const headlineEdit = acceptedOrSavedEdit(draftEditForField(input.draft.draftEdits, "headline"));
+  const subheadingEdit = acceptedOrSavedEdit(draftEditForField(input.draft.draftEdits, "subheading"));
   if (!headlineEdit) throw new Error("accepted_headline_required");
   if (!subheadingEdit) throw new Error("saved_subheading_required");
-  const ctaEdit = acceptedOrSavedEdit(input.draft.draftEdits.find((edit) => edit.id === CTA_DRAFT_ID));
-  const rejectedCta = rejectedEdit(input.draft.draftEdits.find((edit) => edit.id === CTA_DRAFT_ID));
+  const ctaDraftEdit = draftEditForField(input.draft.draftEdits, "ctaLabel");
+  const ctaEdit = acceptedOrSavedEdit(ctaDraftEdit);
+  const rejectedCta = rejectedEdit(ctaDraftEdit);
 
   const appliedEdits = [headlineEdit, subheadingEdit, ctaEdit].filter((edit): edit is AirshipSingleSiteDraftEdit => Boolean(edit)).map((edit) => ({
     draftEditId: edit.id,

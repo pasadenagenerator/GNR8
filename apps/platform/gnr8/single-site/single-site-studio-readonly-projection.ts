@@ -155,6 +155,17 @@ function labelize(value: string): string {
   return value.replaceAll("_", " ");
 }
 
+function domainFromUrl(value: string | null | undefined): string | null {
+  const normalized = text(value);
+  if (!normalized) return null;
+  if (!/^https?:\/\//i.test(normalized) && !normalized.includes(".")) return null;
+  try {
+    return new URL(normalized).hostname.replace(/^www\./i, "");
+  } catch {
+    return normalized.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[/?#]/)[0]?.trim() || null;
+  }
+}
+
 function extractId(value: string | null | undefined): string | null {
   const normalized = text(value);
   if (!normalized) return null;
@@ -235,7 +246,7 @@ function previewState(input: {
       ? null
       : "Internal preview unavailable: missing runtime site version ref for this stage.",
     authNote: route
-      ? "Superadmin-only internal GNR8 preview. This is not the live CHS production domain."
+      ? "Superadmin-only internal GNR8 preview. This is not the live production domain."
       : "No internal GNR8 preview route can be constructed without a site version id.",
   };
 }
@@ -321,7 +332,10 @@ export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput)
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const migrationId = text(input.migrationId) ?? input.stateModel?.migration.migrationId ?? input.publishModel?.lookup.migrationId ?? null;
   const acceptance = input.publishModel?.internalMvpAcceptance;
-  const sourceUrl = input.stateModel?.migration.sourceUrl ?? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl;
+  const sourceUrl =
+    input.stateModel?.migration.sourceUrl ??
+    acceptance?.publicUrl ??
+    (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl : "Source URL unavailable");
   const originalCloneSiteVersionId =
     extractId(input.stateModel?.cloneReview.cloneSiteVersionRef) ?? (migrationId === CHS_MIGRATION_ID ? CHS_ORIGINAL_CLONE_SITE_VERSION_ID : null);
   const originalCloneArtifactId =
@@ -350,10 +364,14 @@ export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput)
     migrationId,
     diagnosticsHref: migrationId ? `/gnr8/command-center/single-site-publish?migrationId=${encodeURIComponent(migrationId)}` : "/gnr8/command-center/single-site-publish",
     summary: {
-      site: acceptance?.siteHost ?? input.stateModel?.migration.intendedLaunchDomain ?? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.siteHost,
+      site:
+        acceptance?.siteHost ??
+        input.stateModel?.migration.intendedLaunchDomain ??
+        domainFromUrl(sourceUrl) ??
+        (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.siteHost : "Imported single-site"),
       sourceUrl,
       mvpStatus: acceptance?.status ?? (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.displayStatus : "Internal single-site MVP status unavailable"),
-      liveSiteUrl: acceptance?.publicUrl ?? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl,
+      liveSiteUrl: acceptance?.publicUrl ?? (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl : sourceUrl),
       activePointer,
       publishedCandidate,
     },
@@ -407,8 +425,8 @@ export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput)
       {
         label: "Live published version",
         status: activePointer === "live" ? "live" : activePointer,
-        detail: acceptance?.publicUrl ?? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl,
-        href: acceptance?.publicUrl ?? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl,
+        detail: acceptance?.publicUrl ?? (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl : sourceUrl),
+        href: acceptance?.publicUrl ?? (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl : sourceUrl),
       },
     ],
     improvementSummary: {

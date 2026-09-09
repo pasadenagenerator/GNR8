@@ -3,9 +3,6 @@ import {
   type AirshipDraftCandidateCreationOutput,
 } from "@/gnr8/single-site/airship-single-site-draft-candidate-service";
 import { AirshipSingleSiteDraftService } from "@/gnr8/single-site/airship-single-site-draft-service";
-import {
-  AIRSHIP_CHS_MIGRATION_ID,
-} from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 import { requireSuperadminUserId } from "@/src/auth/require-superadmin-user-id";
 
 type ActionMode = "create_internal_preview_candidate";
@@ -171,7 +168,10 @@ export function createAirshipSingleSiteDraftCandidateRouteHandlers(deps: Partial
         return failure(400, "INVALID_AIRSHIP_DRAFT_CANDIDATE_BODY", ["airship_draft_candidate_action_mode_invalid"]);
       }
 
-      const migrationId = text(body.migrationId) || AIRSHIP_CHS_MIGRATION_ID;
+      const migrationId = text(body.migrationId);
+      if (!migrationId) {
+        return failure(400, "INVALID_AIRSHIP_DRAFT_CANDIDATE_BODY", ["airship_draft_candidate_migration_id_required"]);
+      }
       try {
         const draft = await resolvedDeps.service.readCurrentDraft(migrationId);
         if (!draft) return failure(409, "AIRSHIP_SAVED_DRAFT_REQUIRED", ["airship_saved_draft_required"]);

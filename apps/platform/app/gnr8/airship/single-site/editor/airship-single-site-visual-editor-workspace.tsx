@@ -3,6 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type {
+  AirshipImportedSiteEditorModel,
+  AirshipImportedSiteEditableSection,
+  AirshipSingleSiteDraftFieldKey,
   AirshipSingleSiteDraftPreview,
   AirshipSingleSiteDraftStyleSettings,
   AirshipSingleSiteImprovementDraft,
@@ -17,6 +20,7 @@ type Props = {
   importedSite: string;
   sourceUrl: string;
   liveSiteUrl: string;
+  importedSiteModel?: AirshipImportedSiteEditorModel;
   draftCandidate: {
     siteVersionId: string | null;
     runtimeArtifactId: string | null;
@@ -72,7 +76,7 @@ type DraftActionResponse = {
   error?: string;
 };
 
-type TextFieldKey = "headline" | "subheading" | "ctaLabel";
+type TextFieldKey = AirshipSingleSiteDraftFieldKey;
 type StyleFieldKey = "topPadding" | "bottomPadding" | "backgroundTint" | "ctaColor";
 type EditorSectionKey = "hero" | "cta" | "source";
 type EditorViewportKey = "desktop" | "tablet" | "mobile";
@@ -112,10 +116,6 @@ type DraftCandidateActionResponse = {
   error?: string;
 };
 
-const HEADLINE_DRAFT_ID = "airship-chs-home-hero-headline";
-const SUBHEADING_DRAFT_ID = "airship-chs-home-hero-value-proposition";
-const CTA_DRAFT_ID = "airship-chs-home-contact-cta";
-
 const STYLE_DRAFT_SAVED_MESSAGE = "Style changes are saved to Airship draft only. Not live. Not published.";
 const CONNECT_OPENAI_MESSAGE = "Connect OpenAI to use AI commands.";
 
@@ -133,10 +133,10 @@ const ctaOptions = [
   { label: "Emerald", value: "#047857" },
 ];
 
-const sectionOptions: Array<{ key: EditorSectionKey; label: string; detail: string }> = [
-  { key: "hero", label: "Hero / intro", detail: "Headline, subheading, spacing, tint" },
-  { key: "cta", label: "CTA", detail: "Primary action label and color" },
-  { key: "source", label: "Source material", detail: "CHS evidence and internal draft refs" },
+const fallbackSectionOptions: AirshipImportedSiteEditableSection[] = [
+  { key: "hero", label: "Hero / intro", detail: "Headline, subheading, spacing, tint", mappedDraftFieldIds: [], sourceStatus: "partial source-supported hero draft fields" },
+  { key: "cta", label: "CTA", detail: "Primary action label and color", mappedDraftFieldIds: [], sourceStatus: "CTA draft field unavailable from source evidence" },
+  { key: "source", label: "Source material", detail: "Imported-site evidence and internal draft refs", mappedDraftFieldIds: [], sourceStatus: "source material readback only" },
 ];
 
 const viewportOptions: Array<{ key: EditorViewportKey; label: string; width: number }> = [
@@ -376,10 +376,17 @@ function providerBadgeLabel(status: AirshipOpenAIProviderStatusReadModel): strin
   return "Not connected";
 }
 
-function draftIdForField(field: "headline" | "subheading" | "ctaLabel"): string {
-  if (field === "headline") return HEADLINE_DRAFT_ID;
-  if (field === "subheading") return SUBHEADING_DRAFT_ID;
-  return CTA_DRAFT_ID;
+function draftFieldKey(draft: AirshipSingleSiteImprovementDraft): TextFieldKey | null {
+  if (draft.fieldKey === "headline" || draft.fieldKey === "subheading" || draft.fieldKey === "ctaLabel") return draft.fieldKey;
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/cta|call.to.action|button|contact/.test(haystack)) return "ctaLabel";
+  if (/subheading|subheadline|subtitle|value.proposition|body|description/.test(haystack)) return "subheading";
+  if (/headline|heading|hero|h1|title/.test(haystack)) return "headline";
+  return null;
+}
+
+function draftIdForField(field: TextFieldKey, drafts: AirshipSingleSiteImprovementDraft[]): string | null {
+  return drafts.find((draft) => draftFieldKey(draft) === field)?.id ?? null;
 }
 
 export function applyAirshipHeroTextFieldEdit(input: {
@@ -391,7 +398,11 @@ export function applyAirshipHeroTextFieldEdit(input: {
   fields: AirshipHeroEditorFields;
   drafts: AirshipSingleSiteImprovementDraft[];
 } {
-  const draftId = draftIdForField(input.field);
+  const draftId = draftIdForField(input.field, input.drafts);
+  if (!draftId) return {
+    fields: { ...input.fields, [input.field]: input.value },
+    drafts: input.drafts,
+  };
   return {
     fields: { ...input.fields, [input.field]: input.value },
     drafts: input.drafts.map((draft) =>
@@ -412,10 +423,13 @@ export function sectionStyleFields(section: EditorSectionKey): StyleFieldKey[] {
   return ["topPadding", "bottomPadding", "backgroundTint"];
 }
 
-export function mappedAirshipDraftFieldIdsForSection(section: EditorSectionKey): string[] {
-  if (section === "hero") return [HEADLINE_DRAFT_ID, SUBHEADING_DRAFT_ID];
-  if (section === "cta") return [CTA_DRAFT_ID];
-  return [HEADLINE_DRAFT_ID, SUBHEADING_DRAFT_ID, CTA_DRAFT_ID];
+export function mappedAirshipDraftFieldIdsForSection(section: EditorSectionKey, drafts: AirshipSingleSiteImprovementDraft[] = []): string[] {
+  if (section === "hero") return drafts.filter((draft) => {
+    const field = draftFieldKey(draft);
+    return field === "headline" || field === "subheading";
+  }).map((draft) => draft.id);
+  if (section === "cta") return drafts.filter((draft) => draftFieldKey(draft) === "ctaLabel").map((draft) => draft.id);
+  return drafts.map((draft) => draft.id);
 }
 
 export function airshipCanvasSelectorForSection(section: EditorSectionKey): string {
@@ -453,8 +467,10 @@ export function deriveAirshipSelectedElementMetadata(input: {
   viewportWidth: number;
   draftMeta: Pick<Props["persistence"], "label" | "draftId" | "draftStatus" | "version" | "lastSavedAt">;
   draftCandidate: Props["draftCandidate"];
+  editableSections?: AirshipImportedSiteEditableSection[];
 }): AirshipSelectedElementMetadata {
-  const option = sectionOptions.find((section) => section.key === input.section);
+  const sections = input.editableSections?.length ? input.editableSections : fallbackSectionOptions;
+  const option = sections.find((section) => section.key === input.section);
   const sectionLabel = option?.label ?? "Hero / intro";
   const draftStatus = input.draftMeta.draftStatus ?? input.draftMeta.label;
   const baseRefs = [
@@ -483,9 +499,9 @@ export function deriveAirshipSelectedElementMetadata(input: {
       label: sectionLabel,
       domSectionId: "airship-preview-primary-cta",
       role: "button / primary action",
-      sourceStatus: "source-supported CTA draft field",
+      sourceStatus: option?.sourceStatus ?? "source-supported CTA draft field",
       draftStatus,
-      mappedDraftFieldIds: mappedAirshipDraftFieldIdsForSection("cta"),
+      mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
       sizeLabel: "auto button in CTA row",
       internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
     };
@@ -496,9 +512,9 @@ export function deriveAirshipSelectedElementMetadata(input: {
       label: sectionLabel,
       domSectionId: "airship-preview-source-material",
       role: "source evidence strip",
-      sourceStatus: "source material readback only",
+      sourceStatus: option?.sourceStatus ?? "source material readback only",
       draftStatus,
-      mappedDraftFieldIds: mappedAirshipDraftFieldIdsForSection("source"),
+      mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
       sizeLabel: `full frame width in ${input.viewportLabel}`,
       internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
     };
@@ -508,9 +524,9 @@ export function deriveAirshipSelectedElementMetadata(input: {
     label: sectionLabel,
     domSectionId: "airship-preview-hero-intro",
     role: "region / homepage hero intro",
-    sourceStatus: "source-supported hero draft fields",
+    sourceStatus: option?.sourceStatus ?? "source-supported hero draft fields",
     draftStatus,
-    mappedDraftFieldIds: mappedAirshipDraftFieldIdsForSection("hero"),
+    mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
     sizeLabel: `${input.viewportWidth}px frame, min-height 498px`,
     internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
   };
@@ -641,6 +657,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const styleSaveRequestRef = useRef(0);
   const providerConnected = isAirshipOpenAIProviderConnected(providerStatus);
   const selectedViewport = viewportOptions.find((option) => option.key === viewport) ?? viewportOptions[0];
+  const sectionOptions = props.importedSiteModel?.editableSections.length ? props.importedSiteModel.editableSections : fallbackSectionOptions;
   const selectedSectionLabel = sectionOptions.find((section) => section.key === selectedSection)?.label ?? "Hero / intro";
   const saveStateStatus = saveStateCopy[saveState];
   const selectedElementMetadata = deriveAirshipSelectedElementMetadata({
@@ -653,16 +670,17 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     viewportWidth: selectedViewport.width,
     draftMeta,
     draftCandidate: previewCandidate,
+    editableSections: sectionOptions,
   });
   const selectedStyleValueRows = deriveAirshipStyleValueRows(selectedSection, fields);
   const activeAgentProfile = agentProfileSelection.activeProfile;
 
   const selectedDrafts = useMemo(
     () => {
-      const ids = new Set(mappedAirshipDraftFieldIdsForSection(selectedSection));
+      const ids = new Set(sectionOptions.find((section) => section.key === selectedSection)?.mappedDraftFieldIds ?? mappedAirshipDraftFieldIdsForSection(selectedSection, editableDrafts));
       return editableDrafts.filter((draft) => ids.has(draft.id));
     },
-    [editableDrafts, selectedSection],
+    [editableDrafts, sectionOptions, selectedSection],
   );
 
   useEffect(() => {
@@ -848,7 +866,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     try {
       let latestDraft: NonNullable<DraftActionResponse["draft"]> | null = null;
       for (const field of changedFields) {
-        latestDraft = await saveDraftText(draftIdForField(field), nextFields[field]);
+        const draftId = draftIdForField(field, editableDrafts);
+        if (!draftId) continue;
+        latestDraft = await saveDraftText(draftId, nextFields[field]);
       }
       const nextSavedFields = {
         ...savedFieldsRef.current,
@@ -917,7 +937,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     rememberUndoSnapshot();
     setFields(result.fields);
     for (const field of result.changedTextFields) {
-      const draftId = draftIdForField(field);
+      const draftId = draftIdForField(field, editableDrafts);
+      if (!draftId) continue;
       const proposedTextContent = result.fields[field];
       setEditableDrafts((current) =>
         current.map((draft) => draft.id === draftId ? { ...draft, proposedTextContent, status: draft.status === "accepted" || draft.status === "rejected" || draft.status === "proposed" ? "edited" : draft.status } : draft),
@@ -1665,6 +1686,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   viewportWidth: selectedViewport.width,
                   draftMeta,
                   draftCandidate: previewCandidate,
+                  editableSections: sectionOptions,
                 }).domSectionId}
                 onClick={() => selectSection(section.key)}
               >
@@ -1774,7 +1796,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <span>
                     <strong>Source material</strong>
                     <span style={{ display: "block", color: "#64748b", fontSize: 12, marginTop: 2 }}>
-                      CHS draft evidence stays inside the internal editor workspace.
+                      Imported-site draft evidence stays inside the internal editor workspace.
                     </span>
                   </span>
                   <span style={{ color: "#0f766e", fontSize: 12, fontWeight: 900 }}>Draft only</span>
@@ -1917,7 +1939,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                     <span>Read-only reference in this editor.</span>
                   </div>
                   <div className="airship-scope-cell">
-                    <strong>Live CHS site</strong>
+                    <strong>Live {props.importedSite} site</strong>
                     <span>Separate and unchanged.</span>
                   </div>
                 </div>
@@ -1963,7 +1985,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   {providerConnectionMessage(providerStatus)}
                 </div>
                 <div className="airship-muted">Commands run through the local Airship draft interpreter in this shell. No OpenAI command request is sent.</div>
-                <textarea rows={3} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="spremeni CTA v Kontaktirajte CHS" style={inputStyle(true)} />
+                <textarea rows={3} value={command} onChange={(event) => setCommand(event.target.value)} placeholder={`spremeni CTA v Kontaktirajte ${props.importedSite}`} style={inputStyle(true)} />
                 <button
                   type="button"
                   disabled={busy || command.trim().length === 0}

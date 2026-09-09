@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   airshipChsDraftContainsForbiddenMaverCopy,
+  airshipDraftIdForImportedSiteField,
   buildAirshipSingleSiteEditorReadonlyProjection,
 } from "./airship-single-site-editor-readonly-projection";
 import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
@@ -40,7 +41,23 @@ const studioProjection: SingleSiteStudioReadonlyProjection = {
     status: "accepted",
   },
   workflow: [],
-  sourceEvidence: [],
+  sourceEvidence: [
+    {
+      label: "Hero headline",
+      status: "present",
+      detail: "Captured CHS homepage evidence includes hero headline `Less risk. More control. Better IT.`.",
+    },
+    {
+      label: "Service positioning",
+      status: "present",
+      detail: "Captured CHS source evidence includes value proposition `Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.`.",
+    },
+    {
+      label: "Contact action",
+      status: "present",
+      detail: "Captured CHS contact evidence includes `Contact CHS at sales@chs.si`, `sales@chs.si`, and a homepage contact form.",
+    },
+  ],
   previews: {
     originalClone: {
       label: "Original clone preview",
@@ -79,6 +96,22 @@ const studioProjection: SingleSiteStudioReadonlyProjection = {
   },
 };
 
+const CHS_HEADLINE_DRAFT_ID = airshipDraftIdForImportedSiteField({
+  migrationId: CHS_MIGRATION_ID,
+  siteLabel: "chs.si",
+  fieldKey: "headline",
+});
+const CHS_SUBHEADING_DRAFT_ID = airshipDraftIdForImportedSiteField({
+  migrationId: CHS_MIGRATION_ID,
+  siteLabel: "chs.si",
+  fieldKey: "subheading",
+});
+const CHS_CTA_DRAFT_ID = airshipDraftIdForImportedSiteField({
+  migrationId: CHS_MIGRATION_ID,
+  siteLabel: "chs.si",
+  fieldKey: "ctaLabel",
+});
+
 test("airship projection generates the first concrete CHS AI draft and local-only preview", () => {
   const model = buildAirshipSingleSiteEditorReadonlyProjection({
     migrationId: CHS_MIGRATION_ID,
@@ -96,6 +129,11 @@ test("airship projection generates the first concrete CHS AI draft and local-onl
     model.draftPanel.drafts.map((draft) => draft.targetSectionPage).join("|"),
     "Homepage / hero headline|Homepage / hero subheading|Homepage / contact call-to-action",
   );
+  assert.deepEqual(
+    model.importedSiteModel.editableSections.find((section) => section.key === "hero")?.mappedDraftFieldIds,
+    [CHS_HEADLINE_DRAFT_ID, CHS_SUBHEADING_DRAFT_ID],
+  );
+  assert.equal(model.importedSiteModel.sourceEvidenceSummary.status, "source_supported");
   assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent === "Less risk. More control. Better IT."), true);
   assert.equal(
     model.draftPanel.drafts.some((draft) =>
@@ -181,7 +219,7 @@ test("airship projection reloads saved draft edits from persistent storage", () 
     backgroundTint: "#eef6ff",
     ctaColor: "#1d4ed8",
   });
-  assert.equal(model.draftPanel.drafts.find((draft) => draft.id === "airship-chs-home-hero-headline")?.proposedTextContent, "CHS helps modernize enterprise IT");
+  assert.equal(model.draftPanel.drafts.find((draft) => draft.id === CHS_HEADLINE_DRAFT_ID)?.proposedTextContent, "CHS helps modernize enterprise IT");
   assert.equal(model.draftPanel.draftPreview?.persistence, "saved_airship_draft");
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS helps modernize enterprise IT");
   assert.equal(model.draftPanel.draftPreview?.appliedToLiveSite, false);
@@ -214,19 +252,19 @@ test("airship projection exposes a saved draft candidate as internal preview onl
       },
       appliedEdits: [
         {
-          draftEditId: "airship-chs-home-hero-headline",
+            draftEditId: CHS_HEADLINE_DRAFT_ID,
           targetSectionPage: "Homepage / hero headline",
           appliedTextContent: "CHS helps modernize secure enterprise IT",
         },
         {
-          draftEditId: "airship-chs-home-hero-value-proposition",
+            draftEditId: CHS_SUBHEADING_DRAFT_ID,
           targetSectionPage: "Homepage / hero subheading",
           appliedTextContent: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region.",
         },
       ],
       skippedEdits: [
         {
-          draftEditId: "airship-chs-home-contact-cta",
+            draftEditId: CHS_CTA_DRAFT_ID,
           targetSectionPage: "Homepage / contact call-to-action",
           skippedTextContent: "Contact CHS at sales@chs.si",
           reason: "rejected",
@@ -254,4 +292,128 @@ test("airship CHS draft guard detects Maver transport identity leaks", () => {
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy("Prevozi vozil po Evropi od leta 1982"), true);
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy("15 avtotransporterjev"), true);
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy("CHS d.o.o. enterprise IT"), false);
+});
+
+test("airship projection builds a second imported-site model without CHS copy", () => {
+  const migrationId = "11111111-2222-4333-8444-555555555555";
+  const studioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    migrationId,
+    diagnosticsHref: `/gnr8/command-center/single-site-publish?migrationId=${migrationId}`,
+    summary: {
+      site: "luna.example",
+      sourceUrl: "https://luna.example/",
+      mvpStatus: "Internal single-site MVP accepted",
+      liveSiteUrl: "https://luna.example/",
+      activePointer: "not_live",
+      publishedCandidate: "DRAFT",
+    },
+    sourceTruth: {
+      tenantId: "tenant-luna",
+      clientId: "client-luna",
+      siteId: "site-luna",
+      ownershipSiteId: null,
+      runtimeSiteId: "runtime-luna",
+    },
+    sourceEvidence: [
+      { label: "Hero headline", status: "present", detail: "Captured source headline `Luna Books for curious teams`." },
+      { label: "Service positioning", status: "present", detail: "Captured value proposition `Editorial research, launch notes, and reading operations for product teams.`." },
+      { label: "Contact action", status: "present", detail: "Captured contact evidence includes `Contact Luna at hello@luna.example`." },
+    ],
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId,
+    studioModel,
+    generatedAt: "2026-09-02T00:10:00.000Z",
+  });
+
+  assert.equal(model.importedSite, "luna.example");
+  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.draftPreview?.hero.eyebrow, "LUNA");
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "Luna Books for curious teams");
+  assert.equal(model.draftPanel.draftPreview?.hero.subheading, "Editorial research, launch notes, and reading operations for product teams.");
+  assert.equal(model.draftPanel.draftPreview?.hero.primaryCtaLabel, "Contact Luna at hello@luna.example");
+  assert.equal(JSON.stringify(model).includes("chs.si"), false);
+  assert.equal(JSON.stringify(model).includes("CHS"), false);
+  assert.equal(JSON.stringify(model).includes("Maver"), false);
+});
+
+test("airship projection keeps CHS free of Maver copy unless CHS source evidence contains it", () => {
+  const contaminatedDraft: AirshipSingleSiteDraftRecord = {
+    id: "draft-chs-contaminated",
+    migrationId: CHS_MIGRATION_ID,
+    tenantId: "tenant-chs",
+    clientId: "client-chs",
+    siteId: "site-chs",
+    agencyId: null,
+    sourceUrl: "https://www.chs.si/",
+    targetSiteVersionRefs: {
+      originalCloneSiteVersionId: ORIGINAL_CLONE_VERSION_ID,
+      originalCloneRuntimeArtifactId: "929106cd-fa19-47eb-9582-ce6931d0e370",
+      improvedCandidateSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      improvedCandidateRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    },
+    draftEdits: [{
+      id: CHS_HEADLINE_DRAFT_ID,
+      targetSectionPage: "Homepage / hero headline",
+      currentTextContentSummary: "Wrong imported-site copy.",
+      proposedTextContent: "Transporti Maver vehicle transport across Europe",
+      reasonForChange: "Wrong source.",
+      status: "edited",
+      previewImpact: "Should be ignored for CHS.",
+    }],
+    draftStatus: "draft",
+    version: 9,
+    semanticWatermark: "airship-single-site-editor-draft:contaminated",
+    metadata: { liveBoundary: "not_applied_to_live_site" },
+    createdByActorId: "superadmin",
+    updatedByActorId: "superadmin",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-02T00:00:00.000Z",
+    updatedAt: "2026-09-02T00:09:00.000Z",
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: studioProjection,
+    persistedDraft: contaminatedDraft,
+  });
+
+  assert.equal(model.draftPanel.persistence.draftId, null);
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "Less risk. More control. Better IT.");
+  assert.equal(airshipChsDraftContainsForbiddenMaverCopy(model), false);
+});
+
+test("airship projection handles missing or partial source evidence without CHS fallback copy", () => {
+  const migrationId = "22222222-3333-4444-8555-666666666666";
+  const studioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    migrationId,
+    summary: {
+      site: "partial.example",
+      sourceUrl: "https://partial.example/",
+      mvpStatus: "Internal single-site MVP status unavailable",
+      liveSiteUrl: "https://partial.example/",
+      activePointer: "unknown",
+      publishedCandidate: "unknown",
+    },
+    sourceTruth: null,
+    sourceEvidence: [
+      { label: "Source evidence", status: "missing", detail: "No source evidence review was available for this migration lookup." },
+    ],
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId,
+    studioModel,
+  });
+
+  assert.equal(model.draftPanel.drafts.length, 0);
+  assert.equal(model.draftPanel.draftPreview, null);
+  assert.equal(model.importedSiteModel.sourceEvidenceSummary.status, "partial_evidence");
+  assert.equal(model.aiImprovementStatus.deterministicEditableChangesGenerated, false);
+  assert.equal(JSON.stringify(model).includes("Less risk. More control. Better IT."), false);
+  assert.equal(JSON.stringify(model).includes("Contact CHS"), false);
 });

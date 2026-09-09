@@ -29,9 +29,16 @@ export type AirshipSingleSiteLocalDraftFields = {
   primaryCtaLabel: string;
 };
 
-const HEADLINE_DRAFT_ID = "airship-chs-home-hero-headline";
-const SUBHEADING_DRAFT_ID = "airship-chs-home-hero-value-proposition";
-const CTA_DRAFT_ID = "airship-chs-home-contact-cta";
+type DraftFieldKey = "headline" | "subheading" | "ctaLabel";
+
+function draftFieldKey(draft: AirshipSingleSiteImprovementDraft): DraftFieldKey | null {
+  if (draft.fieldKey === "headline" || draft.fieldKey === "subheading" || draft.fieldKey === "ctaLabel") return draft.fieldKey;
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/cta|call.to.action|button|contact/.test(haystack)) return "ctaLabel";
+  if (/subheading|subheadline|subtitle|value.proposition|body|description/.test(haystack)) return "subheading";
+  if (/headline|heading|hero|h1|title/.test(haystack)) return "headline";
+  return null;
+}
 
 export function initialAirshipSingleSiteLocalDraftFields(preview: AirshipSingleSiteDraftPreview): AirshipSingleSiteLocalDraftFields {
   return {
@@ -49,15 +56,16 @@ export function applyAirshipSingleSiteLocalDraftEdit(input: {
   drafts: AirshipSingleSiteImprovementDraft[];
   draftPreview: AirshipSingleSiteDraftPreview;
 } {
-  const nextTextByDraftId = new Map([
-    [HEADLINE_DRAFT_ID, input.fields.headline],
-    [SUBHEADING_DRAFT_ID, input.fields.subheading],
-    [CTA_DRAFT_ID, input.fields.primaryCtaLabel],
+  const nextTextByField = new Map<DraftFieldKey, string>([
+    ["headline", input.fields.headline],
+    ["subheading", input.fields.subheading],
+    ["ctaLabel", input.fields.primaryCtaLabel],
   ]);
 
   return {
     drafts: input.drafts.map((draft) => {
-      const nextText = nextTextByDraftId.get(draft.id);
+      const fieldKey = draftFieldKey(draft);
+      const nextText = fieldKey ? nextTextByField.get(fieldKey) : undefined;
       if (nextText === undefined) return draft;
       return {
         ...draft,
@@ -78,16 +86,16 @@ export function applyAirshipSingleSiteLocalDraftEdit(input: {
 }
 
 function draftPreviewValue(input: {
-  draftId: string;
+  fieldKey: DraftFieldKey;
   drafts: AirshipSingleSiteImprovementDraft[];
   baselinePreview: AirshipSingleSiteDraftPreview;
 }): string | null {
-  const draft = input.drafts.find((item) => item.id === input.draftId);
+  const draft = input.drafts.find((item) => draftFieldKey(item) === input.fieldKey);
   if (!draft) return null;
   if (draft.status !== "rejected") return draft.proposedTextContent;
-  if (input.draftId === HEADLINE_DRAFT_ID) return input.baselinePreview.hero.headline;
-  if (input.draftId === SUBHEADING_DRAFT_ID) return input.baselinePreview.hero.subheading;
-  if (input.draftId === CTA_DRAFT_ID) return input.baselinePreview.hero.primaryCtaLabel;
+  if (input.fieldKey === "headline") return input.baselinePreview.hero.headline;
+  if (input.fieldKey === "subheading") return input.baselinePreview.hero.subheading;
+  if (input.fieldKey === "ctaLabel") return input.baselinePreview.hero.primaryCtaLabel;
   return draft.proposedTextContent;
 }
 
@@ -99,9 +107,9 @@ function draftPreviewFromDrafts(input: {
     ...input.baselinePreview,
     hero: {
       ...input.baselinePreview.hero,
-      headline: draftPreviewValue({ ...input, draftId: HEADLINE_DRAFT_ID }) ?? input.baselinePreview.hero.headline,
-      subheading: draftPreviewValue({ ...input, draftId: SUBHEADING_DRAFT_ID }) ?? input.baselinePreview.hero.subheading,
-      primaryCtaLabel: draftPreviewValue({ ...input, draftId: CTA_DRAFT_ID }) || null,
+      headline: draftPreviewValue({ ...input, fieldKey: "headline" }) ?? input.baselinePreview.hero.headline,
+      subheading: draftPreviewValue({ ...input, fieldKey: "subheading" }) ?? input.baselinePreview.hero.subheading,
+      primaryCtaLabel: draftPreviewValue({ ...input, fieldKey: "ctaLabel" }) || null,
     },
   };
 }

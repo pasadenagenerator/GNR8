@@ -4,7 +4,6 @@ import {
   unavailableAirshipAgencyAISettingsReadModel,
 } from "@/gnr8/single-site/airship-agent-profile-settings";
 import {
-  AIRSHIP_CHS_MIGRATION_ID,
   getAirshipSingleSiteEditorReadonlyProjection,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 
@@ -30,7 +29,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
   await requireSuperadminUserIdForPage();
   const searchParams = props.searchParams ? await props.searchParams : undefined;
   const model = await getAirshipSingleSiteEditorReadonlyProjection({
-    migrationId: param(searchParams?.migrationId) ?? AIRSHIP_CHS_MIGRATION_ID,
+    migrationId: param(searchParams?.migrationId),
   });
   const aiSettings = await readAirshipAgencyAISettings()
     .catch(() => unavailableAirshipAgencyAISettingsReadModel());
@@ -58,6 +57,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
       importedSite={model.importedSite}
       sourceUrl={model.sourceUrl}
       liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
       draftCandidate={model.previews.airshipDraftCandidate ? {
         siteVersionId: model.previews.airshipDraftCandidate.siteVersionId,
         runtimeArtifactId: model.previews.airshipDraftCandidate.runtimeArtifactId,

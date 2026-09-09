@@ -73,6 +73,62 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
     migrationId: CHS_MIGRATION_ID,
     importedSite: "chs.si",
     sourceUrl: "https://www.chs.si/",
+    importedSiteModel: {
+      siteLabel: "chs.si",
+      sourceUrl: "https://www.chs.si/",
+      liveUrl: "https://www.chs.si/",
+      sourceEvidenceSummary: {
+        status: "source_supported",
+        detail: "3 source evidence item(s) available for chs.si.",
+        evidenceItems: [
+          { label: "Hero headline", status: "present", detail: "Captured CHS homepage evidence includes hero headline `Less risk. More control. Better IT.`." },
+          { label: "Service positioning", status: "present", detail: "Captured CHS source evidence includes value proposition `Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.`." },
+          { label: "Contact action", status: "present", detail: "Captured CHS contact evidence includes `Contact CHS at sales@chs.si`, `sales@chs.si`, and a homepage contact form." },
+        ],
+      },
+      editableSections: [
+        {
+          key: "hero",
+          label: "Hero / intro",
+          detail: "Headline, subheading, spacing, tint",
+          mappedDraftFieldIds: ["airship-chs-home-hero-headline", "airship-chs-home-hero-value-proposition"],
+          sourceStatus: "source-supported hero draft fields",
+        },
+        {
+          key: "cta",
+          label: "CTA",
+          detail: "Primary action label and color",
+          mappedDraftFieldIds: ["airship-chs-home-contact-cta"],
+          sourceStatus: "source-supported CTA draft field",
+        },
+        {
+          key: "source",
+          label: "Source material",
+          detail: "Imported-site evidence and internal draft refs",
+          mappedDraftFieldIds: ["airship-chs-home-hero-headline", "airship-chs-home-hero-value-proposition", "airship-chs-home-contact-cta"],
+          sourceStatus: "source material readback only",
+        },
+      ],
+      draftFields: [
+        { fieldKey: "headline", draftId: "airship-chs-home-hero-headline", label: "Homepage / hero headline", sectionKey: "hero", sourceStatus: "source-supported" },
+        { fieldKey: "subheading", draftId: "airship-chs-home-hero-value-proposition", label: "Homepage / hero subheading", sectionKey: "hero", sourceStatus: "source-supported" },
+        { fieldKey: "ctaLabel", draftId: "airship-chs-home-contact-cta", label: "Homepage / contact call-to-action", sectionKey: "cta", sourceStatus: "source-supported" },
+      ],
+      latestDraft: {
+        draftId: null,
+        draftStatus: null,
+        version: null,
+        lastSavedAt: null,
+      },
+      latestInternalPreviewCandidate: null,
+      publishedVersionRefs: {
+        siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+        runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+        liveUrl: "https://www.chs.si/",
+        activePointer: "live",
+        publishedCandidate: "PUBLISHED",
+      },
+    },
     studioSourceTruth: {
       tenantId: "tenant-chs",
       clientId: "client-chs",
@@ -85,7 +141,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
     mvpStatus: "Internal single-site MVP accepted",
     aiImprovementStatus: {
       label: "Editable AI draft generated",
-      detail: "3 proposed Airship draft edit(s) generated for the imported CHS homepage. Browser edits are local-only and are not applied to the live site.",
+      detail: "3 proposed Airship draft edit(s) generated for the imported chs.si homepage from source evidence. Browser edits are local-only and are not applied to the live site.",
       deterministicEditableChangesGenerated: true,
     },
     previews: {
@@ -173,6 +229,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
       drafts: [
         {
           id: "airship-chs-home-hero-headline",
+          fieldKey: "headline",
           targetSectionPage: "Homepage / hero headline",
           currentTextContentSummary: "Captured CHS homepage evidence includes the hero line `Less risk. More control. Better IT.` and the CHS identity in the page title and footer.",
           proposedTextContent: "Less risk. More control. Better IT.",
@@ -182,6 +239,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         },
         {
           id: "airship-chs-home-hero-value-proposition",
+          fieldKey: "subheading",
           targetSectionPage: "Homepage / hero subheading",
           currentTextContentSummary: "Captured CHS source evidence says CHS delivers advanced solutions in cybersecurity, data systems, and hybrid infrastructure across the Adriatic region.",
           proposedTextContent: "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
@@ -191,6 +249,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         },
         {
           id: "airship-chs-home-contact-cta",
+          fieldKey: "ctaLabel",
           targetSectionPage: "Homepage / contact call-to-action",
           currentTextContentSummary: "Captured CHS source evidence includes `Contact us`, `sales@chs.si`, and a homepage contact form.",
           proposedTextContent: "Contact CHS at sales@chs.si",
@@ -384,7 +443,7 @@ test("airship visual editor route is superadmin-gated and renders the workspace"
   assert.equal(pageSource.includes("requireSuperadminUserIdForPage()"), true);
   assert.equal(pageSource.includes("getAirshipSingleSiteEditorReadonlyProjection"), true);
   assert.equal(pageSource.includes("AirshipSingleSiteVisualEditorWorkspace"), true);
-  assert.equal(pageSource.includes("AIRSHIP_CHS_MIGRATION_ID"), true);
+  assert.equal(pageSource.includes("AIRSHIP_CHS_MIGRATION_ID"), false);
   assert.equal(pageSource.includes("readAirshipAgencyAISettings"), true);
   assert.equal(pageSource.includes("agentProfileSelection={aiSettings.selectedAirshipProfile}"), true);
 });
@@ -398,6 +457,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
       importedSite={model.importedSite}
       sourceUrl={model.sourceUrl}
       liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
       draftCandidate={{
         siteVersionId: model.previews.airshipDraftCandidate?.siteVersionId ?? null,
         runtimeArtifactId: model.previews.airshipDraftCandidate?.runtimeArtifactId ?? null,
@@ -456,7 +516,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Live site unchanged"), true);
   assert.equal(html.includes("Airship draft"), true);
   assert.equal(html.includes("Published candidate"), true);
-  assert.equal(html.includes("Live CHS site"), true);
+  assert.equal(html.includes("Live chs.si site"), true);
   assert.equal(html.includes("Text and style saves persist here"), true);
   assert.equal(html.includes("Open internal preview"), true);
   assert.equal(html.includes("Apply saved draft to preview"), true);
@@ -544,6 +604,7 @@ test("airship visual editor derives selected element DOM metadata per section", 
     viewportLabel: "Desktop",
     viewportWidth: 1100,
     draftMeta: model.draftPanel.persistence,
+    editableSections: model.importedSiteModel.editableSections,
     draftCandidate: {
       siteVersionId: model.previews.airshipDraftCandidate?.siteVersionId ?? null,
       runtimeArtifactId: model.previews.airshipDraftCandidate?.runtimeArtifactId ?? null,
@@ -590,7 +651,7 @@ test("airship visual editor inspector scopes Edit and CSS fields to the selected
   assert.deepEqual(sectionStyleFields("hero"), ["topPadding", "bottomPadding", "backgroundTint"]);
   assert.deepEqual(sectionStyleFields("cta"), ["ctaColor"]);
   assert.deepEqual(sectionStyleFields("source"), []);
-  assert.deepEqual(mappedAirshipDraftFieldIdsForSection("cta"), ["airship-chs-home-contact-cta"]);
+  assert.deepEqual(mappedAirshipDraftFieldIdsForSection("cta", model.draftPanel.drafts), ["airship-chs-home-contact-cta"]);
 
   assert.deepEqual(deriveAirshipStyleValueRows("hero", fields), [
     { label: "padding-top", value: "72px" },
@@ -613,6 +674,7 @@ test("airship visual editor renders safe provider read error state without expos
       importedSite={model.importedSite}
       sourceUrl={model.sourceUrl}
       liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
       draftCandidate={null}
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}
@@ -677,6 +739,7 @@ test("airship visual editor renders connected provider status from backend readb
       importedSite={model.importedSite}
       sourceUrl={model.sourceUrl}
       liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
       draftCandidate={null}
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}
@@ -933,11 +996,11 @@ test("airship single-site editor CHS draft contains no Maver transport copy", ()
   assert.doesNotMatch(html, /Prevozi vozil|prevoz vozil|avtotransporter|vehicle transport/i);
 });
 
-test("airship single-site route is superadmin-gated and defaults to the CHS migration", async () => {
+test("airship single-site route is superadmin-gated and does not default to CHS", async () => {
   const pageSource = await readFile(PAGE_FILE, "utf8");
 
   assert.equal(pageSource.includes("requireSuperadminUserIdForPage()"), true);
-  assert.equal(pageSource.includes("AIRSHIP_CHS_MIGRATION_ID"), true);
+  assert.equal(pageSource.includes("AIRSHIP_CHS_MIGRATION_ID"), false);
   assert.equal(pageSource.includes("getAirshipSingleSiteEditorReadonlyProjection"), true);
 });
 

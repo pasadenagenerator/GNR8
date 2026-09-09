@@ -423,3 +423,73 @@ test("applies saved CTA text when the CTA draft edit is accepted", async () => {
   assert.match(artifact?.htmlByPath["/"] ?? "", /Email CHS sales/);
   assert.doesNotMatch(artifact?.htmlByPath["/"] ?? "", /Contact us/);
 });
+
+test("creates an internal draft candidate from generic imported-site draft fields", async () => {
+  const deps = fakeDeps();
+  const draft = savedDraft();
+  draft.id = "draft-luna-generic";
+  draft.migrationId = "11111111-2222-4333-8444-555555555555";
+  draft.tenantId = "tenant-luna";
+  draft.clientId = "client-luna";
+  draft.siteId = "site-luna";
+  draft.sourceUrl = "https://luna.example/";
+  draft.version = 1;
+  draft.draftEdits = [
+    {
+      id: "airship-luna-example-home-headline",
+      targetSectionPage: "Homepage / hero headline",
+      currentTextContentSummary: "Captured source headline.",
+      proposedTextContent: "Luna Books for curious teams",
+      reasonForChange: "Accepted operator edit.",
+      status: "accepted",
+      previewImpact: "Headline appears in internal preview only.",
+    },
+    {
+      id: "airship-luna-example-home-subheading",
+      targetSectionPage: "Homepage / hero subheading",
+      currentTextContentSummary: "Captured source subheading.",
+      proposedTextContent: "Editorial research, launch notes, and reading operations for product teams.",
+      reasonForChange: "Saved operator edit.",
+      status: "edited",
+      previewImpact: "Subheading appears in internal preview only.",
+    },
+    {
+      id: "airship-luna-example-home-ctaLabel",
+      targetSectionPage: "Homepage / contact call-to-action",
+      currentTextContentSummary: "Captured contact action.",
+      proposedTextContent: "Contact Luna at hello@luna.example",
+      reasonForChange: "Accepted operator edit.",
+      status: "accepted",
+      previewImpact: "CTA appears in internal preview only.",
+    },
+  ];
+
+  const output = await createAirshipSingleSiteDraftCandidate(
+    {
+      draft,
+      actor: "superadmin",
+      targetCandidateSiteVersionId: TARGET_VERSION_ID,
+    },
+    deps,
+  );
+
+  const candidate = deps.versions.get(TARGET_VERSION_ID);
+  const artifact = deps.artifacts.get(TARGET_ARTIFACT_ID);
+  assert.equal(output.status, "created");
+  assert.deepEqual(output.appliedEdits.map((edit) => edit.draftEditId), [
+    "airship-luna-example-home-headline",
+    "airship-luna-example-home-subheading",
+    "airship-luna-example-home-ctaLabel",
+  ]);
+  assert.equal(candidate?.state, "DRAFT");
+  assert.equal(candidate?.pages[0]?.contentModel.sectionProps.hero?.headline, "Luna Books for curious teams");
+  assert.equal(
+    candidate?.pages[0]?.contentModel.sectionProps.hero?.subheading,
+    "Editorial research, launch notes, and reading operations for product teams.",
+  );
+  assert.equal(candidate?.pages[0]?.contentModel.sectionProps.hero?.cta, "Contact Luna at hello@luna.example");
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Luna Books for curious teams/);
+  assert.doesNotMatch(JSON.stringify(output), /airship-chs|CHS|chs\.si/);
+  assert.equal(output.published, false);
+  assert.equal(output.activePointerChanged, false);
+});

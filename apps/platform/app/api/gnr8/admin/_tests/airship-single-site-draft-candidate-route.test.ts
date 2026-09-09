@@ -165,6 +165,35 @@ test("airship draft candidate POST requires superadmin before reading the saved 
   assert.equal(body.mutationFlags.activePointerMutation, false);
 });
 
+test("airship draft candidate POST requires an explicit migration id", async () => {
+  let readCalls = 0;
+  let createCalls = 0;
+  const handlers = createAirshipSingleSiteDraftCandidateRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-airship",
+    service: {
+      async readCurrentDraft() {
+        readCalls += 1;
+        return draftRecord();
+      },
+    },
+    async createAirshipSingleSiteDraftCandidate() {
+      createCalls += 1;
+      return candidateOutput();
+    },
+  });
+
+  const response = await handlers.POST(request({
+    actionMode: "create_internal_preview_candidate",
+  }));
+  const body = await response.json() as { diagnostics: string[]; mutationFlags: Record<string, boolean> };
+
+  assert.equal(response.status, 400);
+  assert.equal(readCalls, 0);
+  assert.equal(createCalls, 0);
+  assert.equal(body.diagnostics.includes("airship_draft_candidate_migration_id_required"), true);
+  assert.equal(body.mutationFlags.runtimeVersionMutation, false);
+});
+
 test("airship draft candidate POST creates internal preview from server-read saved draft only", async () => {
   let observedActor = "";
   let observedDraftId = "";
