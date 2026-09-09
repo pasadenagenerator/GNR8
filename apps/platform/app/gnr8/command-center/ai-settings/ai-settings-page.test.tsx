@@ -87,6 +87,8 @@ test("Command Center AI Settings route is superadmin-gated through layout and wi
   ]);
 
   assert.equal(layoutSource.includes("requireSuperadminUserIdForPage()"), true);
+  assert.equal(pageSource.includes("requireSuperadminUserIdForPage()"), true);
+  assert.equal(pageSource.indexOf("requireSuperadminUserIdForPage()") < pageSource.indexOf("readAirshipAgencyAISettings()"), true);
   assert.equal(pageSource.includes("readAirshipAgencyAISettings"), true);
   assert.equal(viewSource.includes("This is not live-site editing"), true);
   assert.equal(commandCenterLayoutSource.includes("/gnr8/command-center/ai-settings"), true);
