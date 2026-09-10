@@ -314,7 +314,6 @@ function rowToReadiness(row: Record<string, unknown>): AirshipPublishReadinessRe
       rollback: false,
       sourceCapture: false,
       providerCall: false,
-      ...confirmation,
     },
     serviceVersion: AIRSHIP_PUBLISH_READINESS_SERVICE_VERSION,
     idempotencyKey: required("idempotencyKey", rowText(row, "idempotency_key")),
