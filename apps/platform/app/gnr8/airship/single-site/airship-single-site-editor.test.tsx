@@ -123,6 +123,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
       },
       latestInternalPreviewCandidate: null,
       latestInternalPreviewReview: null,
+      latestInternalPreviewPublishReadiness: null,
       publishedVersionRefs: {
         siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
         runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
@@ -219,6 +220,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         ],
       },
       airshipDraftCandidateReview: null,
+      airshipDraftCandidatePublishReadiness: null,
     },
     links: {
       liveSite: "https://www.chs.si/",
@@ -357,6 +359,10 @@ test("airship single-site editor renders live published and Airship draft candid
   assert.equal(html.includes("Apply saved draft to preview"), true);
   assert.equal(html.includes("Internal preview review readiness"), true);
   assert.equal(html.includes("Approve internal preview for publish readiness"), true);
+  assert.equal(html.includes("Publish-readiness evidence handoff"), true);
+  assert.equal(html.includes("Prepare publish readiness"), true);
+  assert.equal(html.includes("readiness/evidence only"), true);
+  assert.equal(html.includes("next step: governed dry-run"), true);
   assert.equal(html.includes("active pointer unchanged"), true);
   assert.equal(html.includes("records review readiness only"), true);
   assert.equal(html.includes("Open latest internal preview candidate"), true);
@@ -415,6 +421,131 @@ test("airship single-site editor shows approved internal preview review status a
   assert.equal(html.includes("not live"), true);
   assert.equal(html.includes("not published"), true);
   assert.equal(html.includes("active pointer unchanged"), true);
+});
+
+test("airship single-site editor shows publish-readiness package status and governed dry-run next step", () => {
+  const model = airshipModel();
+  const candidate = model.previews.airshipDraftCandidate;
+  assert.ok(candidate);
+  model.draftPanel.persistence.draftId = candidate.draftId;
+  model.draftPanel.persistence.version = candidate.draftVersion;
+  model.previews.airshipDraftCandidateReview = {
+    id: "33333333-3333-4333-8333-333333333333",
+    migrationId: CHS_MIGRATION_ID,
+    draftId: candidate.draftId,
+    draftVersion: candidate.draftVersion,
+    candidateSiteVersionId: candidate.siteVersionId,
+    candidateRuntimeArtifactId: candidate.runtimeArtifactId,
+    reviewDecision: "approved_for_publish_readiness",
+    reviewStatus: "approved",
+    publishReadinessReady: true,
+    reviewerActorId: "superadmin-reviewer",
+    reviewerActorType: "human",
+    reviewerActorRole: "platform_superadmin",
+    reviewedAt: "2026-09-10T12:18:00.750Z",
+    limitationsNotes: "Internal preview only; not live, not published; active pointer unchanged.",
+    nextStep: "publish-readiness evaluation, not publish",
+    activePointerSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+    activePointerArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    activePointerChanged: false,
+    runtimeVersionStateMutated: false,
+    liveSiteMutated: false,
+    published: false,
+    serviceVersion: "airship-5-internal-preview-candidate-review:v1",
+    idempotencyKey: "review-key",
+    correlationId: "review-correlation",
+    metadata: { internalPreviewOnly: true },
+    createdAt: "2026-09-10T12:18:00.750Z",
+    updatedAt: "2026-09-10T12:18:00.750Z",
+  };
+  model.previews.airshipDraftCandidatePublishReadiness = {
+    id: "44444444-4444-4444-8444-444444444444",
+    migrationId: CHS_MIGRATION_ID,
+    reviewRecordId: "33333333-3333-4333-8333-333333333333",
+    readinessStatus: "complete",
+    nextStep: "governed dry-run later, not publish",
+    siteClientSourceLabels: {
+      tenantId: "tenant-chs",
+      clientId: "client-chs",
+      siteId: "site-chs",
+      sourceUrl: "https://www.chs.si/",
+      liveUrl: "https://www.chs.si/",
+      importedSiteLabel: "chs.si",
+    },
+    reviewedCandidateSiteVersionId: candidate.siteVersionId,
+    reviewedArtifactId: candidate.runtimeArtifactId,
+    draftId: candidate.draftId,
+    draftVersion: candidate.draftVersion,
+    reviewStatus: "approved",
+    reviewDecision: "approved_for_publish_readiness",
+    reviewedAt: "2026-09-10T12:18:00.750Z",
+    currentLiveActivePointerBefore: {
+      siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      artifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    },
+    currentLiveActivePointerAfter: {
+      siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      artifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    },
+    sourceEvidenceSummary: {
+      status: "source_supported",
+      detail: "3 source evidence item(s) available for chs.si.",
+      evidenceItems: [
+        { label: "Hero headline", status: "present", detail: "Captured CHS homepage evidence includes hero headline." },
+      ],
+    },
+    savedDraftFieldSummary: [
+      {
+        id: "airship-chs-home-hero-headline",
+        fieldKey: "headline",
+        targetSectionPage: "Homepage / hero headline",
+        status: "accepted",
+        currentTextContentSummary: "Existing CHS headline.",
+        proposedTextContent: "CHS helps modernize secure enterprise IT",
+      },
+    ],
+    internalPreviewUrl: candidate.route,
+    limitationsWarnings: ["Internal preview only; not live; not published; active pointer unchanged."],
+    noPublishConfirmation: {
+      internalPreviewOnly: true,
+      notLive: true,
+      notPublished: true,
+      candidateRuntimeState: "DRAFT",
+      activePointerChanged: false,
+      runtimeVersionStateMutated: false,
+      liveSiteMutated: false,
+      publishes: false,
+      dryRun: false,
+      shadowPublish: false,
+      rollback: false,
+      sourceCapture: false,
+      providerCall: false,
+    },
+    serviceVersion: "airship-6-publish-readiness-package:v1",
+    idempotencyKey: "readiness-key",
+    correlationId: "readiness-correlation",
+    metadata: { internalPreviewOnly: true },
+    createdAt: "2026-09-10T12:20:00.000Z",
+    updatedAt: "2026-09-10T12:20:00.000Z",
+  };
+  const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={model} />);
+
+  assert.equal(html.includes("Publish-readiness evidence handoff"), true);
+  assert.equal(html.includes("Publish readiness prepared"), true);
+  assert.equal(html.includes("complete / evidence prepared"), true);
+  assert.equal(html.includes("Reviewed candidate"), true);
+  assert.equal(html.includes(candidate.siteVersionId), true);
+  assert.equal(html.includes(candidate.runtimeArtifactId), true);
+  assert.equal(html.includes(`${candidate.draftId} v${candidate.draftVersion}`), true);
+  assert.equal(html.includes("33333333-3333-4333-8333-333333333333 / approved / 2026-09-10T12:18:00.750Z"), true);
+  assert.equal(html.includes("Pointer before"), true);
+  assert.equal(html.includes("Pointer after"), true);
+  assert.equal(html.includes(`${IMPROVED_CANDIDATE_VERSION_ID} / 1f80138a-39c2-4210-ac61-16200e5a2254`), true);
+  assert.equal(html.includes("3 source evidence item(s) available for chs.si."), true);
+  assert.equal(html.includes("Homepage / hero headline (accepted)"), true);
+  assert.equal(html.includes("governed dry-run later, not publish"), true);
+  assert.equal(html.includes("candidate runtime state DRAFT"), true);
+  assert.equal(html.includes("no dry-run, shadow-publish, rollback, source capture, provider call, or live-site mutation"), true);
 });
 
 test("airship single-site editor shows concrete proposed draft rows", () => {

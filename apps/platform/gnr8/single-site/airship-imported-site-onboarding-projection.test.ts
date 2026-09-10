@@ -66,6 +66,7 @@ function editorModel(overrides: {
       },
       latestInternalPreviewCandidate: overrides.draftCandidate ?? null,
       latestInternalPreviewReview: null,
+      latestInternalPreviewPublishReadiness: null,
       publishedVersionRefs: {
         siteVersionId: improvedPreviewAvailable ? `version-${siteLabel}` : null,
         runtimeArtifactId: improvedPreviewAvailable ? `artifact-${siteLabel}` : null,
@@ -116,6 +117,7 @@ function editorModel(overrides: {
       },
       airshipDraftCandidate: overrides.draftCandidate ?? null,
       airshipDraftCandidateReview: null,
+      airshipDraftCandidatePublishReadiness: null,
     },
     links: {
       liveSite: liveUrl ?? sourceUrl,

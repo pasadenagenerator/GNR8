@@ -121,6 +121,7 @@ function model(): AirshipSingleSiteEditorReadonlyProjection {
       },
       latestInternalPreviewCandidate: null,
       latestInternalPreviewReview: null,
+      latestInternalPreviewPublishReadiness: null,
       publishedVersionRefs: {
         siteVersionId: "a3f9493e-9da4-4ef8-8608-154fe6d25a0f",
         runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
@@ -177,6 +178,7 @@ function model(): AirshipSingleSiteEditorReadonlyProjection {
       },
       airshipDraftCandidate: null,
       airshipDraftCandidateReview: null,
+      airshipDraftCandidatePublishReadiness: null,
     },
     links: {
       liveSite: "https://www.chs.si/",

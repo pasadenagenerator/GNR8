@@ -8,6 +8,7 @@ import type { SingleSiteStudioPreviewState } from "@/gnr8/single-site/single-sit
 
 import { AirshipDraftCandidateAction } from "./airship-draft-candidate-action";
 import { AirshipDraftCandidateReviewAction } from "./airship-draft-candidate-review-action";
+import { AirshipPublishReadinessAction } from "./airship-publish-readiness-action";
 import { AirshipSingleSiteLocalDraftEditor } from "./airship-single-site-local-draft-editor";
 
 type Props = {
@@ -136,6 +137,14 @@ function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjectio
         savedDraftVersion={model.draftPanel.persistence.version}
         candidate={candidate}
         initialReview={model.previews.airshipDraftCandidateReview}
+      />
+      <AirshipPublishReadinessAction
+        migrationId={model.migrationId}
+        savedDraftId={model.draftPanel.persistence.draftId}
+        savedDraftVersion={model.draftPanel.persistence.version}
+        candidate={candidate}
+        review={model.previews.airshipDraftCandidateReview}
+        initialReadiness={model.previews.airshipDraftCandidatePublishReadiness}
       />
       {preview(candidate)}
       <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 12, display: "grid", gap: 10 }}>
