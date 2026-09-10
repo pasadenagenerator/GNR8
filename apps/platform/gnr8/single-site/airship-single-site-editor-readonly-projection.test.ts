@@ -418,6 +418,208 @@ test("airship projection handles missing or partial source evidence without CHS 
   assert.equal(JSON.stringify(model).includes("Contact CHS"), false);
 });
 
+test("airship projection opens CHS onboarding editor target when persisted evidence is coarse", () => {
+  const productionCoarseChsStudioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    sourceEvidence: [
+      { label: "source url", status: "present", detail: "source_url evidence was captured." },
+      { label: "page", status: "present", detail: "page evidence was captured." },
+      { label: "screenshot", status: "present", detail: "screenshot evidence was captured." },
+      { label: "text", status: "present", detail: "text evidence was captured." },
+      { label: "visual identity", status: "present", detail: "visual_identity evidence was captured." },
+      { label: "metadata", status: "present", detail: "metadata evidence was captured." },
+    ],
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: productionCoarseChsStudioModel,
+  });
+
+  assert.equal(model.links.airshipEditor, `/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`);
+  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS");
+  assert.equal(model.draftPanel.draftPreview?.hero.subheading, "Imported chs.si homepage evidence is available for Airship draft editing.");
+  assert.equal(model.importedSiteModel.editableSections.find((section) => section.key === "hero")?.mappedDraftFieldIds.length, 2);
+  assert.equal(model.aiImprovementStatus.deterministicEditableChangesGenerated, true);
+  assert.equal(JSON.stringify(model).includes("Maver"), false);
+});
+
+test("airship projection reloads saved CHS draft edits even when evidence rows are coarse", () => {
+  const persistedDraft: AirshipSingleSiteDraftRecord = {
+    id: "draft-chs-production-existing",
+    migrationId: CHS_MIGRATION_ID,
+    tenantId: "tenant-chs",
+    clientId: "client-chs",
+    siteId: "site-chs",
+    agencyId: null,
+    sourceUrl: "https://www.chs.si/",
+    targetSiteVersionRefs: {
+      originalCloneSiteVersionId: ORIGINAL_CLONE_VERSION_ID,
+      originalCloneRuntimeArtifactId: "929106cd-fa19-47eb-9582-ce6931d0e370",
+      improvedCandidateSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      improvedCandidateRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    },
+    draftEdits: [
+      {
+        id: CHS_HEADLINE_DRAFT_ID,
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Saved CHS headline from the existing Airship draft.",
+        proposedTextContent: "CHS helps modernize & secure enterprise IT",
+        reasonForChange: "Existing saved Airship draft.",
+        status: "edited",
+        previewImpact: "Saved headline appears in Airship draft preview only.",
+      },
+      {
+        id: CHS_SUBHEADING_DRAFT_ID,
+        targetSectionPage: "Homepage / hero subheading",
+        currentTextContentSummary: "Saved CHS subheading from the existing Airship draft.",
+        proposedTextContent: "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.",
+        reasonForChange: "Existing saved Airship draft.",
+        status: "edited",
+        previewImpact: "Saved subheading appears in Airship draft preview only.",
+      },
+      {
+        id: CHS_CTA_DRAFT_ID,
+        targetSectionPage: "Homepage / contact call-to-action",
+        currentTextContentSummary: "Saved CHS CTA from the existing Airship draft.",
+        proposedTextContent: "Contact Us",
+        reasonForChange: "Existing saved Airship draft.",
+        status: "edited",
+        previewImpact: "Saved CTA appears in Airship draft preview only.",
+      },
+    ],
+    draftStatus: "draft",
+    version: 4,
+    semanticWatermark: "airship-single-site-editor-draft:production-existing",
+    metadata: { liveBoundary: "not_applied_to_live_site" },
+    createdByActorId: "superadmin-projection",
+    updatedByActorId: "superadmin-projection",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-02T00:00:00.000Z",
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  };
+  const coarseStudioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    sourceEvidence: [
+      { label: "source url", status: "present", detail: "source_url evidence was captured." },
+      { label: "text", status: "present", detail: "text evidence was captured." },
+    ],
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: coarseStudioModel,
+    persistedDraft,
+  });
+
+  assert.equal(model.draftPanel.persistence.draftId, "draft-chs-production-existing");
+  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS helps modernize & secure enterprise IT");
+  assert.equal(
+    model.draftPanel.draftPreview?.hero.subheading,
+    "Cybersecurity, data systems, and hybrid infrastructure support for teams across the region.",
+  );
+  assert.equal(model.draftPanel.draftPreview?.hero.primaryCtaLabel, "Contact Us");
+  assert.equal(JSON.stringify(model).includes("Maver"), false);
+});
+
+test("airship projection keeps invalid imported-site editor lookups unavailable", () => {
+  const invalidMigrationId = "33333333-4444-4555-8666-777777777777";
+  const studioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    state: "empty",
+    migrationId: invalidMigrationId,
+    diagnosticsHref: `/gnr8/command-center/single-site-publish?migrationId=${invalidMigrationId}`,
+    summary: {
+      site: "Imported single-site",
+      sourceUrl: "Source URL unavailable",
+      mvpStatus: "Internal single-site MVP status unavailable",
+      liveSiteUrl: "Source URL unavailable",
+      activePointer: "unknown",
+      publishedCandidate: "unknown",
+    },
+    sourceTruth: null,
+    sourceEvidence: [
+      { label: "text", status: "present", detail: "text evidence was captured." },
+    ],
+    previews: {
+      originalClone: {
+        ...studioProjection.previews.originalClone,
+        siteVersionId: null,
+        runtimeArtifactId: null,
+        route: null,
+        available: false,
+        unavailableReason: "Internal preview unavailable: missing runtime site version ref for this stage.",
+      },
+      improvedCandidate: {
+        ...studioProjection.previews.improvedCandidate,
+        siteVersionId: null,
+        runtimeArtifactId: null,
+        route: null,
+        available: false,
+        unavailableReason: "Internal preview unavailable: missing runtime site version ref for this stage.",
+      },
+    },
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: invalidMigrationId,
+    studioModel,
+  });
+
+  assert.equal(model.state, "empty");
+  assert.equal(model.links.airshipEditor, `/gnr8/airship/single-site/editor?migrationId=${invalidMigrationId}`);
+  assert.equal(model.draftPanel.drafts.length, 0);
+  assert.equal(model.draftPanel.draftPreview, null);
+  assert.equal(JSON.stringify(model).includes("CHS"), false);
+  assert.equal(JSON.stringify(model).includes("chs.si"), false);
+});
+
+test("airship projection opens a generic coarse-evidence workspace without CHS or Maver content", () => {
+  const migrationId = "44444444-5555-4666-8777-888888888888";
+  const studioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    migrationId,
+    diagnosticsHref: `/gnr8/command-center/single-site-publish?migrationId=${migrationId}`,
+    summary: {
+      site: "atlas.example",
+      sourceUrl: "https://atlas.example/",
+      mvpStatus: "Internal single-site MVP accepted",
+      liveSiteUrl: "https://atlas.example/",
+      activePointer: "not_live",
+      publishedCandidate: "DRAFT",
+    },
+    sourceTruth: {
+      tenantId: "tenant-atlas",
+      clientId: "client-atlas",
+      siteId: "site-atlas",
+      ownershipSiteId: null,
+      runtimeSiteId: "runtime-atlas",
+    },
+    sourceEvidence: [
+      { label: "source url", status: "present", detail: "source_url evidence was captured." },
+      { label: "text", status: "present", detail: "text evidence was captured." },
+    ],
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId,
+    studioModel,
+  });
+  const serialized = JSON.stringify(model);
+
+  assert.equal(model.importedSite, "atlas.example");
+  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.draftPreview?.hero.eyebrow, "Atlas");
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "Atlas");
+  assert.equal(model.draftPanel.draftPreview?.hero.subheading, "Imported atlas.example homepage evidence is available for Airship draft editing.");
+  assert.equal(serialized.includes("chs.si"), false);
+  assert.equal(serialized.includes("CHS"), false);
+  assert.equal(serialized.includes("Maver"), false);
+});
+
 test("airship projection with missing migration id stays unavailable and does not fall back to CHS", () => {
   const studioModel: SingleSiteStudioReadonlyProjection = {
     ...studioProjection,

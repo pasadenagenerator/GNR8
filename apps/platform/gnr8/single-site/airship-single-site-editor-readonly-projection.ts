@@ -362,6 +362,53 @@ function deriveImportedSiteDraftTexts(studioModel: SingleSiteStudioReadonlyProje
   };
 }
 
+function sourceUrlAvailable(value: string | null | undefined): boolean {
+  const normalized = text(value);
+  return Boolean(normalized && /^https?:\/\//i.test(normalized) && !/unavailable|unknown|missing/i.test(normalized));
+}
+
+function hasPresentSourceEvidence(studioModel: SingleSiteStudioReadonlyProjection): boolean {
+  return studioModel.sourceEvidence.some((item) => /present|accepted|captured|available/i.test(item.status));
+}
+
+function shouldSeedImportedSiteEditorWorkspace(input: {
+  migrationId: string | null;
+  studioModel: SingleSiteStudioReadonlyProjection;
+}): boolean {
+  if (!input.migrationId || input.studioModel.state !== "visible") return false;
+  if (!sourceUrlAvailable(input.studioModel.summary.sourceUrl)) return false;
+  if (!hasPresentSourceEvidence(input.studioModel)) return false;
+  return input.studioModel.previews.originalClone.available || input.studioModel.previews.improvedCandidate.available;
+}
+
+function fallbackImportedSiteDraftText(input: {
+  fieldKey: AirshipSingleSiteDraftFieldKey;
+  siteLabel: string;
+  organization: string;
+}): string {
+  if (input.fieldKey === "headline") return input.organization;
+  if (input.fieldKey === "subheading") {
+    return `Imported ${input.siteLabel} homepage evidence is available for Airship draft editing.`;
+  }
+  return "Review source site";
+}
+
+function ensureImportedSiteWorkspaceDraftTexts(input: {
+  migrationId: string | null;
+  studioModel: SingleSiteStudioReadonlyProjection;
+  texts: ReturnType<typeof deriveImportedSiteDraftTexts>;
+  siteLabel: string;
+  organization: string;
+}): ReturnType<typeof deriveImportedSiteDraftTexts> {
+  if (!shouldSeedImportedSiteEditorWorkspace(input)) return input.texts;
+  return {
+    ...input.texts,
+    headline: input.texts.headline ?? fallbackImportedSiteDraftText({ ...input, fieldKey: "headline" }),
+    subheading: input.texts.subheading ?? fallbackImportedSiteDraftText({ ...input, fieldKey: "subheading" }),
+    ctaLabel: input.texts.ctaLabel ?? fallbackImportedSiteDraftText({ ...input, fieldKey: "ctaLabel" }),
+  };
+}
+
 function draftFieldSourceSummary(input: {
   studioModel: SingleSiteStudioReadonlyProjection;
   fieldKey: AirshipSingleSiteDraftFieldKey;
@@ -383,7 +430,12 @@ function importedSiteDrafts(input: {
 }): AirshipSingleSiteImprovementDraft[] {
   const siteLabel = humanSiteLabel(input.studioModel);
   const organization = organizationLabel(siteLabel);
-  const texts = deriveImportedSiteDraftTexts(input.studioModel);
+  const texts = ensureImportedSiteWorkspaceDraftTexts({
+    ...input,
+    texts: deriveImportedSiteDraftTexts(input.studioModel),
+    siteLabel,
+    organization,
+  });
   const configs: Array<{
     fieldKey: AirshipSingleSiteDraftFieldKey;
     targetSectionPage: string;
