@@ -13,6 +13,7 @@ export type AirshipSingleSiteDraftStatus = "draft" | "mixed" | "accepted" | "rej
 
 export type AirshipSingleSiteDraftEdit = {
   id: string;
+  fieldKey?: "headline" | "subheading" | "ctaLabel";
   targetSectionPage: string;
   currentTextContentSummary: string;
   proposedTextContent: string;
@@ -236,8 +237,10 @@ function dateText(value: unknown): string | null {
 
 function sanitizeEdit(edit: AirshipSingleSiteDraftEdit): AirshipSingleSiteDraftEdit {
   const status = edit.status === "accepted" || edit.status === "rejected" || edit.status === "edited" ? edit.status : "proposed";
+  const fieldKey = draftEditFieldKey(edit) ?? undefined;
   return {
     id: text("draftEditId", edit.id, { max: 160 }) ?? "",
+    ...(fieldKey ? { fieldKey } : {}),
     targetSectionPage: text("targetSectionPage", edit.targetSectionPage, { max: 300 }) ?? "",
     currentTextContentSummary: text("currentTextContentSummary", edit.currentTextContentSummary, { max: 2000 }) ?? "",
     proposedTextContent: text("proposedTextContent", edit.proposedTextContent, { max: 5000 }) ?? "",
@@ -254,6 +257,59 @@ function sanitizeDraftEdits(edits: AirshipSingleSiteDraftEdit[]): AirshipSingleS
     seen.add(edit.id);
     return true;
   });
+}
+
+type AirshipDraftFieldKey = NonNullable<AirshipSingleSiteDraftEdit["fieldKey"]>;
+
+function draftEditFieldKey(draft: Pick<AirshipSingleSiteDraftEdit, "id" | "targetSectionPage"> & {
+  fieldKey?: unknown;
+}): AirshipDraftFieldKey | null {
+  if (draft.fieldKey === "headline" || draft.fieldKey === "subheading" || draft.fieldKey === "ctaLabel") return draft.fieldKey;
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/cta|call.to.action|button|contact/.test(haystack)) return "ctaLabel";
+  if (/subheading|subheadline|subtitle|value.proposition|body|description/.test(haystack)) return "subheading";
+  if (/headline|heading|hero|h1|title/.test(haystack)) return "headline";
+  return null;
+}
+
+function draftEditMatchesIdOrField(edit: AirshipSingleSiteDraftEdit, requestedEditId: string): boolean {
+  if (edit.id === requestedEditId) return true;
+  const requestedField = draftEditFieldKey({ id: requestedEditId, targetSectionPage: "" });
+  return Boolean(requestedField && draftEditFieldKey(edit) === requestedField);
+}
+
+function sameDraftEditIdentity(left: AirshipSingleSiteDraftEdit, right: AirshipSingleSiteDraftEdit): boolean {
+  if (left.id === right.id) return true;
+  const leftField = draftEditFieldKey(left);
+  return Boolean(leftField && leftField === draftEditFieldKey(right));
+}
+
+export function mergeAirshipDraftEditsForCurrentImportedSiteSeed(input: {
+  currentDraftEdits: AirshipSingleSiteDraftEdit[];
+  seedDraftEdits: AirshipSingleSiteDraftEdit[];
+}): AirshipSingleSiteDraftEdit[] {
+  const currentDraftEdits = sanitizeDraftEdits(input.currentDraftEdits);
+  const seedDraftEdits = sanitizeDraftEdits(input.seedDraftEdits);
+  const usedCurrentIds = new Set<string>();
+  const merged = seedDraftEdits.map((seedEdit) => {
+    const currentEdit = currentDraftEdits.find((candidate) =>
+      !usedCurrentIds.has(candidate.id) && sameDraftEditIdentity(candidate, seedEdit)
+    );
+    if (!currentEdit) return seedEdit;
+    usedCurrentIds.add(currentEdit.id);
+    return {
+      ...seedEdit,
+      proposedTextContent: currentEdit.proposedTextContent,
+      status: currentEdit.status,
+    };
+  });
+
+  for (const currentEdit of currentDraftEdits) {
+    if (usedCurrentIds.has(currentEdit.id)) continue;
+    if (merged.some((edit) => sameDraftEditIdentity(edit, currentEdit))) continue;
+    merged.push(currentEdit);
+  }
+  return sanitizeDraftEdits(merged);
 }
 
 function deriveDraftStatus(edits: readonly AirshipSingleSiteDraftEdit[]): AirshipSingleSiteDraftStatus {
@@ -418,9 +474,9 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
       const current = await this.readCurrentDraftInTx(client, draft.migrationId);
       if (!current) throw new Error("airship_draft_missing_after_create");
       const draftEdits = current.draftEdits.map((edit) =>
-        edit.id === draftEditId ? { ...edit, proposedTextContent, status: edit.proposedTextContent === proposedTextContent ? edit.status : "edited" as const } : edit,
+        draftEditMatchesIdOrField(edit, draftEditId) ? { ...edit, proposedTextContent, status: edit.proposedTextContent === proposedTextContent ? edit.status : "edited" as const } : edit,
       );
-      if (!draftEdits.some((edit) => edit.id === draftEditId)) throw new Error("airship_draft_edit_not_found");
+      if (!draftEdits.some((edit) => draftEditMatchesIdOrField(edit, draftEditId))) throw new Error("airship_draft_edit_not_found");
       const updated = await this.updateDraft(client, current, draftEdits, event.actorId);
       await this.insertEvent(client, {
         draft: updated,
@@ -475,8 +531,8 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
     return withTransaction(this.pool, async (client) => {
       const current = await this.readCurrentDraftInTx(client, draft.migrationId);
       if (!current) throw new Error("airship_draft_missing_after_create");
-      const draftEdits = current.draftEdits.map((edit) => edit.id === draftEditId ? { ...edit, status } : edit);
-      if (!draftEdits.some((edit) => edit.id === draftEditId)) throw new Error("airship_draft_edit_not_found");
+      const draftEdits = current.draftEdits.map((edit) => draftEditMatchesIdOrField(edit, draftEditId) ? { ...edit, status } : edit);
+      if (!draftEdits.some((edit) => draftEditMatchesIdOrField(edit, draftEditId))) throw new Error("airship_draft_edit_not_found");
       const updated = await this.updateDraft(client, current, draftEdits, event.actorId);
       await this.insertEvent(client, {
         draft: updated,
@@ -563,12 +619,17 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
     seed: AirshipSingleSiteDraftSeed,
     actorId: string,
   ): Promise<AirshipSingleSiteDraftRecord> {
+    const draftEdits = mergeAirshipDraftEditsForCurrentImportedSiteSeed({
+      currentDraftEdits: current.draftEdits,
+      seedDraftEdits: seed.draftEdits,
+    });
+    const draftStatus = deriveDraftStatus(draftEdits);
     const watermark = semanticWatermark({
       migrationId: current.migrationId,
       sourceUrl: seed.sourceUrl,
       targetSiteVersionRefs: seed.targetSiteVersionRefs,
-      draftEdits: current.draftEdits,
-      draftStatus: current.draftStatus,
+      draftEdits,
+      draftStatus,
       version: current.version,
     });
     const result = await client.query(
@@ -581,9 +642,11 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
         agency_id = $5,
         source_url = $6,
         target_site_version_refs_json = $7::jsonb,
-        semantic_watermark = $8,
-        metadata_json = $9::jsonb,
-        updated_by_actor_id = $10,
+        draft_edits_json = $8::jsonb,
+        draft_status = $9,
+        semantic_watermark = $10,
+        metadata_json = $11::jsonb,
+        updated_by_actor_id = $12,
         updated_at = now()
       where id = $1::uuid
       returning *, accepted_at::text as accepted_at, rejected_at::text as rejected_at, created_at::text as created_at, updated_at::text as updated_at
@@ -596,6 +659,8 @@ export class PostgresAirshipSingleSiteDraftRepository implements AirshipSingleSi
         seed.agencyId,
         seed.sourceUrl,
         JSON.stringify(seed.targetSiteVersionRefs),
+        JSON.stringify(draftEdits),
+        draftStatus,
         watermark,
         JSON.stringify(metadataWithPreservedStyleSettings(seed.metadata, current.metadata)),
         actorId,

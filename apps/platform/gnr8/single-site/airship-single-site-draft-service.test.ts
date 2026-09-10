@@ -8,6 +8,7 @@ import {
   AirshipSingleSiteDraftService,
   AIRSHIP_SINGLE_SITE_DRAFT_SERVICE_VERSION,
   DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS,
+  mergeAirshipDraftEditsForCurrentImportedSiteSeed,
   sanitizeDraftStyleSettings,
   type AirshipSingleSiteDraftCreateInput,
   type AirshipSingleSiteDraftRecord,
@@ -216,6 +217,105 @@ test("airship draft service sanitizes style settings to safe draft fields", () =
       ctaColor: "#0f766e",
     },
   );
+});
+
+test("airship draft service reconciles legacy saved draft edit ids to the current imported-site seed", () => {
+  const merged = mergeAirshipDraftEditsForCurrentImportedSiteSeed({
+    currentDraftEdits: [
+      {
+        id: "airship-chs-home-hero-headline",
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Legacy CHS source summary.",
+        proposedTextContent: "CHS helps modernize saved enterprise IT",
+        reasonForChange: "Operator saved legacy draft copy.",
+        status: "edited",
+        previewImpact: "Legacy saved headline should survive generic model refresh.",
+      },
+      {
+        id: "airship-chs-home-hero-value-proposition",
+        targetSectionPage: "Homepage / hero value proposition",
+        currentTextContentSummary: "Legacy CHS subheading source summary.",
+        proposedTextContent: "Saved cybersecurity, data systems, and hybrid infrastructure support.",
+        reasonForChange: "Operator saved legacy draft subheading.",
+        status: "accepted",
+        previewImpact: "Legacy saved subheading should survive generic model refresh.",
+      },
+    ],
+    seedDraftEdits: [
+      {
+        id: "airship-682a09fd-8fd5-4f73-93b8-54f5d4067c63-home-headline",
+        fieldKey: "headline",
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Current generic source summary.",
+        proposedTextContent: "Less risk. More control. Better IT.",
+        reasonForChange: "Current generic reason.",
+        status: "proposed",
+        previewImpact: "Current generic preview impact.",
+      },
+      {
+        id: "airship-682a09fd-8fd5-4f73-93b8-54f5d4067c63-home-subheading",
+        fieldKey: "subheading",
+        targetSectionPage: "Homepage / hero subheading",
+        currentTextContentSummary: "Current generic subheading summary.",
+        proposedTextContent: "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
+        reasonForChange: "Current generic subheading reason.",
+        status: "proposed",
+        previewImpact: "Current generic subheading preview impact.",
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    merged.map((edit) => ({ id: edit.id, fieldKey: edit.fieldKey, proposedTextContent: edit.proposedTextContent, status: edit.status })),
+    [
+      {
+        id: "airship-682a09fd-8fd5-4f73-93b8-54f5d4067c63-home-headline",
+        fieldKey: "headline",
+        proposedTextContent: "CHS helps modernize saved enterprise IT",
+        status: "edited",
+      },
+      {
+        id: "airship-682a09fd-8fd5-4f73-93b8-54f5d4067c63-home-subheading",
+        fieldKey: "subheading",
+        proposedTextContent: "Saved cybersecurity, data systems, and hybrid infrastructure support.",
+        status: "accepted",
+      },
+    ],
+  );
+});
+
+test("airship draft service reconciliation is generic for non-CHS imported sites", () => {
+  const merged = mergeAirshipDraftEditsForCurrentImportedSiteSeed({
+    currentDraftEdits: [
+      {
+        id: "legacy-luna-title",
+        targetSectionPage: "Homepage / h1 title",
+        currentTextContentSummary: "Legacy Luna summary.",
+        proposedTextContent: "Luna Books for saved curious teams",
+        reasonForChange: "Saved operator copy.",
+        status: "edited",
+        previewImpact: "Saved headline appears in the imported-site draft preview.",
+      },
+    ],
+    seedDraftEdits: [
+      {
+        id: "airship-11111111-2222-4333-8444-555555555555-home-headline",
+        fieldKey: "headline",
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Current Luna summary.",
+        proposedTextContent: "Luna Books for curious teams",
+        reasonForChange: "Source-supported Luna headline.",
+        status: "proposed",
+        previewImpact: "Headline appears in the imported-site draft preview.",
+      },
+    ],
+  });
+
+  assert.equal(merged[0]?.id, "airship-11111111-2222-4333-8444-555555555555-home-headline");
+  assert.equal(merged[0]?.fieldKey, "headline");
+  assert.equal(merged[0]?.proposedTextContent, "Luna Books for saved curious teams");
+  assert.equal(JSON.stringify(merged).includes("chs.si"), false);
+  assert.equal(JSON.stringify(merged).includes("CHS"), false);
 });
 
 test("airship draft service rejects missing required edit text before repository write", async () => {

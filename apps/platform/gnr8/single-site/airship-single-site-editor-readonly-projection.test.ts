@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   airshipChsDraftContainsForbiddenMaverCopy,
   airshipDraftIdForImportedSiteField,
+  buildAirshipSingleSiteDraftSeed,
   buildAirshipSingleSiteEditorReadonlyProjection,
 } from "./airship-single-site-editor-readonly-projection";
 import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
@@ -224,6 +225,59 @@ test("airship projection reloads saved draft edits from persistent storage", () 
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS helps modernize enterprise IT");
   assert.equal(model.draftPanel.draftPreview?.appliedToLiveSite, false);
   assert.equal(model.flags.mutatesProductionData, false);
+});
+
+test("airship draft seed keeps current generic field ids while carrying reloaded saved headline", () => {
+  const persistedDraft: AirshipSingleSiteDraftRecord = {
+    id: "draft-chs-legacy-id",
+    migrationId: CHS_MIGRATION_ID,
+    tenantId: "tenant-chs",
+    clientId: "client-chs",
+    siteId: "site-chs",
+    agencyId: null,
+    sourceUrl: "https://www.chs.si/",
+    targetSiteVersionRefs: {
+      originalCloneSiteVersionId: ORIGINAL_CLONE_VERSION_ID,
+      originalCloneRuntimeArtifactId: "929106cd-fa19-47eb-9582-ce6931d0e370",
+      improvedCandidateSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      improvedCandidateRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    },
+    draftEdits: [
+      {
+        id: "airship-chs-home-hero-headline",
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Legacy CHS headline summary.",
+        proposedTextContent: "CHS saved headline reloads",
+        reasonForChange: "Operator saved draft copy.",
+        status: "edited",
+        previewImpact: "Saved headline appears in Airship draft preview only.",
+      },
+    ],
+    draftStatus: "draft",
+    version: 7,
+    semanticWatermark: "airship-single-site-editor-draft:legacy-id",
+    metadata: { liveBoundary: "not_applied_to_live_site" },
+    createdByActorId: "superadmin-projection",
+    updatedByActorId: "superadmin-projection",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-02T00:00:00.000Z",
+    updatedAt: "2026-09-02T00:07:00.000Z",
+  };
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: studioProjection,
+    persistedDraft,
+    generatedAt: "2026-09-02T00:07:00.000Z",
+  });
+  const seed = buildAirshipSingleSiteDraftSeed({ model });
+  const headline = seed.draftEdits.find((draft) => draft.fieldKey === "headline");
+
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS saved headline reloads");
+  assert.equal(headline?.id, CHS_HEADLINE_DRAFT_ID);
+  assert.equal(headline?.fieldKey, "headline");
+  assert.equal(headline?.proposedTextContent, "CHS saved headline reloads");
+  assert.equal(headline?.status, "edited");
 });
 
 test("airship projection exposes a saved draft candidate as internal preview only", () => {

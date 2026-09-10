@@ -411,6 +411,100 @@ test("airship draft POST saves edit text through superadmin-only draft service",
   assert.equal(body.labels.includes("Not published"), true);
 });
 
+test("airship draft POST forwards generic imported-site field identity to draft storage", async () => {
+  const migrationId = "11111111-2222-4333-8444-555555555555";
+  let observedDraftSeed: AirshipSingleSiteDraftRecord["draftEdits"] = [];
+  const genericModel = model();
+  genericModel.migrationId = migrationId;
+  genericModel.importedSite = "luna.example";
+  genericModel.sourceUrl = "https://luna.example/";
+  genericModel.liveSiteUrl = "https://luna.example/";
+  genericModel.studioSourceTruth = {
+    tenantId: "tenant-luna",
+    clientId: "client-luna",
+    siteId: "site-luna",
+    ownershipSiteId: null,
+    runtimeSiteId: "runtime-luna",
+  };
+  genericModel.draftPanel.drafts = [
+    {
+      id: "airship-11111111-2222-4333-8444-555555555555-home-headline",
+      fieldKey: "headline",
+      targetSectionPage: "Homepage / hero headline",
+      currentTextContentSummary: "Captured Luna source headline.",
+      proposedTextContent: "Luna Books for curious teams",
+      reasonForChange: "Source-supported Luna headline.",
+      status: "edited",
+      previewImpact: "Saved headline appears in Airship draft preview only.",
+    },
+  ];
+  genericModel.draftPanel.draftPreview = {
+    label: "AI draft preview",
+    appliedToLiveSite: false,
+    persistence: "saved_airship_draft",
+    note: "Saved Airship draft preview only. Not applied to live site. Not published.",
+    hero: {
+      eyebrow: "LUNA",
+      headline: "Luna Books for curious teams",
+      subheading: "Editorial research, launch notes, and reading operations for product teams.",
+      primaryCtaLabel: "Contact Luna",
+      secondaryContactText: null,
+    },
+  };
+
+  const handlers = createAirshipSingleSiteDraftsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-route",
+    getAirshipSingleSiteEditorReadonlyProjection: async ({ migrationId: requestedMigrationId }) => {
+      assert.equal(requestedMigrationId, migrationId);
+      return genericModel;
+    },
+    service: {
+      async readCurrentDraft() {
+        return null;
+      },
+      async createOrReuseDraft() {
+        return draftRecord({ migrationId, sourceUrl: "https://luna.example/" });
+      },
+      async updateDraftEditText(input) {
+        observedDraftSeed = input.draftEdits;
+        return draftRecord({
+          migrationId,
+          sourceUrl: "https://luna.example/",
+          draftEdits: input.draftEdits.map((draft) =>
+            draft.fieldKey === "headline" ? { ...draft, proposedTextContent: input.proposedTextContent, status: "edited" } : draft,
+          ),
+          version: 4,
+        });
+      },
+      async updateDraftStyleSettings() {
+        return draftRecord();
+      },
+      async markDraftEditAccepted() {
+        return draftRecord();
+      },
+      async markDraftEditRejected() {
+        return draftRecord();
+      },
+    },
+  });
+
+  const response = await handlers.POST(request("https://app.test/api/gnr8/admin/airship/single-site/drafts", {
+    actionMode: "update_edit",
+    migrationId,
+    draftEditId: "airship-11111111-2222-4333-8444-555555555555-home-headline",
+    proposedTextContent: "Luna Books saved headline",
+  }));
+  const body = await response.json() as { ok: boolean; draft: AirshipSingleSiteDraftRecord };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(observedDraftSeed[0]?.id, "airship-11111111-2222-4333-8444-555555555555-home-headline");
+  assert.equal(observedDraftSeed[0]?.fieldKey, "headline");
+  assert.equal(body.draft.draftEdits[0]?.proposedTextContent, "Luna Books saved headline");
+  assert.equal(JSON.stringify(observedDraftSeed).includes("chs.si"), false);
+  assert.equal(JSON.stringify(observedDraftSeed).includes("CHS"), false);
+});
+
 test("airship draft POST saves style settings to draft metadata only", async () => {
   let observedActorId = "";
   let observedStyleSettings: unknown = null;

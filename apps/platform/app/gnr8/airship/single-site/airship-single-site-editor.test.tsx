@@ -567,6 +567,75 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Revoke key"), false);
 });
 
+test("airship visual editor keeps apply-saved-draft enabled when saved draft data exists", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const savedModel = {
+    ...model,
+    previews: {
+      ...model.previews,
+      airshipDraftCandidate: null,
+    },
+    draftPanel: {
+      ...model.draftPanel,
+      persistence: {
+        ...model.draftPanel.persistence,
+        label: "Saved Airship draft" as const,
+        draftId: "draft-saved-headline",
+        draftStatus: "draft",
+        version: 8,
+        lastSavedAt: "2026-09-02T00:08:00.000Z",
+      },
+      draftPreview: {
+        ...model.draftPanel.draftPreview,
+        persistence: "saved_airship_draft" as const,
+        hero: {
+          ...model.draftPanel.draftPreview.hero,
+          headline: "CHS saved headline persists",
+        },
+      },
+    },
+  };
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={savedModel.migrationId}
+      importedSite={savedModel.importedSite}
+      sourceUrl={savedModel.sourceUrl}
+      liveSiteUrl={savedModel.liveSiteUrl}
+      importedSiteModel={savedModel.importedSiteModel}
+      draftCandidate={null}
+      draftPreview={savedModel.draftPanel.draftPreview}
+      drafts={savedModel.draftPanel.drafts}
+      persistence={savedModel.draftPanel.persistence}
+      aiProviderStatus={{
+        provider: "openai",
+        scope: "airship_editor",
+        ownerScope: "internal_superadmin",
+        connected: false,
+        status: "missing",
+        maskedKey: null,
+        model: "gpt-5",
+        lastTestedAt: null,
+        lastTestStatus: null,
+        createdAt: null,
+        updatedAt: null,
+        canUseAiCommands: false,
+      }}
+      agentProfileSelection={selectedAirshipProfile({
+        status: "unavailable",
+        activeProfile: null,
+        diagnostics: ["airship_agent_default_profile_unavailable"],
+      })}
+    />,
+  );
+  const applyButton = html.match(/<button[^>]*aria-label="Apply saved draft to preview"[^>]*>/)?.[0] ?? "";
+
+  assert.notEqual(applyButton, "");
+  assert.equal(applyButton.includes("disabled"), false);
+  assert.equal(html.includes("CHS saved headline persists"), true);
+  assert.equal(html.includes("Draft only. Not live. Not published."), true);
+});
+
 test("airship visual editor exposes focused canvas click targets for hero, CTA, and source selection", async () => {
   const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
 

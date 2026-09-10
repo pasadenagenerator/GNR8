@@ -674,6 +674,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   });
   const selectedStyleValueRows = deriveAirshipStyleValueRows(selectedSection, fields);
   const activeAgentProfile = agentProfileSelection.activeProfile;
+  const canApplySavedDraftToPreview = Boolean(props.migrationId && draftMeta.draftId) && !busy && candidateApplyState !== "creating";
 
   const selectedDrafts = useMemo(
     () => {
@@ -892,7 +893,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   }
 
   async function createInternalPreviewCandidate() {
-    if (!props.migrationId || !draftMeta.draftId || saveState !== "saved" || busy || candidateApplyState === "creating") {
+    if (!canApplySavedDraftToPreview) {
       setMessage("Save the Airship draft first, then create the internal preview candidate. Not live. Not published.");
       return;
     }
@@ -1863,11 +1864,11 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               type="button"
               aria-label="Apply saved draft to preview"
               aria-busy={candidateApplyState === "creating"}
-              disabled={busy || candidateApplyState === "creating" || saveState !== "saved" || !draftMeta.draftId}
+              disabled={!canApplySavedDraftToPreview}
               onClick={() => void createInternalPreviewCandidate()}
               style={actionButtonStyle({
                 tone: "primary",
-                disabled: busy || candidateApplyState === "creating" || saveState !== "saved" || !draftMeta.draftId,
+                disabled: !canApplySavedDraftToPreview,
                 compact: true,
               })}
             >

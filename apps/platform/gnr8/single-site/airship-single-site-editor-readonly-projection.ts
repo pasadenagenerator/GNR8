@@ -857,6 +857,7 @@ export function buildAirshipSingleSiteDraftSeed(input: {
     },
     draftEdits: input.model.draftPanel.drafts.map((draft) => ({
       id: draft.id,
+      ...(draft.fieldKey ? { fieldKey: draft.fieldKey } : {}),
       targetSectionPage: draft.targetSectionPage,
       currentTextContentSummary: draft.currentTextContentSummary,
       proposedTextContent: draft.proposedTextContent,
