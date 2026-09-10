@@ -65,6 +65,7 @@ function editorModel(overrides: {
         lastSavedAt: overrides.draftId ? "2026-09-10T00:05:00.000Z" : null,
       },
       latestInternalPreviewCandidate: overrides.draftCandidate ?? null,
+      latestInternalPreviewReview: null,
       publishedVersionRefs: {
         siteVersionId: improvedPreviewAvailable ? `version-${siteLabel}` : null,
         runtimeArtifactId: improvedPreviewAvailable ? `artifact-${siteLabel}` : null,
@@ -114,6 +115,7 @@ function editorModel(overrides: {
         authNote: "Superadmin-only internal GNR8 preview.",
       },
       airshipDraftCandidate: overrides.draftCandidate ?? null,
+      airshipDraftCandidateReview: null,
     },
     links: {
       liveSite: liveUrl ?? sourceUrl,

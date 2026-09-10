@@ -14,6 +14,7 @@ import {
 } from "./airship-single-site-local-draft-editor";
 import {
   AirshipSingleSiteVisualEditorWorkspace,
+  airshipCanApplySavedDraftToPreview,
   airshipCanvasSelectorForSection,
   applyAirshipHeroCommand,
   applyAirshipHeroTextFieldEdit,
@@ -121,6 +122,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         lastSavedAt: null,
       },
       latestInternalPreviewCandidate: null,
+      latestInternalPreviewReview: null,
       publishedVersionRefs: {
         siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
         runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
@@ -216,6 +218,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
           },
         ],
       },
+      airshipDraftCandidateReview: null,
     },
     links: {
       liveSite: "https://www.chs.si/",
@@ -352,6 +355,10 @@ test("airship single-site editor renders live published and Airship draft candid
   assert.equal(html.includes("Not live, internal preview only"), true);
   assert.equal(html.includes("Saved draft to internal preview"), true);
   assert.equal(html.includes("Apply saved draft to preview"), true);
+  assert.equal(html.includes("Internal preview review readiness"), true);
+  assert.equal(html.includes("Approve internal preview for publish readiness"), true);
+  assert.equal(html.includes("active pointer unchanged"), true);
+  assert.equal(html.includes("records review readiness only"), true);
   assert.equal(html.includes("Open latest internal preview candidate"), true);
   assert.equal(html.includes("accepted/saved edits applied"), true);
   assert.equal(html.includes("rejected CTA not applied"), true);
@@ -364,6 +371,50 @@ test("airship single-site editor renders live published and Airship draft candid
   assert.equal(html.includes('src="https://www.chs.si/"'), false);
   assert.equal(html.includes("If this frame shows a connection-session error"), true);
   assert.equal(html.includes("The draft editor below remains usable."), true);
+});
+
+test("airship single-site editor shows approved internal preview review status and next step", () => {
+  const model = airshipModel();
+  model.previews.airshipDraftCandidateReview = {
+    id: "33333333-3333-4333-8333-333333333333",
+    migrationId: CHS_MIGRATION_ID,
+    draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
+    draftVersion: 5,
+    candidateSiteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
+    candidateRuntimeArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
+    reviewDecision: "approved_for_publish_readiness",
+    reviewStatus: "approved",
+    publishReadinessReady: true,
+    reviewerActorId: "superadmin-reviewer",
+    reviewerActorType: "human",
+    reviewerActorRole: "platform_superadmin",
+    reviewedAt: "2026-09-10T00:08:00.000Z",
+    limitationsNotes: "Internal preview only; not live, not published; active pointer unchanged.",
+    nextStep: "publish-readiness evaluation, not publish",
+    activePointerSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+    activePointerArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    activePointerChanged: false,
+    runtimeVersionStateMutated: false,
+    liveSiteMutated: false,
+    published: false,
+    serviceVersion: "airship-5-internal-preview-candidate-review:v1",
+    idempotencyKey: "review-key",
+    correlationId: "review-correlation",
+    metadata: { internalPreviewOnly: true },
+    createdAt: "2026-09-10T00:08:00.000Z",
+    updatedAt: "2026-09-10T00:08:00.000Z",
+  };
+  const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={model} />);
+
+  assert.equal(html.includes("Approved for publish readiness"), true);
+  assert.equal(html.includes("approved / reviewed"), true);
+  assert.equal(html.includes("Reviewed candidate"), true);
+  assert.equal(html.includes("Preview artifact"), true);
+  assert.equal(html.includes("platform_superadmin: superadmin-reviewer"), true);
+  assert.equal(html.includes("publish-readiness evaluation, not publish"), true);
+  assert.equal(html.includes("not live"), true);
+  assert.equal(html.includes("not published"), true);
+  assert.equal(html.includes("active pointer unchanged"), true);
 });
 
 test("airship single-site editor shows concrete proposed draft rows", () => {
@@ -634,6 +685,24 @@ test("airship visual editor keeps apply-saved-draft enabled when saved draft dat
   assert.equal(applyButton.includes("disabled"), false);
   assert.equal(html.includes("CHS saved headline persists"), true);
   assert.equal(html.includes("Draft only. Not live. Not published."), true);
+});
+
+test("airship visual editor applies saved drafts to preview only after local text and style changes are saved", () => {
+  const base = {
+    migrationId: CHS_MIGRATION_ID,
+    draftId: "draft-saved-headline",
+    busy: false,
+    candidateApplyState: "idle" as const,
+  };
+
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "saved" }), true);
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "unsaved" }), false);
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "saving" }), false);
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "failed" }), false);
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "saved", busy: true }), false);
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "saved", candidateApplyState: "creating" }), false);
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "saved", migrationId: null }), false);
+  assert.equal(airshipCanApplySavedDraftToPreview({ ...base, saveState: "saved", draftId: null }), false);
 });
 
 test("airship visual editor exposes focused canvas click targets for hero, CTA, and source selection", async () => {

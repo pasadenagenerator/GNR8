@@ -81,8 +81,8 @@ type StyleFieldKey = "topPadding" | "bottomPadding" | "backgroundTint" | "ctaCol
 type EditorSectionKey = "hero" | "cta" | "source";
 type EditorViewportKey = "desktop" | "tablet" | "mobile";
 type InspectorTabKey = "agent" | "edit" | "css" | "dom";
-type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
-type CandidateApplyState = "idle" | "creating" | "created" | "failed";
+export type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
+export type CandidateApplyState = "idle" | "creating" | "created" | "failed";
 type PreviewCandidateState = NonNullable<Props["draftCandidate"]>;
 
 export type AirshipSelectedElementMetadata = {
@@ -551,6 +551,16 @@ export function deriveAirshipDraftSaveState(input: {
   return textFieldsChanged(input.fields, input.savedFields) || styleFieldsChanged(input.fields, input.savedFields) ? "unsaved" : "saved";
 }
 
+export function airshipCanApplySavedDraftToPreview(input: {
+  migrationId: string | null;
+  draftId: string | null;
+  saveState: DraftSaveState;
+  busy: boolean;
+  candidateApplyState: CandidateApplyState;
+}): boolean {
+  return Boolean(input.migrationId && input.draftId) && input.saveState === "saved" && !input.busy && input.candidateApplyState !== "creating";
+}
+
 export function resetAirshipSectionTextToSavedValues(input: {
   section: EditorSectionKey;
   fields: AirshipHeroEditorFields;
@@ -674,7 +684,13 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   });
   const selectedStyleValueRows = deriveAirshipStyleValueRows(selectedSection, fields);
   const activeAgentProfile = agentProfileSelection.activeProfile;
-  const canApplySavedDraftToPreview = Boolean(props.migrationId && draftMeta.draftId) && !busy && candidateApplyState !== "creating";
+  const canApplySavedDraftToPreview = airshipCanApplySavedDraftToPreview({
+    migrationId: props.migrationId,
+    draftId: draftMeta.draftId,
+    saveState,
+    busy,
+    candidateApplyState,
+  });
 
   const selectedDrafts = useMemo(
     () => {
@@ -793,7 +809,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     return payload.draft;
   }
 
-  const saveStyleSettings = useCallback(async (nextFields: AirshipHeroEditorFields) => {
+  const saveStyleSettings = useCallback(async (nextFields: AirshipHeroEditorFields): Promise<NonNullable<DraftActionResponse["draft"]>> => {
     if (!props.migrationId) throw new Error("airship_migration_id_missing");
     const response = await fetch("/api/gnr8/admin/airship/single-site/drafts", {
       method: "POST",
@@ -833,6 +849,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       scope: "style",
       state: "saved",
     });
+    return payload.draft;
   }, [props.migrationId]);
 
   useEffect(() => {
@@ -865,11 +882,15 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     setSaveState("saving");
     setMessage("Saving changes to Airship draft only...");
     try {
+      clearPendingStyleSave();
       let latestDraft: NonNullable<DraftActionResponse["draft"]> | null = null;
       for (const field of changedFields) {
         const draftId = draftIdForField(field, editableDrafts);
         if (!draftId) continue;
         latestDraft = await saveDraftText(draftId, nextFields[field]);
+      }
+      if (styleKey(nextFields) !== savedStyleKeyRef.current) {
+        latestDraft = await saveStyleSettings(nextFields);
       }
       const nextSavedFields = {
         ...savedFieldsRef.current,
@@ -898,6 +919,23 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       return;
     }
     clearPendingStyleSave();
+    if (styleKey(fields) !== savedStyleKeyRef.current) {
+      setSaveState("saving");
+      setMessage("Saving style changes to Airship draft only before creating the internal preview candidate...");
+      try {
+        await saveStyleSettings(fields);
+      } catch {
+        setCandidateApplyState("failed");
+        setSaveState("failed");
+        setMessage("Airship style save failed. Internal preview candidate was not created; no live site or active pointer changed.");
+        return;
+      }
+    }
+    if (deriveAirshipDraftSaveState({ fields, savedFields: savedFieldsRef.current }) !== "saved") {
+      setSaveState("unsaved");
+      setMessage("Save the Airship draft first, then create the internal preview candidate. Not live. Not published.");
+      return;
+    }
     setCandidateApplyState("creating");
     setMessage("Creating internal preview candidate from the saved Airship draft...");
     try {
