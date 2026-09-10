@@ -22,8 +22,8 @@ const TABS: WorkspaceTabInput[] = [
   { key: "hosting", href: "/gnr8/command-center/hosting", label: "Hosting" },
   {
     key: "single-site-studio",
-    href: "/gnr8/command-center/single-site-studio?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63",
-    label: "Single-Site Studio",
+    href: "/gnr8/airship",
+    label: "Airship",
   },
   { key: "single-site-publish", href: "/gnr8/command-center/single-site-publish", label: "Single-Site Publish" },
   { key: "migration-batches", href: "/gnr8/command-center/migration-batches", label: "Migration Batches" },
@@ -73,6 +73,13 @@ const COMMAND_CENTER_SHORTCUTS: WorkspaceShortcut[] = [
     href: "/gnr8/command-center/ai-settings",
     description: "Review agency-level AI provider and Airship profile metadata",
     icon: "AI",
+  },
+  {
+    id: "open-airship",
+    label: "Open Airship",
+    href: "/gnr8/airship",
+    description: "Select imported single-site migrations for Airship",
+    icon: "AS",
   },
   {
     id: "open-migration-batches",
@@ -189,8 +196,8 @@ export default function CommandCenterLayout(props: Props) {
           { id: "route-command-center-hosting", label: "Command Center Hosting", href: "/gnr8/command-center/hosting", sublabel: "Key route" },
           {
             id: "route-command-center-single-site-studio",
-            label: "Command Center Single-Site Studio",
-            href: "/gnr8/command-center/single-site-studio?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63",
+            label: "Airship Imported Sites",
+            href: "/gnr8/airship",
             sublabel: "Key route",
           },
           {

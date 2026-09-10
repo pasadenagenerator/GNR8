@@ -104,6 +104,16 @@ export default async function CommandCenterOverviewPage() {
           </article>
 
           <article style={{ border: "1px solid #dbe6f1", borderRadius: 10, padding: 12 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 16 }}>Airship</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>
+              Select existing imported single-site migrations and open the Airship overview or editor.
+            </p>
+            <Link href="/gnr8/airship" style={{ display: "inline-flex", marginTop: 10, fontSize: 13 }}>
+              Open Airship
+            </Link>
+          </article>
+
+          <article style={{ border: "1px solid #dbe6f1", borderRadius: 10, padding: 12 }}>
             <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 16 }}>Migration Batches</h3>
             <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>
               Durable migration batch summary, diagnostics, failures, and timeline.

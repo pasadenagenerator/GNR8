@@ -148,6 +148,13 @@ export class SingleSiteStateReadRepository {
     });
   }
 
+  async listRecentMigrationIds(limit = 50): Promise<string[]> {
+    return this.withReadOnlyTransaction(async (client) => {
+      const rows = await this.listRecentMigrationHeaders(client, limit);
+      return rows.map((row) => row.id);
+    });
+  }
+
   async readLatestSourceEvidenceReviewForMigration(migrationId: string): Promise<SingleSiteSourceEvidenceReviewSummary | null> {
     const model = await this.readByMigrationId(migrationId);
     return model?.sourceEvidenceReview ?? null;
@@ -355,6 +362,23 @@ export class SingleSiteStateReadRepository {
         updated_at::text as updated_at
       from public.gnr8_single_site_migrations
       where current_state not in ('migration_closed_out', 'migration_failed', 'migration_cancelled')
+      order by public.gnr8_single_site_migrations.updated_at desc, public.gnr8_single_site_migrations.created_at desc
+      limit $1
+      `,
+      [Math.max(1, Math.min(Number(limit) || 50, 200))],
+    );
+    return result.rows as SingleSiteMigrationRow[];
+  }
+
+  private async listRecentMigrationHeaders(client: SingleSitePgClient, limit: number): Promise<SingleSiteMigrationRow[]> {
+    const result = await client.query(
+      `
+      select
+        *,
+        terminal_at::text as terminal_at,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_single_site_migrations
       order by public.gnr8_single_site_migrations.updated_at desc, public.gnr8_single_site_migrations.created_at desc
       limit $1
       `,

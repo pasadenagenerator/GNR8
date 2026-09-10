@@ -273,7 +273,7 @@ test("single-site studio is wired as the primary single-site Command Center rout
   const source = await readFile(COMMAND_CENTER_LAYOUT_FILE, "utf8");
 
   assert.equal(source.includes('"single-site-studio"'), true);
-  assert.equal(source.includes("/gnr8/command-center/single-site-studio?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63"), true);
+  assert.equal(source.includes("/gnr8/airship"), true);
   assert.equal(source.includes("/gnr8/command-center/single-site-publish"), true);
   assert.equal(source.indexOf('"single-site-studio"') < source.indexOf('"single-site-publish"'), true);
 });
