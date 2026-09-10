@@ -420,14 +420,14 @@ export class PostgresAirshipPublishReadinessRepository implements AirshipPublish
       const result = await client.query(
         `
         select *, reviewed_at::text as reviewed_at, created_at::text as created_at, updated_at::text as updated_at
-        from public.gnr8_airship_publish_readiness_packages
+        from public.gnr8_airship_publish_readiness_packages p
         where migration_id = $1::uuid
           and ($2::uuid is null or review_record_id = $2::uuid)
           and ($3::uuid is null or reviewed_candidate_site_version_id = $3::uuid)
           and ($4::uuid is null or reviewed_artifact_id = $4::uuid)
           and ($5::uuid is null or draft_id = $5::uuid)
           and ($6::integer is null or draft_version = $6::integer)
-        order by created_at desc
+        order by p.created_at desc
         limit 1
         `,
         [

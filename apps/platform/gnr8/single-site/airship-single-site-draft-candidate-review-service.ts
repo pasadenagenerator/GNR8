@@ -276,13 +276,13 @@ export class PostgresAirshipInternalPreviewCandidateReviewRepository implements 
       const result = await client.query(
         `
         select *, reviewed_at::text as reviewed_at, created_at::text as created_at, updated_at::text as updated_at
-        from public.gnr8_airship_internal_preview_candidate_reviews
+        from public.gnr8_airship_internal_preview_candidate_reviews r
         where migration_id = $1::uuid
           and ($2::uuid is null or draft_id = $2::uuid)
           and ($3::integer is null or draft_version = $3::integer)
           and ($4::uuid is null or candidate_site_version_id = $4::uuid)
           and ($5::uuid is null or candidate_runtime_artifact_id = $5::uuid)
-        order by reviewed_at desc, created_at desc
+        order by r.reviewed_at desc, r.created_at desc
         limit 1
         `,
         [

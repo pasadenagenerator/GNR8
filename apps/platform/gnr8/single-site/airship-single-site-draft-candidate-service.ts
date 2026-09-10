@@ -571,33 +571,79 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
   draftId?: string | null;
 }): Promise<AirshipDraftCandidatePreviewRef | null> {
   const pool = getSuperadminPool();
-  const res = await pool.query<{
+  type CandidateRow = {
     site_version_id: string;
     artifact_id: string;
     import_provenance_summary: unknown;
     artifact_manifest: unknown;
-  }>(
+    fallback_draft_id: string | null;
+    fallback_draft_version: number | null;
+    fallback_source_site_version_id: string | null;
+    fallback_source_artifact_id: string | null;
+  };
+  const res = await pool.query<CandidateRow>(
     `
     select
       v.id::text as site_version_id,
       a.id::text as artifact_id,
       v.import_provenance_summary,
-      a.manifest as artifact_manifest
+      a.manifest as artifact_manifest,
+      null::text as fallback_draft_id,
+      null::integer as fallback_draft_version,
+      null::text as fallback_source_site_version_id,
+      null::text as fallback_source_artifact_id
     from public.gnr8_runtime_site_versions v
     join public.gnr8_runtime_artifacts a on a.site_version_id = v.id
     where v.state = 'DRAFT'
-      and v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'serviceVersion' = $1::text
-      and v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'migrationId' = $2::text
-      and ($3::text is null or v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'draftId' = $3::text)
+      and (
+        (
+          v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'serviceVersion' = $1::text
+          and v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'migrationId' = $2::text
+          and ($3::text is null or v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'draftId' = $3::text)
+        )
+        or (
+          a.manifest->'airshipSingleSiteDraftCandidate'->>'serviceVersion' = $1::text
+          and a.manifest->'airshipSingleSiteDraftCandidate'->>'migrationId' = $2::text
+          and ($3::text is null or a.manifest->'airshipSingleSiteDraftCandidate'->>'draftId' = $3::text)
+        )
+      )
     order by v.created_at desc, v.version_no desc
     limit 1
     `,
     [AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION, input.migrationId, text(input.draftId)],
   );
-  const row = res.rows[0];
+  let row = res.rows[0];
+  if (!row) {
+    const fallback = await pool.query<CandidateRow>(
+      `
+      select
+        v.id::text as site_version_id,
+        a.id::text as artifact_id,
+        v.import_provenance_summary,
+        a.manifest as artifact_manifest,
+        r.draft_id::text as fallback_draft_id,
+        r.draft_version::integer as fallback_draft_version,
+        r.active_pointer_site_version_id::text as fallback_source_site_version_id,
+        r.active_pointer_artifact_id::text as fallback_source_artifact_id
+      from public.gnr8_airship_internal_preview_candidate_reviews r
+      join public.gnr8_runtime_site_versions v on v.id = r.candidate_site_version_id
+      join public.gnr8_runtime_artifacts a on a.id = r.candidate_runtime_artifact_id and a.site_version_id = v.id
+      where r.migration_id = $1::uuid
+        and ($2::uuid is null or r.draft_id = $2::uuid)
+        and r.review_status = 'approved'
+        and r.review_decision = 'approved_for_publish_readiness'
+        and v.state = 'DRAFT'
+        and a.publish_stage is distinct from 'production'
+      order by r.reviewed_at desc, r.created_at desc
+      limit 1
+      `,
+      [input.migrationId, text(input.draftId)],
+    );
+    row = fallback.rows[0];
+  }
   if (!row) return null;
   const provenance = provenanceFrom(row.import_provenance_summary) ?? provenanceFrom(row.artifact_manifest);
-  if (!provenance) return null;
+  if (!provenance && (!row.fallback_draft_id || !row.fallback_draft_version || !row.fallback_source_site_version_id || !row.fallback_source_artifact_id)) return null;
   return {
     label: "New Airship draft candidate preview",
     siteVersionId: row.site_version_id,
@@ -608,12 +654,12 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
     unavailableReason: null,
     authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
     statusLabel: "Not live, internal preview only",
-    sourceLiveSiteVersionId: provenance.sourceLiveSiteVersionId,
-    sourceLiveRuntimeArtifactId: provenance.sourceLiveRuntimeArtifactId,
-    draftId: provenance.draftId,
-    draftVersion: provenance.draftVersion,
-    styleSettings: provenance.styleSettings ?? sanitizeDraftStyleSettings(null),
-    appliedEdits: provenance.appliedEdits ?? [],
-    skippedEdits: provenance.skippedEdits ?? [],
+    sourceLiveSiteVersionId: provenance?.sourceLiveSiteVersionId ?? row.fallback_source_site_version_id ?? "",
+    sourceLiveRuntimeArtifactId: provenance?.sourceLiveRuntimeArtifactId ?? row.fallback_source_artifact_id ?? "",
+    draftId: provenance?.draftId ?? row.fallback_draft_id ?? "",
+    draftVersion: provenance?.draftVersion ?? row.fallback_draft_version ?? 1,
+    styleSettings: provenance?.styleSettings ?? sanitizeDraftStyleSettings(null),
+    appliedEdits: provenance?.appliedEdits ?? [],
+    skippedEdits: provenance?.skippedEdits ?? [],
   };
 }
