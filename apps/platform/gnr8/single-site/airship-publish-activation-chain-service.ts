@@ -186,6 +186,15 @@ function jsonArray(value: unknown): unknown[] {
   return [];
 }
 
+function rowText(row: unknown, ...keys: string[]): string | null {
+  const object = jsonObject(row);
+  for (const key of keys) {
+    const value = text(object[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
 export function airshipPublishActivationChainIdempotencyKey(input: AirshipPublishActivationChainRefs): string {
   return `airship-publish-activation-chain:${sha256({
     readinessPackageId: input.readinessPackageId,
@@ -645,7 +654,7 @@ export async function createAirshipPublishActivationChain(
     evidencePackageInput({ readiness, refs: canonicalRefs, actorId, correlationId, idempotencyKey }),
   );
   const evidencePackageId = required("evidence_package_id", evidence.evidencePackage.id);
-  const evidenceSourceWatermark = required("evidence_source_watermark", evidence.evidencePackage.sourceWatermark);
+  const evidenceSourceWatermark = required("evidence_source_watermark", rowText(evidence.evidencePackage, "sourceWatermark", "source_watermark"));
   const candidateSourceRef = sourceRefForRequest(canonicalRefs.candidateSourceRef);
   const artifactSourceRef = sourceRefForRequest(canonicalRefs.artifactSourceRef);
   const publishTargetRef = sourceRefForRequest(canonicalRefs.publishTargetRef);
