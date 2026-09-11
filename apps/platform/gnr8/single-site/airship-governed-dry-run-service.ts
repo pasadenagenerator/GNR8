@@ -25,6 +25,13 @@ import {
   type SingleSitePublishOperatorDryRunSafeResult,
 } from "./single-site-publish-operator-dry-run-caller";
 import {
+  AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+  type AirshipPublishActivationHandoff,
+  type PublishActivationMetadataHandoffDecisionRef,
+  type PublishActivationMetadataHandoffRequestRef,
+  type AirshipPublishActivationGateAttemptRef,
+} from "./publish-activation-metadata-handoff";
+import {
   publishSingleSiteApprovedCandidateShadow,
   type SingleSitePublishWrapperInput,
 } from "./single-site-publish-wrapper-orchestrator";
@@ -251,6 +258,28 @@ function optionalMetadataString(metadata: Record<string, unknown>, key: string):
   return text(metadata[key]);
 }
 
+function optionalHandoffRequest(metadata: Record<string, unknown>): PublishActivationMetadataHandoffRequestRef | null {
+  const id = optionalMetadataString(metadata, "expectedPublishActivationRequestRef");
+  const ref = optionalMetadataString(metadata, "expectedPublishActivationRequestDisplayRef") ?? optionalMetadataString(metadata, "expectedPublishActivationRequestRef");
+  const status = optionalMetadataString(metadata, "expectedPublishActivationRequestStatus");
+  return id || ref || status ? { id, ref, status } : null;
+}
+
+function optionalHandoffDecision(metadata: Record<string, unknown>): PublishActivationMetadataHandoffDecisionRef | null {
+  const id = optionalMetadataString(metadata, "expectedPublishActivationDecisionRef");
+  const ref = optionalMetadataString(metadata, "expectedPublishActivationDecisionDisplayRef") ?? optionalMetadataString(metadata, "expectedPublishActivationDecisionRef");
+  const status = optionalMetadataString(metadata, "expectedPublishActivationDecisionStatus");
+  return id || ref || status ? { id, ref, status } : null;
+}
+
+function optionalHandoffGate(metadata: Record<string, unknown>): AirshipPublishActivationGateAttemptRef | null {
+  const id = optionalMetadataString(metadata, "expectedGateAttemptResultRef");
+  const ref = optionalMetadataString(metadata, "expectedGateAttemptResultDisplayRef") ?? optionalMetadataString(metadata, "expectedGateAttemptResultRef");
+  const status = optionalMetadataString(metadata, "expectedGateAttemptStatus");
+  const watermark = optionalMetadataString(metadata, "expectedGateInputWatermark");
+  return id || ref || status || watermark ? { id, ref, status, watermark } : null;
+}
+
 function baseRequest(input: {
   readiness: AirshipPublishReadinessRecord;
   refs: AirshipGovernedDryRunRefs;
@@ -278,36 +307,66 @@ function baseRequest(input: {
     sourceWatermark: `airship-publish-readiness:${input.refs.readinessPackageId}:${input.refs.reviewRecordId}:${input.refs.candidateVersionId}:${input.refs.artifactId}:${input.refs.draftId}:${input.refs.draftVersion}`,
     metadataJson: metadata,
   });
+  const reviewRecordRef = canonicalRef({
+    role: "airship_review_record",
+    sourceTable: "gnr8_airship_internal_preview_candidate_reviews",
+    sourceRecordId: input.refs.reviewRecordId,
+    sourceVersion: input.readiness.serviceVersion,
+    sourceWatermark: `airship-review:${input.refs.reviewRecordId}:candidate:${input.refs.candidateVersionId}`,
+    metadataJson: metadata,
+  });
+  const candidateSiteVersionRef = canonicalRef({
+    role: "candidate_site_version",
+    sourceTable: "gnr8_runtime_site_versions",
+    sourceRecordId: input.refs.candidateVersionId,
+    sourceVersion: `airship-draft:${input.refs.draftVersion}`,
+    sourceWatermark: `airship-candidate:${input.refs.candidateVersionId}:readiness:${input.refs.readinessPackageId}`,
+    metadataJson: metadata,
+  });
+  const runtimeArtifactRef = canonicalRef({
+    role: "runtime_artifact",
+    sourceTable: "gnr8_runtime_artifacts",
+    sourceRecordId: input.refs.artifactId,
+    sourceVersion: `airship-draft:${input.refs.draftVersion}`,
+    sourceWatermark: `airship-artifact:${input.refs.artifactId}:readiness:${input.refs.readinessPackageId}`,
+    metadataJson: metadata,
+  });
+  const airshipPublishActivationHandoff: AirshipPublishActivationHandoff = {
+    sourceType: AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+    readinessPackageId: input.refs.readinessPackageId,
+    reviewRecordId: input.refs.reviewRecordId,
+    candidateVersionId: input.refs.candidateVersionId,
+    artifactId: input.refs.artifactId,
+    draftId: input.refs.draftId,
+    draftVersion: input.refs.draftVersion,
+    publishTargetRef: PRODUCTION_TARGET_REF,
+    sourceEvidenceRefs: {
+      readinessPackageRef,
+      reviewRecordRef,
+      candidateSourceRef: candidateSiteVersionRef,
+      artifactSourceRef: runtimeArtifactRef,
+    },
+    activationRequestRef: optionalHandoffRequest(readinessMetadata),
+    activationDecisionRef: optionalHandoffDecision(readinessMetadata),
+    gateAttemptRef: optionalHandoffGate(readinessMetadata),
+  };
   return {
     mode: "dry_run",
     ...identity,
     migrationId: input.refs.migrationId,
-    candidateSiteVersionRef: canonicalRef({
-      role: "candidate_site_version",
-      sourceTable: "gnr8_runtime_site_versions",
-      sourceRecordId: input.refs.candidateVersionId,
-      sourceVersion: `airship-draft:${input.refs.draftVersion}`,
-      sourceWatermark: `airship-candidate:${input.refs.candidateVersionId}:readiness:${input.refs.readinessPackageId}`,
-      metadataJson: metadata,
-    }),
-    runtimeArtifactRef: canonicalRef({
-      role: "runtime_artifact",
-      sourceTable: "gnr8_runtime_artifacts",
-      sourceRecordId: input.refs.artifactId,
-      sourceVersion: `airship-draft:${input.refs.draftVersion}`,
-      sourceWatermark: `airship-artifact:${input.refs.artifactId}:readiness:${input.refs.readinessPackageId}`,
-      metadataJson: metadata,
-    }),
+    candidateSiteVersionRef,
+    runtimeArtifactRef,
     expectedPublishTargetRef: PRODUCTION_TARGET_REF,
     publishStage: "production",
     publishEnvironment: "production",
     expectedLaunchReadinessEvidenceRef: readinessPackageRef,
-    expectedPublishActivationRequestRef: optionalMetadataString(readinessMetadata, "expectedPublishActivationRequestRef") ?? input.refs.readinessPackageId,
-    expectedPublishActivationDecisionRef: optionalMetadataString(readinessMetadata, "expectedPublishActivationDecisionRef") ?? input.refs.readinessPackageId,
-    expectedGateAttemptResultRef: optionalMetadataString(readinessMetadata, "expectedGateAttemptResultRef") ?? input.refs.readinessPackageId,
+    expectedPublishActivationRequestRef: optionalMetadataString(readinessMetadata, "expectedPublishActivationRequestRef") ?? "",
+    expectedPublishActivationDecisionRef: optionalMetadataString(readinessMetadata, "expectedPublishActivationDecisionRef") ?? "",
+    expectedGateAttemptResultRef: optionalMetadataString(readinessMetadata, "expectedGateAttemptResultRef") ?? "",
     expectedGateAttemptResultDisplayRef: optionalMetadataString(readinessMetadata, "expectedGateAttemptResultDisplayRef") ?? null,
-    expectedHandoffWatermark: optionalMetadataString(readinessMetadata, "expectedHandoffWatermark") ?? `airship-handoff-pending:${input.refs.readinessPackageId}`,
-    expectedGateInputWatermark: optionalMetadataString(readinessMetadata, "expectedGateInputWatermark") ?? `airship-gate-input-pending:${input.refs.readinessPackageId}`,
+    expectedHandoffWatermark: optionalMetadataString(readinessMetadata, "expectedHandoffWatermark") ?? "",
+    expectedGateInputWatermark: optionalMetadataString(readinessMetadata, "expectedGateInputWatermark") ?? "",
+    airshipPublishActivationHandoff,
     operatorConfirmation: {
       mode: "dry_run",
       dryRunOnly: true,
@@ -347,6 +406,7 @@ function wrapperInputFromAirshipRequest(
     expectedGateAttemptResultRef: optionalMetadataString(metadata, "expectedGateAttemptResultRef"),
     expectedHandoffWatermark: optionalMetadataString(metadata, "expectedHandoffWatermark"),
     expectedGateInputWatermark: optionalMetadataString(metadata, "expectedGateInputWatermark"),
+    airshipPublishActivationHandoff: request.airshipPublishActivationHandoff ?? null,
     actor,
     correlationId: request.correlationId,
     idempotencyKey: request.idempotencyKey,

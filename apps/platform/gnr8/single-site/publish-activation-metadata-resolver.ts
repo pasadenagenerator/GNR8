@@ -24,6 +24,7 @@ import {
   PUBLISH_ACTIVATION_METADATA_HANDOFF_SOURCE_TYPE,
   buildPublishActivationMetadataHandoffWatermark,
   normalizePublishActivationMetadataHandoff,
+  type AirshipPublishActivationHandoff,
   type NormalizedPublishActivationMetadataHandoff,
   type PublishActivationMetadataHandoff,
 } from "./publish-activation-metadata-handoff";
@@ -78,6 +79,7 @@ export type PublishActivationMetadataResolverInput = {
   allowWarningsWithLimitations?: boolean;
   evaluatedAt?: string | Date | null;
   requestId?: string | null;
+  airshipPublishActivationHandoff?: AirshipPublishActivationHandoff | null;
   repositorySnapshot?: PublishActivationMetadataResolverRepositorySnapshot | null;
 };
 
@@ -267,6 +269,47 @@ function refMatchesText(expected: string | null | undefined, values: readonly (s
   return values.map(text).some((value) => value === normalized);
 }
 
+function isAirshipInput(input: PublishActivationMetadataResolverInput): boolean {
+  return input.airshipPublishActivationHandoff?.sourceType === "airship_publish_activation";
+}
+
+function optionalAirshipRefId(ref: { id?: string | null; ref?: string | null } | null | undefined): string | null {
+  return text(ref?.id) ?? refTextId(text(ref?.ref));
+}
+
+function airshipMissingCodes(input: PublishActivationMetadataResolverInput, snapshot: PublishActivationMetadataResolverRepositorySnapshot, handoff: ReturnType<typeof buildPublishActivationGateHandoff>): string[] {
+  const airship = input.airshipPublishActivationHandoff;
+  if (!airship) return [];
+  const gate = snapshot.gateAttempt;
+  const gateInput = gateInputWatermark(gate) ?? text(airship.gateAttemptRef?.watermark);
+  const missing: string[] = [];
+  if (!sourceId(input.candidateSiteVersionRef) || !sourceId(airship.sourceEvidenceRefs.candidateSourceRef)) missing.push("airship_candidate_source_ref_missing");
+  if (!sourceId(input.runtimeArtifactRef) || !sourceId(airship.sourceEvidenceRefs.artifactSourceRef)) missing.push("airship_artifact_source_ref_missing");
+  if (!sourceId(input.expectedPublishTargetRef) && !sourceId(airship.publishTargetRef)) missing.push("airship_publish_target_ref_missing");
+  if (!optionalAirshipRefId(airship.activationRequestRef) && !handoff.request.id) missing.push("airship_publish_activation_request_missing");
+  if (!optionalAirshipRefId(airship.activationDecisionRef) && !handoff.decision.id) missing.push("airship_publish_activation_decision_missing");
+  if (!gate) missing.push("airship_publish_activation_gate_missing");
+  if ((text(airship.gateAttemptRef?.id) || text(airship.gateAttemptRef?.ref) || gate) && !gateInput) missing.push("airship_gate_input_watermark_missing");
+  return uniqueSorted(missing);
+}
+
+function filterAirshipGenericMissing(codes: readonly string[]): string[] {
+  const filtered = codes.filter((code) => ![
+    "publish_activation_request_missing",
+    "publish_activation_decision_missing",
+    "publish_activation_gate_missing",
+    "publish_activation_gate_input_watermark_missing",
+    "publish_target_ref_missing",
+    "publish_activation_target_missing",
+    "publish_activation_metadata_handoff_publish_activation_request_ref_missing",
+    "publish_activation_metadata_handoff_publish_activation_decision_ref_missing",
+    "publish_activation_metadata_handoff_gate_attempt_result_ref_missing",
+    "publish_activation_metadata_handoff_handoff_watermark_missing",
+    "publish_activation_metadata_handoff_gate_input_watermark_missing",
+  ].includes(code));
+  return uniqueSorted(filtered);
+}
+
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
   if (!value || typeof value !== "object") return value ?? null;
@@ -344,12 +387,13 @@ function validationCodes(input: PublishActivationMetadataResolverInput, snapshot
   stale.push(...model.diagnostics.stale);
   warnings.push(...model.diagnostics.warnings);
   blockers.push(...model.diagnostics.blockers);
-  if (!model.publishActivationRequest.id) missing.push("publish_activation_request_missing");
-  if (!model.publishActivationDecision.id) missing.push("publish_activation_decision_missing");
+  const airship = isAirshipInput(input);
+  if (!model.publishActivationRequest.id) missing.push(airship ? "airship_publish_activation_request_missing" : "publish_activation_request_missing");
+  if (!model.publishActivationDecision.id) missing.push(airship ? "airship_publish_activation_decision_missing" : "publish_activation_decision_missing");
   if (!model.launchReadinessEvidence.packageId) missing.push("launch_readiness_evidence_package_missing");
-  if (!handoff.candidateSiteVersionRef) missing.push("candidate_site_version_ref_missing");
-  if (!handoff.runtimeArtifactRef) missing.push("runtime_artifact_ref_missing");
-  if (!handoff.publishTargetRef) missing.push("publish_target_ref_missing");
+  if (!handoff.candidateSiteVersionRef) missing.push(airship ? "airship_candidate_source_ref_missing" : "candidate_site_version_ref_missing");
+  if (!handoff.runtimeArtifactRef) missing.push(airship ? "airship_artifact_source_ref_missing" : "runtime_artifact_ref_missing");
+  if (!handoff.publishTargetRef) missing.push(airship ? "airship_publish_target_ref_missing" : "publish_target_ref_missing");
 
   const targetRef = handoff.publishTargetRef;
   if (!sameRef(input.candidateSiteVersionRef, handoff.candidateSiteVersionRef)) mismatches.push("publish_activation_candidate_mismatch");
@@ -363,7 +407,7 @@ function validationCodes(input: PublishActivationMetadataResolverInput, snapshot
   const gateId = rowText(gate, "id");
   const gateInput = gateInputWatermark(gate);
   if (!gate) {
-    missing.push("publish_activation_gate_missing");
+    missing.push(airship ? "airship_publish_activation_gate_missing" : "publish_activation_gate_missing");
   } else {
     if (!refMatchesText(input.expectedGateAttemptResultRef, [gateId])) mismatches.push("publish_activation_gate_mismatch");
     if (rowText(gate, "tenant_id") !== input.tenantId || rowText(gate, "client_id") !== input.clientId || rowText(gate, "site_id") !== input.siteId) {
@@ -380,13 +424,13 @@ function validationCodes(input: PublishActivationMetadataResolverInput, snapshot
     if (rowText(snapshot.gatePolicyEvaluation, "result") && rowText(snapshot.gatePolicyEvaluation, "result") !== "approval_required") {
       blockers.push(`publish_activation_gate_policy_${rowText(snapshot.gatePolicyEvaluation, "result")}`);
     }
-    if (!gateInput) missing.push("publish_activation_gate_input_watermark_missing");
+    if (!gateInput) missing.push(airship ? "airship_gate_input_watermark_missing" : "publish_activation_gate_input_watermark_missing");
     if (!refMatchesText(input.expectedGateInputWatermark, [gateInput])) mismatches.push("publish_activation_gate_input_watermark_mismatch");
   }
 
   const target = snapshot.decisionSnapshot.publishTarget;
   if (!target) {
-    missing.push("publish_activation_target_missing");
+    missing.push(airship ? "airship_publish_target_ref_missing" : "publish_activation_target_missing");
   } else {
     if (rowText(target, "id") !== sourceId(targetRef)) mismatches.push("publish_activation_target_mismatch");
     if (["disabled", "retired"].includes(String(rowText(target, "status")))) blockers.push("publish_activation_target_inactive");
@@ -413,9 +457,10 @@ function validationCodes(input: PublishActivationMetadataResolverInput, snapshot
     if (!input.allowWarningsWithLimitations) blockers.push("publish_activation_limitations_not_accepted");
   }
 
+  const airshipMissing = airshipMissingCodes(input, snapshot, handoff);
   return {
-    blockers: uniqueSorted(blockers),
-    missing: uniqueSorted(missing),
+    blockers: uniqueSorted([...blockers, ...airshipMissing]),
+    missing: uniqueSorted([...missing, ...airshipMissing]),
     mismatches: uniqueSorted(mismatches),
     stale: uniqueSorted(stale),
     warnings: uniqueSorted(warnings),
@@ -609,8 +654,11 @@ export function resolveSingleSitePublishActivationMetadataHandoff(input: Publish
         },
       })
     : null;
+  const airship = isAirshipInput(input);
   const blockerCodes = uniqueSorted([...codes.blockers, ...(guard && !guard.allowed ? guard.blockerCodes : [])]);
-  const missingCodes = uniqueSorted([...codes.missing, ...normalized.diagnostics.missingCodes]);
+  const validationMissingCodes = airship ? filterAirshipGenericMissing(codes.missing) : codes.missing;
+  const normalizedMissingCodes = airship ? filterAirshipGenericMissing(normalized.diagnostics.missingCodes) : normalized.diagnostics.missingCodes;
+  const missingCodes = uniqueSorted([...validationMissingCodes, ...normalizedMissingCodes]);
   const mismatchCodes = uniqueSorted([...codes.mismatches, ...normalized.diagnostics.mismatchCodes]);
   const staleCodes = uniqueSorted(codes.stale);
   const warningCodes = uniqueSorted([...codes.warnings, ...normalized.diagnostics.warningCodes, ...(guard?.warnings ?? [])]);

@@ -482,6 +482,14 @@ function safeBodyFields(body: unknown): Record<string, unknown> {
   return Object.fromEntries(keys.map((key) => [key, safeText(body[key])]));
 }
 
+function missingAuditRef(role: string): string {
+  return `missing:${role}`;
+}
+
+function auditRefText(value: unknown, role: string): string {
+  return text(value) ?? missingAuditRef(role);
+}
+
 export function buildSingleSitePublishOperatorActionAuditInputFromDryRunRequest(input: {
   request: SingleSitePublishOperatorDryRunRequest;
   actor: SingleSitePublishOperatorActionAuditActor;
@@ -502,11 +510,11 @@ export function buildSingleSitePublishOperatorActionAuditInputFromDryRunRequest(
     publishStage: input.request.publishStage,
     publishEnvironment: input.request.publishEnvironment,
     launchReadinessEvidenceRef: displaySingleSitePublishOperatorDryRunRef(input.request.expectedLaunchReadinessEvidenceRef),
-    publishActivationRequestRef: input.request.expectedPublishActivationRequestRef,
-    publishActivationDecisionRef: input.request.expectedPublishActivationDecisionRef,
-    gateAttemptResultRef: input.request.expectedGateAttemptResultDisplayRef ?? input.request.expectedGateAttemptResultRef,
-    handoffWatermark: input.request.expectedHandoffWatermark,
-    gateInputWatermark: input.request.expectedGateInputWatermark,
+    publishActivationRequestRef: auditRefText(input.request.expectedPublishActivationRequestRef, "publish_activation_request"),
+    publishActivationDecisionRef: auditRefText(input.request.expectedPublishActivationDecisionRef, "publish_activation_decision"),
+    gateAttemptResultRef: auditRefText(input.request.expectedGateAttemptResultDisplayRef ?? input.request.expectedGateAttemptResultRef, "gate_attempt"),
+    handoffWatermark: auditRefText(input.request.expectedHandoffWatermark, "handoff_watermark"),
+    gateInputWatermark: auditRefText(input.request.expectedGateInputWatermark, "gate_input_watermark"),
     idempotencyKey: input.request.idempotencyKey,
     correlationId: input.request.correlationId,
   };

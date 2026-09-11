@@ -6,6 +6,7 @@ import type { publishApprovedSiteVersion as publishApprovedSiteVersionImpl } fro
 import type { PublishActivationEnforcementGuardPolicy, PublishActivationEnforcementGuardRef } from "./publish-activation-enforcement-guard";
 import {
   normalizePublishActivationMetadataHandoff,
+  type AirshipPublishActivationHandoff,
   type NormalizedPublishActivationMetadataHandoff,
   type PublishActivationMetadataHandoff,
 } from "./publish-activation-metadata-handoff";
@@ -65,6 +66,7 @@ export type SingleSitePublishWrapperInput = {
   expectedGateAttemptResultRef?: string | null;
   expectedHandoffWatermark?: string | null;
   expectedGateInputWatermark?: string | null;
+  airshipPublishActivationHandoff?: AirshipPublishActivationHandoff | null;
   allowWarningsWithLimitations?: boolean;
   maxGateAgeMs?: number | null;
   evaluatedAt?: string | Date | null;
@@ -401,6 +403,7 @@ export async function prepareSingleSitePublishContext(
     evaluatedAt: input.evaluatedAt ?? null,
     requestId: text(input.requestId),
     repository: input.repository,
+    airshipPublishActivationHandoff: input.airshipPublishActivationHandoff ?? null,
   };
 
   let resolverResult: PublishActivationMetadataResolverResult;

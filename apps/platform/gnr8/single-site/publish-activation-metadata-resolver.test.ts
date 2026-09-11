@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import test from "node:test";
 
 import {
   evaluatePublishActivationEnforcementGuard,
   type EvaluatePublishActivationEnforcementGuardInput,
 } from "./publish-activation-enforcement-guard";
-import { normalizePublishActivationMetadataHandoff } from "./publish-activation-metadata-handoff";
+import {
+  AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+  normalizePublishActivationMetadataHandoff,
+} from "./publish-activation-metadata-handoff";
 import {
   PUBLISH_ACTIVATION_METADATA_RESOLVER_FLAGS,
   buildPublishActivationMetadataResolverWatermark,
@@ -215,6 +217,29 @@ function input(overrides: Partial<PublishActivationMetadataResolverInput> = {}):
   };
 }
 
+function airshipHandoff(overrides: Partial<NonNullable<PublishActivationMetadataResolverInput["airshipPublishActivationHandoff"]>> = {}): NonNullable<PublishActivationMetadataResolverInput["airshipPublishActivationHandoff"]> {
+  return {
+    sourceType: AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+    readinessPackageId: "3fdcde40-e178-40b5-83e1-217d600315ef",
+    reviewRecordId: "4bcca499-468b-40ff-b124-9cee88061263",
+    candidateVersionId: CANDIDATE_ID,
+    artifactId: ARTIFACT_ID,
+    draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
+    draftVersion: 44,
+    publishTargetRef: ref("gnr8_publish_targets", PUBLISH_TARGET_ID),
+    sourceEvidenceRefs: {
+      readinessPackageRef: ref("gnr8_airship_publish_readiness_packages", "3fdcde40-e178-40b5-83e1-217d600315ef"),
+      reviewRecordRef: ref("gnr8_airship_internal_preview_candidate_reviews", "4bcca499-468b-40ff-b124-9cee88061263"),
+      candidateSourceRef: ref("gnr8_runtime_site_versions", CANDIDATE_ID),
+      artifactSourceRef: ref("gnr8_runtime_artifacts", ARTIFACT_ID),
+    },
+    activationRequestRef: null,
+    activationDecisionRef: null,
+    gateAttemptRef: null,
+    ...overrides,
+  };
+}
+
 function guardInputFromMetadata(metadata: NonNullable<ReturnType<typeof resolveSingleSitePublishActivationMetadataHandoff>["publishActivationMetadataHandoff"]>): EvaluatePublishActivationEnforcementGuardInput {
   return {
     tenantId: metadata.tenantId!,
@@ -289,6 +314,70 @@ test("missing request, decision, and gate result return incomplete diagnostics",
   const missingGate = resolveSingleSitePublishActivationMetadataHandoff(input({ repositorySnapshot: snapshot({ gateAttempt: null }) }));
   assert.equal(missingGate.diagnostics.complete, false);
   assert.ok(missingGate.diagnostics.missingCodes.includes("publish_activation_gate_missing"));
+});
+
+test("Airship handoff without activation metadata returns Airship-specific blockers and preserves readiness refs", () => {
+  const emptyActivationSnapshot = snapshot({
+    decisionSnapshot: {
+      ...snapshot().decisionSnapshot,
+      request: null,
+      selectedDecision: null,
+      decisions: [],
+      requestEvidenceLinks: [],
+      decisionEvidenceLinks: [],
+      policyRows: [],
+    },
+    gateAttempt: null,
+  });
+  const result = resolveSingleSitePublishActivationMetadataHandoff(input({
+    airshipPublishActivationHandoff: airshipHandoff(),
+    expectedPublishActivationRequestRef: null,
+    expectedPublishActivationDecisionRef: null,
+    expectedGateAttemptResultRef: null,
+    expectedHandoffWatermark: null,
+    expectedGateInputWatermark: null,
+    repositorySnapshot: emptyActivationSnapshot,
+  }));
+
+  assert.equal(result.diagnostics.complete, false);
+  assert.equal(result.publishActivationMetadataHandoff, null);
+  assert.ok(result.diagnostics.blockerCodes.includes("airship_publish_activation_request_missing"));
+  assert.ok(result.diagnostics.blockerCodes.includes("airship_publish_activation_decision_missing"));
+  assert.ok(result.diagnostics.blockerCodes.includes("airship_publish_activation_gate_missing"));
+  assert.equal(result.diagnostics.missingCodes.includes("publish_activation_request_missing"), false);
+  assert.equal(result.diagnostics.missingCodes.includes("publish_activation_gate_missing"), false);
+  assert.equal(result.diagnostics.safeIds.siteVersionId, CANDIDATE_ID);
+  assert.equal(result.diagnostics.safeIds.runtimeArtifactId, ARTIFACT_ID);
+  assert.equal(result.diagnostics.safeIds.publishTargetId, PUBLISH_TARGET_ID);
+});
+
+test("Airship handoff reports missing source and publish target refs with Airship codes", () => {
+  const result = resolveSingleSitePublishActivationMetadataHandoff(input({
+    airshipPublishActivationHandoff: airshipHandoff({
+      publishTargetRef: null,
+      sourceEvidenceRefs: {
+        readinessPackageRef: ref("gnr8_airship_publish_readiness_packages", "3fdcde40-e178-40b5-83e1-217d600315ef"),
+        reviewRecordRef: ref("gnr8_airship_internal_preview_candidate_reviews", "4bcca499-468b-40ff-b124-9cee88061263"),
+        candidateSourceRef: null,
+        artifactSourceRef: null,
+      },
+    }),
+    candidateSiteVersionRef: "",
+    runtimeArtifactRef: "",
+    expectedPublishTargetRef: null,
+    repositorySnapshot: snapshot({
+      decisionSnapshot: {
+        ...snapshot().decisionSnapshot,
+        evidenceSourceRefs: [],
+        publishTarget: null,
+      },
+    }),
+  }));
+
+  assert.equal(result.diagnostics.complete, false);
+  assert.ok(result.diagnostics.blockerCodes.includes("airship_candidate_source_ref_missing"));
+  assert.ok(result.diagnostics.blockerCodes.includes("airship_artifact_source_ref_missing"));
+  assert.ok(result.diagnostics.blockerCodes.includes("airship_publish_target_ref_missing"));
 });
 
 test("rejected decision and blocked gate fail closed as incomplete", () => {
@@ -370,7 +459,7 @@ test("read failure returns incomplete without throwing", async () => {
 });
 
 test("resolver source stays read-only and does not call gate evaluation or side-effect systems", () => {
-  const source = readFileSync(path.resolve(process.cwd(), "apps/platform/gnr8/single-site/publish-activation-metadata-resolver.ts"), "utf8");
+  const source = readFileSync(new URL("./publish-activation-metadata-resolver.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /evaluatePublishActivationGateFromHandoff|SingleSitePublishActivationGateEvaluator|AafActionGateValidatorFacade/);
   assert.doesNotMatch(source, /createApprovalRequest|createApprovalDecision|createActionGateAttempt|insert\s+into|update\s+public\.|delete\s+from/i);
   assert.doesNotMatch(source, /from\s+["'][^"']*(pasr|ddom|domain|dns|provider|vercel|openprovider|stripe|ai)[^"']*["']/i);

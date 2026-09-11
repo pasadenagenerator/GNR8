@@ -12,6 +12,7 @@ import type {
 
 export const PUBLISH_ACTIVATION_METADATA_HANDOFF_SOURCE_TYPE = "single_site_publish_activation" as const;
 export const PUBLISH_ACTIVATION_METADATA_HANDOFF_VERSION = "mvp-48-publish-activation-metadata-handoff:v1" as const;
+export const AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE = "airship_publish_activation" as const;
 
 export type PublishActivationMetadataHandoffRef = PublishActivationEnforcementGuardRef | string;
 
@@ -25,6 +26,35 @@ export type PublishActivationMetadataHandoffRequestRef = {
   id?: string | null;
   ref?: string | null;
   status?: string | null;
+};
+
+export type AirshipPublishActivationSourceEvidenceRefs = {
+  readinessPackageRef?: PublishActivationMetadataHandoffRef | null;
+  reviewRecordRef?: PublishActivationMetadataHandoffRef | null;
+  candidateSourceRef?: PublishActivationMetadataHandoffRef | null;
+  artifactSourceRef?: PublishActivationMetadataHandoffRef | null;
+};
+
+export type AirshipPublishActivationGateAttemptRef = {
+  id?: string | null;
+  ref?: string | null;
+  status?: string | null;
+  watermark?: string | null;
+};
+
+export type AirshipPublishActivationHandoff = {
+  sourceType: typeof AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE;
+  readinessPackageId: string;
+  reviewRecordId: string;
+  candidateVersionId: string;
+  artifactId: string;
+  draftId: string;
+  draftVersion: number;
+  publishTargetRef?: PublishActivationMetadataHandoffRef | null;
+  sourceEvidenceRefs: AirshipPublishActivationSourceEvidenceRefs;
+  activationRequestRef?: PublishActivationMetadataHandoffRequestRef | null;
+  activationDecisionRef?: PublishActivationMetadataHandoffDecisionRef | null;
+  gateAttemptRef?: AirshipPublishActivationGateAttemptRef | null;
 };
 
 export type PublishActivationMetadataHandoff = {

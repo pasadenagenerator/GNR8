@@ -269,7 +269,7 @@ function wrapperResult(input: SingleSitePublishWrapperInput, overrides: Partial<
     metadataHandoffCompleteness: {
       status: "incomplete",
       complete: false,
-      missingCodes: ["publish_activation_request_missing", "publish_activation_gate_missing"],
+      missingCodes: ["airship_publish_activation_request_missing", "airship_publish_activation_gate_missing"],
       mismatchCodes: [],
       warningCodes: [],
       safeIds: {
@@ -295,8 +295,8 @@ function wrapperResult(input: SingleSitePublishWrapperInput, overrides: Partial<
     resolverDiagnostics: {
       status: "incomplete",
       complete: false,
-      blockerCodes: [],
-      missingCodes: ["publish_activation_request_missing", "publish_activation_gate_missing"],
+      blockerCodes: ["airship_publish_activation_request_missing", "airship_publish_activation_gate_missing"],
+      missingCodes: ["airship_publish_activation_request_missing", "airship_publish_activation_gate_missing"],
       mismatchCodes: [],
       staleCodes: [],
       warningCodes: ["limitations_carried_forward"],
@@ -316,7 +316,7 @@ function wrapperResult(input: SingleSitePublishWrapperInput, overrides: Partial<
     publishOrchestratorInput: null,
     limitations: { readiness: [{ code: "airship_internal_preview_only" }], decision: [], combined: [] },
     warnings: ["limitations_carried_forward"],
-    blockerCodes: ["publish_activation_request_missing", "publish_activation_gate_missing"],
+    blockerCodes: ["airship_publish_activation_request_missing", "airship_publish_activation_gate_missing"],
     dryRun: true,
     publishes: false,
     runtimeMutation: false,
@@ -379,7 +379,7 @@ test("airship readiness package adapts into a governed dry-run input and records
   assert.equal(result.refs.reviewRecordId, REVIEW_ID);
   assert.equal(result.refs.candidateVersionId, CANDIDATE_VERSION_ID);
   assert.equal(result.result.ok, false);
-  assert.deepEqual(result.result.blockerCodes, ["publish_activation_gate_missing", "publish_activation_request_missing"]);
+  assert.deepEqual(result.result.blockerCodes, ["airship_publish_activation_gate_missing", "airship_publish_activation_request_missing"]);
   assert.equal(result.nextStep, "resolve listed blockers");
   assert.equal(result.mutationFlags.dryRunAttemptExecuted, true);
   assert.equal(result.mutationFlags.publishes, false);
@@ -393,6 +393,21 @@ test("airship readiness package adapts into a governed dry-run input and records
     READINESS_ID,
   );
   assert.equal(wrapperInputs[0]!.expectedPublishActivationRequestRef, null);
+  assert.equal(wrapperInputs[0]!.expectedPublishActivationDecisionRef, null);
+  assert.equal(wrapperInputs[0]!.expectedGateAttemptResultRef, null);
+  assert.equal(wrapperInputs[0]!.expectedHandoffWatermark, null);
+  assert.equal(wrapperInputs[0]!.expectedGateInputWatermark, null);
+  assert.equal(wrapperInputs[0]!.candidateSiteVersionRef && typeof wrapperInputs[0]!.candidateSiteVersionRef === "object" && wrapperInputs[0]!.candidateSiteVersionRef.sourceRecordId, CANDIDATE_VERSION_ID);
+  assert.equal(wrapperInputs[0]!.runtimeArtifactRef && typeof wrapperInputs[0]!.runtimeArtifactRef === "object" && wrapperInputs[0]!.runtimeArtifactRef.sourceRecordId, ARTIFACT_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.readinessPackageId, READINESS_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.reviewRecordId, REVIEW_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.candidateVersionId, CANDIDATE_VERSION_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.artifactId, ARTIFACT_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.draftId, DRAFT_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.draftVersion, 44);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.activationRequestRef, null);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.activationDecisionRef, null);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.gateAttemptRef, null);
   assert.deepEqual(auditService.events, ["action_requested", "dry_run_started", "dry_run_completed"]);
 });
 

@@ -8,6 +8,7 @@ import {
   type SingleSitePublishWrapperResult,
 } from "./single-site-publish-wrapper-orchestrator";
 import type { PublishActivationEnforcementGuardRef } from "./publish-activation-enforcement-guard";
+import type { AirshipPublishActivationHandoff } from "./publish-activation-metadata-handoff";
 
 export const SINGLE_SITE_PUBLISH_OPERATOR_DRY_RUN_CALLER_VERSION =
   "mvp-54-single-site-publish-operator-dry-run-caller:v1" as const;
@@ -66,6 +67,7 @@ export type SingleSitePublishOperatorDryRunRequest = {
   expectedGateAttemptResultDisplayRef?: string | null;
   expectedHandoffWatermark: string;
   expectedGateInputWatermark: string;
+  airshipPublishActivationHandoff?: AirshipPublishActivationHandoff | null;
   operatorConfirmation: SingleSitePublishOperatorDryRunConfirmation;
   idempotencyKey: string;
   correlationId: string;
@@ -473,6 +475,7 @@ function wrapperInput(
     expectedGateAttemptResultRef: request.expectedGateAttemptResultRef,
     expectedHandoffWatermark: request.expectedHandoffWatermark,
     expectedGateInputWatermark: request.expectedGateInputWatermark,
+    airshipPublishActivationHandoff: request.airshipPublishActivationHandoff,
     actor,
     correlationId: request.correlationId,
     idempotencyKey: request.idempotencyKey,
