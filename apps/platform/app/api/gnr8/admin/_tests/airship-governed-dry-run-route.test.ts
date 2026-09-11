@@ -224,6 +224,7 @@ test("airship governed dry-run action surface stays non-publishing", () => {
   const uiFetchUrls = Array.from(uiSource.matchAll(/fetch\(["']([^"']+)["']/g), (match) => match[1]).sort();
   assert.deepEqual(uiFetchUrls, [
     "/api/gnr8/admin/airship/single-site/governed-dry-run",
+    "/api/gnr8/admin/airship/single-site/publish-activation-chain",
     "/api/gnr8/admin/airship/single-site/publish-readiness",
   ]);
   assert.equal(uiFetchUrls.some((url) => /shadow-publish|source-capture|rollback/i.test(url)), false);

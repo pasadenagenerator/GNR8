@@ -26,6 +26,12 @@ const ARTIFACT_ID = "5ac3716a-f29d-4648-bc86-a6942638ed53";
 const DRAFT_ID = "f9b31666-b3b0-4455-8650-4a8c7304a559";
 const LIVE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
 const LIVE_ARTIFACT_ID = "1f80138a-39c2-4210-ac61-16200e5a2254";
+const EVIDENCE_ID = "11111111-1111-4111-8111-111111111111";
+const REQUEST_ID = "22222222-2222-4222-8222-222222222222";
+const DECISION_ID = "33333333-3333-4333-8333-333333333333";
+const GATE_ID = "44444444-4444-4444-8444-444444444444";
+const GATE_INPUT_WATERMARK = `single-site-publish-activation-gate-input:${"a".repeat(64)}`;
+const HANDOFF_WATERMARK = `single-site-publish-activation-gate-handoff:${"b".repeat(64)}`;
 
 function refs(overrides: Partial<AirshipGovernedDryRunRefs> = {}): AirshipGovernedDryRunRefs {
   return {
@@ -136,6 +142,26 @@ function artifact(publishStage: RuntimeArtifact["publishStage"] = "shadow"): Run
       publishStage,
     },
     createdAt: "2026-09-10T00:07:00.000Z",
+  };
+}
+
+function activationChainMetadata(): Record<string, unknown> {
+  return {
+    expectedLaunchReadinessEvidenceRef: EVIDENCE_ID,
+    expectedLaunchReadinessEvidenceDisplayRef: `aaf:evidence_package:${EVIDENCE_ID}`,
+    expectedLaunchReadinessEvidenceStatus: "created",
+    expectedLaunchReadinessEvidenceWatermark: "wm:evidence",
+    expectedPublishActivationRequestRef: REQUEST_ID,
+    expectedPublishActivationRequestDisplayRef: `aaf:approval_request:${REQUEST_ID}`,
+    expectedPublishActivationRequestStatus: "requested",
+    expectedPublishActivationDecisionRef: DECISION_ID,
+    expectedPublishActivationDecisionDisplayRef: `aaf:approval_decision:${DECISION_ID}`,
+    expectedPublishActivationDecisionStatus: "granted_with_limitations",
+    expectedGateAttemptResultRef: GATE_ID,
+    expectedGateAttemptResultDisplayRef: `aaf:action_gate_attempt:${GATE_ID}`,
+    expectedGateAttemptStatus: "warning",
+    expectedGateInputWatermark: GATE_INPUT_WATERMARK,
+    expectedHandoffWatermark: HANDOFF_WATERMARK,
   };
 }
 
@@ -336,6 +362,77 @@ function wrapperResult(input: SingleSitePublishWrapperInput, overrides: Partial<
   };
 }
 
+function readyWrapperResult(input: SingleSitePublishWrapperInput): SingleSitePublishWrapperResult {
+  return wrapperResult(input, {
+    status: "dry_run_ready",
+    strictContextSummary: {
+      tenantId: input.tenantId,
+      clientId: input.clientId,
+      siteId: input.siteId,
+      migrationId: input.migrationId,
+      siteVersionId: CANDIDATE_VERSION_ID,
+      runtimeArtifactId: ARTIFACT_ID,
+      publishTargetId: "production",
+      publishStage: "production",
+      publishEnvironment: "production",
+      publishActivationRequestId: REQUEST_ID,
+      publishActivationDecisionId: DECISION_ID,
+      gateAttemptId: GATE_ID,
+      launchReadinessEvidenceId: EVIDENCE_ID,
+      metadataWatermark: "metadata-watermark",
+      handoffWatermark: HANDOFF_WATERMARK,
+      gateInputWatermark: GATE_INPUT_WATERMARK,
+      contextWatermark: "context-watermark",
+    },
+    metadataHandoffCompleteness: {
+      status: "complete",
+      complete: true,
+      missingCodes: [],
+      mismatchCodes: [],
+      warningCodes: [],
+      safeIds: {
+        tenantId: input.tenantId,
+        clientId: input.clientId,
+        siteId: input.siteId,
+        migrationId: input.migrationId,
+        siteVersionId: CANDIDATE_VERSION_ID,
+        runtimeArtifactId: ARTIFACT_ID,
+        publishTargetId: "production",
+        publishStage: "production",
+        publishEnvironment: "production",
+        publishActivationRequestId: REQUEST_ID,
+        publishActivationDecisionId: DECISION_ID,
+        gateAttemptId: GATE_ID,
+        launchReadinessEvidenceId: EVIDENCE_ID,
+        metadataWatermark: "metadata-watermark",
+        handoffWatermark: HANDOFF_WATERMARK,
+        gateInputWatermark: GATE_INPUT_WATERMARK,
+        contextWatermark: "context-watermark",
+      },
+    },
+    resolverDiagnostics: {
+      status: "complete",
+      complete: true,
+      blockerCodes: [],
+      missingCodes: [],
+      mismatchCodes: [],
+      staleCodes: [],
+      warningCodes: ["limitations_carried_forward"],
+      transactionCapturedAt: "2026-09-10T12:21:00.000Z",
+      safeIds: {
+        siteId: input.siteId,
+        siteVersionId: CANDIDATE_VERSION_ID,
+        runtimeArtifactId: ARTIFACT_ID,
+        publishTargetId: "production",
+        publishActivationRequestId: REQUEST_ID,
+        publishActivationDecisionId: DECISION_ID,
+        gateAttemptId: GATE_ID,
+      },
+    },
+    blockerCodes: [],
+  });
+}
+
 function deps(overrides: {
   readinessRecord?: AirshipPublishReadinessRecord | null;
   version?: CanonicalSiteVersionSnapshot | null;
@@ -431,6 +528,46 @@ test("airship governed dry-run is idempotent for readiness package refs", async 
   assert.equal(second.mutationFlags.dryRunAttemptExecuted, false);
   assert.equal(second.result.idempotencyKey, airshipGovernedDryRunIdempotencyKey(refs()));
   assert.equal(airshipGovernedDryRunIdempotencyKey(refs({ migrationId: "11111111-1111-4111-8111-111111111111" }) as AirshipGovernedDryRunRefs), second.result.idempotencyKey);
+});
+
+test("airship governed dry-run handoff uses real activation chain refs after chain creation", async () => {
+  const wrapperInputs: SingleSitePublishWrapperInput[] = [];
+  const result = await runAirshipGovernedDryRun(
+    {
+      ...refs(),
+      actorId: "superadmin-airship",
+    },
+    deps({
+      readinessRecord: readiness({ metadata: activationChainMetadata() }),
+      wrapper: async (input) => {
+        wrapperInputs.push(input);
+        return readyWrapperResult(input);
+      },
+    }),
+  );
+
+  assert.equal(result.result.ok, true);
+  assert.equal(result.result.blockerCodes.includes("airship_publish_activation_request_missing"), false);
+  assert.equal(result.result.blockerCodes.includes("airship_publish_activation_decision_missing"), false);
+  assert.equal(result.result.blockerCodes.includes("airship_publish_activation_gate_missing"), false);
+  assert.equal(result.result.blockerCodes.includes("airship_gate_input_watermark_missing"), false);
+  assert.equal(wrapperInputs.length, 1);
+  assert.equal(
+    typeof wrapperInputs[0]!.expectedLaunchReadinessEvidenceRef === "object" && wrapperInputs[0]!.expectedLaunchReadinessEvidenceRef?.sourceRecordId,
+    EVIDENCE_ID,
+  );
+  assert.equal(wrapperInputs[0]!.expectedPublishActivationRequestRef, REQUEST_ID);
+  assert.equal(wrapperInputs[0]!.expectedPublishActivationDecisionRef, DECISION_ID);
+  assert.equal(wrapperInputs[0]!.expectedGateAttemptResultRef, GATE_ID);
+  assert.equal(wrapperInputs[0]!.expectedHandoffWatermark, HANDOFF_WATERMARK);
+  assert.equal(wrapperInputs[0]!.expectedGateInputWatermark, GATE_INPUT_WATERMARK);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.activationRequestRef?.id, REQUEST_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.activationDecisionRef?.id, DECISION_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.gateAttemptRef?.id, GATE_ID);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.gateAttemptRef?.watermark, GATE_INPUT_WATERMARK);
+  assert.equal(result.mutationFlags.publishes, false);
+  assert.equal(result.mutationFlags.shadowPublish, false);
+  assert.equal(result.mutationFlags.activePointerChanged, false);
 });
 
 test("airship governed dry-run reuses migration-scoped legacy records without a second attempt", async () => {

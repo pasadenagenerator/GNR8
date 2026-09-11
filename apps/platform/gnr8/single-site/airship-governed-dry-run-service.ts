@@ -331,6 +331,23 @@ function baseRequest(input: {
     sourceWatermark: `airship-artifact:${input.refs.artifactId}:readiness:${input.refs.readinessPackageId}`,
     metadataJson: metadata,
   });
+  const activationEvidenceRefId = optionalMetadataString(readinessMetadata, "expectedLaunchReadinessEvidenceRef");
+  const activationEvidenceDisplayRef = optionalMetadataString(readinessMetadata, "expectedLaunchReadinessEvidenceDisplayRef");
+  const activationEvidenceWatermark = optionalMetadataString(readinessMetadata, "expectedLaunchReadinessEvidenceWatermark");
+  const expectedLaunchReadinessEvidenceRef = activationEvidenceRefId
+    ? canonicalRef({
+        role: "launch_readiness_evidence",
+        sourceTable: "gnr8_aaf_evidence_packages",
+        sourceRecordId: activationEvidenceRefId,
+        sourceVersion: optionalMetadataString(readinessMetadata, "expectedLaunchReadinessEvidenceStatus"),
+        sourceWatermark: activationEvidenceWatermark ?? `airship-publish-activation-evidence:${activationEvidenceRefId}`,
+        metadataJson: {
+          ...metadata,
+          sourceRef: activationEvidenceDisplayRef ?? `aaf:evidence_package:${activationEvidenceRefId}`,
+          airshipReadinessPackageId: input.refs.readinessPackageId,
+        },
+      })
+    : readinessPackageRef;
   const airshipPublishActivationHandoff: AirshipPublishActivationHandoff = {
     sourceType: AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
     readinessPackageId: input.refs.readinessPackageId,
@@ -359,7 +376,7 @@ function baseRequest(input: {
     expectedPublishTargetRef: PRODUCTION_TARGET_REF,
     publishStage: "production",
     publishEnvironment: "production",
-    expectedLaunchReadinessEvidenceRef: readinessPackageRef,
+    expectedLaunchReadinessEvidenceRef,
     expectedPublishActivationRequestRef: optionalMetadataString(readinessMetadata, "expectedPublishActivationRequestRef") ?? "",
     expectedPublishActivationDecisionRef: optionalMetadataString(readinessMetadata, "expectedPublishActivationDecisionRef") ?? "",
     expectedGateAttemptResultRef: optionalMetadataString(readinessMetadata, "expectedGateAttemptResultRef") ?? "",

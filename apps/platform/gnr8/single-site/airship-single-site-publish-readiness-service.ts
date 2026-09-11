@@ -130,6 +130,10 @@ export type AirshipPublishReadinessRepository = {
     draftVersion?: number | null;
   }): Promise<AirshipPublishReadinessRecord | null>;
   readReadinessById?(readinessPackageId: string): Promise<AirshipPublishReadinessRecord | null>;
+  attachActivationChainMetadata?(input: {
+    readinessPackageId: string;
+    metadata: Record<string, unknown>;
+  }): Promise<AirshipPublishReadinessRecord>;
 };
 
 export type AirshipPublishReadinessDependencies = {
@@ -459,6 +463,29 @@ export class PostgresAirshipPublishReadinessRepository implements AirshipPublish
         [uuid("readinessPackageId", readinessPackageId)],
       ) as QueryResult<Record<string, unknown>>;
       return result.rows[0] ? rowToReadiness(result.rows[0]) : null;
+    } finally {
+      client.release?.();
+    }
+  }
+
+  async attachActivationChainMetadata(input: {
+    readinessPackageId: string;
+    metadata: Record<string, unknown>;
+  }): Promise<AirshipPublishReadinessRecord> {
+    const client = await (this.pool ?? getSuperadminPool()).connect();
+    try {
+      const result = await client.query(
+        `
+        update public.gnr8_airship_publish_readiness_packages
+        set metadata_json = metadata_json || $2::jsonb,
+            updated_at = now()
+        where id = $1::uuid
+        returning *, reviewed_at::text as reviewed_at, created_at::text as created_at, updated_at::text as updated_at
+        `,
+        [uuid("readinessPackageId", input.readinessPackageId), JSON.stringify(input.metadata)],
+      ) as QueryResult<Record<string, unknown>>;
+      if (!result.rows[0]) throw new Error("airship_publish_readiness_activation_chain_attach_failed");
+      return rowToReadiness(result.rows[0]);
     } finally {
       client.release?.();
     }
