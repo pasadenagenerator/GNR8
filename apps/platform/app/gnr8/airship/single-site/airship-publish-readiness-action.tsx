@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 
 import type { AirshipInternalPreviewCandidateReviewRecord } from "@/gnr8/single-site/airship-single-site-draft-candidate-review-service";
+import type { AirshipGovernedDryRunOutput, AirshipGovernedDryRunReadback } from "@/gnr8/single-site/airship-governed-dry-run-service";
 import type { AirshipPublishReadinessRecord } from "@/gnr8/single-site/airship-single-site-publish-readiness-service";
 
 type CandidateSummary = {
@@ -21,14 +22,24 @@ type Props = {
   candidate: CandidateSummary | null;
   review: AirshipInternalPreviewCandidateReviewRecord | null;
   initialReadiness: AirshipPublishReadinessRecord | null;
+  initialDryRun: AirshipGovernedDryRunReadback | null;
 };
 
 type ReadinessState = "idle" | "preparing" | "ready" | "failed";
+type DryRunState = "idle" | "running" | "complete" | "failed";
 
 type ReadinessResponse = {
   ok?: boolean;
   readiness?: AirshipPublishReadinessRecord & { status?: "created" | "reused" };
   error?: string;
+};
+
+type DryRunResponse = {
+  ok?: boolean;
+  result?: AirshipGovernedDryRunReadback;
+  nextStep?: AirshipGovernedDryRunOutput["nextStep"];
+  error?: string;
+  diagnostics?: string[];
 };
 
 function buttonStyle(disabled: boolean): React.CSSProperties {
@@ -60,6 +71,9 @@ function pointerLabel(pointer: { siteVersionId: string | null; artifactId: strin
 export function AirshipPublishReadinessAction(props: Props) {
   const [state, setState] = useState<ReadinessState>(props.initialReadiness ? "ready" : "idle");
   const [readiness, setReadiness] = useState<AirshipPublishReadinessRecord | null>(() => props.initialReadiness);
+  const [dryRunState, setDryRunState] = useState<DryRunState>(props.initialDryRun ? "complete" : "idle");
+  const [dryRun, setDryRun] = useState<AirshipGovernedDryRunReadback | null>(() => props.initialDryRun);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
   const reviewMatchesCandidate = Boolean(
     props.review &&
       props.candidate &&
@@ -86,6 +100,7 @@ export function AirshipPublishReadinessAction(props: Props) {
       props.candidate.draftVersion === props.savedDraftVersion,
   );
   const disabled = state === "preparing" || !props.migrationId || !props.candidate || !props.review || !candidateMatchesSavedDraft || !reviewMatchesCandidate;
+  const dryRunDisabled = dryRunState === "running" || !props.migrationId || !props.candidate || !props.review || !readinessMatchesReview || !readiness || Boolean(dryRun);
   const message = useMemo(() => {
     if (!props.candidate) return "Create an internal preview candidate first. This readiness step never publishes.";
     if (!candidateMatchesSavedDraft) return "Latest candidate does not match the saved draft/version; save and apply the draft to preview before readiness.";
@@ -120,6 +135,37 @@ export function AirshipPublishReadinessAction(props: Props) {
       setState("ready");
     } catch {
       setState("failed");
+    }
+  }
+
+  async function runGovernedDryRun() {
+    if (dryRunDisabled || !props.candidate || !props.review || !readiness) return;
+    setDryRunState("running");
+    setDryRunError(null);
+    try {
+      const response = await fetch("/api/gnr8/admin/airship/single-site/governed-dry-run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actionMode: "run_governed_dry_run",
+          migrationId: props.migrationId,
+          readinessPackageId: readiness.id,
+          reviewRecordId: readiness.reviewRecordId,
+          candidateVersionId: readiness.reviewedCandidateSiteVersionId,
+          artifactId: readiness.reviewedArtifactId,
+          draftId: readiness.draftId,
+          draftVersion: readiness.draftVersion,
+        }),
+      });
+      const payload = await response.json() as DryRunResponse;
+      if (!response.ok || !payload.ok || !payload.result) {
+        throw new Error(payload.diagnostics?.join("; ") || payload.error || "airship_governed_dry_run_failed");
+      }
+      setDryRun(payload.result);
+      setDryRunState("complete");
+    } catch (error) {
+      setDryRunState("failed");
+      setDryRunError(error instanceof Error ? error.message : "airship_governed_dry_run_failed");
     }
   }
 
@@ -171,6 +217,58 @@ export function AirshipPublishReadinessAction(props: Props) {
           </div>
           <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
             <strong>No-publish confirmation:</strong> internal preview only; not live; not published; candidate runtime state DRAFT; active pointer unchanged before/after; no dry-run, shadow-publish, rollback, source capture, provider call, or live-site mutation.
+          </div>
+          <div style={{ borderTop: "1px solid #dbeafe", paddingTop: 10, display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: "#1d4ed8", fontSize: 12, fontWeight: 900 }}>Governed dry-run check</div>
+                <div style={{ marginTop: 3, color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
+                  Dry-run only; no publish; no shadow-publish; active pointer unchanged; live CHS unchanged.
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={dryRunDisabled}
+                aria-busy={dryRunState === "running"}
+                aria-label="Run governed dry-run"
+                onClick={() => void runGovernedDryRun()}
+                style={buttonStyle(dryRunDisabled)}
+              >
+                {dryRunState === "running" ? "Running..." : dryRun ? "Governed dry-run recorded" : "Run governed dry-run"}
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#334155", fontSize: 12, fontWeight: 850 }}>
+              <span>dry-run only</span>
+              <span>no publish</span>
+              <span>no shadow-publish</span>
+              <span>active pointer unchanged</span>
+              <span>live CHS unchanged</span>
+            </div>
+            {dryRun ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 9 }}>
+                  {fact("Dry-run result", dryRun.ok ? "ready / no blockers" : "blocked / review blockers")}
+                  {fact("Action status", dryRun.actionStatus)}
+                  {fact("Wrapper status", dryRun.wrapperDryRunStatus)}
+                  {fact("Resolver status", dryRun.resolverStatus)}
+                  {fact("Action ref", dryRun.actionId)}
+                  {fact("Dry-run idempotency", dryRun.idempotencyKey)}
+                </div>
+                <div style={{ color: dryRun.blockerCodes.length > 0 ? "#92400e" : "#166534", fontSize: 12, lineHeight: 1.45 }}>
+                  <strong>Blockers:</strong> {dryRun.blockerCodes.join("; ") || "none"}
+                </div>
+                <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
+                  <strong>Warnings/limitations:</strong> {[...dryRun.warnings, ...dryRun.limitationCodes].join("; ") || "none"}
+                </div>
+                <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
+                  <strong>Next step:</strong> {dryRun.ok ? "eligible for a separately approved shadow-publish task" : "resolve listed blockers"}
+                </div>
+              </div>
+            ) : dryRunState === "failed" ? (
+              <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", color: "#92400e", padding: 10, fontSize: 12, lineHeight: 1.45 }}>
+                Governed dry-run did not run. {dryRunError ?? "No live state changed."}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

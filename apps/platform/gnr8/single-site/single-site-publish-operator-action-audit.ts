@@ -985,6 +985,10 @@ export class SingleSitePublishOperatorActionAuditRepository implements SingleSit
 export class SingleSitePublishOperatorActionAuditService {
   constructor(private readonly repository: SingleSitePublishOperatorActionAuditRepositoryLike = new SingleSitePublishOperatorActionAuditRepository()) {}
 
+  async readActionByIdempotencyKey(idempotencyKey: string): Promise<SingleSitePublishOperatorActionAuditRow | null> {
+    return this.repository.withTransaction((tx) => this.repository.getActionByIdempotencyKey(tx, idempotencyKey));
+  }
+
   async createOrReuseAction(input: SingleSitePublishOperatorActionAuditInput): Promise<SingleSitePublishOperatorActionAuditOperation> {
     return this.repository.withTransaction(async (tx) => {
       const attempted = actionRow(input);

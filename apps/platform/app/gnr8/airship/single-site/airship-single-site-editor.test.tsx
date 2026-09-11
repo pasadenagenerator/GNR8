@@ -124,6 +124,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
       latestInternalPreviewCandidate: null,
       latestInternalPreviewReview: null,
       latestInternalPreviewPublishReadiness: null,
+      latestInternalPreviewGovernedDryRun: null,
       publishedVersionRefs: {
         siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
         runtimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
@@ -221,6 +222,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
       },
       airshipDraftCandidateReview: null,
       airshipDraftCandidatePublishReadiness: null,
+      airshipDraftCandidateGovernedDryRun: null,
     },
     links: {
       liveSite: "https://www.chs.si/",
@@ -546,6 +548,142 @@ test("airship single-site editor shows publish-readiness package status and gove
   assert.equal(html.includes("governed dry-run later, not publish"), true);
   assert.equal(html.includes("candidate runtime state DRAFT"), true);
   assert.equal(html.includes("no dry-run, shadow-publish, rollback, source capture, provider call, or live-site mutation"), true);
+});
+
+test("airship single-site editor shows governed dry-run action and readback without publish controls", () => {
+  const model = airshipModel();
+  const candidate = {
+    label: "New Airship draft candidate preview",
+    siteVersionId: "92e476b9-67fc-408a-be3d-5c744aa0f3f6",
+    runtimeArtifactId: "5ac3716a-f29d-4648-bc86-a6942638ed53",
+    route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/92e476b9-67fc-408a-be3d-5c744aa0f3f6/preview?mode=transformed`,
+    mode: "transformed" as const,
+    available: true,
+    unavailableReason: null,
+    authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+    statusLabel: "Not live, internal preview only",
+    sourceLiveSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+    sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
+    draftVersion: 44,
+    styleSettings: {
+      heroTopPadding: 96,
+      heroBottomPadding: 104,
+      backgroundTint: "#eef6ff",
+      ctaColor: "#1d4ed8",
+    },
+    appliedEdits: [],
+    skippedEdits: [],
+  };
+  model.draftPanel.persistence.draftId = candidate.draftId;
+  model.draftPanel.persistence.version = candidate.draftVersion;
+  model.previews.airshipDraftCandidate = candidate;
+  model.previews.airshipDraftCandidateReview = {
+    id: "4bcca499-468b-40ff-b124-9cee88061263",
+    migrationId: CHS_MIGRATION_ID,
+    draftId: candidate.draftId,
+    draftVersion: candidate.draftVersion,
+    candidateSiteVersionId: candidate.siteVersionId,
+    candidateRuntimeArtifactId: candidate.runtimeArtifactId,
+    reviewDecision: "approved_for_publish_readiness",
+    reviewStatus: "approved",
+    publishReadinessReady: true,
+    reviewerActorId: "superadmin-reviewer",
+    reviewerActorType: "human",
+    reviewerActorRole: "platform_superadmin",
+    reviewedAt: "2026-09-10T12:18:00.750Z",
+    limitationsNotes: "Internal preview only; not live, not published; active pointer unchanged.",
+    nextStep: "publish-readiness evaluation, not publish",
+    activePointerSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+    activePointerArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    activePointerChanged: false,
+    runtimeVersionStateMutated: false,
+    liveSiteMutated: false,
+    published: false,
+    serviceVersion: "airship-5-internal-preview-candidate-review:v1",
+    idempotencyKey: "review-key",
+    correlationId: "review-correlation",
+    metadata: { internalPreviewOnly: true },
+    createdAt: "2026-09-10T12:18:00.750Z",
+    updatedAt: "2026-09-10T12:18:00.750Z",
+  };
+  model.previews.airshipDraftCandidatePublishReadiness = {
+    id: "3fdcde40-e178-40b5-83e1-217d600315ef",
+    migrationId: CHS_MIGRATION_ID,
+    reviewRecordId: "4bcca499-468b-40ff-b124-9cee88061263",
+    readinessStatus: "complete",
+    nextStep: "governed dry-run later, not publish",
+    siteClientSourceLabels: {
+      tenantId: "tenant-chs",
+      clientId: "client-chs",
+      siteId: "site-chs",
+      sourceUrl: "https://www.chs.si/",
+      liveUrl: "https://www.chs.si/",
+      importedSiteLabel: "chs.si",
+    },
+    reviewedCandidateSiteVersionId: candidate.siteVersionId,
+    reviewedArtifactId: candidate.runtimeArtifactId,
+    draftId: candidate.draftId,
+    draftVersion: candidate.draftVersion,
+    reviewStatus: "approved",
+    reviewDecision: "approved_for_publish_readiness",
+    reviewedAt: "2026-09-10T12:18:00.750Z",
+    currentLiveActivePointerBefore: { siteVersionId: IMPROVED_CANDIDATE_VERSION_ID, artifactId: "1f80138a-39c2-4210-ac61-16200e5a2254" },
+    currentLiveActivePointerAfter: { siteVersionId: IMPROVED_CANDIDATE_VERSION_ID, artifactId: "1f80138a-39c2-4210-ac61-16200e5a2254" },
+    sourceEvidenceSummary: {
+      status: "source_supported",
+      detail: "3 source evidence item(s) available for chs.si.",
+      evidenceItems: [],
+    },
+    savedDraftFieldSummary: [],
+    internalPreviewUrl: candidate.route,
+    limitationsWarnings: ["Internal preview only; not live; not published; active pointer unchanged."],
+    noPublishConfirmation: {
+      internalPreviewOnly: true,
+      notLive: true,
+      notPublished: true,
+      candidateRuntimeState: "DRAFT",
+      activePointerChanged: false,
+      runtimeVersionStateMutated: false,
+      liveSiteMutated: false,
+      publishes: false,
+      dryRun: false,
+      shadowPublish: false,
+      rollback: false,
+      sourceCapture: false,
+      providerCall: false,
+    },
+    serviceVersion: "airship-6-publish-readiness-package:v1",
+    idempotencyKey: "readiness-key",
+    correlationId: "readiness-correlation",
+    metadata: { internalPreviewOnly: true },
+    createdAt: "2026-09-10T12:20:00.000Z",
+    updatedAt: "2026-09-10T12:20:00.000Z",
+  };
+  model.previews.airshipDraftCandidateGovernedDryRun = {
+    ok: false,
+    actionId: "77777777-7777-4777-8777-777777777777",
+    actionStatus: "dry_run_completed",
+    preflightStatus: "wrapper_blocked",
+    resolverStatus: "incomplete",
+    wrapperDryRunStatus: "preflight_blocked",
+    blockerCodes: ["publish_activation_gate_missing"],
+    warnings: ["limitations_carried_forward"],
+    limitationCodes: ["airship_internal_preview_only"],
+    safeRefs: null,
+    idempotencyKey: "airship-governed-dry-run:key",
+    correlationId: "airship-governed-dry-run:corr",
+    createdAt: "2026-09-10T12:21:00.000Z",
+    completedAt: "2026-09-10T12:21:01.000Z",
+  };
+  const html = renderToStaticMarkup(<AirshipSingleSiteEditor model={model} />);
+
+  assert.equal(html.includes("Governed dry-run check"), true);
+  assert.equal(html.includes("Governed dry-run recorded"), true);
+  assert.equal(html.includes("Dry-run only; no publish; no shadow-publish; active pointer unchanged; live CHS unchanged."), true);
+  assert.equal(html.includes("publish_activation_gate_missing"), true);
+  assert.equal(html.includes("resolve listed blockers"), true);
+  assert.equal(html.includes("Shadow publish"), false);
 });
 
 test("airship single-site editor shows concrete proposed draft rows", () => {

@@ -129,6 +129,7 @@ export type AirshipPublishReadinessRepository = {
     draftId?: string | null;
     draftVersion?: number | null;
   }): Promise<AirshipPublishReadinessRecord | null>;
+  readReadinessById?(readinessPackageId: string): Promise<AirshipPublishReadinessRecord | null>;
 };
 
 export type AirshipPublishReadinessDependencies = {
@@ -444,6 +445,24 @@ export class PostgresAirshipPublishReadinessRepository implements AirshipPublish
       client.release?.();
     }
   }
+
+  async readReadinessById(readinessPackageId: string): Promise<AirshipPublishReadinessRecord | null> {
+    const client = await (this.pool ?? getSuperadminPool()).connect();
+    try {
+      const result = await client.query(
+        `
+        select *, reviewed_at::text as reviewed_at, created_at::text as created_at, updated_at::text as updated_at
+        from public.gnr8_airship_publish_readiness_packages
+        where id = $1::uuid
+        limit 1
+        `,
+        [uuid("readinessPackageId", readinessPackageId)],
+      ) as QueryResult<Record<string, unknown>>;
+      return result.rows[0] ? rowToReadiness(result.rows[0]) : null;
+    } finally {
+      client.release?.();
+    }
+  }
 }
 
 function assertApprovedReview(input: {
@@ -609,4 +628,13 @@ export async function readLatestAirshipPublishReadiness(input: {
     draftId: input.draftId ?? null,
     draftVersion: input.draftVersion ?? null,
   });
+}
+
+export async function readAirshipPublishReadinessById(
+  readinessPackageId: string,
+  repository: AirshipPublishReadinessRepository = new PostgresAirshipPublishReadinessRepository(),
+): Promise<AirshipPublishReadinessRecord | null> {
+  const id = text(readinessPackageId);
+  if (!id || !repository.readReadinessById) return null;
+  return repository.readReadinessById(id);
 }

@@ -145,6 +145,7 @@ function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjectio
         candidate={candidate}
         review={model.previews.airshipDraftCandidateReview}
         initialReadiness={model.previews.airshipDraftCandidatePublishReadiness}
+        initialDryRun={model.previews.airshipDraftCandidateGovernedDryRun}
       />
       {preview(candidate)}
       <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 12, display: "grid", gap: 10 }}>
