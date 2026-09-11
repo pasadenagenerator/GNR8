@@ -194,7 +194,22 @@ function sha256(value: unknown): string {
 }
 
 export function airshipGovernedDryRunIdempotencyKey(input: Omit<AirshipGovernedDryRunRefs, "migrationId">): string {
-  return `airship-governed-dry-run:${sha256(input)}`;
+  return `airship-governed-dry-run:${sha256(idempotencyScopeRefs(input))}`;
+}
+
+function idempotencyScopeRefs(input: Omit<AirshipGovernedDryRunRefs, "migrationId">): Omit<AirshipGovernedDryRunRefs, "migrationId"> {
+  return {
+    readinessPackageId: input.readinessPackageId,
+    reviewRecordId: input.reviewRecordId,
+    candidateVersionId: input.candidateVersionId,
+    artifactId: input.artifactId,
+    draftId: input.draftId,
+    draftVersion: input.draftVersion,
+  };
+}
+
+function legacyMigrationScopedIdempotencyKey(refs: AirshipGovernedDryRunRefs): string {
+  return `airship-governed-dry-run:${sha256(refs)}`;
 }
 
 function samePointer(
@@ -520,8 +535,11 @@ export async function runAirshipGovernedDryRun(
   const activePointer = candidateVersion ? await deps.getActivePointerForSite(candidateVersion.siteId) : null;
   assertRuntimeStillSafe({ readiness, candidateVersion, artifact, activePointer });
 
-  const idempotencyKey = text(input.idempotencyKey) ?? airshipGovernedDryRunIdempotencyKey(refs);
-  const existing = await deps.auditService.readActionByIdempotencyKey(idempotencyKey);
+  const requestedIdempotencyKey = text(input.idempotencyKey);
+  const idempotencyKey = requestedIdempotencyKey ?? airshipGovernedDryRunIdempotencyKey(refs);
+  const existing =
+    await deps.auditService.readActionByIdempotencyKey(idempotencyKey) ??
+    (requestedIdempotencyKey ? null : await deps.auditService.readActionByIdempotencyKey(legacyMigrationScopedIdempotencyKey(refs)));
   if (existing?.status === "dry_run_completed" || existing?.status === "preflight_failed") {
     return outputFromReadback({
       status: "reused",
@@ -587,5 +605,15 @@ export async function readAirshipGovernedDryRunForReadiness(
     draftVersion: readiness.draftVersion,
   });
   const row = await auditService.readActionByIdempotencyKey(idempotencyKey);
-  return row ? airshipGovernedDryRunReadbackFromAuditRow(row) : null;
+  if (row) return airshipGovernedDryRunReadbackFromAuditRow(row);
+  const legacyRow = await auditService.readActionByIdempotencyKey(legacyMigrationScopedIdempotencyKey({
+    readinessPackageId: readiness.id,
+    reviewRecordId: readiness.reviewRecordId,
+    candidateVersionId: readiness.reviewedCandidateSiteVersionId,
+    artifactId: readiness.reviewedArtifactId,
+    draftId: readiness.draftId,
+    draftVersion: readiness.draftVersion,
+    migrationId: readiness.migrationId,
+  }));
+  return legacyRow ? airshipGovernedDryRunReadbackFromAuditRow(legacyRow) : null;
 }

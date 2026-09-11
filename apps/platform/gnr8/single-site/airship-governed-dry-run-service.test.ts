@@ -415,6 +415,28 @@ test("airship governed dry-run is idempotent for readiness package refs", async 
   assert.equal(wrapperCalls, 1);
   assert.equal(second.mutationFlags.dryRunAttemptExecuted, false);
   assert.equal(second.result.idempotencyKey, airshipGovernedDryRunIdempotencyKey(refs()));
+  assert.equal(airshipGovernedDryRunIdempotencyKey(refs({ migrationId: "11111111-1111-4111-8111-111111111111" }) as AirshipGovernedDryRunRefs), second.result.idempotencyKey);
+});
+
+test("airship governed dry-run reuses migration-scoped legacy records without a second attempt", async () => {
+  const auditService = fakeAuditService();
+  let wrapperCalls = 0;
+  const dependencies = deps({
+    auditService,
+    wrapper: async (input) => {
+      wrapperCalls += 1;
+      return wrapperResult(input);
+    },
+  });
+  const legacyIdempotencyKey = "airship-governed-dry-run:98462c58f8205c9a58c168fba4ce95e1c0ae439e04cc7e0b190696b304c85456";
+  const first = await runAirshipGovernedDryRun({ ...refs(), actorId: "superadmin-airship", idempotencyKey: legacyIdempotencyKey }, dependencies);
+  const second = await runAirshipGovernedDryRun({ ...refs(), actorId: "superadmin-airship" }, dependencies);
+
+  assert.equal(first.status, "created");
+  assert.equal(second.status, "reused");
+  assert.equal(wrapperCalls, 1);
+  assert.equal(second.mutationFlags.dryRunAttemptExecuted, false);
+  assert.equal(second.result.idempotencyKey, legacyIdempotencyKey);
 });
 
 test("airship governed dry-run refuses missing, unapproved, stale, and mismatched readiness packages", async () => {
