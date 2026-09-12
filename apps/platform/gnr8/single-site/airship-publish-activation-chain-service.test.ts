@@ -6,13 +6,14 @@ import {
   AIRSHIP_PUBLISH_ACTIVATION_CHAIN_SERVICE_VERSION,
   airshipPublishActivationChainIdempotencyKey,
   createAirshipPublishActivationChain,
+  refreshAirshipPublishActivationHandoffWatermark,
   type AirshipPublishActivationChainRecord,
   type AirshipPublishActivationChainDependencies,
   type AirshipPublishActivationChainRefs,
 } from "./airship-publish-activation-chain-service";
 import type { AirshipPublishReadinessRecord, AirshipPublishReadinessRepository } from "./airship-single-site-publish-readiness-service";
 import type { PublishActivationDecisionReadModel } from "./publish-activation-decision-read-model";
-import type { PublishActivationGateHandoffPackage } from "./publish-activation-gate-handoff";
+import { buildPublishActivationGateHandoff, type PublishActivationGateHandoffPackage } from "./publish-activation-gate-handoff";
 
 const MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const READINESS_ID = "3fdcde40-e178-40b5-83e1-217d600315ef";
@@ -27,6 +28,7 @@ const REQUEST_ID = "22222222-2222-4222-8222-222222222222";
 const DECISION_ID = "33333333-3333-4333-8333-333333333333";
 const GATE_ID = "44444444-4444-4444-8444-444444444444";
 const GATE_INPUT_WATERMARK = `single-site-publish-activation-gate-input:${"a".repeat(64)}`;
+const STALE_HANDOFF_WATERMARK = `single-site-publish-activation-gate-handoff:${"0".repeat(64)}`;
 
 function refs(overrides: Partial<AirshipPublishActivationChainRefs> = {}): AirshipPublishActivationChainRefs {
   return {
@@ -132,6 +134,94 @@ function artifact(publishStage: RuntimeArtifact["publishStage"] = "shadow"): Run
       publishStage,
     },
     createdAt: "2026-09-10T00:07:00.000Z",
+  };
+}
+
+function activationChain(overrides: Partial<AirshipPublishActivationChainRecord> = {}): AirshipPublishActivationChainRecord {
+  return {
+    serviceVersion: AIRSHIP_PUBLISH_ACTIVATION_CHAIN_SERVICE_VERSION,
+    readinessPackageId: READINESS_ID,
+    reviewRecordId: REVIEW_ID,
+    candidateVersionId: CANDIDATE_VERSION_ID,
+    artifactId: ARTIFACT_ID,
+    draftId: DRAFT_ID,
+    draftVersion: 44,
+    activationEvidencePackage: {
+      id: EVIDENCE_ID,
+      ref: `aaf:evidence_package:${EVIDENCE_ID}`,
+      status: "created",
+      sourceWatermark: "wm:evidence",
+    },
+    activationRequest: {
+      id: REQUEST_ID,
+      ref: `aaf:approval_request:${REQUEST_ID}`,
+      status: "requested",
+    },
+    activationDecision: {
+      id: DECISION_ID,
+      ref: `aaf:approval_decision:${DECISION_ID}`,
+      status: "granted_with_limitations",
+    },
+    gateAttempt: {
+      id: GATE_ID,
+      ref: `aaf:action_gate_attempt:${GATE_ID}`,
+      status: "warning",
+      gateResult: "allowed",
+    },
+    gateInputWatermark: GATE_INPUT_WATERMARK,
+    handoffWatermark: STALE_HANDOFF_WATERMARK,
+    evidenceSourceRefs: {
+      readinessPackageRef: { role: "airship_readiness_package", sourceSystem: "gnr8", sourceTable: "gnr8_airship_publish_readiness_packages", sourceRecordId: READINESS_ID, sourceRef: `gnr8:gnr8_airship_publish_readiness_packages:${READINESS_ID}`, sourceWatermark: "wm:readiness" },
+      reviewRecordRef: { role: "airship_review_record", sourceSystem: "gnr8", sourceTable: "gnr8_airship_internal_preview_candidate_reviews", sourceRecordId: REVIEW_ID, sourceRef: `gnr8:gnr8_airship_internal_preview_candidate_reviews:${REVIEW_ID}`, sourceWatermark: "wm:review" },
+      candidateSourceRef: { role: "improved_candidate_site_version", sourceSystem: "gnr8", sourceTable: "gnr8_runtime_site_versions", sourceRecordId: CANDIDATE_VERSION_ID, sourceRef: `gnr8:gnr8_runtime_site_versions:${CANDIDATE_VERSION_ID}`, sourceVersion: "airship-draft:44", sourceWatermark: "wm:candidate" },
+      artifactSourceRef: { role: "improved_runtime_artifact", sourceSystem: "gnr8", sourceTable: "gnr8_runtime_artifacts", sourceRecordId: ARTIFACT_ID, sourceRef: `gnr8:gnr8_runtime_artifacts:${ARTIFACT_ID}`, sourceVersion: "airship-draft:44", sourceWatermark: "wm:artifact" },
+      draftSourceRef: { role: "airship_draft", sourceSystem: "gnr8", sourceTable: "gnr8_airship_single_site_editor_drafts", sourceRecordId: DRAFT_ID, sourceRef: `gnr8:gnr8_airship_single_site_editor_drafts:${DRAFT_ID}`, sourceWatermark: "wm:draft" },
+    },
+    publishTargetRef: { role: "publish_target", sourceSystem: "gnr8", sourceTable: "gnr8_publish_targets", sourceRecordId: "production", sourceRef: "gnr8:gnr8_publish_targets:production", sourceWatermark: "wm:production" },
+    activePointerBefore: { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID },
+    activePointerAfter: { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID },
+    nextStep: "governed dry-run, not publish",
+    idempotencyKey: "airship-publish-activation-chain:key",
+    correlationId: "airship-publish-activation-chain:corr",
+    createdAt: "2026-09-10T12:30:00.000Z",
+    mutationFlags: {
+      activationMetadataMutation: true,
+      createsApprovalRequest: true,
+      createsApprovalDecision: true,
+      createsGateAttempt: true,
+      publishes: false,
+      dryRun: false,
+      shadowPublish: false,
+      rollback: false,
+      sourceCapture: false,
+      activePointerChanged: false,
+      runtimeMutation: false,
+      liveSiteMutated: false,
+      providerCall: false,
+    },
+    ...overrides,
+  };
+}
+
+function activationChainMetadata(chain = activationChain()): Record<string, unknown> {
+  return {
+    expectedLaunchReadinessEvidenceRef: chain.activationEvidencePackage.id,
+    expectedLaunchReadinessEvidenceDisplayRef: chain.activationEvidencePackage.ref,
+    expectedLaunchReadinessEvidenceStatus: chain.activationEvidencePackage.status,
+    expectedLaunchReadinessEvidenceWatermark: chain.activationEvidencePackage.sourceWatermark,
+    expectedPublishActivationRequestRef: chain.activationRequest.id,
+    expectedPublishActivationRequestDisplayRef: chain.activationRequest.ref,
+    expectedPublishActivationRequestStatus: chain.activationRequest.status,
+    expectedPublishActivationDecisionRef: chain.activationDecision.id,
+    expectedPublishActivationDecisionDisplayRef: chain.activationDecision.ref,
+    expectedPublishActivationDecisionStatus: chain.activationDecision.status,
+    expectedGateAttemptResultRef: chain.gateAttempt.id,
+    expectedGateAttemptResultDisplayRef: chain.gateAttempt.ref,
+    expectedGateAttemptStatus: chain.gateAttempt.status,
+    expectedGateInputWatermark: chain.gateInputWatermark,
+    expectedHandoffWatermark: chain.handoffWatermark,
+    airshipPublishActivationChain: chain,
+    unrelatedReadinessField: { keep: "unchanged" },
   };
 }
 
@@ -435,4 +525,89 @@ test("Airship activation chain keeps generic imported-site source metadata free 
   assert.equal(serialized.includes("Maver"), false);
   assert.equal(result.chain.mutationFlags.liveSiteMutated, false);
   assert.equal(result.chain.mutationFlags.providerCall, false);
+});
+
+test("Airship activation-chain refresh recomputes expected handoff watermark from the current read model", async () => {
+  const staleChain = activationChain();
+  const repository = new MemoryReadinessRepository(readiness({ metadata: activationChainMetadata(staleChain) }));
+  const currentReadModel = decisionReadModel();
+  const expectedHandoffWatermark = buildPublishActivationGateHandoff(currentReadModel).semanticHandoffWatermark;
+  const dependencies = deps(repository);
+
+  const result = await refreshAirshipPublishActivationHandoffWatermark(
+    { readinessPackageId: READINESS_ID },
+    {
+      ...dependencies,
+      buildDecisionReadModel: async (input) => {
+        dependencies.calls.push("read-model");
+        assert.equal(input.publishActivationRequestId, REQUEST_ID);
+        assert.equal(input.publishActivationDecisionId, DECISION_ID);
+        assert.equal(input.launchReadinessEvidencePackageId, EVIDENCE_ID);
+        assert.equal(input.candidateSiteVersionId, CANDIDATE_VERSION_ID);
+        assert.equal(input.runtimeArtifactId, ARTIFACT_ID);
+        assert.equal(input.publishTargetId, "production");
+        assert.equal(input.expectedLaunchReadinessEvidenceWatermark, "wm:evidence");
+        return currentReadModel;
+      },
+    },
+  );
+
+  assert.equal(result.status, "refreshed");
+  assert.equal(result.previousExpectedHandoffWatermark, STALE_HANDOFF_WATERMARK);
+  assert.equal(result.previousChainHandoffWatermark, STALE_HANDOFF_WATERMARK);
+  assert.equal(result.derivedHandoffWatermark, expectedHandoffWatermark);
+  assert.equal(result.chain.handoffWatermark, expectedHandoffWatermark);
+  assert.equal(repository.record?.metadata.expectedHandoffWatermark, expectedHandoffWatermark);
+  assert.equal((repository.record?.metadata.airshipPublishActivationChain as AirshipPublishActivationChainRecord).handoffWatermark, expectedHandoffWatermark);
+  assert.deepEqual(dependencies.calls, ["read-model"]);
+  assert.equal(repository.updates, 1);
+});
+
+test("Airship activation-chain refresh updates only expected handoff metadata fields", async () => {
+  const staleChain = activationChain();
+  const beforeMetadata = activationChainMetadata(staleChain);
+  const repository = new MemoryReadinessRepository(readiness({ metadata: beforeMetadata }));
+  const expectedHandoffWatermark = buildPublishActivationGateHandoff(decisionReadModel()).semanticHandoffWatermark;
+
+  await refreshAirshipPublishActivationHandoffWatermark(
+    { readinessPackageId: READINESS_ID },
+    { ...deps(repository), buildDecisionReadModel: async () => decisionReadModel() },
+  );
+
+  const afterMetadata = repository.record?.metadata as Record<string, unknown>;
+  const afterChain = afterMetadata.airshipPublishActivationChain as AirshipPublishActivationChainRecord;
+  const expectedMetadata = {
+    ...beforeMetadata,
+    expectedHandoffWatermark: expectedHandoffWatermark,
+    airshipPublishActivationChain: {
+      ...staleChain,
+      handoffWatermark: expectedHandoffWatermark,
+    },
+  };
+
+  assert.deepEqual(afterMetadata, expectedMetadata);
+  assert.equal(afterChain.readinessPackageId, READINESS_ID);
+  assert.equal(afterChain.reviewRecordId, REVIEW_ID);
+  assert.equal(afterChain.candidateVersionId, CANDIDATE_VERSION_ID);
+  assert.equal(afterChain.artifactId, ARTIFACT_ID);
+  assert.equal(afterChain.draftId, DRAFT_ID);
+  assert.equal(afterChain.draftVersion, 44);
+  assert.deepEqual(afterChain.activePointerBefore, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
+  assert.deepEqual(afterChain.activePointerAfter, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
+  assert.equal(afterChain.gateInputWatermark, GATE_INPUT_WATERMARK);
+});
+
+test("Airship activation-chain refresh refuses missing or invalid readiness package input", async () => {
+  await assert.rejects(
+    () => refreshAirshipPublishActivationHandoffWatermark({ readinessPackageId: "not-a-uuid" }, deps()),
+    /airship_publish_activation_chain_readiness_package_id_invalid/,
+  );
+  await assert.rejects(
+    () => refreshAirshipPublishActivationHandoffWatermark({ readinessPackageId: READINESS_ID }, deps(new MemoryReadinessRepository(null))),
+    /airship_publish_activation_chain_refresh_readiness_package_missing/,
+  );
+  await assert.rejects(
+    () => refreshAirshipPublishActivationHandoffWatermark({ readinessPackageId: READINESS_ID }, deps(new MemoryReadinessRepository(readiness({ metadata: {} })))),
+    /airship_publish_activation_chain_refresh_chain_missing/,
+  );
 });

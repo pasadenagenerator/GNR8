@@ -116,6 +116,10 @@ export type CreateAirshipPublishActivationChainInput = AirshipPublishActivationC
   idempotencyKey?: string | null;
 };
 
+export type RefreshAirshipPublishActivationHandoffWatermarkInput = {
+  readinessPackageId: string;
+};
+
 type ActivationEvidenceWriter = Pick<AafWriterRepository, "createEvidencePackageTransaction">;
 
 export type AirshipPublishActivationChainDependencies = {
@@ -588,6 +592,19 @@ function persistedChainMetadata(chain: AirshipPublishActivationChainRecord): Rec
   };
 }
 
+function refreshedHandoffWatermarkMetadata(
+  chain: AirshipPublishActivationChainRecord,
+  handoffWatermark: string,
+): Record<string, unknown> {
+  return {
+    expectedHandoffWatermark: handoffWatermark,
+    airshipPublishActivationChain: {
+      ...chain,
+      handoffWatermark,
+    },
+  };
+}
+
 function outputFromChain(status: "created" | "reused", chain: AirshipPublishActivationChainRecord): {
   status: "created" | "reused";
   chain: AirshipPublishActivationChainRecord;
@@ -600,6 +617,119 @@ function outputFromChain(status: "created" | "reused", chain: AirshipPublishActi
         ...chain.mutationFlags,
         activationMetadataMutation: status === "created",
       },
+    },
+  };
+}
+
+export async function refreshAirshipPublishActivationHandoffWatermark(
+  input: RefreshAirshipPublishActivationHandoffWatermarkInput,
+  dependencies: Partial<Pick<
+    AirshipPublishActivationChainDependencies,
+    "readinessRepository" | "getSiteVersion" | "getArtifactById" | "getActivePointerForSite" | "buildDecisionReadModel"
+  >> = {},
+): Promise<{
+  status: "refreshed";
+  readinessPackageId: string;
+  previousExpectedHandoffWatermark: string | null;
+  previousChainHandoffWatermark: string | null;
+  derivedHandoffWatermark: string;
+  chain: AirshipPublishActivationChainRecord;
+  mutationFlags: {
+    activationMetadataMutation: true;
+    createsApprovalRequest: false;
+    createsApprovalDecision: false;
+    createsGateAttempt: false;
+    publishes: false;
+    dryRun: false;
+    shadowPublish: false;
+    rollback: false;
+    sourceCapture: false;
+    activePointerChanged: false;
+    runtimeMutation: false;
+    liveSiteMutated: false;
+    providerCall: false;
+  };
+}> {
+  const deps = {
+    readinessRepository: dependencies.readinessRepository ?? new PostgresAirshipPublishReadinessRepository(),
+    getSiteVersion: dependencies.getSiteVersion ?? getSiteVersion,
+    getArtifactById: dependencies.getArtifactById ?? getArtifactById,
+    getActivePointerForSite: dependencies.getActivePointerForSite ?? getActivePointerForSite,
+    buildDecisionReadModel: dependencies.buildDecisionReadModel ?? buildPublishActivationDecisionReadModel,
+  };
+  const readinessPackageId = uuid("readiness_package_id", input.readinessPackageId);
+  const readiness = await readAirshipPublishReadinessById(readinessPackageId, deps.readinessRepository);
+  if (!readiness) throw new Error("airship_publish_activation_chain_refresh_readiness_package_missing");
+
+  const chain = airshipPublishActivationChainFromReadiness(readiness);
+  if (!chain) throw new Error("airship_publish_activation_chain_refresh_chain_missing");
+  assertReadinessMatchesInput(readiness, {
+    readinessPackageId,
+    reviewRecordId: chain.reviewRecordId,
+    candidateVersionId: chain.candidateVersionId,
+    artifactId: chain.artifactId,
+    draftId: chain.draftId,
+    draftVersion: chain.draftVersion,
+    migrationId: readiness.migrationId,
+  });
+
+  const candidateVersion = await deps.getSiteVersion(chain.candidateVersionId);
+  const artifact = await deps.getArtifactById(chain.artifactId);
+  const activePointer = candidateVersion ? await deps.getActivePointerForSite(candidateVersion.siteId) : null;
+  assertRuntimeStillSafe({ readiness, candidateVersion, artifact, activePointer });
+
+  const readModel = await deps.buildDecisionReadModel({
+    tenantId: required("tenant_id", readiness.siteClientSourceLabels.tenantId),
+    clientId: required("client_id", readiness.siteClientSourceLabels.clientId),
+    siteId: required("site_id", readiness.siteClientSourceLabels.siteId),
+    migrationId: readiness.migrationId,
+    publishActivationRequestId: chain.activationRequest.id,
+    publishActivationDecisionId: chain.activationDecision.id,
+    launchReadinessEvidencePackageId: chain.activationEvidencePackage.id,
+    candidateSiteVersionId: chain.candidateVersionId,
+    runtimeArtifactId: chain.artifactId,
+    publishTargetId: chain.publishTargetRef.sourceRecordId,
+    expectedLaunchReadinessEvidenceWatermark: chain.activationEvidencePackage.sourceWatermark,
+    improvedCandidateSiteVersionRef: sourceRefForRequest(chain.evidenceSourceRefs.candidateSourceRef),
+    improvedRuntimeArtifactRef: sourceRefForRequest(chain.evidenceSourceRefs.artifactSourceRef),
+    publishTargetRef: sourceRefForRequest(chain.publishTargetRef),
+  });
+  const handoff = buildPublishActivationGateHandoff(readModel);
+  if (handoff.status !== "handoff_ready") {
+    throw new Error(`airship_publish_activation_chain_refresh_handoff_blocked:${handoff.blockerSummary.blockers.join(",")}`);
+  }
+  if (!deps.readinessRepository.attachActivationChainMetadata) {
+    throw new Error("airship_publish_activation_chain_refresh_repository_attach_missing");
+  }
+
+  const previousExpectedHandoffWatermark = text(jsonObject(readiness.metadata).expectedHandoffWatermark);
+  const refreshedChain = { ...chain, handoffWatermark: handoff.semanticHandoffWatermark };
+  await deps.readinessRepository.attachActivationChainMetadata({
+    readinessPackageId,
+    metadata: refreshedHandoffWatermarkMetadata(chain, handoff.semanticHandoffWatermark),
+  });
+
+  return {
+    status: "refreshed",
+    readinessPackageId,
+    previousExpectedHandoffWatermark,
+    previousChainHandoffWatermark: text(chain.handoffWatermark),
+    derivedHandoffWatermark: handoff.semanticHandoffWatermark,
+    chain: refreshedChain,
+    mutationFlags: {
+      activationMetadataMutation: true,
+      createsApprovalRequest: false,
+      createsApprovalDecision: false,
+      createsGateAttempt: false,
+      publishes: false,
+      dryRun: false,
+      shadowPublish: false,
+      rollback: false,
+      sourceCapture: false,
+      activePointerChanged: false,
+      runtimeMutation: false,
+      liveSiteMutated: false,
+      providerCall: false,
     },
   };
 }
