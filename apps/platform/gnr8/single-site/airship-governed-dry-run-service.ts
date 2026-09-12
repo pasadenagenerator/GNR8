@@ -246,6 +246,48 @@ function canonicalRef(input: {
   };
 }
 
+function canonicalActivationArtifactSourceRef(
+  readinessMetadata: Record<string, unknown>,
+  refs: AirshipGovernedDryRunRefs,
+): Exclude<SingleSitePublishOperatorDryRunCanonicalRef, string> {
+  const chain = jsonObject(readinessMetadata.airshipPublishActivationChain);
+  const evidenceSourceRefs = jsonObject(chain.evidenceSourceRefs);
+  const artifactSourceRef = jsonObject(evidenceSourceRefs.artifactSourceRef);
+  const sourceRecordId = text(artifactSourceRef.sourceRecordId);
+  const sourceWatermark = text(artifactSourceRef.sourceWatermark);
+  if (!sourceRecordId || !sourceWatermark) {
+    throw new Error("airship_governed_dry_run_canonical_artifact_source_ref_missing");
+  }
+  if (sourceRecordId !== refs.artifactId) {
+    throw new Error("airship_governed_dry_run_canonical_artifact_source_ref_mismatch");
+  }
+  const sourceTable = text(artifactSourceRef.sourceTable) ?? "gnr8_runtime_artifacts";
+  if (sourceTable !== "gnr8_runtime_artifacts") {
+    throw new Error("airship_governed_dry_run_canonical_artifact_source_ref_mismatch");
+  }
+  const role = text(artifactSourceRef.role) ?? "improved_runtime_artifact";
+  if (role !== "improved_runtime_artifact") {
+    throw new Error("airship_governed_dry_run_canonical_artifact_source_ref_mismatch");
+  }
+  if (sourceWatermark === `airship-artifact:${refs.artifactId}:readiness:${refs.readinessPackageId}`) {
+    throw new Error("airship_governed_dry_run_canonical_artifact_source_ref_readiness_scoped");
+  }
+  if (!sourceWatermark.startsWith(`airship-artifact:${refs.artifactId}:bundle:`)) {
+    throw new Error("airship_governed_dry_run_canonical_artifact_source_ref_mismatch");
+  }
+  return {
+    role,
+    sourceSystem: text(artifactSourceRef.sourceSystem) ?? "gnr8",
+    sourceTable,
+    sourceRecordId,
+    sourceRef: text(artifactSourceRef.sourceRef) ?? `gnr8:gnr8_runtime_artifacts:${sourceRecordId}`,
+    sourceVersion: text(artifactSourceRef.sourceVersion),
+    sourceWatermark,
+    contentHash: text(artifactSourceRef.contentHash),
+    metadataJson: jsonObject(artifactSourceRef.metadataJson),
+  };
+}
+
 function sourceIdentity(readiness: AirshipPublishReadinessRecord): { tenantId: string; clientId: string; siteId: string } {
   return {
     tenantId: required("tenant_id", readiness.siteClientSourceLabels.tenantId),
@@ -323,14 +365,7 @@ function baseRequest(input: {
     sourceWatermark: `airship-candidate:${input.refs.candidateVersionId}:readiness:${input.refs.readinessPackageId}`,
     metadataJson: metadata,
   });
-  const runtimeArtifactRef = canonicalRef({
-    role: "runtime_artifact",
-    sourceTable: "gnr8_runtime_artifacts",
-    sourceRecordId: input.refs.artifactId,
-    sourceVersion: `airship-draft:${input.refs.draftVersion}`,
-    sourceWatermark: `airship-artifact:${input.refs.artifactId}:readiness:${input.refs.readinessPackageId}`,
-    metadataJson: metadata,
-  });
+  const runtimeArtifactRef = canonicalActivationArtifactSourceRef(readinessMetadata, input.refs);
   const activationEvidenceRefId = optionalMetadataString(readinessMetadata, "expectedLaunchReadinessEvidenceRef");
   const activationEvidenceDisplayRef = optionalMetadataString(readinessMetadata, "expectedLaunchReadinessEvidenceDisplayRef");
   const activationEvidenceWatermark = optionalMetadataString(readinessMetadata, "expectedLaunchReadinessEvidenceWatermark");

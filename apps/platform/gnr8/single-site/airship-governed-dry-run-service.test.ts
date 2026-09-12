@@ -32,6 +32,9 @@ const DECISION_ID = "33333333-3333-4333-8333-333333333333";
 const GATE_ID = "44444444-4444-4444-8444-444444444444";
 const GATE_INPUT_WATERMARK = `single-site-publish-activation-gate-input:${"a".repeat(64)}`;
 const HANDOFF_WATERMARK = `single-site-publish-activation-gate-handoff:${"b".repeat(64)}`;
+const ARTIFACT_BUNDLE_SHA256 = "0f1bb26bfcd6ea21d79fa2839842ae2be9f292d4b2b7abd504d7a2d34d6010fe";
+const CANONICAL_ARTIFACT_WATERMARK = `airship-artifact:${ARTIFACT_ID}:bundle:${ARTIFACT_BUNDLE_SHA256}`;
+const READINESS_SCOPED_ARTIFACT_WATERMARK = `airship-artifact:${ARTIFACT_ID}:readiness:${READINESS_ID}`;
 
 function refs(overrides: Partial<AirshipGovernedDryRunRefs> = {}): AirshipGovernedDryRunRefs {
   return {
@@ -42,6 +45,32 @@ function refs(overrides: Partial<AirshipGovernedDryRunRefs> = {}): AirshipGovern
     draftId: DRAFT_ID,
     draftVersion: 44,
     migrationId: MIGRATION_ID,
+    ...overrides,
+  };
+}
+
+function canonicalArtifactSourceRef(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    role: "improved_runtime_artifact",
+    sourceSystem: "gnr8",
+    sourceTable: "gnr8_runtime_artifacts",
+    sourceRecordId: ARTIFACT_ID,
+    sourceRef: `gnr8:gnr8_runtime_artifacts:${ARTIFACT_ID}`,
+    sourceVersion: "airship-draft:44",
+    sourceWatermark: CANONICAL_ARTIFACT_WATERMARK,
+    metadataJson: { refRole: "improved_runtime_artifact", canonical: true },
+    ...overrides,
+  };
+}
+
+function activationArtifactOnlyMetadata(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    internalPreviewOnly: true,
+    airshipPublishActivationChain: {
+      evidenceSourceRefs: {
+        artifactSourceRef: canonicalArtifactSourceRef(),
+      },
+    },
     ...overrides,
   };
 }
@@ -96,7 +125,7 @@ function readiness(overrides: Partial<AirshipPublishReadinessRecord> = {}): Airs
     serviceVersion: "airship-6-publish-readiness-package:v1",
     idempotencyKey: "readiness-key",
     correlationId: "readiness-correlation",
-    metadata: { internalPreviewOnly: true },
+    metadata: activationArtifactOnlyMetadata(),
     createdAt: "2026-09-10T12:20:00.000Z",
     updatedAt: "2026-09-10T12:20:00.000Z",
     ...overrides,
@@ -125,7 +154,7 @@ function artifact(publishStage: RuntimeArtifact["publishStage"] = "shadow"): Run
     siteId: "runtime-synthetic",
     siteVersionId: CANDIDATE_VERSION_ID,
     rendererCompatibilityVersion: "gnr8-renderer-v1",
-    bundleSha256: "bundle-synthetic",
+    bundleSha256: ARTIFACT_BUNDLE_SHA256,
     htmlByPath: { "/": "<html><body>Synthetic imported-site headline</body></html>" },
     compiledTokenStyles: "",
     assetFingerprintMap: {},
@@ -147,6 +176,7 @@ function artifact(publishStage: RuntimeArtifact["publishStage"] = "shadow"): Run
 
 function activationChainMetadata(): Record<string, unknown> {
   return {
+    ...activationArtifactOnlyMetadata(),
     expectedLaunchReadinessEvidenceRef: EVIDENCE_ID,
     expectedLaunchReadinessEvidenceDisplayRef: `aaf:evidence_package:${EVIDENCE_ID}`,
     expectedLaunchReadinessEvidenceStatus: "created",
@@ -496,10 +526,14 @@ test("airship readiness package adapts into a governed dry-run input and records
   assert.equal(wrapperInputs[0]!.expectedGateInputWatermark, null);
   assert.equal(wrapperInputs[0]!.candidateSiteVersionRef && typeof wrapperInputs[0]!.candidateSiteVersionRef === "object" && wrapperInputs[0]!.candidateSiteVersionRef.sourceRecordId, CANDIDATE_VERSION_ID);
   assert.equal(wrapperInputs[0]!.runtimeArtifactRef && typeof wrapperInputs[0]!.runtimeArtifactRef === "object" && wrapperInputs[0]!.runtimeArtifactRef.sourceRecordId, ARTIFACT_ID);
+  assert.equal(wrapperInputs[0]!.runtimeArtifactRef && typeof wrapperInputs[0]!.runtimeArtifactRef === "object" && wrapperInputs[0]!.runtimeArtifactRef.sourceRef, `gnr8:gnr8_runtime_artifacts:${ARTIFACT_ID}`);
+  assert.equal(wrapperInputs[0]!.runtimeArtifactRef && typeof wrapperInputs[0]!.runtimeArtifactRef === "object" && wrapperInputs[0]!.runtimeArtifactRef.sourceWatermark, CANONICAL_ARTIFACT_WATERMARK);
+  assert.equal(JSON.stringify(wrapperInputs[0]!.runtimeArtifactRef).includes(READINESS_SCOPED_ARTIFACT_WATERMARK), false);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.readinessPackageId, READINESS_ID);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.reviewRecordId, REVIEW_ID);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.candidateVersionId, CANDIDATE_VERSION_ID);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.artifactId, ARTIFACT_ID);
+  assert.deepEqual(wrapperInputs[0]!.airshipPublishActivationHandoff?.sourceEvidenceRefs.artifactSourceRef, wrapperInputs[0]!.runtimeArtifactRef);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.draftId, DRAFT_ID);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.draftVersion, 44);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.activationRequestRef, null);
@@ -561,6 +595,10 @@ test("airship governed dry-run handoff uses real activation chain refs after cha
   assert.equal(wrapperInputs[0]!.expectedGateAttemptResultRef, GATE_ID);
   assert.equal(wrapperInputs[0]!.expectedHandoffWatermark, HANDOFF_WATERMARK);
   assert.equal(wrapperInputs[0]!.expectedGateInputWatermark, GATE_INPUT_WATERMARK);
+  assert.equal(wrapperInputs[0]!.runtimeArtifactRef && typeof wrapperInputs[0]!.runtimeArtifactRef === "object" && wrapperInputs[0]!.runtimeArtifactRef.sourceRecordId, ARTIFACT_ID);
+  assert.equal(wrapperInputs[0]!.runtimeArtifactRef && typeof wrapperInputs[0]!.runtimeArtifactRef === "object" && wrapperInputs[0]!.runtimeArtifactRef.sourceWatermark, CANONICAL_ARTIFACT_WATERMARK);
+  assert.equal(JSON.stringify(wrapperInputs[0]!).includes(READINESS_SCOPED_ARTIFACT_WATERMARK), false);
+  assert.deepEqual(wrapperInputs[0]!.airshipPublishActivationHandoff?.sourceEvidenceRefs.artifactSourceRef, wrapperInputs[0]!.runtimeArtifactRef);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.activationRequestRef?.id, REQUEST_ID);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.activationDecisionRef?.id, DECISION_ID);
   assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff?.gateAttemptRef?.id, GATE_ID);
@@ -589,6 +627,30 @@ test("airship governed dry-run reuses migration-scoped legacy records without a 
   assert.equal(wrapperCalls, 1);
   assert.equal(second.mutationFlags.dryRunAttemptExecuted, false);
   assert.equal(second.result.idempotencyKey, legacyIdempotencyKey);
+});
+
+test("airship governed dry-run fails closed when canonical artifact evidence metadata is absent", async () => {
+  await assert.rejects(
+    () => runAirshipGovernedDryRun({ ...refs(), actorId: "superadmin-airship" }, deps({ readinessRecord: readiness({ metadata: { internalPreviewOnly: true } }) })),
+    /airship_governed_dry_run_canonical_artifact_source_ref_missing/,
+  );
+  await assert.rejects(
+    () => runAirshipGovernedDryRun(
+      { ...refs(), actorId: "superadmin-airship" },
+      deps({
+        readinessRecord: readiness({
+          metadata: activationArtifactOnlyMetadata({
+            airshipPublishActivationChain: {
+              evidenceSourceRefs: {
+                artifactSourceRef: canonicalArtifactSourceRef({ sourceWatermark: READINESS_SCOPED_ARTIFACT_WATERMARK }),
+              },
+            },
+          }),
+        }),
+      }),
+    ),
+    /airship_governed_dry_run_canonical_artifact_source_ref_readiness_scoped/,
+  );
 });
 
 test("airship governed dry-run refuses missing, unapproved, stale, and mismatched readiness packages", async () => {
