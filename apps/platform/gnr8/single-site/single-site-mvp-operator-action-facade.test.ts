@@ -15,6 +15,10 @@ import {
 import { SINGLE_SITE_PUBLISH_OPERATOR_DRY_RUN_CALLER_VERSION } from "./single-site-publish-operator-dry-run-caller";
 import { SINGLE_SITE_PUBLISH_WRAPPER_ORCHESTRATOR_VERSION } from "./single-site-publish-wrapper-orchestrator";
 import { SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_CALLER_VERSION } from "./single-site-shadow-publish-operator-caller";
+import {
+  AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+  type AirshipPublishActivationHandoff,
+} from "./publish-activation-metadata-handoff";
 
 const BASE_INPUT: SingleSiteMvpOperatorActionInput = {
   tenantId: "tenant-cutline-3",
@@ -186,6 +190,70 @@ function safeRefs() {
     handoffWatermark: BASE_INPUT.expectedHandoffWatermark!,
     gateInputWatermark: BASE_INPUT.expectedGateInputWatermark!,
     contextWatermark: "context-watermark-cutline-3",
+  };
+}
+
+function airshipHandoff(): AirshipPublishActivationHandoff {
+  const candidateSourceRef = {
+    role: "candidate_site_version",
+    sourceSystem: "gnr8",
+    sourceTable: "gnr8_runtime_site_versions",
+    sourceRecordId: "site-version-cutline-3",
+    sourceRef: "gnr8:gnr8_runtime_site_versions:site-version-cutline-3",
+    sourceVersion: "airship-activation-chain:v1",
+    sourceWatermark: "airship-candidate:site-version-cutline-3:readiness:readiness-cutline-3",
+    metadataJson: {
+      tenantId: BASE_INPUT.tenantId,
+      clientId: BASE_INPUT.clientId,
+      siteId: BASE_INPUT.siteId,
+      migrationId: BASE_INPUT.migrationId,
+    },
+  };
+  const artifactSourceRef = {
+    role: "improved_runtime_artifact",
+    sourceSystem: "gnr8",
+    sourceTable: "gnr8_runtime_artifacts",
+    sourceRecordId: "artifact-cutline-3",
+    sourceRef: "gnr8:gnr8_runtime_artifacts:artifact-cutline-3",
+    sourceVersion: "airship-activation-chain:v1",
+    sourceWatermark: "airship-artifact:artifact-cutline-3:bundle:bundle-cutline-3",
+    metadataJson: {
+      tenantId: BASE_INPUT.tenantId,
+      clientId: BASE_INPUT.clientId,
+      siteId: BASE_INPUT.siteId,
+      migrationId: BASE_INPUT.migrationId,
+    },
+  };
+  const publishTargetRef = {
+    role: "publish_target",
+    sourceSystem: "gnr8",
+    sourceTable: "gnr8_publish_targets",
+    sourceRecordId: "production",
+    sourceRef: "gnr8:gnr8_publish_targets:production",
+    sourceVersion: "ptt-1",
+    sourceWatermark: "ptt-1:gnr8_publish_targets:production",
+    metadataJson: {
+      environment: "production",
+      publishStage: "production",
+      status: "active",
+    },
+  };
+  return {
+    sourceType: AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+    readinessPackageId: "readiness-cutline-3",
+    reviewRecordId: "review-cutline-3",
+    candidateVersionId: "site-version-cutline-3",
+    artifactId: "artifact-cutline-3",
+    draftId: "draft-cutline-3",
+    draftVersion: 3,
+    publishTargetRef,
+    sourceEvidenceRefs: {
+      candidateSourceRef,
+      artifactSourceRef,
+    },
+    activationRequestRef: { id: "request-cutline-3", ref: "request-cutline-3", status: "granted" },
+    activationDecisionRef: { id: "decision-cutline-3", ref: "decision-cutline-3", status: "granted" },
+    gateAttemptRef: { id: "gate-cutline-3", ref: "aaf:action_gate_attempt:gate-cutline-3", status: "allowed", watermark: BASE_INPUT.expectedGateInputWatermark },
   };
 }
 
@@ -465,4 +533,84 @@ test("shadow-publish delegates only with feature flag and confirmation", async (
   assert.equal(result.mutationFlags.publishMayHaveExecuted, true);
   assert.equal(result.mutationFlags.facadeDirectRuntimeMutation, false);
   assert.equal(calls.length, 1);
+});
+
+test("shadow-publish facade preserves Airship activation handoff for caller mapping", async () => {
+  const calls: unknown[] = [];
+  const handoff = airshipHandoff();
+  const result = await executeSingleSiteMvpOperatorAction(
+    {
+      ...BASE_INPUT,
+      requestedOperationKey: "run_shadow_publish",
+      explicitConfirmation: SHADOW_CONFIRMATION,
+      airshipPublishActivationHandoff: handoff,
+    },
+    {
+      ...depsFor("run_shadow_publish"),
+      isShadowPublishFeatureEnabled: () => true,
+      async runSingleSiteShadowPublishOperatorAction(input) {
+        calls.push(input);
+        return {
+          ok: false,
+          callerVersion: SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_CALLER_VERSION,
+          wrapperVersion: SINGLE_SITE_PUBLISH_WRAPPER_ORCHESTRATOR_VERSION,
+          mode: "shadow_publish",
+          routeStatus: "wrapper_preflight_blocked",
+          preflightStatus: "wrapper_blocked",
+          resolverStatus: "complete",
+          wrapperStatus: "preflight_blocked",
+          publishOrchestratorStatus: "not_called",
+          publishOrchestrator: {
+            status: "not_called",
+            siteId: null,
+            siteVersionId: null,
+            artifactId: null,
+            publishStage: null,
+            pointerSwitch: null,
+            activationOutcome: null,
+            previousActivePointer: null,
+            newActivePointer: null,
+          },
+          shadowGuardDiagnostics: null,
+          metadataCompleteness: { status: "complete", complete: true, missingCodes: [], mismatchCodes: [], warningCodes: [] },
+          blockerCodes: ["test_wrapper_not_published"],
+          warnings: [],
+          limitationCodes: [],
+          safeRefs: safeRefs(),
+          correlationId: BASE_INPUT.correlationId!,
+          idempotencyKey: BASE_INPUT.idempotencyKey!,
+          shadowPublish: true,
+          dryRun: false,
+          blockingEnforcementApplied: false,
+          publishMayHaveExecuted: false,
+          createsAafRecords: false,
+          createsGateAttempt: false,
+          evaluatesGate: false,
+          redactions: ["rawPublishOrchestratorResult"],
+          flags: {
+            shadowPublish: true,
+            dryRun: false,
+            blockingEnforcementApplied: false,
+            createsAafRecords: false,
+            createsGateAttempt: false,
+            evaluatesGate: false,
+            pasrInvoked: false,
+            createsDdomSnapshots: false,
+            providerCalls: false,
+            billingMutation: false,
+            domainMutation: false,
+            rollbackMutation: false,
+            clientPortalExposure: false,
+            opsInboxAction: false,
+          },
+        };
+      },
+    },
+  );
+
+  const delegated = calls[0] as { request: { airshipPublishActivationHandoff?: AirshipPublishActivationHandoff | null } } | undefined;
+  assert.equal(result.allowed, false);
+  assert.equal(result.executionResult?.publishMayHaveExecuted, false);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(delegated?.request.airshipPublishActivationHandoff, handoff);
 });

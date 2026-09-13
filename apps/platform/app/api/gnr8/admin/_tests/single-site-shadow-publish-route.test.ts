@@ -22,6 +22,10 @@ import {
   type SingleSitePublishWrapperInput,
   type SingleSitePublishWrapperResult,
 } from "@/gnr8/single-site/single-site-publish-wrapper-orchestrator";
+import {
+  AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+  type AirshipPublishActivationHandoff,
+} from "@/gnr8/single-site/publish-activation-metadata-handoff";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PLATFORM_ROOT = path.resolve(TEST_DIR, "../../../../..");
@@ -107,6 +111,110 @@ const DRY_RUN_REQUEST: SingleSitePublishOperatorDryRunRequest = {
   correlationId: BASE_REQUEST.correlationId,
   allowWarningsWithLimitations: true,
 };
+
+const AIRSHIP_REFS = {
+  migrationId: "682a09fd-8fd5-4f73-93b8-54f5d4067c63",
+  readinessPackageId: "3fdcde40-e178-40b5-83e1-217d600315ef",
+  candidateVersionId: "92e476b9-67fc-408a-be3d-5c744aa0f3f6",
+  artifactId: "5ac3716a-f29d-4648-bc86-a6942638ed53",
+  reviewRecordId: "review-airship-37",
+  draftId: "draft-airship-37",
+  draftVersion: 37,
+  requestId: "request-airship-37",
+  decisionId: "decision-airship-37",
+  gateId: "944d1bf7-23cc-49f7-9996-f843b2fc28c9",
+  gateInputWatermark: "single-site-publish-activation-gate-input:0563861ab2ea3a1cacf89426ddb85456253301afc6c57a050ae8df2caba72c4c",
+  handoffWatermark: "single-site-publish-activation-gate-handoff:dfc864143f32d0fe54ed0376bb7b02f80d298982e7aa79a58218be434ad78db3",
+} as const;
+
+function airshipCanonicalRef(input: {
+  role: string;
+  sourceTable: string;
+  sourceRecordId: string;
+  sourceWatermark: string;
+  metadataJson?: Record<string, unknown>;
+}) {
+  return {
+    role: input.role,
+    sourceSystem: "gnr8",
+    sourceTable: input.sourceTable,
+    sourceRecordId: input.sourceRecordId,
+    sourceRef: `gnr8:${input.sourceTable}:${input.sourceRecordId}`,
+    sourceVersion: "airship-activation-chain:v1",
+    sourceWatermark: input.sourceWatermark,
+    metadataJson: input.metadataJson ?? {},
+  };
+}
+
+function airshipActivationChain() {
+  const metadataJson = {
+    tenantId: BASE_REQUEST.tenantId,
+    clientId: BASE_REQUEST.clientId,
+    siteId: BASE_REQUEST.siteId,
+    migrationId: AIRSHIP_REFS.migrationId,
+    readinessPackageId: AIRSHIP_REFS.readinessPackageId,
+  };
+  return {
+    evidenceSourceRefs: {
+      candidateSourceRef: airshipCanonicalRef({
+        role: "candidate_site_version",
+        sourceTable: "gnr8_runtime_site_versions",
+        sourceRecordId: AIRSHIP_REFS.candidateVersionId,
+        sourceWatermark: `airship-candidate:${AIRSHIP_REFS.candidateVersionId}:readiness:${AIRSHIP_REFS.readinessPackageId}`,
+        metadataJson,
+      }),
+      artifactSourceRef: airshipCanonicalRef({
+        role: "improved_runtime_artifact",
+        sourceTable: "gnr8_runtime_artifacts",
+        sourceRecordId: AIRSHIP_REFS.artifactId,
+        sourceWatermark: `airship-artifact:${AIRSHIP_REFS.artifactId}:bundle:bundle-airship-37`,
+        metadataJson,
+      }),
+    },
+    publishTargetRef: airshipCanonicalRef({
+      role: "publish_target",
+      sourceTable: "gnr8_publish_targets",
+      sourceRecordId: "production",
+      sourceWatermark: "ptt-1:gnr8_publish_targets:production",
+      metadataJson: {
+        environment: "production",
+        publishStage: "production",
+        status: "active",
+      },
+    }),
+  };
+}
+
+function airshipPublishActivationHandoff(chain = airshipActivationChain()): AirshipPublishActivationHandoff {
+  return {
+    sourceType: AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+    readinessPackageId: AIRSHIP_REFS.readinessPackageId,
+    reviewRecordId: AIRSHIP_REFS.reviewRecordId,
+    candidateVersionId: AIRSHIP_REFS.candidateVersionId,
+    artifactId: AIRSHIP_REFS.artifactId,
+    draftId: AIRSHIP_REFS.draftId,
+    draftVersion: AIRSHIP_REFS.draftVersion,
+    publishTargetRef: chain.publishTargetRef,
+    sourceEvidenceRefs: {
+      readinessPackageRef: airshipCanonicalRef({
+        role: "launch_readiness_evidence",
+        sourceTable: "gnr8_airship_publish_readiness_packages",
+        sourceRecordId: AIRSHIP_REFS.readinessPackageId,
+        sourceWatermark: `airship-publish-readiness:${AIRSHIP_REFS.readinessPackageId}`,
+      }),
+      candidateSourceRef: chain.evidenceSourceRefs.candidateSourceRef,
+      artifactSourceRef: chain.evidenceSourceRefs.artifactSourceRef,
+    },
+    activationRequestRef: { id: AIRSHIP_REFS.requestId, ref: AIRSHIP_REFS.requestId, status: "granted" },
+    activationDecisionRef: { id: AIRSHIP_REFS.decisionId, ref: AIRSHIP_REFS.decisionId, status: "granted" },
+    gateAttemptRef: {
+      id: AIRSHIP_REFS.gateId,
+      ref: `aaf:action_gate_attempt:${AIRSHIP_REFS.gateId}`,
+      status: "allowed",
+      watermark: AIRSHIP_REFS.gateInputWatermark,
+    },
+  };
+}
 
 function canonicalRef(sourceTable: string, sourceRecordId: string, sourceWatermark: string, metadataJson: Record<string, unknown> = {}) {
   return {
@@ -554,6 +662,7 @@ test("valid request calls wrapper execute mode exactly once", async () => {
   assert.equal(wrapperInputs[0]!.enabled, true);
   assert.equal(wrapperInputs[0]!.mode, "shadow_publish");
   assert.equal(wrapperInputs[0]!.dryRun, false);
+  assert.equal(wrapperInputs[0]!.airshipPublishActivationHandoff, undefined);
   assert.equal(wrapperInputs[0]!.actor.actorRole, "platform_superadmin");
   assert.equal(wrapperInputs[0]!.actor.actorId, "superadmin-mvp56");
   assert.equal(logEvents.at(-1)?.details.blockingEnforcementApplied, false);
@@ -627,6 +736,89 @@ test("canonical persisted metadata reaches shadow-publish wrapper without synthe
   assert.equal(wrapperInputs[0]!.expectedGateAttemptResultRef, "gate-mvp56");
   assert.equal(auditService.actions[0]!.candidate_site_version_ref, "gnr8:gnr8_runtime_site_versions:site-version-mvp56");
   assert.equal(auditService.actions[0]!.gate_attempt_result_ref, "aaf:action_gate_attempt:gate-mvp56");
+});
+
+test("Airship handoff maps activation-chain canonical refs into shadow-publish wrapper input", async () => {
+  const wrapperInputs: SingleSitePublishWrapperInput[] = [];
+  const auditService = fakeAuditService();
+  const chain = airshipActivationChain();
+  const handoff = airshipPublishActivationHandoff(chain);
+  const airshipRequest = {
+    ...BASE_REQUEST,
+    migrationId: AIRSHIP_REFS.migrationId,
+    candidateSiteVersionRef: `ref:gnr8_runtime_site_versions:${AIRSHIP_REFS.candidateVersionId}`,
+    runtimeArtifactRef: `ref:gnr8_runtime_artifacts:${AIRSHIP_REFS.artifactId}`,
+    expectedPublishTargetRef: "ref:gnr8_publish_targets:production",
+    expectedPublishActivationRequestRef: AIRSHIP_REFS.requestId,
+    expectedPublishActivationDecisionRef: AIRSHIP_REFS.decisionId,
+    expectedGateAttemptResultRef: {
+      gateAttemptId: AIRSHIP_REFS.gateId,
+      gateAttemptRef: `aaf:action_gate_attempt:${AIRSHIP_REFS.gateId}`,
+      tenantId: BASE_REQUEST.tenantId,
+      clientId: BASE_REQUEST.clientId,
+      siteId: BASE_REQUEST.siteId,
+      migrationId: AIRSHIP_REFS.migrationId,
+      candidateSiteVersionRef: chain.evidenceSourceRefs.candidateSourceRef,
+      runtimeArtifactRef: chain.evidenceSourceRefs.artifactSourceRef,
+      publishTargetRef: chain.publishTargetRef,
+      publishStage: "production",
+      publishEnvironment: "production",
+      semanticHandoffWatermark: AIRSHIP_REFS.handoffWatermark,
+      semanticGateInputWatermark: AIRSHIP_REFS.gateInputWatermark,
+    },
+    expectedHandoffWatermark: AIRSHIP_REFS.handoffWatermark,
+    expectedGateInputWatermark: AIRSHIP_REFS.gateInputWatermark,
+    airshipPublishActivationHandoff: handoff,
+    operatorConfirmation: {
+      ...BASE_REQUEST.operatorConfirmation,
+      migrationId: AIRSHIP_REFS.migrationId,
+      candidateSiteVersionRef: AIRSHIP_REFS.candidateVersionId,
+      runtimeArtifactRef: AIRSHIP_REFS.artifactId,
+    },
+  };
+  const handlers = createSingleSiteShadowPublishRouteHandlers({
+    auditService,
+    isFeatureEnabled: () => true,
+    requireSuperadminUserId: async () => "superadmin-mvp56",
+    wrapperDependencies: {
+      publishSingleSiteApprovedCandidateShadow: async (input) => {
+        wrapperInputs.push(input);
+        return wrapperResult({
+          status: "preflight_blocked",
+          publishOrchestratorResult: null,
+          blockerCodes: ["test_wrapper_not_published"],
+          dryRun: false,
+          publishes: false,
+          runtimeMutation: false,
+        });
+      },
+    },
+    log: () => {},
+  });
+
+  const response = await handlers.POST(request(airshipRequest));
+  const body = (await response.json()) as { ok: boolean; publishMayHaveExecuted: boolean };
+
+  assert.equal(response.status, 409);
+  assert.equal(body.ok, false);
+  assert.equal(body.publishMayHaveExecuted, false);
+  assert.equal(wrapperInputs.length, 1);
+  assert.deepEqual(wrapperInputs[0]!.airshipPublishActivationHandoff, handoff);
+  assert.deepEqual(wrapperInputs[0]!.candidateSiteVersionRef, chain.evidenceSourceRefs.candidateSourceRef);
+  assert.deepEqual(wrapperInputs[0]!.runtimeArtifactRef, chain.evidenceSourceRefs.artifactSourceRef);
+  assert.deepEqual(wrapperInputs[0]!.expectedPublishTargetRef, chain.publishTargetRef);
+  assert.equal(
+    typeof wrapperInputs[0]!.candidateSiteVersionRef === "object" && wrapperInputs[0]!.candidateSiteVersionRef.sourceWatermark,
+    `airship-candidate:${AIRSHIP_REFS.candidateVersionId}:readiness:${AIRSHIP_REFS.readinessPackageId}`,
+  );
+  assert.equal(
+    typeof wrapperInputs[0]!.runtimeArtifactRef === "object" && wrapperInputs[0]!.runtimeArtifactRef.sourceWatermark,
+    `airship-artifact:${AIRSHIP_REFS.artifactId}:bundle:bundle-airship-37`,
+  );
+  assert.equal(
+    typeof wrapperInputs[0]!.expectedPublishTargetRef === "object" && wrapperInputs[0]!.expectedPublishTargetRef.sourceWatermark,
+    "ptt-1:gnr8_publish_targets:production",
+  );
 });
 
 test("publish orchestrator failure is projected safely without rollback or retry", async () => {

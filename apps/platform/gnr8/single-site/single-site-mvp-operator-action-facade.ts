@@ -23,6 +23,7 @@ import {
   type SingleSiteShadowPublishOperatorCallerDependencies,
   type SingleSiteShadowPublishOperatorSafeResult,
 } from "./single-site-shadow-publish-operator-caller";
+import type { AirshipPublishActivationHandoff } from "./publish-activation-metadata-handoff";
 
 export const SINGLE_SITE_MVP_OPERATOR_ACTION_FACADE_VERSION =
   "mvp-cutline-3-single-site-mvp-operator-action-facade:v1" as const;
@@ -135,6 +136,7 @@ export type SingleSiteMvpOperatorActionInput = {
   expectedGateAttemptResultDisplayRef?: string | null;
   expectedHandoffWatermark?: string | null;
   expectedGateInputWatermark?: string | null;
+  airshipPublishActivationHandoff?: AirshipPublishActivationHandoff | null;
   allowWarningsWithLimitations?: boolean;
   maxGateAgeMs?: number | null;
   evaluatedAt?: string | null;
@@ -381,6 +383,7 @@ function existingCallerBody(input: SingleSiteMvpOperatorActionInput, mode: "dry_
       : {}),
     expectedHandoffWatermark: text(input.expectedHandoffWatermark),
     expectedGateInputWatermark: text(input.expectedGateInputWatermark),
+    ...(input.airshipPublishActivationHandoff === undefined ? {} : { airshipPublishActivationHandoff: input.airshipPublishActivationHandoff }),
     operatorConfirmation: input.explicitConfirmation,
     idempotencyKey: text(input.idempotencyKey),
     correlationId: text(input.correlationId),

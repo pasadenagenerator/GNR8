@@ -8,6 +8,10 @@ import {
   type SingleSitePublishWrapperResult,
 } from "./single-site-publish-wrapper-orchestrator";
 import type { PublishActivationEnforcementGuardRef } from "./publish-activation-enforcement-guard";
+import {
+  AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE,
+  type AirshipPublishActivationHandoff,
+} from "./publish-activation-metadata-handoff";
 
 export const SINGLE_SITE_SHADOW_PUBLISH_OPERATOR_CALLER_VERSION =
   "mvp-56-single-site-shadow-publish-operator-caller:v1" as const;
@@ -69,6 +73,7 @@ export type SingleSiteShadowPublishOperatorRequest = {
   expectedGateAttemptResultDisplayRef?: string | null;
   expectedHandoffWatermark: string;
   expectedGateInputWatermark: string;
+  airshipPublishActivationHandoff?: AirshipPublishActivationHandoff | null;
   operatorConfirmation: SingleSiteShadowPublishOperatorConfirmation;
   idempotencyKey: string;
   correlationId: string;
@@ -179,6 +184,7 @@ const ALLOWED_KEYS = new Set([
   ...REQUIRED_REF_FIELDS,
   "expectedGateAttemptResultRef",
   "expectedGateAttemptResultDisplayRef",
+  "airshipPublishActivationHandoff",
   "publishStage",
   "operatorConfirmation",
   "allowWarningsWithLimitations",
@@ -375,6 +381,33 @@ function validateGateAttemptRef(value: unknown, input: Record<string, unknown>):
   return errors;
 }
 
+function validateAirshipPublishActivationHandoff(
+  value: unknown,
+  input: {
+    candidateSiteVersionRef: SingleSiteShadowPublishOperatorCanonicalRef | null;
+    runtimeArtifactRef: SingleSiteShadowPublishOperatorCanonicalRef | null;
+    expectedPublishTargetRef: SingleSiteShadowPublishOperatorCanonicalRef | null;
+  },
+): AirshipPublishActivationHandoff | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  if (value.sourceType !== AIRSHIP_PUBLISH_ACTIVATION_HANDOFF_SOURCE_TYPE) return null;
+  const sourceEvidenceRefs = isRecord(value.sourceEvidenceRefs) ? value.sourceEvidenceRefs : null;
+  if (!sourceEvidenceRefs) return null;
+  if (text(value.candidateVersionId) !== sourceId(input.candidateSiteVersionRef)) return null;
+  if (text(value.artifactId) !== sourceId(input.runtimeArtifactRef)) return null;
+  if (!isRecord(value.publishTargetRef) || !text(value.publishTargetRef.sourceWatermark)) return null;
+  if (!isRecord(sourceEvidenceRefs.candidateSourceRef) || !text(sourceEvidenceRefs.candidateSourceRef.sourceWatermark)) return null;
+  if (!isRecord(sourceEvidenceRefs.artifactSourceRef) || !text(sourceEvidenceRefs.artifactSourceRef.sourceWatermark)) return null;
+  const publishTargetRef = normalizedRef(value.publishTargetRef, { role: "publish_target", sourceTable: "gnr8_publish_targets" });
+  if (!publishTargetRef || sourceId(publishTargetRef) !== sourceId(input.expectedPublishTargetRef)) return null;
+  const candidateSourceRef = normalizedRef(sourceEvidenceRefs.candidateSourceRef, { role: "candidate_site_version", sourceTable: "gnr8_runtime_site_versions" });
+  const artifactSourceRef = normalizedRef(sourceEvidenceRefs.artifactSourceRef, { role: "runtime_artifact", sourceTable: "gnr8_runtime_artifacts" });
+  if (!candidateSourceRef || sourceId(candidateSourceRef) !== sourceId(input.candidateSiteVersionRef)) return null;
+  if (!artifactSourceRef || sourceId(artifactSourceRef) !== sourceId(input.runtimeArtifactRef)) return null;
+  return value as AirshipPublishActivationHandoff;
+}
+
 function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
@@ -459,6 +492,14 @@ export function validateSingleSiteShadowPublishOperatorRequest(
 
   const confirmation = validateConfirmation(body.operatorConfirmation, body);
   if (!confirmation) errors.push("single_site_shadow_publish_operator_confirmation_invalid");
+  const airshipPublishActivationHandoff = validateAirshipPublishActivationHandoff(body.airshipPublishActivationHandoff, {
+    candidateSiteVersionRef: canonicalRefs.candidateSiteVersionRef,
+    runtimeArtifactRef: canonicalRefs.runtimeArtifactRef,
+    expectedPublishTargetRef: canonicalRefs.expectedPublishTargetRef,
+  });
+  if (body.airshipPublishActivationHandoff !== undefined && !airshipPublishActivationHandoff) {
+    errors.push("single_site_shadow_publish_operator_airshipPublishActivationHandoff_invalid");
+  }
 
   const allowWarningsWithLimitations = optionalBoolean(body.allowWarningsWithLimitations);
   if (body.allowWarningsWithLimitations !== undefined && allowWarningsWithLimitations === undefined) {
@@ -500,6 +541,7 @@ export function validateSingleSiteShadowPublishOperatorRequest(
         : {}),
       expectedHandoffWatermark: text(body.expectedHandoffWatermark),
       expectedGateInputWatermark: text(body.expectedGateInputWatermark),
+      ...(body.airshipPublishActivationHandoff === undefined ? {} : { airshipPublishActivationHandoff }),
       operatorConfirmation: confirmation,
       idempotencyKey: text(body.idempotencyKey),
       correlationId: text(body.correlationId),
@@ -515,6 +557,7 @@ function wrapperInput(
   request: SingleSiteShadowPublishOperatorRequest,
   actor: SingleSiteShadowPublishOperatorActor,
 ): SingleSitePublishWrapperInput {
+  const airshipSourceRefs = request.airshipPublishActivationHandoff?.sourceEvidenceRefs;
   return {
     enabled: true,
     mode: "shadow_publish",
@@ -523,9 +566,9 @@ function wrapperInput(
     clientId: request.clientId,
     siteId: request.siteId,
     migrationId: request.migrationId,
-    candidateSiteVersionRef: request.candidateSiteVersionRef,
-    runtimeArtifactRef: request.runtimeArtifactRef,
-    expectedPublishTargetRef: request.expectedPublishTargetRef,
+    candidateSiteVersionRef: airshipSourceRefs?.candidateSourceRef ?? request.candidateSiteVersionRef,
+    runtimeArtifactRef: airshipSourceRefs?.artifactSourceRef ?? request.runtimeArtifactRef,
+    expectedPublishTargetRef: request.airshipPublishActivationHandoff?.publishTargetRef ?? request.expectedPublishTargetRef,
     publishStage: request.publishStage,
     publishEnvironment: request.publishEnvironment,
     expectedLaunchReadinessEvidenceRef: request.expectedLaunchReadinessEvidenceRef,
@@ -534,6 +577,7 @@ function wrapperInput(
     expectedGateAttemptResultRef: request.expectedGateAttemptResultRef,
     expectedHandoffWatermark: request.expectedHandoffWatermark,
     expectedGateInputWatermark: request.expectedGateInputWatermark,
+    airshipPublishActivationHandoff: request.airshipPublishActivationHandoff,
     actor,
     correlationId: request.correlationId,
     idempotencyKey: request.idempotencyKey,
