@@ -6,6 +6,7 @@ import {
   AIRSHIP_PUBLISH_ACTIVATION_CHAIN_SERVICE_VERSION,
   airshipPublishActivationChainIdempotencyKey,
   createAirshipPublishActivationChain,
+  refreshAirshipPublishActivationGate,
   refreshAirshipPublishActivationHandoffWatermark,
   type AirshipPublishActivationChainRecord,
   type AirshipPublishActivationChainDependencies,
@@ -27,7 +28,9 @@ const EVIDENCE_ID = "11111111-1111-4111-8111-111111111111";
 const REQUEST_ID = "22222222-2222-4222-8222-222222222222";
 const DECISION_ID = "33333333-3333-4333-8333-333333333333";
 const GATE_ID = "44444444-4444-4444-8444-444444444444";
+const REFRESHED_GATE_ID = "55555555-5555-4555-8555-555555555555";
 const GATE_INPUT_WATERMARK = `single-site-publish-activation-gate-input:${"a".repeat(64)}`;
+const REFRESHED_GATE_INPUT_WATERMARK = `single-site-publish-activation-gate-input:${"b".repeat(64)}`;
 const STALE_HANDOFF_WATERMARK = `single-site-publish-activation-gate-handoff:${"0".repeat(64)}`;
 
 function refs(overrides: Partial<AirshipPublishActivationChainRefs> = {}): AirshipPublishActivationChainRefs {
@@ -595,6 +598,96 @@ test("Airship activation-chain refresh updates only expected handoff metadata fi
   assert.deepEqual(afterChain.activePointerBefore, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
   assert.deepEqual(afterChain.activePointerAfter, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
   assert.equal(afterChain.gateInputWatermark, GATE_INPUT_WATERMARK);
+});
+
+test("Airship activation gate refresh creates one new gate attempt and updates only gate metadata", async () => {
+  const staleChain = activationChain();
+  const beforeMetadata = activationChainMetadata(staleChain);
+  const repository = new MemoryReadinessRepository(readiness({ metadata: beforeMetadata }));
+  const currentReadModel = decisionReadModel();
+  const expectedHandoffWatermark = buildPublishActivationGateHandoff(currentReadModel).semanticHandoffWatermark;
+  const dependencies = deps(repository);
+  let gateCalls = 0;
+
+  const result = await refreshAirshipPublishActivationGate(
+    {
+      readinessPackageId: READINESS_ID,
+      actorId: "superadmin-airship-33",
+      correlationId: "airship-33",
+      idempotencyKey: "airship-33-gate-refresh",
+    },
+    {
+      ...dependencies,
+      buildDecisionReadModel: async (input) => {
+        dependencies.calls.push("read-model");
+        assert.equal(input.publishActivationRequestId, REQUEST_ID);
+        assert.equal(input.publishActivationDecisionId, DECISION_ID);
+        assert.equal(input.launchReadinessEvidencePackageId, EVIDENCE_ID);
+        assert.equal(input.candidateSiteVersionId, CANDIDATE_VERSION_ID);
+        assert.equal(input.runtimeArtifactId, ARTIFACT_ID);
+        return currentReadModel;
+      },
+      gateEvaluator: {
+        async evaluatePublishActivationGateFromHandoff(input) {
+          dependencies.calls.push("gate");
+          gateCalls += 1;
+          assert.equal(input.handoff.status, "handoff_ready");
+          assert.equal(input.expectedDecisionRef, DECISION_ID);
+          assert.equal(input.expectedEvidencePackageRef, EVIDENCE_ID);
+          assert.equal(input.expectedHandoffWatermark, expectedHandoffWatermark);
+          assert.equal(input.expectedPublishTargetRef, "production");
+          assert.equal(input.actor.actorId, "superadmin-airship-33");
+          assert.equal(input.correlationId, "airship-33");
+          assert.equal(input.idempotencyKey, "airship-33-gate-refresh");
+          return {
+            gateAttemptId: REFRESHED_GATE_ID,
+            gateResult: "allowed",
+            evaluationStatus: "warning",
+            semanticGateInputWatermark: REFRESHED_GATE_INPUT_WATERMARK,
+            semanticHandoffWatermark: expectedHandoffWatermark,
+            blockerCodes: [],
+          };
+        },
+      },
+    },
+  );
+
+  assert.equal(result.status, "refreshed");
+  assert.equal(gateCalls, 1);
+  assert.equal(result.previousGateAttemptRef, `aaf:action_gate_attempt:${GATE_ID}`);
+  assert.equal(result.previousGateInputWatermark, GATE_INPUT_WATERMARK);
+  assert.equal(result.gateAttemptRef, `aaf:action_gate_attempt:${REFRESHED_GATE_ID}`);
+  assert.equal(result.gateInputWatermark, REFRESHED_GATE_INPUT_WATERMARK);
+  assert.equal(result.handoffWatermark, expectedHandoffWatermark);
+  assert.equal(result.mutationFlags.createsGateAttempt, true);
+  assert.equal(result.mutationFlags.createsApprovalRequest, false);
+  assert.equal(result.mutationFlags.createsApprovalDecision, false);
+  assert.equal(result.mutationFlags.dryRun, false);
+  assert.equal(result.mutationFlags.shadowPublish, false);
+  assert.equal(result.mutationFlags.publishes, false);
+  assert.deepEqual(dependencies.calls, ["read-model", "gate"]);
+  assert.equal(repository.updates, 1);
+
+  const afterMetadata = repository.record?.metadata as Record<string, unknown>;
+  const afterChain = afterMetadata.airshipPublishActivationChain as AirshipPublishActivationChainRecord;
+  assert.equal(afterMetadata.expectedGateAttemptResultRef, REFRESHED_GATE_ID);
+  assert.equal(afterMetadata.expectedGateAttemptResultDisplayRef, `aaf:action_gate_attempt:${REFRESHED_GATE_ID}`);
+  assert.equal(afterMetadata.expectedGateInputWatermark, REFRESHED_GATE_INPUT_WATERMARK);
+  assert.equal(afterMetadata.expectedHandoffWatermark, expectedHandoffWatermark);
+  assert.equal(afterMetadata.expectedPublishActivationRequestRef, REQUEST_ID);
+  assert.equal(afterMetadata.expectedPublishActivationDecisionRef, DECISION_ID);
+  assert.equal(afterMetadata.expectedLaunchReadinessEvidenceRef, EVIDENCE_ID);
+  assert.equal(afterChain.gateAttempt.id, REFRESHED_GATE_ID);
+  assert.equal(afterChain.gateInputWatermark, REFRESHED_GATE_INPUT_WATERMARK);
+  assert.equal(afterChain.handoffWatermark, expectedHandoffWatermark);
+  assert.equal(afterChain.activationRequest.id, REQUEST_ID);
+  assert.equal(afterChain.activationDecision.id, DECISION_ID);
+  assert.equal(afterChain.activationEvidencePackage.id, EVIDENCE_ID);
+  assert.equal(afterChain.candidateVersionId, CANDIDATE_VERSION_ID);
+  assert.equal(afterChain.artifactId, ARTIFACT_ID);
+  assert.deepEqual(afterChain.activePointerBefore, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
+  assert.deepEqual(afterChain.activePointerAfter, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
+  assert.deepEqual(afterMetadata.unrelatedReadinessField, { keep: "unchanged" });
 });
 
 test("Airship activation-chain refresh refuses missing or invalid readiness package input", async () => {
