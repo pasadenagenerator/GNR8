@@ -258,8 +258,8 @@ export async function approveAirshipCandidateLifecycle(
   const actorId = required("actorId", input.actorId);
   const reason = text(input.reason);
 
-  const readiness = await deps.readinessRepository.readReadinessById?.(readinessPackageId);
-  assertReadinessReady(readiness ?? null);
+  const readiness = (await deps.readinessRepository.readReadinessById?.(readinessPackageId)) ?? null;
+  assertReadinessReady(readiness);
 
   const review = await deps.reviewRepository.readLatestReview({
     migrationId,
