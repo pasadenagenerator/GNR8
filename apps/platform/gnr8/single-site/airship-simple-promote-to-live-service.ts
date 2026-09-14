@@ -176,6 +176,7 @@ function assertEligibility(input: {
   artifactId: string;
   readiness: AirshipPublishReadinessRecord;
   review: AirshipInternalPreviewCandidateReviewRecord;
+  reviewedCandidateVersion: CanonicalSiteVersionSnapshot;
   candidateVersion: CanonicalSiteVersionSnapshot;
   artifact: RuntimeArtifact;
 }): void {
@@ -191,7 +192,10 @@ function assertEligibility(input: {
   if (input.review.candidateSiteVersionId !== input.candidateSiteVersionId) throw new Error("airship_simple_promote_review_candidate_mismatch");
   if (input.review.candidateRuntimeArtifactId !== input.artifactId) throw new Error("airship_simple_promote_review_artifact_mismatch");
 
-  const expectedSiteId = text(input.readiness.siteClientSourceLabels.siteId);
+  if (input.reviewedCandidateVersion.id !== input.readiness.reviewedCandidateSiteVersionId) {
+    throw new Error("airship_simple_promote_reviewed_candidate_version_id_mismatch");
+  }
+  const expectedSiteId = text(input.reviewedCandidateVersion.siteId);
   if (!expectedSiteId) throw new Error("airship_simple_promote_expected_site_missing");
   if (input.candidateVersion.siteId !== expectedSiteId) throw new Error("airship_simple_promote_candidate_site_mismatch");
   if (input.candidateVersion.artifactId !== input.artifactId) throw new Error("airship_simple_promote_candidate_version_artifact_mismatch");
@@ -301,6 +305,8 @@ export async function promoteAirshipApprovedCandidateToLive(
 
   const candidateVersion = await deps.getSiteVersion(candidateSiteVersionId);
   if (!candidateVersion) throw new Error("airship_simple_promote_candidate_version_missing");
+  const reviewedCandidateVersion = await deps.getSiteVersion(readiness.reviewedCandidateSiteVersionId);
+  if (!reviewedCandidateVersion) throw new Error("airship_simple_promote_reviewed_candidate_version_missing");
   const artifact = await deps.getArtifactById(artifactId);
   if (!artifact) throw new Error("airship_simple_promote_artifact_missing");
 
@@ -311,6 +317,7 @@ export async function promoteAirshipApprovedCandidateToLive(
     artifactId,
     readiness,
     review,
+    reviewedCandidateVersion,
     candidateVersion,
     artifact,
   });

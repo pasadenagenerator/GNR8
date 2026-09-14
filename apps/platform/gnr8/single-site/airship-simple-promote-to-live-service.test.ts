@@ -17,7 +17,9 @@ const ARTIFACT_ID = "5ac3716a-f29d-4648-bc86-a6942638ed53";
 const DRAFT_ID = "f9b31666-b3b0-4455-8650-4a8c7304a559";
 const LIVE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
 const LIVE_ARTIFACT_ID = "1f80138a-39c2-4210-ac61-16200e5a2254";
-const SITE_ID = "site-chs";
+const RUNTIME_SITE_ID = "site_57d9665a3a5867edf6ef";
+const OTHER_RUNTIME_SITE_ID = "site_other_runtime";
+const OWNERSHIP_SITE_ID = "a03fcb5b-6ad9-4b19-a682-4c06f998881a";
 
 function input(overrides: Record<string, unknown> = {}) {
   return {
@@ -42,7 +44,7 @@ function readiness(overrides: Partial<AirshipPublishReadinessRecord> = {}): Airs
     siteClientSourceLabels: {
       tenantId: "tenant-chs",
       clientId: "client-chs",
-      siteId: SITE_ID,
+      siteId: OWNERSHIP_SITE_ID,
       sourceUrl: "https://www.chs.si/",
       liveUrl: "https://www.chs.si/",
       importedSiteLabel: "chs.si",
@@ -121,7 +123,7 @@ function review(overrides: Partial<AirshipInternalPreviewCandidateReviewRecord> 
 function candidateVersion(state: CanonicalSiteVersionSnapshot["state"] = "APPROVED"): CanonicalSiteVersionSnapshot {
   return {
     id: CANDIDATE_VERSION_ID,
-    siteId: SITE_ID,
+    siteId: RUNTIME_SITE_ID,
     versionNo: 12,
     state,
     source: "manual",
@@ -134,10 +136,10 @@ function candidateVersion(state: CanonicalSiteVersionSnapshot["state"] = "APPROV
   };
 }
 
-function artifact(): RuntimeArtifact {
+function artifact(overrides: Partial<RuntimeArtifact> = {}): RuntimeArtifact {
   return {
     id: ARTIFACT_ID,
-    siteId: SITE_ID,
+    siteId: RUNTIME_SITE_ID,
     siteVersionId: CANDIDATE_VERSION_ID,
     rendererCompatibilityVersion: "gnr8-renderer-v1",
     bundleSha256: "0f1bb26bfcd6ea21d79fa2839842ae2be9f292d4b2b7abd504d7a2d34d6010fe",
@@ -157,6 +159,7 @@ function artifact(): RuntimeArtifact {
       publishStage: "shadow",
     },
     createdAt: "2026-09-10T00:07:00.000Z",
+    ...overrides,
   };
 }
 
@@ -180,6 +183,7 @@ function deps(overrides: {
   readinessRecord?: AirshipPublishReadinessRecord | null;
   reviewRecord?: AirshipInternalPreviewCandidateReviewRecord | null;
   version?: CanonicalSiteVersionSnapshot | null;
+  versionSequence?: Array<CanonicalSiteVersionSnapshot | null>;
   artifactRecord?: RuntimeArtifact | null;
   activePointers?: Array<{ siteVersionId: string; artifactId: string } | null>;
   events?: string[];
@@ -190,6 +194,7 @@ function deps(overrides: {
     { siteVersionId: CANDIDATE_VERSION_ID, artifactId: ARTIFACT_ID },
   ];
   let activeReadIndex = 0;
+  let versionCallIndex = 0;
   return {
     events,
     readinessRepository: new MemoryReadinessRepository(overrides.readinessRecord === undefined ? readiness() : overrides.readinessRecord),
@@ -202,8 +207,9 @@ function deps(overrides: {
         return overrides.reviewRecord === undefined ? review() : overrides.reviewRecord;
       },
     },
-    async getSiteVersion() {
-      events.push("get_site_version");
+    async getSiteVersion(siteVersionId) {
+      events.push(`get_site_version:${siteVersionId}`);
+      if (overrides.versionSequence) return overrides.versionSequence[versionCallIndex++] ?? null;
       return overrides.version === undefined ? candidateVersion() : overrides.version;
     },
     async getArtifactById() {
@@ -266,6 +272,15 @@ test("simple promote rejects missing and non-approved review", async () => {
 
 test("simple promote rejects mismatched candidate and artifact refs", async () => {
   await assert.rejects(
+    () =>
+      promoteAirshipApprovedCandidateToLive(
+        input(),
+        deps({ readinessRecord: readiness({ reviewedCandidateSiteVersionId: "33333333-3333-4333-8333-333333333333" }) }),
+      ),
+    /airship_simple_promote_readiness_candidate_mismatch/,
+  );
+
+  await assert.rejects(
     () => promoteAirshipApprovedCandidateToLive(input(), deps({ readinessRecord: readiness({ reviewedArtifactId: "11111111-1111-4111-8111-111111111111" }) })),
     /airship_simple_promote_readiness_artifact_mismatch/,
   );
@@ -274,6 +289,54 @@ test("simple promote rejects mismatched candidate and artifact refs", async () =
     () => promoteAirshipApprovedCandidateToLive(input(), deps({ reviewRecord: review({ candidateSiteVersionId: "22222222-2222-4222-8222-222222222222" }) })),
     /airship_simple_promote_review_candidate_mismatch/,
   );
+
+  await assert.rejects(
+    () => promoteAirshipApprovedCandidateToLive(input(), deps({ reviewRecord: review({ candidateRuntimeArtifactId: "44444444-4444-4444-8444-444444444444" }) })),
+    /airship_simple_promote_review_artifact_mismatch/,
+  );
+
+  await assert.rejects(
+    () =>
+      promoteAirshipApprovedCandidateToLive(
+        input(),
+        deps({ version: { ...candidateVersion(), artifactId: "55555555-5555-4555-8555-555555555555" } }),
+      ),
+    /airship_simple_promote_candidate_version_artifact_mismatch/,
+  );
+
+  await assert.rejects(
+    () =>
+      promoteAirshipApprovedCandidateToLive(
+        input(),
+        deps({ artifactRecord: artifact({ siteVersionId: "66666666-6666-4666-8666-666666666666" }) }),
+      ),
+    /airship_simple_promote_artifact_candidate_mismatch/,
+  );
+});
+
+test("simple promote accepts matching runtime site id when ownership site label differs", async () => {
+  const fakeDeps = deps();
+  const result = await promoteAirshipApprovedCandidateToLive(input(), fakeDeps);
+
+  assert.equal(readiness().siteClientSourceLabels.siteId, OWNERSHIP_SITE_ID);
+  assert.equal(result.refs.siteId, RUNTIME_SITE_ID);
+  assert.equal(fakeDeps.events.includes("switch_active_pointer"), true);
+});
+
+test("simple promote rejects genuine runtime site mismatch before pointer switch", async () => {
+  const fakeDeps = deps({
+    versionSequence: [
+      candidateVersion(),
+      { ...candidateVersion(), siteId: OTHER_RUNTIME_SITE_ID },
+    ],
+  });
+
+  await assert.rejects(
+    () => promoteAirshipApprovedCandidateToLive(input(), fakeDeps),
+    /airship_simple_promote_candidate_site_mismatch/,
+  );
+  assert.equal(fakeDeps.events.includes("switch_active_pointer"), false);
+  assert.equal(fakeDeps.events.includes("audit:pre_switch"), false);
 });
 
 test("simple promote rejects forbidden override fields", async () => {
