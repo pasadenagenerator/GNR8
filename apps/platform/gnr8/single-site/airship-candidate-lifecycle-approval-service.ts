@@ -161,6 +161,7 @@ function assertEligibility(input: {
   artifactId: string;
   readiness: AirshipPublishReadinessRecord;
   review: AirshipInternalPreviewCandidateReviewRecord;
+  reviewedCandidateVersion: CanonicalSiteVersionSnapshot;
   candidateVersion: CanonicalSiteVersionSnapshot;
   artifact: RuntimeArtifact;
   activePointer: NullablePointer;
@@ -177,7 +178,10 @@ function assertEligibility(input: {
   if (input.review.candidateSiteVersionId !== input.candidateSiteVersionId) throw new Error("airship_candidate_lifecycle_review_candidate_mismatch");
   if (input.review.candidateRuntimeArtifactId !== input.artifactId) throw new Error("airship_candidate_lifecycle_review_artifact_mismatch");
 
-  const expectedSiteId = text(input.readiness.siteClientSourceLabels.siteId);
+  if (input.reviewedCandidateVersion.id !== input.readiness.reviewedCandidateSiteVersionId) {
+    throw new Error("airship_candidate_lifecycle_reviewed_candidate_version_id_mismatch");
+  }
+  const expectedSiteId = text(input.reviewedCandidateVersion.siteId);
   if (!expectedSiteId) throw new Error("airship_candidate_lifecycle_expected_site_missing");
   if (input.candidateVersion.siteId !== expectedSiteId) throw new Error("airship_candidate_lifecycle_candidate_site_mismatch");
   if (input.candidateVersion.artifactId !== input.artifactId) throw new Error("airship_candidate_lifecycle_candidate_version_artifact_mismatch");
@@ -272,6 +276,8 @@ export async function approveAirshipCandidateLifecycle(
 
   const candidateVersion = await deps.getSiteVersion(candidateSiteVersionId);
   if (!candidateVersion) throw new Error("airship_candidate_lifecycle_candidate_version_missing");
+  const reviewedCandidateVersion = await deps.getSiteVersion(readiness.reviewedCandidateSiteVersionId);
+  if (!reviewedCandidateVersion) throw new Error("airship_candidate_lifecycle_reviewed_candidate_version_missing");
   const artifact = await deps.getArtifactById(artifactId);
   if (!artifact) throw new Error("airship_candidate_lifecycle_artifact_missing");
   const activePointer = await deps.getActivePointerForSite(candidateVersion.siteId);
@@ -283,6 +289,7 @@ export async function approveAirshipCandidateLifecycle(
     artifactId,
     readiness,
     review,
+    reviewedCandidateVersion,
     candidateVersion,
     artifact,
     activePointer,
