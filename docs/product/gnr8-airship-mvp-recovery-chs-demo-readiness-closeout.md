@@ -1,13 +1,23 @@
 # GNR8 Airship MVP Recovery CHS Demo Readiness Closeout
 
 Date: 2026-09-15
-Status: `mvp_recovery_chs_airship_demo_ready`
+Status: `mvp_recovery_chs_airship_demo_visual_accepted`
 
 ## Result
 
 CHS Airship MVP Recovery is demo-ready on the GNR8-controlled HTTPS demo URL:
 
 - `https://chs-airship.app.pasadenagenerator.com/`
+
+Manual visual verdict:
+
+- `visual demo accepted for internal review`.
+- Gregor manually reviewed the demo URL on 2026-09-15.
+- The page is visually OK for internal demo.
+- No fallback/debug render was visible.
+- No `FALLBACK PREVIEW`, `raw-block`, `CAPTURE_DRIVEN`, or diagnostics text was visible.
+- The page renders as a coherent branded landing page with a clear hero, sections, CTA/contact area, and acceptable GNR8/Airship improved direction for internal demo.
+- External `https://www.chs.si/` remains untouched and external.
 
 Verified recovery evidence:
 
@@ -38,5 +48,7 @@ Airship now exposes a compact superadmin/operator readback for this demo state:
 ## Boundary
 
 This closeout and UI update did not run promote-to-live, rollback, dry-run, shadow-publish, source-capture, DNS/domain/provider/billing/env mutation, or runtime pointer mutation.
+
+This visual acceptance update is documentation/status only. It does not change artifact content, page content, active pointer state, DNS/domain/provider/billing/env state, or external CHS production ownership.
 
 The external `https://www.chs.si/` site remains unchanged/external.
