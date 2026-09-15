@@ -411,6 +411,27 @@ export async function ensureRuntimeTables(options: RuntimeStoreDbOptions = {}): 
         `);
 
         await client.query(`
+          create table if not exists public.gnr8_runtime_preview_host_bindings (
+            id uuid primary key default gen_random_uuid(),
+            site_id text not null references public.gnr8_runtime_sites(id) on delete cascade,
+            host text not null,
+            candidate_site_version_id uuid not null references public.gnr8_runtime_site_versions(id) on delete cascade,
+            candidate_artifact_id uuid not null references public.gnr8_runtime_artifacts(id) on delete cascade,
+            status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE')),
+            binding_kind text not null default 'candidate_preview',
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (site_id, host)
+          )
+        `);
+
+        await client.query(`
+          create unique index if not exists gnr8_runtime_preview_host_bindings_active_host_uq
+          on public.gnr8_runtime_preview_host_bindings (lower(host))
+          where status = 'ACTIVE'
+        `);
+
+        await client.query(`
           create table if not exists public.gnr8_runtime_active_pointers (
             site_id text primary key references public.gnr8_runtime_sites(id) on delete cascade,
             active_site_version_id uuid not null references public.gnr8_runtime_site_versions(id),
@@ -533,6 +554,20 @@ export type RuntimeHostBinding = {
   siteId: string;
   host: string;
   status: RuntimeHostBindingStatus;
+  bindingKind: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RuntimePreviewHostBindingStatus = "ACTIVE" | "INACTIVE";
+
+export type RuntimePreviewHostBinding = {
+  id: string;
+  siteId: string;
+  host: string;
+  candidateSiteVersionId: string;
+  candidateArtifactId: string;
+  status: RuntimePreviewHostBindingStatus;
   bindingKind: string;
   createdAt: string;
   updatedAt: string;
@@ -740,7 +775,7 @@ function parseRawImportedSiteArtifactMetadata(value: unknown): RawImportedSiteAr
 
 function resolveServingStageFromBindingKind(bindingKind: string | null): "shadow" | "canary" | "production" {
   const normalized = String(bindingKind ?? "").trim().toLowerCase();
-  if (normalized === "shadow") return "shadow";
+  if (normalized === "shadow" || normalized === "candidate_preview" || normalized === "preview_host") return "shadow";
   if (normalized === "canary") return "canary";
   return "production";
 }
@@ -1607,6 +1642,164 @@ export async function listHostBindingsForSite(siteId: string): Promise<RuntimeHo
   }
 }
 
+function mapRuntimePreviewHostBindingRow(row: {
+  id: string;
+  site_id: string;
+  host: string;
+  candidate_site_version_id: string;
+  candidate_artifact_id: string;
+  status: RuntimePreviewHostBindingStatus;
+  binding_kind: string;
+  created_at: string;
+  updated_at: string;
+}): RuntimePreviewHostBinding {
+  return {
+    id: row.id,
+    siteId: row.site_id,
+    host: row.host,
+    candidateSiteVersionId: row.candidate_site_version_id,
+    candidateArtifactId: row.candidate_artifact_id,
+    status: row.status,
+    bindingKind: row.binding_kind,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function upsertPreviewHostBinding(input: {
+  siteId: string;
+  host: string;
+  candidateSiteVersionId: string;
+  candidateArtifactId: string;
+  status?: RuntimePreviewHostBindingStatus;
+  bindingKind?: string;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<RuntimePreviewHostBinding> {
+  return withTx(async (client) => {
+    const normalizedHost = normalizeRuntimeHost(input.host);
+    if (!normalizedHost) throw new Error("Invalid preview host");
+
+    const status = input.status ?? "ACTIVE";
+    const bindingKind = String(input.bindingKind ?? "candidate_preview").trim() || "candidate_preview";
+
+    const lineage = await client.query<{ site_id: string; artifact_id: string | null; artifact_site_id: string; artifact_version_id: string }>(
+      `
+      select
+        sv.site_id::text as site_id,
+        sv.artifact_id::text as artifact_id,
+        a.site_id::text as artifact_site_id,
+        a.site_version_id::text as artifact_version_id
+      from public.gnr8_runtime_site_versions sv
+      join public.gnr8_runtime_artifacts a
+        on a.id = $3::uuid
+       and a.site_id = sv.site_id
+       and a.site_version_id = sv.id
+      where sv.id = $2::uuid
+        and sv.site_id = $1::text
+      limit 1
+      `,
+      [input.siteId, input.candidateSiteVersionId, input.candidateArtifactId],
+    );
+    const lineageRow = lineage.rows[0];
+    if (!lineageRow) throw new Error("Preview host candidate lineage mismatch");
+
+    if (status === "ACTIVE") {
+      await client.query(
+        `
+        update public.gnr8_runtime_preview_host_bindings
+        set status = 'INACTIVE', updated_at = now()
+        where lower(host) = $1::text and status = 'ACTIVE' and site_id <> $2::text
+        `,
+        [normalizedHost, input.siteId],
+      );
+    }
+
+    const result = await client.query<{
+      id: string;
+      site_id: string;
+      host: string;
+      candidate_site_version_id: string;
+      candidate_artifact_id: string;
+      status: RuntimePreviewHostBindingStatus;
+      binding_kind: string;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      insert into public.gnr8_runtime_preview_host_bindings (
+        site_id,
+        host,
+        candidate_site_version_id,
+        candidate_artifact_id,
+        status,
+        binding_kind
+      )
+      values ($1::text, $2::text, $3::uuid, $4::uuid, $5::text, $6::text)
+      on conflict (site_id, host)
+      do update set
+        candidate_site_version_id = excluded.candidate_site_version_id,
+        candidate_artifact_id = excluded.candidate_artifact_id,
+        status = excluded.status,
+        binding_kind = excluded.binding_kind,
+        updated_at = now()
+      returning
+        id::text as id,
+        site_id::text as site_id,
+        host::text as host,
+        candidate_site_version_id::text as candidate_site_version_id,
+        candidate_artifact_id::text as candidate_artifact_id,
+        status::text as status,
+        binding_kind::text as binding_kind,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      `,
+      [input.siteId, normalizedHost, input.candidateSiteVersionId, input.candidateArtifactId, status, bindingKind],
+    );
+    return mapRuntimePreviewHostBindingRow(result.rows[0]!);
+  }, { dbClient: input.dbClient });
+}
+
+export async function getPreviewHostBindingForHost(
+  host: string,
+  options: RuntimeStoreDbOptions = {},
+): Promise<RuntimePreviewHostBinding | null> {
+  const normalizedHost = normalizeRuntimeHost(host);
+  if (!normalizedHost) return null;
+  return withRuntimeClient(options, async (client) => {
+    const result = await client.query<{
+      id: string;
+      site_id: string;
+      host: string;
+      candidate_site_version_id: string;
+      candidate_artifact_id: string;
+      status: RuntimePreviewHostBindingStatus;
+      binding_kind: string;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `
+      select
+        id::text as id,
+        site_id::text as site_id,
+        host::text as host,
+        candidate_site_version_id::text as candidate_site_version_id,
+        candidate_artifact_id::text as candidate_artifact_id,
+        status::text as status,
+        binding_kind::text as binding_kind,
+        created_at::text as created_at,
+        updated_at::text as updated_at
+      from public.gnr8_runtime_preview_host_bindings
+      where lower(host) = $1::text
+      order by case when status = 'ACTIVE' then 0 else 1 end asc, updated_at desc, created_at desc
+      limit 1
+      `,
+      [normalizedHost],
+    );
+    const row = result.rows[0];
+    return row ? mapRuntimePreviewHostBindingRow(row) : null;
+  });
+}
+
 export async function linkRuntimeSiteVersionOwnershipIfAllowed(input: {
   siteVersionId: string;
   ownershipSiteId: string;
@@ -2356,7 +2549,7 @@ export type RuntimeActiveServingDiagnostic = {
   activePointerSiteVersionId: string;
 };
 
-type RuntimeActiveServingResolutionKind = "host_match" | "domain_match" | "fallback_latest_site";
+type RuntimeActiveServingResolutionKind = "preview_host_match" | "host_match" | "domain_match" | "fallback_latest_site";
 
 export type RuntimeActiveServingMissReasonCode = "no_runtime_site" | "no_active_pointer" | "active_artifact_missing";
 
@@ -2824,7 +3017,20 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
       artifact_id: string | null;
     }>(
       `
-      with host_site as (
+      with preview_site as (
+        select
+          b.id::text as host_binding_id,
+          b.site_id::text as site_id,
+          b.binding_kind::text as host_binding_kind,
+          b.status::text as host_binding_status,
+          b.candidate_site_version_id::text as active_site_version_id,
+          b.candidate_artifact_id::text as artifact_id
+        from public.gnr8_runtime_preview_host_bindings b
+        where lower(b.host) = $1::text
+          and b.status = 'ACTIVE'
+        order by b.updated_at desc, b.created_at desc
+        limit 1
+      ), host_site as (
         select
           b.id::text as host_binding_id,
           b.site_id::text as site_id,
@@ -2833,6 +3039,7 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
         from public.gnr8_runtime_host_bindings b
         where lower(b.host) = $1::text
           and b.status = 'ACTIVE'
+          and not exists (select 1 from preview_site)
         order by b.updated_at desc, b.created_at desc
         limit 1
       ), domain_site as (
@@ -2845,11 +3052,26 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
         from public.gnr8_runtime_domain_host_bindings d
         where lower(d.domain) = $1::text
           and d.status = 'active'
+          and not exists (select 1 from preview_site)
         order by d.updated_at desc, d.created_at desc
         limit 1
       ), fallback_site as (
         select id::text as site_id from public.gnr8_runtime_sites order by created_at desc limit 1
       ), resolved_site as (
+        select
+          site_id,
+          'preview_host_match'::text as site_resolution,
+          host_binding_id,
+          host_binding_kind,
+          host_binding_status,
+          null::text as domain,
+          null::text as domain_binding_id,
+          null::text as domain_binding_status,
+          null::text as legacy_domain_site_version_id,
+          active_site_version_id,
+          artifact_id
+        from preview_site
+        union all
         select
           site_id,
           'host_match'::text as site_resolution,
@@ -2859,7 +3081,9 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
           null::text as domain,
           null::text as domain_binding_id,
           null::text as domain_binding_status,
-          null::text as legacy_domain_site_version_id
+          null::text as legacy_domain_site_version_id,
+          null::text as active_site_version_id,
+          null::text as artifact_id
         from host_site
         union all
         select
@@ -2871,7 +3095,9 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
           domain,
           domain_binding_id,
           domain_binding_status,
-          legacy_domain_site_version_id
+          legacy_domain_site_version_id,
+          null::text as active_site_version_id,
+          null::text as artifact_id
         from domain_site
         where not exists (select 1 from host_site)
         union all
@@ -2884,10 +3110,20 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
           null::text as domain,
           null::text as domain_binding_id,
           null::text as domain_binding_status,
-          null::text as legacy_domain_site_version_id
+          null::text as legacy_domain_site_version_id,
+          null::text as active_site_version_id,
+          null::text as artifact_id
         from fallback_site
-        where not exists (select 1 from host_site)
+        where not exists (select 1 from preview_site)
+          and not exists (select 1 from host_site)
           and not exists (select 1 from domain_site)
+      ), resolved_pointer as (
+        select
+          s.*,
+          coalesce(s.active_site_version_id, p.active_site_version_id::text) as resolved_active_site_version_id,
+          coalesce(s.artifact_id, p.active_artifact_id::text) as resolved_artifact_id
+        from resolved_site s
+        left join public.gnr8_runtime_active_pointers p on p.site_id = s.site_id
       )
       select
         s.site_id::text as site_id,
@@ -2902,12 +3138,11 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
         rs.source_url::text as source_url,
         rs.source_host::text as source_host,
         sv.ownership_site_id::text as ownership_site_id,
-        p.active_site_version_id::text as active_site_version_id,
-        p.active_artifact_id::text as artifact_id
-      from resolved_site s
+        s.resolved_active_site_version_id::text as active_site_version_id,
+        s.resolved_artifact_id::text as artifact_id
+      from resolved_pointer s
       join public.gnr8_runtime_sites rs on rs.id = s.site_id
-      left join public.gnr8_runtime_active_pointers p on p.site_id = s.site_id
-      left join public.gnr8_runtime_site_versions sv on sv.id = p.active_site_version_id
+      left join public.gnr8_runtime_site_versions sv on sv.id = s.resolved_active_site_version_id::uuid
       limit 1
       `,
       [host],

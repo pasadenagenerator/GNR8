@@ -8,10 +8,12 @@ import {
   createArtifact,
   ensureRuntimeTables,
   getActivePointerForSite,
+  getPreviewHostBindingForHost,
   persistRawImportedSiteArtifact,
   resolveActiveArtifactForHostAndPathWithDiagnostics,
   resolveRawTemplateSiteForDomainAndPath,
   switchActivePointer,
+  upsertPreviewHostBinding,
   upsertDomainHostBinding,
 } from "@/gnr8/runtime/runtime-store";
 import { getSuperadminPool } from "@/src/superadmin/db";
@@ -32,7 +34,7 @@ async function seedSiteVersion(input: {
   siteId: string;
   siteVersionId: string;
   versionNo: number;
-  state: "PUBLISHED" | "ARCHIVED";
+  state: "DRAFT" | "PUBLISHED" | "ARCHIVED";
 }): Promise<void> {
   await getSuperadminPool().query(
     `
@@ -55,6 +57,7 @@ async function seedVersionArtifacts(input: {
   siteId: string;
   siteVersionId: string;
   label: string;
+  publishStage?: Parameters<typeof createArtifact>[0]["publishStage"];
   artifactGovernance?: RuntimeArtifactGovernance;
 }): Promise<{ artifactId: string }> {
   const artifact = await createArtifact({
@@ -66,7 +69,7 @@ async function seedVersionArtifacts(input: {
     compiledTokenStyles: "",
     assetFingerprintMap: {},
     manifest: { label: input.label },
-    publishStage: "production",
+    publishStage: input.publishStage ?? "production",
     shadowRestricted: false,
     artifactGovernance: input.artifactGovernance ?? {
       pageGateState: [],
@@ -296,6 +299,94 @@ test("raw-template success remains distinct from artifact fallback diagnostics",
     assert.equal(artifactResolution.reasonCode, "artifact_stage_denied");
     assert.equal(artifactResolution.activeSiteVersionId, siteVersionId);
     assert.equal(artifactResolution.artifactId, artifact.artifactId);
+  } finally {
+    await cleanRuntimeSite(siteId);
+  }
+});
+
+test("preview host binding serves candidate artifact without active pointer", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is required for runtime-store preview host integration coverage");
+    return;
+  }
+
+  const runId = randomUUID().replaceAll("-", "_").slice(0, 16);
+  const siteId = `${TEST_SITE_PREFIX}_${runId}`;
+  const sourceHost = `${siteId}.source.example.test`;
+  const previewHost = `${siteId}.preview.app.pasadenagenerator.com`;
+  const candidateSiteVersionId = randomUUID();
+
+  assertTestSiteId(siteId);
+  await ensureRuntimeTables();
+  await cleanRuntimeSite(siteId);
+
+  try {
+    await getSuperadminPool().query(
+      `
+      insert into public.gnr8_runtime_sites (id, source_url, source_host)
+      values ($1::text, $2::text, $3::text)
+      `,
+      [siteId, `https://${sourceHost}/`, sourceHost],
+    );
+    await seedSiteVersion({ siteId, siteVersionId: candidateSiteVersionId, versionNo: 1, state: "DRAFT" });
+    const artifact = await seedVersionArtifacts({
+      siteId,
+      siteVersionId: candidateSiteVersionId,
+      label: "candidate-preview",
+      publishStage: "shadow",
+    });
+
+    const binding = await upsertPreviewHostBinding({
+      siteId,
+      host: previewHost,
+      candidateSiteVersionId,
+      candidateArtifactId: artifact.artifactId,
+    });
+    assert.equal(binding.host, previewHost);
+    assert.equal(binding.siteId, siteId);
+    assert.equal(binding.candidateSiteVersionId, candidateSiteVersionId);
+    assert.equal(binding.candidateArtifactId, artifact.artifactId);
+    assert.equal(binding.status, "ACTIVE");
+    assert.equal(binding.bindingKind, "candidate_preview");
+
+    const activePointer = await getActivePointerForSite(siteId);
+    assert.equal(activePointer, null);
+
+    const candidateReadback = await getSuperadminPool().query<{ state: string; publish_stage: string }>(
+      `
+      select sv.state::text as state, a.publish_stage::text as publish_stage
+      from public.gnr8_runtime_site_versions sv
+      join public.gnr8_runtime_artifacts a on a.id = $3::uuid
+      where sv.site_id = $1::text
+        and sv.id = $2::uuid
+        and a.site_id = sv.site_id
+        and a.site_version_id = sv.id
+      limit 1
+      `,
+      [siteId, candidateSiteVersionId, artifact.artifactId],
+    );
+    assert.equal(candidateReadback.rows[0]?.state, "DRAFT");
+    assert.equal(candidateReadback.rows[0]?.publish_stage, "shadow");
+
+    const bindingReadback = await getPreviewHostBindingForHost(previewHost);
+    assert.equal(bindingReadback?.host, previewHost);
+    assert.equal(bindingReadback?.siteId, siteId);
+    assert.equal(bindingReadback?.candidateSiteVersionId, candidateSiteVersionId);
+    assert.equal(bindingReadback?.candidateArtifactId, artifact.artifactId);
+    assert.equal(bindingReadback?.status, "ACTIVE");
+    assert.equal(bindingReadback?.bindingKind, "candidate_preview");
+
+    const artifactResolution = await resolveActiveArtifactForHostAndPathWithDiagnostics({
+      host: previewHost,
+      path: "/",
+    });
+    if (artifactResolution.outcome !== "artifact_hit") {
+      assert.fail(`expected artifact_hit, got ${artifactResolution.outcome}`);
+    }
+    assert.equal(artifactResolution.siteResolution, "preview_host_match");
+    assert.equal(artifactResolution.activeSiteVersionId, candidateSiteVersionId);
+    assert.equal(artifactResolution.artifactId, artifact.artifactId);
+    assert.match(artifactResolution.html, /artifact:candidate-preview/);
   } finally {
     await cleanRuntimeSite(siteId);
   }
