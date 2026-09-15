@@ -9,6 +9,7 @@ import type { SingleSiteStudioPreviewState } from "@/gnr8/single-site/single-sit
 import { AirshipDraftCandidateAction } from "./airship-draft-candidate-action";
 import { AirshipDraftCandidateReviewAction } from "./airship-draft-candidate-review-action";
 import { AirshipPublishReadinessAction } from "./airship-publish-readiness-action";
+import { AirshipSimplePromoteRollbackAction } from "./airship-simple-promote-rollback-action";
 import { AirshipSingleSiteLocalDraftEditor } from "./airship-single-site-local-draft-editor";
 
 type Props = {
@@ -268,7 +269,7 @@ function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
             {demo.demoUrl}
           </a>,
         )}
-        {fact("Active pointer target", `${demo.activePointerTarget.siteVersionId} / ${demo.activePointerTarget.runtimeArtifactId}`)}
+        {fact("Current active pointer", `${demo.activePointerTarget.siteVersionId} / ${demo.activePointerTarget.runtimeArtifactId}`)}
         {fact(
           "External www.chs.si",
           <span>
@@ -283,8 +284,8 @@ function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
       <div style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 12, display: "grid", gap: 10 }}>
         <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Admin-only rollback refs</div>
         <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
-          {fact("Previous target", `${demo.rollbackRefs.previousSiteVersionId} / ${demo.rollbackRefs.previousRuntimeArtifactId}`)}
-          {fact("Current Airship target", `${demo.rollbackRefs.currentSiteVersionId} / ${demo.rollbackRefs.currentRuntimeArtifactId}`)}
+          {fact("Rollback target pointer", `${demo.rollbackRefs.previousSiteVersionId} / ${demo.rollbackRefs.previousRuntimeArtifactId}`)}
+          {fact("Current Airship pointer", `${demo.rollbackRefs.currentSiteVersionId} / ${demo.rollbackRefs.currentRuntimeArtifactId}`)}
           {fact("Promote audit rows", demo.rollbackRefs.promoteAuditRows.join(" / "))}
           {fact(
             "Readback boundary",
@@ -296,6 +297,7 @@ function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
           )}
         </dl>
       </div>
+      <AirshipSimplePromoteRollbackAction migrationId={model.migrationId} demoReadiness={demo} />
     </div>,
   );
 }

@@ -41,6 +41,7 @@ const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versio
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const COMPONENT_FILE = new URL("./airship-single-site-editor.tsx", import.meta.url);
 const LOCAL_EDITOR_FILE = new URL("./airship-single-site-local-draft-editor.tsx", import.meta.url);
+const ROLLBACK_ACTION_FILE = new URL("./airship-simple-promote-rollback-action.tsx", import.meta.url);
 const VISUAL_EDITOR_PAGE_FILE = new URL("./editor/page.tsx", import.meta.url);
 const VISUAL_EDITOR_FILE = new URL("./editor/airship-single-site-visual-editor-workspace.tsx", import.meta.url);
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/airship-single-site-editor-readonly-projection.ts", import.meta.url);
@@ -394,11 +395,17 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("MVP Demo Readiness"), true);
   assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
   assert.equal(html.includes("mvp recovery chs airship demo ready"), true);
+  assert.equal(html.includes("Current active pointer"), true);
   assert.equal(html.includes(`${AIRSHIP_DEMO_VERSION_ID} / ${AIRSHIP_DEMO_ARTIFACT_ID}`), true);
   assert.equal(html.includes("external not cut over"), true);
   assert.equal(html.includes("89b2cafa-651a-4402-a947-0c3d45378a3d / ACTIVE / shadow / site_57d9665a3a5867edf6ef"), true);
+  assert.equal(html.includes("Rollback target pointer"), true);
   assert.equal(html.includes(`${IMPROVED_CANDIDATE_VERSION_ID} / 1f80138a-39c2-4210-ac61-16200e5a2254`), true);
   assert.equal(html.includes("no pointer mutation, no promote-to-live, no rollback"), true);
+  assert.equal(html.includes("Admin-only destructive rollback"), true);
+  assert.equal(html.includes("Rollback active pointer"), true);
+  assert.equal(html.includes("Ready for superadmin rollback review"), true);
+  assert.equal(html.includes("I understand this is a superadmin-only active-pointer restore"), true);
 });
 
 test("airship single-site editor renders live published and Airship draft candidate previews with internal routes", () => {
@@ -1467,15 +1474,17 @@ test("airship single-site route is superadmin-gated and does not default to CHS"
   assert.equal(pageSource.includes("getAirshipSingleSiteEditorReadonlyProjection"), true);
 });
 
-test("airship single-site foundation adds no production mutation action surface", async () => {
-  const [pageSource, componentSource, localEditorSource, visualEditorSource, projectionSource] = await Promise.all([
+test("airship single-site readback keeps rollback explicit without adding unrelated mutation surfaces", async () => {
+  const [pageSource, componentSource, localEditorSource, rollbackActionSource, visualEditorSource, projectionSource] = await Promise.all([
     readFile(PAGE_FILE, "utf8"),
     readFile(COMPONENT_FILE, "utf8"),
     readFile(LOCAL_EDITOR_FILE, "utf8"),
+    readFile(ROLLBACK_ACTION_FILE, "utf8"),
     readFile(VISUAL_EDITOR_FILE, "utf8"),
     readFile(PROJECTION_FILE, "utf8"),
   ]);
-  const source = `${pageSource}\n${componentSource}\n${localEditorSource}\n${visualEditorSource}\n${projectionSource}`;
+  const source = `${pageSource}\n${componentSource}\n${localEditorSource}\n${rollbackActionSource}\n${visualEditorSource}\n${projectionSource}`;
+  const rollbackFetchUrls = Array.from(rollbackActionSource.matchAll(/fetch\(["']([^"']+)["']/g), (match) => match[1]);
 
   assert.equal(source.includes("mutatesProductionData: false"), true);
   assert.equal(source.includes("mutatesDraftData: true"), true);
@@ -1483,8 +1492,10 @@ test("airship single-site foundation adds no production mutation action surface"
   assert.equal(source.includes('method="post"'), false);
   assert.equal(source.includes("runtimePreviewGET"), false);
   assert.equal(source.includes("Run provider"), false);
-  assert.equal(source.includes("Rollback"), false);
+  assert.deepEqual(rollbackFetchUrls, ["/api/gnr8/admin/airship/single-site/rollback-simple-promote"]);
+  assert.equal(rollbackActionSource.includes("Admin-only destructive rollback"), true);
   assert.equal(source.includes("Publish candidate"), false);
+  assert.doesNotMatch(rollbackActionSource, /publish-readiness|governed-dry-run|shadow-publish|source-capture|provider\/openai/i);
 });
 
 test("airship visual editor adds no publish, dry-run, shadow, rollback, source capture, or active-pointer action control", async () => {
