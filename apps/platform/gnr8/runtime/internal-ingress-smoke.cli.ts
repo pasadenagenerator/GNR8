@@ -32,7 +32,7 @@ type ResolutionLogPayload = {
   mode: string;
   host: string;
   path: string;
-  siteResolution: "host_match" | "domain_match" | "fallback_latest_site" | "none";
+  siteResolution: PublicRuntimeArtifactResolution["siteResolution"];
   siteId: string | null;
   siteVersionId: string | null;
   artifactId: string | null;
