@@ -1163,6 +1163,20 @@ Production verification status: `one_site_internal_mvp_rehearsal_accepted_pendin
 
 Closeout: `docs/product/gnr8-single-site-mvp-cutline-64-post-shadow-publish-public-verification-closeout.md`.
 
+## Airship MVP Recovery CHS Demo Readiness
+
+Production verification status: `mvp_recovery_chs_airship_demo_ready`.
+
+- GNR8-controlled demo URL: `https://chs-airship.app.pasadenagenerator.com/`.
+- Demo evidence: HTTPS HTTP `200`, TLS verification passed, response contains `The CHS team helps your IT change with every technology wave.`, and response is served by Vercel/GNR8 with the GNR8 preview marker.
+- Active pointer target: `92e476b9-67fc-408a-be3d-5c744aa0f3f6 / 5ac3716a-f29d-4648-bc86-a6942638ed53`.
+- Host binding: `89b2cafa-651a-4402-a947-0c3d45378a3d`, `ACTIVE`, `shadow`, `site_57d9665a3a5867edf6ef`.
+- External site status: `https://www.chs.si/` remains external and not cut over; unchanged external status is expected and not a failure.
+- Airship UI readback: overview and visual editor now surface the demo URL, active target, external `www.chs.si` status, host binding, and compact admin-only rollback refs.
+- Forbidden mutation confirmation: no promote-to-live, rollback, dry-run, shadow-publish, source-capture, provider/DNS/domain/billing/env mutation, or active pointer mutation was run for this readback.
+
+Closeout: `docs/product/gnr8-airship-mvp-recovery-chs-demo-readiness-closeout.md`.
+
 ## Stop Criteria
 
 Stop immediately if:

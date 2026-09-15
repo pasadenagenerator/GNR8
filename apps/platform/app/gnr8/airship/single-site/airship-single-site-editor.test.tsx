@@ -35,6 +35,8 @@ const { renderToStaticMarkup } = ReactDomServer;
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const ORIGINAL_CLONE_VERSION_ID = "6b172a5b-200e-471c-9599-5dc70f04ea53";
 const IMPROVED_CANDIDATE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
+const AIRSHIP_DEMO_VERSION_ID = "92e476b9-67fc-408a-be3d-5c744aa0f3f6";
+const AIRSHIP_DEMO_ARTIFACT_ID = "5ac3716a-f29d-4648-bc86-a6942638ed53";
 const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const COMPONENT_FILE = new URL("./airship-single-site-editor.tsx", import.meta.url);
@@ -43,6 +45,45 @@ const VISUAL_EDITOR_PAGE_FILE = new URL("./editor/page.tsx", import.meta.url);
 const VISUAL_EDITOR_FILE = new URL("./editor/airship-single-site-visual-editor-workspace.tsx", import.meta.url);
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/airship-single-site-editor-readonly-projection.ts", import.meta.url);
 const PREVIEW_ROUTE_FILE = new URL("../../../api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts", import.meta.url);
+
+function chsDemoReadiness(): NonNullable<AirshipSingleSiteEditorReadonlyProjection["demoReadiness"]> {
+  return {
+    status: "mvp_recovery_chs_airship_demo_ready",
+    demoUrl: "https://chs-airship.app.pasadenagenerator.com/",
+    demoUrlStatus: "https_200_tls_verified_gnr8_preview",
+    expectedBodyText: "The CHS team helps your IT change with every technology wave.",
+    activePointerTarget: {
+      siteVersionId: AIRSHIP_DEMO_VERSION_ID,
+      runtimeArtifactId: AIRSHIP_DEMO_ARTIFACT_ID,
+    },
+    externalProductionSite: {
+      url: "https://www.chs.si/",
+      status: "external_not_cut_over",
+    },
+    hostBinding: {
+      id: "89b2cafa-651a-4402-a947-0c3d45378a3d",
+      status: "ACTIVE",
+      mode: "shadow",
+      runtimeSiteId: "site_57d9665a3a5867edf6ef",
+    },
+    rollbackRefs: {
+      previousSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      previousRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+      currentSiteVersionId: AIRSHIP_DEMO_VERSION_ID,
+      currentRuntimeArtifactId: AIRSHIP_DEMO_ARTIFACT_ID,
+      promoteAuditRows: [
+        "d873b627-bab9-4868-9def-e4772fb71f37",
+        "7b667851-5132-43b3-8202-d56fc30ee193",
+      ],
+    },
+    adminOnly: true,
+    boundary: {
+      pointerMutatedByThisReadback: false,
+      promoteToLiveRunByThisReadback: false,
+      rollbackRunByThisReadback: false,
+    },
+  };
+}
 
 function selectedAirshipProfile(overrides: Partial<AirshipAgentProfileSelection> = {}): AirshipAgentProfileSelection {
   return {
@@ -148,6 +189,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
       detail: "3 proposed Airship draft edit(s) generated for the imported chs.si homepage from source evidence. Browser edits are local-only and are not applied to the live site.",
       deterministicEditableChangesGenerated: true,
     },
+    demoReadiness: chsDemoReadiness(),
     previews: {
       originalClone: {
         label: "Original clone preview",
@@ -349,6 +391,14 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("Open Airship Editor"), true);
   assert.equal(html.includes(`/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`), true);
   assert.equal(html.includes("Open live site"), true);
+  assert.equal(html.includes("MVP Demo Readiness"), true);
+  assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
+  assert.equal(html.includes("mvp recovery chs airship demo ready"), true);
+  assert.equal(html.includes(`${AIRSHIP_DEMO_VERSION_ID} / ${AIRSHIP_DEMO_ARTIFACT_ID}`), true);
+  assert.equal(html.includes("external not cut over"), true);
+  assert.equal(html.includes("89b2cafa-651a-4402-a947-0c3d45378a3d / ACTIVE / shadow / site_57d9665a3a5867edf6ef"), true);
+  assert.equal(html.includes(`${IMPROVED_CANDIDATE_VERSION_ID} / 1f80138a-39c2-4210-ac61-16200e5a2254`), true);
+  assert.equal(html.includes("no pointer mutation, no promote-to-live, no rollback"), true);
 });
 
 test("airship single-site editor renders live published and Airship draft candidate previews with internal routes", () => {
@@ -778,6 +828,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
       sourceUrl={model.sourceUrl}
       liveSiteUrl={model.liveSiteUrl}
       importedSiteModel={model.importedSiteModel}
+      demoReadiness={model.demoReadiness}
       draftCandidate={{
         siteVersionId: model.previews.airshipDraftCandidate?.siteVersionId ?? null,
         runtimeArtifactId: model.previews.airshipDraftCandidate?.runtimeArtifactId ?? null,
@@ -822,6 +873,11 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Hero / intro"), true);
   assert.equal(html.includes("CTA"), true);
   assert.equal(html.includes("Source material"), true);
+  assert.equal(html.includes("MVP demo readiness"), true);
+  assert.equal(html.includes("Open GNR8 demo"), true);
+  assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
+  assert.equal(html.includes(`${AIRSHIP_DEMO_VERSION_ID} / ${AIRSHIP_DEMO_ARTIFACT_ID}`), true);
+  assert.equal(html.includes("external not cut over"), true);
   assert.equal(html.includes("Canvas editor controls"), true);
   assert.equal(html.includes("Select"), true);
   assert.equal(html.includes("Desktop"), true);

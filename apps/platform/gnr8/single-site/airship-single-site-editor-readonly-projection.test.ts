@@ -13,6 +13,8 @@ import type { SingleSiteStudioReadonlyProjection } from "./single-site-studio-re
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const ORIGINAL_CLONE_VERSION_ID = "6b172a5b-200e-471c-9599-5dc70f04ea53";
 const IMPROVED_CANDIDATE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
+const AIRSHIP_DEMO_VERSION_ID = "92e476b9-67fc-408a-be3d-5c744aa0f3f6";
+const AIRSHIP_DEMO_ARTIFACT_ID = "5ac3716a-f29d-4648-bc86-a6942638ed53";
 const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
 
 const studioProjection: SingleSiteStudioReadonlyProjection = {
@@ -148,6 +150,18 @@ test("airship projection generates the first concrete CHS AI draft and local-onl
   assert.equal(model.draftPanel.draftPreview?.persistence, "browser_local_only");
   assert.equal(model.draftPanel.controlMode, "persistent_airship_draft");
   assert.equal(model.draftPanel.persistence.label, "Unsaved Airship draft");
+  assert.equal(model.demoReadiness?.status, "mvp_recovery_chs_airship_demo_ready");
+  assert.equal(model.demoReadiness?.demoUrl, "https://chs-airship.app.pasadenagenerator.com/");
+  assert.equal(model.demoReadiness?.activePointerTarget.siteVersionId, AIRSHIP_DEMO_VERSION_ID);
+  assert.equal(model.demoReadiness?.activePointerTarget.runtimeArtifactId, AIRSHIP_DEMO_ARTIFACT_ID);
+  assert.equal(model.demoReadiness?.externalProductionSite.status, "external_not_cut_over");
+  assert.equal(model.demoReadiness?.hostBinding.id, "89b2cafa-651a-4402-a947-0c3d45378a3d");
+  assert.equal(model.demoReadiness?.hostBinding.mode, "shadow");
+  assert.equal(model.demoReadiness?.rollbackRefs.previousSiteVersionId, IMPROVED_CANDIDATE_VERSION_ID);
+  assert.equal(model.demoReadiness?.rollbackRefs.currentSiteVersionId, AIRSHIP_DEMO_VERSION_ID);
+  assert.equal(model.demoReadiness?.boundary.pointerMutatedByThisReadback, false);
+  assert.equal(model.demoReadiness?.boundary.promoteToLiveRunByThisReadback, false);
+  assert.equal(model.demoReadiness?.boundary.rollbackRunByThisReadback, false);
   assert.deepEqual(model.draftPanel.persistence.styleSettings, {
     heroTopPadding: 72,
     heroBottomPadding: 72,
@@ -383,6 +397,7 @@ test("airship projection builds a second imported-site model without CHS copy", 
   });
 
   assert.equal(model.importedSite, "luna.example");
+  assert.equal(model.demoReadiness, null);
   assert.equal(model.draftPanel.drafts.length, 3);
   assert.equal(model.draftPanel.draftPreview?.hero.eyebrow, "LUNA");
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "Luna Books for curious teams");

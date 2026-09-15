@@ -9,6 +9,7 @@ import type {
   AirshipSingleSiteDraftPreview,
   AirshipSingleSiteDraftStyleSettings,
   AirshipSingleSiteImprovementDraft,
+  AirshipMvpDemoReadiness,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 import type {
   AirshipAgentProfileSelection,
@@ -21,6 +22,7 @@ type Props = {
   sourceUrl: string;
   liveSiteUrl: string;
   importedSiteModel?: AirshipImportedSiteEditorModel;
+  demoReadiness?: AirshipMvpDemoReadiness | null;
   draftCandidate: {
     siteVersionId: string | null;
     runtimeArtifactId: string | null;
@@ -1740,6 +1742,29 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
             <span aria-label={STYLE_DRAFT_SAVED_MESSAGE}>{badge("Style autosave", "neutral")}</span>
             <div className="airship-muted">Source {props.importedSite}.</div>
           </div>
+
+          {props.demoReadiness ? (
+            <div className="airship-details" aria-label="MVP demo readiness">
+              <div className="airship-kicker">MVP demo readiness</div>
+              <a href={props.demoReadiness.demoUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true })}>
+                Open GNR8 demo
+              </a>
+              <div className="airship-detail-list">
+                <div className="airship-detail-row">
+                  <strong>demo URL</strong>
+                  <code>{props.demoReadiness.demoUrl}</code>
+                </div>
+                <div className="airship-detail-row">
+                  <strong>active target</strong>
+                  <code>{`${props.demoReadiness.activePointerTarget.siteVersionId} / ${props.demoReadiness.activePointerTarget.runtimeArtifactId}`}</code>
+                </div>
+                <div className="airship-detail-row">
+                  <strong>www.chs.si</strong>
+                  <code>{props.demoReadiness.externalProductionSite.status.replaceAll("_", " ")}</code>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </aside>
 
         <section className="airship-canvas" aria-label="Draft preview canvas">

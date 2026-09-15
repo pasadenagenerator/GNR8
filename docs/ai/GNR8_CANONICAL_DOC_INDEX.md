@@ -1539,6 +1539,21 @@ Canonical implementation:
 
 Canonical result: The existing Airship single-site page now exposes a primary `Open Airship Editor` action for the accepted CHS migration, opening `/gnr8/airship/single-site/editor?migrationId=682a09fd-8fd5-4f73-93b8-54f5d4067c63`. The new superadmin-gated editor route renders a real visual workspace with a draft preview canvas, selected `Homepage hero/intro` controls, and a deterministic draft-only AI command box. H1/headline, subheading/body, and CTA label text save through the existing Airship draft-only persistence path; hero spacing, background tint, and CTA color are local preview-only and labeled as such. Required labels include `Draft editor`, `Internal preview only`, `Not live`, `Not published`, `Changes are saved to Airship draft only`, and `Style changes are local preview only`. No live CHS content mutation, runtime version mutation, source capture, publish, dry-run, shadow-publish, rollback, provider/DNS/domain/billing mutation, env change, or active pointer mutation is introduced. Final status is `airship_visual_editor_workspace_openable_for_chs_si`.
 
+## AIRSHIP MVP Recovery CHS Demo Readiness
+
+Canonical Airship MVP recovery CHS demo readiness closeout:
+- `docs/product/gnr8-airship-mvp-recovery-chs-demo-readiness-closeout.md`
+
+Canonical implementation:
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.ts`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.tsx`
+- `apps/platform/app/gnr8/airship/single-site/editor/page.tsx`
+- `apps/platform/app/gnr8/airship/single-site/editor/airship-single-site-visual-editor-workspace.tsx`
+- `apps/platform/gnr8/single-site/airship-single-site-editor-readonly-projection.test.ts`
+- `apps/platform/app/gnr8/airship/single-site/airship-single-site-editor.test.tsx`
+
+Canonical result: Airship now surfaces the recovered CHS GNR8-controlled demo URL `https://chs-airship.app.pasadenagenerator.com/` on the overview and visual editor surfaces, with active pointer target `92e476b9-67fc-408a-be3d-5c744aa0f3f6 / 5ac3716a-f29d-4648-bc86-a6942638ed53`, external `https://www.chs.si/` marked `external / not cut over`, host binding `89b2cafa-651a-4402-a947-0c3d45378a3d / ACTIVE / shadow / site_57d9665a3a5867edf6ef`, and compact admin-only rollback refs. No promote-to-live, rollback, dry-run, shadow-publish, source-capture, provider/DNS/domain/billing/env mutation, or active pointer mutation was run. Final status is `mvp_recovery_chs_airship_demo_ready`.
+
 ## Secondary
 
 - `SYSTEM.md`

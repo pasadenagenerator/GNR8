@@ -249,6 +249,57 @@ function recommendationRow(item: AirshipSingleSiteRecommendationMaterial) {
   );
 }
 
+function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
+  const demo = model.demoReadiness;
+  if (!demo) return null;
+
+  return section(
+    "MVP Demo Readiness",
+    <div style={{ border: "1px solid #bbf7d0", borderRadius: 8, background: "#f0fdf4", padding: 14, display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {badge(demo.status, "good")}
+        {badge(demo.demoUrlStatus, "good")}
+        {badge(demo.externalProductionSite.status, "warn")}
+      </div>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
+        {fact(
+          "GNR8 demo URL",
+          <a href={demo.demoUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+            {demo.demoUrl}
+          </a>,
+        )}
+        {fact("Active pointer target", `${demo.activePointerTarget.siteVersionId} / ${demo.activePointerTarget.runtimeArtifactId}`)}
+        {fact(
+          "External www.chs.si",
+          <span>
+            <a href={demo.externalProductionSite.url} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+              {demo.externalProductionSite.url}
+            </a>{" "}
+            ({labelize(demo.externalProductionSite.status)})
+          </span>,
+        )}
+        {fact("Host binding", `${demo.hostBinding.id} / ${demo.hostBinding.status} / ${demo.hostBinding.mode} / ${demo.hostBinding.runtimeSiteId}`)}
+      </dl>
+      <div style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 12, display: "grid", gap: 10 }}>
+        <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Admin-only rollback refs</div>
+        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+          {fact("Previous target", `${demo.rollbackRefs.previousSiteVersionId} / ${demo.rollbackRefs.previousRuntimeArtifactId}`)}
+          {fact("Current Airship target", `${demo.rollbackRefs.currentSiteVersionId} / ${demo.rollbackRefs.currentRuntimeArtifactId}`)}
+          {fact("Promote audit rows", demo.rollbackRefs.promoteAuditRows.join(" / "))}
+          {fact(
+            "Readback boundary",
+            demo.boundary.pointerMutatedByThisReadback === false &&
+              demo.boundary.promoteToLiveRunByThisReadback === false &&
+              demo.boundary.rollbackRunByThisReadback === false
+              ? "no pointer mutation, no promote-to-live, no rollback"
+              : "review required",
+          )}
+        </dl>
+      </div>
+    </div>,
+  );
+}
+
 export function AirshipSingleSiteEditor({ model }: Props) {
   const improvementTone = model.aiImprovementStatus.deterministicEditableChangesGenerated ? "good" : "warn";
 
@@ -295,6 +346,8 @@ export function AirshipSingleSiteEditor({ model }: Props) {
           {model.aiImprovementStatus.detail}
         </div>
       </section>
+
+      {demoReadinessPanel(model)}
 
       {section(
         "Previews",

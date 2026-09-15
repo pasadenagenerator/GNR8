@@ -125,6 +125,40 @@ export type AirshipImportedSiteEditorModel = {
   };
 };
 
+export type AirshipMvpDemoReadiness = {
+  status: "mvp_recovery_chs_airship_demo_ready";
+  demoUrl: string;
+  demoUrlStatus: "https_200_tls_verified_gnr8_preview";
+  expectedBodyText: string;
+  activePointerTarget: {
+    siteVersionId: string;
+    runtimeArtifactId: string;
+  };
+  externalProductionSite: {
+    url: string;
+    status: "external_not_cut_over";
+  };
+  hostBinding: {
+    id: string;
+    status: "ACTIVE";
+    mode: "shadow";
+    runtimeSiteId: string;
+  };
+  rollbackRefs: {
+    previousSiteVersionId: string;
+    previousRuntimeArtifactId: string;
+    currentSiteVersionId: string;
+    currentRuntimeArtifactId: string;
+    promoteAuditRows: string[];
+  };
+  adminOnly: true;
+  boundary: {
+    pointerMutatedByThisReadback: false;
+    promoteToLiveRunByThisReadback: false;
+    rollbackRunByThisReadback: false;
+  };
+};
+
 export type AirshipSingleSiteEditorReadonlyProjection = {
   version: typeof AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION;
   generatedAt: string;
@@ -149,6 +183,7 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
     detail: string;
     deterministicEditableChangesGenerated: boolean;
   };
+  demoReadiness: AirshipMvpDemoReadiness | null;
   previews: {
     originalClone: SingleSiteStudioReadonlyProjection["previews"]["originalClone"];
     currentImprovedPublished: SingleSiteStudioReadonlyProjection["previews"]["improvedCandidate"];
@@ -205,6 +240,43 @@ export const AIRSHIP_CHS_FORBIDDEN_DRAFT_PATTERNS = [
   /prevoz\s+vozil/i,
   /transportimaver/i,
 ] as const;
+
+const AIRSHIP_CHS_MVP_DEMO_READINESS: AirshipMvpDemoReadiness = {
+  status: "mvp_recovery_chs_airship_demo_ready",
+  demoUrl: "https://chs-airship.app.pasadenagenerator.com/",
+  demoUrlStatus: "https_200_tls_verified_gnr8_preview",
+  expectedBodyText: "The CHS team helps your IT change with every technology wave.",
+  activePointerTarget: {
+    siteVersionId: "92e476b9-67fc-408a-be3d-5c744aa0f3f6",
+    runtimeArtifactId: "5ac3716a-f29d-4648-bc86-a6942638ed53",
+  },
+  externalProductionSite: {
+    url: "https://www.chs.si/",
+    status: "external_not_cut_over",
+  },
+  hostBinding: {
+    id: "89b2cafa-651a-4402-a947-0c3d45378a3d",
+    status: "ACTIVE",
+    mode: "shadow",
+    runtimeSiteId: "site_57d9665a3a5867edf6ef",
+  },
+  rollbackRefs: {
+    previousSiteVersionId: "a3f9493e-9da4-4ef8-8608-154fe6d25a0f",
+    previousRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    currentSiteVersionId: "92e476b9-67fc-408a-be3d-5c744aa0f3f6",
+    currentRuntimeArtifactId: "5ac3716a-f29d-4648-bc86-a6942638ed53",
+    promoteAuditRows: [
+      "d873b627-bab9-4868-9def-e4772fb71f37",
+      "7b667851-5132-43b3-8202-d56fc30ee193",
+    ],
+  },
+  adminOnly: true,
+  boundary: {
+    pointerMutatedByThisReadback: false,
+    promoteToLiveRunByThisReadback: false,
+    rollbackRunByThisReadback: false,
+  },
+};
 
 type AirshipBuildInput = {
   migrationId?: string | null;
@@ -386,6 +458,10 @@ function deriveImportedSiteDraftTexts(studioModel: SingleSiteStudioReadonlyProje
 function sourceUrlAvailable(value: string | null | undefined): boolean {
   const normalized = text(value);
   return Boolean(normalized && /^https?:\/\//i.test(normalized) && !/unavailable|unknown|missing/i.test(normalized));
+}
+
+function demoReadinessForMigration(migrationId: string | null): AirshipMvpDemoReadiness | null {
+  return migrationId === AIRSHIP_CHS_MIGRATION_ID ? AIRSHIP_CHS_MVP_DEMO_READINESS : null;
 }
 
 function hasPresentSourceEvidence(studioModel: SingleSiteStudioReadonlyProjection): boolean {
@@ -790,6 +866,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
         : `${input.studioModel.improvementSummary.headline} ${importedModel.sourceEvidenceSummary.detail}`,
       deterministicEditableChangesGenerated,
     },
+    demoReadiness: demoReadinessForMigration(migrationId),
     previews: {
       originalClone: input.studioModel.previews.originalClone,
       currentImprovedPublished: input.studioModel.previews.improvedCandidate,

@@ -58,6 +58,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
       sourceUrl={model.sourceUrl}
       liveSiteUrl={model.liveSiteUrl}
       importedSiteModel={model.importedSiteModel}
+      demoReadiness={model.demoReadiness}
       draftCandidate={model.previews.airshipDraftCandidate ? {
         siteVersionId: model.previews.airshipDraftCandidate.siteVersionId,
         runtimeArtifactId: model.previews.airshipDraftCandidate.runtimeArtifactId,
