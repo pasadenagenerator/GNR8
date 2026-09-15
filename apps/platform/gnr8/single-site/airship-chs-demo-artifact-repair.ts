@@ -536,6 +536,7 @@ export async function repairAirshipChsDemoArtifact(input: {
     await client.query("begin");
     const activePointerBefore = await readActivePointer(client);
     const artifact = await readArtifact(client);
+    assertExpectedPointer(activePointerBefore);
     const plan = buildAirshipChsDemoArtifactRepairPlan({
       activePointer: activePointerBefore,
       artifact,
