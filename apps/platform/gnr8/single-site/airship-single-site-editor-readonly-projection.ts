@@ -32,6 +32,11 @@ import {
   readAirshipGovernedDryRunForReadiness,
   type AirshipGovernedDryRunReadback,
 } from "./airship-governed-dry-run-service";
+import {
+  arisAirshipDraftContainsForbiddenCopy,
+  buildArisAirshipMvpDraftEdits,
+  isArisAirshipMvpMigration,
+} from "./airship-aris-mvp-draft";
 
 export const AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION = "airship-1-single-site-editor-readonly:v1" as const;
 export type { AirshipSingleSiteDraftStyleSettings };
@@ -525,6 +530,10 @@ function importedSiteDrafts(input: {
   migrationId: string | null;
   studioModel: SingleSiteStudioReadonlyProjection;
 }): AirshipSingleSiteImprovementDraft[] {
+  if (isArisAirshipMvpMigration(input.migrationId)) {
+    return buildArisAirshipMvpDraftEdits();
+  }
+
   const siteLabel = humanSiteLabel(input.studioModel);
   const organization = organizationLabel(siteLabel);
   const texts = ensureImportedSiteWorkspaceDraftTexts({
@@ -654,6 +663,12 @@ function assertChsDraftIdentity(drafts: AirshipSingleSiteImprovementDraft[]) {
   }
 }
 
+function assertArisDraftIdentity(value: unknown) {
+  if (arisAirshipDraftContainsForbiddenCopy(value)) {
+    throw new Error("Airship ARIS draft identity violation: CHS copy or fallback diagnostics are not allowed in ARIS drafts.");
+  }
+}
+
 function chsSourceEvidenceAllowsForbiddenMaverCopy(input: {
   studioModel: SingleSiteStudioReadonlyProjection;
   migrationId: string | null;
@@ -670,6 +685,7 @@ function persistedDraftForMigration(input: {
   const { draft, migrationId } = input;
   if (!draft || !migrationId || draft.migrationId !== migrationId) return null;
   if (!chsSourceEvidenceAllowsForbiddenMaverCopy({ studioModel: input.studioModel, migrationId }) && airshipChsDraftContainsForbiddenMaverCopy(draft.draftEdits)) return null;
+  if (isArisAirshipMvpMigration(migrationId) && arisAirshipDraftContainsForbiddenCopy(draft.draftEdits)) return null;
   return draft;
 }
 
@@ -822,12 +838,18 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
   if (migrationId === AIRSHIP_CHS_MIGRATION_ID && !chsSourceEvidenceAllowsForbiddenMaverCopy({ studioModel: input.studioModel, migrationId })) {
     assertChsDraftIdentity(generatedDrafts);
   }
+  if (isArisAirshipMvpMigration(migrationId)) {
+    assertArisDraftIdentity(generatedDrafts);
+  }
   const persistedDraft = persistedDraftForMigration({
     draft: input.persistedDraft,
     migrationId,
     studioModel: input.studioModel,
   });
   const drafts = mergePersistedDrafts(generatedDrafts, persistedDraft);
+  if (isArisAirshipMvpMigration(migrationId)) {
+    assertArisDraftIdentity(drafts);
+  }
   const styleSettings = persistedStyleSettings(persistedDraft);
   const deterministicEditableChangesGenerated = drafts.length > 0 || input.studioModel.improvementSummary.noDeterministicContentChanges === false;
   const siteLabel = humanSiteLabel(input.studioModel);

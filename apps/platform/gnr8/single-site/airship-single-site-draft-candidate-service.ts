@@ -20,6 +20,7 @@ import {
   type AirshipSingleSiteDraftRecord,
   type AirshipSingleSiteDraftStyleSettings,
 } from "./airship-single-site-draft-service";
+import { maybeBuildArisAirshipMvpEvidenceSourceVersion } from "./airship-aris-mvp-draft";
 
 export const AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION = "airship-4-draft-candidate-service:v1" as const;
 
@@ -413,6 +414,11 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const sourceArtifact = await deps.getArtifactById(sourceLiveRuntimeArtifactId);
   if (!sourceArtifact) throw new Error(`source_live_runtime_artifact_not_found:${sourceLiveRuntimeArtifactId}`);
   if (sourceArtifact.siteVersionId !== sourceVersion.id) throw new Error("source_live_runtime_artifact_version_mismatch");
+  const candidateSourceVersion = maybeBuildArisAirshipMvpEvidenceSourceVersion({
+    draftMigrationId: input.draft.migrationId,
+    sourceVersion,
+    actor: input.actor,
+  });
 
   const headlineEdit = acceptedOrSavedEdit(draftEditForField(input.draft.draftEdits, "headline"));
   const subheadingEdit = acceptedOrSavedEdit(draftEditForField(input.draft.draftEdits, "subheading"));
@@ -459,7 +465,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
 
   const actor = `${input.actor}:airship-draft-candidate`;
   const pages = applyAirshipHeroEdits({
-    sourceVersion,
+    sourceVersion: candidateSourceVersion,
     actor,
     headline: headlineEdit.proposedTextContent,
     subheading: subheadingEdit.proposedTextContent,
@@ -489,16 +495,17 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const candidateVersion = existingTarget
     ? { siteId: existingTarget.siteId, siteVersionId: existingTarget.id, versionNo: existingTarget.versionNo }
     : await deps.createSiteVersionFromMigration({
-        siteId: sourceVersion.siteId,
+        siteId: candidateSourceVersion.siteId,
         sourceUrl: input.draft.sourceUrl,
         actor,
-        rendererCompatibilityVersion: sourceVersion.rendererCompatibilityVersion,
+        rendererCompatibilityVersion: candidateSourceVersion.rendererCompatibilityVersion,
         importProvenanceSummary: {
-          ...(sourceVersion.importProvenanceSummary ?? {}),
+          ...(candidateSourceVersion.importProvenanceSummary ?? {}),
           airshipSingleSiteDraftCandidate: provenance,
         } as RuntimeImportProvenanceSummary,
         pages,
         siteVersionId: targetCandidateSiteVersionId,
+        createSourceHostBinding: false,
       });
 
   const verifiedVersion = existingTarget ?? await deps.getSiteVersion(candidateVersion.siteVersionId);

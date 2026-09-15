@@ -56,6 +56,9 @@ export type AirshipSingleSiteDraftSeed = {
     liveSiteUrl?: string;
     liveBoundary?: "not_applied_to_live_site";
     styleSettings?: Partial<AirshipSingleSiteDraftStyleSettings>;
+    internalLabel?: string;
+    sourceEvidenceBasis?: string;
+    sourceLimitations?: string;
   };
 };
 
@@ -134,7 +137,17 @@ export const DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS: AirshipSingleSite
 };
 
 const AIRSHIP_STYLE_DRAFT_EDIT_ID = "airship-editor-style-settings";
-const SAFE_METADATA_KEYS = new Set(["serviceVersion", "projectionVersion", "previewPersistence", "liveSiteUrl", "liveBoundary", "styleSettings"]);
+const SAFE_METADATA_KEYS = new Set([
+  "serviceVersion",
+  "projectionVersion",
+  "previewPersistence",
+  "liveSiteUrl",
+  "liveBoundary",
+  "styleSettings",
+  "internalLabel",
+  "sourceEvidenceBasis",
+  "sourceLimitations",
+]);
 const UNSAFE_METADATA_VALUE = /secret|password|credential|token|cookie|billing|stripe|payment|openprovider|raw sql|stack trace|database_url|openai_api_key/i;
 const SAFE_BACKGROUND_TINTS = new Set<AirshipSingleSiteDraftStyleSettings["backgroundTint"]>(["#ecfeff", "#eef6ff", "#fefce8", "#ffffff"]);
 const SAFE_CTA_COLORS = new Set<AirshipSingleSiteDraftStyleSettings["ctaColor"]>(["#0f766e", "#1d4ed8", "#111827", "#047857"]);

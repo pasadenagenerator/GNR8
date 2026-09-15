@@ -1086,7 +1086,11 @@ function assertNoDuplicateRuntimePageVersions(pages: CanonicalPageVersionInput[]
 }
 
 export async function createSiteVersionFromMigration(
-  input: CanonicalSiteMigrationInput & { rendererCompatibilityVersion: string; siteVersionId?: string },
+  input: CanonicalSiteMigrationInput & {
+    rendererCompatibilityVersion: string;
+    siteVersionId?: string;
+    createSourceHostBinding?: boolean;
+  },
 ): Promise<{ siteId: string; siteVersionId: string; versionNo: number }> {
   return withTx(async (client) => {
     const sourceHost = (() => {
@@ -1107,7 +1111,7 @@ export async function createSiteVersionFromMigration(
       [input.siteId, input.sourceUrl, sourceHost],
     );
 
-    if (sourceHost) {
+    if (sourceHost && input.createSourceHostBinding !== false) {
       await bindHostToSiteInTx(client, {
         siteId: input.siteId,
         host: sourceHost,

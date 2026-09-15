@@ -23,6 +23,7 @@ type LegacyHtmlSummary = {
   extractedText?: unknown;
   extractedImageSrcs?: unknown;
   extractedLinks?: unknown;
+  labels?: unknown;
 };
 
 type LegacySummaryTheme = {
@@ -135,6 +136,17 @@ function readSummaryLinks(summary: LegacyHtmlSummary): Array<{ href: string; lab
     if (links.length >= 10) break;
   }
   return links;
+}
+
+function readSummaryLabels(summary: LegacyHtmlSummary): Partial<Record<"about" | "services" | "contact" | "overview", string>> {
+  if (!summary.labels || typeof summary.labels !== "object" || Array.isArray(summary.labels)) return {};
+  const record = summary.labels as Record<string, unknown>;
+  return {
+    about: asNonEmptyString(record.about) ?? undefined,
+    services: asNonEmptyString(record.services) ?? undefined,
+    contact: asNonEmptyString(record.contact) ?? undefined,
+    overview: asNonEmptyString(record.overview) ?? undefined,
+  };
 }
 
 function splitIntoSentences(text: string): string[] {
@@ -428,7 +440,7 @@ function pickAboutParagraph(sentences: string[]): string | null {
 }
 
 function pickServices(sentences: string[]): string[] {
-  const serviceHint = /(service|services|prevoz|transport|truck|kamion|evrop|logistics|delivery|destinations?)/i;
+  const serviceHint = /(service|services|prevoz|transport|truck|kamion|evrop|logistics|delivery|destinations?|ponudba|izdelk|apple|macbook|mac studio|canton|zvočnik|audio|glasba)/i;
   const serviceLike = sentences.filter(
     (line) => serviceHint.test(line) && line.length >= 35 && !isLikelyNavigationNoise(line) && !isContactHeavyLine(line),
   );
@@ -618,9 +630,13 @@ function renderLegacySummaryHtml(input: {
       }
     : baseTheme;
   const slovenianSignals = /(naše|prevozi|kontakt|o nas|galerija|kamion|podjetje)/i.test(text ?? "");
-  const labels = slovenianSignals
+  const defaultLabels = slovenianSignals
     ? { about: "O Podjetju", services: "Storitve", contact: "Kontakt", overview: "Prevozi Po Evropi" }
     : { about: "About", services: "Services", contact: "Contact", overview: "Transport Across Europe" };
+  const labels = {
+    ...defaultLabels,
+    ...readSummaryLabels(summary),
+  };
 
   const rankedLinks = links
     .map(classifyLinkSemantic)

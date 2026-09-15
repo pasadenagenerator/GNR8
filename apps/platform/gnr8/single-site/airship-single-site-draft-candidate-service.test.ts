@@ -7,6 +7,13 @@ import {
   createAirshipSingleSiteDraftCandidate,
 } from "./airship-single-site-draft-candidate-service";
 import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
+import {
+  AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+  AIRSHIP_ARIS_MIGRATION_ID,
+  AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+  AIRSHIP_ARIS_RUNTIME_SITE_ID,
+  buildArisAirshipMvpDraftSeed,
+} from "./airship-aris-mvp-draft";
 
 const MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const DRAFT_ID = "f9b31666-b3b0-4455-8650-4a8c7304a559";
@@ -162,11 +169,17 @@ function fakeDeps() {
   const versions = new Map<string, CanonicalSiteVersionSnapshot>([[LIVE_VERSION_ID, liveVersion()]]);
   const artifacts = new Map<string, RuntimeArtifact>([[LIVE_ARTIFACT_ID, liveArtifact()]]);
   const artifactBySiteVersion = new Map<string, string>([[LIVE_VERSION_ID, LIVE_ARTIFACT_ID]]);
+  const createSiteVersionInputs: Array<{
+    sourceUrl: string;
+    createSourceHostBinding?: boolean;
+    pages: CanonicalPageVersionInput[];
+  }> = [];
 
   return {
     calls,
     versions,
     artifacts,
+    createSiteVersionInputs,
     getSiteVersion: async (siteVersionId: string) => {
       calls.push(`getSiteVersion:${siteVersionId}`);
       return versions.get(siteVersionId) ?? null;
@@ -187,8 +200,14 @@ function fakeDeps() {
       importProvenanceSummary?: RuntimeImportProvenanceSummary | null;
       pages: CanonicalPageVersionInput[];
       siteVersionId?: string;
+      createSourceHostBinding?: boolean;
     }) => {
       calls.push("createSiteVersionFromMigration");
+      createSiteVersionInputs.push({
+        sourceUrl: input.sourceUrl,
+        createSourceHostBinding: input.createSourceHostBinding,
+        pages: input.pages,
+      });
       const id = input.siteVersionId ?? TARGET_VERSION_ID;
       versions.set(id, {
         ...liveVersion(),
@@ -212,9 +231,11 @@ function fakeDeps() {
     },
     buildDeterministicArtifactBundle: (input: { siteVersion: CanonicalSiteVersionSnapshot; renderMode: RenderMode }) => {
       calls.push("buildDeterministicArtifactBundle");
-      const props = input.siteVersion.pages[0]?.contentModel.sectionProps.hero as Record<string, unknown>;
+      const sectionProps = input.siteVersion.pages[0]?.contentModel.sectionProps ?? {};
+      const firstSectionId = Object.keys(sectionProps)[0] ?? "hero";
+      const props = (sectionProps.hero ?? sectionProps[firstSectionId] ?? {}) as Record<string, unknown>;
       const style = props.airshipDraftStyleOverride as Record<string, unknown> | undefined;
-      const html = `<html><body style="background:${String(style?.backgroundTint ?? "")}"><h1>${String(props.headline ?? "")}</h1><p>${String(props.subheading ?? "")}</p><button style="background:${String(style?.ctaColor ?? "")}">${String(props.cta ?? "")}</button></body></html>`;
+      const html = `<html><body style="background:${String(style?.backgroundTint ?? "")}"><h1>${String(props.headline ?? "")}</h1><p>${String(props.subheading ?? "")}</p><button style="background:${String(style?.ctaColor ?? "")}">${String(props.cta ?? "")}</button><script type="application/json">${JSON.stringify(props)}</script></body></html>`;
       return {
         siteId: input.siteVersion.siteId,
         siteVersionId: input.siteVersion.id,
@@ -492,4 +513,88 @@ test("creates an internal draft candidate from generic imported-site draft field
   assert.doesNotMatch(JSON.stringify(output), /airship-chs|CHS|chs\.si/);
   assert.equal(output.published, false);
   assert.equal(output.activePointerChanged, false);
+});
+
+test("creates ARIS internal draft candidate from source-evidence page without degraded artifact content or host binding", async () => {
+  const deps = fakeDeps();
+  deps.versions.set(AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID, {
+    ...liveVersion(),
+    id: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+    siteId: AIRSHIP_ARIS_RUNTIME_SITE_ID,
+    artifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+    pages: [
+      {
+        ...liveVersion().pages[0]!,
+        id: "aris-degraded-page-version",
+        siteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+        pageId: "aris-degraded-home",
+        title: "FALLBACK PREVIEW",
+        contentModel: {
+          sectionProps: {
+            "raw-block": {
+              headline: "FALLBACK PREVIEW",
+              subheading: "CAPTURE_DRIVEN Diagnostics:",
+            },
+          },
+        },
+      },
+    ],
+  });
+  deps.artifacts.set(AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID, {
+    ...liveArtifact(),
+    id: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+    siteId: AIRSHIP_ARIS_RUNTIME_SITE_ID,
+    siteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+    htmlByPath: { "/": "<html><body>FALLBACK PREVIEW raw-block CAPTURE_DRIVEN Diagnostics:</body></html>" },
+  });
+  const seed = buildArisAirshipMvpDraftSeed({ tenantId: "tenant-aris" });
+  const draft: AirshipSingleSiteDraftRecord = {
+    id: "11111111-2222-4333-8444-999999999999",
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    tenantId: seed.tenantId,
+    clientId: seed.clientId,
+    siteId: seed.siteId,
+    agencyId: seed.agencyId,
+    sourceUrl: seed.sourceUrl,
+    targetSiteVersionRefs: seed.targetSiteVersionRefs,
+    draftEdits: seed.draftEdits,
+    draftStatus: "draft",
+    version: 1,
+    semanticWatermark: "airship-single-site-editor-draft:aris-test",
+    metadata: seed.metadata,
+    createdByActorId: "superadmin",
+    updatedByActorId: "superadmin",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-15T00:00:00.000Z",
+    updatedAt: "2026-09-15T00:00:00.000Z",
+  };
+
+  const output = await createAirshipSingleSiteDraftCandidate(
+    {
+      draft,
+      actor: "superadmin",
+      sourceLiveSiteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+      sourceLiveRuntimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+      targetCandidateSiteVersionId: TARGET_VERSION_ID,
+    },
+    deps,
+  );
+  const candidate = deps.versions.get(TARGET_VERSION_ID);
+  const artifact = deps.artifacts.get(TARGET_ARTIFACT_ID);
+  const serialized = JSON.stringify({ output, candidate, artifact });
+
+  assert.equal(output.status, "created");
+  assert.equal(output.activePointerChanged, false);
+  assert.equal(output.published, false);
+  assert.equal(deps.createSiteVersionInputs[0]?.sourceUrl, "https://www.aris.si/");
+  assert.equal(deps.createSiteVersionInputs[0]?.createSourceHostBinding, false);
+  assert.equal(candidate?.siteId, AIRSHIP_ARIS_RUNTIME_SITE_ID);
+  assert.equal(candidate?.pages[0]?.title, "ARIS - Apple in Canton ponudba");
+  assert.equal(candidate?.pages[0]?.contentModel.sectionProps["aris-airship-mvp"]?.headline, "ARIS - Apple in Canton ponudba");
+  assert.equal(candidate?.pages[0]?.contentModel.sectionProps["aris-airship-mvp"]?.ctaLabel, "Želim ponudbo");
+  assert.match(artifact?.htmlByPath["/"] ?? "", /MacBook Air, Mac Studio in Canton Smart/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Blackmagic Design/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /prodaja@aris\.si/);
+  assert.doesNotMatch(serialized, /CHS|chs\.si|FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/);
 });

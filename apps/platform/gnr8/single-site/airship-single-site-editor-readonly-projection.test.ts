@@ -7,6 +7,12 @@ import {
   buildAirshipSingleSiteDraftSeed,
   buildAirshipSingleSiteEditorReadonlyProjection,
 } from "./airship-single-site-editor-readonly-projection";
+import {
+  AIRSHIP_ARIS_MIGRATION_ID,
+  AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+  AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+  arisAirshipDraftContainsForbiddenCopy,
+} from "./airship-aris-mvp-draft";
 import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
 import type { SingleSiteStudioReadonlyProjection } from "./single-site-studio-readonly-projection";
 
@@ -406,6 +412,140 @@ test("airship projection builds a second imported-site model without CHS copy", 
   assert.equal(JSON.stringify(model).includes("chs.si"), false);
   assert.equal(JSON.stringify(model).includes("CHS"), false);
   assert.equal(JSON.stringify(model).includes("Maver"), false);
+});
+
+test("airship projection generates a deterministic ARIS MVP draft from source evidence without CHS or diagnostics", () => {
+  const studioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    diagnosticsHref: `/gnr8/command-center/single-site-publish?migrationId=${AIRSHIP_ARIS_MIGRATION_ID}`,
+    summary: {
+      site: "aris.si",
+      sourceUrl: "https://www.aris.si/",
+      mvpStatus: "Simplified ARIS MVP draft generated from source evidence",
+      liveSiteUrl: "https://www.aris.si/",
+      activePointer: "unknown",
+      publishedCandidate: "DRAFT",
+    },
+    sourceTruth: {
+      tenantId: "tenant-aris",
+      clientId: "e61d1982-068f-4d84-bb6f-c3fbfc93f39b",
+      siteId: "ccc4e66e-5dcb-4556-a339-51dbe891cfd8",
+      ownershipSiteId: "ccc4e66e-5dcb-4556-a339-51dbe891cfd8",
+      runtimeSiteId: "site_6b859cc1599a5b6642dc",
+    },
+    sourceEvidence: [
+      { label: "raw HTML", status: "present", detail: "ARIS raw HTML evidence was captured." },
+      { label: "rendered DOM", status: "present", detail: "ARIS rendered DOM evidence was captured." },
+      { label: "metadata", status: "present", detail: "ARIS metadata evidence was captured." },
+      { label: "screenshots", status: "present", detail: "Two ARIS screenshots were captured." },
+    ],
+    previews: {
+      originalClone: {
+        ...studioProjection.previews.originalClone,
+        siteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+        runtimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+        route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID}/preview?mode=transformed`,
+      },
+      improvedCandidate: {
+        ...studioProjection.previews.improvedCandidate,
+        siteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+        runtimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+        route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID}/preview?mode=transformed`,
+      },
+    },
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    studioModel,
+  });
+  const serialized = JSON.stringify(model);
+
+  assert.equal(model.importedSite, "aris.si");
+  assert.equal(model.draftPanel.drafts.length, 5);
+  assert.equal(model.draftPanel.draftPreview?.hero.eyebrow, "ARIS");
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "ARIS - Apple in Canton ponudba");
+  assert.equal(
+    model.draftPanel.draftPreview?.hero.subheading,
+    "MacBook Air, Mac Studio in Canton Smart izdelki z osebnim svetovanjem, testiranjem in ponudbo v Ljubljani.",
+  );
+  assert.equal(model.draftPanel.draftPreview?.hero.primaryCtaLabel, "Želim ponudbo");
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.targetSectionPage === "Homepage / product offer section"), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("MacBook Pro 16 M3 Pro")), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.targetSectionPage === "Homepage / brand and category proof"), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("Blackmagic Design")), true);
+  assert.equal(arisAirshipDraftContainsForbiddenCopy(model.draftPanel.drafts), false);
+  assert.equal(serialized.includes("CHS"), false);
+  assert.equal(serialized.includes("chs.si"), false);
+  assert.equal(serialized.includes("FALLBACK PREVIEW"), false);
+  assert.equal(serialized.includes("raw-block"), false);
+  assert.equal(serialized.includes("CAPTURE_DRIVEN"), false);
+  assert.equal(serialized.includes("Diagnostics:"), false);
+  assert.equal(model.flags.publishes, false);
+  assert.equal(model.flags.activePointerMutation, false);
+});
+
+test("airship projection rejects persisted ARIS draft rows that contain CHS copy or diagnostics", () => {
+  const contaminatedDraft: AirshipSingleSiteDraftRecord = {
+    id: "draft-aris-contaminated",
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    tenantId: "tenant-aris",
+    clientId: "e61d1982-068f-4d84-bb6f-c3fbfc93f39b",
+    siteId: "ccc4e66e-5dcb-4556-a339-51dbe891cfd8",
+    agencyId: null,
+    sourceUrl: "https://www.aris.si/",
+    targetSiteVersionRefs: {
+      originalCloneSiteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+      originalCloneRuntimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+      improvedCandidateSiteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+      improvedCandidateRuntimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+    },
+    draftEdits: [
+      {
+        id: "airship-aris-home-headline",
+        fieldKey: "headline",
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Wrong saved row.",
+        proposedTextContent: "CHS helps modernize secure enterprise IT",
+        reasonForChange: "Wrong source.",
+        status: "edited",
+        previewImpact: "Should be ignored for ARIS.",
+      },
+    ],
+    draftStatus: "draft",
+    version: 1,
+    semanticWatermark: "airship-single-site-editor-draft:aris-contaminated",
+    metadata: { liveBoundary: "not_applied_to_live_site" },
+    createdByActorId: "superadmin",
+    updatedByActorId: "superadmin",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-15T00:00:00.000Z",
+    updatedAt: "2026-09-15T00:00:00.000Z",
+  };
+  const studioModel: SingleSiteStudioReadonlyProjection = {
+    ...studioProjection,
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    summary: {
+      site: "aris.si",
+      sourceUrl: "https://www.aris.si/",
+      mvpStatus: "Simplified ARIS MVP draft generated from source evidence",
+      liveSiteUrl: "https://www.aris.si/",
+      activePointer: "unknown",
+      publishedCandidate: "DRAFT",
+    },
+  };
+
+  const model = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    studioModel,
+    persistedDraft: contaminatedDraft,
+  });
+
+  assert.equal(model.draftPanel.persistence.draftId, null);
+  assert.equal(model.draftPanel.draftPreview?.hero.headline, "ARIS - Apple in Canton ponudba");
+  assert.equal(JSON.stringify(model).includes("CHS helps modernize"), false);
 });
 
 test("airship projection keeps CHS free of Maver copy unless CHS source evidence contains it", () => {
