@@ -1177,6 +1177,24 @@ Production verification status: `mvp_recovery_chs_airship_demo_ready`.
 
 Closeout: `docs/product/gnr8-airship-mvp-recovery-chs-demo-readiness-closeout.md`.
 
+## Airship MVP Recovery ARIS Demo Visual Acceptance
+
+Production verification status: `mvp_recovery_aris_demo_visual_accepted`.
+
+- Source URL: `https://www.aris.si/`.
+- GNR8-controlled preview URL: `https://aris-airship.app.pasadenagenerator.com/`.
+- Demo verdict: Gregor manually reviewed the preview URL and accepted ARIS as visually OK for internal MVP demo.
+- Demo target order: ARIS is the second imported-site demo target after CHS.
+- Migration/runtime refs: migration `ebf62324-1e51-4435-abd7-004722fb48d6`, runtime site `site_6b859cc1599a5b6642dc`, draft `5ed1b4da-eb06-4eee-bdc0-5b5cdec99707 / 1`.
+- Candidate refs: site version `6d712ab9-f48e-49a3-9c26-03915365d746`, artifact `8073651e-510b-47e7-8363-8a742b7967db`, candidate state `DRAFT`, artifact stage `shadow`.
+- Preview binding: `e73e5d73-cbbe-4ff7-9cdb-75c0ee6aa2ae`, hostname `aris-airship.app.pasadenagenerator.com`.
+- Active pointer: `null` / no row.
+- External site status: `https://www.aris.si/` remains external and untouched.
+- Demo boundary: internal demo only, not DNS cutover, launch approval, active pointer mutation, or live customer publish.
+- Forbidden mutation confirmation: no promote-to-live, rollback, dry-run, shadow-publish, source-capture, provider/DNS/domain/billing/env mutation, artifact/page-content mutation, runtime mutation, active pointer mutation, or AI provider call was run for this readback.
+
+Closeout: `docs/product/gnr8-airship-mvp-recovery-aris-demo-visual-acceptance-closeout.md`.
+
 ## Stop Criteria
 
 Stop immediately if:

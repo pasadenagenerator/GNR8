@@ -1554,6 +1554,16 @@ Canonical implementation:
 
 Canonical result: Airship now surfaces the recovered CHS GNR8-controlled demo URL `https://chs-airship.app.pasadenagenerator.com/` on the overview and visual editor surfaces, with active pointer target `92e476b9-67fc-408a-be3d-5c744aa0f3f6 / 5ac3716a-f29d-4648-bc86-a6942638ed53`, external `https://www.chs.si/` marked `external / not cut over`, host binding `89b2cafa-651a-4402-a947-0c3d45378a3d / ACTIVE / shadow / site_57d9665a3a5867edf6ef`, and compact admin-only rollback refs. No promote-to-live, rollback, dry-run, shadow-publish, source-capture, provider/DNS/domain/billing/env mutation, or active pointer mutation was run. Final status is `mvp_recovery_chs_airship_demo_ready`.
 
+## AIRSHIP MVP Recovery ARIS Demo Visual Acceptance
+
+Canonical Airship MVP recovery ARIS demo visual acceptance closeout:
+- `docs/product/gnr8-airship-mvp-recovery-aris-demo-visual-acceptance-closeout.md`
+- `docs/product/gnr8-airship-mvp-recovery-aris-draft-candidate-closeout.md`
+- `docs/product/gnr8-single-site-deployment-readiness-checklist.md`
+- `docs/product/gnr8-single-site-mvp-online-verification-checklist.md`
+
+Canonical result: Gregor manually reviewed the ARIS GNR8-controlled preview URL `https://aris-airship.app.pasadenagenerator.com/` and accepted it as visually OK for internal MVP demo, making ARIS the second imported-site demo target after CHS. The accepted ARIS demo remains preview-host only through binding `e73e5d73-cbbe-4ff7-9cdb-75c0ee6aa2ae` on hostname `aris-airship.app.pasadenagenerator.com` for runtime site `site_6b859cc1599a5b6642dc`; draft `5ed1b4da-eb06-4eee-bdc0-5b5cdec99707 / 1`, candidate `6d712ab9-f48e-49a3-9c26-03915365d746`, and artifact `8073651e-510b-47e7-8363-8a742b7967db` stay in demo/readback scope with candidate state `DRAFT`, artifact stage `shadow`, and active pointer `null / no row`. External `https://www.aris.si/` remains external and untouched. This is internal demo acceptance only, not DNS cutover, launch approval, active pointer mutation, or live customer publish. No promote-to-live, rollback, dry-run, shadow-publish, source-capture, runtime/artifact/page-content mutation, provider/DNS/domain/billing/env mutation, or AI provider call was run. Final status is `mvp_recovery_aris_demo_visual_accepted`.
+
 ## Secondary
 
 - `SYSTEM.md`

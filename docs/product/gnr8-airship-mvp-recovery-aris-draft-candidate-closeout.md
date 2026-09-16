@@ -58,3 +58,23 @@ MVP Recovery 15 generated the first simplified ARIS Airship MVP draft and intern
 - `finalSiteModelAvailable=false` and `rendererContractAvailable=false` are carried forward from the recovery context.
 - Source warning `PRIMARY_STYLESHEET_NOT_USED_IN_FINAL_HTML` is carried forward.
 - The result is a simplified one-page Airship MVP draft; exact clone fidelity is not claimed.
+
+## MVP Recovery 19 Visual Acceptance Addendum
+
+Status: `mvp_recovery_aris_demo_visual_accepted`.
+
+Gregor manually reviewed `https://aris-airship.app.pasadenagenerator.com/` and accepted ARIS as visually OK for internal MVP demo purposes. ARIS is now recorded as the second imported-site demo target after CHS.
+
+- Preview URL: `https://aris-airship.app.pasadenagenerator.com/`
+- Preview binding id: `e73e5d73-cbbe-4ff7-9cdb-75c0ee6aa2ae`
+- Preview hostname: `aris-airship.app.pasadenagenerator.com`
+- Candidate site version id: `6d712ab9-f48e-49a3-9c26-03915365d746`
+- Candidate artifact id: `8073651e-510b-47e7-8363-8a742b7967db`
+- Candidate state: `DRAFT`
+- Artifact stage: `shadow`
+- Active pointer: `null` / no row
+- External source site: `https://www.aris.si/` remains external and untouched.
+
+This acceptance is documentation/status only and covers the internal preview-host demo. It is not DNS cutover, live customer publish, launch approval, active pointer mutation, promote, rollback, dry-run, shadow-publish, source-capture, runtime mutation, provider/DNS/domain/billing/env mutation, or an AI provider call.
+
+Closeout: `docs/product/gnr8-airship-mvp-recovery-aris-demo-visual-acceptance-closeout.md`.
