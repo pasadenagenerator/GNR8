@@ -717,11 +717,13 @@ function importedSiteDrafts(input: {
       ...(config.fieldKey ? { fieldKey: config.fieldKey } : {}),
       sectionKey: config.sectionKey,
       targetSectionPage: config.targetSectionPage,
-      currentTextContentSummary: draftFieldSourceSummary({
-        studioModel: input.studioModel,
-        fieldKey: config.fieldKey,
-        fallback: config.fallbackSummary,
-      }),
+      currentTextContentSummary: config.fieldKey
+        ? draftFieldSourceSummary({
+            studioModel: input.studioModel,
+            fieldKey: config.fieldKey,
+            fallback: config.fallbackSummary,
+          })
+        : config.fallbackSummary,
       proposedTextContent: config.proposedTextContent ?? "",
       reasonForChange: config.reasonForChange,
       status: "proposed",
