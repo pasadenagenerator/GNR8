@@ -132,17 +132,21 @@ test("airship projection generates the first concrete CHS AI draft and local-onl
 
   assert.equal(model.aiImprovementStatus.label, "Editable AI draft generated");
   assert.equal(model.aiImprovementStatus.deterministicEditableChangesGenerated, true);
-  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.drafts.length, 7);
   assert.equal(model.draftPanel.drafts.every((draft) => draft.status === "proposed"), true);
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy(model.draftPanel.drafts), false);
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy(model.draftPanel.draftPreview), false);
   assert.equal(
     model.draftPanel.drafts.map((draft) => draft.targetSectionPage).join("|"),
-    "Homepage / hero headline|Homepage / hero subheading|Homepage / contact call-to-action",
+    "Homepage / hero headline|Homepage / hero subheading|Homepage / contact call-to-action|Homepage / offers or services|Homepage / proof and benefits|Homepage / approach and process|Homepage / footer demo note",
   );
   assert.deepEqual(
     model.importedSiteModel.editableSections.find((section) => section.key === "hero")?.mappedDraftFieldIds,
     [CHS_HEADLINE_DRAFT_ID, CHS_SUBHEADING_DRAFT_ID],
+  );
+  assert.deepEqual(
+    model.importedSiteModel.editableSections.map((section) => section.label),
+    ["Hero / intro", "Offers / Services", "Proof / Benefits", "Approach / Process", "CTA / Contact", "Footer / Demo note", "Source material"],
   );
   assert.equal(model.importedSiteModel.sourceEvidenceSummary.status, "source_supported");
   assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent === "Less risk. More control. Better IT."), true);
@@ -406,7 +410,7 @@ test("airship projection builds a second imported-site model without CHS copy", 
 
   assert.equal(model.importedSite, "luna.example");
   assert.equal(model.demoReadiness, null);
-  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.drafts.length, 7);
   assert.equal(model.draftPanel.draftPreview?.hero.eyebrow, "LUNA");
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "Luna Books for curious teams");
   assert.equal(model.draftPanel.draftPreview?.hero.subheading, "Editorial research, launch notes, and reading operations for product teams.");
@@ -652,7 +656,7 @@ test("airship projection opens CHS onboarding editor target when persisted evide
   });
 
   assert.equal(model.links.airshipEditor, `/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`);
-  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.drafts.length, 7);
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS");
   assert.equal(model.draftPanel.draftPreview?.hero.subheading, "Imported chs.si homepage evidence is available for Airship draft editing.");
   assert.equal(model.importedSiteModel.editableSections.find((section) => section.key === "hero")?.mappedDraftFieldIds.length, 2);
@@ -730,7 +734,7 @@ test("airship projection reloads saved CHS draft edits even when evidence rows a
   });
 
   assert.equal(model.draftPanel.persistence.draftId, "draft-chs-production-existing");
-  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.drafts.length, 7);
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "CHS helps modernize & secure enterprise IT");
   assert.equal(
     model.draftPanel.draftPreview?.hero.subheading,
@@ -826,7 +830,7 @@ test("airship projection opens a generic coarse-evidence workspace without CHS o
   const serialized = JSON.stringify(model);
 
   assert.equal(model.importedSite, "atlas.example");
-  assert.equal(model.draftPanel.drafts.length, 3);
+  assert.equal(model.draftPanel.drafts.length, 7);
   assert.equal(model.draftPanel.draftPreview?.hero.eyebrow, "Atlas");
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "Atlas");
   assert.equal(model.draftPanel.draftPreview?.hero.subheading, "Imported atlas.example homepage evidence is available for Airship draft editing.");

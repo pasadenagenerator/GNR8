@@ -515,6 +515,96 @@ test("creates an internal draft candidate from generic imported-site draft field
   assert.equal(output.activePointerChanged, false);
 });
 
+test("materializes saved multi-section Airship draft edits into internal candidate content", async () => {
+  const deps = fakeDeps();
+  const draft = savedDraft();
+  draft.version = 12;
+  draft.draftEdits = [
+    ...draft.draftEdits.filter((edit) => edit.id !== "airship-chs-home-contact-cta"),
+    {
+      id: "airship-chs-home-services",
+      sectionKey: "offers",
+      targetSectionPage: "Homepage / offers or services",
+      currentTextContentSummary: "CHS service evidence.",
+      proposedTextContent: "Cybersecurity, data systems, hybrid infrastructure, and managed support.",
+      reasonForChange: "Saved services section.",
+      status: "edited",
+      previewImpact: "Services section appears in internal preview only.",
+    },
+    {
+      id: "airship-chs-home-benefits",
+      sectionKey: "proof",
+      targetSectionPage: "Homepage / proof and benefits",
+      currentTextContentSummary: "CHS proof evidence.",
+      proposedTextContent: "Regional expertise, practical support, and source-supported IT specialization.",
+      reasonForChange: "Saved proof section.",
+      status: "accepted",
+      previewImpact: "Proof section appears in internal preview only.",
+    },
+    {
+      id: "airship-chs-home-process",
+      sectionKey: "approach",
+      targetSectionPage: "Homepage / approach and process",
+      currentTextContentSummary: "CHS process evidence.",
+      proposedTextContent: "Assess risk, plan implementation, and support operations after launch.",
+      reasonForChange: "Saved approach section.",
+      status: "edited",
+      previewImpact: "Approach section appears in internal preview only.",
+    },
+    {
+      id: "airship-chs-home-contact-cta",
+      fieldKey: "ctaLabel",
+      sectionKey: "cta",
+      targetSectionPage: "Homepage / contact call-to-action",
+      currentTextContentSummary: "Existing CHS contact action.",
+      proposedTextContent: "Contact CHS at sales@chs.si",
+      reasonForChange: "Accepted contact CTA.",
+      status: "accepted",
+      previewImpact: "CTA appears in internal preview only.",
+    },
+    {
+      id: "airship-chs-home-demo-note",
+      sectionKey: "footer",
+      targetSectionPage: "Homepage / footer demo note",
+      currentTextContentSummary: "Preview boundary.",
+      proposedTextContent: "Internal GNR8 demo preview for CHS. https://www.chs.si/ remains external and unchanged.",
+      reasonForChange: "Keep demo boundary visible.",
+      status: "edited",
+      previewImpact: "Footer note appears in internal preview only.",
+    },
+  ];
+
+  const output = await createAirshipSingleSiteDraftCandidate(
+    {
+      draft,
+      actor: "superadmin",
+      targetCandidateSiteVersionId: TARGET_VERSION_ID,
+    },
+    deps,
+  );
+
+  const candidate = deps.versions.get(TARGET_VERSION_ID);
+  const artifact = deps.artifacts.get(TARGET_ARTIFACT_ID);
+  const home = candidate?.pages[0];
+  const serialized = JSON.stringify({ output, candidate, artifact });
+
+  assert.equal(output.status, "created");
+  assert.equal(output.appliedEdits.length, 7);
+  assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-offers"), true);
+  assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-proof"), true);
+  assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-approach"), true);
+  assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-footer"), true);
+  assert.equal(home?.contentModel.sectionProps["airship-draft-offers"]?.body, "Cybersecurity, data systems, hybrid infrastructure, and managed support.");
+  assert.equal(home?.contentModel.sectionProps["airship-draft-proof"]?.body, "Regional expertise, practical support, and source-supported IT specialization.");
+  assert.equal(home?.contentModel.sectionProps["airship-draft-footer"]?.body, "Internal GNR8 demo preview for CHS. https://www.chs.si/ remains external and unchanged.");
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Cybersecurity, data systems, hybrid infrastructure, and managed support/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Regional expertise, practical support, and source-supported IT specialization/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Internal GNR8 demo preview for CHS/);
+  assert.doesNotMatch(serialized, /Recovered from:|\/tmp\/|Recovered Section|FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/);
+  assert.equal(output.published, false);
+  assert.equal(output.activePointerChanged, false);
+});
+
 test("creates ARIS internal draft candidate from source-evidence page without degraded artifact content or host binding", async () => {
   const deps = fakeDeps();
   deps.versions.set(AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID, {

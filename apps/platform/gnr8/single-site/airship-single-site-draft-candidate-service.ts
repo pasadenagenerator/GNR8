@@ -18,6 +18,7 @@ import {
   sanitizeDraftStyleSettings,
   type AirshipSingleSiteDraftEdit,
   type AirshipSingleSiteDraftRecord,
+  type AirshipSingleSiteDraftSectionKey,
   type AirshipSingleSiteDraftStyleSettings,
 } from "./airship-single-site-draft-service";
 import { maybeBuildArisAirshipMvpEvidenceSourceVersion } from "./airship-aris-mvp-draft";
@@ -171,6 +172,15 @@ function rejectedEdit(edit: AirshipSingleSiteDraftEdit | undefined): AirshipSing
 }
 
 type AirshipDraftFieldKey = "headline" | "subheading" | "ctaLabel";
+type AirshipDraftSectionPayload = {
+  key: AirshipSingleSiteDraftSectionKey;
+  label: string;
+  heading: string;
+  body: string;
+  items: string[];
+  ctaLabel: string | null;
+  draftEditIds: string[];
+};
 
 function draftFieldKey(draft: Pick<AirshipSingleSiteDraftEdit, "id" | "targetSectionPage"> & {
   fieldKey?: unknown;
@@ -185,6 +195,92 @@ function draftFieldKey(draft: Pick<AirshipSingleSiteDraftEdit, "id" | "targetSec
 
 function draftEditForField(drafts: AirshipSingleSiteDraftEdit[], fieldKey: AirshipDraftFieldKey): AirshipSingleSiteDraftEdit | undefined {
   return drafts.find((draft) => draftFieldKey(draft) === fieldKey);
+}
+
+function draftSectionKey(draft: Pick<AirshipSingleSiteDraftEdit, "id" | "targetSectionPage"> & {
+  fieldKey?: unknown;
+  sectionKey?: unknown;
+}): AirshipSingleSiteDraftSectionKey | null {
+  if (
+    draft.sectionKey === "hero" ||
+    draft.sectionKey === "offers" ||
+    draft.sectionKey === "proof" ||
+    draft.sectionKey === "approach" ||
+    draft.sectionKey === "cta" ||
+    draft.sectionKey === "footer"
+  ) {
+    return draft.sectionKey;
+  }
+  const fieldKey = draftFieldKey(draft);
+  if (fieldKey === "headline" || fieldKey === "subheading") return "hero";
+  if (fieldKey === "ctaLabel") return "cta";
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/offer|service|product|ponud/.test(haystack)) return "offers";
+  if (/proof|benefit|trust|brand|category|reference|partner/.test(haystack)) return "proof";
+  if (/approach|process|method|workflow|delivery/.test(haystack)) return "approach";
+  if (/footer|demo.note|boundary/.test(haystack)) return "footer";
+  if (/cta|contact|inquiry|call.to.action/.test(haystack)) return "cta";
+  return null;
+}
+
+function sectionLabel(sectionKey: AirshipSingleSiteDraftSectionKey): string {
+  switch (sectionKey) {
+    case "hero":
+      return "Hero";
+    case "offers":
+      return "Offers / Services";
+    case "proof":
+      return "Proof / Benefits";
+    case "approach":
+      return "Approach / Process";
+    case "cta":
+      return "CTA / Contact";
+    case "footer":
+      return "Footer / Demo note";
+  }
+}
+
+function sectionHeading(sectionKey: AirshipSingleSiteDraftSectionKey): string {
+  switch (sectionKey) {
+    case "hero":
+      return "Homepage";
+    case "offers":
+      return "What the improved draft offers";
+    case "proof":
+      return "Proof and benefits";
+    case "approach":
+      return "Approach";
+    case "cta":
+      return "Contact";
+    case "footer":
+      return "Internal demo boundary";
+  }
+}
+
+function splitSectionItems(value: string): string[] {
+  return value
+    .split(/(?:\.\s+|;\s+|\n+)/)
+    .map((item) => item.replace(/\.$/, "").trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 4);
+}
+
+function airshipDraftSectionsFromAppliedEdits(edits: AirshipSingleSiteDraftEdit[]): AirshipDraftSectionPayload[] {
+  const sectionKeys: AirshipSingleSiteDraftSectionKey[] = ["offers", "proof", "approach", "cta", "footer"];
+  return sectionKeys.map((sectionKey) => {
+    const sectionEdits = edits.filter((edit) => draftSectionKey(edit) === sectionKey);
+    const body = sectionEdits.map((edit) => edit.proposedTextContent).filter(Boolean).join(" ");
+    const ctaLabel = sectionEdits.find((edit) => draftFieldKey(edit) === "ctaLabel")?.proposedTextContent ?? null;
+    return {
+      key: sectionKey,
+      label: sectionLabel(sectionKey),
+      heading: sectionKey === "cta" ? ctaLabel ?? sectionHeading(sectionKey) : sectionHeading(sectionKey),
+      body,
+      items: sectionKey === "offers" || sectionKey === "proof" || sectionKey === "approach" ? splitSectionItems(body) : [],
+      ctaLabel,
+      draftEditIds: sectionEdits.map((edit) => edit.id),
+    };
+  }).filter((section) => text(section.body) || text(section.ctaLabel));
 }
 
 function styleSettingsFromDraft(draft: AirshipSingleSiteDraftRecord): AirshipSingleSiteDraftStyleSettings {
@@ -245,6 +341,7 @@ function applyAirshipHeroEdits(input: {
   subheading: string;
   ctaLabel: string | null;
   rejectedCtaText: string | null;
+  draftSections: AirshipDraftSectionPayload[];
   styleSettings: AirshipSingleSiteDraftStyleSettings;
 }): CanonicalPageVersionInput[] {
   return input.sourceVersion.pages.map((sourcePage, index) => {
@@ -307,9 +404,37 @@ function applyAirshipHeroEdits(input: {
       ...page.contentModel,
       sectionProps: {
         ...sectionProps(page),
-        [targetSectionId]: stripRejectedCtaText(nextSectionProps, input.rejectedCtaText) as Record<string, unknown>,
+        [targetSectionId]: stripRejectedCtaText({
+          ...nextSectionProps,
+          airshipDraftSections: input.draftSections,
+        }, input.rejectedCtaText) as Record<string, unknown>,
+        ...Object.fromEntries(input.draftSections.map((section) => [
+          `airship-draft-${section.key}`,
+          stripRejectedCtaText({
+            heading: section.heading,
+            body: section.body,
+            items: section.items,
+            ctaLabel: section.ctaLabel,
+            airshipDraftSection: section,
+          }, input.rejectedCtaText) as Record<string, unknown>,
+        ])),
       },
     };
+    const existingSectionIds = new Set((page.structureModel.sections ?? []).map((section) => section.id));
+    const maxOrder = Math.max(-1, ...(page.structureModel.sections ?? []).map((section) => section.order));
+    const addedSections = input.draftSections
+      .filter((section) => !existingSectionIds.has(`airship-draft-${section.key}`))
+      .map((section, sectionIndex) => ({
+        id: `airship-draft-${section.key}`,
+        type: section.key === "cta" ? "cta.airship" : section.key === "footer" ? "footer.airship" : "content.airship",
+        order: maxOrder + sectionIndex + 1,
+      }));
+    if (addedSections.length > 0) {
+      page.structureModel = {
+        ...page.structureModel,
+        sections: [...(page.structureModel.sections ?? []), ...addedSections],
+      };
+    }
     page.styleTokens = {
       ...page.styleTokens,
       "airship.hero.paddingTop": `${input.styleSettings.heroTopPadding}px`,
@@ -427,21 +552,22 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const ctaDraftEdit = draftEditForField(input.draft.draftEdits, "ctaLabel");
   const ctaEdit = acceptedOrSavedEdit(ctaDraftEdit);
   const rejectedCta = rejectedEdit(ctaDraftEdit);
+  const acceptedEdits = input.draft.draftEdits.filter((edit) => acceptedOrSavedEdit(edit));
+  const rejectedEdits = input.draft.draftEdits.filter((edit) => rejectedEdit(edit));
 
-  const appliedEdits = [headlineEdit, subheadingEdit, ctaEdit].filter((edit): edit is AirshipSingleSiteDraftEdit => Boolean(edit)).map((edit) => ({
+  const appliedEdits = acceptedEdits.map((edit) => ({
     draftEditId: edit.id,
     targetSectionPage: edit.targetSectionPage,
     appliedTextContent: edit.proposedTextContent,
   }));
-  const skippedEdits = rejectedCta
-    ? [{
-        draftEditId: rejectedCta.id,
-        targetSectionPage: rejectedCta.targetSectionPage,
-        skippedTextContent: rejectedCta.proposedTextContent,
-        reason: "rejected" as const,
-      }]
-    : [];
+  const skippedEdits = rejectedEdits.map((edit) => ({
+    draftEditId: edit.id,
+    targetSectionPage: edit.targetSectionPage,
+    skippedTextContent: edit.proposedTextContent,
+    reason: "rejected" as const,
+  }));
   const styleSettings = styleSettingsFromDraft(input.draft);
+  const draftSections = airshipDraftSectionsFromAppliedEdits(acceptedEdits);
   const semanticInputWatermark = airshipDraftCandidateSemanticInput({
     draft: input.draft,
     sourceLiveSiteVersionId,
@@ -471,6 +597,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
     subheading: subheadingEdit.proposedTextContent,
     ctaLabel: ctaEdit?.proposedTextContent ?? null,
     rejectedCtaText: rejectedCta?.proposedTextContent ?? null,
+    draftSections,
     styleSettings,
   });
   const provenance: AirshipDraftCandidateProvenance = {

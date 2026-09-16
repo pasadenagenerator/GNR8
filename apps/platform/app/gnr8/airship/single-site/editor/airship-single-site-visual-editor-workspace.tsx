@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSPrope
 import type {
   AirshipImportedSiteEditorModel,
   AirshipImportedSiteEditableSection,
+  AirshipImportedSiteEditorSectionKey,
   AirshipSingleSiteDraftFieldKey,
   AirshipSingleSiteDraftPreview,
   AirshipSingleSiteDraftStyleSettings,
@@ -80,7 +81,7 @@ type DraftActionResponse = {
 
 type TextFieldKey = AirshipSingleSiteDraftFieldKey;
 type StyleFieldKey = "topPadding" | "bottomPadding" | "backgroundTint" | "ctaColor";
-type EditorSectionKey = "hero" | "cta" | "source";
+type EditorSectionKey = AirshipImportedSiteEditorSectionKey;
 type EditorViewportKey = "desktop" | "tablet" | "mobile";
 type InspectorTabKey = "agent" | "edit" | "css" | "dom";
 export type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
@@ -137,7 +138,11 @@ const ctaOptions = [
 
 const fallbackSectionOptions: AirshipImportedSiteEditableSection[] = [
   { key: "hero", label: "Hero / intro", detail: "Headline, subheading, spacing, tint", mappedDraftFieldIds: [], sourceStatus: "partial source-supported hero draft fields" },
-  { key: "cta", label: "CTA", detail: "Primary action label and color", mappedDraftFieldIds: [], sourceStatus: "CTA draft field unavailable from source evidence" },
+  { key: "offers", label: "Offers / Services", detail: "Offer/service copy and cards", mappedDraftFieldIds: [], sourceStatus: "services section draft unavailable" },
+  { key: "proof", label: "Proof / Benefits", detail: "Proof points and benefits", mappedDraftFieldIds: [], sourceStatus: "proof section draft unavailable" },
+  { key: "approach", label: "Approach / Process", detail: "Process or approach copy", mappedDraftFieldIds: [], sourceStatus: "approach section draft unavailable" },
+  { key: "cta", label: "CTA / Contact", detail: "Primary action label and color", mappedDraftFieldIds: [], sourceStatus: "CTA draft field unavailable from source evidence" },
+  { key: "footer", label: "Footer / Demo note", detail: "Preview boundary note", mappedDraftFieldIds: [], sourceStatus: "footer demo note unavailable" },
   { key: "source", label: "Source material", detail: "Imported-site evidence and internal draft refs", mappedDraftFieldIds: [], sourceStatus: "source material readback only" },
 ];
 
@@ -387,6 +392,29 @@ function draftFieldKey(draft: AirshipSingleSiteImprovementDraft): TextFieldKey |
   return null;
 }
 
+function draftSectionKey(draft: AirshipSingleSiteImprovementDraft): Exclude<EditorSectionKey, "source"> | null {
+  if (
+    draft.sectionKey === "hero" ||
+    draft.sectionKey === "offers" ||
+    draft.sectionKey === "proof" ||
+    draft.sectionKey === "approach" ||
+    draft.sectionKey === "cta" ||
+    draft.sectionKey === "footer"
+  ) {
+    return draft.sectionKey;
+  }
+  const field = draftFieldKey(draft);
+  if (field === "headline" || field === "subheading") return "hero";
+  if (field === "ctaLabel") return "cta";
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/offer|service|product|ponud/.test(haystack)) return "offers";
+  if (/proof|benefit|trust|brand|category|reference|partner/.test(haystack)) return "proof";
+  if (/approach|process|method|workflow|delivery/.test(haystack)) return "approach";
+  if (/footer|demo.note|boundary/.test(haystack)) return "footer";
+  if (/cta|contact|inquiry|call.to.action/.test(haystack)) return "cta";
+  return null;
+}
+
 function draftIdForField(field: TextFieldKey, drafts: AirshipSingleSiteImprovementDraft[]): string | null {
   return drafts.find((draft) => draftFieldKey(draft) === field)?.id ?? null;
 }
@@ -416,21 +444,19 @@ export function applyAirshipHeroTextFieldEdit(input: {
 export function sectionTextFields(section: EditorSectionKey): TextFieldKey[] {
   if (section === "cta") return ["ctaLabel"];
   if (section === "source") return [];
+  if (section !== "hero") return [];
   return ["headline", "subheading"];
 }
 
 export function sectionStyleFields(section: EditorSectionKey): StyleFieldKey[] {
   if (section === "cta") return ["ctaColor"];
   if (section === "source") return [];
+  if (section === "offers" || section === "proof" || section === "approach" || section === "footer") return ["backgroundTint"];
   return ["topPadding", "bottomPadding", "backgroundTint"];
 }
 
 export function mappedAirshipDraftFieldIdsForSection(section: EditorSectionKey, drafts: AirshipSingleSiteImprovementDraft[] = []): string[] {
-  if (section === "hero") return drafts.filter((draft) => {
-    const field = draftFieldKey(draft);
-    return field === "headline" || field === "subheading";
-  }).map((draft) => draft.id);
-  if (section === "cta") return drafts.filter((draft) => draftFieldKey(draft) === "ctaLabel").map((draft) => draft.id);
+  if (section !== "source") return drafts.filter((draft) => draftSectionKey(draft) === section).map((draft) => draft.id);
   return drafts.map((draft) => draft.id);
 }
 
@@ -450,6 +476,14 @@ export function deriveAirshipStyleValueRows(section: EditorSectionKey, fields: A
     return [
       { label: "background", value: "#f8fafc" },
       { label: "border-top", value: "1px solid #e2e8f0" },
+    ];
+  }
+  if (section === "offers" || section === "proof" || section === "approach" || section === "footer") {
+    return [
+      { label: "background", value: fields.backgroundTint },
+      { label: "accent-color", value: fields.ctaColor },
+      { label: "card-style", value: section === "footer" ? "compact boundary note" : "compact bordered cards" },
+      { label: "spacing", value: "section padding 34px" },
     ];
   }
   return [
@@ -515,6 +549,25 @@ export function deriveAirshipSelectedElementMetadata(input: {
       domSectionId: "airship-preview-source-material",
       role: "source evidence strip",
       sourceStatus: option?.sourceStatus ?? "source material readback only",
+      draftStatus,
+      mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
+      sizeLabel: `full frame width in ${input.viewportLabel}`,
+      internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
+    };
+  }
+  if (input.section === "offers" || input.section === "proof" || input.section === "approach" || input.section === "footer") {
+    const roleBySection: Record<"offers" | "proof" | "approach" | "footer", string> = {
+      offers: "section / offers and services",
+      proof: "section / proof and benefits",
+      approach: "section / approach and process",
+      footer: "contentinfo / internal demo note",
+    };
+    return {
+      section: input.section,
+      label: sectionLabel,
+      domSectionId: `airship-preview-${input.section}`,
+      role: roleBySection[input.section],
+      sourceStatus: option?.sourceStatus ?? "draft section metadata",
       draftStatus,
       mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
       sizeLabel: `full frame width in ${input.viewportLabel}`,
@@ -671,6 +724,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const selectedViewport = viewportOptions.find((option) => option.key === viewport) ?? viewportOptions[0];
   const sectionOptions = props.importedSiteModel?.editableSections.length ? props.importedSiteModel.editableSections : fallbackSectionOptions;
   const selectedSectionLabel = sectionOptions.find((section) => section.key === selectedSection)?.label ?? "Hero / intro";
+  const previewSections = props.draftPreview.sections ?? [];
   const saveStateStatus = saveStateCopy[saveState];
   const selectedElementMetadata = deriveAirshipSelectedElementMetadata({
     section: selectedSection,
@@ -741,6 +795,24 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     setEditableDrafts(edited.drafts);
     markLocalChange("Unsaved draft editor text change. Not live. Not published.", {
       label: `${textFieldLabels[field]} changed locally`,
+      scope: "text",
+      state: "local",
+    });
+  }
+
+  function updateDraftTextById(draftId: string, value: string) {
+    const draft = editableDrafts.find((item) => item.id === draftId);
+    if (!draft || draft.proposedTextContent === value) return;
+    rememberUndoSnapshot();
+    setEditableDrafts((current) =>
+      current.map((item) =>
+        item.id === draftId
+          ? { ...item, proposedTextContent: value, status: item.status === "accepted" || item.status === "rejected" || item.status === "proposed" ? "edited" : item.status }
+          : item,
+      ),
+    );
+    markLocalChange("Unsaved draft editor section change. Not live. Not published.", {
+      label: `${draft.targetSectionPage} changed locally`,
       scope: "text",
       state: "local",
     });
@@ -890,6 +962,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         const draftId = draftIdForField(field, editableDrafts);
         if (!draftId) continue;
         latestDraft = await saveDraftText(draftId, nextFields[field]);
+      }
+      for (const draft of editableDrafts) {
+        if (draftFieldKey(draft)) continue;
+        latestDraft = await saveDraftText(draft.id, draft.proposedTextContent);
       }
       if (styleKey(nextFields) !== savedStyleKeyRef.current) {
         latestDraft = await saveStyleSettings(nextFields);
@@ -1399,6 +1475,48 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           background: #eff6ff;
           padding-top: 54px;
         }
+        .airship-preview-section {
+          position: relative;
+          display: grid;
+          gap: 12px;
+          border-top: 1px solid #e2e8f0;
+          background: #ffffff;
+          padding: 34px 44px;
+          cursor: pointer;
+          outline: 2px solid transparent;
+          outline-offset: -2px;
+        }
+        .airship-preview-section[data-selected="true"] {
+          outline-color: #1d4ed8;
+          background: #f8fbff;
+          padding-top: 58px;
+        }
+        .airship-preview-section h3 {
+          margin: 0;
+          color: #0f172a;
+          font-size: 22px;
+          line-height: 1.22;
+        }
+        .airship-preview-section p {
+          margin: 0;
+          color: #475569;
+          font-size: 14px;
+          line-height: 1.55;
+        }
+        .airship-preview-card-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .airship-preview-card {
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #ffffff;
+          padding: 12px;
+          color: #334155;
+          font-size: 13px;
+          line-height: 1.45;
+        }
         .airship-inspector {
           position: absolute;
           top: 20px;
@@ -1658,6 +1776,12 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           .airship-preview-headline {
             font-size: 34px;
           }
+          .airship-preview-section {
+            padding: 26px 22px;
+          }
+          .airship-preview-card-grid {
+            grid-template-columns: 1fr;
+          }
           .airship-bottom-toolbar {
             left: 12px;
             right: 12px;
@@ -1848,6 +1972,41 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                     ) : null}
                   </div>
                 </section>
+                {previewSections.filter((section) => section.key !== "hero").map((section) => (
+                  <section
+                    key={section.key}
+                    id={`airship-preview-${section.key}`}
+                    data-airship-editor-canvas={section.key}
+                    data-selected={selectedSection === section.key}
+                    className="airship-preview-section"
+                    aria-label={section.label}
+                    onClick={() => selectSection(section.key)}
+                    style={{
+                      background: section.key === "footer" ? "#f8fafc" : "#ffffff",
+                    }}
+                  >
+                    {selectedSection === section.key ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                    <div className="airship-preview-eyebrow">{section.eyebrow}</div>
+                    <h3>{section.heading}</h3>
+                    {section.body ? <p>{section.body}</p> : null}
+                    {section.items.length > 0 ? (
+                      <div className="airship-preview-card-grid">
+                        {section.items.map((item) => (
+                          <div key={item} className="airship-preview-card">{item}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {section.ctaLabel ? (
+                      <button
+                        type="button"
+                        className="airship-preview-cta"
+                        style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor, width: "fit-content" }}
+                      >
+                        {section.ctaLabel}
+                      </button>
+                    ) : null}
+                  </section>
+                ))}
                 <button
                   id="airship-preview-source-material"
                   type="button"
@@ -2100,6 +2259,27 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <span className="airship-control-note">Persists to Airship draft on save</span>
                   {controlLabel("CTA label", <input value={fields.ctaLabel} onChange={(event) => updateTextField("ctaLabel", event.target.value)} style={inputStyle()} />)}
                   <div className="airship-muted">CTA text saves to the Airship draft only.</div>
+                </div>
+              ) : null}
+
+              {selectedSection !== "hero" && selectedSection !== "cta" && selectedSection !== "source" ? (
+                <div className="airship-control-group" style={{ borderTop: 0, paddingTop: 0 }}>
+                  <span className="airship-control-note">Persists to Airship draft on save</span>
+                  {selectedDrafts.length > 0 ? selectedDrafts.map((draft) => (
+                    <React.Fragment key={draft.id}>
+                      {controlLabel(
+                        draft.targetSectionPage,
+                        <textarea
+                          rows={5}
+                          value={draft.proposedTextContent}
+                          onChange={(event) => updateDraftTextById(draft.id, event.target.value)}
+                          style={inputStyle(true)}
+                        />,
+                      )}
+                    </React.Fragment>
+                  )) : (
+                    <div className="airship-muted">No editable draft rows are mapped to this section yet.</div>
+                  )}
                 </div>
               ) : null}
 

@@ -72,6 +72,7 @@ export function buildArisAirshipMvpDraftEdits(): AirshipSingleSiteDraftEdit[] {
     {
       id: "airship-aris-home-headline",
       fieldKey: "headline",
+      sectionKey: "hero",
       targetSectionPage: "Homepage / hero headline",
       currentTextContentSummary: "Source evidence and public ARIS page show ARIS identity with Apple and Canton product-offer orientation.",
       proposedTextContent: ARIS_HEADLINE,
@@ -82,6 +83,7 @@ export function buildArisAirshipMvpDraftEdits(): AirshipSingleSiteDraftEdit[] {
     {
       id: "airship-aris-home-subheading",
       fieldKey: "subheading",
+      sectionKey: "hero",
       targetSectionPage: "Homepage / hero subheading",
       currentTextContentSummary: "Source evidence and public ARIS page show MacBook Air, Mac Studio, Canton Smart, consultation, testing, and offer-request content.",
       proposedTextContent: ARIS_SUBHEADING,
@@ -91,6 +93,7 @@ export function buildArisAirshipMvpDraftEdits(): AirshipSingleSiteDraftEdit[] {
     },
     {
       id: "airship-aris-home-product-offers",
+      sectionKey: "offers",
       targetSectionPage: "Homepage / product offer section",
       currentTextContentSummary: "Source evidence includes Apple/Mac offers and Canton audio products.",
       proposedTextContent: ARIS_PRODUCT_OFFER,
@@ -100,6 +103,7 @@ export function buildArisAirshipMvpDraftEdits(): AirshipSingleSiteDraftEdit[] {
     },
     {
       id: "airship-aris-home-brand-category-proof",
+      sectionKey: "proof",
       targetSectionPage: "Homepage / brand and category proof",
       currentTextContentSummary: "Source evidence includes ARIS identity plus external brand/category links.",
       proposedTextContent: ARIS_BRAND_PROOF,
@@ -110,6 +114,7 @@ export function buildArisAirshipMvpDraftEdits(): AirshipSingleSiteDraftEdit[] {
     {
       id: "airship-aris-home-ctaLabel",
       fieldKey: "ctaLabel",
+      sectionKey: "cta",
       targetSectionPage: "Homepage / contact inquiry call-to-action",
       currentTextContentSummary: "Source evidence includes inquiry form, newsletter opt-in, working hours, phone, email, and Ljubljana address.",
       proposedTextContent: ARIS_CTA,

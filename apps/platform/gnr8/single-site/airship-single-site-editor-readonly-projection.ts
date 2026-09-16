@@ -14,6 +14,7 @@ import {
   DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS,
   sanitizeDraftStyleSettings,
   type AirshipSingleSiteDraftRecord,
+  type AirshipSingleSiteDraftSectionKey,
   type AirshipSingleSiteDraftStyleSettings,
 } from "./airship-single-site-draft-service";
 import {
@@ -56,10 +57,12 @@ export const AIRSHIP_CHS_MIGRATION_ID = SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVID
 
 export type AirshipSingleSiteDraftFieldKey = "headline" | "subheading" | "ctaLabel";
 export type AirshipSingleSiteDraftStatus = "proposed" | "accepted" | "rejected" | "edited";
+export type AirshipImportedSiteEditorSectionKey = AirshipSingleSiteDraftSectionKey | "source";
 
 export type AirshipSingleSiteImprovementDraft = {
   id: string;
   fieldKey?: AirshipSingleSiteDraftFieldKey;
+  sectionKey?: AirshipSingleSiteDraftSectionKey;
   targetSectionPage: string;
   currentTextContentSummary: string;
   proposedTextContent: string;
@@ -80,6 +83,15 @@ export type AirshipSingleSiteDraftPreview = {
     primaryCtaLabel: string | null;
     secondaryContactText: string | null;
   };
+  sections: Array<{
+    key: AirshipSingleSiteDraftSectionKey;
+    label: string;
+    eyebrow: string;
+    heading: string;
+    body: string;
+    items: string[];
+    ctaLabel: string | null;
+  }>;
 };
 
 export type AirshipSingleSiteRecommendationMaterial = {
@@ -96,7 +108,7 @@ export type AirshipSingleSiteRecommendationMaterial = {
 };
 
 export type AirshipImportedSiteEditableSection = {
-  key: "hero" | "cta" | "source";
+  key: AirshipImportedSiteEditorSectionKey;
   label: string;
   detail: string;
   mappedDraftFieldIds: string[];
@@ -119,7 +131,7 @@ export type AirshipImportedSiteEditorModel = {
     fieldKey: AirshipSingleSiteDraftFieldKey;
     draftId: string;
     label: string;
-    sectionKey: "hero" | "cta";
+    sectionKey: AirshipSingleSiteDraftSectionKey;
     sourceStatus: string;
   }>;
   latestDraft: {
@@ -377,6 +389,32 @@ export function airshipDraftFieldKey(draft: Pick<AirshipSingleSiteImprovementDra
   return null;
 }
 
+export function airshipDraftSectionKey(draft: Pick<AirshipSingleSiteImprovementDraft, "id" | "targetSectionPage"> & {
+  fieldKey?: unknown;
+  sectionKey?: unknown;
+}): AirshipSingleSiteDraftSectionKey | null {
+  if (
+    draft.sectionKey === "hero" ||
+    draft.sectionKey === "offers" ||
+    draft.sectionKey === "proof" ||
+    draft.sectionKey === "approach" ||
+    draft.sectionKey === "cta" ||
+    draft.sectionKey === "footer"
+  ) {
+    return draft.sectionKey;
+  }
+  const fieldKey = airshipDraftFieldKey(draft);
+  if (fieldKey === "headline" || fieldKey === "subheading") return "hero";
+  if (fieldKey === "ctaLabel") return "cta";
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/offer|service|product|ponud/.test(haystack)) return "offers";
+  if (/proof|benefit|trust|brand|category|reference|partner/.test(haystack)) return "proof";
+  if (/approach|process|method|workflow|delivery/.test(haystack)) return "approach";
+  if (/footer|demo.note|boundary/.test(haystack)) return "footer";
+  if (/cta|contact|inquiry|call.to.action/.test(haystack)) return "cta";
+  return null;
+}
+
 function evidenceText(studioModel: SingleSiteStudioReadonlyProjection): string {
   return studioModel.sourceEvidence
     .map((item) => [item.label, item.status, item.detail].map((part) => text(part)).filter(Boolean).join(": "))
@@ -576,6 +614,8 @@ function importedSiteDrafts(input: {
 
   const siteLabel = humanSiteLabel(input.studioModel);
   const organization = organizationLabel(siteLabel);
+  const isChs = input.migrationId === AIRSHIP_CHS_MIGRATION_ID || /(^|\.)chs\.si$/i.test(siteLabel);
+  const canSeedWorkspace = shouldSeedImportedSiteEditorWorkspace(input);
   const texts = ensureImportedSiteWorkspaceDraftTexts({
     ...input,
     texts: deriveImportedSiteDraftTexts(input.studioModel),
@@ -583,7 +623,9 @@ function importedSiteDrafts(input: {
     organization,
   });
   const configs: Array<{
-    fieldKey: AirshipSingleSiteDraftFieldKey;
+    fieldKey?: AirshipSingleSiteDraftFieldKey;
+    sectionKey: AirshipSingleSiteDraftSectionKey;
+    draftKey: string;
     targetSectionPage: string;
     proposedTextContent: string | null;
     reasonForChange: string;
@@ -592,6 +634,8 @@ function importedSiteDrafts(input: {
   }> = [
     {
       fieldKey: "headline",
+      sectionKey: "hero",
+      draftKey: "headline",
       targetSectionPage: "Homepage / hero headline",
       proposedTextContent: texts.headline,
       reasonForChange: `Keep the first-viewport headline anchored to captured ${siteLabel} source evidence.`,
@@ -600,6 +644,8 @@ function importedSiteDrafts(input: {
     },
     {
       fieldKey: "subheading",
+      sectionKey: "hero",
+      draftKey: "subheading",
       targetSectionPage: "Homepage / hero subheading",
       proposedTextContent: texts.subheading,
       reasonForChange: `Condense source-supported ${siteLabel} positioning into a scannable first-viewport value proposition.`,
@@ -608,11 +654,55 @@ function importedSiteDrafts(input: {
     },
     {
       fieldKey: "ctaLabel",
+      sectionKey: "cta",
+      draftKey: "ctaLabel",
       targetSectionPage: "Homepage / contact call-to-action",
       proposedTextContent: texts.ctaLabel,
       reasonForChange: `Keep the primary action tied to captured ${siteLabel} contact evidence.`,
       previewImpact: "Airship draft preview shows a source-supported contact CTA; it is not wired to mutate or publish production content.",
       fallbackSummary: `No source-supported contact CTA text was available for ${siteLabel}.`,
+    },
+    {
+      sectionKey: "offers",
+      draftKey: "offers",
+      targetSectionPage: "Homepage / offers or services",
+      proposedTextContent: !canSeedWorkspace ? null : isChs
+        ? "Cybersecurity, data systems, hybrid infrastructure, and managed support for organizations across the Adriatic region."
+        : `${organization} services are grouped into a clearer offer section using the imported homepage evidence.`,
+      reasonForChange: `Add an editable offer/services section so the ${siteLabel} draft is more than a hero-only preview.`,
+      previewImpact: "Airship draft preview includes a compact services/offers section in the internal candidate.",
+      fallbackSummary: `No structured services section existed yet for ${siteLabel}; Airship derives a concise section from available source evidence.`,
+    },
+    {
+      sectionKey: "proof",
+      draftKey: "proof",
+      targetSectionPage: "Homepage / proof and benefits",
+      proposedTextContent: !canSeedWorkspace ? null : isChs
+        ? "CHS source evidence supports advanced IT specialization, practical contact paths, and regional delivery focus."
+        : `${organization} source evidence is summarized as trust and benefit proof without introducing unsupported claims.`,
+      reasonForChange: `Expose proof/benefits as a separate editable draft section for ${siteLabel}.`,
+      previewImpact: "Airship draft preview gains a proof/benefits block below the offer section.",
+      fallbackSummary: `No structured proof section existed yet for ${siteLabel}; Airship derives a concise section from source evidence.`,
+    },
+    {
+      sectionKey: "approach",
+      draftKey: "approach",
+      targetSectionPage: "Homepage / approach and process",
+      proposedTextContent: !canSeedWorkspace ? null : isChs
+        ? "Assess the environment, prioritize risk, implement resilient systems, and keep teams supported as needs change."
+        : `Review the imported site evidence, clarify the offer, preserve source identity, and prepare an internal demo candidate for ${organization}.`,
+      reasonForChange: `Give ${siteLabel} a process/approach section suitable for a fuller demo preview.`,
+      previewImpact: "Airship draft preview includes an approach/process section before the final CTA.",
+      fallbackSummary: `No structured process section existed yet for ${siteLabel}; Airship derives a concise section from the editor workflow.`,
+    },
+    {
+      sectionKey: "footer",
+      draftKey: "footer",
+      targetSectionPage: "Homepage / footer demo note",
+      proposedTextContent: canSeedWorkspace ? `Internal GNR8 demo preview for ${organization}. ${input.studioModel.summary.liveSiteUrl ?? input.studioModel.summary.sourceUrl} remains external and unchanged.` : null,
+      reasonForChange: "Keep the preview/customer-domain boundary visible in the generated draft candidate.",
+      previewImpact: "Airship draft preview ends with an internal demo note that separates preview from live/customer domain.",
+      fallbackSummary: `No footer demo note existed yet for ${siteLabel}.`,
     },
   ];
 
@@ -622,9 +712,10 @@ function importedSiteDrafts(input: {
       id: airshipDraftIdForImportedSiteField({
         migrationId: input.migrationId,
         siteLabel,
-        fieldKey: config.fieldKey,
+        fieldKey: config.fieldKey ?? config.draftKey as AirshipSingleSiteDraftFieldKey,
       }),
-      fieldKey: config.fieldKey,
+      ...(config.fieldKey ? { fieldKey: config.fieldKey } : {}),
+      sectionKey: config.sectionKey,
       targetSectionPage: config.targetSectionPage,
       currentTextContentSummary: draftFieldSourceSummary({
         studioModel: input.studioModel,
@@ -766,6 +857,86 @@ function effectivePreviewText(
   return generatedDrafts.find((item) => airshipDraftFieldKey(item) === fieldKey)?.proposedTextContent ?? null;
 }
 
+function effectiveSectionDrafts(
+  sectionKey: AirshipSingleSiteDraftSectionKey,
+  drafts: AirshipSingleSiteImprovementDraft[],
+  generatedDrafts: AirshipSingleSiteImprovementDraft[],
+): AirshipSingleSiteImprovementDraft[] {
+  const generatedById = new Map(generatedDrafts.map((draft) => [draft.id, draft]));
+  return drafts
+    .filter((draft) => airshipDraftSectionKey(draft) === sectionKey)
+    .map((draft) => draft.status === "rejected" ? generatedById.get(draft.id) ?? draft : draft)
+    .filter((draft) => draft.status !== "rejected");
+}
+
+function sectionLabel(sectionKey: AirshipSingleSiteDraftSectionKey): string {
+  switch (sectionKey) {
+    case "hero":
+      return "Hero";
+    case "offers":
+      return "Offers / Services";
+    case "proof":
+      return "Proof / Benefits";
+    case "approach":
+      return "Approach / Process";
+    case "cta":
+      return "CTA / Contact";
+    case "footer":
+      return "Footer / Demo note";
+  }
+}
+
+function sectionHeading(sectionKey: AirshipSingleSiteDraftSectionKey, organization: string): string {
+  switch (sectionKey) {
+    case "hero":
+      return organization;
+    case "offers":
+      return "What changes in the improved draft";
+    case "proof":
+      return "Why this version is clearer";
+    case "approach":
+      return "How the page now guides the visitor";
+    case "cta":
+      return `Contact ${organization}`;
+    case "footer":
+      return "Internal demo boundary";
+  }
+}
+
+function splitSectionItems(value: string): string[] {
+  return value
+    .split(/(?:\.\s+|;\s+|\n+)/)
+    .map((item) => item.replace(/\.$/, "").trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 4);
+}
+
+function draftPreviewSections(
+  drafts: AirshipSingleSiteImprovementDraft[],
+  generatedDrafts: AirshipSingleSiteImprovementDraft[],
+  organization: string,
+): AirshipSingleSiteDraftPreview["sections"] {
+  const sectionKeys: AirshipSingleSiteDraftSectionKey[] = ["hero", "offers", "proof", "approach", "cta", "footer"];
+  return sectionKeys.map((sectionKey) => {
+    const sectionDrafts = effectiveSectionDrafts(sectionKey, drafts, generatedDrafts);
+    const body = sectionDrafts
+      .map((draft) => draft.proposedTextContent)
+      .filter(Boolean)
+      .join(" ");
+    return {
+      key: sectionKey,
+      label: sectionLabel(sectionKey),
+      eyebrow: sectionKey === "hero" ? "First viewport" : sectionLabel(sectionKey),
+      heading: sectionKey === "cta"
+        ? sectionDrafts.find((draft) => airshipDraftFieldKey(draft) === "ctaLabel")?.proposedTextContent ?? sectionHeading(sectionKey, organization)
+        : sectionHeading(sectionKey, organization),
+      body,
+      items: sectionKey === "offers" || sectionKey === "proof" || sectionKey === "approach" ? splitSectionItems(body) : [],
+      ctaLabel: sectionKey === "cta" ? sectionDrafts.find((draft) => airshipDraftFieldKey(draft) === "ctaLabel")?.proposedTextContent ?? null : null,
+    };
+  }).filter((section) => section.key === "hero" || text(section.body) || text(section.ctaLabel));
+}
+
 function draftPreview(
   drafts: AirshipSingleSiteImprovementDraft[],
   generatedDrafts: AirshipSingleSiteImprovementDraft[],
@@ -777,6 +948,7 @@ function draftPreview(
   const primaryCtaLabel = effectivePreviewText("ctaLabel", drafts, generatedDrafts);
   if (!headline || !subheading) return null;
   const siteLabel = humanSiteLabel(studioModel);
+  const organization = organizationLabel(siteLabel);
   const fallbackContact = deriveImportedSiteDraftTexts(studioModel).secondaryContactText;
 
   return {
@@ -793,29 +965,57 @@ function draftPreview(
       primaryCtaLabel,
       secondaryContactText: fallbackContact,
     },
+    sections: draftPreviewSections(drafts, generatedDrafts, organization),
   };
 }
 
 function editableSections(drafts: AirshipSingleSiteImprovementDraft[]): AirshipImportedSiteEditableSection[] {
-  const idsFor = (fieldKeys: AirshipSingleSiteDraftFieldKey[]) =>
+  const idsFor = (sectionKey: AirshipSingleSiteDraftSectionKey) =>
     drafts.filter((draft) => {
-      const fieldKey = airshipDraftFieldKey(draft);
-      return fieldKey ? fieldKeys.includes(fieldKey) : false;
+      return airshipDraftSectionKey(draft) === sectionKey;
     }).map((draft) => draft.id);
   return [
     {
       key: "hero",
       label: "Hero / intro",
       detail: "Headline, subheading, spacing, tint",
-      mappedDraftFieldIds: idsFor(["headline", "subheading"]),
-      sourceStatus: idsFor(["headline", "subheading"]).length >= 2 ? "source-supported hero draft fields" : "partial source-supported hero draft fields",
+      mappedDraftFieldIds: idsFor("hero"),
+      sourceStatus: idsFor("hero").length >= 2 ? "source-supported hero draft fields" : "partial source-supported hero draft fields",
+    },
+    {
+      key: "offers",
+      label: "Offers / Services",
+      detail: "Offer/service copy and cards",
+      mappedDraftFieldIds: idsFor("offers"),
+      sourceStatus: idsFor("offers").length > 0 ? "draft services section available" : "services section not generated",
+    },
+    {
+      key: "proof",
+      label: "Proof / Benefits",
+      detail: "Proof points and benefits",
+      mappedDraftFieldIds: idsFor("proof"),
+      sourceStatus: idsFor("proof").length > 0 ? "draft proof section available" : "proof section not generated",
+    },
+    {
+      key: "approach",
+      label: "Approach / Process",
+      detail: "Process or approach copy",
+      mappedDraftFieldIds: idsFor("approach"),
+      sourceStatus: idsFor("approach").length > 0 ? "draft approach section available" : "approach section not generated",
     },
     {
       key: "cta",
-      label: "CTA",
-      detail: "Primary action label and color",
-      mappedDraftFieldIds: idsFor(["ctaLabel"]),
-      sourceStatus: idsFor(["ctaLabel"]).length > 0 ? "source-supported CTA draft field" : "CTA draft field unavailable from source evidence",
+      label: "CTA / Contact",
+      detail: "Primary action label and contact copy",
+      mappedDraftFieldIds: idsFor("cta"),
+      sourceStatus: idsFor("cta").length > 0 ? "source-supported CTA draft field" : "CTA draft field unavailable from source evidence",
+    },
+    {
+      key: "footer",
+      label: "Footer / Demo note",
+      detail: "Preview boundary and footer note",
+      mappedDraftFieldIds: idsFor("footer"),
+      sourceStatus: idsFor("footer").length > 0 ? "internal demo boundary note available" : "footer demo note not generated",
     },
     {
       key: "source",
@@ -849,7 +1049,7 @@ function importedSiteEditorModel(input: {
       fieldKey: airshipDraftFieldKey(draft),
       draftId: draft.id,
       label: draft.targetSectionPage,
-      sectionKey: airshipDraftFieldKey(draft) === "ctaLabel" ? "cta" : "hero",
+      sectionKey: airshipDraftSectionKey(draft) ?? "hero",
       sourceStatus: draft.currentTextContentSummary,
     })).filter((draft): draft is AirshipImportedSiteEditorModel["draftFields"][number] => Boolean(draft.fieldKey)),
     latestDraft: {
@@ -1090,6 +1290,7 @@ export function buildAirshipSingleSiteDraftSeed(input: {
     draftEdits: input.model.draftPanel.drafts.map((draft) => ({
       id: draft.id,
       ...(draft.fieldKey ? { fieldKey: draft.fieldKey } : {}),
+      ...(draft.sectionKey ? { sectionKey: draft.sectionKey } : {}),
       targetSectionPage: draft.targetSectionPage,
       currentTextContentSummary: draft.currentTextContentSummary,
       proposedTextContent: draft.proposedTextContent,

@@ -10,10 +10,12 @@ export const AIRSHIP_SINGLE_SITE_DRAFT_REPOSITORY_VERSION = "airship-3-single-si
 
 export type AirshipSingleSiteDraftEditStatus = "proposed" | "edited" | "accepted" | "rejected";
 export type AirshipSingleSiteDraftStatus = "draft" | "mixed" | "accepted" | "rejected";
+export type AirshipSingleSiteDraftSectionKey = "hero" | "offers" | "proof" | "approach" | "cta" | "footer";
 
 export type AirshipSingleSiteDraftEdit = {
   id: string;
   fieldKey?: "headline" | "subheading" | "ctaLabel";
+  sectionKey?: AirshipSingleSiteDraftSectionKey;
   targetSectionPage: string;
   currentTextContentSummary: string;
   proposedTextContent: string;
@@ -251,9 +253,11 @@ function dateText(value: unknown): string | null {
 function sanitizeEdit(edit: AirshipSingleSiteDraftEdit): AirshipSingleSiteDraftEdit {
   const status = edit.status === "accepted" || edit.status === "rejected" || edit.status === "edited" ? edit.status : "proposed";
   const fieldKey = draftEditFieldKey(edit) ?? undefined;
+  const sectionKey = draftEditSectionKey(edit) ?? undefined;
   return {
     id: text("draftEditId", edit.id, { max: 160 }) ?? "",
     ...(fieldKey ? { fieldKey } : {}),
+    ...(sectionKey ? { sectionKey } : {}),
     targetSectionPage: text("targetSectionPage", edit.targetSectionPage, { max: 300 }) ?? "",
     currentTextContentSummary: text("currentTextContentSummary", edit.currentTextContentSummary, { max: 2000 }) ?? "",
     proposedTextContent: text("proposedTextContent", edit.proposedTextContent, { max: 5000 }) ?? "",
@@ -282,6 +286,32 @@ function draftEditFieldKey(draft: Pick<AirshipSingleSiteDraftEdit, "id" | "targe
   if (/cta|call.to.action|button|contact/.test(haystack)) return "ctaLabel";
   if (/subheading|subheadline|subtitle|value.proposition|body|description/.test(haystack)) return "subheading";
   if (/headline|heading|hero|h1|title/.test(haystack)) return "headline";
+  return null;
+}
+
+function draftEditSectionKey(draft: Pick<AirshipSingleSiteDraftEdit, "id" | "targetSectionPage"> & {
+  fieldKey?: unknown;
+  sectionKey?: unknown;
+}): AirshipSingleSiteDraftSectionKey | null {
+  if (
+    draft.sectionKey === "hero" ||
+    draft.sectionKey === "offers" ||
+    draft.sectionKey === "proof" ||
+    draft.sectionKey === "approach" ||
+    draft.sectionKey === "cta" ||
+    draft.sectionKey === "footer"
+  ) {
+    return draft.sectionKey;
+  }
+  const fieldKey = draftEditFieldKey(draft);
+  if (fieldKey === "headline" || fieldKey === "subheading") return "hero";
+  if (fieldKey === "ctaLabel") return "cta";
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (/offer|service|product|ponud/.test(haystack)) return "offers";
+  if (/proof|benefit|trust|brand|category|reference|partner/.test(haystack)) return "proof";
+  if (/approach|process|method|workflow|delivery/.test(haystack)) return "approach";
+  if (/footer|demo.note|boundary/.test(haystack)) return "footer";
+  if (/cta|contact|inquiry|call.to.action/.test(haystack)) return "cta";
   return null;
 }
 

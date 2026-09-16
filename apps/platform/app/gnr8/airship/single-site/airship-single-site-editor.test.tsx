@@ -139,10 +139,38 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         },
         {
           key: "cta",
-          label: "CTA",
+          label: "CTA / Contact",
           detail: "Primary action label and color",
           mappedDraftFieldIds: ["airship-chs-home-contact-cta"],
           sourceStatus: "source-supported CTA draft field",
+        },
+        {
+          key: "offers",
+          label: "Offers / Services",
+          detail: "Offer/service copy and cards",
+          mappedDraftFieldIds: ["airship-chs-home-services"],
+          sourceStatus: "draft services section available",
+        },
+        {
+          key: "proof",
+          label: "Proof / Benefits",
+          detail: "Proof points and benefits",
+          mappedDraftFieldIds: ["airship-chs-home-benefits"],
+          sourceStatus: "draft proof section available",
+        },
+        {
+          key: "approach",
+          label: "Approach / Process",
+          detail: "Process or approach copy",
+          mappedDraftFieldIds: ["airship-chs-home-process"],
+          sourceStatus: "draft approach section available",
+        },
+        {
+          key: "footer",
+          label: "Footer / Demo note",
+          detail: "Preview boundary and footer note",
+          mappedDraftFieldIds: ["airship-chs-home-demo-note"],
+          sourceStatus: "internal demo boundary note available",
         },
         {
           key: "source",
@@ -324,6 +352,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         {
           id: "airship-chs-home-hero-headline",
           fieldKey: "headline",
+          sectionKey: "hero",
           targetSectionPage: "Homepage / hero headline",
           currentTextContentSummary: "Captured CHS homepage evidence includes the hero line `Less risk. More control. Better IT.` and the CHS identity in the page title and footer.",
           proposedTextContent: "Less risk. More control. Better IT.",
@@ -334,6 +363,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         {
           id: "airship-chs-home-hero-value-proposition",
           fieldKey: "subheading",
+          sectionKey: "hero",
           targetSectionPage: "Homepage / hero subheading",
           currentTextContentSummary: "Captured CHS source evidence says CHS delivers advanced solutions in cybersecurity, data systems, and hybrid infrastructure across the Adriatic region.",
           proposedTextContent: "Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
@@ -344,12 +374,53 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         {
           id: "airship-chs-home-contact-cta",
           fieldKey: "ctaLabel",
+          sectionKey: "cta",
           targetSectionPage: "Homepage / contact call-to-action",
           currentTextContentSummary: "Captured CHS source evidence includes `Contact us`, `sales@chs.si`, and a homepage contact form.",
           proposedTextContent: "Contact CHS at sales@chs.si",
           reasonForChange: "Make the contact action outcome-specific while keeping it tied to the existing contact section and source contact channels.",
           status: "proposed",
           previewImpact: "AI draft preview shows a clearer CHS contact CTA; it is not wired to mutate or publish production content.",
+        },
+        {
+          id: "airship-chs-home-services",
+          sectionKey: "offers",
+          targetSectionPage: "Homepage / offers or services",
+          currentTextContentSummary: "Captured CHS source evidence describes cybersecurity, data systems, and hybrid infrastructure.",
+          proposedTextContent: "Cybersecurity, data systems, hybrid infrastructure, and managed support for organizations across the Adriatic region.",
+          reasonForChange: "Expose CHS services as a real editable section in the draft canvas.",
+          status: "proposed",
+          previewImpact: "Services section appears in the internal draft preview only.",
+        },
+        {
+          id: "airship-chs-home-benefits",
+          sectionKey: "proof",
+          targetSectionPage: "Homepage / proof and benefits",
+          currentTextContentSummary: "Captured CHS evidence supports advanced IT specialization and regional delivery.",
+          proposedTextContent: "Advanced IT specialization, practical contact paths, and regional delivery focus help visitors understand why CHS is credible.",
+          reasonForChange: "Expose proof/benefits as a real editable section in the draft canvas.",
+          status: "proposed",
+          previewImpact: "Proof section appears in the internal draft preview only.",
+        },
+        {
+          id: "airship-chs-home-process",
+          sectionKey: "approach",
+          targetSectionPage: "Homepage / approach and process",
+          currentTextContentSummary: "CHS draft needs a process section for a fuller demo preview.",
+          proposedTextContent: "Assess the environment, prioritize risk, implement resilient systems, and keep teams supported as needs change.",
+          reasonForChange: "Expose approach/process as a real editable section in the draft canvas.",
+          status: "proposed",
+          previewImpact: "Approach section appears in the internal draft preview only.",
+        },
+        {
+          id: "airship-chs-home-demo-note",
+          sectionKey: "footer",
+          targetSectionPage: "Homepage / footer demo note",
+          currentTextContentSummary: "Internal preview/customer-domain boundary needs to remain visible.",
+          proposedTextContent: "Internal GNR8 demo preview for CHS. https://www.chs.si/ remains external and unchanged.",
+          reasonForChange: "Keep demo preview host readback separate from the live/customer domain.",
+          status: "proposed",
+          previewImpact: "Footer demo note appears in the internal draft preview only.",
         },
       ],
       draftPreview: {
@@ -364,6 +435,62 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
           primaryCtaLabel: "Contact CHS at sales@chs.si",
           secondaryContactText: "Parmova ulica 51, Ljubljana",
         },
+        sections: [
+          {
+            key: "hero",
+            label: "Hero",
+            eyebrow: "First viewport",
+            heading: "CHS d.o.o.",
+            body: "Less risk. More control. Better IT. Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.",
+            items: [],
+            ctaLabel: null,
+          },
+          {
+            key: "offers",
+            label: "Offers / Services",
+            eyebrow: "Offers / Services",
+            heading: "What changes in the improved draft",
+            body: "Cybersecurity, data systems, hybrid infrastructure, and managed support for organizations across the Adriatic region.",
+            items: ["Cybersecurity", "data systems", "hybrid infrastructure", "managed support"],
+            ctaLabel: null,
+          },
+          {
+            key: "proof",
+            label: "Proof / Benefits",
+            eyebrow: "Proof / Benefits",
+            heading: "Why this version is clearer",
+            body: "Advanced IT specialization, practical contact paths, and regional delivery focus help visitors understand why CHS is credible.",
+            items: ["Advanced IT specialization", "practical contact paths", "regional delivery focus"],
+            ctaLabel: null,
+          },
+          {
+            key: "approach",
+            label: "Approach / Process",
+            eyebrow: "Approach / Process",
+            heading: "How the page now guides the visitor",
+            body: "Assess the environment, prioritize risk, implement resilient systems, and keep teams supported as needs change.",
+            items: ["Assess the environment", "prioritize risk", "implement resilient systems", "keep teams supported as needs change"],
+            ctaLabel: null,
+          },
+          {
+            key: "cta",
+            label: "CTA / Contact",
+            eyebrow: "CTA / Contact",
+            heading: "Contact CHS at sales@chs.si",
+            body: "Contact CHS at sales@chs.si",
+            items: [],
+            ctaLabel: "Contact CHS at sales@chs.si",
+          },
+          {
+            key: "footer",
+            label: "Footer / Demo note",
+            eyebrow: "Footer / Demo note",
+            heading: "Internal demo boundary",
+            body: "Internal GNR8 demo preview for CHS. https://www.chs.si/ remains external and unchanged.",
+            items: [],
+            ctaLabel: null,
+          },
+        ],
       },
       controlMode: "persistent_airship_draft",
       controlNote: "Save, accept, and reject update only the saved Airship draft workspace. Not applied to live site. Not published.",
@@ -926,7 +1053,11 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("CSS"), true);
   assert.equal(html.includes("DOM"), true);
   assert.equal(html.includes("Hero / intro"), true);
-  assert.equal(html.includes("CTA"), true);
+  assert.equal(html.includes("Offers / Services"), true);
+  assert.equal(html.includes("Proof / Benefits"), true);
+  assert.equal(html.includes("Approach / Process"), true);
+  assert.equal(html.includes("CTA / Contact"), true);
+  assert.equal(html.includes("Footer / Demo note"), true);
   assert.equal(html.includes("Source material"), true);
   assert.equal(html.includes("MVP demo readiness"), true);
   assert.equal(html.includes("Open GNR8 demo"), true);
@@ -956,8 +1087,15 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Save draft"), true);
   assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="hero"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="offers"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="proof"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="approach"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="cta"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="footer"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="source"'), true);
+  assert.equal(html.includes("Cybersecurity, data systems, hybrid infrastructure, and managed support"), true);
+  assert.equal(html.includes("Advanced IT specialization, practical contact paths"), true);
+  assert.equal(html.includes("Internal GNR8 demo preview for CHS"), true);
   assert.equal(html.includes("Selected canvas element"), true);
   assert.equal(html.includes("region / homepage hero intro"), true);
   assert.equal(html.includes("Selected element metadata"), true);
@@ -996,6 +1134,76 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Save key"), false);
   assert.equal(html.includes("Test connection"), false);
   assert.equal(html.includes("Revoke key"), false);
+});
+
+test("airship visual editor renders ARIS multi-section canvas without CHS identity leakage", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  model.importedSite = "aris.si";
+  model.sourceUrl = "https://www.aris.si/";
+  model.liveSiteUrl = "https://www.aris.si/";
+  model.demoReadiness = null;
+  model.importedSiteModel = {
+    ...model.importedSiteModel,
+    siteLabel: "aris.si",
+    sourceUrl: "https://www.aris.si/",
+    liveUrl: "https://www.aris.si/",
+    editableSections: [
+      { key: "hero", label: "Hero / intro", detail: "Headline, subheading, spacing, tint", mappedDraftFieldIds: ["airship-aris-home-headline", "airship-aris-home-subheading"], sourceStatus: "source-supported hero draft fields" },
+      { key: "offers", label: "Offers / Services", detail: "Offer/service copy and cards", mappedDraftFieldIds: ["airship-aris-home-product-offers"], sourceStatus: "draft services section available" },
+      { key: "proof", label: "Proof / Benefits", detail: "Proof points and benefits", mappedDraftFieldIds: ["airship-aris-home-brand-category-proof"], sourceStatus: "draft proof section available" },
+      { key: "cta", label: "CTA / Contact", detail: "Primary action label and contact copy", mappedDraftFieldIds: ["airship-aris-home-ctaLabel"], sourceStatus: "source-supported CTA draft field" },
+      { key: "source", label: "Source material", detail: "Imported-site evidence and internal draft refs", mappedDraftFieldIds: ["airship-aris-home-headline", "airship-aris-home-subheading", "airship-aris-home-product-offers", "airship-aris-home-brand-category-proof", "airship-aris-home-ctaLabel"], sourceStatus: "source material readback only" },
+    ],
+  };
+  model.draftPanel.drafts = [
+    { id: "airship-aris-home-headline", fieldKey: "headline", sectionKey: "hero", targetSectionPage: "Homepage / hero headline", currentTextContentSummary: "ARIS source evidence.", proposedTextContent: "ARIS - Apple in Canton ponudba", reasonForChange: "ARIS hero.", status: "edited", previewImpact: "Hero headline appears in internal preview only." },
+    { id: "airship-aris-home-subheading", fieldKey: "subheading", sectionKey: "hero", targetSectionPage: "Homepage / hero subheading", currentTextContentSummary: "ARIS source evidence.", proposedTextContent: "MacBook Air, Mac Studio in Canton Smart izdelki z osebnim svetovanjem.", reasonForChange: "ARIS subheading.", status: "edited", previewImpact: "Hero subheading appears in internal preview only." },
+    { id: "airship-aris-home-product-offers", sectionKey: "offers", targetSectionPage: "Homepage / product offer section", currentTextContentSummary: "ARIS product evidence.", proposedTextContent: "MacBook Air, Mac Studio, Canton Smart in posebne ponudbe.", reasonForChange: "ARIS offers.", status: "edited", previewImpact: "Offers section appears in internal preview only." },
+    { id: "airship-aris-home-brand-category-proof", sectionKey: "proof", targetSectionPage: "Homepage / brand and category proof", currentTextContentSummary: "ARIS brand evidence.", proposedTextContent: "Apple, Canton, Blackmagic Design, Eizo in druge znamke podpirajo ARIS ponudbo.", reasonForChange: "ARIS proof.", status: "edited", previewImpact: "Proof section appears in internal preview only." },
+    { id: "airship-aris-home-ctaLabel", fieldKey: "ctaLabel", sectionKey: "cta", targetSectionPage: "Homepage / contact inquiry call-to-action", currentTextContentSummary: "ARIS contact evidence.", proposedTextContent: "Želim ponudbo", reasonForChange: "ARIS CTA.", status: "edited", previewImpact: "CTA appears in internal preview only." },
+  ];
+  model.draftPanel.draftPreview = {
+    ...model.draftPanel.draftPreview,
+    hero: {
+      eyebrow: "ARIS",
+      headline: "ARIS - Apple in Canton ponudba",
+      subheading: "MacBook Air, Mac Studio in Canton Smart izdelki z osebnim svetovanjem.",
+      primaryCtaLabel: "Želim ponudbo",
+      secondaryContactText: "prodaja@aris.si",
+    },
+    sections: [
+      { key: "hero", label: "Hero", eyebrow: "First viewport", heading: "ARIS", body: "ARIS - Apple in Canton ponudba", items: [], ctaLabel: null },
+      { key: "offers", label: "Offers / Services", eyebrow: "Offers / Services", heading: "Product offers", body: "MacBook Air, Mac Studio, Canton Smart in posebne ponudbe.", items: ["MacBook Air", "Mac Studio", "Canton Smart"], ctaLabel: null },
+      { key: "proof", label: "Proof / Benefits", eyebrow: "Proof / Benefits", heading: "Brand proof", body: "Apple, Canton, Blackmagic Design, Eizo in druge znamke podpirajo ARIS ponudbo.", items: ["Apple", "Canton", "Blackmagic Design"], ctaLabel: null },
+      { key: "cta", label: "CTA / Contact", eyebrow: "CTA / Contact", heading: "Želim ponudbo", body: "prodaja@aris.si", items: [], ctaLabel: "Želim ponudbo" },
+    ],
+  };
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={model.migrationId}
+      importedSite={model.importedSite}
+      sourceUrl={model.sourceUrl}
+      liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
+      demoReadiness={model.demoReadiness}
+      draftCandidate={null}
+      draftPreview={model.draftPanel.draftPreview}
+      drafts={model.draftPanel.drafts}
+      persistence={model.draftPanel.persistence}
+      aiProviderStatus={{ provider: "openai", scope: "airship_editor", ownerScope: "internal_superadmin", connected: false, status: "missing", maskedKey: null, model: "gpt-5", lastTestedAt: null, lastTestStatus: null, createdAt: null, updatedAt: null, canUseAiCommands: false }}
+      agentProfileSelection={selectedAirshipProfile({ status: "unavailable", activeProfile: null, diagnostics: ["airship_agent_default_profile_unavailable"] })}
+    />,
+  );
+
+  assert.equal(html.includes("aris.si"), true);
+  assert.equal(html.includes("ARIS - Apple in Canton ponudba"), true);
+  assert.equal(html.includes("MacBook Air"), true);
+  assert.equal(html.includes("Blackmagic Design"), true);
+  assert.equal(html.includes('data-airship-editor-canvas="offers"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="proof"'), true);
+  assert.equal(html.includes("CHS"), false);
+  assert.equal(html.includes("chs.si"), false);
 });
 
 test("airship visual editor keeps apply-saved-draft enabled when saved draft data exists", () => {

@@ -52,6 +52,15 @@ type AirshipDraftCtaOverride = {
   label: string;
 };
 
+type AirshipDraftSection = {
+  key: string;
+  label: string;
+  heading: string;
+  body: string;
+  items: string[];
+  ctaLabel: string | null;
+};
+
 function readLegacyHtmlSummary(sectionProps: Record<string, unknown>): LegacyHtmlSummary | null {
   const raw = sectionProps.htmlSummary;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -92,6 +101,31 @@ function readAirshipDraftCtaOverride(sectionProps: Record<string, unknown>): Air
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const label = asNonEmptyString((raw as Record<string, unknown>).label);
   return label ? { label } : null;
+}
+
+function readAirshipDraftSections(sectionProps: Record<string, unknown>): AirshipDraftSection[] {
+  const raw = sectionProps.airshipDraftSections;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const record = entry as Record<string, unknown>;
+    const key = asNonEmptyString(record.key);
+    const label = asNonEmptyString(record.label);
+    const heading = asNonEmptyString(record.heading);
+    const body = asNonEmptyString(record.body);
+    const items = Array.isArray(record.items)
+      ? record.items.map(asNonEmptyString).filter((item): item is string => Boolean(item)).slice(0, 4)
+      : [];
+    if (!key || !label || !heading || (!body && items.length === 0 && !asNonEmptyString(record.ctaLabel))) return null;
+    return {
+      key,
+      label,
+      heading,
+      body: body ?? "",
+      items,
+      ctaLabel: asNonEmptyString(record.ctaLabel),
+    };
+  }).filter((section): section is AirshipDraftSection => Boolean(section));
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -609,6 +643,7 @@ function renderLegacySummaryHtml(input: {
   const airshipDraftHero = readAirshipDraftHeroOverride(sectionProps);
   const airshipDraftStyle = readAirshipDraftStyleOverride(sectionProps);
   const airshipDraftCta = readAirshipDraftCtaOverride(sectionProps);
+  const airshipDraftSections = readAirshipDraftSections(sectionProps);
   const sentences = uniqueByCaseFold(splitIntoSentences(text ?? "").map(normalizeSentenceForDisplay).filter((line) => line.length > 0));
   const heroHeading = airshipDraftHero?.headline ?? pickHeroHeading(sentences) ?? "Company Overview";
   const intro =
@@ -709,6 +744,26 @@ function renderLegacySummaryHtml(input: {
   }
   lines.push("  </div>");
 
+  if (airshipDraftSections.length > 0) {
+    lines.push('  <div class="gnr8-columns" aria-label="airship-draft-sections">');
+    for (const section of airshipDraftSections.filter((item) => item.key !== "cta" && item.key !== "footer")) {
+      lines.push(`    <article class="gnr8-card gnr8-section" data-airship-draft-section="${escapeHtml(section.key)}">`);
+      lines.push(`      <h2>${escapeHtml(section.label)}</h2>`);
+      lines.push(`      <p style="margin: 0 0 10px; font-weight: 800; color: #0d2230;">${escapeHtml(section.heading)}</p>`);
+      if (section.items.length > 0) {
+        lines.push("      <ul>");
+        for (const item of section.items) {
+          lines.push(`        <li>${escapeHtml(item)}</li>`);
+        }
+        lines.push("      </ul>");
+      } else if (section.body) {
+        lines.push(`      <p style="margin: 0;">${escapeHtml(section.body)}</p>`);
+      }
+      lines.push("    </article>");
+    }
+    lines.push("  </div>");
+  }
+
   lines.push('  <article class="gnr8-card gnr8-section" aria-label="legacy-summary-contact">');
   lines.push(`    <h2>${escapeHtml(labels.contact)}</h2>`);
   if (contact.address) {
@@ -742,7 +797,20 @@ function renderLegacySummaryHtml(input: {
     }
     lines.push("    </ul>");
   }
+  const airshipContactSection = airshipDraftSections.find((section) => section.key === "cta");
+  if (airshipContactSection?.body) {
+    lines.push(`    <p style="margin: 10px 0 0;">${escapeHtml(airshipContactSection.body)}</p>`);
+  }
+  if (airshipContactSection?.ctaLabel) {
+    lines.push(`    <a class="gnr8-primary-cta" href="#contact">${escapeHtml(airshipContactSection.ctaLabel)}</a>`);
+  }
   lines.push("  </article>");
+  const airshipFooterSection = airshipDraftSections.find((section) => section.key === "footer");
+  if (airshipFooterSection?.body) {
+    lines.push('  <footer class="gnr8-section" data-airship-draft-section="footer" style="font-size: 0.86rem; color: #456; padding: 4px 2px 0;">');
+    lines.push(`    ${escapeHtml(airshipFooterSection.body)}`);
+    lines.push("  </footer>");
+  }
   lines.push("</section>");
 
   return lines.join("\n");
