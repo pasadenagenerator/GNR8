@@ -159,6 +159,37 @@ test("single-site studio renders the CHS MVP first-viewport summary and preview 
   assert.equal(html.includes(`/gnr8/command-center/single-site-publish?migrationId=${CHS_MIGRATION_ID}`), true);
 });
 
+test("single-site studio renders ARIS identity without CHS live-domain fallback", () => {
+  const model = studioModel();
+  model.migrationId = "ebf62324-1e51-4435-abd7-004722fb48d6";
+  model.diagnosticsHref = `/gnr8/command-center/single-site-publish?migrationId=${model.migrationId}`;
+  model.summary = {
+    site: "aris.si",
+    sourceUrl: "https://www.aris.si/",
+    mvpStatus: "Simplified ARIS MVP draft generated from source evidence",
+    liveSiteUrl: "https://www.aris.si/",
+    activePointer: "unknown",
+    publishedCandidate: "DRAFT",
+  };
+  model.import.inputUrl = "https://www.aris.si/";
+  model.sourceEvidence = [
+    { label: "Source URL", status: "accepted", detail: "https://www.aris.si/" },
+    { label: "Visual identity", status: "present", detail: "ARIS source evidence captured." },
+  ];
+  model.comparison = model.comparison.map((item) =>
+    item.label === "Original imported site" || item.label === "Live published version"
+      ? { ...item, detail: "https://www.aris.si/", href: "https://www.aris.si/" }
+      : item,
+  );
+
+  const html = renderToStaticMarkup(<SingleSiteStudio model={model} />);
+
+  assert.equal(html.includes("aris.si MVP Studio"), true);
+  assert.equal(html.includes("https://www.aris.si/"), true);
+  assert.equal(html.includes("https://www.chs.si/"), false);
+  assert.equal(html.includes("chs.si MVP Studio"), false);
+});
+
 test("single-site studio renders the required workflow, comparison, and AI recommendation summary", () => {
   const html = renderToStaticMarkup(<SingleSiteStudio model={studioModel()} />);
 

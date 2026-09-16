@@ -12,6 +12,16 @@ import {
 } from "./single-site-state-read-model";
 import { SingleSiteStateReadRepository } from "./single-site-state-read-repository";
 import type { SingleSiteEvidenceItemRow, SingleSiteImprovementProposalRecommendationRow } from "./single-site-state-writer-repository";
+import {
+  AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+  AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+  AIRSHIP_ARIS_CLIENT_ID,
+  AIRSHIP_ARIS_OWNERSHIP_SITE_ID,
+  AIRSHIP_ARIS_RUNTIME_SITE_ID,
+  AIRSHIP_ARIS_SITE_LABEL,
+  AIRSHIP_ARIS_SOURCE_URL,
+  isArisAirshipMvpMigration,
+} from "./airship-aris-mvp-draft";
 
 export const SINGLE_SITE_STUDIO_READONLY_PROJECTION_VERSION = "mvp-ui-1-single-site-studio-readonly:v1" as const;
 
@@ -19,6 +29,7 @@ const CHS_MIGRATION_ID = SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.migrationI
 const CHS_ORIGINAL_CLONE_SITE_VERSION_ID = "6b172a5b-200e-471c-9599-5dc70f04ea53";
 const CHS_ORIGINAL_CLONE_ARTIFACT_ID = "929106cd-fa19-47eb-9582-ce6931d0e370";
 const STUDIO_INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
+const ARIS_MVP_STATUS = "Simplified ARIS MVP draft generated from source evidence";
 
 const CHS_RECOMMENDATION_FALLBACK = [
   {
@@ -331,24 +342,30 @@ function workflow(model: SingleSiteMigrationReadModel | null | undefined, publis
 export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput): SingleSiteStudioReadonlyProjection {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const migrationId = text(input.migrationId) ?? input.stateModel?.migration.migrationId ?? input.publishModel?.lookup.migrationId ?? null;
-  const acceptance = input.publishModel?.internalMvpAcceptance;
+  const acceptance = input.publishModel?.internalMvpAcceptance.visible ? input.publishModel.internalMvpAcceptance : null;
+  const arisMigration = isArisAirshipMvpMigration(migrationId);
   const sourceUrl =
     input.stateModel?.migration.sourceUrl ??
+    (arisMigration ? AIRSHIP_ARIS_SOURCE_URL : null) ??
     acceptance?.publicUrl ??
     (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl : "Source URL unavailable");
   const originalCloneSiteVersionId =
-    extractId(input.stateModel?.cloneReview.cloneSiteVersionRef) ?? (migrationId === CHS_MIGRATION_ID ? CHS_ORIGINAL_CLONE_SITE_VERSION_ID : null);
+    extractId(input.stateModel?.cloneReview.cloneSiteVersionRef) ??
+    (migrationId === CHS_MIGRATION_ID ? CHS_ORIGINAL_CLONE_SITE_VERSION_ID : null);
   const originalCloneArtifactId =
-    extractId(input.stateModel?.cloneReview.runtimeArtifactRef) ?? (migrationId === CHS_MIGRATION_ID ? CHS_ORIGINAL_CLONE_ARTIFACT_ID : null);
+    extractId(input.stateModel?.cloneReview.runtimeArtifactRef) ??
+    (migrationId === CHS_MIGRATION_ID ? CHS_ORIGINAL_CLONE_ARTIFACT_ID : null);
   const improvedCandidateSiteVersionId =
     extractId(input.stateModel?.improvedVersionReview.reviewedCandidateSiteVersionRef) ??
     extractId(input.stateModel?.improvementExecution.improvedCandidateRefs.siteVersionRef) ??
     extractId(input.publishModel?.publishContext.candidateSiteVersionRef) ??
+    (arisMigration ? AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID : null) ??
     (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.candidateSiteVersionId : null);
   const improvedRuntimeArtifactId =
     extractId(input.stateModel?.improvedVersionReview.reviewedRuntimeArtifactRef) ??
     extractId(input.stateModel?.improvementExecution.improvedCandidateRefs.runtimeArtifactRef) ??
     extractId(input.publishModel?.publishContext.runtimeArtifactRef) ??
+    (arisMigration ? AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID : null) ??
     (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.runtimeArtifactId : null);
   const recs = recommendations(input.stateSnapshot, migrationId);
   const appliedCount = recs.filter((item) => item.status === "applied").length;
@@ -367,10 +384,11 @@ export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput)
       site:
         acceptance?.siteHost ??
         input.stateModel?.migration.intendedLaunchDomain ??
+        (arisMigration ? AIRSHIP_ARIS_SITE_LABEL : null) ??
         domainFromUrl(sourceUrl) ??
         (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.siteHost : "Imported single-site"),
       sourceUrl,
-      mvpStatus: acceptance?.status ?? (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.displayStatus : "Internal single-site MVP status unavailable"),
+      mvpStatus: acceptance?.status ?? (arisMigration ? ARIS_MVP_STATUS : null) ?? (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.displayStatus : "Internal single-site MVP status unavailable"),
       liveSiteUrl: acceptance?.publicUrl ?? (migrationId === CHS_MIGRATION_ID ? SINGLE_SITE_INTERNAL_MVP_ACCEPTANCE_EVIDENCE.publicUrl : sourceUrl),
       activePointer,
       publishedCandidate,
@@ -383,11 +401,19 @@ export function buildSingleSiteStudioReadonlyProjection(input: StudioBuildInput)
           ownershipSiteId: input.stateModel.migration.ownershipSiteId,
           runtimeSiteId: input.stateModel.migration.runtimeSiteId,
         }
+      : arisMigration
+        ? {
+            tenantId: null,
+            clientId: AIRSHIP_ARIS_CLIENT_ID,
+            siteId: AIRSHIP_ARIS_OWNERSHIP_SITE_ID,
+            ownershipSiteId: AIRSHIP_ARIS_OWNERSHIP_SITE_ID,
+            runtimeSiteId: AIRSHIP_ARIS_RUNTIME_SITE_ID,
+          }
       : null,
     import: {
       inputUrl: sourceUrl,
       captured: Boolean(input.stateModel?.sourceEvidenceReview.reviewId),
-      status: input.stateModel?.sourceEvidenceReview.reviewStatus ?? (migrationId === CHS_MIGRATION_ID ? "accepted" : "missing"),
+      status: input.stateModel?.sourceEvidenceReview.reviewStatus ?? (arisMigration || migrationId === CHS_MIGRATION_ID ? "accepted" : "missing"),
     },
     workflow: workflow(input.stateModel, input.publishModel),
     sourceEvidence: sourceEvidenceRows(input.stateSnapshot, input.stateModel),

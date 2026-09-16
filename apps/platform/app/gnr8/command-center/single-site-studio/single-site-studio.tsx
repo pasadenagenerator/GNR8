@@ -105,7 +105,7 @@ export function SingleSiteStudio({ model }: Props) {
         <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ minWidth: 260 }}>
             <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Single-Site Studio</div>
-            <h1 style={{ margin: "4px 0 0", color: "#0f172a", fontSize: 30, lineHeight: 1.1 }}>chs.si MVP Studio</h1>
+            <h1 style={{ margin: "4px 0 0", color: "#0f172a", fontSize: 30, lineHeight: 1.1 }}>{model.summary.site} MVP Studio</h1>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <a
@@ -170,7 +170,7 @@ export function SingleSiteStudio({ model }: Props) {
           {fact("Published candidate", statusBadge(model.summary.publishedCandidate, summaryTone))}
         </dl>
         <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, color: "#475569", fontSize: 13, lineHeight: 1.45 }}>
-          Live site is the published CHS production domain. Original clone and improved candidate are superadmin-only internal GNR8 previews. This MVP proved the governed workflow; meaningful AI content improvement remains a next product phase.
+          Live site is the external customer/source domain shown above. Original clone and improved candidate are superadmin-only internal GNR8 previews. This readback does not publish or mutate active pointers.
         </div>
       </section>
 

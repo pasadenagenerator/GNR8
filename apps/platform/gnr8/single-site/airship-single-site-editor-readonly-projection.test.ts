@@ -8,6 +8,8 @@ import {
   buildAirshipSingleSiteEditorReadonlyProjection,
 } from "./airship-single-site-editor-readonly-projection";
 import {
+  AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+  AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
   AIRSHIP_ARIS_MIGRATION_ID,
   AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
   AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
@@ -475,6 +477,10 @@ test("airship projection generates a deterministic ARIS MVP draft from source ev
   assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("MacBook Pro 16 M3 Pro")), true);
   assert.equal(model.draftPanel.drafts.some((draft) => draft.targetSectionPage === "Homepage / brand and category proof"), true);
   assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("Blackmagic Design")), true);
+  assert.equal(model.previews.airshipDraftCandidate?.siteVersionId, AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID);
+  assert.equal(model.previews.airshipDraftCandidate?.runtimeArtifactId, AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID);
+  assert.equal(model.importedSiteModel.latestInternalPreviewCandidate?.siteVersionId, AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID);
+  assert.equal(model.importedSiteModel.publishedVersionRefs.liveUrl, "https://www.aris.si/");
   assert.equal(arisAirshipDraftContainsForbiddenCopy(model.draftPanel.drafts), false);
   assert.equal(serialized.includes("CHS"), false);
   assert.equal(serialized.includes("chs.si"), false);

@@ -6,6 +6,14 @@ import {
   type AirshipSingleSiteEditorReadonlyProjection,
 } from "./airship-single-site-editor-readonly-projection";
 import {
+  AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+  AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+  AIRSHIP_ARIS_MIGRATION_ID,
+  AIRSHIP_ARIS_PREVIEW_BINDING_ID,
+  AIRSHIP_ARIS_RUNTIME_SITE_ID,
+  AIRSHIP_ARIS_SOURCE_URL,
+} from "./airship-aris-mvp-draft";
+import {
   buildAirshipImportedSiteOnboardingProjection,
   getAirshipImportedSiteOnboardingProjection,
 } from "./airship-imported-site-onboarding-projection";
@@ -26,6 +34,7 @@ function editorModel(overrides: {
   draftVersion?: number | null;
   draftCount?: number;
   draftCandidate?: AirshipSingleSiteEditorReadonlyProjection["importedSiteModel"]["latestInternalPreviewCandidate"];
+  previewHost?: AirshipSingleSiteEditorReadonlyProjection["importedSiteModel"]["latestInternalPreviewHost"];
   activePointer?: "live" | "not_live" | "unknown";
   publishedCandidate?: string;
   improvedPreviewAvailable?: boolean;
@@ -65,8 +74,10 @@ function editorModel(overrides: {
         lastSavedAt: overrides.draftId ? "2026-09-10T00:05:00.000Z" : null,
       },
       latestInternalPreviewCandidate: overrides.draftCandidate ?? null,
+      latestInternalPreviewHost: overrides.previewHost ?? null,
       latestInternalPreviewReview: null,
       latestInternalPreviewPublishReadiness: null,
+      latestInternalPreviewGovernedDryRun: null,
       publishedVersionRefs: {
         siteVersionId: improvedPreviewAvailable ? `version-${siteLabel}` : null,
         runtimeArtifactId: improvedPreviewAvailable ? `artifact-${siteLabel}` : null,
@@ -118,6 +129,7 @@ function editorModel(overrides: {
       airshipDraftCandidate: overrides.draftCandidate ?? null,
       airshipDraftCandidateReview: null,
       airshipDraftCandidatePublishReadiness: null,
+      airshipDraftCandidateGovernedDryRun: null,
     },
     links: {
       liveSite: liveUrl ?? sourceUrl,
@@ -171,6 +183,53 @@ function editorModel(overrides: {
   };
 }
 
+function arisPreviewHostReadback(): NonNullable<AirshipSingleSiteEditorReadonlyProjection["importedSiteModel"]["latestInternalPreviewHost"]> {
+  return {
+    serviceVersion: "airship-21-preview-host-binding:v1",
+    label: "GNR8 demo preview, not live",
+    candidateSiteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+    candidateArtifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+    suggestedHostname: "aris-airship.app.pasadenagenerator.com",
+    previewUrl: "https://aris-airship.app.pasadenagenerator.com/",
+    binding: {
+      id: AIRSHIP_ARIS_PREVIEW_BINDING_ID,
+      siteId: AIRSHIP_ARIS_RUNTIME_SITE_ID,
+      host: "aris-airship.app.pasadenagenerator.com",
+      candidateSiteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+      candidateArtifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+      status: "ACTIVE",
+      bindingKind: "candidate_preview",
+      createdAt: "2026-09-15T00:00:00.000Z",
+      updatedAt: "2026-09-15T00:00:00.000Z",
+    },
+    bindingStatus: {
+      label: "Preview host binding active",
+      detail: `Binding ${AIRSHIP_ARIS_PREVIEW_BINDING_ID} points aris-airship.app.pasadenagenerator.com to candidate ${AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID} / artifact ${AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID}.`,
+      tone: "good",
+    },
+    activePointerStatus: {
+      siteVersionId: null,
+      artifactId: null,
+      label: "No active pointer",
+      detail: "Preview-host workflow does not require an active/live pointer.",
+      tone: "neutral",
+    },
+    externalSourceDomainStatus: {
+      url: AIRSHIP_ARIS_SOURCE_URL,
+      host: "www.aris.si",
+      label: "External customer domain separate",
+      detail: "www.aris.si is the customer/source domain and is not mutated by this workflow.",
+      tone: "neutral",
+    },
+    action: {
+      enabled: false,
+      endpoint: "/api/gnr8/admin/airship/single-site/preview-host-binding",
+      actionMode: "create_gnr8_demo_preview_host",
+      disabledReason: "Preview host binding already exists or conflicts; service will not overwrite from the UI.",
+    },
+  };
+}
+
 test("CHS appears in Airship onboarding through the imported-site editor model", () => {
   const model = buildAirshipImportedSiteOnboardingProjection({
     models: [editorModel()],
@@ -209,6 +268,38 @@ test("a second imported-site fixture appears without CHS or Maver leakage", () =
   assert.equal(JSON.stringify(luna).includes("chs.si"), false);
   assert.equal(JSON.stringify(luna).includes("CHS"), false);
   assert.equal(JSON.stringify(luna).includes("Maver"), false);
+});
+
+test("ARIS onboarding row keeps ARIS identity and existing preview host binding separate from CHS", () => {
+  const model = buildAirshipImportedSiteOnboardingProjection({
+    models: [
+      editorModel(),
+      editorModel({
+        migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+        siteLabel: "aris.si",
+        sourceUrl: AIRSHIP_ARIS_SOURCE_URL,
+        liveUrl: AIRSHIP_ARIS_SOURCE_URL,
+        activePointer: "unknown",
+        publishedCandidate: "DRAFT",
+        previewHost: arisPreviewHostReadback(),
+      }),
+    ],
+  });
+
+  const aris = model.items.find((item) => item.migrationId === AIRSHIP_ARIS_MIGRATION_ID);
+  const chs = model.items.find((item) => item.migrationId === CHS_MIGRATION_ID);
+  const serializedAris = JSON.stringify(aris);
+
+  assert.equal(chs?.siteLabel, "chs.si");
+  assert.equal(aris?.siteLabel, "aris.si");
+  assert.equal(aris?.sourceUrl, "https://www.aris.si/");
+  assert.equal(aris?.liveUrl, "https://www.aris.si/");
+  assert.equal(aris?.latestGnr8PreviewHostStatus.label, "Preview host binding active");
+  assert.equal(aris?.latestGnr8PreviewHostStatus.href, "https://aris-airship.app.pasadenagenerator.com/");
+  assert.equal(aris?.publishedLivePointerStatus.label, "Live pointer unknown");
+  assert.equal(aris?.externalSourceDomainStatus.href, "https://www.aris.si/");
+  assert.equal(serializedAris.includes("chs.si"), false);
+  assert.equal(serializedAris.includes("https://www.chs.si/"), false);
 });
 
 test("missing or partial imported-site data renders unavailable and partial states", () => {

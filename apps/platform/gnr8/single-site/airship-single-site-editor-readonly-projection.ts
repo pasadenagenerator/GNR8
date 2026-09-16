@@ -17,6 +17,7 @@ import {
   type AirshipSingleSiteDraftStyleSettings,
 } from "./airship-single-site-draft-service";
 import {
+  AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX,
   readLatestAirshipSingleSiteDraftCandidatePreview,
   type AirshipDraftCandidatePreviewRef,
 } from "./airship-single-site-draft-candidate-service";
@@ -33,6 +34,12 @@ import {
   type AirshipGovernedDryRunReadback,
 } from "./airship-governed-dry-run-service";
 import {
+  AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+  AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+  AIRSHIP_ARIS_DRAFT_ID,
+  AIRSHIP_ARIS_DRAFT_VERSION,
+  AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+  AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
   arisAirshipDraftContainsForbiddenCopy,
   buildArisAirshipMvpDraftEdits,
   isArisAirshipMvpMigration,
@@ -475,6 +482,33 @@ function demoReadinessForMigration(migrationId: string | null): AirshipMvpDemoRe
   return migrationId === AIRSHIP_CHS_MIGRATION_ID ? AIRSHIP_CHS_MVP_DEMO_READINESS : null;
 }
 
+function arisDraftCandidatePreviewFallback(migrationId: string | null): AirshipDraftCandidatePreviewRef | null {
+  if (!isArisAirshipMvpMigration(migrationId)) return null;
+  const appliedEdits = buildArisAirshipMvpDraftEdits().map((edit) => ({
+    draftEditId: edit.id,
+    targetSectionPage: edit.targetSectionPage,
+    appliedTextContent: edit.proposedTextContent,
+  }));
+  return {
+    label: "New Airship draft candidate preview",
+    siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+    runtimeArtifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+    route: `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID)}/preview?mode=transformed`,
+    mode: "transformed",
+    available: true,
+    unavailableReason: null,
+    authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+    statusLabel: "Not live, internal preview only",
+    sourceLiveSiteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+    sourceLiveRuntimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+    draftId: AIRSHIP_ARIS_DRAFT_ID,
+    draftVersion: AIRSHIP_ARIS_DRAFT_VERSION,
+    styleSettings: DEFAULT_AIRSHIP_SINGLE_SITE_DRAFT_STYLE_SETTINGS,
+    appliedEdits,
+    skippedEdits: [],
+  };
+}
+
 function hasPresentSourceEvidence(studioModel: SingleSiteStudioReadonlyProjection): boolean {
   return studioModel.sourceEvidence.some((item) => /present|accepted|captured|available/i.test(item.status));
 }
@@ -842,6 +876,7 @@ function importedSiteEditorModel(input: {
 export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBuildInput): AirshipSingleSiteEditorReadonlyProjection {
   const migrationId = text(input.migrationId) ?? input.studioModel.migrationId;
   const routeHref = `/gnr8/airship/single-site${migrationId ? `?migrationId=${encodeURIComponent(migrationId)}` : ""}`;
+  const airshipDraftCandidate = input.airshipDraftCandidate ?? arisDraftCandidatePreviewFallback(migrationId);
   const generatedDrafts = importedSiteDrafts({ migrationId, studioModel: input.studioModel });
   if (migrationId === AIRSHIP_CHS_MIGRATION_ID && !chsSourceEvidenceAllowsForbiddenMaverCopy({ studioModel: input.studioModel, migrationId })) {
     assertChsDraftIdentity(generatedDrafts);
@@ -868,7 +903,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     migrationId,
     drafts,
     persistedDraft,
-    airshipDraftCandidate: input.airshipDraftCandidate ?? null,
+    airshipDraftCandidate,
     airshipDraftCandidatePreviewHost: input.airshipDraftCandidatePreviewHost ?? null,
     airshipDraftCandidateReview: input.airshipDraftCandidateReview ?? null,
     airshipDraftCandidatePublishReadiness: input.airshipDraftCandidatePublishReadiness ?? null,
@@ -902,7 +937,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
       originalClone: input.studioModel.previews.originalClone,
       currentImprovedPublished: input.studioModel.previews.improvedCandidate,
       currentLivePublished: input.studioModel.previews.improvedCandidate,
-      airshipDraftCandidate: input.airshipDraftCandidate ?? null,
+      airshipDraftCandidate,
       airshipDraftCandidateReview: input.airshipDraftCandidateReview ?? null,
       airshipDraftCandidatePublishReadiness: input.airshipDraftCandidatePublishReadiness ?? null,
       airshipDraftCandidateGovernedDryRun: input.airshipDraftCandidateGovernedDryRun ?? null,
@@ -969,6 +1004,7 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
       airshipDraftCandidate = null;
     }
   }
+  airshipDraftCandidate = airshipDraftCandidate ?? arisDraftCandidatePreviewFallback(migrationId);
   let airshipDraftCandidateReview: AirshipInternalPreviewCandidateReviewRecord | null = null;
   let airshipDraftCandidatePreviewHost: AirshipPreviewHostReadback | null = null;
   if (airshipDraftCandidate) {

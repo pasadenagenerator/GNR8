@@ -5,10 +5,11 @@ import {
   getAirshipSingleSiteEditorReadonlyProjection,
   type AirshipSingleSiteEditorReadonlyProjection,
 } from "./airship-single-site-editor-readonly-projection";
+import { AIRSHIP_ARIS_MIGRATION_ID } from "./airship-aris-mvp-draft";
 import { SingleSiteStateReadRepository } from "./single-site-state-read-repository";
 
 export const AIRSHIP_IMPORTED_SITE_ONBOARDING_PROJECTION_VERSION = "airship-15-imported-site-onboarding:v1" as const;
-export const AIRSHIP_IMPORTED_SITE_ONBOARDING_SEED_MIGRATION_IDS = [AIRSHIP_CHS_MIGRATION_ID] as const;
+export const AIRSHIP_IMPORTED_SITE_ONBOARDING_SEED_MIGRATION_IDS = [AIRSHIP_CHS_MIGRATION_ID, AIRSHIP_ARIS_MIGRATION_ID] as const;
 
 export type AirshipOnboardingStatusTone = "good" | "warn" | "neutral";
 

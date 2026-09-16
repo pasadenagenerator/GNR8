@@ -10,6 +10,7 @@ import {
 
 export const AIRSHIP_ARIS_MVP_DRAFT_VERSION = "airship-aris-mvp-source-evidence-draft:v1" as const;
 export const AIRSHIP_ARIS_MIGRATION_ID = "ebf62324-1e51-4435-abd7-004722fb48d6" as const;
+export const AIRSHIP_ARIS_SITE_LABEL = "aris.si" as const;
 export const AIRSHIP_ARIS_SOURCE_URL = "https://www.aris.si/" as const;
 export const AIRSHIP_ARIS_OWNERSHIP_SITE_ID = "ccc4e66e-5dcb-4556-a339-51dbe891cfd8" as const;
 export const AIRSHIP_ARIS_CLIENT_ID = "e61d1982-068f-4d84-bb6f-c3fbfc93f39b" as const;
@@ -17,6 +18,12 @@ export const AIRSHIP_ARIS_AGENCY_ID = "6a09c2d9-12c3-4c19-a466-0c29ae2f723e" as 
 export const AIRSHIP_ARIS_RUNTIME_SITE_ID = "site_6b859cc1599a5b6642dc" as const;
 export const AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID = "ae35c6ad-5a26-4413-a3c8-64362b042810" as const;
 export const AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID = "f024459a-8bc9-41b9-b2a7-137ee85eaf83" as const;
+export const AIRSHIP_ARIS_DRAFT_ID = "5ed1b4da-eb06-4eee-bdc0-5b5cdec99707" as const;
+export const AIRSHIP_ARIS_DRAFT_VERSION = 1 as const;
+export const AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID = "6d712ab9-f48e-49a3-9c26-03915365d746" as const;
+export const AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID = "8073651e-510b-47e7-8363-8a742b7967db" as const;
+export const AIRSHIP_ARIS_PREVIEW_HOSTNAME = "aris-airship.app.pasadenagenerator.com" as const;
+export const AIRSHIP_ARIS_PREVIEW_BINDING_ID = "e73e5d73-cbbe-4ff7-9cdb-75c0ee6aa2ae" as const;
 export const AIRSHIP_ARIS_SOURCE_EVIDENCE_REVIEW_ID = "c868beb0-08d8-412c-9f21-4ef49cfae4c5" as const;
 export const AIRSHIP_ARIS_CAPTURE_RUN_ID = "imported-url-site-5a3cd0011548018e" as const;
 export const AIRSHIP_ARIS_SOURCE_PACKAGE_REF = "b66c7af5-f365-4d85-a821-46eb31dbc633" as const;
