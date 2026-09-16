@@ -28,7 +28,13 @@ export type AirshipImportedSiteOnboardingItem = {
   latestInternalPreviewCandidate: AirshipImportedSiteOnboardingStatus & {
     href: string | null;
   };
+  latestGnr8PreviewHostStatus: AirshipImportedSiteOnboardingStatus & {
+    href: string | null;
+  };
   publishedLivePointerStatus: AirshipImportedSiteOnboardingStatus & {
+    href: string | null;
+  };
+  externalSourceDomainStatus: AirshipImportedSiteOnboardingStatus & {
     href: string | null;
   };
   links: {
@@ -166,6 +172,44 @@ function publishedLivePointerStatus(model: AirshipSingleSiteEditorReadonlyProjec
   };
 }
 
+function gnr8PreviewHostStatus(model: AirshipSingleSiteEditorReadonlyProjection): AirshipImportedSiteOnboardingItem["latestGnr8PreviewHostStatus"] {
+  const readback = model.importedSiteModel.latestInternalPreviewHost;
+  if (!readback) {
+    return {
+      label: "Preview host unavailable",
+      detail: "No latest Airship draft candidate is available for a GNR8 demo preview host.",
+      tone: "warn",
+      href: null,
+    };
+  }
+  return {
+    label: readback.bindingStatus.label,
+    detail: `${readback.label}. ${readback.bindingStatus.detail}`,
+    tone: readback.bindingStatus.tone,
+    href: readback.binding ? readback.previewUrl : null,
+  };
+}
+
+function externalSourceDomainStatus(model: AirshipSingleSiteEditorReadonlyProjection): AirshipImportedSiteOnboardingItem["externalSourceDomainStatus"] {
+  const readback = model.importedSiteModel.latestInternalPreviewHost;
+  if (readback) {
+    return {
+      label: readback.externalSourceDomainStatus.label,
+      detail: readback.externalSourceDomainStatus.detail,
+      tone: readback.externalSourceDomainStatus.tone,
+      href: readback.externalSourceDomainStatus.url,
+    };
+  }
+  return {
+    label: "External customer domain separate",
+    detail: model.importedSiteModel.liveUrl
+      ? `${model.importedSiteModel.liveUrl} is shown separately from GNR8 preview hosts.`
+      : "Customer/source domain status is separate from GNR8 preview hosts.",
+    tone: "neutral",
+    href: availableUrl(model.importedSiteModel.liveUrl),
+  };
+}
+
 function itemFromEditorModel(model: AirshipSingleSiteEditorReadonlyProjection): AirshipImportedSiteOnboardingItem | null {
   const migrationId = text(model.migrationId);
   if (!migrationId) return null;
@@ -177,7 +221,9 @@ function itemFromEditorModel(model: AirshipSingleSiteEditorReadonlyProjection): 
     importSourceEvidenceStatus: sourceEvidenceStatus(model),
     latestAirshipDraftStatus: draftStatus(model),
     latestInternalPreviewCandidate: previewCandidateStatus(model),
+    latestGnr8PreviewHostStatus: gnr8PreviewHostStatus(model),
     publishedLivePointerStatus: publishedLivePointerStatus(model),
+    externalSourceDomainStatus: externalSourceDomainStatus(model),
     links: {
       overviewHref: model.routeHref,
       editorHref: model.links.airshipEditor,

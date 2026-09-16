@@ -164,6 +164,50 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         lastSavedAt: null,
       },
       latestInternalPreviewCandidate: null,
+      latestInternalPreviewHost: {
+        serviceVersion: "airship-21-preview-host-binding:v1",
+        label: "GNR8 demo preview, not live",
+        candidateSiteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
+        candidateArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
+        suggestedHostname: "chs-airship.app.pasadenagenerator.com",
+        previewUrl: "https://chs-airship.app.pasadenagenerator.com/",
+        binding: {
+          id: "preview-binding-chs",
+          siteId: "runtime-chs",
+          host: "chs-airship.app.pasadenagenerator.com",
+          candidateSiteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
+          candidateArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
+          status: "ACTIVE",
+          bindingKind: "candidate_preview",
+          createdAt: "2026-09-16T00:00:00.000Z",
+          updatedAt: "2026-09-16T00:00:00.000Z",
+        },
+        bindingStatus: {
+          label: "Preview host binding active",
+          detail: "Binding preview-binding-chs points chs-airship.app.pasadenagenerator.com to candidate 2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7 / artifact 4ec7588a-b7cb-46dc-a735-88e4ec466a72.",
+          tone: "good",
+        },
+        activePointerStatus: {
+          siteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+          artifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+          label: "Active pointer present",
+          detail: `Live pointer remains separate: ${IMPROVED_CANDIDATE_VERSION_ID} / 1f80138a-39c2-4210-ac61-16200e5a2254.`,
+          tone: "neutral",
+        },
+        externalSourceDomainStatus: {
+          url: "https://www.chs.si/",
+          host: "www.chs.si",
+          label: "External customer domain separate",
+          detail: "www.chs.si is the customer/source domain and is not mutated by this workflow.",
+          tone: "neutral",
+        },
+        action: {
+          enabled: false,
+          endpoint: "/api/gnr8/admin/airship/single-site/preview-host-binding",
+          actionMode: "create_gnr8_demo_preview_host",
+          disabledReason: "Preview host binding already exists or conflicts; service will not overwrite from the UI.",
+        },
+      },
       latestInternalPreviewReview: null,
       latestInternalPreviewPublishReadiness: null,
       latestInternalPreviewGovernedDryRun: null,
@@ -425,6 +469,10 @@ test("airship single-site editor renders live published and Airship draft candid
   assert.equal(html.includes("active pointer unchanged"), true);
   assert.equal(html.includes("records review readiness only"), true);
   assert.equal(html.includes("Open latest internal preview candidate"), true);
+  assert.equal(html.includes("GNR8 demo preview, not live"), true);
+  assert.equal(html.includes("Preview host binding active"), true);
+  assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
+  assert.equal(html.includes("External customer domain"), true);
   assert.equal(html.includes("accepted/saved edits applied"), true);
   assert.equal(html.includes("rejected CTA not applied"), true);
   assert.equal(html.includes("CHS helps modernize secure enterprise IT"), true);

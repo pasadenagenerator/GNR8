@@ -121,7 +121,9 @@ export function AirshipImportedSiteOnboarding({ model }: Props) {
                   {statusBlock("Import / source evidence", item.importSourceEvidenceStatus)}
                   {statusBlock("Latest Airship draft", item.latestAirshipDraftStatus)}
                   {statusBlock("Latest internal preview candidate", item.latestInternalPreviewCandidate)}
+                  {statusBlock("GNR8 demo preview host", item.latestGnr8PreviewHostStatus)}
                   {statusBlock("Published / live pointer", item.publishedLivePointerStatus)}
+                  {statusBlock("External customer domain", item.externalSourceDomainStatus)}
                 </div>
               </article>
             ))}

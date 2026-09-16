@@ -37,6 +37,10 @@ import {
   buildArisAirshipMvpDraftEdits,
   isArisAirshipMvpMigration,
 } from "./airship-aris-mvp-draft";
+import {
+  readAirshipPreviewHostReadback,
+  type AirshipPreviewHostReadback,
+} from "./airship-preview-host-binding-service";
 
 export const AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION = "airship-1-single-site-editor-readonly:v1" as const;
 export type { AirshipSingleSiteDraftStyleSettings };
@@ -118,6 +122,7 @@ export type AirshipImportedSiteEditorModel = {
     lastSavedAt: string | null;
   };
   latestInternalPreviewCandidate: AirshipDraftCandidatePreviewRef | null;
+  latestInternalPreviewHost: AirshipPreviewHostReadback | null;
   latestInternalPreviewReview: AirshipInternalPreviewCandidateReviewRecord | null;
   latestInternalPreviewPublishReadiness: AirshipPublishReadinessRecord | null;
   latestInternalPreviewGovernedDryRun: AirshipGovernedDryRunReadback | null;
@@ -288,6 +293,7 @@ type AirshipBuildInput = {
   studioModel: SingleSiteStudioReadonlyProjection;
   persistedDraft?: AirshipSingleSiteDraftRecord | null;
   airshipDraftCandidate?: AirshipDraftCandidatePreviewRef | null;
+  airshipDraftCandidatePreviewHost?: AirshipPreviewHostReadback | null;
   airshipDraftCandidateReview?: AirshipInternalPreviewCandidateReviewRecord | null;
   airshipDraftCandidatePublishReadiness?: AirshipPublishReadinessRecord | null;
   airshipDraftCandidateGovernedDryRun?: AirshipGovernedDryRunReadback | null;
@@ -793,6 +799,7 @@ function importedSiteEditorModel(input: {
   drafts: AirshipSingleSiteImprovementDraft[];
   persistedDraft: AirshipSingleSiteDraftRecord | null;
   airshipDraftCandidate: AirshipDraftCandidatePreviewRef | null;
+  airshipDraftCandidatePreviewHost: AirshipPreviewHostReadback | null;
   airshipDraftCandidateReview: AirshipInternalPreviewCandidateReviewRecord | null;
   airshipDraftCandidatePublishReadiness: AirshipPublishReadinessRecord | null;
   airshipDraftCandidateGovernedDryRun: AirshipGovernedDryRunReadback | null;
@@ -818,6 +825,7 @@ function importedSiteEditorModel(input: {
       lastSavedAt: input.persistedDraft?.updatedAt ?? null,
     },
     latestInternalPreviewCandidate: input.airshipDraftCandidate,
+    latestInternalPreviewHost: input.airshipDraftCandidatePreviewHost,
     latestInternalPreviewReview: input.airshipDraftCandidateReview,
     latestInternalPreviewPublishReadiness: input.airshipDraftCandidatePublishReadiness,
     latestInternalPreviewGovernedDryRun: input.airshipDraftCandidateGovernedDryRun,
@@ -861,6 +869,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     drafts,
     persistedDraft,
     airshipDraftCandidate: input.airshipDraftCandidate ?? null,
+    airshipDraftCandidatePreviewHost: input.airshipDraftCandidatePreviewHost ?? null,
     airshipDraftCandidateReview: input.airshipDraftCandidateReview ?? null,
     airshipDraftCandidatePublishReadiness: input.airshipDraftCandidatePublishReadiness ?? null,
     airshipDraftCandidateGovernedDryRun: input.airshipDraftCandidateGovernedDryRun ?? null,
@@ -961,6 +970,20 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
     }
   }
   let airshipDraftCandidateReview: AirshipInternalPreviewCandidateReviewRecord | null = null;
+  let airshipDraftCandidatePreviewHost: AirshipPreviewHostReadback | null = null;
+  if (airshipDraftCandidate) {
+    try {
+      airshipDraftCandidatePreviewHost = await readAirshipPreviewHostReadback({
+        candidateSiteVersionId: airshipDraftCandidate.siteVersionId,
+        candidateArtifactId: airshipDraftCandidate.runtimeArtifactId,
+        siteLabel: studioModel.summary.site,
+        sourceUrl: studioModel.summary.sourceUrl,
+        liveUrl: studioModel.summary.liveSiteUrl,
+      });
+    } catch {
+      airshipDraftCandidatePreviewHost = null;
+    }
+  }
   if (migrationId && airshipDraftCandidate) {
     try {
       airshipDraftCandidateReview = await readLatestAirshipInternalPreviewCandidateReview({
@@ -1002,6 +1025,7 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
     studioModel,
     persistedDraft,
     airshipDraftCandidate,
+    airshipDraftCandidatePreviewHost,
     airshipDraftCandidateReview,
     airshipDraftCandidatePublishReadiness,
     airshipDraftCandidateGovernedDryRun,

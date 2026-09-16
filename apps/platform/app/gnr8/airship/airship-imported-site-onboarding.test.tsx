@@ -44,10 +44,22 @@ function onboardingModel(overrides: Partial<AirshipImportedSiteOnboardingProject
           tone: "good",
           href: "/api/gnr8/admin/single-site-studio/versions/candidate-chs/preview?mode=transformed",
         },
+        latestGnr8PreviewHostStatus: {
+          label: "Preview host binding active",
+          detail: "GNR8 demo preview, not live. Binding preview-binding-chs points chs-airship.app.pasadenagenerator.com to candidate candidate-chs / artifact artifact-chs.",
+          tone: "good",
+          href: "https://chs-airship.app.pasadenagenerator.com/",
+        },
         publishedLivePointerStatus: {
           label: "Live pointer present",
           detail: "Published/current candidate PUBLISHED; site version improved-chs; artifact artifact-improved-chs.",
           tone: "good",
+          href: "https://www.chs.si/",
+        },
+        externalSourceDomainStatus: {
+          label: "External customer domain separate",
+          detail: "www.chs.si is the customer/source domain and is not mutated by this workflow.",
+          tone: "neutral",
           href: "https://www.chs.si/",
         },
         links: {
@@ -91,7 +103,10 @@ test("Airship onboarding renders imported-site fields and overview/editor links"
   assert.equal(html.includes("source supported"), true);
   assert.equal(html.includes("Saved draft draft"), true);
   assert.equal(html.includes("Not live, internal preview only"), true);
+  assert.equal(html.includes("GNR8 demo preview host"), true);
+  assert.equal(html.includes("Preview host binding active"), true);
   assert.equal(html.includes("Live pointer present"), true);
+  assert.equal(html.includes("External customer domain"), true);
   assert.equal(html.includes(`/gnr8/airship/single-site?migrationId=${CHS_MIGRATION_ID}`), true);
   assert.equal(html.includes(`/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`), true);
 });
@@ -121,10 +136,22 @@ test("Airship onboarding renders unavailable values for partial imported-site da
           tone: "warn",
           href: null,
         },
+        latestGnr8PreviewHostStatus: {
+          label: "Preview host unavailable",
+          detail: "No latest Airship draft candidate is available for a GNR8 demo preview host.",
+          tone: "warn",
+          href: null,
+        },
         publishedLivePointerStatus: {
           label: "Live pointer unknown",
           detail: "Published/current candidate unknown; site version unavailable.",
           tone: "warn",
+          href: null,
+        },
+        externalSourceDomainStatus: {
+          label: "External customer domain separate",
+          detail: "Customer/source domain status is separate from GNR8 preview hosts.",
+          tone: "neutral",
           href: null,
         },
       },
@@ -136,6 +163,7 @@ test("Airship onboarding renders unavailable values for partial imported-site da
   assert.equal(html.includes("partial evidence"), true);
   assert.equal(html.includes("No saved Airship draft"), true);
   assert.equal(html.includes("No Airship draft candidate"), true);
+  assert.equal(html.includes("Preview host unavailable"), true);
   assert.equal(html.match(/Unavailable/g)?.length, 2);
 });
 

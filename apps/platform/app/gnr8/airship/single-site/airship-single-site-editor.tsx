@@ -8,6 +8,7 @@ import type { SingleSiteStudioPreviewState } from "@/gnr8/single-site/single-sit
 
 import { AirshipDraftCandidateAction } from "./airship-draft-candidate-action";
 import { AirshipDraftCandidateReviewAction } from "./airship-draft-candidate-review-action";
+import { AirshipPreviewHostBindingAction } from "./airship-preview-host-binding-action";
 import { AirshipPublishReadinessAction } from "./airship-publish-readiness-action";
 import { AirshipSimplePromoteRollbackAction } from "./airship-simple-promote-rollback-action";
 import { AirshipSingleSiteLocalDraftEditor } from "./airship-single-site-local-draft-editor";
@@ -108,6 +109,7 @@ function preview(previewState: Omit<SingleSiteStudioPreviewState, "label"> & { l
 
 function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjection) {
   const candidate = model.previews.airshipDraftCandidate;
+  const previewHost = model.importedSiteModel.latestInternalPreviewHost;
   if (!candidate) {
     return (
       <div style={{ display: "grid", gap: 10 }}>
@@ -148,7 +150,35 @@ function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjectio
         initialReadiness={model.previews.airshipDraftCandidatePublishReadiness}
         initialDryRun={model.previews.airshipDraftCandidateGovernedDryRun}
       />
+      <AirshipPreviewHostBindingAction
+        migrationId={model.migrationId}
+        readback={previewHost}
+      />
       {preview(candidate)}
+      {previewHost ? (
+        <div style={{ border: "1px solid #ccfbf1", borderRadius: 8, background: "#f0fdfa", padding: 12, display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {badge(previewHost.label, "good")}
+            {badge(previewHost.bindingStatus.label, previewHost.bindingStatus.tone)}
+            {badge(previewHost.activePointerStatus.label, previewHost.activePointerStatus.tone)}
+            {badge(previewHost.externalSourceDomainStatus.label, previewHost.externalSourceDomainStatus.tone)}
+          </div>
+          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+            {fact("Candidate site version", previewHost.candidateSiteVersionId)}
+            {fact("Artifact", previewHost.candidateArtifactId)}
+            {fact(
+              "Preview URL",
+              <a href={previewHost.previewUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+                {previewHost.previewUrl}
+              </a>,
+            )}
+            {fact("Preview host binding", previewHost.binding ? `${previewHost.binding.id} / ${previewHost.binding.status} / ${previewHost.binding.bindingKind}` : "missing")}
+            {fact("Preview host status", previewHost.bindingStatus.detail)}
+            {fact("Active/live pointer", previewHost.activePointerStatus.detail)}
+            {fact("External customer domain", previewHost.externalSourceDomainStatus.detail)}
+          </dl>
+        </div>
+      ) : null}
       <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 12, display: "grid", gap: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {badge(candidate.statusLabel, "warn")}
