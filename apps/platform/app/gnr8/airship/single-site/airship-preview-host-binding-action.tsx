@@ -43,23 +43,26 @@ export function AirshipPreviewHostBindingAction({ migrationId, readback }: Props
       : "No GNR8 demo preview-host binding exists for this candidate.",
   );
   if (!readback) return null;
-  const disabled = state === "creating" || !migrationId || !readback.action.enabled;
+  const previewHostReadback = readback;
+  const previewHostAction = previewHostReadback.action;
+  const previewHostEndpoint = previewHostAction.endpoint;
+  const disabled = state === "creating" || !migrationId || !previewHostAction.enabled;
 
   async function createBinding() {
     if (disabled) return;
     setState("creating");
     setMessage("Creating GNR8 demo preview-host binding without active pointer changes...");
     try {
-      const response = await fetch(readback.action.endpoint, {
+      const response = await fetch(previewHostEndpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          actionMode: readback.action.actionMode,
+          actionMode: previewHostAction.actionMode,
           migrationId,
-          candidateSiteVersionId: readback.candidateSiteVersionId,
-          candidateArtifactId: readback.candidateArtifactId,
-          hostname: readback.suggestedHostname,
-          idempotencyKey: `airship-preview-host:${readback.suggestedHostname}:${readback.candidateSiteVersionId}:${readback.candidateArtifactId}`,
+          candidateSiteVersionId: previewHostReadback.candidateSiteVersionId,
+          candidateArtifactId: previewHostReadback.candidateArtifactId,
+          hostname: previewHostReadback.suggestedHostname,
+          idempotencyKey: `airship-preview-host:${previewHostReadback.suggestedHostname}:${previewHostReadback.candidateSiteVersionId}:${previewHostReadback.candidateArtifactId}`,
         }),
       });
       const payload = await response.json() as PreviewHostResponse;
@@ -94,13 +97,13 @@ export function AirshipPreviewHostBindingAction({ migrationId, readback }: Props
         </button>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#334155", fontSize: 12, fontWeight: 850 }}>
-        <span>{state === "failed" ? "failed" : state === "creating" ? "creating" : readback.binding ? "bound" : "missing"}</span>
+        <span>{state === "failed" ? "failed" : state === "creating" ? "creating" : previewHostReadback.binding ? "bound" : "missing"}</span>
         <span>candidate preview only</span>
         <span>no active pointer</span>
         <span>no customer DNS</span>
       </div>
-      {readback.action.disabledReason ? (
-        <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>{readback.action.disabledReason}</div>
+      {previewHostAction.disabledReason ? (
+        <div style={{ color: "#92400e", fontSize: 12, lineHeight: 1.45 }}>{previewHostAction.disabledReason}</div>
       ) : null}
     </div>
   );
