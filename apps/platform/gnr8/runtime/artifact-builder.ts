@@ -745,45 +745,44 @@ function renderLegacySummaryHtml(input: {
   lines.push("  </div>");
 
   if (airshipDraftSections.length > 0) {
-    lines.push('  <div class="gnr8-columns" aria-label="airship-draft-sections">');
     for (const section of airshipDraftSections.filter((item) => item.key !== "cta" && item.key !== "footer")) {
       const elementMarker = section.key === "offers" ? "offer-card" : section.key === "proof" ? "proof-card" : section.key === "approach" ? "approach-card" : "";
-      lines.push(`    <article class="gnr8-card gnr8-section" data-airship-draft-section="${escapeHtml(section.key)}" data-airship-section="${escapeHtml(section.key)}">`);
-      lines.push(`      <h2>${escapeHtml(section.label)}</h2>`);
-      lines.push(`      <p style="margin: 0 0 10px; font-weight: 800; color: #0d2230;">${escapeHtml(section.heading)}</p>`);
+      lines.push(`  <section class="gnr8-card gnr8-section" data-airship-draft-section="${escapeHtml(section.key)}" data-airship-section="${escapeHtml(section.key)}">`);
+      lines.push(`    <h2>${escapeHtml(section.label)}</h2>`);
+      lines.push(`    <p style="margin: 0 0 10px; font-weight: 800; color: #0d2230;">${escapeHtml(section.heading)}</p>`);
       if (section.items.length > 0) {
-        lines.push("      <ul>");
+        lines.push("    <ul>");
         for (const [itemIndex, item] of section.items.entries()) {
-          lines.push(`        <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""}>${escapeHtml(item)}</li>`);
+          lines.push(`      <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""}>${escapeHtml(item)}</li>`);
         }
-        lines.push("      </ul>");
+        lines.push("    </ul>");
       } else if (section.body) {
-        lines.push(`      <p style="margin: 0;">${escapeHtml(section.body)}</p>`);
+        lines.push(`    <p style="margin: 0;">${escapeHtml(section.body)}</p>`);
       }
-      lines.push("    </article>");
+      lines.push("  </section>");
     }
-    lines.push("  </div>");
   }
 
-  lines.push('  <article class="gnr8-card gnr8-section" aria-label="legacy-summary-contact" data-airship-section="cta" data-airship-element="contact-card">');
+  lines.push('  <section class="gnr8-card gnr8-section" aria-label="legacy-summary-contact" data-airship-section="cta">');
   lines.push(`    <h2>${escapeHtml(labels.contact)}</h2>`);
+  lines.push('    <div data-airship-element="contact-card">');
   if (contact.address) {
-    lines.push(`    <p style="margin: 0 0 10px;">${escapeHtml(contact.address)}</p>`);
+    lines.push(`      <p style="margin: 0 0 10px;">${escapeHtml(contact.address)}</p>`);
   }
   if (contact.phones.length > 0 || contact.emails.length > 0 || rankedLinks.length > 0) {
     const contactItems = new Set<string>();
-    lines.push("    <ul>");
+    lines.push("      <ul>");
     for (const phone of contact.phones) {
       const folded = `phone:${normalizePhoneKey(phone)}`;
       if (contactItems.has(folded)) continue;
       contactItems.add(folded);
-      lines.push(`      <li>${escapeHtml(phone)}</li>`);
+      lines.push(`        <li>${escapeHtml(phone)}</li>`);
     }
     for (const email of contact.emails) {
       const folded = `email:${normalizeEmailKey(email)}`;
       if (contactItems.has(folded)) continue;
       contactItems.add(folded);
-      lines.push(`      <li>${escapeHtml(email)}</li>`);
+      lines.push(`        <li>${escapeHtml(email)}</li>`);
     }
     for (const link of rankedLinks) {
       const folded =
@@ -794,10 +793,11 @@ function renderLegacySummaryHtml(input: {
             : `link:${link.href.toLowerCase()}::${link.label.toLowerCase()}`;
       if (contactItems.has(folded)) continue;
       contactItems.add(folded);
-      lines.push(`      <li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`);
+      lines.push(`        <li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`);
     }
-    lines.push("    </ul>");
+    lines.push("      </ul>");
   }
+  lines.push("    </div>");
   const airshipContactSection = airshipDraftSections.find((section) => section.key === "cta");
   if (airshipContactSection?.body) {
     lines.push(`    <p style="margin: 10px 0 0;">${escapeHtml(airshipContactSection.body)}</p>`);
@@ -805,7 +805,7 @@ function renderLegacySummaryHtml(input: {
   if (airshipContactSection?.ctaLabel) {
     lines.push(`    <a class="gnr8-primary-cta" href="#contact" data-airship-element="contact-cta">${escapeHtml(airshipContactSection.ctaLabel)}</a>`);
   }
-  lines.push("  </article>");
+  lines.push("  </section>");
   const airshipFooterSection = airshipDraftSections.find((section) => section.key === "footer");
   if (airshipFooterSection?.body) {
     lines.push('  <footer class="gnr8-section" data-airship-draft-section="footer" data-airship-section="footer" style="font-size: 0.86rem; color: #456; padding: 4px 2px 0;">');

@@ -126,12 +126,15 @@ test("artifact-builder renders Airship section and element markers in candidate 
   for (const section of ["hero", "offers", "proof", "approach", "cta", "footer"]) {
     assert.match(html, new RegExp(`data-airship-section="${section}"`));
   }
+  assert.match(html, /<section[^>]*class="gnr8-card gnr8-section"[^>]*data-airship-section="offers"/);
+  assert.match(html, /<section[^>]*class="gnr8-card gnr8-section"[^>]*data-airship-section="cta"/);
+  assert.doesNotMatch(html, /<section[^>]*data-airship-section="cta"[^>]*data-airship-element="contact-card"/);
   assert.match(html, /data-airship-element="hero-headline"/);
   assert.match(html, /data-airship-element="hero-cta"/);
   assert.match(html, /data-airship-element="offer-card"/);
   assert.match(html, /data-airship-element="proof-card"/);
   assert.match(html, /data-airship-element="approach-card"/);
-  assert.match(html, /data-airship-element="contact-card"/);
+  assert.match(html, /<div data-airship-element="contact-card">/);
   assert.match(html, /data-airship-element="contact-cta"/);
   assert.doesNotMatch(html, /FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/i);
 });

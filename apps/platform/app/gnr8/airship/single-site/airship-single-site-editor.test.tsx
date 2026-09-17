@@ -1558,10 +1558,50 @@ test("airship visual editor derives artifact DOM geometry and fallback canvas he
     1180,
   );
   assert.deepEqual(
-    airshipArtifactOverlayRectFromDomRect({ top: 12.4, left: 8.6, width: 320.2, height: 144.8, scrollY: 40 }),
+    airshipArtifactOverlayRectFromDomRect({
+      iframeElementRect: { top: 100, left: 80, width: 1100, height: 1400 },
+      overlayHostElementRect: { top: 100, left: 80, width: 1100, height: 1400 },
+      targetElementRect: { top: 12.4, left: 8.6, width: 320.2, height: 144.8 },
+      zoomScale: 1,
+      iframeScrollY: 40,
+    }),
     { top: 52, left: 9, width: 320, height: 145, source: "dom-marker" },
   );
-  assert.equal(airshipArtifactOverlayRectFromDomRect({ top: 0, left: 0, width: 0, height: 20 }), null);
+  assert.deepEqual(
+    airshipArtifactOverlayRectFromDomRect({
+      iframeElementRect: { top: 71, left: 35.5, width: 781, height: 994 },
+      overlayHostElementRect: { top: 0, left: 0, width: 781, height: 994 },
+      targetElementRect: { top: 120, left: 48, width: 640, height: 220 },
+      zoomScale: 0.71,
+    }),
+    { top: 220, left: 98, width: 640, height: 220, source: "dom-marker" },
+  );
+  assert.deepEqual(
+    airshipArtifactOverlayRectFromDomRect({
+      iframeElementRect: { top: 122, left: 54, width: 1100, height: 1400 },
+      overlayHostElementRect: { top: 90, left: 40, width: 1100, height: 1432 },
+      targetElementRect: { top: 200, left: 0, width: 1100, height: 360 },
+      zoomScale: 1,
+    }),
+    { top: 232, left: 14, width: 1100, height: 360, source: "dom-marker" },
+  );
+  assert.deepEqual(
+    airshipArtifactOverlayRectFromDomRect({
+      iframeElementRect: { top: -178, left: 54, width: 1100, height: 1400 },
+      overlayHostElementRect: { top: -210, left: 40, width: 1100, height: 1432 },
+      targetElementRect: { top: 200, left: 0, width: 1100, height: 360 },
+      zoomScale: 1,
+    }),
+    { top: 232, left: 14, width: 1100, height: 360, source: "dom-marker" },
+  );
+  assert.equal(
+    airshipArtifactOverlayRectFromDomRect({
+      iframeElementRect: { top: 0, left: 0, width: 100, height: 100 },
+      targetElementRect: null,
+      zoomScale: 1,
+    }),
+    null,
+  );
   assert.equal(airshipArtifactSectionSelector("cta"), '[data-airship-section="cta"]');
   assert.deepEqual(airshipElementSelectorsForSection("hero"), [
     '[data-airship-element="hero-headline"]',
@@ -1571,6 +1611,14 @@ test("airship visual editor derives artifact DOM geometry and fallback canvas he
     '[data-airship-element="contact-card"]',
     '[data-airship-element="contact-cta"]',
   ]);
+});
+
+test("airship artifact selection falls back to approximate bands when DOM markers are absent", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+
+  assert.equal(visualEditorSource.includes('data-airship-artifact-geometry-source={artifactOverlayRects[section] ? "dom-marker" : "fallback-band"}'), true);
+  assert.equal(visualEditorSource.includes("if (!element) continue;"), true);
+  assert.equal(visualEditorSource.includes("return artifactSectionBandStyle(section);"), true);
 });
 
 test("airship visual editor inspector scopes Edit and CSS fields to the selected section", () => {

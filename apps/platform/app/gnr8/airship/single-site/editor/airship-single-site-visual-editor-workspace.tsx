@@ -111,6 +111,13 @@ export type AirshipArtifactOverlayRect = {
   source: "dom-marker";
 };
 
+type AirshipDomRectLike = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+};
+
 type EditorSnapshot = {
   fields: AirshipHeroEditorFields;
   drafts: AirshipSingleSiteImprovementDraft[];
@@ -392,28 +399,38 @@ export function measuredAirshipArtifactCanvasHeight(input: {
 }
 
 export function airshipArtifactOverlayRectFromDomRect(input: {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-  scrollX?: number;
-  scrollY?: number;
+  iframeElementRect: AirshipDomRectLike;
+  targetElementRect: AirshipDomRectLike | null | undefined;
+  zoomScale: number;
+  overlayHostElementRect?: AirshipDomRectLike | null;
+  iframeScrollX?: number;
+  iframeScrollY?: number;
 }): AirshipArtifactOverlayRect | null {
+  const target = input.targetElementRect;
+  const zoomScale = Number.isFinite(input.zoomScale) && input.zoomScale > 0 ? input.zoomScale : 1;
+  const overlayHost = input.overlayHostElementRect ?? { top: 0, left: 0, width: 0, height: 0 };
   if (
-    !Number.isFinite(input.top) ||
-    !Number.isFinite(input.left) ||
-    !Number.isFinite(input.width) ||
-    !Number.isFinite(input.height) ||
-    input.width <= 0 ||
-    input.height <= 0
+    !target ||
+    !Number.isFinite(input.iframeElementRect.top) ||
+    !Number.isFinite(input.iframeElementRect.left) ||
+    !Number.isFinite(overlayHost.top) ||
+    !Number.isFinite(overlayHost.left) ||
+    !Number.isFinite(target.top) ||
+    !Number.isFinite(target.left) ||
+    !Number.isFinite(target.width) ||
+    !Number.isFinite(target.height) ||
+    target.width <= 0 ||
+    target.height <= 0
   ) {
     return null;
   }
+  const iframeTopInOverlayHost = (input.iframeElementRect.top - overlayHost.top) / zoomScale;
+  const iframeLeftInOverlayHost = (input.iframeElementRect.left - overlayHost.left) / zoomScale;
   return {
-    top: Math.max(0, Math.round(input.top + (input.scrollY ?? 0))),
-    left: Math.max(0, Math.round(input.left + (input.scrollX ?? 0))),
-    width: Math.max(1, Math.round(input.width)),
-    height: Math.max(1, Math.round(input.height)),
+    top: Math.max(0, Math.round(iframeTopInOverlayHost + target.top + (input.iframeScrollY ?? 0))),
+    left: Math.max(0, Math.round(iframeLeftInOverlayHost + target.left + (input.iframeScrollX ?? 0))),
+    width: Math.max(1, Math.round(target.width)),
+    height: Math.max(1, Math.round(target.height)),
     source: "dom-marker",
   };
 }
@@ -979,6 +996,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     });
     const scrollX = doc.defaultView?.scrollX ?? doc.documentElement?.scrollLeft ?? doc.body?.scrollLeft ?? 0;
     const scrollY = doc.defaultView?.scrollY ?? doc.documentElement?.scrollTop ?? doc.body?.scrollTop ?? 0;
+    const iframeRect = iframe.getBoundingClientRect();
+    const overlayHostRect = iframe.parentElement?.getBoundingClientRect() ?? iframeRect;
     const nextRects: Partial<Record<Exclude<EditorSectionKey, "source">, AirshipArtifactOverlayRect>> = {};
 
     for (const section of artifactCanvasSections) {
@@ -986,19 +1005,19 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       if (!element) continue;
       const rect = element.getBoundingClientRect();
       const overlayRect = airshipArtifactOverlayRectFromDomRect({
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height,
-        scrollX,
-        scrollY,
+        iframeElementRect: iframeRect,
+        overlayHostElementRect: overlayHostRect,
+        targetElementRect: rect,
+        zoomScale: canvasZoom,
+        iframeScrollX: scrollX,
+        iframeScrollY: scrollY,
       });
       if (overlayRect) nextRects[section] = overlayRect;
     }
 
     setArtifactCanvasMeasuredHeight(nextHeight);
     setArtifactOverlayRects(nextRects);
-  }, [artifactCanvasFallbackHeight]);
+  }, [artifactCanvasFallbackHeight, canvasZoom]);
 
   useEffect(() => {
     if (!artifactCanvasRender) {
