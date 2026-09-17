@@ -6,6 +6,7 @@ import {
   airshipDraftIdForImportedSiteField,
   buildAirshipSingleSiteDraftSeed,
   buildAirshipSingleSiteEditorReadonlyProjection,
+  sanitizeAirshipEditorArtifactHtml,
 } from "./airship-single-site-editor-readonly-projection";
 import {
   AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
@@ -121,6 +122,30 @@ const CHS_CTA_DRAFT_ID = airshipDraftIdForImportedSiteField({
   migrationId: CHS_MIGRATION_ID,
   siteLabel: "chs.si",
   fieldKey: "ctaLabel",
+});
+
+test("airship editor artifact sanitizer disables raw scripts and unsafe handlers", () => {
+  const sanitized = sanitizeAirshipEditorArtifactHtml(`
+    <!doctype html>
+    <html>
+      <body onload="alert('x')">
+        <a href="javascript:alert('x')" onclick="alert('x')">Unsafe</a>
+        <script>alert("x")</script>
+        <section>The CHS team helps your IT change with every technology wave.</section>
+      </body>
+    </html>
+  `);
+
+  assert.equal(sanitized.sandbox, "iframe-sandbox-without-scripts");
+  assert.equal(sanitized.rawScriptsExecute, false);
+  assert.equal(sanitized.scriptsRemoved, 1);
+  assert.equal(sanitized.inlineEventHandlersRemoved, 2);
+  assert.equal(sanitized.javascriptUrlsRemoved, 1);
+  assert.equal(sanitized.sanitizedHtml.includes("<script"), false);
+  assert.equal(sanitized.sanitizedHtml.includes("onload="), false);
+  assert.equal(sanitized.sanitizedHtml.includes("onclick="), false);
+  assert.equal(sanitized.sanitizedHtml.includes("javascript:"), false);
+  assert.equal(sanitized.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), true);
 });
 
 test("airship projection generates the first concrete CHS AI draft and local-only preview", () => {

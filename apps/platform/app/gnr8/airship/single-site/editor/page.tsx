@@ -67,6 +67,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
         draftVersion: model.previews.airshipDraftCandidate.draftVersion,
         statusLabel: model.previews.airshipDraftCandidate.statusLabel,
       } : null}
+      artifactCanvasRender={model.previews.airshipEditorArtifactCanvas}
       draftPreview={model.draftPanel.draftPreview}
       drafts={model.draftPanel.drafts}
       persistence={model.draftPanel.persistence}

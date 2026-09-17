@@ -49,6 +49,9 @@ import {
   readAirshipPreviewHostReadback,
   type AirshipPreviewHostReadback,
 } from "./airship-preview-host-binding-service";
+import {
+  getArtifactById,
+} from "../runtime/runtime-store";
 
 export const AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION = "airship-1-single-site-editor-readonly:v1" as const;
 export type { AirshipSingleSiteDraftStyleSettings };
@@ -188,6 +191,25 @@ export type AirshipMvpDemoReadiness = {
   };
 };
 
+export type AirshipEditorArtifactCanvasRender = {
+  source: "demo_artifact" | "candidate_artifact";
+  label: string;
+  siteVersionId: string;
+  runtimeArtifactId: string;
+  path: "/";
+  previewUrl: string | null;
+  sanitizedHtml: string;
+  originalHtmlByteLength: number;
+  sanitizedHtmlByteLength: number;
+  safety: {
+    sandbox: "iframe-sandbox-without-scripts";
+    scriptsRemoved: number;
+    inlineEventHandlersRemoved: number;
+    javascriptUrlsRemoved: number;
+    rawScriptsExecute: false;
+  };
+};
+
 export type AirshipSingleSiteEditorReadonlyProjection = {
   version: typeof AIRSHIP_SINGLE_SITE_EDITOR_PROJECTION_VERSION;
   generatedAt: string;
@@ -218,6 +240,7 @@ export type AirshipSingleSiteEditorReadonlyProjection = {
     currentImprovedPublished: SingleSiteStudioReadonlyProjection["previews"]["improvedCandidate"];
     currentLivePublished: SingleSiteStudioReadonlyProjection["previews"]["improvedCandidate"];
     airshipDraftCandidate: AirshipDraftCandidatePreviewRef | null;
+    airshipEditorArtifactCanvas: AirshipEditorArtifactCanvasRender | null;
     airshipDraftCandidateReview: AirshipInternalPreviewCandidateReviewRecord | null;
     airshipDraftCandidatePublishReadiness: AirshipPublishReadinessRecord | null;
     airshipDraftCandidateGovernedDryRun: AirshipGovernedDryRunReadback | null;
@@ -313,6 +336,7 @@ type AirshipBuildInput = {
   persistedDraft?: AirshipSingleSiteDraftRecord | null;
   airshipDraftCandidate?: AirshipDraftCandidatePreviewRef | null;
   airshipDraftCandidatePreviewHost?: AirshipPreviewHostReadback | null;
+  artifactCanvasRender?: AirshipEditorArtifactCanvasRender | null;
   airshipDraftCandidateReview?: AirshipInternalPreviewCandidateReviewRecord | null;
   airshipDraftCandidatePublishReadiness?: AirshipPublishReadinessRecord | null;
   airshipDraftCandidateGovernedDryRun?: AirshipGovernedDryRunReadback | null;
@@ -518,6 +542,79 @@ function sourceUrlAvailable(value: string | null | undefined): boolean {
 
 function demoReadinessForMigration(migrationId: string | null): AirshipMvpDemoReadiness | null {
   return migrationId === AIRSHIP_CHS_MIGRATION_ID ? AIRSHIP_CHS_MVP_DEMO_READINESS : null;
+}
+
+export function sanitizeAirshipEditorArtifactHtml(html: string): AirshipEditorArtifactCanvasRender["safety"] & {
+  sanitizedHtml: string;
+  sanitizedHtmlByteLength: number;
+} {
+  const source = String(html ?? "");
+  let scriptsRemoved = 0;
+  let inlineEventHandlersRemoved = 0;
+  let javascriptUrlsRemoved = 0;
+  let sanitizedHtml = source.replace(/<script\b[\s\S]*?<\/script>/gi, () => {
+    scriptsRemoved += 1;
+    return "";
+  });
+
+  sanitizedHtml = sanitizedHtml.replace(/\s+on[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
+    inlineEventHandlersRemoved += 1;
+    return "";
+  });
+  sanitizedHtml = sanitizedHtml.replace(/\s+(href|src|xlink:href)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, (_full, attr: string, quote: string) => {
+    javascriptUrlsRemoved += 1;
+    return ` ${attr}=${quote}#${quote}`;
+  });
+  sanitizedHtml = sanitizedHtml.replace(/\s+(href|src|xlink:href)\s*=\s*javascript:[^\s>]+/gi, (_full, attr: string) => {
+    javascriptUrlsRemoved += 1;
+    return ` ${attr}="#"`;
+  });
+
+  return {
+    sanitizedHtml,
+    sanitizedHtmlByteLength: Buffer.byteLength(sanitizedHtml, "utf8"),
+    sandbox: "iframe-sandbox-without-scripts",
+    scriptsRemoved,
+    inlineEventHandlersRemoved,
+    javascriptUrlsRemoved,
+    rawScriptsExecute: false,
+  };
+}
+
+async function readAirshipEditorArtifactCanvasRender(input: {
+  migrationId: string | null;
+  draftCandidate: AirshipDraftCandidatePreviewRef | null;
+  previewHost: AirshipPreviewHostReadback | null;
+}): Promise<AirshipEditorArtifactCanvasRender | null> {
+  const demoReadiness = demoReadinessForMigration(input.migrationId);
+  const source = demoReadiness ? "demo_artifact" as const : "candidate_artifact" as const;
+  const siteVersionId = demoReadiness?.activePointerTarget.siteVersionId ?? input.draftCandidate?.siteVersionId ?? null;
+  const runtimeArtifactId = demoReadiness?.activePointerTarget.runtimeArtifactId ?? input.draftCandidate?.runtimeArtifactId ?? null;
+  if (!siteVersionId || !runtimeArtifactId) return null;
+
+  const artifact = await getArtifactById(runtimeArtifactId);
+  const html = text(artifact?.htmlByPath?.["/"]);
+  if (!artifact || artifact.siteVersionId !== siteVersionId || !html) return null;
+
+  const sanitized = sanitizeAirshipEditorArtifactHtml(html);
+  return {
+    source,
+    label: source === "demo_artifact" ? "GNR8 demo artifact render" : "Airship candidate artifact render",
+    siteVersionId,
+    runtimeArtifactId,
+    path: "/",
+    previewUrl: demoReadiness?.demoUrl ?? input.previewHost?.previewUrl ?? input.draftCandidate?.route ?? null,
+    sanitizedHtml: sanitized.sanitizedHtml,
+    originalHtmlByteLength: Buffer.byteLength(html, "utf8"),
+    sanitizedHtmlByteLength: sanitized.sanitizedHtmlByteLength,
+    safety: {
+      sandbox: sanitized.sandbox,
+      scriptsRemoved: sanitized.scriptsRemoved,
+      inlineEventHandlersRemoved: sanitized.inlineEventHandlersRemoved,
+      javascriptUrlsRemoved: sanitized.javascriptUrlsRemoved,
+      rawScriptsExecute: false,
+    },
+  };
 }
 
 function arisDraftCandidatePreviewFallback(migrationId: string | null): AirshipDraftCandidatePreviewRef | null {
@@ -1140,6 +1237,7 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
       currentImprovedPublished: input.studioModel.previews.improvedCandidate,
       currentLivePublished: input.studioModel.previews.improvedCandidate,
       airshipDraftCandidate,
+      airshipEditorArtifactCanvas: input.artifactCanvasRender ?? null,
       airshipDraftCandidateReview: input.airshipDraftCandidateReview ?? null,
       airshipDraftCandidatePublishReadiness: input.airshipDraftCandidatePublishReadiness ?? null,
       airshipDraftCandidateGovernedDryRun: input.airshipDraftCandidateGovernedDryRun ?? null,
@@ -1222,6 +1320,16 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
       airshipDraftCandidatePreviewHost = null;
     }
   }
+  let artifactCanvasRender: AirshipEditorArtifactCanvasRender | null = null;
+  try {
+    artifactCanvasRender = await readAirshipEditorArtifactCanvasRender({
+      migrationId,
+      draftCandidate: airshipDraftCandidate,
+      previewHost: airshipDraftCandidatePreviewHost,
+    });
+  } catch {
+    artifactCanvasRender = null;
+  }
   if (migrationId && airshipDraftCandidate) {
     try {
       airshipDraftCandidateReview = await readLatestAirshipInternalPreviewCandidateReview({
@@ -1264,6 +1372,7 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
     persistedDraft,
     airshipDraftCandidate,
     airshipDraftCandidatePreviewHost,
+    artifactCanvasRender,
     airshipDraftCandidateReview,
     airshipDraftCandidatePublishReadiness,
     airshipDraftCandidateGovernedDryRun,

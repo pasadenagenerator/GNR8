@@ -335,6 +335,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
           },
         ],
       },
+      airshipEditorArtifactCanvas: null,
       airshipDraftCandidateReview: null,
       airshipDraftCandidatePublishReadiness: null,
       airshipDraftCandidateGovernedDryRun: null,
@@ -1141,6 +1142,154 @@ test("airship visual editor renders full-page draft canvas, zoom controls, label
   assert.equal(html.includes("Save key"), false);
   assert.equal(html.includes("Test connection"), false);
   assert.equal(html.includes("Revoke key"), false);
+});
+
+test("airship visual editor uses CHS demo artifact renderer when available", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={model.migrationId}
+      importedSite={model.importedSite}
+      sourceUrl={model.sourceUrl}
+      liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
+      demoReadiness={model.demoReadiness}
+      artifactCanvasRender={{
+        source: "demo_artifact",
+        label: "GNR8 demo artifact render",
+        siteVersionId: AIRSHIP_DEMO_VERSION_ID,
+        runtimeArtifactId: AIRSHIP_DEMO_ARTIFACT_ID,
+        path: "/",
+        previewUrl: "https://chs-airship.app.pasadenagenerator.com/",
+        sanitizedHtml: "<!doctype html><html><body><main><section><h1>The CHS team helps your IT change with every technology wave.</h1><p>Cybersecurity, data systems, hybrid infrastructure, and support.</p><footer>Internal GNR8 demo preview for CHS.</footer></section></main></body></html>",
+        originalHtmlByteLength: 244,
+        sanitizedHtmlByteLength: 244,
+        safety: {
+          sandbox: "iframe-sandbox-without-scripts",
+          scriptsRemoved: 0,
+          inlineEventHandlersRemoved: 0,
+          javascriptUrlsRemoved: 0,
+          rawScriptsExecute: false,
+        },
+      }}
+      draftCandidate={{
+        siteVersionId: model.previews.airshipDraftCandidate?.siteVersionId ?? null,
+        runtimeArtifactId: model.previews.airshipDraftCandidate?.runtimeArtifactId ?? null,
+        route: model.previews.airshipDraftCandidate?.route ?? null,
+        draftId: model.previews.airshipDraftCandidate?.draftId ?? null,
+        draftVersion: model.previews.airshipDraftCandidate?.draftVersion ?? null,
+        statusLabel: model.previews.airshipDraftCandidate?.statusLabel ?? null,
+      }}
+      draftPreview={model.draftPanel.draftPreview}
+      drafts={model.draftPanel.drafts}
+      persistence={model.draftPanel.persistence}
+      aiProviderStatus={{ provider: "openai", scope: "airship_editor", ownerScope: "internal_superadmin", connected: false, status: "missing", maskedKey: null, model: "gpt-5", lastTestedAt: null, lastTestStatus: null, createdAt: null, updatedAt: null, canUseAiCommands: false }}
+      agentProfileSelection={selectedAirshipProfile({ status: "unavailable", activeProfile: null, diagnostics: ["airship_agent_default_profile_unavailable"] })}
+    />,
+  );
+
+  assert.equal(html.includes('data-airship-artifact-canvas-render="true"'), true);
+  assert.equal(html.includes('data-airship-artifact-render-source="demo_artifact"'), true);
+  assert.equal(html.includes(`data-airship-artifact-runtime-artifact-id="${AIRSHIP_DEMO_ARTIFACT_ID}"`), true);
+  assert.equal(html.includes('sandbox=""'), true);
+  assert.equal(html.includes('data-airship-artifact-raw-scripts-execute="false"'), true);
+  assert.equal(html.includes("The CHS team helps your IT change with every technology wave."), true);
+  assert.equal(html.includes("Internal GNR8 demo preview for CHS."), true);
+  assert.equal(html.includes('data-airship-editor-canvas="hero"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="offers"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="proof"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="approach"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="cta"'), true);
+  assert.equal(html.includes('data-airship-editor-canvas="footer"'), true);
+  assert.equal(html.includes("What changes in the improved draft"), false);
+});
+
+test("airship visual editor uses ARIS candidate artifact renderer when available", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  model.importedSite = "aris.si";
+  model.sourceUrl = "https://www.aris.si/";
+  model.liveSiteUrl = "https://www.aris.si/";
+  model.demoReadiness = null;
+  model.importedSiteModel = {
+    ...model.importedSiteModel,
+    siteLabel: "aris.si",
+    sourceUrl: "https://www.aris.si/",
+    liveUrl: "https://www.aris.si/",
+    latestInternalPreviewHost: {
+      ...model.importedSiteModel.latestInternalPreviewHost!,
+      previewUrl: "https://aris-airship.app.pasadenagenerator.com/",
+    },
+  };
+  model.previews.airshipDraftCandidate = {
+    label: "New Airship draft candidate preview",
+    siteVersionId: "6d712ab9-f48e-49a3-9c26-03915365d746",
+    runtimeArtifactId: "8073651e-510b-47e7-8363-8a742b7967db",
+    route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/6d712ab9-f48e-49a3-9c26-03915365d746/preview?mode=transformed`,
+    mode: "transformed",
+    available: true,
+    unavailableReason: null,
+    authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+    statusLabel: "Not live, internal preview only",
+    sourceLiveSiteVersionId: "ae35c6ad-5a26-4413-a3c8-64362b042810",
+    sourceLiveRuntimeArtifactId: "f024459a-8bc9-41b9-b2a7-137ee85eaf83",
+    draftId: "5ed1b4da-eb06-4eee-bdc0-5b5cdec99707",
+    draftVersion: 1,
+    styleSettings: model.draftPanel.persistence.styleSettings,
+    appliedEdits: [],
+    skippedEdits: [],
+  };
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={model.migrationId}
+      importedSite={model.importedSite}
+      sourceUrl={model.sourceUrl}
+      liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
+      demoReadiness={model.demoReadiness}
+      artifactCanvasRender={{
+        source: "candidate_artifact",
+        label: "Airship candidate artifact render",
+        siteVersionId: "6d712ab9-f48e-49a3-9c26-03915365d746",
+        runtimeArtifactId: "8073651e-510b-47e7-8363-8a742b7967db",
+        path: "/",
+        previewUrl: "https://aris-airship.app.pasadenagenerator.com/",
+        sanitizedHtml: "<!doctype html><html><body><main><h1>ARIS - Apple in Canton ponudba</h1><p>MacBook Air, Mac Studio in Canton Smart izdelki.</p><p>Blackmagic Design, Eizo, Just Normlicht.</p><p>prodaja@aris.si</p></main></body></html>",
+        originalHtmlByteLength: 221,
+        sanitizedHtmlByteLength: 221,
+        safety: {
+          sandbox: "iframe-sandbox-without-scripts",
+          scriptsRemoved: 0,
+          inlineEventHandlersRemoved: 0,
+          javascriptUrlsRemoved: 0,
+          rawScriptsExecute: false,
+        },
+      }}
+      draftCandidate={{
+        siteVersionId: model.previews.airshipDraftCandidate.siteVersionId,
+        runtimeArtifactId: model.previews.airshipDraftCandidate.runtimeArtifactId,
+        route: model.previews.airshipDraftCandidate.route,
+        draftId: model.previews.airshipDraftCandidate.draftId,
+        draftVersion: model.previews.airshipDraftCandidate.draftVersion,
+        statusLabel: model.previews.airshipDraftCandidate.statusLabel,
+      }}
+      draftPreview={model.draftPanel.draftPreview}
+      drafts={model.draftPanel.drafts}
+      persistence={model.draftPanel.persistence}
+      aiProviderStatus={{ provider: "openai", scope: "airship_editor", ownerScope: "internal_superadmin", connected: false, status: "missing", maskedKey: null, model: "gpt-5", lastTestedAt: null, lastTestStatus: null, createdAt: null, updatedAt: null, canUseAiCommands: false }}
+      agentProfileSelection={selectedAirshipProfile({ status: "unavailable", activeProfile: null, diagnostics: ["airship_agent_default_profile_unavailable"] })}
+    />,
+  );
+
+  assert.equal(html.includes('data-airship-artifact-render-source="candidate_artifact"'), true);
+  assert.equal(html.includes("ARIS - Apple in Canton ponudba"), true);
+  assert.equal(html.includes("MacBook Air"), true);
+  assert.equal(html.includes("Blackmagic Design"), true);
+  assert.equal(html.includes("prodaja@aris.si"), true);
+  assert.equal(html.includes("https://aris-airship.app.pasadenagenerator.com/"), true);
+  assert.equal(html.includes("What changes in the improved draft"), false);
+  assert.equal(html.includes("CHS helps modernize secure enterprise IT"), false);
 });
 
 test("airship visual editor renders ARIS multi-section canvas without CHS identity leakage", () => {

@@ -11,6 +11,7 @@ import type {
   AirshipSingleSiteDraftStyleSettings,
   AirshipSingleSiteImprovementDraft,
   AirshipMvpDemoReadiness,
+  AirshipEditorArtifactCanvasRender,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 import type {
   AirshipAgentProfileSelection,
@@ -24,6 +25,7 @@ type Props = {
   liveSiteUrl: string;
   importedSiteModel?: AirshipImportedSiteEditorModel;
   demoReadiness?: AirshipMvpDemoReadiness | null;
+  artifactCanvasRender?: AirshipEditorArtifactCanvasRender | null;
   draftCandidate: {
     siteVersionId: string | null;
     runtimeArtifactId: string | null;
@@ -320,6 +322,26 @@ function SelectionOverlay({ metadata }: { metadata: AirshipSelectedElementMetada
       <span>{metadata.sizeLabel}</span>
     </span>
   );
+}
+
+const artifactCanvasSections: Array<Exclude<EditorSectionKey, "source">> = ["hero", "offers", "proof", "approach", "cta", "footer"];
+
+function artifactSectionBandStyle(section: Exclude<EditorSectionKey, "source">): CSSProperties {
+  const bands: Record<Exclude<EditorSectionKey, "source">, CSSProperties> = {
+    hero: { top: "0%", left: "0%", width: "100%", height: "30%" },
+    offers: { top: "30%", left: "0%", width: "50%", height: "23%" },
+    proof: { top: "30%", left: "50%", width: "50%", height: "23%" },
+    approach: { top: "53%", left: "0%", width: "50%", height: "25%" },
+    cta: { top: "53%", left: "50%", width: "50%", height: "25%" },
+    footer: { top: "78%", left: "0%", width: "100%", height: "22%" },
+  };
+  return bands[section];
+}
+
+function artifactCanvasHeight(viewport: EditorViewportKey): number {
+  if (viewport === "mobile") return 1320;
+  if (viewport === "tablet") return 1240;
+  return 1180;
 }
 
 function inputStyle(multiline = false): CSSProperties {
@@ -767,6 +789,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     previewUrl: props.importedSiteModel?.latestInternalPreviewHost?.previewUrl,
   });
   const previewHostLabel = props.demoReadiness ? "GNR8 demo preview" : "Latest GNR8 preview host";
+  const artifactCanvasRender = props.artifactCanvasRender ?? null;
+  const artifactCanvasFrameHeight = artifactCanvasHeight(viewport);
   const zoomPercent = `${Math.round(canvasZoom * 100)}%`;
   const scaledCanvasWidth = Math.ceil(selectedViewport.width * canvasZoom);
   const canApplySavedDraftToPreview = airshipCanApplySavedDraftToPreview({
@@ -1411,6 +1435,58 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           overflow: visible;
           background: #ffffff;
         }
+        .airship-artifact-canvas-frame {
+          position: relative;
+          min-height: var(--airship-artifact-canvas-height);
+          background: #ffffff;
+          overflow: hidden;
+        }
+        .airship-artifact-canvas-frame iframe {
+          display: block;
+          width: 100%;
+          height: var(--airship-artifact-canvas-height);
+          border: 0;
+          background: #ffffff;
+          pointer-events: none;
+        }
+        .airship-artifact-overlay {
+          position: absolute;
+          z-index: 2;
+          border: 2px solid transparent;
+          background: transparent;
+          cursor: pointer;
+          outline: none;
+        }
+        .airship-artifact-overlay[data-selected="true"] {
+          border-color: #1d4ed8;
+          background: rgba(29, 78, 216, 0.055);
+          box-shadow: inset 0 0 0 9999px rgba(29, 78, 216, 0.025);
+        }
+        .airship-artifact-overlay .airship-selection-chip {
+          top: 12px;
+          left: 12px;
+        }
+        .airship-artifact-source-strip {
+          position: relative;
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: center;
+          width: 100%;
+          border: 0;
+          border-top: 1px solid #e2e8f0;
+          background: #f8fafc;
+          padding: 12px 16px;
+          color: #0f172a;
+          cursor: pointer;
+          text-align: left;
+        }
+        .airship-artifact-source-strip[data-selected="true"] {
+          outline: 2px solid #1d4ed8;
+          outline-offset: -2px;
+          background: #eff6ff;
+          padding-top: 54px;
+        }
         .airship-preview-hero {
           position: relative;
           display: grid;
@@ -1943,10 +2019,65 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   data-airship-canvas-zoom={canvasZoom.toFixed(2)}
                 >
                   <div className="airship-frame-top">
-                    <span>{props.draftPreview.label}</span>
-                    <span>Draft only / Not live</span>
+                    <span>{artifactCanvasRender?.label ?? props.draftPreview.label}</span>
+                    <span>{artifactCanvasRender ? "Artifact renderer / Not live" : "Draft only / Not live"}</span>
                   </div>
                   <div className="airship-frame-page">
+                    {artifactCanvasRender ? (
+                      <>
+                        <div
+                          className="airship-artifact-canvas-frame"
+                          style={{ "--airship-artifact-canvas-height": `${artifactCanvasFrameHeight}px` } as CSSProperties}
+                          data-airship-artifact-canvas-render="true"
+                          data-airship-artifact-render-source={artifactCanvasRender.source}
+                          data-airship-artifact-site-version-id={artifactCanvasRender.siteVersionId}
+                          data-airship-artifact-runtime-artifact-id={artifactCanvasRender.runtimeArtifactId}
+                          data-airship-artifact-sandbox={artifactCanvasRender.safety.sandbox}
+                          data-airship-artifact-raw-scripts-execute={String(artifactCanvasRender.safety.rawScriptsExecute)}
+                          aria-label={artifactCanvasRender.label}
+                        >
+                          <iframe
+                            title={artifactCanvasRender.label}
+                            sandbox=""
+                            referrerPolicy="no-referrer"
+                            srcDoc={artifactCanvasRender.sanitizedHtml}
+                          />
+                          {artifactCanvasSections.map((section) => (
+                            <button
+                              key={section}
+                              type="button"
+                              className="airship-artifact-overlay"
+                              data-airship-editor-canvas={section}
+                              data-airship-artifact-section-anchor={section}
+                              data-selected={selectedSection === section}
+                              aria-label={`Select ${sectionOptions.find((option) => option.key === section)?.label ?? section} artifact section`}
+                              onClick={() => selectSection(section)}
+                              style={artifactSectionBandStyle(section)}
+                            >
+                              {selectedSection === section ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          id="airship-preview-source-material"
+                          type="button"
+                          className="airship-artifact-source-strip"
+                          data-airship-editor-canvas="source"
+                          data-selected={selectedSection === "source"}
+                          onClick={() => selectSection("source")}
+                        >
+                          {selectedSection === "source" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                          <span>
+                            <strong>Source material</strong>
+                            <span style={{ display: "block", color: "#64748b", fontSize: 12, marginTop: 2 }}>
+                              Artifact canvas is rendered from sanitized demo/candidate HTML; scripts are disabled in the editor sandbox.
+                            </span>
+                          </span>
+                          <span style={{ color: "#0f766e", fontSize: 12, fontWeight: 900 }}>{artifactCanvasRender.label}</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
                     <section
                       id="airship-preview-hero-intro"
                       data-airship-editor-canvas="hero"
@@ -2060,6 +2191,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                       </span>
                       <span style={{ color: "#0f766e", fontSize: 12, fontWeight: 900 }}>Draft only</span>
                     </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
