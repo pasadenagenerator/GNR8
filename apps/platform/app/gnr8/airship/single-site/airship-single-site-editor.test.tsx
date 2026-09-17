@@ -14,8 +14,11 @@ import {
 } from "./airship-single-site-local-draft-editor";
 import {
   AirshipSingleSiteVisualEditorWorkspace,
+  airshipArtifactOverlayRectFromDomRect,
+  airshipArtifactSectionSelector,
   airshipCanApplySavedDraftToPreview,
   airshipCanvasSelectorForSection,
+  airshipElementSelectorsForSection,
   applyAirshipHeroCommand,
   applyAirshipHeroTextFieldEdit,
   deriveAirshipSelectedElementMetadata,
@@ -23,6 +26,7 @@ import {
   deriveAirshipStyleValueRows,
   initialAirshipHeroEditorFields,
   mappedAirshipDraftFieldIdsForSection,
+  measuredAirshipArtifactCanvasHeight,
   resetAirshipSectionStyleToSavedValues,
   resetAirshipSectionTextToSavedValues,
   sectionStyleFields,
@@ -1107,10 +1111,15 @@ test("airship visual editor renders full-page draft canvas, zoom controls, label
   assert.equal(html.includes("Selected canvas element"), true);
   assert.equal(html.includes("region / homepage hero intro"), true);
   assert.equal(html.includes("Selected element metadata"), true);
+  assert.equal(html.includes("selection level"), true);
+  assert.equal(html.includes("section-level"), true);
   assert.equal(html.includes("Mapped draft field ids"), true);
+  assert.equal(html.includes("Element-level selection markers"), true);
+  assert.equal(html.includes('[data-airship-element=&quot;hero-headline&quot;]'), true);
   assert.equal(html.includes("Internal refs"), true);
   assert.equal(html.includes("canvas selector"), true);
   assert.equal(html.includes('[data-airship-editor-canvas=&quot;hero&quot;]'), true);
+  assert.equal(html.includes('[data-airship-section=&quot;hero&quot;]'), true);
   assert.equal(html.includes("Text and style saves persist here"), true);
   assert.equal(html.includes("Style autosaves to Airship draft"), true);
   assert.equal(html.includes("Homepage hero/intro"), true);
@@ -1192,7 +1201,9 @@ test("airship visual editor uses CHS demo artifact renderer when available", () 
   assert.equal(html.includes('data-airship-artifact-canvas-render="true"'), true);
   assert.equal(html.includes('data-airship-artifact-render-source="demo_artifact"'), true);
   assert.equal(html.includes(`data-airship-artifact-runtime-artifact-id="${AIRSHIP_DEMO_ARTIFACT_ID}"`), true);
-  assert.equal(html.includes('sandbox=""'), true);
+  assert.equal(html.includes('sandbox="allow-same-origin"'), true);
+  assert.equal(html.includes('data-airship-artifact-canvas-height="1180"'), true);
+  assert.equal(html.includes('data-airship-artifact-canvas-height-source="fallback-min-height"'), true);
   assert.equal(html.includes('data-airship-artifact-raw-scripts-execute="false"'), true);
   assert.equal(html.includes("The CHS team helps your IT change with every technology wave."), true);
   assert.equal(html.includes("Internal GNR8 demo preview for CHS."), true);
@@ -1202,6 +1213,8 @@ test("airship visual editor uses CHS demo artifact renderer when available", () 
   assert.equal(html.includes('data-airship-editor-canvas="approach"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="cta"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="footer"'), true);
+  assert.equal(html.includes('data-airship-artifact-section-selector="[data-airship-section=&quot;hero&quot;]"'), true);
+  assert.equal(html.includes('data-airship-artifact-geometry-source="fallback-band"'), true);
   assert.equal(html.includes("What changes in the improved draft"), false);
 });
 
@@ -1499,6 +1512,7 @@ test("airship visual editor derives selected element DOM metadata per section", 
 
   const hero = deriveAirshipSelectedElementMetadata({ ...base, section: "hero" });
   assert.equal(hero.domSectionId, "airship-preview-hero-intro");
+  assert.equal(hero.selectionLevel, "section-level");
   assert.equal(hero.role, "region / homepage hero intro");
   assert.deepEqual(hero.mappedDraftFieldIds, [
     "airship-chs-home-hero-headline",
@@ -1508,8 +1522,9 @@ test("airship visual editor derives selected element DOM metadata per section", 
   assert.equal(hero.internalRefs.some((ref) => ref.label === "live url" && ref.value === "https://www.chs.si/"), true);
 
   const cta = deriveAirshipSelectedElementMetadata({ ...base, section: "cta" });
-  assert.equal(cta.domSectionId, "airship-preview-primary-cta");
-  assert.equal(cta.role, "button / primary action");
+  assert.equal(cta.selectionLevel, "section-level");
+  assert.equal(cta.domSectionId, "airship-preview-cta");
+  assert.equal(cta.role, "section / CTA and contact action");
   assert.deepEqual(cta.mappedDraftFieldIds, ["airship-chs-home-contact-cta"]);
 
   const source = deriveAirshipSelectedElementMetadata({ ...base, section: "source" });
@@ -1520,6 +1535,41 @@ test("airship visual editor derives selected element DOM metadata per section", 
     "airship-chs-home-hero-headline",
     "airship-chs-home-hero-value-proposition",
     "airship-chs-home-contact-cta",
+  ]);
+});
+
+test("airship visual editor derives artifact DOM geometry and fallback canvas height", () => {
+  assert.equal(
+    measuredAirshipArtifactCanvasHeight({
+      documentElementScrollHeight: 2140,
+      bodyScrollHeight: 2060,
+      bodyOffsetHeight: 1980,
+      fallbackHeight: 1180,
+    }),
+    2140,
+  );
+  assert.equal(
+    measuredAirshipArtifactCanvasHeight({
+      documentElementScrollHeight: null,
+      bodyScrollHeight: null,
+      bodyOffsetHeight: null,
+      fallbackHeight: 1180,
+    }),
+    1180,
+  );
+  assert.deepEqual(
+    airshipArtifactOverlayRectFromDomRect({ top: 12.4, left: 8.6, width: 320.2, height: 144.8, scrollY: 40 }),
+    { top: 52, left: 9, width: 320, height: 145, source: "dom-marker" },
+  );
+  assert.equal(airshipArtifactOverlayRectFromDomRect({ top: 0, left: 0, width: 0, height: 20 }), null);
+  assert.equal(airshipArtifactSectionSelector("cta"), '[data-airship-section="cta"]');
+  assert.deepEqual(airshipElementSelectorsForSection("hero"), [
+    '[data-airship-element="hero-headline"]',
+    '[data-airship-element="hero-cta"]',
+  ]);
+  assert.deepEqual(airshipElementSelectorsForSection("cta"), [
+    '[data-airship-element="contact-card"]',
+    '[data-airship-element="contact-cta"]',
   ]);
 });
 

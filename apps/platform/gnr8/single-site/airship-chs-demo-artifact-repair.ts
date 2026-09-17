@@ -93,6 +93,12 @@ export function inspectAirshipChsDemoHtml(html: string) {
     hasDiagnosticsLabel: /Diagnostics:/i.test(html),
     hasHeader: /<header\b/i.test(html) && /CHS/i.test(html),
     hasHero: /data-section="hero"/i.test(html),
+    hasAirshipHeroMarker: /data-airship-section="hero"/i.test(html),
+    hasAirshipOffersMarker: /data-airship-section="offers"/i.test(html),
+    hasAirshipProofMarker: /data-airship-section="proof"/i.test(html),
+    hasAirshipApproachMarker: /data-airship-section="approach"/i.test(html),
+    hasAirshipCtaMarker: /data-airship-section="cta"/i.test(html),
+    hasAirshipFooterMarker: /data-airship-section="footer"/i.test(html),
     hasIdentitySection: /data-section="identity"/i.test(html),
     hasProofSection: /data-section="proof"/i.test(html),
     hasContactSection: /data-section="contact"/i.test(html),
@@ -107,6 +113,12 @@ export function assertCleanAirshipChsDemoHtml(html: string): void {
   const checks = inspectAirshipChsDemoHtml(html);
   if (!checks.hasHeader) throw new Error("airship_chs_demo_header_missing");
   if (!checks.hasHero) throw new Error("airship_chs_demo_hero_missing");
+  if (!checks.hasAirshipHeroMarker) throw new Error("airship_chs_demo_airship_hero_marker_missing");
+  if (!checks.hasAirshipOffersMarker) throw new Error("airship_chs_demo_airship_offers_marker_missing");
+  if (!checks.hasAirshipProofMarker) throw new Error("airship_chs_demo_airship_proof_marker_missing");
+  if (!checks.hasAirshipApproachMarker) throw new Error("airship_chs_demo_airship_approach_marker_missing");
+  if (!checks.hasAirshipCtaMarker) throw new Error("airship_chs_demo_airship_cta_marker_missing");
+  if (!checks.hasAirshipFooterMarker) throw new Error("airship_chs_demo_airship_footer_marker_missing");
   if (!checks.hasIdentitySection) throw new Error("airship_chs_demo_identity_section_missing");
   if (!checks.hasProofSection) throw new Error("airship_chs_demo_proof_section_missing");
   if (!checks.hasContactSection) throw new Error("airship_chs_demo_contact_section_missing");
@@ -305,14 +317,14 @@ export function buildAirshipChsMvpDemoHtml(): string {
     </div>
   </header>
   <main id="top">
-    <section class="hero" data-section="hero">
+    <section class="hero" data-section="hero" data-airship-section="hero">
       <div class="shell hero-grid">
         <div>
           <p class="eyebrow">Computer Help Specialists</p>
-          <h1>The CHS team helps your IT change with every technology wave.</h1>
+          <h1 data-airship-element="hero-headline">The CHS team helps your IT change with every technology wave.</h1>
           <p>The people behind the technology matter more than the technology itself. We bring deep, lived expertise and the practical discipline to drive real change, so your organization can move forward with confidence.</p>
           <div class="hero-actions">
-            <a class="button" href="#contact">Contact Us</a>
+            <a class="button" href="#contact" data-airship-element="hero-cta">Contact Us</a>
             <a class="button secondary" href="#proof">See how CHS works</a>
           </div>
         </div>
@@ -322,7 +334,7 @@ export function buildAirshipChsMvpDemoHtml(): string {
         </aside>
       </div>
     </section>
-    <section id="identity" data-section="identity">
+    <section id="identity" data-section="identity" data-airship-section="offers">
       <div class="shell identity-grid">
         <div>
           <p class="section-kicker">Who CHS helps</p>
@@ -330,29 +342,29 @@ export function buildAirshipChsMvpDemoHtml(): string {
           <p class="lead">CHS brings calm senior guidance to complex IT moments: infrastructure modernization, service improvement, security-minded operations, and everyday support that keeps teams moving.</p>
         </div>
         <ul class="value-list">
-          <li><strong>Experienced guidance</strong> Clear decisions for organizations that need technology to serve the business, not distract from it.</li>
-          <li><strong>Practical execution</strong> Plans become working systems, documented handovers, and support rhythms that teams can trust.</li>
-          <li><strong>Human adoption</strong> CHS focuses on the people behind the technology, making change understandable and sustainable.</li>
+          <li data-airship-element="offer-card" data-airship-element-index="0"><strong>Experienced guidance</strong> Clear decisions for organizations that need technology to serve the business, not distract from it.</li>
+          <li data-airship-element="offer-card" data-airship-element-index="1"><strong>Practical execution</strong> Plans become working systems, documented handovers, and support rhythms that teams can trust.</li>
+          <li data-airship-element="offer-card" data-airship-element-index="2"><strong>Human adoption</strong> CHS focuses on the people behind the technology, making change understandable and sustainable.</li>
         </ul>
       </div>
     </section>
-    <section id="proof" class="proof" data-section="proof">
+    <section id="proof" class="proof" data-section="proof" data-airship-section="proof">
       <div class="shell">
         <p class="section-kicker">Approach</p>
         <h2>A focused partner for real IT progress.</h2>
         <p class="lead">This MVP demo keeps the imported CHS direction simple: a branded page with a clear promise, proof of expertise, and an immediate contact path.</p>
         <div class="proof-grid">
-          <article class="proof-card">
+          <article class="proof-card" data-airship-element="proof-card" data-airship-element-index="0">
             <b>01</b>
             <h3>Assess</h3>
             <p>Understand the current environment, risks, people, and business priorities before proposing change.</p>
           </article>
-          <article class="proof-card">
+          <article class="proof-card" data-airship-element="proof-card" data-airship-element-index="1">
             <b>02</b>
             <h3>Improve</h3>
             <p>Shape practical improvements across infrastructure, support, security, and digital workflows.</p>
           </article>
-          <article class="proof-card">
+          <article class="proof-card" data-airship-element="proof-card" data-airship-element-index="2">
             <b>03</b>
             <h3>Support</h3>
             <p>Stay close after delivery with documentation, operational care, and clear next steps.</p>
@@ -360,19 +372,19 @@ export function buildAirshipChsMvpDemoHtml(): string {
         </div>
       </div>
     </section>
-    <section data-section="team">
+    <section data-section="team" data-airship-section="approach">
       <div class="shell team-strip">
         <h2>CHS is built around trusted specialists, not generic technology promises.</h2>
         <p>For clients, that means direct conversations, visible accountability, and a team that knows how to translate technical change into business confidence.</p>
       </div>
     </section>
-    <section id="contact" class="contact" data-section="contact">
+    <section id="contact" class="contact" data-section="contact" data-airship-section="cta">
       <div class="shell contact-grid">
         <div>
           <p class="section-kicker">Start a conversation</p>
           <h2>Tell CHS what needs to change.</h2>
           <p class="lead">Use this GNR8-controlled demo page to review the improved direction. The real external CHS site remains untouched.</p>
-          <div class="contact-card">
+          <div class="contact-card" data-airship-element="contact-card">
             <dl>
               <div><dt>Website</dt><dd>www.chs.si</dd></div>
               <div><dt>Focus</dt><dd>IT consulting, implementation, support, and change enablement.</dd></div>
@@ -384,12 +396,12 @@ export function buildAirshipChsMvpDemoHtml(): string {
           <label>Name<input name="name" autocomplete="name" /></label>
           <label>Email<input name="email" type="email" autocomplete="email" /></label>
           <label>How can CHS help?<textarea name="message"></textarea></label>
-          <button class="button" type="button">Send inquiry</button>
+          <button class="button" type="button" data-airship-element="contact-cta">Send inquiry</button>
         </form>
       </div>
     </section>
   </main>
-  <footer>
+  <footer data-airship-section="footer">
     <div class="shell">CHS Airship MVP demo. GNR8 preview render for review.</div>
   </footer>
 </body>

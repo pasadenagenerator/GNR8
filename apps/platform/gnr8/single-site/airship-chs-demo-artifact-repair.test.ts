@@ -22,9 +22,20 @@ test("buildAirshipChsMvpDemoHtml renders a clean CHS-like public page", () => {
   assert.equal(checks.hasDiagnosticsLabel, false);
   assert.equal(checks.hasHeader, true);
   assert.equal(checks.hasHero, true);
+  assert.equal(checks.hasAirshipHeroMarker, true);
+  assert.equal(checks.hasAirshipOffersMarker, true);
+  assert.equal(checks.hasAirshipProofMarker, true);
+  assert.equal(checks.hasAirshipApproachMarker, true);
+  assert.equal(checks.hasAirshipCtaMarker, true);
+  assert.equal(checks.hasAirshipFooterMarker, true);
   assert.equal(checks.hasIdentitySection, true);
   assert.equal(checks.hasProofSection, true);
   assert.equal(checks.hasContactSection, true);
+  assert.equal(html.includes('data-airship-element="hero-headline"'), true);
+  assert.equal(html.includes('data-airship-element="hero-cta"'), true);
+  assert.equal(html.includes('data-airship-element="offer-card"'), true);
+  assert.equal(html.includes('data-airship-element="contact-card"'), true);
+  assert.equal(html.includes('data-airship-element="contact-cta"'), true);
 });
 
 test("buildAirshipChsDemoArtifactRepairPlan is guarded to the active Airship CHS artifact", () => {

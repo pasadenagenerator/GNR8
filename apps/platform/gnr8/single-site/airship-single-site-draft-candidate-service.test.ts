@@ -235,7 +235,21 @@ function fakeDeps() {
       const firstSectionId = Object.keys(sectionProps)[0] ?? "hero";
       const props = (sectionProps.hero ?? sectionProps[firstSectionId] ?? {}) as Record<string, unknown>;
       const style = props.airshipDraftStyleOverride as Record<string, unknown> | undefined;
-      const html = `<html><body style="background:${String(style?.backgroundTint ?? "")}"><h1>${String(props.headline ?? "")}</h1><p>${String(props.subheading ?? "")}</p><button style="background:${String(style?.ctaColor ?? "")}">${String(props.cta ?? "")}</button><script type="application/json">${JSON.stringify(props)}</script></body></html>`;
+      const draftSections = Array.isArray(props.airshipDraftSections) ? props.airshipDraftSections as Array<Record<string, unknown>> : [];
+      const sectionHtml = draftSections.map((section) => {
+        const key = String(section.key ?? "");
+        const element =
+          key === "offers" ? "offer-card" :
+          key === "proof" ? "proof-card" :
+          key === "approach" ? "approach-card" :
+          key === "cta" ? "contact-card" :
+          "";
+        const cta = key === "cta" && section.ctaLabel
+          ? `<a href="#contact" data-airship-element="contact-cta">${String(section.ctaLabel)}</a>`
+          : "";
+        return `<section data-airship-section="${key}"${element ? ` data-airship-element="${element}"` : ""}><h2>${String(section.heading ?? "")}</h2><p>${String(section.body ?? "")}</p>${cta}</section>`;
+      }).join("");
+      const html = `<html><body style="background:${String(style?.backgroundTint ?? "")}"><section data-airship-section="hero"><h1 data-airship-element="hero-headline">${String(props.headline ?? "")}</h1><p>${String(props.subheading ?? "")}</p><a href="#contact" data-airship-element="hero-cta" style="background:${String(style?.ctaColor ?? "")}">${String(props.cta ?? props.ctaLabel ?? "")}</a></section>${sectionHtml}<script type="application/json">${JSON.stringify(props)}</script></body></html>`;
       return {
         siteId: input.siteVersion.siteId,
         siteVersionId: input.siteVersion.id,
@@ -600,6 +614,13 @@ test("materializes saved multi-section Airship draft edits into internal candida
   assert.match(artifact?.htmlByPath["/"] ?? "", /Cybersecurity, data systems, hybrid infrastructure, and managed support/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Regional expertise, practical support, and source-supported IT specialization/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Internal GNR8 demo preview for CHS/);
+  for (const section of ["hero", "offers", "proof", "approach", "cta", "footer"]) {
+    assert.match(artifact?.htmlByPath["/"] ?? "", new RegExp(`data-airship-section="${section}"`));
+  }
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="hero-headline"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="offer-card"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="contact-card"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="contact-cta"/);
   assert.doesNotMatch(serialized, /Recovered from:|\/tmp\/|Recovered Section|FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/);
   assert.equal(output.published, false);
   assert.equal(output.activePointerChanged, false);
@@ -686,5 +707,13 @@ test("creates ARIS internal draft candidate from source-evidence page without de
   assert.match(artifact?.htmlByPath["/"] ?? "", /MacBook Air, Mac Studio in Canton Smart/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Blackmagic Design/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /prodaja@aris\.si/);
+  for (const section of ["hero", "offers", "proof", "approach", "cta", "footer"]) {
+    assert.match(artifact?.htmlByPath["/"] ?? "", new RegExp(`data-airship-section="${section}"`));
+  }
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="hero-headline"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="hero-cta"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="offer-card"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="contact-card"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="contact-cta"/);
   assert.doesNotMatch(serialized, /CHS|chs\.si|FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/);
 });

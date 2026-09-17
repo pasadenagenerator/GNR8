@@ -85,6 +85,57 @@ test("artifact-builder renders Airship saved subheading instead of generic hero 
   assert.doesNotMatch(html, /<p[^>]*>\[hero body\]<\/p>/);
 });
 
+test("artifact-builder renders Airship section and element markers in candidate legacy summary", () => {
+  const candidateSiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [{ id: "airship-draft-hero", type: "legacy.html", order: 0 }],
+        },
+        contentModel: {
+          sectionProps: {
+            "airship-draft-hero": {
+              htmlSummary: {
+                extractedText: "ARIS - Apple in Canton ponudba. MacBook Air, Mac Studio in Canton Smart izdelki. Kontakt: prodaja@aris.si.",
+                extractedLinks: [{ href: "mailto:prodaja@aris.si", label: "prodaja@aris.si" }],
+                labels: { overview: "ARIS", about: "Blagovne znamke", services: "Ponudba", contact: "Kontakt" },
+              },
+              airshipDraftHeroOverride: {
+                headline: "ARIS - Apple in Canton ponudba",
+                subheading: "MacBook Air, Mac Studio in Canton Smart izdelki z osebnim svetovanjem.",
+              },
+              airshipDraftCtaOverride: { label: "Želim ponudbo" },
+              airshipDraftSections: [
+                { key: "offers", label: "Offers / Services", heading: "Product offers", body: "MacBook Air. Mac Studio.", items: ["MacBook Air", "Mac Studio"], ctaLabel: null },
+                { key: "proof", label: "Proof / Benefits", heading: "Brand proof", body: "Apple and Canton proof.", items: ["Apple", "Canton"], ctaLabel: null },
+                { key: "approach", label: "Approach / Process", heading: "Process", body: "Svetovanje in testiranje.", items: ["Svetovanje", "Testiranje"], ctaLabel: null },
+                { key: "cta", label: "CTA / Contact", heading: "Kontakt", body: "prodaja@aris.si", items: [], ctaLabel: "Želim ponudbo" },
+                { key: "footer", label: "Footer / Demo note", heading: "Internal demo boundary", body: "Internal GNR8 demo preview for ARIS.", items: [], ctaLabel: null },
+              ],
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const preview = buildDeterministicArtifactBundle({ siteVersion: candidateSiteVersion, renderMode: "PREVIEW" });
+  const html = preview.htmlByPath["/"] ?? "";
+  for (const section of ["hero", "offers", "proof", "approach", "cta", "footer"]) {
+    assert.match(html, new RegExp(`data-airship-section="${section}"`));
+  }
+  assert.match(html, /data-airship-element="hero-headline"/);
+  assert.match(html, /data-airship-element="hero-cta"/);
+  assert.match(html, /data-airship-element="offer-card"/);
+  assert.match(html, /data-airship-element="proof-card"/);
+  assert.match(html, /data-airship-element="approach-card"/);
+  assert.match(html, /data-airship-element="contact-card"/);
+  assert.match(html, /data-airship-element="contact-cta"/);
+  assert.doesNotMatch(html, /FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/i);
+});
+
 test("artifact-builder renders visible faq.basic fallback plus section payload script", () => {
   const faqSiteVersion = {
     ...siteVersion,
@@ -297,7 +348,7 @@ test("artifact-builder renders Airship draft hero override in legacy summary pre
   assert.match(html, /padding: 96px 16px 104px/);
   assert.match(html, /--gnr8-bg: #eef6ff/);
   assert.match(html, /--gnr8-accent: #1d4ed8/);
-  assert.match(html, /class="gnr8-primary-cta" href="#contact">Email CHS sales<\/a>/);
+  assert.match(html, /class="gnr8-primary-cta" href="#contact" data-airship-element="hero-cta">Email CHS sales<\/a>/);
   assert.doesNotMatch(html, /Contact CHS at sales@chs\.si/);
 });
 

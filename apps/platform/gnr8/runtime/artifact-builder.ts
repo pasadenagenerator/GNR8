@@ -705,14 +705,14 @@ function renderLegacySummaryHtml(input: {
   lines.push('    [data-gnr8-legacy-summary="visible-v2"] .gnr8-columns { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 16px; }');
   lines.push('    @media (max-width: 720px) { [data-gnr8-legacy-summary="visible-v2"] { padding-bottom: 34px; } [data-gnr8-legacy-summary="visible-v2"] .gnr8-title { max-width: none; } }');
   lines.push("  </style>");
-  lines.push('  <article class="gnr8-card" aria-label="legacy-summary-hero">');
+  lines.push('  <article class="gnr8-card" aria-label="legacy-summary-hero" data-airship-section="hero">');
   lines.push(`    <p class="gnr8-eyebrow">${escapeHtml(labels.overview)}</p>`);
-  lines.push(`    <h1 class="gnr8-title">${escapeHtml(heroHeading)}</h1>`);
+  lines.push(`    <h1 class="gnr8-title" data-airship-element="hero-headline">${escapeHtml(heroHeading)}</h1>`);
   if (intro) {
     lines.push(`    <p style="margin: 10px 0 0; font-size: 1.03rem;">${escapeHtml(intro)}</p>`);
   }
   if (airshipDraftCta) {
-    lines.push(`    <a class="gnr8-primary-cta" href="#contact">${escapeHtml(airshipDraftCta.label)}</a>`);
+    lines.push(`    <a class="gnr8-primary-cta" href="#contact" data-airship-element="hero-cta">${escapeHtml(airshipDraftCta.label)}</a>`);
   }
   if (heroImages.length > 0) {
     lines.push('    <div class="gnr8-grid">');
@@ -747,13 +747,14 @@ function renderLegacySummaryHtml(input: {
   if (airshipDraftSections.length > 0) {
     lines.push('  <div class="gnr8-columns" aria-label="airship-draft-sections">');
     for (const section of airshipDraftSections.filter((item) => item.key !== "cta" && item.key !== "footer")) {
-      lines.push(`    <article class="gnr8-card gnr8-section" data-airship-draft-section="${escapeHtml(section.key)}">`);
+      const elementMarker = section.key === "offers" ? "offer-card" : section.key === "proof" ? "proof-card" : section.key === "approach" ? "approach-card" : "";
+      lines.push(`    <article class="gnr8-card gnr8-section" data-airship-draft-section="${escapeHtml(section.key)}" data-airship-section="${escapeHtml(section.key)}">`);
       lines.push(`      <h2>${escapeHtml(section.label)}</h2>`);
       lines.push(`      <p style="margin: 0 0 10px; font-weight: 800; color: #0d2230;">${escapeHtml(section.heading)}</p>`);
       if (section.items.length > 0) {
         lines.push("      <ul>");
-        for (const item of section.items) {
-          lines.push(`        <li>${escapeHtml(item)}</li>`);
+        for (const [itemIndex, item] of section.items.entries()) {
+          lines.push(`        <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""}>${escapeHtml(item)}</li>`);
         }
         lines.push("      </ul>");
       } else if (section.body) {
@@ -764,7 +765,7 @@ function renderLegacySummaryHtml(input: {
     lines.push("  </div>");
   }
 
-  lines.push('  <article class="gnr8-card gnr8-section" aria-label="legacy-summary-contact">');
+  lines.push('  <article class="gnr8-card gnr8-section" aria-label="legacy-summary-contact" data-airship-section="cta" data-airship-element="contact-card">');
   lines.push(`    <h2>${escapeHtml(labels.contact)}</h2>`);
   if (contact.address) {
     lines.push(`    <p style="margin: 0 0 10px;">${escapeHtml(contact.address)}</p>`);
@@ -802,12 +803,12 @@ function renderLegacySummaryHtml(input: {
     lines.push(`    <p style="margin: 10px 0 0;">${escapeHtml(airshipContactSection.body)}</p>`);
   }
   if (airshipContactSection?.ctaLabel) {
-    lines.push(`    <a class="gnr8-primary-cta" href="#contact">${escapeHtml(airshipContactSection.ctaLabel)}</a>`);
+    lines.push(`    <a class="gnr8-primary-cta" href="#contact" data-airship-element="contact-cta">${escapeHtml(airshipContactSection.ctaLabel)}</a>`);
   }
   lines.push("  </article>");
   const airshipFooterSection = airshipDraftSections.find((section) => section.key === "footer");
   if (airshipFooterSection?.body) {
-    lines.push('  <footer class="gnr8-section" data-airship-draft-section="footer" style="font-size: 0.86rem; color: #456; padding: 4px 2px 0;">');
+    lines.push('  <footer class="gnr8-section" data-airship-draft-section="footer" data-airship-section="footer" style="font-size: 0.86rem; color: #456; padding: 4px 2px 0;">');
     lines.push(`    ${escapeHtml(airshipFooterSection.body)}`);
     lines.push("  </footer>");
   }

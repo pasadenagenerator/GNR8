@@ -92,6 +92,7 @@ type PreviewCandidateState = NonNullable<Props["draftCandidate"]>;
 
 export type AirshipSelectedElementMetadata = {
   section: EditorSectionKey;
+  selectionLevel: "section-level" | "element-level";
   label: string;
   domSectionId: string;
   role: string;
@@ -100,6 +101,14 @@ export type AirshipSelectedElementMetadata = {
   mappedDraftFieldIds: string[];
   sizeLabel: string;
   internalRefs: Array<{ label: string; value: string }>;
+};
+
+export type AirshipArtifactOverlayRect = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  source: "dom-marker";
 };
 
 type EditorSnapshot = {
@@ -325,6 +334,7 @@ function SelectionOverlay({ metadata }: { metadata: AirshipSelectedElementMetada
 }
 
 const artifactCanvasSections: Array<Exclude<EditorSectionKey, "source">> = ["hero", "offers", "proof", "approach", "cta", "footer"];
+const AIRSHIP_ARTIFACT_CANVAS_FALLBACK_MIN_HEIGHT = 1180;
 
 function artifactSectionBandStyle(section: Exclude<EditorSectionKey, "source">): CSSProperties {
   const bands: Record<Exclude<EditorSectionKey, "source">, CSSProperties> = {
@@ -341,7 +351,71 @@ function artifactSectionBandStyle(section: Exclude<EditorSectionKey, "source">):
 function artifactCanvasHeight(viewport: EditorViewportKey): number {
   if (viewport === "mobile") return 1320;
   if (viewport === "tablet") return 1240;
-  return 1180;
+  return AIRSHIP_ARTIFACT_CANVAS_FALLBACK_MIN_HEIGHT;
+}
+
+export function airshipArtifactSectionSelector(section: Exclude<EditorSectionKey, "source">): string {
+  return `[data-airship-section="${section}"]`;
+}
+
+export function airshipElementSelectorsForSection(section: EditorSectionKey): string[] {
+  const selectors: Record<EditorSectionKey, string[]> = {
+    hero: [
+      '[data-airship-element="hero-headline"]',
+      '[data-airship-element="hero-cta"]',
+    ],
+    offers: ['[data-airship-element="offer-card"]'],
+    proof: ['[data-airship-element="proof-card"]'],
+    approach: ['[data-airship-element="approach-card"]'],
+    cta: [
+      '[data-airship-element="contact-card"]',
+      '[data-airship-element="contact-cta"]',
+    ],
+    footer: [],
+    source: [],
+  };
+  return selectors[section];
+}
+
+export function measuredAirshipArtifactCanvasHeight(input: {
+  documentElementScrollHeight?: number | null;
+  bodyScrollHeight?: number | null;
+  bodyOffsetHeight?: number | null;
+  fallbackHeight: number;
+}): number {
+  const measured = Math.max(
+    Number(input.documentElementScrollHeight ?? 0),
+    Number(input.bodyScrollHeight ?? 0),
+    Number(input.bodyOffsetHeight ?? 0),
+  );
+  return Number.isFinite(measured) && measured > 0 ? Math.max(input.fallbackHeight, Math.ceil(measured)) : input.fallbackHeight;
+}
+
+export function airshipArtifactOverlayRectFromDomRect(input: {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  scrollX?: number;
+  scrollY?: number;
+}): AirshipArtifactOverlayRect | null {
+  if (
+    !Number.isFinite(input.top) ||
+    !Number.isFinite(input.left) ||
+    !Number.isFinite(input.width) ||
+    !Number.isFinite(input.height) ||
+    input.width <= 0 ||
+    input.height <= 0
+  ) {
+    return null;
+  }
+  return {
+    top: Math.max(0, Math.round(input.top + (input.scrollY ?? 0))),
+    left: Math.max(0, Math.round(input.left + (input.scrollX ?? 0))),
+    width: Math.max(1, Math.round(input.width)),
+    height: Math.max(1, Math.round(input.height)),
+    source: "dom-marker",
+  };
 }
 
 function inputStyle(multiline = false): CSSProperties {
@@ -574,19 +648,21 @@ export function deriveAirshipSelectedElementMetadata(input: {
   if (input.section === "cta") {
     return {
       section: "cta",
+      selectionLevel: "section-level",
       label: sectionLabel,
-      domSectionId: "airship-preview-primary-cta",
-      role: "button / primary action",
+      domSectionId: "airship-preview-cta",
+      role: "section / CTA and contact action",
       sourceStatus: option?.sourceStatus ?? "source-supported CTA draft field",
       draftStatus,
       mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
-      sizeLabel: "auto button in CTA row",
+      sizeLabel: `rendered section box in ${input.viewportLabel}`,
       internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
     };
   }
   if (input.section === "source") {
     return {
       section: "source",
+      selectionLevel: "section-level",
       label: sectionLabel,
       domSectionId: "airship-preview-source-material",
       role: "source evidence strip",
@@ -606,6 +682,7 @@ export function deriveAirshipSelectedElementMetadata(input: {
     };
     return {
       section: input.section,
+      selectionLevel: "section-level",
       label: sectionLabel,
       domSectionId: `airship-preview-${input.section}`,
       role: roleBySection[input.section],
@@ -618,6 +695,7 @@ export function deriveAirshipSelectedElementMetadata(input: {
   }
   return {
     section: "hero",
+    selectionLevel: "section-level",
     label: sectionLabel,
     domSectionId: "airship-preview-hero-intro",
     role: "region / homepage hero intro",
@@ -759,7 +837,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
   const [canvasZoom, setCanvasZoom] = useState(0.86);
   const [inspectorTab, setInspectorTab] = useState<InspectorTabKey>("agent");
+  const [artifactCanvasMeasuredHeight, setArtifactCanvasMeasuredHeight] = useState<number | null>(null);
+  const [artifactOverlayRects, setArtifactOverlayRects] = useState<Partial<Record<Exclude<EditorSectionKey, "source">, AirshipArtifactOverlayRect>>>({});
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
+  const artifactIframeRef = useRef<HTMLIFrameElement | null>(null);
   const savedFieldsRef = useRef(savedFields);
   const savedStyleKeyRef = useRef(styleKey(initialFieldsRef.current));
   const styleSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -790,7 +871,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   });
   const previewHostLabel = props.demoReadiness ? "GNR8 demo preview" : "Latest GNR8 preview host";
   const artifactCanvasRender = props.artifactCanvasRender ?? null;
-  const artifactCanvasFrameHeight = artifactCanvasHeight(viewport);
+  const artifactCanvasFallbackHeight = artifactCanvasHeight(viewport);
+  const artifactCanvasFrameHeight = artifactCanvasMeasuredHeight ?? artifactCanvasFallbackHeight;
   const zoomPercent = `${Math.round(canvasZoom * 100)}%`;
   const scaledCanvasWidth = Math.ceil(selectedViewport.width * canvasZoom);
   const canApplySavedDraftToPreview = airshipCanApplySavedDraftToPreview({
@@ -873,6 +955,78 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
 
   function selectSection(section: EditorSectionKey) {
     setSelectedSection(section);
+  }
+
+  const measureArtifactCanvas = useCallback(() => {
+    const iframe = artifactIframeRef.current;
+    let doc: Document | null | undefined = null;
+    try {
+      doc = iframe?.contentDocument;
+    } catch {
+      doc = null;
+    }
+    if (!iframe || !doc) {
+      setArtifactCanvasMeasuredHeight(null);
+      setArtifactOverlayRects({});
+      return;
+    }
+
+    const nextHeight = measuredAirshipArtifactCanvasHeight({
+      documentElementScrollHeight: doc.documentElement?.scrollHeight,
+      bodyScrollHeight: doc.body?.scrollHeight,
+      bodyOffsetHeight: doc.body?.offsetHeight,
+      fallbackHeight: artifactCanvasFallbackHeight,
+    });
+    const scrollX = doc.defaultView?.scrollX ?? doc.documentElement?.scrollLeft ?? doc.body?.scrollLeft ?? 0;
+    const scrollY = doc.defaultView?.scrollY ?? doc.documentElement?.scrollTop ?? doc.body?.scrollTop ?? 0;
+    const nextRects: Partial<Record<Exclude<EditorSectionKey, "source">, AirshipArtifactOverlayRect>> = {};
+
+    for (const section of artifactCanvasSections) {
+      const element = doc.querySelector(airshipArtifactSectionSelector(section));
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      const overlayRect = airshipArtifactOverlayRectFromDomRect({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        scrollX,
+        scrollY,
+      });
+      if (overlayRect) nextRects[section] = overlayRect;
+    }
+
+    setArtifactCanvasMeasuredHeight(nextHeight);
+    setArtifactOverlayRects(nextRects);
+  }, [artifactCanvasFallbackHeight]);
+
+  useEffect(() => {
+    if (!artifactCanvasRender) {
+      setArtifactCanvasMeasuredHeight(null);
+      setArtifactOverlayRects({});
+      return undefined;
+    }
+    setArtifactCanvasMeasuredHeight(artifactCanvasFallbackHeight);
+    setArtifactOverlayRects({});
+    const timers = [
+      window.setTimeout(measureArtifactCanvas, 0),
+      window.setTimeout(measureArtifactCanvas, 120),
+      window.setTimeout(measureArtifactCanvas, 600),
+    ];
+    return () => {
+      for (const timer of timers) window.clearTimeout(timer);
+    };
+  }, [artifactCanvasRender, artifactCanvasFallbackHeight, measureArtifactCanvas]);
+
+  function artifactOverlayStyle(section: Exclude<EditorSectionKey, "source">): CSSProperties {
+    const rect = artifactOverlayRects[section];
+    if (!rect) return artifactSectionBandStyle(section);
+    return {
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+    };
   }
 
   const fitCanvasWidth = useCallback(() => {
@@ -2034,13 +2188,17 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                           data-airship-artifact-runtime-artifact-id={artifactCanvasRender.runtimeArtifactId}
                           data-airship-artifact-sandbox={artifactCanvasRender.safety.sandbox}
                           data-airship-artifact-raw-scripts-execute={String(artifactCanvasRender.safety.rawScriptsExecute)}
+                          data-airship-artifact-canvas-height={artifactCanvasFrameHeight}
+                          data-airship-artifact-canvas-height-source={artifactCanvasMeasuredHeight ? "iframe-scroll-height" : "fallback-min-height"}
                           aria-label={artifactCanvasRender.label}
                         >
                           <iframe
                             title={artifactCanvasRender.label}
-                            sandbox=""
+                            sandbox="allow-same-origin"
+                            ref={artifactIframeRef}
                             referrerPolicy="no-referrer"
                             srcDoc={artifactCanvasRender.sanitizedHtml}
+                            onLoad={measureArtifactCanvas}
                           />
                           {artifactCanvasSections.map((section) => (
                             <button
@@ -2049,10 +2207,12 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                               className="airship-artifact-overlay"
                               data-airship-editor-canvas={section}
                               data-airship-artifact-section-anchor={section}
+                              data-airship-artifact-section-selector={airshipArtifactSectionSelector(section)}
+                              data-airship-artifact-geometry-source={artifactOverlayRects[section] ? "dom-marker" : "fallback-band"}
                               data-selected={selectedSection === section}
                               aria-label={`Select ${sectionOptions.find((option) => option.key === section)?.label ?? section} artifact section`}
                               onClick={() => selectSection(section)}
-                              style={artifactSectionBandStyle(section)}
+                              style={artifactOverlayStyle(section)}
                             >
                               {selectedSection === section ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
                             </button>
@@ -2081,6 +2241,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                     <section
                       id="airship-preview-hero-intro"
                       data-airship-editor-canvas="hero"
+                      data-airship-section="hero"
                       data-selected={selectedSection === "hero"}
                       className="airship-preview-hero"
                       aria-label="Homepage hero/intro"
@@ -2094,6 +2255,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                       <div className="airship-preview-eyebrow">{props.draftPreview.hero.eyebrow}</div>
                       <h2
                         data-airship-editor-preview="headline"
+                        data-airship-element="hero-headline"
                         className="airship-preview-headline"
                         style={{ fontSize: viewport === "mobile" ? 34 : viewport === "tablet" ? 40 : 46 }}
                       >
@@ -2121,6 +2283,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                           <button
                             type="button"
                             data-airship-editor-preview="cta"
+                            data-airship-element="hero-cta"
                             data-selected={selectedSection === "cta"}
                             className="airship-preview-cta"
                             onClick={(event) => {
@@ -2144,6 +2307,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                         key={section.key}
                         id={`airship-preview-${section.key}`}
                         data-airship-editor-canvas={section.key}
+                        data-airship-section={section.key}
                         data-selected={selectedSection === section.key}
                         className="airship-preview-section"
                         aria-label={section.label}
@@ -2158,8 +2322,15 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                         {section.body ? <p>{section.body}</p> : null}
                         {section.items.length > 0 ? (
                           <div className="airship-preview-card-grid">
-                            {section.items.map((item) => (
-                              <div key={item} className="airship-preview-card">{item}</div>
+                            {section.items.map((item, itemIndex) => (
+                              <div
+                                key={item}
+                                className="airship-preview-card"
+                                data-airship-element={section.key === "offers" ? "offer-card" : section.key === "proof" ? "proof-card" : section.key === "approach" ? "approach-card" : undefined}
+                                data-airship-element-index={section.key === "offers" || section.key === "proof" || section.key === "approach" ? itemIndex : undefined}
+                              >
+                                {item}
+                              </div>
                             ))}
                           </div>
                         ) : null}
@@ -2167,6 +2338,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                           <button
                             type="button"
                             className="airship-preview-cta"
+                            data-airship-element="contact-cta"
                             style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor, width: "fit-content" }}
                           >
                             {section.ctaLabel}
@@ -2557,6 +2729,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                     <code>{selectedElementMetadata.section}</code>
                   </div>
                   <div className="airship-detail-row">
+                    <strong>selection level</strong>
+                    <code>{selectedElementMetadata.selectionLevel}</code>
+                  </div>
+                  <div className="airship-detail-row">
                     <strong>DOM id</strong>
                     <code>{selectedElementMetadata.domSectionId}</code>
                   </div>
@@ -2576,7 +2752,24 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                     <strong>canvas selector</strong>
                     <code>{airshipCanvasSelectorForSection(selectedSection)}</code>
                   </div>
+                  <div className="airship-detail-row">
+                    <strong>artifact selector</strong>
+                    <code>{selectedSection === "source" ? "source strip" : airshipArtifactSectionSelector(selectedSection)}</code>
+                  </div>
                 </div>
+              </div>
+
+              <div className="airship-details" aria-label="Element-level selection markers">
+                <div className="airship-kicker">Element-level selection markers</div>
+                {airshipElementSelectorsForSection(selectedSection).length > 0 ? (
+                  <div className="airship-detail-list">
+                    {airshipElementSelectorsForSection(selectedSection).map((selector) => (
+                      <code key={selector}>{selector}</code>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="airship-muted">No element-level marker registered for this selection yet.</div>
+                )}
               </div>
 
               <div className="airship-details" aria-label="Mapped draft field ids">
