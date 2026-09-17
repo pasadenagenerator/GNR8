@@ -152,6 +152,10 @@ const viewportOptions: Array<{ key: EditorViewportKey; label: string; width: num
   { key: "mobile", label: "Mobile", width: 390 },
 ];
 
+const MIN_CANVAS_ZOOM = 0.38;
+const MAX_CANVAS_ZOOM = 1.35;
+const CANVAS_ZOOM_STEP = 0.08;
+
 const inspectorTabs: Array<{ key: InspectorTabKey; label: string }> = [
   { key: "agent", label: "Agent" },
   { key: "edit", label: "Edit" },
@@ -381,6 +385,22 @@ function providerBadgeLabel(status: AirshipOpenAIProviderStatusReadModel): strin
   if (status.status === "encryption_not_configured") return "Encryption setup needed";
   if (status.status === "read_error") return "Status read failed";
   return "Not connected";
+}
+
+function clampCanvasZoom(value: number): number {
+  return Math.max(MIN_CANVAS_ZOOM, Math.min(MAX_CANVAS_ZOOM, Number(value.toFixed(2))));
+}
+
+function sameSitePreviewHost(input: { importedSite: string; previewUrl: string | null | undefined }): string | null {
+  if (!input.previewUrl) return null;
+  const sitePrefix = input.importedSite.split(".")[0]?.toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, "");
+  if (!sitePrefix) return null;
+  try {
+    const host = new URL(input.previewUrl).hostname.toLocaleLowerCase("en-US");
+    return host.startsWith(`${sitePrefix}-airship.`) ? input.previewUrl : null;
+  } catch {
+    return null;
+  }
 }
 
 function draftFieldKey(draft: AirshipSingleSiteImprovementDraft): TextFieldKey | null {
@@ -715,7 +735,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [agentProfileSelection] = useState(() => props.agentProfileSelection);
   const [selectedSection, setSelectedSection] = useState<EditorSectionKey>("hero");
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
+  const [canvasZoom, setCanvasZoom] = useState(0.86);
   const [inspectorTab, setInspectorTab] = useState<InspectorTabKey>("agent");
+  const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const savedFieldsRef = useRef(savedFields);
   const savedStyleKeyRef = useRef(styleKey(initialFieldsRef.current));
   const styleSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -740,6 +762,13 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   });
   const selectedStyleValueRows = deriveAirshipStyleValueRows(selectedSection, fields);
   const activeAgentProfile = agentProfileSelection.activeProfile;
+  const previewHostUrl = props.demoReadiness?.demoUrl ?? sameSitePreviewHost({
+    importedSite: props.importedSite,
+    previewUrl: props.importedSiteModel?.latestInternalPreviewHost?.previewUrl,
+  });
+  const previewHostLabel = props.demoReadiness ? "GNR8 demo preview" : "Latest GNR8 preview host";
+  const zoomPercent = `${Math.round(canvasZoom * 100)}%`;
+  const scaledCanvasWidth = Math.ceil(selectedViewport.width * canvasZoom);
   const canApplySavedDraftToPreview = airshipCanApplySavedDraftToPreview({
     migrationId: props.migrationId,
     draftId: draftMeta.draftId,
@@ -820,6 +849,21 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
 
   function selectSection(section: EditorSectionKey) {
     setSelectedSection(section);
+  }
+
+  const fitCanvasWidth = useCallback(() => {
+    const canvasWidth = canvasScrollRef.current?.clientWidth ?? (typeof window === "undefined" ? selectedViewport.width : window.innerWidth);
+    const inspectorReserve = typeof window !== "undefined" && window.innerWidth > 1220 ? 408 : 0;
+    const availableWidth = Math.max(220, canvasWidth - inspectorReserve - 72);
+    setCanvasZoom(clampCanvasZoom(Math.min(1, availableWidth / selectedViewport.width)));
+  }, [selectedViewport.width]);
+
+  useEffect(() => {
+    fitCanvasWidth();
+  }, [fitCanvasWidth, viewport]);
+
+  function zoomCanvas(delta: number) {
+    setCanvasZoom((current) => clampCanvasZoom(current + delta));
   }
 
   function updateStyleField(field: StyleFieldKey, value: string | number) {
@@ -1232,7 +1276,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         .airship-shell {
           position: relative;
           display: grid;
-          grid-template-columns: 88px minmax(0, 1fr);
+          grid-template-columns: minmax(0, 1fr);
           min-height: 0;
           overflow: hidden;
         }
@@ -1309,14 +1353,21 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           background-size: 28px 28px;
         }
         .airship-canvas-scroll {
-          display: grid;
-          align-content: start;
+          display: block;
           gap: 12px;
           height: 100%;
           min-width: 0;
           overflow: auto;
-          padding: 20px 408px 112px 28px;
+          padding: 20px 408px 126px 28px;
           box-sizing: border-box;
+        }
+        .airship-canvas-stage {
+          display: grid;
+          justify-items: center;
+          align-content: start;
+          gap: 12px;
+          width: max-content;
+          min-width: 100%;
         }
         .airship-canvas-bar {
           display: flex;
@@ -1328,15 +1379,20 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           max-width: 1100px;
           flex-wrap: wrap;
         }
+        .airship-canvas-zoom-shell {
+          display: block;
+          transform-origin: top left;
+        }
         .airship-frame-shell {
-          width: min(var(--airship-frame-width), calc(100vw - 544px));
+          width: var(--airship-frame-width);
           margin: 0 auto;
           border: 1px solid #94a3b8;
           border-radius: 8px;
           background: #0f172a;
           box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
           overflow: hidden;
-          max-width: 100%;
+          transform: scale(var(--airship-canvas-zoom));
+          transform-origin: top left;
         }
         .airship-frame-top {
           display: flex;
@@ -1351,7 +1407,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           font-weight: 800;
         }
         .airship-frame-page {
-          overflow: hidden;
+          min-height: 100%;
+          overflow: visible;
           background: #ffffff;
         }
         .airship-preview-hero {
@@ -1739,9 +1796,6 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           .airship-canvas-scroll {
             padding-right: 28px;
           }
-          .airship-frame-shell {
-            width: min(var(--airship-frame-width), 100%);
-          }
           .airship-inspector {
             position: relative;
             inset: auto;
@@ -1825,205 +1879,189 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       </header>
 
       <div className="airship-shell">
-        <aside className="airship-left" aria-label="Section navigator">
-          <div className="airship-panel-title">
-            <div className="airship-kicker">Section navigator</div>
-            <h2>{props.importedSite}</h2>
-            <div className="airship-muted">Live site unchanged. Text saves update the Airship draft only.</div>
-          </div>
-
-          <div className="airship-section-list">
-            {sectionOptions.map((section) => (
-              <button
-                key={section.key}
-                type="button"
-                className="airship-section-button"
-                data-selected={selectedSection === section.key}
-                data-airship-editor-rail-target={section.key}
-                aria-pressed={selectedSection === section.key}
-                aria-controls={deriveAirshipSelectedElementMetadata({
-                  section: section.key,
-                  migrationId: props.migrationId,
-                  importedSite: props.importedSite,
-                  sourceUrl: props.sourceUrl,
-                  liveSiteUrl: props.liveSiteUrl,
-                  viewportLabel: selectedViewport.label,
-                  viewportWidth: selectedViewport.width,
-                  draftMeta,
-                  draftCandidate: previewCandidate,
-                  editableSections: sectionOptions,
-                }).domSectionId}
-                onClick={() => selectSection(section.key)}
-              >
-                <strong>{section.label}</strong>
-                <span>{section.detail}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="airship-left-meta">
-            <span aria-label="Changes are saved to Airship draft only">{badge("Draft only", "good")}</span>
-            <span aria-label={STYLE_DRAFT_SAVED_MESSAGE}>{badge("Style autosave", "neutral")}</span>
-            <div className="airship-muted">Source {props.importedSite}.</div>
-          </div>
-
-          {props.demoReadiness ? (
-            <div className="airship-details" aria-label="MVP demo readiness">
-              <div className="airship-kicker">MVP demo readiness</div>
-              <a href={props.demoReadiness.demoUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true })}>
-                Open GNR8 demo
-              </a>
-              <div className="airship-detail-list">
-                <div className="airship-detail-row">
-                  <strong>demo URL</strong>
-                  <code>{props.demoReadiness.demoUrl}</code>
-                </div>
-                <div className="airship-detail-row">
-                  <strong>active target</strong>
-                  <code>{`${props.demoReadiness.activePointerTarget.siteVersionId} / ${props.demoReadiness.activePointerTarget.runtimeArtifactId}`}</code>
-                </div>
-                <div className="airship-detail-row">
-                  <strong>www.chs.si</strong>
-                  <code>{props.demoReadiness.externalProductionSite.status.replaceAll("_", " ")}</code>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </aside>
-
         <section className="airship-canvas" aria-label="Draft preview canvas">
-          <div className="airship-canvas-scroll">
-            <div className="airship-canvas-bar">
-              <div className="airship-toolbar-group">
-                {badge(`${selectedViewport.label} canvas`, "neutral")}
-                {badge(`${selectedViewport.width}px frame`, "neutral")}
+          <div className="airship-canvas-scroll" ref={canvasScrollRef}>
+            <div className="airship-canvas-stage">
+              <div className="airship-canvas-bar">
+                <div className="airship-toolbar-group">
+                  {badge(`${selectedViewport.label} canvas`, "neutral")}
+                  {badge(`${selectedViewport.width}px frame`, "neutral")}
+                  {badge(`Zoom ${zoomPercent}`, "neutral")}
+                </div>
+                <div className="airship-muted">
+                  Full-page internal canvas preview. Live remains separate at {props.liveSiteUrl}.
+                  {previewHostUrl ? (
+                    <>
+                      {" "}
+                      <a href={previewHostUrl} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontWeight: 900, textDecoration: "none" }}>
+                        Open GNR8 demo
+                      </a>
+                    </>
+                  ) : null}
+                </div>
+                {props.demoReadiness ? (
+                  <div className="airship-detail-list" aria-label="MVP demo readiness" style={{ width: "100%" }}>
+                    <div className="airship-detail-row">
+                      <strong>{previewHostLabel}</strong>
+                      <code>{props.demoReadiness.demoUrl}</code>
+                    </div>
+                    <div className="airship-detail-row">
+                      <strong>demo text</strong>
+                      <span>{props.demoReadiness.expectedBodyText}</span>
+                    </div>
+                    <div className="airship-detail-row">
+                      <strong>active target</strong>
+                      <code>{`${props.demoReadiness.activePointerTarget.siteVersionId} / ${props.demoReadiness.activePointerTarget.runtimeArtifactId}`}</code>
+                    </div>
+                    <div className="airship-detail-row">
+                      <strong>external domain</strong>
+                      <code>{props.demoReadiness.externalProductionSite.status.replaceAll("_", " ")}</code>
+                    </div>
+                  </div>
+                ) : previewHostUrl ? (
+                  <div className="airship-detail-list" aria-label="GNR8 preview host parity" style={{ width: "100%" }}>
+                    <div className="airship-detail-row">
+                      <strong>{previewHostLabel}</strong>
+                      <code>{previewHostUrl}</code>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div className="airship-muted">Internal canvas preview. Live remains separate at {props.liveSiteUrl}.</div>
-            </div>
 
-            <div
-              className="airship-frame-shell"
-              style={{ "--airship-frame-width": `${selectedViewport.width}px` } as CSSProperties}
-              data-airship-editor-viewport={viewport}
-            >
-              <div className="airship-frame-top">
-                <span>{props.draftPreview.label}</span>
-                <span>Draft only / Not live</span>
-              </div>
-              <div className="airship-frame-page">
-                <section
-                  id="airship-preview-hero-intro"
-                  data-airship-editor-canvas="hero"
-                  data-selected={selectedSection === "hero"}
-                  className="airship-preview-hero"
-                  aria-label="Homepage hero/intro"
-                  onClick={() => selectSection("hero")}
+              <div
+                className="airship-canvas-zoom-shell"
+                style={{ width: scaledCanvasWidth, minWidth: scaledCanvasWidth }}
+              >
+                <div
+                  className="airship-frame-shell"
                   style={{
-                    padding: `${fields.topPadding}px ${viewport === "mobile" ? 22 : 44}px ${fields.bottomPadding}px`,
-                    background: `linear-gradient(135deg, ${fields.backgroundTint} 0%, #ffffff 58%, #dbeafe 100%)`,
-                  }}
+                    "--airship-frame-width": `${selectedViewport.width}px`,
+                    "--airship-canvas-zoom": canvasZoom,
+                  } as CSSProperties}
+                  data-airship-editor-viewport={viewport}
+                  data-airship-full-page-canvas="true"
+                  data-airship-canvas-zoom={canvasZoom.toFixed(2)}
                 >
-                  {selectedSection === "hero" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
-                  <div className="airship-preview-eyebrow">{props.draftPreview.hero.eyebrow}</div>
-                  <h2
-                    data-airship-editor-preview="headline"
-                    className="airship-preview-headline"
-                    style={{ fontSize: viewport === "mobile" ? 34 : viewport === "tablet" ? 40 : 46 }}
-                  >
-                    {fields.headline}
-                  </h2>
-                  <p
-                    data-airship-editor-preview="subheading"
-                    className="airship-preview-copy"
-                    style={{ fontSize: viewport === "mobile" ? 16 : 18 }}
-                  >
-                    {fields.subheading}
-                  </p>
-                  <div
-                    id="airship-preview-primary-cta"
-                    className="airship-cta-row"
-                    data-airship-editor-canvas="cta"
-                    data-selected={selectedSection === "cta"}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      selectSection("cta");
-                    }}
-                  >
-                    {selectedSection === "cta" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
-                    {fields.ctaLabel ? (
-                      <button
-                        type="button"
-                        data-airship-editor-preview="cta"
+                  <div className="airship-frame-top">
+                    <span>{props.draftPreview.label}</span>
+                    <span>Draft only / Not live</span>
+                  </div>
+                  <div className="airship-frame-page">
+                    <section
+                      id="airship-preview-hero-intro"
+                      data-airship-editor-canvas="hero"
+                      data-selected={selectedSection === "hero"}
+                      className="airship-preview-hero"
+                      aria-label="Homepage hero/intro"
+                      onClick={() => selectSection("hero")}
+                      style={{
+                        padding: `${fields.topPadding}px ${viewport === "mobile" ? 22 : 44}px ${fields.bottomPadding}px`,
+                        background: `linear-gradient(135deg, ${fields.backgroundTint} 0%, #ffffff 58%, #dbeafe 100%)`,
+                      }}
+                    >
+                      {selectedSection === "hero" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                      <div className="airship-preview-eyebrow">{props.draftPreview.hero.eyebrow}</div>
+                      <h2
+                        data-airship-editor-preview="headline"
+                        className="airship-preview-headline"
+                        style={{ fontSize: viewport === "mobile" ? 34 : viewport === "tablet" ? 40 : 46 }}
+                      >
+                        {fields.headline}
+                      </h2>
+                      <p
+                        data-airship-editor-preview="subheading"
+                        className="airship-preview-copy"
+                        style={{ fontSize: viewport === "mobile" ? 16 : 18 }}
+                      >
+                        {fields.subheading}
+                      </p>
+                      <div
+                        id="airship-preview-primary-cta"
+                        className="airship-cta-row"
+                        data-airship-editor-canvas="cta"
                         data-selected={selectedSection === "cta"}
-                        className="airship-preview-cta"
                         onClick={(event) => {
                           event.stopPropagation();
                           selectSection("cta");
                         }}
-                        style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor }}
                       >
-                        {fields.ctaLabel}
-                      </button>
-                    ) : null}
-                    {props.draftPreview.hero.secondaryContactText ? (
-                      <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
-                        {props.draftPreview.hero.secondaryContactText}
-                      </span>
-                    ) : null}
-                  </div>
-                </section>
-                {previewSections.filter((section) => section.key !== "hero").map((section) => (
-                  <section
-                    key={section.key}
-                    id={`airship-preview-${section.key}`}
-                    data-airship-editor-canvas={section.key}
-                    data-selected={selectedSection === section.key}
-                    className="airship-preview-section"
-                    aria-label={section.label}
-                    onClick={() => selectSection(section.key)}
-                    style={{
-                      background: section.key === "footer" ? "#f8fafc" : "#ffffff",
-                    }}
-                  >
-                    {selectedSection === section.key ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
-                    <div className="airship-preview-eyebrow">{section.eyebrow}</div>
-                    <h3>{section.heading}</h3>
-                    {section.body ? <p>{section.body}</p> : null}
-                    {section.items.length > 0 ? (
-                      <div className="airship-preview-card-grid">
-                        {section.items.map((item) => (
-                          <div key={item} className="airship-preview-card">{item}</div>
-                        ))}
+                        {selectedSection === "cta" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                        {fields.ctaLabel ? (
+                          <button
+                            type="button"
+                            data-airship-editor-preview="cta"
+                            data-selected={selectedSection === "cta"}
+                            className="airship-preview-cta"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              selectSection("cta");
+                            }}
+                            style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor }}
+                          >
+                            {fields.ctaLabel}
+                          </button>
+                        ) : null}
+                        {props.draftPreview.hero.secondaryContactText ? (
+                          <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
+                            {props.draftPreview.hero.secondaryContactText}
+                          </span>
+                        ) : null}
                       </div>
-                    ) : null}
-                    {section.ctaLabel ? (
-                      <button
-                        type="button"
-                        className="airship-preview-cta"
-                        style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor, width: "fit-content" }}
+                    </section>
+                    {previewSections.filter((section) => section.key !== "hero").map((section) => (
+                      <section
+                        key={section.key}
+                        id={`airship-preview-${section.key}`}
+                        data-airship-editor-canvas={section.key}
+                        data-selected={selectedSection === section.key}
+                        className="airship-preview-section"
+                        aria-label={section.label}
+                        onClick={() => selectSection(section.key)}
+                        style={{
+                          background: section.key === "footer" ? "#f8fafc" : "#ffffff",
+                        }}
                       >
-                        {section.ctaLabel}
-                      </button>
-                    ) : null}
-                  </section>
-                ))}
-                <button
-                  id="airship-preview-source-material"
-                  type="button"
-                  className="airship-source-strip"
-                  data-airship-editor-canvas="source"
-                  data-selected={selectedSection === "source"}
-                  onClick={() => selectSection("source")}
-                >
-                  {selectedSection === "source" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
-                  <span>
-                    <strong>Source material</strong>
-                    <span style={{ display: "block", color: "#64748b", fontSize: 12, marginTop: 2 }}>
-                      Imported-site draft evidence stays inside the internal editor workspace.
-                    </span>
-                  </span>
-                  <span style={{ color: "#0f766e", fontSize: 12, fontWeight: 900 }}>Draft only</span>
-                </button>
+                        {selectedSection === section.key ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                        <div className="airship-preview-eyebrow">{section.eyebrow}</div>
+                        <h3>{section.heading}</h3>
+                        {section.body ? <p>{section.body}</p> : null}
+                        {section.items.length > 0 ? (
+                          <div className="airship-preview-card-grid">
+                            {section.items.map((item) => (
+                              <div key={item} className="airship-preview-card">{item}</div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {section.ctaLabel ? (
+                          <button
+                            type="button"
+                            className="airship-preview-cta"
+                            style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor, width: "fit-content" }}
+                          >
+                            {section.ctaLabel}
+                          </button>
+                        ) : null}
+                      </section>
+                    ))}
+                    <button
+                      id="airship-preview-source-material"
+                      type="button"
+                      className="airship-source-strip"
+                      data-airship-editor-canvas="source"
+                      data-selected={selectedSection === "source"}
+                      onClick={() => selectSection("source")}
+                    >
+                      {selectedSection === "source" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                      <span>
+                        <strong>Source material</strong>
+                        <span style={{ display: "block", color: "#64748b", fontSize: 12, marginTop: 2 }}>
+                          Imported-site draft evidence stays inside the internal editor workspace.
+                        </span>
+                      </span>
+                      <span style={{ color: "#0f766e", fontSize: 12, fontWeight: 900 }}>Draft only</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2032,6 +2070,34 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
             <button type="button" aria-pressed="true" style={actionButtonStyle({ selected: true, compact: true })}>
               Select
             </button>
+            <button
+              type="button"
+              aria-label="Zoom out canvas"
+              onClick={() => zoomCanvas(-CANVAS_ZOOM_STEP)}
+              style={actionButtonStyle({ disabled: canvasZoom <= MIN_CANVAS_ZOOM, compact: true })}
+              disabled={canvasZoom <= MIN_CANVAS_ZOOM}
+            >
+              Zoom -
+            </button>
+            <button
+              type="button"
+              aria-label="Fit width canvas"
+              onClick={fitCanvasWidth}
+              style={actionButtonStyle({ compact: true })}
+            >
+              Fit width
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in canvas"
+              onClick={() => zoomCanvas(CANVAS_ZOOM_STEP)}
+              style={actionButtonStyle({ disabled: canvasZoom >= MAX_CANVAS_ZOOM, compact: true })}
+              disabled={canvasZoom >= MAX_CANVAS_ZOOM}
+            >
+              Zoom +
+            </button>
+            <span className="airship-muted" aria-label="Current canvas zoom">{zoomPercent}</span>
+            <span className="airship-toolbar-separator" />
             <div className="airship-device-toggle" aria-label="Device preview controls">
               {viewportOptions.map((option) => (
                 <button

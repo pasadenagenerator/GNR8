@@ -469,7 +469,7 @@ test("airship projection generates a deterministic ARIS MVP draft from source ev
   const serialized = JSON.stringify(model);
 
   assert.equal(model.importedSite, "aris.si");
-  assert.equal(model.draftPanel.drafts.length, 5);
+  assert.equal(model.draftPanel.drafts.length, 7);
   assert.equal(model.draftPanel.draftPreview?.hero.eyebrow, "ARIS");
   assert.equal(model.draftPanel.draftPreview?.hero.headline, "ARIS - Apple in Canton ponudba");
   assert.equal(
@@ -481,6 +481,10 @@ test("airship projection generates a deterministic ARIS MVP draft from source ev
   assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("MacBook Pro 16 M3 Pro")), true);
   assert.equal(model.draftPanel.drafts.some((draft) => draft.targetSectionPage === "Homepage / brand and category proof"), true);
   assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("Blackmagic Design")), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.targetSectionPage === "Homepage / approach and process"), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("Svetovanje, testiranje izdelkov")), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.targetSectionPage === "Homepage / footer demo note"), true);
+  assert.equal(model.draftPanel.drafts.some((draft) => draft.proposedTextContent.includes("Internal GNR8 demo preview for ARIS")), true);
   assert.equal(model.previews.airshipDraftCandidate?.siteVersionId, AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID);
   assert.equal(model.previews.airshipDraftCandidate?.runtimeArtifactId, AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID);
   assert.equal(model.importedSiteModel.latestInternalPreviewCandidate?.siteVersionId, AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID);

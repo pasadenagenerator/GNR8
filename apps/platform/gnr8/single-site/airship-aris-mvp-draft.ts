@@ -50,7 +50,9 @@ const ARIS_PRODUCT_OFFER = [
   "Posebni ponudbi: MacBook Pro 16 M3 Pro in Canton Smart Reference 5 K.",
 ].join(" ");
 const ARIS_BRAND_PROOF = "ARIS JABOLKO d. o. o. povezuje Apple, Canton, micromega, Blackmagic Design, Eizo, Just Normlicht in in-akustik ponudbo.";
+const ARIS_APPROACH = "Svetovanje, testiranje izdelkov, priprava ponudbe in prevzem v Ljubljani pomagajo stranki izbrati pravo Apple ali Canton rešitev.";
 const ARIS_CONTACT = "Kontaktirajte nas za svetovanje, rezervacijo termina testiranja ali nakup: 040 397 527, prodaja@aris.si, Bognarjeva pot 44, 1000 Ljubljana. Na voljo je tudi prijava na ARIS tedenska obvestila.";
+const ARIS_DEMO_NOTE = "Internal GNR8 demo preview for ARIS JABOLKO d. o. o. https://www.aris.si/ remains external and unchanged.";
 
 export function isArisAirshipMvpMigration(migrationId: string | null | undefined): boolean {
   return migrationId === AIRSHIP_ARIS_MIGRATION_ID;
@@ -112,6 +114,16 @@ export function buildArisAirshipMvpDraftEdits(): AirshipSingleSiteDraftEdit[] {
       previewImpact: "Brand/category proof appears in the internal Airship MVP candidate content summary.",
     },
     {
+      id: "airship-aris-home-approach",
+      sectionKey: "approach",
+      targetSectionPage: "Homepage / approach and process",
+      currentTextContentSummary: "Source evidence includes ARIS consultation, testing, offers, Ljubljana location, and contact flow.",
+      proposedTextContent: ARIS_APPROACH,
+      reasonForChange: "Represent the customer journey as a fuller lower-page process section in the Airship editor canvas.",
+      status: "edited",
+      previewImpact: "Approach/process copy appears in the internal Airship draft candidate only.",
+    },
+    {
       id: "airship-aris-home-ctaLabel",
       fieldKey: "ctaLabel",
       sectionKey: "cta",
@@ -121,6 +133,16 @@ export function buildArisAirshipMvpDraftEdits(): AirshipSingleSiteDraftEdit[] {
       reasonForChange: "Keep the CTA tied to the captured ARIS inquiry flow.",
       status: "edited",
       previewImpact: "CTA label appears in the internal Airship draft candidate only.",
+    },
+    {
+      id: "airship-aris-home-demo-note",
+      sectionKey: "footer",
+      targetSectionPage: "Homepage / footer demo note",
+      currentTextContentSummary: "Internal preview/customer-domain boundary needs to remain visible for ARIS.",
+      proposedTextContent: ARIS_DEMO_NOTE,
+      reasonForChange: "Keep the ARIS demo preview host separate from the customer/source domain.",
+      status: "edited",
+      previewImpact: "Footer demo note appears in the internal Airship draft candidate only.",
     },
   ];
   assertArisDraftSafe(edits);
@@ -189,7 +211,9 @@ export function buildArisAirshipMvpCandidatePages(input: {
               ARIS_SUBHEADING,
               ARIS_PRODUCT_OFFER,
               ARIS_BRAND_PROOF,
+              ARIS_APPROACH,
               ARIS_CONTACT,
+              ARIS_DEMO_NOTE,
             ].join(" "),
             extractedLinks: [
               { href: "https://www.aris.si/", label: "ARIS" },

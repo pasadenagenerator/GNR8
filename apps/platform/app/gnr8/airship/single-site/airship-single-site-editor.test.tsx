@@ -1000,7 +1000,7 @@ test("airship visual editor route is superadmin-gated and renders the workspace"
   assert.equal(pageSource.includes("agentProfileSelection={aiSettings.selectedAirshipProfile}"), true);
 });
 
-test("airship visual editor renders draft canvas, sidebar controls, labels, and AI command box", () => {
+test("airship visual editor renders full-page draft canvas, zoom controls, labels, and AI command box", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);
   const html = renderToStaticMarkup(
@@ -1045,7 +1045,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   );
 
   assert.equal(html.includes("Draft editor"), true);
-  assert.equal(html.includes("Section navigator"), true);
+  assert.equal(html.includes("Section navigator"), false);
   assert.equal(html.includes("Floating inspector panel"), true);
   assert.equal(html.includes("Inspector tabs"), true);
   assert.equal(html.includes("Agent"), true);
@@ -1061,11 +1061,16 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Source material"), true);
   assert.equal(html.includes("MVP demo readiness"), true);
   assert.equal(html.includes("Open GNR8 demo"), true);
+  assert.equal(html.includes("The CHS team helps your IT change with every technology wave."), true);
   assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
   assert.equal(html.includes(`${AIRSHIP_DEMO_VERSION_ID} / ${AIRSHIP_DEMO_ARTIFACT_ID}`), true);
   assert.equal(html.includes("external not cut over"), true);
   assert.equal(html.includes("Canvas editor controls"), true);
   assert.equal(html.includes("Select"), true);
+  assert.equal(html.includes("Zoom -"), true);
+  assert.equal(html.includes("Fit width"), true);
+  assert.equal(html.includes("Zoom +"), true);
+  assert.equal(html.includes("86%"), true);
   assert.equal(html.includes("Desktop"), true);
   assert.equal(html.includes("Tablet"), true);
   assert.equal(html.includes("Mobile"), true);
@@ -1075,7 +1080,7 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Internal preview only"), true);
   assert.equal(html.includes("Not live"), true);
   assert.equal(html.includes("Not published"), true);
-  assert.equal(html.includes("Live site unchanged"), true);
+  assert.equal(html.includes("Full-page internal canvas preview"), true);
   assert.equal(html.includes("Airship draft"), true);
   assert.equal(html.includes("Published candidate"), true);
   assert.equal(html.includes("Live chs.si site"), true);
@@ -1086,6 +1091,8 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes("Save draft"), true);
   assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);
+  assert.equal(html.includes('data-airship-full-page-canvas="true"'), true);
+  assert.equal(html.includes('data-airship-canvas-zoom="0.86"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="hero"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="offers"'), true);
   assert.equal(html.includes('data-airship-editor-canvas="proof"'), true);
@@ -1103,8 +1110,8 @@ test("airship visual editor renders draft canvas, sidebar controls, labels, and 
   assert.equal(html.includes("Internal refs"), true);
   assert.equal(html.includes("canvas selector"), true);
   assert.equal(html.includes('[data-airship-editor-canvas=&quot;hero&quot;]'), true);
-  assert.equal(html.includes("Changes are saved to Airship draft only"), true);
-  assert.equal(html.includes("Style changes are saved to Airship draft only"), true);
+  assert.equal(html.includes("Text and style saves persist here"), true);
+  assert.equal(html.includes("Style autosaves to Airship draft"), true);
   assert.equal(html.includes("Homepage hero/intro"), true);
   assert.equal(html.includes("H1/headline text"), true);
   assert.equal(html.includes("Subheading/body text"), true);
@@ -1308,15 +1315,16 @@ test("airship visual editor exposes focused canvas click targets for hero, CTA, 
   assert.equal(visualEditorSource.includes("event.stopPropagation();"), true);
 });
 
-test("airship visual editor keeps left rail and canvas selection wired to the same section keys", async () => {
+test("airship visual editor uses direct canvas selection without requiring the old left rail", async () => {
   const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
 
-  assert.equal(visualEditorSource.includes("data-airship-editor-rail-target"), true);
-  assert.equal(visualEditorSource.includes("data-selected={selectedSection === section.key}"), true);
+  assert.equal(visualEditorSource.includes("data-airship-editor-rail-target"), false);
+  assert.equal(visualEditorSource.includes("aria-label=\"Section navigator\""), false);
   assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"hero\"}"), true);
+  assert.equal(visualEditorSource.includes("data-selected={selectedSection === section.key}"), true);
   assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"cta\"}"), true);
   assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"source\"}"), true);
-  assert.equal(visualEditorSource.includes("aria-controls={deriveAirshipSelectedElementMetadata"), true);
+  assert.equal(visualEditorSource.includes("onClick={() => selectSection(section.key)}"), true);
 });
 
 test("airship visual editor derives selected element DOM metadata per section", () => {
@@ -1453,7 +1461,10 @@ test("airship visual editor shell bounds the floating inspector and page overflo
   assert.equal(visualEditorSource.includes("overflow: auto"), true);
   assert.equal(visualEditorSource.includes(".airship-bottom-toolbar"), true);
   assert.equal(visualEditorSource.includes("max-width: calc(100% - 40px)"), true);
-  assert.equal(visualEditorSource.includes("padding: 20px 408px 112px 28px"), true);
+  assert.equal(visualEditorSource.includes("padding: 20px 408px 126px 28px"), true);
+  assert.equal(visualEditorSource.includes("data-airship-full-page-canvas=\"true\""), true);
+  assert.equal(visualEditorSource.includes("data-airship-canvas-zoom"), true);
+  assert.equal(visualEditorSource.includes("fitCanvasWidth"), true);
 });
 
 test("airship visual editor renders connected provider status from backend readback", () => {
