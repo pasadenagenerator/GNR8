@@ -2910,7 +2910,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <div className="airship-agent-result">
                     <div className="airship-agent-step"><strong>● Read</strong> hero-section.tsx</div>
                     <div className="airship-agent-step">│ Read 84 lines</div>
-                    <div className="airship-agent-step"><strong>● Grep</strong> "cta-primary"</div>
+                    <div className="airship-agent-step"><strong>● Grep</strong> &quot;cta-primary&quot;</div>
                     <div className="airship-agent-step">│ Found 2 matches</div>
                     <div className="airship-agent-step"><strong>● Edit</strong> styles/shell.css</div>
                     <div className="airship-agent-step">│ 1 addition, 1 removal</div>
