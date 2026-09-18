@@ -1080,18 +1080,18 @@ test("airship visual editor renders full-page draft canvas, zoom controls, label
   assert.equal(html.includes("Tablet"), true);
   assert.equal(html.includes("Mobile"), true);
   assert.equal(html.includes("Draft only"), true);
-  assert.equal(html.includes("Draft state"), true);
+  assert.equal(html.includes("Draft publication boundary"), true);
   assert.equal(html.includes("Unsaved changes"), true);
   assert.equal(html.includes("Internal preview only"), true);
   assert.equal(html.includes("Not live"), true);
   assert.equal(html.includes("Not published"), true);
   assert.equal(html.includes("Full-page internal canvas preview"), true);
   assert.equal(html.includes("Airship draft"), true);
-  assert.equal(html.includes("Published candidate"), true);
+  assert.equal(html.includes("Internal preview"), true);
   assert.equal(html.includes("Live chs.si site"), true);
   assert.equal(html.includes("Text and style saves persist here"), true);
   assert.equal(html.includes("Open internal preview"), true);
-  assert.equal(html.includes("Apply saved draft to preview"), true);
+  assert.equal(html.includes("Apply / generate preview"), true);
   assert.equal(html.includes("Latest preview draft v5"), true);
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes("Save draft"), true);
@@ -1140,12 +1140,14 @@ test("airship visual editor renders full-page draft canvas, zoom controls, label
   assert.equal(html.includes("Reset selected section style"), true);
   assert.equal(html.includes("Reset selected section text"), true);
   assert.equal(html.includes("Recent changes"), true);
-  assert.equal(html.includes("AI command"), true);
+  assert.equal(html.includes("Local deterministic command area"), true);
+  assert.equal(html.includes("Local interpreter"), true);
+  assert.equal(html.includes("deterministic commands only"), true);
   assert.equal(html.includes("Connect OpenAI to use AI commands"), true);
   assert.equal(html.includes("No OpenAI command request is sent"), true);
   assert.equal(html.includes("Active Airship profile"), true);
   assert.equal(html.includes("Airship agent profile unavailable"), true);
-  assert.equal(html.includes("OpenAI provider"), true);
+  assert.equal(html.includes("OpenAI provider readback"), true);
   assert.equal(html.includes("Apply command"), true);
   assert.equal(html.includes("Save text edits to Airship draft"), true);
   assert.equal(html.includes("Save key"), false);
@@ -1441,7 +1443,9 @@ test("airship visual editor keeps apply-saved-draft enabled when saved draft dat
   assert.notEqual(applyButton, "");
   assert.equal(applyButton.includes("disabled"), false);
   assert.equal(html.includes("CHS saved headline persists"), true);
-  assert.equal(html.includes("Draft only. Not live. Not published."), true);
+  assert.equal(html.includes("Draft only"), true);
+  assert.equal(html.includes("Not live"), true);
+  assert.equal(html.includes("Not published"), true);
 });
 
 test("airship visual editor applies saved drafts to preview only after local text and style changes are saved", () => {
@@ -1704,10 +1708,13 @@ test("airship visual editor shell bounds the floating inspector and page overflo
   assert.equal(visualEditorSource.includes("right: 20px"), true);
   assert.equal(visualEditorSource.includes("max-width: calc(100vw - 132px)"), true);
   assert.equal(visualEditorSource.includes("max-height: calc(100% - 112px)"), true);
+  assert.equal(visualEditorSource.includes("background: rgba(34, 34, 35, 0.96)"), true);
+  assert.equal(visualEditorSource.includes(".airship-command-card"), true);
   assert.equal(visualEditorSource.includes(".airship-inspector-body"), true);
   assert.equal(visualEditorSource.includes("overflow: auto"), true);
   assert.equal(visualEditorSource.includes(".airship-bottom-toolbar"), true);
   assert.equal(visualEditorSource.includes("max-width: calc(100% - 40px)"), true);
+  assert.equal(visualEditorSource.includes("background: rgba(34, 34, 35, 0.95)"), true);
   assert.equal(visualEditorSource.includes("padding: 20px 408px 126px 28px"), true);
   assert.equal(visualEditorSource.includes("data-airship-full-page-canvas=\"true\""), true);
   assert.equal(visualEditorSource.includes("data-airship-canvas-zoom"), true);
