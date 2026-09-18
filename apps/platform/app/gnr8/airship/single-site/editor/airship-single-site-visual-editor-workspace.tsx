@@ -86,6 +86,7 @@ type StyleFieldKey = "topPadding" | "bottomPadding" | "backgroundTint" | "ctaCol
 type EditorSectionKey = AirshipImportedSiteEditorSectionKey;
 type EditorViewportKey = "desktop" | "tablet" | "mobile";
 type InspectorTabKey = "agent" | "edit" | "css" | "dom";
+type EditorToolKey = "select" | "pan" | "text";
 export type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
 export type CandidateApplyState = "idle" | "creating" | "created" | "failed";
 type PreviewCandidateState = NonNullable<Props["draftCandidate"]>;
@@ -165,6 +166,12 @@ const inspectorTabs: Array<{ key: InspectorTabKey; label: string }> = [
   { key: "edit", label: "Edit" },
   { key: "css", label: "CSS" },
   { key: "dom", label: "DOM" },
+];
+
+const toolOptions: Array<{ key: EditorToolKey; label: string; icon: string }> = [
+  { key: "select", label: "Select", icon: "▸" },
+  { key: "pan", label: "Pan", icon: "↔" },
+  { key: "text", label: "Text", icon: "T" },
 ];
 
 function styleKey(fields: Pick<AirshipHeroEditorFields, "topPadding" | "bottomPadding" | "backgroundTint" | "ctaColor">): string {
@@ -765,6 +772,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [selectedSection, setSelectedSection] = useState<EditorSectionKey>("hero");
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
   const [canvasZoom, setCanvasZoom] = useState(0.86);
+  const [selectedTool, setSelectedTool] = useState<EditorToolKey>("select");
   const [inspectorTab, setInspectorTab] = useState<InspectorTabKey>("agent");
   const [artifactCanvasMeasuredHeight, setArtifactCanvasMeasuredHeight] = useState<number | null>(null);
   const [artifactOverlayRects, setArtifactOverlayRects] = useState<Partial<Record<Exclude<EditorSectionKey, "source">, AirshipArtifactOverlayRect>>>({});
@@ -849,7 +857,63 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   }
 
   function selectSection(section: EditorSectionKey) {
+    setSelectedTool("select");
     setSelectedSection(section);
+  }
+
+  function selectTool(tool: EditorToolKey) {
+    setSelectedTool(tool);
+    if (tool === "text") setInspectorTab("edit");
+  }
+
+  function updateTextField(field: TextFieldKey, value: string) {
+    rememberUndoSnapshot();
+    const edited = applyAirshipHeroTextFieldEdit({
+      fields,
+      drafts: editableDrafts,
+      field,
+      value,
+    });
+    setFields(edited.fields);
+    setEditableDrafts(edited.drafts);
+    markLocalChange(`${selectedSectionLabel} text changed locally. Save draft before generating an internal preview.`, {
+      label: `Edited ${field}`,
+      scope: "text",
+      state: "local",
+    });
+  }
+
+  function updateMappedDraftText(draftId: string, proposedTextContent: string) {
+    rememberUndoSnapshot();
+    setEditableDrafts((current) =>
+      current.map((draft) =>
+        draft.id === draftId
+          ? {
+              ...draft,
+              proposedTextContent,
+              status: draft.status === "accepted" || draft.status === "rejected" || draft.status === "proposed" ? "edited" : draft.status,
+            }
+          : draft,
+      ),
+    );
+    markLocalChange(`${selectedSectionLabel} draft content changed locally. Save draft before generating an internal preview.`, {
+      label: `Edited ${selectedSectionLabel}`,
+      scope: "text",
+      state: "local",
+    });
+  }
+
+  function updateStyleField(field: StyleFieldKey, value: string | number) {
+    rememberUndoSnapshot();
+    setFields((current) => ({
+      ...current,
+      [field]: field === "topPadding" || field === "bottomPadding" ? clampSpacing(Number(value)) : String(value),
+    }));
+    markLocalChange(`${selectedSectionLabel} style changed locally. Autosaving to Airship draft only.`, {
+      label: `Edited ${field}`,
+      scope: "style",
+      state: "local",
+    });
   }
 
   const measureArtifactCanvas = useCallback(() => {
@@ -2100,11 +2164,75 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         }
         .airship-panel-actions {
           display: inline-flex;
-          gap: 20px;
+          gap: 8px;
           align-items: center;
-          color: #bdbdbd;
-          font-size: 25px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          min-width: 0;
+        }
+        .airship-header-actions {
+          display: inline-flex;
+          gap: 8px;
+          align-items: center;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+        .airship-state-pill {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 30px;
+          border: 1px solid rgba(23, 23, 23, 0.08);
+          border-radius: 8px;
+          background: #ffffff;
+          color: #3f3f46;
+          padding: 0 10px;
+          font-size: 12px;
+          font-weight: 820;
+          white-space: nowrap;
+        }
+        .airship-panel-pill {
+          border-color: rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.07);
+          color: #d4d4d4;
+        }
+        .airship-shell-action {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 30px;
+          border: 1px solid rgba(23, 23, 23, 0.1);
+          border-radius: 8px;
+          background: #171717;
+          color: #ffffff;
+          padding: 0 11px;
+          font-size: 12px;
+          font-weight: 840;
           line-height: 1;
+          cursor: pointer;
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        .airship-shell-action[data-tone="secondary"] {
+          background: #ffffff;
+          color: #171717;
+        }
+        .airship-shell-action[data-dark="true"] {
+          border-color: rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.08);
+          color: #f4f4f4;
+        }
+        .airship-shell-action[data-dark="true"][data-tone="primary"] {
+          border-color: #149ce7;
+          background: #149ce7;
+          color: #ffffff;
+        }
+        .airship-shell-action:disabled,
+        .airship-shell-action[aria-disabled="true"] {
+          border-color: rgba(148, 163, 184, 0.14);
+          background: rgba(148, 163, 184, 0.12);
+          color: #8a8a8a;
+          cursor: not-allowed;
         }
         .airship-inspector-tabs {
           border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -2328,6 +2456,55 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           color: #a7a7a7;
           cursor: pointer;
         }
+        .airship-field-grid {
+          display: grid;
+          gap: 12px;
+        }
+        .airship-field-label {
+          display: grid;
+          gap: 7px;
+          color: #a8a8a8;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+          font-size: 13px;
+          font-weight: 760;
+          line-height: 1.25;
+          text-transform: uppercase;
+        }
+        .airship-field-label input,
+        .airship-field-label textarea {
+          width: 100%;
+          min-width: 0;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          background: rgba(15, 15, 15, 0.62);
+          color: #f4f4f4;
+          padding: 10px 11px;
+          font: inherit;
+          font-size: 15px;
+          font-weight: 520;
+          line-height: 1.35;
+          text-transform: none;
+          outline: none;
+        }
+        .airship-field-label textarea {
+          min-height: 86px;
+          resize: vertical;
+        }
+        .airship-field-label input[type="color"] {
+          height: 42px;
+          padding: 4px;
+        }
+        .airship-style-control-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 12px;
+          align-items: center;
+        }
+        .airship-style-control-row output {
+          color: #f4f4f4;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+          font-size: 14px;
+        }
         .airship-code-readback {
           display: grid;
           gap: 10px;
@@ -2374,7 +2551,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         }
         .airship-bottom-segmented {
           display: inline-grid;
-          grid-template-columns: 1fr 1fr;
+          grid-auto-flow: column;
+          grid-auto-columns: max-content;
           gap: 4px;
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 9px;
@@ -2386,7 +2564,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           gap: 8px;
           align-items: center;
           justify-content: center;
-          min-width: 98px;
+          min-width: 74px;
           height: 36px;
           border: 0;
           border-radius: 7px;
@@ -2485,6 +2663,45 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           <span className="airship-mark" aria-hidden="true">A</span>
           <span>airship</span>
         </a>
+        <div className="airship-header-actions" aria-label="Airship draft actions">
+          <span className="airship-state-pill" aria-label={`Draft save state: ${saveState}`}>
+            {saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving" : saveState === "failed" ? "Save failed" : "Unsaved"}
+          </span>
+          <button
+            type="button"
+            className="airship-shell-action"
+            data-tone="secondary"
+            aria-label="Save draft"
+            disabled={busy}
+            onClick={() => void saveAllTextEdits()}
+          >
+            Save draft
+          </button>
+          <button
+            type="button"
+            className="airship-shell-action"
+            data-tone="primary"
+            aria-label="Apply / generate preview"
+            aria-busy={candidateApplyState === "creating"}
+            disabled={!canApplySavedDraftToPreview}
+            onClick={() => void createInternalPreviewCandidate()}
+          >
+            Apply / generate preview
+          </button>
+          {previewCandidate?.route ? (
+            <a className="airship-shell-action" data-tone="secondary" aria-label="Open internal preview" href={previewCandidate.route} target="_blank" rel="noreferrer">
+              Internal preview
+            </a>
+          ) : null}
+          {previewHostUrl ? (
+            <a className="airship-shell-action" data-tone="secondary" aria-label="Open GNR8 demo preview" href={previewHostUrl} target="_blank" rel="noreferrer">
+              GNR8 demo
+            </a>
+          ) : null}
+          <a className="airship-shell-action" data-tone="secondary" aria-label="Open live external preview" href={props.liveSiteUrl} target="_blank" rel="noreferrer">
+            Live
+          </a>
+        </div>
       </header>
 
       <div className="airship-shell">
@@ -2762,31 +2979,29 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
             >
               ↶
             </button>
+            {toolOptions.map((tool) => (
+              <button
+                key={tool.key}
+                type="button"
+                className="airship-icon-button"
+                data-selected={selectedTool === tool.key}
+                aria-label={`${tool.label} ${tool.key === "select" ? "pointer " : ""}tool`}
+                aria-pressed={selectedTool === tool.key}
+                onClick={() => selectTool(tool.key)}
+                title={tool.label}
+              >
+                {tool.icon}
+              </button>
+            ))}
+            <span className="airship-toolbar-separator" />
             <button
               type="button"
               className="airship-icon-button"
-              data-selected="true"
-              aria-label="Select pointer tool"
-              aria-pressed="true"
-              title="Select"
+              aria-label="Zoom out"
+              onClick={() => zoomCanvas(-CANVAS_ZOOM_STEP)}
+              title={`Zoom out (${zoomPercent})`}
             >
-              ▸
-            </button>
-            <button
-              type="button"
-              className="airship-icon-button"
-              aria-label="Hand pan tool"
-              title="Pan"
-            >
-              ♡
-            </button>
-            <button
-              type="button"
-              className="airship-icon-button"
-              aria-label="Text edit tool"
-              title="Text"
-            >
-              T
+              −
             </button>
             <button
               type="button"
@@ -2797,14 +3012,79 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
             >
               ⛶
             </button>
+            <button
+              type="button"
+              className="airship-icon-button"
+              aria-label="Zoom in"
+              onClick={() => zoomCanvas(CANVAS_ZOOM_STEP)}
+              title={`Zoom in (${zoomPercent})`}
+            >
+              +
+            </button>
             <span className="airship-toolbar-separator" />
-            <div className="airship-bottom-segmented" aria-label="Editor mode">
-              <button type="button" data-selected="true" aria-pressed="true">✎ Edit</button>
-              <button type="button" aria-pressed="false">◉ View</button>
+            <div className="airship-bottom-segmented" aria-label="Viewport size">
+              {viewportOptions.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  data-selected={viewport === option.key}
+                  aria-pressed={viewport === option.key}
+                  aria-label={`${option.label} viewport`}
+                  onClick={() => setViewport(option.key)}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
             <span className="airship-count-badge" aria-label={`${recentChanges.length} recent changes`}>
               {Math.max(1, recentChanges.length)}
             </span>
+            <button
+              type="button"
+              aria-label="Reset selected section text"
+              disabled={sectionTextFields(selectedSection).length === 0}
+              onClick={resetSelectedSectionText}
+              style={actionButtonStyle({ disabled: sectionTextFields(selectedSection).length === 0, compact: true, dark: true })}
+            >
+              Reset text
+            </button>
+            <button
+              type="button"
+              aria-label="Save text edits to Airship draft"
+              disabled={busy}
+              onClick={() => void saveAllTextEdits()}
+              style={actionButtonStyle({ tone: "primary", disabled: busy, compact: true, dark: true })}
+            >
+              Save draft
+            </button>
+            <button
+              type="button"
+              aria-label="Apply saved draft to preview"
+              aria-busy={candidateApplyState === "creating"}
+              disabled={!canApplySavedDraftToPreview}
+              onClick={() => void createInternalPreviewCandidate()}
+              style={actionButtonStyle({
+                tone: "primary",
+                disabled: !canApplySavedDraftToPreview,
+                compact: true,
+                dark: true,
+              })}
+            >
+              Apply
+            </button>
+            {previewCandidate?.route ? (
+              <a aria-label="Open internal preview shortcut" href={previewCandidate.route} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
+                Internal
+              </a>
+            ) : null}
+            {previewHostUrl ? (
+              <a aria-label="Open GNR8 demo preview shortcut" href={previewHostUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
+                Demo
+              </a>
+            ) : null}
+            <a aria-label="Open live external preview shortcut" href={props.liveSiteUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
+              Live
+            </a>
             <details className="airship-hidden-ops">
               <summary>
                 <span className="airship-icon-button" aria-label="More draft actions" title="More">⋯</span>
@@ -2870,9 +3150,38 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 <span className="airship-mark" aria-hidden="true">A</span>
                 <span>Airship</span>
               </div>
-              <div className="airship-panel-actions" aria-hidden="true">
-                <span>+</span>
-                <span>▯</span>
+              <div className="airship-panel-actions" aria-label="Airship panel actions">
+                <span className="airship-state-pill airship-panel-pill" aria-label={`Draft save state: ${saveState}`}>
+                  {saveState}
+                </span>
+                <button
+                  type="button"
+                  className="airship-shell-action"
+                  data-dark="true"
+                  data-tone="primary"
+                  aria-label="Save draft from panel"
+                  disabled={busy}
+                  onClick={() => void saveAllTextEdits()}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="airship-shell-action"
+                  data-dark="true"
+                  data-tone="primary"
+                  aria-label="Apply / generate preview from panel"
+                  aria-busy={candidateApplyState === "creating"}
+                  disabled={!canApplySavedDraftToPreview}
+                  onClick={() => void createInternalPreviewCandidate()}
+                >
+                  Apply
+                </button>
+                {previewCandidate?.route ? (
+                  <a className="airship-shell-action" data-dark="true" aria-label="Open internal preview from panel" href={previewCandidate.route} target="_blank" rel="noreferrer">
+                    Preview
+                  </a>
+                ) : null}
               </div>
             </div>
             <div className="airship-inspector-tabs" role="tablist" aria-label="Inspector tabs">
@@ -2906,22 +3215,23 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
             >
               <div className="airship-agent-panel">
                 <div className="airship-agent-transcript-shell" aria-label="Local deterministic transcript">
-                  <div className="airship-agent-user-bubble">Make this warmer.</div>
                   <div className="airship-agent-result">
-                    <div className="airship-agent-step"><strong>● Read</strong> hero-section.tsx</div>
-                    <div className="airship-agent-step">│ Read 84 lines</div>
-                    <div className="airship-agent-step"><strong>● Grep</strong> &quot;cta-primary&quot;</div>
-                    <div className="airship-agent-step">│ Found 2 matches</div>
-                    <div className="airship-agent-step"><strong>● Edit</strong> styles/shell.css</div>
-                    <div className="airship-agent-step">│ 1 addition, 1 removal</div>
-                    <div className="airship-agent-step">● Applying local draft edit...</div>
-                    <div className="airship-diff-card" aria-label="Local deterministic diff example">
-                      <div className="airship-diff-header">shell.css +1 -1</div>
-                      <div className="airship-diff-line">.cta-primary {"{"}</div>
-                      <div className="airship-diff-line" data-tone="remove">- background: #1C1917;</div>
-                      <div className="airship-diff-line" data-tone="add">+ background: {fields.ctaColor.toUpperCase()};</div>
-                      <div className="airship-diff-line">{"}"}</div>
-                    </div>
+                    <div className="airship-agent-step"><strong>● Target</strong> {selectedElementMetadata.label}</div>
+                    <div className="airship-agent-step">│ {selectedElementMetadata.role}</div>
+                    <div className="airship-agent-step"><strong>● Command mode</strong> local deterministic Airship draft command</div>
+                    <div className="airship-agent-step">│ Supported: change CTA, shorten headline, adjust hero spacing, make CTA prominent</div>
+                    <div className="airship-agent-step"><strong>● Save state</strong> {saveState}; candidate {candidateApplyState}</div>
+                    <div className="airship-agent-step">│ Draft only, not live, not published; external customer domain unchanged.</div>
+                    {recentChanges.length > 0 ? (
+                      <div className="airship-diff-card" aria-label="Recent real draft changes">
+                        <div className="airship-diff-header">Recent draft activity</div>
+                        {recentChanges.map((change) => (
+                          <div key={change.id} className="airship-diff-line">
+                            {change.scope}: {change.label} ({change.state})
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                   <div role="status" className="airship-panel-value">{message}</div>
                 </div>
@@ -2956,12 +3266,56 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               aria-hidden={inspectorTab !== "edit"}
             >
               <div className="airship-panel-section">
-                <div className="airship-panel-heading">SOURCE <span>⌃</span></div>
-                <div className="airship-panel-value">{selectedElementMetadata.domSectionId}.tsx:24</div>
+                <div className="airship-panel-heading">SELECTED <span>⌃</span></div>
+                <div className="airship-panel-value">{selectedElementMetadata.label}</div>
+                <div className="airship-panel-value">{selectedElementMetadata.sourceStatus}</div>
               </div>
               <div className="airship-panel-section">
-                <div className="airship-icon-row" aria-label="Alignment controls">
-                  <span>|←</span><span>↕</span><span>→|</span><span>T|</span><span>H</span><span>⊥</span><span>|0|</span><span>═</span><span>▦</span>
+                <div className="airship-panel-heading">DRAFT FIELDS <span>⌃</span></div>
+                <div className="airship-field-grid" aria-label="Real selected-section editable fields">
+                  {sectionTextFields(selectedSection).includes("headline") ? (
+                    <label className="airship-field-label">
+                      H1/headline text
+                      <textarea
+                        value={fields.headline}
+                        onChange={(event) => updateTextField("headline", event.target.value)}
+                        aria-label="Edit selected hero headline"
+                      />
+                    </label>
+                  ) : null}
+                  {sectionTextFields(selectedSection).includes("subheading") ? (
+                    <label className="airship-field-label">
+                      Subheading/body text
+                      <textarea
+                        value={fields.subheading}
+                        onChange={(event) => updateTextField("subheading", event.target.value)}
+                        aria-label="Edit selected hero subheading"
+                      />
+                    </label>
+                  ) : null}
+                  {sectionTextFields(selectedSection).includes("ctaLabel") ? (
+                    <label className="airship-field-label">
+                      CTA label
+                      <input
+                        value={fields.ctaLabel}
+                        onChange={(event) => updateTextField("ctaLabel", event.target.value)}
+                        aria-label="Edit selected CTA label"
+                      />
+                    </label>
+                  ) : null}
+                  {selectedDrafts.filter((draft) => !draftFieldKey(draft)).map((draft) => (
+                    <label key={draft.id} className="airship-field-label">
+                      {draft.targetSectionPage}
+                      <textarea
+                        value={draft.proposedTextContent}
+                        onChange={(event) => updateMappedDraftText(draft.id, event.target.value)}
+                        aria-label={`Edit ${draft.targetSectionPage}`}
+                      />
+                    </label>
+                  ))}
+                  {sectionTextFields(selectedSection).length === 0 && selectedDrafts.filter((draft) => !draftFieldKey(draft)).length === 0 ? (
+                    <div className="airship-panel-value">No editable text field is mapped to this selection.</div>
+                  ) : null}
                 </div>
               </div>
               <div className="airship-panel-section">
@@ -2970,12 +3324,6 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <div><span>W</span>{selectedSection === "cta" ? "122" : selectedViewport.width}</div>
                   <div><span>H</span>{selectedSection === "cta" ? "45" : selectedElementMetadata.sizeLabel.replace(/.*×\s*/, "")}</div>
                 </div>
-              </div>
-              <div className="airship-collapsed-row">
-                <div className="airship-row-heading">AUTO LAYOUT <span>⌄</span></div>
-              </div>
-              <div className="airship-collapsed-row">
-                <div className="airship-row-heading">TEXT <span>⌄</span></div>
               </div>
               <div className="airship-panel-section">
                 <div className="airship-panel-heading">APPEARANCE <span>⌃</span></div>
@@ -2993,8 +3341,28 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <span>-</span>
                 </div>
               </div>
-              <div className="airship-collapsed-row">
-                <div className="airship-row-heading">STROKE <span>⌃</span></div>
+              <div className="airship-panel-section">
+                <div className="airship-panel-heading">ACTIONS <span>⌃</span></div>
+                <div className="airship-toolbar-group">
+                  <button
+                    type="button"
+                    aria-label="Reset selected section text from edit panel"
+                    disabled={sectionTextFields(selectedSection).length === 0}
+                    onClick={resetSelectedSectionText}
+                    style={actionButtonStyle({ disabled: sectionTextFields(selectedSection).length === 0, compact: true, dark: true })}
+                  >
+                    Reset text
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Save selected section draft fields"
+                    disabled={busy}
+                    onClick={() => void saveAllTextEdits()}
+                    style={actionButtonStyle({ tone: "primary", disabled: busy, compact: true, dark: true })}
+                  >
+                    Save draft
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -3005,6 +3373,70 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               data-active={inspectorTab === "css"}
               aria-hidden={inspectorTab !== "css"}
             >
+              <div className="airship-panel-section">
+                <div className="airship-panel-heading">CONTROLS <span>⌃</span></div>
+                <div className="airship-field-grid" aria-label="Real selected-section style controls">
+                  {sectionStyleFields(selectedSection).includes("topPadding") ? (
+                    <label className="airship-field-label">
+                      Hero top padding
+                      <div className="airship-style-control-row">
+                        <input
+                          type="range"
+                          min="24"
+                          max="140"
+                          step="1"
+                          value={fields.topPadding}
+                          onChange={(event) => updateStyleField("topPadding", event.target.value)}
+                          aria-label="Hero top padding"
+                        />
+                        <output>{fields.topPadding}px</output>
+                      </div>
+                    </label>
+                  ) : null}
+                  {sectionStyleFields(selectedSection).includes("bottomPadding") ? (
+                    <label className="airship-field-label">
+                      Hero bottom padding
+                      <div className="airship-style-control-row">
+                        <input
+                          type="range"
+                          min="24"
+                          max="140"
+                          step="1"
+                          value={fields.bottomPadding}
+                          onChange={(event) => updateStyleField("bottomPadding", event.target.value)}
+                          aria-label="Hero bottom padding"
+                        />
+                        <output>{fields.bottomPadding}px</output>
+                      </div>
+                    </label>
+                  ) : null}
+                  {sectionStyleFields(selectedSection).includes("backgroundTint") ? (
+                    <label className="airship-field-label">
+                      Background tint
+                      <input
+                        type="color"
+                        value={fields.backgroundTint}
+                        onChange={(event) => updateStyleField("backgroundTint", event.target.value)}
+                        aria-label="Background tint"
+                      />
+                    </label>
+                  ) : null}
+                  {sectionStyleFields(selectedSection).includes("ctaColor") ? (
+                    <label className="airship-field-label">
+                      CTA color
+                      <input
+                        type="color"
+                        value={fields.ctaColor}
+                        onChange={(event) => updateStyleField("ctaColor", event.target.value)}
+                        aria-label="CTA color"
+                      />
+                    </label>
+                  ) : null}
+                  {sectionStyleFields(selectedSection).length === 0 ? (
+                    <div className="airship-panel-value">No draft style controls are mapped to this selection.</div>
+                  ) : null}
+                </div>
+              </div>
               <div className="airship-panel-section">
                 <div className="airship-panel-heading">STYLE <span>⌃</span></div>
                 <div className="airship-code-readback" aria-label="Selected element current CSS values">
@@ -3022,6 +3454,20 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <code>--airship-background: {fields.backgroundTint};</code>
                   <code>--airship-top: {fields.topPadding}px;</code>
                   <code>--airship-bottom: {fields.bottomPadding}px;</code>
+                </div>
+              </div>
+              <div className="airship-panel-section">
+                <div className="airship-panel-heading">ACTIONS <span>⌃</span></div>
+                <div className="airship-toolbar-group">
+                  <button
+                    type="button"
+                    aria-label="Reset selected section style from CSS panel"
+                    disabled={sectionStyleFields(selectedSection).length === 0}
+                    onClick={resetSelectedSectionStyle}
+                    style={actionButtonStyle({ disabled: sectionStyleFields(selectedSection).length === 0, compact: true, dark: true })}
+                  >
+                    Reset CSS
+                  </button>
                 </div>
               </div>
             </div>
@@ -3058,6 +3504,14 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   {selectedElementMetadata.mappedDraftFieldIds.length > 0
                     ? selectedElementMetadata.mappedDraftFieldIds.map((id) => <code key={id}>{id}</code>)
                     : <code>none</code>}
+                </div>
+              </div>
+              <div className="airship-panel-section" aria-label="Selected element internal references">
+                <div className="airship-panel-heading">INTERNAL REFS <span>⌃</span></div>
+                <div className="airship-code-readback">
+                  {selectedElementMetadata.internalRefs.map((ref) => (
+                    <code key={`${ref.label}:${ref.value}`}>{ref.label}: {ref.value}</code>
+                  ))}
                 </div>
               </div>
             </div>
