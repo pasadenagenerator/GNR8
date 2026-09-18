@@ -1005,7 +1005,7 @@ test("airship visual editor route is superadmin-gated and renders the workspace"
   assert.equal(pageSource.includes("agentProfileSelection={aiSettings.selectedAirshipProfile}"), true);
 });
 
-test("airship visual editor renders full-page draft canvas, zoom controls, labels, and AI command box", () => {
+test("airship visual editor matches Airship reference shell without primary admin clutter", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);
   const html = renderToStaticMarkup(
@@ -1049,7 +1049,7 @@ test("airship visual editor renders full-page draft canvas, zoom controls, label
     />,
   );
 
-  assert.equal(html.includes("Draft editor"), true);
+  assert.equal(html.includes("airship"), true);
   assert.equal(html.includes("Section navigator"), false);
   assert.equal(html.includes("Floating inspector panel"), true);
   assert.equal(html.includes("Inspector tabs"), true);
@@ -1057,44 +1057,20 @@ test("airship visual editor renders full-page draft canvas, zoom controls, label
   assert.equal(html.includes("Edit"), true);
   assert.equal(html.includes("CSS"), true);
   assert.equal(html.includes("DOM"), true);
-  assert.equal(html.includes("Hero / intro"), true);
-  assert.equal(html.includes("Offers / Services"), true);
-  assert.equal(html.includes("Proof / Benefits"), true);
-  assert.equal(html.includes("Approach / Process"), true);
-  assert.equal(html.includes("CTA / Contact"), true);
-  assert.equal(html.includes("Footer / Demo note"), true);
-  assert.equal(html.includes("Source material"), true);
-  assert.equal(html.includes("MVP demo readiness"), true);
-  assert.equal(html.includes("Open GNR8 demo"), true);
-  assert.equal(html.includes("The CHS team helps your IT change with every technology wave."), true);
-  assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
-  assert.equal(html.includes(`${AIRSHIP_DEMO_VERSION_ID} / ${AIRSHIP_DEMO_ARTIFACT_ID}`), true);
-  assert.equal(html.includes("external not cut over"), true);
   assert.equal(html.includes("Canvas editor controls"), true);
-  assert.equal(html.includes("Select"), true);
-  assert.equal(html.includes("Zoom -"), true);
-  assert.equal(html.includes("Fit width"), true);
-  assert.equal(html.includes("Zoom +"), true);
-  assert.equal(html.includes("86%"), true);
-  assert.equal(html.includes("Desktop"), true);
-  assert.equal(html.includes("Tablet"), true);
-  assert.equal(html.includes("Mobile"), true);
-  assert.equal(html.includes("Draft only"), true);
-  assert.equal(html.includes("Draft publication boundary"), true);
-  assert.equal(html.includes("Unsaved changes"), true);
-  assert.equal(html.includes("Internal preview only"), true);
-  assert.equal(html.includes("Not live"), true);
-  assert.equal(html.includes("Not published"), true);
-  assert.equal(html.includes("Full-page internal canvas preview"), true);
-  assert.equal(html.includes("Airship draft"), true);
-  assert.equal(html.includes("Internal preview"), true);
-  assert.equal(html.includes("Live chs.si site"), true);
-  assert.equal(html.includes("Text and style saves persist here"), true);
-  assert.equal(html.includes("Open internal preview"), true);
-  assert.equal(html.includes("Apply / generate preview"), true);
-  assert.equal(html.includes("Latest preview draft v5"), true);
-  assert.equal(html.includes("Open live site"), true);
-  assert.equal(html.includes("Save draft"), true);
+  assert.equal(html.includes("Select pointer tool"), true);
+  assert.equal(html.includes("Hand pan tool"), true);
+  assert.equal(html.includes("Text edit tool"), true);
+  assert.equal(html.includes("Editor mode"), true);
+  assert.equal(html.includes("✎ Edit"), true);
+  assert.equal(html.includes("◉ View"), true);
+  assert.equal(html.includes("Save draft"), false);
+  assert.equal(html.includes("Apply / generate preview"), false);
+  assert.equal(html.includes("Draft publication boundary"), false);
+  assert.equal(html.includes("Active Airship profile"), false);
+  assert.equal(html.includes("OpenAI provider readback"), false);
+  assert.equal(html.includes("Published candidate"), false);
+  assert.equal(html.includes("Live site"), false);
   assert.equal(html.includes('data-airship-editor-viewport="desktop"'), true);
   assert.equal(html.includes('data-airship-full-page-canvas="true"'), true);
   assert.equal(html.includes('data-airship-canvas-zoom="0.86"'), true);
@@ -1110,45 +1086,46 @@ test("airship visual editor renders full-page draft canvas, zoom controls, label
   assert.equal(html.includes("Internal GNR8 demo preview for CHS"), true);
   assert.equal(html.includes("Selected canvas element"), true);
   assert.equal(html.includes("region / homepage hero intro"), true);
-  assert.equal(html.includes("Selected element metadata"), true);
-  assert.equal(html.includes("selection level"), true);
+  assert.equal(html.includes("SELECTED NODE"), true);
+  assert.equal(html.includes("level:"), true);
   assert.equal(html.includes("section-level"), true);
-  assert.equal(html.includes("Mapped draft field ids"), true);
-  assert.equal(html.includes("Element-level selection markers"), true);
+  assert.equal(html.includes("FIELDS"), true);
+  assert.equal(html.includes("MARKERS"), true);
   assert.equal(html.includes('[data-airship-element=&quot;hero-headline&quot;]'), true);
-  assert.equal(html.includes("Internal refs"), true);
-  assert.equal(html.includes("canvas selector"), true);
+  assert.equal(html.includes("canvas:"), true);
   assert.equal(html.includes('[data-airship-editor-canvas=&quot;hero&quot;]'), true);
   assert.equal(html.includes('[data-airship-section=&quot;hero&quot;]'), true);
-  assert.equal(html.includes("Text and style saves persist here"), true);
-  assert.equal(html.includes("Style autosaves to Airship draft"), true);
   assert.equal(html.includes("Homepage hero/intro"), true);
-  assert.equal(html.includes("H1/headline text"), true);
-  assert.equal(html.includes("Subheading/body text"), true);
+  assert.equal(html.includes("SOURCE"), true);
+  assert.equal(html.includes("hero-intro.tsx:24"), true);
+  assert.equal(html.includes("SIZE"), true);
+  assert.equal(html.includes("AUTO LAYOUT"), true);
+  assert.equal(html.includes("TEXT"), true);
+  assert.equal(html.includes("APPEARANCE"), true);
+  assert.equal(html.includes("FILL"), true);
+  assert.equal(html.includes("STROKE"), true);
+  assert.equal(html.includes("H1/headline text"), false);
+  assert.equal(html.includes("Subheading/body text"), false);
   assert.equal(html.includes("CTA label"), false);
-  assert.equal(html.includes("Current CSS values"), true);
+  assert.equal(html.includes("STYLE"), true);
+  assert.equal(html.includes("DRAFT TOKENS"), true);
   assert.equal(html.includes("padding-top"), true);
   assert.equal(html.includes("background-tint"), true);
-  assert.equal(html.includes("Hero top padding"), true);
-  assert.equal(html.includes("Hero bottom padding"), true);
-  assert.equal(html.includes("Background tint"), true);
+  assert.equal(html.includes("Hero top padding"), false);
+  assert.equal(html.includes("Hero bottom padding"), false);
+  assert.equal(html.includes("Background tint"), false);
   assert.equal(html.includes("CTA color"), false);
-  assert.equal(html.includes("Persists to Airship draft on save"), true);
-  assert.equal(html.includes("Style autosaves to Airship draft"), true);
-  assert.equal(html.includes("Selected style controls are safe draft style controls only"), true);
+  assert.equal(html.includes("Persists to Airship draft on save"), false);
+  assert.equal(html.includes("Style autosaves to Airship draft"), false);
+  assert.equal(html.includes("Selected style controls are safe draft style controls only"), false);
   assert.equal(html.includes("Undo last local change"), true);
   assert.equal(html.includes("Reset selected section style"), true);
   assert.equal(html.includes("Reset selected section text"), true);
-  assert.equal(html.includes("Recent changes"), true);
-  assert.equal(html.includes("Local deterministic command area"), true);
-  assert.equal(html.includes("Local interpreter"), true);
-  assert.equal(html.includes("deterministic commands only"), true);
-  assert.equal(html.includes("Connect OpenAI to use AI commands"), true);
-  assert.equal(html.includes("No OpenAI command request is sent"), true);
-  assert.equal(html.includes("Active Airship profile"), true);
-  assert.equal(html.includes("Airship agent profile unavailable"), true);
-  assert.equal(html.includes("OpenAI provider readback"), true);
-  assert.equal(html.includes("Apply command"), true);
+  assert.equal(html.includes("Local deterministic transcript"), true);
+  assert.equal(html.includes("Make this warmer."), true);
+  assert.equal(html.includes("shell.css +1 -1"), true);
+  assert.equal(html.includes("Describe the change..."), true);
+  assert.equal(html.includes("Apply command"), false);
   assert.equal(html.includes("Save text edits to Airship draft"), true);
   assert.equal(html.includes("Save key"), false);
   assert.equal(html.includes("Test connection"), false);
@@ -1650,7 +1627,7 @@ test("airship visual editor inspector scopes Edit and CSS fields to the selected
   ]);
 });
 
-test("airship visual editor renders safe provider read error state without exposing keys", () => {
+test("airship visual editor hides provider read error cards from the reference shell", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);
   const html = renderToStaticMarkup(
@@ -1686,12 +1663,13 @@ test("airship visual editor renders safe provider read error state without expos
     />,
   );
 
-  assert.equal(html.includes("Status read failed"), true);
-  assert.equal(html.includes("OpenAI provider status could not be read"), true);
-  assert.equal(html.includes("Provider status read failed. The editor remains available"), true);
-  assert.equal(html.includes("AI commands stay disabled"), true);
-  assert.equal(html.includes("Airship agent profile unavailable"), true);
-  assert.equal(html.includes("Airship visual editor workspace"), true);
+  assert.equal(html.includes("OpenAI provider readback"), false);
+  assert.equal(html.includes("Status read failed"), false);
+  assert.equal(html.includes("OpenAI provider status could not be read"), false);
+  assert.equal(html.includes("Provider status read failed. The editor remains available"), false);
+  assert.equal(html.includes("AI commands stay disabled"), false);
+  assert.equal(html.includes("Airship agent profile unavailable"), false);
+  assert.equal(html.includes("Airship</span>"), true);
   assert.equal(html.includes("sk-test"), false);
   assert.equal(html.includes("ORDER BY"), false);
   assert.equal(html.includes("encrypted"), false);
@@ -1705,23 +1683,25 @@ test("airship visual editor shell bounds the floating inspector and page overflo
   assert.equal(visualEditorSource.includes("min-height: 0"), true);
   assert.equal(visualEditorSource.includes("overflow: hidden"), true);
   assert.equal(visualEditorSource.includes(".airship-inspector {"), true);
-  assert.equal(visualEditorSource.includes("right: 20px"), true);
+  assert.equal(visualEditorSource.includes("right: 34px"), true);
   assert.equal(visualEditorSource.includes("max-width: calc(100vw - 132px)"), true);
-  assert.equal(visualEditorSource.includes("max-height: calc(100% - 112px)"), true);
-  assert.equal(visualEditorSource.includes("background: rgba(34, 34, 35, 0.96)"), true);
-  assert.equal(visualEditorSource.includes(".airship-command-card"), true);
+  assert.equal(visualEditorSource.includes("max-height: calc(100% - 32px)"), true);
+  assert.equal(visualEditorSource.includes("background: #292929"), true);
+  assert.equal(visualEditorSource.includes("width: 546px"), true);
+  assert.equal(visualEditorSource.includes(".airship-agent-transcript-shell"), true);
   assert.equal(visualEditorSource.includes(".airship-inspector-body"), true);
   assert.equal(visualEditorSource.includes("overflow: auto"), true);
   assert.equal(visualEditorSource.includes(".airship-bottom-toolbar"), true);
   assert.equal(visualEditorSource.includes("max-width: calc(100% - 40px)"), true);
-  assert.equal(visualEditorSource.includes("background: rgba(34, 34, 35, 0.95)"), true);
-  assert.equal(visualEditorSource.includes("padding: 20px 408px 126px 28px"), true);
+  assert.equal(visualEditorSource.includes("bottom: 28px"), true);
+  assert.equal(visualEditorSource.includes("padding: 46px 620px 122px 98px"), true);
   assert.equal(visualEditorSource.includes("data-airship-full-page-canvas=\"true\""), true);
   assert.equal(visualEditorSource.includes("data-airship-canvas-zoom"), true);
   assert.equal(visualEditorSource.includes("fitCanvasWidth"), true);
+  assert.equal(visualEditorSource.includes("overflow-x: auto"), true);
 });
 
-test("airship visual editor renders connected provider status from backend readback", () => {
+test("airship visual editor hides connected provider status from primary shell", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);
   const html = renderToStaticMarkup(
@@ -1753,25 +1733,27 @@ test("airship visual editor renders connected provider status from backend readb
     />,
   );
 
-  assert.equal(html.includes("Connected"), true);
-  assert.equal(html.includes("OpenAI connected (sk-...safe, gpt-5)."), true);
-  assert.equal(html.includes("Test passed"), true);
-  assert.equal(html.includes("Active Airship profile"), true);
-  assert.equal(html.includes("Airship Editor Default"), true);
-  assert.equal(html.includes("Selected agency/default Airship profile"), true);
-  assert.equal(html.includes("airship_editor"), true);
+  assert.equal(html.includes("OpenAI provider readback"), false);
+  assert.equal(html.includes("Connected"), false);
+  assert.equal(html.includes("OpenAI connected (sk-...safe, gpt-5)."), false);
+  assert.equal(html.includes("Test passed"), false);
+  assert.equal(html.includes("Active Airship profile"), false);
+  assert.equal(html.includes("Airship Editor Default"), false);
+  assert.equal(html.includes("Selected agency/default Airship profile"), false);
+  assert.equal(html.includes("airship_editor"), false);
   assert.equal(html.includes("sk-test"), false);
   assert.equal(html.includes("safe-secret"), false);
   assert.equal(html.includes("Status read failed"), false);
   assert.equal(html.includes("Connect OpenAI to use AI commands"), false);
 });
 
-test("airship visual editor provider status stays read-only and commands never call OpenAI", async () => {
+test("airship visual editor shell has no provider cards and commands never call OpenAI", async () => {
   const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
 
   assert.equal(visualEditorSource.includes("isAirshipOpenAIProviderConnected"), true);
-  assert.equal(visualEditorSource.includes("Provider readback is shown from backend status only"), true);
-  assert.equal(visualEditorSource.includes("No OpenAI command request is sent"), true);
+  assert.equal(visualEditorSource.includes("OpenAI provider readback"), false);
+  assert.equal(visualEditorSource.includes("Provider readback is shown from backend status only"), false);
+  assert.equal(visualEditorSource.includes("No OpenAI command request is sent"), false);
   assert.equal(visualEditorSource.includes("/api/gnr8/admin/airship/single-site/ai-command"), false);
   assert.equal(visualEditorSource.includes("runProviderCommand"), false);
   assert.equal(visualEditorSource.includes("submitProviderAction"), false);
