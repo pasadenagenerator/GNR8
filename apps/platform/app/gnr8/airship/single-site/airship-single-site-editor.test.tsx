@@ -1016,6 +1016,10 @@ test("airship visual editor route is superadmin-gated and renders the workspace"
 test("airship visual editor matches Airship reference shell without primary admin clutter", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);
+  model.draftPanel.persistence.draftId = "airship-shell-saved-draft";
+  model.draftPanel.persistence.draftStatus = "saved";
+  model.draftPanel.persistence.version = 4;
+  model.draftPanel.persistence.lastSavedAt = "2026-09-19T00:00:00.000Z";
   const html = renderToStaticMarkup(
     <AirshipSingleSiteVisualEditorWorkspace
       migrationId={model.migrationId}
@@ -1056,11 +1060,28 @@ test("airship visual editor matches Airship reference shell without primary admi
       })}
     />,
   );
+  const topHeaderHtml = sourceBetween(html, '<header class="airship-toolbar">', "</header>");
+  const inspectorHeaderHtml = sourceBetween(
+    html,
+    '<div class="airship-inspector-titlebar">',
+    '<div class="airship-inspector-tabs"',
+  );
+  const bottomToolbarHtml = sourceBetween(
+    html,
+    '<div class="airship-bottom-toolbar" aria-label="Canvas editor controls">',
+    '<aside class="airship-inspector"',
+  );
 
   assert.equal(html.includes("airship"), true);
   assert.equal(html.includes("Section navigator"), false);
   assert.equal(html.includes("Floating inspector panel"), true);
   assert.equal(html.includes("Inspector tabs"), true);
+  assert.equal(inspectorHeaderHtml.includes(">GNR8<"), true);
+  assert.equal(inspectorHeaderHtml.includes(">Airship<"), false);
+  assert.equal(inspectorHeaderHtml.includes("Draft save state"), false);
+  assert.equal(inspectorHeaderHtml.includes("Save draft from panel"), false);
+  assert.equal(inspectorHeaderHtml.includes("Apply / generate preview from panel"), false);
+  assert.equal(inspectorHeaderHtml.includes("Open internal preview from panel"), false);
   assert.equal(html.includes("Agent"), true);
   assert.equal(html.includes("Edit"), true);
   assert.equal(html.includes("CSS"), true);
@@ -1076,6 +1097,15 @@ test("airship visual editor matches Airship reference shell without primary admi
   assert.equal(html.includes("Desktop viewport"), true);
   assert.equal(html.includes("Tablet viewport"), true);
   assert.equal(html.includes("Mobile viewport"), true);
+  assert.equal(topHeaderHtml.includes("Draft save state: saved"), true);
+  assert.equal(topHeaderHtml.includes("Saved"), true);
+  assert.equal(topHeaderHtml.includes("Save draft"), true);
+  assert.equal(topHeaderHtml.includes("Apply / generate preview"), true);
+  assert.equal(topHeaderHtml.includes("Open internal preview"), true);
+  assert.equal(topHeaderHtml.includes("Internal preview"), true);
+  assert.equal(topHeaderHtml.includes("Live"), true);
+  assert.equal(bottomToolbarHtml.includes("✥"), true);
+  assert.equal(bottomToolbarHtml.includes("☝"), false);
   assert.equal(html.includes("Canvas mode"), true);
   assert.equal(html.includes("Edit canvas mode"), true);
   assert.equal(html.includes("View canvas mode"), true);
@@ -1185,6 +1215,8 @@ test("airship visual editor bottom toolbar contains canvas controls only", async
     "</section>",
   );
 
+  assert.equal(visualEditorSource.includes('{ key: "pan", label: "Pan", icon: "✥" }'), true);
+  assert.equal(visualEditorSource.includes('{ key: "pan", label: "Pan", icon: "☝" }'), false);
   assert.equal(bottomToolbarSource.includes("Undo last local change"), true);
   assert.equal(bottomToolbarSource.includes("toolOptions.map"), true);
   assert.equal(bottomToolbarSource.includes("selectTool(tool.key)"), true);
@@ -1743,7 +1775,7 @@ test("airship visual editor hides provider read error cards from the reference s
   assert.equal(html.includes("Provider status read failed. The editor remains available"), false);
   assert.equal(html.includes("AI commands stay disabled"), false);
   assert.equal(html.includes("Airship agent profile unavailable"), false);
-  assert.equal(html.includes("Airship</span>"), true);
+  assert.equal(html.includes("GNR8</span>"), true);
   assert.equal(html.includes("sk-test"), false);
   assert.equal(html.includes("ORDER BY"), false);
   assert.equal(html.includes("encrypted"), false);

@@ -171,7 +171,7 @@ const inspectorTabs: Array<{ key: InspectorTabKey; label: string }> = [
 
 const toolOptions: Array<{ key: EditorToolKey; label: string; icon: string }> = [
   { key: "select", label: "Select", icon: "↖" },
-  { key: "pan", label: "Pan", icon: "☝" },
+  { key: "pan", label: "Pan", icon: "✥" },
   { key: "text", label: "Text", icon: "T" },
 ];
 
@@ -2175,14 +2175,6 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           font-size: 15px;
           font-weight: 760;
         }
-        .airship-panel-actions {
-          display: inline-flex;
-          gap: 8px;
-          align-items: center;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-          min-width: 0;
-        }
         .airship-header-actions {
           display: inline-flex;
           gap: 8px;
@@ -2230,11 +2222,6 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           font-size: 12px;
           font-weight: 820;
           white-space: nowrap;
-        }
-        .airship-panel-pill {
-          border-color: rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.07);
-          color: #d4d4d4;
         }
         .airship-shell-action {
           display: inline-flex;
@@ -3091,40 +3078,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
             <div className="airship-inspector-titlebar">
               <div className="airship-inspector-title">
                 <span className="airship-mark" aria-hidden="true">A</span>
-                <span>Airship</span>
-              </div>
-              <div className="airship-panel-actions" aria-label="Airship panel actions">
-                <span className="airship-state-pill airship-panel-pill" aria-label={`Draft save state: ${saveState}`}>
-                  {saveState}
-                </span>
-                <button
-                  type="button"
-                  className="airship-shell-action"
-                  data-dark="true"
-                  data-tone="primary"
-                  aria-label="Save draft from panel"
-                  disabled={busy}
-                  onClick={() => void saveAllTextEdits()}
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  className="airship-shell-action"
-                  data-dark="true"
-                  data-tone="primary"
-                  aria-label="Apply / generate preview from panel"
-                  aria-busy={candidateApplyState === "creating"}
-                  disabled={!canApplySavedDraftToPreview}
-                  onClick={() => void createInternalPreviewCandidate()}
-                >
-                  Apply
-                </button>
-                {previewCandidate?.route ? (
-                  <a className="airship-shell-action" data-dark="true" aria-label="Open internal preview from panel" href={previewCandidate.route} target="_blank" rel="noreferrer">
-                    Preview
-                  </a>
-                ) : null}
+                <span>GNR8</span>
               </div>
             </div>
             <div className="airship-inspector-tabs" role="tablist" aria-label="Inspector tabs">
