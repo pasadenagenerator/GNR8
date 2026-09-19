@@ -87,6 +87,7 @@ type EditorSectionKey = AirshipImportedSiteEditorSectionKey;
 type EditorViewportKey = "desktop" | "tablet" | "mobile";
 type InspectorTabKey = "agent" | "edit" | "css" | "dom";
 type EditorToolKey = "select" | "pan" | "text";
+type CanvasModeKey = "edit" | "view";
 export type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
 export type CandidateApplyState = "idle" | "creating" | "created" | "failed";
 type PreviewCandidateState = NonNullable<Props["draftCandidate"]>;
@@ -169,8 +170,8 @@ const inspectorTabs: Array<{ key: InspectorTabKey; label: string }> = [
 ];
 
 const toolOptions: Array<{ key: EditorToolKey; label: string; icon: string }> = [
-  { key: "select", label: "Select", icon: "▸" },
-  { key: "pan", label: "Pan", icon: "↔" },
+  { key: "select", label: "Select", icon: "↖" },
+  { key: "pan", label: "Pan", icon: "☝" },
   { key: "text", label: "Text", icon: "T" },
 ];
 
@@ -773,6 +774,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
   const [canvasZoom, setCanvasZoom] = useState(0.86);
   const [selectedTool, setSelectedTool] = useState<EditorToolKey>("select");
+  const [canvasMode, setCanvasMode] = useState<CanvasModeKey>("edit");
   const [inspectorTab, setInspectorTab] = useState<InspectorTabKey>("agent");
   const [artifactCanvasMeasuredHeight, setArtifactCanvasMeasuredHeight] = useState<number | null>(null);
   const [artifactOverlayRects, setArtifactOverlayRects] = useState<Partial<Record<Exclude<EditorSectionKey, "source">, AirshipArtifactOverlayRect>>>({});
@@ -863,7 +865,18 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
 
   function selectTool(tool: EditorToolKey) {
     setSelectedTool(tool);
+    setCanvasMode(tool === "pan" ? "view" : "edit");
     if (tool === "text") setInspectorTab("edit");
+  }
+
+  function selectCanvasMode(mode: CanvasModeKey) {
+    setCanvasMode(mode);
+    if (mode === "edit") {
+      setSelectedTool("select");
+      setInspectorTab("edit");
+      return;
+    }
+    setSelectedTool("pan");
   }
 
   function updateTextField(field: TextFieldKey, value: string) {
@@ -2079,7 +2092,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           background-image: none;
         }
         .airship-canvas-scroll {
-          padding: 46px 620px 122px 98px;
+          padding: 38px 464px 108px 82px;
         }
         .airship-canvas-stage {
           justify-items: start;
@@ -2138,10 +2151,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         }
         .airship-inspector {
           top: 20px;
-          right: 34px;
-          width: 546px;
-          max-width: calc(100vw - 132px);
-          max-height: calc(100% - 32px);
+          right: 24px;
+          width: 392px;
+          max-width: calc(100vw - 92px);
+          max-height: calc(100% - 40px);
           border: 1px solid rgba(255, 255, 255, 0.13);
           border-radius: 12px;
           background: #292929;
@@ -2150,8 +2163,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           backdrop-filter: none;
         }
         .airship-inspector-titlebar {
-          min-height: 84px;
-          padding: 0 42px;
+          min-height: 56px;
+          padding: 0 18px;
         }
         .airship-inspector-title {
           display: inline-flex;
@@ -2159,7 +2172,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           gap: 16px;
           min-width: 0;
           color: #f4f4f4;
-          font-size: 21px;
+          font-size: 15px;
           font-weight: 760;
         }
         .airship-panel-actions {
@@ -2176,6 +2189,33 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           align-items: center;
           flex-wrap: wrap;
           justify-content: flex-end;
+        }
+        .airship-header-device-toggle {
+          display: inline-grid;
+          grid-auto-flow: column;
+          gap: 2px;
+          border: 1px solid rgba(23, 23, 23, 0.1);
+          border-radius: 8px;
+          background: #ffffff;
+          padding: 2px;
+        }
+        .airship-header-device-toggle button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          height: 24px;
+          border: 0;
+          border-radius: 6px;
+          background: transparent;
+          color: #71717a;
+          font-size: 11px;
+          font-weight: 820;
+          cursor: pointer;
+        }
+        .airship-header-device-toggle button[data-selected="true"] {
+          background: #171717;
+          color: #ffffff;
         }
         .airship-state-pill {
           display: inline-flex;
@@ -2243,11 +2283,11 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           align-items: center;
           justify-content: center;
           gap: 9px;
-          min-height: 64px;
-          border-bottom-width: 3px;
+          min-height: 48px;
+          border-bottom-width: 2px;
           color: #8f8f8f;
-          padding: 0 10px;
-          font-size: 22px;
+          padding: 0 8px;
+          font-size: 14px;
           font-weight: 520;
         }
         .airship-inspector-tab[data-selected="true"] {
@@ -2257,7 +2297,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         }
         .airship-tab-icon {
           color: currentColor;
-          font-size: 21px;
+          font-size: 14px;
           line-height: 1;
           opacity: 0.82;
         }
@@ -2269,9 +2309,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         }
         .airship-panel-section {
           display: grid;
-          gap: 22px;
+          gap: 12px;
           border-top: 1px solid rgba(255, 255, 255, 0.08);
-          padding: 22px 42px 30px;
+          padding: 14px 20px 18px;
         }
         .airship-panel-section:first-child {
           border-top: 0;
@@ -2284,7 +2324,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           gap: 12px;
           color: #909090;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 17px;
+          font-size: 12px;
           font-weight: 760;
           line-height: 1.2;
           text-transform: uppercase;
@@ -2292,7 +2332,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         .airship-panel-value {
           color: #9c9c9c;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 18px;
+          font-size: 13px;
           line-height: 1.4;
           overflow-wrap: anywhere;
         }
@@ -2301,46 +2341,46 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           grid-template-columns: repeat(9, 1fr);
           gap: 2px;
           color: #a4a4a4;
-          font-size: 28px;
+          font-size: 19px;
         }
         .airship-icon-row span {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-height: 40px;
+          min-height: 28px;
         }
         .airship-size-grid,
         .airship-appearance-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 42px;
+          gap: 22px;
           color: #e0e0e0;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 21px;
+          font-size: 14px;
         }
         .airship-size-grid span,
         .airship-appearance-grid span {
           color: #777;
-          font-size: 16px;
-          margin-right: 14px;
+          font-size: 11px;
+          margin-right: 8px;
         }
         .airship-collapsed-row {
           border-top: 1px solid rgba(255, 255, 255, 0.08);
-          padding: 18px 42px;
+          padding: 12px 20px;
         }
         .airship-fill-row {
           display: grid;
-          grid-template-columns: 42px 1fr auto auto;
-          gap: 28px;
+          grid-template-columns: 28px 1fr auto auto;
+          gap: 14px;
           align-items: center;
           color: #e5e5e5;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 20px;
+          font-size: 13px;
         }
         .airship-fill-swatch {
-          width: 38px;
-          height: 38px;
-          border-radius: 9px;
+          width: 26px;
+          height: 26px;
+          border-radius: 7px;
           background: var(--airship-swatch);
         }
         .airship-agent-panel {
@@ -2352,9 +2392,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         .airship-agent-transcript-shell {
           display: grid;
           align-content: start;
-          gap: 32px;
+          gap: 18px;
           min-height: 0;
-          padding: 34px 42px;
+          padding: 22px 20px;
         }
         .airship-agent-user-bubble {
           justify-self: end;
@@ -2362,8 +2402,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           border-radius: 8px;
           background: rgba(255, 255, 255, 0.08);
           color: #f2f2f2;
-          padding: 15px 20px;
-          font-size: 24px;
+          padding: 10px 12px;
+          font-size: 14px;
           line-height: 1.2;
         }
         .airship-agent-result {
@@ -2372,15 +2412,15 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           border: 1px solid rgba(255, 255, 255, 0.09);
           border-radius: 10px;
           background: rgba(255, 255, 255, 0.05);
-          padding: 20px 22px;
+          padding: 13px 14px;
           color: #a8a8a8;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 18px;
+          font-size: 13px;
           line-height: 1.35;
         }
         .airship-agent-step {
           color: #a7a7a7;
-          font-size: 18px;
+          font-size: 13px;
         }
         .airship-agent-step strong {
           color: #f0f0f0;
@@ -2393,12 +2433,12 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         }
         .airship-diff-header {
           background: rgba(255, 255, 255, 0.06);
-          padding: 11px 16px;
+          padding: 8px 12px;
           color: #efefef;
           font-weight: 760;
         }
         .airship-diff-line {
-          padding: 7px 16px;
+          padding: 5px 12px;
         }
         .airship-diff-line[data-tone="remove"] {
           background: rgba(239, 68, 68, 0.24);
@@ -2412,7 +2452,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           display: grid;
           gap: 10px;
           border-top: 1px solid rgba(255, 255, 255, 0.08);
-          padding: 22px 34px;
+          padding: 14px 18px;
         }
         .airship-selected-element-token {
           width: fit-content;
@@ -2421,51 +2461,51 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           border-radius: 8px;
           background: rgba(255, 255, 255, 0.08);
           color: #d8d8d8;
-          padding: 8px 14px;
+          padding: 6px 10px;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 18px;
+          font-size: 13px;
           overflow-wrap: anywhere;
         }
         .airship-agent-input-row {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 42px;
-          gap: 10px;
+          grid-template-columns: minmax(0, 1fr) 32px;
+          gap: 8px;
           align-items: center;
           border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 10px;
+          border-radius: 8px;
           background: rgba(24, 24, 24, 0.7);
-          padding: 8px 8px 8px 14px;
+          padding: 5px 5px 5px 10px;
         }
         .airship-agent-input-row textarea {
-          min-height: 42px;
-          max-height: 96px;
+          min-height: 32px;
+          max-height: 78px;
           border: 0;
           background: transparent;
           color: #f1f1f1;
           resize: none;
           outline: none;
           font: inherit;
-          font-size: 20px;
+          font-size: 13px;
         }
         .airship-agent-input-row button {
-          width: 42px;
-          height: 42px;
+          width: 32px;
+          height: 32px;
           border: 0;
-          border-radius: 9px;
+          border-radius: 7px;
           background: rgba(255, 255, 255, 0.07);
           color: #a7a7a7;
           cursor: pointer;
         }
         .airship-field-grid {
           display: grid;
-          gap: 12px;
+          gap: 9px;
         }
         .airship-field-label {
           display: grid;
           gap: 7px;
           color: #a8a8a8;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 760;
           line-height: 1.25;
           text-transform: uppercase;
@@ -2478,20 +2518,20 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           border-radius: 8px;
           background: rgba(15, 15, 15, 0.62);
           color: #f4f4f4;
-          padding: 10px 11px;
+          padding: 8px 9px;
           font: inherit;
-          font-size: 15px;
+          font-size: 13px;
           font-weight: 520;
           line-height: 1.35;
           text-transform: none;
           outline: none;
         }
         .airship-field-label textarea {
-          min-height: 86px;
+          min-height: 72px;
           resize: vertical;
         }
         .airship-field-label input[type="color"] {
-          height: 42px;
+          height: 34px;
           padding: 4px;
         }
         .airship-style-control-row {
@@ -2503,14 +2543,14 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         .airship-style-control-row output {
           color: #f4f4f4;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 14px;
+          font-size: 12px;
         }
         .airship-code-readback {
           display: grid;
-          gap: 10px;
+          gap: 7px;
           color: #bebebe;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 15px;
+          font-size: 12px;
           line-height: 1.5;
         }
         .airship-code-readback code {
@@ -2518,25 +2558,25 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           overflow-wrap: anywhere;
         }
         .airship-bottom-toolbar {
-          gap: 7px;
-          bottom: 28px;
+          gap: 5px;
+          bottom: 24px;
           border-color: rgba(255, 255, 255, 0.11);
           border-radius: 11px;
           background: #292929;
-          padding: 8px;
+          padding: 5px;
           box-shadow: 0 12px 28px rgba(0, 0, 0, 0.23);
         }
         .airship-icon-button {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 41px;
-          height: 41px;
+          width: 34px;
+          height: 34px;
           border: 1px solid transparent;
           border-radius: 6px;
           background: transparent;
           color: #cfcfcf;
-          font-size: 24px;
+          font-size: 18px;
           line-height: 1;
           cursor: pointer;
           text-decoration: none;
@@ -2553,24 +2593,24 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           display: inline-grid;
           grid-auto-flow: column;
           grid-auto-columns: max-content;
-          gap: 4px;
+          gap: 3px;
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 9px;
           background: rgba(255, 255, 255, 0.04);
-          padding: 4px;
+          padding: 3px;
         }
         .airship-bottom-segmented button {
           display: inline-flex;
           gap: 8px;
           align-items: center;
           justify-content: center;
-          min-width: 74px;
-          height: 36px;
+          min-width: 62px;
+          height: 30px;
           border: 0;
           border-radius: 7px;
           background: transparent;
           color: #a8a8a8;
-          font-size: 17px;
+          font-size: 14px;
           font-weight: 650;
           cursor: pointer;
         }
@@ -2582,41 +2622,24 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-width: 32px;
-          height: 32px;
+          min-width: 26px;
+          height: 26px;
           border-radius: 999px;
           background: #149ce7;
           color: #ffffff;
-          font-size: 17px;
+          font-size: 13px;
           font-weight: 760;
-        }
-        .airship-hidden-ops summary {
-          list-style: none;
-        }
-        .airship-hidden-ops summary::-webkit-details-marker {
-          display: none;
-        }
-        .airship-hidden-ops[open] {
-          position: absolute;
-          right: 0;
-          bottom: 58px;
-          display: grid;
-          gap: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.11);
-          border-radius: 10px;
-          background: #292929;
-          padding: 8px;
         }
         @media (max-width: 1220px) {
           .airship-canvas-scroll {
-            padding: 28px 28px 118px;
+            padding: 28px 28px 104px;
           }
           .airship-inspector {
             position: absolute;
             right: 18px;
-            width: min(546px, calc(100vw - 36px));
+            width: min(392px, calc(100vw - 36px));
             max-width: calc(100vw - 36px);
-            max-height: calc(100% - 118px);
+            max-height: calc(100% - 104px);
             margin: 0;
           }
           .airship-shell {
@@ -2640,8 +2663,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           .airship-panel-section,
           .airship-collapsed-row,
           .airship-agent-transcript-shell {
-            padding-left: 22px;
-            padding-right: 22px;
+            padding-left: 14px;
+            padding-right: 14px;
           }
           .airship-inspector-tab {
             font-size: 16px;
@@ -2664,6 +2687,21 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           <span>airship</span>
         </a>
         <div className="airship-header-actions" aria-label="Airship draft actions">
+          <div className="airship-header-device-toggle" aria-label="Viewport size">
+            {viewportOptions.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                data-selected={viewport === option.key}
+                aria-pressed={viewport === option.key}
+                aria-label={`${option.label} viewport`}
+                title={`${option.label} viewport`}
+                onClick={() => setViewport(option.key)}
+              >
+                {option.label.slice(0, 1)}
+              </button>
+            ))}
+          </div>
           <span className="airship-state-pill" aria-label={`Draft save state: ${saveState}`}>
             {saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving" : saveState === "failed" ? "Save failed" : "Unsaved"}
           </span>
@@ -3022,124 +3060,29 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               +
             </button>
             <span className="airship-toolbar-separator" />
-            <div className="airship-bottom-segmented" aria-label="Viewport size">
-              {viewportOptions.map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  data-selected={viewport === option.key}
-                  aria-pressed={viewport === option.key}
-                  aria-label={`${option.label} viewport`}
-                  onClick={() => setViewport(option.key)}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="airship-bottom-segmented" aria-label="Canvas mode">
+              <button
+                type="button"
+                data-selected={canvasMode === "edit"}
+                aria-pressed={canvasMode === "edit"}
+                aria-label="Edit canvas mode"
+                onClick={() => selectCanvasMode("edit")}
+              >
+                ✎ Edit
+              </button>
+              <button
+                type="button"
+                data-selected={canvasMode === "view"}
+                aria-pressed={canvasMode === "view"}
+                aria-label="View canvas mode"
+                onClick={() => selectCanvasMode("view")}
+              >
+                ◉ View
+              </button>
             </div>
             <span className="airship-count-badge" aria-label={`${recentChanges.length} recent changes`}>
               {Math.max(1, recentChanges.length)}
             </span>
-            <button
-              type="button"
-              aria-label="Reset selected section text"
-              disabled={sectionTextFields(selectedSection).length === 0}
-              onClick={resetSelectedSectionText}
-              style={actionButtonStyle({ disabled: sectionTextFields(selectedSection).length === 0, compact: true, dark: true })}
-            >
-              Reset text
-            </button>
-            <button
-              type="button"
-              aria-label="Save text edits to Airship draft"
-              disabled={busy}
-              onClick={() => void saveAllTextEdits()}
-              style={actionButtonStyle({ tone: "primary", disabled: busy, compact: true, dark: true })}
-            >
-              Save draft
-            </button>
-            <button
-              type="button"
-              aria-label="Apply saved draft to preview"
-              aria-busy={candidateApplyState === "creating"}
-              disabled={!canApplySavedDraftToPreview}
-              onClick={() => void createInternalPreviewCandidate()}
-              style={actionButtonStyle({
-                tone: "primary",
-                disabled: !canApplySavedDraftToPreview,
-                compact: true,
-                dark: true,
-              })}
-            >
-              Apply
-            </button>
-            {previewCandidate?.route ? (
-              <a aria-label="Open internal preview shortcut" href={previewCandidate.route} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
-                Internal
-              </a>
-            ) : null}
-            {previewHostUrl ? (
-              <a aria-label="Open GNR8 demo preview shortcut" href={previewHostUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
-                Demo
-              </a>
-            ) : null}
-            <a aria-label="Open live external preview shortcut" href={props.liveSiteUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
-              Live
-            </a>
-            <details className="airship-hidden-ops">
-              <summary>
-                <span className="airship-icon-button" aria-label="More draft actions" title="More">⋯</span>
-              </summary>
-              <button
-                type="button"
-                aria-label="Reset selected section style"
-                disabled={sectionStyleFields(selectedSection).length === 0}
-                onClick={resetSelectedSectionStyle}
-                style={actionButtonStyle({ disabled: sectionStyleFields(selectedSection).length === 0, compact: true, dark: true })}
-              >
-                Reset CSS
-              </button>
-              <button
-                type="button"
-                aria-label="Reset selected section text"
-                disabled={sectionTextFields(selectedSection).length === 0}
-                onClick={resetSelectedSectionText}
-                style={actionButtonStyle({ disabled: sectionTextFields(selectedSection).length === 0, compact: true, dark: true })}
-              >
-                Reset Text
-              </button>
-              <button
-                type="button"
-                aria-label="Save text edits to Airship draft"
-                disabled={busy}
-                onClick={() => void saveAllTextEdits()}
-                style={actionButtonStyle({ tone: "primary", disabled: busy, compact: true, dark: true })}
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                aria-label="Apply saved draft to preview"
-                aria-busy={candidateApplyState === "creating"}
-                disabled={!canApplySavedDraftToPreview}
-                onClick={() => void createInternalPreviewCandidate()}
-                style={actionButtonStyle({
-                  tone: "primary",
-                  disabled: !canApplySavedDraftToPreview,
-                  compact: true,
-                  dark: true,
-                })}
-              >
-                Apply
-              </button>
-              {previewCandidate?.route ? (
-                <a aria-label="Open internal preview" href={previewCandidate.route} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
-                  Preview
-                </a>
-              ) : null}
-              <a aria-label="Open live site" href={props.liveSiteUrl} target="_blank" rel="noreferrer" style={actionButtonStyle({ compact: true, dark: true })}>
-                Live
-              </a>
-            </details>
           </div>
         </section>
 

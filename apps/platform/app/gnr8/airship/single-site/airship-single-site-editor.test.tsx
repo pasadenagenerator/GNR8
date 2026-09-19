@@ -51,6 +51,14 @@ const VISUAL_EDITOR_FILE = new URL("./editor/airship-single-site-visual-editor-w
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/airship-single-site-editor-readonly-projection.ts", import.meta.url);
 const PREVIEW_ROUTE_FILE = new URL("../../../api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts", import.meta.url);
 
+function sourceBetween(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1);
+  const endIndex = source.indexOf(end, startIndex);
+  assert.notEqual(endIndex, -1);
+  return source.slice(startIndex, endIndex);
+}
+
 function chsDemoReadiness(): NonNullable<AirshipSingleSiteEditorReadonlyProjection["demoReadiness"]> {
   return {
     status: "mvp_recovery_chs_airship_demo_ready",
@@ -1068,6 +1076,9 @@ test("airship visual editor matches Airship reference shell without primary admi
   assert.equal(html.includes("Desktop viewport"), true);
   assert.equal(html.includes("Tablet viewport"), true);
   assert.equal(html.includes("Mobile viewport"), true);
+  assert.equal(html.includes("Canvas mode"), true);
+  assert.equal(html.includes("Edit canvas mode"), true);
+  assert.equal(html.includes("View canvas mode"), true);
   assert.equal(html.includes("Save draft"), true);
   assert.equal(html.includes("Apply / generate preview"), true);
   assert.equal(html.includes("Open internal preview"), true);
@@ -1129,7 +1140,7 @@ test("airship visual editor matches Airship reference shell without primary admi
   assert.equal(html.includes("shell.css +1 -1"), false);
   assert.equal(html.includes("Describe the change..."), true);
   assert.equal(html.includes("Apply command"), false);
-  assert.equal(html.includes("Save text edits to Airship draft"), true);
+  assert.equal(html.includes("Save selected section draft fields"), true);
   assert.equal(html.includes("Save key"), false);
   assert.equal(html.includes("Test connection"), false);
   assert.equal(html.includes("Revoke key"), false);
@@ -1139,8 +1150,12 @@ test("airship visual editor reference shell controls are wired to real editor st
   const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
 
   assert.equal(visualEditorSource.includes("type EditorToolKey = \"select\" | \"pan\" | \"text\""), true);
+  assert.equal(visualEditorSource.includes("type CanvasModeKey = \"edit\" | \"view\""), true);
   assert.equal(visualEditorSource.includes("const [selectedTool, setSelectedTool]"), true);
+  assert.equal(visualEditorSource.includes("const [canvasMode, setCanvasMode]"), true);
   assert.equal(visualEditorSource.includes("onClick={() => selectTool(tool.key)}"), true);
+  assert.equal(visualEditorSource.includes("onClick={() => selectCanvasMode(\"edit\")}"), true);
+  assert.equal(visualEditorSource.includes("onClick={() => selectCanvasMode(\"view\")}"), true);
   assert.equal(visualEditorSource.includes("onClick={() => zoomCanvas(-CANVAS_ZOOM_STEP)}"), true);
   assert.equal(visualEditorSource.includes("onClick={fitCanvasWidth}"), true);
   assert.equal(visualEditorSource.includes("onClick={() => zoomCanvas(CANVAS_ZOOM_STEP)}"), true);
@@ -1160,6 +1175,35 @@ test("airship visual editor reference shell controls are wired to real editor st
   assert.equal(visualEditorSource.includes("onChange={(event) => updateStyleField(\"ctaColor\", event.target.value)}"), true);
   assert.equal(visualEditorSource.includes("applyAirshipHeroCommand(fields, command)"), true);
   assert.equal(visualEditorSource.includes("selectedElementMetadata.internalRefs.map"), true);
+});
+
+test("airship visual editor bottom toolbar contains canvas controls only", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+  const bottomToolbarSource = sourceBetween(
+    visualEditorSource,
+    '<div className="airship-bottom-toolbar" aria-label="Canvas editor controls">',
+    "</section>",
+  );
+
+  assert.equal(bottomToolbarSource.includes("Undo last local change"), true);
+  assert.equal(bottomToolbarSource.includes("toolOptions.map"), true);
+  assert.equal(bottomToolbarSource.includes("selectTool(tool.key)"), true);
+  assert.equal(bottomToolbarSource.includes("Zoom out"), true);
+  assert.equal(bottomToolbarSource.includes("Fit width canvas"), true);
+  assert.equal(bottomToolbarSource.includes("Zoom in"), true);
+  assert.equal(bottomToolbarSource.includes("Canvas mode"), true);
+  assert.equal(bottomToolbarSource.includes("Edit canvas mode"), true);
+  assert.equal(bottomToolbarSource.includes("View canvas mode"), true);
+  assert.equal(bottomToolbarSource.includes("recent changes"), true);
+  assert.equal(bottomToolbarSource.includes("Save draft"), false);
+  assert.equal(bottomToolbarSource.includes("Apply saved draft to preview"), false);
+  assert.equal(bottomToolbarSource.includes("Open internal preview"), false);
+  assert.equal(bottomToolbarSource.includes("Open live"), false);
+  assert.equal(bottomToolbarSource.includes("Reset selected section text"), false);
+  assert.equal(bottomToolbarSource.includes("Desktop viewport"), false);
+  assert.equal(bottomToolbarSource.includes("Tablet viewport"), false);
+  assert.equal(bottomToolbarSource.includes("Mobile viewport"), false);
+  assert.equal(bottomToolbarSource.includes("More draft actions"), false);
 });
 
 test("airship visual editor uses CHS demo artifact renderer when available", () => {
@@ -1445,7 +1489,7 @@ test("airship visual editor keeps apply-saved-draft enabled when saved draft dat
       })}
     />,
   );
-  const applyButton = html.match(/<button[^>]*aria-label="Apply saved draft to preview"[^>]*>/)?.[0] ?? "";
+  const applyButton = html.match(/<button[^>]*aria-label="Apply \/ generate preview"[^>]*>/)?.[0] ?? "";
 
   assert.notEqual(applyButton, "");
   assert.equal(applyButton.includes("disabled"), false);
@@ -1713,18 +1757,18 @@ test("airship visual editor shell bounds the floating inspector and page overflo
   assert.equal(visualEditorSource.includes("min-height: 0"), true);
   assert.equal(visualEditorSource.includes("overflow: hidden"), true);
   assert.equal(visualEditorSource.includes(".airship-inspector {"), true);
-  assert.equal(visualEditorSource.includes("right: 34px"), true);
-  assert.equal(visualEditorSource.includes("max-width: calc(100vw - 132px)"), true);
-  assert.equal(visualEditorSource.includes("max-height: calc(100% - 32px)"), true);
+  assert.equal(visualEditorSource.includes("right: 24px"), true);
+  assert.equal(visualEditorSource.includes("max-width: calc(100vw - 92px)"), true);
+  assert.equal(visualEditorSource.includes("max-height: calc(100% - 40px)"), true);
   assert.equal(visualEditorSource.includes("background: #292929"), true);
-  assert.equal(visualEditorSource.includes("width: 546px"), true);
+  assert.equal(visualEditorSource.includes("width: 392px"), true);
   assert.equal(visualEditorSource.includes(".airship-agent-transcript-shell"), true);
   assert.equal(visualEditorSource.includes(".airship-inspector-body"), true);
   assert.equal(visualEditorSource.includes("overflow: auto"), true);
   assert.equal(visualEditorSource.includes(".airship-bottom-toolbar"), true);
   assert.equal(visualEditorSource.includes("max-width: calc(100% - 40px)"), true);
-  assert.equal(visualEditorSource.includes("bottom: 28px"), true);
-  assert.equal(visualEditorSource.includes("padding: 46px 620px 122px 98px"), true);
+  assert.equal(visualEditorSource.includes("bottom: 24px"), true);
+  assert.equal(visualEditorSource.includes("padding: 38px 464px 108px 82px"), true);
   assert.equal(visualEditorSource.includes("data-airship-full-page-canvas=\"true\""), true);
   assert.equal(visualEditorSource.includes("data-airship-canvas-zoom"), true);
   assert.equal(visualEditorSource.includes("fitCanvasWidth"), true);
