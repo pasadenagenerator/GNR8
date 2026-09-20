@@ -131,7 +131,10 @@ test("airship editor artifact sanitizer disables raw scripts and unsafe handlers
       <body onload="alert('x')">
         <a href="javascript:alert('x')" onclick="alert('x')">Unsafe</a>
         <script>alert("x")</script>
-        <section data-airship-section="hero" data-airship-element="hero-headline">The CHS team helps your IT change with every technology wave.</section>
+        <section data-airship-section="hero">
+          <h1 data-airship-element="hero-headline">The CHS team helps your IT change with every technology wave.</h1>
+          <p data-airship-element="hero-subheading">Advanced cybersecurity and infrastructure support.</p>
+        </section>
       </body>
     </html>
   `);
@@ -147,6 +150,7 @@ test("airship editor artifact sanitizer disables raw scripts and unsafe handlers
   assert.equal(sanitized.sanitizedHtml.includes("javascript:"), false);
   assert.equal(sanitized.sanitizedHtml.includes('data-airship-section="hero"'), true);
   assert.equal(sanitized.sanitizedHtml.includes('data-airship-element="hero-headline"'), true);
+  assert.equal(sanitized.sanitizedHtml.includes('data-airship-element="hero-subheading"'), true);
   assert.equal(sanitized.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), true);
 });
 

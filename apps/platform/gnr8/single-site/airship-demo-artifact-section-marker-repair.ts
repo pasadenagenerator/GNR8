@@ -186,6 +186,28 @@ function markIndexed(elements: HtmlElement[], marker: string): void {
   });
 }
 
+function markCardParts(cards: HtmlElement[]): void {
+  cards.forEach((card, index) => {
+    const title = descendants(card).find((element) => /^h[1-6]$/i.test(element.tagName)) ?? null;
+    const body = descendants(card).find((element) => element.tagName === "p") ?? null;
+    if (title) {
+      setAttr(title, "data-airship-element", "card-title");
+      setAttr(title, "data-airship-element-index", String(index));
+    }
+    if (body) {
+      setAttr(body, "data-airship-element", "card-body");
+      setAttr(body, "data-airship-element-index", String(index));
+    }
+  });
+}
+
+function markNavItems(root: HtmlNode): void {
+  const navItems = allElements(root).filter((element) => element.tagName === "a" && allElements(root).some((candidate) => {
+    return candidate.tagName === "nav" && descendants(candidate).includes(element);
+  }));
+  markIndexed(navItems, "nav-item");
+}
+
 function applyChsMarkers(root: HtmlNode): void {
   const hero = findElement(root, (element) => element.tagName === "section" && hasClass(element, "hero"));
   const offers = findElement(root, (element) => element.tagName === "section" && attr(element, "id") === "identity");
@@ -202,9 +224,11 @@ function applyChsMarkers(root: HtmlNode): void {
   markSection(footer, "footer");
 
   const heroHeadline = hero ? descendants(hero).find((element) => element.tagName === "h1") ?? null : null;
+  const heroSubheading = hero ? descendants(hero).find((element) => element.tagName === "p") ?? null : null;
   const heroCta = hero ? descendants(hero).find((element) => element.tagName === "a" && attr(element, "href") === "#contact") ?? null : null;
   const approachCard = approach ? descendants(approach).find((element) => element.tagName === "div" && hasClass(element, "team-strip")) ?? approach : null;
   if (heroHeadline) setAttr(heroHeadline, "data-airship-element", "hero-headline");
+  if (heroSubheading) setAttr(heroSubheading, "data-airship-element", "hero-subheading");
   if (heroCta) setAttr(heroCta, "data-airship-element", "hero-cta");
   if (approachCard) setAttr(approachCard, "data-airship-element", "approach-card");
   if (cta) {
@@ -213,8 +237,17 @@ function applyChsMarkers(root: HtmlNode): void {
     if (contactCard) setAttr(contactCard, "data-airship-element", "contact-card");
     if (contactCta) setAttr(contactCta, "data-airship-element", "contact-cta");
   }
-  if (offers) markIndexed(descendants(offers).filter((element) => element.tagName === "li"), "offer-card");
-  if (proof) markIndexed(descendants(proof).filter((element) => element.tagName === "article" && hasClass(element, "proof-card")), "proof-card");
+  if (offers) {
+    const offerCards = descendants(offers).filter((element) => element.tagName === "li");
+    markIndexed(offerCards, "offer-card");
+    markCardParts(offerCards);
+  }
+  if (proof) {
+    const proofCards = descendants(proof).filter((element) => element.tagName === "article" && hasClass(element, "proof-card"));
+    markIndexed(proofCards, "proof-card");
+    markCardParts(proofCards);
+  }
+  markNavItems(root);
 }
 
 function applyArisMarkers(root: HtmlNode): void {
@@ -231,17 +264,28 @@ function applyArisMarkers(root: HtmlNode): void {
   markSection(footer, "footer");
 
   const heroHeadline = hero ? descendants(hero).find((element) => element.tagName === "h1") ?? null : null;
+  const heroSubheading = hero ? descendants(hero).find((element) => element.tagName === "p") ?? null : null;
   const heroCta = hero ? descendants(hero).find((element) => element.tagName === "a" && attr(element, "href") === "#kontakt") ?? null : null;
   if (heroHeadline) setAttr(heroHeadline, "data-airship-element", "hero-headline");
+  if (heroSubheading) setAttr(heroSubheading, "data-airship-element", "hero-subheading");
   if (heroCta) setAttr(heroCta, "data-airship-element", "hero-cta");
-  if (offers) markIndexed(descendants(offers).filter((element) => element.tagName === "article" && hasClass(element, "card")), "offer-card");
-  if (proof) markIndexed(descendants(proof).filter((element) => element.tagName === "article" && hasClass(element, "card")), "proof-card");
+  if (offers) {
+    const offerCards = descendants(offers).filter((element) => element.tagName === "article" && hasClass(element, "card"));
+    markIndexed(offerCards, "offer-card");
+    markCardParts(offerCards);
+  }
+  if (proof) {
+    const proofCards = descendants(proof).filter((element) => element.tagName === "article" && hasClass(element, "card"));
+    markIndexed(proofCards, "proof-card");
+    markCardParts(proofCards);
+  }
   if (cta) {
     const contactCard = descendants(cta).find((element) => hasClass(element, "contact-panel")) ?? null;
     const contactCta = descendants(cta).find((element) => element.tagName === "a" && hasClass(element, "pill")) ?? null;
     if (contactCard) setAttr(contactCard, "data-airship-element", "contact-card");
     if (contactCta) setAttr(contactCta, "data-airship-element", "contact-cta");
   }
+  markNavItems(root);
 }
 
 export function refreshAirshipDemoArtifactSectionMarkersHtml(input: {

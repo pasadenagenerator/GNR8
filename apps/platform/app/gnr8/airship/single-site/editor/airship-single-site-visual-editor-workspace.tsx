@@ -91,12 +91,25 @@ type CanvasModeKey = "edit" | "view";
 export type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
 export type CandidateApplyState = "idle" | "creating" | "created" | "failed";
 type PreviewCandidateState = NonNullable<Props["draftCandidate"]>;
+export type AirshipCanvasSelectionLevel = "section" | "element";
+export type AirshipCanvasSelection = {
+  level: AirshipCanvasSelectionLevel;
+  section: EditorSectionKey;
+  elementKey: string | null;
+  elementIndex: number | null;
+};
 
 export type AirshipSelectedElementMetadata = {
   section: EditorSectionKey;
-  selectionLevel: "section-level" | "element-level";
+  selectionLevel: AirshipCanvasSelectionLevel;
   label: string;
+  displayLabel: string;
   domSectionId: string;
+  elementKey: string | null;
+  elementIndex: number | null;
+  sectionMarkerSelector: string;
+  elementMarkerSelector: string | null;
+  markerSelector: string;
   role: string;
   sourceStatus: string;
   draftStatus: string;
@@ -318,11 +331,24 @@ export function airshipElementSelectorsForSection(section: EditorSectionKey): st
   const selectors: Record<EditorSectionKey, string[]> = {
     hero: [
       '[data-airship-element="hero-headline"]',
+      '[data-airship-element="hero-subheading"]',
       '[data-airship-element="hero-cta"]',
     ],
-    offers: ['[data-airship-element="offer-card"]'],
-    proof: ['[data-airship-element="proof-card"]'],
-    approach: ['[data-airship-element="approach-card"]'],
+    offers: [
+      '[data-airship-element="offer-card"]',
+      '[data-airship-element="card-title"]',
+      '[data-airship-element="card-body"]',
+    ],
+    proof: [
+      '[data-airship-element="proof-card"]',
+      '[data-airship-element="card-title"]',
+      '[data-airship-element="card-body"]',
+    ],
+    approach: [
+      '[data-airship-element="approach-card"]',
+      '[data-airship-element="card-title"]',
+      '[data-airship-element="card-body"]',
+    ],
     cta: [
       '[data-airship-element="contact-card"]',
       '[data-airship-element="contact-cta"]',
@@ -331,6 +357,74 @@ export function airshipElementSelectorsForSection(section: EditorSectionKey): st
     source: [],
   };
   return selectors[section];
+}
+
+const airshipElementLabels: Record<string, string> = {
+  "hero-headline": "Hero headline",
+  "hero-subheading": "Hero subheading/body",
+  "hero-cta": "Primary CTA button",
+  "offer-card": "Offer/product card",
+  "proof-card": "Proof/benefit item",
+  "approach-card": "Approach/process item",
+  "card-title": "Card title",
+  "card-body": "Card body",
+  "contact-card": "Contact card",
+  "contact-cta": "Contact CTA",
+  "nav-item": "Navigation item",
+};
+
+function airshipElementLabel(elementKey: string | null, sectionLabel: string): string {
+  if (!elementKey) return sectionLabel;
+  return airshipElementLabels[elementKey] ?? labelizeElementKey(elementKey);
+}
+
+function labelizeElementKey(value: string): string {
+  return value
+    .replace(/^hero-/, "hero ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("en-US"));
+}
+
+function airshipElementMarkerSelector(elementKey: string | null, elementIndex: number | null = null): string | null {
+  if (!elementKey) return null;
+  const marker = `[data-airship-element="${elementKey}"]`;
+  return elementIndex === null ? marker : `${marker}[data-airship-element-index="${elementIndex}"]`;
+}
+
+export function airshipCanvasSelectionForSection(section: EditorSectionKey): AirshipCanvasSelection {
+  return { level: "section", section, elementKey: null, elementIndex: null };
+}
+
+export function airshipCanvasSelectionForElement(input: {
+  section: EditorSectionKey;
+  elementKey: string;
+  elementIndex?: number | null;
+}): AirshipCanvasSelection {
+  return {
+    level: "element",
+    section: input.section,
+    elementKey: input.elementKey,
+    elementIndex: input.elementIndex ?? null,
+  };
+}
+
+export function airshipSelectionFromDomMarkerAttributes(input: {
+  sectionMarker: string | null | undefined;
+  elementMarker?: string | null | undefined;
+  elementIndex?: string | number | null | undefined;
+  fallbackSection: EditorSectionKey;
+}): AirshipCanvasSelection {
+  const section = (input.sectionMarker || input.fallbackSection) as EditorSectionKey;
+  const elementKey = typeof input.elementMarker === "string" && input.elementMarker.trim() ? input.elementMarker.trim() : null;
+  if (!elementKey) return airshipCanvasSelectionForSection(section);
+  const parsedIndex = input.elementIndex === undefined || input.elementIndex === null || input.elementIndex === ""
+    ? null
+    : Number(input.elementIndex);
+  return airshipCanvasSelectionForElement({
+    section,
+    elementKey,
+    elementIndex: Number.isFinite(parsedIndex) ? parsedIndex : null,
+  });
 }
 
 export function measuredAirshipArtifactCanvasHeight(input: {
@@ -502,6 +596,14 @@ export function sectionTextFields(section: EditorSectionKey): TextFieldKey[] {
   return ["headline", "subheading"];
 }
 
+export function selectionTextFields(selection: AirshipCanvasSelection): TextFieldKey[] {
+  if (selection.level === "section") return sectionTextFields(selection.section);
+  if (selection.elementKey === "hero-headline") return ["headline"];
+  if (selection.elementKey === "hero-subheading") return ["subheading"];
+  if (selection.elementKey === "hero-cta" || selection.elementKey === "contact-cta") return ["ctaLabel"];
+  return [];
+}
+
 export function sectionStyleFields(section: EditorSectionKey): StyleFieldKey[] {
   if (section === "cta") return ["ctaColor"];
   if (section === "source") return [];
@@ -548,7 +650,8 @@ export function deriveAirshipStyleValueRows(section: EditorSectionKey, fields: A
 }
 
 export function deriveAirshipSelectedElementMetadata(input: {
-  section: EditorSectionKey;
+  section?: EditorSectionKey;
+  selection?: AirshipCanvasSelection;
   migrationId: string | null;
   importedSite: string;
   sourceUrl: string;
@@ -560,14 +663,27 @@ export function deriveAirshipSelectedElementMetadata(input: {
   editableSections?: AirshipImportedSiteEditableSection[];
 }): AirshipSelectedElementMetadata {
   const sections = input.editableSections?.length ? input.editableSections : fallbackSectionOptions;
-  const option = sections.find((section) => section.key === input.section);
+  const selection = input.selection ?? airshipCanvasSelectionForSection(input.section ?? "hero");
+  const option = sections.find((section) => section.key === selection.section);
   const sectionLabel = option?.label ?? "Hero / intro";
+  const elementLabel = airshipElementLabel(selection.elementKey, sectionLabel);
+  const displayLabel = selection.level === "element" ? elementLabel : sectionLabel;
+  const sectionMarkerSelector = selection.section === "source" ? airshipCanvasSelectorForSection("source") : airshipArtifactSectionSelector(selection.section as Exclude<EditorSectionKey, "source">);
+  const elementMarkerSelector = airshipElementMarkerSelector(selection.elementKey, selection.elementIndex);
+  const markerSelector = elementMarkerSelector ?? sectionMarkerSelector;
   const draftStatus = input.draftMeta.draftStatus ?? input.draftMeta.label;
+  const selectedFieldKeys = selectionTextFields(selection);
+  const mappedDraftFieldIds = selection.level === "element" && selectedFieldKeys.length > 0
+    ? option?.mappedDraftFieldIds.filter((id) => selectedFieldKeys.some((field) => id.toLocaleLowerCase("en-US").includes(field.toLocaleLowerCase("en-US")) || (field === "ctaLabel" && /cta|contact/i.test(id)))) ?? []
+    : option?.mappedDraftFieldIds ?? [];
   const baseRefs = [
     { label: "migration", value: input.migrationId ?? "missing" },
     { label: "imported site", value: input.importedSite },
     { label: "source url", value: input.sourceUrl },
     { label: "live url", value: input.liveSiteUrl },
+    { label: "selection level", value: selection.level },
+    { label: "section marker", value: sectionMarkerSelector },
+    ...(elementMarkerSelector ? [{ label: "element marker", value: elementMarkerSelector }] : []),
   ];
   const candidateRefs = input.draftCandidate
     ? [
@@ -583,26 +699,38 @@ export function deriveAirshipSelectedElementMetadata(input: {
     { label: "last saved", value: input.draftMeta.lastSavedAt ?? "not saved yet" },
   ];
 
-  if (input.section === "cta") {
+  if (selection.section === "cta") {
     return {
       section: "cta",
-      selectionLevel: "section-level",
-      label: sectionLabel,
+      selectionLevel: selection.level,
+      label: displayLabel,
+      displayLabel,
       domSectionId: "airship-preview-cta",
-      role: "section / CTA and contact action",
+      elementKey: selection.elementKey,
+      elementIndex: selection.elementIndex,
+      sectionMarkerSelector,
+      elementMarkerSelector,
+      markerSelector,
+      role: selection.level === "element" ? "element / CTA or contact target" : "section / CTA and contact action",
       sourceStatus: option?.sourceStatus ?? "source-supported CTA draft field",
       draftStatus,
-      mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
+      mappedDraftFieldIds,
       sizeLabel: `rendered section box in ${input.viewportLabel}`,
       internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
     };
   }
-  if (input.section === "source") {
+  if (selection.section === "source") {
     return {
       section: "source",
-      selectionLevel: "section-level",
+      selectionLevel: "section",
       label: sectionLabel,
+      displayLabel: sectionLabel,
       domSectionId: "airship-preview-source-material",
+      elementKey: null,
+      elementIndex: null,
+      sectionMarkerSelector,
+      elementMarkerSelector: null,
+      markerSelector: sectionMarkerSelector,
       role: "source evidence strip",
       sourceStatus: option?.sourceStatus ?? "source material readback only",
       draftStatus,
@@ -611,7 +739,7 @@ export function deriveAirshipSelectedElementMetadata(input: {
       internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
     };
   }
-  if (input.section === "offers" || input.section === "proof" || input.section === "approach" || input.section === "footer") {
+  if (selection.section === "offers" || selection.section === "proof" || selection.section === "approach" || selection.section === "footer") {
     const roleBySection: Record<"offers" | "proof" | "approach" | "footer", string> = {
       offers: "section / offers and services",
       proof: "section / proof and benefits",
@@ -619,27 +747,39 @@ export function deriveAirshipSelectedElementMetadata(input: {
       footer: "contentinfo / internal demo note",
     };
     return {
-      section: input.section,
-      selectionLevel: "section-level",
-      label: sectionLabel,
-      domSectionId: `airship-preview-${input.section}`,
-      role: roleBySection[input.section],
+      section: selection.section,
+      selectionLevel: selection.level,
+      label: displayLabel,
+      displayLabel,
+      domSectionId: `airship-preview-${selection.section}`,
+      elementKey: selection.elementKey,
+      elementIndex: selection.elementIndex,
+      sectionMarkerSelector,
+      elementMarkerSelector,
+      markerSelector,
+      role: selection.level === "element" ? "element / section content item" : roleBySection[selection.section],
       sourceStatus: option?.sourceStatus ?? "draft section metadata",
       draftStatus,
-      mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
+      mappedDraftFieldIds,
       sizeLabel: `full frame width in ${input.viewportLabel}`,
       internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
     };
   }
   return {
     section: "hero",
-    selectionLevel: "section-level",
-    label: sectionLabel,
+    selectionLevel: selection.level,
+    label: displayLabel,
+    displayLabel,
     domSectionId: "airship-preview-hero-intro",
-    role: "region / homepage hero intro",
+    elementKey: selection.elementKey,
+    elementIndex: selection.elementIndex,
+    sectionMarkerSelector,
+    elementMarkerSelector,
+    markerSelector,
+    role: selection.level === "element" ? "element / homepage hero content" : "region / homepage hero intro",
     sourceStatus: option?.sourceStatus ?? "source-supported hero draft fields",
     draftStatus,
-    mappedDraftFieldIds: option?.mappedDraftFieldIds ?? [],
+    mappedDraftFieldIds,
     sizeLabel: `${input.viewportWidth}px frame, min-height 498px`,
     internalRefs: [...baseRefs, ...savedDraftRefs, ...candidateRefs],
   };
@@ -770,7 +910,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [previewCandidate, setPreviewCandidate] = useState<PreviewCandidateState | null>(() => props.draftCandidate);
   const [candidateApplyState, setCandidateApplyState] = useState<CandidateApplyState>("idle");
   const [providerStatus] = useState(() => props.aiProviderStatus);
-  const [selectedSection, setSelectedSection] = useState<EditorSectionKey>("hero");
+  const [selectedCanvasItem, setSelectedCanvasItem] = useState<AirshipCanvasSelection>(() => airshipCanvasSelectionForSection("hero"));
   const [viewport, setViewport] = useState<EditorViewportKey>("desktop");
   const [canvasZoom, setCanvasZoom] = useState(0.86);
   const [selectedTool, setSelectedTool] = useState<EditorToolKey>("select");
@@ -778,18 +918,21 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const [inspectorTab, setInspectorTab] = useState<InspectorTabKey>("agent");
   const [artifactCanvasMeasuredHeight, setArtifactCanvasMeasuredHeight] = useState<number | null>(null);
   const [artifactOverlayRects, setArtifactOverlayRects] = useState<Partial<Record<Exclude<EditorSectionKey, "source">, AirshipArtifactOverlayRect>>>({});
+  const [artifactElementOverlayRect, setArtifactElementOverlayRect] = useState<AirshipArtifactOverlayRect | null>(null);
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const artifactIframeRef = useRef<HTMLIFrameElement | null>(null);
   const savedFieldsRef = useRef(savedFields);
   const savedStyleKeyRef = useRef(styleKey(initialFieldsRef.current));
   const styleSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const styleSaveRequestRef = useRef(0);
+  const selectedSection = selectedCanvasItem.section;
   const selectedViewport = viewportOptions.find((option) => option.key === viewport) ?? viewportOptions[0];
   const sectionOptions = props.importedSiteModel?.editableSections.length ? props.importedSiteModel.editableSections : fallbackSectionOptions;
   const selectedSectionLabel = sectionOptions.find((section) => section.key === selectedSection)?.label ?? "Hero / intro";
+  const selectedTextFields = selectionTextFields(selectedCanvasItem);
   const previewSections = props.draftPreview.sections ?? [];
   const selectedElementMetadata = deriveAirshipSelectedElementMetadata({
-    section: selectedSection,
+    selection: selectedCanvasItem,
     migrationId: props.migrationId,
     importedSite: props.importedSite,
     sourceUrl: props.sourceUrl,
@@ -860,7 +1003,12 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
 
   function selectSection(section: EditorSectionKey) {
     setSelectedTool("select");
-    setSelectedSection(section);
+    setSelectedCanvasItem(airshipCanvasSelectionForSection(section));
+  }
+
+  function selectElement(section: EditorSectionKey, elementKey: string, elementIndex: number | null = null) {
+    setSelectedTool("select");
+    setSelectedCanvasItem(airshipCanvasSelectionForElement({ section, elementKey, elementIndex }));
   }
 
   function selectTool(tool: EditorToolKey) {
@@ -940,6 +1088,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     if (!iframe || !doc) {
       setArtifactCanvasMeasuredHeight(null);
       setArtifactOverlayRects({});
+      setArtifactElementOverlayRect(null);
       return;
     }
 
@@ -970,18 +1119,38 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       if (overlayRect) nextRects[section] = overlayRect;
     }
 
+    let nextElementRect: AirshipArtifactOverlayRect | null = null;
+    if (selectedCanvasItem.level === "element" && selectedCanvasItem.elementKey) {
+      const indexedSelector = airshipElementMarkerSelector(selectedCanvasItem.elementKey, selectedCanvasItem.elementIndex);
+      const fallbackSelector = airshipElementMarkerSelector(selectedCanvasItem.elementKey);
+      const element = (indexedSelector ? doc.querySelector(indexedSelector) : null)
+        ?? (fallbackSelector ? doc.querySelector(fallbackSelector) : null);
+      const rect = element?.getBoundingClientRect();
+      nextElementRect = airshipArtifactOverlayRectFromDomRect({
+        iframeElementRect: iframeRect,
+        overlayHostElementRect: overlayHostRect,
+        targetElementRect: rect,
+        zoomScale: canvasZoom,
+        iframeScrollX: scrollX,
+        iframeScrollY: scrollY,
+      });
+    }
+
     setArtifactCanvasMeasuredHeight(nextHeight);
     setArtifactOverlayRects(nextRects);
-  }, [artifactCanvasFallbackHeight, canvasZoom]);
+    setArtifactElementOverlayRect(nextElementRect);
+  }, [artifactCanvasFallbackHeight, canvasZoom, selectedCanvasItem]);
 
   useEffect(() => {
     if (!artifactCanvasRender) {
       setArtifactCanvasMeasuredHeight(null);
       setArtifactOverlayRects({});
+      setArtifactElementOverlayRect(null);
       return undefined;
     }
     setArtifactCanvasMeasuredHeight(artifactCanvasFallbackHeight);
     setArtifactOverlayRects({});
+    setArtifactElementOverlayRect(null);
     const timers = [
       window.setTimeout(measureArtifactCanvas, 0),
       window.setTimeout(measureArtifactCanvas, 120),
@@ -1001,6 +1170,35 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       width: rect.width,
       height: rect.height,
     };
+  }
+
+  function selectArtifactCanvasPoint(section: Exclude<EditorSectionKey, "source">, event: React.MouseEvent<HTMLButtonElement>) {
+    const iframe = artifactIframeRef.current;
+    let doc: Document | null | undefined = null;
+    try {
+      doc = iframe?.contentDocument;
+    } catch {
+      doc = null;
+    }
+    if (!iframe || !doc) {
+      selectSection(section);
+      return;
+    }
+    const iframeRect = iframe.getBoundingClientRect();
+    const x = (event.clientX - iframeRect.left) / canvasZoom;
+    const y = (event.clientY - iframeRect.top) / canvasZoom;
+    const target = doc.elementFromPoint(x, y);
+    const elementTarget = target?.closest("[data-airship-element]");
+    const sectionTarget = target?.closest("[data-airship-section]");
+    const selection = airshipSelectionFromDomMarkerAttributes({
+      sectionMarker: sectionTarget?.getAttribute("data-airship-section") ?? section,
+      elementMarker: elementTarget?.getAttribute("data-airship-element"),
+      elementIndex: elementTarget?.getAttribute("data-airship-element-index"),
+      fallbackSection: section,
+    });
+    setSelectedTool("select");
+    setSelectedCanvasItem(selection);
+    window.setTimeout(measureArtifactCanvas, 0);
   }
 
   const fitCanvasWidth = useCallback(() => {
@@ -1293,12 +1491,24 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   }
 
   function resetSelectedSectionText() {
-    const reset = resetAirshipSectionTextToSavedValues({
-      section: selectedSection,
-      fields,
-      drafts: editableDrafts,
-      savedFields: savedFieldsRef.current,
-    });
+    const reset = selectedCanvasItem.level === "section"
+      ? resetAirshipSectionTextToSavedValues({
+          section: selectedSection,
+          fields,
+          drafts: editableDrafts,
+          savedFields: savedFieldsRef.current,
+        })
+      : selectedTextFields.reduce<EditorSnapshot & { changedFields: TextFieldKey[] }>((current, field) => {
+          const savedValue = savedFieldsRef.current[field];
+          if (current.fields[field] === savedValue) return current;
+          const edited = applyAirshipHeroTextFieldEdit({
+            fields: current.fields,
+            drafts: current.drafts,
+            field,
+            value: savedValue,
+          });
+          return { ...edited, changedFields: [...current.changedFields, field] };
+        }, { fields, drafts: editableDrafts, changedFields: [] });
     if (reset.changedFields.length === 0) {
       setMessage(`${selectedSectionLabel} text already matches saved Airship draft values.`);
       return;
@@ -1518,9 +1728,25 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           background: rgba(29, 78, 216, 0.055);
           box-shadow: inset 0 0 0 9999px rgba(29, 78, 216, 0.025);
         }
+        .airship-artifact-overlay[data-selected-scope="element"] {
+          border-color: rgba(20, 156, 231, 0.34);
+          background: rgba(20, 156, 231, 0.018);
+        }
+        .airship-artifact-element-overlay {
+          position: absolute;
+          z-index: 3;
+          border: 2px solid #149ce7;
+          border-radius: 4px;
+          background: rgba(20, 156, 231, 0.055);
+          pointer-events: none;
+        }
         .airship-artifact-overlay .airship-selection-chip {
           top: 12px;
           left: 12px;
+        }
+        .airship-artifact-element-overlay .airship-selection-chip {
+          top: -32px;
+          left: 0;
         }
         .airship-artifact-source-strip {
           position: relative;
@@ -1608,6 +1834,14 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           color: #334155;
           font-size: 18px;
           line-height: 1.55;
+        }
+        .airship-preview-headline[data-selected="true"],
+        .airship-preview-copy[data-selected="true"],
+        .airship-preview-card[data-selected="true"] {
+          outline: 2px solid #149ce7;
+          outline-offset: 5px;
+          border-radius: 4px;
+          background: rgba(20, 156, 231, 0.04);
         }
         .airship-cta-row {
           position: relative;
@@ -2114,6 +2348,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           background: #ffffff;
         }
         .airship-artifact-overlay[data-selected="true"],
+        .airship-artifact-overlay[data-selected-scope="element"],
+        .airship-artifact-element-overlay,
         .airship-preview-hero[data-selected="true"],
         .airship-preview-section[data-selected="true"],
         .airship-source-strip[data-selected="true"],
@@ -2831,14 +3067,30 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                               data-airship-artifact-section-anchor={section}
                               data-airship-artifact-section-selector={airshipArtifactSectionSelector(section)}
                               data-airship-artifact-geometry-source={artifactOverlayRects[section] ? "dom-marker" : "fallback-band"}
-                              data-selected={selectedSection === section}
+                              data-selected={selectedCanvasItem.level === "section" && selectedSection === section}
+                              data-selected-scope={selectedCanvasItem.level === "element" && selectedSection === section ? "element" : undefined}
                               aria-label={`Select ${sectionOptions.find((option) => option.key === section)?.label ?? section} artifact section`}
-                              onClick={() => selectSection(section)}
+                              onClick={(event) => selectArtifactCanvasPoint(section, event)}
                               style={artifactOverlayStyle(section)}
                             >
-                              {selectedSection === section ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                              {selectedCanvasItem.level === "section" && selectedSection === section ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
                             </button>
                           ))}
+                          {selectedCanvasItem.level === "element" && artifactElementOverlayRect ? (
+                            <div
+                              className="airship-artifact-element-overlay"
+                              data-airship-artifact-element-selector={selectedElementMetadata.elementMarkerSelector ?? undefined}
+                              data-airship-artifact-element-section={selectedSection}
+                              style={{
+                                top: artifactElementOverlayRect.top,
+                                left: artifactElementOverlayRect.left,
+                                width: artifactElementOverlayRect.width,
+                                height: artifactElementOverlayRect.height,
+                              }}
+                            >
+                              <SelectionOverlay metadata={selectedElementMetadata} />
+                            </div>
+                          ) : null}
                         </div>
                         <button
                           id="airship-preview-source-material"
@@ -2864,7 +3116,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                       id="airship-preview-hero-intro"
                       data-airship-editor-canvas="hero"
                       data-airship-section="hero"
-                      data-selected={selectedSection === "hero"}
+                      data-selected={selectedCanvasItem.level === "section" && selectedSection === "hero"}
                       className="airship-preview-hero"
                       aria-label="Homepage hero/intro"
                       onClick={() => selectSection("hero")}
@@ -2873,19 +3125,30 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                         background: `linear-gradient(135deg, ${fields.backgroundTint} 0%, #ffffff 58%, #dbeafe 100%)`,
                       }}
                     >
-                      {selectedSection === "hero" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                      {selectedCanvasItem.level === "section" && selectedSection === "hero" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
                       <div className="airship-preview-eyebrow">{props.draftPreview.hero.eyebrow}</div>
                       <h2
                         data-airship-editor-preview="headline"
                         data-airship-element="hero-headline"
+                        data-selected={selectedCanvasItem.level === "element" && selectedCanvasItem.elementKey === "hero-headline"}
                         className="airship-preview-headline"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          selectElement("hero", "hero-headline");
+                        }}
                         style={{ fontSize: viewport === "mobile" ? 34 : viewport === "tablet" ? 40 : 46 }}
                       >
                         {fields.headline}
                       </h2>
                       <p
                         data-airship-editor-preview="subheading"
+                        data-airship-element="hero-subheading"
+                        data-selected={selectedCanvasItem.level === "element" && selectedCanvasItem.elementKey === "hero-subheading"}
                         className="airship-preview-copy"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          selectElement("hero", "hero-subheading");
+                        }}
                         style={{ fontSize: viewport === "mobile" ? 16 : 18 }}
                       >
                         {fields.subheading}
@@ -2894,23 +3157,23 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                         id="airship-preview-primary-cta"
                         className="airship-cta-row"
                         data-airship-editor-canvas="cta"
-                        data-selected={selectedSection === "cta"}
+                        data-selected={selectedCanvasItem.level === "section" && selectedSection === "cta"}
                         onClick={(event) => {
                           event.stopPropagation();
                           selectSection("cta");
                         }}
                       >
-                        {selectedSection === "cta" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                        {selectedCanvasItem.level === "section" && selectedSection === "cta" ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
                         {fields.ctaLabel ? (
                           <button
                             type="button"
                             data-airship-editor-preview="cta"
                             data-airship-element="hero-cta"
-                            data-selected={selectedSection === "cta"}
+                            data-selected={selectedCanvasItem.level === "element" && selectedCanvasItem.elementKey === "hero-cta"}
                             className="airship-preview-cta"
                             onClick={(event) => {
                               event.stopPropagation();
-                              selectSection("cta");
+                              selectElement("hero", "hero-cta");
                             }}
                             style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor }}
                           >
@@ -2930,7 +3193,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                         id={`airship-preview-${section.key}`}
                         data-airship-editor-canvas={section.key}
                         data-airship-section={section.key}
-                        data-selected={selectedSection === section.key}
+                        data-selected={selectedCanvasItem.level === "section" && selectedSection === section.key}
                         className="airship-preview-section"
                         aria-label={section.label}
                         onClick={() => selectSection(section.key)}
@@ -2938,7 +3201,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                           background: section.key === "footer" ? "#f8fafc" : "#ffffff",
                         }}
                       >
-                        {selectedSection === section.key ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
+                        {selectedCanvasItem.level === "section" && selectedSection === section.key ? <SelectionOverlay metadata={selectedElementMetadata} /> : null}
                         <div className="airship-preview-eyebrow">{section.eyebrow}</div>
                         <h3>{section.heading}</h3>
                         {section.body ? <p>{section.body}</p> : null}
@@ -2950,6 +3213,13 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                                 className="airship-preview-card"
                                 data-airship-element={section.key === "offers" ? "offer-card" : section.key === "proof" ? "proof-card" : section.key === "approach" ? "approach-card" : undefined}
                                 data-airship-element-index={section.key === "offers" || section.key === "proof" || section.key === "approach" ? itemIndex : undefined}
+                                data-selected={selectedCanvasItem.level === "element" && selectedSection === section.key && selectedCanvasItem.elementIndex === itemIndex}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (section.key === "offers") selectElement("offers", "offer-card", itemIndex);
+                                  if (section.key === "proof") selectElement("proof", "proof-card", itemIndex);
+                                  if (section.key === "approach") selectElement("approach", "approach-card", itemIndex);
+                                }}
                               >
                                 {item}
                               </div>
@@ -2961,6 +3231,11 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                             type="button"
                             className="airship-preview-cta"
                             data-airship-element="contact-cta"
+                            data-selected={selectedCanvasItem.level === "element" && selectedCanvasItem.elementKey === "contact-cta"}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              selectElement("cta", "contact-cta");
+                            }}
                             style={{ border: `1px solid ${fields.ctaColor}`, background: fields.ctaColor, width: "fit-content" }}
                           >
                             {section.ctaLabel}
@@ -3114,6 +3389,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 <div className="airship-agent-transcript-shell" aria-label="Local deterministic transcript">
                   <div className="airship-agent-result">
                     <div className="airship-agent-step"><strong>● Target</strong> {selectedElementMetadata.label}</div>
+                    <div className="airship-agent-step">│ level: {selectedElementMetadata.selectionLevel}; marker: {selectedElementMetadata.markerSelector}</div>
                     <div className="airship-agent-step">│ {selectedElementMetadata.role}</div>
                     <div className="airship-agent-step"><strong>● Command mode</strong> local deterministic Airship draft command</div>
                     <div className="airship-agent-step">│ Supported: change CTA, shorten headline, adjust hero spacing, make CTA prominent</div>
@@ -3133,7 +3409,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <div role="status" className="airship-panel-value">{message}</div>
                 </div>
                 <div className="airship-agent-input-shell">
-                  <div className="airship-selected-element-token">{selectedElementMetadata.label} ×</div>
+                  <div className="airship-selected-element-token">{selectedElementMetadata.label} × {selectedElementMetadata.selectionLevel}</div>
                   <div className="airship-agent-input-row">
                     <textarea
                       rows={1}
@@ -3170,7 +3446,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               <div className="airship-panel-section">
                 <div className="airship-panel-heading">DRAFT FIELDS <span>⌃</span></div>
                 <div className="airship-field-grid" aria-label="Real selected-section editable fields">
-                  {sectionTextFields(selectedSection).includes("headline") ? (
+                  {selectedTextFields.includes("headline") ? (
                     <label className="airship-field-label">
                       H1/headline text
                       <textarea
@@ -3180,7 +3456,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                       />
                     </label>
                   ) : null}
-                  {sectionTextFields(selectedSection).includes("subheading") ? (
+                  {selectedTextFields.includes("subheading") ? (
                     <label className="airship-field-label">
                       Subheading/body text
                       <textarea
@@ -3190,7 +3466,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                       />
                     </label>
                   ) : null}
-                  {sectionTextFields(selectedSection).includes("ctaLabel") ? (
+                  {selectedTextFields.includes("ctaLabel") ? (
                     <label className="airship-field-label">
                       CTA label
                       <input
@@ -3200,7 +3476,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                       />
                     </label>
                   ) : null}
-                  {selectedDrafts.filter((draft) => !draftFieldKey(draft)).map((draft) => (
+                  {selectedCanvasItem.level === "section" ? selectedDrafts.filter((draft) => !draftFieldKey(draft)).map((draft) => (
                     <label key={draft.id} className="airship-field-label">
                       {draft.targetSectionPage}
                       <textarea
@@ -3209,9 +3485,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                         aria-label={`Edit ${draft.targetSectionPage}`}
                       />
                     </label>
-                  ))}
-                  {sectionTextFields(selectedSection).length === 0 && selectedDrafts.filter((draft) => !draftFieldKey(draft)).length === 0 ? (
-                    <div className="airship-panel-value">No editable text field is mapped to this selection.</div>
+                  )) : null}
+                  {selectedTextFields.length === 0 && (selectedCanvasItem.level === "element" || selectedDrafts.filter((draft) => !draftFieldKey(draft)).length === 0) ? (
+                    <div className="airship-panel-value">read-only in this foundation pass</div>
                   ) : null}
                 </div>
               </div>
@@ -3244,9 +3520,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <button
                     type="button"
                     aria-label="Reset selected section text from edit panel"
-                    disabled={sectionTextFields(selectedSection).length === 0}
+                    disabled={selectedTextFields.length === 0}
                     onClick={resetSelectedSectionText}
-                    style={actionButtonStyle({ disabled: sectionTextFields(selectedSection).length === 0, compact: true, dark: true })}
+                    style={actionButtonStyle({ disabled: selectedTextFields.length === 0, compact: true, dark: true })}
                   >
                     Reset text
                   </button>
@@ -3337,7 +3613,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               <div className="airship-panel-section">
                 <div className="airship-panel-heading">STYLE <span>⌃</span></div>
                 <div className="airship-code-readback" aria-label="Selected element current CSS values">
-                  <code>{airshipCanvasSelectorForSection(selectedSection)} {"{"}</code>
+                  <code>{selectedElementMetadata.markerSelector} {"{"}</code>
                   {selectedStyleValueRows.map((row) => (
                     <code key={row.label}>  {row.label}: {row.value};</code>
                   ))}
@@ -3382,9 +3658,13 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <code>section: {selectedElementMetadata.section}</code>
                   <code>level: {selectedElementMetadata.selectionLevel}</code>
                   <code>domId: {selectedElementMetadata.domSectionId}</code>
+                  <code>element: {selectedElementMetadata.elementKey ?? "none"}</code>
+                  <code>elementIndex: {selectedElementMetadata.elementIndex ?? "none"}</code>
                   <code>role: {selectedElementMetadata.role}</code>
                   <code>canvas: {airshipCanvasSelectorForSection(selectedSection)}</code>
-                  <code>artifact: {selectedSection === "source" ? "source strip" : airshipArtifactSectionSelector(selectedSection)}</code>
+                  <code>sectionMarker: {selectedElementMetadata.sectionMarkerSelector}</code>
+                  <code>elementMarker: {selectedElementMetadata.elementMarkerSelector ?? "none"}</code>
+                  <code>artifact: {selectedElementMetadata.markerSelector}</code>
                 </div>
               </div>
               <div className="airship-panel-section" aria-label="Element-level selection markers">

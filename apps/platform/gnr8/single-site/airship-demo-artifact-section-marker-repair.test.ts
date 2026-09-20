@@ -20,10 +20,12 @@ import {
 const staleArisHtml = `<!doctype html>
 <html lang="sl">
 <body>
+  <nav><a href="#apple">Apple</a><a href="#kontakt">Kontakt</a></nav>
   <main id="top">
     <section class="hero">
       <div class="shell hero-grid">
         <h1>ARIS ponudba za Apple in Canton izdelke.</h1>
+        <p>Izbor je pripravljen za hitrejši pregled ponudbe.</p>
         <div class="hero-actions"><a class="pill" href="#kontakt">Želim ponudbo</a></div>
       </div>
     </section>
@@ -34,9 +36,9 @@ const staleArisHtml = `<!doctype html>
           <p>Minimalen demo izpostavlja izdelke.</p>
         </div>
         <div class="cards">
-          <article class="card"><h3>MacBook Air 15</h3></article>
-          <article class="card"><h3>Mac Studio</h3></article>
-          <article class="card"><h3>MacBook Pro</h3></article>
+          <article class="card"><h3>MacBook Air 15</h3><p>Lahek prenosnik.</p></article>
+          <article class="card"><h3>Mac Studio</h3><p>Namizna zmogljivost.</p></article>
+          <article class="card"><h3>MacBook Pro</h3><p>Profesionalna izbira.</p></article>
         </div>
       </div>
     </section>
@@ -47,8 +49,8 @@ const staleArisHtml = `<!doctype html>
           <p>Audio izbor je urejen kot pregledna produktna linija.</p>
         </div>
         <div class="cards">
-          <article class="card"><h3>Canton Smart</h3></article>
-          <article class="card"><h3>Smart Reference 5 K</h3></article>
+          <article class="card"><h3>Canton Smart</h3><p>Omrezena audio linija.</p></article>
+          <article class="card"><h3>Smart Reference 5 K</h3><p>Referencni zvok.</p></article>
         </div>
       </div>
     </section>
@@ -68,10 +70,12 @@ const staleArisHtml = `<!doctype html>
 const staleChsHtml = `<!doctype html>
 <html lang="en">
 <body>
+  <nav><a href="#identity">Services</a><a href="#contact">Contact</a></nav>
   <main id="top">
     <section class="hero" data-section="hero">
       <div class="shell hero-grid">
         <h1>The CHS team helps your IT change with every technology wave.</h1>
+        <p>Advanced cybersecurity, data systems, and hybrid infrastructure support.</p>
         <div class="hero-actions"><a class="button" href="#contact">Contact Us</a></div>
       </div>
     </section>
@@ -79,16 +83,16 @@ const staleChsHtml = `<!doctype html>
       <div class="shell identity-grid">
         <h2>Technology change works when people can actually adopt it.</h2>
         <ul class="value-list">
-          <li><strong>Experienced guidance</strong></li>
-          <li><strong>Practical execution</strong></li>
-          <li><strong>Human adoption</strong></li>
+          <li><strong>Experienced guidance</strong><p>Senior implementation support.</p></li>
+          <li><strong>Practical execution</strong><p>Hands-on delivery.</p></li>
+          <li><strong>Human adoption</strong><p>Support for real teams.</p></li>
         </ul>
       </div>
     </section>
     <section id="proof" class="proof" data-section="proof">
       <div class="shell">
-        <article class="proof-card"><h3>Assess</h3></article>
-        <article class="proof-card"><h3>Improve</h3></article>
+        <article class="proof-card"><h3>Assess</h3><p>Understand the environment.</p></article>
+        <article class="proof-card"><h3>Improve</h3><p>Prioritize resilient systems.</p></article>
       </div>
     </section>
     <section data-section="team">
@@ -124,8 +128,12 @@ test("refreshAirshipDemoArtifactSectionMarkersHtml places ARIS markers on outer 
   assert.equal(placement.sectionTags.cta?.id, "kontakt");
   assert.equal(placement.elementMarkers["offer-card"], 3);
   assert.equal(placement.elementMarkers["proof-card"], 2);
+  assert.equal(placement.elementMarkers["hero-subheading"], 1);
+  assert.equal(placement.elementMarkers["card-title"], 5);
+  assert.equal(placement.elementMarkers["card-body"], 5);
   assert.equal(placement.elementMarkers["contact-card"], 1);
   assert.equal(placement.elementMarkers["contact-cta"], 1);
+  assert.equal(placement.elementMarkers["nav-item"], 2);
   assert.equal(repaired.html.includes("Apple ponudba"), true);
   assert.equal(repaired.html.includes("MacBook Pro"), true);
   assert.equal(repaired.html.includes("Canton Smart ponudba"), true);
@@ -153,8 +161,12 @@ test("refreshAirshipDemoArtifactSectionMarkersHtml places CHS markers on outer v
   assert.equal(placement.elementMarkers["offer-card"], 3);
   assert.equal(placement.elementMarkers["proof-card"], 2);
   assert.equal(placement.elementMarkers["approach-card"], 1);
+  assert.equal(placement.elementMarkers["hero-subheading"], 1);
+  assert.equal(placement.elementMarkers["card-title"], 2);
+  assert.equal(placement.elementMarkers["card-body"], 5);
   assert.equal(placement.elementMarkers["contact-card"], 1);
   assert.equal(placement.elementMarkers["contact-cta"], 1);
+  assert.equal(placement.elementMarkers["nav-item"], 2);
 });
 
 test("buildAirshipDemoArtifactMarkerRefreshPlan is guarded to known ARIS and CHS demo artifacts", () => {

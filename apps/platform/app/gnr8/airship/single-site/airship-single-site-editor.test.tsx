@@ -18,7 +18,10 @@ import {
   airshipArtifactSectionSelector,
   airshipCanApplySavedDraftToPreview,
   airshipCanvasSelectorForSection,
+  airshipCanvasSelectionForElement,
+  airshipCanvasSelectionForSection,
   airshipElementSelectorsForSection,
+  airshipSelectionFromDomMarkerAttributes,
   applyAirshipHeroCommand,
   applyAirshipHeroTextFieldEdit,
   deriveAirshipSelectedElementMetadata,
@@ -29,6 +32,7 @@ import {
   measuredAirshipArtifactCanvasHeight,
   resetAirshipSectionStyleToSavedValues,
   resetAirshipSectionTextToSavedValues,
+  selectionTextFields,
   sectionStyleFields,
   sectionTextFields,
   undoAirshipEditorLastLocalChange,
@@ -1136,10 +1140,11 @@ test("airship visual editor matches Airship reference shell without primary admi
   assert.equal(html.includes("region / homepage hero intro"), true);
   assert.equal(html.includes("SELECTED NODE"), true);
   assert.equal(html.includes("level:"), true);
-  assert.equal(html.includes("section-level"), true);
+  assert.equal(html.includes("section"), true);
   assert.equal(html.includes("FIELDS"), true);
   assert.equal(html.includes("MARKERS"), true);
   assert.equal(html.includes('[data-airship-element=&quot;hero-headline&quot;]'), true);
+  assert.equal(html.includes('[data-airship-element=&quot;hero-subheading&quot;]'), true);
   assert.equal(html.includes("canvas:"), true);
   assert.equal(html.includes('[data-airship-editor-canvas=&quot;hero&quot;]'), true);
   assert.equal(html.includes('[data-airship-section=&quot;hero&quot;]'), true);
@@ -1560,6 +1565,9 @@ test("airship visual editor exposes focused canvas click targets for hero, CTA, 
   assert.equal(visualEditorSource.includes('data-airship-editor-canvas="source"'), true);
   assert.equal(visualEditorSource.includes('onClick={() => selectSection("hero")}'), true);
   assert.equal(visualEditorSource.includes('selectSection("cta");'), true);
+  assert.equal(visualEditorSource.includes('selectElement("hero", "hero-headline")'), true);
+  assert.equal(visualEditorSource.includes('selectElement("hero", "hero-subheading")'), true);
+  assert.equal(visualEditorSource.includes('selectElement("hero", "hero-cta")'), true);
   assert.equal(visualEditorSource.includes('onClick={() => selectSection("source")}'), true);
   assert.equal(visualEditorSource.includes("event.stopPropagation();"), true);
 });
@@ -1569,9 +1577,9 @@ test("airship visual editor uses direct canvas selection without requiring the o
 
   assert.equal(visualEditorSource.includes("data-airship-editor-rail-target"), false);
   assert.equal(visualEditorSource.includes("aria-label=\"Section navigator\""), false);
-  assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"hero\"}"), true);
-  assert.equal(visualEditorSource.includes("data-selected={selectedSection === section.key}"), true);
-  assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"cta\"}"), true);
+  assert.equal(visualEditorSource.includes('data-selected={selectedCanvasItem.level === "section" && selectedSection === "hero"}'), true);
+  assert.equal(visualEditorSource.includes('data-selected={selectedCanvasItem.level === "section" && selectedSection === section.key}'), true);
+  assert.equal(visualEditorSource.includes('data-selected={selectedCanvasItem.level === "section" && selectedSection === "cta"}'), true);
   assert.equal(visualEditorSource.includes("data-selected={selectedSection === \"source\"}"), true);
   assert.equal(visualEditorSource.includes("onClick={() => selectSection(section.key)}"), true);
 });
@@ -1599,8 +1607,11 @@ test("airship visual editor derives selected element DOM metadata per section", 
 
   const hero = deriveAirshipSelectedElementMetadata({ ...base, section: "hero" });
   assert.equal(hero.domSectionId, "airship-preview-hero-intro");
-  assert.equal(hero.selectionLevel, "section-level");
+  assert.equal(hero.selectionLevel, "section");
   assert.equal(hero.role, "region / homepage hero intro");
+  assert.equal(hero.sectionMarkerSelector, '[data-airship-section="hero"]');
+  assert.equal(hero.elementMarkerSelector, null);
+  assert.equal(hero.markerSelector, '[data-airship-section="hero"]');
   assert.deepEqual(hero.mappedDraftFieldIds, [
     "airship-chs-home-hero-headline",
     "airship-chs-home-hero-value-proposition",
@@ -1609,10 +1620,21 @@ test("airship visual editor derives selected element DOM metadata per section", 
   assert.equal(hero.internalRefs.some((ref) => ref.label === "live url" && ref.value === "https://www.chs.si/"), true);
 
   const cta = deriveAirshipSelectedElementMetadata({ ...base, section: "cta" });
-  assert.equal(cta.selectionLevel, "section-level");
+  assert.equal(cta.selectionLevel, "section");
   assert.equal(cta.domSectionId, "airship-preview-cta");
   assert.equal(cta.role, "section / CTA and contact action");
   assert.deepEqual(cta.mappedDraftFieldIds, ["airship-chs-home-contact-cta"]);
+
+  const headline = deriveAirshipSelectedElementMetadata({
+    ...base,
+    selection: airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-headline" }),
+  });
+  assert.equal(headline.selectionLevel, "element");
+  assert.equal(headline.label, "Hero headline");
+  assert.equal(headline.elementKey, "hero-headline");
+  assert.equal(headline.elementMarkerSelector, '[data-airship-element="hero-headline"]');
+  assert.equal(headline.markerSelector, '[data-airship-element="hero-headline"]');
+  assert.deepEqual(headline.mappedDraftFieldIds, ["airship-chs-home-hero-headline"]);
 
   const source = deriveAirshipSelectedElementMetadata({ ...base, section: "source" });
   assert.equal(source.domSectionId, "airship-preview-source-material");
@@ -1692,12 +1714,41 @@ test("airship visual editor derives artifact DOM geometry and fallback canvas he
   assert.equal(airshipArtifactSectionSelector("cta"), '[data-airship-section="cta"]');
   assert.deepEqual(airshipElementSelectorsForSection("hero"), [
     '[data-airship-element="hero-headline"]',
+    '[data-airship-element="hero-subheading"]',
     '[data-airship-element="hero-cta"]',
   ]);
   assert.deepEqual(airshipElementSelectorsForSection("cta"), [
     '[data-airship-element="contact-card"]',
     '[data-airship-element="contact-cta"]',
   ]);
+});
+
+test("airship visual editor resolves element markers before section fallback", () => {
+  assert.deepEqual(
+    airshipSelectionFromDomMarkerAttributes({
+      sectionMarker: "hero",
+      elementMarker: "hero-headline",
+      fallbackSection: "cta",
+    }),
+    { level: "element", section: "hero", elementKey: "hero-headline", elementIndex: null },
+  );
+  assert.deepEqual(
+    airshipSelectionFromDomMarkerAttributes({
+      sectionMarker: null,
+      elementMarker: null,
+      fallbackSection: "offers",
+    }),
+    airshipCanvasSelectionForSection("offers"),
+  );
+  assert.deepEqual(
+    airshipSelectionFromDomMarkerAttributes({
+      sectionMarker: "offers",
+      elementMarker: "offer-card",
+      elementIndex: "2",
+      fallbackSection: "hero",
+    }),
+    { level: "element", section: "offers", elementKey: "offer-card", elementIndex: 2 },
+  );
 });
 
 test("airship artifact selection falls back to approximate bands when DOM markers are absent", async () => {
@@ -1716,6 +1767,10 @@ test("airship visual editor inspector scopes Edit and CSS fields to the selected
   assert.deepEqual(sectionTextFields("hero"), ["headline", "subheading"]);
   assert.deepEqual(sectionTextFields("cta"), ["ctaLabel"]);
   assert.deepEqual(sectionTextFields("source"), []);
+  assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-headline" })), ["headline"]);
+  assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-subheading" })), ["subheading"]);
+  assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "cta", elementKey: "contact-cta" })), ["ctaLabel"]);
+  assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "offers", elementKey: "offer-card", elementIndex: 0 })), []);
   assert.deepEqual(sectionStyleFields("hero"), ["topPadding", "bottomPadding", "backgroundTint"]);
   assert.deepEqual(sectionStyleFields("cta"), ["ctaColor"]);
   assert.deepEqual(sectionStyleFields("source"), []);
