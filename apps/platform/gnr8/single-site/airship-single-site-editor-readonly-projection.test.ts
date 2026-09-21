@@ -244,6 +244,84 @@ test("airship editor canvas artifact render is unavailable when artifact HTML is
   assert.equal(render, null);
 });
 
+test("airship editor canvas resolves refreshed CHS candidate artifact before stale demo artifact", async () => {
+  const candidateSiteVersionId = "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7";
+  const candidateRuntimeArtifactId = "4ec7588a-b7cb-46dc-a735-88e4ec466a72";
+  const calls: string[] = [];
+  const render = await readAirshipEditorArtifactCanvasRender({
+    migrationId: CHS_MIGRATION_ID,
+    draftCandidate: {
+      label: "New Airship draft candidate preview",
+      siteVersionId: candidateSiteVersionId,
+      runtimeArtifactId: candidateRuntimeArtifactId,
+      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${candidateSiteVersionId}/preview?mode=transformed`,
+      mode: "transformed",
+      available: true,
+      unavailableReason: null,
+      authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+      statusLabel: "Not live, internal preview only",
+      sourceLiveSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+      draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
+      draftVersion: 9,
+      styleSettings: {
+        heroTopPadding: 96,
+        heroBottomPadding: 104,
+        backgroundTint: "#eef6ff",
+        ctaColor: "#1d4ed8",
+      },
+      appliedEdits: [
+        {
+          draftEditId: CHS_HEADLINE_DRAFT_ID,
+          targetSectionPage: "Homepage / hero headline",
+          appliedTextContent: "Saved regenerated CHS headline",
+        },
+      ],
+      skippedEdits: [],
+    },
+    previewHost: null,
+    getArtifactById: async (artifactId) => {
+      calls.push(artifactId);
+      assert.equal(artifactId, candidateRuntimeArtifactId);
+      return {
+        id: candidateRuntimeArtifactId,
+        siteId: "runtime-chs",
+        siteVersionId: candidateSiteVersionId,
+        rendererCompatibilityVersion: "gnr8-renderer-v1",
+        htmlByPath: {
+          "/": "<!doctype html><html><body><main data-airship-section=\"hero\"><h1 data-airship-element=\"hero-headline\">Saved regenerated CHS headline</h1><a data-airship-element=\"hero-cta\">Schedule CHS consultation</a></main></body></html>",
+        },
+        compiledTokenStyles: "",
+        assetFingerprintMap: {},
+        manifest: { sourceKind: "airship_single_site_draft_candidate" },
+        publishStage: "shadow",
+        shadowRestricted: false,
+        artifactGovernance: {
+          pageGateState: ["AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY"],
+          pageRolloutPolicyState: ["AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE"],
+          pageEnforcementState: { shadow: ["ALLOW"], canary: ["REVIEW"], production: ["REVIEW"] },
+          siteGateState: "AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY",
+          siteRolloutPolicyState: "AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE",
+          siteEnforcementState: { shadow: "ALLOW", canary: "REVIEW", production: "REVIEW" },
+          publishStage: "shadow",
+        },
+        bundleSha256: "sha-chs-candidate",
+        createdAt: "2026-09-21T00:00:00.000Z",
+      } satisfies RuntimeArtifact;
+    },
+  });
+
+  assert.deepEqual(calls, [candidateRuntimeArtifactId]);
+  assert.equal(render?.source, "candidate_artifact");
+  assert.equal(render?.siteVersionId, candidateSiteVersionId);
+  assert.equal(render?.runtimeArtifactId, candidateRuntimeArtifactId);
+  assert.equal(render?.previewUrl, `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${candidateSiteVersionId}/preview?mode=transformed`);
+  assert.equal(render?.sanitizedHtml.includes("Saved regenerated CHS headline"), true);
+  assert.equal(render?.sanitizedHtml.includes("Schedule CHS consultation"), true);
+  assert.equal(render?.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), false);
+  assert.equal(render?.sanitizedHtml.includes("FALLBACK PREVIEW"), false);
+});
+
 test("airship projection generates the first concrete CHS AI draft and local-only preview", () => {
   const model = buildAirshipSingleSiteEditorReadonlyProjection({
     migrationId: CHS_MIGRATION_ID,

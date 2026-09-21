@@ -588,29 +588,52 @@ export async function readAirshipEditorArtifactCanvasRender(input: {
   getArtifactById?: typeof getArtifactById;
 }): Promise<AirshipEditorArtifactCanvasRender | null> {
   const demoReadiness = demoReadinessForMigration(input.migrationId);
-  const source = demoReadiness ? "demo_artifact" as const : "candidate_artifact" as const;
   const arisCandidate = isArisAirshipMvpMigration(input.migrationId)
     ? {
         siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
         runtimeArtifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
       }
     : null;
-  const siteVersionId = demoReadiness?.activePointerTarget.siteVersionId ?? input.draftCandidate?.siteVersionId ?? arisCandidate?.siteVersionId ?? null;
-  const runtimeArtifactId = demoReadiness?.activePointerTarget.runtimeArtifactId ?? input.draftCandidate?.runtimeArtifactId ?? arisCandidate?.runtimeArtifactId ?? null;
-  if (!siteVersionId || !runtimeArtifactId) return null;
+  const selected = input.draftCandidate
+    ? {
+        source: "candidate_artifact" as const,
+        label: "Airship candidate artifact render",
+        siteVersionId: input.draftCandidate.siteVersionId,
+        runtimeArtifactId: input.draftCandidate.runtimeArtifactId,
+        previewUrl: input.previewHost?.previewUrl ?? input.draftCandidate.route,
+      }
+    : arisCandidate
+      ? {
+          source: "candidate_artifact" as const,
+          label: "Airship candidate artifact render",
+          siteVersionId: arisCandidate.siteVersionId,
+          runtimeArtifactId: arisCandidate.runtimeArtifactId,
+          previewUrl: input.previewHost?.previewUrl ?? `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(arisCandidate.siteVersionId)}/preview?mode=transformed`,
+        }
+      : demoReadiness
+        ? {
+            source: "demo_artifact" as const,
+            label: "GNR8 demo artifact render",
+            siteVersionId: demoReadiness.activePointerTarget.siteVersionId,
+            runtimeArtifactId: demoReadiness.activePointerTarget.runtimeArtifactId,
+            previewUrl: demoReadiness.demoUrl,
+          }
+        : null;
+  if (!selected) return null;
+  if (!selected.siteVersionId || !selected.runtimeArtifactId) return null;
 
-  const artifact = await (input.getArtifactById ?? getArtifactById)(runtimeArtifactId);
+  const artifact = await (input.getArtifactById ?? getArtifactById)(selected.runtimeArtifactId);
   const html = text(artifact?.htmlByPath?.["/"]);
-  if (!artifact || artifact.siteVersionId !== siteVersionId || !html) return null;
+  if (!artifact || artifact.siteVersionId !== selected.siteVersionId || !html) return null;
 
   const sanitized = sanitizeAirshipEditorArtifactHtml(html);
   return {
-    source,
-    label: source === "demo_artifact" ? "GNR8 demo artifact render" : "Airship candidate artifact render",
-    siteVersionId,
-    runtimeArtifactId,
+    source: selected.source,
+    label: selected.label,
+    siteVersionId: selected.siteVersionId,
+    runtimeArtifactId: selected.runtimeArtifactId,
     path: "/",
-    previewUrl: demoReadiness?.demoUrl ?? input.previewHost?.previewUrl ?? input.draftCandidate?.route ?? null,
+    previewUrl: selected.previewUrl,
     sanitizedHtml: sanitized.sanitizedHtml,
     originalHtmlByteLength: Buffer.byteLength(html, "utf8"),
     sanitizedHtmlByteLength: sanitized.sanitizedHtmlByteLength,

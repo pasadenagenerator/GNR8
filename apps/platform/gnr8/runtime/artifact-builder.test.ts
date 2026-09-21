@@ -85,6 +85,87 @@ test("artifact-builder renders Airship saved subheading instead of generic hero 
   assert.doesNotMatch(html, /<p[^>]*>\[hero body\]<\/p>/);
 });
 
+test("artifact-builder renders regenerated Airship draft HTML for non-legacy candidate sections", () => {
+  const candidateSiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [
+            { id: "hero", type: "hero.basic", order: 0 },
+            { id: "airship-draft-offers", type: "content.airship", order: 1 },
+            { id: "airship-draft-cta", type: "cta.airship", order: 2 },
+            { id: "airship-draft-footer", type: "footer.airship", order: 3 },
+          ],
+        },
+        contentModel: {
+          sectionProps: {
+            hero: {
+              headline: "Legacy source headline",
+              subheading: "Legacy source subheading",
+              ctaLabel: "Legacy CTA",
+              airshipDraftHeroOverride: {
+                headline: "Saved hero headline after Apply",
+                subheading: "Saved hero subheading after Apply.",
+              },
+              airshipDraftCtaOverride: { label: "Saved CTA label" },
+              airshipDraftStyleOverride: {
+                heroTopPadding: 88,
+                heroBottomPadding: 96,
+                backgroundTint: "#eef6ff",
+                ctaColor: "#1d4ed8",
+              },
+              airshipDraftSections: [
+                { key: "offers", label: "Offers / Services", heading: "Saved offer cards", body: "Resilient support. Hybrid systems.", items: ["Resilient support", "Hybrid systems"], ctaLabel: null },
+                { key: "cta", label: "CTA / Contact", heading: "Saved CTA label", body: "Talk to the team.", items: [], ctaLabel: "Saved CTA label" },
+                { key: "footer", label: "Footer / Demo note", heading: "Internal demo boundary", body: "Internal preview only.", items: [], ctaLabel: null },
+              ],
+            },
+            "airship-draft-offers": {
+              heading: "Saved offer cards",
+              body: "Resilient support. Hybrid systems.",
+              items: ["Resilient support", "Hybrid systems"],
+              airshipDraftSection: { key: "offers", label: "Offers / Services", heading: "Saved offer cards", body: "Resilient support. Hybrid systems.", items: ["Resilient support", "Hybrid systems"], ctaLabel: null },
+            },
+            "airship-draft-cta": {
+              heading: "Saved CTA label",
+              body: "Talk to the team.",
+              ctaLabel: "Saved CTA label",
+              airshipDraftSection: { key: "cta", label: "CTA / Contact", heading: "Saved CTA label", body: "Talk to the team.", items: [], ctaLabel: "Saved CTA label" },
+            },
+            "airship-draft-footer": {
+              body: "Internal preview only.",
+              airshipDraftSection: { key: "footer", label: "Footer / Demo note", heading: "Internal demo boundary", body: "Internal preview only.", items: [], ctaLabel: null },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const preview = buildDeterministicArtifactBundle({ siteVersion: candidateSiteVersion, renderMode: "PREVIEW" });
+  const html = preview.htmlByPath["/"] ?? "";
+
+  assert.match(html, /Saved hero headline after Apply/);
+  assert.match(html, /Saved hero subheading after Apply\./);
+  assert.match(html, /Saved CTA label/);
+  assert.match(html, /Resilient support/);
+  assert.match(html, /Hybrid systems/);
+  assert.match(html, /Talk to the team\./);
+  assert.match(html, /Internal preview only\./);
+  assert.match(html, /data-airship-section="hero"/);
+  assert.match(html, /data-airship-section="offers"/);
+  assert.match(html, /data-airship-section="cta"/);
+  assert.match(html, /data-airship-section="footer"/);
+  assert.match(html, /data-airship-element="hero-headline"/);
+  assert.match(html, /data-airship-element="hero-cta"/);
+  assert.match(html, /data-airship-element="offer-card"/);
+  assert.match(html, /data-airship-element="contact-card"/);
+  assert.match(html, /data-airship-element="contact-cta"/);
+  assert.doesNotMatch(html, /data-gnr8-preview-fallback|FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/i);
+});
+
 test("artifact-builder renders Airship section and element markers in candidate legacy summary", () => {
   const candidateSiteVersion = {
     ...siteVersion,

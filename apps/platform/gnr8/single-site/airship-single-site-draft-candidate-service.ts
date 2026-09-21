@@ -456,6 +456,14 @@ function previewRoute(siteVersionId: string): string {
   return `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(siteVersionId)}/preview?mode=transformed`;
 }
 
+function assertGeneratedAirshipArtifactHtml(htmlByPath: Record<string, string>): void {
+  const rootHtml = text(htmlByPath["/"]);
+  if (!rootHtml) throw new Error("airship_draft_candidate_artifact_html_missing");
+  if (/FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/i.test(rootHtml)) {
+    throw new Error("airship_draft_candidate_artifact_html_diagnostic_fallback");
+  }
+}
+
 function provenanceFrom(value: unknown): AirshipDraftCandidateProvenance | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
@@ -638,6 +646,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const verifiedVersion = existingTarget ?? await deps.getSiteVersion(candidateVersion.siteVersionId);
   if (!verifiedVersion) throw new Error(`airship_draft_candidate_version_not_found:${candidateVersion.siteVersionId}`);
   const artifactBundle = deps.buildDeterministicArtifactBundle({ siteVersion: verifiedVersion, renderMode: "PREVIEW" });
+  assertGeneratedAirshipArtifactHtml(artifactBundle.htmlByPath);
   const artifactInput = {
     siteId: artifactBundle.siteId,
     siteVersionId: artifactBundle.siteVersionId,

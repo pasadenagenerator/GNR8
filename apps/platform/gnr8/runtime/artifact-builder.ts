@@ -61,6 +61,28 @@ type AirshipDraftSection = {
   ctaLabel: string | null;
 };
 
+function readAirshipDraftSection(sectionProps: Record<string, unknown>): AirshipDraftSection | null {
+  const raw = sectionProps.airshipDraftSection;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const key = asNonEmptyString(record.key);
+  const label = asNonEmptyString(record.label);
+  const heading = asNonEmptyString(record.heading);
+  const body = asNonEmptyString(record.body);
+  const items = Array.isArray(record.items)
+    ? record.items.map(asNonEmptyString).filter((item): item is string => Boolean(item)).slice(0, 4)
+    : [];
+  if (!key || !label || !heading || (!body && items.length === 0 && !asNonEmptyString(record.ctaLabel))) return null;
+  return {
+    key,
+    label,
+    heading,
+    body: body ?? "",
+    items,
+    ctaLabel: asNonEmptyString(record.ctaLabel),
+  };
+}
+
 function readLegacyHtmlSummary(sectionProps: Record<string, unknown>): LegacyHtmlSummary | null {
   const raw = sectionProps.htmlSummary;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -817,6 +839,72 @@ function renderLegacySummaryHtml(input: {
   return lines.join("\n");
 }
 
+function renderAirshipDraftHeroHtml(input: {
+  sectionProps: Record<string, unknown>;
+}): string {
+  const airshipDraftHero = readAirshipDraftHeroOverride(input.sectionProps);
+  if (!airshipDraftHero) return "";
+
+  const airshipDraftStyle = readAirshipDraftStyleOverride(input.sectionProps);
+  const airshipDraftCta = readAirshipDraftCtaOverride(input.sectionProps);
+  const padding = airshipDraftStyle
+    ? `${airshipDraftStyle.heroTopPadding}px 16px ${airshipDraftStyle.heroBottomPadding}px`
+    : "clamp(28px, 5vw, 72px) 16px";
+  const bg = airshipDraftStyle?.backgroundTint ?? "#f2f6fa";
+  const accent = airshipDraftStyle?.ctaColor ?? "#245b74";
+
+  const lines: string[] = [];
+  lines.push(
+    `<article class="gnr8-airship-draft-hero" data-airship-section="hero" style="max-width:1120px;margin:0 auto;padding:${escapeHtml(padding)};background:${escapeHtml(bg)};color:#172027;font-family:&quot;Trebuchet MS&quot;,&quot;Segoe UI&quot;,sans-serif;border-radius:18px;">`,
+  );
+  lines.push(`  <h1 data-airship-element="hero-headline" style="margin:0;max-width:28ch;font-size:clamp(1.8rem,3.2vw,2.65rem);line-height:1.12;color:#0d2230;">${escapeHtml(airshipDraftHero.headline)}</h1>`);
+  lines.push(`  <p data-airship-element="hero-subheading" style="margin:12px 0 0;max-width:68ch;font-size:1.03rem;line-height:1.6;">${escapeHtml(airshipDraftHero.subheading)}</p>`);
+  if (airshipDraftCta) {
+    lines.push(`  <a href="#contact" data-airship-element="hero-cta" style="display:inline-flex;width:fit-content;margin-top:18px;border:1px solid ${escapeHtml(accent)};border-radius:8px;background:${escapeHtml(accent)};color:#fff;padding:10px 14px;font-weight:800;text-decoration:none;">${escapeHtml(airshipDraftCta.label)}</a>`);
+  }
+  lines.push("</article>");
+  return lines.join("\n");
+}
+
+function renderAirshipDraftSectionHtml(input: {
+  sectionProps: Record<string, unknown>;
+}): string {
+  const section = readAirshipDraftSection(input.sectionProps);
+  if (!section) return "";
+
+  if (section.key === "footer") {
+    return `<footer data-airship-draft-section="footer" data-airship-section="footer" style="max-width:1120px;margin:16px auto 0;padding:4px 16px 0;font-size:0.86rem;color:#456;font-family:&quot;Trebuchet MS&quot;,&quot;Segoe UI&quot;,sans-serif;">${escapeHtml(section.body)}</footer>`;
+  }
+
+  const lines: string[] = [];
+  const elementMarker =
+    section.key === "offers" ? "offer-card" :
+    section.key === "proof" ? "proof-card" :
+    section.key === "approach" ? "approach-card" :
+    "";
+  lines.push(`<section class="gnr8-card gnr8-section" data-airship-draft-section="${escapeHtml(section.key)}" data-airship-section="${escapeHtml(section.key)}" style="max-width:1120px;margin:16px auto 0;padding:clamp(16px,2vw,24px);border:1px solid #cfdae4;border-radius:16px;background:#fff;color:#172027;font-family:&quot;Trebuchet MS&quot;,&quot;Segoe UI&quot;,sans-serif;line-height:1.6;">`);
+  lines.push(`  <h2 style="margin:0 0 8px;font-size:1.05rem;text-transform:uppercase;letter-spacing:0.07em;color:#245b74;">${escapeHtml(section.label)}</h2>`);
+  lines.push(`  <p style="margin:0 0 10px;font-weight:800;color:#0d2230;">${escapeHtml(section.heading)}</p>`);
+  if (section.key === "cta") {
+    if (section.body) {
+      lines.push(`  <div data-airship-element="contact-card"><p style="margin:0 0 10px;">${escapeHtml(section.body)}</p></div>`);
+    }
+    if (section.ctaLabel) {
+      lines.push(`  <a href="#contact" data-airship-element="contact-cta" style="display:inline-flex;width:fit-content;margin-top:6px;border:1px solid #245b74;border-radius:8px;background:#245b74;color:#fff;padding:10px 14px;font-weight:800;text-decoration:none;">${escapeHtml(section.ctaLabel)}</a>`);
+    }
+  } else if (section.items.length > 0) {
+    lines.push('  <ul style="margin:0;padding-left:18px;">');
+    for (const [itemIndex, item] of section.items.entries()) {
+      lines.push(`    <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""} style="margin:0 0 6px;">${escapeHtml(item)}</li>`);
+    }
+    lines.push("  </ul>");
+  } else if (section.body) {
+    lines.push(`  <p style="margin:0;">${escapeHtml(section.body)}</p>`);
+  }
+  lines.push("</section>");
+  return lines.join("\n");
+}
+
 function cssVarName(key: string): string {
   return `--${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
@@ -848,7 +936,11 @@ function renderSectionHtml(input: {
     input.sectionType === "legacy.html"
       ? renderLegacySummaryHtml({ sectionProps: input.sectionProps, styleTokens: input.styleTokens })
       : "";
-  const visibleFallback = legacyVisibleFallback || renderPreviewFallbackSectionHtml({
+  const airshipDraftHtml = legacyVisibleFallback
+    ? ""
+    : renderAirshipDraftHeroHtml({ sectionProps: input.sectionProps }) ||
+      renderAirshipDraftSectionHtml({ sectionProps: input.sectionProps });
+  const visibleFallback = legacyVisibleFallback || airshipDraftHtml || renderPreviewFallbackSectionHtml({
     sectionType: input.sectionType,
     sectionProps: input.sectionProps,
   });
