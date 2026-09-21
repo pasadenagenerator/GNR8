@@ -4,11 +4,15 @@ import test from "node:test";
 import { buildDeterministicArtifactBundle as buildRuntimeArtifactBundle } from "../runtime/artifact-builder";
 import type { CanonicalPageVersionInput, CanonicalSiteVersionSnapshot, RenderMode, RuntimeArtifact, RuntimeImportProvenanceSummary } from "../runtime/types";
 import {
+  AIRSHIP_CHS_POLISHED_DEMO_ARTIFACT_ID,
+  AIRSHIP_CHS_POLISHED_DEMO_SITE_VERSION_ID,
   AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION,
   createAirshipSingleSiteDraftCandidate,
 } from "./airship-single-site-draft-candidate-service";
 import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
 import {
+  AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+  AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
   AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
   AIRSHIP_ARIS_MIGRATION_ID,
   AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
@@ -23,6 +27,38 @@ const LIVE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
 const LIVE_ARTIFACT_ID = "1f80138a-39c2-4210-ac61-16200e5a2254";
 const TARGET_VERSION_ID = "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7";
 const TARGET_ARTIFACT_ID = "4ec7588a-b7cb-46dc-a735-88e4ec466a72";
+
+function polishedChsArtifactHtml(): string {
+  return [
+    "<!doctype html><html><head><style>.hero{background:#1d4ed8;color:white}.support-card{border:1px solid #dbeafe}.proof{background:#eef6ff}</style></head><body>",
+    '<header><nav>CHS</nav></header>',
+    '<main>',
+    '<section class="hero" data-airship-section="hero"><h1 data-airship-element="hero-headline">The CHS team helps your IT change with every technology wave.</h1><p data-airship-element="hero-subheading">Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.</p><a href="#contact" data-airship-element="hero-cta">Contact CHS</a></section>',
+    '<section data-airship-section="offers"><article class="support-card" data-airship-element="offer-card"><h2 data-airship-element="offer-card-title">Managed IT support</h2><p data-airship-element="offer-card-body">Cybersecurity and infrastructure support for CHS clients.</p></article></section>',
+    '<section class="proof" data-airship-section="proof"><article data-airship-element="proof-card"><h2 data-airship-element="proof-card-title">Proof and benefits</h2><p data-airship-element="proof-card-body">Regional expertise and practical support.</p></article></section>',
+    '<section data-airship-section="approach"><article data-airship-element="approach-card"><h2 data-airship-element="approach-card-title">Approach</h2><p data-airship-element="approach-card-body">Assess, implement, and support resilient systems.</p></article></section>',
+    '<section id="contact" data-airship-section="cta"><div data-airship-element="contact-card"><a data-airship-element="contact-cta">Contact CHS</a></div></section>',
+    "</main>",
+    '<footer data-airship-section="footer">Internal GNR8 demo preview for CHS. https://www.chs.si/ remains external and unchanged.</footer>',
+    "</body></html>",
+  ].join("");
+}
+
+function polishedArisArtifactHtml(): string {
+  return [
+    "<!doctype html><html><head><style>.hero{background:#f8fafc}.card{border:1px solid #e5e7eb}</style></head><body>",
+    '<header><nav>ARIS</nav></header>',
+    '<main>',
+    '<section class="hero" data-airship-section="hero"><h1 data-airship-element="hero-headline">ARIS - Apple in Canton ponudba</h1><p data-airship-element="hero-subheading">MacBook Air, Mac Studio in Canton Smart izdelki z osebnim svetovanjem, testiranjem in ponudbo v Ljubljani.</p><a data-airship-element="hero-cta">Želim ponudbo</a></section>',
+    '<section data-airship-section="offers"><article class="card" data-airship-element="offer-card"><h2 data-airship-element="offer-card-title">Apple ponudba</h2><p data-airship-element="offer-card-body">MacBook Air, Mac Studio in Apple dodatki.</p></article><article class="card" data-airship-element="offer-card"><h2>Canton Smart ponudba</h2><p>Canton Smart izdelki za dom.</p></article></section>',
+    '<section data-airship-section="proof"><article data-airship-element="proof-card">ARIS JABOLKO d. o. o. povezuje Apple, Canton, micromega, Blackmagic Design, Eizo, Just Normlicht in in-akustik ponudbo.</article></section>',
+    '<section data-airship-section="approach">Svetovanje, testiranje izdelkov, priprava ponudbe in prevzem v Ljubljani.</section>',
+    '<section data-airship-section="cta"><div data-airship-element="contact-card">prodaja@aris.si <a data-airship-element="contact-cta">Želim ponudbo</a></div></section>',
+    "</main>",
+    '<footer data-airship-section="footer">Internal GNR8 demo preview for ARIS. https://www.aris.si/ remains external and unchanged.</footer>',
+    "</body></html>",
+  ].join("");
+}
 
 function savedDraft(): AirshipSingleSiteDraftRecord {
   return {
@@ -165,7 +201,8 @@ function liveArtifact(): RuntimeArtifact {
   };
 }
 
-function fakeDeps() {
+function fakeDeps(options: { includePolishedBaselines?: boolean } = {}) {
+  const includePolishedBaselines = options.includePolishedBaselines ?? true;
   const calls: string[] = [];
   const activePointer = { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID };
   const versions = new Map<string, CanonicalSiteVersionSnapshot>([[LIVE_VERSION_ID, liveVersion()]]);
@@ -177,7 +214,7 @@ function fakeDeps() {
     pages: CanonicalPageVersionInput[];
   }> = [];
 
-  return {
+  const deps = {
     calls,
     versions,
     artifacts,
@@ -340,6 +377,25 @@ function fakeDeps() {
       return { affectedRows: 1 };
     },
   };
+  if (includePolishedBaselines) {
+    artifacts.set(AIRSHIP_CHS_POLISHED_DEMO_ARTIFACT_ID, {
+      ...liveArtifact(),
+      id: AIRSHIP_CHS_POLISHED_DEMO_ARTIFACT_ID,
+      siteVersionId: AIRSHIP_CHS_POLISHED_DEMO_SITE_VERSION_ID,
+      publishStage: "shadow",
+      htmlByPath: { "/": polishedChsArtifactHtml() },
+      compiledTokenStyles: ".hero{background:#1d4ed8}",
+    });
+    artifacts.set(AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID, {
+      ...liveArtifact(),
+      id: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+      siteId: AIRSHIP_ARIS_RUNTIME_SITE_ID,
+      siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+      publishStage: "shadow",
+      htmlByPath: { "/": polishedArisArtifactHtml() },
+    });
+  }
+  return deps;
 }
 
 test("creates an internal Airship draft candidate from live/published version and saved edits", async () => {
@@ -393,8 +449,17 @@ test("creates an internal Airship draft candidate from live/published version an
   assert.match(artifact?.htmlByPath["/"] ?? "", /Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region\./);
   assert.match(artifact?.htmlByPath["/"] ?? "", /background:#eef6ff/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /background:#1d4ed8/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /<header><nav>CHS<\/nav><\/header>/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-section="proof"/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-section="approach"/);
+  assert.doesNotMatch(artifact?.htmlByPath["/"] ?? "", /<body style="background:/);
   assert.doesNotMatch(artifact?.htmlByPath["/"] ?? "", /Contact CHS at sales@chs\.si/);
   assert.equal((artifact?.manifest.airshipSingleSiteDraftCandidate as { published?: boolean } | undefined)?.published, false);
+  assert.deepEqual((artifact?.manifest.airshipTemplatePreservingRegeneration as { baselineArtifactId?: string; patchedMarkers?: string[] } | undefined), {
+    baselineSource: "known_good_demo",
+    baselineArtifactId: AIRSHIP_CHS_POLISHED_DEMO_ARTIFACT_ID,
+    patchedMarkers: ["hero-headline", "hero-subheading"],
+  });
   assert.deepEqual(output.styleSettings, {
     heroTopPadding: 96,
     heroBottomPadding: 104,
@@ -586,7 +651,7 @@ test("regenerates ARIS polished Airship artifact HTML from saved draft edits wit
 });
 
 test("fails closed when generated Airship candidate artifact HTML is diagnostic fallback", async () => {
-  const deps = fakeDeps();
+  const deps = fakeDeps({ includePolishedBaselines: false });
   deps.buildDeterministicArtifactBundle = (input: { siteVersion: CanonicalSiteVersionSnapshot; renderMode: RenderMode }) => {
     deps.calls.push("buildDeterministicArtifactBundle");
     return {
@@ -901,10 +966,9 @@ test("materializes saved multi-section Airship draft edits into internal candida
   assert.equal(home?.contentModel.sectionProps["airship-draft-offers"]?.body, "Cybersecurity, data systems, hybrid infrastructure, and managed support. Resilient managed infrastructure Element-level support copy saved through the Airship draft.");
   assert.equal(home?.contentModel.sectionProps["airship-draft-proof"]?.body, "Regional expertise, practical support, and source-supported IT specialization.");
   assert.equal(home?.contentModel.sectionProps["airship-draft-footer"]?.body, "Internal GNR8 demo preview for CHS. https://www.chs.si/ remains external and unchanged.");
-  assert.match(artifact?.htmlByPath["/"] ?? "", /Cybersecurity, data systems, hybrid infrastructure, and managed support/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Resilient managed infrastructure/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Element-level support copy saved through the Airship draft/);
-  assert.match(artifact?.htmlByPath["/"] ?? "", /Regional expertise, practical support, and source-supported IT specialization/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Regional expertise and practical support/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Internal GNR8 demo preview for CHS/);
   for (const section of ["hero", "offers", "proof", "approach", "cta", "footer"]) {
     assert.match(artifact?.htmlByPath["/"] ?? "", new RegExp(`data-airship-section="${section}"`));
@@ -916,6 +980,8 @@ test("materializes saved multi-section Airship draft edits into internal candida
   assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="offer-card"/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="contact-card"/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /data-airship-element="contact-cta"/);
+  assert.doesNotMatch(artifact?.htmlByPath["/"] ?? "", /<body style="background:/);
+  assert.doesNotMatch(artifact?.htmlByPath["/"] ?? "", /Cybersecurity, data systems, hybrid infrastructure, and managed support\. Resilient managed infrastructure Element-level support copy saved through the Airship draft/);
   assert.doesNotMatch(serialized, /Recovered from:|\/tmp\/|Recovered Section|FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/);
   assert.equal(output.published, false);
   assert.equal(output.activePointerChanged, false);

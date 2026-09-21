@@ -40,9 +40,11 @@ function airshipPreviewRoute(siteVersionId: string, artifactId: string): string 
 
 function polishedChsArtifactHtml(headline = "The CHS team helps your IT change with every technology wave."): string {
   return [
-    "<!doctype html><html><body>",
-    `<header data-airship-section="hero"><h1 data-airship-element="hero-headline">${headline}</h1><p>Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.</p></header>`,
-    '<main><section data-airship-section="offers"><article data-airship-element="offer-card">Cybersecurity and infrastructure support for CHS clients.</article></section>',
+    '<!doctype html><html><head><style>.hero{background:#1d4ed8}.proof{background:#eef6ff}</style></head><body>',
+    `<header><nav>CHS</nav></header><main><section class="hero" data-airship-section="hero"><h1 data-airship-element="hero-headline">${headline}</h1><p data-airship-element="hero-subheading">Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.</p><a data-airship-element="hero-cta">Contact CHS</a></section>`,
+    '<section data-airship-section="offers"><article data-airship-element="offer-card">Cybersecurity and infrastructure support for CHS clients.</article></section>',
+    '<section class="proof" data-airship-section="proof">Regional expertise and practical support.</section>',
+    '<section data-airship-section="approach">Assess, implement, and support resilient systems.</section>',
     '<section data-airship-section="cta"><a data-airship-element="contact-cta">Contact CHS</a></section></main>',
     '<footer data-airship-section="footer">Internal GNR8 demo preview for CHS.</footer>',
     "</body></html>",

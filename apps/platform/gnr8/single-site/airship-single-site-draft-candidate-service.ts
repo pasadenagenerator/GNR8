@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 import type { CanonicalPageVersionInput, CanonicalSiteVersionSnapshot, RuntimeArtifact, RuntimeImportProvenanceSummary } from "../runtime/types";
 import { buildDeterministicArtifactBundle } from "../runtime/artifact-builder";
+import { sha256Hex, stableStringify } from "../runtime/deterministic";
 import {
   bindArtifactToVersion,
   createArtifact,
@@ -21,12 +22,22 @@ import {
   type AirshipSingleSiteDraftSectionKey,
   type AirshipSingleSiteDraftStyleSettings,
 } from "./airship-single-site-draft-service";
-import { maybeBuildArisAirshipMvpEvidenceSourceVersion } from "./airship-aris-mvp-draft";
-import { analyzeAirshipArtifactHtmlValidity } from "./airship-valid-artifact-html";
+import {
+  AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+  AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+  maybeBuildArisAirshipMvpEvidenceSourceVersion,
+} from "./airship-aris-mvp-draft";
+import {
+  analyzeAirshipArtifactHtmlValidity,
+  analyzeAirshipPolishedArtifactHtmlCompleteness,
+  isValidPolishedAirshipArtifactHtml,
+} from "./airship-valid-artifact-html";
 
 export const AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION = "airship-4-draft-candidate-service:v1" as const;
 
 export const AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions" as const;
+export const AIRSHIP_CHS_POLISHED_DEMO_SITE_VERSION_ID = "92e476b9-67fc-408a-be3d-5c744aa0f3f6" as const;
+export const AIRSHIP_CHS_POLISHED_DEMO_ARTIFACT_ID = "5ac3716a-f29d-4648-bc86-a6942638ed53" as const;
 
 type RuntimePrimitiveDeps = {
   getSiteVersion: typeof getSiteVersion;
@@ -531,6 +542,125 @@ function assertGeneratedAirshipArtifactHtml(htmlByPath: Record<string, string>, 
   if (!validity.valid) throw new Error(`airship_draft_candidate_artifact_html_invalid:${validity.reasons.join(",")}`);
 }
 
+function assertPolishedAirshipArtifactHtml(htmlByPath: Record<string, string>, migrationId: string): void {
+  assertGeneratedAirshipArtifactHtml(htmlByPath, migrationId);
+  const rootHtml = text(htmlByPath["/"]);
+  const completeness = analyzeAirshipPolishedArtifactHtmlCompleteness({ html: rootHtml, migrationId });
+  if (!completeness.complete) throw new Error(`airship_draft_candidate_artifact_html_not_polished:${completeness.reasons.join(",")}`);
+}
+
+function knownGoodPolishedBaselineForMigration(migrationId: string): { siteVersionId: string; artifactId: string } | null {
+  if (migrationId === "682a09fd-8fd5-4f73-93b8-54f5d4067c63") {
+    return {
+      siteVersionId: AIRSHIP_CHS_POLISHED_DEMO_SITE_VERSION_ID,
+      artifactId: AIRSHIP_CHS_POLISHED_DEMO_ARTIFACT_ID,
+    };
+  }
+  if (migrationId === "ebf62324-1e51-4435-abd7-004722fb48d6") {
+    return {
+      siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+      artifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+    };
+  }
+  return null;
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function patchElementTextByMarker(html: string, marker: string, value: string): { html: string; patched: boolean } {
+  const elementPattern = new RegExp(
+    `(<([a-zA-Z][\\w:-]*)\\b(?=[^>]*\\bdata-airship-element\\s*=\\s*["']${escapeRegExp(marker)}["'])[^>]*>)([\\s\\S]*?)(<\\/\\2>)`,
+    "i",
+  );
+  let patched = false;
+  const nextHtml = html.replace(elementPattern, (_match, open: string, _tag: string, _inner: string, close: string) => {
+    patched = true;
+    return `${open}${escapeHtmlText(value)}${close}`;
+  });
+  return { html: nextHtml, patched };
+}
+
+function markerTargetsForDraftEdit(edit: AirshipSingleSiteDraftEdit): string[] {
+  const fieldKey = draftFieldKey(edit);
+  const sectionKey = draftSectionKey(edit);
+  const haystack = `${edit.id} ${edit.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (fieldKey === "headline" && sectionKey === "hero") return ["hero-headline"];
+  if (fieldKey === "subheading" && sectionKey === "hero") return ["hero-subheading"];
+  if (fieldKey === "ctaLabel") return ["hero-cta", "contact-cta"];
+  if (sectionKey === "offers" && /card|offer/.test(haystack) && /title|heading/.test(haystack)) return ["offer-card-title", "card-title"];
+  if (sectionKey === "offers" && /card|offer/.test(haystack) && /body|description|text|copy/.test(haystack)) return ["offer-card-body", "card-body"];
+  if (sectionKey === "proof" && /card|proof|benefit/.test(haystack) && /title|heading/.test(haystack)) return ["proof-card-title", "card-title"];
+  if (sectionKey === "proof" && /card|proof|benefit/.test(haystack) && /body|description|text|copy/.test(haystack)) return ["proof-card-body", "card-body"];
+  if (sectionKey === "approach" && /card|approach|process/.test(haystack) && /title|heading/.test(haystack)) return ["approach-card-title", "card-title"];
+  if (sectionKey === "approach" && /card|approach|process/.test(haystack) && /body|description|text|copy/.test(haystack)) return ["approach-card-body", "card-body"];
+  return [];
+}
+
+function patchPolishedAirshipTemplateHtml(input: {
+  html: string;
+  acceptedEdits: AirshipSingleSiteDraftEdit[];
+  rejectedEdits: AirshipSingleSiteDraftEdit[];
+}): { html: string; patchedMarkers: string[] } {
+  let html = input.html;
+  const patchedMarkers: string[] = [];
+  for (const edit of input.acceptedEdits) {
+    for (const marker of markerTargetsForDraftEdit(edit)) {
+      const patched = patchElementTextByMarker(html, marker, edit.proposedTextContent);
+      if (!patched.patched) continue;
+      html = patched.html;
+      patchedMarkers.push(marker);
+    }
+  }
+  for (const rejected of input.rejectedEdits) {
+    html = stripRejectedCtaText(html, rejected.proposedTextContent) as string;
+  }
+  return {
+    html,
+    patchedMarkers: Array.from(new Set(patchedMarkers)),
+  };
+}
+
+async function selectPolishedAirshipBaselineArtifact(input: {
+  migrationId: string;
+  existingTargetArtifactId?: string | null;
+  getArtifactById: typeof getArtifactById;
+}): Promise<{ artifact: RuntimeArtifact; source: "lineage_candidate" | "known_good_demo"; baselineArtifactId: string } | null> {
+  const candidates: Array<{ artifactId: string; siteVersionId?: string | null; source: "lineage_candidate" | "known_good_demo" }> = [];
+  if (input.existingTargetArtifactId) {
+    candidates.push({ artifactId: input.existingTargetArtifactId, source: "lineage_candidate" });
+  }
+  const knownGood = knownGoodPolishedBaselineForMigration(input.migrationId);
+  if (knownGood && knownGood.artifactId !== input.existingTargetArtifactId) {
+    candidates.push({ ...knownGood, source: "known_good_demo" });
+  }
+
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.artifactId)) continue;
+    seen.add(candidate.artifactId);
+    const artifact = await input.getArtifactById(candidate.artifactId);
+    const html = text(artifact?.htmlByPath?.["/"]);
+    if (!artifact || !html) continue;
+    if (candidate.siteVersionId && artifact.siteVersionId !== candidate.siteVersionId) continue;
+    if (!isValidPolishedAirshipArtifactHtml({ html, migrationId: input.migrationId })) continue;
+    return {
+      artifact,
+      source: candidate.source,
+      baselineArtifactId: candidate.artifactId,
+    };
+  }
+  return null;
+}
+
 function provenanceFrom(value: unknown): AirshipDraftCandidateProvenance | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
@@ -713,18 +843,69 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
 
   const verifiedVersion = await deps.getSiteVersion(candidateVersion.siteVersionId);
   if (!verifiedVersion) throw new Error(`airship_draft_candidate_version_not_found:${candidateVersion.siteVersionId}`);
-  const artifactBundle = deps.buildDeterministicArtifactBundle({ siteVersion: verifiedVersion, renderMode: "PREVIEW" });
-  assertGeneratedAirshipArtifactHtml(artifactBundle.htmlByPath, input.draft.migrationId);
-  const artifactInput = {
-    siteId: artifactBundle.siteId,
-    siteVersionId: artifactBundle.siteVersionId,
-    rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
-    bundleSha256: artifactBundle.bundleSha256,
+  const renderedArtifactBundle = deps.buildDeterministicArtifactBundle({ siteVersion: verifiedVersion, renderMode: "PREVIEW" });
+  const polishedBaseline = await selectPolishedAirshipBaselineArtifact({
+    migrationId: input.draft.migrationId,
+    existingTargetArtifactId: existingTarget?.artifactId ?? null,
+    getArtifactById: deps.getArtifactById,
+  });
+  const patchedBaseline = polishedBaseline
+    ? patchPolishedAirshipTemplateHtml({
+        html: required("airshipPolishedBaselineHtml", polishedBaseline.artifact.htmlByPath["/"]),
+        acceptedEdits,
+        rejectedEdits,
+      })
+    : null;
+  const artifactBundle = patchedBaseline && polishedBaseline
+    ? {
+        ...renderedArtifactBundle,
+        htmlByPath: {
+          ...renderedArtifactBundle.htmlByPath,
+          "/": patchedBaseline.html,
+        },
+        compiledTokenStyles: polishedBaseline.artifact.compiledTokenStyles,
+        assetFingerprintMap: {
+          ...polishedBaseline.artifact.assetFingerprintMap,
+          ...renderedArtifactBundle.assetFingerprintMap,
+        },
+        manifest: {
+          ...renderedArtifactBundle.manifest,
+          airshipTemplatePreservingRegeneration: {
+            baselineSource: polishedBaseline.source,
+            baselineArtifactId: polishedBaseline.baselineArtifactId,
+            patchedMarkers: patchedBaseline.patchedMarkers,
+          },
+        },
+      }
+    : renderedArtifactBundle;
+  const bundleSha256 = sha256Hex(stableStringify({
     htmlByPath: artifactBundle.htmlByPath,
     compiledTokenStyles: artifactBundle.compiledTokenStyles,
     assetFingerprintMap: artifactBundle.assetFingerprintMap,
+    manifest: artifactBundle.manifest,
+  }));
+  const finalizedArtifactBundle = {
+    ...artifactBundle,
+    bundleSha256,
+  };
+  if (polishedBaseline) {
+    assertPolishedAirshipArtifactHtml(finalizedArtifactBundle.htmlByPath, input.draft.migrationId);
+  } else {
+    assertGeneratedAirshipArtifactHtml(finalizedArtifactBundle.htmlByPath, input.draft.migrationId);
+    if (knownGoodPolishedBaselineForMigration(input.draft.migrationId)) {
+      throw new Error("airship_draft_candidate_polished_baseline_missing");
+    }
+  }
+  const artifactInput = {
+    siteId: finalizedArtifactBundle.siteId,
+    siteVersionId: finalizedArtifactBundle.siteVersionId,
+    rendererCompatibilityVersion: finalizedArtifactBundle.rendererCompatibilityVersion,
+    bundleSha256: finalizedArtifactBundle.bundleSha256,
+    htmlByPath: finalizedArtifactBundle.htmlByPath,
+    compiledTokenStyles: finalizedArtifactBundle.compiledTokenStyles,
+    assetFingerprintMap: finalizedArtifactBundle.assetFingerprintMap,
     manifest: {
-      ...artifactBundle.manifest,
+      ...finalizedArtifactBundle.manifest,
       sourceKind: "airship_single_site_draft_candidate",
       airshipSingleSiteDraftCandidate: provenance,
     },
@@ -749,7 +930,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   await deps.bindArtifactToVersion({
     siteVersionId: candidateVersion.siteVersionId,
     artifactId: artifact.artifactId,
-    rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
+    rendererCompatibilityVersion: finalizedArtifactBundle.rendererCompatibilityVersion,
   });
 
   const activePointerAfter = await deps.getActivePointerForSite(sourceVersion.siteId);
@@ -870,6 +1051,7 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
   if (!provenance && (!row.fallback_draft_id || !row.fallback_draft_version || !row.fallback_source_site_version_id || !row.fallback_source_artifact_id)) return null;
   const validity = analyzeAirshipArtifactHtmlValidity({ html: row.artifact_html, migrationId: input.migrationId });
   if (!validity.valid) return null;
+  if (knownGoodPolishedBaselineForMigration(input.migrationId) && !isValidPolishedAirshipArtifactHtml({ html: row.artifact_html, migrationId: input.migrationId })) return null;
   return {
     label: "New Airship draft candidate preview",
     siteVersionId: row.site_version_id,
