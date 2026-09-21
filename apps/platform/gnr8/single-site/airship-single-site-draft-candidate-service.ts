@@ -415,8 +415,9 @@ function applyAirshipHeroEdits(input: {
     if (index !== 0 && page.path !== "/") return page;
 
     const brandName = brandNameForMigration(input.migrationId);
-    if (brandName && !new RegExp(`\\b${brandName}\\b`, "i").test(page.title)) {
-      page.title = `${brandName} ${page.title || "home"}`.trim();
+    const pageTitle = typeof page.title === "string" ? page.title : "";
+    if (brandName && !new RegExp(`\\b${brandName}\\b`, "i").test(pageTitle)) {
+      page.title = `${brandName} ${pageTitle || "home"}`.trim();
     }
     const targetSectionId = firstEditableSectionId(page);
     const existingSectionProps = sectionProps(page);
