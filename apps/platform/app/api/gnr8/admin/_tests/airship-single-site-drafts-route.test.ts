@@ -415,6 +415,78 @@ test("airship draft POST saves edit text through superadmin-only draft service",
   assert.equal(body.labels.includes("Not published"), true);
 });
 
+test("airship draft POST saves selected CTA label edits to the draft model only", async () => {
+  let observedDraftEditId = "";
+  let observedProposedText = "";
+  const draftWithCta = draftRecord({
+    draftEdits: [
+      ...draftRecord().draftEdits,
+      {
+        id: "airship-chs-home-contact-cta",
+        fieldKey: "ctaLabel",
+        sectionKey: "cta",
+        targetSectionPage: "Homepage / contact call-to-action",
+        currentTextContentSummary: "Captured CHS contact CTA.",
+        proposedTextContent: "Contact CHS",
+        reasonForChange: "Keep CTA source-supported.",
+        status: "edited",
+        previewImpact: "CTA label changes in the Airship draft preview only.",
+      },
+    ],
+  });
+  const handlers = createAirshipSingleSiteDraftsRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-route",
+    getAirshipSingleSiteEditorReadonlyProjection: async () => model(),
+    service: {
+      async readCurrentDraft() {
+        return draftWithCta;
+      },
+      async createOrReuseDraft() {
+        return draftWithCta;
+      },
+      async updateDraftEditText(input) {
+        observedDraftEditId = input.draftEditId;
+        observedProposedText = input.proposedTextContent;
+        return draftRecord({
+          draftEdits: draftWithCta.draftEdits.map((draft) =>
+            draft.id === input.draftEditId
+              ? { ...draft, proposedTextContent: input.proposedTextContent, status: "edited" }
+              : draft,
+          ),
+        });
+      },
+      async updateDraftStyleSettings() {
+        return draftRecord();
+      },
+      async markDraftEditAccepted() {
+        return draftRecord();
+      },
+      async markDraftEditRejected() {
+        return draftRecord();
+      },
+    },
+  });
+
+  const response = await handlers.POST(request("https://app.test/api/gnr8/admin/airship/single-site/drafts", {
+    actionMode: "update_edit",
+    migrationId: MIGRATION_ID,
+    draftEditId: "airship-chs-home-contact-cta",
+    proposedTextContent: "Schedule CHS consultation",
+  }));
+  const body = await response.json() as { ok: boolean; draft: AirshipSingleSiteDraftRecord; mutationFlags: Record<string, boolean> };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(observedDraftEditId, "airship-chs-home-contact-cta");
+  assert.equal(observedProposedText, "Schedule CHS consultation");
+  assert.equal(body.draft.draftEdits.find((draft) => draft.id === "airship-chs-home-contact-cta")?.proposedTextContent, "Schedule CHS consultation");
+  assert.equal(body.mutationFlags.draftDataMutation, true);
+  assert.equal(body.mutationFlags.liveSiteMutation, false);
+  assert.equal(body.mutationFlags.runtimeVersionMutation, false);
+  assert.equal(body.mutationFlags.activePointerMutation, false);
+  assert.equal(body.mutationFlags.publishes, false);
+});
+
 test("airship draft POST forwards generic imported-site field identity to draft storage", async () => {
   const migrationId = "11111111-2222-4333-8444-555555555555";
   let observedDraftSeed: AirshipSingleSiteDraftRecord["draftEdits"] = [];

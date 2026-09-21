@@ -548,6 +548,26 @@ test("materializes saved multi-section Airship draft edits into internal candida
       previewImpact: "Services section appears in internal preview only.",
     },
     {
+      id: "airship-chs-home-offer-card-1-title",
+      sectionKey: "offers",
+      targetSectionPage: "Homepage / offers card 1 title",
+      currentTextContentSummary: "CHS offer title evidence.",
+      proposedTextContent: "Resilient managed infrastructure",
+      reasonForChange: "Saved offer card title element edit.",
+      status: "edited",
+      previewImpact: "Offer card title appears in internal preview only.",
+    },
+    {
+      id: "airship-chs-home-offer-card-1-body",
+      sectionKey: "offers",
+      targetSectionPage: "Homepage / offers card 1 body",
+      currentTextContentSummary: "CHS offer body evidence.",
+      proposedTextContent: "Element-level support copy saved through the Airship draft.",
+      reasonForChange: "Saved offer card body element edit.",
+      status: "edited",
+      previewImpact: "Offer card body appears in internal preview only.",
+    },
+    {
       id: "airship-chs-home-benefits",
       sectionKey: "proof",
       targetSectionPage: "Homepage / proof and benefits",
@@ -605,15 +625,17 @@ test("materializes saved multi-section Airship draft edits into internal candida
   const serialized = JSON.stringify({ output, candidate, artifact });
 
   assert.equal(output.status, "created");
-  assert.equal(output.appliedEdits.length, 7);
+  assert.equal(output.appliedEdits.length, 9);
   assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-offers"), true);
   assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-proof"), true);
   assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-approach"), true);
   assert.equal(home?.structureModel.sections.some((section) => section.id === "airship-draft-footer"), true);
-  assert.equal(home?.contentModel.sectionProps["airship-draft-offers"]?.body, "Cybersecurity, data systems, hybrid infrastructure, and managed support.");
+  assert.equal(home?.contentModel.sectionProps["airship-draft-offers"]?.body, "Cybersecurity, data systems, hybrid infrastructure, and managed support. Resilient managed infrastructure Element-level support copy saved through the Airship draft.");
   assert.equal(home?.contentModel.sectionProps["airship-draft-proof"]?.body, "Regional expertise, practical support, and source-supported IT specialization.");
   assert.equal(home?.contentModel.sectionProps["airship-draft-footer"]?.body, "Internal GNR8 demo preview for CHS. https://www.chs.si/ remains external and unchanged.");
   assert.match(artifact?.htmlByPath["/"] ?? "", /Cybersecurity, data systems, hybrid infrastructure, and managed support/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Resilient managed infrastructure/);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /Element-level support copy saved through the Airship draft/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Regional expertise, practical support, and source-supported IT specialization/);
   assert.match(artifact?.htmlByPath["/"] ?? "", /Internal GNR8 demo preview for CHS/);
   for (const section of ["hero", "offers", "proof", "approach", "cta", "footer"]) {

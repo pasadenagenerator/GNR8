@@ -27,6 +27,7 @@ import {
   deriveAirshipSelectedElementMetadata,
   deriveAirshipDraftSaveState,
   deriveAirshipStyleValueRows,
+  editableAirshipElementTextTarget,
   initialAirshipHeroEditorFields,
   mappedAirshipDraftFieldIdsForSection,
   measuredAirshipArtifactCanvasHeight,
@@ -1769,7 +1770,7 @@ test("airship visual editor inspector scopes Edit and CSS fields to the selected
   assert.deepEqual(sectionTextFields("source"), []);
   assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-headline" })), ["headline"]);
   assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-subheading" })), ["subheading"]);
-  assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "cta", elementKey: "contact-cta" })), ["ctaLabel"]);
+  assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "cta", elementKey: "contact-cta" })), []);
   assert.deepEqual(selectionTextFields(airshipCanvasSelectionForElement({ section: "offers", elementKey: "offer-card", elementIndex: 0 })), []);
   assert.deepEqual(sectionStyleFields("hero"), ["topPadding", "bottomPadding", "backgroundTint"]);
   assert.deepEqual(sectionStyleFields("cta"), ["ctaColor"]);
@@ -1786,6 +1787,99 @@ test("airship visual editor inspector scopes Edit and CSS fields to the selected
     { label: "border-color", value: "#0f766e" },
     { label: "border-radius", value: "8px" },
   ]);
+});
+
+test("airship visual editor resolves safe element text targets only when backed by draft fields or rows", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  const fields = initialAirshipHeroEditorFields(model.draftPanel.draftPreview);
+  const drafts = [
+    ...model.draftPanel.drafts,
+    {
+      id: "airship-chs-home-offer-card-1-title",
+      sectionKey: "offers" as const,
+      targetSectionPage: "Homepage / offers card 1 title",
+      currentTextContentSummary: "Current offer title",
+      proposedTextContent: "Managed infrastructure",
+      reasonForChange: "Make the offer card title editable.",
+      status: "edited" as const,
+      previewImpact: "Internal preview offer card title changes only.",
+    },
+    {
+      id: "airship-chs-home-offer-card-1-body",
+      sectionKey: "offers" as const,
+      targetSectionPage: "Homepage / offers card 1 body",
+      currentTextContentSummary: "Current offer body",
+      proposedTextContent: "Support for resilient hybrid systems.",
+      reasonForChange: "Make the offer card body editable.",
+      status: "edited" as const,
+      previewImpact: "Internal preview offer card body changes only.",
+    },
+  ];
+
+  const headline = editableAirshipElementTextTarget({
+    selection: airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-headline" }),
+    fields,
+    drafts,
+  });
+  assert.equal(headline?.kind, "hero-field");
+  assert.equal(headline?.label, "Hero headline");
+  assert.equal(headline?.value, fields.headline);
+
+  const cta = editableAirshipElementTextTarget({
+    selection: airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-cta" }),
+    fields,
+    drafts,
+  });
+  assert.equal(cta?.kind, "hero-field");
+  assert.equal(cta?.label, "Primary CTA label");
+  assert.equal(cta?.value, fields.ctaLabel);
+
+  const cardTitle = editableAirshipElementTextTarget({
+    selection: airshipCanvasSelectionForElement({ section: "offers", elementKey: "card-title", elementIndex: 0 }),
+    fields,
+    drafts,
+  });
+  assert.equal(cardTitle?.kind, "draft-row");
+  assert.equal(cardTitle?.draftId, "airship-chs-home-offer-card-1-title");
+  assert.equal(cardTitle?.value, "Managed infrastructure");
+
+  const cardBody = editableAirshipElementTextTarget({
+    selection: airshipCanvasSelectionForElement({ section: "offers", elementKey: "card-body", elementIndex: 0 }),
+    fields,
+    drafts,
+  });
+  assert.equal(cardBody?.kind, "draft-row");
+  assert.equal(cardBody?.draftId, "airship-chs-home-offer-card-1-body");
+  assert.equal(cardBody?.multiline, true);
+
+  assert.equal(editableAirshipElementTextTarget({
+    selection: airshipCanvasSelectionForElement({ section: "offers", elementKey: "offer-card", elementIndex: 0 }),
+    fields,
+    drafts,
+  }), null);
+  assert.equal(editableAirshipElementTextTarget({
+    selection: airshipCanvasSelectionForElement({ section: "proof", elementKey: "card-title", elementIndex: 0 }),
+    fields,
+    drafts: model.draftPanel.drafts,
+  }), null);
+});
+
+test("airship visual editor inspector keeps unsupported selected elements read-only", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+  const editPanelSource = sourceBetween(
+    visualEditorSource,
+    '<div className="airship-panel-heading">DRAFT FIELDS',
+    '<div className="airship-panel-heading">SIZE',
+  );
+
+  assert.equal(editPanelSource.includes("selectedElementTextTarget ?"), true);
+  assert.equal(editPanelSource.includes("read-only for now"), true);
+  assert.equal(editPanelSource.includes("updateSelectedElementText"), true);
+  assert.equal(visualEditorSource.includes("saveSelectedElementTextEdit"), true);
+  assert.equal(visualEditorSource.includes("panelSaveDisabled"), true);
+  assert.equal(editPanelSource.includes("provider"), false);
+  assert.equal(editPanelSource.includes("publish"), false);
 });
 
 test("airship visual editor hides provider read error cards from the reference shell", () => {

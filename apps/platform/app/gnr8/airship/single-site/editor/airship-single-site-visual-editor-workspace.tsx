@@ -92,6 +92,24 @@ export type DraftSaveState = "saved" | "unsaved" | "saving" | "failed";
 export type CandidateApplyState = "idle" | "creating" | "created" | "failed";
 type PreviewCandidateState = NonNullable<Props["draftCandidate"]>;
 export type AirshipCanvasSelectionLevel = "section" | "element";
+type ElementTextEditTarget =
+  | {
+      kind: "hero-field";
+      field: TextFieldKey;
+      draftId: string | null;
+      label: string;
+      value: string;
+      multiline: boolean;
+      readback: string;
+    }
+  | {
+      kind: "draft-row";
+      draftId: string;
+      label: string;
+      value: string;
+      multiline: boolean;
+      readback: string;
+    };
 export type AirshipCanvasSelection = {
   level: AirshipCanvasSelectionLevel;
   section: EditorSectionKey;
@@ -567,6 +585,116 @@ function draftIdForField(field: TextFieldKey, drafts: AirshipSingleSiteImproveme
   return drafts.find((draft) => draftFieldKey(draft) === field)?.id ?? null;
 }
 
+function draftIdsForTextFields(drafts: AirshipSingleSiteImprovementDraft[]): Set<string> {
+  return new Set(
+    (["headline", "subheading", "ctaLabel"] as TextFieldKey[])
+      .map((field) => draftIdForField(field, drafts))
+      .filter((id): id is string => Boolean(id)),
+  );
+}
+
+function selectedDraftFieldValue(field: TextFieldKey, fields: AirshipHeroEditorFields): string {
+  return fields[field];
+}
+
+function textRoleForCardElement(elementKey: string | null): "title" | "body" | null {
+  if (elementKey === "card-title") return "title";
+  if (elementKey === "card-body") return "body";
+  return null;
+}
+
+function draftMatchesCardRole(draft: AirshipSingleSiteImprovementDraft, role: "title" | "body"): boolean {
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  if (role === "title") return /\b(title|heading|headline|name)\b/.test(haystack);
+  return /\b(body|copy|description|summary|text|content)\b/.test(haystack) && !/\b(title|heading|headline)\b/.test(haystack);
+}
+
+function draftMatchesSelectionIndex(draft: AirshipSingleSiteImprovementDraft, elementIndex: number | null, candidateCount: number): boolean {
+  if (elementIndex === null) return true;
+  const haystack = `${draft.id} ${draft.targetSectionPage}`.toLocaleLowerCase("en-US");
+  const zeroBased = String(elementIndex);
+  const oneBased = String(elementIndex + 1);
+  if (new RegExp(`(?:^|[^0-9])${zeroBased}(?:[^0-9]|$)`).test(haystack)) return true;
+  if (new RegExp(`(?:card|item|offer|product|service)\\s*${oneBased}(?:[^0-9]|$)`).test(haystack)) return true;
+  return candidateCount === 1 && elementIndex === 0;
+}
+
+export function editableAirshipElementTextTarget(input: {
+  selection: AirshipCanvasSelection;
+  fields: AirshipHeroEditorFields;
+  drafts: AirshipSingleSiteImprovementDraft[];
+}): ElementTextEditTarget | null {
+  if (input.selection.level !== "element") return null;
+  if (input.selection.elementKey === "hero-headline") {
+    return {
+      kind: "hero-field",
+      field: "headline",
+      draftId: draftIdForField("headline", input.drafts),
+      label: "Hero headline",
+      value: selectedDraftFieldValue("headline", input.fields),
+      multiline: true,
+      readback: "Maps to the saved Airship hero headline draft field.",
+    };
+  }
+  if (input.selection.elementKey === "hero-subheading") {
+    return {
+      kind: "hero-field",
+      field: "subheading",
+      draftId: draftIdForField("subheading", input.drafts),
+      label: "Hero subheading/body",
+      value: selectedDraftFieldValue("subheading", input.fields),
+      multiline: true,
+      readback: "Maps to the saved Airship hero subheading draft field.",
+    };
+  }
+  if (input.selection.elementKey === "hero-cta") {
+    return {
+      kind: "hero-field",
+      field: "ctaLabel",
+      draftId: draftIdForField("ctaLabel", input.drafts),
+      label: "Primary CTA label",
+      value: selectedDraftFieldValue("ctaLabel", input.fields),
+      multiline: false,
+      readback: "Maps to the saved Airship primary CTA label draft field.",
+    };
+  }
+  if (input.selection.elementKey === "contact-cta") {
+    const contactCtaDraft = input.drafts.find((draft) =>
+      draftSectionKey(draft) === "cta" && draftFieldKey(draft) === "ctaLabel",
+    );
+    if (!contactCtaDraft) return null;
+    return {
+      kind: "hero-field",
+      field: "ctaLabel",
+      draftId: contactCtaDraft.id,
+      label: "Contact CTA label",
+      value: selectedDraftFieldValue("ctaLabel", input.fields),
+      multiline: false,
+      readback: "Maps to an existing saved Airship CTA draft row.",
+    };
+  }
+
+  const cardRole = textRoleForCardElement(input.selection.elementKey);
+  if (!cardRole || (input.selection.section !== "offers" && input.selection.section !== "proof" && input.selection.section !== "approach")) return null;
+  const candidates = input.drafts.filter((draft) =>
+    draftSectionKey(draft) === input.selection.section &&
+    !draft.fieldKey &&
+    draftMatchesCardRole(draft, cardRole),
+  );
+  const draft = candidates.find((candidate) =>
+    draftMatchesSelectionIndex(candidate, input.selection.elementIndex, candidates.length),
+  );
+  if (!draft) return null;
+  return {
+    kind: "draft-row",
+    draftId: draft.id,
+    label: `${airshipElementLabel(input.selection.elementKey, draft.targetSectionPage)} text`,
+    value: draft.proposedTextContent,
+    multiline: cardRole === "body",
+    readback: "Maps to an existing saved Airship draft row for this card element.",
+  };
+}
+
 export function applyAirshipHeroTextFieldEdit(input: {
   fields: AirshipHeroEditorFields;
   drafts: AirshipSingleSiteImprovementDraft[];
@@ -600,7 +728,7 @@ export function selectionTextFields(selection: AirshipCanvasSelection): TextFiel
   if (selection.level === "section") return sectionTextFields(selection.section);
   if (selection.elementKey === "hero-headline") return ["headline"];
   if (selection.elementKey === "hero-subheading") return ["subheading"];
-  if (selection.elementKey === "hero-cta" || selection.elementKey === "contact-cta") return ["ctaLabel"];
+  if (selection.elementKey === "hero-cta") return ["ctaLabel"];
   return [];
 }
 
@@ -943,6 +1071,11 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     draftCandidate: previewCandidate,
     editableSections: sectionOptions,
   });
+  const selectedElementTextTarget = editableAirshipElementTextTarget({
+    selection: selectedCanvasItem,
+    fields,
+    drafts: editableDrafts,
+  });
   const selectedStyleValueRows = deriveAirshipStyleValueRows(selectedSection, fields);
   const previewHostUrl = props.demoReadiness?.demoUrl ?? sameSitePreviewHost({
     importedSite: props.importedSite,
@@ -961,6 +1094,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     busy,
     candidateApplyState,
   });
+  const panelSaveDisabled = busy || (selectedCanvasItem.level === "element" && !selectedElementTextTarget);
 
   const selectedDrafts = useMemo(
     () => {
@@ -1062,6 +1196,15 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       scope: "text",
       state: "local",
     });
+  }
+
+  function updateSelectedElementText(value: string) {
+    if (!selectedElementTextTarget) return;
+    if (selectedElementTextTarget.kind === "hero-field") {
+      updateTextField(selectedElementTextTarget.field, value);
+      return;
+    }
+    updateMappedDraftText(selectedElementTextTarget.draftId, value);
   }
 
   function updateStyleField(field: StyleFieldKey, value: string | number) {
@@ -1340,8 +1483,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         if (!draftId) continue;
         latestDraft = await saveDraftText(draftId, nextFields[field]);
       }
+      const savedTextFieldDraftIds = draftIdsForTextFields(editableDrafts);
       for (const draft of editableDrafts) {
-        if (draftFieldKey(draft)) continue;
+        if (savedTextFieldDraftIds.has(draft.id)) continue;
         latestDraft = await saveDraftText(draft.id, draft.proposedTextContent);
       }
       if (styleKey(nextFields) !== savedStyleKeyRef.current) {
@@ -1363,6 +1507,43 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     } catch {
       setSaveState("failed");
       setMessage("Airship draft save failed. Editor preview changed locally only; no live site changes were made.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveSelectedElementTextEdit() {
+    if (!selectedElementTextTarget) return;
+    setBusy(true);
+    setSaveState("saving");
+    setMessage(`Saving ${selectedElementTextTarget.label} to Airship draft only...`);
+    try {
+      clearPendingStyleSave();
+      let latestDraft: NonNullable<DraftActionResponse["draft"]> | null = null;
+      if (selectedElementTextTarget.kind === "hero-field") {
+        const draftId = selectedElementTextTarget.draftId ?? draftIdForField(selectedElementTextTarget.field, editableDrafts);
+        if (!draftId) throw new Error("airship_selected_element_draft_field_missing");
+        latestDraft = await saveDraftText(draftId, fields[selectedElementTextTarget.field]);
+        const nextSavedFields = {
+          ...savedFieldsRef.current,
+          [selectedElementTextTarget.field]: fields[selectedElementTextTarget.field],
+        };
+        updateSavedFields(nextSavedFields, fields);
+      } else {
+        const draft = editableDrafts.find((item) => item.id === selectedElementTextTarget.draftId);
+        if (!draft) throw new Error("airship_selected_element_draft_row_missing");
+        latestDraft = await saveDraftText(draft.id, draft.proposedTextContent);
+        setSaveState(deriveAirshipDraftSaveState({ fields, savedFields: savedFieldsRef.current }));
+      }
+      recordChange({
+        label: latestDraft ? `Saved ${selectedElementTextTarget.label}` : "Selected element save confirmed",
+        scope: "text",
+        state: "saved",
+      });
+      setMessage(`${selectedElementTextTarget.label} saved to Airship draft only. Not live. Not published.`);
+    } catch {
+      setSaveState("failed");
+      setMessage("Selected element draft save failed. No live site changes were made.");
     } finally {
       setBusy(false);
     }
@@ -3446,49 +3627,79 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               <div className="airship-panel-section">
                 <div className="airship-panel-heading">DRAFT FIELDS <span>⌃</span></div>
                 <div className="airship-field-grid" aria-label="Real selected-section editable fields">
-                  {selectedTextFields.includes("headline") ? (
-                    <label className="airship-field-label">
-                      H1/headline text
-                      <textarea
-                        value={fields.headline}
-                        onChange={(event) => updateTextField("headline", event.target.value)}
-                        aria-label="Edit selected hero headline"
-                      />
-                    </label>
-                  ) : null}
-                  {selectedTextFields.includes("subheading") ? (
-                    <label className="airship-field-label">
-                      Subheading/body text
-                      <textarea
-                        value={fields.subheading}
-                        onChange={(event) => updateTextField("subheading", event.target.value)}
-                        aria-label="Edit selected hero subheading"
-                      />
-                    </label>
-                  ) : null}
-                  {selectedTextFields.includes("ctaLabel") ? (
-                    <label className="airship-field-label">
-                      CTA label
-                      <input
-                        value={fields.ctaLabel}
-                        onChange={(event) => updateTextField("ctaLabel", event.target.value)}
-                        aria-label="Edit selected CTA label"
-                      />
-                    </label>
-                  ) : null}
-                  {selectedCanvasItem.level === "section" ? selectedDrafts.filter((draft) => !draftFieldKey(draft)).map((draft) => (
-                    <label key={draft.id} className="airship-field-label">
-                      {draft.targetSectionPage}
-                      <textarea
-                        value={draft.proposedTextContent}
-                        onChange={(event) => updateMappedDraftText(draft.id, event.target.value)}
-                        aria-label={`Edit ${draft.targetSectionPage}`}
-                      />
-                    </label>
-                  )) : null}
-                  {selectedTextFields.length === 0 && (selectedCanvasItem.level === "element" || selectedDrafts.filter((draft) => !draftFieldKey(draft)).length === 0) ? (
-                    <div className="airship-panel-value">read-only in this foundation pass</div>
-                  ) : null}
+                  {selectedCanvasItem.level === "element" ? (
+                    selectedElementTextTarget ? (
+                      <label className="airship-field-label">
+                        {selectedElementTextTarget.label}
+                        {selectedElementTextTarget.multiline ? (
+                          <textarea
+                            value={selectedElementTextTarget.value}
+                            onChange={(event) => updateSelectedElementText(event.target.value)}
+                            aria-label={`Edit selected ${selectedElementTextTarget.label}`}
+                          />
+                        ) : (
+                          <input
+                            value={selectedElementTextTarget.value}
+                            onChange={(event) => updateSelectedElementText(event.target.value)}
+                            aria-label={`Edit selected ${selectedElementTextTarget.label}`}
+                          />
+                        )}
+                        <span className="airship-panel-value">{selectedElementTextTarget.readback}</span>
+                      </label>
+                    ) : (
+                      <div className="airship-code-readback" aria-label="Read-only selected element metadata">
+                        <code>{selectedElementMetadata.markerSelector}</code>
+                        <code>read-only for now</code>
+                        <code>{selectedElementMetadata.role}</code>
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      {selectedTextFields.includes("headline") ? (
+                        <label className="airship-field-label">
+                          H1/headline text
+                          <textarea
+                            value={fields.headline}
+                            onChange={(event) => updateTextField("headline", event.target.value)}
+                            aria-label="Edit selected hero headline"
+                          />
+                        </label>
+                      ) : null}
+                      {selectedTextFields.includes("subheading") ? (
+                        <label className="airship-field-label">
+                          Subheading/body text
+                          <textarea
+                            value={fields.subheading}
+                            onChange={(event) => updateTextField("subheading", event.target.value)}
+                            aria-label="Edit selected hero subheading"
+                          />
+                        </label>
+                      ) : null}
+                      {selectedTextFields.includes("ctaLabel") ? (
+                        <label className="airship-field-label">
+                          CTA label
+                          <input
+                            value={fields.ctaLabel}
+                            onChange={(event) => updateTextField("ctaLabel", event.target.value)}
+                            aria-label="Edit selected CTA label"
+                          />
+                        </label>
+                      ) : null}
+                      {selectedDrafts.filter((draft) => !draftIdsForTextFields(editableDrafts).has(draft.id)).map((draft) => (
+                        <label key={draft.id} className="airship-field-label">
+                          {draft.targetSectionPage}
+                          <textarea
+                            value={draft.proposedTextContent}
+                            onChange={(event) => updateMappedDraftText(draft.id, event.target.value)}
+                            aria-label={`Edit ${draft.targetSectionPage}`}
+                          />
+                        </label>
+                      ))}
+                      {selectedTextFields.length === 0 && selectedDrafts.filter((draft) => !draftIdsForTextFields(editableDrafts).has(draft.id)).length === 0 ? (
+                        <div className="airship-panel-value">read-only in this foundation pass</div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               </div>
               <div className="airship-panel-section">
@@ -3529,9 +3740,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <button
                     type="button"
                     aria-label="Save selected section draft fields"
-                    disabled={busy}
-                    onClick={() => void saveAllTextEdits()}
-                    style={actionButtonStyle({ tone: "primary", disabled: busy, compact: true, dark: true })}
+                    disabled={panelSaveDisabled}
+                    onClick={() => selectedCanvasItem.level === "element" ? void saveSelectedElementTextEdit() : void saveAllTextEdits()}
+                    style={actionButtonStyle({ tone: "primary", disabled: panelSaveDisabled, compact: true, dark: true })}
                   >
                     Save draft
                   </button>
