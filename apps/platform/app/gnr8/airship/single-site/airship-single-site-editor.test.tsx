@@ -586,6 +586,16 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("Editable AI draft generated"), true);
   assert.equal(html.includes("Open Airship Editor"), true);
   assert.equal(html.includes(`/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`), true);
+  assert.equal(html.includes("Real Airship sidecar proof"), true);
+  assert.equal(html.includes("Proof-only, local/manual"), true);
+  assert.equal(html.includes("Does not publish"), true);
+  assert.equal(html.includes("regenerate preview"), true);
+  assert.equal(html.includes("change the live site"), true);
+  assert.equal(html.includes("replace the current editor route"), true);
+  assert.equal(html.includes("Prepare Airship session"), true);
+  assert.equal(html.includes("Capture changes"), true);
+  assert.equal(html.includes("Map captured edits"), true);
+  assert.equal(html.includes("Apply safe mappings to draft"), true);
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes("MVP Demo Readiness"), true);
   assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);

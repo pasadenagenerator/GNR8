@@ -8,6 +8,7 @@ import type { SingleSiteStudioPreviewState } from "@/gnr8/single-site/single-sit
 
 import { AirshipDraftCandidateAction } from "./airship-draft-candidate-action";
 import { AirshipDraftCandidateReviewAction } from "./airship-draft-candidate-review-action";
+import { AirshipProofWorkflowPanel } from "./airship-proof-workflow-panel";
 import { AirshipPreviewHostBindingAction } from "./airship-preview-host-binding-action";
 import { AirshipPublishReadinessAction } from "./airship-publish-readiness-action";
 import { AirshipSimplePromoteRollbackAction } from "./airship-simple-promote-rollback-action";
@@ -392,6 +393,11 @@ export function AirshipSingleSiteEditor({ model }: Props) {
       {section(
         model.draftPanel.title,
         <>
+          <AirshipProofWorkflowPanel
+            migrationId={model.migrationId}
+            savedDraftId={model.draftPanel.persistence.draftId}
+            savedDraftVersion={model.draftPanel.persistence.version}
+          />
           {model.draftPanel.drafts.length > 0 && model.draftPanel.draftPreview ? (
             <AirshipSingleSiteLocalDraftEditor
               migrationId={model.migrationId}
