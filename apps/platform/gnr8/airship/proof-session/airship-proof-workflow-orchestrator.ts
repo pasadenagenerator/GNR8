@@ -175,6 +175,7 @@ export async function prepareAirshipProofWorkflow(input: PrepareAirshipProofWork
       warnings: preparedSession.warnings,
       diagnostics: ["airship_proof_workflow_prepared", "manual_airship_cli_only", "no_auto_launch"],
     }),
+    status: "prepared",
     preparedSession,
   };
 }
@@ -206,6 +207,7 @@ export async function captureAirshipProofWorkflowChanges(
         capture.indexHtmlChanged ? "index_html_changed" : "index_html_unchanged",
       ],
     }),
+    status: "captured",
     preparedSession: input.preparedWorkflow.preparedSession,
     capture,
   };
@@ -244,6 +246,7 @@ export async function mapAirshipProofWorkflowChanges(input: MapAirshipProofWorkf
         `unsupported_entry_count:${mappingReadback.mapping.unsupportedEntryCount}`,
       ],
     }),
+    status: "mapped",
     preparedSession: input.preparedWorkflow.preparedSession,
     mappingReadback,
     mapping: mappingReadback.mapping,
@@ -276,9 +279,10 @@ export async function applyAirshipProofWorkflowMappings(
   });
 
   const applied = applyReadback.status === "applied";
+  const status = applied ? "applied_to_draft" : "blocked";
   return {
     ...baseReadback({
-      status: applied ? "applied_to_draft" : "blocked",
+      status,
       preparedSession: input.mappedWorkflow.preparedSession,
       finalHashes: input.mappedWorkflow.finalHashes,
       mapping: input.mappedWorkflow.mapping,
@@ -298,6 +302,7 @@ export async function applyAirshipProofWorkflowMappings(
       ],
       draftDataMutation: applyReadback.mutationFlags.draftDataMutation,
     }),
+    status,
     preparedSession: input.mappedWorkflow.preparedSession,
     mappingReadback: input.mappedWorkflow.mappingReadback,
     mapping: input.mappedWorkflow.mapping,
@@ -370,6 +375,7 @@ function blockedApplyReadback(input: {
       ],
       diagnostics: input.diagnostics,
     }),
+    status: "blocked",
     preparedSession: input.input.mappedWorkflow.preparedSession,
     mappingReadback: input.input.mappedWorkflow.mappingReadback,
     mapping: input.input.mappedWorkflow.mapping,
