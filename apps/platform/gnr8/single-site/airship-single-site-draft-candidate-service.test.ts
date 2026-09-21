@@ -280,7 +280,7 @@ function fakeDeps() {
     }) => {
       calls.push("createArtifact");
       const existingId = artifactBySiteVersion.get(input.siteVersionId);
-      if (existingId) return { artifactId: existingId };
+      if (existingId && artifacts.has(existingId)) return { artifactId: existingId };
       artifacts.set(TARGET_ARTIFACT_ID, {
         id: TARGET_ARTIFACT_ID,
         siteId: input.siteId,
@@ -415,9 +415,34 @@ test("creates an internal Airship draft candidate from live/published version an
 test("regenerates CHS polished Airship artifact HTML from saved draft edits with real builder", async () => {
   const deps = fakeDeps();
   deps.buildDeterministicArtifactBundle = buildRuntimeArtifactBundle;
+  const noisySourceVersion = deps.versions.get(LIVE_VERSION_ID);
+  if (noisySourceVersion?.pages[0]) {
+    noisySourceVersion.pages[0].structureModel.sections = [
+      { id: "hero", type: "hero", order: 0 },
+      { id: "diagnostic-source-section", type: "content", order: 1 },
+    ];
+    noisySourceVersion.pages[0].contentModel.sectionProps.hero = {
+      ...noisySourceVersion.pages[0].contentModel.sectionProps.hero,
+      blockIds: ["raw-block:html>body>div:nth-of-type(1):0"],
+      classificationDiagnostics: ["CAPTURE_DRIVEN"],
+      rationale: ["Diagnostics: keys=script"],
+    };
+    noisySourceVersion.pages[0].contentModel.sectionProps["diagnostic-source-section"] = {
+      blockIds: ["raw-block:html>body>script:nth-of-type(1):1"],
+      body: "Diagnostics: keys=script",
+      classificationDiagnostics: ["CAPTURE_DRIVEN"],
+    };
+  }
   const draft = savedDraft();
   draft.draftEdits = draft.draftEdits.map((edit) =>
-    edit.id === "airship-chs-home-contact-cta"
+    edit.id === "airship-chs-home-hero-headline"
+      ? {
+          ...edit,
+          proposedTextContent: "We help your IT change with every technology wave.",
+          status: "edited" as const,
+          reasonForChange: "Saved CHS hero headline edit.",
+        }
+      : edit.id === "airship-chs-home-contact-cta"
       ? {
           ...edit,
           proposedTextContent: "Book a CHS security review",
@@ -443,7 +468,7 @@ test("regenerates CHS polished Airship artifact HTML from saved draft edits with
   assert.equal(output.candidateRuntimeArtifactId, TARGET_ARTIFACT_ID);
   assert.equal(validity.valid, true, validity.reasons.join(","));
   assert.equal((artifact?.manifest.pageRenderModes as Record<string, string> | undefined)?.["/"], "canonical");
-  assert.match(html, /CHS helps modernize secure enterprise IT/);
+  assert.match(html, /We help your IT change with every technology wave\./);
   assert.match(html, /Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region\./);
   assert.match(html, /Book a CHS security review/);
   assert.match(html, /data-airship-section="hero"/);
@@ -452,6 +477,7 @@ test("regenerates CHS polished Airship artifact HTML from saved draft edits with
   assert.match(html, /data-airship-element="hero-subheading"/);
   assert.match(html, /data-airship-element="hero-cta"/);
   assert.match(html, /data-airship-element="contact-cta"/);
+  assert.equal(deps.versions.get(TARGET_VERSION_ID)?.pages[0]?.structureModel.sections.some((section) => section.id === "diagnostic-source-section"), false);
   assert.doesNotMatch(html, /FALLBACK PREVIEW|raw-block:|Diagnostics: keys=|Recovered Section|CAPTURE_DRIVEN/i);
   assert.equal(output.activePointerChanged, false);
   assert.equal(output.published, false);
@@ -615,6 +641,60 @@ test("reuses an existing matching Airship draft candidate and keeps active point
   assert.equal(second.activePointerChanged, false);
   assert.equal(deps.calls.filter((call) => call === "createSiteVersionFromMigration").length, 1);
   assert.equal(deps.calls.filter((call) => call === "refreshArtifactForVersionPublishCandidate").length, 1);
+});
+
+test("rebuilds an artifact-missing matching Airship draft candidate from current canonical pages", async () => {
+  const deps = fakeDeps();
+  await createAirshipSingleSiteDraftCandidate(
+    { draft: savedDraft(), actor: "superadmin", targetCandidateSiteVersionId: TARGET_VERSION_ID },
+    deps,
+  );
+  const existing = deps.versions.get(TARGET_VERSION_ID);
+  assert.ok(existing);
+  deps.artifacts.delete(TARGET_ARTIFACT_ID);
+  deps.versions.set(TARGET_VERSION_ID, {
+    ...existing,
+    artifactId: null,
+    pages: [
+      {
+        ...existing.pages[0]!,
+        structureModel: {
+          sections: [
+            { id: "legacy-source-section", type: "hero", order: 0 },
+            { id: "diagnostic-source-section", type: "content", order: 1 },
+          ],
+        },
+        contentModel: {
+          sectionProps: {
+            "legacy-source-section": {
+              headline: "Old source headline",
+              cta: "Contact us",
+            },
+            "diagnostic-source-section": {
+              htmlSummary: {
+                extractedText: "FALLBACK PREVIEW raw-block:html>body Diagnostics: keys=script",
+              },
+            },
+          },
+        },
+      },
+    ],
+  });
+
+  const output = await createAirshipSingleSiteDraftCandidate(
+    { draft: savedDraft(), actor: "superadmin", targetCandidateSiteVersionId: TARGET_VERSION_ID },
+    deps,
+  );
+
+  const candidate = deps.versions.get(TARGET_VERSION_ID);
+  const artifact = deps.artifacts.get(TARGET_ARTIFACT_ID);
+  assert.equal(output.status, "reused");
+  assert.equal(output.candidateRuntimeArtifactId, TARGET_ARTIFACT_ID);
+  assert.equal(deps.calls.filter((call) => call === "createSiteVersionFromMigration").length, 2);
+  assert.equal(candidate?.artifactId, TARGET_ARTIFACT_ID);
+  assert.equal(candidate?.pages[0]?.structureModel.sections.some((section) => section.id === "diagnostic-source-section"), false);
+  assert.match(artifact?.htmlByPath["/"] ?? "", /CHS helps modernize secure enterprise IT/);
+  assert.doesNotMatch(JSON.stringify({ candidate, artifact }), /FALLBACK PREVIEW|raw-block|Diagnostics:/);
 });
 
 test("applies saved CTA text when the CTA draft edit is accepted", async () => {

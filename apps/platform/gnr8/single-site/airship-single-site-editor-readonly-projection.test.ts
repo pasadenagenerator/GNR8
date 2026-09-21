@@ -756,6 +756,105 @@ test("airship projection exposes a saved draft candidate as internal preview onl
   assert.equal(model.flags.activePointerMutation, false);
 });
 
+test("airship projection hides stale draft candidates after saved draft version advances", () => {
+  const persistedDraft: AirshipSingleSiteDraftRecord = {
+    id: "draft-chs-current",
+    migrationId: CHS_MIGRATION_ID,
+    tenantId: "tenant-chs",
+    clientId: "client-chs",
+    siteId: "site-chs",
+    agencyId: null,
+    sourceUrl: "https://www.chs.si/",
+    targetSiteVersionRefs: {
+      originalCloneSiteVersionId: ORIGINAL_CLONE_VERSION_ID,
+      originalCloneRuntimeArtifactId: "929106cd-fa19-47eb-9582-ce6931d0e370",
+      improvedCandidateSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      improvedCandidateRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    },
+    draftEdits: [
+      {
+        id: CHS_HEADLINE_DRAFT_ID,
+        fieldKey: "headline",
+        sectionKey: "hero",
+        targetSectionPage: "Homepage / hero headline",
+        currentTextContentSummary: "Captured CHS homepage evidence includes the hero line.",
+        proposedTextContent: "We help your IT change with every technology wave.",
+        reasonForChange: "Operator saved current draft copy.",
+        status: "edited",
+        previewImpact: "Saved headline appears in Airship draft preview only.",
+      },
+    ],
+    draftStatus: "draft",
+    version: 47,
+    semanticWatermark: "airship-single-site-editor-draft:current",
+    metadata: { liveBoundary: "not_applied_to_live_site" },
+    createdByActorId: "superadmin-projection",
+    updatedByActorId: "superadmin-projection",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-21T00:00:00.000Z",
+    updatedAt: "2026-09-21T12:21:31.000Z",
+  };
+  const staleCandidate = {
+    label: "New Airship draft candidate preview" as const,
+    siteVersionId: "698c8cc8-8050-40c4-80ab-fadd506521be",
+    runtimeArtifactId: "53ba5072-b694-40b8-8279-2cb5e91cc8f8",
+    route: airshipPreviewRoute("698c8cc8-8050-40c4-80ab-fadd506521be", "53ba5072-b694-40b8-8279-2cb5e91cc8f8"),
+    mode: "transformed" as const,
+    available: true as const,
+    unavailableReason: null,
+    authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+    statusLabel: "Not live, internal preview only" as const,
+    sourceLiveSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+    sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+    draftId: persistedDraft.id,
+    draftVersion: 45,
+    styleSettings: {
+      heroTopPadding: 96,
+      heroBottomPadding: 104,
+      backgroundTint: "#eef6ff" as const,
+      ctaColor: "#1d4ed8" as const,
+    },
+    appliedEdits: [
+      {
+        draftEditId: CHS_HEADLINE_DRAFT_ID,
+        targetSectionPage: "Homepage / hero headline",
+        appliedTextContent: "We help your IT change with every technology wave.",
+      },
+    ],
+    skippedEdits: [],
+  };
+
+  const staleModel = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: studioProjection,
+    persistedDraft,
+    airshipDraftCandidate: staleCandidate,
+  });
+
+  assert.equal(staleModel.draftPanel.persistence.version, 47);
+  assert.equal(staleModel.draftPanel.draftPreview?.hero.headline, "We help your IT change with every technology wave.");
+  assert.equal(staleModel.previews.airshipDraftCandidate, null);
+  assert.equal(staleModel.importedSiteModel.latestInternalPreviewCandidate, null);
+
+  const currentModel = buildAirshipSingleSiteEditorReadonlyProjection({
+    migrationId: CHS_MIGRATION_ID,
+    studioModel: studioProjection,
+    persistedDraft,
+    airshipDraftCandidate: {
+      ...staleCandidate,
+      siteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
+      runtimeArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
+      route: airshipPreviewRoute("2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7", "4ec7588a-b7cb-46dc-a735-88e4ec466a72"),
+      draftVersion: 47,
+    },
+  });
+
+  assert.equal(currentModel.previews.airshipDraftCandidate?.draftVersion, 47);
+  assert.equal(currentModel.previews.airshipDraftCandidate?.runtimeArtifactId, "4ec7588a-b7cb-46dc-a735-88e4ec466a72");
+  assert.equal(currentModel.importedSiteModel.latestInternalPreviewCandidate?.route.includes("airshipArtifactId=4ec7588a-b7cb-46dc-a735-88e4ec466a72"), true);
+});
+
 test("airship CHS draft guard detects Maver transport identity leaks", () => {
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy("TRANSPORTI MAVER D.O.O."), true);
   assert.equal(airshipChsDraftContainsForbiddenMaverCopy("Prevozi vozil po Evropi od leta 1982"), true);

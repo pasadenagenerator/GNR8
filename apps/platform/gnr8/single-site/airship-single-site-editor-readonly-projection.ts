@@ -1115,6 +1115,17 @@ function draftPreview(
   };
 }
 
+function currentDraftCandidateForPersistedDraft(input: {
+  candidate: AirshipDraftCandidatePreviewRef | null;
+  persistedDraft: AirshipSingleSiteDraftRecord | null;
+}): AirshipDraftCandidatePreviewRef | null {
+  if (!input.candidate) return null;
+  if (!input.persistedDraft) return input.candidate;
+  if (input.candidate.draftId !== input.persistedDraft.id) return null;
+  if (input.candidate.draftVersion !== input.persistedDraft.version) return null;
+  return input.candidate;
+}
+
 function editableSections(drafts: AirshipSingleSiteImprovementDraft[]): AirshipImportedSiteEditableSection[] {
   const idsFor = (sectionKey: AirshipSingleSiteDraftSectionKey) =>
     drafts.filter((draft) => {
@@ -1222,7 +1233,6 @@ function importedSiteEditorModel(input: {
 export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBuildInput): AirshipSingleSiteEditorReadonlyProjection {
   const migrationId = text(input.migrationId) ?? input.studioModel.migrationId;
   const routeHref = `/gnr8/airship/single-site${migrationId ? `?migrationId=${encodeURIComponent(migrationId)}` : ""}`;
-  const airshipDraftCandidate = input.airshipDraftCandidate ?? arisDraftCandidatePreviewFallback(migrationId);
   const generatedDrafts = importedSiteDrafts({ migrationId, studioModel: input.studioModel });
   if (migrationId === AIRSHIP_CHS_MIGRATION_ID && !chsSourceEvidenceAllowsForbiddenMaverCopy({ studioModel: input.studioModel, migrationId })) {
     assertChsDraftIdentity(generatedDrafts);
@@ -1234,6 +1244,10 @@ export function buildAirshipSingleSiteEditorReadonlyProjection(input: AirshipBui
     draft: input.persistedDraft,
     migrationId,
     studioModel: input.studioModel,
+  });
+  const airshipDraftCandidate = currentDraftCandidateForPersistedDraft({
+    candidate: input.airshipDraftCandidate ?? arisDraftCandidatePreviewFallback(migrationId),
+    persistedDraft,
   });
   const drafts = mergePersistedDrafts(generatedDrafts, persistedDraft);
   if (isArisAirshipMvpMigration(migrationId)) {
@@ -1346,6 +1360,7 @@ export async function getAirshipSingleSiteEditorReadonlyProjection(input: {
       airshipDraftCandidate = await readLatestAirshipSingleSiteDraftCandidatePreview({
         migrationId,
         draftId: persistedDraft?.id ?? null,
+        draftVersion: persistedDraft?.version ?? null,
       });
     } catch {
       airshipDraftCandidate = null;

@@ -125,6 +125,11 @@ function text(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function draftVersionParam(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(1, Math.floor(value));
+}
+
 function required(field: string, value: unknown): string {
   const normalized = text(value);
   if (!normalized) throw new Error(`${field}_required`);
@@ -335,9 +340,57 @@ function stripRejectedCtaText(value: unknown, rejectedText: string | null): unkn
   return value;
 }
 
+function firstEmailInValue(value: unknown, depth = 0): string | null {
+  if (depth > 8) return null;
+  if (typeof value === "string") return value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? null;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const email = firstEmailInValue(entry, depth + 1);
+      if (email) return email;
+    }
+    return null;
+  }
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    for (const entry of Object.values(value as Record<string, unknown>)) {
+      const email = firstEmailInValue(entry, depth + 1);
+      if (email) return email;
+    }
+  }
+  return null;
+}
+
+function draftSectionsWithContactEmail(
+  sections: AirshipDraftSectionPayload[],
+  email: string | null,
+): AirshipDraftSectionPayload[] {
+  if (!email) return sections;
+  return sections.map((section) => {
+    if (section.key !== "cta" || section.body.includes(email)) return section;
+    return {
+      ...section,
+      body: [section.body, email].map((part) => part.trim()).filter(Boolean).join(" "),
+    };
+  });
+}
+
+function currentCtaLabelForTargetSection(props: Record<string, unknown>): string | null {
+  for (const key of ["ctaLabel", "primaryCtaLabel", "buttonLabel", "cta", "label"]) {
+    const value = text(props[key]);
+    if (value) return value;
+  }
+  return text(objectValue(props.airshipDraftCtaOverride).label);
+}
+
+function brandNameForMigration(migrationId: string): string | null {
+  if (migrationId === "682a09fd-8fd5-4f73-93b8-54f5d4067c63") return "CHS";
+  if (migrationId === "ebf62324-1e51-4435-abd7-004722fb48d6") return "ARIS";
+  return null;
+}
+
 function applyAirshipHeroEdits(input: {
   sourceVersion: CanonicalSiteVersionSnapshot;
   actor: string;
+  migrationId: string;
   headline: string;
   subheading: string;
   ctaLabel: string | null;
@@ -361,10 +414,15 @@ function applyAirshipHeroEdits(input: {
     };
     if (index !== 0 && page.path !== "/") return page;
 
+    const brandName = brandNameForMigration(input.migrationId);
+    if (brandName && !new RegExp(`\\b${brandName}\\b`, "i").test(page.title)) {
+      page.title = `${brandName} ${page.title || "home"}`.trim();
+    }
     const targetSectionId = firstEditableSectionId(page);
-    const currentSectionProps = objectValue(sectionProps(page)[targetSectionId]);
+    const existingSectionProps = sectionProps(page);
+    const pageDraftSections = draftSectionsWithContactEmail(input.draftSections, firstEmailInValue(existingSectionProps));
+    const ctaLabel = input.ctaLabel ?? currentCtaLabelForTargetSection(existingSectionProps[targetSectionId] ?? {});
     const baseSectionProps = {
-      ...currentSectionProps,
       airshipDraftHeroOverride: {
         headline: input.headline,
         subheading: input.subheading,
@@ -376,17 +434,19 @@ function applyAirshipHeroEdits(input: {
         ctaColor: input.styleSettings.ctaColor,
       },
     };
-    const sectionPropsWithCta = input.ctaLabel
+    const sectionPropsWithCta = ctaLabel
       ? withTextField({
           props: {
             ...baseSectionProps,
+            cta: ctaLabel,
+            ctaLabel,
             airshipDraftCtaOverride: {
-              label: input.ctaLabel,
+              label: ctaLabel,
             },
           },
           preferredKeys: ["ctaLabel", "primaryCtaLabel", "buttonLabel", "cta", "label"],
           fallbackKey: "ctaLabel",
-          value: input.ctaLabel,
+          value: ctaLabel,
         })
       : baseSectionProps;
     const nextSectionProps = withTextField({
@@ -404,12 +464,12 @@ function applyAirshipHeroEdits(input: {
     page.contentModel = {
       ...page.contentModel,
       sectionProps: {
-        ...sectionProps(page),
+        ...existingSectionProps,
         [targetSectionId]: stripRejectedCtaText({
           ...nextSectionProps,
-          airshipDraftSections: input.draftSections,
+          airshipDraftSections: pageDraftSections,
         }, input.rejectedCtaText) as Record<string, unknown>,
-        ...Object.fromEntries(input.draftSections.map((section) => [
+        ...Object.fromEntries(pageDraftSections.map((section) => [
           `airship-draft-${section.key}`,
           stripRejectedCtaText({
             heading: section.heading,
@@ -421,21 +481,24 @@ function applyAirshipHeroEdits(input: {
         ])),
       },
     };
-    const existingSectionIds = new Set((page.structureModel.sections ?? []).map((section) => section.id));
-    const maxOrder = Math.max(-1, ...(page.structureModel.sections ?? []).map((section) => section.order));
-    const addedSections = input.draftSections
+    const targetSection = (page.structureModel.sections ?? []).find((section) => section.id === targetSectionId) ?? {
+      id: targetSectionId,
+      type: "hero.airship",
+      order: 0,
+    };
+    const existingSectionIds = new Set([targetSectionId]);
+    const maxOrder = 0;
+    const addedSections = pageDraftSections
       .filter((section) => !existingSectionIds.has(`airship-draft-${section.key}`))
       .map((section, sectionIndex) => ({
         id: `airship-draft-${section.key}`,
         type: section.key === "cta" ? "cta.airship" : section.key === "footer" ? "footer.airship" : "content.airship",
         order: maxOrder + sectionIndex + 1,
       }));
-    if (addedSections.length > 0) {
-      page.structureModel = {
-        ...page.structureModel,
-        sections: [...(page.structureModel.sections ?? []), ...addedSections],
-      };
-    }
+    page.structureModel = {
+      ...page.structureModel,
+      sections: [{ ...targetSection, order: 0 }, ...addedSections],
+    };
     page.styleTokens = {
       ...page.styleTokens,
       "airship.hero.paddingTop": `${input.styleSettings.heroTopPadding}px`,
@@ -604,6 +667,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const pages = applyAirshipHeroEdits({
     sourceVersion: candidateSourceVersion,
     actor,
+    migrationId: input.draft.migrationId,
     headline: headlineEdit.proposedTextContent,
     subheading: subheadingEdit.proposedTextContent,
     ctaLabel: ctaEdit?.proposedTextContent ?? null,
@@ -630,7 +694,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
     published: false,
   };
 
-  const candidateVersion = existingTarget
+  const candidateVersion = existingTarget?.artifactId
     ? { siteId: existingTarget.siteId, siteVersionId: existingTarget.id, versionNo: existingTarget.versionNo }
     : await deps.createSiteVersionFromMigration({
         siteId: candidateSourceVersion.siteId,
@@ -646,7 +710,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
         createSourceHostBinding: false,
       });
 
-  const verifiedVersion = existingTarget ?? await deps.getSiteVersion(candidateVersion.siteVersionId);
+  const verifiedVersion = await deps.getSiteVersion(candidateVersion.siteVersionId);
   if (!verifiedVersion) throw new Error(`airship_draft_candidate_version_not_found:${candidateVersion.siteVersionId}`);
   const artifactBundle = deps.buildDeterministicArtifactBundle({ siteVersion: verifiedVersion, renderMode: "PREVIEW" });
   assertGeneratedAirshipArtifactHtml(artifactBundle.htmlByPath, input.draft.migrationId);
@@ -715,11 +779,14 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
 export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
   migrationId: string;
   draftId?: string | null;
+  draftVersion?: number | null;
 }): Promise<AirshipDraftCandidatePreviewRef | null> {
   const pool = getSuperadminPool();
+  const requestedDraftVersion = draftVersionParam(input.draftVersion);
   type CandidateRow = {
     site_version_id: string;
     artifact_id: string;
+    artifact_html: string | null;
     import_provenance_summary: unknown;
     artifact_manifest: unknown;
     fallback_draft_id: string | null;
@@ -734,6 +801,7 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
       a.id::text as artifact_id,
       v.import_provenance_summary,
       a.manifest as artifact_manifest,
+      a.html_by_path->>'/' as artifact_html,
       null::text as fallback_draft_id,
       null::integer as fallback_draft_version,
       null::text as fallback_source_site_version_id,
@@ -746,17 +814,24 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
           v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'serviceVersion' = $1::text
           and v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'migrationId' = $2::text
           and ($3::text is null or v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'draftId' = $3::text)
+          and ($4::integer is null or (v.import_provenance_summary->'airshipSingleSiteDraftCandidate'->>'draftVersion')::integer = $4::integer)
         )
         or (
           a.manifest->'airshipSingleSiteDraftCandidate'->>'serviceVersion' = $1::text
           and a.manifest->'airshipSingleSiteDraftCandidate'->>'migrationId' = $2::text
           and ($3::text is null or a.manifest->'airshipSingleSiteDraftCandidate'->>'draftId' = $3::text)
+          and ($4::integer is null or (a.manifest->'airshipSingleSiteDraftCandidate'->>'draftVersion')::integer = $4::integer)
         )
       )
     order by v.created_at desc, v.version_no desc
     limit 1
     `,
-    [AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION, input.migrationId, text(input.draftId)],
+    [
+      AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION,
+      input.migrationId,
+      text(input.draftId),
+      requestedDraftVersion,
+    ],
   );
   let row = res.rows[0];
   if (!row) {
@@ -767,6 +842,7 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
         a.id::text as artifact_id,
         v.import_provenance_summary,
         a.manifest as artifact_manifest,
+        a.html_by_path->>'/' as artifact_html,
         r.draft_id::text as fallback_draft_id,
         r.draft_version::integer as fallback_draft_version,
         r.active_pointer_site_version_id::text as fallback_source_site_version_id,
@@ -776,6 +852,7 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
       join public.gnr8_runtime_artifacts a on a.id = r.candidate_runtime_artifact_id and a.site_version_id = v.id
       where r.migration_id = $1::uuid
         and ($2::uuid is null or r.draft_id = $2::uuid)
+        and ($3::integer is null or r.draft_version = $3::integer)
         and r.review_status = 'approved'
         and r.review_decision = 'approved_for_publish_readiness'
         and v.state = 'DRAFT'
@@ -783,13 +860,15 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
       order by r.reviewed_at desc, r.created_at desc
       limit 1
       `,
-      [input.migrationId, text(input.draftId)],
+      [input.migrationId, text(input.draftId), requestedDraftVersion],
     );
     row = fallback.rows[0];
   }
   if (!row) return null;
   const provenance = provenanceFrom(row.import_provenance_summary) ?? provenanceFrom(row.artifact_manifest);
   if (!provenance && (!row.fallback_draft_id || !row.fallback_draft_version || !row.fallback_source_site_version_id || !row.fallback_source_artifact_id)) return null;
+  const validity = analyzeAirshipArtifactHtmlValidity({ html: row.artifact_html, migrationId: input.migrationId });
+  if (!validity.valid) return null;
   return {
     label: "New Airship draft candidate preview",
     siteVersionId: row.site_version_id,
