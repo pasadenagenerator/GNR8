@@ -1317,6 +1317,43 @@ test("airship visual editor uses CHS demo artifact renderer when available", () 
   assert.equal(html.includes("What changes in the improved draft"), false);
 });
 
+test("airship visual editor keeps draft canvas when artifact resolver rejects diagnostic fallback HTML", () => {
+  const model = airshipModel();
+  assert.ok(model.draftPanel.draftPreview);
+  model.previews.airshipEditorArtifactCanvas = null;
+  const html = renderToStaticMarkup(
+    <AirshipSingleSiteVisualEditorWorkspace
+      migrationId={model.migrationId}
+      importedSite={model.importedSite}
+      sourceUrl={model.sourceUrl}
+      liveSiteUrl={model.liveSiteUrl}
+      importedSiteModel={model.importedSiteModel}
+      demoReadiness={model.demoReadiness}
+      draftCandidate={{
+        siteVersionId: model.previews.airshipDraftCandidate?.siteVersionId ?? null,
+        runtimeArtifactId: model.previews.airshipDraftCandidate?.runtimeArtifactId ?? null,
+        route: model.previews.airshipDraftCandidate?.route ?? null,
+        draftId: model.previews.airshipDraftCandidate?.draftId ?? null,
+        draftVersion: model.previews.airshipDraftCandidate?.draftVersion ?? null,
+        statusLabel: model.previews.airshipDraftCandidate?.statusLabel ?? null,
+      }}
+      draftPreview={model.draftPanel.draftPreview}
+      drafts={model.draftPanel.drafts}
+      persistence={model.draftPanel.persistence}
+      aiProviderStatus={{ provider: "openai", scope: "airship_editor", ownerScope: "internal_superadmin", connected: false, status: "missing", maskedKey: null, model: "gpt-5", lastTestedAt: null, lastTestStatus: null, createdAt: null, updatedAt: null, canUseAiCommands: false }}
+      agentProfileSelection={selectedAirshipProfile({ status: "unavailable", activeProfile: null, diagnostics: ["airship_agent_default_profile_unavailable"] })}
+    />,
+  );
+
+  assert.equal(html.includes('data-airship-artifact-canvas-render="true"'), false);
+  assert.equal(html.includes("Less risk. More control. Better IT."), true);
+  assert.equal(html.includes("Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region."), true);
+  assert.equal(html.includes("FALLBACK PREVIEW"), false);
+  assert.equal(html.includes("raw-block:"), false);
+  assert.equal(html.includes("Diagnostics: keys="), false);
+  assert.equal(html.includes("No CTA action link extracted"), false);
+});
+
 test("airship visual editor uses ARIS candidate artifact renderer when available", () => {
   const model = airshipModel();
   assert.ok(model.draftPanel.draftPreview);

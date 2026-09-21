@@ -22,6 +22,7 @@ import {
   type AirshipSingleSiteDraftStyleSettings,
 } from "./airship-single-site-draft-service";
 import { maybeBuildArisAirshipMvpEvidenceSourceVersion } from "./airship-aris-mvp-draft";
+import { analyzeAirshipArtifactHtmlValidity } from "./airship-valid-artifact-html";
 
 export const AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION = "airship-4-draft-candidate-service:v1" as const;
 
@@ -456,12 +457,14 @@ function previewRoute(siteVersionId: string): string {
   return `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(siteVersionId)}/preview?mode=transformed`;
 }
 
-function assertGeneratedAirshipArtifactHtml(htmlByPath: Record<string, string>): void {
+function assertGeneratedAirshipArtifactHtml(htmlByPath: Record<string, string>, migrationId: string): void {
   const rootHtml = text(htmlByPath["/"]);
   if (!rootHtml) throw new Error("airship_draft_candidate_artifact_html_missing");
-  if (/FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/i.test(rootHtml)) {
+  const validity = analyzeAirshipArtifactHtmlValidity({ html: rootHtml, migrationId });
+  if (validity.reasons.includes("diagnostic_fallback_marker")) {
     throw new Error("airship_draft_candidate_artifact_html_diagnostic_fallback");
   }
+  if (!validity.valid) throw new Error(`airship_draft_candidate_artifact_html_invalid:${validity.reasons.join(",")}`);
 }
 
 function provenanceFrom(value: unknown): AirshipDraftCandidateProvenance | null {
@@ -646,7 +649,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
   const verifiedVersion = existingTarget ?? await deps.getSiteVersion(candidateVersion.siteVersionId);
   if (!verifiedVersion) throw new Error(`airship_draft_candidate_version_not_found:${candidateVersion.siteVersionId}`);
   const artifactBundle = deps.buildDeterministicArtifactBundle({ siteVersion: verifiedVersion, renderMode: "PREVIEW" });
-  assertGeneratedAirshipArtifactHtml(artifactBundle.htmlByPath);
+  assertGeneratedAirshipArtifactHtml(artifactBundle.htmlByPath, input.draft.migrationId);
   const artifactInput = {
     siteId: artifactBundle.siteId,
     siteVersionId: artifactBundle.siteVersionId,

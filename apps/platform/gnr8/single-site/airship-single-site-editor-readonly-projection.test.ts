@@ -12,6 +12,8 @@ import {
 import {
   AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
   AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+  AIRSHIP_ARIS_DRAFT_ID,
+  AIRSHIP_ARIS_DRAFT_VERSION,
   AIRSHIP_ARIS_MIGRATION_ID,
   AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
   AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
@@ -20,6 +22,10 @@ import {
 import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
 import type { RuntimeArtifact } from "../runtime/types";
 import type { SingleSiteStudioReadonlyProjection } from "./single-site-studio-readonly-projection";
+import {
+  analyzeAirshipArtifactHtmlValidity,
+  isValidPolishedAirshipArtifactHtml,
+} from "./airship-valid-artifact-html";
 
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const ORIGINAL_CLONE_VERSION_ID = "6b172a5b-200e-471c-9599-5dc70f04ea53";
@@ -27,6 +33,58 @@ const IMPROVED_CANDIDATE_VERSION_ID = "a3f9493e-9da4-4ef8-8608-154fe6d25a0f";
 const AIRSHIP_DEMO_VERSION_ID = "92e476b9-67fc-408a-be3d-5c744aa0f3f6";
 const AIRSHIP_DEMO_ARTIFACT_ID = "5ac3716a-f29d-4648-bc86-a6942638ed53";
 const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
+
+function polishedChsArtifactHtml(headline = "The CHS team helps your IT change with every technology wave."): string {
+  return [
+    "<!doctype html><html><body>",
+    `<header data-airship-section="hero"><h1 data-airship-element="hero-headline">${headline}</h1><p>Advanced cybersecurity, data systems, and hybrid infrastructure solutions across the Adriatic region.</p></header>`,
+    '<main><section data-airship-section="offers"><article data-airship-element="offer-card">Cybersecurity and infrastructure support for CHS clients.</article></section>',
+    '<section data-airship-section="cta"><a data-airship-element="contact-cta">Contact CHS</a></section></main>',
+    '<footer data-airship-section="footer">Internal GNR8 demo preview for CHS.</footer>',
+    "</body></html>",
+  ].join("");
+}
+
+function polishedArisArtifactHtml(headline = "ARIS - Apple in Canton ponudba"): string {
+  return [
+    "<!doctype html><html><body>",
+    `<header data-airship-section="hero"><nav>ARIS</nav><h1 data-airship-element="hero-headline">${headline}</h1></header>`,
+    '<main><section data-airship-section="offers"><article data-airship-element="offer-card">Apple ponudba</article><article data-airship-element="offer-card">Canton Smart ponudba</article></section>',
+    '<section data-airship-section="cta"><a data-airship-element="contact-cta">Želim ponudbo</a></section></main>',
+    '<footer data-airship-section="footer">Internal GNR8 demo preview for ARIS.</footer>',
+    "</body></html>",
+  ].join("");
+}
+
+function runtimeArtifact(input: {
+  artifactId: string;
+  siteVersionId: string;
+  html: string;
+}): RuntimeArtifact {
+  return {
+    id: input.artifactId,
+    siteId: "runtime-airship-test",
+    siteVersionId: input.siteVersionId,
+    rendererCompatibilityVersion: "gnr8-renderer-v1",
+    htmlByPath: { "/": input.html },
+    compiledTokenStyles: "",
+    assetFingerprintMap: {},
+    manifest: { sourceKind: "airship_single_site_draft_candidate" },
+    publishStage: "shadow",
+    shadowRestricted: false,
+    artifactGovernance: {
+      pageGateState: ["AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY"],
+      pageRolloutPolicyState: ["AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE"],
+      pageEnforcementState: { shadow: ["ALLOW"], canary: ["REVIEW"], production: ["REVIEW"] },
+      siteGateState: "AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY",
+      siteRolloutPolicyState: "AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE",
+      siteEnforcementState: { shadow: "ALLOW", canary: "REVIEW", production: "REVIEW" },
+      publishStage: "shadow",
+    },
+    bundleSha256: `sha-${input.artifactId}`,
+    createdAt: "2026-09-21T00:00:00.000Z",
+  };
+}
 
 const studioProjection: SingleSiteStudioReadonlyProjection = {
   version: "mvp-ui-1-single-site-studio-readonly:v1",
@@ -156,15 +214,24 @@ test("airship editor artifact sanitizer disables raw scripts and unsafe handlers
   assert.equal(sanitized.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), true);
 });
 
-test("airship editor canvas resolves ARIS polished candidate artifact HTML before fallback preview rendering", async () => {
-  const polishedArisHtml = [
+test("airship artifact validity gate rejects diagnostic fallback HTML and accepts polished Airship pages", () => {
+  const diagnosticHtml = [
     "<!doctype html><html><body>",
-    '<header data-airship-section="hero"><nav>ARIS</nav><h1 data-airship-element="hero-headline">ARIS - Apple in Canton ponudba</h1></header>',
-    '<main><section data-airship-section="offers"><article data-airship-element="offer-card">Apple ponudba</article><article data-airship-element="offer-card">Canton Smart ponudba</article></section>',
-    '<section data-airship-section="cta"><a data-airship-element="contact-cta">Želim ponudbo</a></section></main>',
-    '<footer data-airship-section="footer">Internal GNR8 demo preview for ARIS.</footer>',
+    "<h1>FALLBACK PREVIEW: HERO</h1>",
+    "<section>raw-block: html&gt;body Diagnostics: keys=script No CTA action link extracted</section>",
     "</body></html>",
   ].join("");
+
+  const diagnostic = analyzeAirshipArtifactHtmlValidity({ html: diagnosticHtml, migrationId: CHS_MIGRATION_ID });
+
+  assert.equal(diagnostic.valid, false);
+  assert.equal(diagnostic.reasons.includes("diagnostic_fallback_marker"), true);
+  assert.equal(isValidPolishedAirshipArtifactHtml({ html: polishedChsArtifactHtml(), migrationId: CHS_MIGRATION_ID }), true);
+  assert.equal(isValidPolishedAirshipArtifactHtml({ html: polishedArisArtifactHtml(), migrationId: AIRSHIP_ARIS_MIGRATION_ID }), true);
+});
+
+test("airship editor canvas resolves ARIS polished candidate artifact HTML before fallback preview rendering", async () => {
+  const polishedArisHtml = polishedArisArtifactHtml();
   const calls: string[] = [];
   const render = await readAirshipEditorArtifactCanvasRender({
     migrationId: AIRSHIP_ARIS_MIGRATION_ID,
@@ -289,7 +356,7 @@ test("airship editor canvas resolves refreshed CHS candidate artifact before sta
         siteVersionId: candidateSiteVersionId,
         rendererCompatibilityVersion: "gnr8-renderer-v1",
         htmlByPath: {
-          "/": "<!doctype html><html><body><main data-airship-section=\"hero\"><h1 data-airship-element=\"hero-headline\">Saved regenerated CHS headline</h1><a data-airship-element=\"hero-cta\">Schedule CHS consultation</a></main></body></html>",
+          "/": polishedChsArtifactHtml("Saved regenerated CHS headline").replace("Contact CHS", "Schedule CHS consultation"),
         },
         compiledTokenStyles: "",
         assetFingerprintMap: {},
@@ -320,6 +387,125 @@ test("airship editor canvas resolves refreshed CHS candidate artifact before sta
   assert.equal(render?.sanitizedHtml.includes("Schedule CHS consultation"), true);
   assert.equal(render?.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), false);
   assert.equal(render?.sanitizedHtml.includes("FALLBACK PREVIEW"), false);
+});
+
+test("airship editor canvas rejects diagnostic CHS candidate artifact and falls back to polished CHS demo artifact", async () => {
+  const badCandidateVersionId = "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7";
+  const badCandidateArtifactId = "4ec7588a-b7cb-46dc-a735-88e4ec466a72";
+  const calls: string[] = [];
+  const render = await readAirshipEditorArtifactCanvasRender({
+    migrationId: CHS_MIGRATION_ID,
+    draftCandidate: {
+      label: "New Airship draft candidate preview",
+      siteVersionId: badCandidateVersionId,
+      runtimeArtifactId: badCandidateArtifactId,
+      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${badCandidateVersionId}/preview?mode=transformed`,
+      mode: "transformed",
+      available: true,
+      unavailableReason: null,
+      authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+      statusLabel: "Not live, internal preview only",
+      sourceLiveSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
+      sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
+      draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
+      draftVersion: 10,
+      styleSettings: {
+        heroTopPadding: 96,
+        heroBottomPadding: 104,
+        backgroundTint: "#eef6ff",
+        ctaColor: "#1d4ed8",
+      },
+      appliedEdits: [],
+      skippedEdits: [],
+    },
+    previewHost: null,
+    getArtifactById: async (artifactId) => {
+      calls.push(artifactId);
+      if (artifactId === badCandidateArtifactId) {
+        return runtimeArtifact({
+          artifactId,
+          siteVersionId: badCandidateVersionId,
+          html: "<!doctype html><html><body><h1>FALLBACK PREVIEW: HERO</h1><ul><li>raw-block: html&gt;body</li><li>Diagnostics: keys=script</li><li>No CTA action link extracted</li></ul></body></html>",
+        });
+      }
+      if (artifactId === AIRSHIP_DEMO_ARTIFACT_ID) {
+        return runtimeArtifact({
+          artifactId,
+          siteVersionId: AIRSHIP_DEMO_VERSION_ID,
+          html: polishedChsArtifactHtml(),
+        });
+      }
+      return null;
+    },
+  });
+
+  assert.deepEqual(calls, [badCandidateArtifactId, AIRSHIP_DEMO_ARTIFACT_ID]);
+  assert.equal(render?.source, "demo_artifact");
+  assert.equal(render?.siteVersionId, AIRSHIP_DEMO_VERSION_ID);
+  assert.equal(render?.runtimeArtifactId, AIRSHIP_DEMO_ARTIFACT_ID);
+  assert.equal(render?.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), true);
+  assert.equal(render?.sanitizedHtml.includes("FALLBACK PREVIEW"), false);
+  assert.equal(render?.sanitizedHtml.includes("raw-block"), false);
+});
+
+test("airship editor canvas rejects diagnostic ARIS candidate artifact and falls back to polished ARIS demo artifact", async () => {
+  const badCandidateVersionId = "11111111-2222-4333-8444-555555555555";
+  const badCandidateArtifactId = "22222222-3333-4444-8555-666666666666";
+  const calls: string[] = [];
+  const render = await readAirshipEditorArtifactCanvasRender({
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    draftCandidate: {
+      label: "New Airship draft candidate preview",
+      siteVersionId: badCandidateVersionId,
+      runtimeArtifactId: badCandidateArtifactId,
+      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${badCandidateVersionId}/preview?mode=transformed`,
+      mode: "transformed",
+      available: true,
+      unavailableReason: null,
+      authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
+      statusLabel: "Not live, internal preview only",
+      sourceLiveSiteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+      sourceLiveRuntimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+      draftId: AIRSHIP_ARIS_DRAFT_ID,
+      draftVersion: AIRSHIP_ARIS_DRAFT_VERSION,
+      styleSettings: {
+        heroTopPadding: 72,
+        heroBottomPadding: 72,
+        backgroundTint: "#ffffff",
+        ctaColor: "#111827",
+      },
+      appliedEdits: [],
+      skippedEdits: [],
+    },
+    previewHost: null,
+    getArtifactById: async (artifactId) => {
+      calls.push(artifactId);
+      if (artifactId === badCandidateArtifactId) {
+        return runtimeArtifact({
+          artifactId,
+          siteVersionId: badCandidateVersionId,
+          html: "<!doctype html><html><body><h1>FALLBACK PREVIEW: HERO</h1><div>raw-block: html&gt;body Diagnostics: keys=script</div></body></html>",
+        });
+      }
+      if (artifactId === AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID) {
+        return runtimeArtifact({
+          artifactId,
+          siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+          html: polishedArisArtifactHtml(),
+        });
+      }
+      return null;
+    },
+  });
+
+  assert.deepEqual(calls, [badCandidateArtifactId, AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID]);
+  assert.equal(render?.source, "demo_artifact");
+  assert.equal(render?.siteVersionId, AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID);
+  assert.equal(render?.runtimeArtifactId, AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID);
+  assert.equal(render?.sanitizedHtml.includes("ARIS - Apple in Canton ponudba"), true);
+  assert.equal(render?.sanitizedHtml.includes("Želim ponudbo"), true);
+  assert.equal(render?.sanitizedHtml.includes("FALLBACK PREVIEW"), false);
+  assert.equal(render?.sanitizedHtml.includes("raw-block"), false);
 });
 
 test("airship projection generates the first concrete CHS AI draft and local-only preview", () => {

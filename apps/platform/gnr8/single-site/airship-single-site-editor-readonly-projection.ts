@@ -34,6 +34,7 @@ import {
   readAirshipGovernedDryRunForReadiness,
   type AirshipGovernedDryRunReadback,
 } from "./airship-governed-dry-run-service";
+import { isValidPolishedAirshipArtifactHtml } from "./airship-valid-artifact-html";
 import {
   AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
   AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
@@ -588,63 +589,79 @@ export async function readAirshipEditorArtifactCanvasRender(input: {
   getArtifactById?: typeof getArtifactById;
 }): Promise<AirshipEditorArtifactCanvasRender | null> {
   const demoReadiness = demoReadinessForMigration(input.migrationId);
-  const arisCandidate = isArisAirshipMvpMigration(input.migrationId)
+  const arisDemoCandidate = isArisAirshipMvpMigration(input.migrationId)
     ? {
         siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
         runtimeArtifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
       }
     : null;
-  const selected = input.draftCandidate
-    ? {
-        source: "candidate_artifact" as const,
-        label: "Airship candidate artifact render",
-        siteVersionId: input.draftCandidate.siteVersionId,
-        runtimeArtifactId: input.draftCandidate.runtimeArtifactId,
-        previewUrl: input.previewHost?.previewUrl ?? input.draftCandidate.route,
-      }
-    : arisCandidate
-      ? {
-          source: "candidate_artifact" as const,
-          label: "Airship candidate artifact render",
-          siteVersionId: arisCandidate.siteVersionId,
-          runtimeArtifactId: arisCandidate.runtimeArtifactId,
-          previewUrl: input.previewHost?.previewUrl ?? `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(arisCandidate.siteVersionId)}/preview?mode=transformed`,
-        }
-      : demoReadiness
-        ? {
-            source: "demo_artifact" as const,
-            label: "GNR8 demo artifact render",
-            siteVersionId: demoReadiness.activePointerTarget.siteVersionId,
-            runtimeArtifactId: demoReadiness.activePointerTarget.runtimeArtifactId,
-            previewUrl: demoReadiness.demoUrl,
-          }
-        : null;
-  if (!selected) return null;
-  if (!selected.siteVersionId || !selected.runtimeArtifactId) return null;
+  const candidates: Array<{
+    source: AirshipEditorArtifactCanvasRender["source"];
+    label: string;
+    siteVersionId: string;
+    runtimeArtifactId: string;
+    previewUrl: string | null;
+  }> = [];
 
-  const artifact = await (input.getArtifactById ?? getArtifactById)(selected.runtimeArtifactId);
-  const html = text(artifact?.htmlByPath?.["/"]);
-  if (!artifact || artifact.siteVersionId !== selected.siteVersionId || !html) return null;
+  if (input.draftCandidate) {
+    candidates.push({
+      source: "candidate_artifact",
+      label: "Airship candidate artifact render",
+      siteVersionId: input.draftCandidate.siteVersionId,
+      runtimeArtifactId: input.draftCandidate.runtimeArtifactId,
+      previewUrl: input.previewHost?.previewUrl ?? input.draftCandidate.route,
+    });
+  }
+  if (arisDemoCandidate) {
+    candidates.push({
+      source: input.draftCandidate ? "demo_artifact" : "candidate_artifact",
+      label: input.draftCandidate ? "GNR8 ARIS demo artifact render" : "Airship candidate artifact render",
+      siteVersionId: arisDemoCandidate.siteVersionId,
+      runtimeArtifactId: arisDemoCandidate.runtimeArtifactId,
+      previewUrl: input.previewHost?.previewUrl ?? `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(arisDemoCandidate.siteVersionId)}/preview?mode=transformed`,
+    });
+  }
+  if (demoReadiness) {
+    candidates.push({
+      source: "demo_artifact",
+      label: "GNR8 demo artifact render",
+      siteVersionId: demoReadiness.activePointerTarget.siteVersionId,
+      runtimeArtifactId: demoReadiness.activePointerTarget.runtimeArtifactId,
+      previewUrl: demoReadiness.demoUrl,
+    });
+  }
 
-  const sanitized = sanitizeAirshipEditorArtifactHtml(html);
-  return {
-    source: selected.source,
-    label: selected.label,
-    siteVersionId: selected.siteVersionId,
-    runtimeArtifactId: selected.runtimeArtifactId,
-    path: "/",
-    previewUrl: selected.previewUrl,
-    sanitizedHtml: sanitized.sanitizedHtml,
-    originalHtmlByteLength: Buffer.byteLength(html, "utf8"),
-    sanitizedHtmlByteLength: sanitized.sanitizedHtmlByteLength,
-    safety: {
-      sandbox: sanitized.sandbox,
-      scriptsRemoved: sanitized.scriptsRemoved,
-      inlineEventHandlersRemoved: sanitized.inlineEventHandlersRemoved,
-      javascriptUrlsRemoved: sanitized.javascriptUrlsRemoved,
-      rawScriptsExecute: false,
-    },
-  };
+  const seenArtifactIds = new Set<string>();
+  for (const selected of candidates) {
+    if (!selected.siteVersionId || !selected.runtimeArtifactId || seenArtifactIds.has(selected.runtimeArtifactId)) continue;
+    seenArtifactIds.add(selected.runtimeArtifactId);
+    const artifact = await (input.getArtifactById ?? getArtifactById)(selected.runtimeArtifactId);
+    const html = text(artifact?.htmlByPath?.["/"]);
+    if (!artifact || artifact.siteVersionId !== selected.siteVersionId || !html) continue;
+    if (!isValidPolishedAirshipArtifactHtml({ html, migrationId: input.migrationId })) continue;
+
+    const sanitized = sanitizeAirshipEditorArtifactHtml(html);
+    return {
+      source: selected.source,
+      label: selected.label,
+      siteVersionId: selected.siteVersionId,
+      runtimeArtifactId: selected.runtimeArtifactId,
+      path: "/",
+      previewUrl: selected.previewUrl,
+      sanitizedHtml: sanitized.sanitizedHtml,
+      originalHtmlByteLength: Buffer.byteLength(html, "utf8"),
+      sanitizedHtmlByteLength: sanitized.sanitizedHtmlByteLength,
+      safety: {
+        sandbox: sanitized.sandbox,
+        scriptsRemoved: sanitized.scriptsRemoved,
+        inlineEventHandlersRemoved: sanitized.inlineEventHandlersRemoved,
+        javascriptUrlsRemoved: sanitized.javascriptUrlsRemoved,
+        rawScriptsExecute: false,
+      },
+    };
+  }
+
+  return null;
 }
 
 function arisDraftCandidatePreviewFallback(migrationId: string | null): AirshipDraftCandidatePreviewRef | null {

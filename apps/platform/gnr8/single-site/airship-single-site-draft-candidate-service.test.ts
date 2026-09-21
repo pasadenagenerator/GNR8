@@ -410,6 +410,45 @@ test("creates an internal Airship draft candidate from live/published version an
   ]);
 });
 
+test("fails closed when generated Airship candidate artifact HTML is diagnostic fallback", async () => {
+  const deps = fakeDeps();
+  deps.buildDeterministicArtifactBundle = (input: { siteVersion: CanonicalSiteVersionSnapshot; renderMode: RenderMode }) => {
+    deps.calls.push("buildDeterministicArtifactBundle");
+    return {
+      siteId: input.siteVersion.siteId,
+      siteVersionId: input.siteVersion.id,
+      rendererCompatibilityVersion: input.siteVersion.rendererCompatibilityVersion,
+      bundleSha256: "diagnostic-fallback-bundle",
+      htmlByPath: {
+        "/": "<!doctype html><html><body><h1>FALLBACK PREVIEW: HERO</h1><div>raw-block: html&gt;body Diagnostics: keys=script No CTA action link extracted</div></body></html>",
+      },
+      compiledTokenStyles: "",
+      assetFingerprintMap: {},
+      manifest: { renderMode: input.renderMode },
+    };
+  };
+
+  await assert.rejects(
+    () => createAirshipSingleSiteDraftCandidate(
+      {
+        draft: savedDraft(),
+        actor: "superadmin",
+        targetCandidateSiteVersionId: TARGET_VERSION_ID,
+      },
+      deps,
+    ),
+    /airship_draft_candidate_artifact_html_diagnostic_fallback/,
+  );
+
+  assert.equal(deps.calls.includes("createArtifact"), false);
+  assert.equal(deps.calls.includes("refreshArtifactForVersionPublishCandidate"), false);
+  assert.equal(deps.calls.includes("bindArtifactToVersion"), false);
+  assert.equal(deps.artifacts.has(TARGET_ARTIFACT_ID), false);
+  assert.equal(deps.versions.get(TARGET_VERSION_ID)?.artifactId, null);
+  assert.equal(deps.calls.filter((call) => call === "getActivePointerForSite:runtime-chs").length, 1);
+  assert.equal(deps.createSiteVersionInputs[0]?.createSourceHostBinding, false);
+});
+
 test("reuses an existing matching Airship draft candidate and keeps active pointer unchanged", async () => {
   const deps = fakeDeps();
   const first = await createAirshipSingleSiteDraftCandidate(
