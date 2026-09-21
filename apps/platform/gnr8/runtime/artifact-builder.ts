@@ -150,6 +150,25 @@ function readAirshipDraftSections(sectionProps: Record<string, unknown>): Airshi
   }).filter((section): section is AirshipDraftSection => Boolean(section));
 }
 
+function splitAirshipCardItem(value: string): { title: string; body: string } | null {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/^(.{3,72}?)(?:\s+-\s+|\s+–\s+|\s+—\s+|:\s+)(.{12,})$/);
+  if (!match) return null;
+  const title = match[1]?.trim();
+  const body = match[2]?.trim();
+  if (!title || !body) return null;
+  return { title, body };
+}
+
+function renderAirshipCardItemContent(item: string, itemIndex: number): string {
+  const split = splitAirshipCardItem(item);
+  if (!split) return escapeHtml(item);
+  return [
+    `<strong data-airship-element="card-title" data-airship-element-index="${itemIndex}">${escapeHtml(split.title)}</strong>`,
+    `<span data-airship-element="card-body" data-airship-element-index="${itemIndex}">${escapeHtml(split.body)}</span>`,
+  ].join(" ");
+}
+
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -731,7 +750,7 @@ function renderLegacySummaryHtml(input: {
   lines.push(`    <p class="gnr8-eyebrow">${escapeHtml(labels.overview)}</p>`);
   lines.push(`    <h1 class="gnr8-title" data-airship-element="hero-headline">${escapeHtml(heroHeading)}</h1>`);
   if (intro) {
-    lines.push(`    <p style="margin: 10px 0 0; font-size: 1.03rem;">${escapeHtml(intro)}</p>`);
+    lines.push(`    <p data-airship-element="hero-subheading" style="margin: 10px 0 0; font-size: 1.03rem;">${escapeHtml(intro)}</p>`);
   }
   if (airshipDraftCta) {
     lines.push(`    <a class="gnr8-primary-cta" href="#contact" data-airship-element="hero-cta">${escapeHtml(airshipDraftCta.label)}</a>`);
@@ -775,7 +794,7 @@ function renderLegacySummaryHtml(input: {
       if (section.items.length > 0) {
         lines.push("    <ul>");
         for (const [itemIndex, item] of section.items.entries()) {
-          lines.push(`      <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""}>${escapeHtml(item)}</li>`);
+          lines.push(`      <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""}>${renderAirshipCardItemContent(item, itemIndex)}</li>`);
         }
         lines.push("    </ul>");
       } else if (section.body) {
@@ -895,7 +914,7 @@ function renderAirshipDraftSectionHtml(input: {
   } else if (section.items.length > 0) {
     lines.push('  <ul style="margin:0;padding-left:18px;">');
     for (const [itemIndex, item] of section.items.entries()) {
-      lines.push(`    <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""} style="margin:0 0 6px;">${escapeHtml(item)}</li>`);
+      lines.push(`    <li${elementMarker ? ` data-airship-element="${elementMarker}" data-airship-element-index="${itemIndex}"` : ""} style="margin:0 0 6px;">${renderAirshipCardItemContent(item, itemIndex)}</li>`);
     }
     lines.push("  </ul>");
   } else if (section.body) {
@@ -1047,7 +1066,7 @@ export function buildDeterministicArtifactBundle(input: {
   const pageRenderModes: Record<string, ArtifactPageRenderMode> = {};
   const pageRecoveryReasons: Record<string, ContentRecoveryReasonCode[]> = {};
   const recoveryDiagnosticCodes = new Set<ContentRecoveryDiagnosticCode>();
-  const selectedSourceHtmlPath = input.siteVersion.importProvenanceSummary?.captureEvidence.selectedSourceHtmlPath ?? null;
+  const selectedSourceHtmlPath = input.siteVersion.importProvenanceSummary?.captureEvidence?.selectedSourceHtmlPath ?? null;
 
   for (const page of [...input.siteVersion.pages].sort((a, b) => a.path.localeCompare(b.path))) {
     const normalizedPath = normalizePagePath(page.path);

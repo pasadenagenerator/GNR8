@@ -189,7 +189,7 @@ test("artifact-builder renders Airship section and element markers in candidate 
               },
               airshipDraftCtaOverride: { label: "Želim ponudbo" },
               airshipDraftSections: [
-                { key: "offers", label: "Offers / Services", heading: "Product offers", body: "MacBook Air. Mac Studio.", items: ["MacBook Air", "Mac Studio"], ctaLabel: null },
+                { key: "offers", label: "Offers / Services", heading: "Product offers", body: "MacBook Air. Mac Studio.", items: ["MacBook Air - Thin laptop with Apple silicon.", "Mac Studio - Compact workstation for demanding workflows."], ctaLabel: null },
                 { key: "proof", label: "Proof / Benefits", heading: "Brand proof", body: "Apple and Canton proof.", items: ["Apple", "Canton"], ctaLabel: null },
                 { key: "approach", label: "Approach / Process", heading: "Process", body: "Svetovanje in testiranje.", items: ["Svetovanje", "Testiranje"], ctaLabel: null },
                 { key: "cta", label: "CTA / Contact", heading: "Kontakt", body: "prodaja@aris.si", items: [], ctaLabel: "Želim ponudbo" },
@@ -215,6 +215,8 @@ test("artifact-builder renders Airship section and element markers in candidate 
   assert.match(html, /data-airship-element="offer-card"/);
   assert.match(html, /data-airship-element="proof-card"/);
   assert.match(html, /data-airship-element="approach-card"/);
+  assert.match(html, /data-airship-element="card-title"/);
+  assert.match(html, /data-airship-element="card-body"/);
   assert.match(html, /<div data-airship-element="contact-card">/);
   assert.match(html, /data-airship-element="contact-cta"/);
   assert.doesNotMatch(html, /FALLBACK PREVIEW|raw-block|CAPTURE_DRIVEN|Diagnostics:/i);

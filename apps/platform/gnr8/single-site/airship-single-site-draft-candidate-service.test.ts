@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { buildDeterministicArtifactBundle as buildRuntimeArtifactBundle } from "../runtime/artifact-builder";
 import type { CanonicalPageVersionInput, CanonicalSiteVersionSnapshot, RenderMode, RuntimeArtifact, RuntimeImportProvenanceSummary } from "../runtime/types";
 import {
   AIRSHIP_SINGLE_SITE_DRAFT_CANDIDATE_SERVICE_VERSION,
@@ -14,6 +15,7 @@ import {
   AIRSHIP_ARIS_RUNTIME_SITE_ID,
   buildArisAirshipMvpDraftSeed,
 } from "./airship-aris-mvp-draft";
+import { analyzeAirshipArtifactHtmlValidity } from "./airship-valid-artifact-html";
 
 const MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const DRAFT_ID = "f9b31666-b3b0-4455-8650-4a8c7304a559";
@@ -408,6 +410,153 @@ test("creates an internal Airship draft candidate from live/published version an
     "getArtifactById",
     "getSiteVersion",
   ]);
+});
+
+test("regenerates CHS polished Airship artifact HTML from saved draft edits with real builder", async () => {
+  const deps = fakeDeps();
+  deps.buildDeterministicArtifactBundle = buildRuntimeArtifactBundle;
+  const draft = savedDraft();
+  draft.draftEdits = draft.draftEdits.map((edit) =>
+    edit.id === "airship-chs-home-contact-cta"
+      ? {
+          ...edit,
+          proposedTextContent: "Book a CHS security review",
+          status: "accepted" as const,
+          reasonForChange: "Accepted CTA label edit.",
+        }
+      : edit,
+  );
+
+  const output = await createAirshipSingleSiteDraftCandidate(
+    {
+      draft,
+      actor: "superadmin",
+      targetCandidateSiteVersionId: TARGET_VERSION_ID,
+    },
+    deps,
+  );
+
+  const artifact = deps.artifacts.get(TARGET_ARTIFACT_ID);
+  const html = artifact?.htmlByPath["/"] ?? "";
+  const validity = analyzeAirshipArtifactHtmlValidity({ html, migrationId: MIGRATION_ID });
+
+  assert.equal(output.candidateRuntimeArtifactId, TARGET_ARTIFACT_ID);
+  assert.equal(validity.valid, true, validity.reasons.join(","));
+  assert.equal((artifact?.manifest.pageRenderModes as Record<string, string> | undefined)?.["/"], "canonical");
+  assert.match(html, /CHS helps modernize secure enterprise IT/);
+  assert.match(html, /Cybersecurity, data systems, and hybrid infrastructure support for teams across the Adriatic region\./);
+  assert.match(html, /Book a CHS security review/);
+  assert.match(html, /data-airship-section="hero"/);
+  assert.match(html, /data-airship-section="cta"/);
+  assert.match(html, /data-airship-element="hero-headline"/);
+  assert.match(html, /data-airship-element="hero-subheading"/);
+  assert.match(html, /data-airship-element="hero-cta"/);
+  assert.match(html, /data-airship-element="contact-cta"/);
+  assert.doesNotMatch(html, /FALLBACK PREVIEW|raw-block:|Diagnostics: keys=|Recovered Section|CAPTURE_DRIVEN/i);
+  assert.equal(output.activePointerChanged, false);
+  assert.equal(output.published, false);
+  assert.equal(deps.calls.some((call) => /publish|sourceCapture|capture|provider|dns/i.test(call)), false);
+});
+
+test("regenerates ARIS polished Airship artifact HTML from saved draft edits with real builder", async () => {
+  const deps = fakeDeps();
+  deps.buildDeterministicArtifactBundle = buildRuntimeArtifactBundle;
+  deps.versions.set(AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID, {
+    ...liveVersion(),
+    id: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+    siteId: AIRSHIP_ARIS_RUNTIME_SITE_ID,
+    artifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+    pages: [
+      {
+        ...liveVersion().pages[0]!,
+        id: "aris-degraded-page-version",
+        siteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+        pageId: "aris-degraded-home",
+        title: "FALLBACK PREVIEW",
+        contentModel: {
+          sectionProps: {
+            "raw-block": {
+              headline: "FALLBACK PREVIEW",
+              subheading: "CAPTURE_DRIVEN Diagnostics:",
+            },
+          },
+        },
+      },
+    ],
+  });
+  deps.artifacts.set(AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID, {
+    ...liveArtifact(),
+    id: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+    siteId: AIRSHIP_ARIS_RUNTIME_SITE_ID,
+    siteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+    htmlByPath: { "/": "<html><body>FALLBACK PREVIEW raw-block CAPTURE_DRIVEN Diagnostics:</body></html>" },
+  });
+  const seed = buildArisAirshipMvpDraftSeed({ tenantId: "tenant-aris" });
+  const draft: AirshipSingleSiteDraftRecord = {
+    id: "11111111-2222-4333-8444-999999999999",
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    tenantId: seed.tenantId,
+    clientId: seed.clientId,
+    siteId: seed.siteId,
+    agencyId: seed.agencyId,
+    sourceUrl: seed.sourceUrl,
+    targetSiteVersionRefs: seed.targetSiteVersionRefs,
+    draftEdits: seed.draftEdits.map((edit) =>
+      edit.id === "airship-aris-home-headline"
+        ? { ...edit, proposedTextContent: "ARIS - Apple, Canton in strokovno svetovanje" }
+        : edit.id === "airship-aris-home-ctaLabel"
+          ? { ...edit, proposedTextContent: "Kontaktirajte ARIS" }
+          : edit,
+    ),
+    draftStatus: "draft",
+    version: 2,
+    semanticWatermark: "airship-single-site-editor-draft:aris-real-builder-test",
+    metadata: seed.metadata,
+    createdByActorId: "superadmin",
+    updatedByActorId: "superadmin",
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: "2026-09-15T00:00:00.000Z",
+    updatedAt: "2026-09-15T00:00:00.000Z",
+  };
+
+  const output = await createAirshipSingleSiteDraftCandidate(
+    {
+      draft,
+      actor: "superadmin",
+      sourceLiveSiteVersionId: AIRSHIP_ARIS_INITIAL_RUNTIME_SITE_VERSION_ID,
+      sourceLiveRuntimeArtifactId: AIRSHIP_ARIS_RUNTIME_ARTIFACT_ID,
+      targetCandidateSiteVersionId: TARGET_VERSION_ID,
+    },
+    deps,
+  );
+
+  const artifact = deps.artifacts.get(TARGET_ARTIFACT_ID);
+  const html = artifact?.htmlByPath["/"] ?? "";
+  const validity = analyzeAirshipArtifactHtmlValidity({ html, migrationId: AIRSHIP_ARIS_MIGRATION_ID });
+
+  assert.equal(output.candidateRuntimeArtifactId, TARGET_ARTIFACT_ID);
+  assert.equal(validity.valid, true, validity.reasons.join(","));
+  assert.equal((artifact?.manifest.pageRenderModes as Record<string, string> | undefined)?.["/"], "canonical");
+  assert.match(html, /ARIS - Apple, Canton in strokovno svetovanje/);
+  assert.match(html, /MacBook Air, Mac Studio in Canton Smart izdelki/);
+  assert.match(html, /Kontaktirajte ARIS/);
+  assert.match(html, /Blackmagic Design/);
+  assert.match(html, /data-airship-section="hero"/);
+  assert.match(html, /data-airship-section="offers"/);
+  assert.match(html, /data-airship-section="proof"/);
+  assert.match(html, /data-airship-section="approach"/);
+  assert.match(html, /data-airship-section="cta"/);
+  assert.match(html, /data-airship-element="hero-headline"/);
+  assert.match(html, /data-airship-element="hero-subheading"/);
+  assert.match(html, /data-airship-element="hero-cta"/);
+  assert.match(html, /data-airship-element="offer-card"/);
+  assert.match(html, /data-airship-element="card-title"|data-airship-element="proof-card"/);
+  assert.match(html, /data-airship-element="contact-cta"/);
+  assert.doesNotMatch(html, /CHS|chs\.si|FALLBACK PREVIEW|raw-block:|Diagnostics: keys=|Recovered Section|CAPTURE_DRIVEN/i);
+  assert.equal(output.activePointerChanged, false);
+  assert.equal(output.published, false);
+  assert.equal(deps.calls.some((call) => /publish|sourceCapture|capture|provider|dns/i.test(call)), false);
 });
 
 test("fails closed when generated Airship candidate artifact HTML is diagnostic fallback", async () => {

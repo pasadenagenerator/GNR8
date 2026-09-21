@@ -490,11 +490,33 @@ function inferPageStructuralConfidence(page: CanonicalPageVersionSnapshot): numb
   });
 }
 
+function hasAirshipDraftCandidateProvenance(value: RuntimeImportProvenanceSummary | null): boolean {
+  if (!isRecord(value)) return false;
+  const candidate = value.airshipSingleSiteDraftCandidate;
+  return isRecord(candidate) && asNonEmptyString(candidate.serviceVersion) != null;
+}
+
+function hasGeneratedAirshipDraftContent(page: CanonicalPageVersionSnapshot): boolean {
+  const sections = page.structureModel.sections ?? [];
+  return sections.some((section) => {
+    const sectionProps = page.contentModel.sectionProps[section.id] ?? {};
+    if (!isRecord(sectionProps)) return false;
+    return readAirshipDraftHeroOverride(sectionProps) != null || isRecord(sectionProps.airshipDraftSection);
+  });
+}
+
 export function resolveContentRecoveryDecision(input: {
   page: CanonicalPageVersionSnapshot;
   importProvenanceSummary?: RuntimeImportProvenanceSummary | null;
 }): ContentRecoveryDecision {
   const summary = input.importProvenanceSummary ?? null;
+  if (hasAirshipDraftCandidateProvenance(summary) && hasGeneratedAirshipDraftContent(input.page)) {
+    return {
+      pageRenderMode: "canonical",
+      reasons: [],
+    };
+  }
+
   const hasRecoverySignals = summary != null || input.page.migrationGovernance != null;
   const sectionsDetected = input.page.structureModel.sections?.length ?? 0;
 
