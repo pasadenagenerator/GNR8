@@ -492,7 +492,8 @@ function inferPageStructuralConfidence(page: CanonicalPageVersionSnapshot): numb
 
 function hasAirshipDraftCandidateProvenance(value: RuntimeImportProvenanceSummary | null): boolean {
   if (!isRecord(value)) return false;
-  const candidate = value.airshipSingleSiteDraftCandidate;
+  const record = value as Record<string, unknown>;
+  const candidate = record["airshipSingleSiteDraftCandidate"];
   return isRecord(candidate) && asNonEmptyString(candidate.serviceVersion) != null;
 }
 

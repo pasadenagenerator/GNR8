@@ -340,3 +340,61 @@ test("content recovery trigger activates when deterministic conditions are met",
 
   assert.notEqual(highFidelity.pageRenderMode, "content_recovery");
 });
+
+test("content recovery decision bypasses recovery only for Airship draft provenance with service version", () => {
+  const page = buildPage({
+    sections: [{ id: "legacy", type: "legacy.html", order: 0 }],
+    sectionProps: {
+      legacy: {
+        airshipDraftSection: {
+          kind: "draft",
+        },
+      },
+    },
+    migrationGovernance: {
+      pageStructuralConfidence: 0.2,
+      weakSectionIds: ["legacy"],
+      structuralAnomalies: [],
+      pageMigrationGate: { stage: "gate", overallStatus: "pass", checks: [] } as any,
+      pageRolloutPolicy: { stage: "policy", overallStatus: "pass", checks: [] } as any,
+      pageEnforcement: {
+        shadow: { allow: true, reasons: [] },
+        canary: { allow: true, reasons: [] },
+        production: { allow: true, reasons: [] },
+      } as any,
+    },
+  });
+
+  const withoutServiceVersion = resolveContentRecoveryDecision({
+    page,
+    importProvenanceSummary: {
+      ...buildSummary({
+        importFidelityStatus: "degraded_import",
+        renderedCaptureStatus: "failed",
+        renderedDomQuality: "weak",
+      }),
+      airshipSingleSiteDraftCandidate: {
+        serviceVersion: "",
+      },
+    } as unknown as RuntimeImportProvenanceSummary,
+  });
+
+  assert.equal(withoutServiceVersion.pageRenderMode, "content_recovery");
+
+  const withServiceVersion = resolveContentRecoveryDecision({
+    page,
+    importProvenanceSummary: {
+      ...buildSummary({
+        importFidelityStatus: "degraded_import",
+        renderedCaptureStatus: "failed",
+        renderedDomQuality: "weak",
+      }),
+      airshipSingleSiteDraftCandidate: {
+        serviceVersion: "airship-4-draft-candidate:v1",
+      },
+    } as unknown as RuntimeImportProvenanceSummary,
+  });
+
+  assert.equal(withServiceVersion.pageRenderMode, "canonical");
+  assert.deepEqual(withServiceVersion.reasons, []);
+});
