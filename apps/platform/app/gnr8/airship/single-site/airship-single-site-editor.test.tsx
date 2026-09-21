@@ -31,6 +31,7 @@ import {
   initialAirshipHeroEditorFields,
   mappedAirshipDraftFieldIdsForSection,
   measuredAirshipArtifactCanvasHeight,
+  reflectAirshipDraftTextInArtifactCanvas,
   resetAirshipSectionStyleToSavedValues,
   resetAirshipSectionTextToSavedValues,
   selectionTextFields,
@@ -1863,6 +1864,109 @@ test("airship visual editor resolves safe element text targets only when backed 
     fields,
     drafts: model.draftPanel.drafts,
   }), null);
+});
+
+test("airship visual editor reflects saved hero headline text into the artifact canvas DOM only", () => {
+  const reflectedElement = {
+    textContent: "Old artifact headline",
+    attributes: new Map<string, string>(),
+    setAttribute(name: string, value: string) {
+      this.attributes.set(name, value);
+    },
+  };
+  const selectors: string[] = [];
+  const fakeDocument = {
+    querySelector(selector: string) {
+      selectors.push(selector);
+      return selector === '[data-airship-element="hero-headline"]' ? reflectedElement as unknown as Element : null;
+    },
+  } as Pick<Document, "querySelector">;
+
+  const reflected = reflectAirshipDraftTextInArtifactCanvas({
+    document: fakeDocument,
+    selection: airshipCanvasSelectionForElement({ section: "hero", elementKey: "hero-headline" }),
+    text: "CHS saved headline appears immediately",
+  });
+
+  assert.equal(reflected, true);
+  assert.deepEqual(selectors, ['[data-airship-element="hero-headline"]']);
+  assert.equal(reflectedElement.textContent, "CHS saved headline appears immediately");
+  assert.equal(reflectedElement.attributes.get("data-airship-draft-reflected"), "true");
+});
+
+test("airship visual editor reflects saved CTA labels and mapped card text without regenerating preview", async () => {
+  const reflectedElement = {
+    textContent: "Old CTA",
+    attributes: new Map<string, string>(),
+    setAttribute(name: string, value: string) {
+      this.attributes.set(name, value);
+    },
+  };
+  const selectors: string[] = [];
+  const fakeDocument = {
+    querySelector(selector: string) {
+      selectors.push(selector);
+      return selector === '[data-airship-element="contact-cta"][data-airship-element-index="0"]' ? reflectedElement as unknown as Element : null;
+    },
+  } as Pick<Document, "querySelector">;
+
+  assert.equal(reflectAirshipDraftTextInArtifactCanvas({
+    document: fakeDocument,
+    selection: airshipCanvasSelectionForElement({ section: "cta", elementKey: "contact-cta", elementIndex: 0 }),
+    text: "Schedule CHS consultation",
+  }), true);
+  assert.equal(reflectedElement.textContent, "Schedule CHS consultation");
+  assert.equal(reflectedElement.attributes.get("data-airship-draft-reflected"), "true");
+  assert.deepEqual(selectors, ['[data-airship-element="contact-cta"][data-airship-element-index="0"]']);
+
+  const cardElement = {
+    textContent: "Old card body",
+    attributes: new Map<string, string>(),
+    setAttribute(name: string, value: string) {
+      this.attributes.set(name, value);
+    },
+  };
+  const cardDocument = {
+    querySelector(selector: string) {
+      return selector === '[data-airship-element="card-body"][data-airship-element-index="1"]' ? cardElement as unknown as Element : null;
+    },
+  } as Pick<Document, "querySelector">;
+
+  assert.equal(reflectAirshipDraftTextInArtifactCanvas({
+    document: cardDocument,
+    selection: airshipCanvasSelectionForElement({ section: "offers", elementKey: "card-body", elementIndex: 1 }),
+    text: "Support for resilient hybrid systems.",
+  }), true);
+  assert.equal(cardElement.textContent, "Support for resilient hybrid systems.");
+
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+  assert.equal(visualEditorSource.includes("DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE"), true);
+  assert.equal(visualEditorSource.includes("Preview not regenerated yet"), true);
+  assert.equal(visualEditorSource.includes("reflectSelectedElementDraftText(selectedCanvasItem"), true);
+  assert.equal(visualEditorSource.includes("createInternalPreviewCandidate()"), true);
+  assert.equal(visualEditorSource.includes('fetch("/api/gnr8/admin/airship/single-site/draft-candidate"'), true);
+  assert.equal(visualEditorSource.includes('fetch("/api/gnr8/admin/airship/single-site/drafts"'), true);
+});
+
+test("airship visual editor does not reflect unsupported elements into the artifact canvas DOM", () => {
+  const reflectedElement = {
+    textContent: "Offer wrapper",
+    setAttribute() {
+      throw new Error("unsupported_element_should_not_be_mutated");
+    },
+  };
+  const fakeDocument = {
+    querySelector() {
+      return reflectedElement as unknown as Element;
+    },
+  } as Pick<Document, "querySelector">;
+
+  assert.equal(reflectAirshipDraftTextInArtifactCanvas({
+    document: fakeDocument,
+    selection: airshipCanvasSelectionForElement({ section: "offers", elementKey: "offer-card", elementIndex: 0 }),
+    text: "Should not apply",
+  }), false);
+  assert.equal(reflectedElement.textContent, "Offer wrapper");
 });
 
 test("airship visual editor inspector keeps unsupported selected elements read-only", async () => {

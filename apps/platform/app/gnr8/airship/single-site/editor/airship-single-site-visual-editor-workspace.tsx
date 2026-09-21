@@ -172,6 +172,7 @@ type DraftCandidateActionResponse = {
 
 const STYLE_DRAFT_SAVED_MESSAGE = "Style changes are saved to Airship draft only. Not live. Not published.";
 const CONNECT_OPENAI_MESSAGE = "Connect OpenAI to use AI commands.";
+const DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE = "Saved to draft. Preview not regenerated yet. Apply / generate preview when ready. Not live. Not published.";
 
 const fallbackSectionOptions: AirshipImportedSiteEditableSection[] = [
   { key: "hero", label: "Hero / intro", detail: "Headline, subheading, spacing, tint", mappedDraftFieldIds: [], sourceStatus: "partial source-supported hero draft fields" },
@@ -407,6 +408,38 @@ function airshipElementMarkerSelector(elementKey: string | null, elementIndex: n
   if (!elementKey) return null;
   const marker = `[data-airship-element="${elementKey}"]`;
   return elementIndex === null ? marker : `${marker}[data-airship-element-index="${elementIndex}"]`;
+}
+
+function isAirshipDraftReflectableElement(elementKey: string | null): boolean {
+  return elementKey === "hero-headline" ||
+    elementKey === "hero-subheading" ||
+    elementKey === "hero-cta" ||
+    elementKey === "contact-cta" ||
+    elementKey === "card-title" ||
+    elementKey === "card-body";
+}
+
+export function reflectAirshipDraftTextInArtifactCanvas(input: {
+  document: Pick<Document, "querySelector"> | null | undefined;
+  selection: AirshipCanvasSelection;
+  text: string;
+}): boolean {
+  if (input.selection.level !== "element" || !isAirshipDraftReflectableElement(input.selection.elementKey)) return false;
+  const doc = input.document;
+  if (!doc) return false;
+  const indexedSelector = airshipElementMarkerSelector(input.selection.elementKey, input.selection.elementIndex);
+  const fallbackSelector = airshipElementMarkerSelector(input.selection.elementKey);
+  let element: Element | null = null;
+  try {
+    element = (indexedSelector ? doc.querySelector(indexedSelector) : null)
+      ?? (fallbackSelector ? doc.querySelector(fallbackSelector) : null);
+  } catch {
+    element = null;
+  }
+  if (!element) return false;
+  element.textContent = input.text;
+  element.setAttribute("data-airship-draft-reflected", "true");
+  return true;
 }
 
 export function airshipCanvasSelectionForSection(section: EditorSectionKey): AirshipCanvasSelection {
@@ -1383,6 +1416,19 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     };
   }
 
+  const reflectSelectedElementDraftText = useCallback((selection: AirshipCanvasSelection, text: string): boolean => {
+    const iframe = artifactIframeRef.current;
+    let doc: Document | null | undefined = null;
+    try {
+      doc = iframe?.contentDocument;
+    } catch {
+      doc = null;
+    }
+    const reflected = reflectAirshipDraftTextInArtifactCanvas({ document: doc, selection, text });
+    if (reflected) window.setTimeout(measureArtifactCanvas, 0);
+    return reflected;
+  }, [measureArtifactCanvas]);
+
   async function saveDraftText(draftId: string, proposedTextContent: string): Promise<NonNullable<DraftActionResponse["draft"]>> {
     if (!props.migrationId) throw new Error("airship_migration_id_missing");
     const response = await fetch("/api/gnr8/admin/airship/single-site/drafts", {
@@ -1498,12 +1544,18 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         ctaLabel: nextFields.ctaLabel,
       };
       updateSavedFields(nextSavedFields, nextFields);
+      if (selectedElementTextTarget) {
+        const selectedText = selectedElementTextTarget.kind === "hero-field"
+          ? nextFields[selectedElementTextTarget.field]
+          : editableDrafts.find((draft) => draft.id === selectedElementTextTarget.draftId)?.proposedTextContent;
+        if (selectedText !== undefined) reflectSelectedElementDraftText(selectedCanvasItem, selectedText);
+      }
       recordChange({
         label: latestDraft ? "Text saved to Airship draft" : "Text save confirmed",
         scope: "text",
         state: "saved",
       });
-      setMessage("Changes are saved to Airship draft only. Not live. Not published.");
+      setMessage(DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE);
     } catch {
       setSaveState("failed");
       setMessage("Airship draft save failed. Editor preview changed locally only; no live site changes were made.");
@@ -1524,6 +1576,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         const draftId = selectedElementTextTarget.draftId ?? draftIdForField(selectedElementTextTarget.field, editableDrafts);
         if (!draftId) throw new Error("airship_selected_element_draft_field_missing");
         latestDraft = await saveDraftText(draftId, fields[selectedElementTextTarget.field]);
+        reflectSelectedElementDraftText(selectedCanvasItem, fields[selectedElementTextTarget.field]);
         const nextSavedFields = {
           ...savedFieldsRef.current,
           [selectedElementTextTarget.field]: fields[selectedElementTextTarget.field],
@@ -1533,6 +1586,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         const draft = editableDrafts.find((item) => item.id === selectedElementTextTarget.draftId);
         if (!draft) throw new Error("airship_selected_element_draft_row_missing");
         latestDraft = await saveDraftText(draft.id, draft.proposedTextContent);
+        reflectSelectedElementDraftText(selectedCanvasItem, draft.proposedTextContent);
         setSaveState(deriveAirshipDraftSaveState({ fields, savedFields: savedFieldsRef.current }));
       }
       recordChange({
@@ -1540,7 +1594,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         scope: "text",
         state: "saved",
       });
-      setMessage(`${selectedElementTextTarget.label} saved to Airship draft only. Not live. Not published.`);
+      setMessage(`${selectedElementTextTarget.label} ${DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE}`);
     } catch {
       setSaveState("failed");
       setMessage("Selected element draft save failed. No live site changes were made.");
