@@ -3225,7 +3225,151 @@ test('transformed preview artifact path uses request-scoped db client and bypass
   }
 })
 
-test('airship transformed preview keeps polished artifact HTML even when legacy fallback diagnostics would normally block it', async () => {
+function polishedAirshipArtifactHtml(input: { brand: 'CHS' | 'ARIS'; headline: string; body: string }): string {
+  return [
+    '<!doctype html><html><head><title>Airship Preview</title></head><body>',
+    '<main>',
+    `<section data-airship-section="hero"><h1 data-airship-element="hero-headline">${input.headline}</h1><p>${input.body}</p></section>`,
+    '<section data-airship-section="cta"><a href="/contact">Contact</a></section>',
+    `<footer data-airship-section="footer">Internal GNR8 demo preview for ${input.brand}.</footer>`,
+    '</main>',
+    '</body></html>',
+  ].join('')
+}
+
+test('airship transformed preview resolves CHS and ARIS through the explicit artifact-first route', async () => {
+  const cases = [
+    {
+      brand: 'CHS' as const,
+      migrationId: '682a09fd-8fd5-4f73-93b8-54f5d4067c63',
+      siteVersionId: 'sv-chs-airship',
+      artifactId: 'artifact-chs-airship-polished',
+      headline: 'Less risk. More control. Better IT.',
+      body: 'The CHS team helps your IT change with every technology wave.',
+    },
+    {
+      brand: 'ARIS' as const,
+      migrationId: 'ebf62324-1e51-4435-abd7-004722fb48d6',
+      siteVersionId: 'sv-aris-airship',
+      artifactId: 'artifact-aris-airship-polished',
+      headline: 'ARIS Apple experts for business teams',
+      body: 'MacBook Air, Canton Smart, Eizo, Blackmagic Design and prodaja@aris.si.',
+    },
+  ]
+
+  for (const item of cases) {
+    const calls = {
+      getSiteVersion: 0,
+      getSiteVersionArtifactBinding: 0,
+      getArtifactById: 0,
+      getRawImportedSiteArtifact: 0,
+      getRawTemplateSiteArtifact: 0,
+      getRawTemplateSiteAsset: 0,
+      listContentSlots: 0,
+      listContentOverrides: 0,
+    }
+    const restore = setUnifiedRenderPreviewDependenciesForTest({
+      getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+      getSiteVersion: async () => {
+        calls.getSiteVersion += 1
+        throw new Error('airship artifact-first preview should not fall back to site-version rendering')
+      },
+      getSiteVersionArtifactBinding: async () => {
+        calls.getSiteVersionArtifactBinding += 1
+        return { siteId: `site-${item.brand.toLowerCase()}`, artifactId: `legacy-diagnostic-${item.brand.toLowerCase()}` }
+      },
+      getArtifactById: async (artifactId) => {
+        calls.getArtifactById += 1
+        assert.equal(artifactId, item.artifactId)
+        return {
+          id: item.artifactId,
+          siteId: `site-${item.brand.toLowerCase()}`,
+          siteVersionId: item.siteVersionId,
+          rendererCompatibilityVersion: 'gnr8-renderer-v1',
+          htmlByPath: {
+            '/': polishedAirshipArtifactHtml(item),
+          },
+          compiledTokenStyles: '',
+          assetFingerprintMap: {},
+          manifest: {
+            sourceKind: 'airship_single_site_draft_candidate',
+            airshipSingleSiteDraftCandidate: {
+              serviceVersion: 'airship-4-draft-candidate-service:v1',
+              migrationId: item.migrationId,
+            },
+          },
+          publishStage: 'shadow',
+          shadowRestricted: false,
+          artifactGovernance: {
+            pageGateState: ['AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY'],
+            pageRolloutPolicyState: ['AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE'],
+            pageEnforcementState: { shadow: ['ALLOW'], canary: ['REVIEW'], production: ['REVIEW'] },
+            siteGateState: 'AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY',
+            siteRolloutPolicyState: 'AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE',
+            siteEnforcementState: { shadow: 'ALLOW', canary: 'REVIEW', production: 'REVIEW' },
+            publishStage: 'shadow',
+          },
+          bundleSha256: `sha-${item.artifactId}`,
+          createdAt: '2026-09-21T00:00:00.000Z',
+        } as any
+      },
+      getRawImportedSiteArtifact: async () => {
+        calls.getRawImportedSiteArtifact += 1
+        throw new Error('raw imported fallback should not run when explicit Airship artifact HTML exists')
+      },
+      getRawTemplateSiteArtifact: async () => {
+        calls.getRawTemplateSiteArtifact += 1
+        throw new Error('raw template fallback should not run when explicit Airship artifact HTML exists')
+      },
+      getRawTemplateSiteAsset: async () => {
+        calls.getRawTemplateSiteAsset += 1
+        throw new Error('raw template asset fallback should not run when explicit Airship artifact HTML exists')
+      },
+      listContentSlots: async () => {
+        calls.listContentSlots += 1
+        throw new Error('content fallback should not run when explicit Airship artifact HTML exists')
+      },
+      listContentOverrides: async () => {
+        calls.listContentOverrides += 1
+        throw new Error('content override fallback should not run when explicit Airship artifact HTML exists')
+      },
+    })
+
+    try {
+      const preview = await renderSiteVersionPreview({
+        siteVersionId: item.siteVersionId,
+        path: '/',
+        mode: 'transformed',
+        airshipArtifactId: item.artifactId,
+        requestCorrelationKey: `req-airship-artifact-preferred-${item.brand.toLowerCase()}`,
+      })
+
+      assert.equal(preview.source, 'transformed_artifact')
+      assert.equal(preview.artifactId, item.artifactId)
+      assert.equal(preview.siteVersionId, item.siteVersionId)
+      assert.equal(preview.fallbackUsed, false)
+      assert.equal(preview.html.includes(item.headline), true)
+      assert.equal(preview.html.includes(item.body), true)
+      assert.equal(preview.html.includes('FALLBACK PREVIEW'), false)
+      assert.equal(preview.html.includes('raw-block:'), false)
+      assert.equal(preview.html.includes('Diagnostics: keys='), false)
+      assert.deepEqual(calls, {
+        getSiteVersion: 0,
+        getSiteVersionArtifactBinding: 0,
+        getArtifactById: 1,
+        getRawImportedSiteArtifact: 0,
+        getRawTemplateSiteArtifact: 0,
+        getRawTemplateSiteAsset: 0,
+        listContentSlots: 0,
+        listContentOverrides: 0,
+      })
+    } finally {
+      restore()
+    }
+  }
+})
+
+test('airship transformed preview rejects an explicit missing or invalid artifact before legacy diagnostics render', async () => {
   const calls = {
     getSiteVersion: 0,
     getRawImportedSiteArtifact: 0,
@@ -3233,27 +3377,37 @@ test('airship transformed preview keeps polished artifact HTML even when legacy 
     getRawTemplateSiteAsset: 0,
     listContentSlots: 0,
     listContentOverrides: 0,
+    getSiteVersionArtifactBinding: 0,
+    getArtifactById: 0,
   }
   const restore = setUnifiedRenderPreviewDependenciesForTest({
     getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
     getSiteVersion: async () => {
       calls.getSiteVersion += 1
-      throw new Error('airship artifact preview should not fall back to site-version content rendering')
+      throw new Error('invalid explicit Airship artifact should not fall back to site-version content rendering')
     },
-    getSiteVersionArtifactBinding: async () => ({ siteId: 'site-aris', artifactId: 'artifact-aris-airship' }),
-    getArtifactById: async () => ({
-      id: 'artifact-aris-airship',
+    getSiteVersionArtifactBinding: async () => {
+      calls.getSiteVersionArtifactBinding += 1
+      throw new Error('invalid explicit Airship artifact should not read the legacy site-version binding')
+    },
+    getArtifactById: async () => {
+      calls.getArtifactById += 1
+      return {
+      id: 'artifact-invalid-airship',
       siteId: 'site-aris',
       siteVersionId: 'sv-aris-airship',
       rendererCompatibilityVersion: 'gnr8-renderer-v1',
       htmlByPath: {
-        '/': '<!doctype html><html><body><main data-airship-section="hero"><h1>Recovered Section ARIS polished artifact</h1><p>MacBook Air, Canton Smart, Eizo, Blackmagic Design.</p></main></body></html>',
+        '/': '<!doctype html><html><body><main><h1>FALLBACK PREVIEW: HERO</h1><p>raw-block:html&gt;body Diagnostics: keys=script</p></main></body></html>',
       },
       compiledTokenStyles: '',
       assetFingerprintMap: {},
       manifest: {
         sourceKind: 'airship_single_site_draft_candidate',
-        airshipSingleSiteDraftCandidate: { serviceVersion: 'airship-4-draft-candidate:v1' },
+        airshipSingleSiteDraftCandidate: {
+          serviceVersion: 'airship-4-draft-candidate-service:v1',
+          migrationId: 'ebf62324-1e51-4435-abd7-004722fb48d6',
+        },
       },
       publishStage: 'shadow',
       shadowRestricted: false,
@@ -3268,18 +3422,19 @@ test('airship transformed preview keeps polished artifact HTML even when legacy 
       },
       bundleSha256: 'sha-aris-airship',
       createdAt: '2026-09-21T00:00:00.000Z',
-    } as any),
+    } as any
+    },
     getRawImportedSiteArtifact: async () => {
       calls.getRawImportedSiteArtifact += 1
-      throw new Error('raw imported fallback should not run when Airship artifact HTML exists')
+      throw new Error('raw imported fallback should not run when explicit Airship artifact is invalid')
     },
     getRawTemplateSiteArtifact: async () => {
       calls.getRawTemplateSiteArtifact += 1
-      throw new Error('raw template fallback should not run when Airship artifact HTML exists')
+      throw new Error('raw template fallback should not run when explicit Airship artifact is invalid')
     },
     getRawTemplateSiteAsset: async () => {
       calls.getRawTemplateSiteAsset += 1
-      throw new Error('raw template asset fallback should not run when Airship artifact HTML exists')
+      throw new Error('raw template asset fallback should not run when explicit Airship artifact is invalid')
     },
     listContentSlots: async () => {
       calls.listContentSlots += 1
@@ -3292,17 +3447,20 @@ test('airship transformed preview keeps polished artifact HTML even when legacy 
   })
 
   try {
-    const preview = await renderSiteVersionPreview({
-      siteVersionId: 'sv-aris-airship',
-      path: '/',
-      mode: 'transformed',
-      requestCorrelationKey: 'req-airship-artifact-preferred',
-    })
-
-    assert.equal(preview.source, 'transformed_artifact')
-    assert.equal(preview.fallbackUsed, false)
-    assert.equal(preview.html.includes('Recovered Section ARIS polished artifact'), true)
-    assert.equal(preview.html.includes('MacBook Air, Canton Smart, Eizo, Blackmagic Design.'), true)
+    await assert.rejects(
+      () =>
+        renderSiteVersionPreview({
+          siteVersionId: 'sv-aris-airship',
+          path: '/',
+          mode: 'transformed',
+          airshipArtifactId: 'artifact-invalid-airship',
+          requestCorrelationKey: 'req-airship-artifact-invalid',
+        }),
+      (error: unknown) =>
+        error instanceof SiteVersionPreviewUnavailableError &&
+        error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE' &&
+        /invalid/.test(error.message),
+    )
     assert.deepEqual(calls, {
       getSiteVersion: 0,
       getRawImportedSiteArtifact: 0,
@@ -3310,6 +3468,73 @@ test('airship transformed preview keeps polished artifact HTML even when legacy 
       getRawTemplateSiteAsset: 0,
       listContentSlots: 0,
       listContentOverrides: 0,
+      getSiteVersionArtifactBinding: 0,
+      getArtifactById: 1,
+    })
+  } finally {
+    restore()
+  }
+})
+
+test('airship transformed preview rejects an explicit missing artifact without fallback lookup', async () => {
+  const calls = {
+    getSiteVersion: 0,
+    getSiteVersionArtifactBinding: 0,
+    getArtifactById: 0,
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      calls.getSiteVersion += 1
+      throw new Error('missing explicit Airship artifact should not fall back to site-version rendering')
+    },
+    getSiteVersionArtifactBinding: async () => {
+      calls.getSiteVersionArtifactBinding += 1
+      throw new Error('missing explicit Airship artifact should not read the legacy site-version binding')
+    },
+    getArtifactById: async () => {
+      calls.getArtifactById += 1
+      return null
+    },
+    getRawImportedSiteArtifact: async () => {
+      calls.getRawImportedSiteArtifact += 1
+      throw new Error('raw imported fallback should not run when explicit Airship artifact is missing')
+    },
+    getRawTemplateSiteArtifact: async () => {
+      calls.getRawTemplateSiteArtifact += 1
+      throw new Error('raw template fallback should not run when explicit Airship artifact is missing')
+    },
+    getRawTemplateSiteAsset: async () => {
+      calls.getRawTemplateSiteAsset += 1
+      throw new Error('raw template asset fallback should not run when explicit Airship artifact is missing')
+    },
+  })
+
+  try {
+    await assert.rejects(
+      () =>
+        renderSiteVersionPreview({
+          siteVersionId: 'sv-missing-airship',
+          path: '/',
+          mode: 'transformed',
+          airshipArtifactId: 'artifact-missing-airship',
+          requestCorrelationKey: 'req-airship-artifact-missing',
+        }),
+      (error: unknown) =>
+        error instanceof SiteVersionPreviewUnavailableError &&
+        error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE' &&
+        /missing/.test(error.message),
+    )
+    assert.deepEqual(calls, {
+      getSiteVersion: 0,
+      getSiteVersionArtifactBinding: 0,
+      getArtifactById: 1,
+      getRawImportedSiteArtifact: 0,
+      getRawTemplateSiteArtifact: 0,
+      getRawTemplateSiteAsset: 0,
     })
   } finally {
     restore()

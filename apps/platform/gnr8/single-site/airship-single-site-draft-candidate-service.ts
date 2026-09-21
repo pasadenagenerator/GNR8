@@ -453,8 +453,8 @@ function applyAirshipHeroEdits(input: {
   });
 }
 
-function previewRoute(siteVersionId: string): string {
-  return `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(siteVersionId)}/preview?mode=transformed`;
+function previewRoute(siteVersionId: string, runtimeArtifactId: string): string {
+  return `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(siteVersionId)}/preview?mode=transformed&airshipArtifactId=${encodeURIComponent(runtimeArtifactId)}`;
 }
 
 function assertGeneratedAirshipArtifactHtml(htmlByPath: Record<string, string>, migrationId: string): void {
@@ -492,7 +492,7 @@ function toPreviewRef(input: {
     label: "New Airship draft candidate preview",
     siteVersionId: input.candidateSiteVersionId,
     runtimeArtifactId: input.candidateRuntimeArtifactId,
-    route: previewRoute(input.candidateSiteVersionId),
+    route: previewRoute(input.candidateSiteVersionId, input.candidateRuntimeArtifactId),
     mode: "transformed",
     available: true,
     unavailableReason: null,
@@ -701,7 +701,7 @@ export async function createAirshipSingleSiteDraftCandidate(input: {
     sourceLiveRuntimeArtifactId,
     candidateSiteVersionId: candidateVersion.siteVersionId,
     candidateRuntimeArtifactId: artifact.artifactId,
-    previewRoute: previewRoute(candidateVersion.siteVersionId),
+    previewRoute: previewRoute(candidateVersion.siteVersionId, artifact.artifactId),
     styleSettings,
     appliedEdits,
     skippedEdits,
@@ -794,7 +794,7 @@ export async function readLatestAirshipSingleSiteDraftCandidatePreview(input: {
     label: "New Airship draft candidate preview",
     siteVersionId: row.site_version_id,
     runtimeArtifactId: row.artifact_id,
-    route: previewRoute(row.site_version_id),
+    route: previewRoute(row.site_version_id, row.artifact_id),
     mode: "transformed",
     available: true,
     unavailableReason: null,

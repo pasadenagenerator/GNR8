@@ -818,6 +818,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
     const url = new URL(req.url);
     const path = url.searchParams.get("path") ?? "/";
     const mode = url.searchParams.get("mode") ?? undefined;
+    const airshipArtifactId = url.searchParams.get("airshipArtifactId") ?? undefined;
     isRawTemplatePreviewRequest = mode === "raw_template_preview";
     if (isRawTemplatePreviewRequest) {
       rawDbClient = await previewRouteDependencies.acquireRuntimeDbClient();
@@ -871,6 +872,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
       siteVersionId,
       path,
       mode,
+      airshipArtifactId,
       requestCorrelationKey,
       dbClient: rawDbClient ?? undefined,
       initialDbReadCount: rawDbReadCount,
@@ -1007,6 +1009,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ siteVersionId: 
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
         "x-gnr8-preview-source": preview.source,
+        "x-gnr8-preview-artifact-id": preview.artifactId ?? "",
         "x-gnr8-preview-mode": preview.previewMode,
         "x-gnr8-preview-renderer-contract-available": preview.previewRuntimeSummary.rendererContractAvailable ? "true" : "false",
         "x-gnr8-preview-final-site-model-available": preview.previewRuntimeSummary.finalSiteModelAvailable ? "true" : "false",

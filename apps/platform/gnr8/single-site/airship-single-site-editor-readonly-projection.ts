@@ -618,7 +618,7 @@ export async function readAirshipEditorArtifactCanvasRender(input: {
       label: input.draftCandidate ? "GNR8 ARIS demo artifact render" : "Airship candidate artifact render",
       siteVersionId: arisDemoCandidate.siteVersionId,
       runtimeArtifactId: arisDemoCandidate.runtimeArtifactId,
-      previewUrl: input.previewHost?.previewUrl ?? `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(arisDemoCandidate.siteVersionId)}/preview?mode=transformed`,
+      previewUrl: input.previewHost?.previewUrl ?? `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(arisDemoCandidate.siteVersionId)}/preview?mode=transformed&airshipArtifactId=${encodeURIComponent(arisDemoCandidate.runtimeArtifactId)}`,
     });
   }
   if (demoReadiness) {
@@ -675,7 +675,7 @@ function arisDraftCandidatePreviewFallback(migrationId: string | null): AirshipD
     label: "New Airship draft candidate preview",
     siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
     runtimeArtifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
-    route: `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID)}/preview?mode=transformed`,
+    route: `${AIRSHIP_DRAFT_CANDIDATE_PREVIEW_ROUTE_PREFIX}/${encodeURIComponent(AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID)}/preview?mode=transformed&airshipArtifactId=${encodeURIComponent(AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID)}`,
     mode: "transformed",
     available: true,
     unavailableReason: null,

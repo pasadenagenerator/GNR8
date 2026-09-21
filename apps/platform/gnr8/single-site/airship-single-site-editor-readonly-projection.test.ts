@@ -34,6 +34,10 @@ const AIRSHIP_DEMO_VERSION_ID = "92e476b9-67fc-408a-be3d-5c744aa0f3f6";
 const AIRSHIP_DEMO_ARTIFACT_ID = "5ac3716a-f29d-4648-bc86-a6942638ed53";
 const INTERNAL_PREVIEW_ROUTE_PREFIX = "/api/gnr8/admin/single-site-studio/versions";
 
+function airshipPreviewRoute(siteVersionId: string, artifactId: string): string {
+  return `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${siteVersionId}/preview?mode=transformed&airshipArtifactId=${artifactId}`;
+}
+
 function polishedChsArtifactHtml(headline = "The CHS team helps your IT change with every technology wave."): string {
   return [
     "<!doctype html><html><body>",
@@ -321,7 +325,7 @@ test("airship editor canvas resolves refreshed CHS candidate artifact before sta
       label: "New Airship draft candidate preview",
       siteVersionId: candidateSiteVersionId,
       runtimeArtifactId: candidateRuntimeArtifactId,
-      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${candidateSiteVersionId}/preview?mode=transformed`,
+      route: airshipPreviewRoute(candidateSiteVersionId, candidateRuntimeArtifactId),
       mode: "transformed",
       available: true,
       unavailableReason: null,
@@ -382,7 +386,7 @@ test("airship editor canvas resolves refreshed CHS candidate artifact before sta
   assert.equal(render?.source, "candidate_artifact");
   assert.equal(render?.siteVersionId, candidateSiteVersionId);
   assert.equal(render?.runtimeArtifactId, candidateRuntimeArtifactId);
-  assert.equal(render?.previewUrl, `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${candidateSiteVersionId}/preview?mode=transformed`);
+  assert.equal(render?.previewUrl, airshipPreviewRoute(candidateSiteVersionId, candidateRuntimeArtifactId));
   assert.equal(render?.sanitizedHtml.includes("Saved regenerated CHS headline"), true);
   assert.equal(render?.sanitizedHtml.includes("Schedule CHS consultation"), true);
   assert.equal(render?.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), false);
@@ -399,7 +403,7 @@ test("airship editor canvas rejects diagnostic CHS candidate artifact and falls 
       label: "New Airship draft candidate preview",
       siteVersionId: badCandidateVersionId,
       runtimeArtifactId: badCandidateArtifactId,
-      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${badCandidateVersionId}/preview?mode=transformed`,
+      route: airshipPreviewRoute(badCandidateVersionId, badCandidateArtifactId),
       mode: "transformed",
       available: true,
       unavailableReason: null,
@@ -458,7 +462,7 @@ test("airship editor canvas rejects diagnostic ARIS candidate artifact and falls
       label: "New Airship draft candidate preview",
       siteVersionId: badCandidateVersionId,
       runtimeArtifactId: badCandidateArtifactId,
-      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${badCandidateVersionId}/preview?mode=transformed`,
+      route: airshipPreviewRoute(badCandidateVersionId, badCandidateArtifactId),
       mode: "transformed",
       available: true,
       unavailableReason: null,
@@ -699,7 +703,7 @@ test("airship projection exposes a saved draft candidate as internal preview onl
       label: "New Airship draft candidate preview",
       siteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
       runtimeArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
-      route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7/preview?mode=transformed`,
+      route: airshipPreviewRoute("2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7", "4ec7588a-b7cb-46dc-a735-88e4ec466a72"),
       mode: "transformed",
       available: true,
       unavailableReason: null,

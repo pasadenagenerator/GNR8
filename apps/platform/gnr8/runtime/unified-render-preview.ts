@@ -40,6 +40,7 @@ import {
   SEMANTIC_PREVIEW_DIAGNOSTIC,
   shouldUseSemanticFallbackPreview,
 } from '@/gnr8/preview-semantic/semantic-preview-renderer'
+import { analyzeAirshipArtifactHtmlValidity } from '@/gnr8/single-site/airship-valid-artifact-html'
 
 export type SiteVersionPreviewSource =
   | 'react_runtime_renderer'
@@ -59,6 +60,7 @@ type RawTemplatePreviewEvidence = NonNullable<PreviewRuntimeSummary['rawTemplate
 type ResolvedSiteVersionPreview = {
   siteId: string
   siteVersionId: string
+  artifactId?: string | null
   path: string
   rendererCompatibilityVersion: string
   html: string
@@ -116,6 +118,13 @@ function isAirshipInternalPreviewArtifact(artifact: RuntimeArtifact): boolean {
     Boolean(artifact.manifest?.airshipSingleSiteDraftCandidate) ||
     artifact.artifactGovernance?.siteGateState === 'AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY' ||
     artifact.artifactGovernance?.pageGateState?.includes('AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY')
+}
+
+function airshipMigrationIdFromArtifact(artifact: RuntimeArtifact): string | null {
+  const candidate = artifact.manifest?.airshipSingleSiteDraftCandidate
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null
+  const migrationId = (candidate as { migrationId?: unknown }).migrationId
+  return typeof migrationId === 'string' && migrationId.trim().length > 0 ? migrationId.trim() : null
 }
 
 type PoolStatus = {
@@ -2930,25 +2939,33 @@ function transformedPreviewSummaryFromArtifactManifest(input: {
 async function renderTransformedSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
+  airshipArtifactId?: string | null
   fallbackSummary?: PreviewRuntimeSummary | null
   previewTruth?: RenderedCapturePreviewTruth
   context: PreviewReadContext
 }): Promise<ResolvedSiteVersionPreview> {
-  const binding = await cacheLookup({
-    context: input.context,
-    cache: input.context.artifactBindingBySiteVersionId,
-    key: input.siteVersionId,
-    loader: () => previewReadDependencies.getSiteVersionArtifactBinding(input.siteVersionId, { dbClient: input.context.dbClient ?? undefined }),
-    diagnostics: {
-      hitEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_HIT,
-      missEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS,
-      resource: 'site_version_artifact_binding',
-    },
-  })
+  const explicitAirshipArtifactId = typeof input.airshipArtifactId === 'string' && input.airshipArtifactId.trim().length > 0
+    ? input.airshipArtifactId.trim()
+    : null
+  const binding = explicitAirshipArtifactId
+    ? { siteId: '', artifactId: explicitAirshipArtifactId }
+    : await cacheLookup({
+        context: input.context,
+        cache: input.context.artifactBindingBySiteVersionId,
+        key: input.siteVersionId,
+        loader: () => previewReadDependencies.getSiteVersionArtifactBinding(input.siteVersionId, { dbClient: input.context.dbClient ?? undefined }),
+        diagnostics: {
+          hitEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_HIT,
+          missEvent: TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_ARTIFACT_CACHE_MISS,
+          resource: 'site_version_artifact_binding',
+        },
+      })
   if (!binding || !binding.artifactId) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
-      message: 'No transformed runtime artifact is available for this site version.',
+      message: explicitAirshipArtifactId
+        ? 'Requested Airship internal preview artifact is not available.'
+        : 'No transformed runtime artifact is available for this site version.',
     })
   }
 
@@ -2966,8 +2983,24 @@ async function renderTransformedSiteVersionPreview(input: {
   if (!artifact) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
-      message: 'Transformed runtime artifact reference exists, but the artifact payload is missing.',
+      message: explicitAirshipArtifactId
+        ? 'Requested Airship internal preview artifact payload is missing.'
+        : 'Transformed runtime artifact reference exists, but the artifact payload is missing.',
     })
+  }
+  if (explicitAirshipArtifactId) {
+    if (artifact.siteVersionId !== input.siteVersionId) {
+      throw new SiteVersionPreviewUnavailableError({
+        code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+        message: 'Requested Airship internal preview artifact does not belong to this site version.',
+      })
+    }
+    if (!isAirshipInternalPreviewArtifact(artifact)) {
+      throw new SiteVersionPreviewUnavailableError({
+        code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+        message: 'Requested artifact is not an Airship internal preview artifact.',
+      })
+    }
   }
 
   const resolved = resolveHtmlForPath({
@@ -2987,6 +3020,28 @@ async function renderTransformedSiteVersionPreview(input: {
     resolvedPath: resolved.resolvedPath,
     fallbackSummary: input.fallbackSummary,
   })
+  if (explicitAirshipArtifactId) {
+    const validity = analyzeAirshipArtifactHtmlValidity({
+      html: resolved.html,
+      migrationId: airshipMigrationIdFromArtifact(artifact),
+    })
+    if (!validity.valid) {
+      console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
+        requestCorrelationKey: input.context.requestCorrelationKey,
+        siteId: artifact.siteId,
+        siteVersionId: artifact.siteVersionId,
+        artifactId: artifact.id,
+        requestedPath: input.requestedPath,
+        selectedPath: resolved.resolvedPath,
+        reasonCode: 'AIRSHIP_ARTIFACT_HTML_INVALID',
+        validityReasons: validity.reasons,
+      })
+      throw new SiteVersionPreviewUnavailableError({
+        code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+        message: `Requested Airship internal preview artifact is invalid: ${validity.reasons.join(',')}`,
+      })
+    }
+  }
   if (resolved.resolvedPath === '/') {
     console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_HOME_ROUTE_SELECTED}`, {
       requestCorrelationKey: input.context.requestCorrelationKey,
@@ -3004,11 +3059,12 @@ async function renderTransformedSiteVersionPreview(input: {
     selectedPath: resolved.resolvedPath,
   })
   const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
-  if (diagnosticContent.blocked && !isAirshipInternalPreviewArtifact(artifact)) {
+  if (diagnosticContent.blocked) {
     console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
       requestCorrelationKey: input.context.requestCorrelationKey,
       siteId: artifact.siteId,
       siteVersionId: artifact.siteVersionId,
+      artifactId: artifact.id,
       requestedPath: input.requestedPath,
       selectedPath: resolved.resolvedPath,
       matchedPatterns: diagnosticContent.matchedPatterns,
@@ -3020,16 +3076,6 @@ async function renderTransformedSiteVersionPreview(input: {
       resolvedPath: resolved.resolvedPath,
       matchedPatterns: diagnosticContent.matchedPatterns,
     })
-  } else if (diagnosticContent.blocked) {
-    console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
-      requestCorrelationKey: input.context.requestCorrelationKey,
-      siteId: artifact.siteId,
-      siteVersionId: artifact.siteVersionId,
-      requestedPath: input.requestedPath,
-      selectedPath: resolved.resolvedPath,
-      matchedPatterns: diagnosticContent.matchedPatterns,
-      reasonCode: 'AIRSHIP_ARTIFACT_HTML_PREFERRED',
-    })
   }
 
   return {
@@ -3037,6 +3083,7 @@ async function renderTransformedSiteVersionPreview(input: {
       preview: {
         siteId: artifact.siteId,
         siteVersionId: artifact.siteVersionId,
+        artifactId: artifact.id,
         path: resolved.resolvedPath,
         rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
         html: annotateTransformedPreviewHtml({ html: resolved.html, summary: previewRuntimeSummary }),
@@ -3346,6 +3393,7 @@ export async function renderSiteVersionPreview(input: {
   siteVersionId: string
   path?: string
   mode?: unknown
+  airshipArtifactId?: string | null
   requestCorrelationKey?: string
   dbClient?: RuntimeStoreDbClient
   initialDbReadCount?: number
@@ -3428,12 +3476,15 @@ export async function renderSiteVersionPreview(input: {
         return await renderTransformedSiteVersionPreview({
           siteVersionId: input.siteVersionId,
           requestedPath,
+          airshipArtifactId: input.airshipArtifactId,
           context,
         })
       } catch (error) {
         if (error instanceof TransformedPreviewDiagnosticContentError) {
           // Continue into the site-version path so transformed diagnostic output can use
           // an explicit raw route fallback instead of broadening normal artifact hits.
+        } else if (input.airshipArtifactId) {
+          throw error
         } else if (!(error instanceof SiteVersionPreviewUnavailableError) || error.code !== 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
           throw error
         }
@@ -3525,6 +3576,7 @@ export async function renderSiteVersionPreview(input: {
         return await renderTransformedSiteVersionPreview({
           siteVersionId: input.siteVersionId,
           requestedPath,
+          airshipArtifactId: input.airshipArtifactId,
           fallbackSummary,
           previewTruth,
           context,
@@ -3546,6 +3598,7 @@ export async function renderSiteVersionPreview(input: {
           })
         }
         if (error instanceof SiteVersionPreviewUnavailableError && error.code === 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE') {
+          if (input.airshipArtifactId) throw error
           return renderDebugSiteVersionPreview({
             siteVersion,
             requestedPath,

@@ -359,7 +359,7 @@ test("creates an internal Airship draft candidate from live/published version an
   assert.equal(output.sourceLiveRuntimeArtifactId, LIVE_ARTIFACT_ID);
   assert.equal(output.candidateSiteVersionId, TARGET_VERSION_ID);
   assert.equal(output.candidateRuntimeArtifactId, TARGET_ARTIFACT_ID);
-  assert.equal(output.previewRoute, `/api/gnr8/admin/single-site-studio/versions/${TARGET_VERSION_ID}/preview?mode=transformed`);
+  assert.equal(output.previewRoute, `/api/gnr8/admin/single-site-studio/versions/${TARGET_VERSION_ID}/preview?mode=transformed&airshipArtifactId=${TARGET_ARTIFACT_ID}`);
   assert.deepEqual(output.activePointerBefore, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
   assert.deepEqual(output.activePointerAfter, { siteVersionId: LIVE_VERSION_ID, artifactId: LIVE_ARTIFACT_ID });
   assert.equal(output.activePointerChanged, false);

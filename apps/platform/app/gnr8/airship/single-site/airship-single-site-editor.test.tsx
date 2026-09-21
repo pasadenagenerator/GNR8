@@ -56,6 +56,11 @@ const VISUAL_EDITOR_PAGE_FILE = new URL("./editor/page.tsx", import.meta.url);
 const VISUAL_EDITOR_FILE = new URL("./editor/airship-single-site-visual-editor-workspace.tsx", import.meta.url);
 const PROJECTION_FILE = new URL("../../../../gnr8/single-site/airship-single-site-editor-readonly-projection.ts", import.meta.url);
 const PREVIEW_ROUTE_FILE = new URL("../../../api/gnr8/admin/single-site-studio/versions/[siteVersionId]/preview/route.ts", import.meta.url);
+const RUNTIME_PREVIEW_ROUTE_FILE = new URL("../../../api/gnr8/runtime/versions/[siteVersionId]/preview/route.ts", import.meta.url);
+
+function airshipPreviewRoute(siteVersionId: string, artifactId: string): string {
+  return `${INTERNAL_PREVIEW_ROUTE_PREFIX}/${siteVersionId}/preview?mode=transformed&airshipArtifactId=${artifactId}`;
+}
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -316,7 +321,7 @@ function airshipModel(): AirshipSingleSiteEditorReadonlyProjection {
         label: "New Airship draft candidate preview",
         siteVersionId: "2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7",
         runtimeArtifactId: "4ec7588a-b7cb-46dc-a735-88e4ec466a72",
-        route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7/preview?mode=transformed`,
+        route: airshipPreviewRoute("2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7", "4ec7588a-b7cb-46dc-a735-88e4ec466a72"),
         mode: "transformed",
         available: true,
         unavailableReason: null,
@@ -627,6 +632,7 @@ test("airship single-site editor renders live published and Airship draft candid
   assert.equal(html.includes("Saved Airship draft"), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/${IMPROVED_CANDIDATE_VERSION_ID}/preview?mode=transformed`), true);
   assert.equal(html.includes(`${INTERNAL_PREVIEW_ROUTE_PREFIX}/2d33f386-7cd3-4bbf-a9d4-f1c134c5dce7/preview?mode=transformed`), true);
+  assert.equal(html.includes("airshipArtifactId=4ec7588a-b7cb-46dc-a735-88e4ec466a72"), true);
   assert.equal(html.includes('src="https://www.chs.si/"'), false);
   assert.equal(html.includes("If this frame shows a connection-session error"), true);
   assert.equal(html.includes("The draft editor below remains usable."), true);
@@ -807,7 +813,7 @@ test("airship single-site editor shows governed dry-run action and readback with
     label: "New Airship draft candidate preview",
     siteVersionId: "92e476b9-67fc-408a-be3d-5c744aa0f3f6",
     runtimeArtifactId: "5ac3716a-f29d-4648-bc86-a6942638ed53",
-    route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/92e476b9-67fc-408a-be3d-5c744aa0f3f6/preview?mode=transformed`,
+    route: airshipPreviewRoute("92e476b9-67fc-408a-be3d-5c744aa0f3f6", "5ac3716a-f29d-4648-bc86-a6942638ed53"),
     mode: "transformed" as const,
     available: true,
     unavailableReason: null,
@@ -1375,7 +1381,7 @@ test("airship visual editor uses ARIS candidate artifact renderer when available
     label: "New Airship draft candidate preview",
     siteVersionId: "6d712ab9-f48e-49a3-9c26-03915365d746",
     runtimeArtifactId: "8073651e-510b-47e7-8363-8a742b7967db",
-    route: `${INTERNAL_PREVIEW_ROUTE_PREFIX}/6d712ab9-f48e-49a3-9c26-03915365d746/preview?mode=transformed`,
+    route: airshipPreviewRoute("6d712ab9-f48e-49a3-9c26-03915365d746", "8073651e-510b-47e7-8363-8a742b7967db"),
     mode: "transformed",
     available: true,
     unavailableReason: null,
@@ -2457,7 +2463,11 @@ test("airship visual editor adds no publish, dry-run, shadow, rollback, source c
 
 test("airship preview route gives EMAXCONNSESSION a compact retry surface", async () => {
   const routeSource = await readFile(PREVIEW_ROUTE_FILE, "utf8");
+  const runtimeRouteSource = await readFile(RUNTIME_PREVIEW_ROUTE_FILE, "utf8");
 
+  assert.equal(runtimeRouteSource.includes('url.searchParams.get("airshipArtifactId")'), true);
+  assert.equal(runtimeRouteSource.includes("airshipArtifactId,"), true);
+  assert.equal(runtimeRouteSource.includes('"x-gnr8-preview-artifact-id"'), true);
   assert.equal(routeSource.includes("EMAXCONNSESSION"), true);
   assert.equal(routeSource.includes("Preview temporarily unavailable"), true);
   assert.equal(routeSource.includes("The internal preview could not get a database session."), true);
