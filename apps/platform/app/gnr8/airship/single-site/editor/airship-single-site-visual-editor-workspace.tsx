@@ -172,7 +172,9 @@ type DraftCandidateActionResponse = {
 
 const STYLE_DRAFT_SAVED_MESSAGE = "Style changes are saved to Airship draft only. Not live. Not published.";
 const CONNECT_OPENAI_MESSAGE = "Connect OpenAI to use AI commands.";
-const DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE = "Saved to draft. Preview not regenerated yet. Apply / generate preview when ready. Not live. Not published.";
+const UNSAVED_LOCAL_EDIT_MESSAGE = "Unsaved local edit";
+const DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE = "Saved to draft. Preview not regenerated yet";
+const PREVIEW_REGENERATED_MESSAGE = "Preview regenerated";
 
 const fallbackSectionOptions: AirshipImportedSiteEditableSection[] = [
   { key: "hero", label: "Hero / intro", detail: "Headline, subheading, spacing, tint", mappedDraftFieldIds: [], sourceStatus: "partial source-supported hero draft fields" },
@@ -1083,6 +1085,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const artifactIframeRef = useRef<HTMLIFrameElement | null>(null);
   const savedFieldsRef = useRef(savedFields);
+  const savedDraftsRef = useRef(props.drafts);
   const savedStyleKeyRef = useRef(styleKey(initialFieldsRef.current));
   const styleSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const styleSaveRequestRef = useRef(0);
@@ -1128,6 +1131,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     candidateApplyState,
   });
   const panelSaveDisabled = busy || (selectedCanvasItem.level === "element" && !selectedElementTextTarget);
+  const canResetSelectedText = selectedCanvasItem.level === "element"
+    ? Boolean(selectedElementTextTarget)
+    : selectedTextFields.length > 0;
 
   const selectedDrafts = useMemo(
     () => {
@@ -1204,7 +1210,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     });
     setFields(edited.fields);
     setEditableDrafts(edited.drafts);
-    markLocalChange(`${selectedSectionLabel} text changed locally. Save draft before generating an internal preview.`, {
+    if (selectedElementTextTarget?.kind === "hero-field" && selectedElementTextTarget.field === field) {
+      reflectSelectedElementDraftText(selectedCanvasItem, value);
+    }
+    markLocalChange(UNSAVED_LOCAL_EDIT_MESSAGE, {
       label: `Edited ${field}`,
       scope: "text",
       state: "local",
@@ -1224,7 +1233,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           : draft,
       ),
     );
-    markLocalChange(`${selectedSectionLabel} draft content changed locally. Save draft before generating an internal preview.`, {
+    if (selectedElementTextTarget?.kind === "draft-row" && selectedElementTextTarget.draftId === draftId) {
+      reflectSelectedElementDraftText(selectedCanvasItem, proposedTextContent);
+    }
+    markLocalChange(UNSAVED_LOCAL_EDIT_MESSAGE, {
       label: `Edited ${selectedSectionLabel}`,
       scope: "text",
       state: "local",
@@ -1443,7 +1455,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     });
     const payload = await response.json() as DraftActionResponse;
     if (!response.ok || !payload.ok || !payload.draft) throw new Error(payload.error || "airship_draft_action_failed");
-    setEditableDrafts((current) => mergeServerDrafts(current, payload.draft?.draftEdits ?? []));
+    const serverDraftEdits = payload.draft.draftEdits ?? [];
+    setEditableDrafts((current) => mergeServerDrafts(current, serverDraftEdits));
+    savedDraftsRef.current = mergeServerDrafts(savedDraftsRef.current, serverDraftEdits);
     const savedStyleSettings = payload.draft.metadata?.styleSettings as AirshipSingleSiteDraftStyleSettings | undefined;
     setDraftMeta(draftMetaFromSavedDraft(payload.draft, savedStyleSettings ?? draftMeta.styleSettings));
     return payload.draft;
@@ -1555,7 +1569,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         scope: "text",
         state: "saved",
       });
-      setMessage(DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE);
+      setMessage(`${DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE}. Not live. Not published.`);
     } catch {
       setSaveState("failed");
       setMessage("Airship draft save failed. Editor preview changed locally only; no live site changes were made.");
@@ -1594,7 +1608,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
         scope: "text",
         state: "saved",
       });
-      setMessage(`${selectedElementTextTarget.label} ${DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE}`);
+      setMessage(`${DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE}. Not live. Not published.`);
     } catch {
       setSaveState("failed");
       setMessage("Selected element draft save failed. No live site changes were made.");
@@ -1644,8 +1658,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
       setCandidateApplyState("created");
       setMessage(
         payload.candidate.status === "reused"
-          ? `Reused internal preview candidate for saved draft v${payload.candidate.draftVersion}. Not live. Not published.`
-          : `Created internal preview candidate for saved draft v${payload.candidate.draftVersion}. Not live. Not published.`,
+          ? `${PREVIEW_REGENERATED_MESSAGE}. Reused internal preview candidate for saved draft v${payload.candidate.draftVersion}. Not live. Not published.`
+          : `${PREVIEW_REGENERATED_MESSAGE}. Created internal preview candidate for saved draft v${payload.candidate.draftVersion}. Not live. Not published.`,
       );
       recordChange({
         label: "Created internal preview candidate",
@@ -1726,6 +1740,59 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
   }
 
   function resetSelectedSectionText() {
+    if (selectedCanvasItem.level === "element" && selectedElementTextTarget) {
+      let reset: (EditorSnapshot & { changedFields: TextFieldKey[] }) | null = null;
+      let reflectedText: string | null = null;
+      if (selectedElementTextTarget.kind === "hero-field") {
+        const savedValue = savedFieldsRef.current[selectedElementTextTarget.field];
+        if (fields[selectedElementTextTarget.field] === savedValue) {
+          setMessage(`${selectedElementTextTarget.label} already matches the last saved Airship draft value.`);
+          return;
+        }
+        const edited = applyAirshipHeroTextFieldEdit({
+          fields,
+          drafts: editableDrafts,
+          field: selectedElementTextTarget.field,
+          value: savedValue,
+        });
+        reset = { ...edited, changedFields: [selectedElementTextTarget.field] };
+        reflectedText = savedValue;
+      } else {
+        const savedDraft = savedDraftsRef.current.find((draft) => draft.id === selectedElementTextTarget.draftId);
+        if (!savedDraft) {
+          setMessage(`${selectedElementTextTarget.label} has no saved Airship draft value to reset to.`);
+          return;
+        }
+        const currentDraft = editableDrafts.find((draft) => draft.id === selectedElementTextTarget.draftId);
+        if (currentDraft?.proposedTextContent === savedDraft.proposedTextContent) {
+          setMessage(`${selectedElementTextTarget.label} already matches the last saved Airship draft value.`);
+          return;
+        }
+        reset = {
+          fields,
+          drafts: editableDrafts.map((draft) =>
+            draft.id === selectedElementTextTarget.draftId
+              ? { ...draft, proposedTextContent: savedDraft.proposedTextContent, status: savedDraft.status }
+              : draft,
+          ),
+          changedFields: [],
+        };
+        reflectedText = savedDraft.proposedTextContent;
+      }
+      rememberUndoSnapshot();
+      setFields(reset.fields);
+      setEditableDrafts(reset.drafts);
+      setSaveState(deriveAirshipDraftSaveState({ fields: reset.fields, savedFields: savedFieldsRef.current }));
+      if (reflectedText !== null) reflectSelectedElementDraftText(selectedCanvasItem, reflectedText);
+      setMessage(UNSAVED_LOCAL_EDIT_MESSAGE);
+      recordChange({
+        label: `Reset ${selectedElementTextTarget.label} to saved value`,
+        scope: "reset",
+        state: "local",
+      });
+      return;
+    }
+
     const reset = selectedCanvasItem.level === "section"
       ? resetAirshipSectionTextToSavedValues({
           section: selectedSection,
@@ -1752,6 +1819,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
     setFields(reset.fields);
     setEditableDrafts(reset.drafts);
     setSaveState(deriveAirshipDraftSaveState({ fields: reset.fields, savedFields: savedFieldsRef.current }));
+    for (const field of reset.changedFields) {
+      const elementKey = field === "headline" ? "hero-headline" : field === "subheading" ? "hero-subheading" : "hero-cta";
+      reflectSelectedElementDraftText(airshipCanvasSelectionForElement({ section: "hero", elementKey }), reset.fields[field]);
+    }
     setMessage(`Reset ${selectedSectionLabel} text to saved Airship draft values. Not live. Not published.`);
     recordChange({
       label: `Reset ${selectedSectionLabel} text to saved values`,
@@ -3785,9 +3856,9 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                   <button
                     type="button"
                     aria-label="Reset selected section text from edit panel"
-                    disabled={selectedTextFields.length === 0}
+                    disabled={!canResetSelectedText}
                     onClick={resetSelectedSectionText}
-                    style={actionButtonStyle({ disabled: selectedTextFields.length === 0, compact: true, dark: true })}
+                    style={actionButtonStyle({ disabled: !canResetSelectedText, compact: true, dark: true })}
                   >
                     Reset text
                   </button>

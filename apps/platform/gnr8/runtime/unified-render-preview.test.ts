@@ -3225,6 +3225,97 @@ test('transformed preview artifact path uses request-scoped db client and bypass
   }
 })
 
+test('airship transformed preview keeps polished artifact HTML even when legacy fallback diagnostics would normally block it', async () => {
+  const calls = {
+    getSiteVersion: 0,
+    getRawImportedSiteArtifact: 0,
+    getRawTemplateSiteArtifact: 0,
+    getRawTemplateSiteAsset: 0,
+    listContentSlots: 0,
+    listContentOverrides: 0,
+  }
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    getPoolStatus: () => ({ totalCount: 1, idleCount: 1, waitingCount: 0 }),
+    getSiteVersion: async () => {
+      calls.getSiteVersion += 1
+      throw new Error('airship artifact preview should not fall back to site-version content rendering')
+    },
+    getSiteVersionArtifactBinding: async () => ({ siteId: 'site-aris', artifactId: 'artifact-aris-airship' }),
+    getArtifactById: async () => ({
+      id: 'artifact-aris-airship',
+      siteId: 'site-aris',
+      siteVersionId: 'sv-aris-airship',
+      rendererCompatibilityVersion: 'gnr8-renderer-v1',
+      htmlByPath: {
+        '/': '<!doctype html><html><body><main data-airship-section="hero"><h1>Recovered Section ARIS polished artifact</h1><p>MacBook Air, Canton Smart, Eizo, Blackmagic Design.</p></main></body></html>',
+      },
+      compiledTokenStyles: '',
+      assetFingerprintMap: {},
+      manifest: {
+        sourceKind: 'airship_single_site_draft_candidate',
+        airshipSingleSiteDraftCandidate: { serviceVersion: 'airship-4-draft-candidate:v1' },
+      },
+      publishStage: 'shadow',
+      shadowRestricted: false,
+      artifactGovernance: {
+        pageGateState: ['AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY'],
+        pageRolloutPolicyState: ['AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE'],
+        pageEnforcementState: { shadow: ['ALLOW'], canary: ['REVIEW'], production: ['REVIEW'] },
+        siteGateState: 'AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY',
+        siteRolloutPolicyState: 'AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE',
+        siteEnforcementState: { shadow: 'ALLOW', canary: 'REVIEW', production: 'REVIEW' },
+        publishStage: 'shadow',
+      },
+      bundleSha256: 'sha-aris-airship',
+      createdAt: '2026-09-21T00:00:00.000Z',
+    } as any),
+    getRawImportedSiteArtifact: async () => {
+      calls.getRawImportedSiteArtifact += 1
+      throw new Error('raw imported fallback should not run when Airship artifact HTML exists')
+    },
+    getRawTemplateSiteArtifact: async () => {
+      calls.getRawTemplateSiteArtifact += 1
+      throw new Error('raw template fallback should not run when Airship artifact HTML exists')
+    },
+    getRawTemplateSiteAsset: async () => {
+      calls.getRawTemplateSiteAsset += 1
+      throw new Error('raw template asset fallback should not run when Airship artifact HTML exists')
+    },
+    listContentSlots: async () => {
+      calls.listContentSlots += 1
+      throw new Error('content fallback should not run when Airship artifact HTML exists')
+    },
+    listContentOverrides: async () => {
+      calls.listContentOverrides += 1
+      throw new Error('content override fallback should not run when Airship artifact HTML exists')
+    },
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-aris-airship',
+      path: '/',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-airship-artifact-preferred',
+    })
+
+    assert.equal(preview.source, 'transformed_artifact')
+    assert.equal(preview.fallbackUsed, false)
+    assert.equal(preview.html.includes('Recovered Section ARIS polished artifact'), true)
+    assert.equal(preview.html.includes('MacBook Air, Canton Smart, Eizo, Blackmagic Design.'), true)
+    assert.deepEqual(calls, {
+      getSiteVersion: 0,
+      getRawImportedSiteArtifact: 0,
+      getRawTemplateSiteArtifact: 0,
+      getRawTemplateSiteAsset: 0,
+      listContentSlots: 0,
+      listContentOverrides: 0,
+    })
+  } finally {
+    restore()
+  }
+})
+
 test('transformed preview reuses request-local cache and keeps query count bounded per request', async () => {
   const calls = {
     getSiteVersion: 0,

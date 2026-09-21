@@ -26,7 +26,7 @@ import {
 } from '@/gnr8/runtime/runtime-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import type { ContentOverride } from '@/gnr8/runtime/content-binding'
-import type { CanonicalSiteVersionSnapshot, RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
+import type { CanonicalSiteVersionSnapshot, RuntimeArtifact, RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
 import {
   validateMultiPagePreview,
   type MultiPagePreviewValidation,
@@ -109,6 +109,13 @@ export class PreviewDbBackpressureError extends Error {
     this.requestCorrelationKey = input.requestCorrelationKey
     this.poolWaitingCount = input.poolWaitingCount
   }
+}
+
+function isAirshipInternalPreviewArtifact(artifact: RuntimeArtifact): boolean {
+  return artifact.manifest?.sourceKind === 'airship_single_site_draft_candidate' ||
+    Boolean(artifact.manifest?.airshipSingleSiteDraftCandidate) ||
+    artifact.artifactGovernance?.siteGateState === 'AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY' ||
+    artifact.artifactGovernance?.pageGateState?.includes('AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY')
 }
 
 type PoolStatus = {
@@ -2997,7 +3004,7 @@ async function renderTransformedSiteVersionPreview(input: {
     selectedPath: resolved.resolvedPath,
   })
   const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
-  if (diagnosticContent.blocked) {
+  if (diagnosticContent.blocked && !isAirshipInternalPreviewArtifact(artifact)) {
     console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
       requestCorrelationKey: input.context.requestCorrelationKey,
       siteId: artifact.siteId,
@@ -3012,6 +3019,16 @@ async function renderTransformedSiteVersionPreview(input: {
       requestedPath: input.requestedPath,
       resolvedPath: resolved.resolvedPath,
       matchedPatterns: diagnosticContent.matchedPatterns,
+    })
+  } else if (diagnosticContent.blocked) {
+    console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
+      requestCorrelationKey: input.context.requestCorrelationKey,
+      siteId: artifact.siteId,
+      siteVersionId: artifact.siteVersionId,
+      requestedPath: input.requestedPath,
+      selectedPath: resolved.resolvedPath,
+      matchedPatterns: diagnosticContent.matchedPatterns,
+      reasonCode: 'AIRSHIP_ARTIFACT_HTML_PREFERRED',
     })
   }
 

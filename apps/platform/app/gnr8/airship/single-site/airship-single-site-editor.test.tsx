@@ -1948,6 +1948,47 @@ test("airship visual editor reflects saved CTA labels and mapped card text witho
   assert.equal(visualEditorSource.includes('fetch("/api/gnr8/admin/airship/single-site/drafts"'), true);
 });
 
+test("airship visual editor wires typing and reset to local canvas reflection without autosaving text", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+  const updateTextFieldSource = sourceBetween(
+    visualEditorSource,
+    "function updateTextField(field: TextFieldKey, value: string)",
+    "function updateMappedDraftText",
+  );
+  const updateMappedDraftTextSource = sourceBetween(
+    visualEditorSource,
+    "function updateMappedDraftText(draftId: string, proposedTextContent: string)",
+    "function updateSelectedElementText",
+  );
+  const resetTextSource = sourceBetween(
+    visualEditorSource,
+    "function resetSelectedSectionText()",
+    "function resetSelectedSectionStyle()",
+  );
+
+  assert.equal(updateTextFieldSource.includes("reflectSelectedElementDraftText(selectedCanvasItem, value)"), true);
+  assert.equal(updateTextFieldSource.includes("UNSAVED_LOCAL_EDIT_MESSAGE"), true);
+  assert.equal(updateTextFieldSource.includes("fetch("), false);
+  assert.equal(updateMappedDraftTextSource.includes("reflectSelectedElementDraftText(selectedCanvasItem, proposedTextContent)"), true);
+  assert.equal(updateMappedDraftTextSource.includes("UNSAVED_LOCAL_EDIT_MESSAGE"), true);
+  assert.equal(updateMappedDraftTextSource.includes("fetch("), false);
+  assert.equal(resetTextSource.includes("savedDraftsRef.current"), true);
+  assert.equal(resetTextSource.includes("reflectSelectedElementDraftText(selectedCanvasItem, reflectedText)"), true);
+  assert.equal(resetTextSource.includes("reflectSelectedElementDraftText(airshipCanvasSelectionForElement"), true);
+  assert.equal(resetTextSource.includes("fetch("), false);
+});
+
+test("airship visual editor readback states distinguish unsaved, saved, and regenerated preview", async () => {
+  const visualEditorSource = await readFile(VISUAL_EDITOR_FILE, "utf8");
+
+  assert.equal(visualEditorSource.includes('const UNSAVED_LOCAL_EDIT_MESSAGE = "Unsaved local edit"'), true);
+  assert.equal(visualEditorSource.includes('const DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE = "Saved to draft. Preview not regenerated yet"'), true);
+  assert.equal(visualEditorSource.includes('const PREVIEW_REGENERATED_MESSAGE = "Preview regenerated"'), true);
+  assert.equal(visualEditorSource.includes("setMessage(`${DRAFT_SAVED_PREVIEW_NOT_REGENERATED_MESSAGE}. Not live. Not published.`)"), true);
+  assert.equal(visualEditorSource.includes("${PREVIEW_REGENERATED_MESSAGE}. Created internal preview candidate"), true);
+  assert.equal(visualEditorSource.includes("${PREVIEW_REGENERATED_MESSAGE}. Reused internal preview candidate"), true);
+});
+
 test("airship visual editor does not reflect unsupported elements into the artifact canvas DOM", () => {
   const reflectedElement = {
     textContent: "Offer wrapper",
