@@ -581,18 +581,25 @@ export function sanitizeAirshipEditorArtifactHtml(html: string): AirshipEditorAr
   };
 }
 
-async function readAirshipEditorArtifactCanvasRender(input: {
+export async function readAirshipEditorArtifactCanvasRender(input: {
   migrationId: string | null;
   draftCandidate: AirshipDraftCandidatePreviewRef | null;
   previewHost: AirshipPreviewHostReadback | null;
+  getArtifactById?: typeof getArtifactById;
 }): Promise<AirshipEditorArtifactCanvasRender | null> {
   const demoReadiness = demoReadinessForMigration(input.migrationId);
   const source = demoReadiness ? "demo_artifact" as const : "candidate_artifact" as const;
-  const siteVersionId = demoReadiness?.activePointerTarget.siteVersionId ?? input.draftCandidate?.siteVersionId ?? null;
-  const runtimeArtifactId = demoReadiness?.activePointerTarget.runtimeArtifactId ?? input.draftCandidate?.runtimeArtifactId ?? null;
+  const arisCandidate = isArisAirshipMvpMigration(input.migrationId)
+    ? {
+        siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+        runtimeArtifactId: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+      }
+    : null;
+  const siteVersionId = demoReadiness?.activePointerTarget.siteVersionId ?? input.draftCandidate?.siteVersionId ?? arisCandidate?.siteVersionId ?? null;
+  const runtimeArtifactId = demoReadiness?.activePointerTarget.runtimeArtifactId ?? input.draftCandidate?.runtimeArtifactId ?? arisCandidate?.runtimeArtifactId ?? null;
   if (!siteVersionId || !runtimeArtifactId) return null;
 
-  const artifact = await getArtifactById(runtimeArtifactId);
+  const artifact = await (input.getArtifactById ?? getArtifactById)(runtimeArtifactId);
   const html = text(artifact?.htmlByPath?.["/"]);
   if (!artifact || artifact.siteVersionId !== siteVersionId || !html) return null;
 

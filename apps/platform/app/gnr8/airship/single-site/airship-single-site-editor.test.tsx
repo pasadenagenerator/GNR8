@@ -1307,6 +1307,13 @@ test("airship visual editor uses CHS demo artifact renderer when available", () 
   assert.equal(html.includes('data-airship-editor-canvas="footer"'), true);
   assert.equal(html.includes('data-airship-artifact-section-selector="[data-airship-section=&quot;hero&quot;]"'), true);
   assert.equal(html.includes('data-airship-artifact-geometry-source="fallback-band"'), true);
+  const selectionChip = html.match(/<span class="airship-selection-chip"[^>]*>[\s\S]*?<\/span>/)?.[0] ?? "";
+  assert.equal(selectionChip.includes("<strong>Hero / intro</strong>"), true);
+  assert.equal(selectionChip.includes("region / homepage hero intro"), false);
+  assert.equal(selectionChip.includes("element /"), false);
+  assert.equal(selectionChip.includes("min-height"), false);
+  assert.equal(html.includes("role: region / homepage hero intro"), true);
+  assert.equal(html.includes("artifact: [data-airship-section=&quot;hero&quot;]"), true);
   assert.equal(html.includes("What changes in the improved draft"), false);
 });
 

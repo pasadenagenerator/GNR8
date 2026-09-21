@@ -317,8 +317,6 @@ function SelectionOverlay({ metadata }: { metadata: AirshipSelectedElementMetada
   return (
     <span className="airship-selection-chip" aria-label={`Selected canvas element: ${metadata.label}`}>
       <strong>{metadata.label}</strong>
-      <span>{metadata.role}</span>
-      <span>{metadata.sizeLabel}</span>
     </span>
   );
 }
@@ -2054,6 +2052,10 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           top: -32px;
           left: 0;
         }
+        .airship-artifact-element-overlay[data-chip-placement="inside"] .airship-selection-chip {
+          top: 4px;
+          left: 4px;
+        }
         .airship-artifact-source-strip {
           position: relative;
           display: flex;
@@ -2096,12 +2098,12 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           z-index: 2;
           display: grid;
           gap: 2px;
-          max-width: min(310px, calc(100% - 24px));
+          max-width: min(220px, calc(100% - 8px));
           border: 1px solid #bfdbfe;
           border-radius: 8px;
           background: #eff6ff;
           color: #1d4ed8;
-          padding: 5px 7px;
+          padding: 4px 7px;
           font-size: 11px;
           font-weight: 900;
           line-height: 1.2;
@@ -3387,6 +3389,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                               className="airship-artifact-element-overlay"
                               data-airship-artifact-element-selector={selectedElementMetadata.elementMarkerSelector ?? undefined}
                               data-airship-artifact-element-section={selectedSection}
+                              data-chip-placement={artifactElementOverlayRect.top >= 34 ? "above" : "inside"}
                               style={{
                                 top: artifactElementOverlayRect.top,
                                 left: artifactElementOverlayRect.left,

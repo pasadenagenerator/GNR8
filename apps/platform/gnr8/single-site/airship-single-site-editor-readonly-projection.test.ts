@@ -6,6 +6,7 @@ import {
   airshipDraftIdForImportedSiteField,
   buildAirshipSingleSiteDraftSeed,
   buildAirshipSingleSiteEditorReadonlyProjection,
+  readAirshipEditorArtifactCanvasRender,
   sanitizeAirshipEditorArtifactHtml,
 } from "./airship-single-site-editor-readonly-projection";
 import {
@@ -17,6 +18,7 @@ import {
   arisAirshipDraftContainsForbiddenCopy,
 } from "./airship-aris-mvp-draft";
 import type { AirshipSingleSiteDraftRecord } from "./airship-single-site-draft-service";
+import type { RuntimeArtifact } from "../runtime/types";
 import type { SingleSiteStudioReadonlyProjection } from "./single-site-studio-readonly-projection";
 
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
@@ -152,6 +154,94 @@ test("airship editor artifact sanitizer disables raw scripts and unsafe handlers
   assert.equal(sanitized.sanitizedHtml.includes('data-airship-element="hero-headline"'), true);
   assert.equal(sanitized.sanitizedHtml.includes('data-airship-element="hero-subheading"'), true);
   assert.equal(sanitized.sanitizedHtml.includes("The CHS team helps your IT change with every technology wave."), true);
+});
+
+test("airship editor canvas resolves ARIS polished candidate artifact HTML before fallback preview rendering", async () => {
+  const polishedArisHtml = [
+    "<!doctype html><html><body>",
+    '<header data-airship-section="hero"><nav>ARIS</nav><h1 data-airship-element="hero-headline">ARIS - Apple in Canton ponudba</h1></header>',
+    '<main><section data-airship-section="offers"><article data-airship-element="offer-card">Apple ponudba</article><article data-airship-element="offer-card">Canton Smart ponudba</article></section>',
+    '<section data-airship-section="cta"><a data-airship-element="contact-cta">Želim ponudbo</a></section></main>',
+    '<footer data-airship-section="footer">Internal GNR8 demo preview for ARIS.</footer>',
+    "</body></html>",
+  ].join("");
+  const calls: string[] = [];
+  const render = await readAirshipEditorArtifactCanvasRender({
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    draftCandidate: null,
+    previewHost: null,
+    getArtifactById: async (artifactId) => {
+      calls.push(artifactId);
+      return {
+        id: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+        siteId: "site_6b859cc1599a5b6642dc",
+        siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+        rendererCompatibilityVersion: "gnr8-renderer-v1",
+        htmlByPath: { "/": polishedArisHtml },
+        compiledTokenStyles: "",
+        assetFingerprintMap: {},
+        manifest: { sourceKind: "airship_single_site_draft_candidate" },
+        publishStage: "shadow",
+        shadowRestricted: false,
+        artifactGovernance: {
+          pageGateState: ["AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY"],
+          pageRolloutPolicyState: ["AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE"],
+          pageEnforcementState: { shadow: ["ALLOW"], canary: ["REVIEW"], production: ["REVIEW"] },
+          siteGateState: "AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY",
+          siteRolloutPolicyState: "AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE",
+          siteEnforcementState: { shadow: "ALLOW", canary: "REVIEW", production: "REVIEW" },
+          publishStage: "shadow",
+        },
+        bundleSha256: "sha-aris-polished",
+        createdAt: "2026-09-21T00:00:00.000Z",
+      } satisfies RuntimeArtifact;
+    },
+  });
+
+  assert.deepEqual(calls, [AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID]);
+  assert.equal(render?.source, "candidate_artifact");
+  assert.equal(render?.siteVersionId, AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID);
+  assert.equal(render?.runtimeArtifactId, AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID);
+  assert.equal(render?.sanitizedHtml.includes("ARIS - Apple in Canton ponudba"), true);
+  assert.equal(render?.sanitizedHtml.includes("Apple ponudba"), true);
+  assert.equal(render?.sanitizedHtml.includes("Canton Smart ponudba"), true);
+  assert.equal(render?.sanitizedHtml.includes("Želim ponudbo"), true);
+  assert.equal(render?.sanitizedHtml.includes("Internal GNR8 demo preview for ARIS."), true);
+  assert.equal(render?.sanitizedHtml.includes("FALLBACK PREVIEW"), false);
+  assert.equal(render?.sanitizedHtml.includes("content.airship"), false);
+});
+
+test("airship editor canvas artifact render is unavailable when artifact HTML is missing", async () => {
+  const render = await readAirshipEditorArtifactCanvasRender({
+    migrationId: AIRSHIP_ARIS_MIGRATION_ID,
+    draftCandidate: null,
+    previewHost: null,
+    getArtifactById: async () => ({
+      id: AIRSHIP_ARIS_CANDIDATE_ARTIFACT_ID,
+      siteId: "site_6b859cc1599a5b6642dc",
+      siteVersionId: AIRSHIP_ARIS_CANDIDATE_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      htmlByPath: {},
+      compiledTokenStyles: "",
+      assetFingerprintMap: {},
+      manifest: { sourceKind: "airship_single_site_draft_candidate" },
+      publishStage: "shadow",
+      shadowRestricted: false,
+      artifactGovernance: {
+        pageGateState: ["AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY"],
+        pageRolloutPolicyState: ["AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE"],
+        pageEnforcementState: { shadow: ["ALLOW"], canary: ["REVIEW"], production: ["REVIEW"] },
+        siteGateState: "AIRSHIP_DRAFT_CANDIDATE_INTERNAL_PREVIEW_ONLY",
+        siteRolloutPolicyState: "AIRSHIP_DRAFT_CANDIDATE_NOT_LIVE",
+        siteEnforcementState: { shadow: "ALLOW", canary: "REVIEW", production: "REVIEW" },
+        publishStage: "shadow",
+      },
+      bundleSha256: "sha-aris-missing-html",
+      createdAt: "2026-09-21T00:00:00.000Z",
+    } satisfies RuntimeArtifact),
+  });
+
+  assert.equal(render, null);
 });
 
 test("airship projection generates the first concrete CHS AI draft and local-only preview", () => {
