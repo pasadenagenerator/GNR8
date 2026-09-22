@@ -34,6 +34,21 @@ type ProofWorkflowReadback = {
   mappingSummary: MappingSummary | null;
   appliedCount: number;
   skippedCount: number;
+  appliedFieldNames?: string[];
+  skippedMappings?: Array<{
+    draftFieldKey: string | null;
+    changedElementMarker: string | null;
+    sectionMarker: string | null;
+    confidence: string;
+    reason: string;
+  }>;
+  changedDraftFields?: Array<{
+    draftFieldKey: string;
+    previousText: string;
+    nextText: string;
+    changedElementMarker: string | null;
+    sectionMarker: string | null;
+  }>;
   draft: {
     idBefore: string | null;
     versionBefore: number | null;
@@ -175,6 +190,12 @@ export function AirshipProofWorkflowPanel(props: Props) {
     if (!summary) return "No captured edits mapped yet.";
     return `${summary.exactSafeApplyCandidateCount} exact/safe; ${summary.unsupportedEntryCount} skipped/unsupported; ${summary.entryCount} total.`;
   }, [mapped]);
+  const appliedFieldText = result?.appliedFieldNames?.length
+    ? result.appliedFieldNames.join(", ")
+    : "none";
+  const skippedMappingText = result?.skippedMappings?.length
+    ? result.skippedMappings.map((item) => `${item.draftFieldKey ?? item.changedElementMarker ?? "unknown"}: ${item.reason}`).join("; ")
+    : "none";
 
   async function post(body: Record<string, unknown>) {
     const response = await fetch("/api/gnr8/admin/airship/single-site/proof-workflow", {
@@ -318,6 +339,8 @@ export function AirshipProofWorkflowPanel(props: Props) {
           <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
             {fact("Applied count", result.appliedCount)}
             {fact("Skipped count", result.skippedCount)}
+            {fact("Applied fields", appliedFieldText)}
+            {fact("Skipped mappings", skippedMappingText)}
             {fact("Draft before", result.draft.versionBefore === null ? "missing" : `v${result.draft.versionBefore}`)}
             {fact("Draft after", result.draft.versionAfter === null ? "missing" : `v${result.draft.versionAfter}`)}
             {fact("Draft save", "Captured edits saved to draft")}

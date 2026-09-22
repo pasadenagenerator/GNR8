@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   AIRSHIP_SIDECAR_BUILDER_CAPABILITIES,
   AirshipSidecarBuilderAdapter,
   buildAirshipCommandDescriptor,
 } from "./builder-adapter";
+
+const execFileAsync = promisify(execFile);
 
 async function makeWorkspace(): Promise<string> {
   const workspaceDir = await mkdtemp(join(tmpdir(), "gnr8-airship-builder-adapter-test-"));
@@ -18,6 +22,11 @@ async function makeWorkspace(): Promise<string> {
     "utf8",
   );
   await writeFile(join(workspaceDir, "package.json"), `${JSON.stringify({ private: true }, null, 2)}\n`, "utf8");
+  await execFileAsync("git", ["init", "-b", "main"], { cwd: workspaceDir });
+  await execFileAsync("git", ["config", "user.email", "proof-session@gnr8.local"], { cwd: workspaceDir });
+  await execFileAsync("git", ["config", "user.name", "GNR8 Airship Proof"], { cwd: workspaceDir });
+  await execFileAsync("git", ["add", "index.html", "package.json"], { cwd: workspaceDir });
+  await execFileAsync("git", ["commit", "-m", "baseline"], { cwd: workspaceDir });
   return workspaceDir;
 }
 
@@ -88,6 +97,7 @@ test("prepareSession records a descriptor and does not launch Airship", async ()
     assert.equal(result.command.expectedSessionUrl, "http://127.0.0.1:4179/");
     assert.equal(result.session.baselineHashes.some((file) => file.path === "index.html"), true);
     assert.equal(result.session.baselineHashes.some((file) => file.path === "package.json"), true);
+    assert.equal(result.session.workspaceContract.requiresGitRepository, true);
   } finally {
     await rm(workspaceDir, { recursive: true, force: true });
   }

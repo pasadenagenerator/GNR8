@@ -40,6 +40,7 @@ export type BuilderCommandDescriptor = {
 
 export type BuilderWorkspaceContract = {
   requiredFiles: string[];
+  requiresGitRepository: boolean;
   targetCanBeServedLocally: boolean;
   expectedMutationModel: "local-source-files";
   primaryCaptureFiles: string[];
@@ -126,6 +127,7 @@ export const AIRSHIP_SIDECAR_BUILDER_CAPABILITIES: BuilderAdapterCapabilities = 
 
 export const AIRSHIP_SOURCE_BACKED_WORKSPACE_CONTRACT: BuilderWorkspaceContract = {
   requiredFiles: ["index.html", "package.json"],
+  requiresGitRepository: true,
   targetCanBeServedLocally: true,
   expectedMutationModel: "local-source-files",
   primaryCaptureFiles: ["index.html"],
@@ -309,6 +311,12 @@ async function assertSourceBackedWorkspace(workspaceDir: string): Promise<void> 
     const fileStat = await stat(join(workspaceDir, requiredFile)).catch(() => null);
     if (!fileStat?.isFile()) {
       throw new Error(`Airship source-backed workspace is missing ${requiredFile}`);
+    }
+  }
+  if (AIRSHIP_SOURCE_BACKED_WORKSPACE_CONTRACT.requiresGitRepository) {
+    const gitStat = await stat(join(workspaceDir, ".git")).catch(() => null);
+    if (!gitStat?.isDirectory()) {
+      throw new Error("Airship source-backed workspace is missing .git");
     }
   }
 }

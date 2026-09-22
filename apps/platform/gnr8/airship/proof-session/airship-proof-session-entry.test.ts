@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   AIRSHIP_PROOF_SESSION_ENTRY_VERSION,
@@ -12,6 +14,7 @@ import {
 } from "./airship-proof-session-entry";
 
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
+const execFileAsync = promisify(execFile);
 
 async function withWorkspaceRoot<T>(fn: (workspaceRoot: string) => Promise<T>): Promise<T> {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "gnr8-airship-proof-session-entry-test-"));
@@ -49,10 +52,18 @@ test("prepareAirshipProofSessionEntry prepares CHS source-backed proof workspace
     assert.match(html, /data-airship-element="hero-headline"/);
     assert.match(html, /The CHS team helps your IT change/);
     assert.equal(packageJson.private, true);
+    assert.equal(packageJson.name, "gnr8-airship-proof-session");
+    assert.equal(packageJson.version, "0.0.0");
     assert.equal(packageJson.scripts.serve, "python3 -m http.server 4210 --bind 127.0.0.1 --directory .");
     assert.equal(metadata.serviceVersion, AIRSHIP_PROOF_SESSION_ENTRY_VERSION);
     assert.equal(metadata.proofOnly, true);
     assert.equal(metadata.boundaries.noPublishMutation, true);
+
+    const gitStatus = await execFileAsync("git", ["status", "--short"], { cwd: prepared.workspacePath });
+    const gitHead = await execFileAsync("git", ["log", "--oneline", "-1"], { cwd: prepared.workspacePath });
+    assert.equal(gitStatus.stdout, "");
+    assert.match(gitHead.stdout, /baseline/);
+    assert.equal(prepared.adapterSession.workspaceContract.requiresGitRepository, true);
   });
 });
 

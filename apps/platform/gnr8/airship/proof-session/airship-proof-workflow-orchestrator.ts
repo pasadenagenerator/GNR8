@@ -83,6 +83,8 @@ type AirshipProofWorkflowBaseReadback = {
   mappingSummary: AirshipProofWorkflowMappingSummary | null;
   appliedCount: number;
   skippedCount: number;
+  appliedFieldNames: string[];
+  skippedMappings: ApplyAirshipCapturedMappingsToDraftReadback["skippedMappings"];
   draft: AirshipProofWorkflowDraftReadback;
   readback: string;
   nextRecommendedAction: string;
@@ -288,6 +290,8 @@ export async function applyAirshipProofWorkflowMappings(
       mapping: input.mappedWorkflow.mapping,
       appliedCount: applyReadback.appliedCount,
       skippedCount: applyReadback.skippedCount,
+      appliedFieldNames: applyReadback.appliedFieldNames,
+      skippedMappings: applyReadback.skippedMappings,
       draft: applyReadback.draft,
       readback: applyReadback.readback,
       nextRecommendedAction: applyReadback.nextRecommendedAction,
@@ -318,6 +322,8 @@ function baseReadback(input: {
   mapping: AirshipCapturedDiffToDraftMappingResult | null;
   appliedCount: number;
   skippedCount: number;
+  appliedFieldNames?: string[];
+  skippedMappings?: ApplyAirshipCapturedMappingsToDraftReadback["skippedMappings"];
   draft: AirshipProofWorkflowDraftReadback;
   readback: string;
   nextRecommendedAction: string;
@@ -337,6 +343,8 @@ function baseReadback(input: {
     mappingSummary: input.mapping ? summarizeMapping(input.mapping) : null,
     appliedCount: input.appliedCount,
     skippedCount: input.skippedCount,
+    appliedFieldNames: input.appliedFieldNames ?? [],
+    skippedMappings: input.skippedMappings ?? [],
     draft: input.draft,
     readback: input.readback,
     nextRecommendedAction: input.nextRecommendedAction,
@@ -360,6 +368,14 @@ function blockedApplyReadback(input: {
       mapping: input.input.mappedWorkflow.mapping,
       appliedCount: 0,
       skippedCount: input.input.mappedWorkflow.mapping.entries.length,
+      appliedFieldNames: [],
+      skippedMappings: input.input.mappedWorkflow.mapping.entries.map((entry) => ({
+        draftFieldKey: entry.draftFieldKey,
+        changedElementMarker: entry.changedElementMarker,
+        sectionMarker: entry.sectionMarker,
+        confidence: entry.confidence,
+        reason: "stale_mapping_blocked",
+      })),
       draft: {
         idBefore: input.input.expectedDraft.id ?? null,
         versionBefore: input.input.expectedDraft.version,

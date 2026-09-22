@@ -14,6 +14,8 @@ import type {
 
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const ARIS_MIGRATION_ID = "ebf62324-1e51-4435-abd7-004722fb48d6";
+const HERO_HEADLINE_BEFORE = "The CHS team helps your IT change with every technology wave.";
+const HERO_HEADLINE_AFTER = "The XXX team helps your IT change with every technology wave.";
 
 const BASE_HTML = [
   "<!doctype html><html><body>",
@@ -171,7 +173,7 @@ function applyInput(
       id: `draft-${CHS_MIGRATION_ID}`,
       version: 3,
     },
-    mapping: mapping(BASE_HTML.replace("The CHS team helps your IT change with every technology wave.", "Captured CHS hero headline")),
+    mapping: mapping(BASE_HTML.replace(HERO_HEADLINE_BEFORE, HERO_HEADLINE_AFTER)),
     confirmed: true,
     actor,
     service: fake.service,
@@ -188,8 +190,9 @@ test("applying exact hero headline mapping updates the draft", async () => {
   assert.equal(result.skippedCount, 0);
   assert.equal(result.draft.versionBefore, 3);
   assert.equal(result.draft.versionAfter, 4);
+  assert.deepEqual(result.appliedFieldNames, ["headline"]);
   assert.deepEqual(result.changedDraftFields.map((field) => field.draftFieldKey), ["headline"]);
-  assert.equal(fake.current().draftEdits.find((edit) => edit.fieldKey === "headline")?.proposedTextContent, "Captured CHS hero headline");
+  assert.equal(fake.current().draftEdits.find((edit) => edit.fieldKey === "headline")?.proposedTextContent, HERO_HEADLINE_AFTER);
   assert.match(result.readback, /Captured edits saved to draft/);
   assert.match(result.readback, /Preview not regenerated yet/);
   assert.equal(result.nextRecommendedAction, "Apply / generate preview");

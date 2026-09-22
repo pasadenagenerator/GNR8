@@ -237,6 +237,8 @@ test("apply with confirmation writes safe mapping to draft and keeps preview pen
     assert.equal(applied.status, "applied_to_draft");
     assert.equal(applied.appliedCount, 1);
     assert.equal(applied.skippedCount, 0);
+    assert.deepEqual(applied.appliedFieldNames, ["headline"]);
+    assert.deepEqual(applied.skippedMappings, []);
     assert.equal(applied.draft.versionBefore, 3);
     assert.equal(applied.draft.versionAfter, 4);
     assert.equal(fake.current().draftEdits.find((edit) => edit.fieldKey === "headline")?.proposedTextContent, HERO_HEADLINE_AFTER);
@@ -265,6 +267,7 @@ test("apply without confirmation is rejected", async () => {
 
     assert.equal(applied.status, "blocked");
     assert.equal(applied.appliedCount, 0);
+    assert.deepEqual(applied.appliedFieldNames, []);
     assert.equal(applied.applyReadback?.diagnostics.includes("airship_captured_mapping_apply_confirmation_required"), true);
     assert.equal(fake.calls.length, 0);
   });
@@ -301,6 +304,7 @@ test("unsupported mapping is skipped", async () => {
     assert.equal(applied.status, "applied_to_draft");
     assert.equal(applied.appliedCount, 0);
     assert.equal(applied.skippedCount, 1);
+    assert.deepEqual(applied.appliedFieldNames, []);
     assert.equal(applied.applyReadback?.skippedMappings[0]?.reason, "mapping_not_exact_safe_apply_candidate");
     assert.deepEqual(fake.calls, [`read:${CHS_MIGRATION_ID}`]);
   });
@@ -323,6 +327,8 @@ test("stale mapped draft version is rejected before draft mutation", async () =>
 
     assert.equal(applied.status, "blocked");
     assert.equal(applied.appliedCount, 0);
+    assert.deepEqual(applied.appliedFieldNames, []);
+    assert.equal(applied.skippedMappings[0]?.reason, "stale_mapping_blocked");
     assert.equal(applied.diagnostics.includes("airship_proof_workflow_stale_mapping_draft_version"), true);
     assert.equal(applied.applyReadback, null);
     assert.equal(fake.calls.length, 0);

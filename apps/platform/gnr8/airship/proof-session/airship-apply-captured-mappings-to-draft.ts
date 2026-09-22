@@ -62,6 +62,7 @@ export type ApplyAirshipCapturedMappingsToDraftReadback = {
     idAfter: string | null;
     versionAfter: number | null;
   };
+  appliedFieldNames: SupportedDraftFieldKey[];
   changedDraftFields: AppliedAirshipCapturedDraftField[];
   skippedMappings: SkippedAirshipCapturedDraftMapping[];
   safety: {
@@ -173,6 +174,7 @@ export async function applyAirshipCapturedMappingsToDraft(
       versionAfter: updatedDraft.version,
     },
     changedDraftFields,
+    appliedFieldNames: changedDraftFields.map((field) => field.draftFieldKey),
     skippedMappings,
     safety: safety(input.confirmed),
     mutationFlags: mutationFlags(changedDraftFields.length > 0),
@@ -303,6 +305,7 @@ function rejectedReadback(input: {
       idAfter: input.currentDraft?.id ?? null,
       versionAfter: input.currentDraft?.version ?? null,
     },
+    appliedFieldNames: [],
     changedDraftFields: [],
     skippedMappings: input.input.mapping.entries.map((entry) => skip(entry, "apply_rejected")),
     safety: safety(input.input.confirmed),

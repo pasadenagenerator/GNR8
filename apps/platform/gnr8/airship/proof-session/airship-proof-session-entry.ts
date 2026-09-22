@@ -1,9 +1,11 @@
 import "server-only";
 
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { promisify } from "node:util";
 
 import {
   AirshipSidecarBuilderAdapter,
@@ -29,6 +31,7 @@ import {
 
 export const AIRSHIP_PROOF_SESSION_ENTRY_VERSION = "airship-adapter-06-proof-session-entry:v1" as const;
 export const AIRSHIP_PROOF_SESSION_CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63" as const;
+const execFileAsync = promisify(execFile);
 
 export type AirshipProofArtifactKey = "chs-polished-demo";
 
@@ -151,6 +154,7 @@ export async function prepareAirshipProofSessionEntry(input: PrepareAirshipProof
       mode: "canvas",
     },
     baselinePaths: ["index.html", "package.json", "gnr8-airship-proof-session.json"],
+    writeProofMetadata: false,
   });
 
   return {
@@ -279,6 +283,8 @@ async function createProofWorkspace(input: {
     `${JSON.stringify(
       {
         private: true,
+        name: "gnr8-airship-proof-session",
+        version: "0.0.0",
         scripts: {
           serve: `python3 -m http.server ${input.targetPort} --bind 127.0.0.1 --directory .`,
         },
@@ -289,7 +295,20 @@ async function createProofWorkspace(input: {
     "utf8",
   );
   await writeFile(join(workspacePath, "gnr8-airship-proof-session.json"), `${JSON.stringify(input.metadata, null, 2)}\n`, "utf8");
+  await initializeProofGitRepository(workspacePath);
   return workspacePath;
+}
+
+async function initializeProofGitRepository(workspacePath: string): Promise<void> {
+  await runGit(workspacePath, ["init", "-b", "main"]);
+  await runGit(workspacePath, ["config", "user.email", "proof-session@gnr8.local"]);
+  await runGit(workspacePath, ["config", "user.name", "GNR8 Airship Proof"]);
+  await runGit(workspacePath, ["add", "index.html", "package.json", "gnr8-airship-proof-session.json"]);
+  await runGit(workspacePath, ["commit", "-m", "baseline"]);
+}
+
+async function runGit(cwd: string, args: string[]): Promise<void> {
+  await execFileAsync("git", args, { cwd });
 }
 
 function buildRunnerCommand(input: { workspacePath: string; targetPort: number }): ProofCommandDescriptor {
