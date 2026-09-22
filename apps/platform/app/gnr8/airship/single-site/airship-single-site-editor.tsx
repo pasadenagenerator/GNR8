@@ -18,6 +18,22 @@ type Props = {
   model: AirshipSingleSiteEditorReadonlyProjection;
 };
 
+const AIRSHIP_PROOF_APPLIED_HEADLINE = "The XXX team helps your IT change with every technology wave.";
+
+function airshipProofFreshDraftProof(model: AirshipSingleSiteEditorReadonlyProjection) {
+  const draftId = model.draftPanel.persistence.draftId;
+  const draftVersion = model.draftPanel.persistence.version;
+  const hasAppliedHeadline = model.draftPanel.drafts.some((draft) =>
+    draft.fieldKey === "headline" && draft.proposedTextContent === AIRSHIP_PROOF_APPLIED_HEADLINE,
+  );
+  if (!draftId || !draftVersion || !hasAppliedHeadline) return null;
+  return {
+    draftId,
+    draftVersion,
+    appliedHeadline: AIRSHIP_PROOF_APPLIED_HEADLINE,
+  };
+}
+
 function labelize(value: string): string {
   return value.replaceAll("_", " ");
 }
@@ -397,6 +413,7 @@ export function AirshipSingleSiteEditor({ model }: Props) {
             migrationId={model.migrationId}
             savedDraftId={model.draftPanel.persistence.draftId}
             savedDraftVersion={model.draftPanel.persistence.version}
+            freshDraftProof={airshipProofFreshDraftProof(model)}
           />
           {model.draftPanel.drafts.length > 0 && model.draftPanel.draftPreview ? (
             <AirshipSingleSiteLocalDraftEditor

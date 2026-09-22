@@ -380,6 +380,43 @@ test("airship proof workflow capture and map displays exact mapping summary", as
   assert.equal(body.readback.mapped.draft.versionBefore, 3);
 });
 
+test("airship proof workflow route supports separate capture then map operator steps", async () => {
+  const capturedReadback = { ...preparedReadback(), status: "captured", capture: { indexHtmlChanged: true, changedFiles: [{ path: "index.html" }] } };
+  const handlers = createAirshipProofWorkflowRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-proof",
+    service: fakeDraftService().service as never,
+    captureAirshipProofWorkflowChanges: async () => capturedReadback as never,
+    mapAirshipProofWorkflowChanges: async (input) => {
+      assert.equal("capture" in input.preparedWorkflow, true);
+      return mappedReadback() as never;
+    },
+  });
+
+  const captureResponse = await handlers.POST(request({
+    actionMode: "capture",
+    migrationId: MIGRATION_ID,
+    preparedWorkflow: preparedReadback(),
+  }));
+  const captureBody = await captureResponse.json() as { ok: boolean; readback: typeof capturedReadback };
+
+  assert.equal(captureResponse.status, 200);
+  assert.equal(captureBody.ok, true);
+  assert.equal(captureBody.readback.status, "captured");
+  assert.equal(captureBody.readback.capture.indexHtmlChanged, true);
+
+  const mapResponse = await handlers.POST(request({
+    actionMode: "map",
+    migrationId: MIGRATION_ID,
+    capturedWorkflow: captureBody.readback,
+  }));
+  const mapBody = await mapResponse.json() as { ok: boolean; readback: ReturnType<typeof mappedReadback> };
+
+  assert.equal(mapResponse.status, 200);
+  assert.equal(mapBody.ok, true);
+  assert.equal(mapBody.readback.status, "mapped");
+  assert.equal(mapBody.readback.mappingSummary?.exactSafeApplyCandidateCount, 1);
+});
+
 test("airship proof workflow apply without confirmation is rejected", async () => {
   let applyCalls = 0;
   const handlers = createAirshipProofWorkflowRouteHandlers({

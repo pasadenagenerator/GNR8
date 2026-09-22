@@ -15,12 +15,13 @@ import {
   mapAirshipProofWorkflowChanges,
   prepareAirshipProofWorkflow,
   type AirshipProofWorkflowApplyReadback,
+  type AirshipProofWorkflowCapturedReadback,
   type AirshipProofWorkflowMappedReadback,
   type AirshipProofWorkflowPreparedReadback,
 } from "@/gnr8/airship/proof-session/airship-proof-workflow-orchestrator";
 import { requireSuperadminUserId } from "@/src/auth/require-superadmin-user-id";
 
-type ActionMode = "prepare" | "capture_map" | "apply_confirmed" | "generate_internal_preview_from_applied_draft";
+type ActionMode = "prepare" | "capture" | "map" | "capture_map" | "apply_confirmed" | "generate_internal_preview_from_applied_draft";
 
 const APPLIED_HEADLINE = "The XXX team helps your IT change with every technology wave.";
 
@@ -40,6 +41,7 @@ type ActionBody = Record<string, unknown> & {
   actionMode?: unknown;
   migrationId?: unknown;
   preparedWorkflow?: unknown;
+  capturedWorkflow?: unknown;
   mappedWorkflow?: unknown;
   appliedWorkflow?: unknown;
   freshDraftProof?: unknown;
@@ -52,6 +54,7 @@ const POST_BODY_KEYS = new Set([
   "actionMode",
   "migrationId",
   "preparedWorkflow",
+  "capturedWorkflow",
   "mappedWorkflow",
   "appliedWorkflow",
   "freshDraftProof",
@@ -158,6 +161,14 @@ function mappedWorkflow(value: unknown): AirshipProofWorkflowMappedReadback | nu
   if (record.proofOnly !== true || record.localManualOnly !== true || record.status !== "mapped") return null;
   if (!record.preparedSession || !record.mapping || !record.mappingReadback) return null;
   return record as AirshipProofWorkflowMappedReadback;
+}
+
+function capturedWorkflow(value: unknown): AirshipProofWorkflowCapturedReadback | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Partial<AirshipProofWorkflowCapturedReadback>;
+  if (record.proofOnly !== true || record.localManualOnly !== true || record.status !== "captured") return null;
+  if (!record.preparedSession || !record.capture) return null;
+  return record as AirshipProofWorkflowCapturedReadback;
 }
 
 function appliedWorkflow(value: unknown): AirshipProofWorkflowApplyReadback | null {
@@ -316,6 +327,8 @@ export function createAirshipProofWorkflowRouteHandlers(deps: Partial<RouteDeps>
       const migrationId = text(body.migrationId);
       if (
         actionMode !== "prepare" &&
+        actionMode !== "capture" &&
+        actionMode !== "map" &&
         actionMode !== "capture_map" &&
         actionMode !== "apply_confirmed" &&
         actionMode !== "generate_internal_preview_from_applied_draft"
@@ -357,6 +370,38 @@ export function createAirshipProofWorkflowRouteHandlers(deps: Partial<RouteDeps>
             mappingSummary: mapped.mappingSummary,
             nextRecommendedAction: mapped.nextRecommendedAction,
           });
+        }
+
+        if (actionMode === "capture") {
+          const prepared = preparedWorkflow(body.preparedWorkflow);
+          if (!prepared) {
+            return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_prepared_readback_required"]);
+          }
+          if (prepared.preparedSession.selectedArtifact.migrationId !== migrationId) {
+            return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_prepared_migration_mismatch"]);
+          }
+          const captured = await resolvedDeps.captureAirshipProofWorkflowChanges({ preparedWorkflow: prepared });
+          return success(captured);
+        }
+
+        if (actionMode === "map") {
+          const captured = capturedWorkflow(body.capturedWorkflow);
+          if (!captured) {
+            return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_captured_readback_required"]);
+          }
+          if (captured.preparedSession.selectedArtifact.migrationId !== migrationId) {
+            return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_captured_migration_mismatch"]);
+          }
+          const currentDraft = await resolvedDeps.service.readCurrentDraft(migrationId);
+          const expectedDraft = draftRefFromCurrentDraft(currentDraft);
+          if (!expectedDraft) {
+            return failure(409, "AIRSHIP_PROOF_WORKFLOW_DRAFT_MISSING", ["airship_proof_workflow_current_draft_missing"]);
+          }
+          const mapped = await resolvedDeps.mapAirshipProofWorkflowChanges({
+            preparedWorkflow: captured,
+            expectedDraft,
+          });
+          return success(mapped);
         }
 
         if (actionMode === "generate_internal_preview_from_applied_draft") {

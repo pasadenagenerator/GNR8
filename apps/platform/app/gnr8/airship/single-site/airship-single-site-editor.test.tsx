@@ -8,6 +8,7 @@ import type { AirshipSingleSiteEditorReadonlyProjection } from "@/gnr8/single-si
 import type { AirshipAgentProfileSelection } from "@/gnr8/single-site/airship-agent-profile-types";
 
 import { AirshipSingleSiteEditor } from "./airship-single-site-editor";
+import { deriveAirshipProofWorkflowPanelViewModel } from "./airship-proof-workflow-panel";
 import {
   applyAirshipSingleSiteLocalDraftEdit,
   initialAirshipSingleSiteLocalDraftFields,
@@ -592,11 +593,16 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("regenerate preview"), true);
   assert.equal(html.includes("change the live site"), true);
   assert.equal(html.includes("replace the current editor route"), true);
-  assert.equal(html.includes("Prepare Airship session"), true);
-  assert.equal(html.includes("Capture changes"), true);
-  assert.equal(html.includes("Map captured edits"), true);
-  assert.equal(html.includes("Apply safe mappings to draft"), true);
-  assert.equal(html.includes("Generate internal preview from applied draft"), true);
+  assert.equal(html.includes("Step 1: Prepare Airship session"), true);
+  assert.equal(html.includes("Step 2: Open Airship editor"), true);
+  assert.equal(html.includes("Step 3: Capture changes"), true);
+  assert.equal(html.includes("Step 4: Map captured edits"), true);
+  assert.equal(html.includes("Step 5: Apply safe mappings to draft"), true);
+  assert.equal(html.includes("Step 6: Generate internal preview from applied draft"), true);
+  assert.equal(html.includes("Step 7: Open generated internal preview"), true);
+  assert.equal(html.includes("Draft changes are not live"), true);
+  assert.equal(html.includes("Applying a draft and generating an internal preview are separate steps"), true);
+  assert.equal(html.includes("GNR8 demo/live links are unchanged"), true);
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes("MVP Demo Readiness"), true);
   assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
@@ -612,6 +618,141 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("Rollback active pointer"), true);
   assert.equal(html.includes("Ready for superadmin rollback review"), true);
   assert.equal(html.includes("I understand this is a superadmin-only active-pointer restore"), true);
+});
+
+test("airship proof workflow panel view model gates operator buttons by step state", () => {
+  const command = {
+    executable: "pnpm",
+    args: ["dev"],
+    cwd: "/tmp/gnr8-airship-proof/session-1",
+    commandLine: "pnpm dev",
+    manualOnly: true as const,
+    launchesProcess: false as const,
+    description: "Manual command.",
+  };
+  const prepared = {
+    proofOnly: true,
+    localManualOnly: true,
+    status: "prepared",
+    workspacePath: "/tmp/gnr8-airship-proof/session-1",
+    manualAirshipCommand: command,
+    initialHashes: [{ path: "index.html", hash: "initial" }],
+    finalHashes: [],
+    mappingSummary: null,
+    appliedCount: 0,
+    skippedCount: 0,
+    appliedFieldNames: [],
+    skippedMappings: [],
+    draft: { idBefore: null, versionBefore: null, idAfter: null, versionAfter: null },
+    readback: "prepared",
+    nextRecommendedAction: "capture",
+    mutationFlags: { publishes: false, activePointerMutation: false },
+    safety: { proofOnlyManualLocal: true, noAutoLaunch: true },
+    diagnostics: [],
+    preparedSession: {
+      workspacePath: "/tmp/gnr8-airship-proof/session-1",
+      targetUrl: "http://127.0.0.1:4178/",
+      targetPort: 4178,
+      sessionPort: 4179,
+      expectedAirshipSessionUrl: "http://127.0.0.1:4179/",
+      healthReadbackUrl: null,
+      localRunnerCommand: command,
+      manualAirshipCommand: command,
+      warnings: [],
+    },
+  };
+  const captured = {
+    ...prepared,
+    status: "captured",
+    capture: { indexHtmlChanged: true, changedFiles: [{ path: "index.html" }] },
+    readback: "captured",
+  };
+  const mapped = {
+    ...captured,
+    status: "mapped",
+    mappingSummary: {
+      hasChanges: true,
+      entryCount: 1,
+      safeEntryCount: 1,
+      unsupportedEntryCount: 0,
+      exactSafeApplyCandidateCount: 1,
+    },
+    draft: { idBefore: "draft-chs", versionBefore: 3, idAfter: "draft-chs", versionAfter: 3 },
+  };
+  const applied = {
+    ...mapped,
+    status: "applied_to_draft",
+    appliedCount: 1,
+    appliedFieldNames: ["headline"],
+    draft: { idBefore: "draft-chs", versionBefore: 3, idAfter: "draft-chs", versionAfter: 4 },
+  };
+  const base = {
+    migrationId: CHS_MIGRATION_ID,
+    savedDraftId: "draft-chs",
+    savedDraftVersion: 4,
+    freshDraftProof: null,
+    status: "not_prepared" as const,
+    busy: false,
+    prepared: null,
+    captured: null,
+    mapped: null,
+    result: null,
+    previewResult: null,
+    confirmed: false,
+  };
+
+  const initial = deriveAirshipProofWorkflowPanelViewModel(base);
+  assert.equal(initial.canCapture, false);
+  assert.equal(initial.canMap, false);
+  assert.equal(initial.canApply, false);
+  assert.equal(initial.canGeneratePreview, false);
+  assert.equal(initial.canOpenPreview, false);
+
+  const afterPrepare = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "prepared", prepared: prepared as never });
+  assert.equal(afterPrepare.canCapture, true);
+  assert.equal(afterPrepare.canMap, false);
+  assert.equal(afterPrepare.openAirshipHref, "http://127.0.0.1:4179/");
+  assert.equal(afterPrepare.localRunnerCommand?.commandLine, "pnpm dev");
+  assert.equal(afterPrepare.manualAirshipCommand?.commandLine, "pnpm dev");
+
+  const afterCapture = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "captured", prepared: prepared as never, captured: captured as never });
+  assert.equal(afterCapture.canMap, true);
+  assert.equal(afterCapture.changedFilesCount, 1);
+
+  const afterMap = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "mapped", prepared: prepared as never, captured: captured as never, mapped: mapped as never });
+  assert.equal(afterMap.canApply, false);
+  assert.match(afterMap.mappingText, /1 exact\/safe/);
+
+  const afterConfirm = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "mapped", prepared: prepared as never, captured: captured as never, mapped: mapped as never, confirmed: true });
+  assert.equal(afterConfirm.canApply, true);
+
+  const afterApply = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "applied", prepared: prepared as never, captured: captured as never, mapped: mapped as never, result: applied as never });
+  assert.equal(afterApply.canGeneratePreview, true);
+
+  const afterPreview = deriveAirshipProofWorkflowPanelViewModel({
+    ...base,
+    status: "preview_generated",
+    prepared: prepared as never,
+    captured: captured as never,
+    mapped: mapped as never,
+    result: applied as never,
+    previewResult: {
+      status: "created",
+      migrationId: CHS_MIGRATION_ID,
+      draftId: "draft-chs",
+      draftVersionUsed: 4,
+      generatedSiteVersionId: "f4a06874-1906-4a8e-bea3-e4837853c9d4",
+      generatedRuntimeArtifactId: "86245daf-2b24-4842-82b4-ab7acd2e63c4",
+      internalPreviewUrl: "/api/gnr8/admin/single-site-studio/versions/f4a06874-1906-4a8e-bea3-e4837853c9d4/preview?mode=transformed&airshipArtifactId=86245daf-2b24-4842-82b4-ab7acd2e63c4",
+      artifactValidityResult: { valid: true, reasons: [] },
+      generatedArtifactContainsAppliedHeadline: true,
+      readback: "generated",
+      mutationFlags: { publishes: false, activePointerMutation: false, previewRegeneration: true },
+      diagnostics: [],
+    },
+  });
+  assert.equal(afterPreview.canOpenPreview, true);
+  assert.match(afterPreview.previewUrl ?? "", /f4a06874-1906-4a8e-bea3-e4837853c9d4/);
 });
 
 test("airship single-site editor renders live published and Airship draft candidate previews with internal routes", () => {

@@ -21,6 +21,8 @@ type MappingSummary = {
 };
 
 type ProofWorkflowReadback = {
+  proofOnly?: true;
+  localManualOnly?: true;
   status: string;
   workspacePath: string | null;
   targetUrl?: string;
@@ -29,6 +31,21 @@ type ProofWorkflowReadback = {
   expectedAirshipSessionUrl?: string;
   localRunnerCommand?: CommandDescriptor;
   manualAirshipCommand: CommandDescriptor | null;
+  preparedSession?: {
+    workspacePath: string;
+    targetUrl: string;
+    targetPort: number;
+    sessionPort: number;
+    expectedAirshipSessionUrl: string;
+    healthReadbackUrl: string | null;
+    localRunnerCommand: CommandDescriptor;
+    manualAirshipCommand: CommandDescriptor;
+    warnings: string[];
+  };
+  capture?: {
+    changedFiles: Array<{ path: string; unifiedDiff?: string }>;
+    indexHtmlChanged: boolean;
+  };
   initialHashes?: Array<{ path: string; hash: string }>;
   finalHashes?: Array<{ path: string; hash: string }>;
   mappingSummary: MappingSummary | null;
@@ -101,7 +118,25 @@ type Props = {
   migrationId: string | null;
   savedDraftId: string | null;
   savedDraftVersion: number | null;
+  freshDraftProof?: {
+    draftId: string;
+    draftVersion: number;
+    appliedHeadline: string;
+  } | null;
 };
+
+type ProofWorkflowPanelViewModelInput = Props & {
+  status: WorkflowStatus;
+  busy: boolean;
+  prepared: ProofWorkflowReadback | null;
+  captured: ProofWorkflowReadback | null;
+  mapped: ProofWorkflowReadback | null;
+  result: ProofWorkflowReadback | null;
+  previewResult: PreviewGenerationReadback | null;
+  confirmed: boolean;
+};
+
+export type ProofWorkflowPanelViewModel = ReturnType<typeof deriveAirshipProofWorkflowPanelViewModel>;
 
 function buttonStyle(disabled: boolean, tone: "primary" | "neutral" = "neutral"): React.CSSProperties {
   const active = tone === "primary"
@@ -193,9 +228,107 @@ function previewGenerationReadback(value: RouteResponse["readback"]): PreviewGen
   return value;
 }
 
+function preparedSession(readback: ProofWorkflowReadback | null | undefined) {
+  return readback?.preparedSession ?? null;
+}
+
+function targetUrl(readback: ProofWorkflowReadback | null | undefined): string | null {
+  return readback?.targetUrl ?? preparedSession(readback)?.targetUrl ?? null;
+}
+
+function expectedAirshipSessionUrl(readback: ProofWorkflowReadback | null | undefined): string | null {
+  return readback?.expectedAirshipSessionUrl ?? preparedSession(readback)?.expectedAirshipSessionUrl ?? null;
+}
+
+function localRunnerCommand(readback: ProofWorkflowReadback | null | undefined): CommandDescriptor | null {
+  return readback?.localRunnerCommand ?? preparedSession(readback)?.localRunnerCommand ?? null;
+}
+
+function manualAirshipCommand(readback: ProofWorkflowReadback | null | undefined): CommandDescriptor | null {
+  return readback?.manualAirshipCommand ?? preparedSession(readback)?.manualAirshipCommand ?? null;
+}
+
+function changedFilesCount(readback: ProofWorkflowReadback | null | undefined): number {
+  return readback?.capture?.changedFiles?.length ?? 0;
+}
+
+function hasCapturedChanges(readback: ProofWorkflowReadback | null | undefined): boolean {
+  return Boolean(readback?.capture?.indexHtmlChanged || changedFilesCount(readback) > 0);
+}
+
+function mutationFlagText(flags: Record<string, boolean> | null | undefined): string {
+  if (!flags) return "not available yet";
+  const ordered = Object.entries(flags).sort(([left], [right]) => left.localeCompare(right));
+  return ordered.map(([key, value]) => `${labelize(key)}: ${value ? "yes" : "no"}`).join("; ");
+}
+
+function safetyFlagText(flags: Record<string, boolean> | null | undefined): string {
+  if (!flags) return "not available yet";
+  const ordered = Object.entries(flags).sort(([left], [right]) => left.localeCompare(right));
+  return ordered.map(([key, value]) => `${labelize(key)}: ${value ? "yes" : "no"}`).join("; ");
+}
+
+function hasFreshDraftProof(input: Pick<Props, "freshDraftProof" | "savedDraftId" | "savedDraftVersion">): boolean {
+  return Boolean(
+    input.freshDraftProof &&
+    input.savedDraftId &&
+    input.savedDraftVersion &&
+    input.freshDraftProof.draftId === input.savedDraftId &&
+    input.freshDraftProof.draftVersion === input.savedDraftVersion,
+  );
+}
+
+export function deriveAirshipProofWorkflowPanelViewModel(input: ProofWorkflowPanelViewModelInput) {
+  const currentReadback = input.result ?? input.mapped ?? input.captured ?? input.prepared;
+  const captureHasChanges = hasCapturedChanges(input.captured);
+  const safeMappingCount = input.mapped?.mappingSummary?.exactSafeApplyCandidateCount ?? 0;
+  const hasSafeMappings = safeMappingCount > 0;
+  const applySucceeded = input.result?.status === "applied_to_draft";
+  const freshDraftProof = hasFreshDraftProof(input);
+  const previewUrl = input.previewResult?.internalPreviewUrl ?? null;
+  const sessionUrl = expectedAirshipSessionUrl(input.prepared);
+  const target = targetUrl(input.prepared);
+  const localCommand = localRunnerCommand(input.prepared);
+  const airshipCommand = manualAirshipCommand(input.prepared);
+  const draftLabel = input.savedDraftId && input.savedDraftVersion
+    ? `${input.savedDraftId} v${input.savedDraftVersion}`
+    : "Saved draft required before confirmed apply";
+  const summary = input.mapped?.mappingSummary;
+
+  return {
+    currentReadback,
+    canPrepare: Boolean(input.migrationId) && !input.busy,
+    canCapture: Boolean(input.migrationId && input.prepared) && !input.busy,
+    canMap: Boolean(input.migrationId && input.captured && captureHasChanges) && !input.busy,
+    canApply: Boolean(input.migrationId && hasSafeMappings && input.confirmed) && !input.busy,
+    canGeneratePreview: Boolean(input.migrationId && (applySucceeded || freshDraftProof)) && !input.busy,
+    canOpenPreview: Boolean(previewUrl) && !input.busy,
+    hasSafeMappings,
+    hasFreshDraftProof: freshDraftProof,
+    changedFilesCount: changedFilesCount(input.captured),
+    openAirshipHref: sessionUrl,
+    openAirshipDisabledReason: sessionUrl
+      ? null
+      : input.prepared
+        ? "Start the local static target and manual Airship CLI command, then use the session URL printed by that command."
+        : "Prepare the local proof workspace first.",
+    targetUrl: target,
+    localRunnerCommand: localCommand,
+    manualAirshipCommand: airshipCommand,
+    draftLabel,
+    mappingText: summary
+      ? `${summary.exactSafeApplyCandidateCount} exact/safe; ${summary.safeEntryCount} safe; ${summary.unsupportedEntryCount} unsupported; ${input.result?.skippedCount ?? 0} skipped; ${summary.entryCount} total.`
+      : "No captured edits mapped yet.",
+    mutationFlagsText: mutationFlagText((input.previewResult ?? input.result ?? currentReadback)?.mutationFlags),
+    safetyFlagsText: safetyFlagText(currentReadback?.safety),
+    previewUrl,
+  };
+}
+
 export function AirshipProofWorkflowPanel(props: Props) {
   const [status, setStatus] = useState<WorkflowStatus>("not_prepared");
   const [prepared, setPrepared] = useState<ProofWorkflowReadback | null>(null);
+  const [captured, setCaptured] = useState<ProofWorkflowReadback | null>(null);
   const [mapped, setMapped] = useState<ProofWorkflowReadback | null>(null);
   const [result, setResult] = useState<ProofWorkflowReadback | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewGenerationReadback | null>(null);
@@ -203,21 +336,20 @@ export function AirshipProofWorkflowPanel(props: Props) {
   const [message, setMessage] = useState("Not prepared. Prepare a local proof workspace before running the manual Airship sidecar command.");
   const [busy, setBusy] = useState(false);
 
-  const currentReadback = result ?? mapped ?? prepared;
-  const canPrepare = Boolean(props.migrationId) && !busy;
-  const canCaptureMap = Boolean(props.migrationId && prepared) && !busy;
-  const hasSafeMappings = Boolean((mapped?.mappingSummary?.exactSafeApplyCandidateCount ?? 0) > 0);
-  const canApply = Boolean(props.migrationId && hasSafeMappings && confirmed) && !busy;
-  const canGeneratePreview = Boolean(props.migrationId && result?.status === "applied_to_draft") && !busy;
+  const view = deriveAirshipProofWorkflowPanelViewModel({
+    ...props,
+    status,
+    busy,
+    prepared,
+    captured,
+    mapped,
+    result,
+    previewResult,
+    confirmed,
+  });
+  const currentReadback = view.currentReadback;
   const statusTone = status === "applied" ? "good" : status === "blocked" || status === "failed" ? "warn" : "neutral";
-  const draftLabel = props.savedDraftId && props.savedDraftVersion
-    ? `${props.savedDraftId} v${props.savedDraftVersion}`
-    : "Saved draft required before confirmed apply";
-  const mappingText = useMemo(() => {
-    const summary = mapped?.mappingSummary;
-    if (!summary) return "No captured edits mapped yet.";
-    return `${summary.exactSafeApplyCandidateCount} exact/safe; ${summary.unsupportedEntryCount} skipped/unsupported; ${summary.entryCount} total.`;
-  }, [mapped]);
+  const mappingText = useMemo(() => view.mappingText, [view.mappingText]);
   const appliedFieldText = result?.appliedFieldNames?.length
     ? result.appliedFieldNames.join(", ")
     : "none";
@@ -239,12 +371,13 @@ export function AirshipProofWorkflowPanel(props: Props) {
   }
 
   async function prepare() {
-    if (!canPrepare) return;
+    if (!view.canPrepare) return;
     setBusy(true);
     setMessage("Preparing local/manual proof workspace...");
     try {
       const readback = mappedReadback(await post({ actionMode: "prepare", migrationId: props.migrationId }));
       setPrepared(readback);
+      setCaptured(null);
       setMapped(null);
       setResult(null);
       setPreviewResult(null);
@@ -259,29 +392,49 @@ export function AirshipProofWorkflowPanel(props: Props) {
     }
   }
 
-  async function captureAndMap() {
-    if (!canCaptureMap) return;
+  async function captureChanges() {
+    if (!view.canCapture) return;
     setBusy(true);
-    setMessage("Capturing local workspace changes and mapping safe draft edits...");
+    setMessage("Capturing local Airship workspace changes...");
     try {
-      const readback = await post({ actionMode: "capture_map", migrationId: props.migrationId, preparedWorkflow: prepared });
-      const mappedWorkflow = mappedReadback(readback);
-      setMapped(mappedWorkflow);
+      const readback = mappedReadback(await post({ actionMode: "capture", migrationId: props.migrationId, preparedWorkflow: prepared }));
+      setCaptured(readback);
+      setMapped(null);
+      setResult(null);
+      setPreviewResult(null);
+      setConfirmed(false);
+      setStatus("captured");
+      setMessage(readback?.readback ?? "Captured local Airship proof edits. Map captured edits next.");
+    } catch (error) {
+      setStatus("failed");
+      setMessage(error instanceof Error ? error.message : "Airship proof capture failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function mapCapturedEdits() {
+    if (!view.canMap) return;
+    setBusy(true);
+    setMessage("Mapping captured local edits to safe Airship draft fields...");
+    try {
+      const readback = mappedReadback(await post({ actionMode: "map", migrationId: props.migrationId, capturedWorkflow: captured }));
+      setMapped(readback);
       setResult(null);
       setPreviewResult(null);
       setConfirmed(false);
       setStatus("mapped");
-      setMessage(mappedWorkflow?.readback ?? "Captured and mapped local Airship proof edits.");
+      setMessage(readback?.readback ?? "Mapped captured local Airship proof edits.");
     } catch (error) {
       setStatus("failed");
-      setMessage(error instanceof Error ? error.message : "Airship proof capture/map failed.");
+      setMessage(error instanceof Error ? error.message : "Airship proof map failed.");
     } finally {
       setBusy(false);
     }
   }
 
   async function applyConfirmed() {
-    if (!canApply) return;
+    if (!view.canApply) return;
     setBusy(true);
     setMessage("Applying confirmed exact safe mappings to the saved Airship draft...");
     try {
@@ -305,7 +458,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
   }
 
   async function generatePreviewFromAppliedDraft() {
-    if (!canGeneratePreview) return;
+    if (!view.canGeneratePreview) return;
     setBusy(true);
     setMessage("Generating a separate internal preview candidate from the saved applied draft...");
     try {
@@ -313,6 +466,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
         actionMode: "generate_internal_preview_from_applied_draft",
         migrationId: props.migrationId,
         appliedWorkflow: result,
+        freshDraftProof: props.freshDraftProof ?? undefined,
         idempotencyKey: `airship-proof-preview:${props.migrationId}:${result?.draft.idAfter ?? props.savedDraftId ?? "draft"}:${result?.draft.versionAfter ?? props.savedDraftVersion ?? "unknown"}`,
       }));
       setPreviewResult(readback);
@@ -332,7 +486,9 @@ export function AirshipProofWorkflowPanel(props: Props) {
         <div style={{ minWidth: 0 }}>
           <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 950 }}>Real Airship sidecar proof</div>
           <div style={{ marginTop: 4, color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
-            Proof-only, local/manual. Does not publish, regenerate preview, change the live site, mutate DNS/provider state, or replace the current editor route.
+            Proof-only, local/manual operator flow. Draft changes are not live. Applying a draft and generating an internal preview are separate steps.
+            Does not publish, regenerate preview automatically, change the live site, mutate DNS/provider state, or replace the current editor route.
+            GNR8 demo/live links are unchanged.
           </div>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
@@ -342,22 +498,45 @@ export function AirshipProofWorkflowPanel(props: Props) {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" disabled={!canPrepare} aria-busy={busy && status === "not_prepared"} onClick={() => void prepare()} style={buttonStyle(!canPrepare, "primary")}>
-          Prepare Airship session
-        </button>
-        <button type="button" disabled={!canCaptureMap} onClick={() => void captureAndMap()} style={buttonStyle(!canCaptureMap)}>
-          Capture changes
-        </button>
-        <button type="button" disabled={!canCaptureMap} onClick={() => void captureAndMap()} style={buttonStyle(!canCaptureMap)}>
-          Map captured edits
-        </button>
-        <button type="button" disabled={!canApply} onClick={() => void applyConfirmed()} style={buttonStyle(!canApply, "primary")}>
-          Apply safe mappings to draft
-        </button>
-        <button type="button" disabled={!canGeneratePreview} onClick={() => void generatePreviewFromAppliedDraft()} style={buttonStyle(!canGeneratePreview, "primary")}>
-          Generate internal preview from applied draft
-        </button>
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
+          <button type="button" disabled={!view.canPrepare} aria-busy={busy && status === "not_prepared"} onClick={() => void prepare()} style={buttonStyle(!view.canPrepare, "primary")}>
+            Step 1: Prepare Airship session
+          </button>
+          {view.openAirshipHref ? (
+            <a href={view.openAirshipHref} target="_blank" rel="noreferrer" style={{ ...buttonStyle(false, "primary"), textAlign: "center", textDecoration: "none" }}>
+              Step 2: Open Airship editor
+            </a>
+          ) : (
+            <button type="button" disabled style={buttonStyle(true, "primary")} title={view.openAirshipDisabledReason ?? undefined}>
+              Step 2: Open Airship editor
+            </button>
+          )}
+          <button type="button" disabled={!view.canCapture} onClick={() => void captureChanges()} style={buttonStyle(!view.canCapture)}>
+            Step 3: Capture changes
+          </button>
+          <button type="button" disabled={!view.canMap} onClick={() => void mapCapturedEdits()} style={buttonStyle(!view.canMap)}>
+            Step 4: Map captured edits
+          </button>
+          <button type="button" disabled={!view.canApply} onClick={() => void applyConfirmed()} style={buttonStyle(!view.canApply, "primary")}>
+            Step 5: Apply safe mappings to draft
+          </button>
+          <button type="button" disabled={!view.canGeneratePreview} onClick={() => void generatePreviewFromAppliedDraft()} style={buttonStyle(!view.canGeneratePreview, "primary")}>
+            Step 6: Generate internal preview from applied draft
+          </button>
+          {view.previewUrl ? (
+            <a href={view.previewUrl} target="_blank" rel="noreferrer" style={{ ...buttonStyle(false), textAlign: "center", textDecoration: "none" }}>
+              Step 7: Open generated internal preview
+            </a>
+          ) : (
+            <button type="button" disabled style={buttonStyle(true)}>
+              Step 7: Open generated internal preview
+            </button>
+          )}
+        </div>
+        <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.45 }}>
+          {view.openAirshipDisabledReason ?? "Airship session URL is available after prepare. Start the static target first if the Airship CLI needs the target running."}
+        </div>
       </div>
 
       <div style={{ color: status === "failed" || status === "blocked" ? "#92400e" : "#334155", fontSize: 13, fontWeight: 850, lineHeight: 1.45 }}>
@@ -366,23 +545,43 @@ export function AirshipProofWorkflowPanel(props: Props) {
 
       <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
         {fact("Status", labelize(status))}
-        {fact("Saved draft", draftLabel)}
+        {fact("Workflow status", currentReadback?.status ?? "not prepared")}
+        {fact("Saved draft", view.draftLabel)}
+        {fact("Draft before/after", currentReadback?.draft ? `${currentReadback.draft.idBefore ?? "missing"} v${currentReadback.draft.versionBefore ?? "?"} -> ${currentReadback.draft.idAfter ?? "missing"} v${currentReadback.draft.versionAfter ?? "?"}` : "not available")}
         {fact("Workspace path", currentReadback?.workspacePath ?? "not prepared")}
-        {fact("Static target", prepared?.targetUrl ?? "not prepared")}
-        {fact("Airship session", prepared?.expectedAirshipSessionUrl ?? "not prepared")}
+        {fact("Static target", view.targetUrl ?? "not prepared")}
+        {fact("Airship session", view.openAirshipHref ?? "not prepared")}
+        {fact("Changed files", view.changedFilesCount)}
         {fact("Hash summary", hashSummary(currentReadback))}
         {fact("Mapping summary", mappingText)}
+        {fact("Applied fields", appliedFieldText)}
+        {fact("Mutation boundaries", view.mutationFlagsText)}
+        {fact("Safety flags", view.safetyFlagsText)}
         {fact("Next action", result?.nextRecommendedAction ?? mapped?.nextRecommendedAction ?? prepared?.nextRecommendedAction ?? "Prepare Airship session")}
       </dl>
 
-      {commandBlock("Local static target command", prepared?.localRunnerCommand)}
-      {commandBlock("Manual Airship CLI command", prepared?.manualAirshipCommand)}
+      {prepared ? (
+        <div style={{ border: "1px solid #ccfbf1", borderRadius: 8, background: "#f8fffe", padding: 10, display: "grid", gap: 8 }}>
+          <div style={{ color: "#0f766e", fontSize: 13, fontWeight: 950 }}>Open Airship editor affordance</div>
+          <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45, overflowWrap: "anywhere" }}>
+            {view.openAirshipHref
+              ? `Real local session URL: ${view.openAirshipHref}`
+              : view.openAirshipDisabledReason}
+          </div>
+          <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
+            When you finish editing in Airship, return to this GNR8 tab and click Capture changes. Stop the local Airship/static processes from the Codex task or terminal that started them.
+          </div>
+        </div>
+      ) : null}
+
+      {commandBlock("Local static target command", view.localRunnerCommand)}
+      {commandBlock("Manual Airship CLI command", view.manualAirshipCommand)}
 
       <label style={{ display: "flex", gap: 8, alignItems: "start", color: "#334155", fontSize: 13, fontWeight: 850, lineHeight: 1.45 }}>
         <input
           type="checkbox"
           checked={confirmed}
-          disabled={!hasSafeMappings || busy}
+          disabled={!view.hasSafeMappings || busy}
           onChange={(event) => setConfirmed(event.currentTarget.checked)}
           style={{ marginTop: 2 }}
         />
