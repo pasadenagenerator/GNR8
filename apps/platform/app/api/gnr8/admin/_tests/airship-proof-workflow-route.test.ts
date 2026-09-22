@@ -244,6 +244,80 @@ function fakeDraftService(input: { version?: number; headline?: string } = {}) {
   };
 }
 
+function appliedWorkflowReadback(options: { draftId?: string; draftVersion?: number } = {}) {
+  const draftId = options.draftId ?? "draft-chs";
+  const draftVersion = options.draftVersion ?? 4;
+  return {
+    ...mappedReadback({ draftVersion: draftVersion - 1 }),
+    status: "applied_to_draft",
+    appliedCount: 1,
+    skippedCount: 0,
+    appliedFieldNames: ["headline"],
+    skippedMappings: [],
+    draft: {
+      idBefore: draftId,
+      versionBefore: draftVersion - 1,
+      idAfter: draftId,
+      versionAfter: draftVersion,
+    },
+    readback: "Captured edits saved to draft. Preview not regenerated yet.",
+    nextRecommendedAction: "Apply / generate preview",
+    diagnostics: ["airship_proof_workflow_apply_invoked", "airship_apply_captured_mappings_to_draft_applied"],
+    applyReadback: {
+      status: "applied",
+      appliedCount: 1,
+      skippedCount: 0,
+      appliedFieldNames: ["headline"],
+      skippedMappings: [],
+      draft: {
+        idBefore: draftId,
+        versionBefore: draftVersion - 1,
+        idAfter: draftId,
+        versionAfter: draftVersion,
+      },
+      mutationFlags: { draftDataMutation: true },
+    },
+  };
+}
+
+function generatedArtifact() {
+  return {
+    id: "artifact-generated",
+    siteVersionId: "site-version-generated",
+    htmlByPath: {
+      "/": `<!doctype html><html><body><header>CHS chs.si</header><main><section data-airship-section="hero"><h1 data-airship-element="hero-headline">${HERO_HEADLINE_AFTER}</h1><p data-airship-element="hero-subheading">Cybersecurity, data systems, and hybrid infrastructure support.</p><a data-airship-element="hero-cta">contact</a><article data-airship-element="support-card">managed support</article></section><section data-airship-section="proof">proof benefits expertise</section><section data-airship-section="approach">approach process assess implement</section></main><footer data-airship-section="footer"><a data-airship-element="contact-cta">sales@chs.si</a></footer></body></html>`,
+    },
+  };
+}
+
+function generatedCandidateOutput(status: "created" | "reused" = "created") {
+  return {
+    status,
+    serviceVersion: "airship-4-draft-candidate-service:v1",
+    migrationId: MIGRATION_ID,
+    draftId: "draft-chs",
+    draftVersion: 4,
+    sourceLiveSiteVersionId: "source-live-version",
+    sourceLiveRuntimeArtifactId: "source-live-artifact",
+    candidateSiteVersionId: "site-version-generated",
+    candidateRuntimeArtifactId: "artifact-generated",
+    previewRoute: "/api/gnr8/admin/single-site-studio/versions/site-version-generated/preview?mode=transformed&airshipArtifactId=artifact-generated",
+    styleSettings: {},
+    appliedEdits: [
+      {
+        draftEditId: "airship-chs-home-hero-headline",
+        targetSectionPage: "Homepage / hero headline",
+        appliedTextContent: HERO_HEADLINE_AFTER,
+      },
+    ],
+    skippedEdits: [],
+    activePointerBefore: { siteVersionId: "source-live-version", artifactId: "source-live-artifact" },
+    activePointerAfter: { siteVersionId: "source-live-version", artifactId: "source-live-artifact" },
+    activePointerChanged: false,
+    published: false,
+  };
+}
+
 test("airship proof workflow route requires superadmin before prepare", async () => {
   let prepareCalls = 0;
   const handlers = createAirshipProofWorkflowRouteHandlers({
@@ -459,4 +533,123 @@ test("airship proof workflow route skips unsupported and probable mappings", asy
   assert.deepEqual(body.readback.skippedMappings.map((item) => item.confidence), ["unsupported", "probable"]);
   assert.equal(body.readback.mutationFlags.draftDataMutation, false);
   assert.deepEqual(fake.calls, [`read:${MIGRATION_ID}`, `read:${MIGRATION_ID}`]);
+});
+
+test("airship proof workflow blocks internal preview generation without successful apply or fresh draft proof", async () => {
+  let createCalls = 0;
+  const handlers = createAirshipProofWorkflowRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-proof",
+    service: fakeDraftService({ version: 4, headline: HERO_HEADLINE_AFTER }).service as never,
+    createAirshipSingleSiteDraftCandidate: async () => {
+      createCalls += 1;
+      return generatedCandidateOutput() as never;
+    },
+    getArtifactById: async () => generatedArtifact() as never,
+  });
+
+  const response = await handlers.POST(request({
+    actionMode: "generate_internal_preview_from_applied_draft",
+    migrationId: MIGRATION_ID,
+  }));
+  const body = await response.json() as { diagnostics: string[]; mutationFlags: Record<string, boolean> };
+
+  assert.equal(response.status, 409);
+  assert.equal(createCalls, 0);
+  assert.equal(body.diagnostics.includes("airship_proof_workflow_successful_apply_or_fresh_draft_proof_required"), true);
+  assert.equal(body.mutationFlags.runtimeVersionMutation, false);
+  assert.equal(body.mutationFlags.previewRegeneration, false);
+  assert.equal(body.mutationFlags.publishes, false);
+});
+
+test("airship proof workflow generates internal preview from applied draft and proves headline and artifact validity", async () => {
+  let observedActor = "";
+  let observedDraftVersion = 0;
+  const handlers = createAirshipProofWorkflowRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-proof",
+    service: fakeDraftService({ version: 4, headline: HERO_HEADLINE_AFTER }).service as never,
+    createAirshipSingleSiteDraftCandidate: async (input) => {
+      observedActor = input.actor;
+      observedDraftVersion = input.draft.version;
+      return generatedCandidateOutput("created") as never;
+    },
+    getArtifactById: async (artifactId) => {
+      assert.equal(artifactId, "artifact-generated");
+      return generatedArtifact() as never;
+    },
+  });
+
+  const response = await handlers.POST(request({
+    actionMode: "generate_internal_preview_from_applied_draft",
+    migrationId: MIGRATION_ID,
+    appliedWorkflow: appliedWorkflowReadback(),
+  }));
+  const body = await response.json() as {
+    ok: boolean;
+    readback: {
+      status: string;
+      migrationId: string;
+      draftId: string;
+      draftVersionUsed: number;
+      generatedSiteVersionId: string;
+      generatedRuntimeArtifactId: string;
+      internalPreviewUrl: string;
+      artifactValidityResult: { valid: boolean; polishedComplete: boolean };
+      generatedArtifactContainsAppliedHeadline: boolean;
+      mutationFlags: Record<string, boolean>;
+      proofKind: string;
+    };
+  };
+
+  assert.equal(response.status, 201);
+  assert.equal(body.ok, true);
+  assert.equal(observedActor, "superadmin-proof");
+  assert.equal(observedDraftVersion, 4);
+  assert.equal(body.readback.status, "created");
+  assert.equal(body.readback.migrationId, MIGRATION_ID);
+  assert.equal(body.readback.draftId, "draft-chs");
+  assert.equal(body.readback.draftVersionUsed, 4);
+  assert.equal(body.readback.generatedSiteVersionId, "site-version-generated");
+  assert.equal(body.readback.generatedRuntimeArtifactId, "artifact-generated");
+  assert.equal(body.readback.internalPreviewUrl, "/api/gnr8/admin/single-site-studio/versions/site-version-generated/preview?mode=transformed&airshipArtifactId=artifact-generated");
+  assert.equal(body.readback.artifactValidityResult.valid, true);
+  assert.equal(body.readback.artifactValidityResult.polishedComplete, true);
+  assert.equal(body.readback.generatedArtifactContainsAppliedHeadline, true);
+  assert.equal(body.readback.proofKind, "applied_readback");
+  assert.equal(body.readback.mutationFlags.runtimeVersionMutation, true);
+  assert.equal(body.readback.mutationFlags.previewRegeneration, true);
+  assert.equal(body.readback.mutationFlags.artifactRegeneration, true);
+  assert.equal(body.readback.mutationFlags.liveSiteMutation, false);
+  assert.equal(body.readback.mutationFlags.activePointerMutation, false);
+  assert.equal(body.readback.mutationFlags.publishes, false);
+  assert.equal(body.readback.mutationFlags.demoPreviewHostBindingMutation, false);
+  assert.equal(body.readback.mutationFlags.dnsMutation, false);
+  assert.equal(body.readback.mutationFlags.providerMutation, false);
+  assert.equal(body.readback.mutationFlags.sourceCaptureImport, false);
+});
+
+test("airship proof workflow accepts equivalent fresh draft version proof for internal preview generation", async () => {
+  const handlers = createAirshipProofWorkflowRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-proof",
+    service: fakeDraftService({ version: 4, headline: HERO_HEADLINE_AFTER }).service as never,
+    createAirshipSingleSiteDraftCandidate: async () => generatedCandidateOutput("reused") as never,
+    getArtifactById: async () => generatedArtifact() as never,
+  });
+
+  const response = await handlers.POST(request({
+    actionMode: "generate_internal_preview_from_applied_draft",
+    migrationId: MIGRATION_ID,
+    freshDraftProof: {
+      draftId: "draft-chs",
+      draftVersion: 4,
+      appliedHeadline: HERO_HEADLINE_AFTER,
+    },
+  }));
+  const body = await response.json() as { readback: { proofKind: string; mutationFlags: Record<string, boolean>; generatedArtifactContainsAppliedHeadline: boolean } };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.readback.proofKind, "fresh_draft_version");
+  assert.equal(body.readback.generatedArtifactContainsAppliedHeadline, true);
+  assert.equal(body.readback.mutationFlags.runtimeVersionMutation, false);
+  assert.equal(body.readback.mutationFlags.previewRegeneration, false);
+  assert.equal(body.readback.mutationFlags.publishes, false);
 });

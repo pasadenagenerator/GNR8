@@ -596,6 +596,7 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("Capture changes"), true);
   assert.equal(html.includes("Map captured edits"), true);
   assert.equal(html.includes("Apply safe mappings to draft"), true);
+  assert.equal(html.includes("Generate internal preview from applied draft"), true);
   assert.equal(html.includes("Open live site"), true);
   assert.equal(html.includes("MVP Demo Readiness"), true);
   assert.equal(html.includes("https://chs-airship.app.pasadenagenerator.com/"), true);
@@ -820,15 +821,15 @@ test("airship single-site editor shows publish-readiness package status and gove
 test("airship single-site editor shows governed dry-run action and readback without publish controls", () => {
   const model = airshipModel();
   const candidate = {
-    label: "New Airship draft candidate preview",
+    label: "New Airship draft candidate preview" as const,
     siteVersionId: "92e476b9-67fc-408a-be3d-5c744aa0f3f6",
     runtimeArtifactId: "5ac3716a-f29d-4648-bc86-a6942638ed53",
     route: airshipPreviewRoute("92e476b9-67fc-408a-be3d-5c744aa0f3f6", "5ac3716a-f29d-4648-bc86-a6942638ed53"),
     mode: "transformed" as const,
-    available: true,
+    available: true as const,
     unavailableReason: null,
     authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
-    statusLabel: "Not live, internal preview only",
+    statusLabel: "Not live, internal preview only" as const,
     sourceLiveSiteVersionId: IMPROVED_CANDIDATE_VERSION_ID,
     sourceLiveRuntimeArtifactId: "1f80138a-39c2-4210-ac61-16200e5a2254",
     draftId: "f9b31666-b3b0-4455-8650-4a8c7304a559",
@@ -836,8 +837,8 @@ test("airship single-site editor shows governed dry-run action and readback with
     styleSettings: {
       heroTopPadding: 96,
       heroBottomPadding: 104,
-      backgroundTint: "#eef6ff",
-      ctaColor: "#1d4ed8",
+      backgroundTint: "#eef6ff" as const,
+      ctaColor: "#1d4ed8" as const,
     },
     appliedEdits: [],
     skippedEdits: [],
@@ -1396,7 +1397,7 @@ test("airship visual editor uses ARIS candidate artifact renderer when available
     available: true,
     unavailableReason: null,
     authNote: "Superadmin-only internal GNR8 preview. Not live, internal preview only.",
-    statusLabel: "Not live, internal preview only",
+    statusLabel: "Not live, internal preview only" as const,
     sourceLiveSiteVersionId: "ae35c6ad-5a26-4413-a3c8-64362b042810",
     sourceLiveRuntimeArtifactId: "f024459a-8bc9-41b9-b2a7-137ee85eaf83",
     draftId: "5ed1b4da-eb06-4eee-bdc0-5b5cdec99707",

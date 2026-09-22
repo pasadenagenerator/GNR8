@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 
-type WorkflowStatus = "not_prepared" | "prepared" | "captured" | "mapped" | "applied" | "blocked" | "failed";
+type WorkflowStatus = "not_prepared" | "prepared" | "captured" | "mapped" | "applied" | "preview_generated" | "blocked" | "failed";
 
 type CommandDescriptor = {
   commandLine: string;
@@ -62,6 +62,26 @@ type ProofWorkflowReadback = {
   diagnostics: string[];
 };
 
+type PreviewGenerationReadback = {
+  status: "created" | "reused";
+  migrationId: string;
+  draftId: string;
+  draftVersionUsed: number;
+  generatedSiteVersionId: string;
+  generatedRuntimeArtifactId: string;
+  internalPreviewUrl: string;
+  artifactValidityResult: {
+    valid: boolean;
+    reasons: string[];
+    polishedComplete?: boolean;
+    polishedCompletenessReasons?: string[];
+  };
+  generatedArtifactContainsAppliedHeadline: boolean;
+  readback: string;
+  mutationFlags: Record<string, boolean>;
+  diagnostics: string[];
+};
+
 type CaptureMapReadback = {
   captured: ProofWorkflowReadback;
   mapped: ProofWorkflowReadback;
@@ -72,7 +92,7 @@ type CaptureMapReadback = {
 
 type RouteResponse = {
   ok?: boolean;
-  readback?: ProofWorkflowReadback | CaptureMapReadback;
+  readback?: ProofWorkflowReadback | CaptureMapReadback | PreviewGenerationReadback;
   error?: string;
   diagnostics?: string[];
 };
@@ -164,6 +184,12 @@ function hashSummary(readback: ProofWorkflowReadback | null) {
 function mappedReadback(value: RouteResponse["readback"]): ProofWorkflowReadback | null {
   if (!value) return null;
   if ("mapped" in value) return value.mapped;
+  if ("generatedSiteVersionId" in value) return null;
+  return value;
+}
+
+function previewGenerationReadback(value: RouteResponse["readback"]): PreviewGenerationReadback | null {
+  if (!value || !("generatedSiteVersionId" in value)) return null;
   return value;
 }
 
@@ -172,6 +198,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
   const [prepared, setPrepared] = useState<ProofWorkflowReadback | null>(null);
   const [mapped, setMapped] = useState<ProofWorkflowReadback | null>(null);
   const [result, setResult] = useState<ProofWorkflowReadback | null>(null);
+  const [previewResult, setPreviewResult] = useState<PreviewGenerationReadback | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState("Not prepared. Prepare a local proof workspace before running the manual Airship sidecar command.");
   const [busy, setBusy] = useState(false);
@@ -181,6 +208,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
   const canCaptureMap = Boolean(props.migrationId && prepared) && !busy;
   const hasSafeMappings = Boolean((mapped?.mappingSummary?.exactSafeApplyCandidateCount ?? 0) > 0);
   const canApply = Boolean(props.migrationId && hasSafeMappings && confirmed) && !busy;
+  const canGeneratePreview = Boolean(props.migrationId && result?.status === "applied_to_draft") && !busy;
   const statusTone = status === "applied" ? "good" : status === "blocked" || status === "failed" ? "warn" : "neutral";
   const draftLabel = props.savedDraftId && props.savedDraftVersion
     ? `${props.savedDraftId} v${props.savedDraftVersion}`
@@ -219,6 +247,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
       setPrepared(readback);
       setMapped(null);
       setResult(null);
+      setPreviewResult(null);
       setConfirmed(false);
       setStatus("prepared");
       setMessage(readback?.readback ?? "Airship proof workspace prepared.");
@@ -239,6 +268,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
       const mappedWorkflow = mappedReadback(readback);
       setMapped(mappedWorkflow);
       setResult(null);
+      setPreviewResult(null);
       setConfirmed(false);
       setStatus("mapped");
       setMessage(mappedWorkflow?.readback ?? "Captured and mapped local Airship proof edits.");
@@ -263,11 +293,34 @@ export function AirshipProofWorkflowPanel(props: Props) {
         idempotencyKey: `airship-proof-ui:${props.migrationId}:${props.savedDraftId ?? "draft"}:${props.savedDraftVersion ?? "unknown"}`,
       }));
       setResult(readback);
+      setPreviewResult(null);
       setStatus(readback?.status === "blocked" ? "blocked" : "applied");
       setMessage(readback?.readback ?? "Captured edits saved to draft. Preview not regenerated yet.");
     } catch (error) {
       setStatus("failed");
       setMessage(error instanceof Error ? error.message : "Airship proof apply failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generatePreviewFromAppliedDraft() {
+    if (!canGeneratePreview) return;
+    setBusy(true);
+    setMessage("Generating a separate internal preview candidate from the saved applied draft...");
+    try {
+      const readback = previewGenerationReadback(await post({
+        actionMode: "generate_internal_preview_from_applied_draft",
+        migrationId: props.migrationId,
+        appliedWorkflow: result,
+        idempotencyKey: `airship-proof-preview:${props.migrationId}:${result?.draft.idAfter ?? props.savedDraftId ?? "draft"}:${result?.draft.versionAfter ?? props.savedDraftVersion ?? "unknown"}`,
+      }));
+      setPreviewResult(readback);
+      setStatus("preview_generated");
+      setMessage(readback?.readback ?? "Draft was updated first. Internal preview was generated second. Live site unchanged.");
+    } catch (error) {
+      setStatus("failed");
+      setMessage(error instanceof Error ? error.message : "Airship proof preview generation failed.");
     } finally {
       setBusy(false);
     }
@@ -301,6 +354,9 @@ export function AirshipProofWorkflowPanel(props: Props) {
         </button>
         <button type="button" disabled={!canApply} onClick={() => void applyConfirmed()} style={buttonStyle(!canApply, "primary")}>
           Apply safe mappings to draft
+        </button>
+        <button type="button" disabled={!canGeneratePreview} onClick={() => void generatePreviewFromAppliedDraft()} style={buttonStyle(!canGeneratePreview, "primary")}>
+          Generate internal preview from applied draft
         </button>
       </div>
 
@@ -346,6 +402,24 @@ export function AirshipProofWorkflowPanel(props: Props) {
             {fact("Draft save", "Captured edits saved to draft")}
             {fact("Preview", "Preview not regenerated yet")}
           </dl>
+        </div>
+      ) : null}
+
+      {previewResult ? (
+        <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 10, display: "grid", gap: 8 }}>
+          <div style={{ color: "#075985", fontSize: 13, fontWeight: 950 }}>Internal preview readback</div>
+          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+            {fact("Sequence", "Draft updated first; preview generated second")}
+            {fact("Draft version used", `v${previewResult.draftVersionUsed}`)}
+            {fact("Generated site version", previewResult.generatedSiteVersionId)}
+            {fact("Generated artifact", previewResult.generatedRuntimeArtifactId)}
+            {fact("Artifact validity", previewResult.artifactValidityResult.valid ? "passed" : previewResult.artifactValidityResult.reasons.join(", "))}
+            {fact("Applied headline", previewResult.generatedArtifactContainsAppliedHeadline ? "found in generated artifact" : "missing from generated artifact")}
+            {fact("Live site", "unchanged")}
+          </dl>
+          <a href={previewResult.internalPreviewUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", fontSize: 13, fontWeight: 900, textDecoration: "none", overflowWrap: "anywhere" }}>
+            {previewResult.internalPreviewUrl}
+          </a>
         </div>
       ) : null}
     </div>
