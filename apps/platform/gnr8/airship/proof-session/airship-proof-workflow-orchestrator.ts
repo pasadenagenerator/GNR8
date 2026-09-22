@@ -16,6 +16,7 @@ import type {
 } from "./airship-captured-diff-to-draft-mapper";
 import {
   captureAirshipProofSessionChanges,
+  AIRSHIP_PROOF_SESSION_CHS_MIGRATION_ID,
   mapAirshipProofSessionCapturedDiffToDraft,
   prepareAirshipProofSessionEntry,
   type AirshipProofCaptureReadback,
@@ -24,11 +25,19 @@ import {
   type PrepareAirshipProofSessionInput,
   type ProofCommandDescriptor,
 } from "./airship-proof-session-entry";
+import {
+  AirshipLocalSidecarProcessManager,
+  type AirshipLocalSidecarCommandDescriptor,
+  type AirshipLocalSidecarSessionReadback,
+} from "./airship-local-sidecar-process-manager";
 
 export const AIRSHIP_PROOF_WORKFLOW_ORCHESTRATOR_VERSION = "airship-adapter-09-proof-workflow-orchestrator:v1" as const;
 
 export type AirshipProofWorkflowStatus =
   | "prepared"
+  | "owned_airship_session_running"
+  | "owned_airship_session_health_checked"
+  | "owned_airship_session_stopped"
   | "captured"
   | "mapped"
   | "applied_to_draft"
@@ -138,6 +147,28 @@ export type AirshipProofWorkflowApplyReadback = AirshipProofWorkflowBaseReadback
 
 export type PrepareAirshipProofWorkflowInput = PrepareAirshipProofSessionInput;
 
+export type AirshipProofWorkflowOwnedSidecarReadback = AirshipProofWorkflowBaseReadback & {
+  status: "owned_airship_session_running" | "owned_airship_session_health_checked" | "owned_airship_session_stopped" | "blocked";
+  chsOnly: true;
+  adapter16Flow: "one_session_chs_operator_flow";
+  sidecarKind: "fixture_sidecar" | "real_airship_cli_sidecar" | "manual_command_only" | "not_owned";
+  ownedAirshipSession: AirshipLocalSidecarSessionReadback | null;
+  changedFilesCount: number;
+  generatedInternalPreviewUrl: string | null;
+};
+
+export type StartOwnedAirshipProofWorkflowSessionInput = {
+  preparedWorkflow: AirshipProofWorkflowPreparedReadback;
+  manager?: AirshipLocalSidecarProcessManager;
+  startRealAirshipCli?: boolean;
+};
+
+export type OwnedAirshipProofWorkflowSessionInput = {
+  preparedWorkflow: AirshipProofWorkflowPreparedReadback;
+  ownedAirshipSession: AirshipLocalSidecarSessionReadback;
+  manager?: AirshipLocalSidecarProcessManager;
+};
+
 export type CaptureAirshipProofWorkflowChangesInput = {
   preparedWorkflow: AirshipProofWorkflowPreparedReadback;
   sampleEditedString?: string | null;
@@ -162,6 +193,7 @@ export type ApplyAirshipProofWorkflowMappingsInput = {
 };
 
 export async function prepareAirshipProofWorkflow(input: PrepareAirshipProofWorkflowInput): Promise<AirshipProofWorkflowPreparedReadback> {
+  assertAdapter16ChsOnly(input.migrationId);
   const preparedSession = await prepareAirshipProofSessionEntry(input);
   return {
     ...baseReadback({
@@ -180,6 +212,94 @@ export async function prepareAirshipProofWorkflow(input: PrepareAirshipProofWork
     status: "prepared",
     preparedSession,
   };
+}
+
+export async function startOwnedAirshipProofWorkflowSession(
+  input: StartOwnedAirshipProofWorkflowSessionInput,
+): Promise<AirshipProofWorkflowOwnedSidecarReadback> {
+  assertAdapter16ChsOnly(input.preparedWorkflow.preparedSession.selectedArtifact.migrationId);
+  const manager = input.manager ?? defaultAirshipProofWorkflowSidecarManager;
+  const session = await manager.startSession({
+    sessionId: `owned-${input.preparedWorkflow.preparedSession.adapterSession.sessionId}`,
+    workspacePath: input.preparedWorkflow.preparedSession.workspacePath,
+    targetPort: input.preparedWorkflow.preparedSession.targetPort,
+    airshipPort: input.preparedWorkflow.preparedSession.sessionPort,
+    startRealAirshipCli: input.startRealAirshipCli === true,
+    airshipCommand: input.startRealAirshipCli === true
+      ? undefined
+      : airshipFixtureCommand({
+        port: input.preparedWorkflow.preparedSession.sessionPort,
+        cwd: input.preparedWorkflow.preparedSession.workspacePath,
+      }),
+  });
+
+  return ownedSidecarReadback({
+    status: "owned_airship_session_running",
+    preparedWorkflow: input.preparedWorkflow,
+    ownedAirshipSession: session,
+    sidecarKind: session.realAirshipCliLaunched ? "real_airship_cli_sidecar" : "fixture_sidecar",
+    readback: session.realAirshipCliLaunched
+      ? "Owned local static target and real Airship CLI sidecar are running for the CHS proof session."
+      : "Owned local static target and Airship-like fixture sidecar are running for the CHS proof session.",
+    nextRecommendedAction: "Open Airship editor, make CHS text edits, return to GNR8, then stop or capture.",
+    diagnostics: [
+      "airship_adapter_16_owned_session_started",
+      session.realAirshipCliLaunched ? "real_airship_cli_sidecar_launched" : "fixture_sidecar_launched_for_automated_or_local_proof",
+    ],
+  });
+}
+
+export async function healthCheckOwnedAirshipProofWorkflowSession(
+  input: OwnedAirshipProofWorkflowSessionInput,
+): Promise<AirshipProofWorkflowOwnedSidecarReadback> {
+  assertAdapter16ChsOnly(input.preparedWorkflow.preparedSession.selectedArtifact.migrationId);
+  const manager = input.manager ?? defaultAirshipProofWorkflowSidecarManager;
+  const health = await manager.healthCheck(input.ownedAirshipSession);
+  const session: AirshipLocalSidecarSessionReadback = input.ownedAirshipSession.ownedByManager
+    ? await manager.status(input.ownedAirshipSession)
+    : { ...input.ownedAirshipSession, health, status: localSessionStatusFromHealth(health.status) };
+
+  return ownedSidecarReadback({
+    status: "owned_airship_session_health_checked",
+    preparedWorkflow: input.preparedWorkflow,
+    ownedAirshipSession: session,
+    sidecarKind: session.ownedByManager
+      ? session.realAirshipCliLaunched ? "real_airship_cli_sidecar" : "fixture_sidecar"
+      : "not_owned",
+    readback: `Owned Airship session health is ${health.status}.`,
+    nextRecommendedAction: health.status === "healthy"
+      ? "Open Airship editor or continue editing; return to GNR8 to stop and capture."
+      : "Review sidecar process status before opening Airship.",
+    diagnostics: ["airship_adapter_16_owned_session_health_checked", `health:${health.status}`],
+  });
+}
+
+export async function stopOwnedAirshipProofWorkflowSession(
+  input: OwnedAirshipProofWorkflowSessionInput,
+): Promise<AirshipProofWorkflowOwnedSidecarReadback> {
+  assertAdapter16ChsOnly(input.preparedWorkflow.preparedSession.selectedArtifact.migrationId);
+  const manager = input.manager ?? defaultAirshipProofWorkflowSidecarManager;
+  const session = await manager.stopSession(input.ownedAirshipSession);
+
+  return ownedSidecarReadback({
+    status: session.status === "not-owned" ? "blocked" : "owned_airship_session_stopped",
+    preparedWorkflow: input.preparedWorkflow,
+    ownedAirshipSession: session,
+    sidecarKind: session.ownedByManager
+      ? session.realAirshipCliLaunched ? "real_airship_cli_sidecar" : "fixture_sidecar"
+      : "not_owned",
+    readback: session.status === "not-owned"
+      ? "No owned Airship session exists in this manager. Manual cleanup may be required; no process was killed by port."
+      : "Owned Airship session stopped. Static target and Airship session health now report stopped/unreachable from this manager.",
+    nextRecommendedAction: session.status === "not-owned"
+      ? "Use the manual cleanup instructions from the readback, then capture after the editor is closed."
+      : "Capture changes from the CHS proof workspace, then map captured edits.",
+    diagnostics: [
+      "airship_adapter_16_owned_session_stop_invoked",
+      `cleanup:${session.cleanup.status}`,
+      `health:${session.health.status}`,
+    ],
+  });
 }
 
 export async function captureAirshipProofWorkflowChanges(
@@ -474,4 +594,81 @@ function workflowMutationFlags(draftDataMutation: boolean): AirshipProofWorkflow
     providerMutation: false,
     editorRouteReplacement: false,
   };
+}
+
+export const defaultAirshipProofWorkflowSidecarManager = new AirshipLocalSidecarProcessManager();
+
+function assertAdapter16ChsOnly(migrationId: string): void {
+  if (migrationId !== AIRSHIP_PROOF_SESSION_CHS_MIGRATION_ID) {
+    throw new Error("airship_adapter_16_chs_only_flow");
+  }
+}
+
+function ownedSidecarReadback(input: {
+  status: AirshipProofWorkflowOwnedSidecarReadback["status"];
+  preparedWorkflow: AirshipProofWorkflowPreparedReadback;
+  ownedAirshipSession: AirshipLocalSidecarSessionReadback;
+  sidecarKind: AirshipProofWorkflowOwnedSidecarReadback["sidecarKind"];
+  readback: string;
+  nextRecommendedAction: string;
+  diagnostics: string[];
+}): AirshipProofWorkflowOwnedSidecarReadback {
+  return {
+    ...baseReadback({
+      status: input.status,
+      preparedSession: input.preparedWorkflow.preparedSession,
+      finalHashes: input.preparedWorkflow.finalHashes,
+      mapping: null,
+      appliedCount: 0,
+      skippedCount: 0,
+      appliedFieldNames: [],
+      skippedMappings: [],
+      draft: input.preparedWorkflow.draft,
+      readback: input.readback,
+      nextRecommendedAction: input.nextRecommendedAction,
+      warnings: [
+        ...input.preparedWorkflow.warnings,
+        ...input.ownedAirshipSession.warnings,
+        "ADAPTER 16 one-session operator flow is CHS-only and local/proof-only.",
+      ],
+      diagnostics: input.diagnostics,
+    }),
+    status: input.status,
+    chsOnly: true,
+    adapter16Flow: "one_session_chs_operator_flow",
+    sidecarKind: input.sidecarKind,
+    ownedAirshipSession: input.ownedAirshipSession,
+    changedFilesCount: 0,
+    generatedInternalPreviewUrl: null,
+  };
+}
+
+function airshipFixtureCommand(input: { port: number; cwd: string }): AirshipLocalSidecarCommandDescriptor {
+  const script = [
+    "const http = require('node:http');",
+    "const port = Number(process.argv[1]);",
+    "const server = http.createServer((request, response) => {",
+    "response.writeHead(200, {'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store'});",
+    "response.end('<!doctype html><html><body><main><h1>Airship fixture sidecar</h1><p>Local fixture for GNR8 CHS proof flow.</p></main></body></html>');",
+    "});",
+    "server.listen(port, '127.0.0.1');",
+    "process.on('SIGTERM', () => server.close(() => process.exit(0)));",
+  ].join("");
+  const args = ["-e", script, String(input.port)];
+  return {
+    executable: process.execPath,
+    args,
+    cwd: input.cwd,
+    commandLine: [process.execPath, ...args].join(" "),
+    description: "Airship-like local HTTP fixture sidecar for CHS proof workflow tests and local dry runs.",
+  };
+}
+
+function localSessionStatusFromHealth(
+  healthStatus: AirshipLocalSidecarSessionReadback["health"]["status"],
+): AirshipLocalSidecarSessionReadback["status"] {
+  if (healthStatus === "healthy") return "running";
+  if (healthStatus === "stopped") return "stopped";
+  if (healthStatus === "not-owned") return "not-owned";
+  return "failed";
 }

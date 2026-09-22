@@ -12,17 +12,31 @@ import {
 import {
   applyAirshipProofWorkflowMappings,
   captureAirshipProofWorkflowChanges,
+  healthCheckOwnedAirshipProofWorkflowSession,
   mapAirshipProofWorkflowChanges,
   prepareAirshipProofWorkflow,
+  startOwnedAirshipProofWorkflowSession,
+  stopOwnedAirshipProofWorkflowSession,
   type AirshipProofWorkflowApplyReadback,
   type AirshipProofWorkflowCapturedReadback,
   type AirshipProofWorkflowMappedReadback,
   type AirshipProofWorkflowPreparedReadback,
 } from "@/gnr8/airship/proof-session/airship-proof-workflow-orchestrator";
+import type { AirshipLocalSidecarSessionReadback } from "@/gnr8/airship/proof-session/airship-local-sidecar-process-manager";
 import { requireSuperadminUserId } from "@/src/auth/require-superadmin-user-id";
 
-type ActionMode = "prepare" | "capture" | "map" | "capture_map" | "apply_confirmed" | "generate_internal_preview_from_applied_draft";
+type ActionMode =
+  | "prepare"
+  | "start_owned_airship_session"
+  | "health_check_owned_airship_session"
+  | "stop_owned_airship_session"
+  | "capture"
+  | "map"
+  | "capture_map"
+  | "apply_confirmed"
+  | "generate_internal_preview_from_applied_draft";
 
+const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const APPLIED_HEADLINE = "The XXX team helps your IT change with every technology wave.";
 
 type RouteDeps = {
@@ -30,6 +44,9 @@ type RouteDeps = {
   getAirshipSingleSiteEditorReadonlyProjection: typeof getAirshipSingleSiteEditorReadonlyProjection;
   service: Pick<AirshipSingleSiteDraftService, "readCurrentDraft" | "updateDraftEditText">;
   prepareAirshipProofWorkflow: typeof prepareAirshipProofWorkflow;
+  startOwnedAirshipProofWorkflowSession: typeof startOwnedAirshipProofWorkflowSession;
+  healthCheckOwnedAirshipProofWorkflowSession: typeof healthCheckOwnedAirshipProofWorkflowSession;
+  stopOwnedAirshipProofWorkflowSession: typeof stopOwnedAirshipProofWorkflowSession;
   captureAirshipProofWorkflowChanges: typeof captureAirshipProofWorkflowChanges;
   mapAirshipProofWorkflowChanges: typeof mapAirshipProofWorkflowChanges;
   applyAirshipProofWorkflowMappings: typeof applyAirshipProofWorkflowMappings;
@@ -41,6 +58,7 @@ type ActionBody = Record<string, unknown> & {
   actionMode?: unknown;
   migrationId?: unknown;
   preparedWorkflow?: unknown;
+  ownedAirshipSession?: unknown;
   capturedWorkflow?: unknown;
   mappedWorkflow?: unknown;
   appliedWorkflow?: unknown;
@@ -48,12 +66,14 @@ type ActionBody = Record<string, unknown> & {
   confirmed?: unknown;
   correlationId?: unknown;
   idempotencyKey?: unknown;
+  startRealAirshipCli?: unknown;
 };
 
 const POST_BODY_KEYS = new Set([
   "actionMode",
   "migrationId",
   "preparedWorkflow",
+  "ownedAirshipSession",
   "capturedWorkflow",
   "mappedWorkflow",
   "appliedWorkflow",
@@ -61,6 +81,7 @@ const POST_BODY_KEYS = new Set([
   "confirmed",
   "correlationId",
   "idempotencyKey",
+  "startRealAirshipCli",
 ]);
 const FORBIDDEN_ACTOR_KEYS = new Set(["actor", "actorId", "actorRole", "actorType", "role", "userId", "principal", "superadminUserId"]);
 
@@ -86,6 +107,29 @@ function failure(status: number, error: string, diagnostics: string[]): Response
       redactions: ["serverActor", "requestActorOverrides", "rawProviderPayloads", "rawSqlErrors", "stackTraces", "secrets", "tokens", "cookies", "billingData"],
     },
     { status, headers: { "cache-control": "no-store" } },
+  );
+}
+
+function chsOnlyFailure(migrationId: string): Response {
+  return Response.json(
+    {
+      ok: false,
+      error: "AIRSHIP_ADAPTER_16_CHS_ONLY",
+      readback: {
+        proofOnly: true,
+        chsOnly: true,
+        requestedMigrationId: migrationId,
+        requiredMigrationId: CHS_MIGRATION_ID,
+        status: "blocked",
+        readback: "ADAPTER 16 one-session Airship operator flow is CHS-only. ARIS parity is deferred for a later task.",
+        mutationFlags: mutationFlags(false),
+        diagnostics: ["airship_adapter_16_chs_only_flow", "non_chs_migration_blocked"],
+      },
+      diagnostics: ["airship_adapter_16_chs_only_flow", "non_chs_migration_blocked"],
+      labels: ["Real Airship sidecar proof", "Proof-only", "CHS-only", "Does not publish", "Live site unchanged"],
+      mutationFlags: mutationFlags(false),
+    },
+    { status: 409, headers: { "cache-control": "no-store" } },
   );
 }
 
@@ -153,6 +197,14 @@ function preparedWorkflow(value: unknown): AirshipProofWorkflowPreparedReadback 
   if (record.proofOnly !== true || record.localManualOnly !== true || record.status !== "prepared") return null;
   if (!record.preparedSession || typeof record.preparedSession !== "object") return null;
   return record as AirshipProofWorkflowPreparedReadback;
+}
+
+function ownedAirshipSession(value: unknown): AirshipLocalSidecarSessionReadback | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Partial<AirshipLocalSidecarSessionReadback>;
+  if (record.proofOnly !== true || record.localOnly !== true) return null;
+  if (typeof record.sessionId !== "string" || !record.ownership || typeof record.ownership !== "object") return null;
+  return record as AirshipLocalSidecarSessionReadback;
 }
 
 function mappedWorkflow(value: unknown): AirshipProofWorkflowMappedReadback | null {
@@ -297,6 +349,9 @@ export function createAirshipProofWorkflowRouteHandlers(deps: Partial<RouteDeps>
     getAirshipSingleSiteEditorReadonlyProjection,
     service,
     prepareAirshipProofWorkflow,
+    startOwnedAirshipProofWorkflowSession,
+    healthCheckOwnedAirshipProofWorkflowSession,
+    stopOwnedAirshipProofWorkflowSession,
     captureAirshipProofWorkflowChanges,
     mapAirshipProofWorkflowChanges,
     applyAirshipProofWorkflowMappings,
@@ -327,6 +382,9 @@ export function createAirshipProofWorkflowRouteHandlers(deps: Partial<RouteDeps>
       const migrationId = text(body.migrationId);
       if (
         actionMode !== "prepare" &&
+        actionMode !== "start_owned_airship_session" &&
+        actionMode !== "health_check_owned_airship_session" &&
+        actionMode !== "stop_owned_airship_session" &&
         actionMode !== "capture" &&
         actionMode !== "map" &&
         actionMode !== "capture_map" &&
@@ -338,11 +396,49 @@ export function createAirshipProofWorkflowRouteHandlers(deps: Partial<RouteDeps>
       if (!migrationId) {
         return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_migration_id_required"]);
       }
+      if (migrationId !== CHS_MIGRATION_ID) {
+        return chsOnlyFailure(migrationId);
+      }
 
       try {
         if (actionMode === "prepare") {
           const readback = await resolvedDeps.prepareAirshipProofWorkflow({ migrationId });
           return success(readback);
+        }
+
+        if (
+          actionMode === "start_owned_airship_session" ||
+          actionMode === "health_check_owned_airship_session" ||
+          actionMode === "stop_owned_airship_session"
+        ) {
+          const prepared = preparedWorkflow(body.preparedWorkflow);
+          if (!prepared) {
+            return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_prepared_readback_required"]);
+          }
+          if (prepared.preparedSession.selectedArtifact.migrationId !== migrationId) {
+            return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_prepared_migration_mismatch"]);
+          }
+
+          if (actionMode === "start_owned_airship_session") {
+            const wantsRealCli = body.startRealAirshipCli === true;
+            if (wantsRealCli && process.env.GNR8_AIRSHIP_PROOF_REAL_CLI_ENABLED !== "1") {
+              return failure(403, "AIRSHIP_REAL_CLI_LOCAL_OPT_IN_REQUIRED", ["airship_adapter_16_real_cli_requires_local_env_opt_in"]);
+            }
+            const readback = await resolvedDeps.startOwnedAirshipProofWorkflowSession({
+              preparedWorkflow: prepared,
+              startRealAirshipCli: wantsRealCli,
+            });
+            return success(readback);
+          }
+
+          const owned = ownedAirshipSession(body.ownedAirshipSession);
+          if (!owned) {
+            return failure(400, "INVALID_AIRSHIP_PROOF_WORKFLOW_BODY", ["airship_proof_workflow_owned_session_readback_required"]);
+          }
+          const readback = actionMode === "health_check_owned_airship_session"
+            ? await resolvedDeps.healthCheckOwnedAirshipProofWorkflowSession({ preparedWorkflow: prepared, ownedAirshipSession: owned })
+            : await resolvedDeps.stopOwnedAirshipProofWorkflowSession({ preparedWorkflow: prepared, ownedAirshipSession: owned });
+          return success(readback, readback.status === "blocked" ? 409 : 200);
         }
 
         if (actionMode === "capture_map") {

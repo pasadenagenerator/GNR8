@@ -594,12 +594,15 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("change the live site"), true);
   assert.equal(html.includes("replace the current editor route"), true);
   assert.equal(html.includes("Step 1: Prepare Airship session"), true);
-  assert.equal(html.includes("Step 2: Open Airship editor"), true);
-  assert.equal(html.includes("Step 3: Capture changes"), true);
-  assert.equal(html.includes("Step 4: Map captured edits"), true);
-  assert.equal(html.includes("Step 5: Apply safe mappings to draft"), true);
-  assert.equal(html.includes("Step 6: Generate internal preview from applied draft"), true);
-  assert.equal(html.includes("Step 7: Open generated internal preview"), true);
+  assert.equal(html.includes("Step 2: Start Airship session"), true);
+  assert.equal(html.includes("Step 3: Open Airship editor"), true);
+  assert.equal(html.includes("Step 4: Health check Airship session"), true);
+  assert.equal(html.includes("Step 5: Stop Airship session"), true);
+  assert.equal(html.includes("Step 6: Capture changes"), true);
+  assert.equal(html.includes("Step 7: Map captured edits"), true);
+  assert.equal(html.includes("Step 8: Apply safe mappings to draft"), true);
+  assert.equal(html.includes("Step 9: Generate internal preview from applied draft"), true);
+  assert.equal(html.includes("Step 10: Open generated internal preview"), true);
   assert.equal(html.includes("Draft changes are not live"), true);
   assert.equal(html.includes("Applying a draft and generating an internal preview are separate steps"), true);
   assert.equal(html.includes("GNR8 demo/live links are unchanged"), true);
@@ -686,6 +689,39 @@ test("airship proof workflow panel view model gates operator buttons by step sta
     appliedFieldNames: ["headline"],
     draft: { idBefore: "draft-chs", versionBefore: 3, idAfter: "draft-chs", versionAfter: 4 },
   };
+  const ownedSidecar = {
+    ...prepared,
+    status: "owned_airship_session_running",
+    chsOnly: true,
+    adapter16Flow: "one_session_chs_operator_flow",
+    sidecarKind: "fixture_sidecar",
+    ownedAirshipSession: {
+      proofOnly: true,
+      localOnly: true,
+      sessionId: "owned-session-ui",
+      workspacePath: "/tmp/gnr8-airship-proof/session-1",
+      staticTargetUrl: "http://127.0.0.1:4178/",
+      airshipSessionUrl: "http://127.0.0.1:4179/",
+      targetPort: 4178,
+      airshipPort: 4179,
+      processIds: { staticTargetPid: 123, airshipSidecarPid: 124 },
+      staticTarget: { ownedByManager: true, pid: 123, port: 4178, url: "http://127.0.0.1:4178/", status: "running" },
+      airshipSidecar: { ownedByManager: true, pid: 124, port: 4179, url: "http://127.0.0.1:4179/", status: "running" },
+      status: "running",
+      health: {
+        status: "healthy",
+        staticTarget: { ok: true, statusCode: 200, error: null },
+        airshipSession: { ok: true, statusCode: 200, error: null },
+        checkedAt: "2026-09-22T00:00:00.000Z",
+      },
+      ownedByManager: true,
+      ownership: { managerId: "manager-ui", token: "token-ui" },
+      cleanup: { status: "not-run", stoppedPids: [], manualCleanupInstructions: [], errors: [] },
+      realAirshipCliLaunched: false,
+    },
+    changedFilesCount: 0,
+    generatedInternalPreviewUrl: null,
+  };
   const base = {
     migrationId: CHS_MIGRATION_ID,
     savedDraftId: "draft-chs",
@@ -698,6 +734,7 @@ test("airship proof workflow panel view model gates operator buttons by step sta
     mapped: null,
     result: null,
     previewResult: null,
+    ownedSidecar: null,
     confirmed: false,
   };
 
@@ -711,9 +748,17 @@ test("airship proof workflow panel view model gates operator buttons by step sta
   const afterPrepare = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "prepared", prepared: prepared as never });
   assert.equal(afterPrepare.canCapture, true);
   assert.equal(afterPrepare.canMap, false);
-  assert.equal(afterPrepare.openAirshipHref, "http://127.0.0.1:4179/");
+  assert.equal(afterPrepare.canStartOwnedSession, true);
+  assert.equal(afterPrepare.openAirshipHref, null);
   assert.equal(afterPrepare.localRunnerCommand?.commandLine, "pnpm dev");
   assert.equal(afterPrepare.manualAirshipCommand?.commandLine, "pnpm dev");
+
+  const afterOwnedStart = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "prepared", prepared: prepared as never, ownedSidecar: ownedSidecar as never });
+  assert.equal(afterOwnedStart.canStartOwnedSession, false);
+  assert.equal(afterOwnedStart.canHealthCheckOwnedSession, true);
+  assert.equal(afterOwnedStart.canStopOwnedSession, true);
+  assert.equal(afterOwnedStart.openAirshipHref, "http://127.0.0.1:4179/");
+  assert.equal(afterOwnedStart.ownedSession?.ownership.token, "token-ui");
 
   const afterCapture = deriveAirshipProofWorkflowPanelViewModel({ ...base, status: "captured", prepared: prepared as never, captured: captured as never });
   assert.equal(afterCapture.canMap, true);
@@ -753,6 +798,11 @@ test("airship proof workflow panel view model gates operator buttons by step sta
   });
   assert.equal(afterPreview.canOpenPreview, true);
   assert.match(afterPreview.previewUrl ?? "", /f4a06874-1906-4a8e-bea3-e4837853c9d4/);
+
+  const nonChs = deriveAirshipProofWorkflowPanelViewModel({ ...base, migrationId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" });
+  assert.equal(nonChs.canPrepare, false);
+  assert.equal(nonChs.canStartOwnedSession, false);
+  assert.match(nonChs.chsOnlyCopy, /CHS-only/);
 });
 
 test("airship single-site editor renders live published and Airship draft candidate previews with internal routes", () => {

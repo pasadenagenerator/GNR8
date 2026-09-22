@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,9 +14,13 @@ import type { ApplyAirshipCapturedMappingsToDraftInput } from "./airship-apply-c
 import {
   applyAirshipProofWorkflowMappings,
   captureAirshipProofWorkflowChanges,
+  healthCheckOwnedAirshipProofWorkflowSession,
   mapAirshipProofWorkflowChanges,
   prepareAirshipProofWorkflow,
+  startOwnedAirshipProofWorkflowSession,
+  stopOwnedAirshipProofWorkflowSession,
 } from "./airship-proof-workflow-orchestrator";
+import { AirshipLocalSidecarProcessManager } from "./airship-local-sidecar-process-manager";
 
 const CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 const HERO_HEADLINE_BEFORE = "The CHS team helps your IT change with every technology wave.";
@@ -34,6 +39,15 @@ async function withWorkspaceRoot<T>(fn: (workspaceRoot: string) => Promise<T>): 
   } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
   }
+}
+
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+  const address = server.address();
+  await new Promise<void>((resolveClose, rejectClose) => server.close((error) => (error ? rejectClose(error) : resolveClose())));
+  if (!address || typeof address === "string") throw new Error("free_port_unavailable");
+  return address.port;
 }
 
 function seed(): AirshipSingleSiteDraftCreateInput {
@@ -172,6 +186,71 @@ test("prepare returns workspace, command descriptor, and proof-only safety readb
     assert.equal(prepared.safety.currentEditorRouteNotReplaced, true);
     assert.equal(prepared.mutationFlags.previewRegeneration, false);
     assert.equal(prepared.mutationFlags.publishes, false);
+  });
+});
+
+test("CHS prepare starts owned fixture Airship session, health checks, and stops cleanly", async () => {
+  await withWorkspaceRoot(async (workspaceRoot) => {
+    const manager = new AirshipLocalSidecarProcessManager();
+    const targetPort = await freePort();
+    const sessionPort = await freePort();
+    const prepared = await prepareAirshipProofWorkflow({
+      migrationId: CHS_MIGRATION_ID,
+      workspaceRoot,
+      sessionId: "workflow-owned-fixture",
+      targetPort,
+      sessionPort,
+    });
+    let owned = await startOwnedAirshipProofWorkflowSession({ preparedWorkflow: prepared, manager });
+
+    try {
+      assert.equal(owned.status, "owned_airship_session_running");
+      assert.equal(owned.chsOnly, true);
+      assert.equal(owned.sidecarKind, "fixture_sidecar");
+      assert.equal(owned.ownedAirshipSession?.realAirshipCliLaunched, false);
+      assert.equal(owned.ownedAirshipSession?.health.status, "healthy");
+      assert.equal(owned.ownedAirshipSession?.staticTargetUrl, `http://127.0.0.1:${targetPort}/`);
+      assert.equal(owned.ownedAirshipSession?.airshipSessionUrl, `http://127.0.0.1:${sessionPort}/`);
+
+      const health = await healthCheckOwnedAirshipProofWorkflowSession({
+        preparedWorkflow: prepared,
+        ownedAirshipSession: owned.ownedAirshipSession,
+        manager,
+      });
+      assert.equal(health.status, "owned_airship_session_health_checked");
+      assert.equal(health.ownedAirshipSession?.health.status, "healthy");
+
+      const stopped = await stopOwnedAirshipProofWorkflowSession({
+        preparedWorkflow: prepared,
+        ownedAirshipSession: owned.ownedAirshipSession,
+        manager,
+      });
+      owned = stopped;
+      assert.equal(stopped.status, "owned_airship_session_stopped");
+      assert.equal(stopped.ownedAirshipSession?.cleanup.status, "clean");
+      assert.equal(stopped.ownedAirshipSession?.health.status, "stopped");
+      assert.equal(stopped.mutationFlags.publishes, false);
+      assert.equal(stopped.mutationFlags.sourceCaptureImport, false);
+      assert.equal(stopped.mutationFlags.dnsMutation, false);
+      assert.equal(stopped.mutationFlags.providerMutation, false);
+    } finally {
+      if (owned.ownedAirshipSession?.status === "running") {
+        await stopOwnedAirshipProofWorkflowSession({ preparedWorkflow: prepared, ownedAirshipSession: owned.ownedAirshipSession, manager });
+      }
+    }
+  });
+});
+
+test("non-CHS migration blocks ADAPTER 16 proof workflow prepare", async () => {
+  await withWorkspaceRoot(async (workspaceRoot) => {
+    await assert.rejects(
+      () => prepareAirshipProofWorkflow({
+        migrationId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        workspaceRoot,
+        sessionId: "workflow-non-chs",
+      }),
+      /airship_adapter_16_chs_only_flow/,
+    );
   });
 });
 

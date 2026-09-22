@@ -358,6 +358,149 @@ test("airship proof workflow prepare returns manual CLI command and workspace re
   assert.equal(body.labels.includes("Proof-only"), true);
 });
 
+test("airship proof workflow route blocks ADAPTER 16 owned flow for non-CHS migrations", async () => {
+  let prepareCalls = 0;
+  const handlers = createAirshipProofWorkflowRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-proof",
+    service: fakeDraftService().service as never,
+    prepareAirshipProofWorkflow: async () => {
+      prepareCalls += 1;
+      return preparedReadback() as never;
+    },
+  });
+
+  const response = await handlers.POST(request({
+    actionMode: "prepare",
+    migrationId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  }));
+  const body = await response.json() as {
+    ok: boolean;
+    error: string;
+    readback: { readback: string; diagnostics: string[]; mutationFlags: Record<string, boolean> };
+  };
+
+  assert.equal(response.status, 409);
+  assert.equal(body.ok, false);
+  assert.equal(body.error, "AIRSHIP_ADAPTER_16_CHS_ONLY");
+  assert.match(body.readback.readback, /CHS-only/);
+  assert.equal(body.readback.diagnostics.includes("non_chs_migration_blocked"), true);
+  assert.equal(body.readback.mutationFlags.publishes, false);
+  assert.equal(prepareCalls, 0);
+});
+
+test("airship proof workflow route wires owned Airship start, health, and stop actions", async () => {
+  const ownedSession = {
+    proofOnly: true,
+    localOnly: true,
+    sessionId: "owned-session-route",
+    workspacePath: "/tmp/gnr8-airship-proof/session-1",
+    staticTargetUrl: "http://127.0.0.1:4178/",
+    airshipSessionUrl: "http://127.0.0.1:4179/",
+    targetPort: 4178,
+    airshipPort: 4179,
+    processIds: { staticTargetPid: 123, airshipSidecarPid: 124 },
+    staticTarget: { ownedByManager: true, pid: 123, port: 4178, url: "http://127.0.0.1:4178/", status: "running" },
+    airshipSidecar: { ownedByManager: true, pid: 124, port: 4179, url: "http://127.0.0.1:4179/", status: "running" },
+    status: "running",
+    health: {
+      status: "healthy",
+      staticTarget: { url: "http://127.0.0.1:4178/", ok: true, statusCode: 200, error: null },
+      airshipSession: { url: "http://127.0.0.1:4179/", ok: true, statusCode: 200, error: null },
+      checkedAt: "2026-09-22T00:00:00.000Z",
+    },
+    ownedByManager: true,
+    ownership: { managerId: "manager-route", token: "token-route" },
+    cleanup: { status: "not-run", stoppedPids: [], manualCleanupInstructions: [], errors: [] },
+    realAirshipCliLaunched: false,
+  };
+  const actionCalls: string[] = [];
+  const readback = (status: string) => ({
+    ...preparedReadback(),
+    status,
+    chsOnly: true,
+    adapter16Flow: "one_session_chs_operator_flow",
+    sidecarKind: "fixture_sidecar",
+    ownedAirshipSession: status === "owned_airship_session_stopped"
+      ? { ...ownedSession, status: "clean", health: { ...ownedSession.health, status: "stopped" }, cleanup: { ...ownedSession.cleanup, status: "clean", stoppedPids: [124, 123] } }
+      : ownedSession,
+    changedFilesCount: 0,
+    generatedInternalPreviewUrl: null,
+  });
+  const handlers = createAirshipProofWorkflowRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-proof",
+    service: fakeDraftService().service as never,
+    startOwnedAirshipProofWorkflowSession: async (input) => {
+      actionCalls.push(`start:${input.startRealAirshipCli === true ? "real" : "fixture"}`);
+      return readback("owned_airship_session_running") as never;
+    },
+    healthCheckOwnedAirshipProofWorkflowSession: async (input) => {
+      actionCalls.push(`health:${input.ownedAirshipSession.sessionId}`);
+      return readback("owned_airship_session_health_checked") as never;
+    },
+    stopOwnedAirshipProofWorkflowSession: async (input) => {
+      actionCalls.push(`stop:${input.ownedAirshipSession.sessionId}`);
+      return readback("owned_airship_session_stopped") as never;
+    },
+  });
+
+  const startResponse = await handlers.POST(request({
+    actionMode: "start_owned_airship_session",
+    migrationId: MIGRATION_ID,
+    preparedWorkflow: preparedReadback(),
+  }));
+  const startBody = await startResponse.json() as { readback: { sidecarKind: string; ownedAirshipSession: typeof ownedSession } };
+  assert.equal(startResponse.status, 200);
+  assert.equal(startBody.readback.sidecarKind, "fixture_sidecar");
+  assert.equal(startBody.readback.ownedAirshipSession.health.status, "healthy");
+
+  const healthResponse = await handlers.POST(request({
+    actionMode: "health_check_owned_airship_session",
+    migrationId: MIGRATION_ID,
+    preparedWorkflow: preparedReadback(),
+    ownedAirshipSession: startBody.readback.ownedAirshipSession,
+  }));
+  const healthBody = await healthResponse.json() as { readback: { status: string; ownedAirshipSession: typeof ownedSession } };
+  assert.equal(healthResponse.status, 200);
+  assert.equal(healthBody.readback.status, "owned_airship_session_health_checked");
+
+  const stopResponse = await handlers.POST(request({
+    actionMode: "stop_owned_airship_session",
+    migrationId: MIGRATION_ID,
+    preparedWorkflow: preparedReadback(),
+    ownedAirshipSession: healthBody.readback.ownedAirshipSession,
+  }));
+  const stopBody = await stopResponse.json() as { readback: { status: string; ownedAirshipSession: { cleanup: { status: string } } } };
+  assert.equal(stopResponse.status, 200);
+  assert.equal(stopBody.readback.status, "owned_airship_session_stopped");
+  assert.equal(stopBody.readback.ownedAirshipSession.cleanup.status, "clean");
+  assert.deepEqual(actionCalls, ["start:fixture", "health:owned-session-route", "stop:owned-session-route"]);
+});
+
+test("airship proof workflow route requires local opt-in before launching real Airship CLI", async () => {
+  let startCalls = 0;
+  const handlers = createAirshipProofWorkflowRouteHandlers({
+    requireSuperadminUserId: async () => "superadmin-proof",
+    service: fakeDraftService().service as never,
+    startOwnedAirshipProofWorkflowSession: async () => {
+      startCalls += 1;
+      return preparedReadback() as never;
+    },
+  });
+
+  const response = await handlers.POST(request({
+    actionMode: "start_owned_airship_session",
+    migrationId: MIGRATION_ID,
+    preparedWorkflow: preparedReadback(),
+    startRealAirshipCli: true,
+  }));
+  const body = await response.json() as { diagnostics: string[]; mutationFlags: Record<string, boolean> };
+
+  assert.equal(response.status, 403);
+  assert.equal(body.diagnostics.includes("airship_adapter_16_real_cli_requires_local_env_opt_in"), true);
+  assert.equal(body.mutationFlags.publishes, false);
+  assert.equal(startCalls, 0);
+});
+
 test("airship proof workflow capture and map displays exact mapping summary", async () => {
   const handlers = createAirshipProofWorkflowRouteHandlers({
     requireSuperadminUserId: async () => "superadmin-proof",

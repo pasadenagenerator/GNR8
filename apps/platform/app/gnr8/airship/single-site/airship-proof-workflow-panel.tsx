@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 
 type WorkflowStatus = "not_prepared" | "prepared" | "captured" | "mapped" | "applied" | "preview_generated" | "blocked" | "failed";
+const AIRSHIP_ADAPTER_16_CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 
 type CommandDescriptor = {
   commandLine: string;
@@ -18,6 +19,50 @@ type MappingSummary = {
   safeEntryCount: number;
   unsupportedEntryCount: number;
   exactSafeApplyCandidateCount: number;
+};
+
+type OwnedProcessReadback = {
+  ownedByManager: boolean;
+  pid: number | null;
+  port: number;
+  url: string;
+  status: string;
+};
+
+type OwnedAirshipSessionReadback = {
+  proofOnly: true;
+  localOnly: true;
+  sessionId: string;
+  workspacePath: string;
+  staticTargetUrl: string;
+  airshipSessionUrl: string;
+  targetPort: number;
+  airshipPort: number;
+  processIds: {
+    staticTargetPid: number | null;
+    airshipSidecarPid: number | null;
+  };
+  staticTarget: OwnedProcessReadback;
+  airshipSidecar: OwnedProcessReadback;
+  status: string;
+  health: {
+    status: string;
+    staticTarget: { ok: boolean; statusCode: number | null; error: string | null };
+    airshipSession: { ok: boolean; statusCode: number | null; error: string | null };
+    checkedAt: string;
+  };
+  ownedByManager: boolean;
+  ownership: {
+    managerId: string;
+    token: string | null;
+  };
+  cleanup: {
+    status: string;
+    stoppedPids: number[];
+    manualCleanupInstructions: string[];
+    errors: string[];
+  };
+  realAirshipCliLaunched: boolean;
 };
 
 type ProofWorkflowReadback = {
@@ -77,6 +122,12 @@ type ProofWorkflowReadback = {
   mutationFlags: Record<string, boolean>;
   safety: Record<string, boolean>;
   diagnostics: string[];
+  chsOnly?: true;
+  adapter16Flow?: "one_session_chs_operator_flow";
+  sidecarKind?: "fixture_sidecar" | "real_airship_cli_sidecar" | "manual_command_only" | "not_owned";
+  ownedAirshipSession?: OwnedAirshipSessionReadback | null;
+  changedFilesCount?: number;
+  generatedInternalPreviewUrl?: string | null;
 };
 
 type PreviewGenerationReadback = {
@@ -133,6 +184,7 @@ type ProofWorkflowPanelViewModelInput = Props & {
   mapped: ProofWorkflowReadback | null;
   result: ProofWorkflowReadback | null;
   previewResult: PreviewGenerationReadback | null;
+  ownedSidecar: ProofWorkflowReadback | null;
   confirmed: boolean;
 };
 
@@ -280,13 +332,18 @@ function hasFreshDraftProof(input: Pick<Props, "freshDraftProof" | "savedDraftId
 
 export function deriveAirshipProofWorkflowPanelViewModel(input: ProofWorkflowPanelViewModelInput) {
   const currentReadback = input.result ?? input.mapped ?? input.captured ?? input.prepared;
+  const isChsAdapter16 = input.migrationId === AIRSHIP_ADAPTER_16_CHS_MIGRATION_ID;
+  const ownedSession = input.ownedSidecar?.ownedAirshipSession ?? null;
+  const ownedHealthOk = ownedSession?.health.status === "healthy";
+  const ownedSessionRunning = ownedSession?.status === "running" && ownedSession.ownedByManager;
   const captureHasChanges = hasCapturedChanges(input.captured);
   const safeMappingCount = input.mapped?.mappingSummary?.exactSafeApplyCandidateCount ?? 0;
   const hasSafeMappings = safeMappingCount > 0;
   const applySucceeded = input.result?.status === "applied_to_draft";
   const freshDraftProof = hasFreshDraftProof(input);
   const previewUrl = input.previewResult?.internalPreviewUrl ?? null;
-  const sessionUrl = expectedAirshipSessionUrl(input.prepared);
+  const sessionUrl = ownedHealthOk ? ownedSession?.airshipSessionUrl ?? null : null;
+  const expectedManualSessionUrl = expectedAirshipSessionUrl(input.prepared);
   const target = targetUrl(input.prepared);
   const localCommand = localRunnerCommand(input.prepared);
   const airshipCommand = manualAirshipCommand(input.prepared);
@@ -296,13 +353,20 @@ export function deriveAirshipProofWorkflowPanelViewModel(input: ProofWorkflowPan
   const summary = input.mapped?.mappingSummary;
 
   return {
+    isChsAdapter16,
     currentReadback,
-    canPrepare: Boolean(input.migrationId) && !input.busy,
-    canCapture: Boolean(input.migrationId && input.prepared) && !input.busy,
-    canMap: Boolean(input.migrationId && input.captured && captureHasChanges) && !input.busy,
-    canApply: Boolean(input.migrationId && hasSafeMappings && input.confirmed) && !input.busy,
-    canGeneratePreview: Boolean(input.migrationId && (applySucceeded || freshDraftProof)) && !input.busy,
+    canPrepare: Boolean(input.migrationId) && isChsAdapter16 && !input.busy,
+    canStartOwnedSession: Boolean(input.migrationId && input.prepared && !ownedSessionRunning) && isChsAdapter16 && !input.busy,
+    canHealthCheckOwnedSession: Boolean(input.migrationId && input.prepared && ownedSession) && isChsAdapter16 && !input.busy,
+    canStopOwnedSession: Boolean(input.migrationId && input.prepared && ownedSession?.ownedByManager && ownedSession.status === "running") && isChsAdapter16 && !input.busy,
+    canCapture: Boolean(input.migrationId && input.prepared) && isChsAdapter16 && !input.busy,
+    canMap: Boolean(input.migrationId && input.captured && captureHasChanges) && isChsAdapter16 && !input.busy,
+    canApply: Boolean(input.migrationId && hasSafeMappings && input.confirmed) && isChsAdapter16 && !input.busy,
+    canGeneratePreview: Boolean(input.migrationId && (applySucceeded || freshDraftProof)) && isChsAdapter16 && !input.busy,
     canOpenPreview: Boolean(previewUrl) && !input.busy,
+    ownedSession,
+    ownedSessionRunning,
+    ownedHealthOk,
     hasSafeMappings,
     hasFreshDraftProof: freshDraftProof,
     changedFilesCount: changedFilesCount(input.captured),
@@ -310,9 +374,14 @@ export function deriveAirshipProofWorkflowPanelViewModel(input: ProofWorkflowPan
     openAirshipDisabledReason: sessionUrl
       ? null
       : input.prepared
-        ? "Start the local static target and manual Airship CLI command, then use the session URL printed by that command."
-        : "Prepare the local proof workspace first.",
+        ? ownedSession
+          ? "Run a health check and wait for an owned healthy Airship session before opening the editor."
+          : "Start an owned Airship session first. Manual command-only mode remains available from the command readback."
+        : isChsAdapter16
+          ? "Prepare the local proof workspace first."
+          : "ADAPTER 16 one-session Airship operator flow is CHS-only. ARIS parity is deferred.",
     targetUrl: target,
+    expectedManualSessionUrl,
     localRunnerCommand: localCommand,
     manualAirshipCommand: airshipCommand,
     draftLabel,
@@ -322,6 +391,12 @@ export function deriveAirshipProofWorkflowPanelViewModel(input: ProofWorkflowPan
     mutationFlagsText: mutationFlagText((input.previewResult ?? input.result ?? currentReadback)?.mutationFlags),
     safetyFlagsText: safetyFlagText(currentReadback?.safety),
     previewUrl,
+    captureCopy: ownedSessionRunning
+      ? "After editing in Airship, return to this GNR8 tab. You may capture after returning; stopping the owned session first is preferred."
+      : "Capture is available after prepare. Return from Airship to GNR8 before capturing.",
+    chsOnlyCopy: isChsAdapter16
+      ? "ADAPTER 16 CHS operator flow is active for this migration."
+      : "ADAPTER 16 one-session Airship operator flow is CHS-only for migration 682a09fd-8fd5-4f73-93b8-54f5d4067c63. ARIS is deferred.",
   };
 }
 
@@ -332,7 +407,9 @@ export function AirshipProofWorkflowPanel(props: Props) {
   const [mapped, setMapped] = useState<ProofWorkflowReadback | null>(null);
   const [result, setResult] = useState<ProofWorkflowReadback | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewGenerationReadback | null>(null);
+  const [ownedSidecar, setOwnedSidecar] = useState<ProofWorkflowReadback | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [startRealAirshipCli, setStartRealAirshipCli] = useState(false);
   const [message, setMessage] = useState("Not prepared. Prepare a local proof workspace before running the manual Airship sidecar command.");
   const [busy, setBusy] = useState(false);
 
@@ -345,6 +422,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
     mapped,
     result,
     previewResult,
+    ownedSidecar,
     confirmed,
   });
   const currentReadback = view.currentReadback;
@@ -381,12 +459,77 @@ export function AirshipProofWorkflowPanel(props: Props) {
       setMapped(null);
       setResult(null);
       setPreviewResult(null);
+      setOwnedSidecar(null);
       setConfirmed(false);
       setStatus("prepared");
       setMessage(readback?.readback ?? "Airship proof workspace prepared.");
     } catch (error) {
       setStatus("failed");
       setMessage(error instanceof Error ? error.message : "Airship proof prepare failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startOwnedAirshipSession() {
+    if (!view.canStartOwnedSession) return;
+    setBusy(true);
+    setMessage(startRealAirshipCli ? "Starting owned local real Airship CLI session..." : "Starting owned local Airship fixture session...");
+    try {
+      const readback = mappedReadback(await post({
+        actionMode: "start_owned_airship_session",
+        migrationId: props.migrationId,
+        preparedWorkflow: prepared,
+        startRealAirshipCli,
+      }));
+      setOwnedSidecar(readback);
+      setStatus("prepared");
+      setMessage(readback?.readback ?? "Owned Airship session started.");
+    } catch (error) {
+      setStatus("failed");
+      setMessage(error instanceof Error ? error.message : "Owned Airship session start failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function healthCheckOwnedAirshipSession() {
+    if (!view.canHealthCheckOwnedSession) return;
+    setBusy(true);
+    setMessage("Checking owned Airship session health...");
+    try {
+      const readback = mappedReadback(await post({
+        actionMode: "health_check_owned_airship_session",
+        migrationId: props.migrationId,
+        preparedWorkflow: prepared,
+        ownedAirshipSession: view.ownedSession,
+      }));
+      setOwnedSidecar(readback);
+      setMessage(readback?.readback ?? "Owned Airship session health checked.");
+    } catch (error) {
+      setStatus("failed");
+      setMessage(error instanceof Error ? error.message : "Owned Airship health check failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function stopOwnedAirshipSession() {
+    if (!view.canStopOwnedSession) return;
+    setBusy(true);
+    setMessage("Stopping owned Airship session...");
+    try {
+      const readback = mappedReadback(await post({
+        actionMode: "stop_owned_airship_session",
+        migrationId: props.migrationId,
+        preparedWorkflow: prepared,
+        ownedAirshipSession: view.ownedSession,
+      }));
+      setOwnedSidecar(readback);
+      setMessage(readback?.readback ?? "Owned Airship session stopped.");
+    } catch (error) {
+      setStatus("failed");
+      setMessage(error instanceof Error ? error.message : "Owned Airship session stop failed.");
     } finally {
       setBusy(false);
     }
@@ -486,9 +629,12 @@ export function AirshipProofWorkflowPanel(props: Props) {
         <div style={{ minWidth: 0 }}>
           <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 950 }}>Real Airship sidecar proof</div>
           <div style={{ marginTop: 4, color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
-            Proof-only, local/manual operator flow. Draft changes are not live. Applying a draft and generating an internal preview are separate steps.
+            Proof-only, local/manual CHS operator flow. Draft changes are not live. Applying a draft and generating an internal preview are separate steps.
             Does not publish, regenerate preview automatically, change the live site, mutate DNS/provider state, or replace the current editor route.
             GNR8 demo/live links are unchanged.
+          </div>
+          <div style={{ marginTop: 6, color: view.isChsAdapter16 ? "#0f766e" : "#92400e", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>
+            {view.chsOnlyCopy}
           </div>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
@@ -503,39 +649,51 @@ export function AirshipProofWorkflowPanel(props: Props) {
           <button type="button" disabled={!view.canPrepare} aria-busy={busy && status === "not_prepared"} onClick={() => void prepare()} style={buttonStyle(!view.canPrepare, "primary")}>
             Step 1: Prepare Airship session
           </button>
+          <button type="button" disabled={!view.canStartOwnedSession} onClick={() => void startOwnedAirshipSession()} style={buttonStyle(!view.canStartOwnedSession, "primary")}>
+            Step 2: Start Airship session
+          </button>
           {view.openAirshipHref ? (
             <a href={view.openAirshipHref} target="_blank" rel="noreferrer" style={{ ...buttonStyle(false, "primary"), textAlign: "center", textDecoration: "none" }}>
-              Step 2: Open Airship editor
+              Step 3: Open Airship editor
             </a>
           ) : (
             <button type="button" disabled style={buttonStyle(true, "primary")} title={view.openAirshipDisabledReason ?? undefined}>
-              Step 2: Open Airship editor
+              Step 3: Open Airship editor
             </button>
           )}
+          <button type="button" disabled={!view.canHealthCheckOwnedSession} onClick={() => void healthCheckOwnedAirshipSession()} style={buttonStyle(!view.canHealthCheckOwnedSession)}>
+            Step 4: Health check Airship session
+          </button>
+          <button type="button" disabled={!view.canStopOwnedSession} onClick={() => void stopOwnedAirshipSession()} style={buttonStyle(!view.canStopOwnedSession)}>
+            Step 5: Stop Airship session
+          </button>
           <button type="button" disabled={!view.canCapture} onClick={() => void captureChanges()} style={buttonStyle(!view.canCapture)}>
-            Step 3: Capture changes
+            Step 6: Capture changes
           </button>
           <button type="button" disabled={!view.canMap} onClick={() => void mapCapturedEdits()} style={buttonStyle(!view.canMap)}>
-            Step 4: Map captured edits
+            Step 7: Map captured edits
           </button>
           <button type="button" disabled={!view.canApply} onClick={() => void applyConfirmed()} style={buttonStyle(!view.canApply, "primary")}>
-            Step 5: Apply safe mappings to draft
+            Step 8: Apply safe mappings to draft
           </button>
           <button type="button" disabled={!view.canGeneratePreview} onClick={() => void generatePreviewFromAppliedDraft()} style={buttonStyle(!view.canGeneratePreview, "primary")}>
-            Step 6: Generate internal preview from applied draft
+            Step 9: Generate internal preview from applied draft
           </button>
           {view.previewUrl ? (
             <a href={view.previewUrl} target="_blank" rel="noreferrer" style={{ ...buttonStyle(false), textAlign: "center", textDecoration: "none" }}>
-              Step 7: Open generated internal preview
+              Step 10: Open generated internal preview
             </a>
           ) : (
             <button type="button" disabled style={buttonStyle(true)}>
-              Step 7: Open generated internal preview
+              Step 10: Open generated internal preview
             </button>
           )}
         </div>
         <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.45 }}>
-          {view.openAirshipDisabledReason ?? "Airship session URL is available after prepare. Start the static target first if the Airship CLI needs the target running."}
+          {view.openAirshipDisabledReason ?? "Owned Airship session is healthy. Open Airship, edit CHS text, then return to this GNR8 tab."}
+        </div>
+        <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.45 }}>
+          {view.captureCopy}
         </div>
       </div>
 
@@ -550,7 +708,14 @@ export function AirshipProofWorkflowPanel(props: Props) {
         {fact("Draft before/after", currentReadback?.draft ? `${currentReadback.draft.idBefore ?? "missing"} v${currentReadback.draft.versionBefore ?? "?"} -> ${currentReadback.draft.idAfter ?? "missing"} v${currentReadback.draft.versionAfter ?? "?"}` : "not available")}
         {fact("Workspace path", currentReadback?.workspacePath ?? "not prepared")}
         {fact("Static target", view.targetUrl ?? "not prepared")}
-        {fact("Airship session", view.openAirshipHref ?? "not prepared")}
+        {fact("Manual Airship URL", view.expectedManualSessionUrl ?? "not prepared")}
+        {fact("Owned Airship URL", view.ownedSession?.airshipSessionUrl ?? "not started")}
+        {fact("Owned health", view.ownedSession?.health.status ?? "not started")}
+        {fact("Sidecar kind", ownedSidecar?.sidecarKind ?? "manual_command_only")}
+        {fact("Static port / PID", view.ownedSession ? `${view.ownedSession.targetPort} / ${view.ownedSession.processIds.staticTargetPid ?? "none"}` : "not started")}
+        {fact("Airship port / PID", view.ownedSession ? `${view.ownedSession.airshipPort} / ${view.ownedSession.processIds.airshipSidecarPid ?? "none"}` : "not started")}
+        {fact("Ownership token", view.ownedSession?.ownership.token ?? "not owned")}
+        {fact("Last cleanup", view.ownedSession?.cleanup.status ?? "not run")}
         {fact("Changed files", view.changedFilesCount)}
         {fact("Hash summary", hashSummary(currentReadback))}
         {fact("Mapping summary", mappingText)}
@@ -565,12 +730,22 @@ export function AirshipProofWorkflowPanel(props: Props) {
           <div style={{ color: "#0f766e", fontSize: 13, fontWeight: 950 }}>Open Airship editor affordance</div>
           <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45, overflowWrap: "anywhere" }}>
             {view.openAirshipHref
-              ? `Real local session URL: ${view.openAirshipHref}`
+              ? `Owned local session URL: ${view.openAirshipHref}`
               : view.openAirshipDisabledReason}
           </div>
           <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
-            When you finish editing in Airship, return to this GNR8 tab and click Capture changes. Stop the local Airship/static processes from the Codex task or terminal that started them.
+            When you finish editing in Airship, return to this GNR8 tab and click Capture changes. Prefer stopping the owned session first; GNR8 stops only manager-owned child processes.
           </div>
+          <label style={{ display: "flex", gap: 8, alignItems: "start", color: "#334155", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>
+            <input
+              type="checkbox"
+              checked={startRealAirshipCli}
+              disabled={busy || Boolean(view.ownedSessionRunning)}
+              onChange={(event) => setStartRealAirshipCli(event.currentTarget.checked)}
+              style={{ marginTop: 2 }}
+            />
+            Start real Airship CLI sidecar instead of the Airship-like fixture. This requires explicit local server opt-in; automated tests use the fixture sidecar.
+          </label>
         </div>
       ) : null}
 
