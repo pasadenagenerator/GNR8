@@ -349,6 +349,64 @@ function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
   );
 }
 
+function onlineAirshipSessionPanel() {
+  const disabledReasons = [
+    "worker auth not configured",
+    "lease manager not configured",
+    "signed editor gateway not configured",
+  ];
+
+  return section(
+    "Online Airship session",
+    <div style={{ border: "1px solid #fbbf24", borderRadius: 8, background: "#fffbeb", padding: 14, display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: 6, minWidth: 260 }}>
+          <div>{badge("not configured", "warn")}</div>
+          <p style={{ margin: 0, color: "#78350f", fontSize: 14, lineHeight: 1.5 }}>
+            Worker auth, lease manager, and signed editor gateway are not configured yet. Local proof flow remains available.
+          </p>
+          <p style={{ margin: 0, color: "#475569", fontSize: 13, lineHeight: 1.45 }}>
+            Online mode is planned but not active. No live site changes happen here. Draft apply and preview generation remain separate confirmed steps.
+          </p>
+        </div>
+        <a href="#airship-local-proof-flow" style={{ color: "#0369a1", fontSize: 13, fontWeight: 850, textDecoration: "none" }}>
+          Use local proof flow below
+        </a>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {["Create online Airship session", "Open online Airship editor", "Capture online changes", "Stop online session"].map((label) => (
+          <button
+            key={label}
+            type="button"
+            disabled
+            aria-disabled="true"
+            style={{
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              background: "#e2e8f0",
+              color: "#64748b",
+              padding: "9px 11px",
+              fontSize: 13,
+              fontWeight: 850,
+              cursor: "not-allowed",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div style={{ borderTop: "1px solid #fde68a", paddingTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {disabledReasons.map((reason) => (
+          <React.Fragment key={reason}>{badge(reason, "neutral")}</React.Fragment>
+        ))}
+      </div>
+      <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.45 }}>
+        Existing local proof flow is unchanged.
+      </div>
+    </div>,
+  );
+}
+
 export function AirshipSingleSiteEditor({ model }: Props) {
   const improvementTone = model.aiImprovementStatus.deterministicEditableChangesGenerated ? "good" : "warn";
 
@@ -398,6 +456,8 @@ export function AirshipSingleSiteEditor({ model }: Props) {
 
       {demoReadinessPanel(model)}
 
+      {onlineAirshipSessionPanel()}
+
       {section(
         "Previews",
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
@@ -408,7 +468,7 @@ export function AirshipSingleSiteEditor({ model }: Props) {
 
       {section(
         model.draftPanel.title,
-        <>
+        <div id="airship-local-proof-flow" style={{ display: "grid", gap: 12 }}>
           <AirshipProofWorkflowPanel
             migrationId={model.migrationId}
             savedDraftId={model.draftPanel.persistence.draftId}
@@ -428,7 +488,7 @@ export function AirshipSingleSiteEditor({ model }: Props) {
               {model.draftPanel.emptyMessage}
             </div>
           )}
-        </>,
+        </div>,
       )}
 
       {section(
