@@ -118,14 +118,16 @@ export default function ClientDashboardHome(props: Props) {
   const workspaceShortcuts: WorkspaceShortcut[] = [
     { id: "view-sites", label: "View Sites", href: "#client-sites", description: "Jump to sites overview", icon: "site" },
     ...(latestSiteHref
-      ? [{ id: "open-latest-site", label: "Open Latest Site", href: latestSiteHref, description: "Open most recent connected site", icon: "external-link", external: true }]
+      ? ([
+          { id: "open-latest-site", label: "Open Latest Site", href: latestSiteHref, description: "Open most recent connected site", icon: "external-link", external: true },
+        ] satisfies WorkspaceShortcut[])
       : []),
     ...(props.settingsHref
-      ? [{ id: "open-settings", label: "Open Settings", href: props.settingsHref, description: "Open client settings", icon: "settings" }]
+      ? ([{ id: "open-settings", label: "Open Settings", href: props.settingsHref, description: "Open client settings", icon: "settings" }] satisfies WorkspaceShortcut[])
       : []),
-    ...(props.teamHref ? [{ id: "open-team", label: "Open Team", href: props.teamHref, description: "Open client team", icon: "client" }] : []),
+    ...(props.teamHref ? ([{ id: "open-team", label: "Open Team", href: props.teamHref, description: "Open client team", icon: "client" }] satisfies WorkspaceShortcut[]) : []),
     ...(props.backToAgencyHref
-      ? [{ id: "back-to-agency", label: "Back to Agency", href: props.backToAgencyHref, description: "Return to agency workspace", icon: "agency" }]
+      ? ([{ id: "back-to-agency", label: "Back to Agency", href: props.backToAgencyHref, description: "Return to agency workspace", icon: "agency" }] satisfies WorkspaceShortcut[])
       : []),
   ];
   const statusSummary =

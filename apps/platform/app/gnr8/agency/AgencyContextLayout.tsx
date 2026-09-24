@@ -143,7 +143,7 @@ export default async function AgencyContextLayout(props: Props) {
   ]
   const agencyShortcuts: WorkspaceShortcut[] = [
     ...(canPerformAction(props.role, 'create_client') && !isAdminView
-      ? [
+      ? ([
           {
             id: 'add-client',
             label: 'Add Client',
@@ -151,7 +151,7 @@ export default async function AgencyContextLayout(props: Props) {
             description: 'Start client provisioning in current scope',
             icon: 'client',
           },
-        ]
+        ] satisfies WorkspaceShortcut[])
       : []),
     {
       id: 'open-clients',
