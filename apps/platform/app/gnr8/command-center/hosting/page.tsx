@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getCommandCenterSitesViewModel } from "../_lib/command-center-view-model";
+import { gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
 
 function valueOrDash(value: string | number | null | undefined): string {
   const normalized = String(value ?? "").trim();
@@ -61,7 +62,7 @@ export default async function CommandCenterHostingPage() {
                     <td style={{ padding: "9px 6px" }}>{valueOrDash(row.summary.domain)}</td>
                     <td style={{ padding: "9px 6px" }}>{valueOrDash(row.migration.latest_runtime_state)}</td>
                     <td style={{ padding: "9px 6px" }}>
-                      <Link href={`/gnr8/command-center/hosting/${encodeURIComponent(row.summary.site_id)}`} style={{ color: "#1d4ed8" }}>
+                      <Link href={`/gnr8/command-center/hosting/${encodeURIComponent(row.summary.site_id)}`} style={{ color: gnr8VisualTokens.color.accentOrangeHover }}>
                         View
                       </Link>
                     </td>

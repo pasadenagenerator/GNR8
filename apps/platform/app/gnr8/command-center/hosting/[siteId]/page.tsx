@@ -10,6 +10,7 @@ import type { HostingAssetDiagnosticEntry } from "@/gnr8/runtime/hosting-operati
 import type { HostingReadinessFinding } from "@/gnr8/runtime/hosting-operations/hosting-readiness-drilldown";
 import { getHostingOperationsReadModel } from "@/gnr8/runtime/hosting-operations/hosting-operations-read-model";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
+import { gnr8VisualTokens } from "../../../../../gnr8/visual-system/gnr8-visual-system";
 
 function text(value: unknown): string {
   const normalized = String(value ?? "").trim();
@@ -227,7 +228,7 @@ export default async function CommandCenterHostingSitePage(props: {
             <dd style={{ display: "inline", margin: 0 }}>{text(model.site.expectedIdentifier)}</dd>
           </div>
         </dl>
-        <Link href="/gnr8/command-center/hosting" style={{ color: "#1d4ed8" }}>
+        <Link href="/gnr8/command-center/hosting" style={{ color: gnr8VisualTokens.color.accentOrangeHover }}>
           Back to Hosting
         </Link>
       </section>
@@ -248,7 +249,7 @@ export default async function CommandCenterHostingSitePage(props: {
   return (
     <>
       <section style={{ border: "1px solid #dbe2ea", background: "#fff", borderRadius: 12, padding: 14 }}>
-        <Link href="/gnr8/command-center/hosting" style={{ color: "#1d4ed8", fontSize: 13 }}>
+        <Link href="/gnr8/command-center/hosting" style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 13 }}>
           Back to Hosting
         </Link>
         <header style={{ marginTop: 10, display: "grid", gap: 6 }}>

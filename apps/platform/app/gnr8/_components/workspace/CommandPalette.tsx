@@ -13,6 +13,7 @@ import {
   type SavedCommandItem,
   type SavedCommandType,
 } from '@/src/workspace/command-palette-saved'
+import { gnr8VisualTokens } from '../../../../gnr8/visual-system/gnr8-visual-system'
 import { getCommandUsage, recordCommandUsage, type CommandUsageEntry } from '@/src/workspace/command-palette-usage'
 import { addRecentItem, getRecentItems, type WorkspaceRecentItem } from '@/src/workspace/workspace-recents'
 
@@ -1279,11 +1280,11 @@ export default function CommandPalette(props: Props) {
                           }}
                           onMouseEnter={() => setActiveIndex(itemIndex)}
                           style={{
-                            border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                            border: isActive ? `1px solid #fed7aa` : '1px solid #e2e8f0',
                             borderRadius: 10,
-                            background: isActive ? '#f8fbff' : '#fff',
+                            background: isActive ? gnr8VisualTokens.color.accentOrangeSoft : '#fff',
                             marginBottom: 7,
-                            boxShadow: isActive ? '0 0 0 1px rgba(59, 130, 246, 0.08)' : undefined,
+                            boxShadow: isActive ? '0 0 0 1px rgba(217, 108, 24, 0.09)' : undefined,
                             transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
                             fontFamily: commandPaletteFontFamily,
                           }}
@@ -1319,9 +1320,9 @@ export default function CommandPalette(props: Props) {
                                         togglePinned(item)
                                       }}
                                       style={{
-                                        border: itemIsPinned ? '1px solid #93c5fd' : '1px solid #cbd5e1',
-                                        background: itemIsPinned ? '#eff6ff' : '#fff',
-                                        color: itemIsPinned ? '#1d4ed8' : '#475569',
+                                        border: itemIsPinned ? '1px solid #fed7aa' : '1px solid #cbd5e1',
+                                        background: itemIsPinned ? gnr8VisualTokens.color.accentOrangeSoft : '#fff',
+                                        color: itemIsPinned ? gnr8VisualTokens.color.accentOrangeHover : '#475569',
                                         borderRadius: 999,
                                         padding: '2px 7px',
                                         fontSize: 10,
@@ -1396,9 +1397,9 @@ export default function CommandPalette(props: Props) {
                                     handleAction(secondaryAction, item)
                                   }}
                                   style={{
-                                    border: '1px solid #bfdbfe',
-                                    background: '#eff6ff',
-                                    color: '#1e40af',
+                                    border: '1px solid #fed7aa',
+                                    background: gnr8VisualTokens.color.accentOrangeSoft,
+                                    color: gnr8VisualTokens.color.accentOrangeHover,
                                     borderRadius: 999,
                                     fontSize: 11,
                                     fontWeight: 600,
@@ -1458,9 +1459,9 @@ export default function CommandPalette(props: Props) {
                         togglePinned(activeItem)
                       }}
                       style={{
-                        border: isPinned(activeItem) ? '1px solid #93c5fd' : '1px solid #cbd5e1',
-                        background: isPinned(activeItem) ? '#eff6ff' : '#fff',
-                        color: isPinned(activeItem) ? '#1d4ed8' : '#334155',
+                        border: isPinned(activeItem) ? '1px solid #fed7aa' : '1px solid #cbd5e1',
+                        background: isPinned(activeItem) ? gnr8VisualTokens.color.accentOrangeSoft : '#fff',
+                        color: isPinned(activeItem) ? gnr8VisualTokens.color.accentOrangeHover : '#334155',
                         borderRadius: 999,
                         fontSize: 11,
                         fontWeight: 700,

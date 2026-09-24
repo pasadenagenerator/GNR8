@@ -10,10 +10,11 @@ import {
   type MigrationBatchStatus,
 } from "../../_lib/migration-batches-view-model";
 import { MigrationBatchControls } from "./migration-batch-controls";
+import { gnr8VisualTokens } from "../../../../../gnr8/visual-system/gnr8-visual-system";
 
 function badgeStyle(status: MigrationBatchStatus): CSSProperties {
   if (status === "completed") return { color: "#166534", background: "#dcfce7", border: "1px solid #86efac" };
-  if (status === "running") return { color: "#1d4ed8", background: "#dbeafe", border: "1px solid #93c5fd" };
+  if (status === "running") return { color: gnr8VisualTokens.color.accentOrangeHover, background: gnr8VisualTokens.color.accentOrangeSoft, border: "1px solid #fed7aa" };
   if (status === "failed" || status === "partially_failed") return { color: "#991b1b", background: "#fee2e2", border: "1px solid #fca5a5" };
   if (status === "paused") return { color: "#92400e", background: "#fef3c7", border: "1px solid #fcd34d" };
   if (status === "queued") return { color: "#6b21a8", background: "#f3e8ff", border: "1px solid #d8b4fe" };
@@ -120,7 +121,7 @@ export function MigrationBatchListView(props: { model: MigrationBatchListPageVie
                 {props.model.batches.map((batch) => (
                   <tr key={batch.batchId} style={{ borderBottom: "1px solid #eef2f7" }}>
                     <td style={{ padding: "8px", minWidth: 220 }}>
-                      <Link href={batch.href} style={{ color: "#1d4ed8", fontWeight: 800, textDecoration: "none" }}>
+                      <Link href={batch.href} style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontWeight: 800, textDecoration: "none" }}>
                         {batch.name}
                       </Link>
                       <div style={{ marginTop: 3, fontSize: 11, color: "#64748b" }}>{batch.batchId}</div>
@@ -148,7 +149,7 @@ export function MigrationBatchListView(props: { model: MigrationBatchListPageVie
 function DetailHeader(props: { batch: MigrationBatchDetailViewModel; fetchError: string | null; showControls: boolean }) {
   return (
     <section style={{ border: "1px solid #dbe2ea", background: "#fff", borderRadius: 12, padding: 14 }}>
-      <Link href="/gnr8/command-center/migration-batches" style={{ color: "#1d4ed8", fontSize: 13, textDecoration: "none" }}>
+      <Link href="/gnr8/command-center/migration-batches" style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 13, textDecoration: "none" }}>
         Back to migration batches
       </Link>
       <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16, flexWrap: "wrap" }}>

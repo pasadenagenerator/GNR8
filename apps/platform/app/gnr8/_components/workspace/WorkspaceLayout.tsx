@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { CSSProperties, ReactNode } from 'react'
 
+import { gnr8Styles, gnr8VisualTokens } from '../../../../gnr8/visual-system/gnr8-visual-system'
 import CommandPalette, { type CommandPaletteOption } from './CommandPalette'
 
 export type WorkspaceTab = {
@@ -60,10 +61,10 @@ function tabStyle(active: boolean): CSSProperties {
     display: 'inline-flex',
     alignItems: 'center',
     padding: '7px 12px',
-    borderRadius: 8,
-    border: active ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
-    background: active ? '#eff6ff' : '#fff',
-    color: active ? '#1e3a8a' : '#0f172a',
+    borderRadius: gnr8VisualTokens.radius.button,
+    border: active ? `1px solid ${gnr8VisualTokens.color.accentOrange}` : `1px solid ${gnr8VisualTokens.color.border}`,
+    background: active ? gnr8VisualTokens.color.accentOrangeSoft : gnr8VisualTokens.color.surface,
+    color: active ? gnr8VisualTokens.color.accentOrangeHover : gnr8VisualTokens.color.text,
     textDecoration: 'none',
     fontSize: 13,
     fontWeight: active ? 600 : 500,
@@ -76,10 +77,10 @@ function backLinkStyle(): CSSProperties {
     alignItems: 'center',
     width: 'fit-content',
     padding: '6px 10px',
-    borderRadius: 8,
-    border: '1px solid #cbd5e1',
-    background: '#fff',
-    color: '#0f172a',
+    borderRadius: gnr8VisualTokens.radius.button,
+    border: `1px solid ${gnr8VisualTokens.color.border}`,
+    background: gnr8VisualTokens.color.surface,
+    color: gnr8VisualTokens.color.text,
     textDecoration: 'none',
     fontSize: 12,
   }
@@ -102,13 +103,13 @@ function breadcrumbsStyle(align: 'left' | 'right'): CSSProperties {
     flexWrap: 'wrap',
     justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
     fontSize: 12,
-    color: '#64748b',
+    color: gnr8VisualTokens.color.textMuted,
   }
 }
 
 function breadcrumbLinkStyle(): CSSProperties {
   return {
-    color: '#475569',
+    color: gnr8VisualTokens.color.textMuted,
     textDecoration: 'none',
     fontSize: 12,
   }
@@ -139,9 +140,9 @@ function renderIdentity(model: WorkspaceHeaderModel, align: 'left' | 'right') {
   return (
     <div style={identityBlockStyle(align)}>
       {model.breadcrumbs?.length ? <BreadcrumbTrail items={model.breadcrumbs} align={align} /> : null}
-      {model.contextLabel ? <div style={{ margin: 0, fontSize: 12, color: '#475569' }}>{model.contextLabel}</div> : null}
-      <div style={{ margin: 0, fontSize: model.titleFontSize ?? 28, color: '#0f172a', fontWeight: 700 }}>{model.title}</div>
-      {model.subtitle ? <div style={{ margin: 0, fontSize: model.subtitleFontSize ?? 12, color: '#64748b' }}>{model.subtitle}</div> : null}
+      {model.contextLabel ? <div style={{ margin: 0, fontSize: 12, color: gnr8VisualTokens.color.textMuted }}>{model.contextLabel}</div> : null}
+      <div style={{ margin: 0, fontSize: model.titleFontSize ?? 28, color: gnr8VisualTokens.color.text, fontWeight: 700 }}>{model.title}</div>
+      {model.subtitle ? <div style={{ margin: 0, fontSize: model.subtitleFontSize ?? 12, color: gnr8VisualTokens.color.textMuted }}>{model.subtitle}</div> : null}
     </div>
   )
 }
@@ -163,7 +164,7 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
         </div>
         <div style={{ display: 'grid', gap: 4, justifyItems: 'end' }}>
           {identity}
-          {model.meta ? <div style={{ display: 'grid', gap: 4, justifyItems: 'end', fontSize: 12, color: '#334155' }}>{model.meta}</div> : null}
+          {model.meta ? <div style={{ display: 'grid', gap: 4, justifyItems: 'end', fontSize: 12, color: gnr8VisualTokens.color.textMuted }}>{model.meta}</div> : null}
         </div>
       </div>
     )
@@ -179,7 +180,7 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
         ) : null}
         {identity}
       </div>
-      {model.meta ? <div style={{ display: 'grid', gap: 4, justifyItems: 'end', fontSize: 12, color: '#334155' }}>{model.meta}</div> : null}
+      {model.meta ? <div style={{ display: 'grid', gap: 4, justifyItems: 'end', fontSize: 12, color: gnr8VisualTokens.color.textMuted }}>{model.meta}</div> : null}
     </div>
   )
 }
@@ -214,16 +215,14 @@ export default function WorkspaceLayout(props: WorkspaceLayoutProps) {
           maxWidth: props.maxWidth ?? 1440,
           margin: '0 auto',
           padding: props.padding ?? 24,
-          background: 'linear-gradient(180deg, #f4f8fc 0%, #ffffff 62%)',
-          fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+          background: gnr8VisualTokens.color.background,
+          fontFamily: gnr8VisualTokens.typography.uiFont,
           minHeight: '100vh',
         }}
       >
         <section
           style={{
-            border: '1px solid #dbe6f1',
-            borderRadius: 12,
-            background: '#fff',
+            ...gnr8Styles.panel,
             padding: 14,
           }}
         >

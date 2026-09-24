@@ -1,6 +1,7 @@
 import React, { type ReactNode } from "react";
 
 import type { SingleSiteStudioPreviewState, SingleSiteStudioReadonlyProjection } from "@/gnr8/single-site/single-site-studio-readonly-projection";
+import { gnr8StatusStyle, gnr8Styles, gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
 
 type Props = {
   model: SingleSiteStudioReadonlyProjection;
@@ -11,25 +12,11 @@ function labelize(value: string): string {
 }
 
 function statusBadge(value: string, tone: "good" | "warn" | "neutral" = "neutral") {
-  const palette = {
-    good: { border: "#86efac", background: "#f0fdf4", color: "#166534" },
-    warn: { border: "#fcd34d", background: "#fffbeb", color: "#92400e" },
-    neutral: { border: "#cbd5e1", background: "#f8fafc", color: "#334155" },
-  }[tone];
+  const tokenTone = tone === "good" ? "success" : tone === "warn" ? "warning" : "neutral";
   return (
     <span
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        border: `1px solid ${palette.border}`,
-        borderRadius: 8,
-        padding: "4px 8px",
-        background: palette.background,
-        color: palette.color,
-        fontSize: 12,
-        fontWeight: 800,
-        lineHeight: 1.2,
-        whiteSpace: "nowrap",
+        ...gnr8StatusStyle(tokenTone),
       }}
     >
       {labelize(value)}
@@ -40,8 +27,8 @@ function statusBadge(value: string, tone: "good" | "warn" | "neutral" = "neutral
 function fact(label: string, value: ReactNode) {
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{label}</div>
-      <div style={{ marginTop: 4, color: "#0f172a", fontSize: 15, fontWeight: 850, overflowWrap: "anywhere" }}>{value}</div>
+      <div style={{ color: gnr8VisualTokens.color.textMuted, fontSize: 12, fontWeight: 800 }}>{label}</div>
+      <div style={{ marginTop: 4, color: gnr8VisualTokens.color.text, fontSize: 15, fontWeight: 850, overflowWrap: "anywhere" }}>{value}</div>
     </div>
   );
 }
@@ -49,7 +36,7 @@ function fact(label: string, value: ReactNode) {
 function section(title: string, children: ReactNode) {
   return (
     <section style={{ display: "grid", gap: 14 }}>
-      <h2 style={{ margin: 0, color: "#0f172a", fontSize: 20, lineHeight: 1.2 }}>{title}</h2>
+      <h2 style={{ margin: 0, color: gnr8VisualTokens.color.text, fontSize: 20, lineHeight: 1.2 }}>{title}</h2>
       {children}
     </section>
   );
@@ -61,15 +48,15 @@ function previewCard(preview: SingleSiteStudioPreviewState) {
     <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div>
-          <h3 style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>{preview.label}</h3>
-          <div style={{ marginTop: 3, color: "#64748b", fontSize: 12, overflowWrap: "anywhere" }}>
+          <h3 style={{ margin: 0, color: gnr8VisualTokens.color.text, fontSize: 16 }}>{preview.label}</h3>
+          <div style={{ marginTop: 3, color: gnr8VisualTokens.color.textMuted, fontSize: 12, overflowWrap: "anywhere" }}>
             {preview.siteVersionId ? `Runtime site version ${preview.siteVersionId}` : "No runtime site version ref"}
           </div>
         </div>
         {statusBadge(statusLabel, preview.available ? "good" : "warn")}
       </div>
       {preview.available && preview.route ? (
-        <div style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#fff", minHeight: 380 }}>
+        <div style={{ ...gnr8Styles.panel, overflow: "hidden", minHeight: 380 }}>
           <iframe
             title={preview.label}
             src={preview.route}
@@ -82,7 +69,7 @@ function previewCard(preview: SingleSiteStudioPreviewState) {
           <strong>Internal preview unavailable.</strong> {preview.unavailableReason}
         </div>
       )}
-      <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.45 }}>{preview.authNote}</div>
+      <div style={{ color: gnr8VisualTokens.color.textMuted, fontSize: 12, lineHeight: 1.45 }}>{preview.authNote}</div>
     </div>
   );
 }
@@ -91,21 +78,19 @@ export function SingleSiteStudio({ model }: Props) {
   const summaryTone = model.summary.activePointer === "live" && model.summary.publishedCandidate === "PUBLISHED" ? "good" : "warn";
 
   return (
-    <main style={{ display: "grid", gap: 22, color: "#0f172a" }}>
+    <main style={{ display: "grid", gap: 22, color: gnr8VisualTokens.color.text }}>
       <section
         style={{
           display: "grid",
           gap: 16,
-          border: "1px solid #dbe3ee",
-          borderRadius: 8,
-          background: "#ffffff",
+          ...gnr8Styles.panel,
           padding: 18,
         }}
       >
         <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ minWidth: 260 }}>
-            <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Single-Site Studio</div>
-            <h1 style={{ margin: "4px 0 0", color: "#0f172a", fontSize: 30, lineHeight: 1.1 }}>{model.summary.site} MVP Studio</h1>
+            <div style={{ color: gnr8VisualTokens.color.accentOrange, fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Single-Site Studio</div>
+            <h1 style={{ margin: "4px 0 0", color: gnr8VisualTokens.color.text, fontSize: 30, lineHeight: 1.1 }}>{model.summary.site} MVP Studio</h1>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <a
@@ -117,7 +102,7 @@ export function SingleSiteStudio({ model }: Props) {
                 alignItems: "center",
                 justifyContent: "center",
                 border: "1px solid #0f766e",
-                borderRadius: 8,
+                borderRadius: gnr8VisualTokens.radius.button,
                 background: "#0f766e",
                 color: "#fff",
                 padding: "10px 13px",
@@ -135,10 +120,7 @@ export function SingleSiteStudio({ model }: Props) {
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 8,
-                  background: "#fff",
-                  color: "#334155",
+                  ...gnr8Styles.neutralButton,
                   padding: "10px 13px",
                   fontSize: 14,
                   fontWeight: 850,
@@ -155,28 +137,28 @@ export function SingleSiteStudio({ model }: Props) {
           {fact("Site", model.summary.site)}
           {fact(
             "Source URL",
-            <a href={model.summary.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+            <a href={model.summary.sourceUrl} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
               {model.summary.sourceUrl}
             </a>,
           )}
           {fact("MVP status", statusBadge(model.summary.mvpStatus, summaryTone))}
           {fact(
             "Live published site",
-            <a href={model.summary.liveSiteUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+            <a href={model.summary.liveSiteUrl} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
               {model.summary.liveSiteUrl}
             </a>,
           )}
           {fact("Active pointer", statusBadge(model.summary.activePointer, summaryTone))}
           {fact("Published candidate", statusBadge(model.summary.publishedCandidate, summaryTone))}
         </dl>
-        <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, color: "#475569", fontSize: 13, lineHeight: 1.45 }}>
+        <div style={{ borderTop: `1px solid ${gnr8VisualTokens.color.border}`, paddingTop: 12, color: gnr8VisualTokens.color.textMuted, fontSize: 13, lineHeight: 1.45 }}>
           Live site is the external customer/source domain shown above. Original clone and improved candidate are superadmin-only internal GNR8 previews. This readback does not publish or mutate active pointers.
         </div>
       </section>
 
       <section style={{ display: "grid", gap: 12 }}>
         <form action="/gnr8/command-center/single-site-studio" method="get" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
-          <label style={{ display: "grid", gap: 5, flex: "1 1 320px", color: "#475569", fontSize: 12, fontWeight: 850 }}>
+          <label style={{ display: "grid", gap: 5, flex: "1 1 320px", color: gnr8VisualTokens.color.textMuted, fontSize: 12, fontWeight: 850 }}>
             Website URL
             <input
               name="sourceUrl"
@@ -185,11 +167,8 @@ export function SingleSiteStudio({ model }: Props) {
               style={{
                 width: "100%",
                 boxSizing: "border-box",
-                border: "1px solid #cbd5e1",
-                borderRadius: 8,
+                ...gnr8Styles.input,
                 padding: "10px 12px",
-                color: "#0f172a",
-                background: "#fff",
                 fontSize: 14,
               }}
             />
@@ -220,9 +199,9 @@ export function SingleSiteStudio({ model }: Props) {
         "Workflow",
         <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
           {model.workflow.map((step, index) => (
-            <li key={step.key} style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 12 }}>
-              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 850 }}>Step {index + 1}</div>
-              <div style={{ marginTop: 4, color: "#0f172a", fontSize: 14, fontWeight: 900 }}>{step.label}</div>
+            <li key={step.key} style={{ ...gnr8Styles.panel, padding: 12 }}>
+              <div style={{ color: gnr8VisualTokens.color.textMuted, fontSize: 12, fontWeight: 850 }}>Step {index + 1}</div>
+              <div style={{ marginTop: 4, color: gnr8VisualTokens.color.text, fontSize: 14, fontWeight: 900 }}>{step.label}</div>
               <div style={{ marginTop: 8 }}>{statusBadge(step.status, step.status === "done" ? "good" : step.status === "current" ? "warn" : "neutral")}</div>
             </li>
           ))}
@@ -233,12 +212,12 @@ export function SingleSiteStudio({ model }: Props) {
         "Source Evidence",
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
           {model.sourceEvidence.map((item) => (
-            <div key={`${item.label}:${item.status}`} style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 12, minWidth: 0 }}>
+            <div key={`${item.label}:${item.status}`} style={{ ...gnr8Styles.panel, padding: 12, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "start" }}>
                 <strong style={{ fontSize: 14 }}>{item.label}</strong>
                 {statusBadge(item.status, item.status.includes("present") || item.status.includes("accepted") ? "good" : "neutral")}
               </div>
-              <div style={{ marginTop: 8, color: "#475569", fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>{item.detail}</div>
+              <div style={{ marginTop: 8, color: gnr8VisualTokens.color.textMuted, fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>{item.detail}</div>
             </div>
           ))}
         </div>,
@@ -261,7 +240,7 @@ export function SingleSiteStudio({ model }: Props) {
               <div style={{ marginTop: 8 }}>{statusBadge(item.status, item.status === "live" || item.status === "PUBLISHED" ? "good" : "neutral")}</div>
               <div style={{ marginTop: 8, color: "#475569", fontSize: 13, overflowWrap: "anywhere" }}>
                 {item.href ? (
-                  <a href={item.href} target={item.href.startsWith("http") ? "_blank" : undefined} rel={item.href.startsWith("http") ? "noreferrer" : undefined} style={{ color: "#0369a1", textDecoration: "none" }}>
+                  <a href={item.href} target={item.href.startsWith("http") ? "_blank" : undefined} rel={item.href.startsWith("http") ? "noreferrer" : undefined} style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
                     {item.detail}
                   </a>
                 ) : (
@@ -291,15 +270,15 @@ export function SingleSiteStudio({ model }: Props) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
             {model.improvementSummary.recommendations.map((recommendation) => (
-              <div key={recommendation.id} style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 12, minWidth: 0 }}>
+              <div key={recommendation.id} style={{ ...gnr8Styles.panel, padding: 12, minWidth: 0 }}>
                 <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "start" }}>
-                  <strong style={{ color: "#0f172a", fontSize: 14, lineHeight: 1.3 }}>{recommendation.title}</strong>
+                  <strong style={{ color: gnr8VisualTokens.color.text, fontSize: 14, lineHeight: 1.3 }}>{recommendation.title}</strong>
                   {statusBadge(recommendation.status, recommendation.status === "applied" ? "good" : "warn")}
                 </div>
-                <div style={{ marginTop: 8, color: "#475569", fontSize: 12, overflowWrap: "anywhere" }}>
+                <div style={{ marginTop: 8, color: gnr8VisualTokens.color.textMuted, fontSize: 12, overflowWrap: "anywhere" }}>
                   {recommendation.key} / {recommendation.category} / {recommendation.priority}
                 </div>
-                <div style={{ marginTop: 7, color: "#334155", fontSize: 13 }}>Reason: {labelize(recommendation.reason)}</div>
+                <div style={{ marginTop: 7, color: gnr8VisualTokens.color.textMuted, fontSize: 13 }}>Reason: {labelize(recommendation.reason)}</div>
               </div>
             ))}
           </div>

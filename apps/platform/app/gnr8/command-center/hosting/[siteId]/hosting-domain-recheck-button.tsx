@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { gnr8VisualTokens } from "../../../../../gnr8/visual-system/gnr8-visual-system";
+
 export function HostingDomainRecheckButton(props: {
   siteId: string;
   domainId: string;
@@ -35,10 +37,10 @@ export function HostingDomainRecheckButton(props: {
         onClick={recheck}
         disabled={state === "running"}
         style={{
-          border: "1px solid #1d4ed8",
-          borderRadius: 8,
-          background: state === "running" ? "#dbeafe" : "#2563eb",
-          color: state === "running" ? "#1e3a8a" : "#fff",
+          border: `1px solid ${gnr8VisualTokens.color.accentOrange}`,
+          borderRadius: gnr8VisualTokens.radius.button,
+          background: state === "running" ? gnr8VisualTokens.color.accentOrangeSoft : gnr8VisualTokens.color.accentOrange,
+          color: state === "running" ? gnr8VisualTokens.color.accentOrangeHover : "#fff",
           cursor: state === "running" ? "wait" : "pointer",
           fontSize: 13,
           fontWeight: 700,

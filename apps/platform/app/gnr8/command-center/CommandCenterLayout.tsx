@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { gnr8StatusStyle } from "../../../gnr8/visual-system/gnr8-visual-system";
 import WorkspaceLayout, { type WorkspaceBreadcrumbItem } from "../_components/workspace/WorkspaceLayout";
 import WorkspaceRecentItems from "../_components/workspace/WorkspaceRecentItems";
 import WorkspaceShortcuts, { type WorkspaceShortcut } from "../_components/workspace/WorkspaceShortcuts";
@@ -153,13 +154,7 @@ export default function CommandCenterLayout(props: Props) {
         <>
           <span
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              borderRadius: 999,
-              padding: "4px 10px",
-              border: "1px solid #7dd3fc",
-              background: "#e0f2fe",
-              color: "#0c4a6e",
+              ...gnr8StatusStyle("accent"),
               fontWeight: 700,
             }}
           >

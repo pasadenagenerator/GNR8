@@ -348,9 +348,14 @@ export type AirshipOnlineBuilderDisabledReason =
   | "remote_worker_lease_missing";
 
 export type AirshipOnlineBuilderSecurityLifecycleReadback = {
+  durableRepository: "configured" | "not_configured";
   workerAuth: "configured" | "not_configured";
   leaseManager: "configured" | "not_configured";
+  leaseManagerStatus: "configured" | "not_configured";
   signedEditorGateway: "configured" | "not_configured";
+  signedEditorGatewayStatus: "configured" | "not_configured";
+  heartbeatStatus: "configured" | "not_configured" | "stale" | "healthy" | "unknown";
+  lastWorkerSeenAt: string | null;
   fakeTestMode: boolean;
 };
 

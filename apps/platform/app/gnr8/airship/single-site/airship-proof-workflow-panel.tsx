@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 
+import { gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
+
 type WorkflowStatus = "not_prepared" | "prepared" | "captured" | "mapped" | "applied" | "preview_generated" | "blocked" | "failed";
 const AIRSHIP_ADAPTER_16_CHS_MIGRATION_ID = "682a09fd-8fd5-4f73-93b8-54f5d4067c63";
 
@@ -192,7 +194,7 @@ export type ProofWorkflowPanelViewModel = ReturnType<typeof deriveAirshipProofWo
 
 function buttonStyle(disabled: boolean, tone: "primary" | "neutral" = "neutral"): React.CSSProperties {
   const active = tone === "primary"
-    ? { border: "#0f766e", background: "#0f766e", color: "#fff" }
+    ? { border: gnr8VisualTokens.color.accentOrange, background: gnr8VisualTokens.color.accentOrange, color: "#fff" }
     : { border: "#cbd5e1", background: "#fff", color: "#334155" };
   return {
     border: `1px solid ${disabled ? "#cbd5e1" : active.border}`,
@@ -780,8 +782,8 @@ export function AirshipProofWorkflowPanel(props: Props) {
       ) : null}
 
       {previewResult ? (
-        <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 10, display: "grid", gap: 8 }}>
-          <div style={{ color: "#075985", fontSize: 13, fontWeight: 950 }}>Internal preview readback</div>
+        <div style={{ border: "1px solid #fed7aa", borderRadius: 8, background: gnr8VisualTokens.color.accentOrangeSoft, padding: 10, display: "grid", gap: 8 }}>
+          <div style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 13, fontWeight: 950 }}>Internal preview readback</div>
           <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
             {fact("Sequence", "Draft updated first; preview generated second")}
             {fact("Draft version used", `v${previewResult.draftVersionUsed}`)}
@@ -791,7 +793,7 @@ export function AirshipProofWorkflowPanel(props: Props) {
             {fact("Applied headline", previewResult.generatedArtifactContainsAppliedHeadline ? "found in generated artifact" : "missing from generated artifact")}
             {fact("Live site", "unchanged")}
           </dl>
-          <a href={previewResult.internalPreviewUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", fontSize: 13, fontWeight: 900, textDecoration: "none", overflowWrap: "anywhere" }}>
+          <a href={previewResult.internalPreviewUrl} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 13, fontWeight: 900, textDecoration: "none", overflowWrap: "anywhere" }}>
             {previewResult.internalPreviewUrl}
           </a>
         </div>

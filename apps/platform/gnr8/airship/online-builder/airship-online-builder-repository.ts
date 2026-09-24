@@ -71,6 +71,7 @@ export interface AirshipOnlineBuilderEditorGatewayTokenRepository {
   createTokenMetadata(record: AirshipOnlineBuilderEditorGatewayTokenMetadata): Promise<AirshipOnlineBuilderEditorGatewayTokenMetadata>;
   readByTokenHash(tokenHash: string): Promise<AirshipOnlineBuilderEditorGatewayTokenMetadata | null>;
   markVerified(input: { tokenHash: string; lastVerifiedAt: string }): Promise<AirshipOnlineBuilderEditorGatewayTokenMetadata>;
+  revokeToken(input: { tokenHash: string; revokedAt: string }): Promise<AirshipOnlineBuilderEditorGatewayTokenMetadata>;
 }
 
 export interface AirshipOnlineBuilderWorkspaceSnapshotRepository {
@@ -279,6 +280,13 @@ export function createAirshipOnlineBuilderInMemoryRepository(): AirshipOnlineBui
         const current = editorGatewayTokens.get(input.tokenHash);
         if (!current) throw new Error(`airship_online_builder_editor_gateway_token_not_found:${input.tokenHash}`);
         const updated = { ...current, lastVerifiedAt: input.lastVerifiedAt };
+        editorGatewayTokens.set(input.tokenHash, cloneRecord(updated));
+        return cloneRecord(updated);
+      },
+      async revokeToken(input) {
+        const current = editorGatewayTokens.get(input.tokenHash);
+        if (!current) throw new Error(`airship_online_builder_editor_gateway_token_not_found:${input.tokenHash}`);
+        const updated = { ...current, revokedAt: input.revokedAt };
         editorGatewayTokens.set(input.tokenHash, cloneRecord(updated));
         return cloneRecord(updated);
       },

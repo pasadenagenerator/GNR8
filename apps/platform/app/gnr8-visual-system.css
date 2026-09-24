@@ -1,0 +1,50 @@
+:root {
+  --gnr8-color-background: #f6f7f8;
+  --gnr8-color-surface: #ffffff;
+  --gnr8-color-surface-muted: #f3f4f6;
+  --gnr8-color-panel-dark: #111827;
+  --gnr8-color-panel-dark-muted: #1f2937;
+  --gnr8-color-border: #d8dee6;
+  --gnr8-color-border-strong: #9ca3af;
+  --gnr8-color-text: #111827;
+  --gnr8-color-text-muted: #5f6b7a;
+  --gnr8-color-text-inverse: #f9fafb;
+  --gnr8-color-accent-orange: #d96c18;
+  --gnr8-color-accent-orange-hover: #b8550f;
+  --gnr8-color-accent-orange-soft: #fff3e8;
+  --gnr8-color-success: #15803d;
+  --gnr8-color-warning: #b45309;
+  --gnr8-color-danger: #b91c1c;
+  --gnr8-color-focus-ring: #f59e0b;
+  --gnr8-font-ui: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  --gnr8-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  --gnr8-radius-button: 6px;
+  --gnr8-radius-input: 6px;
+  --gnr8-radius-panel: 8px;
+  --gnr8-radius-overlay: 8px;
+  --gnr8-shadow-panel: 0 14px 36px rgba(17, 24, 39, 0.08);
+  --gnr8-shadow-floating-toolbar: 0 10px 24px rgba(17, 24, 39, 0.13);
+  --gnr8-shadow-focus-ring: 0 0 0 3px rgba(245, 158, 11, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--gnr8-color-text);
+  background: var(--gnr8-color-background);
+  font-family: var(--gnr8-font-ui);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--gnr8-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--gnr8-shadow-focus-ring);
+}

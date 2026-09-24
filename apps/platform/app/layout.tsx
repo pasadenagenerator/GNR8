@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 
+import './gnr8-visual-system.css'
+
 export const metadata = {
   title: 'GNR8 Platform',
   description: 'GNR8 Platform',

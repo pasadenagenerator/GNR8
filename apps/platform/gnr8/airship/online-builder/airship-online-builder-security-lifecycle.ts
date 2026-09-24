@@ -18,9 +18,15 @@ export type AirshipOnlineBuilderWorkerAuthRuntimeConfig = {
 };
 
 export type AirshipOnlineBuilderSecurityLifecycleConfig = {
+  durableRepository?: { configured: true; storage: "postgres_jsonb_records" } | null;
   workerAuth?: AirshipOnlineBuilderWorkerAuthRuntimeConfig | null;
   leaseManager?: AirshipOnlineBuilderLeaseConfig | null;
   editorGateway?: AirshipOnlineBuilderEditorGatewayConfig | null;
+  heartbeat?: {
+    configured: true;
+    status?: "healthy" | "stale" | "unknown";
+    lastWorkerSeenAt?: string | null;
+  } | null;
   fakeTestMode?: boolean;
 };
 
@@ -40,6 +46,7 @@ export type AirshipOnlineBuilderSecurityLifecycleGate =
 export function createAirshipOnlineBuilderFakeSecurityLifecycleConfig(): AirshipOnlineBuilderSecurityLifecycleConfig {
   return {
     fakeTestMode: true,
+    durableRepository: { configured: true, storage: "postgres_jsonb_records" },
     workerAuth: {
       configured: true,
       authMode: "bearer_token_with_hashed_storage",
@@ -53,6 +60,11 @@ export function createAirshipOnlineBuilderFakeSecurityLifecycleConfig(): Airship
       tokenTtlSeconds: 5 * 60,
       allowedOrigins: ["https://app.test"],
     },
+    heartbeat: {
+      configured: true,
+      status: "healthy",
+      lastWorkerSeenAt: null,
+    },
   };
 }
 
@@ -60,9 +72,14 @@ export function readAirshipOnlineBuilderSecurityLifecycle(input: {
   config?: AirshipOnlineBuilderSecurityLifecycleConfig | null;
 }): AirshipOnlineBuilderSecurityLifecycleReadback {
   return {
+    durableRepository: input.config?.durableRepository ? "configured" : "not_configured",
     workerAuth: input.config?.workerAuth ? "configured" : "not_configured",
     leaseManager: input.config?.leaseManager ? "configured" : "not_configured",
+    leaseManagerStatus: input.config?.leaseManager ? "configured" : "not_configured",
     signedEditorGateway: input.config?.editorGateway ? "configured" : "not_configured",
+    signedEditorGatewayStatus: input.config?.editorGateway ? "configured" : "not_configured",
+    heartbeatStatus: input.config?.heartbeat ? input.config.heartbeat.status ?? "unknown" : "not_configured",
+    lastWorkerSeenAt: input.config?.heartbeat?.lastWorkerSeenAt ?? null,
     fakeTestMode: input.config?.fakeTestMode === true,
   };
 }

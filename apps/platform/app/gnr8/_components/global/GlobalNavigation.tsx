@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
+import { gnr8VisualTokens } from '../../../../gnr8/visual-system/gnr8-visual-system'
 import { getWorkspaceState, type WorkspaceState } from '@/src/workspace/workspace-state'
 
 type BrandVariant = 'command-center' | 'agency' | 'client'
@@ -113,7 +114,7 @@ function BrandSlot(props: { model: BrandModel }) {
   const hasRenderableLogo = Boolean(props.model.logoUrl) && !logoFailed
   const initials = buildInitials(props.model.label)
   const logoFrameBackground =
-    props.model.variant === 'command-center' ? '#eff6ff' : props.model.variant === 'client' ? '#f1f5f9' : '#f8fafc'
+    props.model.variant === 'command-center' ? gnr8VisualTokens.color.accentOrangeSoft : props.model.variant === 'client' ? '#f1f5f9' : '#f8fafc'
 
   return (
     <div
@@ -123,9 +124,9 @@ function BrandSlot(props: { model: BrandModel }) {
         alignItems: 'center',
         gap: 8,
         padding: '6px 10px',
-        border: '1px solid #dbe6f1',
-        borderRadius: 10,
-        background: '#fff',
+        border: `1px solid ${gnr8VisualTokens.color.border}`,
+        borderRadius: gnr8VisualTokens.radius.panel,
+        background: gnr8VisualTokens.color.surface,
         minHeight: 36,
         minWidth: 0,
       }}
@@ -138,10 +139,10 @@ function BrandSlot(props: { model: BrandModel }) {
           justifyContent: 'center',
           width: 26,
           height: 20,
-          borderRadius: 6,
+          borderRadius: gnr8VisualTokens.radius.button,
           overflow: 'hidden',
           background: logoFrameBackground,
-          border: '1px solid #dbe6f1',
+          border: `1px solid ${gnr8VisualTokens.color.border}`,
           flexShrink: 0,
         }}
       >
@@ -153,7 +154,7 @@ function BrandSlot(props: { model: BrandModel }) {
             onError={() => setLogoFailed(true)}
           />
         ) : (
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', lineHeight: 1 }}>{initials}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: gnr8VisualTokens.color.text, lineHeight: 1 }}>{initials}</span>
         )}
       </span>
       <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
@@ -161,7 +162,7 @@ function BrandSlot(props: { model: BrandModel }) {
           style={{
             fontSize: 13,
             fontWeight: 700,
-            color: '#0f172a',
+            color: gnr8VisualTokens.color.text,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -171,7 +172,7 @@ function BrandSlot(props: { model: BrandModel }) {
           {props.model.label}
         </span>
         {props.model.subtitle ? (
-          <span style={{ fontSize: 10, lineHeight: 1.2, color: '#64748b', whiteSpace: 'nowrap' }}>{props.model.subtitle}</span>
+          <span style={{ fontSize: 10, lineHeight: 1.2, color: gnr8VisualTokens.color.textMuted, whiteSpace: 'nowrap' }}>{props.model.subtitle}</span>
         ) : null}
       </span>
     </div>
@@ -183,7 +184,7 @@ function navItemStyle(isActive: boolean) {
     display: 'inline-flex',
     alignItems: 'center',
     padding: '4px 2px',
-    color: isActive ? '#0f172a' : '#64748b',
+    color: isActive ? gnr8VisualTokens.color.accentOrangeHover : gnr8VisualTokens.color.textMuted,
     textDecoration: 'none',
     fontSize: 12,
     lineHeight: 1.25,
@@ -310,10 +311,10 @@ export default function GlobalNavigation(props: Props) {
         position: 'sticky',
         top: 0,
         zIndex: 60,
-        borderBottom: '1px solid #dbe6f1',
-        background: '#ffffff',
+        borderBottom: `1px solid ${gnr8VisualTokens.color.border}`,
+        background: gnr8VisualTokens.color.surface,
         boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-        fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial',
+        fontFamily: gnr8VisualTokens.typography.uiFont,
       }}
     >
       <div
@@ -329,7 +330,7 @@ export default function GlobalNavigation(props: Props) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, overflowX: 'auto', paddingBottom: 1 }}>
           <BrandSlot model={brandModel} />
-          <div aria-hidden='true' style={{ width: 1, alignSelf: 'stretch', background: '#dbe6f1' }} />
+          <div aria-hidden='true' style={{ width: 1, alignSelf: 'stretch', background: gnr8VisualTokens.color.border }} />
           {navItems.map((item) => (
             <Link
               key={item.key}
@@ -339,7 +340,7 @@ export default function GlobalNavigation(props: Props) {
               onMouseLeave={() => setHoveredItemKey((current) => (current === item.key ? null : current))}
               style={{
                 ...navItemStyle(item.isActive),
-                color: item.isActive ? '#0f172a' : hoveredItemKey === item.key ? '#334155' : '#64748b',
+                color: item.isActive ? gnr8VisualTokens.color.accentOrangeHover : hoveredItemKey === item.key ? gnr8VisualTokens.color.text : gnr8VisualTokens.color.textMuted,
               }}
             >
               {item.label}
@@ -352,7 +353,7 @@ export default function GlobalNavigation(props: Props) {
             display: 'inline-flex',
             alignItems: 'center',
             padding: '0 4px',
-            color: '#475569',
+            color: gnr8VisualTokens.color.textMuted,
             fontSize: 12,
             lineHeight: 1.25,
             letterSpacing: '0.06em',

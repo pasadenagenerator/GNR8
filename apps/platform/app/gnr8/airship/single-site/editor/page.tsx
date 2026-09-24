@@ -6,6 +6,7 @@ import {
 import {
   getAirshipSingleSiteEditorReadonlyProjection,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
+import { gnr8VisualTokens } from "../../../../../gnr8/visual-system/gnr8-visual-system";
 
 import { AirshipSingleSiteVisualEditorWorkspace } from "./airship-single-site-visual-editor-workspace";
 
@@ -43,7 +44,7 @@ export default async function AirshipSingleSiteEditorPage(props: {
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45 }}>
             No homepage hero/intro draft fields are available. Internal preview only. Not live. Not published.
           </p>
-          <a href={model.routeHref} style={{ color: "#0369a1", fontSize: 14, fontWeight: 850, textDecoration: "none" }}>
+          <a href={model.routeHref} style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 14, fontWeight: 850, textDecoration: "none" }}>
             Back to Airship
           </a>
         </section>

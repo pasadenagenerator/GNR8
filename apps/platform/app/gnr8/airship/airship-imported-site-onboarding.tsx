@@ -4,6 +4,7 @@ import type {
   AirshipImportedSiteOnboardingProjection,
   AirshipOnboardingStatusTone,
 } from "@/gnr8/single-site/airship-imported-site-onboarding-projection";
+import { gnr8Styles, gnr8VisualTokens } from "../../../gnr8/visual-system/gnr8-visual-system";
 
 type Props = {
   model: AirshipImportedSiteOnboardingProjection;
@@ -48,7 +49,7 @@ function fact(label: string, value: ReactNode) {
 function linkOrUnavailable(value: string | null, label?: string) {
   if (!value) return <span style={{ color: "#92400e" }}>Unavailable</span>;
   return (
-    <a href={value} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+    <a href={value} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
       {label ?? value}
     </a>
   );
@@ -70,9 +71,9 @@ function statusBlock(title: string, status: { label: string; detail: string; ton
 
 export function AirshipImportedSiteOnboarding({ model }: Props) {
   return (
-    <main style={{ display: "grid", gap: 18, minHeight: "100vh", padding: 20, background: "#f8fafc", color: "#0f172a" }}>
-      <section style={{ display: "grid", gap: 10, border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 18 }}>
-        <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Airship</div>
+    <main style={{ display: "grid", gap: 18, minHeight: "100vh", padding: 20, background: gnr8VisualTokens.color.background, color: gnr8VisualTokens.color.text }}>
+      <section style={{ display: "grid", gap: 10, ...gnr8Styles.panel, padding: 18 }}>
+        <div style={{ color: gnr8VisualTokens.color.accentOrange, fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Airship</div>
         <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.1 }}>Imported site onboarding</h1>
         <p style={{ margin: 0, color: "#475569", fontSize: 14, lineHeight: 1.45 }}>
           Open existing imported single-site migrations in Airship. This surface is read-only and does not start imports, source capture, provider work, previews, publication, rollback, or live pointer changes.
@@ -94,7 +95,7 @@ export function AirshipImportedSiteOnboarding({ model }: Props) {
           <h2 style={{ margin: 0, fontSize: 20 }}>Imported single-site migrations</h2>
           <div style={{ display: "grid", gap: 12 }}>
             {model.items.map((item) => (
-              <article key={item.migrationId} style={{ display: "grid", gap: 14, border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 16 }}>
+              <article key={item.migrationId} style={{ display: "grid", gap: 14, ...gnr8Styles.panel, padding: 16 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "start", justifyContent: "space-between", flexWrap: "wrap" }}>
                   <div style={{ minWidth: 240 }}>
                     <h3 style={{ margin: 0, fontSize: 20, lineHeight: 1.2 }}>{item.siteLabel}</h3>
@@ -104,7 +105,7 @@ export function AirshipImportedSiteOnboarding({ model }: Props) {
                     <a href={item.links.overviewHref} style={{ border: "1px solid #0f766e", borderRadius: 8, background: "#0f766e", color: "#fff", padding: "9px 12px", fontSize: 13, fontWeight: 900, textDecoration: "none" }}>
                       Open Airship overview
                     </a>
-                    <a href={item.links.editorHref} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: "#1d4ed8", color: "#fff", padding: "9px 12px", fontSize: 13, fontWeight: 900, textDecoration: "none" }}>
+                    <a href={item.links.editorHref} style={{ ...gnr8Styles.primaryButton, padding: "9px 12px", fontSize: 13, fontWeight: 900, textDecoration: "none" }}>
                       Open Airship editor
                     </a>
                   </div>

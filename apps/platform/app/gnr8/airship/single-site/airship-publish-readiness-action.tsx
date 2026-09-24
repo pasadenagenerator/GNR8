@@ -6,6 +6,7 @@ import type { AirshipInternalPreviewCandidateReviewRecord } from "@/gnr8/single-
 import type { AirshipGovernedDryRunOutput, AirshipGovernedDryRunReadback } from "@/gnr8/single-site/airship-governed-dry-run-service";
 import type { AirshipPublishActivationChainRecord } from "@/gnr8/single-site/airship-publish-activation-chain-service";
 import type { AirshipPublishReadinessRecord } from "@/gnr8/single-site/airship-single-site-publish-readiness-service";
+import { gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
 
 type CandidateSummary = {
   siteVersionId: string;
@@ -54,9 +55,9 @@ type ChainResponse = {
 
 function buttonStyle(disabled: boolean): React.CSSProperties {
   return {
-    border: `1px solid ${disabled ? "#cbd5e1" : "#1d4ed8"}`,
-    borderRadius: 8,
-    background: disabled ? "#f8fafc" : "#1d4ed8",
+    border: `1px solid ${disabled ? "#cbd5e1" : gnr8VisualTokens.color.accentOrange}`,
+    borderRadius: gnr8VisualTokens.radius.button,
+    background: disabled ? "#f8fafc" : gnr8VisualTokens.color.accentOrange,
     color: disabled ? "#94a3b8" : "#fff",
     padding: "9px 12px",
     fontSize: 13,
@@ -236,10 +237,10 @@ export function AirshipPublishReadinessAction(props: Props) {
   }
 
   return (
-    <div style={{ border: "1px solid #bfdbfe", borderRadius: 8, background: "#eff6ff", padding: 12, display: "grid", gap: 10 }}>
+    <div style={{ border: "1px solid #fed7aa", borderRadius: 8, background: gnr8VisualTokens.color.accentOrangeSoft, padding: 12, display: "grid", gap: 10 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: "#1d4ed8", fontSize: 12, fontWeight: 900 }}>Publish-readiness evidence handoff</div>
+          <div style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 12, fontWeight: 900 }}>Publish-readiness evidence handoff</div>
           <div style={{ marginTop: 3, color: "#334155", fontSize: 12, lineHeight: 1.45 }}>{message}</div>
         </div>
         <button
@@ -262,7 +263,7 @@ export function AirshipPublishReadinessAction(props: Props) {
         <span>next step: governed dry-run</span>
       </div>
       {readinessMatchesReview && readiness ? (
-        <div style={{ borderTop: "1px solid #dbeafe", paddingTop: 10, display: "grid", gap: 10 }}>
+        <div style={{ borderTop: "1px solid #fed7aa", paddingTop: 10, display: "grid", gap: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 9 }}>
             {fact("Readiness status", `${readiness.readinessStatus} / evidence prepared`)}
             {fact("Reviewed candidate", readiness.reviewedCandidateSiteVersionId)}
@@ -284,10 +285,10 @@ export function AirshipPublishReadinessAction(props: Props) {
           <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
             <strong>No-publish confirmation:</strong> internal preview only; not live; not published; candidate runtime state DRAFT; active pointer unchanged before/after; no dry-run, shadow-publish, rollback, source capture, provider call, or live-site mutation.
           </div>
-          <div style={{ borderTop: "1px solid #dbeafe", paddingTop: 10, display: "grid", gap: 10 }}>
+          <div style={{ borderTop: "1px solid #fed7aa", paddingTop: 10, display: "grid", gap: 10 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ color: "#1d4ed8", fontSize: 12, fontWeight: 900 }}>Publish activation chain</div>
+                <div style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 12, fontWeight: 900 }}>Publish activation chain</div>
                 <div style={{ marginTop: 3, color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
                   Creates approval/gate metadata only: no publish, no dry-run, no shadow-publish, no active pointer mutation.
                 </div>
@@ -347,10 +348,10 @@ export function AirshipPublishReadinessAction(props: Props) {
               </div>
             ) : null}
           </div>
-          <div style={{ borderTop: "1px solid #dbeafe", paddingTop: 10, display: "grid", gap: 10 }}>
+          <div style={{ borderTop: "1px solid #fed7aa", paddingTop: 10, display: "grid", gap: 10 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ color: "#1d4ed8", fontSize: 12, fontWeight: 900 }}>Governed dry-run check</div>
+                <div style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 12, fontWeight: 900 }}>Governed dry-run check</div>
                 <div style={{ marginTop: 3, color: "#334155", fontSize: 12, lineHeight: 1.45 }}>
                   Dry-run only; no publish; no shadow-publish; active pointer unchanged; live CHS unchanged.
                 </div>

@@ -589,7 +589,7 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes(`/gnr8/airship/single-site/editor?migrationId=${CHS_MIGRATION_ID}`), true);
   assert.equal(html.includes("Online Airship session"), true);
   assert.equal(html.includes("not configured"), true);
-  assert.equal(html.includes("Worker auth, lease manager, and signed editor gateway are not configured yet. Local proof flow remains available."), true);
+  assert.equal(html.includes("Durable repository, worker auth endpoint, heartbeat, lease manager, and signed editor gateway are not configured yet. Local proof flow remains available."), true);
   assert.equal(html.includes("Online mode is planned but not active."), true);
   assert.equal(html.includes("No live site changes happen here."), true);
   assert.equal(html.includes("Draft apply and preview generation remain separate confirmed steps."), true);
@@ -597,7 +597,11 @@ test("airship single-site editor renders CHS summary, live link, and AI improvem
   assert.equal(html.includes("Open online Airship editor"), true);
   assert.equal(html.includes("Capture online changes"), true);
   assert.equal(html.includes("Stop online session"), true);
+  assert.equal(html.includes("durable repository not configured"), true);
   assert.equal(html.includes("worker auth not configured"), true);
+  assert.equal(html.includes("worker auth endpoint not configured"), true);
+  assert.equal(html.includes("heartbeat status not configured"), true);
+  assert.equal(html.includes("last worker seen none"), true);
   assert.equal(html.includes("lease manager not configured"), true);
   assert.equal(html.includes("signed editor gateway not configured"), true);
   assert.equal(html.includes("Use local proof flow below"), true);

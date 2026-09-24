@@ -31,10 +31,11 @@ import {
   isValidAirshipOnlineBuilderOpaqueSessionId,
   validateAirshipOnlineBuilderOriginIntent,
 } from "./airship-online-builder-security";
+import type { AirshipOnlineBuilderRepositoryBoundary } from "./airship-online-builder-repository";
 import {
-  createAirshipOnlineBuilderInMemoryRepository,
-  type AirshipOnlineBuilderRepositoryBoundary,
-} from "./airship-online-builder-repository";
+  createConfiguredAirshipOnlineBuilderRepository,
+  decorateAirshipOnlineBuilderSecurityLifecycleConfigFromEnv,
+} from "./airship-online-builder-runtime-config";
 import {
   gateAirshipOnlineBuilderSecurityLifecycle,
   readAirshipOnlineBuilderSecurityLifecycle,
@@ -124,7 +125,8 @@ export function createAirshipOnlineBuilderControlPlaneService(deps: AirshipOnlin
   const auditIdFactory = deps.auditIdFactory ?? (() => `audit-${Date.now().toString(36)}`);
   const gatewayTokenIdFactory = deps.gatewayTokenIdFactory ?? (() => `editor-gateway-${Date.now().toString(36)}`);
   const migrationAllowlist = deps.migrationAllowlist ?? AIRSHIP_ONLINE_BUILDER_DEFAULT_MIGRATION_ALLOWLIST;
-  const repository = deps.repository ?? createAirshipOnlineBuilderInMemoryRepository();
+  const repository = deps.repository ?? createConfiguredAirshipOnlineBuilderRepository();
+  const securityLifecycleConfig = decorateAirshipOnlineBuilderSecurityLifecycleConfigFromEnv(deps.securityLifecycleConfig);
 
   function disabledReadback(input: {
     session: AirshipOnlineBuilderDisabledReadback["session"];
@@ -133,7 +135,7 @@ export function createAirshipOnlineBuilderControlPlaneService(deps: AirshipOnlin
     disabledReasons?: AirshipOnlineBuilderDisabledReadback["disabledReasons"];
     securityLifecycle?: AirshipOnlineBuilderSecurityLifecycleReadback;
   }): AirshipOnlineBuilderDisabledReadback {
-    const securityLifecycle = input.securityLifecycle ?? readAirshipOnlineBuilderSecurityLifecycle({ config: deps.securityLifecycleConfig });
+    const securityLifecycle = input.securityLifecycle ?? readAirshipOnlineBuilderSecurityLifecycle({ config: securityLifecycleConfig });
     return {
       status: "not_configured",
       reason: input.reason ?? "remote_worker_not_configured",
@@ -166,7 +168,7 @@ export function createAirshipOnlineBuilderControlPlaneService(deps: AirshipOnlin
     correlationId: string;
     idempotencyKey?: string | null;
   }): AirshipOnlineBuilderControlPlaneFailure {
-    const securityLifecycle = readAirshipOnlineBuilderSecurityLifecycle({ config: deps.securityLifecycleConfig });
+    const securityLifecycle = readAirshipOnlineBuilderSecurityLifecycle({ config: securityLifecycleConfig });
     return {
       ok: false,
       failureReason: input.failureReason,
@@ -335,7 +337,7 @@ export function createAirshipOnlineBuilderControlPlaneService(deps: AirshipOnlin
     idempotencyKey?: string | null;
   }): AirshipOnlineBuilderControlPlaneFailure | null {
     const gate = gateAirshipOnlineBuilderSecurityLifecycle({
-      config: deps.securityLifecycleConfig,
+      config: securityLifecycleConfig,
       workerClient: deps.workerClient,
     });
     if (gate.ok) return null;
@@ -526,7 +528,7 @@ export function createAirshipOnlineBuilderControlPlaneService(deps: AirshipOnlin
               lastErrorMessage: "Remote builder worker is not connected yet.",
             },
             diagnostics: worker.diagnostics,
-            securityLifecycle: readAirshipOnlineBuilderSecurityLifecycle({ config: deps.securityLifecycleConfig }),
+            securityLifecycle: readAirshipOnlineBuilderSecurityLifecycle({ config: securityLifecycleConfig }),
           }),
         };
         return persistResult(result);
@@ -605,7 +607,7 @@ export function createAirshipOnlineBuilderControlPlaneService(deps: AirshipOnlin
         idempotencyKey: input.idempotencyKey,
       });
       if (transitionFailure) return persistResult(transitionFailure);
-      const editorGatewayConfig = deps.securityLifecycleConfig?.editorGateway;
+      const editorGatewayConfig = securityLifecycleConfig?.editorGateway;
       let gatewayDiagnostics: string[] = [];
       let gatewayEditorUrl = response.editorUrl;
       let gatewayExpiresAt = response.expiresAt;

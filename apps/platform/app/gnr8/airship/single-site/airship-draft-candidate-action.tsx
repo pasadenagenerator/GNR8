@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 
+import { gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
+
 type CandidateSummary = {
   siteVersionId: string;
   runtimeArtifactId: string;
@@ -28,9 +30,9 @@ type CandidateResponse = {
 
 function buttonStyle(disabled: boolean): React.CSSProperties {
   return {
-    border: `1px solid ${disabled ? "#cbd5e1" : "#1d4ed8"}`,
-    borderRadius: 8,
-    background: disabled ? "#f8fafc" : "#1d4ed8",
+    border: `1px solid ${disabled ? "#cbd5e1" : gnr8VisualTokens.color.accentOrange}`,
+    borderRadius: gnr8VisualTokens.radius.button,
+    background: disabled ? "#f8fafc" : gnr8VisualTokens.color.accentOrange,
     color: disabled ? "#94a3b8" : "#fff",
     padding: "9px 12px",
     fontSize: 13,
@@ -85,10 +87,10 @@ export function AirshipDraftCandidateAction(props: Props) {
   }
 
   return (
-    <div style={{ border: "1px solid #bfdbfe", borderRadius: 8, background: "#eff6ff", padding: 12, display: "grid", gap: 9 }}>
+    <div style={{ border: "1px solid #fed7aa", borderRadius: 8, background: gnr8VisualTokens.color.accentOrangeSoft, padding: 12, display: "grid", gap: 9 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: "#1e40af", fontSize: 12, fontWeight: 900 }}>Saved draft to internal preview</div>
+          <div style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 12, fontWeight: 900 }}>Saved draft to internal preview</div>
           <div style={{ marginTop: 3, color: "#334155", fontSize: 12, lineHeight: 1.45 }}>{message}</div>
         </div>
         <button
@@ -110,7 +112,7 @@ export function AirshipDraftCandidateAction(props: Props) {
         {candidate && !isCurrentDraftCandidate ? <span>latest candidate is from draft v{candidate.draftVersion}</span> : null}
       </div>
       {candidate?.route ? (
-        <a href={candidate.route} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontSize: 13, fontWeight: 900, textDecoration: "none", overflowWrap: "anywhere" }}>
+        <a href={candidate.route} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 13, fontWeight: 900, textDecoration: "none", overflowWrap: "anywhere" }}>
           Open latest internal preview candidate
         </a>
       ) : null}

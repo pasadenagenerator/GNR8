@@ -5,6 +5,7 @@ import type {
   AirshipSingleSiteRecommendationMaterial,
 } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 import type { SingleSiteStudioPreviewState } from "@/gnr8/single-site/single-site-studio-readonly-projection";
+import { gnr8Styles, gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
 
 import { AirshipDraftCandidateAction } from "./airship-draft-candidate-action";
 import { AirshipDraftCandidateReviewAction } from "./airship-draft-candidate-review-action";
@@ -185,7 +186,7 @@ function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjectio
             {fact("Artifact", previewHost.candidateArtifactId)}
             {fact(
               "Preview URL",
-              <a href={previewHost.previewUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+            <a href={previewHost.previewUrl} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
                 {previewHost.previewUrl}
               </a>,
             )}
@@ -196,7 +197,7 @@ function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjectio
           </dl>
         </div>
       ) : null}
-      <div style={{ border: "1px solid #bae6fd", borderRadius: 8, background: "#f0f9ff", padding: 12, display: "grid", gap: 10 }}>
+      <div style={{ border: `1px solid #fed7aa`, borderRadius: 8, background: gnr8VisualTokens.color.accentOrangeSoft, padding: 12, display: "grid", gap: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {badge(candidate.statusLabel, "warn")}
           {badge("accepted/saved edits applied", "good")}
@@ -210,7 +211,7 @@ function airshipCandidateSummary(model: AirshipSingleSiteEditorReadonlyProjectio
         </dl>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: "#0369a1", fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Applied</div>
+            <div style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Applied</div>
             <ul style={{ margin: 0, paddingLeft: 18, color: "#0f172a", fontSize: 13, lineHeight: 1.5 }}>
               {candidate.appliedEdits.map((edit) => (
                 <li key={edit.draftEditId}>
@@ -312,7 +313,7 @@ function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
       <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
         {fact(
           "GNR8 demo URL",
-          <a href={demo.demoUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+          <a href={demo.demoUrl} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
             {demo.demoUrl}
           </a>,
         )}
@@ -320,7 +321,7 @@ function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
         {fact(
           "External www.chs.si",
           <span>
-            <a href={demo.externalProductionSite.url} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+            <a href={demo.externalProductionSite.url} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
               {demo.externalProductionSite.url}
             </a>{" "}
             ({labelize(demo.externalProductionSite.status)})
@@ -351,7 +352,11 @@ function demoReadinessPanel(model: AirshipSingleSiteEditorReadonlyProjection) {
 
 function onlineAirshipSessionPanel() {
   const disabledReasons = [
+    "durable repository not configured",
     "worker auth not configured",
+    "worker auth endpoint not configured",
+    "heartbeat status not configured",
+    "last worker seen none",
     "lease manager not configured",
     "signed editor gateway not configured",
   ];
@@ -363,13 +368,13 @@ function onlineAirshipSessionPanel() {
         <div style={{ display: "grid", gap: 6, minWidth: 260 }}>
           <div>{badge("not configured", "warn")}</div>
           <p style={{ margin: 0, color: "#78350f", fontSize: 14, lineHeight: 1.5 }}>
-            Worker auth, lease manager, and signed editor gateway are not configured yet. Local proof flow remains available.
+            Durable repository, worker auth endpoint, heartbeat, lease manager, and signed editor gateway are not configured yet. Local proof flow remains available.
           </p>
           <p style={{ margin: 0, color: "#475569", fontSize: 13, lineHeight: 1.45 }}>
             Online mode is planned but not active. No live site changes happen here. Draft apply and preview generation remain separate confirmed steps.
           </p>
         </div>
-        <a href="#airship-local-proof-flow" style={{ color: "#0369a1", fontSize: 13, fontWeight: 850, textDecoration: "none" }}>
+        <a href="#airship-local-proof-flow" style={{ color: gnr8VisualTokens.color.accentOrangeHover, fontSize: 13, fontWeight: 850, textDecoration: "none" }}>
           Use local proof flow below
         </a>
       </div>
@@ -411,21 +416,21 @@ export function AirshipSingleSiteEditor({ model }: Props) {
   const improvementTone = model.aiImprovementStatus.deterministicEditableChangesGenerated ? "good" : "warn";
 
   return (
-    <main style={{ display: "grid", gap: 22, padding: 20, color: "#0f172a", background: "#f8fafc", minHeight: "100vh" }}>
-      <section style={{ display: "grid", gap: 16, border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 18 }}>
+    <main style={{ display: "grid", gap: 22, padding: 20, color: gnr8VisualTokens.color.text, background: gnr8VisualTokens.color.background, minHeight: "100vh" }}>
+      <section style={{ display: "grid", gap: 16, ...gnr8Styles.panel, padding: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", flexWrap: "wrap" }}>
           <div style={{ minWidth: 260 }}>
-            <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Airship</div>
-            <h1 style={{ margin: "4px 0 0", color: "#0f172a", fontSize: 30, lineHeight: 1.1 }}>{model.importedSite} single-site editor</h1>
+            <div style={{ color: gnr8VisualTokens.color.accentOrange, fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>Airship</div>
+            <h1 style={{ margin: "4px 0 0", color: gnr8VisualTokens.color.text, fontSize: 30, lineHeight: 1.1 }}>{model.importedSite} single-site editor</h1>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <a href={model.links.airshipEditor} style={{ border: "1px solid #1d4ed8", borderRadius: 8, background: "#1d4ed8", color: "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, textDecoration: "none" }}>
+            <a href={model.links.airshipEditor} style={{ ...gnr8Styles.primaryButton, padding: "10px 13px", fontSize: 14, fontWeight: 900, textDecoration: "none" }}>
               Open Airship Editor
             </a>
             <a href={model.links.liveSite} target="_blank" rel="noreferrer" style={{ border: "1px solid #0f766e", borderRadius: 8, background: "#0f766e", color: "#fff", padding: "10px 13px", fontSize: 14, fontWeight: 900, textDecoration: "none" }}>
               Open live site
             </a>
-            <a href={model.links.singleSiteStudio} style={{ border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", color: "#334155", padding: "10px 13px", fontSize: 14, fontWeight: 850, textDecoration: "none" }}>
+            <a href={model.links.singleSiteStudio} style={{ ...gnr8Styles.neutralButton, padding: "10px 13px", fontSize: 14, fontWeight: 850, textDecoration: "none" }}>
               Open Single-Site Studio
             </a>
           </div>
@@ -435,7 +440,7 @@ export function AirshipSingleSiteEditor({ model }: Props) {
           {fact("Imported site", model.importedSite)}
           {fact(
             "Source URL",
-            <a href={model.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+            <a href={model.sourceUrl} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
               {model.sourceUrl}
             </a>,
           )}
@@ -443,7 +448,7 @@ export function AirshipSingleSiteEditor({ model }: Props) {
           {fact("AI improvement status", badge(model.aiImprovementStatus.label, improvementTone))}
           {fact(
             "Live site link",
-            <a href={model.liveSiteUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", textDecoration: "none" }}>
+            <a href={model.liveSiteUrl} target="_blank" rel="noreferrer" style={{ color: gnr8VisualTokens.color.accentOrangeHover, textDecoration: "none" }}>
               {model.liveSiteUrl}
             </a>,
           )}

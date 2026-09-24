@@ -9,6 +9,7 @@ import {
   normalizeClientFilter,
   normalizeProfitability,
 } from "../_lib/command-center-view-model";
+import { gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
 
 type SearchParams = {
   clientId?: string;
@@ -144,7 +145,7 @@ export default async function CommandCenterSitesPage(props: {
               <span style={{ border: "1px solid #fca5a5", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#991b1b", background: "#fef2f2" }}>
                 <strong>Errors:</strong> {portfolioMetrics.error_sites}
               </span>
-              <span style={{ border: "1px solid #bfdbfe", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#1d4ed8", background: "#eff6ff" }}>
+              <span style={{ border: "1px solid #fed7aa", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: gnr8VisualTokens.color.accentOrangeHover, background: gnr8VisualTokens.color.accentOrangeSoft }}>
                 <strong>Progress:</strong> {portfolioMetrics.progress_percentage}%
               </span>
             </div>
