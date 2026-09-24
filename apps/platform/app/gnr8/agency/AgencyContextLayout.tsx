@@ -149,7 +149,7 @@ export default async function AgencyContextLayout(props: Props) {
             label: 'Add Client',
             href: buildHref('/gnr8/agency/clients/new', queryParams),
             description: 'Start client provisioning in current scope',
-            icon: '+',
+            icon: 'client',
           },
         ]
       : []),
@@ -158,21 +158,21 @@ export default async function AgencyContextLayout(props: Props) {
       label: 'Open Clients',
       href: clientsHref,
       description: 'Go to current agency client list',
-      icon: 'C',
+      icon: 'client',
     },
     {
       id: 'open-team',
       label: 'Open Team',
       href: membersHref,
       description: 'Open agency membership workspace',
-      icon: 'T',
+      icon: 'settings',
     },
     {
       id: 'open-settings',
       label: 'Open Settings',
       href: settingsHref,
       description: 'Open agency settings and profile',
-      icon: 'S',
+      icon: 'settings',
     },
   ]
   const persistedAgencyTab = props.activeTab === 'members' ? 'team' : props.activeTab

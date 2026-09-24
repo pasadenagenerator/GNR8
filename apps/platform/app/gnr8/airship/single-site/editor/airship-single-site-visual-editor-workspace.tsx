@@ -17,6 +17,7 @@ import type {
   AirshipAgentProfileSelection,
   AirshipOpenAIProviderStatusReadModel,
 } from "@/gnr8/single-site/airship-agent-profile-types";
+import { Gnr8Icon, type Gnr8IconName } from "../../../_components/icons/Gnr8Icon";
 
 type Props = {
   migrationId: string | null;
@@ -203,10 +204,10 @@ const inspectorTabs: Array<{ key: InspectorTabKey; label: string }> = [
   { key: "dom", label: "DOM" },
 ];
 
-const toolOptions: Array<{ key: EditorToolKey; label: string; icon: string }> = [
-  { key: "select", label: "Select", icon: "↖" },
-  { key: "pan", label: "Pan", icon: "✥" },
-  { key: "text", label: "Text", icon: "T" },
+const toolOptions: Array<{ key: EditorToolKey; label: string; icon: Gnr8IconName }> = [
+  { key: "select", label: "Select", icon: "select" },
+  { key: "pan", label: "Pan", icon: "pan" },
+  { key: "text", label: "Text", icon: "text" },
 ];
 
 function styleKey(fields: Pick<AirshipHeroEditorFields, "topPadding" | "bottomPadding" | "backgroundTint" | "ctaColor">): string {
@@ -3113,7 +3114,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
           text-decoration: none;
         }
         .airship-icon-button[data-selected="true"] {
-          background: #149ce7;
+          background: #d96c18;
           color: #ffffff;
         }
         .airship-icon-button:disabled {
@@ -3586,7 +3587,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               onClick={undoLastLocalChange}
               title="Undo"
             >
-              ↶
+              <Gnr8Icon name="refresh" size="compact" state={undoStack.length === 0 ? "muted" : "default"} />
             </button>
             {toolOptions.map((tool) => (
               <button
@@ -3598,8 +3599,8 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
                 aria-pressed={selectedTool === tool.key}
                 onClick={() => selectTool(tool.key)}
                 title={tool.label}
-              >
-                {tool.icon}
+            >
+                <Gnr8Icon name={tool.icon} size="compact" state={selectedTool === tool.key ? "active" : "default"} />
               </button>
             ))}
             <span className="airship-toolbar-separator" />
@@ -3610,7 +3611,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               onClick={() => zoomCanvas(-CANVAS_ZOOM_STEP)}
               title={`Zoom out (${zoomPercent})`}
             >
-              −
+              <Gnr8Icon name="zoom-out" size="compact" />
             </button>
             <button
               type="button"
@@ -3619,7 +3620,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               onClick={fitCanvasWidth}
               title={`Fit width (${zoomPercent})`}
             >
-              ⛶
+              <Gnr8Icon name="fit" size="compact" />
             </button>
             <button
               type="button"
@@ -3628,7 +3629,7 @@ export function AirshipSingleSiteVisualEditorWorkspace(props: Props) {
               onClick={() => zoomCanvas(CANVAS_ZOOM_STEP)}
               title={`Zoom in (${zoomPercent})`}
             >
-              +
+              <Gnr8Icon name="zoom-in" size="compact" />
             </button>
             <span className="airship-toolbar-separator" />
             <div className="airship-bottom-segmented" aria-label="Canvas mode">

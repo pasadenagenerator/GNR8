@@ -1,12 +1,14 @@
 import Link from 'next/link'
-import type { CSSProperties } from 'react'
+import React, { type CSSProperties } from 'react'
+
+import { Gnr8Icon, type Gnr8IconName } from '../icons/Gnr8Icon'
 
 export type WorkspaceShortcut = {
   id: string
   label: string
   href: string
   description?: string
-  icon?: string
+  icon?: Gnr8IconName
   external?: boolean
 }
 
@@ -44,9 +46,7 @@ function ShortcutItem(props: { shortcut: WorkspaceShortcut }) {
     <>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
         {props.shortcut.icon ? (
-          <span aria-hidden='true' style={{ fontSize: 12 }}>
-            {props.shortcut.icon}
-          </span>
+          <Gnr8Icon name={props.shortcut.icon} size='compact' />
         ) : null}
         <span>{props.shortcut.label}</span>
       </span>

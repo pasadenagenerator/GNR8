@@ -116,16 +116,16 @@ export default function ClientDashboardHome(props: Props) {
   const hasManagementActions = Boolean(props.settingsHref || props.teamHref);
   const latestSiteHref = props.readModel.site_rows[0]?.live_url ?? props.readModel.site_rows[0]?.preview_url ?? null;
   const workspaceShortcuts: WorkspaceShortcut[] = [
-    { id: "view-sites", label: "View Sites", href: "#client-sites", description: "Jump to sites overview", icon: "S" },
+    { id: "view-sites", label: "View Sites", href: "#client-sites", description: "Jump to sites overview", icon: "site" },
     ...(latestSiteHref
-      ? [{ id: "open-latest-site", label: "Open Latest Site", href: latestSiteHref, description: "Open most recent connected site", icon: "L", external: true }]
+      ? [{ id: "open-latest-site", label: "Open Latest Site", href: latestSiteHref, description: "Open most recent connected site", icon: "external-link", external: true }]
       : []),
     ...(props.settingsHref
-      ? [{ id: "open-settings", label: "Open Settings", href: props.settingsHref, description: "Open client settings", icon: "G" }]
+      ? [{ id: "open-settings", label: "Open Settings", href: props.settingsHref, description: "Open client settings", icon: "settings" }]
       : []),
-    ...(props.teamHref ? [{ id: "open-team", label: "Open Team", href: props.teamHref, description: "Open client team", icon: "T" }] : []),
+    ...(props.teamHref ? [{ id: "open-team", label: "Open Team", href: props.teamHref, description: "Open client team", icon: "client" }] : []),
     ...(props.backToAgencyHref
-      ? [{ id: "back-to-agency", label: "Back to Agency", href: props.backToAgencyHref, description: "Return to agency workspace", icon: "A" }]
+      ? [{ id: "back-to-agency", label: "Back to Agency", href: props.backToAgencyHref, description: "Return to agency workspace", icon: "agency" }]
       : []),
   ];
   const statusSummary =

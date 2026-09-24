@@ -1,5 +1,6 @@
 import React from "react";
 
+import { Gnr8Icon } from "../../_components/icons/Gnr8Icon";
 import { gnr8StatusStyle, gnr8Styles, gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
 
 const colorSwatches = [
@@ -96,6 +97,42 @@ publish: no_live_mutation
 focus: orange ring`}
             </pre>
           </aside>
+        </section>
+
+        <section style={{ ...gnr8Styles.panel, padding: 16, display: "grid", gap: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 20 }}>Icons</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ color: gnr8VisualTokens.color.textMuted, fontSize: 12, fontWeight: 850 }}>Sizes</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="settings" size="compact" /> compact 14</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="settings" /> default 16</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="settings" size="nav" /> nav 18</span>
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ color: gnr8VisualTokens.color.textMuted, fontSize: 12, fontWeight: 850 }}>States</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="preview" /> default</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: gnr8VisualTokens.color.accentOrangeHover }}><Gnr8Icon name="preview" state="active" /> active</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="warning" state="muted" /> muted</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="success" state="success" weight="duotone" /> success</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="danger" state="danger" weight="duotone" /> danger</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(["select", "pan", "text", "zoom-out", "fit", "zoom-in"] as const).map((name, index) => (
+              <button key={name} type="button" aria-label={name} style={{ width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${index === 0 ? gnr8VisualTokens.color.accentOrange : gnr8VisualTokens.color.border}`, borderRadius: 6, background: index === 0 ? gnr8VisualTokens.color.accentOrange : gnr8VisualTokens.color.surface, color: index === 0 ? gnr8VisualTokens.color.textInverse : "currentColor" }}>
+                <Gnr8Icon name={name} size="compact" state={index === 0 ? "active" : "default"} />
+              </button>
+            ))}
+          </div>
+          <div style={{ ...gnr8Styles.darkPanel, padding: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="airship" /> Airship</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="health" weight="duotone" /> Health</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Gnr8Icon name="external-link" /> External</span>
+          </div>
         </section>
       </section>
     </main>

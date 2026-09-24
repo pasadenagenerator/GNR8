@@ -1338,7 +1338,8 @@ test("airship visual editor matches Airship reference shell without primary admi
   assert.equal(topHeaderHtml.includes("Open internal preview"), true);
   assert.equal(topHeaderHtml.includes("Internal preview"), true);
   assert.equal(topHeaderHtml.includes("Live"), true);
-  assert.equal(bottomToolbarHtml.includes("✥"), true);
+  assert.equal(bottomToolbarHtml.includes("✥"), false);
+  assert.equal(bottomToolbarHtml.includes("<svg"), true);
   assert.equal(bottomToolbarHtml.includes("☝"), false);
   assert.equal(html.includes("Canvas mode"), true);
   assert.equal(html.includes("Edit canvas mode"), true);
@@ -1450,8 +1451,8 @@ test("airship visual editor bottom toolbar contains canvas controls only", async
     "</section>",
   );
 
-  assert.equal(visualEditorSource.includes('{ key: "pan", label: "Pan", icon: "✥" }'), true);
-  assert.equal(visualEditorSource.includes('{ key: "pan", label: "Pan", icon: "☝" }'), false);
+  assert.equal(visualEditorSource.includes('{ key: "pan", label: "Pan", icon: "pan" }'), true);
+  assert.equal(visualEditorSource.includes('{ key: "pan", label: "Pan", icon: "✥" }'), false);
   assert.equal(bottomToolbarSource.includes("Undo last local change"), true);
   assert.equal(bottomToolbarSource.includes("toolOptions.map"), true);
   assert.equal(bottomToolbarSource.includes("selectTool(tool.key)"), true);

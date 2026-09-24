@@ -16,6 +16,11 @@ test("GNR8 visual system reference renders operator UI samples and orange tokens
   assert.equal(html.includes("Operator panel"), true);
   assert.equal(html.includes("Run Check"), true);
   assert.equal(html.includes("Publish locked"), true);
+  assert.equal(html.includes("Icons"), true);
+  assert.equal(html.includes("compact 14"), true);
+  assert.equal(html.includes("default 16"), true);
+  assert.equal(html.includes("nav 18"), true);
+  assert.equal(html.includes("Airship"), true);
   assert.equal(html.includes("draft"), true);
   assert.equal(html.includes("blocked"), true);
   assert.equal(html.includes(gnr8VisualTokens.color.accentOrange), true);

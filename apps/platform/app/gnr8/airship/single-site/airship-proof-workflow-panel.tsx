@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 
+import { Gnr8Icon, type Gnr8IconName } from "../../_components/icons/Gnr8Icon";
 import { gnr8VisualTokens } from "../../../../gnr8/visual-system/gnr8-visual-system";
 
 type WorkflowStatus = "not_prepared" | "prepared" | "captured" | "mapped" | "applied" | "preview_generated" | "blocked" | "failed";
@@ -219,8 +220,18 @@ function badge(value: string, tone: "good" | "warn" | "neutral" = "neutral") {
     neutral: { border: "#cbd5e1", background: "#f8fafc", color: "#334155" },
   }[tone];
   return (
-    <span style={{ border: `1px solid ${palette.border}`, borderRadius: 8, background: palette.background, color: palette.color, padding: "4px 7px", fontSize: 11, fontWeight: 900 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, border: `1px solid ${palette.border}`, borderRadius: 8, background: palette.background, color: palette.color, padding: "4px 7px", fontSize: 11, fontWeight: 900 }}>
+      {tone === "good" ? <Gnr8Icon name="success" size="compact" state="success" /> : tone === "warn" ? <Gnr8Icon name="warning" size="compact" /> : null}
       {labelize(value)}
+    </span>
+  );
+}
+
+function actionContent(icon: Gnr8IconName, label: string, active = false) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+      <Gnr8Icon name={icon} size="compact" state={active ? "active" : "default"} />
+      <span>{label}</span>
     </span>
   );
 }
@@ -649,45 +660,45 @@ export function AirshipProofWorkflowPanel(props: Props) {
       <div style={{ display: "grid", gap: 8 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
           <button type="button" disabled={!view.canPrepare} aria-busy={busy && status === "not_prepared"} onClick={() => void prepare()} style={buttonStyle(!view.canPrepare, "primary")}>
-            Step 1: Prepare Airship session
+            {actionContent("airship", "Step 1: Prepare Airship session", view.canPrepare)}
           </button>
           <button type="button" disabled={!view.canStartOwnedSession} onClick={() => void startOwnedAirshipSession()} style={buttonStyle(!view.canStartOwnedSession, "primary")}>
-            Step 2: Start Airship session
+            {actionContent("start", "Step 2: Start Airship session", view.canStartOwnedSession)}
           </button>
           {view.openAirshipHref ? (
             <a href={view.openAirshipHref} target="_blank" rel="noreferrer" style={{ ...buttonStyle(false, "primary"), textAlign: "center", textDecoration: "none" }}>
-              Step 3: Open Airship editor
+              {actionContent("open", "Step 3: Open Airship editor", true)}
             </a>
           ) : (
             <button type="button" disabled style={buttonStyle(true, "primary")} title={view.openAirshipDisabledReason ?? undefined}>
-              Step 3: Open Airship editor
+              {actionContent("open", "Step 3: Open Airship editor")}
             </button>
           )}
           <button type="button" disabled={!view.canHealthCheckOwnedSession} onClick={() => void healthCheckOwnedAirshipSession()} style={buttonStyle(!view.canHealthCheckOwnedSession)}>
-            Step 4: Health check Airship session
+            {actionContent("health", "Step 4: Health check Airship session")}
           </button>
           <button type="button" disabled={!view.canStopOwnedSession} onClick={() => void stopOwnedAirshipSession()} style={buttonStyle(!view.canStopOwnedSession)}>
-            Step 5: Stop Airship session
+            {actionContent("stop", "Step 5: Stop Airship session")}
           </button>
           <button type="button" disabled={!view.canCapture} onClick={() => void captureChanges()} style={buttonStyle(!view.canCapture)}>
-            Step 6: Capture changes
+            {actionContent("capture", "Step 6: Capture changes")}
           </button>
           <button type="button" disabled={!view.canMap} onClick={() => void mapCapturedEdits()} style={buttonStyle(!view.canMap)}>
-            Step 7: Map captured edits
+            {actionContent("map", "Step 7: Map captured edits")}
           </button>
           <button type="button" disabled={!view.canApply} onClick={() => void applyConfirmed()} style={buttonStyle(!view.canApply, "primary")}>
-            Step 8: Apply safe mappings to draft
+            {actionContent("apply", "Step 8: Apply safe mappings to draft", view.canApply)}
           </button>
           <button type="button" disabled={!view.canGeneratePreview} onClick={() => void generatePreviewFromAppliedDraft()} style={buttonStyle(!view.canGeneratePreview, "primary")}>
-            Step 9: Generate internal preview from applied draft
+            {actionContent("generate", "Step 9: Generate internal preview from applied draft", view.canGeneratePreview)}
           </button>
           {view.previewUrl ? (
             <a href={view.previewUrl} target="_blank" rel="noreferrer" style={{ ...buttonStyle(false), textAlign: "center", textDecoration: "none" }}>
-              Step 10: Open generated internal preview
+              {actionContent("preview", "Step 10: Open generated internal preview")}
             </a>
           ) : (
             <button type="button" disabled style={buttonStyle(true)}>
-              Step 10: Open generated internal preview
+              {actionContent("preview", "Step 10: Open generated internal preview")}
             </button>
           )}
         </div>
