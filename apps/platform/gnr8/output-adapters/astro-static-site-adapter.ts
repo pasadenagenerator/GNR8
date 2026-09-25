@@ -183,15 +183,12 @@ function createIndexAstro(input: NormalizedStaticBusinessSiteContent): string {
     .filter(Boolean)
     .join("\n          ");
 
-  return `---
-import "../styles/global.css";
----
-
-<html lang="en">
+  return `<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(input.siteName)}</title>
+    <link rel="stylesheet" href="/src/styles/global.css?direct" />
   </head>
   <body>
     <header class="site-header">

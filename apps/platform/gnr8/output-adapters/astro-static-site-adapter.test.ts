@@ -22,6 +22,7 @@ test("CHS-like content produces a deterministic Astro source project manifest", 
   assert.match(files.get("src/pages/index.astro") ?? "", /Preconstruction/);
   assert.match(files.get("src/pages/index.astro") ?? "", /Closeout Support/);
   assert.match(files.get("src/pages/index.astro") ?? "", /hello@chs.example/);
+  assert.match(files.get("src/pages/index.astro") ?? "", /href="\/src\/styles\/global\.css\?direct"/);
   assert.match(files.get("src/styles/global.css") ?? "", /--gnr8-astro-accent: #f97316;/);
   assert.match(files.get("src/styles/global.css") ?? "", /--gnr8-astro-background: #fff7ed;/);
 });
