@@ -27,7 +27,7 @@ test("prepares exact Astro source, a clean Git baseline, and proof-only future d
     assert.match(prepared.baselineCommit, /^[0-9a-f]{40,64}$/);
     assert.deepEqual(
       prepared.sourceSnapshot.files.map((file) => file.path),
-      ["astro.config.mjs", "package.json", "src/pages/index.astro", "src/styles/global.css"],
+      ["astro.config.mjs", "package.json", "public/styles/global.css", "src/pages/index.astro"],
     );
     assert.equal(prepared.futureStepMetadata.previewPort, 4321);
     assert.equal(prepared.futureStepMetadata.devCommand.command, "pnpm dev --host 127.0.0.1 --port 4321");

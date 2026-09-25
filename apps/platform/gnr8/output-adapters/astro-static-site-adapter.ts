@@ -70,7 +70,7 @@ export const astroStaticSiteAdapterDescriptor: Gnr8OutputAdapterDescriptor = {
   label: "Astro static site source workspace",
   supportedSiteClasses: ["static-business-site", "marketing-site", "service-business-site", "content-site"],
   sourceWorkspaceShape: "source-project",
-  projectFileReadback: ["package.json", "astro.config.mjs", "src/pages/index.astro", "src/styles/global.css"],
+  projectFileReadback: ["package.json", "astro.config.mjs", "src/pages/index.astro", "public/styles/global.css"],
   buildCommand: {
     command: "pnpm build",
     cwdHint: "workspace-root",
@@ -135,7 +135,7 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
       contents: createIndexAstro(input),
     },
     {
-      path: "src/styles/global.css",
+      path: "public/styles/global.css",
       role: "style",
       contents: createGlobalCss(input.theme),
     },
@@ -188,7 +188,7 @@ function createIndexAstro(input: NormalizedStaticBusinessSiteContent): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(input.siteName)}</title>
-    <link rel="stylesheet" href="/src/styles/global.css?direct" />
+    <link rel="stylesheet" href="/styles/global.css" />
   </head>
   <body>
     <header class="site-header">

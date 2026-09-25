@@ -15,16 +15,16 @@ test("CHS-like content produces a deterministic Astro source project manifest", 
 
   assert.deepEqual(
     manifest.files.map((file) => file.path),
-    ["package.json", "astro.config.mjs", "src/pages/index.astro", "src/styles/global.css"],
+    ["package.json", "astro.config.mjs", "src/pages/index.astro", "public/styles/global.css"],
   );
   assert.match(files.get("src/pages/index.astro") ?? "", /Construction Health Solutions/);
   assert.match(files.get("src/pages/index.astro") ?? "", /Safer sites, cleaner handoffs, faster closeouts/);
   assert.match(files.get("src/pages/index.astro") ?? "", /Preconstruction/);
   assert.match(files.get("src/pages/index.astro") ?? "", /Closeout Support/);
   assert.match(files.get("src/pages/index.astro") ?? "", /hello@chs.example/);
-  assert.match(files.get("src/pages/index.astro") ?? "", /href="\/src\/styles\/global\.css\?direct"/);
-  assert.match(files.get("src/styles/global.css") ?? "", /--gnr8-astro-accent: #f97316;/);
-  assert.match(files.get("src/styles/global.css") ?? "", /--gnr8-astro-background: #fff7ed;/);
+  assert.match(files.get("src/pages/index.astro") ?? "", /href="\/styles\/global\.css"/);
+  assert.match(files.get("public/styles/global.css") ?? "", /--gnr8-astro-accent: #f97316;/);
+  assert.match(files.get("public/styles/global.css") ?? "", /--gnr8-astro-background: #fff7ed;/);
 });
 
 test("ARIS-like content produces nav, contact, card sections, and adapter readback", () => {
