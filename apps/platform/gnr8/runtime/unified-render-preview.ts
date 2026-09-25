@@ -41,10 +41,15 @@ import {
   shouldUseSemanticFallbackPreview,
 } from '@/gnr8/preview-semantic/semantic-preview-renderer'
 import { analyzeAirshipArtifactHtmlValidity } from '@/gnr8/single-site/airship-valid-artifact-html'
+import {
+  isAstroInternalPreviewCandidate,
+  type AstroInternalPreviewCandidate,
+} from '@/gnr8/output-adapters/astro-static-site-internal-preview-bridge'
 
 export type SiteVersionPreviewSource =
   | 'react_runtime_renderer'
   | 'transformed_artifact'
+  | 'astro_internal_preview_candidate'
   | 'debug_preview_bundle'
   | 'semantic_fallback_renderer'
   | 'raw_template_site'
@@ -143,6 +148,7 @@ type PreviewReadDependencies = {
   getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset
   listContentSlots: typeof listContentSlots
   listContentOverrides: typeof listContentOverrides
+  getAstroInternalPreviewCandidate: (candidateId: string) => Promise<AstroInternalPreviewCandidate | null>
   acquireRuntimeDbClient: () => Promise<RuntimeStoreDbClient>
   requestScopedDbClientEnabled: boolean
 }
@@ -164,6 +170,7 @@ const defaultPreviewReadDependencies: PreviewReadDependencies = {
   getRawTemplateSiteAsset,
   listContentSlots,
   listContentOverrides,
+  getAstroInternalPreviewCandidate: async () => null,
   acquireRuntimeDbClient: () => getSuperadminPool().connect(),
   requestScopedDbClientEnabled: true,
 }
@@ -2936,6 +2943,93 @@ function transformedPreviewSummaryFromArtifactManifest(input: {
   }
 }
 
+async function renderAstroInternalPreviewCandidate(input: {
+  siteVersionId: string
+  requestedPath: string
+  selection: { candidateId: string; siteId: string }
+  context: PreviewReadContext
+}): Promise<ResolvedSiteVersionPreview> {
+  const candidateId = String(input.selection.candidateId ?? '').trim()
+  const expectedSiteId = String(input.selection.siteId ?? '').trim()
+  if (!candidateId || !expectedSiteId) {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+      message: 'Astro internal preview selection requires explicit candidate and site identities.',
+    })
+  }
+
+  const candidate = await previewReadDependencies.getAstroInternalPreviewCandidate(candidateId)
+  if (!candidate || !isAstroInternalPreviewCandidate(candidate)) {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+      message: 'Requested Astro internal preview candidate is missing or invalid.',
+    })
+  }
+  if (
+    candidate.id !== candidateId ||
+    candidate.siteId !== expectedSiteId ||
+    candidate.siteVersionId !== input.siteVersionId
+  ) {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+      message: 'Requested Astro internal preview candidate does not match the explicit site/version ownership selection.',
+    })
+  }
+
+  const resolved = resolveHtmlForPath({
+    htmlByPath: candidate.htmlByPath,
+    requestedPath: input.requestedPath,
+    diagnostics: {
+      siteId: candidate.siteId,
+      runtimeSiteId: candidate.siteId,
+      runtimeSiteVersionId: candidate.siteVersionId,
+      matchedPageId: null,
+      unresolvedPathsCount: 0,
+    },
+  })
+  const previewRuntimeSummary = transformedPreviewSummaryFromArtifactManifest({
+    artifactManifest: candidate.manifest as unknown as Record<string, unknown>,
+    requestedPath: input.requestedPath,
+    resolvedPath: resolved.resolvedPath,
+  })
+  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
+  if (diagnosticContent.blocked) {
+    throw new SiteVersionPreviewUnavailableError({
+      code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
+      message: `Requested Astro internal preview candidate contains blocked diagnostic content: ${diagnosticContent.matchedPatterns.join(',')}`,
+    })
+  }
+
+  console.info('[gnr8.runtime.preview] ASTRO_INTERNAL_PREVIEW_CANDIDATE_SELECTED', {
+    requestCorrelationKey: input.context.requestCorrelationKey,
+    siteId: candidate.siteId,
+    siteVersionId: candidate.siteVersionId,
+    candidateId: candidate.id,
+    requestedPath: input.requestedPath,
+    selectedPath: resolved.resolvedPath,
+    conversionVersion: candidate.manifest.conversionVersion,
+  })
+  return withPreviewTruth({
+    preview: {
+      siteId: candidate.siteId,
+      siteVersionId: candidate.siteVersionId,
+      artifactId: candidate.id,
+      path: resolved.resolvedPath,
+      rendererCompatibilityVersion: candidate.rendererCompatibilityVersion,
+      html: annotateTransformedPreviewHtml({ html: resolved.html, summary: previewRuntimeSummary }),
+      source: 'astro_internal_preview_candidate',
+      previewMode: previewRuntimeSummary.previewMode,
+      previewRuntimeSummary,
+    },
+    previewTruth: {
+      renderedCaptureUsed: false,
+      domSize: 0,
+      screenshotCount: 0,
+    },
+    fallbackUsedOverride: false,
+  })
+}
+
 async function renderTransformedSiteVersionPreview(input: {
   siteVersionId: string
   requestedPath: string
@@ -3394,6 +3488,7 @@ export async function renderSiteVersionPreview(input: {
   path?: string
   mode?: unknown
   airshipArtifactId?: string | null
+  astroCandidateSelection?: { candidateId: string; siteId: string } | null
   requestCorrelationKey?: string
   dbClient?: RuntimeStoreDbClient
   initialDbReadCount?: number
@@ -3450,6 +3545,14 @@ export async function renderSiteVersionPreview(input: {
   }
 
   try {
+    if (mode === 'transformed' && input.astroCandidateSelection) {
+      return await renderAstroInternalPreviewCandidate({
+        siteVersionId: input.siteVersionId,
+        requestedPath,
+        selection: input.astroCandidateSelection,
+        context,
+      })
+    }
     if (input.dbClient) {
       context.dbClient = input.dbClient
       context.dbClientOwnedByRenderer = false
