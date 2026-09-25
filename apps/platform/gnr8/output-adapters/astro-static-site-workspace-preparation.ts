@@ -437,7 +437,10 @@ async function runGit(workspacePath: string, args: string[]): Promise<string> {
 }
 
 function isolatedGitEnvironment(workspacePath: string): NodeJS.ProcessEnv {
-  const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith("GIT_")));
+  const environment = { ...process.env };
+  for (const key of Object.keys(environment)) {
+    if (key.toUpperCase().startsWith("GIT_")) delete environment[key];
+  }
   return {
     ...environment,
     GIT_CONFIG_NOSYSTEM: "1",
