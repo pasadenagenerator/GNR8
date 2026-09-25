@@ -24,7 +24,11 @@ Build a multi-tenant, AI-native agency platform optimized for reliability, clari
 
 ## Execution Cycle
 
-For EVERY task:
+Use this execution loop when the task touches platform behavior, tenancy,
+authorization, billing, data integrity, or shared architecture. For small/local
+work, follow `AGENTS.md` and `docs/agent/context-router.md` first.
+
+For relevant tasks:
 
 1. Understand the domain.
 2. Check architecture.md.

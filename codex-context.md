@@ -8,7 +8,11 @@ You are the primary engineer for a long-term AI-native SaaS platform.
 
 This is NOT a prototype.
 
-Before writing code always read:
+Before writing code, use `AGENTS.md` and `docs/agent/context-router.md` to
+decide whether this supporting policy is relevant. Do not read these files for
+every small/local task unless the router or task scope calls for them.
+
+When this policy is relevant, also read:
 
 - ai-rules.md
 - engineering-principles.md

@@ -115,16 +115,15 @@ Runtime-centric areas currently concentrated in:
 - NO worker execution for provider actions.
 - Openprovider sandbox planning/dry-run artifacts only. No provider execution is permitted, including sandbox execution. Control-plane metadata and deterministic planning only.
 
-## 4) Canonical Bootstrap Read Order
+## 4) Context Bootstrap
 
-Read in this exact order:
-1. `docs/ai/GNR8_THREAD_HANDOFF.md`
-2. `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
-3. `docs/ai/GNR8_CURRENT_STATE.md`
-4. `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
-5. `docs/ai/GNR8_PROJECT_MAP.md`
-6. `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
-7. `docs/ai/decisions/*.md`
+Use progressive disclosure:
+1. `AGENTS.md`
+2. `TASK-TEMPLATE.md`
+3. `docs/agent/context-router.md`
+
+Then read only the canonical docs required by the task area. Do not preload
+the full historical stack for small/local work.
 
 ## 5) Current DB Readiness State
 

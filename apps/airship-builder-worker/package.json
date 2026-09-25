@@ -1,0 +1,15 @@
+{
+  "name": "@gnr8/airship-builder-worker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13 <23"
+  },
+  "scripts": {
+    "build": "pnpm exec tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "pnpm exec tsx --test test/*.test.ts",
+    "typecheck": "pnpm exec tsc --noEmit -p tsconfig.json"
+  }
+}

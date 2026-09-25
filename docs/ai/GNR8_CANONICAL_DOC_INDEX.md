@@ -2,15 +2,30 @@
 
 ## Canonical
 
-Read in this exact order:
-1. `docs/ai/GNR8_THREAD_HANDOFF.md`
-2. `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
-3. `docs/ai/GNR8_CURRENT_STATE.md`
-4. `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
-5. `docs/ai/GNR8_COLLABORATION_PROTOCOL.md`
-6. `docs/ai/GNR8_PROJECT_MAP.md`
-7. `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
-8. `docs/ai/decisions/*.md`
+Use progressive disclosure. Start with:
+1. `AGENTS.md`
+2. `TASK-TEMPLATE.md`
+3. `docs/agent/context-router.md`
+
+Then read only the canonical docs required by the task area.
+
+Do not preload the full historical stack for small/local work. Use:
+- `docs/ai/GNR8_THREAD_HANDOFF.md` for fresh long-running threads, milestone resume, or handoff.
+- `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md` only when rebuilding or auditing master context.
+- `docs/ai/GNR8_CURRENT_STATE.md` for current milestone state or direction changes.
+- `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md` for task execution contract details.
+- `docs/ai/GNR8_COLLABORATION_PROTOCOL.md` for Grega/ChatGPT/Codex collaboration rules.
+- `docs/ai/GNR8_PROJECT_MAP.md` when locating implementation areas.
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md` when locating authoritative docs.
+- `docs/ai/decisions/*.md` only for architecture, contract, execution-boundary, or governance changes.
+
+Canonical agent workflow docs:
+- `docs/agent/README.md`
+- `docs/agent/context-router.md`
+- `docs/agent/workflow-policy.md`
+- `docs/agent/model-routing.md`
+- `docs/agent/validation-policy.md`
+- `docs/agent/completion-report.md`
 
 Current decision records:
 - `docs/ai/decisions/ADR-001-deterministic-pipeline.md`

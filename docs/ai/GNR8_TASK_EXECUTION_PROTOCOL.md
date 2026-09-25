@@ -65,14 +65,22 @@ Pred zakljuckom mora task potrditi:
 
 ## 7) Canonical Context Requirement
 
-Pred vecjimi spremembami vedno preberi:
-- `docs/ai/GNR8_THREAD_HANDOFF.md`
-- `docs/ai/GNR8_MASTER_CONTEXT_BOOTSTRAP.md`
-- `docs/ai/GNR8_CURRENT_STATE.md`
-- `docs/ai/GNR8_TASK_EXECUTION_PROTOCOL.md`
-- `docs/ai/GNR8_PROJECT_MAP.md`
-- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md`
-- `docs/ai/decisions/*.md`
+Use progressive disclosure.
+
+Start with:
+- `AGENTS.md`
+- `TASK-TEMPLATE.md`
+- `docs/agent/context-router.md`
+
+Then read only the canonical docs required by the task area. Do not preload
+`GNR8_THREAD_HANDOFF`, `GNR8_MASTER_CONTEXT_BOOTSTRAP`, `GNR8_PROJECT_MAP`,
+`GNR8_CANONICAL_DOC_INDEX`, or every ADR for small/local tasks.
+
+Pred vecjimi spremembami preberi samo relevantne canonical docs:
+- `docs/ai/GNR8_THREAD_HANDOFF.md` for fresh long-running threads, milestone resume, or handoff.
+- `docs/ai/GNR8_CURRENT_STATE.md` for current milestone state or direction changes.
+- `docs/ai/GNR8_CANONICAL_DOC_INDEX.md` when locating the authoritative doc for a touched area.
+- `docs/ai/decisions/*.md` only for architecture, contract, execution-boundary, or governance changes.
 
 ## 8) Escalation Rule
 

@@ -32,13 +32,17 @@ Preferred structure:
 ## E) Workflow
 
 Default flow:
-1. Read canonical context.
-2. Do discovery if needed.
-3. Propose scoped Codex task.
-4. Codex implements.
-5. Codex reports changed files plus validation evidence.
-6. ChatGPT reviews report.
-7. Baseline/docs are refreshed when a milestone is reached.
+1. ChatGPT plans/researches and produces a scoped task.
+2. Codex starts from `AGENTS.md`, `TASK-TEMPLATE.md`, and `docs/agent/context-router.md`.
+3. Codex reads only task-relevant canonical context.
+4. Codex implements in one focused session.
+5. Codex runs focused validation during implementation.
+6. Codex reports changed files plus concise validation evidence.
+7. ChatGPT reviews the report.
+8. Baseline/docs are refreshed only when a milestone is reached.
+
+Fast mode is forbidden for all GNR8 work. Low reasoning is the default; use
+`docs/agent/model-routing.md` for escalation.
 
 ## F) Validation Expectations
 
@@ -73,7 +77,7 @@ Current hard boundaries:
 ## I) New Thread Behavior
 
 Future ChatGPT threads should:
-- first read `docs/ai/GNR8_THREAD_HANDOFF.md`
-- follow canonical read order
+- first use `AGENTS.md` and `docs/agent/context-router.md`
+- read `docs/ai/GNR8_THREAD_HANDOFF.md` only for milestone resume, handoff, or long-running continuity work
 - read this collaboration protocol before generating Codex tasks
 - summarize current state before proposing implementation
