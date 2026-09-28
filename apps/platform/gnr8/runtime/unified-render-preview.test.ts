@@ -8,6 +8,7 @@ import {
   renderSiteVersionPreview,
   setUnifiedRenderPreviewDependenciesForTest,
 } from '@/gnr8/runtime/unified-render-preview'
+import { buildDeterministicArtifactBundle } from '@/gnr8/runtime/artifact-builder'
 import { buildPreviewForensicsReport } from '@/gnr8/runtime/preview-forensics'
 import type { SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 import type { RuntimeImportProvenanceSummary } from '@/gnr8/runtime/types'
@@ -2391,6 +2392,88 @@ test('raw template route-map child selection remains disabled outside controlled
     assert.equal(preview.html.includes('data-gnr8-multipage-link="rewritten"'), false)
     assert.equal(preview.source, 'transformed_artifact')
     assert.equal(preview.previewRuntimeSummary.previewDiagnostics.includes('MULTIPAGE_ROUTE_MAP_SELECTED'), false)
+  } finally {
+    restore()
+  }
+})
+
+test('transformed preview preserves fallback section headings and canonical fragment targets', async () => {
+  const siteVersion = {
+    id: 'sv-fallback-fragments',
+    siteId: 'site-fallback-fragments',
+    versionNo: 1,
+    state: 'READY_FOR_REVIEW',
+    source: 'migration',
+    actor: 'test',
+    createdAt: '2026-09-27T00:00:00.000Z',
+    rendererCompatibilityVersion: 'gnr8-renderer-v1',
+    artifactId: null,
+    importProvenanceSummary: null,
+    pages: [{
+      id: 'pv-fallback-fragments',
+      siteVersionId: 'sv-fallback-fragments',
+      pageId: 'page-fallback-fragments',
+      path: '/',
+      title: 'Fallback fragment regression',
+      structureModel: {
+        sections: [
+          { id: 'nav', type: 'navbar.basic', order: 0 },
+          { id: 'contact', type: 'cta.basic', order: 1 },
+        ],
+      },
+      contentModel: {
+        sectionProps: {
+          nav: { title: 'Navigation', links: [{ href: '#contact', label: 'Contact' }] },
+          contact: {
+            title: 'Plan your next upgrade',
+            body: 'Tell us what needs to become safer.',
+            links: [{ href: 'mailto:hello@example.test', label: 'hello@example.test' }],
+          },
+        },
+      },
+      styleTokens: {},
+      assetGraph: [],
+      semanticSignals: [],
+      source: 'migration',
+      actor: 'test',
+      createdAt: '2026-09-27T00:00:00.000Z',
+    }],
+  } as any
+  const bundle = buildDeterministicArtifactBundle({ siteVersion, renderMode: 'PREVIEW' })
+  const artifact = {
+    ...bundle,
+    id: 'artifact-fallback-fragments',
+    createdAt: '2026-09-27T00:00:00.000Z',
+    publishStage: 'production',
+    shadowRestricted: false,
+    artifactGovernance: {},
+  } as any
+  const restore = setUnifiedRenderPreviewDependenciesForTest({
+    requestScopedDbClientEnabled: false,
+    getPoolStatus: () => ({ totalCount: 0, idleCount: 0, waitingCount: 0 }),
+    getSiteVersionArtifactBinding: async () => ({
+      siteId: 'site-fallback-fragments',
+      artifactId: 'artifact-fallback-fragments',
+    }),
+    getArtifactById: async () => artifact,
+    getSiteVersion: async () => {
+      throw new Error('transformed artifact hit must not read the site version')
+    },
+  })
+
+  try {
+    const preview = await renderSiteVersionPreview({
+      siteVersionId: 'sv-fallback-fragments',
+      path: '/',
+      mode: 'transformed',
+      requestCorrelationKey: 'req-fallback-fragments',
+    })
+
+    assert.equal(preview.source, 'transformed_artifact')
+    assert.equal(preview.fallbackUsed, false)
+    assert.match(preview.html, /<section id="contact" data-gnr8-section-id="contact"/)
+    assert.match(preview.html, /<h2[^>]*>Plan your next upgrade<\/h2>/)
+    assert.match(preview.html, /href="#contact"/)
   } finally {
     restore()
   }

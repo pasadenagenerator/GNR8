@@ -189,7 +189,12 @@ export async function runAstroInternalPreviewBridgeProof(input: {
   const completedCandidate = candidate as AstroInternalPreviewCandidate | null;
   const completedPreviewEvidence = previewEvidence as AstroInternalPreviewBridgeProofEvidence["preview"] | null;
   const completedServerEvidence = serverEvidence as AstroInternalPreviewBridgeProofEvidence["server"] | null;
-  if (!completedCandidate || !completedPreviewEvidence || !completedServerEvidence) {
+  if (
+    !completedCandidate ||
+    !completedPreviewEvidence ||
+    !completedServerEvidence ||
+    completedCandidate.manifest.lifecycle.storage !== "caller_owned_in_memory"
+  ) {
     throw new Error("astro_internal_preview_bridge_evidence_incomplete");
   }
   return {

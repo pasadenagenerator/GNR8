@@ -949,6 +949,7 @@ function renderSectionHtml(input: {
   sectionType: string;
   sectionProps: Record<string, unknown>;
   styleTokens: Record<string, string>;
+  emitCanonicalId: boolean;
 }): string {
   const payload = escapeHtml(stableStringify(input.sectionProps));
   const legacyVisibleFallback =
@@ -963,20 +964,25 @@ function renderSectionHtml(input: {
     sectionType: input.sectionType,
     sectionProps: input.sectionProps,
   });
-  return `<section data-gnr8-section-id="${escapeHtml(input.sectionId)}" data-gnr8-section-type="${escapeHtml(input.sectionType)}">${visibleFallback}<script type="application/json" data-gnr8-section-props>${payload}</script></section>`;
+  const canonicalId = input.emitCanonicalId ? ` id="${escapeHtml(input.sectionId)}"` : "";
+  return `<section${canonicalId} data-gnr8-section-id="${escapeHtml(input.sectionId)}" data-gnr8-section-type="${escapeHtml(input.sectionType)}">${visibleFallback}<script type="application/json" data-gnr8-section-props>${payload}</script></section>`;
 }
 
 function renderCanonicalSections(page: CanonicalSiteVersionSnapshot["pages"][number]): string {
+  const emittedCanonicalIds = new Set<string>();
   return [...(page.structureModel.sections ?? [])]
     .sort((a, b) => a.order - b.order)
-    .map((section) =>
-      renderSectionHtml({
+    .map((section) => {
+      const emitCanonicalId = section.id.length > 0 && !emittedCanonicalIds.has(section.id);
+      if (emitCanonicalId) emittedCanonicalIds.add(section.id);
+      return renderSectionHtml({
         sectionId: section.id,
         sectionType: section.type,
         sectionProps: page.contentModel.sectionProps[section.id] ?? {},
         styleTokens: page.styleTokens,
-      }),
-    )
+        emitCanonicalId,
+      });
+    })
     .join("\n");
 }
 

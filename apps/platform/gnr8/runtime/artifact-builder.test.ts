@@ -287,6 +287,47 @@ test("artifact-builder renders visible navbar.basic links fallback", () => {
   assert.match(html, /href="\/contact"/);
 });
 
+test("artifact-builder emits escaped canonical section fragment targets without duplicate IDs", () => {
+  const targetSiteVersion = {
+    ...siteVersion,
+    pages: [
+      {
+        ...siteVersion.pages[0],
+        structureModel: {
+          sections: [
+            { id: "nav", type: "navbar.basic", order: 0 },
+            { id: "services", type: "content.basic", order: 1 },
+            { id: "contact<&\"'>", type: "cta.basic", order: 2 },
+            { id: "services", type: "content.basic", order: 3 },
+          ],
+        },
+        contentModel: {
+          sectionProps: {
+            nav: {
+              title: "Navigation",
+              links: [
+                { href: "#services", label: "Services" },
+                { href: "#contact%3C%26%22'%3E", label: "Contact" },
+              ],
+            },
+            services: { heading: "Practical services", body: "Focused support." },
+            "contact<&\"'>": { title: "Contact us", body: "Tell us what you need." },
+          },
+        },
+      },
+    ],
+  };
+
+  const out = buildDeterministicArtifactBundle({ siteVersion: targetSiteVersion, renderMode: "PREVIEW" });
+  const html = out.htmlByPath["/"] ?? "";
+
+  assert.match(html, /<section id="nav" data-gnr8-section-id="nav"/);
+  assert.match(html, /<section id="services" data-gnr8-section-id="services"/);
+  assert.match(html, /<section id="contact&lt;&amp;&quot;&#39;&gt;" data-gnr8-section-id="contact&lt;&amp;&quot;&#39;&gt;"/);
+  assert.equal((html.match(/ id="services"/g) ?? []).length, 1);
+  assert.equal((html.match(/ id="nav"/g) ?? []).length, 1);
+});
+
 test("artifact-builder renders non-empty generic fallback for unknown section types", () => {
   const unknownSiteVersion = {
     ...siteVersion,

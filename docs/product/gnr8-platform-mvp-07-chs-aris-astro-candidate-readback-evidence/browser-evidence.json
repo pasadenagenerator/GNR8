@@ -1,0 +1,283 @@
+{
+  "version": "gnr8-astro-candidate-readback-browser:v1",
+  "capturedAt": "2026-09-27T07:36:02.152Z",
+  "serverStopped": true,
+  "captures": [
+    {
+      "fixtureId": "chs-like",
+      "variant": "astro",
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "screenshot": "screenshots/chs-like-astro-desktop.jpg",
+      "missingExpectedText": [],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#services",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#approach",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": true,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": [],
+      "contactScreenshot": "screenshots/chs-like-astro-desktop-contact.jpg"
+    },
+    {
+      "fixtureId": "chs-like",
+      "variant": "fallback",
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "screenshot": "screenshots/chs-like-fallback-desktop.jpg",
+      "missingExpectedText": [
+        "Plan your next upgrade"
+      ],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#services",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#approach",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": false,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": []
+    },
+    {
+      "fixtureId": "aris-like",
+      "variant": "astro",
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "screenshot": "screenshots/aris-like-astro-desktop.jpg",
+      "missingExpectedText": [],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#products",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#advice",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": true,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": [],
+      "contactScreenshot": "screenshots/aris-like-astro-desktop-contact.jpg"
+    },
+    {
+      "fixtureId": "aris-like",
+      "variant": "fallback",
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "screenshot": "screenshots/aris-like-fallback-desktop.jpg",
+      "missingExpectedText": [
+        "Find the right setup"
+      ],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#products",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#advice",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": false,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": []
+    },
+    {
+      "fixtureId": "chs-like",
+      "variant": "astro",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "screenshots/chs-like-astro-mobile.jpg",
+      "missingExpectedText": [],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#services",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#approach",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": true,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": [],
+      "contactScreenshot": "screenshots/chs-like-astro-mobile-contact.jpg"
+    },
+    {
+      "fixtureId": "chs-like",
+      "variant": "fallback",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "screenshots/chs-like-fallback-mobile.jpg",
+      "missingExpectedText": [
+        "Plan your next upgrade"
+      ],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#services",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#approach",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": false,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": []
+    },
+    {
+      "fixtureId": "aris-like",
+      "variant": "astro",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "screenshots/aris-like-astro-mobile.jpg",
+      "missingExpectedText": [],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#products",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#advice",
+          "targetFound": true,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": true,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": [],
+      "contactScreenshot": "screenshots/aris-like-astro-mobile-contact.jpg"
+    },
+    {
+      "fixtureId": "aris-like",
+      "variant": "fallback",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "screenshots/aris-like-fallback-mobile.jpg",
+      "missingExpectedText": [
+        "Find the right setup"
+      ],
+      "horizontalOverflow": false,
+      "clippedElements": [],
+      "overlappingText": [],
+      "lowContrastText": [],
+      "anchors": [
+        {
+          "href": "#products",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#advice",
+          "targetFound": false,
+          "navigationVerified": true
+        },
+        {
+          "href": "#contact",
+          "targetFound": false,
+          "navigationVerified": true
+        }
+      ],
+      "consoleErrors": []
+    }
+  ]
+}

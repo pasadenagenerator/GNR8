@@ -73,6 +73,11 @@ export interface InspectedAstroStaticExport {
   verifiedThemeToken: string;
 }
 
+export interface AstroStaticExportVerification {
+  expectedContent: string[];
+  expectedThemeToken: string;
+}
+
 export interface CommandResult {
   stdout: string;
   stderr: string;
@@ -174,7 +179,10 @@ export interface AstroBuildExportProofDependencies {
     options: { cwd: string; timeoutMs: number; signal?: AbortSignal; env?: NodeJS.ProcessEnv },
   ): Promise<CommandResult>;
   readFile(path: string, encoding: BufferEncoding): Promise<string>;
-  inspectExport(workspacePath: string): Promise<InspectedAstroStaticExport>;
+  inspectExport(
+    workspacePath: string,
+    verification?: AstroStaticExportVerification,
+  ): Promise<InspectedAstroStaticExport>;
   startStaticServer(inspected: InspectedAstroStaticExport): Promise<AstroStaticServerHandle>;
   fetch: typeof fetch;
   readSourceSnapshot(input: { workspacePath: string; sourcePaths: string[] }): Promise<AstroSourceSnapshot>;
@@ -184,6 +192,8 @@ export interface AstroBuildExportProofDependencies {
 
 export interface RunAstroBuildExportProofInput {
   workspaceRoot?: string;
+  content?: NormalizedStaticBusinessSiteContent;
+  verification?: AstroStaticExportVerification;
   signal?: AbortSignal;
   installTimeoutMs?: number;
   buildTimeoutMs?: number;
@@ -204,7 +214,7 @@ export async function runAstroBuildExportProof(
     throwIfAborted(input.signal, evidence);
     const prepareStartedAt = dependencies.now();
     prepared = await dependencies.prepareWorkspace({
-      content: astroDevServerSmokeProofFixture(),
+      content: input.content ?? astroDevServerSmokeProofFixture(),
       workspaceRoot: input.workspaceRoot,
     });
     evidence.timingsMs.prepare = elapsed(dependencies.now(), prepareStartedAt);
@@ -277,7 +287,7 @@ export async function runAstroBuildExportProof(
     const exportStartedAt = dependencies.now();
     let inspected: InspectedAstroStaticExport;
     try {
-      inspected = await dependencies.inspectExport(prepared.workspacePath);
+      inspected = await dependencies.inspectExport(prepared.workspacePath, input.verification);
     } catch (error) {
       if (error instanceof AstroStaticExportValidationError) {
         throw proofError(error.code, error.message, evidence, error);
@@ -350,7 +360,10 @@ export async function runAstroBuildExportProof(
   return evidence;
 }
 
-export async function inspectAstroStaticExport(workspacePath: string): Promise<InspectedAstroStaticExport> {
+export async function inspectAstroStaticExport(
+  workspacePath: string,
+  verification: AstroStaticExportVerification = defaultAstroStaticExportVerification(),
+): Promise<InspectedAstroStaticExport> {
   const canonicalWorkspace = await realpath(resolve(workspacePath)).catch((error: unknown) => {
     throw new AstroStaticExportValidationError("export_boundary_invalid", "Workspace cannot be resolved for export inspection.", {
       cause: error,
@@ -405,7 +418,7 @@ export async function inspectAstroStaticExport(workspacePath: string): Promise<I
 
   const indexHtml = await readFile(join(canonicalDist, "index.html"), "utf8");
   assertNoSourceOrDevDependency(indexHtml, canonicalWorkspace, "index.html");
-  const verifiedContent = verifyFixtureHtml(indexHtml);
+  const verifiedContent = verifyFixtureHtml(indexHtml, verification.expectedContent);
   const filePaths = new Set(files.map((file) => file.path));
   const references = verifyHtmlReferences(indexHtml, filePaths);
   const stylesheetPaths = Array.from(
@@ -415,11 +428,11 @@ export async function inspectAstroStaticExport(workspacePath: string): Promise<I
     throw new AstroStaticExportValidationError("stylesheet_verification_failed", "Built HTML has no local stylesheet.");
   }
 
-  const expectedThemeToken = "--gnr8-astro-accent: #0f766e;";
+  const expectedThemeToken = verification.expectedThemeToken;
   for (const stylesheetPath of stylesheetPaths) {
     const stylesheet = await readFile(join(canonicalDist, ...stylesheetPath.split("/")), "utf8");
     assertNoSourceOrDevDependency(stylesheet, canonicalWorkspace, stylesheetPath);
-    if (!themeTokenPattern().test(stylesheet)) {
+    if (!themeTokenPattern(expectedThemeToken).test(stylesheet)) {
       throw new AstroStaticExportValidationError(
         "stylesheet_verification_failed",
         `Built stylesheet is missing the expected theme token: ${stylesheetPath}.`,
@@ -571,8 +584,9 @@ async function enumerateExportFiles(distPath: string): Promise<AstroStaticExport
   return files;
 }
 
-function verifyFixtureHtml(html: string): string[] {
-  const expectedContent = [
+function defaultAstroStaticExportVerification(): AstroStaticExportVerification {
+  return {
+    expectedContent: [
     "<title>Northline Operations Proof</title>",
     "Work that reads clearly",
     "Services",
@@ -580,7 +594,12 @@ function verifyFixtureHtml(html: string): string[] {
     "Practical operating support",
     "Talk with Northline",
     "hello@northline.example",
-  ];
+    ],
+    expectedThemeToken: "--gnr8-astro-accent: #0f766e;",
+  };
+}
+
+function verifyFixtureHtml(html: string, expectedContent: string[]): string[] {
   const verified = expectedContent.filter((value) => html.includes(value));
   if (verified.length !== expectedContent.length) {
     throw new AstroStaticExportValidationError(
@@ -730,7 +749,7 @@ async function verifyDistHttp(
   if (
     stylesheetResponse.status !== 200 ||
     !stylesheetContentType?.toLowerCase().includes("text/css") ||
-    !themeTokenPattern().test(stylesheet)
+    !themeTokenPattern(inspected.verifiedThemeToken).test(stylesheet)
   ) {
     throw proofError(
       "stylesheet_verification_failed",
@@ -850,8 +869,11 @@ function boundedSignal(signal: AbortSignal | undefined, timeoutMs: number): Abor
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-function themeTokenPattern(): RegExp {
-  return /--gnr8-astro-accent\s*:\s*#0f766e\s*;/i;
+function themeTokenPattern(expectedThemeToken: string): RegExp {
+  const normalized = expectedThemeToken.trim();
+  if (!normalized) return /$a/;
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+  return new RegExp(escaped, "i");
 }
 
 function readPackageVersion(body: string, packageName: string): string {

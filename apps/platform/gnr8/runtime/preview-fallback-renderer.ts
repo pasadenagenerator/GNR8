@@ -323,7 +323,14 @@ function collectImages(value: unknown, max: number): ImageItem[] {
 }
 
 function sectionTitle(sectionProps: Record<string, unknown>, fallback: string): string {
+  // Direct section semantics win in a stable, documented order. When none are
+  // present, retain the historical recursive first-text fallback below.
   return (
+    collectDirectStringsByKeys({
+      record: sectionProps,
+      keys: ['title', 'heading', 'headline', 'name', 'label'],
+      max: 1,
+    })[0] ??
     collectStringsByKeys({
       value: sectionProps,
       keys: new Set(['title', 'heading', 'headline', 'name', 'label']),

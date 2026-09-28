@@ -1,0 +1,1119 @@
+{
+  "version": "gnr8-astro-candidate-readback:v1",
+  "proofOnly": true,
+  "generatedAt": "2026-09-27T08:06:36.099Z",
+  "outputDirectory": "/Users/gregorzigon/Documents/Codex/GNR8/docs/product/gnr8-platform-mvp-07a-fallback-heading-fragment-repair-evidence",
+  "constraints": {
+    "syntheticDataOnly": true,
+    "externalAssets": false,
+    "durableRegistration": false,
+    "databaseReads": 0,
+    "providerOrDnsOperations": 0,
+    "productionMutation": false
+  },
+  "fixtures": [
+    {
+      "fixtureId": "chs-like",
+      "description": "Synthetic service-business fixture shaped like a regional managed-IT company.",
+      "expectedContentSha256": "9e9ab91ec9df9498231471e866f1d2612bf0bf16d4a4c5e65e3e88580179b2d5",
+      "sharedExpected": {
+        "title": "Cobalt Harbor Systems — Managed IT",
+        "visibleText": [
+          "Cobalt Harbor Systems",
+          "Secure infrastructure for teams that keep moving",
+          "Practical cloud, network, and security operations for growing organizations.",
+          "Plan an assessment",
+          "Services",
+          "Approach",
+          "Contact",
+          "Capabilities",
+          "Practical IT services",
+          "Focused support from daily operations through modernization.",
+          "Managed infrastructure",
+          "Reliable cloud, endpoint, and network care.",
+          "Security operations",
+          "Clear controls, monitoring, and response planning.",
+          "How we work",
+          "From assessment to steady operations",
+          "A small senior team maps priorities, delivers in stages, and documents the result.",
+          "Discover",
+          "Review constraints, risks, and the current operating model.",
+          "Operate",
+          "Measure service quality and improve the system over time.",
+          "Plan your next upgrade",
+          "Tell us what needs to become safer or easier to operate.",
+          "hello@cobalt-harbor.example",
+          "+386 1 555 0107",
+          "Harbor Road 7, 1000 Ljubljana",
+          "Cobalt Harbor Systems · Synthetic MVP 07 proof"
+        ],
+        "hrefs": [
+          "/",
+          "#services",
+          "#approach",
+          "#contact",
+          "mailto:hello@cobalt-harbor.example",
+          "tel:+386 1 555 0107"
+        ],
+        "sectionOrderText": [
+          "Secure infrastructure for teams that keep moving",
+          "Practical IT services",
+          "From assessment to steady operations",
+          "Plan your next upgrade",
+          "Cobalt Harbor Systems · Synthetic MVP 07 proof"
+        ],
+        "themeValues": [
+          "#0b6e6b",
+          "#f2fbfa",
+          "#102a2a",
+          "#52706f",
+          "#ffffff",
+          "Inter, ui-sans-serif, system-ui, sans-serif"
+        ]
+      },
+      "mappings": {
+        "astro": "NormalizedStaticBusinessSiteContent -> createAstroStaticSiteProjectManifest -> real Astro build/export -> MVP 06 bridge candidate.",
+        "fallback": "NormalizedStaticBusinessSiteContent -> explicit CanonicalSiteVersionSnapshot mapping -> buildDeterministicArtifactBundle -> ordinary transformed-artifact preview selection.",
+        "gaps": [
+          {
+            "field": "theme.tone",
+            "astro": "Accepted by the normalized model but not emitted by the current Astro adapter.",
+            "fallback": "No dedicated canonical style-token or renderer behavior exists.",
+            "classification": "unsupported_capability"
+          },
+          {
+            "field": "brand/header semantics",
+            "astro": "Rendered as a linked site-header brand.",
+            "fallback": "Represented as navbar title/content rather than a dedicated brand primitive.",
+            "classification": "expected_adapter_variation"
+          },
+          {
+            "field": "card layout semantics",
+            "astro": "Rendered as article cards in a responsive grid.",
+            "fallback": "Current content fallback flattens card fields into text paragraphs.",
+            "classification": "unsupported_capability"
+          },
+          {
+            "field": "theme application",
+            "astro": "Theme signals drive the page stylesheet.",
+            "fallback": "Theme values are retained as compiled CSS custom properties but the fallback shell uses fixed inline colors.",
+            "classification": "unsupported_capability"
+          }
+        ]
+      },
+      "buildExport": {
+        "proofVersion": "gnr8-astro-build-export-proof:v1",
+        "proofOnly": true,
+        "timingsMs": {
+          "total": 14423,
+          "prepare": 157,
+          "install": 10753,
+          "build": 2378,
+          "exportValidation": 13,
+          "httpVerification": 25,
+          "cleanup": 852
+        },
+        "versions": {
+          "node": "v22.22.3",
+          "pnpm": "10.28.2",
+          "astro": "5.18.2"
+        },
+        "workspace": {
+          "path": "/private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-rt3QtN",
+          "baselineCommit": "5e55b0eadc937afb988640b77f150c970dfedc1f",
+          "dependencyGeneratedFiles": [
+            ".pnpm-store/",
+            "node_modules/",
+            "pnpm-lock.yaml"
+          ],
+          "buildGeneratedFiles": [
+            ".astro/",
+            "dist/"
+          ],
+          "removed": true
+        },
+        "installation": {
+          "completed": true,
+          "command": "pnpm install --ignore-workspace --no-frozen-lockfile --store-dir .pnpm-store"
+        },
+        "build": {
+          "completed": true,
+          "command": "pnpm build",
+          "stdout": "\n> cobalt-harbor-systems-managed-it@0.0.0 build /private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-rt3QtN\n> astro build\n\n10:06:24 [content] Syncing content\n10:06:24 [content] Synced content\n10:06:24 [types] Generated 231ms\n10:06:24 [build] output: \"static\"\n10:06:24 [build] mode: \"static\"\n10:06:24 [build] directory: /private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-rt3QtN/dist/\n10:06:24 [build] Collecting build info...\n10:06:24 [build] ✓ Completed in 240ms.\n10:06:24 [build] Building static entrypoints...\n10:06:24 [vite] ✓ built in 388ms\n10:06:24 [build] ✓ Completed in 407ms.\n\n generating static routes \n10:06:24 ▶ src/pages/index.astro\n10:06:24   └─ /index.html (+3ms) \n10:06:24 ✓ Completed in 7ms.\n\n10:06:24 [build] 1 page(s) built in 658ms\n10:06:24 [build] Complete!\n",
+          "stderr": ""
+        },
+        "export": {
+          "distPath": "/private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-rt3QtN/dist",
+          "indexHtmlBytes": 2204,
+          "fileCount": 2,
+          "totalBytes": 4676,
+          "aggregateSha256": "7854ad3b4b41cee428cd2bdf21431aeeb1557896af534304aef05d1aed646d52",
+          "files": [
+            {
+              "path": "index.html",
+              "bytes": 2204,
+              "sha256": "4c04d5dcb85e28b096a090c37b05833c3ca00a3362f6f58efd86dce47cf2c097"
+            },
+            {
+              "path": "styles/global.css",
+              "bytes": 2472,
+              "sha256": "4f36d06a2474425b91a39a60f72186bc5cdf8c00f019c2a5646d5efd9499a81f"
+            }
+          ],
+          "references": [
+            {
+              "sourcePath": "index.html",
+              "reference": "/styles/global.css",
+              "resolvedPath": "styles/global.css",
+              "kind": "stylesheet"
+            }
+          ],
+          "stylesheetPaths": [
+            "styles/global.css"
+          ],
+          "verifiedContent": [
+            "<title>Cobalt Harbor Systems — Managed IT</title>",
+            "Cobalt Harbor Systems",
+            "Secure infrastructure for teams that keep moving",
+            "Practical cloud, network, and security operations for growing organizations.",
+            "Plan an assessment",
+            "Services",
+            "Approach",
+            "Contact",
+            "Capabilities",
+            "Practical IT services",
+            "Focused support from daily operations through modernization.",
+            "Managed infrastructure",
+            "Reliable cloud, endpoint, and network care.",
+            "Security operations",
+            "Clear controls, monitoring, and response planning.",
+            "How we work",
+            "From assessment to steady operations",
+            "A small senior team maps priorities, delivers in stages, and documents the result.",
+            "Discover",
+            "Review constraints, risks, and the current operating model.",
+            "Operate",
+            "Measure service quality and improve the system over time.",
+            "Plan your next upgrade",
+            "Tell us what needs to become safer or easier to operate.",
+            "hello@cobalt-harbor.example",
+            "+386 1 555 0107",
+            "Harbor Road 7, 1000 Ljubljana",
+            "Cobalt Harbor Systems · Synthetic MVP 07 proof"
+          ],
+          "verifiedThemeToken": "--gnr8-astro-accent: #0b6e6b;"
+        },
+        "server": {
+          "started": true,
+          "host": "127.0.0.1",
+          "port": 61434,
+          "url": "http://127.0.0.1:61434/",
+          "stopped": true
+        },
+        "http": {
+          "pageStatus": 200,
+          "pageContentType": "text/html; charset=utf-8",
+          "stylesheetUrl": "http://127.0.0.1:61434/styles/global.css",
+          "stylesheetStatus": 200,
+          "stylesheetContentType": "text/css; charset=utf-8",
+          "verifiedThemeToken": "--gnr8-astro-accent: #0b6e6b;"
+        },
+        "sourceComparison": {
+          "baselineAggregateSha256": "76d09202741362a051058517bb4a9544f17043cd970dea484b79db6d96bb361e",
+          "finalAggregateSha256": "76d09202741362a051058517bb4a9544f17043cd970dea484b79db6d96bb361e",
+          "unchanged": true
+        },
+        "cleanup": {
+          "completed": true,
+          "errors": []
+        }
+      },
+      "candidate": {
+        "id": "candidate-mvp07-chs-like-astro",
+        "siteId": "site-mvp07-chs-like",
+        "siteVersionId": "sv-mvp07-chs-like",
+        "sourceSnapshotSha256": "76d09202741362a051058517bb4a9544f17043cd970dea484b79db6d96bb361e",
+        "exportSha256": "7854ad3b4b41cee428cd2bdf21431aeeb1557896af534304aef05d1aed646d52",
+        "convertedArtifactSha256": "297a7be12c2bafeb847dc52e7bc3a5d4afa3309084b9d5ce002985393fed08e6",
+        "durableRegistration": false
+      },
+      "fallbackArtifact": {
+        "id": "artifact-mvp07-chs-like-fallback",
+        "siteId": "site-mvp07-chs-like",
+        "siteVersionId": "sv-mvp07-chs-like",
+        "bundleSha256": "6b76e40fc1bff8e9932281faa4244e2df41542d9ed3740e5ca46126e3193d500",
+        "durableRegistration": false,
+        "governanceEvidenceConstructed": false
+      },
+      "comparisons": {
+        "astro": {
+          "fixtureId": "chs-like",
+          "variant": "astro",
+          "adapterId": "astro-static-site",
+          "source": "astro_internal_preview_candidate",
+          "fallbackUsed": false,
+          "content": {
+            "expectedCount": 27,
+            "presentCount": 27,
+            "missing": [],
+            "titleMatches": true
+          },
+          "links": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": [],
+            "brokenFragmentHrefs": []
+          },
+          "sectionOrder": {
+            "matches": true,
+            "indexes": [
+              {
+                "text": "Secure infrastructure for teams that keep moving",
+                "index": 70
+              },
+              {
+                "text": "Practical IT services",
+                "index": 228
+              },
+              {
+                "text": "From assessment to steady operations",
+                "index": 461
+              },
+              {
+                "text": "Plan your next upgrade",
+                "index": 724
+              },
+              {
+                "text": "Cobalt Harbor Systems · Synthetic MVP 07 proof",
+                "index": 878
+              }
+            ]
+          },
+          "theme": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": []
+          },
+          "ownership": {
+            "matches": true,
+            "expected": {
+              "siteId": "site-mvp07-chs-like",
+              "siteVersionId": "sv-mvp07-chs-like"
+            },
+            "actual": {
+              "siteId": "site-mvp07-chs-like",
+              "siteVersionId": "sv-mvp07-chs-like"
+            }
+          },
+          "provenance": {
+            "sourceSnapshotSha256": "76d09202741362a051058517bb4a9544f17043cd970dea484b79db6d96bb361e",
+            "exportSha256": "7854ad3b4b41cee428cd2bdf21431aeeb1557896af534304aef05d1aed646d52",
+            "conversionVersion": "gnr8-astro-internal-preview-conversion:v1",
+            "storage": "caller_owned_in_memory",
+            "durableRegistration": false
+          },
+          "contentHash": "297a7be12c2bafeb847dc52e7bc3a5d4afa3309084b9d5ce002985393fed08e6",
+          "differences": []
+        },
+        "fallback": {
+          "fixtureId": "chs-like",
+          "variant": "fallback",
+          "adapterId": "html-static-artifact",
+          "source": "transformed_artifact",
+          "fallbackUsed": false,
+          "content": {
+            "expectedCount": 27,
+            "presentCount": 27,
+            "missing": [],
+            "titleMatches": true
+          },
+          "links": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": [],
+            "brokenFragmentHrefs": []
+          },
+          "sectionOrder": {
+            "matches": true,
+            "indexes": [
+              {
+                "text": "Secure infrastructure for teams that keep moving",
+                "index": 199
+              },
+              {
+                "text": "Practical IT services",
+                "index": 443
+              },
+              {
+                "text": "From assessment to steady operations",
+                "index": 784
+              },
+              {
+                "text": "Plan your next upgrade",
+                "index": 1154
+              },
+              {
+                "text": "Cobalt Harbor Systems · Synthetic MVP 07 proof",
+                "index": 1438
+              }
+            ]
+          },
+          "theme": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": []
+          },
+          "ownership": {
+            "matches": true,
+            "expected": {
+              "siteId": "site-mvp07-chs-like",
+              "siteVersionId": "sv-mvp07-chs-like"
+            },
+            "actual": {
+              "siteId": "site-mvp07-chs-like",
+              "siteVersionId": "sv-mvp07-chs-like"
+            }
+          },
+          "provenance": {
+            "builder": "buildDeterministicArtifactBundle",
+            "renderMode": "PREVIEW",
+            "durableRegistration": false,
+            "governanceEvidenceConstructed": false
+          },
+          "contentHash": "6b76e40fc1bff8e9932281faa4244e2df41542d9ed3740e5ca46126e3193d500",
+          "differences": []
+        },
+        "crossVariant": [
+          {
+            "classification": "expected_adapter_variation",
+            "code": "content_hash_differs",
+            "detail": "Astro 297a7be12c2bafeb847dc52e7bc3a5d4afa3309084b9d5ce002985393fed08e6; fallback 6b76e40fc1bff8e9932281faa4244e2df41542d9ed3740e5ca46126e3193d500."
+          },
+          {
+            "classification": "unsupported_capability",
+            "code": "input_model_gap:theme.tone",
+            "detail": "Accepted by the normalized model but not emitted by the current Astro adapter. No dedicated canonical style-token or renderer behavior exists."
+          },
+          {
+            "classification": "expected_adapter_variation",
+            "code": "input_model_gap:brand/header semantics",
+            "detail": "Rendered as a linked site-header brand. Represented as navbar title/content rather than a dedicated brand primitive."
+          },
+          {
+            "classification": "unsupported_capability",
+            "code": "input_model_gap:card layout semantics",
+            "detail": "Rendered as article cards in a responsive grid. Current content fallback flattens card fields into text paragraphs."
+          },
+          {
+            "classification": "unsupported_capability",
+            "code": "input_model_gap:theme application",
+            "detail": "Theme signals drive the page stylesheet. Theme values are retained as compiled CSS custom properties but the fallback shell uses fixed inline colors."
+          }
+        ]
+      },
+      "previewFiles": {
+        "astro": "previews/chs-like-astro.html",
+        "fallback": "previews/chs-like-fallback.html"
+      },
+      "cleanup": {
+        "astroWorkspaceRemoved": true,
+        "astroDistServerStopped": true,
+        "databaseReads": 0
+      }
+    },
+    {
+      "fixtureId": "aris-like",
+      "description": "Synthetic supply-business fixture shaped like a specialist technology and audio retailer.",
+      "expectedContentSha256": "ce372e0cff419c269aab1519a3310bbd719a67824016c3d5706d1c7d233b7d54",
+      "sharedExpected": {
+        "title": "Aurora Ridge Supply — Technology & Sound",
+        "visibleText": [
+          "Aurora Ridge Supply",
+          "Technology and sound, selected with care",
+          "Specialist computers, studio systems, and home audio with practical advice before and after purchase.",
+          "Ask for a recommendation",
+          "Products",
+          "Advice",
+          "Contact",
+          "Selected ranges",
+          "Tools for work and listening",
+          "A focused assortment for creative desks, studios, and considered home setups.",
+          "Creative computing",
+          "Quiet, capable systems for design and production.",
+          "Reference audio",
+          "Speakers and components chosen for clarity and longevity.",
+          "Personal guidance",
+          "Advice that fits the room and the workflow",
+          "Compare options, test the important details, and leave with a system that works together.",
+          "Listen and compare",
+          "Evaluate sound and ergonomics before deciding.",
+          "Configure and support",
+          "Get a coherent setup plus help after delivery.",
+          "Find the right setup",
+          "Share the space, budget, and work you want the system to do.",
+          "advice@aurora-ridge.example",
+          "+386 1 555 0142",
+          "Ridge Avenue 14, 1000 Ljubljana",
+          "Aurora Ridge Supply · Synthetic MVP 07 proof"
+        ],
+        "hrefs": [
+          "/",
+          "#products",
+          "#advice",
+          "#contact",
+          "mailto:advice@aurora-ridge.example",
+          "tel:+386 1 555 0142"
+        ],
+        "sectionOrderText": [
+          "Technology and sound, selected with care",
+          "Tools for work and listening",
+          "Advice that fits the room and the workflow",
+          "Find the right setup",
+          "Aurora Ridge Supply · Synthetic MVP 07 proof"
+        ],
+        "themeValues": [
+          "#b45309",
+          "#fffaf2",
+          "#2d2118",
+          "#786454",
+          "#ffffff",
+          "Georgia, ui-serif, serif"
+        ]
+      },
+      "mappings": {
+        "astro": "NormalizedStaticBusinessSiteContent -> createAstroStaticSiteProjectManifest -> real Astro build/export -> MVP 06 bridge candidate.",
+        "fallback": "NormalizedStaticBusinessSiteContent -> explicit CanonicalSiteVersionSnapshot mapping -> buildDeterministicArtifactBundle -> ordinary transformed-artifact preview selection.",
+        "gaps": [
+          {
+            "field": "theme.tone",
+            "astro": "Accepted by the normalized model but not emitted by the current Astro adapter.",
+            "fallback": "No dedicated canonical style-token or renderer behavior exists.",
+            "classification": "unsupported_capability"
+          },
+          {
+            "field": "brand/header semantics",
+            "astro": "Rendered as a linked site-header brand.",
+            "fallback": "Represented as navbar title/content rather than a dedicated brand primitive.",
+            "classification": "expected_adapter_variation"
+          },
+          {
+            "field": "card layout semantics",
+            "astro": "Rendered as article cards in a responsive grid.",
+            "fallback": "Current content fallback flattens card fields into text paragraphs.",
+            "classification": "unsupported_capability"
+          },
+          {
+            "field": "theme application",
+            "astro": "Theme signals drive the page stylesheet.",
+            "fallback": "Theme values are retained as compiled CSS custom properties but the fallback shell uses fixed inline colors.",
+            "classification": "unsupported_capability"
+          }
+        ]
+      },
+      "buildExport": {
+        "proofVersion": "gnr8-astro-build-export-proof:v1",
+        "proofOnly": true,
+        "timingsMs": {
+          "total": 10441,
+          "prepare": 180,
+          "install": 6972,
+          "build": 2198,
+          "exportValidation": 7,
+          "httpVerification": 4,
+          "cleanup": 835
+        },
+        "versions": {
+          "node": "v22.22.3",
+          "pnpm": "10.28.2",
+          "astro": "5.18.2"
+        },
+        "workspace": {
+          "path": "/private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-5IEWAS",
+          "baselineCommit": "e9b883aaa962df33decfd60a97526c436d9616b0",
+          "dependencyGeneratedFiles": [
+            ".pnpm-store/",
+            "node_modules/",
+            "pnpm-lock.yaml"
+          ],
+          "buildGeneratedFiles": [
+            ".astro/",
+            "dist/"
+          ],
+          "removed": true
+        },
+        "installation": {
+          "completed": true,
+          "command": "pnpm install --ignore-workspace --no-frozen-lockfile --store-dir .pnpm-store"
+        },
+        "build": {
+          "completed": true,
+          "command": "pnpm build",
+          "stdout": "\n> aurora-ridge-supply-technology-sound@0.0.0 build /private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-5IEWAS\n> astro build\n\n10:06:34 [content] Syncing content\n10:06:34 [content] Synced content\n10:06:34 [types] Generated 230ms\n10:06:34 [build] output: \"static\"\n10:06:34 [build] mode: \"static\"\n10:06:34 [build] directory: /private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-5IEWAS/dist/\n10:06:34 [build] Collecting build info...\n10:06:34 [build] ✓ Completed in 236ms.\n10:06:34 [build] Building static entrypoints...\n10:06:35 [vite] ✓ built in 399ms\n10:06:35 [build] ✓ Completed in 418ms.\n\n generating static routes \n10:06:35 ▶ src/pages/index.astro\n10:06:35   └─ /index.html (+3ms) \n10:06:35 ✓ Completed in 6ms.\n\n10:06:35 [build] 1 page(s) built in 665ms\n10:06:35 [build] Complete!\n",
+          "stderr": ""
+        },
+        "export": {
+          "distPath": "/private/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-astro-workspace-5IEWAS/dist",
+          "indexHtmlBytes": 2280,
+          "fileCount": 2,
+          "totalBytes": 4733,
+          "aggregateSha256": "d3808553233d376a00defe484c9176cdb8ba1bb68f904a749a241529b8f4913b",
+          "files": [
+            {
+              "path": "index.html",
+              "bytes": 2280,
+              "sha256": "46935ea69940b2582745f8424acae0676ab48f88d28016af04acdcca9ba3d86d"
+            },
+            {
+              "path": "styles/global.css",
+              "bytes": 2453,
+              "sha256": "751141391a5d5c323a2ca5e0a48935b4da9d050d64840ecb9f01ff988bf8c3e0"
+            }
+          ],
+          "references": [
+            {
+              "sourcePath": "index.html",
+              "reference": "/styles/global.css",
+              "resolvedPath": "styles/global.css",
+              "kind": "stylesheet"
+            }
+          ],
+          "stylesheetPaths": [
+            "styles/global.css"
+          ],
+          "verifiedContent": [
+            "<title>Aurora Ridge Supply — Technology &amp; Sound</title>",
+            "Aurora Ridge Supply",
+            "Technology and sound, selected with care",
+            "Specialist computers, studio systems, and home audio with practical advice before and after purchase.",
+            "Ask for a recommendation",
+            "Products",
+            "Advice",
+            "Contact",
+            "Selected ranges",
+            "Tools for work and listening",
+            "A focused assortment for creative desks, studios, and considered home setups.",
+            "Creative computing",
+            "Quiet, capable systems for design and production.",
+            "Reference audio",
+            "Speakers and components chosen for clarity and longevity.",
+            "Personal guidance",
+            "Advice that fits the room and the workflow",
+            "Compare options, test the important details, and leave with a system that works together.",
+            "Listen and compare",
+            "Evaluate sound and ergonomics before deciding.",
+            "Configure and support",
+            "Get a coherent setup plus help after delivery.",
+            "Find the right setup",
+            "Share the space, budget, and work you want the system to do.",
+            "advice@aurora-ridge.example",
+            "+386 1 555 0142",
+            "Ridge Avenue 14, 1000 Ljubljana",
+            "Aurora Ridge Supply · Synthetic MVP 07 proof"
+          ],
+          "verifiedThemeToken": "--gnr8-astro-accent: #b45309;"
+        },
+        "server": {
+          "started": true,
+          "host": "127.0.0.1",
+          "port": 61472,
+          "url": "http://127.0.0.1:61472/",
+          "stopped": true
+        },
+        "http": {
+          "pageStatus": 200,
+          "pageContentType": "text/html; charset=utf-8",
+          "stylesheetUrl": "http://127.0.0.1:61472/styles/global.css",
+          "stylesheetStatus": 200,
+          "stylesheetContentType": "text/css; charset=utf-8",
+          "verifiedThemeToken": "--gnr8-astro-accent: #b45309;"
+        },
+        "sourceComparison": {
+          "baselineAggregateSha256": "b3aff6d0d78bb46fffe19ce184c586b0cc2b7c1df2be812a65c54c5493e65da1",
+          "finalAggregateSha256": "b3aff6d0d78bb46fffe19ce184c586b0cc2b7c1df2be812a65c54c5493e65da1",
+          "unchanged": true
+        },
+        "cleanup": {
+          "completed": true,
+          "errors": []
+        }
+      },
+      "candidate": {
+        "id": "candidate-mvp07-aris-like-astro",
+        "siteId": "site-mvp07-aris-like",
+        "siteVersionId": "sv-mvp07-aris-like",
+        "sourceSnapshotSha256": "b3aff6d0d78bb46fffe19ce184c586b0cc2b7c1df2be812a65c54c5493e65da1",
+        "exportSha256": "d3808553233d376a00defe484c9176cdb8ba1bb68f904a749a241529b8f4913b",
+        "convertedArtifactSha256": "09ba7404f168f4f755a10973ed1533669e8a24046cd1e3d7077e559645b4dd01",
+        "durableRegistration": false
+      },
+      "fallbackArtifact": {
+        "id": "artifact-mvp07-aris-like-fallback",
+        "siteId": "site-mvp07-aris-like",
+        "siteVersionId": "sv-mvp07-aris-like",
+        "bundleSha256": "09347e59e81fb97f0e81ff089e1acd4170537cd6b89a0666f4bc702b160e4583",
+        "durableRegistration": false,
+        "governanceEvidenceConstructed": false
+      },
+      "comparisons": {
+        "astro": {
+          "fixtureId": "aris-like",
+          "variant": "astro",
+          "adapterId": "astro-static-site",
+          "source": "astro_internal_preview_candidate",
+          "fallbackUsed": false,
+          "content": {
+            "expectedCount": 27,
+            "presentCount": 27,
+            "missing": [],
+            "titleMatches": true
+          },
+          "links": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": [],
+            "brokenFragmentHrefs": []
+          },
+          "sectionOrder": {
+            "matches": true,
+            "indexes": [
+              {
+                "text": "Technology and sound, selected with care",
+                "index": 64
+              },
+              {
+                "text": "Tools for work and listening",
+                "index": 248
+              },
+              {
+                "text": "Advice that fits the room and the workflow",
+                "index": 516
+              },
+              {
+                "text": "Find the right setup",
+                "index": 792
+              },
+              {
+                "text": "Aurora Ridge Supply · Synthetic MVP 07 proof",
+                "index": 950
+              }
+            ]
+          },
+          "theme": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": []
+          },
+          "ownership": {
+            "matches": true,
+            "expected": {
+              "siteId": "site-mvp07-aris-like",
+              "siteVersionId": "sv-mvp07-aris-like"
+            },
+            "actual": {
+              "siteId": "site-mvp07-aris-like",
+              "siteVersionId": "sv-mvp07-aris-like"
+            }
+          },
+          "provenance": {
+            "sourceSnapshotSha256": "b3aff6d0d78bb46fffe19ce184c586b0cc2b7c1df2be812a65c54c5493e65da1",
+            "exportSha256": "d3808553233d376a00defe484c9176cdb8ba1bb68f904a749a241529b8f4913b",
+            "conversionVersion": "gnr8-astro-internal-preview-conversion:v1",
+            "storage": "caller_owned_in_memory",
+            "durableRegistration": false
+          },
+          "contentHash": "09ba7404f168f4f755a10973ed1533669e8a24046cd1e3d7077e559645b4dd01",
+          "differences": []
+        },
+        "fallback": {
+          "fixtureId": "aris-like",
+          "variant": "fallback",
+          "adapterId": "html-static-artifact",
+          "source": "transformed_artifact",
+          "fallbackUsed": false,
+          "content": {
+            "expectedCount": 27,
+            "presentCount": 27,
+            "missing": [],
+            "titleMatches": true
+          },
+          "links": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": [],
+            "brokenFragmentHrefs": []
+          },
+          "sectionOrder": {
+            "matches": true,
+            "indexes": [
+              {
+                "text": "Technology and sound, selected with care",
+                "index": 193
+              },
+              {
+                "text": "Tools for work and listening",
+                "index": 460
+              },
+              {
+                "text": "Advice that fits the room and the workflow",
+                "index": 833
+              },
+              {
+                "text": "Find the right setup",
+                "index": 1222
+              },
+              {
+                "text": "Aurora Ridge Supply · Synthetic MVP 07 proof",
+                "index": 1508
+              }
+            ]
+          },
+          "theme": {
+            "expectedCount": 6,
+            "presentCount": 6,
+            "missing": []
+          },
+          "ownership": {
+            "matches": true,
+            "expected": {
+              "siteId": "site-mvp07-aris-like",
+              "siteVersionId": "sv-mvp07-aris-like"
+            },
+            "actual": {
+              "siteId": "site-mvp07-aris-like",
+              "siteVersionId": "sv-mvp07-aris-like"
+            }
+          },
+          "provenance": {
+            "builder": "buildDeterministicArtifactBundle",
+            "renderMode": "PREVIEW",
+            "durableRegistration": false,
+            "governanceEvidenceConstructed": false
+          },
+          "contentHash": "09347e59e81fb97f0e81ff089e1acd4170537cd6b89a0666f4bc702b160e4583",
+          "differences": []
+        },
+        "crossVariant": [
+          {
+            "classification": "expected_adapter_variation",
+            "code": "content_hash_differs",
+            "detail": "Astro 09ba7404f168f4f755a10973ed1533669e8a24046cd1e3d7077e559645b4dd01; fallback 09347e59e81fb97f0e81ff089e1acd4170537cd6b89a0666f4bc702b160e4583."
+          },
+          {
+            "classification": "unsupported_capability",
+            "code": "input_model_gap:theme.tone",
+            "detail": "Accepted by the normalized model but not emitted by the current Astro adapter. No dedicated canonical style-token or renderer behavior exists."
+          },
+          {
+            "classification": "expected_adapter_variation",
+            "code": "input_model_gap:brand/header semantics",
+            "detail": "Rendered as a linked site-header brand. Represented as navbar title/content rather than a dedicated brand primitive."
+          },
+          {
+            "classification": "unsupported_capability",
+            "code": "input_model_gap:card layout semantics",
+            "detail": "Rendered as article cards in a responsive grid. Current content fallback flattens card fields into text paragraphs."
+          },
+          {
+            "classification": "unsupported_capability",
+            "code": "input_model_gap:theme application",
+            "detail": "Theme signals drive the page stylesheet. Theme values are retained as compiled CSS custom properties but the fallback shell uses fixed inline colors."
+          }
+        ]
+      },
+      "previewFiles": {
+        "astro": "previews/aris-like-astro.html",
+        "fallback": "previews/aris-like-fallback.html"
+      },
+      "cleanup": {
+        "astroWorkspaceRemoved": true,
+        "astroDistServerStopped": true,
+        "databaseReads": 0
+      }
+    }
+  ],
+  "browser": {
+    "version": "gnr8-astro-candidate-readback-browser:v1",
+    "capturedAt": "2026-09-27T08:12:48.639Z",
+    "serverStopped": true,
+    "captures": [
+      {
+        "fixtureId": "chs-like",
+        "variant": "astro",
+        "viewport": {
+          "name": "desktop",
+          "width": 1440,
+          "height": 900
+        },
+        "screenshot": "screenshots/chs-like-astro-desktop.jpg",
+        "contactScreenshot": "screenshots/chs-like-astro-desktop-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#services",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#approach",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      },
+      {
+        "fixtureId": "chs-like",
+        "variant": "fallback",
+        "viewport": {
+          "name": "desktop",
+          "width": 1440,
+          "height": 900
+        },
+        "screenshot": "screenshots/chs-like-fallback-desktop.jpg",
+        "contactScreenshot": "screenshots/chs-like-fallback-desktop-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#services",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#approach",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      },
+      {
+        "fixtureId": "aris-like",
+        "variant": "astro",
+        "viewport": {
+          "name": "desktop",
+          "width": 1440,
+          "height": 900
+        },
+        "screenshot": "screenshots/aris-like-astro-desktop.jpg",
+        "contactScreenshot": "screenshots/aris-like-astro-desktop-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#products",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#advice",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      },
+      {
+        "fixtureId": "aris-like",
+        "variant": "fallback",
+        "viewport": {
+          "name": "desktop",
+          "width": 1440,
+          "height": 900
+        },
+        "screenshot": "screenshots/aris-like-fallback-desktop.jpg",
+        "contactScreenshot": "screenshots/aris-like-fallback-desktop-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#products",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#advice",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      },
+      {
+        "fixtureId": "chs-like",
+        "variant": "astro",
+        "viewport": {
+          "name": "mobile",
+          "width": 390,
+          "height": 844
+        },
+        "screenshot": "screenshots/chs-like-astro-mobile.jpg",
+        "contactScreenshot": "screenshots/chs-like-astro-mobile-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#services",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#approach",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      },
+      {
+        "fixtureId": "chs-like",
+        "variant": "fallback",
+        "viewport": {
+          "name": "mobile",
+          "width": 390,
+          "height": 844
+        },
+        "screenshot": "screenshots/chs-like-fallback-mobile.jpg",
+        "contactScreenshot": "screenshots/chs-like-fallback-mobile-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#services",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#approach",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      },
+      {
+        "fixtureId": "aris-like",
+        "variant": "astro",
+        "viewport": {
+          "name": "mobile",
+          "width": 390,
+          "height": 844
+        },
+        "screenshot": "screenshots/aris-like-astro-mobile.jpg",
+        "contactScreenshot": "screenshots/aris-like-astro-mobile-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#products",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#advice",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      },
+      {
+        "fixtureId": "aris-like",
+        "variant": "fallback",
+        "viewport": {
+          "name": "mobile",
+          "width": 390,
+          "height": 844
+        },
+        "screenshot": "screenshots/aris-like-fallback-mobile.jpg",
+        "contactScreenshot": "screenshots/aris-like-fallback-mobile-contact.jpg",
+        "clippedElements": [],
+        "horizontalOverflow": false,
+        "lowContrastText": [],
+        "missingExpectedText": [],
+        "overlappingText": [],
+        "anchors": [
+          {
+            "href": "#products",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#advice",
+            "navigationVerified": true,
+            "targetFound": true
+          },
+          {
+            "href": "#contact",
+            "navigationVerified": true,
+            "targetFound": true
+          }
+        ],
+        "consoleErrors": []
+      }
+    ]
+  },
+  "readiness": {
+    "status": "ready_for_further_internal_evaluation",
+    "reasons": [
+      "Both synthetic fixtures passed static comparison and browser validation without defect findings."
+    ]
+  }
+}

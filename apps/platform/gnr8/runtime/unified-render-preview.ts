@@ -2948,6 +2948,7 @@ async function renderAstroInternalPreviewCandidate(input: {
   requestedPath: string
   selection: { candidateId: string; siteId: string }
   context: PreviewReadContext
+  getCandidate?: PreviewReadDependencies['getAstroInternalPreviewCandidate']
 }): Promise<ResolvedSiteVersionPreview> {
   const candidateId = String(input.selection.candidateId ?? '').trim()
   const expectedSiteId = String(input.selection.siteId ?? '').trim()
@@ -2958,7 +2959,7 @@ async function renderAstroInternalPreviewCandidate(input: {
     })
   }
 
-  const candidate = await previewReadDependencies.getAstroInternalPreviewCandidate(candidateId)
+  const candidate = await (input.getCandidate ?? previewReadDependencies.getAstroInternalPreviewCandidate)(candidateId)
   if (!candidate || !isAstroInternalPreviewCandidate(candidate)) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
@@ -3489,6 +3490,8 @@ export async function renderSiteVersionPreview(input: {
   mode?: unknown
   airshipArtifactId?: string | null
   astroCandidateSelection?: { candidateId: string; siteId: string } | null
+  astroCandidateLoader?: PreviewReadDependencies['getAstroInternalPreviewCandidate']
+  previewPoolStatus?: () => PoolStatus
   requestCorrelationKey?: string
   dbClient?: RuntimeStoreDbClient
   initialDbReadCount?: number
@@ -3519,7 +3522,8 @@ export async function renderSiteVersionPreview(input: {
   }
   const requestedPath = normalizePagePath(input.path ?? '/')
   const mode: SiteVersionPreviewMode = normalizeSiteVersionPreviewMode(input.mode)
-  const poolAtStart = previewReadDependencies.getPoolStatus()
+  const getPoolStatus = input.previewPoolStatus ?? previewReadDependencies.getPoolStatus
+  const poolAtStart = getPoolStatus()
   console.info('[gnr8.runtime.preview] PREVIEW_DB_QUERY_BATCH_STARTED', {
     requestCorrelationKey,
     queryCount: context.queryCount,
@@ -3551,6 +3555,7 @@ export async function renderSiteVersionPreview(input: {
         requestedPath,
         selection: input.astroCandidateSelection,
         context,
+        getCandidate: input.astroCandidateLoader,
       })
     }
     if (input.dbClient) {
@@ -3747,7 +3752,7 @@ export async function renderSiteVersionPreview(input: {
       context.dbClientOwnedByRenderer = false
     }
     updateRawPreviewDbLifecycleEvidence(context)
-    const poolAtEnd = previewReadDependencies.getPoolStatus()
+    const poolAtEnd = getPoolStatus()
     if (mode === 'transformed') {
       console.info(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DB_READ_COUNT}`, {
         requestCorrelationKey,

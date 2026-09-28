@@ -21,6 +21,18 @@ export const ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND =
   "astro_static_export_internal_preview_candidate" as const;
 export const ASTRO_INTERNAL_PREVIEW_ASSET_MODE = "inline_stylesheets" as const;
 
+export type AstroInternalPreviewCandidateLifecycle =
+  | {
+      storage: "caller_owned_in_memory";
+      lifetime: "proof_invocation_only";
+      durableRegistration: false;
+    }
+  | {
+      storage: "isolated_local_filesystem";
+      lifetime: "proof_retained_until_explicit_cleanup";
+      durableRegistration: false;
+    };
+
 export type AstroInternalPreviewBridgeErrorCode =
   | "candidate_identity_invalid"
   | "export_manifest_mismatch"
@@ -61,11 +73,7 @@ export type AstroInternalPreviewCandidateManifest = {
     inlinedStylesheetPaths: string[];
     externalAssetStorageRequired: false;
   };
-  lifecycle: {
-    storage: "caller_owned_in_memory";
-    lifetime: "proof_invocation_only";
-    durableRegistration: false;
-  };
+  lifecycle: AstroInternalPreviewCandidateLifecycle;
 };
 
 /**
@@ -177,42 +185,142 @@ export function isAstroInternalPreviewCandidate(value: unknown): value is AstroI
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Partial<AstroInternalPreviewCandidate>;
   const structurallyValid = (
+    hasExactKeys(candidate, [
+      "kind",
+      "id",
+      "siteId",
+      "siteVersionId",
+      "rendererCompatibilityVersion",
+      "htmlByPath",
+      "compiledTokenStyles",
+      "assetFingerprintMap",
+      "manifest",
+      "contentSha256",
+      "createdAt",
+    ]) &&
     candidate.kind === ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND &&
+    hasExactKeys(candidate.manifest, [
+      "sourceKind",
+      "conversionVersion",
+      "adapterId",
+      "ownership",
+      "provenance",
+      "assetHandling",
+      "lifecycle",
+    ]) &&
     candidate.manifest?.sourceKind === ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND &&
     candidate.manifest?.conversionVersion === ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION &&
     candidate.manifest?.adapterId === "astro-static-site" &&
+    hasExactKeys(candidate.manifest?.ownership, ["siteId", "siteVersionId"]) &&
     candidate.manifest?.ownership?.siteId === candidate.siteId &&
     candidate.manifest?.ownership?.siteVersionId === candidate.siteVersionId &&
+    hasExactKeys(candidate.manifest?.provenance, [
+      "sourceSnapshotSha256",
+      "exportManifestVersion",
+      "exportSha256",
+      "convertedArtifactSha256",
+    ]) &&
+    candidate.manifest?.provenance?.exportManifestVersion === ASTRO_STATIC_EXPORT_MANIFEST_VERSION &&
     candidate.manifest?.provenance?.convertedArtifactSha256 === candidate.contentSha256 &&
-    typeof candidate.id === "string" &&
-    typeof candidate.siteId === "string" &&
-    typeof candidate.siteVersionId === "string" &&
-    typeof candidate.rendererCompatibilityVersion === "string" &&
+    isNonEmptyTrimmedString(candidate.id) &&
+    isNonEmptyTrimmedString(candidate.siteId) &&
+    isNonEmptyTrimmedString(candidate.siteVersionId) &&
+    isNonEmptyTrimmedString(candidate.rendererCompatibilityVersion) &&
+    hasExactKeys(candidate.htmlByPath, ["/"]) &&
     typeof candidate.htmlByPath?.["/"] === "string" &&
     typeof candidate.compiledTokenStyles === "string" &&
-    Boolean(candidate.assetFingerprintMap && typeof candidate.assetFingerprintMap === "object") &&
-    typeof candidate.manifest?.provenance?.sourceSnapshotSha256 === "string" &&
-    typeof candidate.manifest?.provenance?.exportSha256 === "string"
+    isSha256Record(candidate.assetFingerprintMap) &&
+    isSha256(candidate.manifest?.provenance?.sourceSnapshotSha256) &&
+    isSha256(candidate.manifest?.provenance?.exportSha256) &&
+    isSha256(candidate.contentSha256) &&
+    hasExactKeys(candidate.manifest?.assetHandling, [
+      "mode",
+      "inlinedStylesheetPaths",
+      "externalAssetStorageRequired",
+    ]) &&
+    candidate.manifest?.assetHandling?.mode === ASTRO_INTERNAL_PREVIEW_ASSET_MODE &&
+    Array.isArray(candidate.manifest?.assetHandling?.inlinedStylesheetPaths) &&
+    candidate.manifest.assetHandling.inlinedStylesheetPaths.every(isNonEmptyTrimmedString) &&
+    candidate.manifest.assetHandling.externalAssetStorageRequired === false &&
+    isSupportedLifecycle(candidate.manifest?.lifecycle) &&
+    isIsoTimestamp(candidate.createdAt)
   );
   if (!structurallyValid) return false;
   const complete = candidate as AstroInternalPreviewCandidate;
-  const recomputed = sha256(Buffer.from(stableStringify({
+  return computeAstroInternalPreviewCandidateContentSha256(complete) === complete.contentSha256;
+}
+
+export function computeAstroInternalPreviewCandidateContentSha256(
+  candidate: Pick<
+    AstroInternalPreviewCandidate,
+    | "siteId"
+    | "siteVersionId"
+    | "rendererCompatibilityVersion"
+    | "htmlByPath"
+    | "compiledTokenStyles"
+    | "assetFingerprintMap"
+    | "manifest"
+  >,
+): string {
+  return sha256(Buffer.from(stableStringify({
     conversionVersion: ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
     adapterId: "astro-static-site",
-    ownership: { siteId: complete.siteId, siteVersionId: complete.siteVersionId },
-    rendererCompatibilityVersion: complete.rendererCompatibilityVersion,
-    htmlByPath: complete.htmlByPath,
-    compiledTokenStyles: complete.compiledTokenStyles,
-    assetFingerprintMap: complete.assetFingerprintMap,
-    sourceSnapshotSha256: complete.manifest.provenance.sourceSnapshotSha256,
-    exportSha256: complete.manifest.provenance.exportSha256,
+    ownership: { siteId: candidate.siteId, siteVersionId: candidate.siteVersionId },
+    rendererCompatibilityVersion: candidate.rendererCompatibilityVersion,
+    htmlByPath: candidate.htmlByPath,
+    compiledTokenStyles: candidate.compiledTokenStyles,
+    assetFingerprintMap: candidate.assetFingerprintMap,
+    sourceSnapshotSha256: candidate.manifest.provenance.sourceSnapshotSha256,
+    exportSha256: candidate.manifest.provenance.exportSha256,
   }), "utf8"));
-  return recomputed === complete.contentSha256;
+}
+
+function isSupportedLifecycle(value: unknown): value is AstroInternalPreviewCandidateLifecycle {
+  if (!hasExactKeys(value, ["storage", "lifetime", "durableRegistration"])) return false;
+  if (value.durableRegistration !== false) return false;
+  return (
+    (value.storage === "caller_owned_in_memory" && value.lifetime === "proof_invocation_only") ||
+    (value.storage === "isolated_local_filesystem" &&
+      value.lifetime === "proof_retained_until_explicit_cleanup")
+  );
+}
+
+function isSha256(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function isSha256Record(value: unknown): value is Record<string, string> {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.entries(value).every(([key, fingerprint]) => isNonEmptyTrimmedString(key) && isSha256(fingerprint)),
+  );
+}
+
+function isNonEmptyTrimmedString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value === value.trim();
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value as Record<string, unknown>).sort();
+  const wanted = [...expected].sort();
+  return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 
 async function revalidateInspectedExport(inspected: InspectedAstroStaticExport): Promise<InspectedAstroStaticExport> {
   const workspacePath = dirname(inspected.distPath);
-  const revalidated = await inspectAstroStaticExport(workspacePath);
+  const revalidated = await inspectAstroStaticExport(workspacePath, {
+    expectedContent: inspected.verifiedContent,
+    expectedThemeToken: inspected.verifiedThemeToken,
+  });
   if (
     revalidated.distPath !== inspected.distPath ||
     stableStringify(revalidated.manifest) !== stableStringify(inspected.manifest)
