@@ -45,6 +45,10 @@ import {
   isAstroInternalPreviewCandidate,
   type AstroInternalPreviewCandidate,
 } from '@/gnr8/output-adapters/astro-static-site-internal-preview-bridge'
+import {
+  isAstroProductionCandidate,
+  type AstroProductionCandidate,
+} from '@/gnr8/output-adapters/astro-production-candidate-record'
 
 export type SiteVersionPreviewSource =
   | 'react_runtime_renderer'
@@ -148,10 +152,13 @@ type PreviewReadDependencies = {
   getRawTemplateSiteAsset: typeof getRawTemplateSiteAsset
   listContentSlots: typeof listContentSlots
   listContentOverrides: typeof listContentOverrides
-  getAstroInternalPreviewCandidate: (candidateId: string) => Promise<AstroInternalPreviewCandidate | null>
+  getAstroInternalPreviewCandidate: (candidateId: string) => Promise<AstroPreviewCandidate | null>
   acquireRuntimeDbClient: () => Promise<RuntimeStoreDbClient>
   requestScopedDbClientEnabled: boolean
 }
+
+type AstroPreviewCandidate = AstroInternalPreviewCandidate | AstroProductionCandidate
+type AstroPreviewCandidateContract = 'proof_v1' | 'production_v2'
 
 const defaultPreviewReadDependencies: PreviewReadDependencies = {
   getPoolStatus: () => {
@@ -2949,6 +2956,7 @@ async function renderAstroInternalPreviewCandidate(input: {
   selection: { candidateId: string; siteId: string }
   context: PreviewReadContext
   getCandidate?: PreviewReadDependencies['getAstroInternalPreviewCandidate']
+  candidateContract: AstroPreviewCandidateContract
 }): Promise<ResolvedSiteVersionPreview> {
   const candidateId = String(input.selection.candidateId ?? '').trim()
   const expectedSiteId = String(input.selection.siteId ?? '').trim()
@@ -2960,7 +2968,10 @@ async function renderAstroInternalPreviewCandidate(input: {
   }
 
   const candidate = await (input.getCandidate ?? previewReadDependencies.getAstroInternalPreviewCandidate)(candidateId)
-  if (!candidate || !isAstroInternalPreviewCandidate(candidate)) {
+  const candidateIsValid = input.candidateContract === 'production_v2'
+    ? isAstroProductionCandidate(candidate)
+    : isAstroInternalPreviewCandidate(candidate)
+  if (!candidate || !candidateIsValid) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
       message: 'Requested Astro internal preview candidate is missing or invalid.',
@@ -3491,6 +3502,7 @@ export async function renderSiteVersionPreview(input: {
   airshipArtifactId?: string | null
   astroCandidateSelection?: { candidateId: string; siteId: string } | null
   astroCandidateLoader?: PreviewReadDependencies['getAstroInternalPreviewCandidate']
+  astroCandidateContract?: AstroPreviewCandidateContract
   previewPoolStatus?: () => PoolStatus
   requestCorrelationKey?: string
   dbClient?: RuntimeStoreDbClient
@@ -3556,6 +3568,7 @@ export async function renderSiteVersionPreview(input: {
         selection: input.astroCandidateSelection,
         context,
         getCandidate: input.astroCandidateLoader,
+        candidateContract: input.astroCandidateContract ?? 'proof_v1',
       })
     }
     if (input.dbClient) {

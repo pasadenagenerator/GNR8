@@ -256,8 +256,8 @@ export class GatewayBackedAstroProductionCandidateRepository {
     if (returnedIntentSha256 !== registrationIntentSha256) {
       throw repositoryError("corrupt", "Candidate gateway returned a different immutable registration intent.");
     }
-    const access = validateAccessState(outcome.access, record.identity.candidateId);
-    validateRegistrationEvent(outcome.registrationEvent, record);
+    const access = validateAstroProductionCandidateAccessState(outcome.access, record.identity.candidateId);
+    validateAstroProductionCandidateRegistrationEvent(outcome.registrationEvent, record);
     return { status: outcome.status, record, access };
   }
 
@@ -283,7 +283,7 @@ export class GatewayBackedAstroProductionCandidateRepository {
     if (!sameIdentity(record.identity, expected)) {
       throw repositoryError("ownership_mismatch", "Candidate ownership does not match the trusted scope.");
     }
-    validateAccessState(outcome.access, expected.candidateId);
+    validateAstroProductionCandidateAccessState(outcome.access, expected.candidateId);
     if (!outcome.registrationEventPresent) {
       throw repositoryError("corrupt", "Candidate atomic registration state is incomplete.");
     }
@@ -312,7 +312,7 @@ export class GatewayBackedAstroProductionCandidateRepository {
     if (!page || !Array.isArray(page.items) || page.items.length > input.limit || typeof page.hasMore !== "boolean") {
       throw repositoryError("corrupt", "Candidate metadata gateway returned an invalid page.");
     }
-    const items = page.items.map((row) => validateMetadata(row, trustedScope));
+    const items = page.items.map((row) => validateAstroProductionCandidateMetadata(row, trustedScope));
     const last = items.at(-1);
     return {
       items,
@@ -325,7 +325,7 @@ export class GatewayBackedAstroProductionCandidateRepository {
     access: AstroProductionCandidateAccessState;
     event: AstroProductionCandidateAccessEvent;
   }> {
-    const validated = validateAccessAction(action);
+    const validated = validateAstroProductionCandidateAccessAction(action);
     const outcome = await this.gateway.atomicSetAccess(validated);
     if (outcome.status === "missing") throw repositoryError("missing", "Candidate record is unavailable.");
     if (outcome.status === "version_conflict") {
@@ -346,8 +346,8 @@ export class GatewayBackedAstroProductionCandidateRepository {
     if (outcome.status !== "updated" && outcome.status !== "idempotent") {
       throw repositoryError("unavailable", "Candidate access gateway returned an unknown outcome.");
     }
-    const access = validateAccessState(outcome.access, validated.candidateId);
-    const event = validateAccessEvent(outcome.event, validated.candidateId);
+    const access = validateAstroProductionCandidateAccessState(outcome.access, validated.candidateId);
+    const event = validateAstroProductionCandidateAccessEvent(outcome.event, validated.candidateId);
     return { status: outcome.status, access, event };
   }
 
@@ -545,11 +545,33 @@ function metadataFromRow(row: StoredRow): AstroProductionCandidateMetadata {
   };
 }
 
-function validateMetadata(
-  value: AstroProductionCandidateMetadata,
+export function validateAstroProductionCandidateMetadata(
+  value: unknown,
   trustedScope: AstroProductionCandidateOwnership,
 ): AstroProductionCandidateMetadata {
-  if (!value || typeof value !== "object" || "candidate" in value || "htmlByPath" in value || "html" in value) {
+  if (!hasExactKeys(value, [
+    "candidateId",
+    "runtimeSiteId",
+    "siteVersionId",
+    "ownershipSiteId",
+    "organizationId",
+    "agencyId",
+    "schemaVersion",
+    "recordKind",
+    "adapterId",
+    "conversionVersion",
+    "exportManifestVersion",
+    "rendererCompatibilityVersion",
+    "candidateCreatedAt",
+    "storedAt",
+    "producerKind",
+    "producerVersion",
+    "producerRef",
+    "contentSha256",
+    "storageSha256",
+    "payloadSizeBytes",
+    "access",
+  ])) {
     throw repositoryError("corrupt", "Candidate metadata list exposed an invalid payload shape.");
   }
   let identity: AstroProductionCandidateIdentity;
@@ -586,14 +608,12 @@ function validateMetadata(
     !isText(value.producerRef) ||
     !isSha256(value.contentSha256) ||
     !isSha256(value.storageSha256) ||
-    !Number.isSafeInteger(value.payloadSizeBytes) ||
-    value.payloadSizeBytes < 1 ||
-    value.payloadSizeBytes > ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES
+    !isSafeIntegerBetween(value.payloadSizeBytes, 1, ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES)
   ) {
     throw repositoryError("corrupt", "Candidate metadata failed structural validation.");
   }
-  validateAccessState(value.access, value.candidateId);
-  return structuredClone(value);
+  validateAstroProductionCandidateAccessState(value.access, identity.candidateId);
+  return structuredClone(value as unknown as AstroProductionCandidateMetadata);
 }
 
 function validateSelection(
@@ -607,31 +627,34 @@ function validateSelection(
   }
 }
 
-function validateAccessState(value: AstroProductionCandidateAccessState, candidateId: string): AstroProductionCandidateAccessState {
+export function validateAstroProductionCandidateAccessState(
+  value: unknown,
+  candidateId: string,
+): AstroProductionCandidateAccessState {
   if (
-    !value ||
+    !hasExactKeys(value, ["candidateId", "state", "reasonCode", "changedByActorId", "changedAt", "version"]) ||
     value.candidateId !== candidateId ||
     (value.state !== "enabled" && value.state !== "disabled") ||
     !isText(value.reasonCode) ||
     !isText(value.changedByActorId) ||
     !isIsoTimestamp(value.changedAt) ||
-    !Number.isSafeInteger(value.version) ||
-    value.version < 1
+    !isSafeIntegerBetween(value.version, 1)
   ) {
     throw repositoryError("corrupt", "Candidate access state is invalid.");
   }
-  return structuredClone(value);
+  return structuredClone(value as unknown as AstroProductionCandidateAccessState);
 }
 
-function validateRegistrationEvent(
-  value: AstroProductionCandidateAccessEvent,
+export function validateAstroProductionCandidateRegistrationEvent(
+  value: unknown,
   record: AstroProductionCandidateRecord,
 ): void {
-  const event = validateAccessEvent(value, record.identity.candidateId);
+  const event = validateAstroProductionCandidateAccessEvent(value, record.identity.candidateId);
   if (
     event.action !== "registered" ||
     event.eventIndex !== 1 ||
     event.actorId !== record.registration.registeredByActorId ||
+    event.reasonCode !== "candidate_registered" ||
     event.idempotencyKey !== record.registration.idempotencyKey ||
     event.correlationId !== record.registration.correlationId ||
     event.occurredAt !== record.registration.storedAt
@@ -640,16 +663,24 @@ function validateRegistrationEvent(
   }
 }
 
-function validateAccessEvent(
-  value: AstroProductionCandidateAccessEvent,
+export function validateAstroProductionCandidateAccessEvent(
+  value: unknown,
   candidateId: string,
 ): AstroProductionCandidateAccessEvent {
   if (
-    !value ||
+    !hasExactKeys(value, [
+      "candidateId",
+      "eventIndex",
+      "action",
+      "actorId",
+      "reasonCode",
+      "idempotencyKey",
+      "correlationId",
+      "occurredAt",
+    ]) ||
     value.candidateId !== candidateId ||
-    !Number.isSafeInteger(value.eventIndex) ||
-    value.eventIndex < 1 ||
-    !["registered", "enabled", "disabled"].includes(value.action) ||
+    !isSafeIntegerBetween(value.eventIndex, 1) ||
+    (value.action !== "registered" && value.action !== "enabled" && value.action !== "disabled") ||
     !isText(value.actorId) ||
     !isText(value.reasonCode) ||
     !isText(value.idempotencyKey) ||
@@ -658,16 +689,17 @@ function validateAccessEvent(
   ) {
     throw repositoryError("corrupt", "Candidate access event is invalid.");
   }
-  return structuredClone(value);
+  return structuredClone(value as unknown as AstroProductionCandidateAccessEvent);
 }
 
-function validateAccessAction(action: AstroProductionCandidateAccessAction): AstroProductionCandidateAccessAction {
+export function validateAstroProductionCandidateAccessAction(
+  action: unknown,
+): AstroProductionCandidateAccessAction {
   if (
-    !action ||
+    !isRecord(action) ||
     (action.action !== "disable" && action.action !== "re_enable") ||
     !isAstroProductionCandidateId(action.candidateId) ||
-    !Number.isSafeInteger(action.expectedVersion) ||
-    action.expectedVersion < 1 ||
+    !isSafeIntegerBetween(action.expectedVersion, 1) ||
     !isText(action.actorId) ||
     !isText(action.reasonCode) ||
     !isText(action.idempotencyKey) ||
@@ -676,8 +708,27 @@ function validateAccessAction(action: AstroProductionCandidateAccessAction): Ast
   ) {
     throw repositoryError("identity_invalid", "Candidate access action is invalid.");
   }
+  const expectedKeys = action.action === "disable"
+    ? ["action", "candidateId", "expectedVersion", "actorId", "reasonCode", "idempotencyKey", "correlationId", "occurredAt"]
+    : [
+        "action",
+        "candidateId",
+        "expectedVersion",
+        "actorId",
+        "reasonCode",
+        "idempotencyKey",
+        "correlationId",
+        "occurredAt",
+        "superadminAuthorization",
+        "renewedIntegrityValidation",
+      ];
+  if (!hasExactKeys(action, expectedKeys)) {
+    throw repositoryError("identity_invalid", "Candidate access action is invalid.");
+  }
   if (action.action === "re_enable") {
     if (
+      !hasExactKeys(action.superadminAuthorization, ["policy", "actorUserId"]) ||
+      !hasExactKeys(action.renewedIntegrityValidation, ["validatedAt", "contentSha256", "storageSha256"]) ||
       action.superadminAuthorization?.policy !== "existing_superadmin" ||
       action.superadminAuthorization.actorUserId !== action.actorId ||
       !isIsoTimestamp(action.renewedIntegrityValidation?.validatedAt) ||
@@ -690,7 +741,13 @@ function validateAccessAction(action: AstroProductionCandidateAccessAction): Ast
       );
     }
   }
-  return structuredClone(action);
+  return structuredClone(action as unknown as AstroProductionCandidateAccessAction);
+}
+
+export function serializeAstroProductionCandidateAccessAction(
+  action: AstroProductionCandidateAccessAction,
+): string {
+  return stableStringify(validateAstroProductionCandidateAccessAction(action));
 }
 
 function validateCursor(value: AstroProductionCandidateListCursor): AstroProductionCandidateListCursor {
@@ -786,8 +843,23 @@ function isSha256(value: unknown): value is string {
   return typeof value === "string" && SHA256_PATTERN.test(value);
 }
 
+function isSafeIntegerBetween(value: unknown, minimum: number, maximum = Number.MAX_SAFE_INTEGER): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum && value <= maximum;
+}
+
 function isIsoTimestamp(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }

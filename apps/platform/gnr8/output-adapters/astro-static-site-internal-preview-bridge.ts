@@ -250,19 +250,28 @@ export function isAstroInternalPreviewCandidate(value: unknown): value is AstroI
   return computeAstroInternalPreviewCandidateContentSha256(complete) === complete.contentSha256;
 }
 
+export type AstroInternalPreviewCandidateContentEnvelopeInput = Pick<
+  AstroInternalPreviewCandidate,
+  | "siteId"
+  | "siteVersionId"
+  | "rendererCompatibilityVersion"
+  | "htmlByPath"
+  | "compiledTokenStyles"
+  | "assetFingerprintMap"
+> & {
+  manifest: Pick<AstroInternalPreviewCandidateManifest, "provenance">;
+};
+
 export function computeAstroInternalPreviewCandidateContentSha256(
-  candidate: Pick<
-    AstroInternalPreviewCandidate,
-    | "siteId"
-    | "siteVersionId"
-    | "rendererCompatibilityVersion"
-    | "htmlByPath"
-    | "compiledTokenStyles"
-    | "assetFingerprintMap"
-    | "manifest"
-  >,
+  candidate: AstroInternalPreviewCandidateContentEnvelopeInput,
 ): string {
-  return sha256(Buffer.from(stableStringify({
+  return sha256(Buffer.from(serializeAstroInternalPreviewCandidateContentEnvelope(candidate), "utf8"));
+}
+
+export function serializeAstroInternalPreviewCandidateContentEnvelope(
+  candidate: AstroInternalPreviewCandidateContentEnvelopeInput,
+): string {
+  return stableStringify({
     conversionVersion: ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
     adapterId: "astro-static-site",
     ownership: { siteId: candidate.siteId, siteVersionId: candidate.siteVersionId },
@@ -272,7 +281,7 @@ export function computeAstroInternalPreviewCandidateContentSha256(
     assetFingerprintMap: candidate.assetFingerprintMap,
     sourceSnapshotSha256: candidate.manifest.provenance.sourceSnapshotSha256,
     exportSha256: candidate.manifest.provenance.exportSha256,
-  }), "utf8"));
+  });
 }
 
 function isSupportedLifecycle(value: unknown): value is AstroInternalPreviewCandidateLifecycle {

@@ -13,6 +13,7 @@ import {
   ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
   computeAstroInternalPreviewCandidateContentSha256,
   isAstroInternalPreviewCandidate,
+  serializeAstroInternalPreviewCandidateContentEnvelope,
   type AstroInternalPreviewCandidate,
 } from "./astro-static-site-internal-preview-bridge";
 
@@ -221,6 +222,26 @@ export function serializeAstroProductionCandidateRecord(record: AstroProductionC
   return stableStringify(validateAstroProductionCandidateRecord(record));
 }
 
+export function serializeAstroProductionCandidateUnsignedRecord(record: AstroProductionCandidateRecord): string {
+  const validated = validateAstroProductionCandidateRecord(record);
+  const { storageSha256: _storageSha256, ...unsignedRecord } = validated;
+  return stableStringify(unsignedRecord);
+}
+
+export function serializeAstroProductionCandidateRegistrationIntent(
+  record: AstroProductionCandidateRecord,
+): string {
+  return stableStringify(registrationIntentFromRecord(validateAstroProductionCandidateRecord(record)));
+}
+
+export function serializeAstroProductionCandidateContentEnvelope(
+  record: AstroProductionCandidateRecord,
+): string {
+  return serializeAstroInternalPreviewCandidateContentEnvelope(
+    validateAstroProductionCandidateRecord(record).candidate,
+  );
+}
+
 export function measureAstroProductionCandidateRecordBytes(record: AstroProductionCandidateRecord): number {
   return Buffer.byteLength(serializeAstroProductionCandidateRecord(record), "utf8");
 }
@@ -267,7 +288,7 @@ export function validateAstroProductionCandidateRecord(
   assertSupportedCandidateVersions(value.candidate);
   const identity = validateAstroProductionCandidateIdentity(value.identity, "corrupt");
   const registration = validateRegistration(value.registration, "corrupt");
-  const candidate = validateProductionCandidate(value.candidate);
+  const candidate = validateAstroProductionCandidate(value.candidate);
   if (
     candidate.id !== identity.candidateId ||
     candidate.siteId !== identity.runtimeSiteId ||
@@ -349,7 +370,8 @@ export function validateAstroProductionCandidateIdentity(
   };
 }
 
-function validateProductionCandidate(value: unknown): AstroProductionCandidate {
+export function validateAstroProductionCandidate(value: unknown): AstroProductionCandidate {
+  assertSupportedCandidateVersions(value);
   if (!hasExactKeys(value, [
     "kind",
     "id",
@@ -436,6 +458,15 @@ function validateProductionCandidate(value: unknown): AstroProductionCandidate {
     throw corrupt("Production candidate content-integrity hash does not match.");
   }
   return structuredClone(candidate);
+}
+
+export function isAstroProductionCandidate(value: unknown): value is AstroProductionCandidate {
+  try {
+    validateAstroProductionCandidate(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function assertSupportedCandidateVersions(value: unknown): void {
