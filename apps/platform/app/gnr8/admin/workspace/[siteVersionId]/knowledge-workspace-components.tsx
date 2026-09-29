@@ -507,14 +507,26 @@ export function PrimaryRecommendation(props: { actions: KnowledgeWorkspaceNextAc
   );
 }
 
-export function SupportingInspectionLinks(props: { steps: KnowledgeWorkspaceStoryStepProjection[] }) {
+export function SupportingInspectionLinks(props: {
+  steps: KnowledgeWorkspaceStoryStepProjection[];
+  siteVersionId: string;
+  astroCandidatePreviewEnabled: boolean;
+}) {
+  const steps = props.astroCandidatePreviewEnabled ? [
+    ...props.steps,
+    {
+      label: "Astro Candidates",
+      summary: "Read-only production-candidate metadata and explicit isolated preview links for this site version.",
+      href: `/gnr8/admin/astro-candidates/${props.siteVersionId}`,
+    },
+  ] : props.steps;
   return (
     <section style={sectionStyle}>
       <SectionTitle title="Supporting Inspection Pages">
         <p style={{ margin: 0 }}>These pages remain secondary inspection views for the same persisted truth.</p>
       </SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
-        {props.steps.map((step) => (
+        {steps.map((step) => (
           <article key={step.label} style={{ ...quietPanelStyle, padding: 14 }}>
             <h3 style={{ margin: "0 0 6px", fontSize: 18 }}>{step.label}</h3>
             <p style={{ margin: "0 0 10px", color: "#475569", lineHeight: 1.4 }}>{step.summary}</p>
@@ -590,7 +602,10 @@ export function WorkspaceAdvancedDetails(props: { advanced: KnowledgeWorkspaceAd
   );
 }
 
-export function KnowledgeWorkspace(props: { model: KnowledgeWorkspaceProjection }) {
+export function KnowledgeWorkspace(props: {
+  model: KnowledgeWorkspaceProjection;
+  astroCandidatePreviewEnabled: boolean;
+}) {
   return (
     <>
       <WorkspaceCommandHero hero={props.model.hero} />
@@ -600,7 +615,11 @@ export function KnowledgeWorkspace(props: { model: KnowledgeWorkspaceProjection 
       <KnowledgeProgressRail health={props.model.health} />
       <KnowledgeGaps gaps={props.model.gaps} />
       <PrimaryRecommendation actions={props.model.nextActions} />
-      <SupportingInspectionLinks steps={props.model.transformationStory} />
+      <SupportingInspectionLinks
+        steps={props.model.transformationStory}
+        siteVersionId={props.model.siteVersionId}
+        astroCandidatePreviewEnabled={props.astroCandidatePreviewEnabled}
+      />
       <WorkspaceAdvancedDetails advanced={props.model.advanced} />
     </>
   );

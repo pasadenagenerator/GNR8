@@ -1,7 +1,5 @@
 import {
   ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES,
-  ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND,
-  ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION,
   AstroProductionCandidateValidationError,
   computeAstroProductionCandidateRegistrationIntentSha256,
   createAstroProductionCandidateRecord,
@@ -49,12 +47,17 @@ export type AstroProductionCandidateMetadata = {
   ownershipSiteId: string;
   organizationId: string;
   agencyId: string;
-  schemaVersion: typeof ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION;
-  recordKind: typeof ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND;
-  adapterId: "astro-static-site";
-  conversionVersion: "gnr8-astro-internal-preview-conversion:v1";
-  exportManifestVersion: "gnr8-astro-static-export:v1";
-  rendererCompatibilityVersion: "gnr8-renderer-v1";
+  /**
+   * Metadata discovery deliberately preserves bounded future version values so
+   * the admin list can identify an unsupported row without loading its payload.
+   * Full-record reads remain strict and reject unsupported versions.
+   */
+  schemaVersion: string;
+  recordKind: string;
+  adapterId: string;
+  conversionVersion: string;
+  exportManifestVersion: string;
+  rendererCompatibilityVersion: string;
   candidateCreatedAt: string;
   storedAt: string;
   producerKind: string;
@@ -532,7 +535,7 @@ function metadataFromRow(row: StoredRow): AstroProductionCandidateMetadata {
     adapterId: record.candidate.manifest.adapterId,
     conversionVersion: record.candidate.manifest.conversionVersion,
     exportManifestVersion: record.candidate.manifest.provenance.exportManifestVersion,
-    rendererCompatibilityVersion: record.candidate.rendererCompatibilityVersion as "gnr8-renderer-v1",
+    rendererCompatibilityVersion: record.candidate.rendererCompatibilityVersion,
     candidateCreatedAt: record.candidate.createdAt,
     storedAt: record.registration.storedAt,
     producerKind: record.registration.producerKind,
@@ -591,16 +594,12 @@ export function validateAstroProductionCandidateMetadata(
     throw repositoryError("ownership_mismatch", "Candidate metadata does not match the trusted scope.");
   }
   if (
-    value.schemaVersion !== ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION ||
-    value.recordKind !== ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND ||
-    value.adapterId !== "astro-static-site" ||
-    value.conversionVersion !== "gnr8-astro-internal-preview-conversion:v1" ||
-    value.exportManifestVersion !== "gnr8-astro-static-export:v1" ||
-    value.rendererCompatibilityVersion !== "gnr8-renderer-v1"
-  ) {
-    throw repositoryError("unsupported_version", "Candidate metadata contains an unsupported version.");
-  }
-  if (
+    !isText(value.schemaVersion) ||
+    !isText(value.recordKind) ||
+    !isText(value.adapterId) ||
+    !isText(value.conversionVersion) ||
+    !isText(value.exportManifestVersion) ||
+    !isText(value.rendererCompatibilityVersion) ||
     !isIsoTimestamp(value.candidateCreatedAt) ||
     !isIsoTimestamp(value.storedAt) ||
     !isText(value.producerKind) ||

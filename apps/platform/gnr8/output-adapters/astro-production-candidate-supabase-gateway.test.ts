@@ -150,6 +150,20 @@ test("metadata pagination enforces descending time and candidate-ID tie-break bo
   );
 });
 
+test("metadata listing preserves bounded unsupported versions without loading a payload", async () => {
+  const unsupported = metadataFor(productionRecord());
+  unsupported.schemaVersion = "gnr8-astro-persisted-preview-candidate:v3";
+  unsupported.rendererCompatibilityVersion = "gnr8-renderer-v2";
+  const gateway = new SupabaseAstroProductionCandidateGateway(() => new FakeRpcClient(async () => ({
+    data: { items: [unsupported], hasMore: false },
+    error: null,
+  })));
+
+  const page = await gateway.listMetadata({ trustedScope: OWNERSHIP, cursor: null, limit: 1 });
+  assert.deepEqual(page, { items: [unsupported], hasMore: false });
+  assert.equal(JSON.stringify(page).includes("html"), false);
+});
+
 test("access change uses one canonical RPC and validates returned evidence", async () => {
   const action = disableAction();
   const fake = new FakeRpcClient(async () => ({

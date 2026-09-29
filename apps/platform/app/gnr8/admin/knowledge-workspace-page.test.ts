@@ -24,9 +24,27 @@ test("knowledge workspace page loads the composed read-only projection", async (
   assert.equal(page.includes("KnowledgeWorkspacePage"), true);
   assert.equal(page.includes("requireSuperadminUserIdForPage"), true);
   assert.equal(page.includes("loadKnowledgeWorkspaceProjection"), true);
-  assert.equal(page.includes("<KnowledgeWorkspace model={model} />"), true);
+  assert.equal(page.includes("<KnowledgeWorkspace"), true);
+  assert.equal(page.includes("astroCandidatePreviewEnabled={astroCandidatePreviewEnabled}"), true);
   assert.equal(page.includes('runtime = "nodejs"'), true);
   assert.equal(page.includes('dynamic = "force-dynamic"'), true);
+});
+
+test("workspace Astro candidates link uses the exact preview gate without metadata reads", async () => {
+  const { page, components } = await workspaceSources();
+
+  assert.equal(page.includes("isAstroProductionCandidatePreviewFeatureEnabled"), true);
+  assert.equal(
+    page.indexOf("requireSuperadminUserIdForPage()") <
+      page.indexOf("isAstroProductionCandidatePreviewFeatureEnabled()"),
+    true,
+  );
+  assert.equal(components.includes('label: "Astro Candidates"'), true);
+  assert.equal(components.includes("/gnr8/admin/astro-candidates/${props.siteVersionId}"), true);
+  assert.equal(components.includes("props.astroCandidatePreviewEnabled ?"), true);
+  assert.equal(page.includes("listCandidateMetadata"), false);
+  assert.equal(components.includes("listCandidateMetadata"), false);
+  assert.equal(page.includes("astroCandidatePreviewEnabled={astroCandidatePreviewEnabled}"), true);
 });
 
 test("projection composes existing runtime projections and never persists workspace truth", async () => {
@@ -267,7 +285,7 @@ test("supporting inspection pages remain secondary and Advanced is collapsed", a
 
 test("technical IDs stay out of the primary component flow", async () => {
   const { components } = await workspaceSources();
-  const primarySource = components.slice(0, components.indexOf("export function WorkspaceAdvancedDetails"));
+  const primarySource = components.slice(0, components.indexOf("export function SupportingInspectionLinks"));
 
   for (const technical of ["siteVersionId", "dryRunId", "Generation IDs", "Artifact Explorer", "evidenceCount"]) {
     assert.equal(primarySource.includes(technical), false, `technical detail in primary flow ${technical}`);

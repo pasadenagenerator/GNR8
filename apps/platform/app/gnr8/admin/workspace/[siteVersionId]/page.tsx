@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 
 import { loadKnowledgeWorkspaceProjection } from "@/gnr8/architecture/knowledge-workspace-projection";
+import { isAstroProductionCandidatePreviewFeatureEnabled } from "@/gnr8/output-adapters/astro-production-candidate-preview-feature-gate";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
 import { KnowledgeWorkspace } from "./knowledge-workspace-components";
@@ -32,13 +33,17 @@ export default async function KnowledgeWorkspacePage(props: PageProps) {
     throw error;
   }
 
+  const astroCandidatePreviewEnabled = isAstroProductionCandidatePreviewFeatureEnabled();
   const { siteVersionId: rawSiteVersionId } = await props.params;
   const siteVersionId = String(rawSiteVersionId ?? "").trim();
   const model = await loadKnowledgeWorkspaceProjection({ siteVersionId });
 
   return (
     <main style={shellStyle}>
-      <KnowledgeWorkspace model={model} />
+      <KnowledgeWorkspace
+        model={model}
+        astroCandidatePreviewEnabled={astroCandidatePreviewEnabled}
+      />
     </main>
   );
 }
