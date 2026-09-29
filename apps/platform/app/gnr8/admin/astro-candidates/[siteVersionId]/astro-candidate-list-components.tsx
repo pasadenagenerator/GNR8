@@ -5,6 +5,8 @@ import type {
   AstroProductionCandidateListReadModel,
 } from "@/gnr8/output-adapters/astro-production-candidate-list-read-model";
 
+import { AstroCandidatePromotionAction } from "./astro-candidate-promotion-action";
+
 const shellStyle: CSSProperties = {
   maxWidth: 1180,
   margin: "0 auto",
@@ -140,6 +142,14 @@ function CandidateCard(props: { item: AstroProductionCandidateListItemReadModel 
               : "This candidate uses unsupported compatibility metadata."}
           </span>
         )}
+        {eligible ? (
+          <AstroCandidatePromotionAction
+            siteVersionId={item.siteVersionId}
+            candidateId={item.candidateId}
+            contentSha256={item.contentSha256}
+            storageSha256={item.storageSha256}
+          />
+        ) : null}
       </div>
     </article>
   );
@@ -152,11 +162,11 @@ export function AstroCandidateListPageView(props: { model: AstroProductionCandid
     <main style={shellStyle}>
       <header>
         <p style={{ margin: 0, color: "#1d4ed8", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>
-          Superadmin · read-only
+          Superadmin · governed materialization
         </p>
         <h1 style={{ margin: "5px 0 0", fontSize: 36, lineHeight: 1.08 }}>Astro candidates</h1>
         <p style={{ margin: "10px 0 0", maxWidth: 760, color: "#475569", lineHeight: 1.55 }}>
-          Bounded candidate metadata for one authoritative site-version scope. This listing does not certify payload integrity; the isolated preview route revalidates the complete record.
+          Bounded candidate metadata for one authoritative site-version scope. Preview remains read-only; the explicit materialization action revalidates the complete record, runs runtime gates, and stops before publishing or activation.
         </p>
         {siteVersionId && siteVersionId !== "unavailable" ? (
           <div style={{ marginTop: 14 }}>

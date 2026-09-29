@@ -30,6 +30,7 @@ import { RENDERER_COMPATIBILITY_VERSION } from "../runtime/types";
 export const ASTRO_PRODUCTION_CANDIDATE_LIST_PAGE_SIZE = 25;
 
 export type AstroProductionCandidateListItemReadModel = {
+  siteVersionId: string;
   candidateId: string;
   candidateCreatedAt: string;
   storedAt: string;
@@ -42,6 +43,8 @@ export type AstroProductionCandidateListItemReadModel = {
   conversionVersion: string;
   exportManifestVersion: string;
   rendererCompatibilityVersion: string;
+  contentSha256: string;
+  storageSha256: string;
   contentSha256Prefix: string;
   storageSha256Prefix: string;
   payloadSizeBytes: number;
@@ -224,6 +227,7 @@ function toItemReadModel(
   const supported = isSupportedMetadata(item);
   const previewEligible = supported && item.access.state === "enabled";
   return {
+    siteVersionId,
     candidateId: item.candidateId,
     candidateCreatedAt: item.candidateCreatedAt,
     storedAt: item.storedAt,
@@ -236,6 +240,8 @@ function toItemReadModel(
     conversionVersion: item.conversionVersion,
     exportManifestVersion: item.exportManifestVersion,
     rendererCompatibilityVersion: item.rendererCompatibilityVersion,
+    contentSha256: item.contentSha256,
+    storageSha256: item.storageSha256,
     contentSha256Prefix: hashPrefix(item.contentSha256),
     storageSha256Prefix: hashPrefix(item.storageSha256),
     payloadSizeBytes: item.payloadSizeBytes,

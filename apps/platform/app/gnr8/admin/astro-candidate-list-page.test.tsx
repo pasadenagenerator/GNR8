@@ -23,8 +23,10 @@ test("candidate list view renders exact top-level preview links only for eligibl
   assert.equal((html.match(/Open Astro candidate/g) ?? []).length, 1);
   assert.match(html, /Preview access is disabled for this candidate/);
   assert.match(html, /unsupported compatibility metadata/);
-  assert.match(html, /does not certify payload integrity/);
-  assert.doesNotMatch(html, /iframe|Create candidate|Register candidate|Promote|Publish/);
+  assert.match(html, /revalidates the complete record/);
+  assert.equal((html.match(/Materialize for governed workflow/g) ?? []).length, 1);
+  assert.match(html, /does not publish, activate a pointer, or change a preview binding/i);
+  assert.doesNotMatch(html, /iframe|Create candidate|Register candidate|Publish now/);
 });
 
 test("feature-disabled, empty, unavailable, access-denied, and invalid states are explicit", () => {
@@ -92,6 +94,7 @@ test("Workspace shows exactly one Astro supporting link only when the shared gat
 
 function readyModel(): AstroProductionCandidateListReadModel {
   const base = {
+    siteVersionId: SITE_VERSION_ID,
     candidateCreatedAt: "2026-09-28T12:00:00.000Z",
     storedAt: "2026-09-28T12:01:00.000Z",
     producerKind: "internal_synthetic_astro_build_export_bridge",
@@ -103,6 +106,8 @@ function readyModel(): AstroProductionCandidateListReadModel {
     conversionVersion: "gnr8-astro-internal-preview-conversion:v1",
     exportManifestVersion: "gnr8-astro-static-export:v1",
     rendererCompatibilityVersion: "gnr8-renderer-v1",
+    contentSha256: "a".repeat(64),
+    storageSha256: "b".repeat(64),
     contentSha256Prefix: "aaaaaaaaaaaa…",
     storageSha256Prefix: "bbbbbbbbbbbb…",
     payloadSizeBytes: 12345,

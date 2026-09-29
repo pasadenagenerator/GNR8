@@ -10,13 +10,17 @@ begin
   end if;
   if (select n.nspname from pg_catalog.pg_extension e
       join pg_catalog.pg_namespace n on n.oid = e.extnamespace
-      where e.extname = 'pgcrypto') <> 'public' then
+      where e.extname = 'pgcrypto') <> 'extensions' then
     raise exception 'pgcrypto_schema_failed';
   end if;
   if exists (
     select 1 from pg_catalog.pg_roles
     where rolname in ('anon', 'authenticated', 'service_role')
-      and (rolsuper or rolcreatedb or rolcreaterole or rolreplication or rolbypassrls or rolcanlogin)
+      and (
+        rolsuper or rolcreatedb or rolcreaterole or rolreplication or rolcanlogin
+        or (rolname in ('anon', 'authenticated') and rolbypassrls)
+        or (rolname = 'service_role' and not rolbypassrls)
+      )
   ) or (select pg_catalog.count(*) from pg_catalog.pg_roles
         where rolname in ('anon', 'authenticated', 'service_role')) <> 3 then
     raise exception 'request_role_attributes_failed';
@@ -126,10 +130,10 @@ begin
       and table_name like 'gnr8_astro_candidate_%'
       and grantee in ('anon', 'authenticated', 'service_role')
   ) then raise exception 'request_role_table_grant_failed'; end if;
-  if exists (
+  if not exists (
     select 1 from pg_catalog.pg_default_acl d
     where pg_catalog.array_to_string(d.defaclacl, ',') ~ '(anon|authenticated|service_role)'
-  ) then raise exception 'request_role_default_privilege_failed'; end if;
+  ) then raise exception 'hosted_default_privilege_fixture_missing'; end if;
 end;
 $$;
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { buildDeterministicArtifactBundle } from "@/gnr8/runtime/artifact-builder";
+import { buildPreservedAstroArtifactBundleForPublish } from "@/gnr8/runtime/astro-artifact-materialization";
 import {
   isPublishActivationShadowGateEnabled,
   observePublishActivationShadowGate,
@@ -895,10 +896,12 @@ export async function publishApprovedSiteVersion(input: {
         throw new Error(`publish_enforcement_review_only_shadow_required:${JSON.stringify(enforcement.adapter)}`);
       }
 
-      const artifactBundle = buildDeterministicArtifactBundle({
-        siteVersion,
-        renderMode: "PUBLISH",
-      });
+      const artifactBundle = buildPreservedAstroArtifactBundleForPublish({
+        artifact: storedArtifact,
+        publishStage: resolvedPublishStage,
+        shadowRestricted: enforcement.shadowRestricted,
+        enforcementDecision: enforcement.adapter.decision,
+      }) ?? buildDeterministicArtifactBundle({ siteVersion, renderMode: "PUBLISH" });
       const integrity = runRenderIntegrityGate({
         siteVersion,
         htmlByPath: artifactBundle.htmlByPath,
@@ -1061,10 +1064,17 @@ export async function publishApprovedSiteVersion(input: {
     throw new Error(`publish_enforcement_review_only_shadow_required:${JSON.stringify(enforcement.adapter)}`);
   }
 
-  const artifactBundle = buildDeterministicArtifactBundle({
-    siteVersion,
-    renderMode: "PUBLISH",
-  });
+  const preexistingArtifact = siteVersion.artifactId
+    ? await getArtifactById(siteVersion.artifactId, dbOptions)
+    : null;
+  const artifactBundle = preexistingArtifact
+    ? buildPreservedAstroArtifactBundleForPublish({
+        artifact: preexistingArtifact,
+        publishStage,
+        shadowRestricted: enforcement.shadowRestricted,
+        enforcementDecision: enforcement.adapter.decision,
+      }) ?? buildDeterministicArtifactBundle({ siteVersion, renderMode: "PUBLISH" })
+    : buildDeterministicArtifactBundle({ siteVersion, renderMode: "PUBLISH" });
 
   const integrity = runRenderIntegrityGate({
     siteVersion,

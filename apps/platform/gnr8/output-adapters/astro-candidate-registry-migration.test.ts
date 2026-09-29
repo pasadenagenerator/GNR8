@@ -27,6 +27,10 @@ const MIGRATION_PATH = path.join(
   REPO_ROOT,
   "apps/platform/supabase/migrations/20260928120000_astro_candidate_registry.sql",
 );
+const PREREQUISITE_MIGRATION_PATH = path.join(
+  REPO_ROOT,
+  "apps/platform/supabase/migrations/20260928110000_astro_candidate_hosted_prerequisites.sql",
+);
 const TEST_ROOT = path.join(REPO_ROOT, "apps/platform/supabase/tests/astro_candidate_registry");
 const READINESS_PATH = path.join(
   REPO_ROOT,
@@ -34,6 +38,7 @@ const READINESS_PATH = path.join(
 );
 
 const sql = readFileSync(MIGRATION_PATH, "utf8");
+const prerequisiteMigrationSql = readFileSync(PREREQUISITE_MIGRATION_PATH, "utf8");
 const functionalSql = readFileSync(path.join(TEST_ROOT, "functional.sql"), "utf8");
 const fixtureSql = readFileSync(path.join(TEST_ROOT, "fixture.sql"), "utf8");
 const prerequisiteSql = readFileSync(path.join(TEST_ROOT, "prerequisite.sql"), "utf8");
@@ -152,6 +157,20 @@ test("migration does not schema-qualify the COALESCE SQL special form", () => {
   assert.match(sql, /\bselect coalesce\s*\(/i);
 });
 
+test("hosted compatibility package matches the observed ownership and extension boundary", () => {
+  assert.match(prerequisiteSql, /create extension pgcrypto with schema extensions/i);
+  assert.doesNotMatch(prerequisiteSql, /create table public\.(?:organizations|agencies|sites)/i);
+  assert.match(prerequisiteMigrationSql, /create table public\.agencies/i);
+  assert.match(prerequisiteMigrationSql, /create table public\.organizations/i);
+  assert.match(prerequisiteMigrationSql, /create table public\.sites/i);
+  assert.match(prerequisiteMigrationSql, /add column ownership_site_id uuid/i);
+  assert.match(prerequisiteMigrationSql, /astro_candidate_prerequisite_object_collision/i);
+  assert.doesNotMatch(prerequisiteMigrationSql, /insert into public\.(?:agencies|organizations|sites)/i);
+  assert.doesNotMatch(prerequisiteMigrationSql, /update public\.(?:agencies|organizations|sites)/i);
+  assert.match(sql, /extensions\.digest\(pg_catalog\.convert_to/i);
+  assert.doesNotMatch(sql, /public\.digest\(/i);
+});
+
 test("executable database fixtures and local runner cover the required behavior", () => {
   for (const marker of [
     "atomic_registration_rows_failed",
@@ -180,9 +199,9 @@ test("executable database fixtures and local runner cover the required behavior"
   ]) assert.match(functionalSql, new RegExp(marker));
   assert.match(fixtureSql, /p_multibyte_filler/);
   assert.match(prerequisiteSql, /not a replay of repository migration history/i);
-  assert.match(prerequisiteSql, /create table public\.organizations/);
+  assert.match(prerequisiteSql, /create schema extensions/i);
   assert.match(catalogSql, /security_definer_or_search_path_failed/);
-  assert.match(catalogSql, /request_role_default_privilege_failed/);
+  assert.match(catalogSql, /hosted_default_privilege_fixture_missing/);
   assert.match(localRunner, /--pull=never/);
   assert.match(localRunner, /--diagnostic-correction/);
   assert.match(localRunner, /migrationRollbackObjectCount/);

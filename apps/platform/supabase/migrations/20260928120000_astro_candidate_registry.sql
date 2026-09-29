@@ -256,7 +256,7 @@ strict
 set search_path = pg_catalog
 as $$
   select pg_catalog.encode(
-    public.digest(pg_catalog.convert_to(p_value, 'UTF8'), 'sha256'),
+    extensions.digest(pg_catalog.convert_to(p_value, 'UTF8'), 'sha256'),
     'hex'
   );
 $$;

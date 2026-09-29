@@ -17,10 +17,14 @@ const MIGRATION_PATH = path.join(
   REPO_ROOT,
   "apps/platform/supabase/migrations/20260928120000_astro_candidate_registry.sql",
 );
-const IMAGE = "postgres:15";
+const PREREQUISITE_MIGRATION_PATH = path.join(
+  REPO_ROOT,
+  "apps/platform/supabase/migrations/20260928110000_astro_candidate_hosted_prerequisites.sql",
+);
+const IMAGE = "postgres:17";
 const OWNER = "gnr8_mvp13_owner";
 const CONTAINER_TEST_DIR = "/tmp/gnr8-mvp13";
-const ISOLATION_TESTER = "/usr/lib/postgresql/15/lib/pgxs/src/test/isolation/isolationtester";
+const ISOLATION_TESTER = "/usr/lib/postgresql/17/lib/pgxs/src/test/isolation/isolationtester";
 const allowDiagnosticCorrection = process.argv.includes("--diagnostic-correction");
 const suffix = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const containerName = `gnr8-mvp13-${suffix}`;
@@ -71,9 +75,10 @@ function createDatabase(database: string): void {
   ]);
 }
 
-function prepareDatabase(database: string, migrationSql: string): void {
+function prepareDatabase(database: string, prerequisiteMigrationSql: string, migrationSql: string): void {
   createDatabase(database);
   psqlFile(database, `${CONTAINER_TEST_DIR}/prerequisite.sql`);
+  psqlText(database, prerequisiteMigrationSql);
   psqlText(database, migrationSql);
 }
 
@@ -172,11 +177,17 @@ function run(): void {
   console.log("PROVENANCE focused test-only prerequisite fixture; not full migration-history replay");
 
   const migrationSql = readFileSync(MIGRATION_PATH, "utf8");
+  const prerequisiteMigrationSql = readFileSync(PREREQUISITE_MIGRATION_PATH, "utf8");
+  const prerequisiteMigrationSha256 = createHash("sha256")
+    .update(prerequisiteMigrationSql, "utf8")
+    .digest("hex");
   const migrationSha256 = createHash("sha256").update(migrationSql, "utf8").digest("hex");
+  console.log(`PREREQUISITE_MIGRATION sha256=${prerequisiteMigrationSha256} source=${PREREQUISITE_MIGRATION_PATH}`);
   console.log(`MIGRATION sha256=${migrationSha256} source=${MIGRATION_PATH} diagnosticCorrection=${allowDiagnosticCorrection}`);
   const actualDatabase = "gnr8_mvp13_actual";
   createDatabase(actualDatabase);
   psqlFile(actualDatabase, `${CONTAINER_TEST_DIR}/prerequisite.sql`);
+  psqlText(actualDatabase, prerequisiteMigrationSql);
 
   let executableMigration = migrationSql;
   let actualMigrationPassed = true;
@@ -200,7 +211,7 @@ function run(): void {
   }
 
   const functionalDatabase = "gnr8_mvp13_functional";
-  prepareDatabase(functionalDatabase, executableMigration);
+  prepareDatabase(functionalDatabase, prerequisiteMigrationSql, executableMigration);
   psqlFile(functionalDatabase, `${CONTAINER_TEST_DIR}/functional.sql`);
   console.log("PASS functional SQL: atomicity, limits, hashes, ownership, metadata, access, immutability, actual roles");
 
@@ -211,7 +222,7 @@ function run(): void {
     ["gnr8_mvp13_identical", "registration_idempotency.spec"],
     ["gnr8_mvp13_conflict", "registration_conflict.spec"],
   ] as const) {
-    prepareDatabase(database, executableMigration);
+    prepareDatabase(database, prerequisiteMigrationSql, executableMigration);
     psqlFile(database, `${CONTAINER_TEST_DIR}/fixture.sql`);
     const output = inContainer(
       [ISOLATION_TESTER, `dbname=${database} user=${OWNER}`],
@@ -223,7 +234,7 @@ function run(): void {
   }
 
   const roundTripDatabase = "gnr8_mvp13_typescript";
-  prepareDatabase(roundTripDatabase, executableMigration);
+  prepareDatabase(roundTripDatabase, prerequisiteMigrationSql, executableMigration);
   psqlFile(roundTripDatabase, `${CONTAINER_TEST_DIR}/fixture.sql`);
   const cases = createTypeScriptRoundTripCases();
   psqlText(roundTripDatabase, roundTripSql(cases.created, cases.retry));
