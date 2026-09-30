@@ -1018,6 +1018,33 @@ test("request host extraction prefers x-forwarded-host and keeps first host befo
   assert.equal(normalizePublicDomainHost(host), "beauty-clinic.pasadenagenerator.com");
 });
 
+test("request host extraction never accepts client-supplied internal runtime host overrides", () => {
+  const previousVercelEnvironment = process.env.VERCEL_ENV;
+  process.env.VERCEL_ENV = "preview";
+  try {
+    const stagingOverride = resolveRequestHost({
+      get(name: string): string | null {
+        if (name === "x-gnr8-internal-runtime-host") return "seed-runtime-coverage.staging.gnr8.test";
+        if (name === "x-forwarded-host") return "deployment.vercel.app";
+        return null;
+      },
+    });
+    assert.equal(stagingOverride, "deployment.vercel.app");
+
+    const customerOverride = resolveRequestHost({
+      get(name: string): string | null {
+        if (name === "x-gnr8-internal-runtime-host") return "customer.example.com";
+        if (name === "x-forwarded-host") return "deployment.vercel.app";
+        return null;
+      },
+    });
+    assert.equal(customerOverride, "deployment.vercel.app");
+  } finally {
+    if (previousVercelEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousVercelEnvironment;
+  }
+});
+
 test("public runtime regression guard: no builder-page fallback usage remains in serving path", async () => {
   const source = await readFile("src/public-site/public-runtime-render.tsx", "utf8");
   assert.doesNotMatch(source, /artifact-with-builder-fallback/);

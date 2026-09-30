@@ -169,7 +169,11 @@ function filterLikelyMeaningfulBlocks(blocks: string[]): string[] {
 
   const scored = cleaned
     .map((block) => ({ block, score: estimateBlockScore(block) }))
-    .filter((entry) => entry.score >= 120);
+    .filter(
+      (entry) =>
+        entry.score >= 120 ||
+        /^\s*<(?:header|nav|section|article|footer|form)\b/i.test(entry.block),
+    );
 
   return scored.length >= 2 ? scored.map((entry) => entry.block) : cleaned;
 }
@@ -294,13 +298,31 @@ function resolveLayoutHintForBlock(input: {
 function assignGroupForBlock(input: {
   groups: CanonicalLayoutGroup[];
   blockOrdinal: number;
+  layoutHint: LayoutNodeHint | null;
 }): CanonicalLayoutGroup {
+  if (input.layoutHint) {
+    const intent = mapNodeTypeToIntent(input.layoutHint.type);
+    return {
+      id: deterministicId(
+        "layout-block-group",
+        `${input.blockOrdinal}:${input.layoutHint.domIndexStart}:${input.layoutHint.domIndexEnd}:${intent}:${input.layoutHint.id}`,
+      ),
+      order: input.blockOrdinal,
+      intent,
+      domIndexStart: input.layoutHint.domIndexStart,
+      domIndexEnd: input.layoutHint.domIndexEnd,
+      sourceNodeTypes: [input.layoutHint.type],
+      confidence: structuralConfidenceForHint(input.layoutHint),
+    };
+  }
+
   const groups = input.groups;
   const byIndex = groups[input.blockOrdinal] ?? null;
-  if (byIndex) return byIndex;
+  if (byIndex) return { ...byIndex, order: input.blockOrdinal };
   const bodyGroup = groups.find((group) => group.intent === "body") ?? null;
-  if (bodyGroup) return bodyGroup;
-  return groups[groups.length - 1] ?? {
+  if (bodyGroup) return { ...bodyGroup, order: input.blockOrdinal };
+  const fallback = groups[groups.length - 1];
+  return fallback ? { ...fallback, order: input.blockOrdinal } : {
     id: deterministicId("layout-group", "unknown"),
     order: 0,
     intent: "unknown",
@@ -350,7 +372,7 @@ export function buildLayoutToCanonicalBridge(input: {
       usedHintIds,
     });
 
-    const group = assignGroupForBlock({ groups, blockOrdinal });
+    const group = assignGroupForBlock({ groups, blockOrdinal, layoutHint });
 
     const structural = computeStructuralConfidence(
       {

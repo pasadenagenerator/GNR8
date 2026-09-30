@@ -162,7 +162,7 @@ function isLikelyFooter(blockHtml: string): boolean {
   const hasFooter = /<footer\b/i.test(blockHtml);
   const txt = textFromHtml(blockHtml);
   const hasFooterWords =
-    /©|copyright/i.test(txt) || /\b(privacy|terms|cookies|all rights reserved|contact)\b/i.test(txt);
+    /©|copyright/i.test(txt) || /\b(privacy|terms|cookies|all rights reserved)\b/i.test(txt);
   if (!hasFooter && !hasFooterWords) return false;
 
   const links = extractAllAnchorLinks(blockHtml, 60);

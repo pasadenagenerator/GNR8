@@ -8,6 +8,12 @@ import {
   createAstroStaticSiteProjectManifest,
   type NormalizedStaticBusinessSiteContent,
 } from "./astro-static-site-adapter";
+import {
+  CHS_ASTRO_ASSET_INVENTORY,
+  CHS_ASTRO_ROUTE_INVENTORY,
+  CHS_ASTRO_SOURCE_LINEAGE,
+  chsAstroSourceContent,
+} from "./chs-astro-source-content";
 
 test("CHS-like content produces a deterministic Astro source project manifest", () => {
   const manifest = createAstroStaticSiteProjectManifest(chsFixture());
@@ -42,6 +48,32 @@ test("ARIS-like content produces nav, contact, card sections, and adapter readba
   assert.equal(astroStaticSiteAdapterDescriptor.buildCommand?.command, "pnpm build");
   assert.equal(astroStaticSiteAdapterDescriptor.previewTargetPort, ASTRO_STATIC_SITE_PREVIEW_PORT);
   assert.equal(ASTRO_STATIC_SITE_PREVIEW_PORT, 4321);
+});
+
+test("authoritative CHS source mapping preserves routes, content, contacts, footer, and mobile layout", () => {
+  const manifest = createAstroStaticSiteProjectManifest(chsAstroSourceContent());
+  const files = fileMap(manifest.files);
+  const page = files.get("src/pages/index.astro") ?? "";
+  const css = files.get("public/styles/global.css") ?? "";
+
+  assert.equal(CHS_ASTRO_SOURCE_LINEAGE.sourceSnapshotId, "imported-url-site-6cba4d2b35d630b5");
+  assert.deepEqual(CHS_ASTRO_ROUTE_INVENTORY.map((route) => route.path), [
+    "/", "/cohesity", "/platform9", "/news", "/home-hrvoje-org",
+  ]);
+  assert.equal(CHS_ASTRO_ASSET_INVENTORY.capturedFileCount, 390);
+  assert.equal(CHS_ASTRO_ASSET_INVENTORY.unsupportedCapability, "astro_bridge_v1_has_no_binary_asset_storage");
+  assert.match(page, /The team that helps you change your IT/);
+  assert.match(page, /VMware pricing change just became your opportunity/);
+  assert.match(page, /Vendor-Neutral yet vendor supported advice/);
+  assert.match(page, /href="https:\/\/www\.chs\.si\/cohesity"/);
+  assert.match(page, /sales@chs\.si/);
+  assert.match(page, /change@chs\.si/);
+  assert.match(page, /Parmova ulica 51, Ljubljana, Slovenia/);
+  assert.match(page, /<footer>/);
+  assert.match(page, /Copyright © 2026 CHS d\.o\.o\. - All rights reserved/);
+  assert.match(css, /--gnr8-astro-accent: #ed7635;/);
+  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.contact \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(css, /\.contact a,[\s\S]*overflow-wrap: anywhere;/);
 });
 
 test("adapter descriptors keep Astro skeletal and runtime fallback intact", () => {

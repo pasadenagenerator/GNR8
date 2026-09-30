@@ -89,3 +89,27 @@ test("layout-to-canonical confidence ordering is deterministic and explainable",
     assert.ok(typeof block.confidenceComponents.densityCoherence === "number");
   }
 });
+
+test("repeated body blocks do not displace the real footer intent", () => {
+  const html = `<!doctype html><html><body>
+    <header><nav><a href="/">Brand</a><a href="/one">One</a><a href="/two">Two</a></nav></header>
+    <main>
+      <section class="hero"><h1>Headline</h1><p>Subheadline long enough to be meaningful.</p></section>
+      <section><h2>One</h2><p>${"First body content ".repeat(10)}</p></section>
+      <section><h2>Two</h2><p>${"Second body content ".repeat(10)}</p></section>
+      <section><h2>Three</h2><p>${"Third body content ".repeat(10)}</p></section>
+    </main>
+    <footer><p>Copyright 2026 Example. All rights reserved.</p></footer>
+  </body></html>`;
+  const bridge = buildLayoutToCanonicalBridge({
+    html,
+    layoutGraph: buildLayoutGraphFromSnapshotHtml({ html, pathSeed: "repeated-body" }),
+  });
+
+  assert.equal(bridge.blocks.at(-1)?.group.intent, "footer_legal");
+  assert.match(bridge.blocks.at(-1)?.blockHtml ?? "", /^<footer\b/i);
+  assert.deepEqual(
+    bridge.blocks.map((block) => block.blockOrdinal),
+    bridge.blocks.map((_, index) => index),
+  );
+});

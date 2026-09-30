@@ -34,6 +34,7 @@ export interface NormalizedSiteContact {
   heading: string;
   body: string;
   email?: string;
+  emails?: string[];
   phone?: string;
   address?: string;
 }
@@ -177,6 +178,9 @@ function createIndexAstro(input: NormalizedStaticBusinessSiteContent): string {
   const sections = input.sections.map(renderSection).join("\n\n");
   const contactLinks = [
     input.contact.email ? `<a href="mailto:${escapeAttribute(input.contact.email)}">${escapeHtml(input.contact.email)}</a>` : null,
+    ...(input.contact.emails ?? [])
+      .filter((email) => email !== input.contact.email)
+      .map((email) => `<a href="mailto:${escapeAttribute(email)}">${escapeHtml(email)}</a>`),
     input.contact.phone ? `<a href="tel:${escapeAttribute(input.contact.phone)}">${escapeHtml(input.contact.phone)}</a>` : null,
     input.contact.address ? `<span>${escapeHtml(input.contact.address)}</span>` : null,
   ]
@@ -309,6 +313,18 @@ nav a {
   padding: clamp(56px, 8vw, 104px) clamp(20px, 6vw, 72px);
 }
 
+.contact > *,
+.contact address,
+.contact a,
+.contact span {
+  min-width: 0;
+}
+
+.contact a,
+.contact span {
+  overflow-wrap: anywhere;
+}
+
 .hero {
   max-width: 920px;
 }
@@ -398,9 +414,16 @@ footer {
 }
 
 @media (max-width: 720px) {
-  .site-header,
-  .contact {
+  .site-header {
     display: grid;
+  }
+
+  .contact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contact address {
+    width: 100%;
   }
 }
 `;
