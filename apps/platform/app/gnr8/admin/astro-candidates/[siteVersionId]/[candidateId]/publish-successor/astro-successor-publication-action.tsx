@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 type PublicationInput = {
@@ -71,8 +72,8 @@ export function AstroSuccessorPublicationAction(props: PublicationInput) {
         <dt>Internal host</dt><dd><code>{props.expectedInternalHost}</code></dd>
       </dl>
       <p style={{ margin: 0, color: "#475569" }}>
-        This guarded action creates or reuses the deterministic successor, persists real governance evidence,
-        approves only passing content, and publishes only to the internal shadow stage.
+        This guarded action creates or reuses the deterministic successor, persists exact build and content evidence,
+        and stops for explicit artifact-bound review. After approval, run it again to publish only to the internal shadow stage.
       </p>
       <button
         type="button"
@@ -98,6 +99,9 @@ export function AstroSuccessorPublicationAction(props: PublicationInput) {
           <pre style={{ margin: "12px 0 0", overflow: "auto", whiteSpace: "pre-wrap", fontSize: 12 }}>
             {JSON.stringify(result, null, 2)}
           </pre>
+          {typeof result.reviewUrl === "string" ? (
+            <p style={{ margin: "12px 0 0" }}><Link href={result.reviewUrl}>Review and approve the exact generated artifact</Link></p>
+          ) : null}
         </section>
       ) : null}
     </section>

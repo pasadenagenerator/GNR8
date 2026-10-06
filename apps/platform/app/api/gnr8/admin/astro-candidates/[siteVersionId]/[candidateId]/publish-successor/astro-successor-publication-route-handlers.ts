@@ -1,5 +1,6 @@
 import {
   AstroSuccessorPublicationError,
+  deriveAstroSuccessorOperationIdentity,
   type AstroSuccessorPublicationResult,
 } from "@/gnr8/output-adapters/astro-successor-publication-service";
 import {
@@ -130,6 +131,23 @@ export function createAstroSuccessorPublicationRouteHandlers(
         );
       } catch (error) {
         if (error instanceof AstroSuccessorPublicationError) {
+          if (error.code === "generated_output_review_required") {
+            const operation = deriveAstroSuccessorOperationIdentity({
+              runtimeSiteId: body.runtimeSiteId,
+              sourceSiteVersionId: selectors.siteVersionId,
+              sourceCandidateId: selectors.candidateId,
+            });
+            return Response.json({
+              ok: true,
+              status: "ready_for_review",
+              successorSiteVersionId: operation.successorSiteVersionId,
+              successorCandidateId: operation.successorCandidateId,
+              reviewUrl: `/gnr8/admin/generated-output-review/${encodeURIComponent(operation.successorSiteVersionId)}`,
+              blockerCodes: error.blockerCodes,
+              published: false,
+              activePointerChanged: false,
+            }, { status: 202, headers: { "cache-control": "no-store" } });
+          }
           const conflict = [
             "active_pointer_conflict",
             "successor_lineage_conflict",

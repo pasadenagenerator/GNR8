@@ -35,6 +35,18 @@ export const CHS_ASTRO_ASSET_INVENTORY = {
   unsupportedCapability: "astro_bridge_v1_has_no_binary_asset_storage",
 } as const;
 
+export const CHS_ASTRO_EXPORT_VERIFICATION = {
+  expectedContent: [
+    "<title>Home | CHS</title>",
+    "The team that helps you change your IT to fit into every season and technology wave.",
+    "VMware pricing change just became your opportunity",
+    "Vendor-Neutral yet vendor supported advice",
+    "sales@chs.si",
+    "Copyright © 2026 CHS d.o.o. - All rights reserved",
+  ],
+  expectedThemeToken: "--gnr8-astro-accent: #ed7635;",
+} as const;
+
 export function chsAstroSourceContent(): NormalizedStaticBusinessSiteContent {
   return {
     siteName: "Home | CHS",

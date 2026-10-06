@@ -395,14 +395,34 @@ async function resolveOrCreateOwnershipSiteId(input: {
     }
 
     if (!ownershipSiteId) {
-      const inserted = await client.query<{ site_id: string }>(
+      const siteNameColumn = await client.query<{ has_name: boolean }>(
         `
-        insert into public.sites (org_id, agency_id, name, status, domain, is_template)
-        values ($1::uuid, $2::uuid, $3::text, 'draft'::public.site_status_enum, $4::text, false)
-        returning id::text as site_id
+        select exists (
+          select 1
+          from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'sites'
+            and column_name = 'name'
+        ) as has_name
         `,
-        [input.clientId, input.agencyId, input.siteName, input.domainHost],
       )
+      const inserted = siteNameColumn.rows[0]?.has_name
+        ? await client.query<{ site_id: string }>(
+            `
+            insert into public.sites (org_id, agency_id, name, status, domain, is_template)
+            values ($1::uuid, $2::uuid, $3::text, 'draft'::public.site_status_enum, $4::text, false)
+            returning id::text as site_id
+            `,
+            [input.clientId, input.agencyId, input.siteName, input.domainHost],
+          )
+        : await client.query<{ site_id: string }>(
+            `
+            insert into public.sites (org_id, agency_id, status, domain, is_template)
+            values ($1::uuid, $2::uuid, 'draft'::public.site_status_enum, $3::text, false)
+            returning id::text as site_id
+            `,
+            [input.clientId, input.agencyId, input.domainHost],
+          )
       ownershipSiteId = normalizeText(inserted.rows[0]?.site_id)
       if (!ownershipSiteId) {
         throw new Error('Unable to create client site ownership record for imported runtime site.')

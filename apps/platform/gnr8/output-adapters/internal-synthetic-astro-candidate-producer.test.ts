@@ -159,6 +159,7 @@ function preparedWorkspace(): PreparedAstroStaticSiteWorkspace {
     adapterId: "astro-static-site",
     workspacePath: "/tmp/mvp15-synthetic-producer-stub",
     baselineCommit: "0".repeat(40),
+    baselineKind: "git-commit",
     sourceSnapshot: {
       version: "gnr8-astro-source-snapshot:v1",
       files: [{ path: "package.json", bytes: 2, sha256: "a".repeat(64) }],

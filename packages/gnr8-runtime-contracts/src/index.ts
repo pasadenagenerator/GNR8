@@ -5,6 +5,8 @@ export const SITE_TEMPLATE_BOOTSTRAP_REQUESTED_EVENT = 'site/bootstrap.requested
 export const SITE_TEMPLATE_BOOTSTRAP_MAX_ATTEMPTS = 3
 export const SITE_RENDER_REQUESTED_EVENT = 'site/render.requested'
 export const SITE_RENDER_MAX_ATTEMPTS = 3
+export const SITE_ASTRO_GENERATION_REQUESTED_EVENT = 'site/astro-generation.requested'
+export const SITE_ASTRO_GENERATION_MAX_ATTEMPTS = 3
 export const DOMAIN_VERIFICATION_CHECK_EVENT = 'domain/verification.check'
 export const DOMAIN_ACTIVATED_EVENT = 'domain/activated'
 
@@ -31,6 +33,23 @@ export type SiteRenderRequestedPayload = {
   templateId: string
   runtimeSiteId: string
   runtimeSiteVersionId: string
+}
+
+export type SiteAstroGenerationRequestedPayload = {
+  actionId: string
+  requestedAt: string
+  ownershipSiteId: string
+  runtimeSiteId: string
+  sourceSiteVersionId: string
+  sourceArtifactId: string
+  actor: string
+  strategy: string
+  requestedAdapterId?: 'astro-static-site' | 'html-static-artifact'
+  acceptedFunctionalReductions?: {
+    kind: 'legacy-forms-to-disclosed-links-v1'
+    contactEmail: string
+    commentLinks: 'source-article'
+  }
 }
 
 export type DomainVerificationCheckPayload = {

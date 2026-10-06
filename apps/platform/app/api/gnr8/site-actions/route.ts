@@ -13,6 +13,8 @@ type SiteActionsBody = {
   actionType?: unknown
   strategy?: unknown
   variantId?: unknown
+  outputAdapterId?: unknown
+  acceptedFunctionalReductions?: unknown
   agencyId?: unknown
 }
 
@@ -41,6 +43,15 @@ export async function POST(request: NextRequest) {
     if (!siteId) {
       return NextResponse.json({ ok: false, error: 'siteId is required' }, { status: 400 })
     }
+    const requestedOutputAdapterId = normalizeText(body.outputAdapterId)
+    if (
+      actionType === 'generate_redesign' &&
+      requestedOutputAdapterId &&
+      requestedOutputAdapterId !== 'astro-static-site' &&
+      requestedOutputAdapterId !== 'html-static-artifact'
+    ) {
+      return NextResponse.json({ ok: false, error: 'outputAdapterId is unsupported' }, { status: 400 })
+    }
 
     const requestedAgencyId = normalizeText(body.agencyId)
     const actionContext = await requireAgencyActionContext({
@@ -54,6 +65,24 @@ export async function POST(request: NextRequest) {
       actor: `user:${actionContext.userId}`,
     }
 
+    const requestedReductions = body.acceptedFunctionalReductions && typeof body.acceptedFunctionalReductions === 'object'
+      ? body.acceptedFunctionalReductions as Record<string, unknown>
+      : null
+    const reductionKind = normalizeText(requestedReductions?.kind)
+    const reductionContactEmail = normalizeText(requestedReductions?.contactEmail).toLowerCase()
+    const reductionCommentLinks = normalizeText(requestedReductions?.commentLinks)
+    if (
+      requestedReductions &&
+      (
+        actionType !== 'generate_redesign' ||
+        reductionKind !== 'legacy-forms-to-disclosed-links-v1' ||
+        !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reductionContactEmail) ||
+        reductionCommentLinks !== 'source-article'
+      )
+    ) {
+      return NextResponse.json({ ok: false, error: 'acceptedFunctionalReductions is invalid' }, { status: 400 })
+    }
+
     const actionRequest: SiteActionRequest =
       actionType === 'rerun_transformation'
         ? {
@@ -65,6 +94,19 @@ export async function POST(request: NextRequest) {
               ...baseRequest,
               type: 'generate_redesign',
               strategy: normalizeText(body.strategy),
+              outputAdapterId:
+                requestedOutputAdapterId === 'html-static-artifact'
+                  ? 'html-static-artifact'
+                  : requestedOutputAdapterId === 'astro-static-site'
+                    ? 'astro-static-site'
+                    : undefined,
+              acceptedFunctionalReductions: requestedReductions
+                ? {
+                    kind: 'legacy-forms-to-disclosed-links-v1',
+                    contactEmail: reductionContactEmail,
+                    commentLinks: 'source-article',
+                  }
+                : undefined,
             }
           : {
               ...baseRequest,

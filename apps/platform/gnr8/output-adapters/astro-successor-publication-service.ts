@@ -1,7 +1,5 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
-
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { buildCanonicalMigrationInput } from "@/gnr8/runtime/migration-factory";
 import {
@@ -35,7 +33,18 @@ import type {
 
 import type { AstroCandidatePromotionResult } from "./astro-candidate-promotion-service";
 import {
-  createAstroProductionCandidateId,
+  ASTRO_SUCCESSOR_PUBLICATION_VERSION,
+  deriveAstroSuccessorOperationIdentity,
+  type AstroSuccessorOperationIdentity,
+} from "./astro-successor-operation-identity";
+import type { GeneratedOutputPublicationDecisionResolver } from "./generated-output-publication-guard";
+import {
+  readGeneratedOutputBuildEvidence,
+  readGeneratedOutputContentManifest,
+  rebindBuildEvidenceToCandidate,
+} from "./generated-output-evidence";
+import type { GeneratedOutputBuildEvidence, GeneratedOutputContentManifest } from "./generated-output-eligibility";
+import {
   type AstroProductionCandidateOwnership,
   type AstroProductionCandidateRecord,
   type AstroProductionCandidateRegistrationContext,
@@ -46,7 +55,11 @@ import {
   type AstroInternalPreviewCandidate,
 } from "./astro-static-site-internal-preview-bridge";
 
-export const ASTRO_SUCCESSOR_PUBLICATION_VERSION = "gnr8-astro-successor-publication:v1" as const;
+export {
+  ASTRO_SUCCESSOR_PUBLICATION_VERSION,
+  deriveAstroSuccessorOperationIdentity,
+  type AstroSuccessorOperationIdentity,
+} from "./astro-successor-operation-identity";
 export const ASTRO_SUCCESSOR_PRODUCER_KIND = "astro_successor_candidate_rebind" as const;
 export const ASTRO_SUCCESSOR_PRODUCER_VERSION = "v1" as const;
 
@@ -63,14 +76,6 @@ export type AstroSuccessorPublicationInput = {
   expectedActivePointer: { siteVersionId: string; artifactId: string };
   expectedInternalHost: string;
   stage: "shadow";
-};
-
-export type AstroSuccessorOperationIdentity = {
-  successorSiteVersionId: string;
-  successorCandidateOperationId: string;
-  successorCandidateId: string;
-  correlationId: string;
-  idempotencyKey: string;
 };
 
 export type AstroSuccessorPublicationResult = {
@@ -151,6 +156,11 @@ export type AstroSuccessorPublicationDependencies = {
     expectedContentSha256: string;
     expectedStorageSha256: string;
     idempotencyKey: string;
+    generatedOutputEvidence?: {
+      buildEvidence: GeneratedOutputBuildEvidence;
+      contentManifest: GeneratedOutputContentManifest;
+      sourceWorkspace?: Record<string, unknown>;
+    };
   }): Promise<AstroCandidatePromotionResult>;
   getSiteVersion: typeof getSiteVersion;
   getRuntimeSiteSummary: typeof getRuntimeSiteSummary;
@@ -165,6 +175,7 @@ export type AstroSuccessorPublicationDependencies = {
   bindHostToSite: typeof bindHostToSite;
   transitionSiteVersionState: typeof transitionSiteVersionState;
   publishApprovedSiteVersion: typeof publishApprovedSiteVersion;
+  generatedOutputPublicationDecisionResolver?: GeneratedOutputPublicationDecisionResolver;
   rollbackToSiteVersionArtifact: typeof rollbackToSiteVersionArtifact;
 };
 
@@ -178,28 +189,6 @@ export class AstroSuccessorPublicationError extends Error {
     this.code = code;
     this.blockerCodes = blockerCodes;
   }
-}
-
-export function deriveAstroSuccessorOperationIdentity(input: {
-  runtimeSiteId: string;
-  sourceSiteVersionId: string;
-  sourceCandidateId: string;
-}): AstroSuccessorOperationIdentity {
-  const seed = stableStringify({
-    version: ASTRO_SUCCESSOR_PUBLICATION_VERSION,
-    runtimeSiteId: input.runtimeSiteId,
-    sourceSiteVersionId: input.sourceSiteVersionId,
-    sourceCandidateId: input.sourceCandidateId,
-  });
-  const successorSiteVersionId = deterministicUuid(`${seed}:site-version`);
-  const successorCandidateOperationId = deterministicUuid(`${seed}:candidate-operation`);
-  return {
-    successorSiteVersionId,
-    successorCandidateOperationId,
-    successorCandidateId: createAstroProductionCandidateId(successorCandidateOperationId),
-    correlationId: `astro-successor:${successorSiteVersionId}`,
-    idempotencyKey: `astro-successor:${successorCandidateOperationId}`,
-  };
 }
 
 export function buildSuccessorBoundAstroCandidate(input: {
@@ -296,6 +285,15 @@ export function createAstroSuccessorPublicationService(
       throw publicationError("source_artifact_missing", "The source materialized artifact is unavailable.");
     }
     assertPreservedBytes(sourceArtifact, sourceCandidate, "source_artifact_bytes_mismatch");
+    const sourceBuildEvidence = readGeneratedOutputBuildEvidence(sourceArtifact.manifest);
+    const contentManifest = readGeneratedOutputContentManifest(sourceArtifact.manifest);
+    if (!sourceBuildEvidence || !contentManifest) {
+      throw publicationError(
+        "generated_output_evidence_missing",
+        "The source candidate is missing retained build or content-manifest evidence.",
+        ["build_evidence_missing_or_invalid"],
+      );
+    }
 
     const importedPage = importHtmlToPage({
       slug: "/",
@@ -398,6 +396,10 @@ export function createAstroSuccessorPublicationService(
       candidate: successorCandidate,
       sourceCandidateId: input.sourceCandidateId,
     });
+    const successorBuildEvidence = rebindBuildEvidenceToCandidate({
+      sourceEvidence: sourceBuildEvidence,
+      successorRecord: successorCandidateRecord,
+    });
 
     successorVersion = await dependencies.getSiteVersion(operation.successorSiteVersionId);
     if (!successorVersion) throw publicationError("successor_version_missing", "Successor version disappeared before materialization.");
@@ -467,6 +469,10 @@ export function createAstroSuccessorPublicationService(
       expectedContentSha256: successorCandidateRecord.candidate.contentSha256,
       expectedStorageSha256: successorCandidateRecord.storageSha256,
       idempotencyKey: `${operation.idempotencyKey}:promotion`,
+      generatedOutputEvidence: {
+        buildEvidence: successorBuildEvidence,
+        contentManifest,
+      },
     });
     if (promotion.governance.status !== "evaluated" || promotion.governance.decision === "DENY") {
       throw publicationError(
@@ -478,6 +484,34 @@ export function createAstroSuccessorPublicationService(
 
     successorVersion = await dependencies.getSiteVersion(operation.successorSiteVersionId);
     if (!successorVersion) throw publicationError("successor_version_missing", "Successor version disappeared before review.");
+    const promotedArtifact = successorVersion.artifactId
+      ? await dependencies.getArtifactById(successorVersion.artifactId)
+      : null;
+    if (!promotedArtifact || !dependencies.generatedOutputPublicationDecisionResolver) {
+      throw publicationError(
+        "generated_output_evidence_unavailable",
+        "Normal generated-output evidence composition is unavailable.",
+        ["generated_output_eligibility_evidence_unavailable"],
+      );
+    }
+    const technicalDecision = await dependencies.generatedOutputPublicationDecisionResolver({
+      siteVersion: successorVersion,
+      artifact: promotedArtifact,
+      publishStage: "shadow",
+      provenance: {
+        kind: "supported_generated_output",
+        candidateId: successorCandidateRecord.identity.candidateId,
+        candidateContentSha256: successorCandidateRecord.candidate.contentSha256,
+        candidateStorageSha256: successorCandidateRecord.storageSha256,
+      },
+    });
+    if (technicalDecision.technical.status !== "PASS") {
+      throw publicationError(
+        "generated_output_technical_evaluation_blocked",
+        "Persisted generated output failed technical eligibility.",
+        technicalDecision.technical.blockerReasons.map((item) => item.code),
+      );
+    }
     const auditDetails = {
       workflow: ASTRO_SUCCESSOR_PUBLICATION_VERSION,
       sourceSiteVersionId: input.sourceSiteVersionId,
@@ -490,6 +524,9 @@ export function createAstroSuccessorPublicationService(
       shadowEnforcementDecision: enforcement.adapter.decision,
       candidateContentSha256: successorCandidateRecord.candidate.contentSha256,
       candidateStorageSha256: successorCandidateRecord.storageSha256,
+      technicalEvaluationSha256: technicalDecision.technical.evidenceSha256,
+      buildEvidenceSha256: successorBuildEvidence.evidenceSha256,
+      contentManifestSha256: contentManifest.manifestSha256,
     };
     if (successorVersion.state === "DRAFT") {
       await dependencies.transitionSiteVersionState({
@@ -497,19 +534,16 @@ export function createAstroSuccessorPublicationService(
         nextState: "READY_FOR_REVIEW",
         actor: input.actorUserId,
         source: "manual",
-        details: { ...auditDetails, reviewOutcome: "governance_checks_passed" },
+        details: { ...auditDetails, technicalEvaluationOutcome: "ready_for_explicit_review" },
       });
       successorVersion = await dependencies.getSiteVersion(successorVersion.id);
     }
     if (successorVersion?.state === "READY_FOR_REVIEW") {
-      await dependencies.transitionSiteVersionState({
-        siteVersionId: successorVersion.id,
-        nextState: "APPROVED",
-        actor: input.actorUserId,
-        source: "manual",
-        details: { ...auditDetails, approvalOutcome: "approved_after_actual_checks" },
-      });
-      successorVersion = await dependencies.getSiteVersion(successorVersion.id);
+      throw publicationError(
+        "generated_output_review_required",
+        "Successor is technically ready for an explicit artifact-bound review; no approval was created.",
+        ["generated_output_review_missing"],
+      );
     }
     if (!successorVersion || !["APPROVED", "PUBLISHED"].includes(successorVersion.state)) {
       throw publicationError("successor_not_approved", "Successor did not reach the approved lifecycle state.");
@@ -538,6 +572,7 @@ export function createAstroSuccessorPublicationService(
       siteVersionId: operation.successorSiteVersionId,
       actor: input.actorUserId,
       stage: "shadow",
+      generatedOutputPublicationDecisionResolver: dependencies.generatedOutputPublicationDecisionResolver,
     });
     const afterFirstPointer = await dependencies.getActivePointerForSite(input.runtimeSiteId);
     if (
@@ -551,6 +586,7 @@ export function createAstroSuccessorPublicationService(
       siteVersionId: operation.successorSiteVersionId,
       actor: input.actorUserId,
       stage: "shadow",
+      generatedOutputPublicationDecisionResolver: dependencies.generatedOutputPublicationDecisionResolver,
     });
     if (repeatPublish.pointerSwitch !== "PUBLISH_ALREADY_ACTIVE_SAFE_NOOP") {
       throw publicationError("publish_idempotency_failed", "Repeated shadow publish was not an active-pointer safe no-op.");
@@ -874,14 +910,6 @@ function isMissingCandidateError(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "missing",
   );
-}
-
-function deterministicUuid(seed: string): string {
-  const bytes = createHash("sha256").update(seed, "utf8").digest().subarray(0, 16);
-  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = bytes.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function boundedText(value: unknown): value is string {

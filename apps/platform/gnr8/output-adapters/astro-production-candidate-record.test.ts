@@ -19,6 +19,7 @@ import {
 } from "./astro-production-candidate-record";
 import { createSyntheticAstroInternalPreviewCandidate } from "./astro-internal-preview-candidate-test-fixture";
 import { ASTRO_PERSISTED_CANDIDATE_SCHEMA_VERSION } from "./astro-internal-preview-candidate-repository";
+import { computeAstroInternalPreviewCandidateContentSha256 } from "./astro-static-site-internal-preview-bridge";
 
 const CANDIDATE_ID = createAstroProductionCandidateId("11111111-1111-4111-8111-111111111111");
 const OWNERSHIP: AstroProductionCandidateOwnership = {
@@ -145,7 +146,7 @@ test("canonical identities and duplicated runtime ownership are validated but do
   assert.throws(() => validateAstroProductionCandidateRecord(malformed), validationError("corrupt"));
 });
 
-test("deserialized payload validation preserves root-only, inline-CSS, script-free restrictions", () => {
+test("deserialized payload validation preserves canonical routes, inline-CSS, and script-free restrictions", () => {
   const restrictedHtml = [
     "<!doctype html><html><head><style>@import url('/other.css')</style></head><body></body></html>",
     "<!doctype html><html><head><style>body{background:url('/hero.png')}</style></head><body></body></html>",
@@ -160,9 +161,21 @@ test("deserialized payload validation preserves root-only, inline-CSS, script-fr
     assert.throws(() => productionRecord({ html }), validationError("corrupt"));
   }
 
-  const extraRoute = structuredClone(productionRecord()) as unknown as Record<string, any>;
-  extraRoute.candidate.htmlByPath["/other"] = "<html></html>";
-  assert.throws(() => validateAstroProductionCandidateRecord(extraRoute), validationError("corrupt"));
+  const multiRouteCandidate = proofCandidate();
+  multiRouteCandidate.htmlByPath["/other"] = supportedHtml("Other route");
+  const multiRouteContentSha = computeAstroInternalPreviewCandidateContentSha256(multiRouteCandidate);
+  multiRouteCandidate.contentSha256 = multiRouteContentSha;
+  multiRouteCandidate.manifest.provenance.convertedArtifactSha256 = multiRouteContentSha;
+  assert.doesNotThrow(() => createAstroProductionCandidateRecord({
+    candidate: multiRouteCandidate,
+    ownership: OWNERSHIP,
+    registration: registration(),
+    storedAt: "2026-09-28T10:00:00.000Z",
+  }));
+
+  const malformedRoute = structuredClone(productionRecord()) as unknown as Record<string, any>;
+  malformedRoute.candidate.htmlByPath["other"] = supportedHtml("Malformed route");
+  assert.throws(() => validateAstroProductionCandidateRecord(malformedRoute), validationError("corrupt"));
 });
 
 test("content and immutable-envelope tampering fail closed", () => {

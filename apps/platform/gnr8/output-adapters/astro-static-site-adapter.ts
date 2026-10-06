@@ -62,6 +62,18 @@ export interface NormalizedStaticBusinessSiteContent {
   contact: NormalizedSiteContact;
   footer: NormalizedSiteFooter;
   theme: NormalizedSiteThemeSignals;
+  /**
+   * Optional captured-route projection. When present it is the authoritative
+   * page set for the generated Astro workspace; the legacy structured fields
+   * remain the backwards-compatible single-page input.
+   */
+  pages?: NormalizedStaticSitePage[];
+}
+
+export interface NormalizedStaticSitePage {
+  path: string;
+  title: string;
+  bodyHtml: string;
 }
 
 export const ASTRO_STATIC_SITE_PREVIEW_PORT = 4321;
@@ -87,10 +99,9 @@ export const astroStaticSiteAdapterDescriptor: Gnr8OutputAdapterDescriptor = {
   },
   supportedEditCategories: ["copy", "navigation", "theme", "layout", "sections", "cards", "contact", "assets"],
   limitations: [
-    "Skeleton adapter only; not wired into production generation, publishing, or deployment.",
-    "Single-page static business-site proof only.",
     "No ecommerce checkout, inventory, account, CMS, or application-state support.",
-    "No live pointer, DNS, provider, billing, dry-run, rollback, shadow-publish, or runtime artifact mutation.",
+    "Scripts and platform-specific theme/application state are rejected by the normal generation capability gate.",
+    "External-domain publication, DNS, provider, and billing operations remain outside this adapter.",
   ],
   mutationBoundary: {
     mutatesRuntimeArtifact: false,
@@ -131,18 +142,76 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
       contents: createAstroConfig(),
     },
     {
-      path: "src/pages/index.astro",
-      role: "source",
-      contents: createIndexAstro(input),
-    },
-    {
       path: "public/styles/global.css",
       role: "style",
       contents: createGlobalCss(input.theme),
     },
   ];
 
+  const pages = input.pages?.length
+    ? normalizedCapturedPages(input.pages).map((page) => ({
+        path: sourcePathForRoute(page.path),
+        role: "source" as const,
+        contents: createCapturedPageAstro(input, page),
+      }))
+    : [{ path: "src/pages/index.astro", role: "source" as const, contents: createIndexAstro(input) }];
+  files.splice(2, 0, ...pages);
+
   return { files };
+}
+
+function normalizedCapturedPages(pages: NormalizedStaticSitePage[]): NormalizedStaticSitePage[] {
+  const byPath = new Map<string, NormalizedStaticSitePage>();
+  for (const page of pages) {
+    const path = normalizeRoutePath(page.path);
+    if (byPath.has(path)) throw new Error(`duplicate_astro_route:${path}`);
+    if (/<script\b/i.test(page.bodyHtml)) throw new Error(`unsupported_astro_page_script:${path}`);
+    byPath.set(path, { path, title: page.title.trim() || "Untitled", bodyHtml: page.bodyHtml });
+  }
+  if (!byPath.has("/")) throw new Error("astro_root_route_required");
+  return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function normalizeRoutePath(value: string): string {
+  const withoutQuery = String(value ?? "").trim().split(/[?#]/, 1)[0] || "/";
+  const normalized = `/${withoutQuery.replace(/^\/+|\/+$/g, "")}`.replace(/\/{2,}/g, "/");
+  if (normalized === "/") return normalized;
+  const segments = normalized.slice(1).split("/");
+  if (segments.some((segment) => !/^(?:[a-z0-9._-]|%[0-9a-f]{2})+$/i.test(segment) || segment === "." || segment === "..")) {
+    throw new Error(`invalid_astro_route:${value}`);
+  }
+  return normalized;
+}
+
+function sourcePathForRoute(route: string): string {
+  return route === "/" ? "src/pages/index.astro" : `src/pages/${route.slice(1)}/index.astro`;
+}
+
+function createCapturedPageAstro(input: NormalizedStaticBusinessSiteContent, page: NormalizedStaticSitePage): string {
+  const nav = input.navItems
+    .map((item) => `        <a href="${escapeAttribute(item.href)}">${escapeHtml(item.label)}</a>`)
+    .join("\n");
+  return `<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(page.title)}</title>
+    <link rel="stylesheet" href="/styles/global.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">${escapeHtml(input.brandName)}</a>
+      <nav aria-label="Primary navigation">
+${nav}
+      </nav>
+    </header>
+    <main data-gnr8-source-route="${escapeAttribute(page.path)}">
+${page.bodyHtml}
+    </main>
+    <footer><p>${escapeHtml(input.footer.text)}</p></footer>
+  </body>
+</html>
+`;
 }
 
 function createPackageJson(input: NormalizedStaticBusinessSiteContent): Record<string, unknown> {

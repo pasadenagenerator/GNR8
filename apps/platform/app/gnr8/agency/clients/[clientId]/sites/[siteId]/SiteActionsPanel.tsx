@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { addRecentItem } from '@/src/workspace/workspace-recents'
@@ -107,6 +107,9 @@ export default function SiteActionsPanel(props: Props) {
 
   const [runningType, setRunningType] = useState<SiteActionType | null>(null)
   const [strategyInput, setStrategyInput] = useState('More visual')
+  const [outputAdapterId, setOutputAdapterId] = useState<'default' | 'html-static-artifact'>('default')
+  const [acceptLegacyFormReductions, setAcceptLegacyFormReductions] = useState(false)
+  const [legacyFormContactEmail, setLegacyFormContactEmail] = useState('')
   const [localMessage, setLocalMessage] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
 
@@ -119,6 +122,12 @@ export default function SiteActionsPanel(props: Props) {
   const canRunMigration = props.canRunTransformation && !isRunning
   const canPublish = props.canPublish && !isRunning
 
+  useEffect(() => {
+    if (props.currentStatus !== 'running') return
+    const timer = window.setInterval(() => router.refresh(), 2_000)
+    return () => window.clearInterval(timer)
+  }, [props.currentStatus, router])
+
   const activeVariant = useMemo(
     () => props.variants.rows.find((variant) => variant.id === props.variants.selectedVariantId) ?? null,
     [props.variants.rows, props.variants.selectedVariantId],
@@ -129,7 +138,7 @@ export default function SiteActionsPanel(props: Props) {
     if ((type === 'rerun_transformation' || type === 'generate_redesign') && !canRunMigration) return
 
     if (type === 'publish_site') {
-      const confirmed = window.confirm('Publish this site variant? This is a simulated publish in V1.')
+      const confirmed = window.confirm('Publish this explicitly approved site variant to the internal GNR8 runtime?')
       if (!confirmed) return
     }
 
@@ -145,6 +154,20 @@ export default function SiteActionsPanel(props: Props) {
           siteId: props.siteId,
           actionType: type,
           strategy: type === 'generate_redesign' ? strategyInput : undefined,
+          outputAdapterId:
+            type === 'generate_redesign' && outputAdapterId === 'html-static-artifact'
+              ? outputAdapterId
+              : undefined,
+          acceptedFunctionalReductions:
+            type === 'generate_redesign' &&
+            outputAdapterId === 'default' &&
+            acceptLegacyFormReductions
+              ? {
+                  kind: 'legacy-forms-to-disclosed-links-v1',
+                  contactEmail: legacyFormContactEmail,
+                  commentLinks: 'source-article',
+                }
+              : undefined,
           variantId: type === 'publish_site' ? props.variants.selectedVariantId ?? undefined : undefined,
           agencyId: props.agencyId,
         }),
@@ -235,6 +258,74 @@ export default function SiteActionsPanel(props: Props) {
               <option value='More conversion-focused'>More conversion-focused</option>
             </select>
           </label>
+          <label style={{ fontSize: 12, color: '#334155' }}>
+            Output format
+            <select
+              value={outputAdapterId}
+              disabled={!canRunMigration}
+              onChange={(event) => setOutputAdapterId(event.target.value as 'default' | 'html-static-artifact')}
+              style={{
+                marginTop: 4,
+                width: '100%',
+                maxWidth: 280,
+                padding: '6px 8px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                fontSize: 12,
+              }}
+            >
+              <option value='default'>Astro (default)</option>
+              <option value='html-static-artifact'>Legacy HTML</option>
+            </select>
+          </label>
+          {outputAdapterId === 'default' ? (
+            <div
+              style={{
+                maxWidth: 520,
+                border: '1px solid #f59e0b',
+                borderRadius: 8,
+                padding: 8,
+                background: '#fffbeb',
+                display: 'grid',
+                gap: 6,
+              }}
+            >
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>
+                <input
+                  type='checkbox'
+                  checked={acceptLegacyFormReductions}
+                  disabled={!canRunMigration}
+                  onChange={(event) => setAcceptLegacyFormReductions(event.target.checked)}
+                />
+                <span>
+                  Accept form reductions for this generated candidate only: replace legacy contact forms with a disclosed email link and comment forms with links to the original articles.
+                </span>
+              </label>
+              {acceptLegacyFormReductions ? (
+                <label style={{ fontSize: 12, color: '#78350f' }}>
+                  Contact email shown in the generated candidate
+                  <input
+                    type='email'
+                    value={legacyFormContactEmail}
+                    required
+                    disabled={!canRunMigration}
+                    onChange={(event) => setLegacyFormContactEmail(event.target.value)}
+                    placeholder='name@example.com'
+                    style={{
+                      display: 'block',
+                      marginTop: 4,
+                      width: '100%',
+                      maxWidth: 280,
+                      padding: '6px 8px',
+                      borderRadius: 8,
+                      border: '1px solid #f59e0b',
+                      fontSize: 12,
+                    }}
+                  />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -253,8 +344,8 @@ export default function SiteActionsPanel(props: Props) {
         {showRedesign ? (
           <button
             type='button'
-            disabled={!canRunMigration}
-            style={buttonStyle({ disabled: !canRunMigration })}
+            disabled={!canRunMigration || (acceptLegacyFormReductions && !legacyFormContactEmail.trim())}
+            style={buttonStyle({ disabled: !canRunMigration || (acceptLegacyFormReductions && !legacyFormContactEmail.trim()) })}
             onClick={() => executeAction('generate_redesign')}
           >
             {runningType === 'generate_redesign' ? 'Generating...' : 'Generate Redesign Variant'}
@@ -309,9 +400,19 @@ export default function SiteActionsPanel(props: Props) {
           </select>
         </label>
         {activeVariant ? (
-          <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
-            Active variant strategy: <strong>{activeVariant.strategy}</strong>
-          </p>
+          <div style={{ display: 'grid', gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
+              Active variant strategy: <strong>{activeVariant.strategy}</strong>
+            </p>
+            {activeVariant.siteVersionId ? (
+              <a
+                href={`/gnr8/admin/generated-output-review/${encodeURIComponent(activeVariant.siteVersionId)}`}
+                style={{ fontSize: 12, color: '#1d4ed8' }}
+              >
+                Review exact generated artifact
+              </a>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

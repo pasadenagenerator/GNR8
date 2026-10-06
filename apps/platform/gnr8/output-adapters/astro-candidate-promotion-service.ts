@@ -8,7 +8,7 @@ import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 import { evaluatePublishEnforcement } from "@/gnr8/runtime/publish-enforcement";
 import { evaluateRuntimeArtifactServingEligibility } from "@/gnr8/runtime/publish-enforcement";
 import { runRenderIntegrityGate } from "@/gnr8/runtime/render-integrity-gate";
-import type { RuntimeArtifact } from "@/gnr8/runtime/types";
+import type { CanonicalSiteVersionSnapshot, RuntimeArtifact } from "@/gnr8/runtime/types";
 
 import type {
   AstroCandidateRuntimeArtifactContext,
@@ -18,6 +18,15 @@ import type {
   AstroProductionCandidateOwnership,
   AstroProductionCandidateRecord,
 } from "./astro-production-candidate-record";
+import {
+  generatedOutputEvidenceManifestFields,
+  readGeneratedOutputBuildEvidence,
+  readGeneratedOutputContentManifest,
+} from "./generated-output-evidence";
+import type {
+  GeneratedOutputBuildEvidence,
+  GeneratedOutputContentManifest,
+} from "./generated-output-eligibility";
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const MAX_IDENTITY_LENGTH = 512;
@@ -29,6 +38,11 @@ export type AstroCandidatePromotionInput = {
   expectedContentSha256: string;
   expectedStorageSha256: string;
   idempotencyKey: string;
+  generatedOutputEvidence?: {
+    buildEvidence: GeneratedOutputBuildEvidence;
+    contentManifest: GeneratedOutputContentManifest;
+    sourceWorkspace?: Record<string, unknown>;
+  };
 };
 
 export type AstroCandidatePromotionDependencies = {
@@ -129,7 +143,11 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
     const artifact = initial.artifact!;
     const existingEvidence = readAstroRuntimeArtifactPromotionEvidence(artifact.manifest);
     if (existingEvidence) {
-      if (samePromotedCandidate(existingEvidence, record) && preservesCandidateBytes(artifact, record)) {
+      if (
+        samePromotedCandidate(existingEvidence, record) &&
+        preservesCandidateBytes(artifact, record) &&
+        sameGeneratedOutputEvidence(artifact, input.generatedOutputEvidence)
+      ) {
         return resultFromStoredContext({ context: initial, record, status: "idempotent" });
       }
       throw promotionError(
@@ -193,7 +211,7 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
       rendererCompatibilityVersion: record.candidate.rendererCompatibilityVersion,
       renderMode: "PUBLISH",
       generatedAt: "deterministic",
-      paths: ["/"],
+      paths: Object.keys(record.candidate.htmlByPath).sort((left, right) => left.localeCompare(right)),
       assetFingerprints: structuredClone(record.candidate.assetFingerprintMap),
       artifactSource: "astro_candidate_materialization",
       astroCandidateManifest: structuredClone(record.candidate.manifest),
@@ -205,6 +223,9 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
         storageSha256: record.storageSha256,
       },
       astroCandidatePromotion: evidence,
+      ...(input.generatedOutputEvidence
+        ? generatedOutputEvidenceManifestFields(input.generatedOutputEvidence)
+        : {}),
       publishStage: "shadow",
       shadowRestricted: governance.shadowRestricted,
       enforcementDecision: governance.decision,
@@ -241,6 +262,7 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
       reconciledEvidence &&
       samePromotedCandidate(reconciledEvidence, record) &&
       preservesCandidateBytes(reconciled.artifact!, record) &&
+      sameGeneratedOutputEvidence(reconciled.artifact!, input.generatedOutputEvidence) &&
       reconciled.artifact!.bundleSha256 === bundleSha256
     ) {
       return resultFromStoredContext({
@@ -259,7 +281,19 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
   };
 }
 
-function evaluateGovernance(context: AstroCandidateRuntimeArtifactContext): {
+function sameGeneratedOutputEvidence(
+  artifact: RuntimeArtifact,
+  expected: AstroCandidatePromotionInput["generatedOutputEvidence"],
+): boolean {
+  if (!expected) return true;
+  const storedBuild = readGeneratedOutputBuildEvidence(artifact.manifest);
+  const storedContent = readGeneratedOutputContentManifest(artifact.manifest);
+  return storedBuild?.evidenceSha256 === expected.buildEvidence.evidenceSha256 &&
+    storedContent?.manifestSha256 === expected.contentManifest.manifestSha256 &&
+    (!expected.sourceWorkspace || stableStringify(artifact.manifest.generatedOutputSourceWorkspace) === stableStringify(expected.sourceWorkspace));
+}
+
+export function evaluateAstroCandidateGovernance(siteVersion: CanonicalSiteVersionSnapshot): {
   status: "evaluated" | "blocked";
   decision: string | null;
   blockerCodes: string[];
@@ -267,7 +301,7 @@ function evaluateGovernance(context: AstroCandidateRuntimeArtifactContext): {
   artifactGovernance: RuntimeArtifact["artifactGovernance"];
 } {
   try {
-    const evaluated = evaluatePublishEnforcement({ siteVersion: context.siteVersion, stage: "shadow" });
+    const evaluated = evaluatePublishEnforcement({ siteVersion, stage: "shadow" });
     return {
       status: "evaluated",
       decision: evaluated.adapter.decision,
@@ -288,6 +322,10 @@ function evaluateGovernance(context: AstroCandidateRuntimeArtifactContext): {
       artifactGovernance: {} as RuntimeArtifact["artifactGovernance"],
     };
   }
+}
+
+function evaluateGovernance(context: AstroCandidateRuntimeArtifactContext) {
+  return evaluateAstroCandidateGovernance(context.siteVersion);
 }
 
 function resultFromStoredContext(input: {

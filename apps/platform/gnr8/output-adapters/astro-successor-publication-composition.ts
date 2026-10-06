@@ -15,6 +15,7 @@ import {
 } from "./astro-production-candidate-supabase-gateway";
 import { AstroProductionCandidatePreviewConfigurationError } from "./astro-production-candidate-preview-feature-gate";
 import { createAstroSuccessorPublicationService } from "./astro-successor-publication-service";
+import { createGeneratedOutputPublicationDecisionResolver } from "./generated-output-publication-composition";
 
 export function createAstroSuccessorPublicationOperation() {
   const serviceRoleClient = getSupabaseServiceRoleClient();
@@ -87,6 +88,7 @@ export function createAstroSuccessorPublicationOperation() {
       const mod = await import("@/gnr8/runtime/publish-activation-orchestrator");
       return mod.publishApprovedSiteVersion(...args);
     },
+    generatedOutputPublicationDecisionResolver: createGeneratedOutputPublicationDecisionResolver(),
     rollbackToSiteVersionArtifact: async (...args) => {
       const mod = await import("@/gnr8/runtime/rollback-switch");
       return mod.rollbackToSiteVersionArtifact(...args);

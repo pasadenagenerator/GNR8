@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { buildDeterministicArtifactBundle } from "@/gnr8/runtime/artifact-builder";
 import { buildPreservedAstroArtifactBundleForPublish } from "@/gnr8/runtime/astro-artifact-materialization";
 import {
+  assertGeneratedOutputDecisionStillBound,
+  enforceGeneratedOutputPublicationEligibility,
+  type GeneratedOutputPublicationDecisionResolver,
+} from "@/gnr8/output-adapters/generated-output-publication-guard";
+import {
   isPublishActivationShadowGateEnabled,
   observePublishActivationShadowGate,
   type PublishActivationShadowObserverInput,
@@ -54,6 +59,14 @@ import { transitionSiteVersionState } from "@/gnr8/runtime/version-lifecycle-enf
 
 function throwPublishActivationFailure(code: PublishActivationFailureCode, message: string, details?: Record<string, unknown>): never {
   throw new Error(`${code}:${JSON.stringify({ message, details: details ?? {} })}`);
+}
+
+function readRetainedEnforcementDecision(artifact: { manifest: Record<string, unknown> }): string {
+  const value = artifact.manifest.enforcementDecision;
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("generated_output_retained_enforcement_decision_missing");
+  }
+  return value;
 }
 
 export type PublishActivationShadowScope = {
@@ -866,6 +879,7 @@ export async function publishApprovedSiteVersion(input: {
   publishActivationMetadataResolverShadowInput?: PublishActivationMetadataResolverShadowInput | null;
   publishActivationMetadataResolverShadow?: PublishActivationMetadataResolverShadow;
   publishActivationEnforcementShadowGuard?: PublishActivationEnforcementShadowGuard;
+  generatedOutputPublicationDecisionResolver?: GeneratedOutputPublicationDecisionResolver;
 }) {
   const dbOptions = { dbClient: input.dbClient };
   const siteVersion = await getSiteVersion(input.siteVersionId, dbOptions);
@@ -884,23 +898,31 @@ export async function publishApprovedSiteVersion(input: {
 
     let storedArtifact = await getArtifactById(siteVersion.artifactId, dbOptions);
     const resolvedPublishStage = input.stage ?? storedArtifact?.publishStage ?? "production";
+    const generatedOutputDecision = await enforceGeneratedOutputPublicationEligibility({
+      siteVersion,
+      artifact: storedArtifact,
+      publishStage: resolvedPublishStage,
+      resolver: input.generatedOutputPublicationDecisionResolver,
+    });
     if (input.stage && storedArtifact) {
-      const enforcement = evaluatePublishEnforcement({
-        siteVersion,
-        stage: resolvedPublishStage,
-      });
-      if (enforcement.adapter.decision === "DENY") {
-        throw new Error(`publish_enforcement_denied:${JSON.stringify(enforcement.adapter)}`);
+      const migrationEnforcement = generatedOutputDecision
+        ? null
+        : evaluatePublishEnforcement({ siteVersion, stage: resolvedPublishStage });
+      if (migrationEnforcement?.adapter.decision === "DENY") {
+        throw new Error(`publish_enforcement_denied:${JSON.stringify(migrationEnforcement.adapter)}`);
       }
-      if (enforcement.adapter.decision === "REVIEW_ONLY" && resolvedPublishStage !== "shadow") {
-        throw new Error(`publish_enforcement_review_only_shadow_required:${JSON.stringify(enforcement.adapter)}`);
+      if (migrationEnforcement?.adapter.decision === "REVIEW_ONLY" && resolvedPublishStage !== "shadow") {
+        throw new Error(`publish_enforcement_review_only_shadow_required:${JSON.stringify(migrationEnforcement.adapter)}`);
       }
+      const enforcementDecision = migrationEnforcement?.adapter.decision ?? readRetainedEnforcementDecision(storedArtifact);
+      const shadowRestricted = migrationEnforcement?.shadowRestricted ?? storedArtifact.shadowRestricted;
+      const artifactGovernance = migrationEnforcement?.artifactGovernance ?? storedArtifact.artifactGovernance;
 
       const artifactBundle = buildPreservedAstroArtifactBundleForPublish({
         artifact: storedArtifact,
         publishStage: resolvedPublishStage,
-        shadowRestricted: enforcement.shadowRestricted,
-        enforcementDecision: enforcement.adapter.decision,
+        shadowRestricted,
+        enforcementDecision,
       }) ?? buildDeterministicArtifactBundle({ siteVersion, renderMode: "PUBLISH" });
       const integrity = runRenderIntegrityGate({
         siteVersion,
@@ -924,15 +946,18 @@ export async function publishApprovedSiteVersion(input: {
         manifest: {
           ...artifactBundle.manifest,
           publishStage: resolvedPublishStage,
-          shadowRestricted: enforcement.shadowRestricted,
-          enforcementDecision: enforcement.adapter.decision,
+          shadowRestricted,
+          enforcementDecision,
         },
         publishStage: resolvedPublishStage,
-        shadowRestricted: enforcement.shadowRestricted,
-        artifactGovernance: enforcement.artifactGovernance,
+        shadowRestricted,
+        artifactGovernance,
         dbClient: input.dbClient,
       });
       storedArtifact = await getArtifactById(siteVersion.artifactId, dbOptions);
+    }
+    if (storedArtifact) {
+      assertGeneratedOutputDecisionStillBound({ decision: generatedOutputDecision, artifact: storedArtifact });
     }
     const candidateValidation = evaluatePublishActivationCandidate({
       candidateRef: `runtime-site-version:${siteVersion.id}`,
@@ -1053,26 +1078,37 @@ export async function publishApprovedSiteVersion(input: {
     };
   }
 
-  const enforcement = evaluatePublishEnforcement({
-    siteVersion,
-    stage: publishStage,
-  });
-  if (enforcement.adapter.decision === "DENY") {
-    throw new Error(`publish_enforcement_denied:${JSON.stringify(enforcement.adapter)}`);
-  }
-  if (enforcement.adapter.decision === "REVIEW_ONLY" && publishStage !== "shadow") {
-    throw new Error(`publish_enforcement_review_only_shadow_required:${JSON.stringify(enforcement.adapter)}`);
-  }
-
   const preexistingArtifact = siteVersion.artifactId
     ? await getArtifactById(siteVersion.artifactId, dbOptions)
     : null;
+  const generatedOutputDecision = await enforceGeneratedOutputPublicationEligibility({
+    siteVersion,
+    artifact: preexistingArtifact,
+    publishStage,
+    resolver: input.generatedOutputPublicationDecisionResolver,
+  });
+  const migrationEnforcement = generatedOutputDecision
+    ? null
+    : evaluatePublishEnforcement({ siteVersion, stage: publishStage });
+  if (migrationEnforcement?.adapter.decision === "DENY") {
+    throw new Error(`publish_enforcement_denied:${JSON.stringify(migrationEnforcement.adapter)}`);
+  }
+  if (migrationEnforcement?.adapter.decision === "REVIEW_ONLY" && publishStage !== "shadow") {
+    throw new Error(`publish_enforcement_review_only_shadow_required:${JSON.stringify(migrationEnforcement.adapter)}`);
+  }
+  const enforcementDecision = migrationEnforcement?.adapter.decision ??
+    (preexistingArtifact ? readRetainedEnforcementDecision(preexistingArtifact) : "ALLOW");
+  const shadowRestricted = migrationEnforcement?.shadowRestricted ?? preexistingArtifact?.shadowRestricted ?? false;
+  const artifactGovernance = migrationEnforcement?.artifactGovernance ?? preexistingArtifact?.artifactGovernance;
+  if (!artifactGovernance) {
+    throw new Error("generated_output_artifact_governance_missing");
+  }
   const artifactBundle = preexistingArtifact
     ? buildPreservedAstroArtifactBundleForPublish({
         artifact: preexistingArtifact,
         publishStage,
-        shadowRestricted: enforcement.shadowRestricted,
-        enforcementDecision: enforcement.adapter.decision,
+        shadowRestricted,
+        enforcementDecision,
       }) ?? buildDeterministicArtifactBundle({ siteVersion, renderMode: "PUBLISH" })
     : buildDeterministicArtifactBundle({ siteVersion, renderMode: "PUBLISH" });
 
@@ -1098,12 +1134,12 @@ export async function publishApprovedSiteVersion(input: {
     manifest: {
       ...artifactBundle.manifest,
       publishStage,
-      shadowRestricted: enforcement.shadowRestricted,
-      enforcementDecision: enforcement.adapter.decision,
+      shadowRestricted,
+      enforcementDecision,
     },
     publishStage,
-    shadowRestricted: enforcement.shadowRestricted,
-    artifactGovernance: enforcement.artifactGovernance,
+    shadowRestricted,
+    artifactGovernance,
     dbClient: input.dbClient,
   });
 
@@ -1125,16 +1161,19 @@ export async function publishApprovedSiteVersion(input: {
     manifest: {
       ...artifactBundle.manifest,
       publishStage,
-      shadowRestricted: enforcement.shadowRestricted,
-      enforcementDecision: enforcement.adapter.decision,
+      shadowRestricted,
+      enforcementDecision,
     },
     publishStage,
-    shadowRestricted: enforcement.shadowRestricted,
-    artifactGovernance: enforcement.artifactGovernance,
+    shadowRestricted,
+    artifactGovernance,
     dbClient: input.dbClient,
   });
 
   const storedArtifact = await getArtifactById(artifact.artifactId, dbOptions);
+  if (storedArtifact) {
+    assertGeneratedOutputDecisionStillBound({ decision: generatedOutputDecision, artifact: storedArtifact });
+  }
   const activePointer = await getActivePointerForSite(siteVersion.siteId, dbOptions);
   const candidateValidation = evaluatePublishActivationCandidate({
     candidateRef: `runtime-site-version:${siteVersion.id}`,
@@ -1238,8 +1277,15 @@ export async function publishApprovedSiteVersion(input: {
     siteVersionId: siteVersion.id,
     artifactId: artifact.artifactId,
     publishStage,
-    shadowRestricted: enforcement.shadowRestricted,
-    enforcement: enforcement.adapter,
+    shadowRestricted,
+    ...(generatedOutputDecision
+      ? { generatedOutputEligibility: {
+          policyVersion: generatedOutputDecision.policyVersion,
+          technicalStatus: generatedOutputDecision.technical.status,
+          reviewStatus: generatedOutputDecision.review.status,
+          activation: generatedOutputDecision.activation,
+        } }
+      : { enforcement: migrationEnforcement!.adapter }),
     bundleSha256: artifactBundle.bundleSha256,
     pointerSwitch: pointerSwitchResult.switched ? "atomic_site_pointer_reassignment" : "PUBLISH_ALREADY_ACTIVE_SAFE_NOOP",
     previousActivePointer: pointerSwitchResult.previousActivePointer,

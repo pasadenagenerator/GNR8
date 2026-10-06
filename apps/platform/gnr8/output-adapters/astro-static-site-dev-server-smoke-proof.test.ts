@@ -109,6 +109,7 @@ test("runner stops its owned process and removes only its prepared workspace aft
           adapterId: "astro-static-site",
           workspacePath: "/tmp/owned-astro-proof-test",
           baselineCommit: "0123456789012345678901234567890123456789",
+          baselineKind: "git-commit",
           sourceSnapshot: snapshot,
           snapshotInclusionRules: [],
           futureStepMetadata: {

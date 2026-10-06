@@ -91,6 +91,21 @@ test("bridge converts deterministic single-page output and the unified preview s
   });
 });
 
+test("bridge preserves canonical directory-index routes in one exact candidate", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    await mkdir(join(workspacePath, "dist", "about"));
+    await writeFile(
+      join(workspacePath, "dist", "about", "index.html"),
+      '<!doctype html><html><head><link rel="stylesheet" href="/styles/global.css"></head><body><a href="/">Home</a><h1>About</h1></body></html>',
+    );
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+    assert.deepEqual(Object.keys(candidate.htmlByPath).sort(), ["/", "/about"]);
+    assert.match(candidate.htmlByPath["/about"], /<h1>About<\/h1>/);
+    assert.equal(candidate.htmlByPath["/about"].includes("<link"), false);
+  });
+});
+
 test("bridge revalidates corrupt, missing, and symlinked export bytes", async (t) => {
   await t.test("corrupt bytes", async () => {
     await withWorkspace(async (workspacePath) => {
@@ -136,8 +151,8 @@ test("bridge revalidates corrupt, missing, and symlinked export bytes", async (t
   });
 });
 
-test("bridge fails explicitly for unsupported routes, file kinds, and CSS asset dependencies", async (t) => {
-  await t.test("second HTML route", async () => {
+test("bridge fails explicitly for unsupported file layouts, file kinds, and CSS asset dependencies", async (t) => {
+  await t.test("non-directory-index HTML route", async () => {
     await withWorkspace(async (workspacePath) => {
       await writeFixtureDist(workspacePath);
       await writeFile(join(workspacePath, "dist", "about.html"), "<!doctype html><html><body>About</body></html>");

@@ -12,6 +12,7 @@ import type {
 import {
   AstroCandidatePromotionError,
   createAstroCandidatePromotionService,
+  evaluateAstroCandidateGovernance,
 } from "./astro-candidate-promotion-service";
 import { createSyntheticAstroInternalPreviewCandidate } from "./astro-internal-preview-candidate-test-fixture";
 import {
@@ -35,6 +36,16 @@ const OWNERSHIP: AstroProductionCandidateOwnership = {
   organizationId: ORGANIZATION_ID,
   agencyId: AGENCY_ID,
 };
+
+test("preallocation governance fails closed without blocking candidate creation", () => {
+  const result = evaluateAstroCandidateGovernance(siteVersionWithoutGovernance());
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.decision, null);
+  assert.equal(result.shadowRestricted, true);
+  assert.deepEqual(result.blockerCodes, ["page_migration_governance_missing"]);
+  assert.deepEqual(result.artifactGovernance, {});
+});
 
 test("materializes exact stored Astro HTML/CSS with provenance and honest blocked governance", async () => {
   const record = productionRecord();

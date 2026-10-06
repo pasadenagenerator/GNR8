@@ -17,7 +17,7 @@ import {
   type OriginalMirrorFidelityProjection,
   type ReconstructionReadinessProjection,
 } from '@/gnr8/site/evidence-capture-baseline-read-model'
-import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
+import { getSupabasePageReadClient } from '@/src/auth/supabase-page-read-client'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -2614,15 +2614,16 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   clientId: string
   siteId: string
   selectedVariantId?: string | null
+  serverOwned?: boolean
 }): Promise<SiteWorkspaceReadModel | null> {
   const agencyId = normalizeUuid(input.agencyId, 'agencyId')
   const clientId = normalizeUuid(input.clientId, 'clientId')
   const siteId = normalizeUuid(input.siteId, 'siteId')
   const selectedVariantId = toTextOrNull(input.selectedVariantId)
 
-  const supabase = await getSupabaseServerClientReadOnly()
+  const supabase = await getSupabasePageReadClient({ serverOwned: input.serverOwned })
 
-  const [clientOrgResult, siteResult, siteOptionsResult, siteActionsResult, siteVariantsResult] = await Promise.all([
+  const [clientOrgResult, initialSiteResult, initialSiteOptionsResult, siteActionsResult, siteVariantsResult] = await Promise.all([
     supabase.from('organizations').select('id,name,agency_id,organization_type').eq('id', clientId).limit(1).maybeSingle(),
     supabase.from('sites').select('id,org_id,agency_id,template_id,name,status,domain,created_at,updated_at').eq('id', siteId).limit(1).maybeSingle(),
     supabase
@@ -2645,6 +2646,32 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       .order('created_at', { ascending: false })
       .limit(40),
   ])
+
+  let siteResult = initialSiteResult
+  let siteOptionsResult = initialSiteOptionsResult
+  const siteOptionalColumnsMissing = [initialSiteResult.error, initialSiteOptionsResult.error]
+    .some((error) => {
+      const message = normalizeText(error?.message).toLowerCase()
+      return (
+        message.includes('does not exist')
+        && (message.includes('sites.name') || message.includes('sites.template_id'))
+      )
+    })
+
+  if (siteOptionalColumnsMissing) {
+    const [fallbackSiteResult, fallbackSiteOptionsResult] = await Promise.all([
+      supabase.from('sites').select('id,org_id,agency_id,status,domain,created_at,updated_at').eq('id', siteId).limit(1).maybeSingle(),
+      supabase
+        .from('sites')
+        .select('id,org_id,agency_id,status,domain,created_at,updated_at')
+        .eq('org_id', clientId)
+        .eq('agency_id', agencyId)
+        .order('created_at', { ascending: false })
+        .limit(120),
+    ])
+    siteResult = fallbackSiteResult as typeof initialSiteResult
+    siteOptionsResult = fallbackSiteOptionsResult as typeof initialSiteOptionsResult
+  }
 
   if (clientOrgResult.error) {
     throw new Error(`Client organization lookup failed: ${clientOrgResult.error.message}`)

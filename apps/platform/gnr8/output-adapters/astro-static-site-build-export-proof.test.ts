@@ -112,6 +112,39 @@ test("failed and timed-out builds remove only the prepared workspace", async (t)
   }
 });
 
+test("install and build commands disable Astro telemetry in ephemeral runtimes", async () => {
+  const workspacePath = "/tmp/owned-astro-build-export-telemetry";
+  const observedCommands: string[] = [];
+
+  await assert.rejects(
+    () =>
+      runAstroBuildExportProof({
+        dependencies: {
+          prepareWorkspace: async () => preparedWorkspace(workspacePath),
+          runCommand: async (_executable, args, options) => {
+            if (args[0] === "install") {
+              observedCommands.push("install");
+              assert.equal(options.env?.ASTRO_TELEMETRY_DISABLED, "1");
+              return { stdout: "installed", stderr: "" };
+            }
+            if (args[0] === "--version") return { stdout: "10.28.2\n", stderr: "" };
+            if (args[0] === "build") {
+              observedCommands.push("build");
+              assert.equal(options.env?.ASTRO_TELEMETRY_DISABLED, "1");
+              throw new Error("stop after environment assertion");
+            }
+            throw new Error(`unexpected command: ${args.join(" ")}`);
+          },
+          readFile: async () => JSON.stringify({ version: "5.18.2" }),
+          removeWorkspace: async () => undefined,
+        },
+      }),
+    (error: unknown) => error instanceof AstroBuildExportProofError && error.code === "build_failed",
+  );
+
+  assert.deepEqual(observedCommands, ["install", "build"]);
+});
+
 async function writeValidDist(
   workspacePath: string,
   options: { stylesheetHref?: string; stylesheetBody?: string } = {},
@@ -152,6 +185,7 @@ function preparedWorkspace(workspacePath: string): PreparedAstroStaticSiteWorksp
     adapterId: "astro-static-site",
     workspacePath,
     baselineCommit: "0123456789012345678901234567890123456789",
+    baselineKind: "git-commit",
     sourceSnapshot: {
       version: "gnr8-astro-source-snapshot:v1",
       files: [{ path: "package.json", bytes: 2, sha256: "a".repeat(64) }],

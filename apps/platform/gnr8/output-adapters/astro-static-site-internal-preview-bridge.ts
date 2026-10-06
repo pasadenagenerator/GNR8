@@ -87,7 +87,7 @@ export type AstroInternalPreviewCandidate = {
   siteId: string;
   siteVersionId: string;
   rendererCompatibilityVersion: string;
-  htmlByPath: { "/": string };
+  htmlByPath: Record<string, string> & { "/": string };
   compiledTokenStyles: string;
   assetFingerprintMap: Record<string, string>;
   manifest: AstroInternalPreviewCandidateManifest;
@@ -102,6 +102,8 @@ export type ConvertAstroExportToInternalPreviewCandidateInput = {
   siteVersionId: string;
   rendererCompatibilityVersion: string;
   sourceSnapshotSha256: string;
+  /** Existing owned raw-capture assets referenced by generated HTML/CSS. */
+  ownedAssetFingerprints?: Record<string, string>;
   createdAt?: string;
 };
 
@@ -118,26 +120,43 @@ export async function convertAstroExportToInternalPreviewCandidate(
   const bytesByPath = await readAndRevalidateExportBytes(revalidated);
   assertSupportedFiles(revalidated.manifest.files);
 
-  const indexBytes = bytesByPath.get("index.html");
-  if (!indexBytes) {
+  const htmlByPath: Record<string, string> = {};
+  const allStylesheetPaths = new Set<string>();
+  const compiledStyles: string[] = [];
+  for (const file of revalidated.manifest.files.filter((item) => /(?:^|\/)index\.html$/i.test(item.path))) {
+    const bytes = bytesByPath.get(file.path);
+    if (!bytes) throw new AstroInternalPreviewBridgeError("export_bytes_mismatch", `Exported route bytes are missing: ${file.path}.`);
+    const routePath = routePathForExportFile(file.path);
+    const conversion = inlineExportedStylesheets({
+      htmlBody: bytes.toString("utf8"),
+      htmlPath: file.path,
+      bytesByPath,
+    });
+    htmlByPath[routePath] = conversion.html;
+    conversion.inlinedStylesheetPaths.forEach((path) => allStylesheetPaths.add(path));
+    compiledStyles.push(...conversion.compiledStyles);
+  }
+  if (!htmlByPath["/"]) {
     throw new AstroInternalPreviewBridgeError("export_bytes_mismatch", "Revalidated export lost index.html bytes.");
   }
-
-  const conversion = inlineExportedStylesheets({
-    htmlBody: indexBytes.toString("utf8"),
-    files: revalidated.manifest.files,
-    bytesByPath,
-  });
-  const assetFingerprintMap = Object.fromEntries(
-    conversion.inlinedStylesheetPaths.map((path) => [path, fileByPath(revalidated.manifest, path).sha256]),
-  );
+  for (const file of revalidated.manifest.files) {
+    if (/(?:^|\/)index\.html$/i.test(file.path) || allStylesheetPaths.has(file.path)) continue;
+    throw new AstroInternalPreviewBridgeError(
+      "unsupported_file_kind",
+      `Unreferenced exported file cannot be represented by the runtime bridge: ${file.path}.`,
+    );
+  }
+  const assetFingerprintMap = {
+    ...structuredClone(input.ownedAssetFingerprints ?? {}),
+    ...Object.fromEntries([...allStylesheetPaths].sort().map((path) => [path, fileByPath(revalidated.manifest, path).sha256])),
+  };
   const contentEnvelope = {
     conversionVersion: ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
     adapterId: "astro-static-site",
     ownership: { siteId: identity.siteId, siteVersionId: identity.siteVersionId },
     rendererCompatibilityVersion: identity.rendererCompatibilityVersion,
-    htmlByPath: { "/": conversion.html },
-    compiledTokenStyles: conversion.compiledTokenStyles,
+    htmlByPath,
+    compiledTokenStyles: [...new Set(compiledStyles)].join("\n"),
     assetFingerprintMap,
     sourceSnapshotSha256: identity.sourceSnapshotSha256,
     exportSha256: revalidated.manifest.aggregateSha256,
@@ -156,7 +175,7 @@ export async function convertAstroExportToInternalPreviewCandidate(
     },
     assetHandling: {
       mode: ASTRO_INTERNAL_PREVIEW_ASSET_MODE,
-      inlinedStylesheetPaths: conversion.inlinedStylesheetPaths,
+      inlinedStylesheetPaths: [...allStylesheetPaths].sort(),
       externalAssetStorageRequired: false,
     },
     lifecycle: {
@@ -172,8 +191,8 @@ export async function convertAstroExportToInternalPreviewCandidate(
     siteId: identity.siteId,
     siteVersionId: identity.siteVersionId,
     rendererCompatibilityVersion: identity.rendererCompatibilityVersion,
-    htmlByPath: { "/": conversion.html },
-    compiledTokenStyles: conversion.compiledTokenStyles,
+    htmlByPath: htmlByPath as Record<string, string> & { "/": string },
+    compiledTokenStyles: [...new Set(compiledStyles)].join("\n"),
     assetFingerprintMap,
     manifest,
     contentSha256: convertedArtifactSha256,
@@ -226,8 +245,7 @@ export function isAstroInternalPreviewCandidate(value: unknown): value is AstroI
     isNonEmptyTrimmedString(candidate.siteId) &&
     isNonEmptyTrimmedString(candidate.siteVersionId) &&
     isNonEmptyTrimmedString(candidate.rendererCompatibilityVersion) &&
-    hasExactKeys(candidate.htmlByPath, ["/"]) &&
-    typeof candidate.htmlByPath?.["/"] === "string" &&
+    isHtmlByPath(candidate.htmlByPath) &&
     typeof candidate.compiledTokenStyles === "string" &&
     isSha256Record(candidate.assetFingerprintMap) &&
     isSha256(candidate.manifest?.provenance?.sourceSnapshotSha256) &&
@@ -375,16 +393,16 @@ async function readAndRevalidateExportBytes(inspected: InspectedAstroStaticExpor
 
 function assertSupportedFiles(files: AstroStaticExportFile[]): void {
   for (const file of files) {
-    if (/\.html?$/i.test(file.path) && file.path !== "index.html") {
+    if (/\.html?$/i.test(file.path) && !/(?:^|\/)index\.html$/i.test(file.path)) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_route",
-        `Only dist/index.html can be converted in this bridge version: ${file.path}.`,
+        `Only Astro directory-index routes can be converted: ${file.path}.`,
       );
     }
-    if (file.path !== "index.html" && !/\.css$/i.test(file.path)) {
+    if (!/(?:^|\/)index\.html$/i.test(file.path) && !/\.css$/i.test(file.path)) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_file_kind",
-        `Only index.html and referenced CSS files are supported: ${file.path}.`,
+        `Only route index.html and referenced CSS files are supported: ${file.path}.`,
       );
     }
   }
@@ -392,9 +410,9 @@ function assertSupportedFiles(files: AstroStaticExportFile[]): void {
 
 function inlineExportedStylesheets(input: {
   htmlBody: string;
-  files: AstroStaticExportFile[];
+  htmlPath: string;
   bytesByPath: Map<string, Buffer>;
-}): { html: string; compiledTokenStyles: string; inlinedStylesheetPaths: string[] } {
+}): { html: string; compiledStyles: string[]; inlinedStylesheetPaths: string[] } {
   const parseErrors: string[] = [];
   const document = parse(input.htmlBody, {
     onParseError: (error) => parseErrors.push(error.code),
@@ -426,7 +444,7 @@ function inlineExportedStylesheets(input: {
     if (!href) {
       throw new AstroInternalPreviewBridgeError("stylesheet_missing", "Astro stylesheet link has no href.");
     }
-    const stylesheetPath = resolveLocalExportReference(href, "index.html");
+    const stylesheetPath = resolveLocalExportReference(href, input.htmlPath);
     if (!stylesheetPath) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_asset_reference",
@@ -447,24 +465,22 @@ function inlineExportedStylesheets(input: {
     compiledStyles.push(css);
   }
 
-  const referenced = new Set(inlinedStylesheetPaths);
-  for (const file of input.files) {
-    if (file.path !== "index.html" && !referenced.has(file.path)) {
-      throw new AstroInternalPreviewBridgeError(
-        "unsupported_file_kind",
-        `Unreferenced exported file cannot be represented by the self-contained bridge: ${file.path}.`,
-      );
-    }
-  }
   for (const style of allElements(document).filter((element) => element.tagName === "style")) {
     assertSelfContainedCss(textContent(style), attribute(style, "data-gnr8-astro-source-path") ?? "inline-style");
   }
 
   return {
     html: serialize(document),
-    compiledTokenStyles: compiledStyles.join("\n"),
+    compiledStyles,
     inlinedStylesheetPaths,
   };
+}
+
+function routePathForExportFile(path: string): string {
+  if (path === "index.html") return "/";
+  const suffix = "/index.html";
+  if (!path.endsWith(suffix)) throw new AstroInternalPreviewBridgeError("unsupported_route", `Unsupported route output: ${path}.`);
+  return `/${path.slice(0, -suffix.length)}`;
 }
 
 function replaceStylesheetLinkWithStyle(link: HtmlElement, href: string, css: string): void {
@@ -507,7 +523,7 @@ function assertSelfContainedCss(css: string, sourcePath: string): void {
 function assertNoCssUrlDependency(value: string, sourcePath: string): void {
   for (const match of value.matchAll(/url\(\s*(["']?)(.*?)\1\s*\)/gi)) {
     const reference = match[2]?.trim() ?? "";
-    if (!reference || reference.startsWith("#") || /^data:/i.test(reference)) continue;
+    if (!reference || reference.startsWith("#") || /^data:/i.test(reference) || isOwnedRuntimeAssetReference(reference)) continue;
     throw new AstroInternalPreviewBridgeError(
       "unsupported_asset_reference",
       `CSS asset dependencies are unsupported by the inline-stylesheet bridge: ${sourcePath} -> ${reference}.`,
@@ -537,13 +553,32 @@ function assertNoUnsupportedResourceElement(element: HtmlElement): void {
   };
   for (const name of resourceAttributes[element.tagName] ?? []) {
     const value = attribute(element, name);
-    if (value) {
+    if (value && !resourceAttributeIsOwnedOrExternal(value)) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_asset_reference",
         `HTML asset references are unsupported by the v1 self-contained bridge: ${element.tagName}[${name}]=${value}.`,
       );
     }
   }
+}
+
+function resourceAttributeIsOwnedOrExternal(value: string): boolean {
+  const references = value.split(",").map((item) => item.trim().split(/\s+/, 1)[0] ?? "").filter(Boolean);
+  return references.length > 0 && references.every((reference) =>
+    /^data:/i.test(reference) || /^https?:\/\//i.test(reference) || isOwnedRuntimeAssetReference(reference),
+  );
+}
+
+function isOwnedRuntimeAssetReference(value: string): boolean {
+  return /^\/api\/gnr8\/runtime\/preview-assets\/[^/?#]+\/[^/?#]+\/.+/i.test(value.trim());
+}
+
+function isHtmlByPath(value: unknown): value is Record<string, string> & { "/": string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return entries.length > 0 && typeof (value as Record<string, unknown>)["/"] === "string" && entries.every(([path, html]) =>
+    /^\/(?:[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*)?$/i.test(path) && typeof html === "string" && html.length > 0,
+  );
 }
 
 function resolveLocalExportReference(reference: string, sourcePath: string): string | null {

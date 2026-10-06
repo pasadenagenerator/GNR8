@@ -113,3 +113,32 @@ test("repeated body blocks do not displace the real footer intent", () => {
     bridge.blocks.map((_, index) => index),
   );
 });
+
+test("expanded main children own disjoint ranges while parent-only content remains represented", () => {
+  const html = `<!doctype html><html><body>
+    <header><nav><a href="/">Brand</a><a href="/one">One</a></nav></header>
+    <main>Parent-only introduction that belongs to main and must remain represented.
+      <section><h1>First child</h1><p>${"First section content ".repeat(8)}</p></section>
+      <section><h2>Second child</h2><p>${"Second section content ".repeat(8)}</p></section>
+    </main>
+    <footer><p>Copyright 2026 Example. All rights reserved.</p></footer>
+  </body></html>`;
+  const bridge = buildLayoutToCanonicalBridge({
+    html,
+    layoutGraph: buildLayoutGraphFromSnapshotHtml({ html, pathSeed: "parent-only-main" }),
+  });
+
+  const parentOnly = bridge.blocks.find((block) => block.blockHtml.includes("Parent-only introduction"));
+  assert.ok(parentOnly, "parent-only main text should remain represented");
+  assert.equal(parentOnly.layoutHint?.tagName, "main");
+  assert.equal(parentOnly.group.intent, "body");
+  assert.equal(parentOnly.group.domIndexStart, parentOnly.group.domIndexEnd);
+
+  const occupied = new Set<number>();
+  for (const block of bridge.blocks) {
+    for (let index = block.group.domIndexStart; index <= block.group.domIndexEnd; index += 1) {
+      assert.equal(occupied.has(index), false, `DOM index ${index} must contribute to at most one block`);
+      occupied.add(index);
+    }
+  }
+});

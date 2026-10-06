@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -25,6 +25,7 @@ test("prepares exact Astro source, a clean Git baseline, and proof-only future d
 
     assert.equal(prepared.adapterId, "astro-static-site");
     assert.match(prepared.baselineCommit, /^[0-9a-f]{40,64}$/);
+    assert.equal(prepared.baselineKind, "git-commit");
     assert.deepEqual(
       prepared.sourceSnapshot.files.map((file) => file.path),
       ["astro.config.mjs", "package.json", "public/styles/global.css", "src/pages/index.astro"],
@@ -52,6 +53,23 @@ test("prepares exact Astro source, a clean Git baseline, and proof-only future d
     const committedFiles = await git(prepared.workspacePath, ["ls-tree", "-r", "--name-only", "HEAD"]);
     assert.equal(status, "");
     assert.deepEqual(committedFiles.split("\n"), prepared.sourceSnapshot.files.map((file) => file.path));
+  });
+});
+
+test("uses the exact source snapshot as the baseline when the runtime has no Git executable", async () => {
+  await withTemporaryRoot(async (root) => {
+    const originalPath = process.env.PATH;
+    process.env.PATH = "";
+    try {
+      const prepared = await prepareAstroStaticSiteWorkspace({ content: businessSiteFixture(), workspaceRoot: root });
+      assert.equal(prepared.baselineKind, "source-snapshot");
+      assert.equal(prepared.baselineCommit, prepared.sourceSnapshot.aggregateSha256);
+      assert.match(prepared.baselineCommit, /^[0-9a-f]{64}$/);
+      await assert.rejects(git(prepared.workspacePath, ["status"]), /ENOENT|spawn git/);
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+    }
   });
 });
 
@@ -190,6 +208,9 @@ test("a post-creation failure removes only the workspace created by that invocat
     const parentMarker = join(root, "parent-marker.txt");
     const emptyPath = join(root, "empty-path");
     await mkdir(emptyPath);
+    const failingGit = join(emptyPath, "git");
+    await writeFile(failingGit, "#!/bin/sh\nexit 17\n", "utf8");
+    await chmod(failingGit, 0o700);
     await writeFile(parentMarker, "preserve parent", "utf8");
     const priorPath = process.env.PATH;
     process.env.PATH = emptyPath;

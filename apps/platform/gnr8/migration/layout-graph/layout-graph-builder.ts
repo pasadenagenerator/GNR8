@@ -59,6 +59,7 @@ function subtreeStats(node: RawElementNode): {
   linkCount: number;
   imageCount: number;
   headingCount: number;
+  h1Count: number;
   formControlCount: number;
   elementCount: number;
   legalKeywordHits: number;
@@ -68,6 +69,7 @@ function subtreeStats(node: RawElementNode): {
   let linkCount = 0;
   let imageCount = 0;
   let headingCount = 0;
+  let h1Count = 0;
   let formControlCount = 0;
   let elementCount = 0;
   let legalKeywordHits = 0;
@@ -83,6 +85,7 @@ function subtreeStats(node: RawElementNode): {
       if (tag === "a") linkCount += 1;
       if (tag === "img" || tag === "picture" || tag === "figure") imageCount += 1;
       if (tag === "h1" || tag === "h2" || tag === "h3") headingCount += 1;
+      if (tag === "h1") h1Count += 1;
       if (tag === "input" || tag === "textarea" || tag === "select" || tag === "button") formControlCount += 1;
 
       const textHints = idClassSignal(asEl);
@@ -109,6 +112,7 @@ function subtreeStats(node: RawElementNode): {
     linkCount,
     imageCount,
     headingCount,
+    h1Count,
     formControlCount,
     elementCount,
     legalKeywordHits,
@@ -186,7 +190,7 @@ function classifyType(input: {
   const heroWindow = input.domIndexStart <= Math.max(6, Math.floor(input.domMaxIndex * 0.35));
   const heroTextRange = input.stats.textLength >= 20 && input.stats.textLength <= 650;
   const notNavLike = input.signals.linkDensity < 0.22;
-  if ((looksHeroByHint || (input.signals.headingPresence && heroWindow && heroTextRange)) && notNavLike && input.depth <= 3) {
+  if ((looksHeroByHint || (input.stats.h1Count > 0 && heroWindow && heroTextRange)) && notNavLike && input.depth <= 3) {
     return "hero";
   }
 
@@ -277,6 +281,7 @@ function buildLayoutNodeTree(input: {
 
   const node: LayoutNode = {
     id: nodeIdFor(input.pathSeed, input.depth, domIndexStart, input.element.tagName),
+    tagName: input.element.tagName.toLowerCase(),
     type,
     depth: input.depth,
     domIndexStart,
@@ -336,6 +341,7 @@ export function buildLayoutGraphFromSnapshotHtml(input: { html: string; pathSeed
   if (!body) {
     const fallbackRoot: LayoutNode = {
       id: nodeIdFor(pathSeed, 0, 0, "root"),
+      tagName: "root",
       type: "unknown",
       depth: 0,
       domIndexStart: 0,
@@ -376,6 +382,7 @@ export function buildLayoutGraphFromSnapshotHtml(input: { html: string; pathSeed
 
   const root: LayoutNode = {
     id: nodeIdFor(pathSeed, 0, 0, "root"),
+    tagName: "root",
     type: "unknown",
     depth: 0,
     domIndexStart: 0,
@@ -421,6 +428,7 @@ export function collectSemanticLayoutHints(graph: LayoutGraph): LayoutNodeHint[]
     .filter((n) => n.depth > 0)
     .map((n) => ({
       id: n.id,
+      tagName: n.tagName,
       type: n.type,
       depth: n.depth,
       domIndexStart: n.domIndexStart,

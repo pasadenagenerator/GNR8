@@ -16,6 +16,11 @@ import {
   domainVerificationCheckSchedulerJob,
 } from '@/gnr8/domain/inngest/domain-verification-job'
 import {
+  SITE_ASTRO_GENERATION_JOB_ID,
+  SITE_ASTRO_GENERATION_JOB_TRIGGER_EVENT,
+  siteAstroGenerationJob,
+} from '@/gnr8/site/inngest/site-astro-generation-job'
+import {
   SITE_RENDER_CAPTURE_JOB_ID,
   SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
   siteRenderCaptureJob,
@@ -37,12 +42,18 @@ export type WorkerInngestFunctionRegistration = {
   fn:
     | typeof templateProcessingJob
     | typeof siteTemplateBootstrapJob
+    | typeof siteAstroGenerationJob
     | typeof siteRenderCaptureJob
     | typeof domainVerificationCheckJob
     | typeof domainVerificationCheckSchedulerJob
 }
 
 export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
+  {
+    id: SITE_ASTRO_GENERATION_JOB_ID,
+    eventName: SITE_ASTRO_GENERATION_JOB_TRIGGER_EVENT,
+    fn: siteAstroGenerationJob,
+  },
   {
     id: TEMPLATE_PROCESSING_JOB_ID,
     eventName: TEMPLATE_PROCESSING_JOB_TRIGGER_EVENT,

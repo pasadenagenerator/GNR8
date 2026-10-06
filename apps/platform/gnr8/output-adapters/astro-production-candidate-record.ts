@@ -423,8 +423,7 @@ export function validateAstroProductionCandidate(value: unknown): AstroProductio
     !isAstroProductionCandidateId(value.id) ||
     !isBoundedIdentity(value.siteId) ||
     !isCanonicalUuid(value.siteVersionId) ||
-    !hasExactKeys(value.htmlByPath, ["/"]) ||
-    typeof value.htmlByPath["/"] !== "string" ||
+    !isHtmlByPath(value.htmlByPath) ||
     typeof value.compiledTokenStyles !== "string" ||
     !isSha256Record(value.assetFingerprintMap) ||
     !Array.isArray(value.manifest.assetHandling.inlinedStylesheetPaths) ||
@@ -515,8 +514,17 @@ function assertSupportedCandidateVersions(value: unknown): void {
 }
 
 function assertSelfContainedProductionPayload(candidate: AstroProductionCandidate): void {
+  for (const html of Object.values(candidate.htmlByPath)) {
+    validateSelfContainedAstroProductionPayload({ html, compiledTokenStyles: candidate.compiledTokenStyles });
+  }
+}
+
+export function validateSelfContainedAstroProductionPayload(input: {
+  html: string;
+  compiledTokenStyles: string;
+}): void {
   const parseErrors: string[] = [];
-  const document = parse(candidate.htmlByPath["/"], {
+  const document = parse(input.html, {
     onParseError: (error) => parseErrors.push(error.code),
   }) as DefaultTreeAdapterMap["document"];
   if (parseErrors.length > 0) {
@@ -530,12 +538,15 @@ function assertSelfContainedProductionPayload(candidate: AstroProductionCandidat
     assertNoUnsupportedResourceElement(element);
     if (element.tagName === "style") assertSelfContainedCss(textContent(element));
   }
-  assertSelfContainedCss(candidate.compiledTokenStyles);
+  assertSelfContainedCss(input.compiledTokenStyles);
 }
 
 function assertNoUnsupportedResourceElement(element: HtmlElement): void {
   if (element.tagName === "form") {
     throw corrupt("Production candidate HTML cannot contain forms.");
+  }
+  if (["iframe", "frame", "object", "embed"].includes(element.tagName)) {
+    throw corrupt("Production candidate HTML cannot contain embedded application resources.");
   }
   if (
     element.tagName === "meta" &&
@@ -566,7 +577,8 @@ function assertNoUnsupportedResourceElement(element: HtmlElement): void {
     use: ["href", "xlink:href"],
   };
   for (const name of resourceAttributes[element.tagName] ?? []) {
-    if (attribute(element, name)) {
+    const value = attribute(element, name);
+    if (value && !resourceAttributeIsOwnedOrExternal(value)) {
       throw corrupt("Production candidate HTML contains an unsupported asset reference.");
     }
   }
@@ -591,9 +603,28 @@ function assertSelfContainedCss(css: string): void {
 function assertNoExternalCssUrl(value: string): void {
   for (const match of value.matchAll(/url\(\s*(["']?)(.*?)\1\s*\)/gi)) {
     const reference = match[2]?.trim() ?? "";
-    if (!reference || reference.startsWith("#") || /^data:/i.test(reference)) continue;
+    if (!reference || reference.startsWith("#") || /^data:/i.test(reference) || isOwnedRuntimeAssetReference(reference)) continue;
     throw corrupt("Production candidate CSS contains an unsupported external asset reference.");
   }
+}
+
+function resourceAttributeIsOwnedOrExternal(value: string): boolean {
+  const references = value.split(",").map((item) => item.trim().split(/\s+/, 1)[0] ?? "").filter(Boolean);
+  return references.length > 0 && references.every((reference) =>
+    /^data:/i.test(reference) || /^https?:\/\//i.test(reference) || isOwnedRuntimeAssetReference(reference),
+  );
+}
+
+function isOwnedRuntimeAssetReference(value: string): boolean {
+  return /^\/api\/gnr8\/runtime\/preview-assets\/[^/?#]+\/[^/?#]+\/.+/i.test(value.trim());
+}
+
+function isHtmlByPath(value: unknown): value is Record<string, string> & { "/": string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return entries.length > 0 && typeof (value as Record<string, unknown>)["/"] === "string" && entries.every(([path, html]) =>
+    /^\/(?:[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*)?$/i.test(path) && typeof html === "string" && html.length > 0,
+  );
 }
 
 function validateRegistration(

@@ -135,6 +135,9 @@ importers:
       playwright-core:
         specifier: ^1.59.1
         version: 1.59.1
+      pnpm:
+        specifier: 10.28.2
+        version: 10.28.2
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
@@ -2560,6 +2563,11 @@ packages:
   playwright@1.59.1:
     resolution: {integrity: sha512-C8oWjPR3F81yljW9o5OxcWzfh6avkVwDD2VYdwIGqTkl+OGFISgypqzfu7dOe4QNLL2aqcWBmI3PMtLIK233lw==}
     engines: {node: '>=18'}
+    hasBin: true
+
+  pnpm@10.28.2:
+    resolution: {integrity: sha512-QYcvA3rSL3NI47Heu69+hnz9RI8nJtnPdMCPGVB8MdLI56EVJbmD/rwt9kC1Q43uYCPrsfhO1DzC1lTSvDJiZA==}
+    engines: {node: '>=18.12'}
     hasBin: true
 
   possible-typed-array-names@1.1.0:
@@ -5688,6 +5696,8 @@ snapshots:
       playwright-core: 1.59.1
     optionalDependencies:
       fsevents: 2.3.2
+
+  pnpm@10.28.2: {}
 
   possible-typed-array-names@1.1.0: {}
 
