@@ -482,8 +482,8 @@ function escapeHtml(value: string): string {
 }
 
 function replaceNodeWithMarkup(node: HtmlElement, markup: string): void {
-  const parent = node.parentNode as (HtmlNode & { childNodes?: HtmlNode[] }) | null;
-  if (!parent?.childNodes) return;
+  const parent = node.parentNode;
+  if (!parent) return;
   const fragment = parseFragment(markup) as DefaultTreeAdapterMap["documentFragment"];
   const index = parent.childNodes.indexOf(node);
   if (index < 0) return;
@@ -530,7 +530,7 @@ function allElements(root: HtmlNode): HtmlElement[] {
   return out;
 }
 function detach(node: HtmlElement): void {
-  const parent = node.parentNode as (HtmlNode & { childNodes?: HtmlNode[] }) | null;
-  if (!parent?.childNodes) return;
+  const parent = node.parentNode;
+  if (!parent) return;
   parent.childNodes = parent.childNodes.filter((child) => child !== node);
 }
