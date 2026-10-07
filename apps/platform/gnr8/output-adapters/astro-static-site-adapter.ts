@@ -4,6 +4,10 @@ import type {
   Gnr8OutputAdapterFile,
   Gnr8OutputAdapterFileManifest,
 } from "./output-adapter-contract";
+import {
+  decodeGeneratedOutputRoutePathForFile,
+  encodeGeneratedOutputRoutePath,
+} from "./generated-output-route-path";
 
 export interface NormalizedSiteNavItem {
   label: string;
@@ -175,16 +179,17 @@ function normalizedCapturedPages(pages: NormalizedStaticSitePage[]): NormalizedS
 function normalizeRoutePath(value: string): string {
   const withoutQuery = String(value ?? "").trim().split(/[?#]/, 1)[0] || "/";
   const normalized = `/${withoutQuery.replace(/^\/+|\/+$/g, "")}`.replace(/\/{2,}/g, "/");
-  if (normalized === "/") return normalized;
-  const segments = normalized.slice(1).split("/");
-  if (segments.some((segment) => !/^(?:[a-z0-9._-]|%[0-9a-f]{2})+$/i.test(segment) || segment === "." || segment === "..")) {
+  try {
+    return encodeGeneratedOutputRoutePath(normalized);
+  } catch {
     throw new Error(`invalid_astro_route:${value}`);
   }
-  return normalized;
 }
 
 function sourcePathForRoute(route: string): string {
-  return route === "/" ? "src/pages/index.astro" : `src/pages/${route.slice(1)}/index.astro`;
+  return route === "/"
+    ? "src/pages/index.astro"
+    : `src/pages/${decodeGeneratedOutputRoutePathForFile(route)}/index.astro`;
 }
 
 function createCapturedPageAstro(input: NormalizedStaticBusinessSiteContent, page: NormalizedStaticSitePage): string {

@@ -50,6 +50,24 @@ test("ARIS-like content produces nav, contact, card sections, and adapter readba
   assert.equal(ASTRO_STATIC_SITE_PREVIEW_PORT, 4321);
 });
 
+test("percent-encoded Unicode routes use literal source filenames while keeping URL-safe route identity", () => {
+  const content = chsFixture();
+  content.pages = [
+    { path: "/", title: "Home", bodyHtml: "<h1>Home</h1>" },
+    {
+      path: "/b/platform9-recognized-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2",
+      title: "Gartner article",
+      bodyHtml: "<h1>Gartner article</h1>",
+    },
+  ];
+
+  const manifest = createAstroStaticSiteProjectManifest(content);
+  assert.ok(manifest.files.some((file) =>
+    file.path === "src/pages/b/platform9-recognized-in-the-gartner®-magic-quadrant™/index.astro"));
+  assert.ok(manifest.files.some((file) =>
+    file.contents.includes('data-gnr8-source-route="/b/platform9-recognized-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2"')));
+});
+
 test("authoritative CHS source mapping preserves routes, content, contacts, footer, and mobile layout", () => {
   const manifest = createAstroStaticSiteProjectManifest(chsAstroSourceContent());
   const files = fileMap(manifest.files);
@@ -93,7 +111,8 @@ test("adapter descriptors keep Astro skeletal and runtime fallback intact", () =
   }
 
   assert.match(astroStaticSiteAdapterDescriptor.airshipIntegrationReadback?.devServer ?? "", /4321/);
-  assert.ok(astroStaticSiteAdapterDescriptor.limitations.some((limit) => limit.includes("Skeleton adapter only")));
+  assert.ok(astroStaticSiteAdapterDescriptor.limitations.some((limit) =>
+    limit.includes("Scripts and platform-specific theme/application state are rejected")));
 });
 
 function fileMap(files: Array<{ path: string; contents: string }>): Map<string, string> {

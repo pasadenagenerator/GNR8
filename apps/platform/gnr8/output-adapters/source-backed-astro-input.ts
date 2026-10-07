@@ -11,6 +11,7 @@ import {
 import { rewriteRawTemplateHtmlForRuntime } from "@/src/public-site/raw-template-runtime";
 
 import { createGeneratedOutputContentManifest, type GeneratedOutputContentManifest } from "./generated-output-eligibility";
+import { encodeGeneratedOutputRoutePath } from "./generated-output-route-path";
 import { createAstroStaticSiteProjectManifest, type NormalizedStaticBusinessSiteContent, type NormalizedStaticSitePage } from "./astro-static-site-adapter";
 import type { OutputAdapterCapability } from "./output-adapter-selection";
 
@@ -423,13 +424,7 @@ function canonicalRouteIdentity(value: string): string {
   return normalizeRawTemplateRouteMapPath(value);
 }
 function normalizeAstroOutputRoutePath(value: string): string {
-  const normalized = normalizeRawTemplateRouteMapPath(value);
-  if (normalized === "/") return "/";
-  return `/${normalized.slice(1).split("/").map((segment) =>
-    encodeURIComponent(segment).replace(/[!'()*]/g, (character) =>
-      `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
-    )
-  ).join("/")}`;
+  return encodeGeneratedOutputRoutePath(normalizeRawTemplateRouteMapPath(value));
 }
 function isFeedResourcePath(value: string): boolean {
   return /(?:\.rss|\.atom)$/i.test(value);

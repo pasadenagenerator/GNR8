@@ -270,7 +270,7 @@ test("normalizes percent-encoding identity and keeps RSS as a source feed instea
 
   assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.target === normalizedEncodedRoute && item.kind === "local_route"));
   assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.target === "https://example.com/blog.rss" && item.kind === "external_url"));
-  assert.ok(generated.sourceManifest.files.some((file) => file.path.includes("trademark%C2%AE/index.astro")));
+  assert.ok(generated.sourceManifest.files.some((file) => file.path.includes("trademark®/index.astro")));
 });
 
 test("removes replaceable static-site bootstrap scripts and materializes lazy assets", () => {

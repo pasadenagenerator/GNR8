@@ -25,6 +25,7 @@ import {
   ASTRO_INTERNAL_PREVIEW_ASSET_MODE,
   ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
 } from "./astro-static-site-internal-preview-bridge";
+import { isGeneratedOutputRoutePath } from "./generated-output-route-path";
 
 export const GENERATED_OUTPUT_ELIGIBILITY_POLICY_VERSION =
   "gnr8-generated-output-eligibility:v1" as const;
@@ -583,7 +584,7 @@ function isValidSourceCaptureEvidence(value: unknown): value is GeneratedOutputB
 function validOutputPaths(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 && value[0] === "/" &&
     new Set(value).size === value.length &&
-    value.every((path) => typeof path === "string" && /^\/(?:[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*)?$/i.test(path)) &&
+    value.every(isGeneratedOutputRoutePath) &&
     [...value].sort((a, b) => a.localeCompare(b)).every((path, index) => path === value[index]);
 }
 

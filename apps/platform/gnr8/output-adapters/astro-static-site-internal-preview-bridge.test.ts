@@ -106,6 +106,26 @@ test("bridge preserves canonical directory-index routes in one exact candidate",
   });
 });
 
+test("bridge preserves URL-safe identity for Unicode export directories", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    const routeDirectory = join(
+      workspacePath,
+      "dist",
+      "b",
+      "platform9-in-the-gartner®-magic-quadrant™",
+    );
+    await mkdir(routeDirectory, { recursive: true });
+    await writeFile(
+      join(routeDirectory, "index.html"),
+      '<!doctype html><html><head><link rel="stylesheet" href="/styles/global.css"></head><body><a href="/">Home</a><h1>Gartner</h1></body></html>',
+    );
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+    const route = "/b/platform9-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2";
+    assert.match(candidate.htmlByPath[route], /<h1>Gartner<\/h1>/);
+  });
+});
+
 test("bridge revalidates corrupt, missing, and symlinked export bytes", async (t) => {
   await t.test("corrupt bytes", async () => {
     await withWorkspace(async (workspacePath) => {

@@ -14,6 +14,7 @@ import {
   type AstroStaticExportManifest,
   type InspectedAstroStaticExport,
 } from "./astro-static-site-build-export-proof";
+import { encodeGeneratedOutputRoutePath, isGeneratedOutputRoutePath } from "./generated-output-route-path";
 
 export const ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION =
   "gnr8-astro-internal-preview-conversion:v1" as const;
@@ -480,7 +481,11 @@ function routePathForExportFile(path: string): string {
   if (path === "index.html") return "/";
   const suffix = "/index.html";
   if (!path.endsWith(suffix)) throw new AstroInternalPreviewBridgeError("unsupported_route", `Unsupported route output: ${path}.`);
-  return `/${path.slice(0, -suffix.length)}`;
+  try {
+    return encodeGeneratedOutputRoutePath(`/${path.slice(0, -suffix.length)}`);
+  } catch (error) {
+    throw new AstroInternalPreviewBridgeError("unsupported_route", `Unsupported route output: ${path}.`, { cause: error });
+  }
 }
 
 function replaceStylesheetLinkWithStyle(link: HtmlElement, href: string, css: string): void {
@@ -577,7 +582,7 @@ function isHtmlByPath(value: unknown): value is Record<string, string> & { "/": 
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const entries = Object.entries(value as Record<string, unknown>);
   return entries.length > 0 && typeof (value as Record<string, unknown>)["/"] === "string" && entries.every(([path, html]) =>
-    /^\/(?:[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*)?$/i.test(path) && typeof html === "string" && html.length > 0,
+    isGeneratedOutputRoutePath(path) && typeof html === "string" && html.length > 0,
   );
 }
 

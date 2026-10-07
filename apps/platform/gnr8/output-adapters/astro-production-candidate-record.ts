@@ -16,6 +16,7 @@ import {
   serializeAstroInternalPreviewCandidateContentEnvelope,
   type AstroInternalPreviewCandidate,
 } from "./astro-static-site-internal-preview-bridge";
+import { isGeneratedOutputRoutePath } from "./generated-output-route-path";
 
 export const ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION =
   "gnr8-astro-persisted-preview-candidate:v2" as const;
@@ -623,7 +624,7 @@ function isHtmlByPath(value: unknown): value is Record<string, string> & { "/": 
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const entries = Object.entries(value as Record<string, unknown>);
   return entries.length > 0 && typeof (value as Record<string, unknown>)["/"] === "string" && entries.every(([path, html]) =>
-    /^\/(?:[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*)?$/i.test(path) && typeof html === "string" && html.length > 0,
+    isGeneratedOutputRoutePath(path) && typeof html === "string" && html.length > 0,
   );
 }
 
