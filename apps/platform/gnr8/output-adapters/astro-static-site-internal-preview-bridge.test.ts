@@ -47,7 +47,9 @@ test("bridge converts deterministic single-page output and the unified preview s
     assert.deepEqual(first.manifest.assetHandling.inlinedStylesheetPaths, ["styles/global.css"]);
     assert.equal(first.compiledTokenStyles.includes("--gnr8-astro-accent: #0f766e;"), true);
     assert.equal(first.htmlByPath["/"].includes("<link"), false);
-    assert.equal(first.htmlByPath["/"].includes("<style data-gnr8-astro-source-href=\"/styles/global.css?v=proof#theme\">"), true);
+    assert.equal(first.htmlByPath["/"].includes("<style data-gnr8-astro-source-href=\"/styles/global.css?v=proof#theme\""), true);
+    assert.equal(first.htmlByPath["/"].includes("--gnr8-astro-accent: #0f766e;"), false);
+    assert.equal(first.htmlByPath["/"].includes("data-gnr8-astro-compiled-styles"), true);
     assert.equal(first.htmlByPath["/"].includes('href="/contact?plan=ops#form"'), true);
 
     const restore = setUnifiedRenderPreviewDependenciesForTest({
@@ -103,6 +105,37 @@ test("bridge preserves canonical directory-index routes in one exact candidate",
     assert.deepEqual(Object.keys(candidate.htmlByPath).sort(), ["/", "/about"]);
     assert.match(candidate.htmlByPath["/about"], /<h1>About<\/h1>/);
     assert.equal(candidate.htmlByPath["/about"].includes("<link"), false);
+    assert.equal(candidate.htmlByPath["/about"].includes("--gnr8-astro-accent: #0f766e;"), false);
+  });
+});
+
+test("bridge stores one shared stylesheet for a 30-route candidate below the registry limit", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const stylesheet = `:root{--gnr8-astro-accent: #0f766e;}.shared{content:"${"x".repeat(70_000)}"}`;
+    await writeFixtureDist(workspacePath, stylesheet);
+    for (let index = 1; index < 30; index += 1) {
+      const routeDirectory = join(workspacePath, "dist", `route-${index}`);
+      await mkdir(routeDirectory, { recursive: true });
+      await writeFile(
+        join(routeDirectory, "index.html"),
+        `<!doctype html><html><head><link rel="stylesheet" href="/styles/global.css"></head><body><h1>Route ${index}</h1></body></html>`,
+      );
+    }
+
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+    const serializedBytes = Buffer.byteLength(JSON.stringify(candidate), "utf8");
+
+    assert.equal(Object.keys(candidate.htmlByPath).length, 30);
+    assert.ok(30 * Buffer.byteLength(stylesheet, "utf8") > 2 * 1024 * 1024);
+    assert.ok(serializedBytes < 2 * 1024 * 1024);
+    assert.equal(
+      Object.values(candidate.htmlByPath).every((html) => html.includes("data-gnr8-astro-compiled-styles")),
+      true,
+    );
+    assert.equal(
+      Object.values(candidate.htmlByPath).every((html) => !html.includes("--gnr8-astro-accent")),
+      true,
+    );
   });
 });
 

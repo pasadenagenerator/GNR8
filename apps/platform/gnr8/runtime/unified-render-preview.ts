@@ -43,6 +43,7 @@ import {
 import { analyzeAirshipArtifactHtmlValidity } from '@/gnr8/single-site/airship-valid-artifact-html'
 import {
   isAstroInternalPreviewCandidate,
+  materializeAstroInternalPreviewHtml,
   type AstroInternalPreviewCandidate,
 } from '@/gnr8/output-adapters/astro-static-site-internal-preview-bridge'
 import {
@@ -3004,7 +3005,11 @@ async function renderAstroInternalPreviewCandidate(input: {
     requestedPath: input.requestedPath,
     resolvedPath: resolved.resolvedPath,
   })
-  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
+  const materializedHtml = materializeAstroInternalPreviewHtml({
+    html: resolved.html,
+    compiledTokenStyles: candidate.compiledTokenStyles,
+  })
+  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(materializedHtml)
   if (diagnosticContent.blocked) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
@@ -3028,7 +3033,7 @@ async function renderAstroInternalPreviewCandidate(input: {
       artifactId: candidate.id,
       path: resolved.resolvedPath,
       rendererCompatibilityVersion: candidate.rendererCompatibilityVersion,
-      html: annotateTransformedPreviewHtml({ html: resolved.html, summary: previewRuntimeSummary }),
+      html: annotateTransformedPreviewHtml({ html: materializedHtml, summary: previewRuntimeSummary }),
       source: 'astro_internal_preview_candidate',
       previewMode: previewRuntimeSummary.previewMode,
       previewRuntimeSummary,
@@ -3126,9 +3131,13 @@ async function renderTransformedSiteVersionPreview(input: {
     resolvedPath: resolved.resolvedPath,
     fallbackSummary: input.fallbackSummary,
   })
+  const materializedHtml = materializeAstroInternalPreviewHtml({
+    html: resolved.html,
+    compiledTokenStyles: artifact.compiledTokenStyles,
+  })
   if (explicitAirshipArtifactId) {
     const validity = analyzeAirshipArtifactHtmlValidity({
-      html: resolved.html,
+      html: materializedHtml,
       migrationId: airshipMigrationIdFromArtifact(artifact),
     })
     if (!validity.valid) {
@@ -3164,7 +3173,7 @@ async function renderTransformedSiteVersionPreview(input: {
     requestedPath: input.requestedPath,
     selectedPath: resolved.resolvedPath,
   })
-  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
+  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(materializedHtml)
   if (diagnosticContent.blocked) {
     console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
       requestCorrelationKey: input.context.requestCorrelationKey,
@@ -3192,7 +3201,7 @@ async function renderTransformedSiteVersionPreview(input: {
         artifactId: artifact.id,
         path: resolved.resolvedPath,
         rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
-        html: annotateTransformedPreviewHtml({ html: resolved.html, summary: previewRuntimeSummary }),
+        html: annotateTransformedPreviewHtml({ html: materializedHtml, summary: previewRuntimeSummary }),
         source: 'transformed_artifact',
         previewMode: previewRuntimeSummary.previewMode,
         previewRuntimeSummary,

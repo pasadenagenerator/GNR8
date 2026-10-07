@@ -21,6 +21,8 @@ export const ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION =
 export const ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND =
   "astro_static_export_internal_preview_candidate" as const;
 export const ASTRO_INTERNAL_PREVIEW_ASSET_MODE = "inline_stylesheets" as const;
+export const ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE =
+  "data-gnr8-astro-compiled-styles" as const;
 
 export type AstroInternalPreviewCandidateLifecycle =
   | {
@@ -121,7 +123,10 @@ export async function convertAstroExportToInternalPreviewCandidate(
   const bytesByPath = await readAndRevalidateExportBytes(revalidated);
   assertSupportedFiles(revalidated.manifest.files);
 
-  const htmlByPath: Record<string, string> = {};
+  const routeConversions: Array<{
+    routePath: string;
+    conversion: ReturnType<typeof inlineExportedStylesheets>;
+  }> = [];
   const allStylesheetPaths = new Set<string>();
   const compiledStyles: string[] = [];
   for (const file of revalidated.manifest.files.filter((item) => /(?:^|\/)index\.html$/i.test(item.path))) {
@@ -133,10 +138,21 @@ export async function convertAstroExportToInternalPreviewCandidate(
       htmlPath: file.path,
       bytesByPath,
     });
-    htmlByPath[routePath] = conversion.html;
+    routeConversions.push({ routePath, conversion });
     conversion.inlinedStylesheetPaths.forEach((path) => allStylesheetPaths.add(path));
     compiledStyles.push(...conversion.compiledStyles);
   }
+  const shareSingleStylesheet = routeConversions.length > 0 && routeConversions.every(({ conversion }) => (
+    conversion.compiledStyles.length === 1 &&
+    conversion.inlinedStylesheetPaths.length === 1 &&
+    conversion.inlinedStylesheetPaths[0] === routeConversions[0]?.conversion.inlinedStylesheetPaths[0] &&
+    conversion.compiledStyles[0] === routeConversions[0]?.conversion.compiledStyles[0] &&
+    conversion.singleStylesheetCanBeShared
+  ));
+  const htmlByPath = Object.fromEntries(routeConversions.map(({ routePath, conversion }) => [
+    routePath,
+    shareSingleStylesheet ? replaceInlinedStylesheetWithSharedMarker(conversion.html) : conversion.html,
+  ]));
   if (!htmlByPath["/"]) {
     throw new AstroInternalPreviewBridgeError("export_bytes_mismatch", "Revalidated export lost index.html bytes.");
   }
@@ -413,7 +429,12 @@ function inlineExportedStylesheets(input: {
   htmlBody: string;
   htmlPath: string;
   bytesByPath: Map<string, Buffer>;
-}): { html: string; compiledStyles: string[]; inlinedStylesheetPaths: string[] } {
+}): {
+  html: string;
+  compiledStyles: string[];
+  inlinedStylesheetPaths: string[];
+  singleStylesheetCanBeShared: boolean;
+} {
   const parseErrors: string[] = [];
   const document = parse(input.htmlBody, {
     onParseError: (error) => parseErrors.push(error.code),
@@ -474,7 +495,65 @@ function inlineExportedStylesheets(input: {
     html: serialize(document),
     compiledStyles,
     inlinedStylesheetPaths,
+    singleStylesheetCanBeShared: stylesheetLinks.length === 1 &&
+      stylesheetLinks[0]!.attrs.every((item) => ["rel", "href"].includes(item.name)),
   };
+}
+
+function replaceInlinedStylesheetWithSharedMarker(htmlBody: string): string {
+  const document = parse(htmlBody) as HtmlDocument;
+  const styles = allElements(document).filter((element) => (
+    element.tagName === "style" && attribute(element, "data-gnr8-astro-source-href") !== null
+  ));
+  if (styles.length !== 1) {
+    throw new AstroInternalPreviewBridgeError(
+      "unsupported_html",
+      "Shared stylesheet compaction requires exactly one bridged stylesheet element.",
+    );
+  }
+  styles[0]!.attrs.push({ name: ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE, value: "" });
+  styles[0]!.childNodes = [];
+  return serialize(document);
+}
+
+/**
+ * Restores a candidate's shared stylesheet at the server-owned render boundary.
+ * Candidates produced before shared-style compaction have no marker and remain
+ * byte-for-byte unchanged.
+ */
+export function materializeAstroInternalPreviewHtml(input: {
+  html: string;
+  compiledTokenStyles: string;
+}): string {
+  if (!input.html.includes(ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE)) return input.html;
+  if (!input.compiledTokenStyles.trim()) {
+    throw new AstroInternalPreviewBridgeError(
+      "stylesheet_missing",
+      "Shared Astro stylesheet content is missing at the render boundary.",
+    );
+  }
+  const parseErrors: string[] = [];
+  const document = parse(input.html, {
+    onParseError: (error) => parseErrors.push(error.code),
+  }) as HtmlDocument;
+  if (parseErrors.length > 0) {
+    throw new AstroInternalPreviewBridgeError(
+      "unsupported_html",
+      `Shared-style candidate HTML requires parser recovery: ${[...new Set(parseErrors)].sort().join(",")}.`,
+    );
+  }
+  const markers = allElements(document).filter((element) => (
+    element.tagName === "style" && attribute(element, ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE) !== null
+  ));
+  if (markers.length !== 1) {
+    throw new AstroInternalPreviewBridgeError(
+      "unsupported_html",
+      "Shared-style candidate HTML must contain exactly one stylesheet marker.",
+    );
+  }
+  markers[0]!.childNodes = [];
+  defaultTreeAdapter.insertText(markers[0]!, input.compiledTokenStyles);
+  return serialize(document);
 }
 
 function routePathForExportFile(path: string): string {
