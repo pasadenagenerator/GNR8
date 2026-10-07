@@ -558,7 +558,7 @@ function assertNoUnsupportedResourceElement(element: HtmlElement): void {
   };
   for (const name of resourceAttributes[element.tagName] ?? []) {
     const value = attribute(element, name);
-    if (value && !resourceAttributeIsOwnedOrExternal(value)) {
+    if (value && !resourceAttributeIsOwnedOrExternal(value, name)) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_asset_reference",
         `HTML asset references are unsupported by the v1 self-contained bridge: ${element.tagName}[${name}]=${value}.`,
@@ -567,8 +567,10 @@ function assertNoUnsupportedResourceElement(element: HtmlElement): void {
   }
 }
 
-function resourceAttributeIsOwnedOrExternal(value: string): boolean {
-  const references = value.split(",").map((item) => item.trim().split(/\s+/, 1)[0] ?? "").filter(Boolean);
+function resourceAttributeIsOwnedOrExternal(value: string, attributeName: string): boolean {
+  const references = attributeName === "srcset"
+    ? value.split(",").map((item) => item.trim().split(/\s+/, 1)[0] ?? "").filter(Boolean)
+    : [value.trim()].filter(Boolean);
   return references.length > 0 && references.every((reference) =>
     /^data:/i.test(reference) || /^https?:\/\//i.test(reference) || isOwnedRuntimeAssetReference(reference),
   );

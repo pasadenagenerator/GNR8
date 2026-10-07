@@ -126,6 +126,25 @@ test("bridge preserves URL-safe identity for Unicode export directories", async 
   });
 });
 
+test("bridge preserves a self-contained data URL image source", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    const indexPath = join(workspacePath, "dist", "index.html");
+    const fixtureHtml = await readFile(indexPath, "utf8");
+    await writeFile(
+      indexPath,
+      fixtureHtml.replace(
+        "</body>",
+        '<img alt="Pixel" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQYV2NgAAIAAAUAAarVyFEAAAAASUVORK5CYII="></body>',
+      ),
+    );
+
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+
+    assert.match(candidate.htmlByPath["/"], /src="data:image\/png;base64,/);
+  });
+});
+
 test("bridge revalidates corrupt, missing, and symlinked export bytes", async (t) => {
   await t.test("corrupt bytes", async () => {
     await withWorkspace(async (workspacePath) => {
