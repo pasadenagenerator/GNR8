@@ -579,7 +579,7 @@ function assertNoUnsupportedResourceElement(element: HtmlElement): void {
   };
   for (const name of resourceAttributes[element.tagName] ?? []) {
     const value = attribute(element, name);
-    if (value && !resourceAttributeIsOwnedOrExternal(value)) {
+    if (value && !resourceAttributeIsOwnedOrExternal(value, name)) {
       throw corrupt("Production candidate HTML contains an unsupported asset reference.");
     }
   }
@@ -609,8 +609,10 @@ function assertNoExternalCssUrl(value: string): void {
   }
 }
 
-function resourceAttributeIsOwnedOrExternal(value: string): boolean {
-  const references = value.split(",").map((item) => item.trim().split(/\s+/, 1)[0] ?? "").filter(Boolean);
+function resourceAttributeIsOwnedOrExternal(value: string, attributeName: string): boolean {
+  const references = attributeName === "srcset"
+    ? value.split(",").map((item) => item.trim().split(/\s+/, 1)[0] ?? "").filter(Boolean)
+    : [value.trim()].filter(Boolean);
   return references.length > 0 && references.every((reference) =>
     /^data:/i.test(reference) || /^https?:\/\//i.test(reference) || isOwnedRuntimeAssetReference(reference),
   );

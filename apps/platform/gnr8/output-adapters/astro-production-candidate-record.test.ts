@@ -178,6 +178,14 @@ test("deserialized payload validation preserves canonical routes, inline-CSS, an
   assert.throws(() => validateAstroProductionCandidateRecord(malformedRoute), validationError("corrupt"));
 });
 
+test("production validation preserves a self-contained data URL image source", () => {
+  const html = supportedHtml(
+    '<img alt="Pixel" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQYV2NgAAIAAAUAAarVyFEAAAAASUVORK5CYII=">',
+  );
+
+  assert.doesNotThrow(() => productionRecord({ html }));
+});
+
 test("content and immutable-envelope tampering fail closed", () => {
   const htmlTamper = structuredClone(productionRecord());
   htmlTamper.candidate.htmlByPath["/"] = htmlTamper.candidate.htmlByPath["/"].replace("Production", "Tampered");
