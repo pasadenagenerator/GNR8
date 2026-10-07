@@ -44,6 +44,11 @@ export type SourceBackedAstroGenerationInput = {
       commentLinks: "source-article";
       limitations: string[];
     };
+    captureScopeLimitations?: Array<{
+      kind: "acquisition-page-limit-external-link-v1";
+      route: string;
+      sourceUrl: string;
+    }>;
   };
 };
 
@@ -64,9 +69,9 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
 }): Promise<Record<string, string> & { "/": string }> {
   const routePaths = new Set<string>([
     "/",
-    ...input.siteVersion.pages.map((page) => normalizeRawTemplateRouteMapPath(page.path)),
+    ...input.siteVersion.pages.map((page) => normalizeAstroOutputRoutePath(page.path)),
     ...routeMapFromProvenance(input.siteVersion.importProvenanceSummary).map((route) =>
-      normalizeRawTemplateRouteMapPath(route.routePath),
+      normalizeAstroOutputRoutePath(route.routePath),
     ),
   ]);
   const htmlByPath: Record<string, string> = {};
@@ -130,6 +135,8 @@ export function createSourceBackedAstroGenerationInput(input: {
   const normalizedHtmlByPath = new Map(pages.map((page) => [page.path, page.bodyHtml]));
   const rootDocument = parse(sourceHtmlByPath["/"] ?? "") as DefaultTreeAdapterMap["document"];
   const sourceHost = sourceHostFromRawArtifact(input.rawArtifact);
+  const outOfScopeSourceUrls = acquisitionPageLimitSourceUrls(input.siteVersion.importProvenanceSummary, sourceHost);
+  const captureScopeLimitations = new Map<string, string>();
   const normalizeAnchors = (document: DefaultTreeAdapterMap["document"], reductionsOnly = false) => allElements(document)
     .filter((element) => element.tagName === "a")
     .filter((element) => !reductionsOnly || attribute(element, "data-gnr8-functional-reduction-link") !== null)
@@ -141,7 +148,16 @@ export function createSourceBackedAstroGenerationInput(input: {
     .filter((item) => item.label && item.href)
     .map((item) => ({
       label: item.label,
-      href: item.forceExternal ? normalizeExplicitSourceLink(item.href) : normalizeNavigationTarget(item.href, sourceHost, knownRoutes, unsupported),
+      href: item.forceExternal
+        ? normalizeExplicitSourceLink(item.href)
+        : normalizeNavigationTarget(
+          item.href,
+          sourceHost,
+          knownRoutes,
+          outOfScopeSourceUrls,
+          captureScopeLimitations,
+          unsupported,
+        ),
     }))
     .filter((item) => Boolean(item.href));
   const navItems = normalizeAnchors(rootDocument);
@@ -228,6 +244,15 @@ export function createSourceBackedAstroGenerationInput(input: {
           ],
         },
       } : {}),
+      ...(captureScopeLimitations.size > 0 ? {
+        captureScopeLimitations: [...captureScopeLimitations.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([route, sourceUrl]) => ({
+            kind: "acquisition-page-limit-external-link-v1" as const,
+            route,
+            sourceUrl,
+          })),
+      } : {}),
     },
   };
 }
@@ -246,6 +271,7 @@ function normalizePage(input: {
   const forms = elements.filter((element) => element.tagName === "form");
   materializeLazyAssetAttributes(elements);
   let replacedFormCount = 0;
+  let replacedFormSecurityRuntime = false;
   if (forms.length > 0 && input.acceptedFunctionalReductions) {
     const sourcePageUrl = sourcePageUrlForRoute(
       input.rawArtifact,
@@ -258,6 +284,7 @@ function normalizePage(input: {
         unsupported.push(`comment_source_url_missing:${input.path}`);
         continue;
       }
+      if (formHasSecurityRuntime(form)) replacedFormSecurityRuntime = true;
       replaceNodeWithMarkup(form, commentForm
         ? commentReplacementMarkup(sourcePageUrl!)
         : contactReplacementMarkup(input.acceptedFunctionalReductions.contactEmail));
@@ -279,7 +306,11 @@ function normalizePage(input: {
     const type = (attribute(script, "type") ?? "").trim().toLowerCase();
     if (
       (type && ["application/json", "application/ld+json", "application/gnr8-disabled-script", "application/gnr8-disabled-preview-script"].includes(type)) ||
-      isReplaceableStaticSiteScript(script, { hasReplacedForms: replacedFormCount > 0, elements })
+      isReplaceableStaticSiteScript(script, {
+        hasReplacedForms: replacedFormCount > 0,
+        replacedFormSecurityRuntime,
+        elements,
+      })
     ) {
       detach(script);
     } else {
@@ -321,7 +352,14 @@ function sourceHostFromRawArtifact(artifact: RawImportedSiteArtifact): string {
   try { return new URL(sourceUrl).hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
-function normalizeNavigationTarget(href: string, sourceHost: string, knownRoutes: Map<string, string>, unsupported: Set<string>): string {
+function normalizeNavigationTarget(
+  href: string,
+  sourceHost: string,
+  knownRoutes: Map<string, string>,
+  outOfScopeSourceUrls: Map<string, string>,
+  captureScopeLimitations: Map<string, string>,
+  unsupported: Set<string>,
+): string {
   const trimmed = href.trim();
   if (/^(?:mailto:|tel:|#)/i.test(trimmed)) return trimmed;
   try {
@@ -331,8 +369,14 @@ function normalizeNavigationTarget(href: string, sourceHost: string, knownRoutes
     const localHost = url.hostname.replace(/^www\./, "") === sourceHost;
     if (!localHost) return url.protocol === "https:" ? url.toString() : "";
     if (isFeedResourcePath(route)) return url.protocol === "https:" ? url.toString() : "";
-    const capturedRoute = knownRoutes.get(canonicalRouteIdentity(route));
+    const routeIdentity = canonicalRouteIdentity(route);
+    const capturedRoute = knownRoutes.get(routeIdentity);
     if (!capturedRoute) {
+      const sourceUrl = outOfScopeSourceUrls.get(routeIdentity);
+      if (sourceUrl) {
+        captureScopeLimitations.set(route, sourceUrl);
+        return sourceUrl;
+      }
       unsupported.add(`uncaptured_required_route:${route}`);
       return "";
     }
@@ -376,8 +420,16 @@ function setAttribute(element: HtmlElement, name: string, value: string): void {
   else element.attrs.push({ name, value });
 }
 function canonicalRouteIdentity(value: string): string {
-  const normalized = `/${String(value ?? "").trim().split(/[?#]/, 1)[0]?.replace(/^\/+|\/+$/g, "") ?? ""}`.replace(/\/{2,}/g, "/");
-  return (normalized || "/").replace(/%[0-9a-f]{2}/gi, (token) => token.toUpperCase());
+  return normalizeRawTemplateRouteMapPath(value);
+}
+function normalizeAstroOutputRoutePath(value: string): string {
+  const normalized = normalizeRawTemplateRouteMapPath(value);
+  if (normalized === "/") return "/";
+  return `/${normalized.slice(1).split("/").map((segment) =>
+    encodeURIComponent(segment).replace(/[!'()*]/g, (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+    )
+  ).join("/")}`;
 }
 function isFeedResourcePath(value: string): boolean {
   return /(?:\.rss|\.atom)$/i.test(value);
@@ -401,7 +453,7 @@ function scriptAssetName(value: string): string {
 }
 function isReplaceableStaticSiteScript(
   script: HtmlElement,
-  context: { hasReplacedForms: boolean; elements: HtmlElement[] },
+  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; elements: HtmlElement[] },
 ): boolean {
   if (attribute(script, "data-gnr8-raw-runtime-duplicate-guard") !== null) return true;
   if (attribute(script, "data-gnr8-disabled-preview-script") !== null) return true;
@@ -432,11 +484,43 @@ function isReplaceableStaticSiteScript(
   if (staticEnhancementAssets.has(assetName)) return true;
   if (/google-analytics|googletagmanager|gtag\/js|monotracker/i.test(src)) return true;
   if (context.hasReplacedForms && (assetName === "form.js" || /hcaptcha\.com/i.test(src))) return true;
-  if (context.hasReplacedForms && assetName === "api.js" && context.elements.some((element) => attribute(element, "name") === "h-captcha-response")) return true;
+  if (context.replacedFormSecurityRuntime && assetName === "api.js") return true;
   if (assetName === "js.js" && context.elements.some((element) => element.tagName === "script" && /\bgtag\s*\(|\bdataLayer\b/i.test(textContent(element)))) return true;
   if (/serviceworker\.getregistrations|window\.assetsurl\s*=|\b_monoCookie\s*=|\bdataLayer\b|\bgtag\s*\(/i.test(body)) return true;
   if (/createelement\s*\(\s*["']link["']\s*\)/i.test(lowerBody) && /rel\s*=\s*["']stylesheet["']/i.test(lowerBody)) return true;
   return false;
+}
+
+function formHasSecurityRuntime(form: HtmlElement): boolean {
+  return allElements(form).some((element) => {
+    const src = attribute(element, "src") ?? attribute(element, "data") ?? "";
+    const className = attribute(element, "class") ?? "";
+    return attribute(element, "name") === "h-captcha-response" ||
+      /(?:^|\.)hcaptcha\.com\b|(?:^|\.)recaptcha\.net\b|google\.com\/recaptcha/i.test(src) ||
+      /\b(?:h-captcha|g-recaptcha)\b/i.test(className);
+  });
+}
+
+function acquisitionPageLimitSourceUrls(
+  provenance: CanonicalSiteVersionSnapshot["importProvenanceSummary"],
+  sourceHost: string,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const pages = provenance?.multiPageDiscovery?.acquisition?.pages ?? [];
+  for (const page of pages) {
+    if (page.status !== "skipped" || page.skippedReason !== "acquisition_page_limit") continue;
+    const route = page.finalNormalizedRoutePath ?? page.normalizedRoutePath;
+    if (!route) continue;
+    const sourceUrl = page.finalUrl ?? page.normalizedUrl ?? page.originalHref;
+    try {
+      const url = new URL(sourceUrl);
+      if (url.protocol !== "https:" || url.hostname.replace(/^www\./, "") !== sourceHost) continue;
+      out.set(canonicalRouteIdentity(route), url.toString());
+    } catch {
+      // Malformed provenance remains unsupported instead of being silently externalized.
+    }
+  }
+  return out;
 }
 
 function sourcePageUrlForRoute(

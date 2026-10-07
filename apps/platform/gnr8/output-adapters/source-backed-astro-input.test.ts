@@ -179,13 +179,62 @@ test("uncaptured required routes and executable source behavior return explicit 
   );
 });
 
-test("normalizes percent-encoding identity and keeps RSS as a source feed instead of an HTML route", () => {
+test("preserves page-limit omissions as disclosed source links while other uncaptured routes still fail", () => {
+  const input = fixture({
+    rootHtml: '<html><head><title>Home</title></head><body><a href="/about">About</a><a href="/older-article">Older article</a></body></html>',
+  });
+  input.version.importProvenanceSummary!.multiPageDiscovery!.acquisition = {
+    kind: "multi_page_html_acquisition_manifest_v1",
+    seedUrl: "https://example.com/",
+    normalizedSeedUrl: "https://example.com/",
+    pages: [{
+      originalHref: "https://example.com/older-article",
+      normalizedUrl: "https://example.com/older-article",
+      finalUrl: null,
+      normalizedRoutePath: "/older-article",
+      finalNormalizedRoutePath: null,
+      depth: 1,
+      status: "skipped",
+      httpStatusCode: null,
+      contentType: null,
+      byteSize: 0,
+      bodySha256: null,
+      bodyPath: null,
+      redirected: false,
+      redirectCount: 0,
+      diagnostics: ["MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED"],
+      skippedReason: "acquisition_page_limit",
+      failureReason: null,
+    }],
+    limitsApplied: { maxPages: 2, maxBytesPerPage: 1_000_000, requestTimeoutMs: 8_000 },
+    summary: { fetchedPageCount: 2, failedPageCount: 0, skippedPageCount: 1 },
+    diagnostics: ["MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED"],
+    generatedAt: "2026-10-02T10:00:00.000Z",
+  };
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+  });
+
+  assert.ok(generated.contentManifest.requiredNavigation.some((item) =>
+    item.kind === "external_url" && item.target === "https://example.com/older-article"));
+  assert.deepEqual(generated.sourceManifest.captureScopeLimitations, [{
+    kind: "acquisition-page-limit-external-link-v1",
+    route: "/older-article",
+    sourceUrl: "https://example.com/older-article",
+  }]);
+});
+
+test("normalizes percent-encoding identity and keeps RSS as a source feed instead of an HTML route", async () => {
   const input = fixture({
     rootHtml: '<html><head><title>Home</title></head><body><a href="/b/trademark%C2%AE">Article</a><a href="/blog.rss">RSS</a></body></html>',
   });
   const encodedRoute = "/b/trademark%c2%ae";
-  input.version.pages.push(page(encodedRoute, "Article"));
-  input.artifact.htmlByPath[encodedRoute] = '<html><head><title>Article</title></head><body><a href="/">Home</a></body></html>';
+  const normalizedEncodedRoute = "/b/trademark%C2%AE";
+  const decodedRoute = "/b/trademark®";
+  input.version.pages.push(page(decodedRoute, "Article"));
   input.rawArtifact.fileMap["pages/b/trademark/index.html"] = { path: "pages/b/trademark/index.html", mediaType: "text/html", sizeBytes: 1, sha256: SHA };
   input.version.importProvenanceSummary!.multiPageDiscovery!.rawArtifactAssembly!.routeMap.push({
     routePath: encodedRoute,
@@ -197,15 +246,31 @@ test("normalizes percent-encoding identity and keeps RSS as a source feed instea
     status: "assembled",
   });
 
+  const sourceBytes: Record<string, Buffer> = {
+    "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
+    "pages/about/index.html": Buffer.from(input.artifact.htmlByPath["/about"]),
+    "pages/b/trademark/index.html": Buffer.from('<html><head><title>Article</title></head><body><a href="/">Home</a></body></html>'),
+  };
+  const htmlByPath = await loadSourceBackedAstroHtmlByPath({
+    siteVersion: input.version,
+    rawArtifact: input.rawArtifact,
+    getRawAsset: async ({ filePath }) => {
+      const bytes = sourceBytes[filePath];
+      const metadata = input.rawArtifact.fileMap[filePath];
+      return bytes && metadata ? { mediaType: metadata.mediaType, sizeBytes: metadata.sizeBytes, sha256: metadata.sha256, bytes } : null;
+    },
+  });
+
   const generated = createSourceBackedAstroGenerationInput({
     siteVersion: input.version,
     artifact: input.artifact,
     rawArtifact: input.rawArtifact,
+    htmlByPath,
   });
 
-  assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.target === encodedRoute && item.kind === "local_route"));
+  assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.target === normalizedEncodedRoute && item.kind === "local_route"));
   assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.target === "https://example.com/blog.rss" && item.kind === "external_url"));
-  assert.ok(generated.sourceManifest.files.some((file) => file.path.includes("trademark%c2%ae/index.astro")));
+  assert.ok(generated.sourceManifest.files.some((file) => file.path.includes("trademark%C2%AE/index.astro")));
 });
 
 test("removes replaceable static-site bootstrap scripts and materializes lazy assets", () => {
@@ -252,7 +317,7 @@ test("applies explicitly accepted form reductions only to that generation and re
   const input = fixture({
     rootHtml: `<html><head><title>Home</title></head><body>
       <form id="m3166" method="post"><input name="email"><iframe src="https://newassets.hcaptcha.com/captcha/frame"></iframe></form>
-      <script src="/assets/form.js"></script><script src="https://js.hcaptcha.com/1/api.js"></script>
+      <script src="/assets/form.js"></script><script src="https://js.hcaptcha.com/1/api.js"></script><script src="/assets/script/1a0efd5f7e4f-api.js"></script>
       <a href="/about">About</a>
     </body></html>`,
     aboutHtml: `<html><head><title>About</title></head><body>
@@ -294,6 +359,25 @@ test("applies explicitly accepted form reductions only to that generation and re
 test("accepted form reductions do not remove unknown functional scripts", () => {
   const input = fixture({
     rootHtml: '<html><head><title>Home</title></head><body><form id="m3166"></form><script>window.checkout = startCheckout()</script></body></html>',
+  });
+  assert.throws(
+    () => createSourceBackedAstroGenerationInput({
+      siteVersion: input.version,
+      artifact: input.artifact,
+      rawArtifact: input.rawArtifact,
+      acceptedFunctionalReductions: {
+        kind: "legacy-forms-to-disclosed-links-v1",
+        contactEmail: "mailto@chs.si",
+        commentLinks: "source-article",
+      },
+    }),
+    (error) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"),
+  );
+});
+
+test("does not remove a generic api.js without security evidence inside a replaced form", () => {
+  const input = fixture({
+    rootHtml: '<html><head><title>Home</title></head><body><form id="m3166"><input name="email"></form><script src="/assets/script/1a0efd5f7e4f-api.js"></script></body></html>',
   });
   assert.throws(
     () => createSourceBackedAstroGenerationInput({
