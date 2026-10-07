@@ -69,4 +69,3 @@ test('honors a caller abort without retrying', async () => {
   await assert.rejects(request, /caller stopped/)
   assert.equal(calls, 1)
 })
-
