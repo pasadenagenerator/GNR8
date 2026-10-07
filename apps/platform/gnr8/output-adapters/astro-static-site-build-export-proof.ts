@@ -68,6 +68,7 @@ export interface InspectedAstroStaticExport {
   manifest: AstroStaticExportManifest;
   indexHtml: string;
   stylesheetPaths: string[];
+  themeStylesheetPath: string;
   references: AstroStaticExportReference[];
   verifiedContent: string[];
   verifiedThemeToken: string;
@@ -440,16 +441,20 @@ export async function inspectAstroStaticExport(
   }
 
   const expectedThemeToken = verification.expectedThemeToken;
+  let themeStylesheetPath: string | null = null;
   for (const stylesheetPath of stylesheetPaths) {
     const stylesheet = await readFile(join(canonicalDist, ...stylesheetPath.split("/")), "utf8");
     assertNoSourceOrDevDependency(stylesheet, canonicalWorkspace, stylesheetPath);
-    if (!themeTokenPattern(expectedThemeToken).test(stylesheet)) {
-      throw new AstroStaticExportValidationError(
-        "stylesheet_verification_failed",
-        `Built stylesheet is missing the expected theme token: ${stylesheetPath}.`,
-      );
+    if (!themeStylesheetPath && themeTokenPattern(expectedThemeToken).test(stylesheet)) {
+      themeStylesheetPath = stylesheetPath;
     }
     references.push(...verifyCssReferences(stylesheet, stylesheetPath, filePaths));
+  }
+  if (!themeStylesheetPath) {
+    throw new AstroStaticExportValidationError(
+      "stylesheet_verification_failed",
+      "Built stylesheets are missing the expected theme token.",
+    );
   }
 
   references.sort((left, right) =>
@@ -460,6 +465,7 @@ export async function inspectAstroStaticExport(
     manifest,
     indexHtml,
     stylesheetPaths,
+    themeStylesheetPath,
     references,
     verifiedContent,
     verifiedThemeToken: expectedThemeToken,
@@ -740,7 +746,7 @@ async function verifyDistHttp(
     );
   }
 
-  const stylesheetPath = inspected.stylesheetPaths[0];
+  const stylesheetPath = inspected.themeStylesheetPath;
   if (!stylesheetPath) {
     throw proofError("stylesheet_verification_failed", "No built stylesheet is available for HTTP verification.", evidence);
   }

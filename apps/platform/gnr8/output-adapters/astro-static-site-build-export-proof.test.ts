@@ -55,6 +55,31 @@ test("valid dist exports a sorted hashed manifest and serves only emitted HTML a
   });
 });
 
+test("multipage export verifies the shared theme token in the stylesheet that contains it", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeValidDist(workspacePath, { stylesheetBody: "body{color:#123}" });
+    const distPath = join(workspacePath, "dist");
+    await mkdir(join(distPath, "about"), { recursive: true });
+    await writeFile(
+      join(distPath, "about", "index.html"),
+      '<!doctype html><html><head><link rel="stylesheet" href="/_astro/theme.css"></head><body>About</body></html>',
+    );
+    await writeFile(join(distPath, "_astro", "theme.css"), ":root{--gnr8-astro-accent:#0f766e;}");
+
+    const inspected = await inspectAstroStaticExport(workspacePath);
+
+    assert.deepEqual(inspected.stylesheetPaths, ["_astro/site.css", "_astro/theme.css"]);
+    assert.equal(inspected.themeStylesheetPath, "_astro/theme.css");
+  });
+});
+
+test("multipage export still rejects output when no referenced stylesheet contains the theme token", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeValidDist(workspacePath, { stylesheetBody: "body{color:#123}" });
+    await assertValidationError(inspectAstroStaticExport(workspacePath), "stylesheet_verification_failed");
+  });
+});
+
 test("export validation rejects missing or empty HTML and missing referenced assets", async () => {
   await withWorkspace(async (workspacePath) => {
     await mkdir(join(workspacePath, "dist"));
