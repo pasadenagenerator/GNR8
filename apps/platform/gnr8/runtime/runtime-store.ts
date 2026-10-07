@@ -26,6 +26,7 @@ import type {
   VersionScopedFormSubmission,
 } from "@/gnr8/runtime/types";
 import type { ContentOverride, ContentOverrideStatus, ContentSlot, ContentSlotType } from "@/gnr8/runtime/content-binding";
+import { RUNTIME_HOST_BINDING_BACKFILL_SQL } from "@/gnr8/runtime/runtime-host-binding-backfill";
 
 export type RuntimeStoreDbClient = PoolClient;
 export type RuntimeStoreDbOptions = { dbClient?: RuntimeStoreDbClient };
@@ -466,28 +467,7 @@ export async function ensureRuntimeTables(options: RuntimeStoreDbOptions = {}): 
           )
         `);
 
-        await client.query(`
-          with ranked as (
-            select
-              s.id::text as site_id,
-              lower(trim(s.source_host))::text as host,
-              row_number() over (
-                partition by lower(trim(s.source_host))
-                order by s.created_at desc, s.id desc
-              ) as host_rank
-            from public.gnr8_runtime_sites s
-            where s.source_host is not null
-              and length(trim(s.source_host)) > 0
-          )
-          insert into public.gnr8_runtime_host_bindings (site_id, host, status, binding_kind)
-          select
-            ranked.site_id,
-            ranked.host,
-            case when ranked.host_rank = 1 then 'ACTIVE' else 'INACTIVE' end as status,
-            'legacy_source_host_backfill'::text as binding_kind
-          from ranked
-          on conflict (site_id, host) do nothing
-        `);
+        await client.query(RUNTIME_HOST_BINDING_BACKFILL_SQL);
       } finally {
         if (!options.dbClient) client.release();
       }
