@@ -2068,6 +2068,7 @@ async function buildScopedMultiPageDiscovery(input: {
 
   const discoveredByRoute = new Map<string, MultiPageDiscoveryLinkEntry>()
   const prioritySourceByRoute = new Map<string, RoutePriorityCandidate<MultiPageDiscoveryLinkEntry>['source']>()
+  const prioritySourceOrderByRoute = new Map<string, number>()
   const skippedLinks: MultiPageDiscoveryLinkEntry[] = []
   const normalizedUrls: MultiPageDiscoveryManifest['normalizedUrls'] = []
 
@@ -2224,7 +2225,7 @@ async function buildScopedMultiPageDiscovery(input: {
     )
   }
 
-  for (const sitemapUrl of sitemapDiscoveryEvidence.discoveredUrls) {
+  for (const [sitemapSourceOrder, sitemapUrl] of sitemapDiscoveryEvidence.discoveredUrls.entries()) {
     normalizedUrls.push({
       originalHref: sitemapUrl.originalUrl,
       absoluteUrl: sitemapUrl.originalUrl,
@@ -2277,6 +2278,7 @@ async function buildScopedMultiPageDiscovery(input: {
     })
     discoveredByRoute.set(sitemapUrl.normalizedRoutePath, entry)
     prioritySourceByRoute.set(sitemapUrl.normalizedRoutePath, 'sitemap')
+    prioritySourceOrderByRoute.set(sitemapUrl.normalizedRoutePath, sitemapSourceOrder)
   }
 
   for (const canonical of canonicalDiscovery.canonicalEntries) {
@@ -2326,6 +2328,7 @@ async function buildScopedMultiPageDiscovery(input: {
     routePath: String(entry.normalizedRoutePath ?? ''),
     depth: entry.depth,
     source: prioritySourceByRoute.get(String(entry.normalizedRoutePath ?? '')) ?? 'link',
+    sourceOrder: prioritySourceOrderByRoute.get(String(entry.normalizedRoutePath ?? '')) ?? null,
     sourceContext: entry.sourceContext,
     value: entry,
   }))

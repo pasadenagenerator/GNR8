@@ -246,7 +246,9 @@ export async function discoverSitemapUrls(input: {
   if (fetched.size > 0) diagnostics.push(diagnosticEntry('SITEMAP_DISCOVERY_SUCCEEDED', `${discovered.size}`))
   else diagnostics.push(diagnosticEntry('SITEMAP_DISCOVERY_NOT_FOUND', 'no_sitemaps_fetched'))
 
-  const discoveredUrls = [...discovered.values()].sort((a, b) => a.normalizedRoutePath.localeCompare(b.normalizedRoutePath))
+  // Sitemap order is publisher-authored evidence. Keep it stable so bounded
+  // acquisition can prefer the declared order instead of lexical route order.
+  const discoveredUrls = [...discovered.values()]
   const skippedUrls = skipped.sort((a, b) =>
     `${a.reason}|${a.normalizedRoutePath ?? ''}|${a.originalUrl ?? ''}`.localeCompare(`${b.reason}|${b.normalizedRoutePath ?? ''}|${b.originalUrl ?? ''}`),
   )
