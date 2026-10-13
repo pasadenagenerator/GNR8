@@ -120,8 +120,28 @@ test("normal source input preserves captured routes, navigation, owned asset ide
   const assetUrl = `/api/gnr8/runtime/preview-assets/${input.rawArtifact.siteId}/${input.rawArtifact.siteVersionId}/uploads/logo.png`;
   assert.equal(generated.ownedAssetFingerprints[assetUrl], SHA);
   assert.ok(generated.contentManifest.requiredAssets.some((asset) => asset.path === assetUrl));
+  assert.deepEqual(generated.sourceManifest.assetEvidence.find((asset) => asset.path === assetUrl), {
+    path: assetUrl,
+    mediaType: "image/png",
+    sizeBytes: 10,
+    sha256: SHA,
+  });
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("<h1>About</h1>")));
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("/uploads/about.png")));
+});
+
+test("fails explicitly when generated HTML references an owned asset without persisted byte evidence", () => {
+  const input = fixture();
+  delete input.rawArtifact.fileMap["uploads/logo.png"];
+  assert.throws(
+    () => createSourceBackedAstroGenerationInput({
+      siteVersion: input.version,
+      artifact: input.artifact,
+      rawArtifact: input.rawArtifact,
+    }),
+    (error) => error instanceof SourceBackedAstroUnsupportedError &&
+      error.unsupportedCapabilities.some((item) => item.startsWith("source_asset_evidence_missing:")),
+  );
 });
 
 test("loads every captured route from the owned raw artifact when the runtime artifact contains only root", async () => {
@@ -337,7 +357,7 @@ test("applies explicitly accepted form reductions only to that generation and re
     rawArtifact: input.rawArtifact,
     acceptedFunctionalReductions: {
       kind: "legacy-forms-to-disclosed-links-v1",
-      contactEmail: "mailto@chs.si",
+      contactEmail: "sales@chs.si",
       commentLinks: "source-article",
     },
   });
@@ -345,13 +365,13 @@ test("applies explicitly accepted form reductions only to that generation and re
   const aboutSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/about/index.astro")?.contents ?? "";
 
   assert.doesNotMatch(`${rootSource}\n${aboutSource}`, /<form\b|hcaptcha|form\.js/i);
-  assert.match(rootSource, /href="mailto:mailto@chs\.si"/);
+  assert.match(rootSource, /href="mailto:sales@chs\.si"/);
   assert.match(rootSource, /does not provide the legacy contact form/);
   assert.match(aboutSource, /href="https:\/\/example\.com\/about"/);
   assert.match(aboutSource, /Open the original article to comment/);
   assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.kind === "external_url" && item.target === "https://example.com/about"));
   assert.deepEqual(generated.sourceManifest.acceptedFunctionalReductions?.limitations, [
-    "Legacy contact forms were replaced with disclosed mailto links to mailto@chs.si.",
+    "Legacy contact forms were replaced with disclosed mailto links to sales@chs.si.",
     "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
   ]);
 });
@@ -367,7 +387,7 @@ test("accepted form reductions do not remove unknown functional scripts", () => 
       rawArtifact: input.rawArtifact,
       acceptedFunctionalReductions: {
         kind: "legacy-forms-to-disclosed-links-v1",
-        contactEmail: "mailto@chs.si",
+        contactEmail: "sales@chs.si",
         commentLinks: "source-article",
       },
     }),
@@ -386,7 +406,7 @@ test("does not remove a generic api.js without security evidence inside a replac
       rawArtifact: input.rawArtifact,
       acceptedFunctionalReductions: {
         kind: "legacy-forms-to-disclosed-links-v1",
-        contactEmail: "mailto@chs.si",
+        contactEmail: "sales@chs.si",
         commentLinks: "source-article",
       },
     }),

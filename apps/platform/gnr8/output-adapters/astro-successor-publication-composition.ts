@@ -14,6 +14,7 @@ import {
   type AstroCandidateRpcClient,
 } from "./astro-production-candidate-supabase-gateway";
 import { AstroProductionCandidatePreviewConfigurationError } from "./astro-production-candidate-preview-feature-gate";
+import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
 import { createAstroSuccessorPublicationService } from "./astro-successor-publication-service";
 import { createGeneratedOutputPublicationDecisionResolver } from "./generated-output-publication-composition";
 
@@ -24,6 +25,7 @@ export function createAstroSuccessorPublicationOperation() {
   const ownershipResolver = new SupabaseAstroCandidateOwnershipResolver(() => candidateClient);
   const candidateRepository = new GatewayBackedAstroProductionCandidateRepository({
     gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
+    objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => serviceRoleClient as never }),
   });
   const runtimeStore = new SupabaseAstroCandidateRuntimeArtifactStore(serviceRoleClient);
   const promoteCandidate = createAstroCandidatePromotionService({

@@ -101,11 +101,19 @@ export type AstroProductionCandidateValidationErrorCode =
 
 export class AstroProductionCandidateValidationError extends Error {
   readonly code: AstroProductionCandidateValidationErrorCode;
+  readonly measuredBytes: number | null;
+  readonly limitBytes: number | null;
 
-  constructor(code: AstroProductionCandidateValidationErrorCode, message: string, options?: ErrorOptions) {
+  constructor(
+    code: AstroProductionCandidateValidationErrorCode,
+    message: string,
+    options?: ErrorOptions & { measuredBytes?: number; limitBytes?: number },
+  ) {
     super(message, options);
     this.name = "AstroProductionCandidateValidationError";
     this.code = code;
+    this.measuredBytes = options?.measuredBytes ?? null;
+    this.limitBytes = options?.limitBytes ?? null;
   }
 }
 
@@ -321,13 +329,16 @@ export function validateAstroProductionCandidateRecord(
   };
   const maxBytes = options.maxBytes ?? ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES;
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-    throw new AstroProductionCandidateValidationError("record_too_large", "Configured record-size bound is invalid.");
+    throw new AstroProductionCandidateValidationError("record_too_large", "Configured record-size bound is invalid.", {
+      limitBytes: maxBytes,
+    });
   }
   const bytes = Buffer.byteLength(stableStringify(record), "utf8");
   if (bytes === 0 || bytes > maxBytes) {
     throw new AstroProductionCandidateValidationError(
       "record_too_large",
       `Production candidate record exceeds the ${maxBytes}-byte limit.`,
+      { measuredBytes: bytes, limitBytes: maxBytes },
     );
   }
   return structuredClone(record);

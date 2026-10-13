@@ -16,6 +16,7 @@ import {
   type AstroCandidateRpcClient,
 } from "./astro-production-candidate-supabase-gateway";
 import { AstroProductionCandidatePreviewConfigurationError } from "./astro-production-candidate-preview-feature-gate";
+import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
 import {
   readGeneratedOutputBuildEvidence,
   readGeneratedOutputContentManifest,
@@ -78,6 +79,7 @@ function createComposition(): Composition {
     ownershipResolver: new SupabaseAstroCandidateOwnershipResolver(() => candidateClient),
     candidateRepository: new GatewayBackedAstroProductionCandidateRepository({
       gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
+      objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => client as never }),
     }),
   };
 }

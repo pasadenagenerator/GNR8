@@ -1,6 +1,6 @@
 import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 
-import type { AstroProductionCandidateRecord } from "./astro-production-candidate-record";
+import type { AstroResolvedCandidateRecord } from "./astro-production-candidate-object-record";
 import type { ChsAstroBuildReceipt } from "./chs-astro-candidate-producer";
 import {
   createGeneratedOutputBuildEvidence,
@@ -16,7 +16,7 @@ export const GENERATED_OUTPUT_SOURCE_WORKSPACE_KEY = "generatedOutputSourceWorks
 export type GeneratedOutputSourceCaptureBinding = GeneratedOutputBuildEvidence["sourceCapture"];
 
 export function createBuildEvidenceForCandidate(input: {
-  record: AstroProductionCandidateRecord;
+  record: AstroResolvedCandidateRecord;
   receipt: ChsAstroBuildReceipt;
   sourceCapture: GeneratedOutputSourceCaptureBinding;
   contentManifest: GeneratedOutputContentManifest;
@@ -61,7 +61,7 @@ export function createBuildEvidenceForCandidate(input: {
 
 export function rebindBuildEvidenceToCandidate(input: {
   sourceEvidence: GeneratedOutputBuildEvidence;
-  successorRecord: AstroProductionCandidateRecord;
+  successorRecord: AstroResolvedCandidateRecord;
 }): GeneratedOutputBuildEvidence {
   const source = validateGeneratedOutputBuildEvidence(input.sourceEvidence);
   if (!source) throw new Error("generated_output_source_build_evidence_invalid");

@@ -41,6 +41,7 @@ import {
   SupabaseAstroProductionCandidateGateway,
   type AstroCandidateRpcClient,
 } from "./astro-production-candidate-supabase-gateway";
+import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
 import {
   createSourceBackedAstroCandidateProducer,
   SOURCE_BACKED_ASTRO_PRODUCER_KIND,
@@ -60,6 +61,11 @@ export type SourceBackedAstroGenerationResult = {
   artifactBundleSha256: string;
   routePaths: string[];
   variantId: string;
+  candidateSizes: {
+    registryRecordUtf8Bytes: number;
+    resolvedCandidateUtf8Bytes: number;
+    objectPayloadUtf8Bytes: number;
+  };
 };
 
 export async function runSourceBackedAstroGeneration(
@@ -132,6 +138,7 @@ export async function runSourceBackedAstroGeneration(
     const ownershipResolver = new SupabaseAstroCandidateOwnershipResolver(() => candidateClient);
     const repository = new GatewayBackedAstroProductionCandidateRepository({
       gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
+      objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => serviceClient as never }),
     });
     const runtimeStore = new SupabaseAstroCandidateRuntimeArtifactStore(serviceClient);
     const ownership = await ownershipResolver.resolve({
@@ -153,7 +160,7 @@ export async function runSourceBackedAstroGeneration(
       retryContexts: new InMemoryAstroCandidateRegistrationRetryContextStore(),
       now: () => new Date(payload.requestedAt),
     });
-    await register({
+    const registrationResult = await register({
       operationId: identities.registrationOperationId,
       siteVersionId: identities.generationSiteVersionId,
       producer: { kind: SOURCE_BACKED_ASTRO_PRODUCER_KIND, version: SOURCE_BACKED_ASTRO_PRODUCER_VERSION },
@@ -289,6 +296,9 @@ export async function runSourceBackedAstroGeneration(
         `adapter:${selection.adapterId}@${selection.adapterVersion}`,
         `candidate:${candidateId}`,
         `routes:${generationInput.outputPaths.join(",")}`,
+        `candidate-registry-utf8-bytes:${registrationResult.candidate.registryRecordUtf8Bytes}`,
+        `candidate-resolved-utf8-bytes:${registrationResult.candidate.resolvedCandidateUtf8Bytes}`,
+        `candidate-object-utf8-bytes:${registrationResult.candidate.objectPayloadUtf8Bytes}`,
         ...(payload.acceptedFunctionalReductions ? [
           `accepted-functional-reduction:${payload.acceptedFunctionalReductions.kind}`,
           `accepted-functional-reduction:contact-mailto:${payload.acceptedFunctionalReductions.contactEmail}`,
@@ -303,6 +313,11 @@ export async function runSourceBackedAstroGeneration(
       artifactBundleSha256: promoted.runtimeBundleSha256,
       routePaths: [...generationInput.outputPaths],
       variantId: identities.variantId,
+      candidateSizes: {
+        registryRecordUtf8Bytes: registrationResult.candidate.registryRecordUtf8Bytes,
+        resolvedCandidateUtf8Bytes: registrationResult.candidate.resolvedCandidateUtf8Bytes,
+        objectPayloadUtf8Bytes: registrationResult.candidate.objectPayloadUtf8Bytes,
+      },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "astro_generation_failed";

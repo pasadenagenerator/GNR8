@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { NonRetriableError } from 'inngest'
 
 import {
   type SiteAstroGenerationRequestedPayload,
@@ -15,6 +16,11 @@ type GenerationResult = {
   artifactBundleSha256: string
   routePaths: string[]
   variantId: string
+  candidateSizes: {
+    registryRecordUtf8Bytes: number
+    resolvedCandidateUtf8Bytes: number
+    objectPayloadUtf8Bytes: number
+  }
 }
 
 type RunGeneration = (payload: SiteAstroGenerationRequestedPayload) => Promise<GenerationResult>
@@ -99,7 +105,24 @@ export async function runSiteAstroGenerationJob(input: {
 }) {
   const payload = parseSiteAstroGenerationPayload(input.eventData)
   if (!payload) throw new Error('Invalid site Astro generation event payload.')
-  return (input.runGeneration ?? runDefaultGeneration)(payload)
+  try {
+    return await (input.runGeneration ?? runDefaultGeneration)(payload)
+  } catch (error) {
+    if (isDeterministicGenerationFailure(error)) {
+      throw new NonRetriableError(error instanceof Error ? error.message : 'Deterministic Astro generation failure.', {
+        cause: error,
+      })
+    }
+    throw error
+  }
+}
+
+function isDeterministicGenerationFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: unknown; retryable?: unknown; message?: unknown }
+  if (candidate.retryable === false) return true
+  if (candidate.code === 'unsupported_capability' || candidate.code === 'record_too_large') return true
+  return typeof candidate.message === 'string' && candidate.message.startsWith('unsupported_capability:')
 }
 
 export const siteAstroGenerationJob = inngest.createFunction(

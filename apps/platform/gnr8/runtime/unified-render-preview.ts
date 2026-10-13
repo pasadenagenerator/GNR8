@@ -50,6 +50,10 @@ import {
   isAstroProductionCandidate,
   type AstroProductionCandidate,
 } from '@/gnr8/output-adapters/astro-production-candidate-record'
+import {
+  isAstroObjectBackedResolvedCandidate,
+  type AstroObjectBackedResolvedCandidate,
+} from '@/gnr8/output-adapters/astro-production-candidate-object-record'
 
 export type SiteVersionPreviewSource =
   | 'react_runtime_renderer'
@@ -158,8 +162,8 @@ type PreviewReadDependencies = {
   requestScopedDbClientEnabled: boolean
 }
 
-type AstroPreviewCandidate = AstroInternalPreviewCandidate | AstroProductionCandidate
-type AstroPreviewCandidateContract = 'proof_v1' | 'production_v2'
+type AstroPreviewCandidate = AstroInternalPreviewCandidate | AstroProductionCandidate | AstroObjectBackedResolvedCandidate
+type AstroPreviewCandidateContract = 'proof_v1' | 'production_v2' | 'production_v3'
 
 const defaultPreviewReadDependencies: PreviewReadDependencies = {
   getPoolStatus: () => {
@@ -2971,7 +2975,9 @@ async function renderAstroInternalPreviewCandidate(input: {
   const candidate = await (input.getCandidate ?? previewReadDependencies.getAstroInternalPreviewCandidate)(candidateId)
   const candidateIsValid = input.candidateContract === 'production_v2'
     ? isAstroProductionCandidate(candidate)
-    : isAstroInternalPreviewCandidate(candidate)
+    : input.candidateContract === 'production_v3'
+      ? isAstroObjectBackedResolvedCandidate(candidate)
+      : isAstroInternalPreviewCandidate(candidate)
   if (!candidate || !candidateIsValid) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',

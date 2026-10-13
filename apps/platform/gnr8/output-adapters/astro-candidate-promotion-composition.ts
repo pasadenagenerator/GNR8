@@ -19,6 +19,7 @@ import {
   type AstroCandidateRpcClient,
 } from "./astro-production-candidate-supabase-gateway";
 import { AstroProductionCandidatePreviewConfigurationError } from "./astro-production-candidate-preview-feature-gate";
+import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
 
 export function createAstroCandidatePromotionOperation() {
   const serviceRoleClient = getSupabaseServiceRoleClient();
@@ -27,6 +28,7 @@ export function createAstroCandidatePromotionOperation() {
   const ownershipResolver = new SupabaseAstroCandidateOwnershipResolver(() => candidateClient);
   const repository = new GatewayBackedAstroProductionCandidateRepository({
     gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
+    objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => serviceRoleClient as never }),
   });
   return createAstroCandidatePromotionService({
     resolveOwnership: (input) => ownershipResolver.resolve(input),

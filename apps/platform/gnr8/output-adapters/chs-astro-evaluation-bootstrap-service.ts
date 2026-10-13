@@ -4,14 +4,17 @@ import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
 import { computeRuntimeArtifactBundleSha256 } from "@/gnr8/runtime/astro-artifact-materialization";
 import { buildCanonicalMigrationInput } from "@/gnr8/runtime/migration-factory";
 import { evaluatePublishEnforcement } from "@/gnr8/runtime/publish-enforcement";
+import { runRenderIntegrityGate } from "@/gnr8/runtime/render-integrity-gate";
 import {
   bindArtifactToVersion,
   createArtifact,
   createSiteVersionFromMigration,
+  getArtifactById,
   getActiveHostBindingForHost,
   getActivePointerForSite,
   getSiteVersion,
   linkRuntimeSiteVersionOwnershipIfAllowed,
+  refreshArtifactForVersionPublishCandidate,
   setSiteVersionState,
   switchActivePointer,
 } from "@/gnr8/runtime/runtime-store";
@@ -22,9 +25,16 @@ import {
 } from "@/gnr8/runtime/types";
 import { getSuperadminPool } from "@/src/superadmin/db";
 
-import { createAstroStaticSiteProjectManifest } from "./astro-static-site-adapter";
 import { CHS_ASTRO_EVALUATION } from "./chs-astro-evaluation-contract";
-import { CHS_ASTRO_SOURCE_LINEAGE, chsAstroSourceContent } from "./chs-astro-source-content";
+import {
+  resolveChsAstroEvaluationInput,
+  type ChsAstroGeneratedEvaluationProvenance,
+} from "./chs-astro-evaluation-input";
+import { CHS_ASTRO_SOURCE_LINEAGE } from "./chs-astro-source-content";
+
+type ChsAstroEvaluationProvenanceSummary = RuntimeImportProvenanceSummary & {
+  generatedAstroEvaluation: ChsAstroGeneratedEvaluationProvenance;
+};
 
 export type ChsAstroEvaluationBootstrapResult = {
   actorUserId: string;
@@ -41,15 +51,31 @@ export type ChsAstroEvaluationBootstrapResult = {
 export async function bootstrapChsAstroEvaluationTarget(actorUserId: string): Promise<ChsAstroEvaluationBootstrapResult> {
   const actor = actorUserId.trim();
   if (!actor) throw new Error("CHS_ASTRO_EVALUATION_ACTOR_REQUIRED");
+
+  const retainedSourceVersion = await getSiteVersion(CHS_ASTRO_EVALUATION.sourceSiteVersionId);
+  const retainedSourceArtifact = retainedSourceVersion?.artifactId
+    ? await getArtifactById(retainedSourceVersion.artifactId)
+    : null;
+  const evaluationInput = resolveChsAstroEvaluationInput(retainedSourceArtifact);
+  if (!retainedSourceVersion) {
+    throw new Error(`CHS_ASTRO_EVALUATION_VALIDATED_ARTIFACT_MISSING:${CHS_ASTRO_EVALUATION.sourceSiteVersionId}`);
+  }
+  const integrity = runRenderIntegrityGate({
+    siteVersion: retainedSourceVersion,
+    htmlByPath: { "/": evaluationInput.html },
+    assetFingerprintMap: evaluationInput.assetFingerprintMap,
+  });
+  if (!integrity.ok) {
+    throw new Error(`CHS_ASTRO_EVALUATION_RENDER_INTEGRITY_DENIED:${integrity.issues.map((issue) => issue.code).join(",")}`);
+  }
   await ensureAuthoritativeOwnership();
 
-  const manifest = createAstroStaticSiteProjectManifest(chsAstroSourceContent());
-  const html = requiredFile(manifest.files, "src/pages/index.astro");
-  const css = requiredFile(manifest.files, "public/styles/global.css");
+  const html = evaluationInput.html;
+  const css = evaluationInput.css;
   const page = importHtmlToPage({ slug: "/", title: "Home | CHS", html });
   if (!page.migrationDiagnostics) throw new Error("CHS_ASTRO_EVALUATION_GOVERNANCE_MISSING");
   const canonical = buildCanonicalMigrationInput({ sourceUrl: CHS_ASTRO_EVALUATION.sourceUrl, page, actor });
-  const provenance: RuntimeImportProvenanceSummary = {
+  const provenance: ChsAstroEvaluationProvenanceSummary = {
     kind: "runtime_import_provenance_summary_v1",
     executionIdentity: {
       snapshotId: CHS_ASTRO_SOURCE_LINEAGE.sourceSnapshotId,
@@ -91,7 +117,8 @@ export async function bootstrapChsAstroEvaluationTarget(actorUserId: string): Pr
     importDiagnosticCodes: [
       "chs_authoritative_source_snapshot",
       "chs_dedicated_astro_evaluation_target",
-      "chs_source_backed_static_mapping",
+      "chs_underlying_source_import_degraded",
+      "chs_generated_astro_validated_rendered_html_evaluation",
     ],
     captureEvidence: {
       selectedSourceHtmlPath: null,
@@ -112,6 +139,7 @@ export async function bootstrapChsAstroEvaluationTarget(actorUserId: string): Pr
     multiPageDiscovery: null,
     siteTree: null,
     templateFamilies: null,
+    generatedAstroEvaluation: evaluationInput.provenance,
   };
 
   for (const siteVersionId of [
@@ -138,12 +166,10 @@ export async function bootstrapChsAstroEvaluationTarget(actorUserId: string): Pr
     siteVersionId: CHS_ASTRO_EVALUATION.baselineSiteVersionId,
     html,
     css,
+    assetFingerprintMap: evaluationInput.assetFingerprintMap,
+    generatedAstroEvaluation: evaluationInput.provenance,
   });
-  const sourceArtifactId = await ensureBootstrapArtifact({
-    siteVersionId: CHS_ASTRO_EVALUATION.sourceSiteVersionId,
-    html,
-    css,
-  });
+  const sourceArtifactId = evaluationInput.provenance.sourceArtifactId;
   await advanceBaselineToPublished(actor);
   await switchActivePointer({
     siteId: CHS_ASTRO_EVALUATION.runtimeSiteId,
@@ -253,7 +279,13 @@ async function ensureAuthoritativeOwnership(): Promise<void> {
   }
 }
 
-async function ensureBootstrapArtifact(input: { siteVersionId: string; html: string; css: string }): Promise<string> {
+async function ensureBootstrapArtifact(input: {
+  siteVersionId: string;
+  html: string;
+  css: string;
+  assetFingerprintMap: Record<string, string>;
+  generatedAstroEvaluation: ChsAstroGeneratedEvaluationProvenance;
+}): Promise<string> {
   const version = await getSiteVersion(input.siteVersionId);
   if (!version) throw new Error("CHS_ASTRO_EVALUATION_SITE_VERSION_MISSING");
   const enforcement = evaluatePublishEnforcement({ siteVersion: version, stage: "shadow" });
@@ -265,6 +297,7 @@ async function ensureBootstrapArtifact(input: { siteVersionId: string; html: str
     paths: ["/"],
     artifactSource: "chs_astro_evaluation_bootstrap",
     authoritativeSource: CHS_ASTRO_SOURCE_LINEAGE,
+    generatedAstroEvaluation: input.generatedAstroEvaluation,
     publishStage: "shadow",
     shadowRestricted: enforcement.shadowRestricted,
     enforcementDecision: enforcement.adapter.decision,
@@ -272,7 +305,7 @@ async function ensureBootstrapArtifact(input: { siteVersionId: string; html: str
   const bundleSha256 = computeRuntimeArtifactBundleSha256({
     htmlByPath: { "/": input.html },
     compiledTokenStyles: input.css,
-    assetFingerprintMap: {},
+    assetFingerprintMap: input.assetFingerprintMap,
     manifest,
   });
   const created = await createArtifact({
@@ -282,7 +315,21 @@ async function ensureBootstrapArtifact(input: { siteVersionId: string; html: str
     bundleSha256,
     htmlByPath: { "/": input.html },
     compiledTokenStyles: input.css,
-    assetFingerprintMap: {},
+    assetFingerprintMap: input.assetFingerprintMap,
+    manifest,
+    publishStage: "shadow",
+    shadowRestricted: enforcement.shadowRestricted,
+    artifactGovernance: enforcement.artifactGovernance,
+  });
+  await refreshArtifactForVersionPublishCandidate({
+    siteId: CHS_ASTRO_EVALUATION.runtimeSiteId,
+    siteVersionId: input.siteVersionId,
+    artifactId: created.artifactId,
+    rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
+    bundleSha256,
+    htmlByPath: { "/": input.html },
+    compiledTokenStyles: input.css,
+    assetFingerprintMap: input.assetFingerprintMap,
     manifest,
     publishStage: "shadow",
     shadowRestricted: enforcement.shadowRestricted,
@@ -315,10 +362,4 @@ async function advanceBaselineToPublished(actor: string): Promise<void> {
       details: { workflow: "chs_astro_evaluation_bootstrap_v1" },
     });
   }
-}
-
-function requiredFile(files: Array<{ path: string; contents: string }>, path: string): string {
-  const contents = files.find((file) => file.path === path)?.contents;
-  if (!contents) throw new Error(`CHS_ASTRO_EVALUATION_FILE_MISSING:${path}`);
-  return contents;
 }

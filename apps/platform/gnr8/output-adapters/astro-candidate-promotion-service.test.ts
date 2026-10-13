@@ -15,10 +15,17 @@ import {
   evaluateAstroCandidateGovernance,
 } from "./astro-candidate-promotion-service";
 import { createSyntheticAstroInternalPreviewCandidate } from "./astro-internal-preview-candidate-test-fixture";
+import { computeAstroInternalPreviewCandidateContentSha256 } from "./astro-static-site-internal-preview-bridge";
 import {
   createAstroProductionCandidateRecord,
   type AstroProductionCandidateOwnership,
 } from "./astro-production-candidate-record";
+import {
+  persistedAstroObjectBackedRecordFromResolved,
+  prepareAstroObjectBackedCandidateRecord,
+  resolveAstroObjectBackedCandidateRecord,
+  type AstroResolvedCandidateRecord,
+} from "./astro-production-candidate-object-record";
 import { AstroProductionCandidateRepositoryError } from "./astro-production-candidate-repository";
 
 const SITE_VERSION_ID = "11111111-1111-4111-8111-111111111111";
@@ -90,6 +97,23 @@ test("materializes exact stored Astro HTML/CSS with provenance and honest blocke
   assert.deepEqual(recordEvidence.identity, record.identity);
   assert.deepEqual(recordEvidence.registration, record.registration);
   assert.equal(recordEvidence.storageSha256, record.storageSha256);
+});
+
+test("materializes object-backed lineage for the public runtime and preserves it on retry", async () => {
+  const record = objectBackedRecord();
+  const store = new MemoryStore(runtimeContext());
+  const promote = service(record, store);
+
+  const first = await promote(input(record));
+  assert.equal(first.status, "materialized");
+  assert.deepEqual(
+    store.context.artifact?.manifest.astroCandidateObjectRecord,
+    persistedAstroObjectBackedRecordFromResolved(record),
+  );
+
+  const replay = await promote({ ...input(record), idempotencyKey: "astro-object-promotion-retry" });
+  assert.equal(replay.status, "idempotent");
+  assert.equal(store.successfulWriteCount, 1);
 });
 
 test("rejects ownership mismatch before candidate storage access", async () => {
@@ -176,7 +200,7 @@ test("identical concurrent promotions converge on one artifact update and idempo
   assert.equal(store.successfulWriteCount, 1);
 });
 
-function service(record: ReturnType<typeof productionRecord>, store: AstroCandidateRuntimeArtifactStore) {
+function service(record: AstroResolvedCandidateRecord, store: AstroCandidateRuntimeArtifactStore) {
   return createAstroCandidatePromotionService({
     resolveOwnership: async () => OWNERSHIP,
     readCandidate: async () => record,
@@ -184,15 +208,47 @@ function service(record: ReturnType<typeof productionRecord>, store: AstroCandid
   });
 }
 
-function input(record: ReturnType<typeof productionRecord>) {
+function input(record: AstroResolvedCandidateRecord) {
   return {
     actorUserId: "superadmin-mvp20",
     siteVersionId: SITE_VERSION_ID,
-    candidateId: CANDIDATE_ID,
+    candidateId: record.identity.candidateId,
     expectedContentSha256: record.candidate.contentSha256,
     expectedStorageSha256: record.storageSha256,
     idempotencyKey: "astro-promotion-test-1",
   };
+}
+
+function objectBackedRecord() {
+  const candidate = createSyntheticAstroInternalPreviewCandidate({
+    candidateId: CANDIDATE_ID,
+    siteId: SITE_ID,
+    siteVersionId: SITE_VERSION_ID,
+  });
+  candidate.htmlByPath = {
+    "/": "<!doctype html><html><head></head><body><a href=\"/about\">About</a></body></html>",
+    "/about": "<!doctype html><html><head></head><body><a href=\"/\">Home</a></body></html>",
+  };
+  candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(candidate);
+  candidate.manifest.provenance.convertedArtifactSha256 = candidate.contentSha256;
+  const prepared = prepareAstroObjectBackedCandidateRecord({
+    candidate,
+    ownership: OWNERSHIP,
+    registration: {
+      registeredByActorId: "superadmin-object-promotion",
+      producerKind: "synthetic_test",
+      producerVersion: "v1",
+      producerRef: "synthetic:object-promotion",
+      idempotencyKey: "registration-object-promotion",
+      correlationId: "registration-correlation-object-promotion",
+    },
+    storedAt: "2026-10-12T12:00:00.000Z",
+    bucket: "astro-candidates-private",
+  });
+  return resolveAstroObjectBackedCandidateRecord({
+    record: prepared.record,
+    htmlByPath: candidate.htmlByPath,
+  });
 }
 
 function productionRecord() {

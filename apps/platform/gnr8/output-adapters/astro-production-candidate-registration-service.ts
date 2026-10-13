@@ -14,7 +14,7 @@ import {
   AstroProductionCandidateRepositoryError,
   type AstroProductionCandidateCreateResult,
 } from "./astro-production-candidate-repository";
-import type { AstroInternalPreviewCandidate } from "./astro-static-site-internal-preview-bridge";
+import { isAstroInternalPreviewCandidate, type AstroInternalPreviewCandidate } from "./astro-static-site-internal-preview-bridge";
 import {
   AstroProductionCandidateRegistrationError,
   InMemoryAstroCandidateRegistrationRetryContextStore,
@@ -217,6 +217,9 @@ export function createAstroProductionCandidateRegistrationService(
         storedAt: created.record.registration.storedAt,
         contentSha256: created.record.candidate.contentSha256,
         storageSha256: created.record.storageSha256,
+        registryRecordUtf8Bytes: created.measurements.registryRecordUtf8Bytes,
+        resolvedCandidateUtf8Bytes: created.measurements.resolvedCandidateUtf8Bytes,
+        objectPayloadUtf8Bytes: created.measurements.objectPayloadUtf8Bytes,
       },
     };
   };
@@ -243,19 +246,41 @@ function validateCandidateBeforeWrite(
   correlationId: string,
 ): void {
   try {
-    createAstroProductionCandidateRecord({
-      candidate,
-      ownership: context.ownership,
-      registration: context.registration,
-      storedAt: context.candidateCreatedAt,
-    });
+    if (Object.keys(candidate.htmlByPath).length > 1) {
+      if (!isAstroInternalPreviewCandidate(candidate)) {
+        throw new AstroProductionCandidateValidationError("corrupt", "Multi-page source candidate is invalid.");
+      }
+      const identity = validateAstroProductionCandidateIdentity({
+        candidateId: candidate.id,
+        ...context.ownership,
+      });
+      if (candidate.siteId !== identity.runtimeSiteId || candidate.siteVersionId !== identity.siteVersionId) {
+        throw new AstroProductionCandidateValidationError("ownership_mismatch", "Candidate ownership is invalid.");
+      }
+    } else {
+      createAstroProductionCandidateRecord({
+        candidate,
+        ownership: context.ownership,
+        registration: context.registration,
+        storedAt: context.candidateCreatedAt,
+      });
+    }
   } catch (error) {
     if (error instanceof AstroProductionCandidateValidationError) {
+      if (error.code === "record_too_large") {
+        throw new AstroProductionCandidateRegistrationError({
+          code: "record_too_large",
+          message: "Synthetic Astro candidate exceeds the registration size limit.",
+          correlationId,
+          retryable: false,
+          cause: error,
+          ...(error.measuredBytes === null ? {} : { measuredBytes: error.measuredBytes }),
+          ...(error.limitBytes === null ? {} : { limitBytes: error.limitBytes }),
+        });
+      }
       throw registrationError(
-        error.code === "record_too_large" ? "record_too_large" : "candidate_invalid",
-        error.code === "record_too_large"
-          ? "Synthetic Astro candidate exceeds the registration size limit."
-          : "Synthetic Astro candidate failed registration validation.",
+        "candidate_invalid",
+        "Synthetic Astro candidate failed registration validation.",
         correlationId,
         false,
         error,
@@ -388,11 +413,15 @@ function mapRepositoryError(error: unknown, correlationId: string): AstroProduct
       );
     }
     if (error.code === "record_too_large") {
-      return registrationError(
-        "record_too_large",
-        "Synthetic Astro candidate exceeds the registration size limit.",
+      return new AstroProductionCandidateRegistrationError({
+        code: "record_too_large",
+        message: "Synthetic Astro candidate exceeds the registration size limit.",
         correlationId,
-      );
+        retryable: false,
+        cause: error,
+        ...(error.measuredBytes === null ? {} : { measuredBytes: error.measuredBytes }),
+        ...(error.limitBytes === null ? {} : { limitBytes: error.limitBytes }),
+      });
     }
     if (error.code === "unavailable") {
       return registrationError(

@@ -46,9 +46,9 @@ import {
 import type { GeneratedOutputBuildEvidence, GeneratedOutputContentManifest } from "./generated-output-eligibility";
 import {
   type AstroProductionCandidateOwnership,
-  type AstroProductionCandidateRecord,
   type AstroProductionCandidateRegistrationContext,
 } from "./astro-production-candidate-record";
+import type { AstroResolvedCandidateRecord } from "./astro-production-candidate-object-record";
 import type { AstroProductionCandidateCreateResult } from "./astro-production-candidate-repository";
 import {
   computeAstroInternalPreviewCandidateContentSha256,
@@ -138,7 +138,7 @@ type CandidateRepository = {
   read(input: {
     candidateId: string;
     trustedScope: AstroProductionCandidateOwnership;
-  }): Promise<AstroProductionCandidateRecord>;
+  }): Promise<AstroResolvedCandidateRecord>;
   create(input: {
     candidate: AstroInternalPreviewCandidate;
     trustedScope: AstroProductionCandidateOwnership;
@@ -192,7 +192,7 @@ export class AstroSuccessorPublicationError extends Error {
 }
 
 export function buildSuccessorBoundAstroCandidate(input: {
-  source: AstroProductionCandidateRecord;
+  source: AstroResolvedCandidateRecord;
   successorSiteVersionId: string;
   successorCandidateId: string;
   createdAt: string;
@@ -370,7 +370,7 @@ export function createAstroSuccessorPublicationService(
       successorCandidateId: operation.successorCandidateId,
       createdAt: successorVersion!.createdAt,
     });
-    let successorCandidateRecord: AstroProductionCandidateRecord;
+    let successorCandidateRecord: AstroResolvedCandidateRecord;
     try {
       successorCandidateRecord = await dependencies.candidateRepository.read({
         candidateId: operation.successorCandidateId,
@@ -761,7 +761,7 @@ async function rereadActivationSelection(
   context: {
     input: AstroSuccessorPublicationInput;
     operation: AstroSuccessorOperationIdentity;
-    successorCandidateRecord: AstroProductionCandidateRecord;
+    successorCandidateRecord: AstroResolvedCandidateRecord;
     expectedOwnershipSiteId: string;
   },
 ): Promise<{
@@ -836,7 +836,7 @@ function assertSuccessorVersion(
 }
 
 function assertSuccessorCandidate(
-  record: AstroProductionCandidateRecord,
+  record: AstroResolvedCandidateRecord,
   expected: { candidate: AstroInternalPreviewCandidate; sourceCandidateId: string },
 ): void {
   if (
@@ -845,7 +845,9 @@ function assertSuccessorCandidate(
       manifest: {
         ...expected.candidate.manifest,
         lifecycle: {
-          storage: "supabase_postgres",
+          storage: record.schemaVersion === "gnr8-astro-persisted-preview-candidate:v3"
+            ? "supabase_storage"
+            : "supabase_postgres",
           lifetime: "retained_until_explicit_authorized_deletion",
           durableRegistration: true,
         },
@@ -861,7 +863,7 @@ function assertSuccessorCandidate(
 
 function assertPreservedBytes(
   artifact: RuntimeArtifact,
-  candidate: AstroProductionCandidateRecord,
+  candidate: AstroResolvedCandidateRecord,
   code: string,
 ): void {
   if (

@@ -214,7 +214,10 @@ test("the 2 MiB canonical record boundary is inclusive and one byte over is reje
   assert.equal(measureAstroProductionCandidateRecordBytes(exact), ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES);
   assert.throws(
     () => productionRecord({ html: supportedHtml("x".repeat(paddingBytes + 1)) }),
-    validationError("record_too_large"),
+    (error: unknown) => error instanceof AstroProductionCandidateValidationError &&
+      error.code === "record_too_large" &&
+      error.measuredBytes === ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES + 1 &&
+      error.limitBytes === ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES,
   );
 });
 

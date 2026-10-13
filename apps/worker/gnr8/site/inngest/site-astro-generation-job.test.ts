@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { NonRetriableError } from 'inngest'
 
 import { SITE_ASTRO_GENERATION_REQUESTED_EVENT } from '@gnr8/runtime-contracts'
 
@@ -41,6 +42,11 @@ test('Astro generation worker uses the canonical event and passes a validated pa
         artifactBundleSha256: 'a'.repeat(64),
         routePaths: ['/', '/about'],
         variantId: 'variant',
+        candidateSizes: {
+          registryRecordUtf8Bytes: 1000,
+          resolvedCandidateUtf8Bytes: 3000000,
+          objectPayloadUtf8Bytes: 2990000,
+        },
       }
     },
   })
@@ -70,7 +76,7 @@ test('worker preserves an explicit per-generation form reduction without making 
     ...payload,
     acceptedFunctionalReductions: {
       kind: 'legacy-forms-to-disclosed-links-v1',
-      contactEmail: 'MAILTO@CHS.SI',
+      contactEmail: 'SALES@CHS.SI',
       commentLinks: 'source-article',
     },
   }
@@ -78,8 +84,23 @@ test('worker preserves an explicit per-generation form reduction without making 
     ...payload,
     acceptedFunctionalReductions: {
       kind: 'legacy-forms-to-disclosed-links-v1',
-      contactEmail: 'mailto@chs.si',
+      contactEmail: 'sales@chs.si',
       commentLinks: 'source-article',
     },
   })
+})
+
+test('deterministic validation failures are non-retriable while transient failures remain retryable', async () => {
+  const deterministic = Object.assign(new Error('unsupported_capability:source_asset_evidence_missing:/hero.webp'), {
+    code: 'unsupported_capability',
+  })
+  await assert.rejects(
+    runSiteAstroGenerationJob({ eventData: payload, runGeneration: async () => { throw deterministic } }),
+    (error: unknown) => error instanceof NonRetriableError && error.message === deterministic.message,
+  )
+  const transient = new Error('database_temporarily_unavailable')
+  await assert.rejects(
+    runSiteAstroGenerationJob({ eventData: payload, runGeneration: async () => { throw transient } }),
+    (error: unknown) => error === transient,
+  )
 })

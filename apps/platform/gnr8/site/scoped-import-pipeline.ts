@@ -138,7 +138,7 @@ const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
 }
 
 const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
-  maxPages: 20,
+  maxPages: 31,
   maxBytesPerPage: 1_000_000,
   requestTimeoutMs: 8_000,
 }

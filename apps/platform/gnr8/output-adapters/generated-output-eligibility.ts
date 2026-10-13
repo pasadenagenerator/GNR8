@@ -17,9 +17,13 @@ import {
   ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND,
   ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION,
   type AstroProductionCandidateOwnership,
-  type AstroProductionCandidateRecord,
-  validateAstroProductionCandidateRecord,
 } from "./astro-production-candidate-record";
+import {
+  ASTRO_OBJECT_CANDIDATE_RECORD_KIND,
+  ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION,
+  validateAstroResolvedCandidateRecord,
+  type AstroResolvedCandidateRecord,
+} from "./astro-production-candidate-object-record";
 import { ASTRO_STATIC_EXPORT_MANIFEST_VERSION } from "./astro-static-site-build-export-proof";
 import {
   ASTRO_INTERNAL_PREVIEW_ASSET_MODE,
@@ -227,13 +231,13 @@ export function evaluateGeneratedOutputTechnicalEligibility(input: {
     if (!blockers.some((item) => item.code === code)) blockers.push({ code, message });
   };
   const { artifact, contentManifest } = input;
-  let record: AstroProductionCandidateRecord | null = null;
+  let record: AstroResolvedCandidateRecord | null = null;
 
   if (!isValidContentManifest(contentManifest)) {
     block("content_manifest_invalid", "Trusted source/content manifest integrity is invalid.");
   }
   try {
-    record = validateAstroProductionCandidateRecord(input.candidateRecord);
+    record = validateAstroResolvedCandidateRecord(input.candidateRecord);
   } catch {
     block("generated_candidate_record_invalid", "Retained generated candidate record is missing, corrupt, or unsupported.");
   }
@@ -613,7 +617,7 @@ function isValidSubmissionAttestation(value: unknown): value is GeneratedOutputB
 }
 
 function sameOwnership(
-  identity: AstroProductionCandidateRecord["identity"],
+  identity: AstroResolvedCandidateRecord["identity"],
   ownership: AstroProductionCandidateOwnership,
 ): boolean {
   return identity.runtimeSiteId === ownership.runtimeSiteId &&
@@ -623,9 +627,15 @@ function sameOwnership(
     identity.agencyId === ownership.agencyId;
 }
 
-function sameArtifactBytes(record: AstroProductionCandidateRecord, artifact: RuntimeArtifact): boolean {
-  return record.schemaVersion === ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION &&
-    record.recordKind === ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND &&
+function sameArtifactBytes(record: AstroResolvedCandidateRecord, artifact: RuntimeArtifact): boolean {
+  const supportedRecord = (
+    record.schemaVersion === ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION &&
+    record.recordKind === ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND
+  ) || (
+    record.schemaVersion === ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION &&
+    record.recordKind === ASTRO_OBJECT_CANDIDATE_RECORD_KIND
+  );
+  return supportedRecord &&
     artifact.rendererCompatibilityVersion === record.candidate.rendererCompatibilityVersion &&
     stableStringify(artifact.htmlByPath) === stableStringify(record.candidate.htmlByPath) &&
     artifact.compiledTokenStyles === record.candidate.compiledTokenStyles &&

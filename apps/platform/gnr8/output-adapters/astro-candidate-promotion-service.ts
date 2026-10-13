@@ -16,8 +16,12 @@ import type {
 } from "./astro-candidate-runtime-artifact-store";
 import type {
   AstroProductionCandidateOwnership,
-  AstroProductionCandidateRecord,
 } from "./astro-production-candidate-record";
+import {
+  isAstroObjectBackedResolvedRecord,
+  persistedAstroObjectBackedRecordFromResolved,
+  type AstroResolvedCandidateRecord,
+} from "./astro-production-candidate-object-record";
 import {
   generatedOutputEvidenceManifestFields,
   readGeneratedOutputBuildEvidence,
@@ -50,7 +54,7 @@ export type AstroCandidatePromotionDependencies = {
   readCandidate(input: {
     candidateId: string;
     trustedScope: AstroProductionCandidateOwnership;
-  }): Promise<AstroProductionCandidateRecord>;
+  }): Promise<AstroResolvedCandidateRecord>;
   runtimeStore: AstroCandidateRuntimeArtifactStore;
 };
 
@@ -222,6 +226,9 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
         registration: structuredClone(record.registration),
         storageSha256: record.storageSha256,
       },
+      ...(isAstroObjectBackedResolvedRecord(record)
+        ? { astroCandidateObjectRecord: persistedAstroObjectBackedRecordFromResolved(record) }
+        : {}),
       astroCandidatePromotion: evidence,
       ...(input.generatedOutputEvidence
         ? generatedOutputEvidenceManifestFields(input.generatedOutputEvidence)
@@ -330,7 +337,7 @@ function evaluateGovernance(context: AstroCandidateRuntimeArtifactContext) {
 
 function resultFromStoredContext(input: {
   context: AstroCandidateRuntimeArtifactContext;
-  record: AstroProductionCandidateRecord;
+  record: AstroResolvedCandidateRecord;
   status: "materialized" | "idempotent";
 }): AstroCandidatePromotionResult {
   const artifact = input.context.artifact!;
@@ -427,7 +434,7 @@ function assertRuntimeContext(
 }
 
 function sameOwnership(
-  identity: AstroProductionCandidateRecord["identity"],
+  identity: AstroResolvedCandidateRecord["identity"],
   ownership: AstroProductionCandidateOwnership,
 ): boolean {
   return identity.runtimeSiteId === ownership.runtimeSiteId &&
@@ -439,17 +446,27 @@ function sameOwnership(
 
 function samePromotedCandidate(
   evidence: AstroRuntimeArtifactPromotionEvidence,
-  record: AstroProductionCandidateRecord,
+  record: AstroResolvedCandidateRecord,
 ): boolean {
   return evidence.candidateId === record.identity.candidateId &&
     evidence.candidateContentSha256 === record.candidate.contentSha256 &&
     evidence.candidateStorageSha256 === record.storageSha256;
 }
 
-function preservesCandidateBytes(artifact: RuntimeArtifact, record: AstroProductionCandidateRecord): boolean {
+function preservesCandidateBytes(artifact: RuntimeArtifact, record: AstroResolvedCandidateRecord): boolean {
   return stableStringify(artifact.htmlByPath) === stableStringify(record.candidate.htmlByPath) &&
     artifact.compiledTokenStyles === record.candidate.compiledTokenStyles &&
-    stableStringify(artifact.assetFingerprintMap) === stableStringify(record.candidate.assetFingerprintMap);
+    stableStringify(artifact.assetFingerprintMap) === stableStringify(record.candidate.assetFingerprintMap) &&
+    preservesObjectBackedLineage(artifact, record);
+}
+
+function preservesObjectBackedLineage(
+  artifact: RuntimeArtifact,
+  record: AstroResolvedCandidateRecord,
+): boolean {
+  const stored = artifact.manifest.astroCandidateObjectRecord;
+  if (!isAstroObjectBackedResolvedRecord(record)) return stored === undefined;
+  return stableStringify(stored) === stableStringify(persistedAstroObjectBackedRecordFromResolved(record));
 }
 
 function boundedText(value: unknown): value is string {

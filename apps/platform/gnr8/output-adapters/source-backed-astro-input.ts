@@ -39,6 +39,7 @@ export type SourceBackedAstroGenerationInput = {
     sourceSiteVersionId: string;
     sourceArtifactId: string;
     files: Array<{ path: string; role: string; bytes: number; sha256: string; contents: string }>;
+    assetEvidence: Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string }>;
     acceptedFunctionalReductions?: {
       kind: "legacy-forms-to-disclosed-links-v1";
       contactEmail: string;
@@ -183,6 +184,15 @@ export function createSourceBackedAstroGenerationInput(input: {
       .map((file) => [ownedAssetUrl(input.rawArtifact.siteId, input.rawArtifact.siteVersionId, file.path), file.sha256])
       .sort(([left], [right]) => left.localeCompare(right)),
   );
+  const ownedAssetEvidence = Object.values(input.rawArtifact.fileMap)
+    .filter((file) => !/\.html?$/i.test(file.path))
+    .map((file) => ({
+      path: ownedAssetUrl(input.rawArtifact.siteId, input.rawArtifact.siteVersionId, file.path),
+      mediaType: file.mediaType,
+      sizeBytes: file.sizeBytes,
+      sha256: file.sha256,
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
   const normalizedPages: NormalizedStaticSitePage[] = pages.map((page) => ({ path: page.path, title: page.title || siteName, bodyHtml: page.bodyHtml }));
   const content: NormalizedStaticBusinessSiteContent = {
     siteName,
@@ -201,9 +211,16 @@ export function createSourceBackedAstroGenerationInput(input: {
     target: item.href,
   }));
   const generatedHtml = normalizedPages.map((page) => page.bodyHtml).join("\n");
-  const requiredAssets = Object.entries(ownedAssetFingerprints)
-    .filter(([path]) => generatedHtml.includes(path))
-    .map(([path, sha256]) => ({ path, sha256 }));
+  const referencedOwnedAssetUrls = extractOwnedAssetUrls(generatedHtml);
+  const missingAssetEvidence = referencedOwnedAssetUrls
+    .filter((path) => !Object.prototype.hasOwnProperty.call(ownedAssetFingerprints, path));
+  if (missingAssetEvidence.length > 0) {
+    throw new SourceBackedAstroUnsupportedError(
+      missingAssetEvidence.map((path) => `source_asset_evidence_missing:${path}`),
+    );
+  }
+  const requiredAssets = referencedOwnedAssetUrls
+    .map((path) => ({ path, sha256: ownedAssetFingerprints[path]! }));
   const contentManifest = createGeneratedOutputContentManifest({
     sourceRef: `${input.siteVersion.id}:${input.artifact.id}:${input.artifact.bundleSha256}`,
     scope: {
@@ -236,6 +253,7 @@ export function createSourceBackedAstroGenerationInput(input: {
         sha256: createHash("sha256").update(file.contents, "utf8").digest("hex"),
         contents: file.contents,
       })),
+      assetEvidence: ownedAssetEvidence,
       ...(input.acceptedFunctionalReductions ? {
         acceptedFunctionalReductions: {
           ...input.acceptedFunctionalReductions,
@@ -406,6 +424,40 @@ function classifyNavigation(href: string): "local_anchor" | "local_route" | "ext
 
 function ownedAssetUrl(siteId: string, siteVersionId: string, path: string): string {
   return `/api/gnr8/runtime/preview-assets/${encodeURIComponent(siteId)}/${encodeURIComponent(siteVersionId)}/${path}`;
+}
+
+function extractOwnedAssetUrls(html: string): string[] {
+  const fragment = parseFragment(html) as DefaultTreeAdapterMap["documentFragment"];
+  const values: string[] = [];
+  const attributeNamesByTag: Record<string, string[]> = {
+    img: ["src", "srcset"],
+    source: ["src", "srcset"],
+    video: ["src", "poster"],
+    audio: ["src"],
+    link: ["href"],
+  };
+  for (const element of allElements(fragment)) {
+    for (const name of attributeNamesByTag[element.tagName] ?? []) {
+      const raw = attribute(element, name);
+      if (!raw) continue;
+      values.push(...(name === "srcset"
+        ? raw.split(",").map((entry) => entry.trim().split(/\s+/, 1)[0] ?? "")
+        : [raw]));
+    }
+    if (element.tagName === "style") {
+      values.push(...[...textContent(element).matchAll(/url\(\s*["']?([^"')\s]+)["']?\s*\)/gi)]
+        .map((match) => match[1] ?? ""));
+    }
+    const inlineStyle = attribute(element, "style");
+    if (inlineStyle) {
+      values.push(...[...inlineStyle.matchAll(/url\(\s*["']?([^"')\s]+)["']?\s*\)/gi)]
+        .map((match) => match[1] ?? ""));
+    }
+  }
+  return [...new Set(values
+    .filter((value) => value.startsWith("/api/gnr8/runtime/preview-assets/"))
+    .map((value) => value.split(/[?#]/, 1)[0]!)
+    .filter(Boolean))].sort();
 }
 
 function normalizeHex(value: unknown, fallback: string): string {

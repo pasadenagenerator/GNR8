@@ -10,11 +10,24 @@ import {
   validateAstroProductionCandidateRecord,
   type AstroProductionCandidateIdentity,
   type AstroProductionCandidateOwnership,
-  type AstroProductionCandidateRecord,
   type AstroProductionCandidateRegistrationContext,
 } from "./astro-production-candidate-record";
 import type { AstroInternalPreviewCandidate } from "./astro-static-site-internal-preview-bridge";
 import { stableStringify } from "../runtime/deterministic";
+import {
+  computeAstroObjectBackedRegistrationIntentSha256,
+  isAstroObjectBackedCandidateRecord,
+  prepareAstroObjectBackedCandidateRecord,
+  resolveAstroObjectBackedCandidateRecord,
+  validateAstroObjectBackedCandidateRecord,
+  type AstroPersistedCandidateRecord,
+  type AstroResolvedCandidateRecord,
+} from "./astro-production-candidate-object-record";
+import {
+  AstroCandidateObjectStoreError,
+  readVerifiedAstroCandidateRouteHtml,
+  type AstroCandidateObjectStore,
+} from "./astro-production-candidate-object-store";
 
 const LIST_LIMIT_MAX = 100;
 const TEXT_MAX_CHARACTERS = 512;
@@ -110,15 +123,17 @@ export type AstroProductionCandidateAccessAction =
   | AstroProductionCandidateReenableAction;
 
 export type AstroProductionCandidateGatewayCreateInput = {
-  proposedRecord: AstroProductionCandidateRecord;
+  proposedRecord: AstroPersistedCandidateRecord;
   registrationIntentSha256: string;
   payloadSizeBytes: number;
+  resolvedPayloadSizeBytes: number;
+  objectPayloadSizeBytes: number;
 };
 
 export type AstroProductionCandidateGatewayCreateOutcome =
   | {
       status: "created" | "idempotent";
-      record: AstroProductionCandidateRecord;
+      record: AstroPersistedCandidateRecord;
       access: AstroProductionCandidateAccessState;
       registrationEvent: AstroProductionCandidateAccessEvent;
     }
@@ -127,7 +142,7 @@ export type AstroProductionCandidateGatewayCreateOutcome =
 export type AstroProductionCandidateGatewayReadOutcome =
   | {
       status: "found";
-      record: AstroProductionCandidateRecord;
+      record: AstroPersistedCandidateRecord;
       access: AstroProductionCandidateAccessState;
       registrationEventPresent: boolean;
     }
@@ -166,8 +181,13 @@ export interface AstroProductionCandidateGateway {
 
 export type AstroProductionCandidateCreateResult = {
   status: "created" | "idempotent";
-  record: AstroProductionCandidateRecord;
+  record: AstroResolvedCandidateRecord;
   access: AstroProductionCandidateAccessState;
+  measurements: {
+    registryRecordUtf8Bytes: number;
+    resolvedCandidateUtf8Bytes: number;
+    objectPayloadUtf8Bytes: number;
+  };
 };
 
 export type AstroProductionCandidateListResult = {
@@ -190,11 +210,19 @@ export type AstroProductionCandidateRepositoryErrorCode =
 
 export class AstroProductionCandidateRepositoryError extends Error {
   readonly code: AstroProductionCandidateRepositoryErrorCode;
+  readonly measuredBytes: number | null;
+  readonly limitBytes: number | null;
 
-  constructor(code: AstroProductionCandidateRepositoryErrorCode, message: string, options?: ErrorOptions) {
+  constructor(
+    code: AstroProductionCandidateRepositoryErrorCode,
+    message: string,
+    options?: ErrorOptions & { measuredBytes?: number; limitBytes?: number },
+  ) {
     super(message, options);
     this.name = "AstroProductionCandidateRepositoryError";
     this.code = code;
+    this.measuredBytes = options?.measuredBytes ?? null;
+    this.limitBytes = options?.limitBytes ?? null;
   }
 }
 
@@ -202,15 +230,18 @@ export class GatewayBackedAstroProductionCandidateRepository {
   private readonly gateway: AstroProductionCandidateGateway;
   private readonly now: () => Date;
   private readonly maxRecordBytes: number;
+  private readonly objectStore: AstroCandidateObjectStore | null;
 
   constructor(input: {
     gateway: AstroProductionCandidateGateway;
     now?: () => Date;
     maxRecordBytes?: number;
+    objectStore?: AstroCandidateObjectStore | null;
   }) {
     this.gateway = input.gateway;
     this.now = input.now ?? (() => new Date());
     this.maxRecordBytes = input.maxRecordBytes ?? ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES;
+    this.objectStore = input.objectStore ?? null;
   }
 
   async create(input: {
@@ -218,27 +249,56 @@ export class GatewayBackedAstroProductionCandidateRepository {
     trustedScope: AstroProductionCandidateOwnership;
     registration: AstroProductionCandidateRegistrationContext;
   }): Promise<AstroProductionCandidateCreateResult> {
-    let proposedRecord: AstroProductionCandidateRecord;
+    let proposedRecord: AstroPersistedCandidateRecord;
+    let measurements: AstroProductionCandidateCreateResult["measurements"];
     try {
-      proposedRecord = createAstroProductionCandidateRecord({
-        candidate: input.candidate,
-        ownership: input.trustedScope,
-        registration: input.registration,
-        storedAt: toIsoTimestamp(this.now()),
-      });
-      proposedRecord = validateAstroProductionCandidateRecord(proposedRecord, {
-        maxBytes: this.maxRecordBytes,
-      });
+      const storedAt = toIsoTimestamp(this.now());
+      if (Object.keys(input.candidate.htmlByPath).length > 1) {
+        if (!this.objectStore) {
+          throw repositoryError("unavailable", "Multi-page candidate object storage is not configured.");
+        }
+        if (!this.objectStore.bucket) {
+          throw repositoryError("unavailable", "Multi-page candidate object storage bucket is not configured.");
+        }
+        const prepared = prepareAstroObjectBackedCandidateRecord({
+          candidate: input.candidate,
+          ownership: input.trustedScope,
+          registration: input.registration,
+          storedAt,
+          bucket: this.objectStore.bucket,
+        });
+        for (const upload of prepared.uploads) await this.objectStore.putVerified(upload);
+        proposedRecord = prepared.record;
+        measurements = prepared.measurements;
+      } else {
+        proposedRecord = createAstroProductionCandidateRecord({
+          candidate: input.candidate,
+          ownership: input.trustedScope,
+          registration: input.registration,
+          storedAt,
+        });
+        proposedRecord = validateAstroProductionCandidateRecord(proposedRecord, {
+          maxBytes: this.maxRecordBytes,
+        });
+        const payloadBytes = measureAstroProductionCandidateRecordBytes(proposedRecord);
+        measurements = {
+          registryRecordUtf8Bytes: payloadBytes,
+          resolvedCandidateUtf8Bytes: payloadBytes,
+          objectPayloadUtf8Bytes: 0,
+        };
+      }
     } catch (error) {
       throw mapValidationError(error);
     }
-    const registrationIntentSha256 = computeAstroProductionCandidateRegistrationIntentSha256(
-      registrationIntentFromRecord(proposedRecord),
-    );
+    const registrationIntentSha256 = isAstroObjectBackedCandidateRecord(proposedRecord)
+      ? computeAstroObjectBackedRegistrationIntentSha256(proposedRecord)
+      : computeAstroProductionCandidateRegistrationIntentSha256(registrationIntentFromRecord(proposedRecord));
     const outcome = await this.gateway.atomicCreate({
       proposedRecord,
       registrationIntentSha256,
-      payloadSizeBytes: measureAstroProductionCandidateRecordBytes(proposedRecord),
+      payloadSizeBytes: measurements.registryRecordUtf8Bytes,
+      resolvedPayloadSizeBytes: measurements.resolvedCandidateUtf8Bytes,
+      objectPayloadSizeBytes: measurements.objectPayloadUtf8Bytes,
     });
     if (outcome.status === "conflicting_write") {
       throw repositoryError("conflicting_write", "Immutable candidate registration conflicts with an existing write.");
@@ -252,22 +312,23 @@ export class GatewayBackedAstroProductionCandidateRepository {
     if (outcome.status !== "created" && outcome.status !== "idempotent") {
       throw repositoryError("unavailable", "Candidate registration gateway returned an unknown outcome.");
     }
-    const record = this.validateGatewayRecord(outcome.record);
-    const returnedIntentSha256 = computeAstroProductionCandidateRegistrationIntentSha256(
-      registrationIntentFromRecord(record),
-    );
+    const persistedRecord = this.validateGatewayRecord(outcome.record);
+    const returnedIntentSha256 = isAstroObjectBackedCandidateRecord(persistedRecord)
+      ? computeAstroObjectBackedRegistrationIntentSha256(persistedRecord)
+      : computeAstroProductionCandidateRegistrationIntentSha256(registrationIntentFromRecord(persistedRecord));
     if (returnedIntentSha256 !== registrationIntentSha256) {
       throw repositoryError("corrupt", "Candidate gateway returned a different immutable registration intent.");
     }
-    const access = validateAstroProductionCandidateAccessState(outcome.access, record.identity.candidateId);
-    validateAstroProductionCandidateRegistrationEvent(outcome.registrationEvent, record);
-    return { status: outcome.status, record, access };
+    const access = validateAstroProductionCandidateAccessState(outcome.access, persistedRecord.identity.candidateId);
+    validateAstroProductionCandidateRegistrationEvent(outcome.registrationEvent, persistedRecord);
+    const record = await this.resolveRecord(persistedRecord);
+    return { status: outcome.status, record, access, measurements };
   }
 
   async read(input: {
     candidateId: string;
     trustedScope: AstroProductionCandidateOwnership;
-  }): Promise<AstroProductionCandidateRecord> {
+  }): Promise<AstroResolvedCandidateRecord> {
     const expected = validateSelection(input.candidateId, input.trustedScope);
     const outcome = await this.gateway.readForScope({
       candidateId: expected.candidateId,
@@ -290,7 +351,7 @@ export class GatewayBackedAstroProductionCandidateRepository {
     if (!outcome.registrationEventPresent) {
       throw repositoryError("corrupt", "Candidate atomic registration state is incomplete.");
     }
-    return record;
+    return this.resolveRecord(record);
   }
 
   async list(input: {
@@ -354,9 +415,30 @@ export class GatewayBackedAstroProductionCandidateRepository {
     return { status: outcome.status, access, event };
   }
 
-  private validateGatewayRecord(record: AstroProductionCandidateRecord): AstroProductionCandidateRecord {
+  private validateGatewayRecord(record: AstroPersistedCandidateRecord): AstroPersistedCandidateRecord {
     try {
-      return validateAstroProductionCandidateRecord(record, { maxBytes: this.maxRecordBytes });
+      return isAstroObjectBackedCandidateRecord(record)
+        ? validateAstroObjectBackedCandidateRecord(record, { maxBytes: this.maxRecordBytes })
+        : validateAstroProductionCandidateRecord(record, { maxBytes: this.maxRecordBytes });
+    } catch (error) {
+      throw mapValidationError(error);
+    }
+  }
+
+  private async resolveRecord(record: AstroPersistedCandidateRecord): Promise<AstroResolvedCandidateRecord> {
+    if (!isAstroObjectBackedCandidateRecord(record)) return record;
+    if (!this.objectStore) throw repositoryError("unavailable", "Candidate object storage is not configured.");
+    if (!this.objectStore.bucket) throw repositoryError("unavailable", "Candidate object storage bucket is not configured.");
+    try {
+      const htmlByPath: Record<string, string> = {};
+      for (const [routePath, ref] of Object.entries(record.candidate.routePayloads)) {
+        htmlByPath[routePath] = await readVerifiedAstroCandidateRouteHtml({
+          objectStore: this.objectStore,
+          ref,
+          compiledTokenStyles: record.candidate.compiledTokenStyles,
+        });
+      }
+      return resolveAstroObjectBackedCandidateRecord({ record, htmlByPath });
     } catch (error) {
       throw mapValidationError(error);
     }
@@ -413,6 +495,8 @@ export class InMemoryAstroProductionCandidateGateway implements AstroProductionC
     const row: StoredRow = {
       record,
       payloadSizeBytes: input.payloadSizeBytes,
+      resolvedPayloadSizeBytes: input.resolvedPayloadSizeBytes,
+      objectPayloadSizeBytes: input.objectPayloadSizeBytes,
       registrationIntentSha256: input.registrationIntentSha256,
       access,
       events: [registrationEvent],
@@ -514,8 +598,10 @@ export class InMemoryAstroProductionCandidateGateway implements AstroProductionC
 }
 
 type StoredRow = {
-  record: AstroProductionCandidateRecord;
+  record: AstroPersistedCandidateRecord;
   payloadSizeBytes: number;
+  resolvedPayloadSizeBytes: number;
+  objectPayloadSizeBytes: number;
   registrationIntentSha256: string;
   access: AstroProductionCandidateAccessState;
   events: AstroProductionCandidateAccessEvent[];
@@ -646,7 +732,7 @@ export function validateAstroProductionCandidateAccessState(
 
 export function validateAstroProductionCandidateRegistrationEvent(
   value: unknown,
-  record: AstroProductionCandidateRecord,
+  record: AstroPersistedCandidateRecord,
 ): void {
   const event = validateAstroProductionCandidateAccessEvent(value, record.identity.candidateId);
   if (
@@ -817,7 +903,18 @@ function toIsoTimestamp(value: Date): string {
 function mapValidationError(error: unknown): AstroProductionCandidateRepositoryError {
   if (error instanceof AstroProductionCandidateRepositoryError) return error;
   if (error instanceof AstroProductionCandidateValidationError) {
-    return repositoryError(error.code, error.message, error);
+    return new AstroProductionCandidateRepositoryError(error.code, error.message, {
+      cause: error,
+      ...(error.measuredBytes === null ? {} : { measuredBytes: error.measuredBytes }),
+      ...(error.limitBytes === null ? {} : { limitBytes: error.limitBytes }),
+    });
+  }
+  if (error instanceof AstroCandidateObjectStoreError) {
+    return repositoryError(
+      error.code === "missing" || error.code === "integrity_mismatch" ? "corrupt" : "unavailable",
+      error.message,
+      error,
+    );
   }
   return repositoryError("corrupt", "Candidate validation failed.", error);
 }

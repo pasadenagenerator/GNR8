@@ -5,6 +5,8 @@ import { CHS_ASTRO_EVALUATION } from "@/gnr8/output-adapters/chs-astro-evaluatio
 import { isAstroProductionCandidatePreviewFeatureEnabled } from "@/gnr8/output-adapters/astro-production-candidate-preview-feature-gate";
 import { requireSuperadminUserIdForPage } from "@/src/auth/require-superadmin-user-id";
 
+import { Mvp28PackageUpload } from "./mvp28-package-upload";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,6 +55,7 @@ export default async function ChsAstroEvaluationPage(props: {
             Create or verify isolated CHS target
           </button>
         </form>
+        <Mvp28PackageUpload />
       </div>
     </main>
   );
