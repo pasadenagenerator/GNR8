@@ -69,6 +69,11 @@ export type MultiPagePreviewLinkRewriteValidationSummary = {
 }
 
 export type MultiPagePreviewValidation = {
+  sourceIdentity?: {
+    siteVersionId: string
+    rawArtifactId: string
+    snapshotRunId: string
+  }
   status: MultiPagePreviewValidationStatus
   summary: {
     discoveredRoutes: number
@@ -108,6 +113,7 @@ export type LatestRawMultiPagePreviewValidationEvidence = {
   capturedAt: string
   siteVersionId: string
   artifactId: string
+  snapshotRunId?: string
   routePath: string | null
   selectedRawFilePath: string | null
   validationStatus: MultiPagePreviewValidationStatus
@@ -432,6 +438,7 @@ export function validateMultiPagePreview(input: {
   importProvenanceSummary?: RuntimeImportProvenanceSummary | null
   multiPagePreviewRequested: boolean
   linkRewriteSummary?: MultiPagePreviewLinkRewriteValidationSummary | null
+  sourceIdentity?: MultiPagePreviewValidation['sourceIdentity']
 }): MultiPagePreviewValidation {
   const diagnostics = new Set<string>([MULTIPAGE_PREVIEW_VALIDATION_DIAGNOSTIC.MULTIPAGE_PREVIEW_VALIDATION_STARTED])
   const blockers: string[] = []
@@ -587,6 +594,7 @@ export function validateMultiPagePreview(input: {
   diagnostics.add(statusDiagnostic)
 
   const validation: MultiPagePreviewValidation = {
+    ...(input.sourceIdentity ? { sourceIdentity: input.sourceIdentity } : {}),
     status,
     summary: {
       discoveredRoutes: countDiscoveredRoutes(provenance),
@@ -745,6 +753,11 @@ export function validateLatestRawMultiPagePreviewEvidence(input: {
         importProvenanceSummary: provenance,
         multiPagePreviewRequested: true,
         linkRewriteSummary: mergedLinkSummary,
+        sourceIdentity: {
+          siteVersionId: input.siteVersionId,
+          rawArtifactId: input.artifactId,
+          snapshotRunId: input.importProvenanceSummary?.executionIdentity?.snapshotRunId ?? '',
+        },
       })
     : null
   if (previewValidation) {
@@ -776,6 +789,7 @@ export function validateLatestRawMultiPagePreviewEvidence(input: {
       capturedAt,
       siteVersionId: input.siteVersionId,
       artifactId: input.artifactId,
+      snapshotRunId: input.importProvenanceSummary?.executionIdentity?.snapshotRunId,
       routePath: primary?.routePath ?? null,
       selectedRawFilePath: primary?.selectedRawFilePath ?? null,
       validationStatus,

@@ -3003,9 +3003,24 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       }
     }
   }
+  const latestImportProvenance = isRecord(latestImportRuntimeRow?.import_provenance_summary)
+    ? latestImportRuntimeRow.import_provenance_summary
+    : null
+  if (isRecord(latestImportProvenance?.currentMultiPagePreviewValidation)) {
+    latestImportPreviewValidationPayload = latestImportProvenance.currentMultiPagePreviewValidation
+  }
+  const currentRawPreviewValidationEvidence = isRecord(latestImportProvenance?.currentRawPreviewValidationEvidence)
+    ? latestImportProvenance.currentRawPreviewValidationEvidence
+    : null
   const latestRawPreviewValidationEvidence = resolveLatestRawPreviewValidationEvidence({
     latestImportSiteVersionId: latestImportRuntimeSiteVersionId,
-    latestImportManifest: latestImportArtifactManifest,
+    latestImportManifest: currentRawPreviewValidationEvidence
+      ? {
+          ...(latestImportArtifactManifest ?? {}),
+          latestRawPreviewValidationEvidence: currentRawPreviewValidationEvidence,
+          rawPreviewValidationEvidence: currentRawPreviewValidationEvidence,
+        }
+      : null,
     latestImportPreviewValidation: latestImportPreviewValidationPayload,
   })
 

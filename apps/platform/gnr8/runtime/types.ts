@@ -146,6 +146,13 @@ export type MultiPageHtmlAcquisitionPageEntry = {
   diagnostics: string[];
   skippedReason: string | null;
   failureReason: string | null;
+  assetAcquisition?: {
+    discoveredReferenceCount: number;
+    fetchedAssetCount: number;
+    failedRequiredAssetCount: number;
+    deduplicatedReferenceCount: number;
+    failedRequiredResources: string[];
+  };
 };
 
 export type MultiPageHtmlAcquisitionManifest = {
@@ -162,6 +169,11 @@ export type MultiPageHtmlAcquisitionManifest = {
     fetchedPageCount: number;
     failedPageCount: number;
     skippedPageCount: number;
+    discoveredAssetReferenceCount?: number;
+    fetchedAssetCount?: number;
+    failedRequiredAssetCount?: number;
+    deduplicatedAssetReferenceCount?: number;
+    failedRequiredResources?: string[];
   };
   diagnostics: string[];
   generatedAt: string;

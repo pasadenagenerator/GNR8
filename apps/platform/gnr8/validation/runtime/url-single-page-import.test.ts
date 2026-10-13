@@ -6,7 +6,10 @@ import test from "node:test";
 
 import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture-worker";
 import { parseRenderedCaptureWorkerRequestDetailed } from "@/gnr8/import-rendered-capture-worker/worker-service";
-import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
+import {
+  captureAssetsForAdditionalHtmlPages,
+  importPublicSinglePageUrlToSnapshot,
+} from "@/gnr8/validation/runtime/url-single-page-import";
 
 function unsupportedWorkerClient(): RenderedCaptureWorkerClient {
   return {
@@ -57,6 +60,64 @@ function makeHtmlResponse(html: string): Response {
     },
   });
 }
+
+test("additional child-page asset capture persists responsive and lazy images, deduplicates shared assets, and reports failures", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-page-assets-"));
+  const fetchCounts = new Map<string, number>();
+  const fetchImpl = async (request: string | URL | Request): Promise<Response> => {
+    const url = String(request instanceof Request ? request.url : request);
+    fetchCounts.set(url, (fetchCounts.get(url) ?? 0) + 1);
+    if (url.endsWith("/assets/child.css")) {
+      return new Response(".hero{background:url('/fonts/child.woff2')}", { status: 200, headers: { "content-type": "text/css" } });
+    }
+    if (url.endsWith("/uploads/missing.webp")) {
+      return new Response("missing", { status: 404, headers: { "content-type": "text/plain" } });
+    }
+    if (/\.(?:webp|png|woff2)$/.test(new URL(url).pathname)) {
+      return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { "content-type": url.endsWith("woff2") ? "font/woff2" : "image/webp" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    fetchImpl,
+    pages: [
+      {
+        pageUrl: "https://example.com/about",
+        bodyPath: path.resolve(root, "about.html"),
+        html: [
+          "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/child.css\"></head><body>",
+          "<img src=\"/uploads/child.webp\" srcset=\"/uploads/child-small.webp 480w, /uploads/shared.webp 960w\" data-src=\"/uploads/lazy.webp\">",
+          "</body></html>",
+        ].join(""),
+      },
+      {
+        pageUrl: "https://www.example.com/contact",
+        bodyPath: path.resolve(root, "contact.html"),
+        html: "<!doctype html><html><body><img src=\"https://www.example.com/uploads/shared.webp\"><img data-lazy-src=\"/uploads/missing.webp\"></body></html>",
+      },
+    ],
+  });
+
+  assert.equal(fetchCounts.get("https://example.com/uploads/shared.webp"), 1);
+  assert.equal(result.summary.failedRequiredAssetCount, 1);
+  assert.deepEqual(result.summary.failedRequiredResources, ["https://www.example.com/uploads/missing.webp"]);
+  assert.ok(result.summary.deduplicatedReferenceCount >= 1);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/child.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/child-small.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/lazy.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/shared.webp")), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.attribute === "srcset" && entry.fetchStatus === "fetched"), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-src" && entry.fetchStatus === "fetched"), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-lazy-src" && entry.fetchStatus === "fetch_failed"), true);
+  const stylesheetEntry = result.manifestEntries.find((entry) => entry.assetKind === "stylesheet" && entry.fetchStatus === "fetched");
+  assert.ok(stylesheetEntry?.localPath);
+  const stylesheet = fs.readFileSync(path.resolve(root, stylesheetEntry!.localPath!), "utf8");
+  assert.match(stylesheet, /style_asset/);
+  assert.equal([...fetchCounts.keys()].some((url) => url.endsWith("/fonts/child.woff2")), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.assetKind === "style_asset" && entry.fetchStatus === "fetched"), true);
+});
 
 function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
   return {

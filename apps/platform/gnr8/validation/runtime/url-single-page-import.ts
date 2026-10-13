@@ -2679,6 +2679,430 @@ type FetchOutcome = {
   byteLength: number | null;
 };
 
+export type AdditionalHtmlPageAssetInput = {
+  pageUrl: string;
+  html: string;
+  bodyPath: string;
+};
+
+export type AdditionalHtmlPageAssetCaptureResult = {
+  pages: Array<{
+    bodyPath: string;
+    html: string;
+    discoveredReferenceCount: number;
+    fetchedAssetCount: number;
+    failedRequiredAssetCount: number;
+    deduplicatedReferenceCount: number;
+    failedRequiredResources: string[];
+  }>;
+  manifestEntries: UrlImportFetchManifestEntry[];
+  summary: {
+    discoveredReferenceCount: number;
+    fetchedAssetCount: number;
+    failedRequiredAssetCount: number;
+    deduplicatedReferenceCount: number;
+    failedRequiredResources: string[];
+  };
+};
+
+const ADDITIONAL_PAGE_ASSET_MAX_COUNT = 512;
+const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 12 * 1024 * 1024;
+const ADDITIONAL_PAGE_ASSET_TIMEOUT_MS = 12_000;
+const ADDITIONAL_PAGE_ASSET_CONCURRENCY = 4;
+
+function canonicalAssetHost(value: string): string {
+  return value.trim().toLowerCase().replace(/^www\./, "");
+}
+
+function canonicalAdditionalPageAssetIdentity(value: string): string {
+  const url = new URL(value);
+  url.hostname = canonicalAssetHost(url.hostname);
+  url.hash = "";
+  return url.toString();
+}
+
+function isAllowedAdditionalPageAssetUrl(candidate: string, pageUrl: string): boolean {
+  try {
+    const candidateUrl = new URL(candidate);
+    const page = new URL(pageUrl);
+    return (
+      (candidateUrl.protocol === "http:" || candidateUrl.protocol === "https:") &&
+      canonicalAssetHost(candidateUrl.hostname) === canonicalAssetHost(page.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function mapWithBoundedConcurrency<T>(
+  values: T[],
+  concurrency: number,
+  task: (value: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor;
+      cursor += 1;
+      await task(values[index]!);
+    }
+  });
+  await Promise.all(workers);
+}
+
+/**
+ * Extends the normal URL-import asset contract to already-acquired child HTML.
+ * It deliberately reuses the single-page parser, URL resolution, deterministic
+ * path, srcset/lazy, CSS dependency, and manifest rules instead of introducing a
+ * second crawler or persistence boundary.
+ */
+export async function captureAssetsForAdditionalHtmlPages(input: {
+  pages: AdditionalHtmlPageAssetInput[];
+  snapshotRootDirAbs: string;
+  existingFetchManifest?: UrlImportFetchManifestEntry[];
+  fetchImpl?: FetchLike;
+}): Promise<AdditionalHtmlPageAssetCaptureResult> {
+  const fetcher = input.fetchImpl ?? fetch;
+  const diagnostics: UrlImportDiagnostic[] = [];
+  const pageStates = input.pages.map((page) => {
+    const document = parse(page.html);
+    const refs = collectAssetRefs({ document, entryUrl: new URL(page.pageUrl), diagnostics, rawHtml: page.html })
+      .filter((ref) => ref.assetKind !== "script")
+      .map((ref) => ({ ...ref, pageUrl: page.pageUrl }));
+    return { page, document, refs };
+  });
+
+  const existingManifest = input.existingFetchManifest ?? [];
+  const localPathByUrl = new Map<string, string>();
+  const outcomeByUrl = new Map<string, FetchOutcome>();
+  const usedPathToUrl = new Map<string, string>();
+  const representativeUrlByIdentity = new Map<string, string>();
+  const aliasToRepresentativeUrl = new Map<string, string>();
+  const representativeUrl = (resolvedUrl: string): string =>
+    aliasToRepresentativeUrl.get(resolvedUrl) ??
+    representativeUrlByIdentity.get(canonicalAdditionalPageAssetIdentity(resolvedUrl)) ??
+    resolvedUrl;
+  for (const entry of existingManifest) {
+    if (!entry.resolvedUrl || !entry.localPath) continue;
+    const identity = canonicalAdditionalPageAssetIdentity(entry.resolvedUrl);
+    const representative = representativeUrlByIdentity.get(identity) ?? entry.resolvedUrl;
+    representativeUrlByIdentity.set(identity, representative);
+    aliasToRepresentativeUrl.set(entry.resolvedUrl, representative);
+    localPathByUrl.set(representative, entry.localPath);
+    usedPathToUrl.set(entry.localPath, representative);
+    outcomeByUrl.set(representative, {
+      fetchStatus: entry.fetchStatus,
+      httpStatus: entry.httpStatus,
+      contentType: entry.contentType,
+      byteLength: entry.byteLength,
+    });
+  }
+
+  const refsByUrl = new Map<string, Array<ParsedAssetRef & { pageUrl: string }>>();
+  for (const state of pageStates) {
+    for (const ref of state.refs) {
+      if (!ref.resolvedUrl || !isAllowedAdditionalPageAssetUrl(ref.resolvedUrl, state.page.pageUrl)) continue;
+      const identity = canonicalAdditionalPageAssetIdentity(ref.resolvedUrl);
+      const representative = representativeUrlByIdentity.get(identity) ?? ref.resolvedUrl;
+      representativeUrlByIdentity.set(identity, representative);
+      aliasToRepresentativeUrl.set(ref.resolvedUrl, representative);
+      const rows = refsByUrl.get(representative) ?? [];
+      rows.push(ref);
+      refsByUrl.set(representative, rows);
+    }
+  }
+
+  const assignLocalPath = (resolvedUrl: string, assetKind: UrlImportAssetKind): string => {
+    const existing = localPathByUrl.get(resolvedUrl);
+    if (existing) return existing;
+    const base = computeLocalPathCandidate({ resolvedUrl, assetKind });
+    let candidate = base;
+    let suffix = 1;
+    while (usedPathToUrl.has(candidate) && usedPathToUrl.get(candidate) !== resolvedUrl) {
+      suffix += 1;
+      const ext = path.posix.extname(base);
+      const stem = ext ? base.slice(0, -ext.length) : base;
+      candidate = `${stem}-${suffix}${ext}`;
+    }
+    localPathByUrl.set(resolvedUrl, candidate);
+    usedPathToUrl.set(candidate, resolvedUrl);
+    return candidate;
+  };
+
+  const failedRequiredResources = new Set<string>();
+  const fetchOne = async (resolvedUrl: string, assetKind: UrlImportAssetKind, pageUrl: string): Promise<void> => {
+    if (outcomeByUrl.get(resolvedUrl)?.fetchStatus === "fetched") return;
+    const localPath = assignLocalPath(resolvedUrl, assetKind);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
+    try {
+      const response = await fetcher(resolvedUrl, {
+        method: "GET",
+        cache: "no-store",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          accept: "text/css,image/*,*/*;q=0.8",
+          "user-agent": "GNR8-Operator-URL-Import/1.1 (+multi-page-assets)",
+        },
+      });
+      const finalUrl = response.url || resolvedUrl;
+      const contentType = safeContentType(response.headers.get("content-type"));
+      if (!response.ok || !isAllowedAdditionalPageAssetUrl(finalUrl, pageUrl)) {
+        outcomeByUrl.set(resolvedUrl, {
+          fetchStatus: "fetch_failed",
+          httpStatus: response.status,
+          contentType,
+          byteLength: null,
+        });
+        failedRequiredResources.add(resolvedUrl);
+        return;
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > ADDITIONAL_PAGE_ASSET_MAX_BYTES) {
+        outcomeByUrl.set(resolvedUrl, {
+          fetchStatus: "fetch_failed",
+          httpStatus: response.status,
+          contentType,
+          byteLength: bytes.byteLength,
+        });
+        failedRequiredResources.add(resolvedUrl);
+        return;
+      }
+      const absPath = path.resolve(input.snapshotRootDirAbs, localPath);
+      const rootWithSeparator = `${path.resolve(input.snapshotRootDirAbs)}${path.sep}`;
+      if (!absPath.startsWith(rootWithSeparator)) {
+        outcomeByUrl.set(resolvedUrl, { fetchStatus: "unsupported", httpStatus: null, contentType: null, byteLength: null });
+        failedRequiredResources.add(resolvedUrl);
+        return;
+      }
+      fs.mkdirSync(path.dirname(absPath), { recursive: true });
+      fs.writeFileSync(absPath, bytes);
+      outcomeByUrl.set(resolvedUrl, {
+        fetchStatus: "fetched",
+        httpStatus: response.status,
+        contentType,
+        byteLength: bytes.byteLength,
+      });
+    } catch {
+      outcomeByUrl.set(resolvedUrl, { fetchStatus: "fetch_failed", httpStatus: null, contentType: null, byteLength: null });
+      failedRequiredResources.add(resolvedUrl);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const directUrls = [...refsByUrl.keys()].sort((left, right) => left.localeCompare(right));
+  const limitedDirectUrls = directUrls.slice(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT);
+  for (const omitted of directUrls.slice(ADDITIONAL_PAGE_ASSET_MAX_COUNT)) failedRequiredResources.add(omitted);
+  await mapWithBoundedConcurrency(limitedDirectUrls, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async (resolvedUrl) => {
+    const exemplar = refsByUrl.get(resolvedUrl)?.[0];
+    if (!exemplar) return;
+    assignLocalPath(resolvedUrl, exemplar.assetKind);
+    await fetchOne(resolvedUrl, exemplar.assetKind, exemplar.pageUrl);
+  });
+
+  const stylesheetUrls = limitedDirectUrls.filter((url) => refsByUrl.get(url)?.some((ref) => ref.assetKind === "stylesheet"));
+  const stylesheetDependencyUrls = new Map<string, {
+    assetKind: UrlImportAssetKind;
+    pageUrl: string;
+    rawRef: string;
+    resolvedUrl: string;
+  }>();
+  for (const stylesheetUrl of stylesheetUrls) {
+    if (outcomeByUrl.get(stylesheetUrl)?.fetchStatus !== "fetched") continue;
+    const localPath = localPathByUrl.get(stylesheetUrl);
+    if (!localPath) continue;
+    let cssText = "";
+    try {
+      cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8");
+    } catch {
+      continue;
+    }
+    const pageUrl = refsByUrl.get(stylesheetUrl)?.[0]?.pageUrl ?? stylesheetUrl;
+    for (const rawRef of extractCssUrlCandidates(cssText)) {
+      const resolvedUrl = resolveAssetUrl({
+        rawRef,
+        baseUrl: new URL(stylesheetUrl),
+        diagnostics,
+        diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
+      });
+      if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, pageUrl)) continue;
+      const assetKind = inferCssUrlAssetKind(rawRef);
+      const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
+      const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
+      representativeUrlByIdentity.set(identity, representative);
+      aliasToRepresentativeUrl.set(resolvedUrl, representative);
+      assignLocalPath(representative, assetKind);
+      if (!stylesheetDependencyUrls.has(representative)) {
+        stylesheetDependencyUrls.set(representative, { assetKind, pageUrl, rawRef, resolvedUrl });
+      }
+    }
+  }
+  const remainingBudget = Math.max(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT - limitedDirectUrls.length);
+  const limitedDependencies = [...stylesheetDependencyUrls.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(0, remainingBudget);
+  for (const [omitted] of [...stylesheetDependencyUrls.entries()].slice(remainingBudget)) failedRequiredResources.add(omitted);
+  await mapWithBoundedConcurrency(limitedDependencies, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async ([resolvedUrl, meta]) => {
+    await fetchOne(resolvedUrl, meta.assetKind, meta.pageUrl);
+  });
+
+  for (const [representative, meta] of stylesheetDependencyUrls) {
+    const localPath = localPathByUrl.get(representative);
+    if (localPath) localPathByUrl.set(meta.resolvedUrl, localPath);
+  }
+  for (const [alias, representative] of aliasToRepresentativeUrl) {
+    const localPath = localPathByUrl.get(representative);
+    if (localPath) localPathByUrl.set(alias, localPath);
+  }
+
+  for (const stylesheetUrl of stylesheetUrls) {
+    if (outcomeByUrl.get(stylesheetUrl)?.fetchStatus !== "fetched") continue;
+    const localPath = localPathByUrl.get(stylesheetUrl);
+    if (!localPath) continue;
+    const absPath = path.resolve(input.snapshotRootDirAbs, localPath);
+    try {
+      const cssText = fs.readFileSync(absPath, "utf8");
+      const rewritten = rewriteCssUrlFunctions({
+        cssText,
+        stylesheetLocalPath: localPath,
+        baseUrl: new URL(stylesheetUrl),
+        localPathByUrl,
+        diagnostics,
+      });
+      if (rewritten !== cssText) fs.writeFileSync(absPath, rewritten, "utf8");
+    } catch {
+      // The fetch outcome already records missing required stylesheet bytes.
+    }
+  }
+
+  const manifestEntries: UrlImportFetchManifestEntry[] = [];
+  let cssDependencyOccurrence = 0;
+  for (const [representative, meta] of [...stylesheetDependencyUrls.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const outcome = outcomeByUrl.get(representative) ?? {
+      fetchStatus: "unsupported" as const,
+      httpStatus: null,
+      contentType: null,
+      byteLength: null,
+    };
+    manifestEntries.push({
+      tag: "link",
+      attribute: "href",
+      occurrence: cssDependencyOccurrence,
+      rawRef: meta.rawRef,
+      resolvedUrl: meta.resolvedUrl,
+      localPath: localPathByUrl.get(representative) ?? null,
+      assetKind: meta.assetKind,
+      fetchStatus: outcome.fetchStatus,
+      httpStatus: outcome.httpStatus,
+      contentType: outcome.contentType,
+      byteLength: outcome.byteLength,
+    });
+    cssDependencyOccurrence += 1;
+  }
+  const pageResults = pageStates.map((state) => {
+    const pageUrls = new Set<string>();
+    const failedForPage = new Set<string>();
+    let discoveredReferenceCount = 0;
+    let deduplicatedReferenceCount = 0;
+    const rewriteReference = (rawRef: string): string => {
+      const resolvedUrl = resolveAssetUrl({
+        rawRef,
+        baseUrl: new URL(state.page.pageUrl),
+        diagnostics: [],
+        diagnosticContext: { tag: "img", attribute: "src", surface: "multi_page_rewrite" },
+      });
+      if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl)) return rawRef;
+      const representative = representativeUrl(resolvedUrl);
+      const outcome = outcomeByUrl.get(representative);
+      const localPath = localPathByUrl.get(representative);
+      if (outcome?.fetchStatus !== "fetched" || !localPath) return rawRef;
+      return `/${toPosixPath(localPath)}`;
+    };
+
+    const occurrenceCounter = new Map<string, number>();
+    walkDomWithAncestors(state.document, (node) => {
+      if (!isElement(node)) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag !== "img" && tag !== "source" && tag !== "link") return;
+      const attrs: UrlImportAssetAttribute[] = tag === "link"
+        ? ["href"]
+        : ["src", ...SRCSET_ATTRS, ...(tag === "img" ? LAZY_IMAGE_ATTR_PRIORITY : [])];
+      for (const attribute of attrs) {
+        const rawValue = getAttr(node, attribute);
+        if (!rawValue?.trim()) continue;
+        const values = attribute === "srcset" || attribute === "data-srcset"
+          ? parseSrcsetTokens(rawValue).map((token) => token.url)
+          : [rawValue];
+        for (const rawRef of values) {
+          const resolvedUrl = resolveAssetUrl({
+            rawRef,
+            baseUrl: new URL(state.page.pageUrl),
+            diagnostics: [],
+            diagnosticContext: { tag: tag as UrlImportAssetTag, attribute, surface: "multi_page_manifest" },
+          });
+          if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl)) continue;
+          discoveredReferenceCount += 1;
+          if (pageUrls.has(resolvedUrl)) deduplicatedReferenceCount += 1;
+          pageUrls.add(resolvedUrl);
+          const representative = representativeUrl(resolvedUrl);
+          const outcome = outcomeByUrl.get(representative) ?? { fetchStatus: "unsupported" as const, httpStatus: null, contentType: null, byteLength: null };
+          if (outcome.fetchStatus !== "fetched") failedForPage.add(resolvedUrl);
+          const key = `${tag}:${attribute}`;
+          const occurrence = occurrenceCounter.get(key) ?? 0;
+          occurrenceCounter.set(key, occurrence + 1);
+          manifestEntries.push({
+            tag: tag as UrlImportAssetTag,
+            attribute,
+            occurrence,
+            rawRef,
+            resolvedUrl,
+            localPath: localPathByUrl.get(representative) ?? null,
+            assetKind: refsByUrl.get(representative)?.[0]?.assetKind ?? "image",
+            fetchStatus: outcome.fetchStatus,
+            httpStatus: outcome.httpStatus,
+            contentType: outcome.contentType,
+            byteLength: outcome.byteLength,
+          });
+        }
+        if (attribute === "srcset" || attribute === "data-srcset") {
+          const rewritten = buildSrcsetValue(parseSrcsetTokens(rawValue).map((token) => ({ ...token, url: rewriteReference(token.url) })));
+          setAttr(node, attribute, rewritten);
+        } else {
+          setAttr(node, attribute, rewriteReference(rawValue));
+        }
+      }
+    });
+    const html = serialize(state.document);
+    return {
+      bodyPath: state.page.bodyPath,
+      html,
+      discoveredReferenceCount,
+      fetchedAssetCount: [...pageUrls].filter((url) => outcomeByUrl.get(representativeUrl(url))?.fetchStatus === "fetched").length,
+      failedRequiredAssetCount: failedForPage.size,
+      deduplicatedReferenceCount,
+      failedRequiredResources: [...failedForPage].sort((left, right) => left.localeCompare(right)),
+    };
+  });
+
+  const discoveredReferenceCount =
+    pageResults.reduce((sum, page) => sum + page.discoveredReferenceCount, 0) + stylesheetDependencyUrls.size;
+  const uniqueReferencedUrls = new Set([...refsByUrl.keys(), ...stylesheetDependencyUrls.keys()]);
+  const directReferenceCount = [...refsByUrl.values()].reduce((sum, refs) => sum + refs.length, 0);
+  return {
+    pages: pageResults,
+    manifestEntries,
+    summary: {
+      discoveredReferenceCount,
+      fetchedAssetCount: [...uniqueReferencedUrls].filter((url) => outcomeByUrl.get(url)?.fetchStatus === "fetched").length,
+      failedRequiredAssetCount: failedRequiredResources.size,
+      deduplicatedReferenceCount: Math.max(0, directReferenceCount - refsByUrl.size),
+      failedRequiredResources: [...failedRequiredResources].sort((left, right) => left.localeCompare(right)),
+    },
+  };
+}
+
 function resolveWorkerFallbackReason(input: {
   job: RenderedCaptureJobRecord | null;
   workerHealth: RenderedCaptureWorkerHealthTruth | null;

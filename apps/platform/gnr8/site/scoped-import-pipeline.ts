@@ -46,7 +46,10 @@ import {
   type MultiPageRawArtifactAssemblySummary,
   type RuntimeImportProvenanceSummary,
 } from '@/gnr8/runtime/types'
-import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import {
+  captureAssetsForAdditionalHtmlPages,
+  type UrlSinglePageImportSnapshot,
+} from '@/gnr8/validation/runtime/url-single-page-import'
 import type { VisualAnalysisModel } from '@/gnr8/visual-analysis/visual-analysis-model'
 import {
   extractStyleSignalModel,
@@ -1696,6 +1699,48 @@ async function acquireScopedMultiPageHtml(input: {
   }
   pages.push(...skippedDiscoveryPages)
 
+  const fetchedAssetPages = pages.flatMap((page) => {
+    if (page.status !== 'fetched' || !page.bodyPath || !(page.finalUrl ?? page.normalizedUrl)) return []
+    try {
+      return [{
+        pageUrl: page.finalUrl ?? page.normalizedUrl!,
+        html: fs.readFileSync(page.bodyPath, 'utf8'),
+        bodyPath: page.bodyPath,
+      }]
+    } catch {
+      return []
+    }
+  })
+  const childAssetCapture = fetchedAssetPages.length > 0
+    ? await captureAssetsForAdditionalHtmlPages({
+        pages: fetchedAssetPages,
+        snapshotRootDirAbs: input.snapshot.snapshotRootDirAbs,
+        existingFetchManifest: input.snapshot.fetchManifest,
+      })
+    : null
+  if (childAssetCapture) {
+    input.snapshot.fetchManifest.push(...childAssetCapture.manifestEntries)
+    const captureByBodyPath = new Map(childAssetCapture.pages.map((page) => [page.bodyPath, page]))
+    for (const page of pages) {
+      if (!page.bodyPath) continue
+      const captured = captureByBodyPath.get(page.bodyPath)
+      if (!captured) continue
+      fs.writeFileSync(page.bodyPath, captured.html, 'utf8')
+      const bytes = Buffer.from(captured.html, 'utf8')
+      page.byteSize = bytes.byteLength
+      page.bodySha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+      page.assetAcquisition = {
+        discoveredReferenceCount: captured.discoveredReferenceCount,
+        fetchedAssetCount: captured.fetchedAssetCount,
+        failedRequiredAssetCount: captured.failedRequiredAssetCount,
+        deduplicatedReferenceCount: captured.deduplicatedReferenceCount,
+        failedRequiredResources: captured.failedRequiredResources,
+      }
+    }
+    diagnostics.push('MULTIPAGE_CHILD_ASSET_ACQUISITION_COMPLETED')
+    if (childAssetCapture.summary.failedRequiredAssetCount > 0) diagnostics.push('MULTIPAGE_CHILD_ASSET_ACQUISITION_INCOMPLETE')
+  }
+
   const sortedPages = pages
   const fetchedPageCount = sortedPages.filter((entry) => entry.status === 'fetched').length
   const failedPageCount = sortedPages.filter((entry) => entry.status === 'failed').length
@@ -1710,6 +1755,15 @@ async function acquireScopedMultiPageHtml(input: {
       fetchedPageCount,
       failedPageCount,
       skippedPageCount,
+      ...(childAssetCapture
+        ? {
+            discoveredAssetReferenceCount: childAssetCapture.summary.discoveredReferenceCount,
+            fetchedAssetCount: childAssetCapture.summary.fetchedAssetCount,
+            failedRequiredAssetCount: childAssetCapture.summary.failedRequiredAssetCount,
+            deduplicatedAssetReferenceCount: childAssetCapture.summary.deduplicatedReferenceCount,
+            failedRequiredResources: childAssetCapture.summary.failedRequiredResources,
+          }
+        : {}),
     },
     diagnostics: uniqueSorted([...diagnostics, 'MULTIPAGE_HTML_ACQUISITION_MANIFEST_PERSISTED']),
     generatedAt,
@@ -3884,6 +3938,18 @@ export async function runScopedImportPipeline(input: {
         routeCount: rawPreviewValidationResult.evidence.routeEvidence.length,
         rewrittenLinksCount: rawPreviewValidationResult.previewValidation?.summary.rewrittenLinks ?? null,
       })
+      importProvenanceSummary = {
+        ...importProvenanceSummary,
+        currentRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+        currentMultiPagePreviewValidation: rawPreviewValidationResult.previewValidation,
+      } as RuntimeImportProvenanceSummary
+      const validationProvenanceWrite = await deps.setSiteVersionImportProvenanceSummary({
+        siteVersionId: migrated.siteVersionId,
+        importProvenanceSummary,
+      })
+      if (validationProvenanceWrite.affectedRows <= 0) {
+        throw new Error(`Validation provenance write affected 0 rows for site version ${migrated.siteVersionId}.`)
+      }
     }
 
     const rawEntryHtml = (() => {
