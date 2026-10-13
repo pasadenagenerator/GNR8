@@ -104,3 +104,15 @@ test('deterministic validation failures are non-retriable while transient failur
     (error: unknown) => error === transient,
   )
 })
+
+test('missing immutable source lineage is non-retriable', async () => {
+  await assert.rejects(
+    runSiteAstroGenerationJob({
+      eventData: payload,
+      runGeneration: async () => {
+        throw new Error('astro_generation_source_artifact_missing')
+      },
+    }),
+    (error: unknown) => error instanceof NonRetriableError && error.message === 'astro_generation_source_artifact_missing',
+  )
+})

@@ -122,7 +122,12 @@ function isDeterministicGenerationFailure(error: unknown): boolean {
   const candidate = error as { code?: unknown; retryable?: unknown; message?: unknown }
   if (candidate.retryable === false) return true
   if (candidate.code === 'unsupported_capability' || candidate.code === 'record_too_large') return true
-  return typeof candidate.message === 'string' && candidate.message.startsWith('unsupported_capability:')
+  return typeof candidate.message === 'string' && (
+    candidate.message.startsWith('unsupported_capability:') ||
+    candidate.message === 'astro_generation_source_artifact_missing' ||
+    candidate.message === 'astro_generation_source_capture_lineage_missing' ||
+    candidate.message === 'astro_generation_source_lineage_mismatch'
+  )
 }
 
 export const siteAstroGenerationJob = inngest.createFunction(
