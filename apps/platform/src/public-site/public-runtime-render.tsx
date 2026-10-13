@@ -13,10 +13,11 @@ import {
   type AstroObjectBackedCandidateRecord,
 } from "@/gnr8/output-adapters/astro-production-candidate-object-record";
 import {
+  readVerifiedAstroCandidateSharedStyles,
   readVerifiedAstroCandidateRouteHtml,
   SupabaseAstroCandidateObjectStore,
 } from "@/gnr8/output-adapters/astro-production-candidate-object-store";
-import { stableStringify } from "@/gnr8/runtime/deterministic";
+import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 import { persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-logger";
 import type { RuntimeArtifact } from "@/gnr8/runtime/types";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
@@ -154,26 +155,34 @@ async function materializePublicArtifactHtml(input: {
   if (!promotion) return input.html;
   const storedObjectRecord = input.artifact.manifest.astroCandidateObjectRecord;
   let html = input.html;
+  let compiledTokenStyles = input.artifact.compiledTokenStyles;
   if (storedObjectRecord !== undefined) {
     const record = validateAstroObjectBackedCandidateRecord(storedObjectRecord);
+    const persistedStyles = record.candidate.compiledTokenStyles;
+    const artifactStylesBytes = Buffer.from(input.artifact.compiledTokenStyles, "utf8");
     if (
       record.identity.runtimeSiteId !== input.artifact.siteId ||
       record.identity.siteVersionId !== input.artifact.siteVersionId ||
       record.candidate.contentSha256 !== promotion.candidateContentSha256 ||
       record.storageSha256 !== promotion.candidateStorageSha256 ||
-      record.candidate.compiledTokenStyles !== input.artifact.compiledTokenStyles ||
+      (typeof persistedStyles === "string"
+        ? persistedStyles !== input.artifact.compiledTokenStyles
+        : persistedStyles.sizeBytes !== artifactStylesBytes.byteLength ||
+          persistedStyles.sha256 !== sha256Hex(artifactStylesBytes)) ||
       stableStringify(record.candidate.assetFingerprintMap) !== stableStringify(input.artifact.assetFingerprintMap)
     ) {
       throw new Error("Object-backed Astro runtime lineage does not match the promoted artifact.");
     }
-    html = await runtimeStoreDependencies.readAstroObjectRouteHtml({
+    const resolved = await runtimeStoreDependencies.readAstroObjectRouteHtml({
       record,
       routePath: input.resolvedPath,
     });
+    html = resolved.html;
+    compiledTokenStyles = resolved.compiledTokenStyles;
   }
   return materializeAstroInternalPreviewHtml({
     html,
-    compiledTokenStyles: input.artifact.compiledTokenStyles,
+    compiledTokenStyles,
   });
 }
 
@@ -207,7 +216,7 @@ type RuntimeStoreDependencies = {
   readAstroObjectRouteHtml(input: {
     record: AstroObjectBackedCandidateRecord;
     routePath: string;
-  }): Promise<string>;
+  }): Promise<{ html: string; compiledTokenStyles: string }>;
 };
 
 const runtimeStoreDependencies: RuntimeStoreDependencies = {
@@ -221,13 +230,21 @@ const runtimeStoreDependencies: RuntimeStoreDependencies = {
     if (!ref) throw new Error("Required immutable Astro route object is not registered for this path.");
     const serviceRoleClient = getSupabaseServiceRoleClient();
     if (!serviceRoleClient) throw new Error("Astro candidate object storage client is unavailable.");
-    return readVerifiedAstroCandidateRouteHtml({
-      objectStore: new SupabaseAstroCandidateObjectStore({
-        getClient: () => serviceRoleClient as never,
-      }),
-      ref,
-      compiledTokenStyles: record.candidate.compiledTokenStyles,
+    const objectStore = new SupabaseAstroCandidateObjectStore({
+      getClient: () => serviceRoleClient as never,
     });
+    const compiledTokenStyles = typeof record.candidate.compiledTokenStyles === "string"
+      ? record.candidate.compiledTokenStyles
+      : await readVerifiedAstroCandidateSharedStyles({
+          objectStore,
+          ref: record.candidate.compiledTokenStyles,
+        });
+    const html = await readVerifiedAstroCandidateRouteHtml({
+      objectStore,
+      ref,
+      compiledTokenStyles,
+    });
+    return { html, compiledTokenStyles };
   },
 };
 

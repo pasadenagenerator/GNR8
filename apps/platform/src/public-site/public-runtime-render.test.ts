@@ -261,7 +261,7 @@ test("public runtime restores exact shared CSS for a compacted multi-page Astro 
 });
 
 test("public runtime resolves promoted object-backed Astro routes through the verified object contract", async () => {
-  const sharedCss = ":root{--object-backed:#0f766e}.object-route{color:var(--object-backed)}";
+  const sharedCss = `/*${"shared-object-css".repeat(4_500)}*/:root{--object-backed:#0f766e}.object-route{color:var(--object-backed)}`;
   const objectHtml = `<!doctype html><html><head><style ${ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE}></style></head><body class="object-route">Verified object route</body></html>`;
   const candidate = createSyntheticAstroInternalPreviewCandidate({
     candidateId: createAstroProductionCandidateId("87878787-8787-4787-8787-878787878787"),
@@ -296,6 +296,7 @@ test("public runtime resolves promoted object-backed Astro routes through the ve
     bucket: "astro-candidates-private",
   });
   const databaseCopy = "<!doctype html><html><body>WRONG DATABASE COPY</body></html>";
+  assert.equal(typeof prepared.record.candidate.compiledTokenStyles, "object");
   const artifact = publicAstroArtifact({
     htmlByPath: { "/": databaseCopy, "/about": databaseCopy },
     compiledTokenStyles: sharedCss,
@@ -315,7 +316,7 @@ test("public runtime resolves promoted object-backed Astro routes through the ve
     readAstroObjectRouteHtml: async ({ record, routePath }) => {
       assert.deepEqual(record, prepared.record);
       assert.equal(routePath, "/about");
-      return objectHtml;
+      return { html: objectHtml, compiledTokenStyles: sharedCss };
     },
   });
 
