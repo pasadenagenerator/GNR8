@@ -313,6 +313,12 @@ function normalizePage(input: {
   } else if (forms.length > 0) {
     unsupported.push("forms");
   }
+  if (replacedFormCount > 0) {
+    for (const style of elements.filter((element) => element.tagName === "style")) {
+      if (isObsoleteFormSecurityStyle(style)) detach(style);
+    }
+    elements = allElements(document);
+  }
   for (const element of elements.filter((candidate) => ["iframe", "object", "embed"].includes(candidate.tagName))) {
     if (isFormSecurityEmbed(element)) {
       if (replacedFormCount > 0) detach(element);
@@ -546,6 +552,14 @@ function formHasSecurityRuntime(form: HtmlElement): boolean {
       /(?:^|\.)hcaptcha\.com\b|(?:^|\.)recaptcha\.net\b|google\.com\/recaptcha/i.test(src) ||
       /\b(?:h-captcha|g-recaptcha)\b/i.test(className);
   });
+}
+
+function isObsoleteFormSecurityStyle(style: HtmlElement): boolean {
+  const css = textContent(style).trim();
+  if (!css || !/(?:h-?captcha|g-recaptcha)/i.test(css)) return false;
+  const withoutSecurityRules = css.replace(/([^{}]+)\{([^{}]*)\}/g, (rule, selector) =>
+    /(?:h-?captcha|g-recaptcha)/i.test(String(selector)) ? "" : rule);
+  return withoutSecurityRules.replace(/\/\*[\s\S]*?\*\//g, "").trim() === "";
 }
 
 function acquisitionPageLimitSourceUrls(
