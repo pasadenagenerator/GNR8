@@ -1,7 +1,8 @@
 import {
-  ASTRO_OBJECT_CANDIDATE_MEDIA_TYPE,
   type AstroCandidateObjectUpload,
   type AstroCandidateRouteObjectRef,
+  type AstroCandidateStoredObjectRef,
+  type AstroCandidateStylesObjectRef,
 } from "./astro-production-candidate-object-record";
 import { sha256Hex } from "../runtime/deterministic";
 import { validateSelfContainedAstroProductionPayload } from "./astro-production-candidate-record";
@@ -27,7 +28,16 @@ export class AstroCandidateObjectStoreError extends Error {
 export interface AstroCandidateObjectStore {
   readonly bucket: string;
   putVerified(upload: AstroCandidateObjectUpload): Promise<void>;
-  readVerified(ref: AstroCandidateRouteObjectRef): Promise<Uint8Array>;
+  readVerified(ref: AstroCandidateStoredObjectRef): Promise<Uint8Array>;
+}
+
+export async function readVerifiedAstroCandidateSharedStyles(input: {
+  objectStore: AstroCandidateObjectStore;
+  ref: AstroCandidateStylesObjectRef;
+}): Promise<string> {
+  return new TextDecoder("utf-8", { fatal: true }).decode(
+    await input.objectStore.readVerified(input.ref),
+  );
 }
 
 export async function readVerifiedAstroCandidateRouteHtml(input: {
@@ -90,7 +100,7 @@ export class SupabaseAstroCandidateObjectStore implements AstroCandidateObjectSt
     try {
       const result = await bucket.upload(upload.ref.key, upload.bytes, {
         cacheControl: "31536000, immutable",
-        contentType: ASTRO_OBJECT_CANDIDATE_MEDIA_TYPE,
+        contentType: upload.ref.mediaType,
         upsert: false,
       });
       if (result.error != null) {
@@ -104,7 +114,7 @@ export class SupabaseAstroCandidateObjectStore implements AstroCandidateObjectSt
     }
   }
 
-  async readVerified(ref: AstroCandidateRouteObjectRef): Promise<Uint8Array> {
+  async readVerified(ref: AstroCandidateStoredObjectRef): Promise<Uint8Array> {
     assertRefScope(ref, validateBucket(this.bucket));
     const client = this.getClient();
     if (!client) throw storeError("unavailable", "Candidate object storage client is unavailable.");
@@ -113,7 +123,7 @@ export class SupabaseAstroCandidateObjectStore implements AstroCandidateObjectSt
 
   private async verifyExisting(
     bucket: StorageBucketClient,
-    ref: AstroCandidateRouteObjectRef,
+    ref: AstroCandidateStoredObjectRef,
     cause?: unknown,
   ): Promise<void> {
     try {
@@ -126,7 +136,7 @@ export class SupabaseAstroCandidateObjectStore implements AstroCandidateObjectSt
 
   private async downloadAndVerify(
     bucket: StorageBucketClient,
-    ref: AstroCandidateRouteObjectRef,
+    ref: AstroCandidateStoredObjectRef,
   ): Promise<Uint8Array> {
     let result: StorageDownloadResult;
     try {
@@ -147,7 +157,10 @@ export class SupabaseAstroCandidateObjectStore implements AstroCandidateObjectSt
       throw storeError("unavailable", "Immutable candidate object metadata is unavailable.", info.error);
     }
     const storedMediaType = info.data.contentType ?? info.data.metadata?.mimetype;
-    if (storedMediaType?.split(";", 1)[0]?.trim().toLowerCase() !== "text/html") {
+    if (
+      storedMediaType?.split(";", 1)[0]?.trim().toLowerCase() !==
+      ref.mediaType.split(";", 1)[0]?.trim().toLowerCase()
+    ) {
       throw storeError("integrity_mismatch", "Immutable candidate object has an unexpected media type.");
     }
     const bytes = new Uint8Array(await result.data.arrayBuffer());
@@ -175,7 +188,7 @@ export class InMemoryAstroCandidateObjectStore implements AstroCandidateObjectSt
     this.objects.set(upload.ref.key, new Uint8Array(upload.bytes));
   }
 
-  async readVerified(ref: AstroCandidateRouteObjectRef): Promise<Uint8Array> {
+  async readVerified(ref: AstroCandidateStoredObjectRef): Promise<Uint8Array> {
     assertRefScope(ref, this.bucket);
     const bytes = this.objects.get(ref.key);
     if (!bytes) throw storeError("missing", "Required immutable candidate object is missing.");
@@ -187,13 +200,13 @@ export class InMemoryAstroCandidateObjectStore implements AstroCandidateObjectSt
   tamperForTest(key: string, bytes: Uint8Array): void { this.objects.set(key, new Uint8Array(bytes)); }
 }
 
-function verifyBytes(bytes: Uint8Array, ref: AstroCandidateRouteObjectRef): void {
+function verifyBytes(bytes: Uint8Array, ref: AstroCandidateStoredObjectRef): void {
   if (bytes.byteLength !== ref.sizeBytes || sha256Hex(bytes) !== ref.sha256) {
     throw storeError("integrity_mismatch", "Immutable candidate object failed size or hash verification.");
   }
 }
 
-function assertRefScope(ref: AstroCandidateRouteObjectRef, bucket: string): void {
+function assertRefScope(ref: AstroCandidateStoredObjectRef, bucket: string): void {
   if (ref.bucket !== bucket) {
     throw storeError("configuration_invalid", "Candidate object reference targets an unexpected bucket.");
   }

@@ -25,6 +25,7 @@ import {
 } from "./astro-production-candidate-object-record";
 import {
   AstroCandidateObjectStoreError,
+  readVerifiedAstroCandidateSharedStyles,
   readVerifiedAstroCandidateRouteHtml,
   type AstroCandidateObjectStore,
 } from "./astro-production-candidate-object-store";
@@ -430,15 +431,21 @@ export class GatewayBackedAstroProductionCandidateRepository {
     if (!this.objectStore) throw repositoryError("unavailable", "Candidate object storage is not configured.");
     if (!this.objectStore.bucket) throw repositoryError("unavailable", "Candidate object storage bucket is not configured.");
     try {
+      const compiledTokenStyles = typeof record.candidate.compiledTokenStyles === "string"
+        ? record.candidate.compiledTokenStyles
+        : await readVerifiedAstroCandidateSharedStyles({
+            objectStore: this.objectStore,
+            ref: record.candidate.compiledTokenStyles,
+          });
       const htmlByPath: Record<string, string> = {};
       for (const [routePath, ref] of Object.entries(record.candidate.routePayloads)) {
         htmlByPath[routePath] = await readVerifiedAstroCandidateRouteHtml({
           objectStore: this.objectStore,
           ref,
-          compiledTokenStyles: record.candidate.compiledTokenStyles,
+          compiledTokenStyles,
         });
       }
-      return resolveAstroObjectBackedCandidateRecord({ record, htmlByPath });
+      return resolveAstroObjectBackedCandidateRecord({ record, htmlByPath, compiledTokenStyles });
     } catch (error) {
       throw mapValidationError(error);
     }

@@ -56,6 +56,49 @@ test("a multi-page candidate larger than the inline limit is stored, resolved, a
   assert.match(rendered, /href="mailto:sales@chs\.si"/);
 });
 
+test("large shared CSS is retained as an immutable object and resolved before rendering", async () => {
+  const gateway = new InMemoryAstroProductionCandidateGateway();
+  const objectStore = new InMemoryAstroCandidateObjectStore();
+  const repository = createRepository(gateway, objectStore);
+  const input = createLargeStylesInput();
+
+  const created = await repository.create(input);
+  assert.ok(created.measurements.resolvedCandidateUtf8Bytes > 2 * 1024 * 1024);
+  assert.ok(created.measurements.registryRecordUtf8Bytes < 2 * 1024 * 1024);
+  assert.ok(created.measurements.objectPayloadUtf8Bytes > 2 * 1024 * 1024);
+  assert.ok((created.record as AstroObjectBackedResolvedRecord).stylesObjectRef);
+  assert.equal(created.record.candidate.compiledTokenStyles, input.candidate.compiledTokenStyles);
+  const rendered = materializeAstroInternalPreviewHtml({
+    html: created.record.candidate.htmlByPath["/"],
+    compiledTokenStyles: created.record.candidate.compiledTokenStyles,
+  });
+  assert.match(rendered, /--brand:#123456/);
+
+  const retry = await repository.create(input);
+  assert.equal(retry.status, "idempotent");
+  assert.equal(retry.record.storageSha256, created.record.storageSha256);
+});
+
+test("missing or tampered immutable shared CSS fails closed", async (t) => {
+  for (const mode of ["missing", "tampered"] as const) {
+    await t.test(mode, async () => {
+      const gateway = new InMemoryAstroProductionCandidateGateway();
+      const objectStore = new InMemoryAstroCandidateObjectStore();
+      const repository = createRepository(gateway, objectStore);
+      const created = await repository.create(createLargeStylesInput());
+      const ref = (created.record as AstroObjectBackedResolvedRecord).stylesObjectRef;
+      assert.ok(ref);
+      if (mode === "missing") objectStore.removeForTest(ref.key);
+      else objectStore.tamperForTest(ref.key, Buffer.from("tampered", "utf8"));
+
+      await assert.rejects(
+        repository.read({ candidateId: CANDIDATE_ID, trustedScope: OWNERSHIP }),
+        (error: unknown) => error instanceof AstroProductionCandidateRepositoryError && error.code === "corrupt",
+      );
+    });
+  }
+});
+
 test("missing and tampered immutable route objects fail closed", async (t) => {
   for (const mode of ["missing", "tampered"] as const) {
     await t.test(mode, async () => {
@@ -183,6 +226,34 @@ function createLargeInput() {
       producerRef: "capture:object-backed-test",
       idempotencyKey: "idem:object-backed-test",
       correlationId: "correlation:object-backed-test",
+    },
+  };
+}
+
+function createLargeStylesInput() {
+  const candidate = createSyntheticAstroInternalPreviewCandidate({
+    candidateId: CANDIDATE_ID,
+    siteId: OWNERSHIP.runtimeSiteId,
+    siteVersionId: OWNERSHIP.siteVersionId,
+    createdAt: "2026-10-12T09:00:00.000Z",
+  });
+  candidate.htmlByPath = {
+    "/": html("Home", "Object-backed shared styles.", '<a href="/about">About</a>'),
+    "/about": html("About", "Object-backed shared styles.", '<a href="/">Home</a>'),
+  };
+  candidate.compiledTokenStyles = `/*${"x".repeat(2 * 1024 * 1024)}*/:root{--brand:#123456}`;
+  candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(candidate);
+  candidate.manifest.provenance.convertedArtifactSha256 = candidate.contentSha256;
+  return {
+    candidate,
+    trustedScope: OWNERSHIP,
+    registration: {
+      registeredByActorId: "actor:object-backed-test",
+      producerKind: "source_backed_astro_generation",
+      producerVersion: "source_backed_astro_generation:v1",
+      producerRef: "capture:object-backed-styles-test",
+      idempotencyKey: "idem:object-backed-styles-test",
+      correlationId: "correlation:object-backed-styles-test",
     },
   };
 }

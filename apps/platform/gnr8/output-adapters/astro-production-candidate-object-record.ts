@@ -32,8 +32,10 @@ export const ASTRO_OBJECT_CANDIDATE_RECORD_KIND =
   "astro_internal_preview_candidate_object_record" as const;
 export const ASTRO_OBJECT_CANDIDATE_STORAGE = "supabase_storage" as const;
 export const ASTRO_OBJECT_CANDIDATE_MEDIA_TYPE = "text/html; charset=utf-8" as const;
+export const ASTRO_OBJECT_CANDIDATE_STYLES_MEDIA_TYPE = "text/css; charset=utf-8" as const;
 
 const TEXT_MAX_CHARACTERS = 1024;
+const COMPILED_STYLES_OBJECT_THRESHOLD_BYTES = 64 * 1024;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ISO_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 
@@ -46,11 +48,23 @@ export type AstroCandidateRouteObjectRef = {
   mediaType: typeof ASTRO_OBJECT_CANDIDATE_MEDIA_TYPE;
 };
 
+export type AstroCandidateStylesObjectRef = {
+  kind: "compiled_token_styles";
+  bucket: string;
+  key: string;
+  sha256: string;
+  sizeBytes: number;
+  mediaType: typeof ASTRO_OBJECT_CANDIDATE_STYLES_MEDIA_TYPE;
+};
+
+export type AstroCandidateStoredObjectRef = AstroCandidateRouteObjectRef | AstroCandidateStylesObjectRef;
+
 export type AstroObjectBackedCandidatePayload = Omit<
   AstroInternalPreviewCandidate,
-  "htmlByPath" | "manifest"
+  "htmlByPath" | "manifest" | "compiledTokenStyles"
 > & {
   routePayloads: Record<string, AstroCandidateRouteObjectRef> & { "/": AstroCandidateRouteObjectRef };
+  compiledTokenStyles: string | AstroCandidateStylesObjectRef;
   manifest: Omit<AstroInternalPreviewCandidate["manifest"], "lifecycle"> & {
     lifecycle: {
       storage: typeof ASTRO_OBJECT_CANDIDATE_STORAGE;
@@ -69,13 +83,18 @@ export type AstroObjectBackedCandidateRecord = {
   storageSha256: string;
 };
 
-export type AstroObjectBackedResolvedCandidate = Omit<AstroObjectBackedCandidatePayload, "routePayloads"> & {
+export type AstroObjectBackedResolvedCandidate = Omit<
+  AstroObjectBackedCandidatePayload,
+  "routePayloads" | "compiledTokenStyles"
+> & {
   htmlByPath: Record<string, string> & { "/": string };
+  compiledTokenStyles: string;
 };
 
 export type AstroObjectBackedResolvedRecord = Omit<AstroObjectBackedCandidateRecord, "candidate"> & {
   candidate: AstroObjectBackedResolvedCandidate;
   objectManifest: Record<string, AstroCandidateRouteObjectRef> & { "/": AstroCandidateRouteObjectRef };
+  stylesObjectRef: AstroCandidateStylesObjectRef | null;
 };
 
 export type AstroPersistedCandidateRecord =
@@ -87,7 +106,7 @@ export type AstroResolvedCandidateRecord =
   | AstroObjectBackedResolvedRecord;
 
 export type AstroCandidateObjectUpload = {
-  ref: AstroCandidateRouteObjectRef;
+  ref: AstroCandidateStoredObjectRef;
   bytes: Uint8Array;
 };
 
@@ -132,7 +151,7 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
     );
   }
   const bucket = boundedText(input.bucket, "candidate object bucket");
-  const uploads = routeEntries.map(([routePath, html]) => {
+  const routeUploads = routeEntries.map(([routePath, html]) => {
     validateSelfContainedAstroProductionPayload({
       html,
       compiledTokenStyles: input.candidate.compiledTokenStyles,
@@ -152,7 +171,14 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
       bytes,
     };
   });
-  const routePayloads = Object.fromEntries(uploads.map((upload) => [upload.ref.routePath, upload.ref]));
+  const routePayloads = Object.fromEntries(routeUploads.map((upload) => [upload.ref.routePath, upload.ref]));
+  const compiledStylesBytes = Buffer.from(input.candidate.compiledTokenStyles, "utf8");
+  const stylesUpload = compiledStylesBytes.byteLength > COMPILED_STYLES_OBJECT_THRESHOLD_BYTES
+    ? createStylesUpload({ identity, bucket, bytes: compiledStylesBytes })
+    : null;
+  const uploads: AstroCandidateObjectUpload[] = stylesUpload
+    ? [...routeUploads, stylesUpload]
+    : routeUploads;
   const registration = validateRegistration({ ...input.registration, storedAt: input.storedAt });
   const candidate: AstroObjectBackedCandidatePayload = {
     kind: input.candidate.kind,
@@ -161,7 +187,7 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
     siteVersionId: input.candidate.siteVersionId,
     rendererCompatibilityVersion: input.candidate.rendererCompatibilityVersion,
     routePayloads: routePayloads as AstroObjectBackedCandidatePayload["routePayloads"],
-    compiledTokenStyles: input.candidate.compiledTokenStyles,
+    compiledTokenStyles: stylesUpload?.ref ?? input.candidate.compiledTokenStyles,
     assetFingerprintMap: structuredClone(input.candidate.assetFingerprintMap),
     manifest: {
       ...structuredClone(input.candidate.manifest),
@@ -253,12 +279,26 @@ export function validateAstroObjectBackedCandidateRecord(
 export function resolveAstroObjectBackedCandidateRecord(input: {
   record: AstroObjectBackedCandidateRecord;
   htmlByPath: Record<string, string>;
+  compiledTokenStyles?: string;
 }): AstroObjectBackedResolvedRecord {
   const record = validateAstroObjectBackedCandidateRecord(input.record);
   const expectedRoutes = Object.keys(record.candidate.routePayloads).sort();
   const actualRoutes = Object.keys(input.htmlByPath).sort();
   if (stableStringify(expectedRoutes) !== stableStringify(actualRoutes) || !input.htmlByPath["/"]) {
     throw corrupt("Resolved candidate route set does not match the immutable object manifest.");
+  }
+  const compiledTokenStyles = typeof record.candidate.compiledTokenStyles === "string"
+    ? record.candidate.compiledTokenStyles
+    : input.compiledTokenStyles;
+  if (typeof compiledTokenStyles !== "string") {
+    throw corrupt("Resolved object-backed candidate shared stylesheet is missing.");
+  }
+  if (typeof record.candidate.compiledTokenStyles !== "string") {
+    const bytes = Buffer.from(compiledTokenStyles, "utf8");
+    if (
+      bytes.byteLength !== record.candidate.compiledTokenStyles.sizeBytes ||
+      sha256Hex(bytes) !== record.candidate.compiledTokenStyles.sha256
+    ) throw corrupt("Resolved object-backed candidate shared stylesheet failed immutable size or hash verification.");
   }
   for (const routePath of expectedRoutes) {
     const html = input.htmlByPath[routePath];
@@ -268,12 +308,13 @@ export function resolveAstroObjectBackedCandidateRecord(input: {
     if (bytes.byteLength !== ref.sizeBytes || sha256Hex(bytes) !== ref.sha256) {
       throw corrupt("Resolved candidate route payload failed immutable size or hash verification.");
     }
-    validateSelfContainedAstroProductionPayload({ html, compiledTokenStyles: record.candidate.compiledTokenStyles });
+    validateSelfContainedAstroProductionPayload({ html, compiledTokenStyles });
   }
-  const { routePayloads, ...candidateMetadata } = record.candidate;
+  const { routePayloads, compiledTokenStyles: persistedStyles, ...candidateMetadata } = record.candidate;
   const candidate: AstroObjectBackedResolvedCandidate = {
     ...candidateMetadata,
     htmlByPath: structuredClone(input.htmlByPath) as AstroObjectBackedResolvedCandidate["htmlByPath"],
+    compiledTokenStyles,
   };
   if (computeAstroInternalPreviewCandidateContentSha256(candidate) !== candidate.contentSha256) {
     throw corrupt("Resolved object-backed candidate content-integrity hash does not match.");
@@ -286,6 +327,7 @@ export function resolveAstroObjectBackedCandidateRecord(input: {
     candidate,
     storageSha256: record.storageSha256,
     objectManifest: structuredClone(record.candidate.routePayloads),
+    stylesObjectRef: typeof persistedStyles === "string" ? null : structuredClone(persistedStyles),
   };
 }
 
@@ -363,22 +405,28 @@ export function validateAstroResolvedCandidateRecord(value: unknown): AstroResol
   if (isRecord(value) && value.schemaVersion === ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION) {
     if (!hasExactKeys(value, [
       "schemaVersion", "recordKind", "identity", "registration", "candidate", "storageSha256", "objectManifest",
+      "stylesObjectRef",
     ]) || !isRecord(value.candidate) || !isRecord(value.objectManifest)) {
       throw corrupt("Resolved object-backed candidate record shape is invalid.");
     }
-    const { htmlByPath, ...candidateMetadata } = value.candidate;
+    const { htmlByPath, compiledTokenStyles, ...candidateMetadata } = value.candidate;
     const persisted = validateAstroObjectBackedCandidateRecord({
       schemaVersion: value.schemaVersion,
       recordKind: value.recordKind,
       identity: value.identity,
       registration: value.registration,
-      candidate: { ...candidateMetadata, routePayloads: value.objectManifest },
+      candidate: {
+        ...candidateMetadata,
+        routePayloads: value.objectManifest,
+        compiledTokenStyles: value.stylesObjectRef ?? compiledTokenStyles,
+      },
       storageSha256: value.storageSha256,
     });
     if (!isRecord(htmlByPath)) throw corrupt("Resolved candidate routes are invalid.");
     return resolveAstroObjectBackedCandidateRecord({
       record: persisted,
       htmlByPath: htmlByPath as Record<string, string>,
+      compiledTokenStyles,
     });
   }
   return validateAstroProductionCandidateRecord(value);
@@ -391,7 +439,7 @@ export function persistedAstroObjectBackedRecordFromResolved(
   if (!isAstroObjectBackedResolvedRecord(resolved)) {
     throw corrupt("Resolved candidate is not backed by immutable route objects.");
   }
-  const { htmlByPath: _htmlByPath, ...candidateMetadata } = resolved.candidate;
+  const { htmlByPath: _htmlByPath, compiledTokenStyles, ...candidateMetadata } = resolved.candidate;
   return validateAstroObjectBackedCandidateRecord({
     schemaVersion: resolved.schemaVersion,
     recordKind: resolved.recordKind,
@@ -400,6 +448,7 @@ export function persistedAstroObjectBackedRecordFromResolved(
     candidate: {
       ...candidateMetadata,
       routePayloads: resolved.objectManifest,
+      compiledTokenStyles: resolved.stylesObjectRef ?? compiledTokenStyles,
     },
     storageSha256: resolved.storageSha256,
   });
@@ -431,7 +480,7 @@ function validateObjectCandidatePayload(value: unknown): AstroObjectBackedCandid
     value.manifest.lifecycle.storage !== ASTRO_OBJECT_CANDIDATE_STORAGE ||
     value.manifest.lifecycle.lifetime !== ASTRO_PRODUCTION_CANDIDATE_LIFETIME ||
     value.manifest.lifecycle.durableRegistration !== true ||
-    typeof value.compiledTokenStyles !== "string" ||
+    !(typeof value.compiledTokenStyles === "string" || isStylesObjectRef(value.compiledTokenStyles)) ||
     !isSha256Record(value.assetFingerprintMap) ||
     !isSha256(value.contentSha256) ||
     value.manifest.provenance.convertedArtifactSha256 !== value.contentSha256 ||
@@ -481,6 +530,44 @@ function objectKeyFor(input: {
     "routes",
     `${routeToken}-${input.sha256}.html`,
   ].join("/");
+}
+
+function createStylesUpload(input: {
+  identity: AstroProductionCandidateIdentity;
+  bucket: string;
+  bytes: Uint8Array;
+}): AstroCandidateObjectUpload & { ref: AstroCandidateStylesObjectRef } {
+  const sha256 = sha256Hex(input.bytes);
+  return {
+    ref: {
+      kind: "compiled_token_styles",
+      bucket: input.bucket,
+      key: [
+        "candidate-v3",
+        input.identity.organizationId,
+        input.identity.ownershipSiteId,
+        input.identity.siteVersionId,
+        input.identity.candidateId,
+        "styles",
+        `${sha256}.css`,
+      ].join("/"),
+      sha256,
+      sizeBytes: input.bytes.byteLength,
+      mediaType: ASTRO_OBJECT_CANDIDATE_STYLES_MEDIA_TYPE,
+    },
+    bytes: input.bytes,
+  };
+}
+
+function isStylesObjectRef(value: unknown): value is AstroCandidateStylesObjectRef {
+  return hasExactKeys(value, ["kind", "bucket", "key", "sha256", "sizeBytes", "mediaType"]) &&
+    value.kind === "compiled_token_styles" &&
+    isBoundedText(value.bucket) &&
+    isBoundedText(value.key) &&
+    isSha256(value.sha256) &&
+    Number.isSafeInteger(value.sizeBytes) &&
+    value.sizeBytes > 0 &&
+    value.mediaType === ASTRO_OBJECT_CANDIDATE_STYLES_MEDIA_TYPE;
 }
 
 function validateRegistration(
