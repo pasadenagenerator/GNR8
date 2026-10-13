@@ -63,6 +63,9 @@ function makeHtmlResponse(html: string): Response {
 
 test("additional child-page asset capture persists responsive and lazy images, deduplicates shared assets, and reports failures", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-page-assets-"));
+  const existingCdnFontPath = "assets/style_asset/existing-cdn-font.woff2";
+  fs.mkdirSync(path.resolve(root, path.dirname(existingCdnFontPath)), { recursive: true });
+  fs.writeFileSync(path.resolve(root, existingCdnFontPath), new Uint8Array([9, 8, 7, 6]));
   const fetchCounts = new Map<string, number>();
   const fetchImpl = async (request: string | URL | Request): Promise<Response> => {
     const url = String(request instanceof Request ? request.url : request);
@@ -87,7 +90,7 @@ test("additional child-page asset capture persists responsive and lazy images, d
         pageUrl: "https://example.com/about",
         bodyPath: path.resolve(root, "about.html"),
         html: [
-          "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/child.css\"><style>@font-face{src:url('https://www.example.com/fonts/inline.woff2')}</style></head><body>",
+          "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/child.css\"><style>@font-face{src:url('https://www.example.com/fonts/inline.woff2'),url('https://assets.example-cdn.test/fonts/existing.woff2'),url('https://assets.example-cdn.test/fonts/child-only.woff2'),url('https://untrusted.example.net/fonts/blocked.woff2')}</style></head><body>",
           "<img src=\"/uploads/child.webp\" srcset=\"/uploads/child-small.webp 480w, /uploads/shared.webp 960w\" data-src=\"/uploads/lazy.webp\">",
           "<div style=\"background-image:url('/uploads/inline.webp')\"></div>",
           "</body></html>",
@@ -99,6 +102,19 @@ test("additional child-page asset capture persists responsive and lazy images, d
         html: "<!doctype html><html><body><img src=\"https://www.example.com/uploads/shared.webp\"><img data-lazy-src=\"/uploads/missing.webp\"></body></html>",
       },
     ],
+    existingFetchManifest: [{
+      tag: "link",
+      attribute: "href",
+      occurrence: 0,
+      rawRef: "https://assets.example-cdn.test/fonts/existing.woff2",
+      resolvedUrl: "https://assets.example-cdn.test/fonts/existing.woff2",
+      localPath: existingCdnFontPath,
+      assetKind: "style_asset",
+      fetchStatus: "fetched",
+      httpStatus: 200,
+      contentType: "font/woff2",
+      byteLength: 4,
+    }],
   });
 
   assert.equal(fetchCounts.get("https://example.com/uploads/shared.webp"), 1);
@@ -111,6 +127,13 @@ test("additional child-page asset capture persists responsive and lazy images, d
   assert.equal(fs.existsSync(path.resolve(root, "uploads/shared.webp")), true);
   assert.equal(fs.existsSync(path.resolve(root, "uploads/inline.webp")), true);
   assert.doesNotMatch(result.pages[0]!.html, /https:\/\/www\.example\.com\/fonts\/inline\.woff2/);
+  assert.doesNotMatch(result.pages[0]!.html, /https:\/\/assets\.example-cdn\.test\/fonts\/(?:existing|child-only)\.woff2/);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/assets\/style_asset\/existing-cdn-font\.woff2/);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/assets\/style_asset\/[^"')]+-child-only\.woff2/);
+  assert.match(result.pages[0]!.html, /https:\/\/untrusted\.example\.net\/fonts\/blocked\.woff2/);
+  assert.equal(fetchCounts.has("https://assets.example-cdn.test/fonts/existing.woff2"), false);
+  assert.equal(fetchCounts.get("https://assets.example-cdn.test/fonts/child-only.woff2"), 1);
+  assert.equal(fetchCounts.has("https://untrusted.example.net/fonts/blocked.woff2"), false);
   assert.match(result.pages[0]!.html, /url\(['"]?\/assets\/style_asset\/[^"')]+-inline\.woff2/);
   assert.match(result.pages[0]!.html, /url\(['"]?\/uploads\/inline\.webp/);
   assert.equal(result.manifestEntries.some((entry) => entry.attribute === "srcset" && entry.fetchStatus === "fetched"), true);

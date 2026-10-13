@@ -2726,13 +2726,32 @@ function canonicalAdditionalPageAssetIdentity(value: string): string {
   return url.toString();
 }
 
-function isAllowedAdditionalPageAssetUrl(candidate: string, pageUrl: string): boolean {
+function canonicalAdditionalPageAssetOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const port = url.port ? `:${url.port}` : "";
+    return `${url.protocol}//${canonicalAssetHost(url.hostname)}${port}`;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedAdditionalPageAssetUrl(
+  candidate: string,
+  pageUrl: string,
+  trustedExternalOrigins: ReadonlySet<string> = new Set(),
+): boolean {
   try {
     const candidateUrl = new URL(candidate);
     const page = new URL(pageUrl);
+    const candidateOrigin = canonicalAdditionalPageAssetOrigin(candidate);
     return (
       (candidateUrl.protocol === "http:" || candidateUrl.protocol === "https:") &&
-      canonicalAssetHost(candidateUrl.hostname) === canonicalAssetHost(page.hostname)
+      (
+        canonicalAssetHost(candidateUrl.hostname) === canonicalAssetHost(page.hostname) ||
+        (candidateOrigin !== null && trustedExternalOrigins.has(candidateOrigin))
+      )
     );
   } catch {
     return false;
@@ -2783,6 +2802,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const usedPathToUrl = new Map<string, string>();
   const representativeUrlByIdentity = new Map<string, string>();
   const aliasToRepresentativeUrl = new Map<string, string>();
+  const trustedExternalOrigins = new Set<string>();
   const representativeUrl = (resolvedUrl: string): string =>
     aliasToRepresentativeUrl.get(resolvedUrl) ??
     representativeUrlByIdentity.get(canonicalAdditionalPageAssetIdentity(resolvedUrl)) ??
@@ -2801,12 +2821,19 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       contentType: entry.contentType,
       byteLength: entry.byteLength,
     });
+    if (entry.fetchStatus === "fetched") {
+      const origin = canonicalAdditionalPageAssetOrigin(entry.resolvedUrl);
+      if (origin) trustedExternalOrigins.add(origin);
+    }
   }
 
   const refsByUrl = new Map<string, Array<ParsedAssetRef & { pageUrl: string }>>();
   for (const state of pageStates) {
     for (const ref of state.refs) {
-      if (!ref.resolvedUrl || !isAllowedAdditionalPageAssetUrl(ref.resolvedUrl, state.page.pageUrl)) continue;
+      if (
+        !ref.resolvedUrl ||
+        !isAllowedAdditionalPageAssetUrl(ref.resolvedUrl, state.page.pageUrl, trustedExternalOrigins)
+      ) continue;
       const identity = canonicalAdditionalPageAssetIdentity(ref.resolvedUrl);
       const representative = representativeUrlByIdentity.get(identity) ?? ref.resolvedUrl;
       representativeUrlByIdentity.set(identity, representative);
@@ -2853,7 +2880,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       });
       const finalUrl = response.url || resolvedUrl;
       const contentType = safeContentType(response.headers.get("content-type"));
-      if (!response.ok || !isAllowedAdditionalPageAssetUrl(finalUrl, pageUrl)) {
+      if (!response.ok || !isAllowedAdditionalPageAssetUrl(finalUrl, pageUrl, trustedExternalOrigins)) {
         outcomeByUrl.set(resolvedUrl, {
           fetchStatus: "fetch_failed",
           httpStatus: response.status,
@@ -2932,7 +2959,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnostics,
         diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
       });
-      if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, pageUrl)) continue;
+      if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, pageUrl, trustedExternalOrigins)) continue;
       const assetKind = inferCssUrlAssetKind(rawRef);
       const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
@@ -3026,7 +3053,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnostics: [],
         diagnosticContext: { tag: "img", attribute: "src", surface: "multi_page_rewrite" },
       });
-      if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl)) return rawRef;
+      if (
+        !resolvedUrl ||
+        !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl, trustedExternalOrigins)
+      ) return rawRef;
       const representative = representativeUrl(resolvedUrl);
       const outcome = outcomeByUrl.get(representative);
       const localPath = localPathByUrl.get(representative);
@@ -3063,7 +3093,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
             diagnostics: [],
             diagnosticContext: { tag: tag as UrlImportAssetTag, attribute, surface: "multi_page_manifest" },
           });
-          if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl)) continue;
+          if (
+            !resolvedUrl ||
+            !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl, trustedExternalOrigins)
+          ) continue;
           discoveredReferenceCount += 1;
           if (pageUrls.has(resolvedUrl)) deduplicatedReferenceCount += 1;
           pageUrls.add(resolvedUrl);
