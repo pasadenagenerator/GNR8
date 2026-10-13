@@ -3006,6 +3006,14 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     const failedForPage = new Set<string>();
     let discoveredReferenceCount = 0;
     let deduplicatedReferenceCount = 0;
+    const htmlLocalPath = toPosixPath(path.relative(input.snapshotRootDirAbs, state.page.bodyPath));
+    const rewriteInlineCss = (cssText: string): string => rewriteCssUrlFunctions({
+      cssText,
+      stylesheetLocalPath: htmlLocalPath,
+      baseUrl: new URL(state.page.pageUrl),
+      localPathByUrl,
+      diagnostics,
+    });
     const rewriteReference = (rawRef: string): string => {
       const resolvedUrl = resolveAssetUrl({
         rawRef,
@@ -3025,6 +3033,14 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     walkDomWithAncestors(state.document, (node) => {
       if (!isElement(node)) return;
       const tag = node.tagName.toLowerCase();
+      const inlineStyle = getAttr(node, "style");
+      if (inlineStyle) setAttr(node, "style", rewriteInlineCss(inlineStyle));
+      if (tag === "style") {
+        for (const child of (node as { childNodes?: unknown[] }).childNodes ?? []) {
+          const textNode = child as { value?: string };
+          if (typeof textNode.value === "string") textNode.value = rewriteInlineCss(textNode.value);
+        }
+      }
       if (tag !== "img" && tag !== "source" && tag !== "link") return;
       const attrs: UrlImportAssetAttribute[] = tag === "link"
         ? ["href"]

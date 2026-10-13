@@ -87,8 +87,9 @@ test("additional child-page asset capture persists responsive and lazy images, d
         pageUrl: "https://example.com/about",
         bodyPath: path.resolve(root, "about.html"),
         html: [
-          "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/child.css\"></head><body>",
+          "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/child.css\"><style>@font-face{src:url('https://www.example.com/fonts/inline.woff2')}</style></head><body>",
           "<img src=\"/uploads/child.webp\" srcset=\"/uploads/child-small.webp 480w, /uploads/shared.webp 960w\" data-src=\"/uploads/lazy.webp\">",
+          "<div style=\"background-image:url('/uploads/inline.webp')\"></div>",
           "</body></html>",
         ].join(""),
       },
@@ -108,6 +109,10 @@ test("additional child-page asset capture persists responsive and lazy images, d
   assert.equal(fs.existsSync(path.resolve(root, "uploads/child-small.webp")), true);
   assert.equal(fs.existsSync(path.resolve(root, "uploads/lazy.webp")), true);
   assert.equal(fs.existsSync(path.resolve(root, "uploads/shared.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/inline.webp")), true);
+  assert.doesNotMatch(result.pages[0]!.html, /https:\/\/www\.example\.com\/fonts\/inline\.woff2/);
+  assert.match(result.pages[0]!.html, /assets\/style_asset\/[^"')]+-inline\.woff2/);
+  assert.match(result.pages[0]!.html, /uploads\/inline\.webp/);
   assert.equal(result.manifestEntries.some((entry) => entry.attribute === "srcset" && entry.fetchStatus === "fetched"), true);
   assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-src" && entry.fetchStatus === "fetched"), true);
   assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-lazy-src" && entry.fetchStatus === "fetch_failed"), true);
