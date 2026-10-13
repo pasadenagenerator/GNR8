@@ -65,8 +65,14 @@ test("large shared CSS is retained as an immutable object and resolved before re
   const created = await repository.create(input);
   assert.ok(created.measurements.resolvedCandidateUtf8Bytes > 2 * 1024 * 1024);
   assert.ok(created.measurements.registryRecordUtf8Bytes < 2 * 1024 * 1024);
-  assert.ok(created.measurements.objectPayloadUtf8Bytes > 2 * 1024 * 1024);
-  assert.ok((created.record as AstroObjectBackedResolvedRecord).stylesObjectRef);
+  const stylesObjectRef = (created.record as AstroObjectBackedResolvedRecord).stylesObjectRef;
+  assert.ok(stylesObjectRef);
+  assert.ok(stylesObjectRef.sizeBytes > 2 * 1024 * 1024);
+  assert.equal(
+    created.measurements.objectPayloadUtf8Bytes,
+    Object.values((created.record as AstroObjectBackedResolvedRecord).objectManifest)
+      .reduce((total, ref) => total + ref.sizeBytes, 0),
+  );
   assert.equal(created.record.candidate.compiledTokenStyles, input.candidate.compiledTokenStyles);
   const rendered = materializeAstroInternalPreviewHtml({
     html: created.record.candidate.htmlByPath["/"],

@@ -34,6 +34,7 @@ import {
   type AstroCandidateOwnershipReadClient,
 } from "./astro-production-candidate-ownership-resolver";
 import { createAstroProductionCandidateId } from "./astro-production-candidate-record";
+import { isAstroObjectBackedResolvedRecord } from "./astro-production-candidate-object-record";
 import { GatewayBackedAstroProductionCandidateRepository } from "./astro-production-candidate-repository";
 import { InMemoryAstroCandidateRegistrationRetryContextStore } from "./astro-production-candidate-registration-contract";
 import { createAstroProductionCandidateRegistrationService } from "./astro-production-candidate-registration-service";
@@ -170,6 +171,10 @@ export async function runSourceBackedAstroGeneration(
     const receipt = producer.readBuildReceipt(candidateId);
     if (!receipt) throw new Error("astro_generation_build_receipt_missing");
     const record = await repository.read({ candidateId, trustedScope: ownership });
+    const retainedObjectUtf8Bytes = isAstroObjectBackedResolvedRecord(record)
+      ? Object.values(record.objectManifest).reduce((total, ref) => total + ref.sizeBytes, 0) +
+        (record.stylesObjectRef?.sizeBytes ?? 0)
+      : 0;
 
     if (!generationVersion.artifactId) {
       const enforcement = evaluateAstroCandidateGovernance(generationVersion);
@@ -298,7 +303,8 @@ export async function runSourceBackedAstroGeneration(
         `routes:${generationInput.outputPaths.join(",")}`,
         `candidate-registry-utf8-bytes:${registrationResult.candidate.registryRecordUtf8Bytes}`,
         `candidate-resolved-utf8-bytes:${registrationResult.candidate.resolvedCandidateUtf8Bytes}`,
-        `candidate-object-utf8-bytes:${registrationResult.candidate.objectPayloadUtf8Bytes}`,
+        `candidate-object-utf8-bytes:${retainedObjectUtf8Bytes}`,
+        `candidate-route-object-utf8-bytes:${registrationResult.candidate.objectPayloadUtf8Bytes}`,
         ...(payload.acceptedFunctionalReductions ? [
           `accepted-functional-reduction:${payload.acceptedFunctionalReductions.kind}`,
           `accepted-functional-reduction:contact-mailto:${payload.acceptedFunctionalReductions.contactEmail}`,
@@ -316,7 +322,7 @@ export async function runSourceBackedAstroGeneration(
       candidateSizes: {
         registryRecordUtf8Bytes: registrationResult.candidate.registryRecordUtf8Bytes,
         resolvedCandidateUtf8Bytes: registrationResult.candidate.resolvedCandidateUtf8Bytes,
-        objectPayloadUtf8Bytes: registrationResult.candidate.objectPayloadUtf8Bytes,
+        objectPayloadUtf8Bytes: retainedObjectUtf8Bytes,
       },
     };
   } catch (error) {

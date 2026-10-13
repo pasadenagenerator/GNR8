@@ -218,7 +218,10 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
     measurements: {
       registryRecordUtf8Bytes: measureAstroObjectBackedCandidateRecordBytes(validated),
       resolvedCandidateUtf8Bytes: Buffer.byteLength(stableStringify(input.candidate), "utf8"),
-      objectPayloadUtf8Bytes: uploads.reduce((total, upload) => total + upload.ref.sizeBytes, 0),
+      // The deployed v3 RPC contract records route-object bytes by summing
+      // candidate.routePayloads. Additional immutable objects remain fully
+      // sized and hashed by their own registry refs.
+      objectPayloadUtf8Bytes: routeUploads.reduce((total, upload) => total + upload.ref.sizeBytes, 0),
     },
   };
 }
