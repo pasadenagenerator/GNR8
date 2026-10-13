@@ -1339,6 +1339,7 @@ function rewriteCssUrlFunctions(input: {
   baseUrl: URL;
   localPathByUrl: Map<string, string>;
   diagnostics: UrlImportDiagnostic[];
+  referenceMode?: "relative" | "root-relative";
 }): string {
   const regex = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
   const replacements: Array<{ start: number; end: number; replacement: string }> = [];
@@ -1360,8 +1361,12 @@ function rewriteCssUrlFunctions(input: {
     const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
     if (!targetLocalPath) continue;
 
-    const rel = path.posix.relative(path.posix.dirname(input.stylesheetLocalPath), targetLocalPath);
-    const rewrittenUrl = rel.length > 0 ? rel : path.posix.basename(targetLocalPath);
+    const rewrittenUrl = input.referenceMode === "root-relative"
+      ? `/${toPosixPath(targetLocalPath).replace(/^\/+/, "")}`
+      : (() => {
+          const rel = path.posix.relative(path.posix.dirname(input.stylesheetLocalPath), targetLocalPath);
+          return rel.length > 0 ? rel : path.posix.basename(targetLocalPath);
+        })();
     replacements.push({
       start: match.index,
       end: match.index + full.length,
@@ -3006,13 +3011,13 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     const failedForPage = new Set<string>();
     let discoveredReferenceCount = 0;
     let deduplicatedReferenceCount = 0;
-    const htmlLocalPath = toPosixPath(path.relative(input.snapshotRootDirAbs, state.page.bodyPath));
     const rewriteInlineCss = (cssText: string): string => rewriteCssUrlFunctions({
       cssText,
-      stylesheetLocalPath: htmlLocalPath,
+      stylesheetLocalPath: "index.html",
       baseUrl: new URL(state.page.pageUrl),
       localPathByUrl,
       diagnostics,
+      referenceMode: "root-relative",
     });
     const rewriteReference = (rawRef: string): string => {
       const resolvedUrl = resolveAssetUrl({
@@ -4937,9 +4942,25 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
     for (const ref of allRefs) refsByKey.set(ref.key, ref);
 
     const occurrenceCounter = new Map<string, number>();
+    const rewriteInlineCss = (cssText: string): string => rewriteCssUrlFunctions({
+      cssText,
+      stylesheetLocalPath: "index.html",
+      baseUrl: normalizedUrl,
+      localPathByUrl,
+      diagnostics,
+      referenceMode: "root-relative",
+    });
     walkDomWithAncestors(document, (node, ancestors) => {
       if (!isElement(node)) return;
       const tag = node.tagName.toLowerCase();
+      const inlineStyle = getAttr(node, "style");
+      if (inlineStyle) setAttr(node, "style", rewriteInlineCss(inlineStyle));
+      if (tag === "style") {
+        for (const child of (node as { childNodes?: unknown[] }).childNodes ?? []) {
+          const textNode = child as { value?: string };
+          if (typeof textNode.value === "string") textNode.value = rewriteInlineCss(textNode.value);
+        }
+      }
       if (tag !== "link" && tag !== "img" && tag !== "script" && tag !== "source" && tag !== "a") return;
 
       const rel = getAttr(node, "rel");

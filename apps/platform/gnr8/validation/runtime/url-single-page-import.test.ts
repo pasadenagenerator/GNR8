@@ -111,8 +111,8 @@ test("additional child-page asset capture persists responsive and lazy images, d
   assert.equal(fs.existsSync(path.resolve(root, "uploads/shared.webp")), true);
   assert.equal(fs.existsSync(path.resolve(root, "uploads/inline.webp")), true);
   assert.doesNotMatch(result.pages[0]!.html, /https:\/\/www\.example\.com\/fonts\/inline\.woff2/);
-  assert.match(result.pages[0]!.html, /assets\/style_asset\/[^"')]+-inline\.woff2/);
-  assert.match(result.pages[0]!.html, /uploads\/inline\.webp/);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/assets\/style_asset\/[^"')]+-inline\.woff2/);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/uploads\/inline\.webp/);
   assert.equal(result.manifestEntries.some((entry) => entry.attribute === "srcset" && entry.fetchStatus === "fetched"), true);
   assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-src" && entry.fetchStatus === "fetched"), true);
   assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-lazy-src" && entry.fetchStatus === "fetch_failed"), true);
@@ -582,6 +582,11 @@ test("url import fetches CSS url() upload image assets from style blocks and inl
   assert.ok(persistedUrlTargets.has(overlayUrl));
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "uploads/KcGdxACT/hero-01.jpg")));
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "uploads/QBSeVQys/overlay.png")));
+  const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
+  assert.equal(writtenHtml.includes(heroUrl), false);
+  assert.equal(writtenHtml.includes(overlayUrl), false);
+  assert.match(writtenHtml, /url\(['"]?\/uploads\/KcGdxACT\/hero-01\.jpg/);
+  assert.match(writtenHtml, /url\(['"]?\/uploads\/QBSeVQys\/overlay\.png/);
 });
 
 test("url import accepts worker partial success as degraded usable rendered truth", async () => {
@@ -1266,9 +1271,9 @@ test("gallery data-req JSON payload double-prefixed preview-assets URL is normal
   assert.equal(writtenHtml.includes("/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/gallery/roboplast-gallery-3.jpg"), true);
 });
 
-test("background inline style image URLs remain unchanged by preview image rewrite", async () => {
-  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-background-inline-style-unchanged-"));
-  const backgroundUrl = "/uploads/gallery/background-image.jpg";
+test("background inline style image URLs use the retained root-relative asset path", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-background-inline-style-retained-"));
+  const backgroundUrl = "https://www.roboplast.si/uploads/gallery/background-image.jpg";
   const html = `<!doctype html><html><body><main><div style="background-image:url('${backgroundUrl}')"></div></main></body></html>`;
   const snapshot = await importPublicSinglePageUrlToSnapshot({
     sourceUrl: "https://www.roboplast.si/",
@@ -1279,7 +1284,8 @@ test("background inline style image URLs remain unchanged by preview image rewri
     fetchImpl: async () => makeHtmlResponse(html),
   });
   const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
-  assert.equal(writtenHtml.includes(`background-image:url('${backgroundUrl}')`), true);
+  assert.equal(writtenHtml.includes(backgroundUrl), false);
+  assert.equal(writtenHtml.includes("background-image:url('/uploads/gallery/background-image.jpg')"), true);
   assert.equal(writtenHtml.includes("/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/gallery/background-image.jpg"), false);
 });
 
