@@ -22,7 +22,7 @@ import type {
 import { isGeneratedOutputRoutePath } from "@/gnr8/output-adapters/generated-output-route-path";
 
 export const ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP = [
-  "sandbox",
+  "sandbox allow-same-origin",
   "default-src 'none'",
   "script-src 'none'",
   "style-src 'unsafe-inline'",
@@ -150,7 +150,15 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
         return jsonError(500, "Candidate preview unavailable.");
       }
 
-      return new Response(preview.html, {
+      const html = rewriteCandidatePreviewLinks({
+        html: preview.html,
+        currentPath: selectors.path,
+        availablePaths: Object.keys(record.candidate.htmlByPath),
+        siteVersionId: selectors.siteVersionId,
+        candidateId: selectors.candidateId,
+      });
+
+      return new Response(html, {
         status: 200,
         headers: {
           ...COMMON_HEADERS,
@@ -160,6 +168,42 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
       });
     },
   };
+}
+
+function rewriteCandidatePreviewLinks(input: {
+  html: string;
+  currentPath: string;
+  availablePaths: string[];
+  siteVersionId: string;
+  candidateId: string;
+}): string {
+  const availablePaths = new Set(input.availablePaths);
+  const currentDirectory = input.currentPath === "/" || input.currentPath.endsWith("/")
+    ? input.currentPath
+    : `${input.currentPath}/`;
+  const baseUrl = new URL(currentDirectory, "https://gnr8.invalid");
+  const previewBase = `/api/gnr8/admin/astro-candidates/${encodeURIComponent(input.siteVersionId)}/${encodeURIComponent(input.candidateId)}/preview`;
+
+  return input.html.replace(/<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>/gi, (tag: string, quote: string, rawHref: string) => {
+    const href = rawHref.trim();
+    if (!href || href.startsWith("#") || /^\/\//.test(href)) return tag;
+
+    let resolved: URL;
+    try {
+      resolved = new URL(href, baseUrl);
+    } catch {
+      return tag;
+    }
+    if (resolved.origin !== baseUrl.origin || resolved.search) return tag;
+
+    const normalizedPath = resolved.pathname === "/"
+      ? "/"
+      : resolved.pathname.replace(/\/+$/, "");
+    if (!isGeneratedOutputRoutePath(normalizedPath) || !availablePaths.has(normalizedPath)) return tag;
+
+    const rewrittenHref = `${previewBase}?path=${encodeURIComponent(normalizedPath)}${resolved.hash}`;
+    return tag.replace(/\bhref\s*=\s*(["'])(.*?)\1/i, `href=${quote}${rewrittenHref}${quote}`);
+  });
 }
 
 async function resolveSelectors(request: Request, context: RouteContext): Promise<{

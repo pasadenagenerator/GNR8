@@ -117,7 +117,7 @@ test("enabled route renders a validated synthetic v2 record through the actual u
   assert.deepEqual(calls, ["ownership", "read", "render"]);
   assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(response.headers.get("content-security-policy"), ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP);
-  assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /sandbox/);
+  assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /sandbox allow-same-origin/);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /script-src 'none'/);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /img-src 'self' data:/);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /font-src 'self' data:/);
@@ -195,6 +195,46 @@ test("valid captured child routes are selected without weakening exact candidate
   assert.equal(response.status, 200);
   assert.match(await response.text(), /Captured child/);
   assert.deepEqual(calls, ["ownership", "read", "render"]);
+});
+
+test("candidate review keeps same-origin assets enabled and rewrites only captured internal routes", async () => {
+  const record = productionRecord();
+  record.candidate.htmlByPath["/about"] = record.candidate.htmlByPath["/"];
+  const deps = previewDependencies(record);
+  deps.renderCandidate = async ({ path }) => ({
+    html: [
+      "<!doctype html><html><body>",
+      '<img src="/api/gnr8/runtime/preview-assets/site/version/uploads/logo.png">',
+      '<a href="/about#team">About</a>',
+      '<a href="/">Home</a>',
+      '<a href="https://chs.si/about">External</a>',
+      '<a href="mailto:mailto@chs.si">Contact</a>',
+      '<a href="/missing">Missing</a>',
+      '<a href="/about?mode=details">Stateful</a>',
+      "</body></html>",
+    ].join(""),
+    source: "astro_internal_preview_candidate",
+    candidateId: record.identity.candidateId,
+    runtimeSiteId: record.identity.runtimeSiteId,
+    siteVersionId: record.identity.siteVersionId,
+    path,
+    fallbackUsed: false,
+  });
+
+  const response = await enabledHandlers(deps).GET(request(), context());
+  const html = await response.text();
+  const previewBase = `/api/gnr8/admin/astro-candidates/${SITE_VERSION_ID}/${CANDIDATE_ID}/preview`;
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-security-policy") ?? "", /sandbox allow-same-origin/);
+  assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'none'/);
+  assert.match(html, /src="\/api\/gnr8\/runtime\/preview-assets\/site\/version\/uploads\/logo\.png"/);
+  assert.match(html, new RegExp(`href="${previewBase}\\?path=%2Fabout#team"`));
+  assert.match(html, new RegExp(`href="${previewBase}\\?path=%2F"`));
+  assert.match(html, /href="https:\/\/chs\.si\/about"/);
+  assert.match(html, /href="mailto:mailto@chs\.si"/);
+  assert.match(html, /href="\/missing"/);
+  assert.match(html, /href="\/about\?mode=details"/);
 });
 
 test("missing or mismatched authoritative ownership is non-enumerating and prevents repository reads", async (t) => {
