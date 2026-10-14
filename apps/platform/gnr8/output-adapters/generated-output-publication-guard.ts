@@ -12,6 +12,10 @@ import {
   ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND,
   ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION,
 } from "./astro-production-candidate-record";
+import {
+  ASTRO_OBJECT_CANDIDATE_RECORD_KIND,
+  ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION,
+} from "./astro-production-candidate-object-record";
 import { ASTRO_STATIC_EXPORT_MANIFEST_VERSION } from "./astro-static-site-build-export-proof";
 import {
   GENERATED_OUTPUT_ELIGIBILITY_POLICY_VERSION,
@@ -80,14 +84,20 @@ export function classifyGeneratedOutputProvenance(input: {
   const provenance = record(candidateManifest?.provenance);
   const ownership = record(candidateManifest?.ownership);
   const assetHandling = record(candidateManifest?.assetHandling);
+  const supportedCandidateRecord = (
+    candidateRecord?.schemaVersion === ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION &&
+    candidateRecord?.recordKind === ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND
+  ) || (
+    candidateRecord?.schemaVersion === ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION &&
+    candidateRecord?.recordKind === ASTRO_OBJECT_CANDIDATE_RECORD_KIND
+  );
 
   if (!promotion || promotion.version !== ASTRO_RUNTIME_ARTIFACT_MATERIALIZATION_VERSION) {
     blockers.push("generated_promotion_provenance_invalid");
   }
   if (
     artifact.manifest.artifactSource !== "astro_candidate_materialization" ||
-    candidateRecord?.schemaVersion !== ASTRO_PRODUCTION_CANDIDATE_SCHEMA_VERSION ||
-    candidateRecord?.recordKind !== ASTRO_PRODUCTION_CANDIDATE_RECORD_KIND ||
+    !supportedCandidateRecord ||
     candidateManifest?.adapterId !== ASTRO_PRODUCTION_CANDIDATE_ADAPTER_ID ||
     candidateManifest?.conversionVersion !== ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION ||
     provenance?.exportManifestVersion !== ASTRO_STATIC_EXPORT_MANIFEST_VERSION ||

@@ -11,6 +11,10 @@ import type { CanonicalSiteVersionSnapshot, RuntimeArtifact } from "@/gnr8/runti
 
 import { createSyntheticAstroInternalPreviewCandidate } from "./astro-internal-preview-candidate-test-fixture";
 import {
+  ASTRO_OBJECT_CANDIDATE_RECORD_KIND,
+  ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION,
+} from "./astro-production-candidate-object-record";
+import {
   createAstroProductionCandidateRecord,
   type AstroProductionCandidateOwnership,
   type AstroProductionCandidateRecord,
@@ -73,6 +77,25 @@ test("valid generated output passes technical policy and an exact explicit revie
     resolver: async () => decision,
   });
   assert.equal(resolved?.technical.evidenceSha256, technical.evidenceSha256);
+});
+
+test("object-backed v3 candidates retain generated-output provenance eligibility", () => {
+  const fixture = buildFixture();
+  const artifact = structuredClone(fixture.artifact);
+  const candidateRecord = artifact.manifest.astroCandidateRecord as Record<string, unknown>;
+  candidateRecord.schemaVersion = ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION;
+  candidateRecord.recordKind = ASTRO_OBJECT_CANDIDATE_RECORD_KIND;
+  artifact.bundleSha256 = bundleHash(artifact);
+
+  assert.deepEqual(classifyGeneratedOutputProvenance({
+    siteVersion: fixture.siteVersion,
+    artifact,
+  }), {
+    kind: "supported_generated_output",
+    candidateId: fixture.record.identity.candidateId,
+    candidateContentSha256: fixture.record.candidate.contentSha256,
+    candidateStorageSha256: fixture.record.storageSha256,
+  });
 });
 
 test("technical policy blocks missing build evidence, ownership drift, corrupt hashes, missing content/assets, broken anchors, unsafe HTML, and unsupported routes", () => {
