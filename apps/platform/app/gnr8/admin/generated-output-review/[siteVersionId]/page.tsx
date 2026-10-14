@@ -25,7 +25,13 @@ export default async function GeneratedOutputReviewPage(props: { params: Promise
   if (process.env.VERCEL_ENV !== "preview" || !isAstroProductionCandidatePreviewFeatureEnabled()) notFound();
   const { siteVersionId } = await props.params;
   if (!isCanonicalUuid(siteVersionId)) notFound();
-  const model = await readGeneratedOutputReviewModel(siteVersionId).catch(() => null);
+  const model = await readGeneratedOutputReviewModel(siteVersionId).catch((error) => {
+    console.error("[gnr8.generated-output-review] model read failed", {
+      siteVersionId,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    return null;
+  });
   if (!model) notFound();
 
   const candidatePreview = (path: string) => `/api/gnr8/admin/astro-candidates/${encodeURIComponent(siteVersionId)}/${encodeURIComponent(model.candidateId)}/preview?path=${encodeURIComponent(path)}`;

@@ -33,6 +33,7 @@ import {
 const LIST_LIMIT_MAX = 100;
 const TEXT_MAX_CHARACTERS = 512;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const OBJECT_ROUTE_READ_CONCURRENCY = 8;
 
 export type AstroProductionCandidateAccessState = {
   candidateId: string;
@@ -437,14 +438,29 @@ export class GatewayBackedAstroProductionCandidateRepository {
             objectStore: this.objectStore,
             ref: record.candidate.compiledTokenStyles,
           });
-      const htmlByPath: Record<string, string> = {};
-      for (const [routePath, ref] of Object.entries(record.candidate.routePayloads)) {
-        htmlByPath[routePath] = await readVerifiedAstroCandidateRouteHtml({
-          objectStore: this.objectStore,
-          ref,
-          compiledTokenStyles,
-        });
-      }
+      const routeEntries = Object.entries(record.candidate.routePayloads);
+      const resolvedEntries = new Array<[string, string]>(routeEntries.length);
+      let nextRouteIndex = 0;
+      const readRouteWorker = async (): Promise<void> => {
+        while (nextRouteIndex < routeEntries.length) {
+          const routeIndex = nextRouteIndex;
+          nextRouteIndex += 1;
+          const [routePath, ref] = routeEntries[routeIndex];
+          const html = await readVerifiedAstroCandidateRouteHtml({
+            objectStore: this.objectStore!,
+            ref,
+            compiledTokenStyles,
+          });
+          resolvedEntries[routeIndex] = [routePath, html];
+        }
+      };
+      await Promise.all(
+        Array.from(
+          { length: Math.min(OBJECT_ROUTE_READ_CONCURRENCY, routeEntries.length) },
+          () => readRouteWorker(),
+        ),
+      );
+      const htmlByPath = Object.fromEntries(resolvedEntries);
       return resolveAstroObjectBackedCandidateRecord({ record, htmlByPath, compiledTokenStyles });
     } catch (error) {
       throw mapValidationError(error);
