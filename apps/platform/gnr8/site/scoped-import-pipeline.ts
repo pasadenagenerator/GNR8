@@ -14,7 +14,7 @@ import type { PreviewDocument } from '@/gnr8/migration/preview-document-model'
 import { importHtmlToPage } from '@/gnr8/importer/html-to-page'
 import { migrateImportedPageToCanonicalDraft } from '@/gnr8/runtime/migration-factory'
 import type { buildDeterministicArtifactBundle as buildDeterministicArtifactBundleType } from '@/gnr8/runtime/artifact-builder'
-import { deterministicId, normalizePagePath } from '@/gnr8/runtime/deterministic'
+import { deterministicId, normalizePagePath, sha256Hex, stableStringify } from '@/gnr8/runtime/deterministic'
 import {
   bindArtifactToVersion,
   createArtifact,
@@ -4010,32 +4010,38 @@ export async function runScopedImportPipeline(input: {
     }
 
     writePathDiagnostics.artifactCreateAttempted = true
+    const artifactManifest = {
+      ...artifactBundle.manifest,
+      sourceKind: 'scoped_pipeline_import',
+      ...(rawPreviewValidationResult
+        ? {
+            latestRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+            rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+            ...(rawPreviewValidationResult.previewValidation
+              ? {
+                  multiPagePreviewValidation: {
+                    ...rawPreviewValidationResult.previewValidation,
+                    rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+                  },
+                }
+              : {}),
+          }
+        : {}),
+    }
     const artifact = await deps.createArtifact({
       siteId: artifactBundle.siteId,
       siteVersionId: artifactBundle.siteVersionId,
       rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
-      bundleSha256: artifactBundle.bundleSha256,
+      bundleSha256: sha256Hex(stableStringify({
+        htmlByPath: artifactBundle.htmlByPath,
+        compiledTokenStyles: artifactBundle.compiledTokenStyles,
+        assetFingerprintMap: artifactBundle.assetFingerprintMap,
+        manifest: artifactManifest,
+      })),
       htmlByPath: artifactBundle.htmlByPath,
       compiledTokenStyles: artifactBundle.compiledTokenStyles,
       assetFingerprintMap: artifactBundle.assetFingerprintMap,
-      manifest: {
-        ...artifactBundle.manifest,
-        sourceKind: 'scoped_pipeline_import',
-        ...(rawPreviewValidationResult
-          ? {
-              latestRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
-              rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
-              ...(rawPreviewValidationResult.previewValidation
-                ? {
-                    multiPagePreviewValidation: {
-                      ...rawPreviewValidationResult.previewValidation,
-                      rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
-                    },
-                  }
-                : {}),
-            }
-          : {}),
-      },
+      manifest: artifactManifest,
       publishStage: 'shadow',
       shadowRestricted: false,
       artifactGovernance,

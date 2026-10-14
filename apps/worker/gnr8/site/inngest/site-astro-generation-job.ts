@@ -126,6 +126,7 @@ function isDeterministicGenerationFailure(error: unknown): boolean {
     candidate.message.startsWith('unsupported_capability:') ||
     candidate.message === 'astro_generation_source_artifact_missing' ||
     candidate.message === 'astro_generation_source_capture_lineage_missing' ||
+    candidate.message === 'astro_generation_source_capture_integrity_mismatch' ||
     candidate.message === 'astro_generation_source_lineage_mismatch'
   )
 }

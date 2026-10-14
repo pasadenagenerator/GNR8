@@ -16,7 +16,7 @@ import {
   getSiteVersion,
   linkRuntimeSiteVersionOwnershipIfAllowed,
 } from "@/gnr8/runtime/runtime-store";
-import { RENDERER_COMPATIBILITY_VERSION } from "@/gnr8/runtime/types";
+import { RENDERER_COMPATIBILITY_VERSION, type RuntimeArtifact } from "@/gnr8/runtime/types";
 import { transitionSiteVersionState } from "@/gnr8/runtime/version-lifecycle-enforcer";
 import {
   completeQueuedAstroGenerationAction,
@@ -77,7 +77,7 @@ export async function runSourceBackedAstroGeneration(
     if (!sourceVersion || sourceVersion.siteId !== payload.runtimeSiteId || sourceVersion.artifactId !== payload.sourceArtifactId) {
       throw new Error("astro_generation_source_lineage_mismatch");
     }
-    const [sourceArtifact, rawArtifact] = await Promise.all([
+    let [sourceArtifact, rawArtifact] = await Promise.all([
       getArtifactById(payload.sourceArtifactId),
       getRawImportedSiteArtifact(payload.sourceSiteVersionId),
     ]);
@@ -142,6 +142,10 @@ export async function runSourceBackedAstroGeneration(
       objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => serviceClient as never }),
     });
     const runtimeStore = new SupabaseAstroCandidateRuntimeArtifactStore(serviceClient);
+    sourceArtifact = await reconcileScopedImportArtifactBundle({
+      artifact: sourceArtifact,
+      runtimeStore,
+    });
     const ownership = await ownershipResolver.resolve({
       siteVersionId: identities.generationSiteVersionId,
       expectedRuntimeSiteId: payload.runtimeSiteId,
@@ -356,4 +360,62 @@ function deterministicUuid(seed: string): string {
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function canonicalizeScopedImportArtifactBundle(
+  artifact: RuntimeArtifact,
+): RuntimeArtifact | null {
+  const canonicalBundleSha256 = computeRuntimeArtifactBundleSha256({
+    htmlByPath: artifact.htmlByPath,
+    compiledTokenStyles: artifact.compiledTokenStyles,
+    assetFingerprintMap: artifact.assetFingerprintMap,
+    manifest: artifact.manifest,
+  });
+  if (artifact.bundleSha256 === canonicalBundleSha256) return artifact;
+
+  const {
+    sourceKind,
+    latestRawPreviewValidationEvidence: _latestRawPreviewValidationEvidence,
+    rawPreviewValidationEvidence: _rawPreviewValidationEvidence,
+    multiPagePreviewValidation: _multiPagePreviewValidation,
+    ...legacyManifest
+  } = artifact.manifest;
+  if (sourceKind !== "scoped_pipeline_import") return null;
+  const legacyBundleSha256 = computeRuntimeArtifactBundleSha256({
+    htmlByPath: artifact.htmlByPath,
+    compiledTokenStyles: artifact.compiledTokenStyles,
+    assetFingerprintMap: artifact.assetFingerprintMap,
+    manifest: legacyManifest,
+  });
+  if (artifact.bundleSha256 !== legacyBundleSha256) return null;
+  return { ...artifact, bundleSha256: canonicalBundleSha256 };
+}
+
+async function reconcileScopedImportArtifactBundle(input: {
+  artifact: RuntimeArtifact;
+  runtimeStore: SupabaseAstroCandidateRuntimeArtifactStore;
+}): Promise<RuntimeArtifact> {
+  const canonical = canonicalizeScopedImportArtifactBundle(input.artifact);
+  if (!canonical) throw new Error("astro_generation_source_capture_integrity_mismatch");
+  if (canonical.bundleSha256 === input.artifact.bundleSha256) return input.artifact;
+
+  const outcome = await input.runtimeStore.compareAndSetArtifact({
+    expectedBundleSha256: input.artifact.bundleSha256,
+    artifact: canonical,
+  });
+  if (outcome === "unavailable") throw new Error("astro_generation_source_capture_reconciliation_unavailable");
+  const reconciled = await input.runtimeStore.readContext(input.artifact.siteVersionId);
+  const artifact = reconciled?.artifact ?? null;
+  const verified = artifact ? canonicalizeScopedImportArtifactBundle(artifact) : null;
+  if (
+    !verified ||
+    verified.id !== canonical.id ||
+    verified.siteId !== canonical.siteId ||
+    verified.siteVersionId !== canonical.siteVersionId ||
+    verified.bundleSha256 !== canonical.bundleSha256 ||
+    artifact?.bundleSha256 !== canonical.bundleSha256
+  ) {
+    throw new Error("astro_generation_source_capture_reconciliation_conflict");
+  }
+  return artifact;
 }

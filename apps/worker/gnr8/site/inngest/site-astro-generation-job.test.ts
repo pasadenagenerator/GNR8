@@ -115,4 +115,13 @@ test('missing immutable source lineage is non-retriable', async () => {
     }),
     (error: unknown) => error instanceof NonRetriableError && error.message === 'astro_generation_source_artifact_missing',
   )
+  await assert.rejects(
+    runSiteAstroGenerationJob({
+      eventData: payload,
+      runGeneration: async () => {
+        throw new Error('astro_generation_source_capture_integrity_mismatch')
+      },
+    }),
+    (error: unknown) => error instanceof NonRetriableError && error.message === 'astro_generation_source_capture_integrity_mismatch',
+  )
 })
