@@ -97,6 +97,22 @@ test("source-backed export verifies exact captured stylesheet references without
   });
 });
 
+test("source-backed export treats HTML-entity serialization as the same stylesheet reference", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const serializedHref = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&display=swap&subset=latin-ext";
+    const capturedHref = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&amp;display=swap&amp;subset=latin-ext";
+    await writeValidDist(workspacePath, { stylesheetHref: serializedHref, stylesheetBody: "body{color:#123}" });
+
+    const inspected = await inspectAstroStaticExport(workspacePath, {
+      expectedContent: ["<title>Northline Operations Proof</title>"],
+      expectedThemeToken: null,
+      expectedStylesheetReferences: [capturedHref],
+    });
+
+    assert.deepEqual(inspected.verifiedStylesheetReferences, [serializedHref]);
+  });
+});
+
 test("source-backed export rejects a missing captured stylesheet reference", async () => {
   await withWorkspace(async (workspacePath) => {
     await writeValidDist(workspacePath, { stylesheetBody: "body{color:#123}" });

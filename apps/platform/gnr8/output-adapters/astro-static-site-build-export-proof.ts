@@ -4,6 +4,7 @@ import { lstat, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 
+import { decodeHtmlEntities } from "../importer/html-utils";
 import type { NormalizedStaticBusinessSiteContent } from "./astro-static-site-adapter";
 import { astroDevServerSmokeProofFixture } from "./astro-static-site-dev-server-smoke-proof";
 import {
@@ -434,13 +435,17 @@ export async function inspectAstroStaticExport(
     }
     const htmlBody = await readFile(join(canonicalDist, ...file.path.split("/")), "utf8");
     assertNoSourceOrDevDependency(htmlBody, canonicalWorkspace, file.path);
-    for (const reference of stylesheetReferencesFromHtml(htmlBody)) observedStylesheetReferences.add(reference);
+    for (const reference of stylesheetReferencesFromHtml(htmlBody)) {
+      observedStylesheetReferences.add(canonicalStylesheetReference(reference));
+    }
     references.push(...verifyHtmlReferences(htmlBody, file.path, filePaths));
   }
   const stylesheetPaths = Array.from(
     new Set(references.filter((reference) => reference.kind === "stylesheet").map((reference) => reference.resolvedPath)),
   ).sort();
-  const expectedStylesheetReferences = [...new Set(verification.expectedStylesheetReferences ?? [])].sort();
+  const expectedStylesheetReferences = [...new Set(
+    (verification.expectedStylesheetReferences ?? []).map(canonicalStylesheetReference),
+  )].sort();
   const missingExpectedStylesheetReferences = expectedStylesheetReferences
     .filter((reference) => !observedStylesheetReferences.has(reference));
   if (missingExpectedStylesheetReferences.length > 0) {
@@ -677,6 +682,10 @@ function stylesheetReferencesFromHtml(html: string): string[] {
     .filter((tag) => /\brel=["'][^"']*stylesheet[^"']*["']/i.test(tag))
     .map((tag) => tag.match(/\bhref=["']([^"']+)["']/i)?.[1] ?? "")
     .filter(Boolean))];
+}
+
+function canonicalStylesheetReference(reference: string): string {
+  return decodeHtmlEntities(reference).trim();
 }
 
 function verifyCssReferences(css: string, stylesheetPath: string, filePaths: Set<string>): AstroStaticExportReference[] {
