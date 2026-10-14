@@ -130,6 +130,37 @@ test("normal source input preserves captured routes, navigation, owned asset ide
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("/uploads/about.png")));
 });
 
+test("normalizes rendered navigation with the same targets used by governance evidence", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title></head><body>
+      <a href="/about">About</a>
+      <a href="https://example.com/about/">Absolute About</a>
+      <a href="https://outside.test/article">External article</a>
+      <a href="#">Legacy toggle</a>
+      <a href="#o-nas">Missing section</a>
+      <a href="#details">Details</a><section id="details">Detail text</section>
+      <img src="/uploads/logo.png">
+    </body></html>`,
+  });
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+  const targets = new Set(generated.contentManifest.requiredNavigation.map((item) => item.target));
+
+  assert.match(rootSource, /href="\/about"/);
+  assert.match(rootSource, /href="https:\/\/outside\.test\/article"/);
+  assert.match(rootSource, /href="#details"/);
+  assert.doesNotMatch(rootSource, /href="#(?:o-nas)?"/);
+  assert.match(rootSource, /data-gnr8-disabled-local-anchor="#o-nas"/);
+  assert.doesNotMatch(rootSource, /<a\b[^>]*href="\/api\/gnr8\/runtime\/preview-assets\//);
+  assert.match(rootSource, /src="\/api\/gnr8\/runtime\/preview-assets\/runtime-site\/11111111-1111-4111-8111-111111111111\/uploads\/logo\.png"/);
+  assert.deepEqual([...targets].sort(), ["#details", "/", "/about", "https://outside.test/article"]);
+});
+
 test("fails explicitly when generated HTML references an owned asset without persisted byte evidence", () => {
   const input = fixture();
   delete input.rawArtifact.fileMap["uploads/logo.png"];

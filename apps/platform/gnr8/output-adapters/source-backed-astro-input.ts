@@ -122,7 +122,7 @@ export function createSourceBackedAstroGenerationInput(input: {
   const sourceHtmlByPath = input.htmlByPath ?? input.artifact.htmlByPath;
   const routes = Object.keys(sourceHtmlByPath).sort((left, right) => left.localeCompare(right));
   if (!routes.includes("/")) throw new SourceBackedAstroUnsupportedError(["missing_root_route"]);
-  const pages = routes.map((path) => normalizePage({ ...input, path, html: sourceHtmlByPath[path] ?? "" }));
+  let pages = routes.map((path) => normalizePage({ ...input, path, html: sourceHtmlByPath[path] ?? "" }));
   const unsupported = new Set<string>();
   for (const page of pages) page.unsupported.forEach((item) => unsupported.add(item));
   const knownRoutes = new Map<string, string>();
@@ -134,41 +134,23 @@ export function createSourceBackedAstroGenerationInput(input: {
     }
     knownRoutes.set(identity, route);
   }
-  const normalizedHtmlByPath = new Map(pages.map((page) => [page.path, page.bodyHtml]));
-  const rootDocument = parse(sourceHtmlByPath["/"] ?? "") as DefaultTreeAdapterMap["document"];
   const sourceHost = sourceHostFromRawArtifact(input.rawArtifact);
   const outOfScopeSourceUrls = acquisitionPageLimitSourceUrls(input.siteVersion.importProvenanceSummary, sourceHost);
   const captureScopeLimitations = new Map<string, string>();
-  const normalizeAnchors = (document: DefaultTreeAdapterMap["document"], reductionsOnly = false) => allElements(document)
-    .filter((element) => element.tagName === "a")
-    .filter((element) => !reductionsOnly || attribute(element, "data-gnr8-functional-reduction-link") !== null)
-    .map((element) => ({
-      label: normalizeText(textContent(element)),
-      href: attribute(element, "href") ?? "",
-      forceExternal: attribute(element, "data-gnr8-source-link") !== null,
-    }))
-    .filter((item) => item.label && item.href)
-    .map((item) => ({
-      label: item.label,
-      href: item.forceExternal
-        ? normalizeExplicitSourceLink(item.href)
-        : normalizeNavigationTarget(
-          item.href,
-          sourceHost,
-          knownRoutes,
-          outOfScopeSourceUrls,
-          captureScopeLimitations,
-          unsupported,
-        ),
-    }))
-    .filter((item) => Boolean(item.href));
-  const navItems = normalizeAnchors(rootDocument);
-  const allNavigationItems = routes.flatMap((route) => normalizeAnchors(
-    parse(sourceHtmlByPath[route] ?? "") as DefaultTreeAdapterMap["document"],
-  )).concat(routes.flatMap((route) => normalizeAnchors(
-    parse(normalizedHtmlByPath.get(route) ?? "") as DefaultTreeAdapterMap["document"],
-    true,
-  )));
+  const normalizedPageNavigation = pages.map((page) => normalizePageNavigation({
+    html: page.bodyHtml,
+    sourceHost,
+    knownRoutes,
+    outOfScopeSourceUrls,
+    captureScopeLimitations,
+    unsupported,
+  }));
+  pages = pages.map((page, index) => ({
+    ...page,
+    bodyHtml: normalizedPageNavigation[index]!.html,
+  }));
+  const allNavigationItems = normalizedPageNavigation.flatMap((result) => result.items);
+  const navItems = normalizedPageNavigation[routes.indexOf("/")]!.items.filter((item) => item.label);
   const dedupedNav = [...new Map(navItems.map((item) => [`${item.label}\0${item.href}`, item])).values()].slice(0, 24);
 
   if (unsupported.size > 0) throw new SourceBackedAstroUnsupportedError([...unsupported].sort());
@@ -353,6 +335,7 @@ function normalizePage(input: {
   if (input.path !== "/" && input.rawArtifact.metadata.multiPage?.enabled && routeSource.outcome !== "selected") {
     unsupported.push(`source_route_lineage_missing:${input.path}`);
   }
+  preserveAnchorHrefsForRuntimeRewrite(document);
   const serialized = serialize(document);
   let rewritten = rewriteRawTemplateHtmlForRuntime({
     html: serialized,
@@ -409,6 +392,59 @@ function normalizeNavigationTarget(
   } catch {
     return "";
   }
+}
+
+function normalizePageNavigation(input: {
+  html: string;
+  sourceHost: string;
+  knownRoutes: Map<string, string>;
+  outOfScopeSourceUrls: Map<string, string>;
+  captureScopeLimitations: Map<string, string>;
+  unsupported: Set<string>;
+}): { html: string; items: Array<{ label: string; href: string }> } {
+  const document = parseFragment(input.html) as DefaultTreeAdapterMap["documentFragment"];
+  const elements = allElements(document);
+  const localTargets = new Set(elements.flatMap((element) => [
+    attribute(element, "id"),
+    element.tagName === "a" ? attribute(element, "name") : null,
+  ]).filter((value): value is string => Boolean(value)));
+  const items: Array<{ label: string; href: string }> = [];
+
+  for (const anchor of elements.filter((element) => element.tagName === "a")) {
+    const href = attribute(anchor, "href")?.trim() ?? "";
+    if (!href) continue;
+    if (href.startsWith("#")) {
+      const fragment = safeDecodeFragment(href.slice(1));
+      if (!fragment || !localTargets.has(fragment)) {
+        anchor.attrs = anchor.attrs.filter((item) => item.name !== "href");
+        setAttribute(anchor, "data-gnr8-disabled-local-anchor", href);
+        continue;
+      }
+    }
+    const normalized = attribute(anchor, "data-gnr8-source-link") !== null
+      ? normalizeExplicitSourceLink(href)
+      : normalizeNavigationTarget(
+        href,
+        input.sourceHost,
+        input.knownRoutes,
+        input.outOfScopeSourceUrls,
+        input.captureScopeLimitations,
+        input.unsupported,
+      );
+    if (!normalized) {
+      anchor.attrs = anchor.attrs.filter((item) => item.name !== "href");
+      setAttribute(anchor, "data-gnr8-disabled-navigation", href);
+      continue;
+    }
+    setAttribute(anchor, "href", normalized);
+    items.push({ label: normalizeText(textContent(anchor)), href: normalized });
+  }
+
+  return { html: serialize(document), items };
+}
+
+function safeDecodeFragment(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
 }
 
 function normalizeExplicitSourceLink(href: string): string {
@@ -645,6 +681,13 @@ function restoreExplicitSourceLinks(html: string): string {
     anchor.attrs = anchor.attrs.filter((item) => item.name !== "data-gnr8-source-href");
   }
   return serialize(document);
+}
+function preserveAnchorHrefsForRuntimeRewrite(document: DefaultTreeAdapterMap["document"]): void {
+  for (const anchor of allElements(document).filter((element) => element.tagName === "a")) {
+    if (attribute(anchor, "data-gnr8-source-href") !== null) continue;
+    const href = attribute(anchor, "href");
+    if (href) setAttribute(anchor, "data-gnr8-source-href", href);
+  }
 }
 function isFormSecurityEmbed(element: HtmlElement): boolean {
   const src = attribute(element, "src") ?? attribute(element, "data") ?? "";
