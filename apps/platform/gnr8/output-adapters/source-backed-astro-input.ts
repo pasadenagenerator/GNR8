@@ -34,7 +34,11 @@ export type SourceBackedAstroGenerationInput = {
   capabilities: OutputAdapterCapability[];
   outputPaths: string[];
   ownedAssetFingerprints: Record<string, string>;
-  verification: { expectedContent: string[]; expectedThemeToken: string };
+  verification: {
+    expectedContent: string[];
+    expectedThemeToken: string | null;
+    expectedStylesheetReferences?: string[];
+  };
   contentManifest: GeneratedOutputContentManifest;
   sourceManifest: {
     adapterId: "astro-static-site";
@@ -237,6 +241,11 @@ export function createSourceBackedAstroGenerationInput(input: {
     target: item.href,
   }));
   const generatedHtml = normalizedPages.map((page) => `${page.headHtml ?? ""}\n${page.bodyHtml}`).join("\n");
+  const expectedStylesheetReferences = [...new Set(normalizedPages.flatMap((page) =>
+    [...(page.headHtml ?? "").matchAll(/<link\b[^>]*\brel=["'][^"']*stylesheet[^"']*["'][^>]*>/gi)]
+      .map((match) => htmlAttributeFromMarkup(match[0], "href"))
+      .filter(Boolean),
+  ))].sort();
   const referencedOwnedAssetUrls = [...new Set([
     ...extractOwnedAssetUrls(generatedHtml),
     ...extractStylesheetDependencyAssetUrls({
@@ -272,7 +281,11 @@ export function createSourceBackedAstroGenerationInput(input: {
     capabilities: ["static_pages", ...(requiredAssets.length > 0 ? ["local_assets" as const] : [])],
     outputPaths: routes,
     ownedAssetFingerprints,
-    verification: { expectedContent: [siteName], expectedThemeToken: `--gnr8-astro-accent: ${accent};` },
+    verification: {
+      expectedContent: [siteName],
+      expectedThemeToken: null,
+      expectedStylesheetReferences,
+    },
     contentManifest,
     sourceManifest: {
       adapterId: "astro-static-site",

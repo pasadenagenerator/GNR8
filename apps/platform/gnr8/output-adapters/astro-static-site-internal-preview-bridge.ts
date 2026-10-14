@@ -364,6 +364,7 @@ async function revalidateInspectedExport(inspected: InspectedAstroStaticExport):
   const revalidated = await inspectAstroStaticExport(workspacePath, {
     expectedContent: inspected.verifiedContent,
     expectedThemeToken: inspected.verifiedThemeToken,
+    expectedStylesheetReferences: inspected.verifiedStylesheetReferences,
   });
   if (
     revalidated.distPath !== inspected.distPath ||

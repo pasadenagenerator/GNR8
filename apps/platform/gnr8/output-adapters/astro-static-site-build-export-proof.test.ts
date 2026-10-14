@@ -80,6 +80,37 @@ test("multipage export still rejects output when no referenced stylesheet contai
   });
 });
 
+test("source-backed export verifies exact captured stylesheet references without requiring a synthetic theme token", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const stylesheetHref = "/api/gnr8/runtime/preview-assets/site/version/assets/user-style.css";
+    await writeValidDist(workspacePath, { stylesheetHref, stylesheetBody: "body{color:#123}" });
+
+    const inspected = await inspectAstroStaticExport(workspacePath, {
+      expectedContent: ["<title>Northline Operations Proof</title>"],
+      expectedThemeToken: null,
+      expectedStylesheetReferences: [stylesheetHref],
+    });
+
+    assert.equal(inspected.themeStylesheetPath, null);
+    assert.equal(inspected.verifiedThemeToken, null);
+    assert.deepEqual(inspected.verifiedStylesheetReferences, [stylesheetHref]);
+  });
+});
+
+test("source-backed export rejects a missing captured stylesheet reference", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeValidDist(workspacePath, { stylesheetBody: "body{color:#123}" });
+    await assertValidationError(
+      inspectAstroStaticExport(workspacePath, {
+        expectedContent: ["<title>Northline Operations Proof</title>"],
+        expectedThemeToken: null,
+        expectedStylesheetReferences: ["/api/gnr8/runtime/preview-assets/site/version/assets/missing.css"],
+      }),
+      "stylesheet_verification_failed",
+    );
+  });
+});
+
 test("export validation rejects missing or empty HTML and missing referenced assets", async () => {
   await withWorkspace(async (workspacePath) => {
     await mkdir(join(workspacePath, "dist"));

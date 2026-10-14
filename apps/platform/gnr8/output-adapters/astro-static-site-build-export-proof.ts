@@ -68,15 +68,17 @@ export interface InspectedAstroStaticExport {
   manifest: AstroStaticExportManifest;
   indexHtml: string;
   stylesheetPaths: string[];
-  themeStylesheetPath: string;
+  themeStylesheetPath: string | null;
   references: AstroStaticExportReference[];
   verifiedContent: string[];
-  verifiedThemeToken: string;
+  verifiedThemeToken: string | null;
+  verifiedStylesheetReferences: string[];
 }
 
 export interface AstroStaticExportVerification {
   expectedContent: string[];
-  expectedThemeToken: string;
+  expectedThemeToken: string | null;
+  expectedStylesheetReferences?: string[];
 }
 
 export interface CommandResult {
@@ -425,18 +427,29 @@ export async function inspectAstroStaticExport(
   const filePaths = new Set(files.map((file) => file.path));
   const htmlFiles = files.filter((file) => /(?:^|\/)index\.html$/i.test(file.path));
   const references: AstroStaticExportReference[] = [];
+  const observedStylesheetReferences = new Set<string>();
   for (const file of htmlFiles) {
     if (file.bytes === 0) {
       throw new AstroStaticExportValidationError("index_empty", `Astro route output is empty: ${file.path}.`);
     }
     const htmlBody = await readFile(join(canonicalDist, ...file.path.split("/")), "utf8");
     assertNoSourceOrDevDependency(htmlBody, canonicalWorkspace, file.path);
+    for (const reference of stylesheetReferencesFromHtml(htmlBody)) observedStylesheetReferences.add(reference);
     references.push(...verifyHtmlReferences(htmlBody, file.path, filePaths));
   }
   const stylesheetPaths = Array.from(
     new Set(references.filter((reference) => reference.kind === "stylesheet").map((reference) => reference.resolvedPath)),
   ).sort();
-  if (stylesheetPaths.length === 0) {
+  const expectedStylesheetReferences = [...new Set(verification.expectedStylesheetReferences ?? [])].sort();
+  const missingExpectedStylesheetReferences = expectedStylesheetReferences
+    .filter((reference) => !observedStylesheetReferences.has(reference));
+  if (missingExpectedStylesheetReferences.length > 0) {
+    throw new AstroStaticExportValidationError(
+      "stylesheet_verification_failed",
+      `Built HTML is missing ${missingExpectedStylesheetReferences.length} expected source stylesheet reference(s).`,
+    );
+  }
+  if (stylesheetPaths.length === 0 && expectedStylesheetReferences.length === 0) {
     throw new AstroStaticExportValidationError("stylesheet_verification_failed", "Built HTML has no local stylesheet.");
   }
 
@@ -445,12 +458,12 @@ export async function inspectAstroStaticExport(
   for (const stylesheetPath of stylesheetPaths) {
     const stylesheet = await readFile(join(canonicalDist, ...stylesheetPath.split("/")), "utf8");
     assertNoSourceOrDevDependency(stylesheet, canonicalWorkspace, stylesheetPath);
-    if (!themeStylesheetPath && themeTokenPattern(expectedThemeToken).test(stylesheet)) {
+    if (expectedThemeToken && !themeStylesheetPath && themeTokenPattern(expectedThemeToken).test(stylesheet)) {
       themeStylesheetPath = stylesheetPath;
     }
     references.push(...verifyCssReferences(stylesheet, stylesheetPath, filePaths));
   }
-  if (!themeStylesheetPath) {
+  if (expectedThemeToken && !themeStylesheetPath) {
     throw new AstroStaticExportValidationError(
       "stylesheet_verification_failed",
       "Built stylesheets are missing the expected theme token.",
@@ -469,6 +482,7 @@ export async function inspectAstroStaticExport(
     references,
     verifiedContent,
     verifiedThemeToken: expectedThemeToken,
+    verifiedStylesheetReferences: expectedStylesheetReferences,
   };
 }
 
@@ -658,6 +672,13 @@ function verifyHtmlReferences(html: string, sourcePath: string, filePaths: Set<s
   return references;
 }
 
+function stylesheetReferencesFromHtml(html: string): string[] {
+  return [...new Set((html.match(/<link\b[^>]*>/gi) ?? [])
+    .filter((tag) => /\brel=["'][^"']*stylesheet[^"']*["']/i.test(tag))
+    .map((tag) => tag.match(/\bhref=["']([^"']+)["']/i)?.[1] ?? "")
+    .filter(Boolean))];
+}
+
 function verifyCssReferences(css: string, stylesheetPath: string, filePaths: Set<string>): AstroStaticExportReference[] {
   const references: AstroStaticExportReference[] = [];
   const matches = css.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi);
@@ -747,8 +768,11 @@ async function verifyDistHttp(
   }
 
   const stylesheetPath = inspected.themeStylesheetPath;
-  if (!stylesheetPath) {
-    throw proofError("stylesheet_verification_failed", "No built stylesheet is available for HTTP verification.", evidence);
+  if (!stylesheetPath || !inspected.verifiedThemeToken) {
+    if (inspected.verifiedStylesheetReferences.length === 0) {
+      throw proofError("stylesheet_verification_failed", "No verified stylesheet evidence is available for HTTP verification.", evidence);
+    }
+    return;
   }
   const sourceReference = inspected.references.find(
     (reference) => reference.kind === "stylesheet" && reference.resolvedPath === stylesheetPath,
