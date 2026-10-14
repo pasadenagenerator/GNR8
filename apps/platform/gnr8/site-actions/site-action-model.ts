@@ -59,6 +59,7 @@ export type SiteActionRequest =
         kind: 'legacy-forms-to-disclosed-links-v1'
         contactEmail: string
         commentLinks: 'source-article'
+        sourceWidgetRemovals?: Array<'cookie-consent' | 'form-captcha' | 'back-to-top'>
       }
     }
   | {

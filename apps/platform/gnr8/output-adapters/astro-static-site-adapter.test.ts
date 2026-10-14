@@ -73,6 +73,7 @@ test("captured pages preserve their source shell without adding synthetic naviga
   content.pages = [{
     path: "/",
     title: "Home",
+    headHtml: '<link rel="stylesheet" href="/api/gnr8/runtime/preview-assets/site/version/assets/user-style.css"><style is:global>.home{display:block}</style>',
     bodyHtml: '<header data-source-header><a href="/cohesity"><img src="/logo.gif" alt="CHS"></a></header><main><h1>Source home</h1></main><footer data-source-footer>Source footer</footer>',
   }];
 
@@ -83,6 +84,9 @@ test("captured pages preserve their source shell without adding synthetic naviga
   assert.match(page, /<header data-source-header>/);
   assert.match(page, /<img src="\/logo\.gif" alt="CHS">/);
   assert.match(page, /<footer data-source-footer>Source footer<\/footer>/);
+  assert.match(page, /assets\/user-style\.css/);
+  assert.match(page, /<style is:global>\.home/);
+  assert.doesNotMatch(page, /href="\/styles\/global\.css"/);
   assert.doesNotMatch(page, /class="site-header"/);
   assert.doesNotMatch(page, /Construction Health Solutions/);
 });

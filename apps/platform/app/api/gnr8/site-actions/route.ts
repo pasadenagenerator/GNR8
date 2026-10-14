@@ -71,13 +71,19 @@ export async function POST(request: NextRequest) {
     const reductionKind = normalizeText(requestedReductions?.kind)
     const reductionContactEmail = normalizeText(requestedReductions?.contactEmail).toLowerCase()
     const reductionCommentLinks = normalizeText(requestedReductions?.commentLinks)
+    const reductionWidgetRemovals = Array.isArray(requestedReductions?.sourceWidgetRemovals)
+      ? requestedReductions.sourceWidgetRemovals.map(normalizeText)
+      : []
+    const allowedWidgetRemovals = new Set(['cookie-consent', 'form-captcha', 'back-to-top'])
     if (
       requestedReductions &&
       (
         actionType !== 'generate_redesign' ||
         reductionKind !== 'legacy-forms-to-disclosed-links-v1' ||
         !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reductionContactEmail) ||
-        reductionCommentLinks !== 'source-article'
+        reductionCommentLinks !== 'source-article' ||
+        reductionWidgetRemovals.some((item) => !allowedWidgetRemovals.has(item)) ||
+        new Set(reductionWidgetRemovals).size !== reductionWidgetRemovals.length
       )
     ) {
       return NextResponse.json({ ok: false, error: 'acceptedFunctionalReductions is invalid' }, { status: 400 })
@@ -105,6 +111,9 @@ export async function POST(request: NextRequest) {
                     kind: 'legacy-forms-to-disclosed-links-v1',
                     contactEmail: reductionContactEmail,
                     commentLinks: 'source-article',
+                    ...(reductionWidgetRemovals.length > 0
+                      ? { sourceWidgetRemovals: reductionWidgetRemovals as Array<'cookie-consent' | 'form-captcha' | 'back-to-top'> }
+                      : {}),
                   }
                 : undefined,
             }

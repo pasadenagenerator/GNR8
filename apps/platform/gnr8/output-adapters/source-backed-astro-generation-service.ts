@@ -52,7 +52,7 @@ import { createBuildEvidenceForCandidate } from "./generated-output-evidence";
 import { selectOutputAdapter } from "./output-adapter-selection";
 import {
   createSourceBackedAstroGenerationInput,
-  loadSourceBackedAstroHtmlByPath,
+  loadSourceBackedAstroGenerationSource,
 } from "./source-backed-astro-input";
 
 export type SourceBackedAstroGenerationResult = {
@@ -85,7 +85,7 @@ export async function runSourceBackedAstroGeneration(
       throw new Error("astro_generation_source_artifact_missing");
     }
 
-    const sourceHtmlByPath = await loadSourceBackedAstroHtmlByPath({
+    const sourceGenerationSource = await loadSourceBackedAstroGenerationSource({
       siteVersion: sourceVersion,
       rawArtifact,
       getRawAsset: getRawTemplateSiteAsset,
@@ -94,7 +94,8 @@ export async function runSourceBackedAstroGeneration(
       siteVersion: sourceVersion,
       artifact: sourceArtifact,
       rawArtifact,
-      htmlByPath: sourceHtmlByPath,
+      htmlByPath: sourceGenerationSource.htmlByPath,
+      stylesheetCssByPath: sourceGenerationSource.stylesheetCssByPath,
       acceptedFunctionalReductions: payload.acceptedFunctionalReductions,
     });
     const selection = selectOutputAdapter({
@@ -313,6 +314,8 @@ export async function runSourceBackedAstroGeneration(
           `accepted-functional-reduction:${payload.acceptedFunctionalReductions.kind}`,
           `accepted-functional-reduction:contact-mailto:${payload.acceptedFunctionalReductions.contactEmail}`,
           "accepted-functional-reduction:comments:source-article-links",
+          ...(payload.acceptedFunctionalReductions.sourceWidgetRemovals ?? [])
+            .map((removal) => `accepted-functional-reduction:source-widget-removed:${removal}`),
         ] : []),
       ],
     });

@@ -77,6 +77,8 @@ export interface NormalizedStaticBusinessSiteContent {
 export interface NormalizedStaticSitePage {
   path: string;
   title: string;
+  headHtml?: string;
+  bodyAttributes?: Record<string, string>;
   bodyHtml: string;
 }
 
@@ -170,7 +172,15 @@ function normalizedCapturedPages(pages: NormalizedStaticSitePage[]): NormalizedS
     const path = normalizeRoutePath(page.path);
     if (byPath.has(path)) throw new Error(`duplicate_astro_route:${path}`);
     if (/<script\b/i.test(page.bodyHtml)) throw new Error(`unsupported_astro_page_script:${path}`);
-    byPath.set(path, { path, title: page.title.trim() || "Untitled", bodyHtml: page.bodyHtml });
+    byPath.set(path, {
+      path,
+      title: page.title.trim() || "Untitled",
+      ...(page.headHtml?.trim() ? { headHtml: page.headHtml.trim() } : {}),
+      ...(page.bodyAttributes && Object.keys(page.bodyAttributes).length > 0
+        ? { bodyAttributes: { ...page.bodyAttributes } }
+        : {}),
+      bodyHtml: page.bodyHtml,
+    });
   }
   if (!byPath.has("/")) throw new Error("astro_root_route_required");
   return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
@@ -193,14 +203,18 @@ function sourcePathForRoute(route: string): string {
 }
 
 function createCapturedPageAstro(page: NormalizedStaticSitePage): string {
+  const bodyAttributes = Object.entries(page.bodyAttributes ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => ` ${escapeAttribute(name)}="${escapeAttribute(value)}"`)
+    .join("");
   return `<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(page.title)}</title>
-    <link rel="stylesheet" href="/styles/global.css" />
+${page.headHtml ? `${page.headHtml}\n` : ""}
   </head>
-  <body data-gnr8-source-route="${escapeAttribute(page.path)}">
+  <body data-gnr8-source-route="${escapeAttribute(page.path)}"${bodyAttributes}>
 ${page.bodyHtml}
   </body>
 </html>

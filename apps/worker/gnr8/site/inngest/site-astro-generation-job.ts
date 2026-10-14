@@ -66,14 +66,20 @@ export function parseSiteAstroGenerationPayload(value: unknown): SiteAstroGenera
         kind: normalizeText(reduction.kind),
         contactEmail: normalizeText(reduction.contactEmail).toLowerCase(),
         commentLinks: normalizeText(reduction.commentLinks),
+        sourceWidgetRemovals: Array.isArray(reduction.sourceWidgetRemovals)
+          ? reduction.sourceWidgetRemovals.map(normalizeText)
+          : [],
       }
     : null
+  const allowedWidgetRemovals = new Set(['cookie-consent', 'form-captcha', 'back-to-top'])
   if (
     acceptedFunctionalReductions &&
     (
       acceptedFunctionalReductions.kind !== 'legacy-forms-to-disclosed-links-v1' ||
       !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(acceptedFunctionalReductions.contactEmail) ||
-      acceptedFunctionalReductions.commentLinks !== 'source-article'
+      acceptedFunctionalReductions.commentLinks !== 'source-article' ||
+      acceptedFunctionalReductions.sourceWidgetRemovals.some((item) => !allowedWidgetRemovals.has(item)) ||
+      new Set(acceptedFunctionalReductions.sourceWidgetRemovals).size !== acceptedFunctionalReductions.sourceWidgetRemovals.length
     )
   ) return null
   return {
@@ -91,6 +97,9 @@ export function parseSiteAstroGenerationPayload(value: unknown): SiteAstroGenera
         kind: 'legacy-forms-to-disclosed-links-v1' as const,
         contactEmail: acceptedFunctionalReductions.contactEmail,
         commentLinks: 'source-article' as const,
+        ...(acceptedFunctionalReductions.sourceWidgetRemovals.length > 0
+          ? { sourceWidgetRemovals: acceptedFunctionalReductions.sourceWidgetRemovals as Array<'cookie-consent' | 'form-captcha' | 'back-to-top'> }
+          : {}),
       },
     } : {}),
   } as SiteAstroGenerationRequestedPayload

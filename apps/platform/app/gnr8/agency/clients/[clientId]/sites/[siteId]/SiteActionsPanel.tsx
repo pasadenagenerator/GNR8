@@ -110,6 +110,9 @@ export default function SiteActionsPanel(props: Props) {
   const [outputAdapterId, setOutputAdapterId] = useState<'default' | 'html-static-artifact'>('default')
   const [acceptLegacyFormReductions, setAcceptLegacyFormReductions] = useState(false)
   const [legacyFormContactEmail, setLegacyFormContactEmail] = useState('')
+  const [removeCookieConsent, setRemoveCookieConsent] = useState(false)
+  const [removeFormCaptcha, setRemoveFormCaptcha] = useState(false)
+  const [removeBackToTop, setRemoveBackToTop] = useState(false)
   const [localMessage, setLocalMessage] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
 
@@ -166,6 +169,11 @@ export default function SiteActionsPanel(props: Props) {
                   kind: 'legacy-forms-to-disclosed-links-v1',
                   contactEmail: legacyFormContactEmail,
                   commentLinks: 'source-article',
+                  sourceWidgetRemovals: [
+                    ...(removeCookieConsent ? ['cookie-consent' as const] : []),
+                    ...(removeFormCaptcha ? ['form-captcha' as const] : []),
+                    ...(removeBackToTop ? ['back-to-top' as const] : []),
+                  ],
                 }
               : undefined,
           variantId: type === 'publish_site' ? props.variants.selectedVariantId ?? undefined : undefined,
@@ -302,27 +310,41 @@ export default function SiteActionsPanel(props: Props) {
                 </span>
               </label>
               {acceptLegacyFormReductions ? (
-                <label style={{ fontSize: 12, color: '#78350f' }}>
-                  Contact email shown in the generated candidate
-                  <input
-                    type='email'
-                    value={legacyFormContactEmail}
-                    required
-                    disabled={!canRunMigration}
-                    onChange={(event) => setLegacyFormContactEmail(event.target.value)}
-                    placeholder='name@example.com'
-                    style={{
-                      display: 'block',
-                      marginTop: 4,
-                      width: '100%',
-                      maxWidth: 280,
-                      padding: '6px 8px',
-                      borderRadius: 8,
-                      border: '1px solid #f59e0b',
-                      fontSize: 12,
-                    }}
-                  />
-                </label>
+                <>
+                  <label style={{ fontSize: 12, color: '#78350f' }}>
+                    Contact email shown in the generated candidate
+                    <input
+                      type='email'
+                      value={legacyFormContactEmail}
+                      required
+                      disabled={!canRunMigration}
+                      onChange={(event) => setLegacyFormContactEmail(event.target.value)}
+                      placeholder='name@example.com'
+                      style={{
+                        display: 'block',
+                        marginTop: 4,
+                        width: '100%',
+                        maxWidth: 280,
+                        padding: '6px 8px',
+                        borderRadius: 8,
+                        border: '1px solid #f59e0b',
+                        fontSize: 12,
+                      }}
+                    />
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>
+                    <input type='checkbox' checked={removeCookieConsent} disabled={!canRunMigration} onChange={(event) => setRemoveCookieConsent(event.target.checked)} />
+                    <span>Remove captured cookie-consent overlay</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>
+                    <input type='checkbox' checked={removeFormCaptcha} disabled={!canRunMigration} onChange={(event) => setRemoveFormCaptcha(event.target.checked)} />
+                    <span>Remove captcha UI/runtime associated with replaced forms</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>
+                    <input type='checkbox' checked={removeBackToTop} disabled={!canRunMigration} onChange={(event) => setRemoveBackToTop(event.target.checked)} />
+                    <span>Remove captured floating back-to-top control</span>
+                  </label>
+                </>
               ) : null}
             </div>
           ) : null}

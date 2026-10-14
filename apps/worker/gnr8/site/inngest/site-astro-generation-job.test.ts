@@ -78,6 +78,7 @@ test('worker preserves an explicit per-generation form reduction without making 
       kind: 'legacy-forms-to-disclosed-links-v1',
       contactEmail: 'SALES@CHS.SI',
       commentLinks: 'source-article',
+      sourceWidgetRemovals: ['cookie-consent', 'form-captcha', 'back-to-top'],
     },
   }
   assert.deepEqual(parseSiteAstroGenerationPayload(withReduction), {
@@ -86,8 +87,16 @@ test('worker preserves an explicit per-generation form reduction without making 
       kind: 'legacy-forms-to-disclosed-links-v1',
       contactEmail: 'sales@chs.si',
       commentLinks: 'source-article',
+      sourceWidgetRemovals: ['cookie-consent', 'form-captcha', 'back-to-top'],
     },
   })
+  assert.equal(parseSiteAstroGenerationPayload({
+    ...withReduction,
+    acceptedFunctionalReductions: {
+      ...withReduction.acceptedFunctionalReductions,
+      sourceWidgetRemovals: ['cookie-consent', 'unknown-widget'],
+    },
+  }), null)
 })
 
 test('deterministic validation failures are non-retriable while transient failures remain retryable', async () => {

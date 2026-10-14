@@ -8,7 +8,10 @@ import {
   resolveRawTemplateRouteMapFile,
   routeMapFromProvenance,
 } from "@/gnr8/runtime/raw-template-route-map-resolver";
-import { rewriteRawTemplateHtmlForRuntime } from "@/src/public-site/raw-template-runtime";
+import {
+  rewriteRawTemplateCssForRuntime,
+  rewriteRawTemplateHtmlForRuntime,
+} from "@/src/public-site/raw-template-runtime";
 
 import { createGeneratedOutputContentManifest, type GeneratedOutputContentManifest } from "./generated-output-eligibility";
 import { encodeGeneratedOutputRoutePath } from "./generated-output-route-path";
@@ -44,6 +47,7 @@ export type SourceBackedAstroGenerationInput = {
       kind: "legacy-forms-to-disclosed-links-v1";
       contactEmail: string;
       commentLinks: "source-article";
+      sourceWidgetRemovals?: SourceWidgetRemoval[];
       limitations: string[];
     };
     captureScopeLimitations?: Array<{
@@ -58,6 +62,14 @@ export type AcceptedSourceFunctionalReductions = {
   kind: "legacy-forms-to-disclosed-links-v1";
   contactEmail: string;
   commentLinks: "source-article";
+  sourceWidgetRemovals?: SourceWidgetRemoval[];
+};
+
+export type SourceWidgetRemoval = "cookie-consent" | "form-captcha" | "back-to-top";
+
+export type SourceBackedAstroGenerationSource = {
+  htmlByPath: Record<string, string> & { "/": string };
+  stylesheetCssByPath: Record<string, string>;
 };
 
 export async function loadSourceBackedAstroHtmlByPath(input: {
@@ -112,11 +124,37 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
   return htmlByPath as Record<string, string> & { "/": string };
 }
 
+export async function loadSourceBackedAstroGenerationSource(input: Parameters<typeof loadSourceBackedAstroHtmlByPath>[0]): Promise<SourceBackedAstroGenerationSource> {
+  const htmlByPath = await loadSourceBackedAstroHtmlByPath(input);
+  const stylesheetCssByPath: Record<string, string> = {};
+  for (const file of Object.values(input.rawArtifact.fileMap)
+    .filter((entry) => /(?:^text\/css\b|\.css$)/i.test(`${entry.mediaType} ${entry.path}`))
+    .sort((left, right) => left.path.localeCompare(right.path))) {
+    const asset = await input.getRawAsset({
+      siteVersionId: input.siteVersion.id,
+      artifactId: input.rawArtifact.id,
+      filePath: file.path,
+    });
+    if (!asset || asset.bytes.byteLength === 0) {
+      throw new SourceBackedAstroUnsupportedError([`source_stylesheet_asset_missing:${file.path}`]);
+    }
+    if (!/^text\/css\b/i.test(asset.mediaType)) {
+      throw new SourceBackedAstroUnsupportedError([`source_stylesheet_asset_invalid_mime:${file.path}`]);
+    }
+    if (file.sha256 !== asset.sha256 || file.sizeBytes !== asset.sizeBytes) {
+      throw new SourceBackedAstroUnsupportedError([`source_stylesheet_asset_identity_mismatch:${file.path}`]);
+    }
+    stylesheetCssByPath[file.path] = asset.bytes.toString("utf8");
+  }
+  return { htmlByPath, stylesheetCssByPath };
+}
+
 export function createSourceBackedAstroGenerationInput(input: {
   siteVersion: CanonicalSiteVersionSnapshot;
   artifact: RuntimeArtifact;
   rawArtifact: RawImportedSiteArtifact;
   htmlByPath?: Record<string, string> & { "/": string };
+  stylesheetCssByPath?: Record<string, string>;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
 }): SourceBackedAstroGenerationInput {
   const sourceHtmlByPath = input.htmlByPath ?? input.artifact.htmlByPath;
@@ -175,7 +213,13 @@ export function createSourceBackedAstroGenerationInput(input: {
       sha256: file.sha256,
     }))
     .sort((left, right) => left.path.localeCompare(right.path));
-  const normalizedPages: NormalizedStaticSitePage[] = pages.map((page) => ({ path: page.path, title: page.title || siteName, bodyHtml: page.bodyHtml }));
+  const normalizedPages: NormalizedStaticSitePage[] = pages.map((page) => ({
+    path: page.path,
+    title: page.title || siteName,
+    ...(page.headHtml ? { headHtml: page.headHtml } : {}),
+    ...(Object.keys(page.bodyAttributes).length > 0 ? { bodyAttributes: page.bodyAttributes } : {}),
+    bodyHtml: page.bodyHtml,
+  }));
   const content: NormalizedStaticBusinessSiteContent = {
     siteName,
     brandName: siteName,
@@ -192,8 +236,15 @@ export function createSourceBackedAstroGenerationInput(input: {
     kind: classifyNavigation(item.href),
     target: item.href,
   }));
-  const generatedHtml = normalizedPages.map((page) => page.bodyHtml).join("\n");
-  const referencedOwnedAssetUrls = extractOwnedAssetUrls(generatedHtml);
+  const generatedHtml = normalizedPages.map((page) => `${page.headHtml ?? ""}\n${page.bodyHtml}`).join("\n");
+  const referencedOwnedAssetUrls = [...new Set([
+    ...extractOwnedAssetUrls(generatedHtml),
+    ...extractStylesheetDependencyAssetUrls({
+      pages: normalizedPages,
+      rawArtifact: input.rawArtifact,
+      stylesheetCssByPath: input.stylesheetCssByPath ?? {},
+    }),
+  ])].sort();
   const missingAssetEvidence = referencedOwnedAssetUrls
     .filter((path) => !Object.prototype.hasOwnProperty.call(ownedAssetFingerprints, path));
   if (missingAssetEvidence.length > 0) {
@@ -242,6 +293,7 @@ export function createSourceBackedAstroGenerationInput(input: {
           limitations: [
             `Legacy contact forms were replaced with disclosed mailto links to ${input.acceptedFunctionalReductions.contactEmail}.`,
             "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
+            ...widgetRemovalLimitations(input.acceptedFunctionalReductions.sourceWidgetRemovals ?? []),
           ],
         },
       } : {}),
@@ -264,8 +316,9 @@ function normalizePage(input: {
   rawArtifact: RawImportedSiteArtifact;
   path: string;
   html: string;
+  stylesheetCssByPath?: Record<string, string>;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
-}): { path: string; title: string; bodyHtml: string; unsupported: string[] } {
+}): { path: string; title: string; headHtml: string; bodyAttributes: Record<string, string>; bodyHtml: string; unsupported: string[] } {
   const document = parse(input.html) as DefaultTreeAdapterMap["document"];
   let elements = allElements(document);
   const unsupported: string[] = [];
@@ -301,6 +354,12 @@ function normalizePage(input: {
     }
     elements = allElements(document);
   }
+  applyExplicitSourceWidgetRemovals({
+    document,
+    removals: input.acceptedFunctionalReductions?.sourceWidgetRemovals ?? [],
+    hasReplacedForms: replacedFormCount > 0,
+  });
+  elements = allElements(document);
   for (const element of elements.filter((candidate) => ["iframe", "object", "embed"].includes(candidate.tagName))) {
     if (isFormSecurityEmbed(element)) {
       if (replacedFormCount > 0) detach(element);
@@ -342,17 +401,222 @@ function normalizePage(input: {
     siteId: input.rawArtifact.siteId,
     siteVersionId: input.rawArtifact.siteVersionId,
     resolvedFilePath: routeSource.outcome === "selected" ? routeSource.rawFilePath : input.rawArtifact.entryHtmlPath,
+    fileMapPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
   });
   rewritten = restoreExplicitSourceLinks(rewritten);
-  const headStyles = [...rewritten.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/gi)].map((match) => match[0]);
-  if (input.artifact.compiledTokenStyles.trim()) {
-    headStyles.push(`<style data-gnr8-source-tokens>${input.artifact.compiledTokenStyles}</style>`);
+  const headStyles = extractCapturedHeadStyles(rewritten, {
+    hasReplacedForms: replacedFormCount > 0,
+    removals: input.acceptedFunctionalReductions?.sourceWidgetRemovals ?? [],
+  });
+  for (const href of unresolvedRequiredStylesheetHrefs(headStyles, sourceHostFromRawArtifact(input.rawArtifact))) {
+    unsupported.push(`source_stylesheet_evidence_missing:${input.path}:${href}`);
   }
+  for (const reference of unresolvedRequiredAssetReferences(rewritten, sourceHostFromRawArtifact(input.rawArtifact))) {
+    unsupported.push(`source_asset_evidence_missing:${reference}`);
+  }
+  const bodyAttributes = extractCapturedBodyAttributes(rewritten);
   const bodyMarkup = rewritten.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1]?.trim() ?? rewritten;
-  const bodyHtml = [...new Set(headStyles), bodyMarkup].filter(Boolean).join("\n");
+  const headHtml = headStyles.join("\n");
+  const bodyHtml = bodyMarkup;
   const title = input.siteVersion.pages.find((page) => page.path === input.path)?.title?.trim() ||
     textContent(elements.find((element) => element.tagName === "title") ?? document).trim().slice(0, 200) || input.path;
-  return { path: input.path, title, bodyHtml, unsupported };
+  return { path: input.path, title, headHtml, bodyAttributes, bodyHtml, unsupported };
+}
+
+function widgetRemovalLimitations(removals: SourceWidgetRemoval[]): string[] {
+  const selected = new Set(removals);
+  return [
+    selected.has("cookie-consent")
+      ? "The captured source cookie-consent overlay and its exclusively associated static markup were removed for this generation."
+      : null,
+    selected.has("form-captcha")
+      ? "Captcha UI and runtime associated only with the replaced legacy forms were removed for this generation."
+      : null,
+    selected.has("back-to-top")
+      ? "The captured floating back-to-top control and its exclusively associated static markup were removed for this generation."
+      : null,
+  ].filter((value): value is string => Boolean(value));
+}
+
+function applyExplicitSourceWidgetRemovals(input: {
+  document: DefaultTreeAdapterMap["document"];
+  removals: SourceWidgetRemoval[];
+  hasReplacedForms: boolean;
+}): void {
+  const selected = new Set(input.removals);
+  let elements = allElements(input.document);
+
+  if (selected.has("cookie-consent")) {
+    for (const element of elements) {
+      if (isCapturedCookieConsentRoot(element)) detach(element);
+    }
+    elements = allElements(input.document);
+    for (const body of elements.filter((element) => element.tagName === "body")) {
+      removeClassTokens(body, (token) => /^(?:cookie|consent|infobar)(?:[-_].*)?$|^(?:scroll[-_]lock)$/i.test(token));
+    }
+  }
+
+  if (selected.has("back-to-top")) {
+    for (const element of elements) {
+      if (isCapturedBackToTopControl(element)) detach(element);
+    }
+    elements = allElements(input.document);
+  }
+
+  if (selected.has("form-captcha") && input.hasReplacedForms) {
+    for (const element of elements) {
+      if (isCapturedFormCaptchaResidue(element)) detach(element);
+    }
+  }
+}
+
+function isCapturedCookieConsentRoot(element: HtmlElement): boolean {
+  const id = attribute(element, "id") ?? "";
+  const classes = classTokens(element);
+  if (id === "infobar" && classes.has("infobar-wrapper")) {
+    return allElements(element).some((child) => classTokens(child).has("cookie-row"));
+  }
+  const structuralClass = [...classes].some((token) => /^(?:cookie|consent)[-_](?:banner|dialog|notice|overlay|wrapper)$/i.test(token));
+  if (!structuralClass) return false;
+  const role = (attribute(element, "role") ?? "").toLowerCase();
+  const fixedSignal = /(?:^|;|\s)(?:position\s*:\s*fixed|z-index\s*:)/i.test(attribute(element, "style") ?? "");
+  return role === "dialog" || attribute(element, "aria-modal") === "true" || fixedSignal;
+}
+
+function isCapturedBackToTopControl(element: HtmlElement): boolean {
+  if (element.tagName !== "a" && element.tagName !== "button") return false;
+  const classes = classTokens(element);
+  const request = (attribute(element, "data-req") ?? "").toLowerCase();
+  const href = (attribute(element, "href") ?? "").trim();
+  return (classes.has("scrollIcon") && request.split(/[,\s]+/).includes("scrolltop")) ||
+    (classes.has("scrollIcon") && classes.has("bottom_right") && href === "#");
+}
+
+function isCapturedFormCaptchaResidue(element: HtmlElement): boolean {
+  if (isFormSecurityEmbed(element)) return true;
+  const name = (attribute(element, "name") ?? "").toLowerCase();
+  const classes = [...classTokens(element)].join(" ");
+  const src = attribute(element, "src") ?? attribute(element, "href") ?? "";
+  if (name === "h-captcha-response" || /\b(?:h-captcha|hcaptcha-badge|g-recaptcha)\b/i.test(classes)) return true;
+  if (["script", "link"].includes(element.tagName) && /(?:^|\.)hcaptcha\.com\b|(?:^|\.)recaptcha\.net\b|google\.com\/recaptcha|hcaptcha(?:\.min)?\.css/i.test(src)) return true;
+  return element.tagName === "style" && isObsoleteFormSecurityStyle(element);
+}
+
+function classTokens(element: HtmlElement): Set<string> {
+  return new Set((attribute(element, "class") ?? "").split(/\s+/).map((value) => value.trim()).filter(Boolean));
+}
+
+function removeClassTokens(element: HtmlElement, predicate: (token: string) => boolean): void {
+  const current = classTokens(element);
+  const kept = [...current].filter((token) => !predicate(token));
+  if (kept.length === current.size) return;
+  if (kept.length > 0) setAttribute(element, "class", kept.join(" "));
+  else element.attrs = element.attrs.filter((item) => item.name !== "class");
+}
+
+function extractCapturedHeadStyles(
+  html: string,
+  input: { hasReplacedForms: boolean; removals: SourceWidgetRemoval[] },
+): string[] {
+  const head = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? "";
+  const removeCaptcha = input.hasReplacedForms && input.removals.includes("form-captcha");
+  const out: string[] = [];
+  for (const match of head.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>|<link\b[^>]*>/gi)) {
+    const markup = match[0];
+    if (/^<link\b/i.test(markup)) {
+      const rel = htmlAttributeFromMarkup(markup, "rel").toLowerCase().split(/\s+/);
+      if (!rel.includes("stylesheet")) continue;
+      const href = htmlAttributeFromMarkup(markup, "href");
+      if (removeCaptcha && /h-?captcha|g-recaptcha|recaptcha/i.test(href)) continue;
+      out.push(markup);
+      continue;
+    }
+    if (removeCaptcha && isObsoleteFormSecurityCss(markup)) continue;
+    out.push(/\bis:global\b/i.test(markup) ? markup : markup.replace(/^<style\b/i, "<style is:global"));
+  }
+  return out;
+}
+
+function unresolvedRequiredStylesheetHrefs(headMarkup: string[], sourceHost: string): string[] {
+  const unresolved: string[] = [];
+  for (const markup of headMarkup) {
+    if (!/^<link\b/i.test(markup)) continue;
+    const href = htmlAttributeFromMarkup(markup, "href").trim();
+    if (!href || href.startsWith("/api/gnr8/runtime/preview-assets/")) continue;
+    try {
+      const url = new URL(href, `https://${sourceHost || "gnr8.invalid"}/`);
+      if (url.hostname.replace(/^www\./, "") !== sourceHost) continue;
+    } catch {
+      // Relative stylesheet references are required local resources.
+    }
+    unresolved.push(href);
+  }
+  return unresolved;
+}
+
+function unresolvedRequiredAssetReferences(html: string, sourceHost: string): string[] {
+  const document = parse(html) as DefaultTreeAdapterMap["document"];
+  const references: string[] = [];
+  const attributeNamesByTag: Record<string, string[]> = {
+    img: ["src", "srcset"],
+    source: ["src", "srcset"],
+    video: ["src", "poster"],
+    audio: ["src"],
+    use: ["href", "xlink:href"],
+    image: ["href", "xlink:href"],
+  };
+  for (const element of allElements(document)) {
+    for (const name of attributeNamesByTag[element.tagName] ?? []) {
+      const raw = attribute(element, name);
+      if (!raw) continue;
+      const values = name === "srcset"
+        ? raw.split(",").map((entry) => entry.trim().split(/\s+/, 1)[0] ?? "")
+        : [raw];
+      for (const value of values) {
+        if (isUnresolvedRequiredLocalReference(value, sourceHost)) references.push(value);
+      }
+    }
+    const cssValues = [
+      ...(element.tagName === "style" ? extractCssReferenceValues(textContent(element)) : []),
+      ...extractCssReferenceValues(attribute(element, "style") ?? ""),
+    ];
+    for (const value of cssValues) {
+      if (isUnresolvedRequiredLocalReference(value, sourceHost)) references.push(value);
+    }
+  }
+  return [...new Set(references)].sort();
+}
+
+function isUnresolvedRequiredLocalReference(value: string, sourceHost: string): boolean {
+  const reference = value.trim();
+  if (!reference || /^(?:data:|blob:|mailto:|tel:|javascript:|#)/i.test(reference)) return false;
+  if (reference.startsWith("/api/gnr8/runtime/preview-assets/")) return false;
+  try {
+    const url = new URL(reference, `https://${sourceHost || "gnr8.invalid"}/`);
+    return url.hostname.replace(/^www\./, "") === (sourceHost || "gnr8.invalid");
+  } catch {
+    return true;
+  }
+}
+
+function extractCapturedBodyAttributes(html: string): Record<string, string> {
+  const document = parse(html) as DefaultTreeAdapterMap["document"];
+  const body = allElements(document).find((element) => element.tagName === "body");
+  if (!body) return {};
+  return Object.fromEntries(body.attrs
+    .filter(({ name }) => /^(?:id|class|style|lang|dir|title|role|tabindex|data-[a-z0-9_.:-]+|aria-[a-z0-9_.:-]+)$/i.test(name))
+    .map(({ name, value }) => [name.toLowerCase(), value]));
+}
+
+function htmlAttributeFromMarkup(markup: string, name: string): string {
+  const match = markup.match(new RegExp(`\\s${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i"));
+  return match?.[2] ?? "";
+}
+
+function isObsoleteFormSecurityCss(markup: string): boolean {
+  const fragment = parseFragment(markup) as DefaultTreeAdapterMap["documentFragment"];
+  const style = allElements(fragment).find((element) => element.tagName === "style");
+  return style ? isObsoleteFormSecurityStyle(style) : false;
 }
 
 function sourceHostFromRawArtifact(artifact: RawImportedSiteArtifact): string {
@@ -477,6 +741,8 @@ function extractOwnedAssetUrls(html: string): string[] {
     video: ["src", "poster"],
     audio: ["src"],
     link: ["href"],
+    use: ["href", "xlink:href"],
+    image: ["href", "xlink:href"],
   };
   for (const element of allElements(fragment)) {
     for (const name of attributeNamesByTag[element.tagName] ?? []) {
@@ -500,6 +766,62 @@ function extractOwnedAssetUrls(html: string): string[] {
     .filter((value) => value.startsWith("/api/gnr8/runtime/preview-assets/"))
     .map((value) => value.split(/[?#]/, 1)[0]!)
     .filter(Boolean))].sort();
+}
+
+function extractStylesheetDependencyAssetUrls(input: {
+  pages: NormalizedStaticSitePage[];
+  rawArtifact: RawImportedSiteArtifact;
+  stylesheetCssByPath: Record<string, string>;
+}): string[] {
+  const prefix = ownedAssetUrl(input.rawArtifact.siteId, input.rawArtifact.siteVersionId, "");
+  const directOwnedUrls = extractOwnedAssetUrls(input.pages.map((page) => page.headHtml ?? "").join("\n"));
+  const queue = directOwnedUrls
+    .map((url) => ownedAssetPathFromUrl(url, prefix))
+    .filter((path): path is string => Boolean(path && /\.css$/i.test(path)));
+  const visited = new Set<string>();
+  const dependencies = new Set<string>();
+  const fileMapPaths = new Set(Object.keys(input.rawArtifact.fileMap));
+
+  while (queue.length > 0) {
+    const stylesheetPath = queue.shift()!;
+    if (visited.has(stylesheetPath)) continue;
+    visited.add(stylesheetPath);
+    const css = input.stylesheetCssByPath[stylesheetPath];
+    if (css === undefined) {
+      throw new SourceBackedAstroUnsupportedError([`source_stylesheet_bytes_missing:${stylesheetPath}`]);
+    }
+    const rewritten = rewriteRawTemplateCssForRuntime({
+      css,
+      siteId: input.rawArtifact.siteId,
+      siteVersionId: input.rawArtifact.siteVersionId,
+      assetFilePath: stylesheetPath,
+      fileMapPaths,
+    });
+    for (const value of extractCssReferenceValues(rewritten)) {
+      const normalizedUrl = value.split(/[?#]/, 1)[0] ?? value;
+      const dependencyPath = ownedAssetPathFromUrl(normalizedUrl, prefix);
+      if (!dependencyPath) continue;
+      dependencies.add(normalizedUrl);
+      if (/\.css$/i.test(dependencyPath) && !visited.has(dependencyPath)) queue.push(dependencyPath);
+    }
+  }
+
+  return [...dependencies].sort();
+}
+
+function extractCssReferenceValues(css: string): string[] {
+  const values = [
+    ...[...css.matchAll(/url\(\s*["']?([^"')\s]+)["']?\s*\)/gi)].map((match) => match[1] ?? ""),
+    ...[...css.matchAll(/@import\s+["']([^"']+)["']/gi)].map((match) => match[1] ?? ""),
+  ];
+  return [...new Set(values.filter(Boolean))];
+}
+
+function ownedAssetPathFromUrl(url: string, prefix: string): string | null {
+  const normalized = url.split(/[?#]/, 1)[0] ?? url;
+  if (!normalized.startsWith(prefix)) return null;
+  const path = normalized.slice(prefix.length).replace(/^\/+/, "");
+  return path || null;
 }
 
 function normalizeHex(value: unknown, fallback: string): string {

@@ -5,6 +5,7 @@ import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArti
 
 import {
   createSourceBackedAstroGenerationInput,
+  loadSourceBackedAstroGenerationSource,
   loadSourceBackedAstroHtmlByPath,
   SourceBackedAstroUnsupportedError,
 } from "./source-backed-astro-input";
@@ -62,7 +63,7 @@ function fixture(overrides: { aboutHtml?: string; rootHtml?: string } = {}) {
     artifactGovernance: {},
     bundleSha256: SHA,
     createdAt: "2026-10-02T10:00:00.000Z",
-  } as RuntimeArtifact;
+  } as unknown as RuntimeArtifact;
   const rawArtifact = {
     id: "33333333-3333-4333-8333-333333333333",
     artifactType: "raw_imported_site",
@@ -215,6 +216,36 @@ test("fails explicitly when any required captured route bytes are unavailable", 
     }),
     (error) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("source_route_asset_missing:/about"),
   );
+});
+
+test("loads and verifies retained stylesheet bytes for generation dependency evidence", async () => {
+  const input = fixture();
+  const stylesheetPath = "assets/stylesheet/site.css";
+  const stylesheetBytes = Buffer.from(".hero{background-image:url('../../uploads/logo.png')}");
+  input.rawArtifact.fileMap[stylesheetPath] = {
+    path: stylesheetPath,
+    mediaType: "text/css",
+    sizeBytes: stylesheetBytes.byteLength,
+    sha256: SHA,
+  };
+  const sourceBytes: Record<string, Buffer> = {
+    "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
+    "pages/about/index.html": Buffer.from(input.artifact.htmlByPath["/about"]),
+    [stylesheetPath]: stylesheetBytes,
+  };
+
+  const source = await loadSourceBackedAstroGenerationSource({
+    siteVersion: input.version,
+    rawArtifact: input.rawArtifact,
+    getRawAsset: async ({ filePath }) => {
+      const bytes = sourceBytes[filePath];
+      const metadata = input.rawArtifact.fileMap[filePath];
+      return bytes && metadata ? { mediaType: metadata.mediaType, sizeBytes: metadata.sizeBytes, sha256: metadata.sha256, bytes } : null;
+    },
+  });
+
+  assert.equal(source.stylesheetCssByPath[stylesheetPath], stylesheetBytes.toString("utf8"));
+  assert.deepEqual(Object.keys(source.htmlByPath), ["/", "/about"]);
 });
 
 test("uncaptured required routes and executable source behavior return explicit unsupported capability results", () => {
@@ -393,7 +424,7 @@ test("applies explicitly accepted form reductions only to that generation and re
     rawArtifact: input.rawArtifact,
     acceptedFunctionalReductions: {
       kind: "legacy-forms-to-disclosed-links-v1",
-      contactEmail: "mailto@chs.si",
+      contactEmail: "sales@chs.si",
       commentLinks: "source-article",
     },
   });
@@ -401,7 +432,7 @@ test("applies explicitly accepted form reductions only to that generation and re
   const aboutSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/about/index.astro")?.contents ?? "";
 
   assert.doesNotMatch(`${rootSource}\n${aboutSource}`, /<form\b|hcaptcha|form\.js/i);
-  assert.match(rootSource, /href="mailto:mailto@chs\.si"/);
+  assert.match(rootSource, /href="mailto:sales@chs\.si"/);
   assert.match(rootSource, /font\.woff2/);
   assert.ok(generated.contentManifest.requiredAssets.some((asset) => asset.path.endsWith("/assets/font.woff2")));
   assert.ok(!generated.contentManifest.requiredAssets.some((asset) => /hcaptcha/i.test(asset.path)));
@@ -410,9 +441,104 @@ test("applies explicitly accepted form reductions only to that generation and re
   assert.match(aboutSource, /Open the original article to comment/);
   assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.kind === "external_url" && item.target === "https://example.com/about"));
   assert.deepEqual(generated.sourceManifest.acceptedFunctionalReductions?.limitations, [
-    "Legacy contact forms were replaced with disclosed mailto links to mailto@chs.si.",
+    "Legacy contact forms were replaced with disclosed mailto links to sales@chs.si.",
     "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
   ]);
+});
+
+test("preserves route-specific stylesheet order and applies only explicitly accepted source-widget removals", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title>
+      <link rel="stylesheet" href="https://example.com/assets/external-libs.css">
+      <link rel="stylesheet" href="/assets/user-style.css">
+      <link rel="stylesheet" href="https://js.hcaptcha.com/1/api.css">
+      <style>.page-specific{background-image:url('/uploads/logo.png')}</style>
+    </head><body class="cookie-open sticky-navigation">
+      <div id="infobar" class="infobar-wrapper"><div class="infobar"><div class="cookie-row cookie-row-text">Consent</div></div></div>
+      <header class="headerFixed"><nav class="module nav"><a href="/about">About</a></nav></header>
+      <main><form id="m3166"><div class="h-captcha"></div></form><h1>Home</h1><svg viewBox="0 0 16 16"><use xlink:href="/assets/icons.svg#mark"></use></svg></main>
+      <a href="/about">Privacy policy</a>
+      <a href="#" data-req="scrollTop" class="scrollIcon hidden bottom_right">Top</a>
+    </body></html>`,
+  });
+  input.rawArtifact.fileMap["assets/stylesheet/f625c4a163d0-external-libs.css"] = {
+    path: "assets/stylesheet/f625c4a163d0-external-libs.css",
+    mediaType: "text/css",
+    sizeBytes: 20,
+    sha256: SHA,
+  };
+  input.rawArtifact.fileMap["assets/user-style.css"] = {
+    path: "assets/user-style.css",
+    mediaType: "text/css",
+    sizeBytes: 20,
+    sha256: SHA,
+  };
+  input.rawArtifact.fileMap["assets/style_asset/icons.woff2"] = {
+    path: "assets/style_asset/icons.woff2",
+    mediaType: "font/woff2",
+    sizeBytes: 20,
+    sha256: SHA,
+  };
+  input.rawArtifact.fileMap["assets/icons.svg"] = {
+    path: "assets/icons.svg",
+    mediaType: "image/svg+xml",
+    sizeBytes: 20,
+    sha256: SHA,
+  };
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+    stylesheetCssByPath: {
+      "assets/stylesheet/f625c4a163d0-external-libs.css": "@font-face{font-family:Icons;src:url('../style_asset/icons.woff2')} .hero{background-image:url('../../uploads/logo.png')}",
+      "assets/user-style.css": ".page{background-image:url('/uploads/about.png')}",
+    },
+    acceptedFunctionalReductions: {
+      kind: "legacy-forms-to-disclosed-links-v1",
+      contactEmail: "sales@chs.si",
+      commentLinks: "source-article",
+      sourceWidgetRemovals: ["cookie-consent", "form-captcha", "back-to-top"],
+    },
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+  const externalHref = `/api/gnr8/runtime/preview-assets/runtime-site/${input.version.id}/assets/stylesheet/f625c4a163d0-external-libs.css`;
+  const userHref = `/api/gnr8/runtime/preview-assets/runtime-site/${input.version.id}/assets/user-style.css`;
+
+  assert.ok(rootSource.indexOf(externalHref) < rootSource.indexOf(userHref));
+  assert.match(rootSource, /<style is:global>\.page-specific/);
+  assert.doesNotMatch(rootSource, /href="\/styles\/global\.css"/);
+  assert.doesNotMatch(rootSource, /infobar-wrapper|cookie-row|scrollIcon|h-captcha|hcaptcha\.com/i);
+  assert.match(rootSource, /class="sticky-navigation"/);
+  assert.match(rootSource, /class="headerFixed"/);
+  assert.match(rootSource, />Privacy policy<\/a>/);
+  assert.match(rootSource, /href="mailto:sales@chs\.si"/);
+  assert.match(rootSource, new RegExp(`xlink:href="/api/gnr8/runtime/preview-assets/runtime-site/${input.version.id}/assets/icons\\.svg#mark"`));
+  assert.ok(generated.contentManifest.requiredAssets.some((asset) => asset.path.endsWith("/assets/style_asset/icons.woff2")));
+  assert.ok(generated.contentManifest.requiredAssets.some((asset) => asset.path.endsWith("/assets/icons.svg")));
+  assert.ok(generated.contentManifest.requiredAssets.some((asset) => asset.path.endsWith("/uploads/logo.png")));
+  assert.ok(generated.contentManifest.requiredAssets.some((asset) => asset.path.endsWith("/uploads/about.png")));
+  assert.deepEqual(generated.sourceManifest.acceptedFunctionalReductions?.sourceWidgetRemovals, [
+    "cookie-consent",
+    "form-captcha",
+    "back-to-top",
+  ]);
+});
+
+test("rejects an unresolved required local stylesheet instead of silently dropping page CSS", () => {
+  const input = fixture({
+    rootHtml: '<!doctype html><html><head><title>Home</title><link rel="stylesheet" href="/assets/missing.css"></head><body><h1>Home</h1></body></html>',
+  });
+
+  assert.throws(
+    () => createSourceBackedAstroGenerationInput({
+      siteVersion: input.version,
+      artifact: input.artifact,
+      rawArtifact: input.rawArtifact,
+    }),
+    (error) => error instanceof SourceBackedAstroUnsupportedError &&
+      error.unsupportedCapabilities.includes("source_stylesheet_evidence_missing:/:/assets/missing.css"),
+  );
 });
 
 test("accepted form reductions do not remove unknown functional scripts", () => {

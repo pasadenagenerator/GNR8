@@ -58,6 +58,10 @@ function safeDecodePath(value: string): string {
   }
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function isImageAssetPath(value: string): boolean {
   return /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(String(value ?? ""));
 }
@@ -209,6 +213,18 @@ function resolveAssetPathFromReference(input: { reference: string; contextFilePa
     if (match) return match;
   }
   for (const candidate of expandedCandidates) {
+    if (path.posix.extname(candidate).toLowerCase() !== ".css") continue;
+    const basename = path.posix.basename(candidate).toLowerCase();
+    const matches = [...input.fileMapPaths]
+      .filter((filePath) => {
+        if (path.posix.extname(filePath).toLowerCase() !== ".css") return false;
+        const fileName = path.posix.basename(filePath).toLowerCase();
+        return fileName === basename || new RegExp(`^[a-f0-9]{12}-${escapeRegExp(basename)}$`, "i").test(fileName);
+      })
+      .sort((left, right) => left.localeCompare(right));
+    if (matches.length === 1) return matches[0]!;
+  }
+  for (const candidate of expandedCandidates) {
     const match = findUploadSiblingImageVariant({ candidate, fileMapPaths: input.fileMapPaths });
     if (match) return match;
   }
@@ -287,7 +303,7 @@ function rewriteCssUrlTokens(css: string, context: RewriteContext): string {
 }
 
 function rewriteTagAttributes(html: string, context: RewriteContext): string {
-  const attributePattern = /(\s(?:src|href)\s*=\s*)(["'])([^"']*)(\2)/gi;
+  const attributePattern = /(\s(?:src|href|xlink:href)\s*=\s*)(["'])([^"']*)(\2)/gi;
   return html.replace(attributePattern, (full, prefix, quote, value, closingQuote) => {
     const rewritten = rewriteAssetReferenceToRuntime({
       reference: String(value ?? ""),
@@ -587,6 +603,7 @@ export function rewriteRawTemplateHtmlForRuntime(input: {
   siteId: string;
   siteVersionId: string;
   resolvedFilePath: string;
+  fileMapPaths?: ReadonlySet<string>;
 }): string {
   return rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input).html;
 }
@@ -596,11 +613,13 @@ export function rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input: {
   siteId: string;
   siteVersionId: string;
   resolvedFilePath: string;
+  fileMapPaths?: ReadonlySet<string>;
 }): RawTemplateRuntimeRewriteResult {
   const context: RewriteContext = {
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     contextFilePath: input.resolvedFilePath,
+    fileMapPaths: input.fileMapPaths,
   };
 
   let rewritten = rewriteTagAttributes(String(input.html ?? ""), context);
