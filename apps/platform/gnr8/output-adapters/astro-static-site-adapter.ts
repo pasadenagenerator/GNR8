@@ -156,7 +156,7 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
     ? normalizedCapturedPages(input.pages).map((page) => ({
         path: sourcePathForRoute(page.path),
         role: "source" as const,
-        contents: createCapturedPageAstro(input, page),
+        contents: createCapturedPageAstro(page),
       }))
     : [{ path: "src/pages/index.astro", role: "source" as const, contents: createIndexAstro(input) }];
   files.splice(2, 0, ...pages);
@@ -192,10 +192,7 @@ function sourcePathForRoute(route: string): string {
     : `src/pages/${decodeGeneratedOutputRoutePathForFile(route)}/index.astro`;
 }
 
-function createCapturedPageAstro(input: NormalizedStaticBusinessSiteContent, page: NormalizedStaticSitePage): string {
-  const nav = input.navItems
-    .map((item) => `        <a href="${escapeAttribute(item.href)}">${escapeHtml(item.label)}</a>`)
-    .join("\n");
+function createCapturedPageAstro(page: NormalizedStaticSitePage): string {
   return `<html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -203,17 +200,8 @@ function createCapturedPageAstro(input: NormalizedStaticBusinessSiteContent, pag
     <title>${escapeHtml(page.title)}</title>
     <link rel="stylesheet" href="/styles/global.css" />
   </head>
-  <body>
-    <header class="site-header">
-      <a class="brand" href="/">${escapeHtml(input.brandName)}</a>
-      <nav aria-label="Primary navigation">
-${nav}
-      </nav>
-    </header>
-    <main data-gnr8-source-route="${escapeAttribute(page.path)}">
+  <body data-gnr8-source-route="${escapeAttribute(page.path)}">
 ${page.bodyHtml}
-    </main>
-    <footer><p>${escapeHtml(input.footer.text)}</p></footer>
   </body>
 </html>
 `;

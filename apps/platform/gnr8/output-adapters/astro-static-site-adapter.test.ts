@@ -68,6 +68,25 @@ test("percent-encoded Unicode routes use literal source filenames while keeping 
     file.contents.includes('data-gnr8-source-route="/b/platform9-recognized-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2"')));
 });
 
+test("captured pages preserve their source shell without adding synthetic navigation or footer", () => {
+  const content = chsFixture();
+  content.pages = [{
+    path: "/",
+    title: "Home",
+    bodyHtml: '<header data-source-header><a href="/cohesity"><img src="/logo.gif" alt="CHS"></a></header><main><h1>Source home</h1></main><footer data-source-footer>Source footer</footer>',
+  }];
+
+  const manifest = createAstroStaticSiteProjectManifest(content);
+  const page = fileMap(manifest.files).get("src/pages/index.astro") ?? "";
+
+  assert.match(page, /<body data-gnr8-source-route="\/">/);
+  assert.match(page, /<header data-source-header>/);
+  assert.match(page, /<img src="\/logo\.gif" alt="CHS">/);
+  assert.match(page, /<footer data-source-footer>Source footer<\/footer>/);
+  assert.doesNotMatch(page, /class="site-header"/);
+  assert.doesNotMatch(page, /Construction Health Solutions/);
+});
+
 test("authoritative CHS source mapping preserves routes, content, contacts, footer, and mobile layout", () => {
   const manifest = createAstroStaticSiteProjectManifest(chsAstroSourceContent());
   const files = fileMap(manifest.files);

@@ -119,6 +119,8 @@ test("enabled route renders a validated synthetic v2 record through the actual u
   assert.equal(response.headers.get("content-security-policy"), ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /sandbox/);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /script-src 'none'/);
+  assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /img-src 'self' data:/);
+  assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /font-src 'self' data:/);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /connect-src 'none'/);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /form-action 'none'/);
   assert.match(ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP, /frame-ancestors 'none'/);
@@ -140,11 +142,11 @@ test("unified preview keeps proof-v1 default distinct from explicit production-v
   );
 });
 
-test("malformed identities, unsupported paths, duplicate path, and extra query selectors return the same 404", async (t) => {
+test("malformed identities, invalid paths, duplicate path, and extra query selectors return the same 404", async (t) => {
   const scenarios = [
     { name: "site version", url: request().url, params: context("not-a-uuid", CANDIDATE_ID) },
     { name: "candidate", url: request().url, params: context(SITE_VERSION_ID, "candidate-free-form") },
-    { name: "unsupported path", url: `${request().url}?path=/about`, params: context() },
+    { name: "invalid path", url: `${request().url}?path=/about/`, params: context() },
     { name: "empty path", url: `${request().url}?path=`, params: context() },
     { name: "ambiguous path", url: `${request().url}?path=/&path=/`, params: context() },
     { name: "caller ownership", url: `${request().url}?organizationId=secret`, params: context() },
@@ -166,6 +168,33 @@ test("malformed identities, unsupported paths, duplicate path, and extra query s
       assertErrorHeaders(response);
     });
   }
+});
+
+test("valid captured child routes are selected without weakening exact candidate matching", async () => {
+  const calls: string[] = [];
+  const record = productionRecord();
+  const deps = previewDependencies(record, calls);
+  deps.renderCandidate = async ({ path }) => {
+    calls.push("render");
+    return {
+      html: "<!doctype html><html><body><h1>Captured child</h1></body></html>",
+      source: "astro_internal_preview_candidate",
+      candidateId: record.identity.candidateId,
+      runtimeSiteId: record.identity.runtimeSiteId,
+      siteVersionId: record.identity.siteVersionId,
+      path,
+      fallbackUsed: false,
+    };
+  };
+
+  const response = await enabledHandlers(deps).GET(
+    request(`${request().url}?path=%2Fabout`),
+    context(),
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Captured child/);
+  assert.deepEqual(calls, ["ownership", "read", "render"]);
 });
 
 test("missing or mismatched authoritative ownership is non-enumerating and prevents repository reads", async (t) => {

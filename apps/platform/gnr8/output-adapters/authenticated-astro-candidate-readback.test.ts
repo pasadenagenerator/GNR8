@@ -103,6 +103,8 @@ test("valid admin scope reads immutable storage and renders only the selected ca
     assert.match(response.headers.get("content-security-policy") ?? "", /sandbox/);
     assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'none'/);
     assert.match(response.headers.get("content-security-policy") ?? "", /style-src 'unsafe-inline'/);
+    assert.match(response.headers.get("content-security-policy") ?? "", /img-src 'self' data:/);
+    assert.match(response.headers.get("content-security-policy") ?? "", /font-src 'self' data:/);
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.equal(response.headers.has("set-cookie"), false);
   });

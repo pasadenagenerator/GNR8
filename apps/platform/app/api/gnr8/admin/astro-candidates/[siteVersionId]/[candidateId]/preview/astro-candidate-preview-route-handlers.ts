@@ -19,14 +19,15 @@ import type {
   AstroProductionCandidatePreviewDependencies,
   AstroProductionCandidatePreviewRenderResult,
 } from "@/gnr8/output-adapters/astro-production-candidate-preview-composition";
+import { isGeneratedOutputRoutePath } from "@/gnr8/output-adapters/generated-output-route-path";
 
 export const ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP = [
   "sandbox",
   "default-src 'none'",
   "script-src 'none'",
   "style-src 'unsafe-inline'",
-  "img-src data:",
-  "font-src data:",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
   "media-src data:",
   "connect-src 'none'",
   "frame-src 'none'",
@@ -164,7 +165,7 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
 async function resolveSelectors(request: Request, context: RouteContext): Promise<{
   siteVersionId: string;
   candidateId: string;
-  path: "/";
+  path: string;
 } | null> {
   let params: { siteVersionId: string; candidateId: string };
   let url: URL;
@@ -179,17 +180,18 @@ async function resolveSelectors(request: Request, context: RouteContext): Promis
   }
   if ([...url.searchParams.keys()].some((key) => key !== "path")) return null;
   const paths = url.searchParams.getAll("path");
-  if (paths.length > 1 || (paths.length === 1 && paths[0] !== "/")) return null;
+  const path = paths[0] ?? "/";
+  if (paths.length > 1 || !isGeneratedOutputRoutePath(path)) return null;
   return {
     siteVersionId: params.siteVersionId,
     candidateId: params.candidateId,
-    path: "/",
+    path,
   };
 }
 
 function matchesSelection(
   preview: AstroProductionCandidatePreviewRenderResult,
-  selectors: { siteVersionId: string; candidateId: string; path: "/" },
+  selectors: { siteVersionId: string; candidateId: string; path: string },
   trustedScope: AstroProductionCandidateOwnership,
 ): boolean {
   return preview.source === "astro_internal_preview_candidate" &&
