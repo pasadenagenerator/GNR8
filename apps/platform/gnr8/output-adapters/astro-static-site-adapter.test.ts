@@ -87,6 +87,7 @@ test("captured pages preserve their source shell without adding synthetic naviga
   assert.match(page, /assets\/user-style\.css/);
   assert.match(page, /<style is:global>\.home/);
   assert.doesNotMatch(page, /href="\/styles\/global\.css"/);
+  assert.equal(fileMap(manifest.files).has("public/styles/global.css"), false);
   assert.doesNotMatch(page, /class="site-header"/);
   assert.doesNotMatch(page, /Construction Health Solutions/);
 });

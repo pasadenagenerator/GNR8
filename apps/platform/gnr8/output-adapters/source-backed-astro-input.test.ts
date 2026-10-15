@@ -130,6 +130,7 @@ test("normal source input preserves captured routes, navigation, owned asset ide
     sizeBytes: 10,
     sha256: SHA,
   });
+  assert.equal(generated.sourceManifest.files.some((file) => file.path === "public/styles/global.css"), false);
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("<h1>About</h1>")));
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("/uploads/about.png")));
 });

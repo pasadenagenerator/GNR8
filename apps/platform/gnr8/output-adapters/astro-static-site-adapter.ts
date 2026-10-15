@@ -147,21 +147,24 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
       role: "config",
       contents: createAstroConfig(),
     },
-    {
-      path: "public/styles/global.css",
-      role: "style",
-      contents: createGlobalCss(input.theme),
-    },
   ];
 
-  const pages = input.pages?.length
-    ? normalizedCapturedPages(input.pages).map((page) => ({
+  const capturedPages = input.pages?.length ? normalizedCapturedPages(input.pages) : null;
+  const pages = capturedPages
+    ? capturedPages.map((page) => ({
         path: sourcePathForRoute(page.path),
         role: "source" as const,
         contents: createCapturedPageAstro(page),
       }))
     : [{ path: "src/pages/index.astro", role: "source" as const, contents: createIndexAstro(input) }];
-  files.splice(2, 0, ...pages);
+  files.push(...pages);
+  if (!capturedPages) {
+    files.push({
+      path: "public/styles/global.css",
+      role: "style",
+      contents: createGlobalCss(input.theme),
+    });
+  }
 
   return { files };
 }
