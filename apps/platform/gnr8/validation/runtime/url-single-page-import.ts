@@ -2932,6 +2932,16 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         failedRequiredResources.add(resolvedUrl);
         return;
       }
+      if (isFontAssetUrl(finalUrl) && !isValidFetchedFont(finalUrl, contentType, bytes)) {
+        outcomeByUrl.set(resolvedUrl, {
+          fetchStatus: "fetch_failed",
+          httpStatus: response.status,
+          contentType,
+          byteLength: bytes.byteLength,
+        });
+        failedRequiredResources.add(resolvedUrl);
+        return;
+      }
       const absPath = path.resolve(input.snapshotRootDirAbs, localPath);
       const rootWithSeparator = `${path.resolve(input.snapshotRootDirAbs)}${path.sep}`;
       if (!absPath.startsWith(rootWithSeparator)) {
@@ -3229,6 +3239,31 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       failedRequiredResources: [...failedRequiredResources].sort((left, right) => left.localeCompare(right)),
     },
   };
+}
+
+function isFontAssetUrl(value: string): boolean {
+  try {
+    return /\.(?:woff2?|ttf|otf|eot)$/i.test(new URL(value).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isValidFetchedFont(url: string, contentType: string | null, bytes: Uint8Array): boolean {
+  const pathname = new URL(url).pathname.toLowerCase();
+  if (contentType && /^(?:text\/|application\/(?:json|xml)|image\/)/i.test(contentType)) return false;
+  if (pathname.endsWith(".ttf")) {
+    if (bytes.byteLength < 12) return false;
+    const signature = Buffer.from(bytes.subarray(0, 4)).toString("latin1");
+    return (bytes[0] === 0x00 && bytes[1] === 0x01 && bytes[2] === 0x00 && bytes[3] === 0x00) ||
+      signature === "true" || signature === "typ1";
+  }
+  if (pathname.endsWith(".otf")) return bytes.byteLength >= 12 && Buffer.from(bytes.subarray(0, 4)).toString("latin1") === "OTTO";
+  if (pathname.endsWith(".woff")) return bytes.byteLength >= 44 && Buffer.from(bytes.subarray(0, 4)).toString("latin1") === "wOFF";
+  if (pathname.endsWith(".woff2")) return bytes.byteLength >= 48 && Buffer.from(bytes.subarray(0, 4)).toString("latin1") === "wOF2";
+  // EOT has no single portable magic value; retain the existing size/MIME
+  // boundary and require non-trivial binary content.
+  return pathname.endsWith(".eot") && bytes.byteLength >= 12;
 }
 
 function resolveWorkerFallbackReason(input: {

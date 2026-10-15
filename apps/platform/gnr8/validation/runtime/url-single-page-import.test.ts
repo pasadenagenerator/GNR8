@@ -8,8 +8,15 @@ import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture
 import { parseRenderedCaptureWorkerRequestDetailed } from "@/gnr8/import-rendered-capture-worker/worker-service";
 import {
   captureAssetsForAdditionalHtmlPages,
+  computeLocalPathCandidate,
   importPublicSinglePageUrlToSnapshot,
 } from "@/gnr8/validation/runtime/url-single-page-import";
+
+function validWoff2Fixture(): Uint8Array {
+  const bytes = new Uint8Array(48);
+  bytes.set(new TextEncoder().encode("wOF2"), 0);
+  return bytes;
+}
 
 function unsupportedWorkerClient(): RenderedCaptureWorkerClient {
   return {
@@ -77,7 +84,7 @@ test("additional child-page asset capture persists responsive and lazy images, d
       return new Response("missing", { status: 404, headers: { "content-type": "text/plain" } });
     }
     if (/\.(?:webp|png|woff2)$/.test(new URL(url).pathname)) {
-      return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { "content-type": url.endsWith("woff2") ? "font/woff2" : "image/webp" } });
+      return new Response(url.endsWith("woff2") ? validWoff2Fixture() : new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { "content-type": url.endsWith("woff2") ? "font/woff2" : "image/webp" } });
     }
     return new Response("not found", { status: 404 });
   };
@@ -168,7 +175,7 @@ test("additional asset capture follows bounded trusted stylesheet imports and fo
         return new Response("@font-face{font-family:Exact;src:url('./exact.woff2') format('woff2')}", { status: 200, headers: { "content-type": "text/css" } });
       }
       if (url === "https://fonts.example.test/exact.woff2") {
-        return new Response(new Uint8Array([1, 3, 3, 7]), { status: 200, headers: { "content-type": "font/woff2" } });
+        return new Response(validWoff2Fixture(), { status: 200, headers: { "content-type": "font/woff2" } });
       }
       return new Response("missing", { status: 404 });
     },
@@ -187,6 +194,39 @@ test("additional asset capture follows bounded trusted stylesheet imports and fo
   assert.ok(theme?.localPath && fontCss?.localPath);
   assert.doesNotMatch(fs.readFileSync(path.join(root, theme!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
   assert.doesNotMatch(fs.readFileSync(path.join(root, fontCss!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
+});
+
+test("additional asset capture rejects invalid TTF bytes and retains a valid sfnt font", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-font-validation-"));
+  const validTtf = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    trustedExternalOrigins: ["https://font-files.example.test"],
+    pages: [{
+      pageUrl: "https://example.com/",
+      bodyPath: path.join(root, "index.html"),
+      html: '<style>@font-face{font-family:Valid;src:url("https://font-files.example.test/valid.ttf")}@font-face{font-family:Invalid;src:url("https://font-files.example.test/invalid.ttf")}</style>',
+    }],
+    fetchImpl: async (request) => {
+      const url = String(request instanceof Request ? request.url : request);
+      return new Response(url.endsWith("/valid.ttf") ? validTtf : new TextEncoder().encode("not-a-font-file"), {
+        status: 200,
+        headers: { "content-type": "font/ttf" },
+      });
+    },
+  });
+
+  assert.deepEqual(result.summary.failedRequiredResources, ["https://font-files.example.test/invalid.ttf"]);
+  const validPath = computeLocalPathCandidate({
+    resolvedUrl: "https://font-files.example.test/valid.ttf",
+    assetKind: "style_asset",
+  });
+  const invalidPath = computeLocalPathCandidate({
+    resolvedUrl: "https://font-files.example.test/invalid.ttf",
+    assetKind: "style_asset",
+  });
+  assert.equal(fs.existsSync(path.join(root, validPath)), true);
+  assert.equal(fs.existsSync(path.join(root, invalidPath)), false);
 });
 
 test("additional asset capture skips only exact CSS dependencies proven unused by retained HTML", async () => {

@@ -468,7 +468,11 @@ function normalizePage(input: {
   let elements = allElements(document);
   const unsupported: string[] = [];
   const forms = elements.filter((element) => element.tagName === "form");
-  materializeScriptAssignedStylesheets(document);
+  materializeScriptAssignedStylesheets({
+    document,
+    siteVersion: input.siteVersion,
+    rawArtifact: input.rawArtifact,
+  });
   normalizePairedNoscriptImages(document);
   elements = allElements(document);
   materializeLazyAssetAttributes(elements);
@@ -511,6 +515,7 @@ function normalizePage(input: {
     removals: input.acceptedFunctionalReductions?.sourceWidgetRemovals ?? [],
     hasReplacedForms: replacedFormCount > 0,
   });
+  const hasStaticMobileNavigation = materializeStaticMobileNavigation(document);
   elements = allElements(document);
   for (const element of elements.filter((candidate) => ["iframe", "object", "embed"].includes(candidate.tagName))) {
     if (isFormSecurityEmbed(element)) {
@@ -560,6 +565,7 @@ function normalizePage(input: {
     hasReplacedForms: replacedFormCount > 0,
     removals: input.acceptedFunctionalReductions?.sourceWidgetRemovals ?? [],
   });
+  if (hasStaticMobileNavigation) headStyles.push(STATIC_MOBILE_NAVIGATION_STYLE);
   for (const href of unresolvedRequiredStylesheetHrefs(headStyles, sourceHostFromRawArtifact(input.rawArtifact))) {
     unsupported.push(`source_stylesheet_evidence_missing:${input.path}:${href}`);
   }
@@ -573,6 +579,32 @@ function normalizePage(input: {
   const title = input.siteVersion.pages.find((page) => page.path === input.path)?.title?.trim() ||
     textContent(elements.find((element) => element.tagName === "title") ?? document).trim().slice(0, 200) || input.path;
   return { path: input.path, title, headHtml, bodyAttributes, bodyHtml, unsupported };
+}
+
+const STATIC_MOBILE_NAVIGATION_STYLE = `<style is:global data-gnr8-static-mobile-navigation>
+@media (max-width: 767px) {
+  nav[data-gnr8-static-mobile-navigation]:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+  nav[data-gnr8-static-mobile-navigation]:focus > ul.navContainer,
+  nav[data-gnr8-static-mobile-navigation]:focus-within > ul.navContainer { right: 0 !important; left: auto !important; }
+  nav[data-gnr8-static-mobile-navigation][data-settings*="direction=right"]:focus > ul.navContainer,
+  nav[data-gnr8-static-mobile-navigation][data-settings*="direction=right"]:focus-within > ul.navContainer { right: auto !important; left: 0 !important; }
+}
+</style>`;
+
+function materializeStaticMobileNavigation(document: DefaultTreeAdapterMap["document"]): boolean {
+  let materialized = false;
+  for (const nav of allElements(document).filter((element) => element.tagName === "nav")) {
+    const classes = classTokens(nav);
+    const navContainer = nav.childNodes.find((child): child is HtmlElement => (
+      isHtmlElement(child) && child.tagName === "ul" && classTokens(child).has("navContainer")
+    ));
+    if (!classes.has("nav") || !navContainer || !attribute(nav, "data-settings")) continue;
+    setAttribute(nav, "data-gnr8-static-mobile-navigation", "");
+    setAttribute(nav, "tabindex", "0");
+    if (!attribute(nav, "aria-label")) setAttribute(nav, "aria-label", "Navigation menu");
+    materialized = true;
+  }
+  return materialized;
 }
 
 function widgetRemovalLimitations(removals: SourceWidgetRemoval[]): string[] {
@@ -1020,8 +1052,12 @@ function materializeLazyAssetAttributes(elements: HtmlElement[]): void {
   }
 }
 
-function materializeScriptAssignedStylesheets(document: DefaultTreeAdapterMap["document"]): void {
-  const elements = allElements(document);
+function materializeScriptAssignedStylesheets(input: {
+  document: DefaultTreeAdapterMap["document"];
+  siteVersion: CanonicalSiteVersionSnapshot;
+  rawArtifact: RawImportedSiteArtifact;
+}): void {
+  const elements = allElements(input.document);
   const existingStylesheetPaths = new Set(elements
     .filter((element) => element.tagName === "link")
     .map((element) => attribute(element, "href"))
@@ -1039,7 +1075,12 @@ function materializeScriptAssignedStylesheets(document: DefaultTreeAdapterMap["d
     if (!target || !parent) continue;
 
     for (const match of body.matchAll(/\bhref\s*=\s*(["'])(\/assets\/[^"'?#\s>]+\.css(?:\?[^"'#\s>]*)?(?:#[^"'\s>]*)?)\1/gi)) {
-      const href = (match[2] ?? "").trim();
+      const sourceHref = (match[2] ?? "").trim();
+      const href = resolveDerivedStylesheetReference({
+        sourceHref,
+        siteVersion: input.siteVersion,
+        rawArtifact: input.rawArtifact,
+      });
       const identity = normalizeReferenceIdentity(href);
       if (!href || existingStylesheetPaths.has(identity)) continue;
       const fragment = parseFragment(`<link rel="stylesheet" href="${escapeHtml(href)}" data-gnr8-materialized-script-stylesheet>`) as DefaultTreeAdapterMap["documentFragment"];
@@ -1052,6 +1093,26 @@ function materializeScriptAssignedStylesheets(document: DefaultTreeAdapterMap["d
       existingStylesheetPaths.add(identity);
     }
   }
+}
+
+function resolveDerivedStylesheetReference(input: {
+  sourceHref: string;
+  siteVersion: CanonicalSiteVersionSnapshot;
+  rawArtifact: RawImportedSiteArtifact;
+}): string {
+  let absoluteSourceUrl: string;
+  try {
+    absoluteSourceUrl = new URL(
+      input.sourceHref,
+      input.rawArtifact.metadata.finalUrl ?? input.rawArtifact.metadata.sourceUrl,
+    ).toString();
+  } catch {
+    return input.sourceHref;
+  }
+  const rewrite = input.siteVersion.importProvenanceSummary?.derivedCapture?.rewrites.find((entry) =>
+    entry.from === absoluteSourceUrl && input.rawArtifact.fileMap[entry.to.replace(/^\/+/, "")],
+  );
+  return rewrite?.to ?? input.sourceHref;
 }
 
 function normalizePairedNoscriptImages(document: DefaultTreeAdapterMap["document"]): void {
@@ -1312,6 +1373,9 @@ function allElements(root: HtmlNode): HtmlElement[] {
   };
   visit(root);
   return out;
+}
+function isHtmlElement(node: HtmlNode): node is HtmlElement {
+  return "tagName" in node && Array.isArray((node as HtmlElement).attrs);
 }
 function detach(node: HtmlElement): void {
   const parent = node.parentNode;

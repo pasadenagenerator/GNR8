@@ -6,6 +6,10 @@ import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-
 
 import {
   deriveDependencySuccessorSiteVersionId,
+  findUnresolvedRetainedStylesheetDependencies,
+  planReachableRetainedStaticDependencies,
+  planRetainedFontDependencies,
+  planRetainedLocalStylesheetRoots,
   planStylesheetDependencies,
   planRetainedStylesheetImports,
   refreshDerivedHtmlProvenance,
@@ -129,6 +133,130 @@ test("retained CSS dependencies resolve from the immutable stylesheet path befor
     rawReference: "../../outside.png",
     filePaths: paths,
   }), null);
+});
+
+test("retained font planner resolves exact source URLs and reuses matching immutable bytes", () => {
+  const stylesheetUrl = "https://fonts.prod.extra-cdn.com/css?family=Roboto";
+  const missingFontUrl = "https://font-files.prod.extra-cdn.com/roboto/missing.ttf";
+  const reusedFontUrl = "https://font-files.prod.extra-cdn.com/roboto/reused.ttf";
+  const stylesheetPath = computeLocalPathCandidate({ resolvedUrl: stylesheetUrl, assetKind: "stylesheet" });
+  const reusedPath = computeLocalPathCandidate({ resolvedUrl: reusedFontUrl, assetKind: "style_asset" });
+  const cssBytes = Buffer.from([
+    `@font-face{font-family:Roboto;src:url('${missingFontUrl}') format('truetype')}`,
+    `@font-face{font-family:Roboto;src:url('${reusedFontUrl}') format('truetype')}`,
+  ].join(""), "utf8");
+  const files = [{
+    path: stylesheetPath,
+    mediaType: "text/css",
+    sizeBytes: cssBytes.byteLength,
+    sha256: createHash("sha256").update(cssBytes).digest("hex"),
+    bytes: cssBytes,
+  }];
+
+  assert.deepEqual(planRetainedFontDependencies({
+    files,
+    stylesheetRewrites: [{ from: stylesheetUrl, to: `/${stylesheetPath}`, reused: true }],
+    filePaths: new Set([stylesheetPath, reusedPath]),
+  }), {
+    missingUrls: [missingFontUrl],
+    reusedUrls: [reusedFontUrl],
+  });
+});
+
+test("dependency closure follows reachable imports and ignores unrelated retained CSS", () => {
+  const rootCss = Buffer.from("@import './nested.css'; .hero{background:url('../images/hero.png')}", "utf8");
+  const nestedCss = Buffer.from("@font-face{font-family:Roboto;src:url('../style_asset/font.ttf')}", "utf8");
+  const unrelatedCss = Buffer.from(".unused{background:url('https://example.com/not-reachable.png')}", "utf8");
+  const file = (path: string, mediaType: string, bytes: Buffer) => ({
+    path,
+    mediaType,
+    sizeBytes: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytes,
+  });
+  const files = [
+    file("assets/stylesheet/root.css", "text/css", rootCss),
+    file("assets/stylesheet/nested.css", "text/css", nestedCss),
+    file("assets/stylesheet/unrelated.css", "text/css", unrelatedCss),
+    file("assets/images/hero.png", "image/png", Buffer.from("png")),
+    file("assets/style_asset/font.ttf", "font/ttf", Buffer.from([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])),
+  ];
+
+  assert.deepEqual(findUnresolvedRetainedStylesheetDependencies({
+    files,
+    rootStylesheetPaths: ["assets/stylesheet/root.css"],
+  }), []);
+
+  assert.deepEqual(findUnresolvedRetainedStylesheetDependencies({
+    files: files.filter((entry) => entry.path !== "assets/style_asset/font.ttf"),
+    rootStylesheetPaths: ["assets/stylesheet/root.css"],
+  }), ["assets/stylesheet/nested.css->../style_asset/font.ttf"]);
+
+  const unusedBytes = Buffer.from(".unused{background:url('../../site/css/images/missing.png')}", "utf8");
+  assert.deepEqual(findUnresolvedRetainedStylesheetDependencies({
+    files: [file("assets/stylesheet/unused.css", "text/css", unusedBytes)],
+    rootStylesheetPaths: ["assets/stylesheet/unused.css"],
+    knownUnusedDependencyUrls: ["https://cdn.example.test/site/css/images/missing.png"],
+    stylesheetSourceUrlsByPath: {
+      "assets/stylesheet/unused.css": "https://cdn.example.test/a/b/unused.css",
+    },
+  }), []);
+});
+
+test("retained local stylesheet roots preserve query identity and drive one reachable static graph", () => {
+  const sourceUrl = "https://www.chs.si/";
+  const userStyleUrl = "https://www.chs.si/assets/user-style.css?1791785941";
+  const importedCssUrl = "https://fonts.prod.extra-cdn.com/css?family=Roboto";
+  const mapImageUrl = "https://maps.gstatic.com/tactile/omnibox/reveal-entity-icons-20131112.png";
+  const userStylePath = "assets/user-style.css";
+  const importedCssPath = "assets/stylesheet/25b8024875fc-css.css";
+  const htmlBytes = Buffer.from(`<script>l.href='/assets/user-style.css?1791785941'</script>`, "utf8");
+  const userStyleBytes = Buffer.from(`@import url('${importedCssUrl}');.directions{background:url('//maps.gstatic.com/tactile/omnibox/reveal-entity-icons-20131112.png')}`, "utf8");
+  const importedCssBytes = Buffer.from("@font-face{src:url('https://font-files.prod.extra-cdn.com/roboto.ttf')}", "utf8");
+  const row = (path: string, mediaType: string, bytes: Buffer) => ({
+    path,
+    mediaType,
+    sizeBytes: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytes,
+  });
+  const files = [
+    row("index.html", "text/html", htmlBytes),
+    row(userStylePath, "text/css", userStyleBytes),
+    row(importedCssPath, "text/css", importedCssBytes),
+  ];
+  const roots = planRetainedLocalStylesheetRoots({
+    htmlFiles: [files[0]!],
+    filePaths: new Set(files.map((entry) => entry.path)),
+    sourceUrl,
+  });
+  assert.deepEqual(roots, [{ from: userStyleUrl, to: `/${userStylePath}`, reused: true }]);
+
+  const graph = planReachableRetainedStaticDependencies({
+    files,
+    stylesheetRewrites: [
+      ...roots,
+      { from: importedCssUrl, to: `/${importedCssPath}`, reused: true },
+    ],
+    filePaths: new Set(files.map((entry) => entry.path)),
+    rootStylesheetPaths: roots.map((entry) => entry.to.replace(/^\/+/, "")),
+  });
+  assert.deepEqual(graph.reachableStylesheetPaths, [importedCssPath, userStylePath].sort());
+  assert.deepEqual(graph.missingUrls, [
+    "https://font-files.prod.extra-cdn.com/roboto.ttf",
+    mapImageUrl,
+  ].sort());
+
+  assert.deepEqual(planReachableRetainedStaticDependencies({
+    files,
+    stylesheetRewrites: [
+      ...roots,
+      { from: importedCssUrl, to: `/${importedCssPath}`, reused: true },
+    ],
+    filePaths: new Set(files.map((entry) => entry.path)),
+    rootStylesheetPaths: roots.map((entry) => entry.to.replace(/^\/+/, "")),
+    knownUnusedDependencyUrls: [mapImageUrl],
+  }).missingUrls, ["https://font-files.prod.extra-cdn.com/roboto.ttf"]);
 });
 
 test("derived capture refreshes rewritten route hashes and invalidates only current validation binding", () => {

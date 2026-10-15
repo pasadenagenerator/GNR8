@@ -166,6 +166,31 @@ test("normalizes rendered navigation with the same targets used by governance ev
   assert.deepEqual([...targets].sort(), ["#details", "/", "/about", "https://outside.test/article"]);
 });
 
+test("materializes a script-free mobile fallback only for the recognized captured navigation contract", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title></head><body>
+      <nav id="primary" class="module nav" data-settings="vertical=false,direction=left,push=true" tabindex="-1">
+        <ul class="navContainer"><li><a href="/about">About</a></li></ul>
+      </nav>
+      <nav id="secondary"><ul class="navContainer"><li><a href="/about">Secondary</a></li></ul></nav>
+    </body></html>`,
+  });
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+
+  assert.match(rootSource, /<nav id="primary"[^>]*data-gnr8-static-mobile-navigation=""/);
+  assert.match(rootSource, /<nav id="primary"[^>]*tabindex="0"/);
+  assert.match(rootSource, /<nav id="primary"[^>]*aria-label="Navigation menu"/);
+  assert.match(rootSource, /nav\[data-gnr8-static-mobile-navigation\]:focus-within > ul\.navContainer \{ right: 0 !important; left: auto !important; \}/);
+  assert.match(rootSource, /focus-visible \{ outline: 2px solid currentColor; outline-offset: 4px; \}/);
+  assert.doesNotMatch(rootSource, /<nav id="secondary"[^>]*data-gnr8-static-mobile-navigation/);
+});
+
 test("fails explicitly when generated HTML references an owned asset without persisted byte evidence", () => {
   const input = fixture();
   delete input.rawArtifact.fileMap["uploads/logo.png"];
@@ -756,6 +781,47 @@ test("materializes retained script-assigned CSS before the target style without 
   assert.ok(rootSource.indexOf(userHref) < rootSource.indexOf('id="style_site"'));
   assert.doesNotMatch(rootSource, /createElement\(['"]link|requestAnimationFrame|<script\b/i);
   assert.equal(rootSource.match(/user-style\.css/g)?.length, 1);
+});
+
+test("uses the exact derived-capture stylesheet mapping for a script-assigned source reference", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title><style id="style_site">#hero{display:block}</style></head><body>
+      <main id="hero">Home</main><script>var l=document.createElement('link');l.rel='stylesheet';var h=document.getElementById('style_site');h.parentNode.insertBefore(l,h);l.href='/assets/user-style.css?capture=1';</script>
+    </body></html>`,
+  });
+  const derivedPath = "assets/stylesheet/derived-user-style.css";
+  input.rawArtifact.fileMap[derivedPath] = {
+    path: derivedPath, mediaType: "text/css", sizeBytes: 20, sha256: SHA,
+  };
+  input.version.importProvenanceSummary = {
+    ...input.version.importProvenanceSummary,
+    derivedCapture: {
+      kind: "dependency_complete_derived_capture_v1",
+      parentSiteVersionId: "parent-version",
+      parentArtifactId: "parent-artifact",
+      parentRawArtifactId: "parent-raw-artifact",
+      parentFilesSha256: SHA,
+      derivedFilesSha256: SHA,
+      dependencyUrls: ["https://example.com/assets/user-style.css?capture=1"],
+      unusedCssDependencies: [],
+      rewrites: [{
+        from: "https://example.com/assets/user-style.css?capture=1",
+        to: `/${derivedPath}`,
+      }],
+      rewrittenHtmlFiles: [],
+    },
+  };
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+    stylesheetCssByPath: { [derivedPath]: "*{border-width:0}" },
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+
+  assert.match(rootSource, /assets\/stylesheet\/derived-user-style\.css/);
+  assert.doesNotMatch(rootSource, /assets\/user-style\.css\?capture=1/);
 });
 
 test("normalizes a verified lazy image and noscript fallback pair for script-disabled preview", () => {

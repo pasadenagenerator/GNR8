@@ -93,17 +93,35 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       input.acceptedFunctionalReductions?.sourceWidgetRemovals?.includes("form-captcha"),
     ),
   });
+  const inheritedStylesheetRewrites = (parentSiteVersion.importProvenanceSummary?.derivedCapture?.rewrites ?? [])
+    .map((entry) => ({ ...entry, reused: true }))
+    .filter((entry) => parentFiles.some((file) => file.path === entry.to.replace(/^\/+/, "")));
+  const inheritedStylesheetPaths = new Set(inheritedStylesheetRewrites.map((entry) => entry.to.replace(/^\/+/, "")));
+  const retainedLocalStylesheetRoots = planRetainedLocalStylesheetRoots({
+    htmlFiles,
+    filePaths: new Set(parentFiles.map((file) => file.path)),
+    sourceUrl: parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
+  }).filter((entry) => !inheritedStylesheetPaths.has(entry.to.replace(/^\/+/, "")));
   const retainedStylesheetRewrites = mergeStylesheetRewrites([
-    ...(parentSiteVersion.importProvenanceSummary?.derivedCapture?.rewrites ?? []).map((entry) => ({ ...entry, reused: true })),
+    ...inheritedStylesheetRewrites,
     ...stylesheetPlan.rewrites,
+    ...retainedLocalStylesheetRoots,
   ]).filter((entry) => parentFiles.some((file) => file.path === entry.to.replace(/^\/+/, "")));
   const retainedStylesheetImportPlan = planRetainedStylesheetImports({
     files: parentFiles,
     stylesheetRewrites: retainedStylesheetRewrites,
     filePaths: new Set(parentFiles.map((file) => file.path)),
   });
+  const inheritedUnusedCssDependencies = parentSiteVersion.importProvenanceSummary?.derivedCapture?.unusedCssDependencies ?? [];
+  const retainedStaticDependencyPlan = planReachableRetainedStaticDependencies({
+    files: parentFiles,
+    stylesheetRewrites: retainedStylesheetRewrites,
+    filePaths: new Set(parentFiles.map((file) => file.path)),
+    rootStylesheetPaths: retainedStylesheetRewrites.map((entry) => entry.to.replace(/^\/+/, "")),
+    knownUnusedDependencyUrls: inheritedUnusedCssDependencies.map((entry) => entry.resolvedUrl),
+  });
   const unusedCssDependencies = [
-    ...(parentSiteVersion.importProvenanceSummary?.derivedCapture?.unusedCssDependencies ?? []),
+    ...inheritedUnusedCssDependencies,
     ...stylesheetPlan.rewrites
     .filter((entry) => entry.reused)
     .flatMap((stylesheet) => {
@@ -122,7 +140,8 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   if (
     stylesheetPlan.missingUrls.length === 0 &&
     stylesheetPlan.rewrites.length === 0 &&
-    retainedStylesheetImportPlan.missingUrls.length === 0
+    retainedStylesheetImportPlan.missingUrls.length === 0 &&
+    retainedStaticDependencyPlan.missingUrls.length === 0
   ) {
     return {
       siteVersion: parentSiteVersion,
@@ -181,6 +200,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       trustedExternalOrigins: trustedOriginsForStylesheets([
         ...allStylesheetUrls,
         ...importOriginsFromRetainedStylesheets(parentFiles),
+        ...retainedStaticDependencyPlan.missingUrls,
       ]),
       knownUnusedStylesheetDependencyUrls: unusedCssDependencies.map((entry) => entry.resolvedUrl),
     });
@@ -204,6 +224,25 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       .filter((entry) => entry.fetchStatus === "fetched" && entry.localPath)
       .map((entry) => entry.localPath!))]
       .filter((filePath) => !parentRawArtifact.fileMap[filePath]);
+    const fetchedStaticDependencyEntries = capture.manifestEntries.filter((entry) =>
+      entry.fetchStatus === "fetched" &&
+      entry.localPath &&
+      entry.resolvedUrl &&
+      retainedStaticDependencyPlan.missingUrls.includes(entry.resolvedUrl),
+    );
+    const missingFetchedStaticDependencies = retainedStaticDependencyPlan.missingUrls.filter((url) =>
+      !fetchedStaticDependencyEntries.some((entry) => entry.resolvedUrl === url),
+    );
+    if (missingFetchedStaticDependencies.length > 0) {
+      throw new Error(`astro_derived_capture_static_dependency_missing:${missingFetchedStaticDependencies.join(",")}`);
+    }
+    if (missingStylesheetUrls.length === 0 && retainedStaticDependencyPlan.missingUrls.length > 0) {
+      const expectedStaticPaths = new Set(fetchedStaticDependencyEntries.map((entry) => entry.localPath!));
+      const unexpectedPaths = fetchedPaths.filter((filePath) => !expectedStaticPaths.has(filePath));
+      if (unexpectedPaths.length > 0 || expectedStaticPaths.size !== retainedStaticDependencyPlan.missingUrls.length) {
+        throw new Error(`astro_derived_capture_static_supplement_scope_mismatch:${unexpectedPaths.join(",")}`);
+      }
+    }
     const newFiles: FileRow[] = [];
     for (const filePath of fetchedPaths.sort()) {
       const bytes = await readFile(join(workspace, ...filePath.split("/")));
@@ -220,21 +259,45 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       ...retainedStylesheetRewrites,
       ...stylesheetPlan.rewrites,
       ...fetchedStylesheetRewrites,
+      ...fetchedStaticDependencyEntries.map((entry) => ({
+        from: entry.resolvedUrl!,
+        to: `/${entry.localPath!}`,
+        reused: false,
+      })),
     ])
       .map(({ from, to }) => ({ from, to }))
       .sort((left, right) => left.from.localeCompare(right.from));
-    const rewrittenParentFiles = parentFiles.map((file) => {
-      if (!/\.html?$/i.test(file.path)) return file;
-      const html = rewriteStylesheetReferences(file.bytes.toString("utf8"), rewrites);
-      const bytes = Buffer.from(html, "utf8");
-      return { ...file, bytes, sizeBytes: bytes.byteLength, sha256: sha256(bytes) };
-    });
+    const rewrittenParentFiles = await Promise.all(parentFiles.map(async (file) => {
+      if (/\.html?$/i.test(file.path)) {
+        const html = rewriteStylesheetReferences(file.bytes.toString("utf8"), rewrites);
+        const bytes = Buffer.from(html, "utf8");
+        return { ...file, bytes, sizeBytes: bytes.byteLength, sha256: sha256(bytes) };
+      }
+      if (/(?:^text\/css\b|\.css$)/i.test(`${file.mediaType} ${file.path}`)) {
+        const bytes = await readFile(join(workspace, ...file.path.split("/")));
+        return { ...file, bytes, sizeBytes: bytes.byteLength, sha256: sha256(bytes) };
+      }
+      return file;
+    }));
     const derivedFiles = [...rewrittenParentFiles, ...newFiles]
       .sort((left, right) => left.path.localeCompare(right.path));
+    const unresolvedDependencies = findUnresolvedRetainedStylesheetDependencies({
+      files: derivedFiles,
+      rootStylesheetPaths: retainedStaticDependencyPlan.reachableStylesheetPaths,
+      knownUnusedDependencyUrls: unusedCssDependencies.map((entry) => entry.resolvedUrl),
+      stylesheetSourceUrlsByPath: Object.fromEntries(retainedStylesheetRewrites.map((entry) => [
+        entry.to.replace(/^\/+/, ""),
+        entry.from,
+      ])),
+    });
+    if (unresolvedDependencies.length > 0) {
+      throw new Error(`astro_derived_capture_dependency_closure_incomplete:${unresolvedDependencies.join(",")}`);
+    }
     const parentFilesSha256 = filesSha256(parentFiles);
     const derivedFilesSha256 = filesSha256(derivedFiles);
     const provenance = structuredClone(parentSiteVersion.importProvenanceSummary ?? {}) as RuntimeImportProvenanceSummary;
     const rewrittenHtmlFiles = rewrittenParentFiles
+      .filter((file) => /\.html?$/i.test(file.path))
       .filter((file) => {
         const parent = parentFiles.find((candidate) => candidate.path === file.path);
         return parent && parent.sha256 !== file.sha256;
@@ -245,6 +308,9 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         afterSha256: file.sha256,
         byteSize: file.sizeBytes,
       }));
+    if (missingStylesheetUrls.length === 0 && retainedStaticDependencyPlan.missingUrls.length > 0 && rewrittenHtmlFiles.length > 0) {
+      throw new Error(`astro_derived_capture_static_supplement_html_changed:${rewrittenHtmlFiles.map((file) => file.path).join(",")}`);
+    }
     refreshDerivedHtmlProvenance(provenance, rewrittenHtmlFiles);
     provenance.derivedCapture = {
       kind: "dependency_complete_derived_capture_v1",
@@ -253,7 +319,10 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       parentRawArtifactId: parentRawArtifact.id,
       parentFilesSha256,
       derivedFilesSha256,
-      dependencyUrls: missingStylesheetUrls,
+      dependencyUrls: [...new Set([
+        ...missingStylesheetUrls,
+        ...fetchedStaticDependencyEntries.map((entry) => entry.resolvedUrl!),
+      ])].sort(),
       unusedCssDependencies,
       rewrites,
       rewrittenHtmlFiles,
@@ -398,6 +467,227 @@ export function planRetainedStylesheetImports(input: {
   };
 }
 
+export function planRetainedLocalStylesheetRoots(input: {
+  htmlFiles: FileRow[];
+  filePaths: ReadonlySet<string>;
+  sourceUrl: string;
+}): Array<{ from: string; to: string; reused: boolean }> {
+  const roots = new Map<string, { from: string; to: string; reused: boolean }>();
+  for (const file of input.htmlFiles) {
+    const html = file.bytes.toString("utf8");
+    for (const match of html.matchAll(/\bhref\s*=\s*(["'])([^"']+\.css(?:[?#][^"']*)?)\1/gi)) {
+      const rawReference = String(match[2] ?? "").replaceAll("&amp;", "&").trim();
+      let resolvedUrl: URL;
+      try { resolvedUrl = new URL(rawReference, input.sourceUrl); } catch { continue; }
+      if (!/^https?:$/.test(resolvedUrl.protocol)) continue;
+      const localPath = decodeOwnedPathname(resolvedUrl.pathname);
+      if (!localPath || !input.filePaths.has(localPath)) continue;
+      const root = { from: resolvedUrl.toString(), to: `/${localPath}`, reused: true };
+      roots.set(`${root.from}\0${root.to}`, root);
+    }
+  }
+  return [...roots.values()].sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
+}
+
+export function planReachableRetainedStaticDependencies(input: {
+  files: FileRow[];
+  stylesheetRewrites: Array<{ from: string; to: string; reused: boolean }>;
+  filePaths: ReadonlySet<string>;
+  rootStylesheetPaths: string[];
+  knownUnusedDependencyUrls?: string[];
+}): { missingUrls: string[]; reusedUrls: string[]; reachableStylesheetPaths: string[] } {
+  const cssByPath = new Map(input.files
+    .filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))
+    .map((file) => [file.path, file]));
+  const sourceUrlsByPath = new Map<string, string[]>();
+  const pathBySourceUrl = new Map<string, string>();
+  for (const rewrite of input.stylesheetRewrites) {
+    const stylesheetPath = rewrite.to.replace(/^\/+/, "");
+    const sources = sourceUrlsByPath.get(stylesheetPath) ?? [];
+    sources.push(rewrite.from);
+    sourceUrlsByPath.set(stylesheetPath, sources);
+    pathBySourceUrl.set(rewrite.from, stylesheetPath);
+  }
+  const pending = [...new Set(input.rootStylesheetPaths.filter((filePath) => cssByPath.has(filePath)))].sort();
+  const visited = new Set<string>();
+  const missingUrls = new Set<string>();
+  const reusedUrls = new Set<string>();
+  const knownUnusedDependencyUrls = new Set(input.knownUnusedDependencyUrls ?? []);
+  while (pending.length > 0) {
+    const stylesheetPath = pending.shift()!;
+    if (visited.has(stylesheetPath)) continue;
+    visited.add(stylesheetPath);
+    const file = cssByPath.get(stylesheetPath);
+    if (!file) continue;
+    const stylesheetSourceUrl = sourceUrlsByPath.get(stylesheetPath)?.[0] ?? null;
+    const css = file.bytes.toString("utf8");
+    for (const match of css.matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
+      const rawReference = String(match[2] ?? "").trim();
+      const resolvedUrl = resolveCssSourceUrl(rawReference, stylesheetSourceUrl);
+      const retainedPath = resolvedUrl ? pathBySourceUrl.get(resolvedUrl) : resolveRetainedCssDependencyPath({
+        stylesheetPath,
+        rawReference,
+        filePaths: input.filePaths,
+      });
+      if (retainedPath && cssByPath.has(retainedPath) && !visited.has(retainedPath)) pending.push(retainedPath);
+    }
+    for (const match of css.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
+      const rawReference = String(match[2] ?? "").trim();
+      if (!rawReference || rawReference.startsWith("data:") || rawReference.startsWith("#")) continue;
+      const resolvedUrl = resolveCssSourceUrl(rawReference, stylesheetSourceUrl);
+      if (!resolvedUrl || !isSupportedStaticCssDependency(resolvedUrl)) continue;
+      if (knownUnusedDependencyUrls.has(resolvedUrl)) continue;
+      const retainedRelativePath = resolveRetainedCssDependencyPath({
+        stylesheetPath,
+        rawReference,
+        filePaths: input.filePaths,
+      });
+      const mappedPath = pathBySourceUrl.get(resolvedUrl);
+      const assetKind = /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?)(?:[?#]|$)/i.test(new URL(resolvedUrl).pathname)
+        ? "image" as const
+        : "style_asset" as const;
+      const deterministicPath = computeLocalPathCandidate({ resolvedUrl, assetKind });
+      if (
+        (retainedRelativePath && input.filePaths.has(retainedRelativePath)) ||
+        (mappedPath && input.filePaths.has(mappedPath)) ||
+        input.filePaths.has(deterministicPath)
+      ) reusedUrls.add(resolvedUrl);
+      else missingUrls.add(resolvedUrl);
+    }
+  }
+  return {
+    missingUrls: [...missingUrls].sort(),
+    reusedUrls: [...reusedUrls].sort(),
+    reachableStylesheetPaths: [...visited].sort(),
+  };
+}
+
+export function planRetainedFontDependencies(input: {
+  files: FileRow[];
+  stylesheetRewrites: Array<{ from: string; to: string; reused: boolean }>;
+  filePaths: ReadonlySet<string>;
+}): { missingUrls: string[]; reusedUrls: string[] } {
+  const missingUrls = new Set<string>();
+  const reusedUrls = new Set<string>();
+  const sourceUrlByPath = new Map(input.stylesheetRewrites.map((entry) => [entry.to.replace(/^\/+/, ""), entry.from]));
+  for (const file of input.files.filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))) {
+    const stylesheetSourceUrl = sourceUrlByPath.get(file.path);
+    for (const match of file.bytes.toString("utf8").matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
+      const rawReference = String(match[2] ?? "").trim();
+      if (!rawReference || rawReference.startsWith("data:") || rawReference.startsWith("#")) continue;
+      let resolvedUrl: string;
+      try {
+        if (/^https?:\/\//i.test(rawReference)) resolvedUrl = new URL(rawReference).toString();
+        else if (stylesheetSourceUrl) resolvedUrl = new URL(rawReference, stylesheetSourceUrl).toString();
+        else continue;
+      } catch {
+        continue;
+      }
+      if (!/\.(?:woff2?|ttf|otf|eot)(?:[?#]|$)/i.test(new URL(resolvedUrl).pathname)) continue;
+      const retainedPath = resolveRetainedCssDependencyPath({
+        stylesheetPath: file.path,
+        rawReference,
+        filePaths: input.filePaths,
+      }) ?? computeLocalPathCandidate({ resolvedUrl, assetKind: "style_asset" });
+      if (input.filePaths.has(retainedPath)) reusedUrls.add(resolvedUrl);
+      else missingUrls.add(resolvedUrl);
+    }
+  }
+  return {
+    missingUrls: [...missingUrls].sort(),
+    reusedUrls: [...reusedUrls].sort(),
+  };
+}
+
+export function findUnresolvedRetainedStylesheetDependencies(input: {
+  files: FileRow[];
+  rootStylesheetPaths: string[];
+  knownUnusedDependencyUrls?: string[];
+  stylesheetSourceUrlsByPath?: Record<string, string>;
+}): string[] {
+  const filePaths = new Set(input.files.map((file) => file.path));
+  const cssByPath = new Map(input.files
+    .filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))
+    .map((file) => [file.path, file]));
+  const unresolved = new Set<string>();
+  const knownUnusedDependencyUrls = new Set(input.knownUnusedDependencyUrls ?? []);
+  const pending = [...new Set(input.rootStylesheetPaths)].sort();
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const stylesheetPath = pending.shift()!;
+    if (visited.has(stylesheetPath)) continue;
+    visited.add(stylesheetPath);
+    const file = cssByPath.get(stylesheetPath);
+    if (!file) {
+      unresolved.add(`${stylesheetPath}->missing_stylesheet`);
+      continue;
+    }
+    const css = file.bytes.toString("utf8");
+    for (const match of css.matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
+      const rawReference = String(match[2] ?? "").trim();
+      const target = resolveClosureReference({
+        stylesheetPath: file.path,
+        rawReference,
+        filePaths,
+        unresolved,
+        knownUnusedDependencyUrls,
+        stylesheetSourceUrl: input.stylesheetSourceUrlsByPath?.[file.path] ?? null,
+      });
+      if (target && cssByPath.has(target) && !visited.has(target)) pending.push(target);
+    }
+    for (const match of css.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
+      const rawReference = String(match[2] ?? "").trim();
+      resolveClosureReference({
+        stylesheetPath: file.path,
+        rawReference,
+        filePaths,
+        unresolved,
+        knownUnusedDependencyUrls,
+        stylesheetSourceUrl: input.stylesheetSourceUrlsByPath?.[file.path] ?? null,
+      });
+    }
+  }
+  return [...unresolved].sort();
+}
+
+function resolveClosureReference(input: {
+  stylesheetPath: string;
+  rawReference: string;
+  filePaths: ReadonlySet<string>;
+  unresolved: Set<string>;
+  knownUnusedDependencyUrls: ReadonlySet<string>;
+  stylesheetSourceUrl: string | null;
+}): string | null {
+  if (!input.rawReference || input.rawReference.startsWith("data:") || input.rawReference.startsWith("#")) return null;
+  const sourceResolvedUrl = resolveCssSourceUrl(input.rawReference, input.stylesheetSourceUrl);
+  if (sourceResolvedUrl && input.knownUnusedDependencyUrls.has(sourceResolvedUrl)) return null;
+  if (/^https?:\/\//i.test(input.rawReference)) {
+    if (input.knownUnusedDependencyUrls.has(input.rawReference)) return null;
+    input.unresolved.add(`${input.stylesheetPath}->${input.rawReference}`);
+    return null;
+  }
+  if (input.rawReference.startsWith("//")) {
+    const resolved = `https:${input.rawReference}`;
+    if (input.knownUnusedDependencyUrls.has(resolved)) return null;
+    input.unresolved.add(`${input.stylesheetPath}->${resolved}`);
+    return null;
+  }
+  const withoutQueryOrHash = input.rawReference.split(/[?#]/, 1)[0] ?? "";
+  let decoded = withoutQueryOrHash;
+  try { decoded = decodeURIComponent(withoutQueryOrHash); } catch {
+    input.unresolved.add(`${input.stylesheetPath}->${input.rawReference}`);
+    return null;
+  }
+  const target = decoded.startsWith("/")
+    ? posix.normalize(decoded.replace(/^\/+/, ""))
+    : posix.normalize(posix.join(posix.dirname(input.stylesheetPath), decoded));
+  if (!target || target === "." || target.startsWith("../") || !input.filePaths.has(target)) {
+    input.unresolved.add(`${input.stylesheetPath}->${input.rawReference}`);
+    return null;
+  }
+  return target;
+}
+
 export function refreshDerivedHtmlProvenance(
   provenance: RuntimeImportProvenanceSummary,
   rewrittenHtmlFiles: Array<{ path: string; afterSha256: string; byteSize: number }>,
@@ -480,7 +770,7 @@ function importOriginsFromRetainedStylesheets(files: FileRow[]): string[] {
   return [...origins].sort();
 }
 
-function existingCssDependencyManifest(input: {
+export function existingCssDependencyManifest(input: {
   parentFiles: FileRow[];
   stylesheetRewrites: Array<{ from: string; to: string; reused: boolean }>;
   filePaths: ReadonlySet<string>;
@@ -553,6 +843,42 @@ export function resolveRetainedCssDependencyPath(input: {
   const candidate = posix.normalize(posix.join(posix.dirname(input.stylesheetPath), decoded));
   if (!candidate || candidate === "." || candidate.startsWith("../") || posix.isAbsolute(candidate)) return null;
   return input.filePaths.has(candidate) ? candidate : null;
+}
+
+function decodeOwnedPathname(pathname: string): string | null {
+  const raw = pathname.replace(/^\/+/, "");
+  if (!raw) return null;
+  try {
+    const decoded = decodeURIComponent(raw);
+    const normalized = posix.normalize(decoded);
+    return !normalized || normalized === "." || normalized.startsWith("../") || posix.isAbsolute(normalized)
+      ? null
+      : normalized;
+  } catch {
+    return null;
+  }
+}
+
+function resolveCssSourceUrl(rawReference: string, stylesheetSourceUrl: string | null): string | null {
+  if (!rawReference || rawReference.startsWith("data:") || rawReference.startsWith("#")) return null;
+  try {
+    if (rawReference.startsWith("//")) {
+      const protocol = stylesheetSourceUrl ? new URL(stylesheetSourceUrl).protocol : "https:";
+      return new URL(`${protocol}${rawReference}`).toString();
+    }
+    if (/^https?:\/\//i.test(rawReference)) return new URL(rawReference).toString();
+    return stylesheetSourceUrl ? new URL(rawReference, stylesheetSourceUrl).toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSupportedStaticCssDependency(value: string): boolean {
+  try {
+    return /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?|woff2?|ttf|otf|eot)(?:$|[?#])/i.test(new URL(value).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function assertFileRowsMatchManifest(files: FileRow[], artifact: RawImportedSiteArtifact): void {
