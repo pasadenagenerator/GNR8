@@ -4,7 +4,11 @@ import test from "node:test";
 
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
 
-import { planStylesheetDependencies, refreshDerivedHtmlProvenance } from "./source-backed-capture-dependency-derivation";
+import {
+  planStylesheetDependencies,
+  refreshDerivedHtmlProvenance,
+  resolveRetainedCssDependencyPath,
+} from "./source-backed-capture-dependency-derivation";
 import type { RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 
 const EXTERNAL_LIBS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780087e3f/css/external-libs.css?1791454204350";
@@ -38,6 +42,23 @@ test("derived capture planner reuses exact deterministic CSS paths and fetches o
 
   assert.deepEqual(plan.rewrites, [{ from: EXTERNAL_LIBS, to: `/${externalPath}`, reused: true }]);
   assert.deepEqual(plan.missingUrls, [GOOGLE, GRIDS].sort());
+});
+
+test("retained CSS dependencies resolve from the immutable stylesheet path before remote fallback", () => {
+  const paths = new Set([
+    "assets/stylesheet/f625c4a163d0-external-libs.css",
+    "assets/style_asset/85344934d15f-fa-solid-900.woff2",
+  ]);
+  assert.equal(resolveRetainedCssDependencyPath({
+    stylesheetPath: "assets/stylesheet/f625c4a163d0-external-libs.css",
+    rawReference: "../style_asset/85344934d15f-fa-solid-900.woff2?#iefix",
+    filePaths: paths,
+  }), "assets/style_asset/85344934d15f-fa-solid-900.woff2");
+  assert.equal(resolveRetainedCssDependencyPath({
+    stylesheetPath: "assets/stylesheet/f625c4a163d0-external-libs.css",
+    rawReference: "../../outside.png",
+    filePaths: paths,
+  }), null);
 });
 
 test("derived capture refreshes rewritten route hashes and invalidates only current validation binding", () => {

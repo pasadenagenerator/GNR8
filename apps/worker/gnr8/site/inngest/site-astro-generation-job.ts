@@ -136,7 +136,9 @@ function isDeterministicGenerationFailure(error: unknown): boolean {
     candidate.message === 'astro_generation_source_artifact_missing' ||
     candidate.message === 'astro_generation_source_capture_lineage_missing' ||
     candidate.message === 'astro_generation_source_capture_integrity_mismatch' ||
-    candidate.message === 'astro_generation_source_lineage_mismatch'
+    candidate.message === 'astro_generation_source_lineage_mismatch' ||
+    candidate.message.startsWith('astro_derived_capture_dependency_fetch_failed:') ||
+    candidate.message.startsWith('astro_derived_capture_stylesheet_missing:')
   )
 }
 

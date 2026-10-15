@@ -189,6 +189,37 @@ test("additional asset capture follows bounded trusted stylesheet imports and fo
   assert.doesNotMatch(fs.readFileSync(path.join(root, fontCss!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
 });
 
+test("additional asset capture skips only exact CSS dependencies proven unused by retained HTML", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-unused-css-assets-"));
+  const fetched: string[] = [];
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    pages: [{
+      pageUrl: "https://example.com/",
+      bodyPath: path.join(root, "index.html"),
+      html: '<link rel="stylesheet" href="https://example.com/theme.css"><main class="hero"></main>',
+    }],
+    knownUnusedStylesheetDependencyUrls: ["https://example.com/images/unused.png"],
+    fetchImpl: async (request) => {
+      const url = String(request instanceof Request ? request.url : request);
+      fetched.push(url);
+      if (url === "https://example.com/theme.css") {
+        return new Response(".unused{background:url('./images/unused.png')}.hero{background:url('./images/required.png')}", {
+          status: 200,
+          headers: { "content-type": "text/css" },
+        });
+      }
+      if (url === "https://example.com/images/required.png") {
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/png" } });
+      }
+      return new Response("missing", { status: 404 });
+    },
+  });
+
+  assert.equal(result.summary.failedRequiredAssetCount, 0);
+  assert.deepEqual(fetched, ["https://example.com/theme.css", "https://example.com/images/required.png"]);
+});
+
 function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
   return {
     async execute(request) {

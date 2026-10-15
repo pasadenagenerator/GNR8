@@ -254,6 +254,11 @@ export type RuntimeImportProvenanceSummary = {
     parentFilesSha256: string;
     derivedFilesSha256: string;
     dependencyUrls: string[];
+    unusedCssDependencies: Array<{
+      stylesheetPath: string;
+      resolvedUrl: string;
+      selectors: string[];
+    }>;
     rewrites: Array<{ from: string; to: string }>;
     rewrittenHtmlFiles: Array<{
       path: string;

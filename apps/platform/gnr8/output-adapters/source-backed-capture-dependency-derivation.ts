@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 
 import { computeRuntimeArtifactBundleSha256 } from "@/gnr8/runtime/astro-artifact-materialization";
 import { stableStringify } from "@/gnr8/runtime/deterministic";
@@ -26,6 +26,7 @@ import {
 } from "@/gnr8/validation/runtime/url-single-page-import";
 
 import type { AcceptedSourceFunctionalReductions } from "./source-backed-astro-input";
+import { findProvablyUnusedCssDependencies } from "./source-backed-css-dependency-analysis";
 
 export type DerivedCaptureResult = {
   siteVersion: CanonicalSiteVersionSnapshot;
@@ -77,6 +78,19 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       input.acceptedFunctionalReductions?.sourceWidgetRemovals?.includes("form-captcha"),
     ),
   });
+  const unusedCssDependencies = stylesheetPlan.rewrites
+    .filter((entry) => entry.reused)
+    .flatMap((stylesheet) => {
+      const stylesheetPath = stylesheet.to.replace(/^\/+/, "");
+      const file = parentFiles.find((candidate) => candidate.path === stylesheetPath);
+      if (!file) return [];
+      return findProvablyUnusedCssDependencies({
+        css: file.bytes.toString("utf8"),
+        stylesheetUrl: stylesheet.from,
+        htmlDocuments: htmlFiles.map((htmlFile) => htmlFile.bytes.toString("utf8")),
+      }).map((dependency) => ({ stylesheetPath, ...dependency }));
+    })
+    .sort((left, right) => left.resolvedUrl.localeCompare(right.resolvedUrl));
   if (stylesheetPlan.missingUrls.length === 0 && stylesheetPlan.rewrites.length === 0) {
     return {
       siteVersion: input.parentSiteVersion,
@@ -133,6 +147,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         ...allStylesheetUrls,
         ...importOriginsFromRetainedStylesheets(parentFiles),
       ]),
+      knownUnusedStylesheetDependencyUrls: unusedCssDependencies.map((entry) => entry.resolvedUrl),
     });
     if (capture.summary.failedRequiredAssetCount > 0) {
       throw new Error(`astro_derived_capture_dependency_fetch_failed:${capture.summary.failedRequiredResources.join(",")}`);
@@ -196,6 +211,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       parentFilesSha256,
       derivedFilesSha256,
       dependencyUrls: stylesheetPlan.missingUrls,
+      unusedCssDependencies,
       rewrites,
       rewrittenHtmlFiles,
     };
@@ -400,7 +416,11 @@ function existingCssDependencyManifest(input: {
       const assetKind = /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?)(?:[?#]|$)/i.test(resolvedUrl)
         ? "image" as const
         : "style_asset" as const;
-      const dependencyPath = computeLocalPathCandidate({ resolvedUrl, assetKind });
+      const dependencyPath = resolveRetainedCssDependencyPath({
+        stylesheetPath: localPath,
+        rawReference: rawRef,
+        filePaths: input.filePaths,
+      }) ?? computeLocalPathCandidate({ resolvedUrl, assetKind });
       if (!input.filePaths.has(dependencyPath)) continue;
       const dependency = input.parentFiles.find((candidate) => candidate.path === dependencyPath);
       if (!dependency) continue;
@@ -421,6 +441,22 @@ function existingCssDependencyManifest(input: {
     }
   }
   return entries;
+}
+
+export function resolveRetainedCssDependencyPath(input: {
+  stylesheetPath: string;
+  rawReference: string;
+  filePaths: ReadonlySet<string>;
+}): string | null {
+  const raw = input.rawReference.trim();
+  if (!raw || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(raw)) return null;
+  const withoutQueryOrHash = raw.split(/[?#]/, 1)[0] ?? "";
+  if (!withoutQueryOrHash) return null;
+  let decoded = withoutQueryOrHash;
+  try { decoded = decodeURIComponent(withoutQueryOrHash); } catch { return null; }
+  const candidate = posix.normalize(posix.join(posix.dirname(input.stylesheetPath), decoded));
+  if (!candidate || candidate === "." || candidate.startsWith("../") || posix.isAbsolute(candidate)) return null;
+  return input.filePaths.has(candidate) ? candidate : null;
 }
 
 function assertFileRowsMatchManifest(files: FileRow[], artifact: RawImportedSiteArtifact): void {

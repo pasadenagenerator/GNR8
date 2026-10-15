@@ -17,6 +17,7 @@ import { createGeneratedOutputContentManifest, type GeneratedOutputContentManife
 import { encodeGeneratedOutputRoutePath } from "./generated-output-route-path";
 import { createAstroStaticSiteProjectManifest, type NormalizedStaticBusinessSiteContent, type NormalizedStaticSitePage } from "./astro-static-site-adapter";
 import type { OutputAdapterCapability } from "./output-adapter-selection";
+import { removeProvablyUnusedCssDependencyRules } from "./source-backed-css-dependency-analysis";
 
 type HtmlNode = DefaultTreeAdapterMap["node"];
 type HtmlElement = DefaultTreeAdapterMap["element"];
@@ -165,16 +166,44 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
       bytes: Buffer.from(asset.bytes),
     });
   }
-  const materializedByPath = new Map([...retainedByPath].map(([filePath, asset]) => [
-    filePath,
-    rewriteRawTemplateCssForRuntime({
+  const derivedCapture = input.siteVersion.importProvenanceSummary?.derivedCapture;
+  const stylesheetSourceUrlByPath = new Map(
+    (derivedCapture?.rewrites ?? []).map((entry) => [entry.to.replace(/^\/+/, ""), entry.from]),
+  );
+  const unusedCssDependenciesByPath = new Map<string, Set<string>>();
+  for (const dependency of derivedCapture?.unusedCssDependencies ?? []) {
+    const urls = unusedCssDependenciesByPath.get(dependency.stylesheetPath) ?? new Set<string>();
+    urls.add(dependency.resolvedUrl);
+    unusedCssDependenciesByPath.set(dependency.stylesheetPath, urls);
+  }
+  const htmlDocuments = Object.values(htmlByPath);
+  const materializedByPath = new Map([...retainedByPath].map(([filePath, asset]) => {
+    let css = rewriteRawTemplateCssForRuntime({
       css: asset.bytes.toString("utf8"),
       siteId: input.rawArtifact.siteId,
       siteVersionId: input.rawArtifact.siteVersionId,
       assetFilePath: filePath,
       fileMapPaths,
-    }),
-  ]));
+    });
+    const allowedUnusedUrls = unusedCssDependenciesByPath.get(filePath) ?? new Set<string>();
+    const stylesheetUrl = stylesheetSourceUrlByPath.get(filePath);
+    if (allowedUnusedUrls.size > 0) {
+      if (!stylesheetUrl) {
+        throw new SourceBackedAstroUnsupportedError([`source_stylesheet_unused_dependency_source_missing:${filePath}`]);
+      }
+      const pruned = removeProvablyUnusedCssDependencyRules({
+        css,
+        stylesheetUrl,
+        htmlDocuments,
+        allowedUnusedUrls,
+      });
+      if (pruned.removedUrls.length !== allowedUnusedUrls.size) {
+        throw new SourceBackedAstroUnsupportedError([`source_stylesheet_unused_dependency_evidence_mismatch:${filePath}`]);
+      }
+      css = pruned.css;
+    }
+    return [filePath, css] as const;
+  }));
   for (const [filePath, asset] of retainedByPath) {
     const materializedCss = inlineMaterializedCssImports({
       filePath,

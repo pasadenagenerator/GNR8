@@ -2806,6 +2806,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   existingFetchManifest?: UrlImportFetchManifestEntry[];
   /** Exact, per-operation origins authorized for retained dependency acquisition. */
   trustedExternalOrigins?: string[];
+  /** Exact stylesheet dependency URLs proven not to match retained HTML. */
+  knownUnusedStylesheetDependencyUrls?: string[];
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -2825,6 +2827,9 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const representativeUrlByIdentity = new Map<string, string>();
   const aliasToRepresentativeUrl = new Map<string, string>();
   const trustedExternalOrigins = new Set<string>();
+  const knownUnusedStylesheetDependencyIdentities = new Set(
+    (input.knownUnusedStylesheetDependencyUrls ?? []).map(canonicalAdditionalPageAssetIdentity),
+  );
   for (const value of input.trustedExternalOrigins ?? []) {
     const origin = canonicalAdditionalPageAssetOrigin(value);
     if (origin) trustedExternalOrigins.add(origin);
@@ -2989,6 +2994,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, pageUrl, trustedExternalOrigins)) continue;
       const assetKind = inferCssUrlAssetKind(rawRef);
       const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
+      if (knownUnusedStylesheetDependencyIdentities.has(identity)) continue;
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
       representativeUrlByIdentity.set(identity, representative);
       aliasToRepresentativeUrl.set(resolvedUrl, representative);
@@ -3032,6 +3038,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, stylesheetUrl, trustedExternalOrigins)) continue;
       const assetKind = inferCssUrlAssetKind(rawRef);
       const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
+      if (knownUnusedStylesheetDependencyIdentities.has(identity)) continue;
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
       representativeUrlByIdentity.set(identity, representative);
       aliasToRepresentativeUrl.set(resolvedUrl, representative);

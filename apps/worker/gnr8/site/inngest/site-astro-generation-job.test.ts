@@ -134,3 +134,14 @@ test('missing immutable source lineage is non-retriable', async () => {
     (error: unknown) => error instanceof NonRetriableError && error.message === 'astro_generation_source_capture_integrity_mismatch',
   )
 })
+
+test('deterministic derived dependency failures are non-retriable', async () => {
+  const message = 'astro_derived_capture_dependency_fetch_failed:https://cdn.example.test/missing.css'
+  await assert.rejects(
+    runSiteAstroGenerationJob({
+      eventData: payload,
+      runGeneration: async () => { throw new Error(message) },
+    }),
+    (error: unknown) => error instanceof NonRetriableError && error.message === message,
+  )
+})

@@ -252,6 +252,64 @@ test("loads and verifies retained stylesheet bytes for generation dependency evi
   assert.deepEqual(Object.keys(source.htmlByPath), ["/", "/about"]);
 });
 
+test("materializes audited unused vendor rules without changing retained stylesheet bytes", async () => {
+  const input = fixture({
+    rootHtml: '<!doctype html><html><head><title>Home</title></head><body><main class="hero"><h1>Home</h1></main></body></html>',
+  });
+  const stylesheetPath = "assets/stylesheet/vendor.css";
+  const stylesheetUrl = "https://cdn.example.test/site/css/vendor.css";
+  const unusedUrl = "https://cdn.example.test/site/css/images/layers.png";
+  const stylesheetBytes = Buffer.from(
+    ".leaflet-control-layers-toggle{background:url('./images/layers.png')}.hero{background:url('../../uploads/logo.png')}",
+  );
+  input.rawArtifact.fileMap[stylesheetPath] = {
+    path: stylesheetPath,
+    mediaType: "text/css",
+    sizeBytes: stylesheetBytes.byteLength,
+    sha256: createHash("sha256").update(stylesheetBytes).digest("hex"),
+  };
+  input.version.importProvenanceSummary = {
+    ...input.version.importProvenanceSummary,
+    derivedCapture: {
+      kind: "dependency_complete_derived_capture_v1",
+      parentSiteVersionId: "parent-version",
+      parentArtifactId: "parent-artifact",
+      parentRawArtifactId: "parent-raw",
+      parentFilesSha256: SHA,
+      derivedFilesSha256: SHA,
+      dependencyUrls: [],
+      unusedCssDependencies: [{
+        stylesheetPath,
+        resolvedUrl: unusedUrl,
+        selectors: [".leaflet-control-layers-toggle"],
+      }],
+      rewrites: [{ from: stylesheetUrl, to: `/${stylesheetPath}` }],
+      rewrittenHtmlFiles: [],
+    },
+  } as CanonicalSiteVersionSnapshot["importProvenanceSummary"];
+  const sourceBytes: Record<string, Buffer> = {
+    "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
+    "pages/about/index.html": Buffer.from(input.artifact.htmlByPath["/about"]),
+    [stylesheetPath]: stylesheetBytes,
+  };
+
+  const source = await loadSourceBackedAstroGenerationSource({
+    siteVersion: input.version,
+    rawArtifact: input.rawArtifact,
+    getRawAsset: async ({ filePath }) => {
+      const bytes = sourceBytes[filePath];
+      const metadata = input.rawArtifact.fileMap[filePath];
+      return bytes && metadata ? { ...metadata, bytes } : null;
+    },
+  });
+
+  assert.equal(source.stylesheetCssByPath[stylesheetPath], stylesheetBytes.toString("utf8"));
+  const materialized = source.ownedStylesheetEvidence.find((entry) => entry.filePath === stylesheetPath)?.materializedBytes.toString("utf8") ?? "";
+  assert.doesNotMatch(materialized, /leaflet-control-layers|layers\.png/);
+  assert.match(materialized, /\.hero/);
+  assert.match(materialized, /preview-assets\/runtime-site\/11111111-1111-4111-8111-111111111111\/uploads\/logo\.png/);
+});
+
 test("materializes owned stylesheet imports with their own URL bases and media condition", async () => {
   const input = fixture();
   const parentPath = "assets/stylesheet/site.css";
