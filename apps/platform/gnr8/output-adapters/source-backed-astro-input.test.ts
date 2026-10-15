@@ -259,14 +259,25 @@ test("materializes audited unused vendor rules without changing retained stylesh
   const stylesheetPath = "assets/stylesheet/vendor.css";
   const stylesheetUrl = "https://cdn.example.test/site/css/vendor.css";
   const unusedUrl = "https://cdn.example.test/site/css/images/layers.png";
+  const retainedUnusedPath = "assets/stylesheet/images/marker-icon.png";
+  const retainedUnusedUrl = "https://cdn.example.test/site/css/images/marker-icon.png";
   const stylesheetBytes = Buffer.from(
-    ".leaflet-control-layers-toggle{background:url('./images/layers.png')}.hero{background:url('../../uploads/logo.png')}",
+    ".leaflet-control-layers-toggle{background:url('./images/layers.png')}" +
+      ".leaflet-default-icon-path{background-image:url('./images/marker-icon.png')}" +
+      ".hero{background:url('../../uploads/logo.png')}",
   );
   input.rawArtifact.fileMap[stylesheetPath] = {
     path: stylesheetPath,
     mediaType: "text/css",
     sizeBytes: stylesheetBytes.byteLength,
     sha256: createHash("sha256").update(stylesheetBytes).digest("hex"),
+  };
+  const retainedUnusedBytes = Buffer.from([1, 2, 3, 4]);
+  input.rawArtifact.fileMap[retainedUnusedPath] = {
+    path: retainedUnusedPath,
+    mediaType: "image/png",
+    sizeBytes: retainedUnusedBytes.byteLength,
+    sha256: createHash("sha256").update(retainedUnusedBytes).digest("hex"),
   };
   input.version.importProvenanceSummary = {
     ...input.version.importProvenanceSummary,
@@ -282,6 +293,10 @@ test("materializes audited unused vendor rules without changing retained stylesh
         stylesheetPath,
         resolvedUrl: unusedUrl,
         selectors: [".leaflet-control-layers-toggle"],
+      }, {
+        stylesheetPath,
+        resolvedUrl: retainedUnusedUrl,
+        selectors: [".leaflet-default-icon-path"],
       }],
       rewrites: [{ from: stylesheetUrl, to: `/${stylesheetPath}` }],
       rewrittenHtmlFiles: [],
@@ -291,6 +306,7 @@ test("materializes audited unused vendor rules without changing retained stylesh
     "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
     "pages/about/index.html": Buffer.from(input.artifact.htmlByPath["/about"]),
     [stylesheetPath]: stylesheetBytes,
+    [retainedUnusedPath]: retainedUnusedBytes,
   };
 
   const source = await loadSourceBackedAstroGenerationSource({
@@ -305,7 +321,7 @@ test("materializes audited unused vendor rules without changing retained stylesh
 
   assert.equal(source.stylesheetCssByPath[stylesheetPath], stylesheetBytes.toString("utf8"));
   const materialized = source.ownedStylesheetEvidence.find((entry) => entry.filePath === stylesheetPath)?.materializedBytes.toString("utf8") ?? "";
-  assert.doesNotMatch(materialized, /leaflet-control-layers|layers\.png/);
+  assert.doesNotMatch(materialized, /leaflet-control-layers|leaflet-default-icon-path|layers\.png|marker-icon\.png/);
   assert.match(materialized, /\.hero/);
   assert.match(materialized, /preview-assets\/runtime-site\/11111111-1111-4111-8111-111111111111\/uploads\/logo\.png/);
 });

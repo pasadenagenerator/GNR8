@@ -178,13 +178,7 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
   }
   const htmlDocuments = Object.values(htmlByPath);
   const materializedByPath = new Map([...retainedByPath].map(([filePath, asset]) => {
-    let css = rewriteRawTemplateCssForRuntime({
-      css: asset.bytes.toString("utf8"),
-      siteId: input.rawArtifact.siteId,
-      siteVersionId: input.rawArtifact.siteVersionId,
-      assetFilePath: filePath,
-      fileMapPaths,
-    });
+    let css = asset.bytes.toString("utf8");
     const allowedUnusedUrls = unusedCssDependenciesByPath.get(filePath) ?? new Set<string>();
     const stylesheetUrl = stylesheetSourceUrlByPath.get(filePath);
     if (allowedUnusedUrls.size > 0) {
@@ -202,6 +196,13 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
       }
       css = pruned.css;
     }
+    css = rewriteRawTemplateCssForRuntime({
+      css,
+      siteId: input.rawArtifact.siteId,
+      siteVersionId: input.rawArtifact.siteVersionId,
+      assetFilePath: filePath,
+      fileMapPaths,
+    });
     return [filePath, css] as const;
   }));
   for (const [filePath, asset] of retainedByPath) {
