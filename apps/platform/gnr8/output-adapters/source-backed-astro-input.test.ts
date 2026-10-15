@@ -848,6 +848,29 @@ test("normalizes a verified lazy image and noscript fallback pair for script-dis
   assert.match(rootSource, /<noscript><p>Meaningful fallback-only content<\/p><\/noscript>/);
 });
 
+test("normalizes an owned preview image and source-relative noscript fallback for the same retained file", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title></head><body>
+      <a href="/">
+        <img src="/api/gnr8/runtime/preview-assets/runtime-site/older-version/uploads/logo.png" id="m3921" class="module image" alt="CHS" width="400" height="100">
+        <noscript data-lazyload-id="m3921" data-lazyload-class="module image" data-lazyload-alt="CHS"><img id="m3921" class="module image" src="/uploads/logo.png" alt="CHS" width="400" height="100"></noscript>
+      </a>
+    </body></html>`,
+  });
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+  const expectedSrc = `/api/gnr8/runtime/preview-assets/${input.rawArtifact.siteId}/${input.rawArtifact.siteVersionId}/uploads/logo.png`;
+
+  assert.equal(rootSource.match(/id="m3921"/g)?.length, 1);
+  assert.doesNotMatch(rootSource, /<noscript[^>]*>[\s\S]{0,500}id="m3921"/i);
+  assert.match(rootSource, new RegExp(expectedSrc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
 test("promotes data-lazyload-src and removes only lazy-runtime initial visibility residue", () => {
   const input = fixture({
     rootHtml: `<!doctype html><html><head><title>Home</title></head><body>

@@ -473,7 +473,7 @@ function normalizePage(input: {
     siteVersion: input.siteVersion,
     rawArtifact: input.rawArtifact,
   });
-  normalizePairedNoscriptImages(document);
+  normalizePairedNoscriptImages(document, input.rawArtifact);
   elements = allElements(document);
   materializeLazyAssetAttributes(elements);
   let replacedFormCount = 0;
@@ -1115,7 +1115,10 @@ function resolveDerivedStylesheetReference(input: {
   return rewrite?.to ?? input.sourceHref;
 }
 
-function normalizePairedNoscriptImages(document: DefaultTreeAdapterMap["document"]): void {
+function normalizePairedNoscriptImages(
+  document: DefaultTreeAdapterMap["document"],
+  rawArtifact: RawImportedSiteArtifact,
+): void {
   for (const noscript of allElements(document).filter((element) => element.tagName === "noscript")) {
     const descendants = allElements(noscript).filter((element) => element !== noscript);
     const fallbackImages = descendants.filter((element) => element.tagName === "img");
@@ -1130,7 +1133,12 @@ function normalizePairedNoscriptImages(document: DefaultTreeAdapterMap["document
 
     const primarySrc = effectiveImageReference(primary);
     const noscriptSrc = attribute(noscript, "data-lazyload-src") ?? attribute(noscript, "data-src");
-    const verifiedPair = (primarySrc && normalizeReferenceIdentity(primarySrc) === normalizeReferenceIdentity(fallbackSrc)) ||
+    const primaryRetainedIdentity = primarySrc ? retainedImageReferenceIdentity(primarySrc, rawArtifact) : null;
+    const fallbackRetainedIdentity = retainedImageReferenceIdentity(fallbackSrc, rawArtifact);
+    const verifiedPair = (primarySrc && (
+      normalizeReferenceIdentity(primarySrc) === normalizeReferenceIdentity(fallbackSrc) ||
+      Boolean(primaryRetainedIdentity && primaryRetainedIdentity === fallbackRetainedIdentity)
+    )) ||
       (noscriptSrc && normalizeReferenceIdentity(noscriptSrc) === normalizeReferenceIdentity(fallbackSrc) &&
         (!attribute(primary, "src") || isLazyPlaceholderReference(attribute(primary, "src")!)));
     if (!verifiedPair) continue;
@@ -1138,6 +1146,19 @@ function normalizePairedNoscriptImages(document: DefaultTreeAdapterMap["document
     primary.attrs = fallback.attrs.map((item) => ({ ...item }));
     detach(noscript);
   }
+}
+
+function retainedImageReferenceIdentity(value: string, rawArtifact: RawImportedSiteArtifact): string | null {
+  const normalized = normalizeReferenceIdentity(value);
+  const previewMatch = normalized.match(/^\/api\/gnr8\/runtime\/preview-assets\/[^/]+\/[^/]+\/(.+)$/);
+  const encodedPath = previewMatch?.[1] ?? normalized.replace(/^\/+/, "");
+  let filePath: string;
+  try {
+    filePath = encodedPath.split("/").map(decodeURIComponent).join("/");
+  } catch {
+    return null;
+  }
+  return rawArtifact.fileMap[filePath] ? filePath : null;
 }
 
 function previousElementSibling(element: HtmlElement): HtmlElement | null {
