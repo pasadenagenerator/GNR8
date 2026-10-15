@@ -493,7 +493,16 @@ function inlineExportedStylesheets(input: {
     }
     const ownedReference = isOwnedRuntimeAssetReference(href);
     const localStylesheetPath = ownedReference ? null : resolveLocalExportReference(href, input.htmlPath);
-    const ownedEvidence = input.ownedStylesheetEvidence.find((entry) => entry.href === href);
+    const ownedEvidenceMatches = ownedReference
+      ? input.ownedStylesheetEvidence.filter((entry) => referencePath(entry.href) === referencePath(href))
+      : [];
+    if (ownedEvidenceMatches.length > 1) {
+      throw new AstroInternalPreviewBridgeError(
+        "stylesheet_invalid",
+        `Trusted owned stylesheet evidence is ambiguous: ${href}.`,
+      );
+    }
+    const ownedEvidence = ownedEvidenceMatches[0];
     if (ownedReference && !ownedEvidence) {
       throw new AstroInternalPreviewBridgeError(
         "stylesheet_missing",
@@ -536,6 +545,10 @@ function inlineExportedStylesheets(input: {
   };
 }
 
+function referencePath(value: string): string {
+  return value.split(/[?#]/, 1)[0] ?? value;
+}
+
 function validateOwnedStylesheetEvidence(
   evidence: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput["ownedStylesheetEvidence"]>[number],
   href: string,
@@ -544,7 +557,7 @@ function validateOwnedStylesheetEvidence(
   if (!evidence.siteId.trim() || !evidence.siteVersionId.trim() || !evidence.artifactId.trim() || !evidence.filePath.trim()) {
     throw new AstroInternalPreviewBridgeError("stylesheet_invalid", `Owned stylesheet identity is incomplete: ${href}.`);
   }
-  if ((href.split(/[?#]/, 1)[0] ?? href) !== expectedHref) {
+  if (referencePath(href) !== expectedHref) {
     throw new AstroInternalPreviewBridgeError(
       "unsupported_asset_reference",
       `Owned stylesheet identity does not match its trusted artifact reference: ${href}.`,

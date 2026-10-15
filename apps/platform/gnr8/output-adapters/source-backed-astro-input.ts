@@ -461,10 +461,16 @@ function normalizePage(input: {
   stylesheetCssByPath?: Record<string, string>;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
 }): { path: string; title: string; headHtml: string; bodyAttributes: Record<string, string>; bodyHtml: string; unsupported: string[] } {
-  const document = parse(input.html) as DefaultTreeAdapterMap["document"];
+  // Candidate previews intentionally disable scripts. Parse using the same
+  // scripting mode so noscript fallbacks can be normalized before Astro
+  // serializes them into a sandboxed document.
+  const document = parse(input.html, { scriptingEnabled: false }) as DefaultTreeAdapterMap["document"];
   let elements = allElements(document);
   const unsupported: string[] = [];
   const forms = elements.filter((element) => element.tagName === "form");
+  materializeScriptAssignedStylesheets(document);
+  normalizePairedNoscriptImages(document);
+  elements = allElements(document);
   materializeLazyAssetAttributes(elements);
   let replacedFormCount = 0;
   let replacedFormSecurityRuntime = false;
@@ -998,15 +1004,124 @@ function isFeedResourcePath(value: string): boolean {
 function materializeLazyAssetAttributes(elements: HtmlElement[]): void {
   for (const element of elements) {
     if (element.tagName !== "img" && element.tagName !== "source") continue;
-    if (!attribute(element, "src")) {
-      const lazySrc = attribute(element, "data-src") ?? attribute(element, "data-lazy-src") ?? attribute(element, "data-original");
-      if (lazySrc) setAttribute(element, "src", lazySrc);
+    const currentSrc = attribute(element, "src");
+    const lazySrc = attribute(element, "data-src") ??
+      attribute(element, "data-lazyload-src") ??
+      attribute(element, "data-original") ??
+      attribute(element, "data-lazy-src");
+    if (lazySrc && (!currentSrc || isLazyPlaceholderReference(currentSrc))) {
+      setAttribute(element, "src", lazySrc);
+      removeLazyRuntimeInitialStyles(element);
     }
     if (!attribute(element, "srcset")) {
       const lazySrcset = attribute(element, "data-srcset") ?? attribute(element, "data-lazy-srcset");
       if (lazySrcset) setAttribute(element, "srcset", lazySrcset);
     }
   }
+}
+
+function materializeScriptAssignedStylesheets(document: DefaultTreeAdapterMap["document"]): void {
+  const elements = allElements(document);
+  const existingStylesheetPaths = new Set(elements
+    .filter((element) => element.tagName === "link")
+    .map((element) => attribute(element, "href"))
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeReferenceIdentity));
+
+  for (const script of elements.filter((element) => element.tagName === "script")) {
+    const body = textContent(script);
+    if (!/createelement\s*\(\s*["']link["']\s*\)/i.test(body) ||
+        !/rel\s*=\s*["']stylesheet["']/i.test(body)) continue;
+    const targetId = body.match(/getElementById\s*\(\s*(["'])([^"']+)\1\s*\)/i)?.[2];
+    if (!targetId) continue;
+    const target = elements.find((element) => attribute(element, "id") === targetId);
+    const parent = target?.parentNode;
+    if (!target || !parent) continue;
+
+    for (const match of body.matchAll(/\bhref\s*=\s*(["'])(\/assets\/[^"'?#\s>]+\.css(?:\?[^"'#\s>]*)?(?:#[^"'\s>]*)?)\1/gi)) {
+      const href = (match[2] ?? "").trim();
+      const identity = normalizeReferenceIdentity(href);
+      if (!href || existingStylesheetPaths.has(identity)) continue;
+      const fragment = parseFragment(`<link rel="stylesheet" href="${escapeHtml(href)}" data-gnr8-materialized-script-stylesheet>`) as DefaultTreeAdapterMap["documentFragment"];
+      const link = fragment.childNodes.find((node): node is HtmlElement => "tagName" in node && node.tagName === "link");
+      if (!link) continue;
+      const index = parent.childNodes.indexOf(target);
+      if (index < 0) continue;
+      link.parentNode = parent;
+      parent.childNodes.splice(index, 0, link);
+      existingStylesheetPaths.add(identity);
+    }
+  }
+}
+
+function normalizePairedNoscriptImages(document: DefaultTreeAdapterMap["document"]): void {
+  for (const noscript of allElements(document).filter((element) => element.tagName === "noscript")) {
+    const descendants = allElements(noscript).filter((element) => element !== noscript);
+    const fallbackImages = descendants.filter((element) => element.tagName === "img");
+    if (fallbackImages.length !== 1 || descendants.some((element) => !["img", "picture", "source"].includes(element.tagName))) continue;
+    if (textContent(noscript).trim()) continue;
+
+    const primary = previousElementSibling(noscript);
+    if (!primary || primary.tagName !== "img") continue;
+    const fallback = fallbackImages[0]!;
+    const fallbackSrc = effectiveImageReference(fallback);
+    if (!fallbackSrc || isLazyPlaceholderReference(fallbackSrc)) continue;
+
+    const primarySrc = effectiveImageReference(primary);
+    const noscriptSrc = attribute(noscript, "data-lazyload-src") ?? attribute(noscript, "data-src");
+    const verifiedPair = (primarySrc && normalizeReferenceIdentity(primarySrc) === normalizeReferenceIdentity(fallbackSrc)) ||
+      (noscriptSrc && normalizeReferenceIdentity(noscriptSrc) === normalizeReferenceIdentity(fallbackSrc) &&
+        (!attribute(primary, "src") || isLazyPlaceholderReference(attribute(primary, "src")!)));
+    if (!verifiedPair) continue;
+
+    primary.attrs = fallback.attrs.map((item) => ({ ...item }));
+    detach(noscript);
+  }
+}
+
+function previousElementSibling(element: HtmlElement): HtmlElement | null {
+  const siblings = element.parentNode?.childNodes ?? [];
+  for (let index = siblings.indexOf(element) - 1; index >= 0; index -= 1) {
+    const sibling = siblings[index];
+    if (sibling && "tagName" in sibling) return sibling as HtmlElement;
+    if (sibling && "value" in sibling && typeof sibling.value === "string" && sibling.value.trim()) return null;
+  }
+  return null;
+}
+
+function effectiveImageReference(element: HtmlElement): string | null {
+  const lazy = attribute(element, "data-src") ??
+    attribute(element, "data-lazyload-src") ??
+    attribute(element, "data-original") ??
+    attribute(element, "data-lazy-src");
+  const src = attribute(element, "src");
+  return lazy ?? src;
+}
+
+function normalizeReferenceIdentity(value: string): string {
+  return value.trim().split(/[?#]/, 1)[0] ?? value.trim();
+}
+
+function isLazyPlaceholderReference(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("data:image/") || /(?:^|\/)(?:blank|placeholder|spacer|transparent)(?:[-_.]|\/)/i.test(normalized);
+}
+
+function removeLazyRuntimeInitialStyles(element: HtmlElement): void {
+  const style = attribute(element, "style");
+  if (!style) return;
+  const kept = style.split(";").map((declaration) => declaration.trim()).filter(Boolean).filter((declaration) => {
+    const separator = declaration.indexOf(":");
+    if (separator < 0) return true;
+    const property = declaration.slice(0, separator).trim().toLowerCase();
+    const value = declaration.slice(separator + 1).trim().toLowerCase().replace(/\s*!important\s*$/, "");
+    if ((property === "width" || property === "height") && value === "1px") return false;
+    if (property === "opacity" && /^0(?:\.0+)?$/.test(value)) return false;
+    if (property === "visibility" && value === "hidden") return false;
+    return true;
+  });
+  if (kept.length > 0) setAttribute(element, "style", `${kept.join("; ")};`);
+  else element.attrs = element.attrs.filter((item) => item.name !== "style");
 }
 function scriptAssetName(value: string): string {
   const raw = value.split(/[?#]/, 1)[0]?.split("/").pop()?.toLowerCase() ?? "";

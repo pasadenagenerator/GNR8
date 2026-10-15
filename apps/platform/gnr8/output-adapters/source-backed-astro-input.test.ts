@@ -723,6 +723,84 @@ test("preserves route-specific stylesheet order and applies only explicitly acce
   ]);
 });
 
+test("materializes retained script-assigned CSS before the target style without executing source JavaScript", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title>
+      <link rel="stylesheet" href="/assets/external.css">
+      <style id="style_site">#hero{border-style:solid}</style>
+    </head><body><main id="hero">Home</main><script>
+      var cb=function(){var l=document.createElement('link');l.rel='stylesheet';var h=document.getElementById('style_site');h.parentNode.insertBefore(l,h);l.href='/assets/user-style.css?capture=1';};
+    </script></body></html>`,
+  });
+  input.rawArtifact.fileMap["assets/external.css"] = {
+    path: "assets/external.css", mediaType: "text/css", sizeBytes: 20, sha256: SHA,
+  };
+  input.rawArtifact.fileMap["assets/user-style.css"] = {
+    path: "assets/user-style.css", mediaType: "text/css", sizeBytes: 20, sha256: SHA,
+  };
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+    stylesheetCssByPath: {
+      "assets/external.css": "body{margin:0}",
+      "assets/user-style.css": "*{border-width:0;border-color:transparent}",
+    },
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+  const externalHref = `/api/gnr8/runtime/preview-assets/runtime-site/${input.version.id}/assets/external.css`;
+  const userHref = `/api/gnr8/runtime/preview-assets/runtime-site/${input.version.id}/assets/user-style.css?capture=1`;
+
+  assert.ok(rootSource.indexOf(externalHref) < rootSource.indexOf(userHref));
+  assert.ok(rootSource.indexOf(userHref) < rootSource.indexOf('id="style_site"'));
+  assert.doesNotMatch(rootSource, /createElement\(['"]link|requestAnimationFrame|<script\b/i);
+  assert.equal(rootSource.match(/user-style\.css/g)?.length, 1);
+});
+
+test("normalizes a verified lazy image and noscript fallback pair for script-disabled preview", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title></head><body>
+      <div class="imageModuleWrap">
+        <img src="data:image/png;base64,placeholder" alt="CHS" style="position: static; width: 1px; height: 1px; opacity: 0">
+        <noscript data-lazyload-src="/uploads/logo.png"><img id="m3921" class="module image" src="/uploads/logo.png" alt="CHS" width="800" height="200"></noscript>
+      </div>
+      <noscript><p>Meaningful fallback-only content</p></noscript>
+    </body></html>`,
+  });
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+
+  assert.equal(rootSource.match(/id="m3921"/g)?.length, 1);
+  assert.equal(rootSource.match(/src="[^\"]*uploads\/logo\.png"/g)?.length, 1);
+  assert.doesNotMatch(rootSource, /placeholder|width:\s*1px|height:\s*1px|opacity:\s*0/);
+  assert.match(rootSource, /<noscript><p>Meaningful fallback-only content<\/p><\/noscript>/);
+});
+
+test("promotes data-lazyload-src and removes only lazy-runtime initial visibility residue", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title></head><body>
+      <img id="identity" src="data:image/png;base64,placeholder" data-lazyload-src="/uploads/about.png" style="position: static; width: 1px; height: 1px; opacity: 0; border-radius: 600px">
+    </body></html>`,
+  });
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+  });
+  const rootSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+
+  assert.match(rootSource, /id="identity"[^>]*src="[^\"]*uploads\/about\.png"/);
+  assert.match(rootSource, /style="position: static; border-radius: 600px;"/);
+  assert.doesNotMatch(rootSource, /width:\s*1px|height:\s*1px|opacity:\s*0/);
+});
+
 test("rejects an unresolved required local stylesheet instead of silently dropping page CSS", () => {
   const input = fixture({
     rootHtml: '<!doctype html><html><head><title>Home</title><link rel="stylesheet" href="/assets/missing.css"></head><body><h1>Home</h1></body></html>',

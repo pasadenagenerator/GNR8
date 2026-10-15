@@ -184,10 +184,11 @@ test("bridge inlines exact ownership-bound captured stylesheets and rejects miss
     await writeFixtureDist(workspacePath);
     const indexPath = join(workspacePath, "dist", "index.html");
     const ownedHref = "/api/gnr8/runtime/preview-assets/source-site/source-version/assets/stylesheet/captured.css";
+    const renderedHref = `${ownedHref}?capture=1791785941#theme`;
     const fixtureHtml = await readFile(indexPath, "utf8");
     await writeFile(
       indexPath,
-      fixtureHtml.replace("</head>", `<link rel="stylesheet" href="${ownedHref}"></head>`),
+      fixtureHtml.replace("</head>", `<link rel="stylesheet" href="${renderedHref}"></head>`),
     );
     const retainedBytes = Buffer.from(".hero{background-image:url('../image/hero.webp')}", "utf8");
     const materializedBytes = Buffer.from(
@@ -220,6 +221,7 @@ test("bridge inlines exact ownership-bound captured stylesheets and rejects miss
     });
     assert.match(candidate.compiledTokenStyles, /preview-assets\/source-site\/source-version\/assets\/image\/hero\.webp/);
     assert.equal(candidate.htmlByPath["/"].includes("<link"), false);
+    assert.match(candidate.htmlByPath["/"], /data-gnr8-astro-source-href="[^"]*captured\.css\?capture=1791785941#theme"/);
 
     await assertBridgeError(convertAstroExportToInternalPreviewCandidate({
       inspectedExport: inspected,
