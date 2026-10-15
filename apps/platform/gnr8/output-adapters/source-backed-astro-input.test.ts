@@ -594,7 +594,7 @@ test("applies explicitly accepted form reductions only to that generation and re
       <style>@font-face{font-family:Example;src:url('/assets/font.woff2')}</style>
       <style>.h-captcha{display:table}.hcaptcha-badge{background-image:url('/assets/hcaptcha-badge.svg')}</style>
     </head><body>
-      <a class="module button" href="mailto:sales@chs.si" title="Contact us" data-track-action="email_link">Contact us</a>
+      <a class="module button" href="mailto:stale@example.test" title="Contact us" data-track-action="email_link">Contact us</a>
       <a href="mailto:change@chs.si" data-track-action="email_link">Change</a>
       <form id="m3166" method="post"><input name="email"><iframe src="https://newassets.hcaptcha.com/captcha/frame"></iframe></form>
       <script src="/assets/form.js"></script><script src="https://js.hcaptcha.com/1/api.js"></script><script src="/assets/script/1a0efd5f7e4f-api.js"></script>
@@ -619,7 +619,7 @@ test("applies explicitly accepted form reductions only to that generation and re
     rawArtifact: input.rawArtifact,
     acceptedFunctionalReductions: {
       kind: "legacy-forms-to-disclosed-links-v1",
-      contactEmail: "mailto@chs.si",
+      contactEmail: "sales@chs.si",
       commentLinks: "source-article",
     },
   });
@@ -627,8 +627,9 @@ test("applies explicitly accepted form reductions only to that generation and re
   const aboutSource = generated.sourceManifest.files.find((file) => file.path === "src/pages/about/index.astro")?.contents ?? "";
 
   assert.doesNotMatch(`${rootSource}\n${aboutSource}`, /<form\b|hcaptcha|form\.js/i);
-  assert.match(rootSource, /href="mailto:mailto@chs\.si"/);
-  assert.doesNotMatch(rootSource, /href="mailto:sales@chs\.si"/);
+  assert.match(rootSource, /href="mailto:sales@chs\.si"/);
+  assert.doesNotMatch(rootSource, /href="mailto:stale@example\.test"/);
+  assert.doesNotMatch(rootSource, /href="mailto:mailto@chs\.si"/);
   assert.match(rootSource, /href="mailto:change@chs\.si"/);
   assert.match(rootSource, /font\.woff2/);
   assert.ok(generated.contentManifest.requiredAssets.some((asset) => asset.path.endsWith("/assets/font.woff2")));
@@ -638,7 +639,7 @@ test("applies explicitly accepted form reductions only to that generation and re
   assert.match(aboutSource, /Open the original article to comment/);
   assert.ok(generated.contentManifest.requiredNavigation.some((item) => item.kind === "external_url" && item.target === "https://example.com/about"));
   assert.deepEqual(generated.sourceManifest.acceptedFunctionalReductions?.limitations, [
-    "Legacy contact forms were replaced with disclosed mailto links to mailto@chs.si.",
+    "Legacy contact forms were replaced with disclosed mailto links to sales@chs.si.",
     "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
   ]);
 });
