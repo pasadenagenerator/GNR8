@@ -5,6 +5,7 @@ import test from "node:test";
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
 
 import {
+  assertPersistedCaptureDependencyEvidence,
   deriveDependencySuccessorSiteVersionId,
   findUnresolvedRetainedStylesheetDependencies,
   planReachableRetainedStaticDependencies,
@@ -130,9 +131,106 @@ test("retained CSS dependencies resolve from the immutable stylesheet path befor
   }), "assets/style_asset/85344934d15f-fa-solid-900.woff2");
   assert.equal(resolveRetainedCssDependencyPath({
     stylesheetPath: "assets/stylesheet/f625c4a163d0-external-libs.css",
+    rawReference: "/assets/style_asset/85344934d15f-fa-solid-900.woff2?v=1#font",
+    filePaths: paths,
+  }), "assets/style_asset/85344934d15f-fa-solid-900.woff2");
+  assert.equal(resolveRetainedCssDependencyPath({
+    stylesheetPath: "assets/stylesheet/f625c4a163d0-external-libs.css",
     rawReference: "../../outside.png",
     filePaths: paths,
   }), null);
+});
+
+test("persisted owned font rewrites resolve repeatedly without source-network fallback", () => {
+  const stylesheetPath = "assets/stylesheet/25b8024875fc-css.css";
+  const fontPaths = Array.from({ length: 18 }, (_, index) => `assets/style_asset/${String(index).padStart(2, "0")}-font.ttf`);
+  const sourceUrls = fontPaths.map((_, index) => `https://fonts.gstatic.com/s/chs/font-${index}.ttf`);
+  const cssBytes = Buffer.from(fontPaths.map((path) => `@font-face{src:url('/${path}?v=1#font')}`).join(""), "utf8");
+  const files = [
+    {
+      path: stylesheetPath,
+      mediaType: "text/css; charset=utf-8",
+      sizeBytes: cssBytes.byteLength,
+      sha256: createHash("sha256").update(cssBytes).digest("hex"),
+      bytes: cssBytes,
+    },
+    ...fontPaths.map((path, index) => {
+      const bytes = Buffer.from([0, 1, 0, 0, index, 0, 0, 0, 0, 0, 0, 0]);
+      return {
+        path,
+        mediaType: "font/ttf",
+        sizeBytes: bytes.byteLength,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        bytes,
+      };
+    }),
+  ];
+  const rewrites = [
+    { from: "https://fonts.googleapis.com/css?family=CHS", to: `/${stylesheetPath}`, reused: true },
+    ...fontPaths.map((path, index) => ({ from: sourceUrls[index]!, to: `/${path}`, reused: true })),
+  ];
+  const input = {
+    files,
+    stylesheetRewrites: rewrites,
+    filePaths: new Set(files.map((file) => file.path)),
+    rootStylesheetPaths: [stylesheetPath],
+  };
+
+  const first = planReachableRetainedStaticDependencies(input);
+  const retry = planReachableRetainedStaticDependencies(input);
+  assert.deepEqual(first, retry);
+  assert.deepEqual(first.missingUrls, []);
+  assert.deepEqual(first.reusedUrls, sourceUrls.sort());
+});
+
+test("persisted capture evidence rejects wrong ownership, missing owned files, and traversal", () => {
+  const bytes = Buffer.from("body{}", "utf8");
+  const row = {
+    path: "assets/stylesheet/site.css",
+    mediaType: "text/css; charset=utf-8",
+    sizeBytes: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytes,
+  };
+  const artifact = {
+    id: "raw-owned",
+    siteId: "site-owned",
+    siteVersionId: "version-owned",
+    fileMap: {
+      [row.path]: {
+        path: row.path,
+        mediaType: row.mediaType,
+        sizeBytes: row.sizeBytes,
+        sha256: row.sha256,
+      },
+    },
+  };
+  const base = {
+    files: [row],
+    artifact,
+    expectedArtifactId: artifact.id,
+    expectedSiteId: artifact.siteId,
+    expectedSiteVersionId: artifact.siteVersionId,
+  };
+
+  assert.throws(() => assertPersistedCaptureDependencyEvidence({
+    ...base,
+    expectedArtifactId: "raw-other-owner",
+    ownedRewrites: [],
+  }), /astro_derived_capture_owned_dependency_wrong_owner/);
+  assert.throws(() => assertPersistedCaptureDependencyEvidence({
+    ...base,
+    ownedRewrites: [{ from: "https://fonts.example/font.ttf", to: "/assets/style_asset/missing.ttf" }],
+  }), /astro_derived_capture_owned_dependency_missing:assets\/style_asset\/missing\.ttf/);
+  assert.throws(() => assertPersistedCaptureDependencyEvidence({
+    ...base,
+    ownedRewrites: [{ from: "https://fonts.example/font.ttf", to: "/../../outside.ttf" }],
+  }), /astro_derived_capture_owned_dependency_path_invalid/);
+  assert.throws(() => assertPersistedCaptureDependencyEvidence({
+    ...base,
+    files: [{ ...row, mediaType: "application/octet-stream" }],
+    ownedRewrites: [],
+  }), /astro_derived_capture_parent_file_mismatch:assets\/stylesheet\/site\.css/);
 });
 
 test("retained font planner resolves exact source URLs and reuses matching immutable bytes", () => {

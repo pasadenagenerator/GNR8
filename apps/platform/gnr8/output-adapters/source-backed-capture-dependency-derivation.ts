@@ -84,7 +84,17 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     siteVersionId: parentSiteVersion.id,
     artifactId: parentRawArtifact.id,
   });
-  assertFileRowsMatchManifest(parentFiles, parentRawArtifact);
+  const inheritedCaptureRewrites = parentSiteVersion.importProvenanceSummary?.derivedCapture?.rewrites ?? [];
+  assertPersistedCaptureDependencyEvidence({
+    files: parentFiles,
+    artifact: parentRawArtifact,
+    expectedArtifactId: typeof parentArtifact.manifest.rawArtifactId === "string"
+      ? parentArtifact.manifest.rawArtifactId
+      : parentRawArtifact.id,
+    expectedSiteId: parentSiteVersion.siteId,
+    expectedSiteVersionId: parentSiteVersion.id,
+    ownedRewrites: inheritedCaptureRewrites,
+  });
   const htmlFiles = parentFiles.filter((file) => /\.html?$/i.test(file.path));
   const stylesheetPlan = planStylesheetDependencies({
     htmlFiles,
@@ -93,9 +103,8 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       input.acceptedFunctionalReductions?.sourceWidgetRemovals?.includes("form-captcha"),
     ),
   });
-  const inheritedStylesheetRewrites = (parentSiteVersion.importProvenanceSummary?.derivedCapture?.rewrites ?? [])
-    .map((entry) => ({ ...entry, reused: true }))
-    .filter((entry) => parentFiles.some((file) => file.path === entry.to.replace(/^\/+/, "")));
+  const inheritedStylesheetRewrites = inheritedCaptureRewrites
+    .map((entry) => ({ ...entry, reused: true }));
   const inheritedStylesheetPaths = new Set(inheritedStylesheetRewrites.map((entry) => entry.to.replace(/^\/+/, "")));
   const retainedLocalStylesheetRoots = planRetainedLocalStylesheetRoots({
     htmlFiles,
@@ -447,6 +456,15 @@ export function planRetainedStylesheetImports(input: {
     for (const match of file.bytes.toString("utf8").matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
       const rawReference = String(match[2] ?? "").trim();
       if (!rawReference || rawReference.startsWith("data:") || rawReference.startsWith("#")) continue;
+      const retainedPath = resolveRetainedCssDependencyPath({
+        stylesheetPath,
+        rawReference,
+        filePaths: input.filePaths,
+      });
+      if (retainedPath) {
+        reusedUrls.add(sourceUrlByPath.get(retainedPath) ?? rawReference);
+        continue;
+      }
       let resolvedUrl: string;
       try {
         if (/^https?:\/\//i.test(rawReference)) resolvedUrl = new URL(rawReference).toString();
@@ -523,32 +541,36 @@ export function planReachableRetainedStaticDependencies(input: {
     const css = file.bytes.toString("utf8");
     for (const match of css.matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
       const rawReference = String(match[2] ?? "").trim();
-      const resolvedUrl = resolveCssSourceUrl(rawReference, stylesheetSourceUrl);
-      const retainedPath = resolvedUrl ? pathBySourceUrl.get(resolvedUrl) : resolveRetainedCssDependencyPath({
+      const ownedPath = resolveRetainedCssDependencyPath({
         stylesheetPath,
         rawReference,
         filePaths: input.filePaths,
       });
+      const resolvedUrl = ownedPath ? null : resolveCssSourceUrl(rawReference, stylesheetSourceUrl);
+      const retainedPath = ownedPath ?? (resolvedUrl ? pathBySourceUrl.get(resolvedUrl) : null);
       if (retainedPath && cssByPath.has(retainedPath) && !visited.has(retainedPath)) pending.push(retainedPath);
     }
     for (const match of css.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
       const rawReference = String(match[2] ?? "").trim();
       if (!rawReference || rawReference.startsWith("data:") || rawReference.startsWith("#")) continue;
-      const resolvedUrl = resolveCssSourceUrl(rawReference, stylesheetSourceUrl);
-      if (!resolvedUrl || !isSupportedStaticCssDependency(resolvedUrl)) continue;
-      if (knownUnusedDependencyUrls.has(resolvedUrl)) continue;
       const retainedRelativePath = resolveRetainedCssDependencyPath({
         stylesheetPath,
         rawReference,
         filePaths: input.filePaths,
       });
+      if (retainedRelativePath) {
+        reusedUrls.add(sourceUrlsByPath.get(retainedRelativePath)?.[0] ?? rawReference);
+        continue;
+      }
+      const resolvedUrl = resolveCssSourceUrl(rawReference, stylesheetSourceUrl);
+      if (!resolvedUrl || !isSupportedStaticCssDependency(resolvedUrl)) continue;
+      if (knownUnusedDependencyUrls.has(resolvedUrl)) continue;
       const mappedPath = pathBySourceUrl.get(resolvedUrl);
       const assetKind = /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?)(?:[?#]|$)/i.test(new URL(resolvedUrl).pathname)
         ? "image" as const
         : "style_asset" as const;
       const deterministicPath = computeLocalPathCandidate({ resolvedUrl, assetKind });
       if (
-        (retainedRelativePath && input.filePaths.has(retainedRelativePath)) ||
         (mappedPath && input.filePaths.has(mappedPath)) ||
         input.filePaths.has(deterministicPath)
       ) reusedUrls.add(resolvedUrl);
@@ -575,6 +597,15 @@ export function planRetainedFontDependencies(input: {
     for (const match of file.bytes.toString("utf8").matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
       const rawReference = String(match[2] ?? "").trim();
       if (!rawReference || rawReference.startsWith("data:") || rawReference.startsWith("#")) continue;
+      const retainedPath = resolveRetainedCssDependencyPath({
+        stylesheetPath: file.path,
+        rawReference,
+        filePaths: input.filePaths,
+      });
+      if (retainedPath && /\.(?:woff2?|ttf|otf|eot)$/i.test(retainedPath)) {
+        reusedUrls.add(sourceUrlByPath.get(retainedPath) ?? rawReference);
+        continue;
+      }
       let resolvedUrl: string;
       try {
         if (/^https?:\/\//i.test(rawReference)) resolvedUrl = new URL(rawReference).toString();
@@ -584,12 +615,8 @@ export function planRetainedFontDependencies(input: {
         continue;
       }
       if (!/\.(?:woff2?|ttf|otf|eot)(?:[?#]|$)/i.test(new URL(resolvedUrl).pathname)) continue;
-      const retainedPath = resolveRetainedCssDependencyPath({
-        stylesheetPath: file.path,
-        rawReference,
-        filePaths: input.filePaths,
-      }) ?? computeLocalPathCandidate({ resolvedUrl, assetKind: "style_asset" });
-      if (input.filePaths.has(retainedPath)) reusedUrls.add(resolvedUrl);
+      const deterministicPath = computeLocalPathCandidate({ resolvedUrl, assetKind: "style_asset" });
+      if (input.filePaths.has(deterministicPath)) reusedUrls.add(resolvedUrl);
       else missingUrls.add(resolvedUrl);
     }
   }
@@ -790,6 +817,7 @@ export function existingCssDependencyManifest(input: {
     byteLength: number;
   }> = [];
   let occurrence = input.startingOccurrence;
+  const sourceUrlByOwnedPath = new Map(input.stylesheetRewrites.map((entry) => [entry.to.replace(/^\/+/, ""), entry.from]));
   for (const stylesheet of input.stylesheetRewrites) {
     const localPath = stylesheet.to.replace(/^\/+/, "");
     const file = input.parentFiles.find((candidate) => candidate.path === localPath);
@@ -797,16 +825,17 @@ export function existingCssDependencyManifest(input: {
     for (const match of file.bytes.toString("utf8").matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
       const rawRef = (match[2] ?? "").trim();
       if (!rawRef || rawRef.startsWith("data:") || rawRef.startsWith("#")) continue;
-      let resolvedUrl: string;
-      try { resolvedUrl = new URL(rawRef, stylesheet.from).toString(); } catch { continue; }
-      const assetKind = /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?)(?:[?#]|$)/i.test(resolvedUrl)
-        ? "image" as const
-        : "style_asset" as const;
-      const dependencyPath = resolveRetainedCssDependencyPath({
+      const retainedPath = resolveRetainedCssDependencyPath({
         stylesheetPath: localPath,
         rawReference: rawRef,
         filePaths: input.filePaths,
-      }) ?? computeLocalPathCandidate({ resolvedUrl, assetKind });
+      });
+      let resolvedUrl = retainedPath ? sourceUrlByOwnedPath.get(retainedPath) ?? null : null;
+      try { resolvedUrl ??= new URL(rawRef, stylesheet.from).toString(); } catch { continue; }
+      const assetKind = /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?)(?:[?#]|$)/i.test(resolvedUrl)
+        ? "image" as const
+        : "style_asset" as const;
+      const dependencyPath = retainedPath ?? computeLocalPathCandidate({ resolvedUrl, assetKind });
       if (!input.filePaths.has(dependencyPath)) continue;
       const dependency = input.parentFiles.find((candidate) => candidate.path === dependencyPath);
       if (!dependency) continue;
@@ -840,7 +869,10 @@ export function resolveRetainedCssDependencyPath(input: {
   if (!withoutQueryOrHash) return null;
   let decoded = withoutQueryOrHash;
   try { decoded = decodeURIComponent(withoutQueryOrHash); } catch { return null; }
-  const candidate = posix.normalize(posix.join(posix.dirname(input.stylesheetPath), decoded));
+  if (decoded.includes("\0") || decoded.includes("\\")) return null;
+  const candidate = decoded.startsWith("/")
+    ? posix.normalize(decoded.replace(/^\/+/, ""))
+    : posix.normalize(posix.join(posix.dirname(input.stylesheetPath), decoded));
   if (!candidate || candidate === "." || candidate.startsWith("../") || posix.isAbsolute(candidate)) return null;
   return input.filePaths.has(candidate) ? candidate : null;
 }
@@ -881,14 +913,62 @@ function isSupportedStaticCssDependency(value: string): boolean {
   }
 }
 
-function assertFileRowsMatchManifest(files: FileRow[], artifact: RawImportedSiteArtifact): void {
+export function assertPersistedCaptureDependencyEvidence(input: {
+  files: FileRow[];
+  artifact: Pick<RawImportedSiteArtifact, "id" | "siteId" | "siteVersionId" | "fileMap">;
+  expectedArtifactId: string;
+  expectedSiteId: string;
+  expectedSiteVersionId: string;
+  ownedRewrites: Array<{ from: string; to: string }>;
+}): void {
+  if (
+    input.artifact.id !== input.expectedArtifactId ||
+    input.artifact.siteId !== input.expectedSiteId ||
+    input.artifact.siteVersionId !== input.expectedSiteVersionId
+  ) throw new Error("astro_derived_capture_owned_dependency_wrong_owner");
+  assertFileRowsMatchManifest(input.files, input.artifact);
+  const filePaths = new Set(input.files.map((file) => file.path));
+  for (const rewrite of input.ownedRewrites) {
+    const target = canonicalOwnedCapturePath(rewrite.to);
+    if (!target) throw new Error(`astro_derived_capture_owned_dependency_path_invalid:${rewrite.to}`);
+    if (!filePaths.has(target)) throw new Error(`astro_derived_capture_owned_dependency_missing:${target}`);
+  }
+}
+
+function assertFileRowsMatchManifest(
+  files: FileRow[],
+  artifact: Pick<RawImportedSiteArtifact, "fileMap">,
+): void {
   if (files.length !== Object.keys(artifact.fileMap).length) throw new Error("astro_derived_capture_parent_file_count_mismatch");
+  for (const [filePath, expected] of Object.entries(artifact.fileMap)) {
+    if (filePath !== expected.path || canonicalOwnedCapturePath(filePath) !== filePath) {
+      throw new Error(`astro_derived_capture_parent_manifest_path_invalid:${filePath}`);
+    }
+  }
   for (const file of files) {
     const expected = artifact.fileMap[file.path];
-    if (!expected || file.bytes.byteLength !== expected.sizeBytes || sha256(file.bytes) !== expected.sha256) {
+    if (
+      !expected ||
+      file.mediaType !== expected.mediaType ||
+      file.sizeBytes !== expected.sizeBytes ||
+      file.sha256 !== expected.sha256 ||
+      file.bytes.byteLength !== expected.sizeBytes ||
+      sha256(file.bytes) !== expected.sha256
+    ) {
       throw new Error(`astro_derived_capture_parent_file_mismatch:${file.path}`);
     }
   }
+}
+
+function canonicalOwnedCapturePath(reference: string): string | null {
+  const withoutQueryOrHash = reference.trim().split(/[?#]/, 1)[0] ?? "";
+  if (!withoutQueryOrHash || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(withoutQueryOrHash)) return null;
+  let decoded: string;
+  try { decoded = decodeURIComponent(withoutQueryOrHash); } catch { return null; }
+  if (!decoded || decoded.includes("\0") || decoded.includes("\\")) return null;
+  const normalized = posix.normalize(decoded.replace(/^\/+/, ""));
+  if (!normalized || normalized === "." || normalized.startsWith("../") || posix.isAbsolute(normalized)) return null;
+  return normalized;
 }
 
 function filesSha256(files: FileRow[]): string {
