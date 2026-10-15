@@ -179,6 +179,42 @@ test("fails explicitly when generated HTML references an owned asset without per
   );
 });
 
+test("rebases ancestor-scoped owned assets only when the current immutable artifact proves the path", () => {
+  const input = fixture({
+    rootHtml: `<!doctype html><html><head><title>Home</title></head><body>
+      <img src="/api/gnr8/runtime/preview-assets/runtime-site/00000000-0000-4000-8000-000000000000/uploads/logo.png">
+    </body></html>`,
+  });
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version,
+    artifact: input.artifact,
+    rawArtifact: input.rawArtifact,
+  });
+  const source = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")?.contents ?? "";
+  assert.match(source, new RegExp(`/preview-assets/runtime-site/${input.rawArtifact.siteVersionId}/uploads/logo\\.png`));
+  assert.doesNotMatch(source, /00000000-0000-4000-8000-000000000000/);
+});
+
+test("does not rebase wrong-owner or unproven preview asset references", () => {
+  for (const reference of [
+    "/api/gnr8/runtime/preview-assets/other-site/00000000-0000-4000-8000-000000000000/uploads/logo.png",
+    "/api/gnr8/runtime/preview-assets/runtime-site/00000000-0000-4000-8000-000000000000/uploads/missing.png",
+  ]) {
+    const input = fixture({
+      rootHtml: `<!doctype html><html><head><title>Home</title></head><body><img src="${reference}"></body></html>`,
+    });
+    assert.throws(
+      () => createSourceBackedAstroGenerationInput({
+        siteVersion: input.version,
+        artifact: input.artifact,
+        rawArtifact: input.rawArtifact,
+      }),
+      (error) => error instanceof SourceBackedAstroUnsupportedError &&
+        error.unsupportedCapabilities.includes(`source_asset_evidence_missing:${reference}`),
+    );
+  }
+});
+
 test("loads every captured route from the owned raw artifact when the runtime artifact contains only root", async () => {
   const input = fixture();
   input.artifact.htmlByPath = { "/": input.artifact.htmlByPath["/"] };

@@ -46,30 +46,45 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   actor: string;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
 }): Promise<DerivedCaptureResult> {
-  const existingVersion = await getSiteVersion(input.derivedSiteVersionId);
+  let parentSiteVersion = input.parentSiteVersion;
+  let parentArtifact = input.parentArtifact;
+  let parentRawArtifact = input.parentRawArtifact;
+  let derivedSiteVersionId = input.derivedSiteVersionId;
+  let existingVersion = await getSiteVersion(derivedSiteVersionId);
   let resumableRawArtifact: RawImportedSiteArtifact | null = null;
   let resumableArtifact: RuntimeArtifact | null = null;
-  if (existingVersion) {
+  let followedImmutableDerivedCapture = false;
+  for (let depth = 0; existingVersion; depth += 1) {
+    if (depth >= 8) throw new Error("astro_derived_capture_lineage_depth_exceeded");
     const lineage = existingVersion.importProvenanceSummary?.derivedCapture;
     if (
-      existingVersion.siteId !== input.parentSiteVersion.siteId ||
-      lineage?.parentSiteVersionId !== input.parentSiteVersion.id ||
-      lineage.parentRawArtifactId !== input.parentRawArtifact.id
+      existingVersion.siteId !== parentSiteVersion.siteId ||
+      lineage?.parentSiteVersionId !== parentSiteVersion.id ||
+      lineage.parentRawArtifactId !== parentRawArtifact.id
     ) throw new Error("astro_derived_capture_lineage_conflict");
     [resumableRawArtifact, resumableArtifact] = await Promise.all([
       getRawImportedSiteArtifact(existingVersion.id),
       existingVersion.artifactId ? getArtifactById(existingVersion.artifactId) : Promise.resolve(null),
     ]);
     if (resumableRawArtifact && resumableArtifact) {
-      return { siteVersion: existingVersion, artifact: resumableArtifact, rawArtifact: resumableRawArtifact, derived: true };
+      parentSiteVersion = existingVersion;
+      parentArtifact = resumableArtifact;
+      parentRawArtifact = resumableRawArtifact;
+      followedImmutableDerivedCapture = true;
+      derivedSiteVersionId = deriveDependencySuccessorSiteVersionId(existingVersion.id);
+      existingVersion = await getSiteVersion(derivedSiteVersionId);
+      resumableRawArtifact = null;
+      resumableArtifact = null;
+      continue;
     }
+    break;
   }
 
   const parentFiles = await getRawTemplateSiteArtifactFiles({
-    siteVersionId: input.parentSiteVersion.id,
-    artifactId: input.parentRawArtifact.id,
+    siteVersionId: parentSiteVersion.id,
+    artifactId: parentRawArtifact.id,
   });
-  assertFileRowsMatchManifest(parentFiles, input.parentRawArtifact);
+  assertFileRowsMatchManifest(parentFiles, parentRawArtifact);
   const htmlFiles = parentFiles.filter((file) => /\.html?$/i.test(file.path));
   const stylesheetPlan = planStylesheetDependencies({
     htmlFiles,
@@ -78,7 +93,18 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       input.acceptedFunctionalReductions?.sourceWidgetRemovals?.includes("form-captcha"),
     ),
   });
-  const unusedCssDependencies = stylesheetPlan.rewrites
+  const retainedStylesheetRewrites = mergeStylesheetRewrites([
+    ...(parentSiteVersion.importProvenanceSummary?.derivedCapture?.rewrites ?? []).map((entry) => ({ ...entry, reused: true })),
+    ...stylesheetPlan.rewrites,
+  ]).filter((entry) => parentFiles.some((file) => file.path === entry.to.replace(/^\/+/, "")));
+  const retainedStylesheetImportPlan = planRetainedStylesheetImports({
+    files: parentFiles,
+    stylesheetRewrites: retainedStylesheetRewrites,
+    filePaths: new Set(parentFiles.map((file) => file.path)),
+  });
+  const unusedCssDependencies = [
+    ...(parentSiteVersion.importProvenanceSummary?.derivedCapture?.unusedCssDependencies ?? []),
+    ...stylesheetPlan.rewrites
     .filter((entry) => entry.reused)
     .flatMap((stylesheet) => {
       const stylesheetPath = stylesheet.to.replace(/^\/+/, "");
@@ -89,14 +115,20 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         stylesheetUrl: stylesheet.from,
         htmlDocuments: htmlFiles.map((htmlFile) => htmlFile.bytes.toString("utf8")),
       }).map((dependency) => ({ stylesheetPath, ...dependency }));
-    })
-    .sort((left, right) => left.resolvedUrl.localeCompare(right.resolvedUrl));
-  if (stylesheetPlan.missingUrls.length === 0 && stylesheetPlan.rewrites.length === 0) {
+    }),
+  ].filter((entry, index, all) => all.findIndex((candidate) =>
+    candidate.stylesheetPath === entry.stylesheetPath && candidate.resolvedUrl === entry.resolvedUrl,
+  ) === index).sort((left, right) => left.resolvedUrl.localeCompare(right.resolvedUrl));
+  if (
+    stylesheetPlan.missingUrls.length === 0 &&
+    stylesheetPlan.rewrites.length === 0 &&
+    retainedStylesheetImportPlan.missingUrls.length === 0
+  ) {
     return {
-      siteVersion: input.parentSiteVersion,
-      artifact: input.parentArtifact,
-      rawArtifact: input.parentRawArtifact,
-      derived: false,
+      siteVersion: parentSiteVersion,
+      artifact: parentArtifact,
+      rawArtifact: parentRawArtifact,
+      derived: followedImmutableDerivedCapture,
     };
   }
 
@@ -107,8 +139,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, file.bytes);
     }
-    const existingManifest: UrlImportFetchManifestEntry[] = stylesheetPlan.rewrites
-      .filter((entry) => entry.reused)
+    const existingManifest: UrlImportFetchManifestEntry[] = retainedStylesheetRewrites
       .map((entry, index) => ({
         tag: "link" as const,
         attribute: "href" as const,
@@ -120,24 +151,28 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         fetchStatus: "fetched" as const,
         httpStatus: 200,
         contentType: "text/css",
-        byteLength: input.parentRawArtifact.fileMap[entry.to.replace(/^\/+/, "")]?.sizeBytes ?? null,
+        byteLength: parentRawArtifact.fileMap[entry.to.replace(/^\/+/, "")]?.sizeBytes ?? null,
       }));
     existingManifest.push(...existingCssDependencyManifest({
       parentFiles,
-      stylesheetRewrites: stylesheetPlan.rewrites.filter((entry) => entry.reused),
+      stylesheetRewrites: retainedStylesheetRewrites,
       filePaths: new Set(parentFiles.map((file) => file.path)),
       startingOccurrence: existingManifest.length,
     }));
-    const allStylesheetUrls = [
-      ...stylesheetPlan.rewrites.filter((entry) => entry.reused).map((entry) => entry.from),
+    const missingStylesheetUrls = [...new Set([
       ...stylesheetPlan.missingUrls,
-    ].sort();
+      ...retainedStylesheetImportPlan.missingUrls,
+    ])].sort();
+    const allStylesheetUrls = [...new Set([
+      ...retainedStylesheetRewrites.map((entry) => entry.from),
+      ...missingStylesheetUrls,
+    ])].sort();
     const syntheticHtml = `<!doctype html><html><head>${allStylesheetUrls
       .map((url) => `<link rel="stylesheet" href="${escapeAttribute(url)}">`)
       .join("")}</head><body></body></html>`;
     const capture = await captureAssetsForAdditionalHtmlPages({
       pages: [{
-        pageUrl: input.parentRawArtifact.metadata.finalUrl ?? input.parentRawArtifact.metadata.sourceUrl,
+        pageUrl: parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
         bodyPath: join(workspace, "dependency-probe.html"),
         html: syntheticHtml,
       }],
@@ -155,16 +190,20 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     const fetchedStylesheetEntries = capture.manifestEntries.filter((entry) =>
       entry.assetKind === "stylesheet" && entry.fetchStatus === "fetched" && entry.resolvedUrl && entry.localPath,
     );
-    for (const url of stylesheetPlan.missingUrls) {
+    const fetchedStylesheetRewrites: Array<{ from: string; to: string; reused: boolean }> = [];
+    for (const url of missingStylesheetUrls) {
       const entry = fetchedStylesheetEntries.find((candidate) => candidate.resolvedUrl === url);
       if (!entry?.localPath) throw new Error(`astro_derived_capture_stylesheet_missing:${url}`);
-      stylesheetPlan.rewrites.push({ from: url, to: `/${entry.localPath}`, reused: false });
+      fetchedStylesheetRewrites.push({ from: url, to: `/${entry.localPath}`, reused: false });
+      if (stylesheetPlan.missingUrls.includes(url)) {
+        stylesheetPlan.rewrites.push({ from: url, to: `/${entry.localPath}`, reused: false });
+      }
     }
 
     const fetchedPaths = [...new Set(capture.manifestEntries
       .filter((entry) => entry.fetchStatus === "fetched" && entry.localPath)
       .map((entry) => entry.localPath!))]
-      .filter((filePath) => !input.parentRawArtifact.fileMap[filePath]);
+      .filter((filePath) => !parentRawArtifact.fileMap[filePath]);
     const newFiles: FileRow[] = [];
     for (const filePath of fetchedPaths.sort()) {
       const bytes = await readFile(join(workspace, ...filePath.split("/")));
@@ -177,7 +216,11 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         bytes,
       });
     }
-    const rewrites = stylesheetPlan.rewrites
+    const rewrites = mergeStylesheetRewrites([
+      ...retainedStylesheetRewrites,
+      ...stylesheetPlan.rewrites,
+      ...fetchedStylesheetRewrites,
+    ])
       .map(({ from, to }) => ({ from, to }))
       .sort((left, right) => left.from.localeCompare(right.from));
     const rewrittenParentFiles = parentFiles.map((file) => {
@@ -190,7 +233,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       .sort((left, right) => left.path.localeCompare(right.path));
     const parentFilesSha256 = filesSha256(parentFiles);
     const derivedFilesSha256 = filesSha256(derivedFiles);
-    const provenance = structuredClone(input.parentSiteVersion.importProvenanceSummary ?? {}) as RuntimeImportProvenanceSummary;
+    const provenance = structuredClone(parentSiteVersion.importProvenanceSummary ?? {}) as RuntimeImportProvenanceSummary;
     const rewrittenHtmlFiles = rewrittenParentFiles
       .filter((file) => {
         const parent = parentFiles.find((candidate) => candidate.path === file.path);
@@ -205,12 +248,12 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     refreshDerivedHtmlProvenance(provenance, rewrittenHtmlFiles);
     provenance.derivedCapture = {
       kind: "dependency_complete_derived_capture_v1",
-      parentSiteVersionId: input.parentSiteVersion.id,
-      parentArtifactId: input.parentArtifact.id,
-      parentRawArtifactId: input.parentRawArtifact.id,
+      parentSiteVersionId: parentSiteVersion.id,
+      parentArtifactId: parentArtifact.id,
+      parentRawArtifactId: parentRawArtifact.id,
       parentFilesSha256,
       derivedFilesSha256,
-      dependencyUrls: stylesheetPlan.missingUrls,
+      dependencyUrls: missingStylesheetUrls,
       unusedCssDependencies,
       rewrites,
       rewrittenHtmlFiles,
@@ -218,13 +261,13 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     const createdVersion = existingVersion
       ? { siteVersionId: existingVersion.id }
       : await createSiteVersionFromMigration({
-          siteId: input.parentSiteVersion.siteId,
-          siteVersionId: input.derivedSiteVersionId,
-          sourceUrl: input.parentRawArtifact.metadata.finalUrl ?? input.parentRawArtifact.metadata.sourceUrl,
+          siteId: parentSiteVersion.siteId,
+          siteVersionId: derivedSiteVersionId,
+          sourceUrl: parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
           actor: input.actor,
-          pages: input.parentSiteVersion.pages,
+          pages: parentSiteVersion.pages,
           importProvenanceSummary: provenance,
-          rendererCompatibilityVersion: input.parentSiteVersion.rendererCompatibilityVersion,
+          rendererCompatibilityVersion: parentSiteVersion.rendererCompatibilityVersion,
           createSourceHostBinding: false,
         });
     await linkRuntimeSiteVersionOwnershipIfAllowed({
@@ -235,16 +278,16 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     const rawResult = resumableRawArtifact
       ? { artifactId: resumableRawArtifact.id }
       : await persistRawImportedSiteArtifact({
-          siteId: input.parentRawArtifact.siteId,
+          siteId: parentRawArtifact.siteId,
           siteVersionId: createdVersion.siteVersionId,
-          entryHtmlPath: input.parentRawArtifact.entryHtmlPath,
-          assetBasePath: input.parentRawArtifact.assetBasePath,
+          entryHtmlPath: parentRawArtifact.entryHtmlPath,
+          assetBasePath: parentRawArtifact.assetBasePath,
           fileRows: derivedFiles,
           metadata: {
-            ...input.parentRawArtifact.metadata,
+            ...parentRawArtifact.metadata,
             diagnostics: {
               codes: [...new Set([
-                ...input.parentRawArtifact.metadata.diagnostics.codes,
+                ...parentRawArtifact.metadata.diagnostics.codes,
                 "DEPENDENCY_COMPLETE_DERIVED_CAPTURE",
               ])],
             },
@@ -255,40 +298,40 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
           },
         });
     const manifest = {
-      ...structuredClone(input.parentArtifact.manifest),
+      ...structuredClone(parentArtifact.manifest),
       sourceKind: "dependency_complete_derived_capture",
-      parentSiteVersionId: input.parentSiteVersion.id,
-      parentArtifactId: input.parentArtifact.id,
-      parentRawArtifactId: input.parentRawArtifact.id,
+      parentSiteVersionId: parentSiteVersion.id,
+      parentArtifactId: parentArtifact.id,
+      parentRawArtifactId: parentRawArtifact.id,
       rawArtifactId: rawResult.artifactId,
       derivedFilesSha256,
     };
     const artifactBundleSha256 = computeRuntimeArtifactBundleSha256({
-      htmlByPath: input.parentArtifact.htmlByPath,
-      compiledTokenStyles: input.parentArtifact.compiledTokenStyles,
-      assetFingerprintMap: input.parentArtifact.assetFingerprintMap,
+      htmlByPath: parentArtifact.htmlByPath,
+      compiledTokenStyles: parentArtifact.compiledTokenStyles,
+      assetFingerprintMap: parentArtifact.assetFingerprintMap,
       manifest,
     });
     if (resumableArtifact && resumableArtifact.bundleSha256 !== artifactBundleSha256) {
       throw new Error("astro_derived_capture_artifact_conflict");
     }
     const createdArtifactId = resumableArtifact?.id ?? (await createArtifact({
-        siteId: input.parentArtifact.siteId,
+        siteId: parentArtifact.siteId,
         siteVersionId: createdVersion.siteVersionId,
-        rendererCompatibilityVersion: input.parentArtifact.rendererCompatibilityVersion,
+        rendererCompatibilityVersion: parentArtifact.rendererCompatibilityVersion,
         bundleSha256: artifactBundleSha256,
-        htmlByPath: input.parentArtifact.htmlByPath,
-        compiledTokenStyles: input.parentArtifact.compiledTokenStyles,
-        assetFingerprintMap: input.parentArtifact.assetFingerprintMap,
+        htmlByPath: parentArtifact.htmlByPath,
+        compiledTokenStyles: parentArtifact.compiledTokenStyles,
+        assetFingerprintMap: parentArtifact.assetFingerprintMap,
         manifest,
-        publishStage: input.parentArtifact.publishStage,
-        shadowRestricted: input.parentArtifact.shadowRestricted,
-        artifactGovernance: input.parentArtifact.artifactGovernance,
+        publishStage: parentArtifact.publishStage,
+        shadowRestricted: parentArtifact.shadowRestricted,
+        artifactGovernance: parentArtifact.artifactGovernance,
       })).artifactId;
     await bindArtifactToVersion({
       siteVersionId: createdVersion.siteVersionId,
       artifactId: createdArtifactId,
-      rendererCompatibilityVersion: input.parentArtifact.rendererCompatibilityVersion,
+      rendererCompatibilityVersion: parentArtifact.rendererCompatibilityVersion,
     });
     const [siteVersion, artifact, rawArtifact] = await Promise.all([
       getSiteVersion(createdVersion.siteVersionId),
@@ -300,6 +343,59 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
+}
+
+function mergeStylesheetRewrites(
+  rewrites: Array<{ from: string; to: string; reused: boolean }>,
+): Array<{ from: string; to: string; reused: boolean }> {
+  const byIdentity = new Map<string, { from: string; to: string; reused: boolean }>();
+  for (const rewrite of rewrites) byIdentity.set(`${rewrite.from}\0${rewrite.to}`, rewrite);
+  return [...byIdentity.values()].sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
+}
+
+export function deriveDependencySuccessorSiteVersionId(parentSiteVersionId: string): string {
+  const bytes = Buffer.from(createHash("sha256")
+    .update(`gnr8-dependency-complete-derived-capture-successor:v1:${parentSiteVersionId}`)
+    .digest()
+    .subarray(0, 16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function planRetainedStylesheetImports(input: {
+  files: FileRow[];
+  stylesheetRewrites: Array<{ from: string; to: string; reused: boolean }>;
+  filePaths: ReadonlySet<string>;
+}): { missingUrls: string[]; reusedUrls: string[] } {
+  const missingUrls = new Set<string>();
+  const reusedUrls = new Set<string>();
+  const sourceUrlByPath = new Map(input.stylesheetRewrites.map((entry) => [entry.to.replace(/^\/+/, ""), entry.from]));
+  for (const file of input.files.filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))) {
+    const stylesheetPath = file.path;
+    const stylesheetSourceUrl = sourceUrlByPath.get(stylesheetPath);
+    for (const match of file.bytes.toString("utf8").matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
+      const rawReference = String(match[2] ?? "").trim();
+      if (!rawReference || rawReference.startsWith("data:") || rawReference.startsWith("#")) continue;
+      let resolvedUrl: string;
+      try {
+        if (/^https?:\/\//i.test(rawReference)) resolvedUrl = new URL(rawReference).toString();
+        else if (stylesheetSourceUrl) resolvedUrl = new URL(rawReference, stylesheetSourceUrl).toString();
+        else continue;
+      } catch {
+        continue;
+      }
+      if (!/^https?:\/\//i.test(resolvedUrl)) continue;
+      const localPath = computeLocalPathCandidate({ resolvedUrl, assetKind: "stylesheet" });
+      if (input.filePaths.has(localPath)) reusedUrls.add(resolvedUrl);
+      else missingUrls.add(resolvedUrl);
+    }
+  }
+  return {
+    missingUrls: [...missingUrls].sort(),
+    reusedUrls: [...reusedUrls].sort(),
+  };
 }
 
 export function refreshDerivedHtmlProvenance(

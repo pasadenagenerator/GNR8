@@ -235,6 +235,29 @@ function buildPreviewAssetUrl(input: { siteId: string; siteVersionId: string; as
   return `${ASSET_ROUTE_PREFIX}/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/${input.assetPath}${input.suffix}`;
 }
 
+function rebaseOwnedPreviewAssetUrl(input: {
+  reference: string;
+  siteId: string;
+  siteVersionId: string;
+  fileMapPaths?: ReadonlySet<string>;
+}): string | null {
+  const { pathname, suffix } = splitPreviewUrlSuffix(input.reference);
+  const prefix = `${ASSET_ROUTE_PREFIX}/`;
+  if (!pathname.startsWith(prefix) || !input.fileMapPaths) return null;
+  const segments = pathname.slice(prefix.length).split("/");
+  if (segments.length < 3) return null;
+  const referencedSiteId = safeDecodePath(segments[0] ?? "");
+  if (referencedSiteId !== input.siteId) return null;
+  const assetPath = normalizeTemplatePath(segments.slice(2).map(safeDecodePath).join("/"));
+  if (!assetPath || !input.fileMapPaths.has(assetPath)) return null;
+  return buildPreviewAssetUrl({
+    siteId: input.siteId,
+    siteVersionId: input.siteVersionId,
+    assetPath,
+    suffix,
+  });
+}
+
 export function rewriteAssetReferenceToRuntime(input: {
   reference: string;
   siteId: string;
@@ -242,7 +265,15 @@ export function rewriteAssetReferenceToRuntime(input: {
   contextFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
 }): string | null {
-  if (String(input.reference ?? "").trim().startsWith(ASSET_ROUTE_PREFIX)) return String(input.reference ?? "").trim();
+  const reference = String(input.reference ?? "").trim();
+  if (reference.startsWith(ASSET_ROUTE_PREFIX)) {
+    return rebaseOwnedPreviewAssetUrl({
+      reference,
+      siteId: input.siteId,
+      siteVersionId: input.siteVersionId,
+      fileMapPaths: input.fileMapPaths,
+    }) ?? reference;
+  }
   const { pathname, suffix } = splitUrlSuffix(input.reference);
   const assetPath = resolveAssetPathFromReference({
     reference: pathname,
