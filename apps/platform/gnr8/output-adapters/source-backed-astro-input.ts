@@ -490,6 +490,10 @@ function normalizePage(input: {
   } else if (forms.length > 0) {
     unsupported.push("forms");
   }
+  if (input.acceptedFunctionalReductions) {
+    rewriteExplicitContactActions(document, input.acceptedFunctionalReductions.contactEmail);
+    elements = allElements(document);
+  }
   if (replacedFormCount > 0) {
     for (const style of elements.filter((element) => element.tagName === "style")) {
       if (isObsoleteFormSecurityStyle(style)) detach(style);
@@ -1119,6 +1123,15 @@ function isLegacyCommentForm(form: HtmlElement): boolean {
 function contactReplacementMarkup(email: string): string {
   const escaped = escapeHtml(email);
   return `<aside class="gnr8-functional-reduction gnr8-contact-reduction" data-gnr8-accepted-limitation="legacy-contact-form-replaced"><p>This generated page does not provide the legacy contact form.</p><p><a href="mailto:${escaped}" data-gnr8-functional-reduction-link>Email ${escaped}</a></p></aside>`;
+}
+
+function rewriteExplicitContactActions(document: DefaultTreeAdapterMap["document"], email: string): void {
+  for (const anchor of allElements(document).filter((element) => element.tagName === "a")) {
+    const title = (attribute(anchor, "title") ?? "").trim().toLowerCase();
+    const trackingAction = (attribute(anchor, "data-track-action") ?? "").trim().toLowerCase();
+    if (title !== "contact us" || trackingAction !== "email_link") continue;
+    setAttribute(anchor, "href", `mailto:${email}`);
+  }
 }
 
 function commentReplacementMarkup(sourcePageUrl: string): string {
