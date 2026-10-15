@@ -3,6 +3,7 @@ import { parse, parseFragment, serialize } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArtifact } from "@/gnr8/runtime/types";
+import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
 import {
   normalizeRawTemplateRouteMapPath,
   resolveRawTemplateRouteMapFile,
@@ -248,7 +249,8 @@ function inlineMaterializedCssImports(input: {
   return css.replace(
     /@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?\s*([^;]*);/gi,
     (full, _quote, reference, condition) => {
-      const targetPath = ownedAssetPathFromUrl(String(reference), prefix);
+      const targetPath = ownedAssetPathFromUrl(String(reference), prefix)
+        ?? deterministicOwnedStylesheetPath(String(reference), input.materializedByPath);
       if (!targetPath || !input.materializedByPath.has(targetPath)) {
         throw new SourceBackedAstroUnsupportedError([`source_stylesheet_import_missing:${input.filePath}:${reference}`]);
       }
@@ -265,6 +267,19 @@ function inlineMaterializedCssImports(input: {
       return `@media ${media}{${imported}}`;
     },
   );
+}
+
+function deterministicOwnedStylesheetPath(
+  reference: string,
+  materializedByPath: ReadonlyMap<string, string>,
+): string | null {
+  if (!/^https?:\/\//i.test(reference)) return null;
+  try {
+    const candidate = computeLocalPathCandidate({ resolvedUrl: reference, assetKind: "stylesheet" });
+    return materializedByPath.has(candidate) ? candidate : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createSourceBackedAstroGenerationInput(input: {

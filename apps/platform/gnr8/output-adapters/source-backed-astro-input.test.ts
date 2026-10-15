@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
+import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
+
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArtifact } from "@/gnr8/runtime/types";
 
 import {
@@ -364,6 +366,42 @@ test("materializes owned stylesheet imports with their own URL bases and media c
   assert.match(css, /font-family:Exact/);
   assert.match(css, /preview-assets\/runtime-site\/11111111-1111-4111-8111-111111111111\/assets\/style_asset\/exact\.woff2/);
   assert.doesNotMatch(css, /@import/);
+});
+
+test("materializes a captured external stylesheet import only from its exact owned artifact path", async () => {
+  const input = fixture();
+  const parentPath = "assets/stylesheet/site.css";
+  const externalUrl = "https://fonts.prod.extra-cdn.com/css?family=Roboto+Condensed:400,700&display=swap";
+  const childPath = computeLocalPathCandidate({ resolvedUrl: externalUrl, assetKind: "stylesheet" });
+  const sourceBytes: Record<string, Buffer> = {
+    "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
+    "pages/about/index.html": Buffer.from(input.artifact.htmlByPath["/about"]),
+    [parentPath]: Buffer.from(`@import url('${externalUrl}');.hero{color:#123}`),
+    [childPath]: Buffer.from("@font-face{font-family:'Roboto Condensed';font-style:normal;font-weight:400 700;src:local('Roboto Condensed')}"),
+  };
+  for (const filePath of [parentPath, childPath]) {
+    const bytes = sourceBytes[filePath]!;
+    input.rawArtifact.fileMap[filePath] = {
+      path: filePath,
+      mediaType: "text/css",
+      sizeBytes: bytes.byteLength,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    };
+  }
+
+  const source = await loadSourceBackedAstroGenerationSource({
+    siteVersion: input.version,
+    rawArtifact: input.rawArtifact,
+    getRawAsset: async ({ filePath }) => {
+      const bytes = sourceBytes[filePath];
+      const metadata = input.rawArtifact.fileMap[filePath];
+      return bytes && metadata ? { ...metadata, bytes } : null;
+    },
+  });
+
+  const css = source.ownedStylesheetEvidence.find((entry) => entry.filePath === parentPath)?.materializedBytes.toString("utf8") ?? "";
+  assert.match(css, /font-family:'Roboto Condensed'/);
+  assert.doesNotMatch(css, /@import|fonts\.prod\.extra-cdn\.com/);
 });
 
 test("uncaptured required routes and executable source behavior return explicit unsupported capability results", () => {
