@@ -797,7 +797,7 @@ function defaultExtensionForAssetKind(assetKind: UrlImportAssetKind): string {
   return ".bin";
 }
 
-function computeLocalPathCandidate(input: { resolvedUrl: string; assetKind: UrlImportAssetKind }): string {
+export function computeLocalPathCandidate(input: { resolvedUrl: string; assetKind: UrlImportAssetKind }): string {
   const u = new URL(input.resolvedUrl);
   const normalizedPathname = normalizeSnapshotLocalTargetPath(decodeURIComponent(u.pathname ?? ""));
   if (input.assetKind === "image" && normalizedPathname) {
@@ -952,6 +952,11 @@ function extractCssUrlCandidates(rawCssText: string): string[] {
     if (!candidate || candidate.startsWith("data:") || candidate.startsWith("#")) continue;
     out.add(candidate);
   }
+  for (const importMatch of cssText.matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
+    const candidate = String(importMatch[2] ?? "").trim();
+    if (!candidate || candidate.startsWith("data:") || candidate.startsWith("#")) continue;
+    out.add(candidate);
+  }
   return [...out];
 }
 
@@ -962,6 +967,7 @@ function inferCssUrlAssetKind(rawRef: string): UrlImportAssetKind {
     const resolved = new URL(trimmed, "https://example.invalid");
     const ext = path.posix.extname(resolved.pathname.toLowerCase());
     if (IMAGE_FILE_EXTENSION_SET.has(ext)) return "image";
+    if (ext === ".css") return "stylesheet";
   } catch {
     // fall through
   }
@@ -1374,13 +1380,27 @@ function rewriteCssUrlFunctions(input: {
     });
   }
 
-  if (replacements.length === 0) return input.cssText;
   let out = input.cssText;
   for (let i = replacements.length - 1; i >= 0; i--) {
     const r = replacements[i]!;
     out = `${out.slice(0, r.start)}${r.replacement}${out.slice(r.end)}`;
   }
-  return out;
+  return out.replace(
+    /(@import\s+(?:url\(\s*)?)(["']?)([^"')\s;]+)(\2\s*\)?)/gi,
+    (full, prefix, quote, rawUrl, suffix) => {
+      let resolvedUrl: string | null = null;
+      try { resolvedUrl = new URL(String(rawUrl), input.baseUrl).toString(); } catch { return full; }
+      const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
+      if (!targetLocalPath) return full;
+      const rewrittenUrl = input.referenceMode === "root-relative"
+        ? `/${toPosixPath(targetLocalPath).replace(/^\/+/, "")}`
+        : (() => {
+            const rel = path.posix.relative(path.posix.dirname(input.stylesheetLocalPath), targetLocalPath);
+            return rel.length > 0 ? rel : path.posix.basename(targetLocalPath);
+          })();
+      return `${prefix}${quote}${rewrittenUrl}${suffix}`;
+    },
+  );
 }
 
 function getAttr(node: unknown, name: string): string | null {
@@ -2784,6 +2804,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   pages: AdditionalHtmlPageAssetInput[];
   snapshotRootDirAbs: string;
   existingFetchManifest?: UrlImportFetchManifestEntry[];
+  /** Exact, per-operation origins authorized for retained dependency acquisition. */
+  trustedExternalOrigins?: string[];
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -2803,6 +2825,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const representativeUrlByIdentity = new Map<string, string>();
   const aliasToRepresentativeUrl = new Map<string, string>();
   const trustedExternalOrigins = new Set<string>();
+  for (const value of input.trustedExternalOrigins ?? []) {
+    const origin = canonicalAdditionalPageAssetOrigin(value);
+    if (origin) trustedExternalOrigins.add(origin);
+  }
   const representativeUrl = (resolvedUrl: string): string =>
     aliasToRepresentativeUrl.get(resolvedUrl) ??
     representativeUrlByIdentity.get(canonicalAdditionalPageAssetIdentity(resolvedUrl)) ??
@@ -2935,6 +2961,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   });
 
   const stylesheetUrls = limitedDirectUrls.filter((url) => refsByUrl.get(url)?.some((ref) => ref.assetKind === "stylesheet"));
+  const allStylesheetUrls = new Set(stylesheetUrls);
   const stylesheetDependencyUrls = new Map<string, {
     assetKind: UrlImportAssetKind;
     pageUrl: string;
@@ -2980,6 +3007,46 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     await fetchOne(resolvedUrl, meta.assetKind, meta.pageUrl);
   });
 
+  let acquiredCount = limitedDirectUrls.length + limitedDependencies.length;
+  const nestedQueue = limitedDependencies
+    .filter(([resolvedUrl, meta]) => meta.assetKind === "stylesheet" && outcomeByUrl.get(resolvedUrl)?.fetchStatus === "fetched")
+    .map(([resolvedUrl]) => resolvedUrl);
+  const scannedStylesheets = new Set(stylesheetUrls);
+  while (nestedQueue.length > 0 && acquiredCount < ADDITIONAL_PAGE_ASSET_MAX_COUNT) {
+    const stylesheetUrl = nestedQueue.shift()!;
+    if (scannedStylesheets.has(stylesheetUrl)) continue;
+    scannedStylesheets.add(stylesheetUrl);
+    allStylesheetUrls.add(stylesheetUrl);
+    const localPath = localPathByUrl.get(stylesheetUrl);
+    if (!localPath) continue;
+    let cssText = "";
+    try { cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8"); } catch { continue; }
+    for (const rawRef of extractCssUrlCandidates(cssText)) {
+      if (acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) break;
+      const resolvedUrl = resolveAssetUrl({
+        rawRef,
+        baseUrl: new URL(stylesheetUrl),
+        diagnostics,
+        diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
+      });
+      if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, stylesheetUrl, trustedExternalOrigins)) continue;
+      const assetKind = inferCssUrlAssetKind(rawRef);
+      const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
+      const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
+      representativeUrlByIdentity.set(identity, representative);
+      aliasToRepresentativeUrl.set(resolvedUrl, representative);
+      assignLocalPath(representative, assetKind);
+      if (!stylesheetDependencyUrls.has(representative)) {
+        stylesheetDependencyUrls.set(representative, { assetKind, pageUrl: stylesheetUrl, rawRef, resolvedUrl });
+        acquiredCount += 1;
+        await fetchOne(representative, assetKind, stylesheetUrl);
+      }
+      if (assetKind === "stylesheet" && outcomeByUrl.get(representative)?.fetchStatus === "fetched") {
+        nestedQueue.push(representative);
+      }
+    }
+  }
+
   for (const [representative, meta] of stylesheetDependencyUrls) {
     const localPath = localPathByUrl.get(representative);
     if (localPath) localPathByUrl.set(meta.resolvedUrl, localPath);
@@ -2989,7 +3056,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     if (localPath) localPathByUrl.set(alias, localPath);
   }
 
-  for (const stylesheetUrl of stylesheetUrls) {
+  for (const stylesheetUrl of allStylesheetUrls) {
     if (outcomeByUrl.get(stylesheetUrl)?.fetchStatus !== "fetched") continue;
     const localPath = localPathByUrl.get(stylesheetUrl);
     if (!localPath) continue;

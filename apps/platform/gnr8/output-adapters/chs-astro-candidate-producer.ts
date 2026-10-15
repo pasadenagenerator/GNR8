@@ -42,6 +42,7 @@ export type ChsSourceBackedAstroCandidateProducerDependencies = {
   producerVersion: string;
   verification: RunAstroBuildExportProofInput["verification"];
   ownedAssetFingerprints: Record<string, string>;
+  ownedStylesheetEvidence: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput["ownedStylesheetEvidence"]>;
   now(): string;
 };
 
@@ -110,6 +111,11 @@ export function createSourceBackedAstroCandidateProducer(
       expectedThemeToken: CHS_ASTRO_EXPORT_VERIFICATION.expectedThemeToken,
     },
     ownedAssetFingerprints: structuredClone(dependencies.ownedAssetFingerprints ?? {}),
+    ownedStylesheetEvidence: (dependencies.ownedStylesheetEvidence ?? []).map((entry) => ({
+      ...entry,
+      retainedBytes: Buffer.from(entry.retainedBytes),
+      materializedBytes: Buffer.from(entry.materializedBytes),
+    })),
     now: dependencies.now ?? (() => new Date().toISOString()),
   };
   const receipts = new Map<string, ChsAstroBuildReceipt>();
@@ -158,6 +164,7 @@ export function createSourceBackedAstroCandidateProducer(
                 rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
                 sourceSnapshotSha256: prepared.sourceSnapshot.aggregateSha256,
                 ownedAssetFingerprints: resolved.ownedAssetFingerprints,
+                ownedStylesheetEvidence: resolved.ownedStylesheetEvidence,
                 createdAt: input.candidateCreatedAt,
               });
               return inspected;

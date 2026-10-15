@@ -50,6 +50,7 @@ import {
 } from "./chs-astro-candidate-producer";
 import { createBuildEvidenceForCandidate } from "./generated-output-evidence";
 import { selectOutputAdapter } from "./output-adapter-selection";
+import { ensureDependencyCompleteDerivedCapture } from "./source-backed-capture-dependency-derivation";
 import {
   createSourceBackedAstroGenerationInput,
   loadSourceBackedAstroGenerationSource,
@@ -73,7 +74,7 @@ export async function runSourceBackedAstroGeneration(
   payload: SiteAstroGenerationRequestedPayload,
 ): Promise<SourceBackedAstroGenerationResult> {
   try {
-    const sourceVersion = await getSiteVersion(payload.sourceSiteVersionId);
+    let sourceVersion = await getSiteVersion(payload.sourceSiteVersionId);
     if (!sourceVersion || sourceVersion.siteId !== payload.runtimeSiteId || sourceVersion.artifactId !== payload.sourceArtifactId) {
       throw new Error("astro_generation_source_lineage_mismatch");
     }
@@ -84,6 +85,20 @@ export async function runSourceBackedAstroGeneration(
     if (!sourceArtifact || sourceArtifact.siteVersionId !== sourceVersion.id || !rawArtifact) {
       throw new Error("astro_generation_source_artifact_missing");
     }
+
+    const identities = deriveIdentities(payload.actionId);
+    const dependencyCapture = await ensureDependencyCompleteDerivedCapture({
+      parentSiteVersion: sourceVersion,
+      parentArtifact: sourceArtifact,
+      parentRawArtifact: rawArtifact,
+      derivedSiteVersionId: identities.derivedSourceSiteVersionId,
+      ownershipSiteId: payload.ownershipSiteId,
+      actor: payload.actor,
+      acceptedFunctionalReductions: payload.acceptedFunctionalReductions,
+    });
+    sourceVersion = dependencyCapture.siteVersion;
+    sourceArtifact = dependencyCapture.artifact;
+    rawArtifact = dependencyCapture.rawArtifact;
 
     const sourceGenerationSource = await loadSourceBackedAstroGenerationSource({
       siteVersion: sourceVersion,
@@ -111,7 +126,6 @@ export async function runSourceBackedAstroGeneration(
       throw new Error("astro_generation_worker_received_legacy_adapter");
     }
 
-    const identities = deriveIdentities(payload.actionId);
     let generationVersion = await getSiteVersion(identities.generationSiteVersionId);
     if (!generationVersion) {
       await createSiteVersionFromMigration({
@@ -156,6 +170,7 @@ export async function runSourceBackedAstroGeneration(
       inputId: identities.producerInputId,
       verification: generationInput.verification,
       ownedAssetFingerprints: generationInput.ownedAssetFingerprints,
+      ownedStylesheetEvidence: sourceGenerationSource.ownedStylesheetEvidence,
       now: () => payload.requestedAt,
     });
     const register = createAstroProductionCandidateRegistrationService({
@@ -350,6 +365,7 @@ export function deriveSourceBackedAstroGenerationIdentities(actionId: string) {
 function deriveIdentities(actionId: string) {
   const seed = stableStringify({ version: "gnr8-source-backed-astro-generation:v1", actionId });
   return {
+    derivedSourceSiteVersionId: deterministicUuid(`${seed}:derived-source-site-version`),
     generationSiteVersionId: deterministicUuid(`${seed}:site-version`),
     registrationOperationId: deterministicUuid(`${seed}:registration`),
     producerInputId: `site-action:${actionId}`,

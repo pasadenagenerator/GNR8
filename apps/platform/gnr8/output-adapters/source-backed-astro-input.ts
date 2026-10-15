@@ -74,6 +74,7 @@ export type SourceWidgetRemoval = "cookie-consent" | "form-captcha" | "back-to-t
 export type SourceBackedAstroGenerationSource = {
   htmlByPath: Record<string, string> & { "/": string };
   stylesheetCssByPath: Record<string, string>;
+  ownedStylesheetEvidence: NonNullable<import("./astro-static-site-internal-preview-bridge").ConvertAstroExportToInternalPreviewCandidateInput["ownedStylesheetEvidence"]>;
 };
 
 export async function loadSourceBackedAstroHtmlByPath(input: {
@@ -131,6 +132,14 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
 export async function loadSourceBackedAstroGenerationSource(input: Parameters<typeof loadSourceBackedAstroHtmlByPath>[0]): Promise<SourceBackedAstroGenerationSource> {
   const htmlByPath = await loadSourceBackedAstroHtmlByPath(input);
   const stylesheetCssByPath: Record<string, string> = {};
+  const ownedStylesheetEvidence: SourceBackedAstroGenerationSource["ownedStylesheetEvidence"] = [];
+  const fileMapPaths = new Set(Object.keys(input.rawArtifact.fileMap));
+  const retainedByPath = new Map<string, {
+    mediaType: string;
+    sizeBytes: number;
+    sha256: string;
+    bytes: Buffer;
+  }>();
   for (const file of Object.values(input.rawArtifact.fileMap)
     .filter((entry) => /(?:^text\/css\b|\.css$)/i.test(`${entry.mediaType} ${entry.path}`))
     .sort((left, right) => left.path.localeCompare(right.path))) {
@@ -149,8 +158,83 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
       throw new SourceBackedAstroUnsupportedError([`source_stylesheet_asset_identity_mismatch:${file.path}`]);
     }
     stylesheetCssByPath[file.path] = asset.bytes.toString("utf8");
+    retainedByPath.set(file.path, {
+      mediaType: asset.mediaType,
+      sizeBytes: asset.sizeBytes,
+      sha256: asset.sha256,
+      bytes: Buffer.from(asset.bytes),
+    });
   }
-  return { htmlByPath, stylesheetCssByPath };
+  const materializedByPath = new Map([...retainedByPath].map(([filePath, asset]) => [
+    filePath,
+    rewriteRawTemplateCssForRuntime({
+      css: asset.bytes.toString("utf8"),
+      siteId: input.rawArtifact.siteId,
+      siteVersionId: input.rawArtifact.siteVersionId,
+      assetFilePath: filePath,
+      fileMapPaths,
+    }),
+  ]));
+  for (const [filePath, asset] of retainedByPath) {
+    const materializedCss = inlineMaterializedCssImports({
+      filePath,
+      materializedByPath,
+      siteId: input.rawArtifact.siteId,
+      siteVersionId: input.rawArtifact.siteVersionId,
+      stack: [],
+    });
+    const materializedBytes = Buffer.from(materializedCss, "utf8");
+    ownedStylesheetEvidence.push({
+      href: ownedAssetUrl(input.rawArtifact.siteId, input.rawArtifact.siteVersionId, filePath),
+      siteId: input.rawArtifact.siteId,
+      siteVersionId: input.rawArtifact.siteVersionId,
+      artifactId: input.rawArtifact.id,
+      filePath,
+      mediaType: asset.mediaType,
+      retainedSizeBytes: asset.sizeBytes,
+      retainedSha256: asset.sha256,
+      retainedBytes: Buffer.from(asset.bytes),
+      materializedSizeBytes: materializedBytes.byteLength,
+      materializedSha256: createHash("sha256").update(materializedBytes).digest("hex"),
+      materializedBytes,
+    });
+  }
+  return { htmlByPath, stylesheetCssByPath, ownedStylesheetEvidence };
+}
+
+function inlineMaterializedCssImports(input: {
+  filePath: string;
+  materializedByPath: ReadonlyMap<string, string>;
+  siteId: string;
+  siteVersionId: string;
+  stack: string[];
+}): string {
+  if (input.stack.includes(input.filePath)) {
+    throw new SourceBackedAstroUnsupportedError([`source_stylesheet_import_cycle:${[...input.stack, input.filePath].join("->")}`]);
+  }
+  const css = input.materializedByPath.get(input.filePath);
+  if (css === undefined) throw new SourceBackedAstroUnsupportedError([`source_stylesheet_bytes_missing:${input.filePath}`]);
+  const prefix = ownedAssetUrl(input.siteId, input.siteVersionId, "");
+  return css.replace(
+    /@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?\s*([^;]*);/gi,
+    (full, _quote, reference, condition) => {
+      const targetPath = ownedAssetPathFromUrl(String(reference), prefix);
+      if (!targetPath || !input.materializedByPath.has(targetPath)) {
+        throw new SourceBackedAstroUnsupportedError([`source_stylesheet_import_missing:${input.filePath}:${reference}`]);
+      }
+      const imported = inlineMaterializedCssImports({
+        ...input,
+        filePath: targetPath,
+        stack: [...input.stack, input.filePath],
+      });
+      const media = String(condition ?? "").trim();
+      if (!media || media.toLowerCase() === "all") return imported;
+      if (/^(?:layer|supports)\b/i.test(media)) {
+        throw new SourceBackedAstroUnsupportedError([`source_stylesheet_import_condition_unsupported:${input.filePath}:${media}`]);
+      }
+      return `@media ${media}{${imported}}`;
+    },
+  );
 }
 
 export function createSourceBackedAstroGenerationInput(input: {
@@ -540,6 +624,10 @@ function extractCapturedHeadStyles(
       const rel = htmlAttributeFromMarkup(markup, "rel").toLowerCase().split(/\s+/);
       if (!rel.includes("stylesheet")) continue;
       const href = htmlAttributeFromMarkup(markup, "href");
+      // Some legacy captures label font binaries as stylesheets. Browsers do
+      // not parse those bytes as CSS; the real @font-face reference remains in
+      // the captured stylesheet dependency graph.
+      if (/\.(?:woff2?|ttf|otf|eot)(?:[?#]|$)/i.test(href)) continue;
       if (removeCaptcha && /h-?captcha|g-recaptcha|recaptcha/i.test(href)) continue;
       out.push(markup);
       continue;

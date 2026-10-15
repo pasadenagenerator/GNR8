@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -175,6 +176,77 @@ test("bridge preserves a self-contained data URL image source", async () => {
     const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
 
     assert.match(candidate.htmlByPath["/"], /src="data:image\/png;base64,/);
+  });
+});
+
+test("bridge inlines exact ownership-bound captured stylesheets and rejects missing, tampered, or wrong-owner evidence", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    const indexPath = join(workspacePath, "dist", "index.html");
+    const ownedHref = "/api/gnr8/runtime/preview-assets/source-site/source-version/assets/stylesheet/captured.css";
+    const fixtureHtml = await readFile(indexPath, "utf8");
+    await writeFile(
+      indexPath,
+      fixtureHtml.replace("</head>", `<link rel="stylesheet" href="${ownedHref}"></head>`),
+    );
+    const retainedBytes = Buffer.from(".hero{background-image:url('../image/hero.webp')}", "utf8");
+    const materializedBytes = Buffer.from(
+      ".hero{background-image:url('/api/gnr8/runtime/preview-assets/source-site/source-version/assets/image/hero.webp')}",
+      "utf8",
+    );
+    const evidence = {
+      href: ownedHref,
+      siteId: "source-site",
+      siteVersionId: "source-version",
+      artifactId: "source-artifact",
+      filePath: "assets/stylesheet/captured.css",
+      mediaType: "text/css",
+      retainedSizeBytes: retainedBytes.byteLength,
+      retainedSha256: createHash("sha256").update(retainedBytes).digest("hex"),
+      retainedBytes,
+      materializedSizeBytes: materializedBytes.byteLength,
+      materializedSha256: createHash("sha256").update(materializedBytes).digest("hex"),
+      materializedBytes,
+    };
+    const inspected = await inspectAstroStaticExport(workspacePath);
+    const candidate = await convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+      ownedStylesheetEvidence: [evidence],
+    });
+    assert.match(candidate.compiledTokenStyles, /preview-assets\/source-site\/source-version\/assets\/image\/hero\.webp/);
+    assert.equal(candidate.htmlByPath["/"].includes("<link"), false);
+
+    await assertBridgeError(convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+    }), "stylesheet_missing");
+    await assertBridgeError(convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+      ownedStylesheetEvidence: [{ ...evidence, materializedBytes: Buffer.from("tampered") }],
+    }), "stylesheet_invalid");
+    await assertBridgeError(convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+      ownedStylesheetEvidence: [{ ...evidence, siteId: "wrong-owner" }],
+    }), "unsupported_asset_reference");
   });
 });
 

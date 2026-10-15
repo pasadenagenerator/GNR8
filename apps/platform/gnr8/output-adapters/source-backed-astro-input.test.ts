@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArtifact } from "@/gnr8/runtime/types";
@@ -222,11 +223,12 @@ test("loads and verifies retained stylesheet bytes for generation dependency evi
   const input = fixture();
   const stylesheetPath = "assets/stylesheet/site.css";
   const stylesheetBytes = Buffer.from(".hero{background-image:url('../../uploads/logo.png')}");
+  const stylesheetSha256 = createHash("sha256").update(stylesheetBytes).digest("hex");
   input.rawArtifact.fileMap[stylesheetPath] = {
     path: stylesheetPath,
     mediaType: "text/css",
     sizeBytes: stylesheetBytes.byteLength,
-    sha256: SHA,
+    sha256: stylesheetSha256,
   };
   const sourceBytes: Record<string, Buffer> = {
     "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
@@ -245,7 +247,49 @@ test("loads and verifies retained stylesheet bytes for generation dependency evi
   });
 
   assert.equal(source.stylesheetCssByPath[stylesheetPath], stylesheetBytes.toString("utf8"));
+  assert.equal(source.ownedStylesheetEvidence[0]?.retainedSha256, stylesheetSha256);
+  assert.match(source.ownedStylesheetEvidence[0]?.materializedBytes.toString("utf8") ?? "", /preview-assets\/runtime-site\/11111111-1111-4111-8111-111111111111\/uploads\/logo\.png/);
   assert.deepEqual(Object.keys(source.htmlByPath), ["/", "/about"]);
+});
+
+test("materializes owned stylesheet imports with their own URL bases and media condition", async () => {
+  const input = fixture();
+  const parentPath = "assets/stylesheet/site.css";
+  const childPath = "assets/stylesheet/fonts.css";
+  const fontPath = "assets/style_asset/exact.woff2";
+  const sourceBytes: Record<string, Buffer> = {
+    "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
+    "pages/about/index.html": Buffer.from(input.artifact.htmlByPath["/about"]),
+    [parentPath]: Buffer.from("@import url('./fonts.css') screen;.hero{color:#123}"),
+    [childPath]: Buffer.from("@font-face{font-family:Exact;src:url('../style_asset/exact.woff2')}"),
+    [fontPath]: Buffer.from([1, 2, 3, 4]),
+  };
+  for (const filePath of [parentPath, childPath, fontPath]) {
+    const bytes = sourceBytes[filePath]!;
+    input.rawArtifact.fileMap[filePath] = {
+      path: filePath,
+      mediaType: filePath.endsWith(".css") ? "text/css" : "font/woff2",
+      sizeBytes: bytes.byteLength,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    };
+  }
+
+  const source = await loadSourceBackedAstroGenerationSource({
+    siteVersion: input.version,
+    rawArtifact: input.rawArtifact,
+    getRawAsset: async ({ filePath }) => {
+      const bytes = sourceBytes[filePath];
+      const metadata = input.rawArtifact.fileMap[filePath];
+      return bytes && metadata ? { ...metadata, bytes } : null;
+    },
+  });
+  const parent = source.ownedStylesheetEvidence.find((entry) => entry.filePath === parentPath);
+  assert.ok(parent);
+  const css = parent.materializedBytes.toString("utf8");
+  assert.match(css, /^@media screen\{/);
+  assert.match(css, /font-family:Exact/);
+  assert.match(css, /preview-assets\/runtime-site\/11111111-1111-4111-8111-111111111111\/assets\/style_asset\/exact\.woff2/);
+  assert.doesNotMatch(css, /@import/);
 });
 
 test("uncaptured required routes and executable source behavior return explicit unsupported capability results", () => {

@@ -107,6 +107,25 @@ export type ConvertAstroExportToInternalPreviewCandidateInput = {
   sourceSnapshotSha256: string;
   /** Existing owned raw-capture assets referenced by generated HTML/CSS. */
   ownedAssetFingerprints?: Record<string, string>;
+  /**
+   * Stylesheets loaded through the authenticated raw-artifact boundary. The
+   * bridge never dereferences hrefs; it accepts only exact, ownership-bound
+   * evidence whose retained and deterministically rewritten bytes verify.
+   */
+  ownedStylesheetEvidence?: Array<{
+    href: string;
+    siteId: string;
+    siteVersionId: string;
+    artifactId: string;
+    filePath: string;
+    mediaType: string;
+    retainedSizeBytes: number;
+    retainedSha256: string;
+    retainedBytes: Buffer;
+    materializedSizeBytes: number;
+    materializedSha256: string;
+    materializedBytes: Buffer;
+  }>;
   createdAt?: string;
 };
 
@@ -137,6 +156,7 @@ export async function convertAstroExportToInternalPreviewCandidate(
       htmlBody: bytes.toString("utf8"),
       htmlPath: file.path,
       bytesByPath,
+      ownedStylesheetEvidence: input.ownedStylesheetEvidence ?? [],
     });
     routeConversions.push({ routePath, conversion });
     conversion.inlinedStylesheetPaths.forEach((path) => allStylesheetPaths.add(path));
@@ -165,7 +185,10 @@ export async function convertAstroExportToInternalPreviewCandidate(
   }
   const assetFingerprintMap = {
     ...structuredClone(input.ownedAssetFingerprints ?? {}),
-    ...Object.fromEntries([...allStylesheetPaths].sort().map((path) => [path, fileByPath(revalidated.manifest, path).sha256])),
+    ...Object.fromEntries([...allStylesheetPaths]
+      .filter((path) => revalidated.manifest.files.some((file) => file.path === path))
+      .sort()
+      .map((path) => [path, fileByPath(revalidated.manifest, path).sha256])),
   };
   const contentEnvelope = {
     conversionVersion: ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
@@ -430,6 +453,7 @@ function inlineExportedStylesheets(input: {
   htmlBody: string;
   htmlPath: string;
   bytesByPath: Map<string, Buffer>;
+  ownedStylesheetEvidence: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput["ownedStylesheetEvidence"]>;
 }): {
   html: string;
   compiledStyles: string[];
@@ -467,14 +491,25 @@ function inlineExportedStylesheets(input: {
     if (!href) {
       throw new AstroInternalPreviewBridgeError("stylesheet_missing", "Astro stylesheet link has no href.");
     }
-    const stylesheetPath = resolveLocalExportReference(href, input.htmlPath);
+    const ownedReference = isOwnedRuntimeAssetReference(href);
+    const localStylesheetPath = ownedReference ? null : resolveLocalExportReference(href, input.htmlPath);
+    const ownedEvidence = input.ownedStylesheetEvidence.find((entry) => entry.href === href);
+    if (ownedReference && !ownedEvidence) {
+      throw new AstroInternalPreviewBridgeError(
+        "stylesheet_missing",
+        `Trusted owned stylesheet evidence is missing: ${href}.`,
+      );
+    }
+    const stylesheetPath = localStylesheetPath ?? ownedEvidence?.href ?? null;
+    const stylesheetBytes = localStylesheetPath
+      ? input.bytesByPath.get(localStylesheetPath)
+      : ownedEvidence ? validateOwnedStylesheetEvidence(ownedEvidence, href) : null;
     if (!stylesheetPath) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_asset_reference",
-        `External or non-file stylesheet references are unsupported: ${href}.`,
+        `External or untrusted stylesheet references are unsupported: ${href}.`,
       );
     }
-    const stylesheetBytes = input.bytesByPath.get(stylesheetPath);
     if (!stylesheetBytes) {
       throw new AstroInternalPreviewBridgeError(
         "stylesheet_missing",
@@ -499,6 +534,37 @@ function inlineExportedStylesheets(input: {
     singleStylesheetCanBeShared: stylesheetLinks.length === 1 &&
       stylesheetLinks[0]!.attrs.every((item) => ["rel", "href"].includes(item.name)),
   };
+}
+
+function validateOwnedStylesheetEvidence(
+  evidence: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput["ownedStylesheetEvidence"]>[number],
+  href: string,
+): Buffer {
+  const expectedHref = `/api/gnr8/runtime/preview-assets/${encodeURIComponent(evidence.siteId)}/${encodeURIComponent(evidence.siteVersionId)}/${evidence.filePath.split("/").map(encodeURIComponent).join("/")}`;
+  if (!evidence.siteId.trim() || !evidence.siteVersionId.trim() || !evidence.artifactId.trim() || !evidence.filePath.trim()) {
+    throw new AstroInternalPreviewBridgeError("stylesheet_invalid", `Owned stylesheet identity is incomplete: ${href}.`);
+  }
+  if ((href.split(/[?#]/, 1)[0] ?? href) !== expectedHref) {
+    throw new AstroInternalPreviewBridgeError(
+      "unsupported_asset_reference",
+      `Owned stylesheet identity does not match its trusted artifact reference: ${href}.`,
+    );
+  }
+  if (!/^text\/css\b/i.test(evidence.mediaType)) {
+    throw new AstroInternalPreviewBridgeError("stylesheet_invalid", `Owned stylesheet MIME type is invalid: ${href}.`);
+  }
+  if (
+    evidence.retainedBytes.byteLength !== evidence.retainedSizeBytes ||
+    sha256(evidence.retainedBytes) !== evidence.retainedSha256 ||
+    evidence.materializedBytes.byteLength !== evidence.materializedSizeBytes ||
+    sha256(evidence.materializedBytes) !== evidence.materializedSha256
+  ) {
+    throw new AstroInternalPreviewBridgeError(
+      "stylesheet_invalid",
+      `Owned stylesheet bytes do not match retained evidence: ${href}.`,
+    );
+  }
+  return evidence.materializedBytes;
 }
 
 function replaceInlinedStylesheetWithSharedMarker(htmlBody: string): string {

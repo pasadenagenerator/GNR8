@@ -147,6 +147,48 @@ test("additional child-page asset capture persists responsive and lazy images, d
   assert.equal(result.manifestEntries.some((entry) => entry.assetKind === "style_asset" && entry.fetchStatus === "fetched"), true);
 });
 
+test("additional asset capture follows bounded trusted stylesheet imports and font URLs", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-css-import-assets-"));
+  const fetched: string[] = [];
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    trustedExternalOrigins: ["https://cdn.example.test", "https://fonts.example.test"],
+    pages: [{
+      pageUrl: "https://example.com/",
+      bodyPath: path.join(root, "index.html"),
+      html: '<!doctype html><html><head><link rel="stylesheet" href="https://cdn.example.test/theme.css"></head><body></body></html>',
+    }],
+    fetchImpl: async (request) => {
+      const url = String(request instanceof Request ? request.url : request);
+      fetched.push(url);
+      if (url === "https://cdn.example.test/theme.css") {
+        return new Response("@import url('https://fonts.example.test/font.css') screen;", { status: 200, headers: { "content-type": "text/css" } });
+      }
+      if (url === "https://fonts.example.test/font.css") {
+        return new Response("@font-face{font-family:Exact;src:url('./exact.woff2') format('woff2')}", { status: 200, headers: { "content-type": "text/css" } });
+      }
+      if (url === "https://fonts.example.test/exact.woff2") {
+        return new Response(new Uint8Array([1, 3, 3, 7]), { status: 200, headers: { "content-type": "font/woff2" } });
+      }
+      return new Response("missing", { status: 404 });
+    },
+  });
+
+  assert.equal(result.summary.failedRequiredAssetCount, 0);
+  assert.deepEqual(fetched, [
+    "https://cdn.example.test/theme.css",
+    "https://fonts.example.test/font.css",
+    "https://fonts.example.test/exact.woff2",
+  ]);
+  assert.equal(result.manifestEntries.some((entry) => entry.resolvedUrl === "https://fonts.example.test/font.css" && entry.fetchStatus === "fetched"), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.resolvedUrl === "https://fonts.example.test/exact.woff2" && entry.fetchStatus === "fetched"), true);
+  const theme = result.manifestEntries.find((entry) => entry.resolvedUrl === "https://cdn.example.test/theme.css");
+  const fontCss = result.manifestEntries.find((entry) => entry.resolvedUrl === "https://fonts.example.test/font.css");
+  assert.ok(theme?.localPath && fontCss?.localPath);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, theme!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, fontCss!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
+});
+
 function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
   return {
     async execute(request) {

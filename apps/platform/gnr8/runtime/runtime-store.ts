@@ -4458,6 +4458,38 @@ export async function getRawTemplateSiteAsset(input: {
   });
 }
 
+export async function getRawTemplateSiteArtifactFiles(input: {
+  siteVersionId: string;
+  artifactId: string;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }>> {
+  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
+    const result = await client.query<RawTemplateArtifactFileRow & { file_path: string }>(
+      `
+      select
+        f.file_path::text as file_path,
+        f.media_type::text as media_type,
+        f.file_size_bytes::integer as file_size_bytes,
+        f.sha256::text as sha256,
+        f.content_bytes
+      from public.gnr8_runtime_raw_template_artifacts a
+      join public.gnr8_runtime_raw_template_artifact_files f on f.artifact_id = a.id
+      where a.id = $1::uuid
+        and a.site_version_id = $2::uuid
+      order by f.file_path asc
+      `,
+      [input.artifactId, input.siteVersionId],
+    );
+    return result.rows.map((row) => ({
+      path: row.file_path,
+      mediaType: row.media_type,
+      sizeBytes: Math.max(0, Math.floor(Number(row.file_size_bytes) || 0)),
+      sha256: row.sha256,
+      bytes: Buffer.isBuffer(row.content_bytes) ? row.content_bytes : Buffer.from(row.content_bytes),
+    }));
+  });
+}
+
 export async function persistRawImportedSiteArtifact(input: {
   siteId: string;
   siteVersionId: string;
