@@ -48,7 +48,7 @@ export type WorkerInngestFunctionRegistration = {
     | typeof domainVerificationCheckSchedulerJob
 }
 
-export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
+const coreWorkerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
   {
     id: SITE_ASTRO_GENERATION_JOB_ID,
     eventName: SITE_ASTRO_GENERATION_JOB_TRIGGER_EVENT,
@@ -69,6 +69,9 @@ export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistrati
     eventName: SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
     fn: siteRenderCaptureJob,
   },
+]
+
+const domainVerificationFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
   {
     id: DOMAIN_VERIFICATION_CHECK_SCHEDULER_JOB_ID,
     fn: domainVerificationCheckSchedulerJob,
@@ -79,6 +82,18 @@ export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistrati
     fn: domainVerificationCheckJob,
   },
 ]
+
+export function resolveWorkerInngestFunctionRegistrations(input: {
+  vercelEnvironment?: string
+} = {}): WorkerInngestFunctionRegistration[] {
+  const vercelEnvironment = String(input.vercelEnvironment ?? process.env.VERCEL_ENV ?? '')
+    .trim()
+    .toLowerCase()
+  if (vercelEnvironment === 'production') return [...coreWorkerInngestFunctionRegistrations]
+  return [...coreWorkerInngestFunctionRegistrations, ...domainVerificationFunctionRegistrations]
+}
+
+export const workerInngestFunctionRegistrations = resolveWorkerInngestFunctionRegistrations()
 
 export const inngestFunctions = workerInngestFunctionRegistrations.map((entry) => entry.fn)
 
