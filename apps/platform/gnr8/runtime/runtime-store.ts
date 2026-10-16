@@ -26,6 +26,7 @@ import type {
   VersionScopedFormSubmission,
 } from "@/gnr8/runtime/types";
 import type { ContentOverride, ContentOverrideStatus, ContentSlot, ContentSlotType } from "@/gnr8/runtime/content-binding";
+import { RUNTIME_HOST_BINDING_BACKFILL_SQL } from "@/gnr8/runtime/runtime-host-binding-backfill";
 
 export type RuntimeStoreDbClient = PoolClient;
 export type RuntimeStoreDbOptions = { dbClient?: RuntimeStoreDbClient };
@@ -466,28 +467,7 @@ export async function ensureRuntimeTables(options: RuntimeStoreDbOptions = {}): 
           )
         `);
 
-        await client.query(`
-          with ranked as (
-            select
-              s.id::text as site_id,
-              lower(trim(s.source_host))::text as host,
-              row_number() over (
-                partition by lower(trim(s.source_host))
-                order by s.created_at desc, s.id desc
-              ) as host_rank
-            from public.gnr8_runtime_sites s
-            where s.source_host is not null
-              and length(trim(s.source_host)) > 0
-          )
-          insert into public.gnr8_runtime_host_bindings (site_id, host, status, binding_kind)
-          select
-            ranked.site_id,
-            ranked.host,
-            case when ranked.host_rank = 1 then 'ACTIVE' else 'INACTIVE' end as status,
-            'legacy_source_host_backfill'::text as binding_kind
-          from ranked
-          on conflict (site_id, host) do nothing
-        `);
+        await client.query(RUNTIME_HOST_BINDING_BACKFILL_SQL);
       } finally {
         if (!options.dbClient) client.release();
       }
@@ -4475,6 +4455,38 @@ export async function getRawTemplateSiteAsset(input: {
       sha256: hit.sha256,
       bytes,
     };
+  });
+}
+
+export async function getRawTemplateSiteArtifactFiles(input: {
+  siteVersionId: string;
+  artifactId: string;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }>> {
+  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
+    const result = await client.query<RawTemplateArtifactFileRow & { file_path: string }>(
+      `
+      select
+        f.file_path::text as file_path,
+        f.media_type::text as media_type,
+        f.file_size_bytes::integer as file_size_bytes,
+        f.sha256::text as sha256,
+        f.content_bytes
+      from public.gnr8_runtime_raw_template_artifacts a
+      join public.gnr8_runtime_raw_template_artifact_files f on f.artifact_id = a.id
+      where a.id = $1::uuid
+        and a.site_version_id = $2::uuid
+      order by f.file_path asc
+      `,
+      [input.artifactId, input.siteVersionId],
+    );
+    return result.rows.map((row) => ({
+      path: row.file_path,
+      mediaType: row.media_type,
+      sizeBytes: Math.max(0, Math.floor(Number(row.file_size_bytes) || 0)),
+      sha256: row.sha256,
+      bytes: Buffer.isBuffer(row.content_bytes) ? row.content_bytes : Buffer.from(row.content_bytes),
+    }));
   });
 }
 

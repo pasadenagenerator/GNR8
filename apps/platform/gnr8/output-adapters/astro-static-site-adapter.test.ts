@@ -8,6 +8,12 @@ import {
   createAstroStaticSiteProjectManifest,
   type NormalizedStaticBusinessSiteContent,
 } from "./astro-static-site-adapter";
+import {
+  CHS_ASTRO_ASSET_INVENTORY,
+  CHS_ASTRO_ROUTE_INVENTORY,
+  CHS_ASTRO_SOURCE_LINEAGE,
+  chsAstroSourceContent,
+} from "./chs-astro-source-content";
 
 test("CHS-like content produces a deterministic Astro source project manifest", () => {
   const manifest = createAstroStaticSiteProjectManifest(chsFixture());
@@ -44,6 +50,74 @@ test("ARIS-like content produces nav, contact, card sections, and adapter readba
   assert.equal(ASTRO_STATIC_SITE_PREVIEW_PORT, 4321);
 });
 
+test("percent-encoded Unicode routes use literal source filenames while keeping URL-safe route identity", () => {
+  const content = chsFixture();
+  content.pages = [
+    { path: "/", title: "Home", bodyHtml: "<h1>Home</h1>" },
+    {
+      path: "/b/platform9-recognized-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2",
+      title: "Gartner article",
+      bodyHtml: "<h1>Gartner article</h1>",
+    },
+  ];
+
+  const manifest = createAstroStaticSiteProjectManifest(content);
+  assert.ok(manifest.files.some((file) =>
+    file.path === "src/pages/b/platform9-recognized-in-the-gartner®-magic-quadrant™/index.astro"));
+  assert.ok(manifest.files.some((file) =>
+    file.contents.includes('data-gnr8-source-route="/b/platform9-recognized-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2"')));
+});
+
+test("captured pages preserve their source shell without adding synthetic navigation or footer", () => {
+  const content = chsFixture();
+  content.pages = [{
+    path: "/",
+    title: "Home",
+    headHtml: '<link rel="stylesheet" href="/api/gnr8/runtime/preview-assets/site/version/assets/user-style.css"><style is:global>.home{display:block}</style>',
+    bodyHtml: '<header data-source-header><a href="/cohesity"><img src="/logo.gif" alt="CHS"></a></header><main><h1>Source home</h1></main><footer data-source-footer>Source footer</footer>',
+  }];
+
+  const manifest = createAstroStaticSiteProjectManifest(content);
+  const page = fileMap(manifest.files).get("src/pages/index.astro") ?? "";
+
+  assert.match(page, /<body data-gnr8-source-route="\/">/);
+  assert.match(page, /<header data-source-header>/);
+  assert.match(page, /<img src="\/logo\.gif" alt="CHS">/);
+  assert.match(page, /<footer data-source-footer>Source footer<\/footer>/);
+  assert.match(page, /assets\/user-style\.css/);
+  assert.match(page, /<style is:global>\.home/);
+  assert.doesNotMatch(page, /href="\/styles\/global\.css"/);
+  assert.equal(fileMap(manifest.files).has("public/styles/global.css"), false);
+  assert.doesNotMatch(page, /class="site-header"/);
+  assert.doesNotMatch(page, /Construction Health Solutions/);
+});
+
+test("authoritative CHS source mapping preserves routes, content, contacts, footer, and mobile layout", () => {
+  const manifest = createAstroStaticSiteProjectManifest(chsAstroSourceContent());
+  const files = fileMap(manifest.files);
+  const page = files.get("src/pages/index.astro") ?? "";
+  const css = files.get("public/styles/global.css") ?? "";
+
+  assert.equal(CHS_ASTRO_SOURCE_LINEAGE.sourceSnapshotId, "imported-url-site-6cba4d2b35d630b5");
+  assert.deepEqual(CHS_ASTRO_ROUTE_INVENTORY.map((route) => route.path), [
+    "/", "/cohesity", "/platform9", "/news", "/home-hrvoje-org",
+  ]);
+  assert.equal(CHS_ASTRO_ASSET_INVENTORY.capturedFileCount, 390);
+  assert.equal(CHS_ASTRO_ASSET_INVENTORY.unsupportedCapability, "astro_bridge_v1_has_no_binary_asset_storage");
+  assert.match(page, /The team that helps you change your IT/);
+  assert.match(page, /VMware pricing change just became your opportunity/);
+  assert.match(page, /Vendor-Neutral yet vendor supported advice/);
+  assert.match(page, /href="https:\/\/www\.chs\.si\/cohesity"/);
+  assert.match(page, /sales@chs\.si/);
+  assert.match(page, /change@chs\.si/);
+  assert.match(page, /Parmova ulica 51, Ljubljana, Slovenia/);
+  assert.match(page, /<footer>/);
+  assert.match(page, /Copyright © 2026 CHS d\.o\.o\. - All rights reserved/);
+  assert.match(css, /--gnr8-astro-accent: #ed7635;/);
+  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.contact \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(css, /\.contact a,[\s\S]*overflow-wrap: anywhere;/);
+});
+
 test("adapter descriptors keep Astro skeletal and runtime fallback intact", () => {
   assert.equal(astroStaticSiteAdapterDescriptor.id, "astro-static-site");
   assert.equal(htmlStaticArtifactAdapterDescriptor.id, "html-static-artifact");
@@ -61,7 +135,8 @@ test("adapter descriptors keep Astro skeletal and runtime fallback intact", () =
   }
 
   assert.match(astroStaticSiteAdapterDescriptor.airshipIntegrationReadback?.devServer ?? "", /4321/);
-  assert.ok(astroStaticSiteAdapterDescriptor.limitations.some((limit) => limit.includes("Skeleton adapter only")));
+  assert.ok(astroStaticSiteAdapterDescriptor.limitations.some((limit) =>
+    limit.includes("Scripts and platform-specific theme/application state are rejected")));
 });
 
 function fileMap(files: Array<{ path: string; contents: string }>): Map<string, string> {

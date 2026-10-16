@@ -10,6 +10,7 @@ export type RoutePriorityCandidate<T> = {
   routePath: string
   depth: number
   source: RoutePrioritySource
+  sourceOrder?: number | null
   sourceContext?: 'nav' | 'header' | 'footer' | 'body' | 'unknown' | null
   value: T
 }
@@ -91,6 +92,12 @@ function compareAssigned<T>(
   if (tierDelta !== 0) return tierDelta
   const depthDelta = routeDepth(left.routePath) - routeDepth(right.routePath)
   if (depthDelta !== 0) return depthDelta
+  const leftUsesSitemapOrder = left.source === 'sitemap' || left.source === 'robots_sitemap'
+  const rightUsesSitemapOrder = right.source === 'sitemap' || right.source === 'robots_sitemap'
+  if (leftUsesSitemapOrder && rightUsesSitemapOrder && Number.isFinite(left.sourceOrder) && Number.isFinite(right.sourceOrder)) {
+    const sourceOrderDelta = Number(left.sourceOrder) - Number(right.sourceOrder)
+    if (sourceOrderDelta !== 0) return sourceOrderDelta
+  }
   return normalizeRoutePath(left.routePath).localeCompare(normalizeRoutePath(right.routePath))
 }
 

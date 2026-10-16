@@ -54,6 +54,13 @@ export type SiteActionRequest =
       type: 'generate_redesign'
       actor: string
       strategy?: string
+      outputAdapterId?: 'astro-static-site' | 'html-static-artifact'
+      acceptedFunctionalReductions?: {
+        kind: 'legacy-forms-to-disclosed-links-v1'
+        contactEmail: string
+        commentLinks: 'source-article'
+        sourceWidgetRemovals?: Array<'cookie-consent' | 'form-captcha' | 'back-to-top'>
+      }
     }
   | {
       siteId: string

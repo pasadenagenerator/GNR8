@@ -13,8 +13,17 @@ import {
   validateAstroProductionCandidateRecord,
   AstroProductionCandidateValidationError,
   type AstroProductionCandidateOwnership,
-  type AstroProductionCandidateRecord,
 } from "./astro-production-candidate-record";
+import {
+  computeAstroObjectBackedRegistrationIntentSha256,
+  isAstroObjectBackedCandidateRecord,
+  measureAstroObjectBackedCandidateRecordBytes,
+  serializeAstroObjectBackedCandidateRecord,
+  serializeAstroObjectBackedRegistrationIntent,
+  serializeAstroObjectBackedUnsignedRecord,
+  validateAstroObjectBackedCandidateRecord,
+  type AstroPersistedCandidateRecord,
+} from "./astro-production-candidate-object-record";
 import {
   AstroProductionCandidateRepositoryError,
   serializeAstroProductionCandidateAccessAction,
@@ -33,6 +42,7 @@ import {
 } from "./astro-production-candidate-repository";
 
 export const ASTRO_CANDIDATE_REGISTRATION_RPC = "gnr8_register_astro_candidate" as const;
+export const ASTRO_CANDIDATE_OBJECT_REGISTRATION_RPC = "gnr8_register_astro_candidate_v3" as const;
 export const ASTRO_CANDIDATE_SCOPED_READ_RPC = "gnr8_read_astro_candidate_for_scope" as const;
 export const ASTRO_CANDIDATE_METADATA_LIST_RPC = "gnr8_list_astro_candidate_metadata" as const;
 export const ASTRO_CANDIDATE_ACCESS_CHANGE_RPC = "gnr8_set_astro_candidate_access" as const;
@@ -64,22 +74,35 @@ export class SupabaseAstroProductionCandidateGateway implements AstroProductionC
     input: AstroProductionCandidateGatewayCreateInput,
   ): Promise<AstroProductionCandidateGatewayCreateOutcome> {
     const record = validateInputRecord(input.proposedRecord);
-    const expectedBytes = measureAstroProductionCandidateRecordBytes(record);
-    const expectedIntentSha256 = computeAstroProductionCandidateRegistrationIntentSha256(
-      registrationIntentFromRecord(record),
-    );
+    const objectBacked = isAstroObjectBackedCandidateRecord(record);
+    const expectedBytes = objectBacked
+      ? measureAstroObjectBackedCandidateRecordBytes(record)
+      : measureAstroProductionCandidateRecordBytes(record);
+    const expectedIntentSha256 = objectBacked
+      ? computeAstroObjectBackedRegistrationIntentSha256(record)
+      : computeAstroProductionCandidateRegistrationIntentSha256(registrationIntentFromRecord(record));
     if (input.payloadSizeBytes !== expectedBytes || input.registrationIntentSha256 !== expectedIntentSha256) {
       throw corruptResponse("Candidate registration input does not match its canonical bytes or intent hash.");
     }
 
-    const result = await this.rpc(ASTRO_CANDIDATE_REGISTRATION_RPC, {
-      p_record_canonical_text: serializeAstroProductionCandidateRecord(record),
-      p_unsigned_record_canonical_text: serializeAstroProductionCandidateUnsignedRecord(record),
-      p_registration_intent_canonical_text: serializeAstroProductionCandidateRegistrationIntent(record),
-      p_content_envelope_canonical_text: serializeAstroProductionCandidateContentEnvelope(record),
-      p_registration_intent_sha256: expectedIntentSha256,
-      p_payload_size_bytes: expectedBytes,
-    });
+    const result = objectBacked
+      ? await this.rpc(ASTRO_CANDIDATE_OBJECT_REGISTRATION_RPC, {
+          p_record_canonical_text: serializeAstroObjectBackedCandidateRecord(record),
+          p_unsigned_record_canonical_text: serializeAstroObjectBackedUnsignedRecord(record),
+          p_registration_intent_canonical_text: serializeAstroObjectBackedRegistrationIntent(record),
+          p_registration_intent_sha256: expectedIntentSha256,
+          p_payload_size_bytes: expectedBytes,
+          p_resolved_payload_size_bytes: input.resolvedPayloadSizeBytes,
+          p_object_payload_size_bytes: input.objectPayloadSizeBytes,
+        })
+      : await this.rpc(ASTRO_CANDIDATE_REGISTRATION_RPC, {
+          p_record_canonical_text: serializeAstroProductionCandidateRecord(record),
+          p_unsigned_record_canonical_text: serializeAstroProductionCandidateUnsignedRecord(record),
+          p_registration_intent_canonical_text: serializeAstroProductionCandidateRegistrationIntent(record),
+          p_content_envelope_canonical_text: serializeAstroProductionCandidateContentEnvelope(record),
+          p_registration_intent_sha256: expectedIntentSha256,
+          p_payload_size_bytes: expectedBytes,
+        });
     if (result.status === "unavailable") return result;
     return parseCreateResponse(result.data, expectedIntentSha256);
   }
@@ -161,9 +184,9 @@ function parseCreateResponse(
   }
   requireExactKeys(response, ["status", "record", "access", "registrationEvent"]);
   const record = validateResponseRecord(response.record);
-  const returnedIntentSha256 = computeAstroProductionCandidateRegistrationIntentSha256(
-    registrationIntentFromRecord(record),
-  );
+  const returnedIntentSha256 = isAstroObjectBackedCandidateRecord(record)
+    ? computeAstroObjectBackedRegistrationIntentSha256(record)
+    : computeAstroProductionCandidateRegistrationIntentSha256(registrationIntentFromRecord(record));
   if (returnedIntentSha256 !== expectedIntentSha256) {
     throw corruptResponse("Candidate registration RPC returned a different immutable intent.");
   }
@@ -266,17 +289,21 @@ function parseAccessResponse(
   return { status: response.status, access, event };
 }
 
-function validateInputRecord(value: AstroProductionCandidateRecord): AstroProductionCandidateRecord {
+function validateInputRecord(value: AstroPersistedCandidateRecord): AstroPersistedCandidateRecord {
   try {
-    return validateAstroProductionCandidateRecord(value);
+    return isAstroObjectBackedCandidateRecord(value)
+      ? validateAstroObjectBackedCandidateRecord(value)
+      : validateAstroProductionCandidateRecord(value);
   } catch (error) {
     throw mapRecordValidationError(error);
   }
 }
 
-function validateResponseRecord(value: unknown): AstroProductionCandidateRecord {
+function validateResponseRecord(value: unknown): AstroPersistedCandidateRecord {
   try {
-    return validateAstroProductionCandidateRecord(value);
+    return isAstroObjectBackedCandidateRecord(value)
+      ? validateAstroObjectBackedCandidateRecord(value)
+      : validateAstroProductionCandidateRecord(value);
   } catch (error) {
     throw mapRecordValidationError(error);
   }
@@ -292,7 +319,7 @@ function validateAccessEvent(value: unknown, candidateId: string) {
   return validateAstroProductionCandidateAccessEvent(value, candidateId);
 }
 
-function validateRegistrationEvent(value: unknown, record: AstroProductionCandidateRecord) {
+function validateRegistrationEvent(value: unknown, record: AstroPersistedCandidateRecord) {
   if (!isRecord(value)) throw corruptResponse("Candidate RPC returned an invalid registration event.");
   const event = validateAccessEvent(value, record.identity.candidateId);
   validateAstroProductionCandidateRegistrationEvent(event, record);

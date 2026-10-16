@@ -1,4 +1,5 @@
 import type { Gnr8Section } from "@/gnr8/types/section";
+import { CONFIDENCE_ACCEPTABLE } from "@/gnr8/migration/layout-graph/structural-confidence-thresholds";
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -110,6 +111,7 @@ export function computePageStructuralConfidence(sections: Gnr8Section[]): {
   }
 
   const weakestSections = metas
+    .filter((meta) => meta.structuralConfidence < CONFIDENCE_ACCEPTABLE)
     .slice()
     .sort((a, b) => a.structuralConfidence - b.structuralConfidence || a.domIndexStart - b.domIndexStart)
     .slice(0, 3)

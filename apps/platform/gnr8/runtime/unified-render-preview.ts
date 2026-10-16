@@ -43,12 +43,17 @@ import {
 import { analyzeAirshipArtifactHtmlValidity } from '@/gnr8/single-site/airship-valid-artifact-html'
 import {
   isAstroInternalPreviewCandidate,
+  materializeAstroInternalPreviewHtml,
   type AstroInternalPreviewCandidate,
 } from '@/gnr8/output-adapters/astro-static-site-internal-preview-bridge'
 import {
   isAstroProductionCandidate,
   type AstroProductionCandidate,
 } from '@/gnr8/output-adapters/astro-production-candidate-record'
+import {
+  isAstroObjectBackedResolvedCandidate,
+  type AstroObjectBackedResolvedCandidate,
+} from '@/gnr8/output-adapters/astro-production-candidate-object-record'
 
 export type SiteVersionPreviewSource =
   | 'react_runtime_renderer'
@@ -157,8 +162,8 @@ type PreviewReadDependencies = {
   requestScopedDbClientEnabled: boolean
 }
 
-type AstroPreviewCandidate = AstroInternalPreviewCandidate | AstroProductionCandidate
-type AstroPreviewCandidateContract = 'proof_v1' | 'production_v2'
+type AstroPreviewCandidate = AstroInternalPreviewCandidate | AstroProductionCandidate | AstroObjectBackedResolvedCandidate
+type AstroPreviewCandidateContract = 'proof_v1' | 'production_v2' | 'production_v3'
 
 const defaultPreviewReadDependencies: PreviewReadDependencies = {
   getPoolStatus: () => {
@@ -2970,7 +2975,9 @@ async function renderAstroInternalPreviewCandidate(input: {
   const candidate = await (input.getCandidate ?? previewReadDependencies.getAstroInternalPreviewCandidate)(candidateId)
   const candidateIsValid = input.candidateContract === 'production_v2'
     ? isAstroProductionCandidate(candidate)
-    : isAstroInternalPreviewCandidate(candidate)
+    : input.candidateContract === 'production_v3'
+      ? isAstroObjectBackedResolvedCandidate(candidate)
+      : isAstroInternalPreviewCandidate(candidate)
   if (!candidate || !candidateIsValid) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
@@ -3004,7 +3011,11 @@ async function renderAstroInternalPreviewCandidate(input: {
     requestedPath: input.requestedPath,
     resolvedPath: resolved.resolvedPath,
   })
-  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
+  const materializedHtml = materializeAstroInternalPreviewHtml({
+    html: resolved.html,
+    compiledTokenStyles: candidate.compiledTokenStyles,
+  })
+  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(materializedHtml)
   if (diagnosticContent.blocked) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
@@ -3028,7 +3039,7 @@ async function renderAstroInternalPreviewCandidate(input: {
       artifactId: candidate.id,
       path: resolved.resolvedPath,
       rendererCompatibilityVersion: candidate.rendererCompatibilityVersion,
-      html: annotateTransformedPreviewHtml({ html: resolved.html, summary: previewRuntimeSummary }),
+      html: annotateTransformedPreviewHtml({ html: materializedHtml, summary: previewRuntimeSummary }),
       source: 'astro_internal_preview_candidate',
       previewMode: previewRuntimeSummary.previewMode,
       previewRuntimeSummary,
@@ -3126,9 +3137,13 @@ async function renderTransformedSiteVersionPreview(input: {
     resolvedPath: resolved.resolvedPath,
     fallbackSummary: input.fallbackSummary,
   })
+  const materializedHtml = materializeAstroInternalPreviewHtml({
+    html: resolved.html,
+    compiledTokenStyles: artifact.compiledTokenStyles,
+  })
   if (explicitAirshipArtifactId) {
     const validity = analyzeAirshipArtifactHtmlValidity({
-      html: resolved.html,
+      html: materializedHtml,
       migrationId: airshipMigrationIdFromArtifact(artifact),
     })
     if (!validity.valid) {
@@ -3164,7 +3179,7 @@ async function renderTransformedSiteVersionPreview(input: {
     requestedPath: input.requestedPath,
     selectedPath: resolved.resolvedPath,
   })
-  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(resolved.html)
+  const diagnosticContent = detectTransformedPreviewVisibleDiagnosticContent(materializedHtml)
   if (diagnosticContent.blocked) {
     console.warn(`[gnr8.runtime.preview] ${TRANSFORMED_PREVIEW_DIAGNOSTIC.TRANSFORMED_PREVIEW_DIAGNOSTIC_CONTENT_BLOCKED}`, {
       requestCorrelationKey: input.context.requestCorrelationKey,
@@ -3192,7 +3207,7 @@ async function renderTransformedSiteVersionPreview(input: {
         artifactId: artifact.id,
         path: resolved.resolvedPath,
         rendererCompatibilityVersion: artifact.rendererCompatibilityVersion,
-        html: annotateTransformedPreviewHtml({ html: resolved.html, summary: previewRuntimeSummary }),
+        html: annotateTransformedPreviewHtml({ html: materializedHtml, summary: previewRuntimeSummary }),
         source: 'transformed_artifact',
         previewMode: previewRuntimeSummary.previewMode,
         previewRuntimeSummary,

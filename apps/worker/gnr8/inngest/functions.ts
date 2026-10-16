@@ -16,6 +16,11 @@ import {
   domainVerificationCheckSchedulerJob,
 } from '@/gnr8/domain/inngest/domain-verification-job'
 import {
+  SITE_ASTRO_GENERATION_JOB_ID,
+  SITE_ASTRO_GENERATION_JOB_TRIGGER_EVENT,
+  siteAstroGenerationJob,
+} from '@/gnr8/site/inngest/site-astro-generation-job'
+import {
   SITE_RENDER_CAPTURE_JOB_ID,
   SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
   siteRenderCaptureJob,
@@ -37,12 +42,18 @@ export type WorkerInngestFunctionRegistration = {
   fn:
     | typeof templateProcessingJob
     | typeof siteTemplateBootstrapJob
+    | typeof siteAstroGenerationJob
     | typeof siteRenderCaptureJob
     | typeof domainVerificationCheckJob
     | typeof domainVerificationCheckSchedulerJob
 }
 
-export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
+const coreWorkerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
+  {
+    id: SITE_ASTRO_GENERATION_JOB_ID,
+    eventName: SITE_ASTRO_GENERATION_JOB_TRIGGER_EVENT,
+    fn: siteAstroGenerationJob,
+  },
   {
     id: TEMPLATE_PROCESSING_JOB_ID,
     eventName: TEMPLATE_PROCESSING_JOB_TRIGGER_EVENT,
@@ -58,6 +69,9 @@ export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistrati
     eventName: SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
     fn: siteRenderCaptureJob,
   },
+]
+
+const domainVerificationFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
   {
     id: DOMAIN_VERIFICATION_CHECK_SCHEDULER_JOB_ID,
     fn: domainVerificationCheckSchedulerJob,
@@ -68,6 +82,18 @@ export const workerInngestFunctionRegistrations: WorkerInngestFunctionRegistrati
     fn: domainVerificationCheckJob,
   },
 ]
+
+export function resolveWorkerInngestFunctionRegistrations(input: {
+  vercelEnvironment?: string
+} = {}): WorkerInngestFunctionRegistration[] {
+  const vercelEnvironment = String(input.vercelEnvironment ?? process.env.VERCEL_ENV ?? '')
+    .trim()
+    .toLowerCase()
+  if (vercelEnvironment === 'production') return [...coreWorkerInngestFunctionRegistrations]
+  return [...coreWorkerInngestFunctionRegistrations, ...domainVerificationFunctionRegistrations]
+}
+
+export const workerInngestFunctionRegistrations = resolveWorkerInngestFunctionRegistrations()
 
 export const inngestFunctions = workerInngestFunctionRegistrations.map((entry) => entry.fn)
 

@@ -9,7 +9,12 @@ import {
   deserializeAstroProductionCandidateRecord,
   serializeAstroProductionCandidateRecord,
 } from "../../../gnr8/output-adapters/astro-production-candidate-record";
-import { createTypeScriptRoundTripCases, type TypeScriptRoundTripCase } from "./typescript-roundtrip";
+import {
+  createObjectBackedRoundTripCases,
+  createTypeScriptRoundTripCases,
+  type ObjectBackedRoundTripCase,
+  type TypeScriptRoundTripCase,
+} from "./typescript-roundtrip";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(TEST_DIR, "../../../../..");
@@ -20,6 +25,10 @@ const MIGRATION_PATH = path.join(
 const PREREQUISITE_MIGRATION_PATH = path.join(
   REPO_ROOT,
   "apps/platform/supabase/migrations/20260928110000_astro_candidate_hosted_prerequisites.sql",
+);
+const OBJECT_STORAGE_MIGRATION_PATH = path.join(
+  REPO_ROOT,
+  "apps/platform/supabase/migrations/20261012120000_astro_candidate_object_storage_v3.sql",
 );
 const IMAGE = "postgres:17";
 const OWNER = "gnr8_mvp13_owner";
@@ -101,6 +110,18 @@ function registrationCall(testCase: TypeScriptRoundTripCase): string {
   )`;
 }
 
+function objectRegistrationCall(testCase: ObjectBackedRoundTripCase): string {
+  return `public.gnr8_register_astro_candidate_v3(
+    ${decodeSql(testCase.recordText)},
+    ${decodeSql(testCase.unsignedRecordText)},
+    ${decodeSql(testCase.registrationIntentText)},
+    '${testCase.registrationIntentSha256}',
+    ${testCase.measurements.registryRecordUtf8Bytes},
+    ${testCase.measurements.resolvedCandidateUtf8Bytes},
+    ${testCase.measurements.objectPayloadUtf8Bytes}
+  )`;
+}
+
 function roundTripSql(
   created: TypeScriptRoundTripCase,
   retry: TypeScriptRoundTripCase,
@@ -123,6 +144,51 @@ begin
   end if;
 end;
 $roundtrip$;
+reset role;
+commit;
+`;
+}
+
+function objectRoundTripSql(input: {
+  created: ObjectBackedRoundTripCase;
+  retry: ObjectBackedRoundTripCase;
+  conflict: ObjectBackedRoundTripCase;
+}): string {
+  return `\\set ON_ERROR_STOP on
+begin;
+set local role service_role;
+do $object_roundtrip$
+declare
+  v_result jsonb;
+begin
+  v_result := ${objectRegistrationCall(input.created)};
+  if v_result->>'status' <> 'created' then
+    raise exception 'object_v3_create_failed';
+  end if;
+  v_result := public.gnr8_read_astro_candidate_for_scope(
+    '${input.created.record.identity.candidateId}',
+    'runtime-site-mvp12-test',
+    '22222222-2222-4222-8222-222222222222'::uuid,
+    '33333333-3333-4333-8333-333333333333'::uuid,
+    '44444444-4444-4444-8444-444444444444'::uuid,
+    '55555555-5555-4555-8555-555555555555'::uuid
+  );
+  if v_result->>'status' <> 'found'
+    or v_result#>>'{record,schemaVersion}' <> 'gnr8-astro-persisted-preview-candidate:v3'
+    or v_result#>>'{record,candidate,routePayloads,/,bucket}' <> 'gnr8-preview-bundles' then
+    raise exception 'object_v3_readback_failed';
+  end if;
+  v_result := ${objectRegistrationCall(input.retry)};
+  if v_result->>'status' <> 'idempotent'
+    or v_result#>>'{record,registration,storedAt}' <> '2026-10-12T10:30:00.000Z' then
+    raise exception 'object_v3_retry_failed';
+  end if;
+  v_result := ${objectRegistrationCall(input.conflict)};
+  if v_result->>'status' <> 'conflicting_write' then
+    raise exception 'object_v3_conflict_failed';
+  end if;
+end;
+$object_roundtrip$;
 reset role;
 commit;
 `;
@@ -178,12 +244,17 @@ function run(): void {
 
   const migrationSql = readFileSync(MIGRATION_PATH, "utf8");
   const prerequisiteMigrationSql = readFileSync(PREREQUISITE_MIGRATION_PATH, "utf8");
+  const objectStorageMigrationSql = readFileSync(OBJECT_STORAGE_MIGRATION_PATH, "utf8");
   const prerequisiteMigrationSha256 = createHash("sha256")
     .update(prerequisiteMigrationSql, "utf8")
     .digest("hex");
   const migrationSha256 = createHash("sha256").update(migrationSql, "utf8").digest("hex");
+  const objectStorageMigrationSha256 = createHash("sha256")
+    .update(objectStorageMigrationSql, "utf8")
+    .digest("hex");
   console.log(`PREREQUISITE_MIGRATION sha256=${prerequisiteMigrationSha256} source=${PREREQUISITE_MIGRATION_PATH}`);
   console.log(`MIGRATION sha256=${migrationSha256} source=${MIGRATION_PATH} diagnosticCorrection=${allowDiagnosticCorrection}`);
+  console.log(`OBJECT_STORAGE_MIGRATION sha256=${objectStorageMigrationSha256} source=${OBJECT_STORAGE_MIGRATION_PATH}`);
   const actualDatabase = "gnr8_mvp13_actual";
   createDatabase(actualDatabase);
   psqlFile(actualDatabase, `${CONTAINER_TEST_DIR}/prerequisite.sql`);
@@ -263,6 +334,46 @@ function run(): void {
     where candidate_id = 'astro_candidate_cccccccccccc4ccc8ccccccccccccccc'
   `);
   console.log(`PASS TypeScript -> PostgreSQL -> TypeScript canonical byte round-trip ${roundTripEvidence}`);
+
+  const objectRoundTripDatabase = "gnr8_mvp13_object_v3";
+  prepareDatabase(objectRoundTripDatabase, prerequisiteMigrationSql, executableMigration);
+  psqlText(objectRoundTripDatabase, objectStorageMigrationSql);
+  psqlFile(objectRoundTripDatabase, `${CONTAINER_TEST_DIR}/fixture.sql`);
+  psqlText(objectRoundTripDatabase, roundTripSql(cases.created, cases.retry));
+  const objectCases = createObjectBackedRoundTripCases();
+  psqlText(objectRoundTripDatabase, objectRoundTripSql(objectCases));
+  const storedObjectRecordBase64 = psqlAt(objectRoundTripDatabase, `
+    select pg_catalog.replace(
+      pg_catalog.encode(pg_catalog.convert_to(canonical_record_text, 'UTF8'), 'base64'),
+      E'\\n',
+      ''
+    )
+    from public.gnr8_astro_candidate_records
+    where candidate_id = '${objectCases.created.record.identity.candidateId}'
+  `);
+  assert.equal(
+    Buffer.from(storedObjectRecordBase64, "base64").toString("utf8"),
+    objectCases.created.recordText,
+  );
+  assert.equal(psqlAt(objectRoundTripDatabase, `
+    select pg_catalog.count(*)
+    from public.gnr8_astro_candidate_records
+    where candidate_id = '${objectCases.created.record.identity.candidateId}'
+      and payload_storage_kind = 'supabase_storage'
+      and payload_size_bytes = ${objectCases.created.measurements.registryRecordUtf8Bytes}
+      and resolved_payload_size_bytes = ${objectCases.created.measurements.resolvedCandidateUtf8Bytes}
+      and object_payload_size_bytes = ${objectCases.created.measurements.objectPayloadUtf8Bytes}
+  `), "1");
+  const compatibilityEvidence = psqlAt(objectRoundTripDatabase, `
+    select pg_catalog.jsonb_build_object(
+      'v2Count', pg_catalog.count(*) filter (where schema_version = 'gnr8-astro-persisted-preview-candidate:v2'),
+      'v3Count', pg_catalog.count(*) filter (where schema_version = 'gnr8-astro-persisted-preview-candidate:v3'),
+      'v2InlineCount', pg_catalog.count(*) filter (where schema_version = 'gnr8-astro-persisted-preview-candidate:v2' and payload_storage_kind = 'inline_postgres'),
+      'v3ObjectCount', pg_catalog.count(*) filter (where schema_version = 'gnr8-astro-persisted-preview-candidate:v3' and payload_storage_kind = 'supabase_storage')
+    )
+    from public.gnr8_astro_candidate_records
+  `);
+  console.log(`PASS v3 migration execution: v2 compatibility, v3 registration/readback, retry/conflict ${compatibilityEvidence}`);
   console.log(actualMigrationPassed
     ? "RESULT locally validated"
     : "RESULT supplemental checks passed only with diagnostic correction; checked-in migration is not locally validated");

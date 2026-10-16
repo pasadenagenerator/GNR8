@@ -7,7 +7,13 @@ import { canPerformAction } from '@/src/auth/rbac'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { createDesignIntelligenceResultFromInput } from '@/gnr8/design-intelligence/design-intelligence-service'
 import type { DesignIntelligenceInput, DesignPageInput, DesignSemanticSectionInput, LayoutStrategy } from '@/gnr8/design-intelligence/design-model'
-import { createSiteVersionFromMigration, getSiteVersion, markSiteVersionPublished } from '@/gnr8/runtime/runtime-store'
+import {
+  createSiteVersionFromMigration,
+  getArtifactById,
+  getRawImportedSiteArtifact,
+  getSiteVersion,
+  markSiteVersionPublished,
+} from '@/gnr8/runtime/runtime-store'
 import { RENDERER_COMPATIBILITY_VERSION, type CanonicalPageVersionInput } from '@/gnr8/runtime/types'
 import type {
   SiteAction,
@@ -17,6 +23,10 @@ import type {
   SitePublishMetadata,
   SiteVariant,
 } from '@/gnr8/site-actions/site-action-model'
+import { emitSiteAstroGenerationRequestedEvent } from '@/gnr8/site-actions/astro-generation-events'
+import { selectOutputAdapter } from '@/gnr8/output-adapters/output-adapter-selection'
+import { createGeneratedOutputPublicationDecisionResolver } from '@/gnr8/output-adapters/generated-output-publication-composition'
+import { publishApprovedSiteVersion } from '@/gnr8/runtime/publish-activation-orchestrator'
 
 type SiteScopeRow = {
   id: string
@@ -65,6 +75,21 @@ const REDESIGN_STRATEGY_MAP: Array<{ match: RegExp; layout: LayoutStrategy; labe
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function resolveCurrentCaptureLineageRef(value: unknown): { siteVersionId: string; rawArtifactId: string } | null {
+  const provenance = asRecord(value)
+  const validation = asRecord(provenance?.currentMultiPagePreviewValidation)
+  const sourceIdentity = asRecord(validation?.sourceIdentity)
+  const siteVersionId = normalizeText(sourceIdentity?.siteVersionId)
+  const rawArtifactId = normalizeText(sourceIdentity?.rawArtifactId)
+  return siteVersionId && rawArtifactId ? { siteVersionId, rawArtifactId } : null
 }
 
 function nowIso(): string {
@@ -293,7 +318,7 @@ async function resolveSiteScope(siteId: string): Promise<SiteScopeRow | null> {
   }
 }
 
-async function resolveLatestRuntimeSiteVersionId(siteId: string): Promise<string | null> {
+async function resolveLatestRuntimeSiteVersionId(siteId: string, requireArtifact = false): Promise<string | null> {
   const client = await getSuperadminPool().connect()
   try {
     const result = await client.query<LatestSiteVersionRow>(
@@ -301,10 +326,11 @@ async function resolveLatestRuntimeSiteVersionId(siteId: string): Promise<string
       select sv.id::text as id
       from public.gnr8_runtime_site_versions sv
       where sv.ownership_site_id = $1::uuid
+        and ($2::boolean = false or sv.artifact_id is not null)
       order by sv.version_no desc, sv.updated_at desc, sv.created_at desc, sv.id::text desc
       limit 1
       `,
-      [siteId],
+      [siteId, requireArtifact],
     )
     return result.rows[0]?.id ?? null
   } finally {
@@ -559,7 +585,7 @@ async function linkOwnershipSiteVersion(input: { siteId: string; siteVersionId: 
   }
 }
 
-async function resolveSourceSiteVersion(input: { siteId: string; variantId?: string }): Promise<string> {
+async function resolveSourceSiteVersion(input: { siteId: string; variantId?: string; requireArtifact?: boolean }): Promise<string> {
   const variantId = normalizeText(input.variantId)
   if (variantId) {
     const variant = await resolveVariantById(variantId)
@@ -569,7 +595,7 @@ async function resolveSourceSiteVersion(input: { siteId: string; variantId?: str
     return variant.site_version_id
   }
 
-  const latest = await resolveLatestRuntimeSiteVersionId(input.siteId)
+  const latest = await resolveLatestRuntimeSiteVersionId(input.siteId, input.requireArtifact === true)
   if (!latest) throw new Error('No runtime version found for site.')
   return latest
 }
@@ -663,9 +689,104 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
 
   try {
     if (request.type === 'rerun_transformation' || request.type === 'generate_redesign') {
-      await setSiteStatus({ siteId, status: 'migrating' })
       const strategyResolution = request.type === 'generate_redesign' ? resolveRedesignStrategy(request.strategy) : undefined
-      const sourceVersionId = await resolveSourceSiteVersion({ siteId })
+      let sourceVersionId = await resolveSourceSiteVersion({
+        siteId,
+        requireArtifact: request.type === 'generate_redesign',
+      })
+
+      if (request.type === 'generate_redesign') {
+        const initiallySelectedVersion = await getSiteVersion(sourceVersionId)
+        const initiallySelectedArtifact = initiallySelectedVersion?.artifactId
+          ? await getArtifactById(initiallySelectedVersion.artifactId)
+          : null
+        if (!initiallySelectedVersion || !initiallySelectedArtifact) {
+          throw new Error('Source runtime artifact was not found.')
+        }
+        const sourceWorkspace = initiallySelectedArtifact.manifest.generatedOutputSourceWorkspace as
+          | { adapterId?: unknown }
+          | undefined
+        const candidateManifest = initiallySelectedArtifact.manifest.astroCandidateManifest as
+          | { adapterId?: unknown }
+          | undefined
+        const existingAdapterId =
+          sourceWorkspace?.adapterId === 'astro-static-site' || candidateManifest?.adapterId === 'astro-static-site'
+            ? 'astro-static-site'
+            : sourceWorkspace?.adapterId === 'html-static-artifact'
+              ? 'html-static-artifact'
+              : null
+        const selection = selectOutputAdapter({
+          generationKind: existingAdapterId ? 'regeneration' : 'new',
+          siteClass: 'static-business-site',
+          requiredCapabilities: ['static_pages', 'local_assets'],
+          requestedAdapterId: request.outputAdapterId ?? null,
+          existingAdapterId,
+        })
+        if (selection.status === 'unsupported') {
+          throw new Error(`unsupported_capability:${selection.unsupportedCapabilities.join(',') || selection.reason}`)
+        }
+        if (selection.adapterId === 'astro-static-site') {
+          const buildEvidence = initiallySelectedArtifact.manifest.generatedOutputBuildEvidence as
+            | { sourceCapture?: { siteVersionId?: unknown; artifactId?: unknown } }
+            | undefined
+          const lineageVersionId = normalizeText(buildEvidence?.sourceCapture?.siteVersionId)
+          const lineageArtifactId = normalizeText(buildEvidence?.sourceCapture?.artifactId)
+          let sourceVersion = lineageVersionId ? await getSiteVersion(lineageVersionId) : initiallySelectedVersion
+          let sourceArtifact = lineageArtifactId ? await getArtifactById(lineageArtifactId) : initiallySelectedArtifact
+          let rawArtifact = sourceVersion ? await getRawImportedSiteArtifact(sourceVersion.id) : null
+
+          if (sourceVersion && sourceArtifact && !rawArtifact && !existingAdapterId) {
+            const captureLineage = resolveCurrentCaptureLineageRef(sourceVersion.importProvenanceSummary)
+            const capturedVersion = captureLineage ? await getSiteVersion(captureLineage.siteVersionId) : null
+            const capturedArtifact = capturedVersion?.artifactId
+              ? await getArtifactById(capturedVersion.artifactId)
+              : null
+            const capturedRawArtifact = capturedVersion
+              ? await getRawImportedSiteArtifact(capturedVersion.id)
+              : null
+            if (
+              !captureLineage ||
+              !capturedVersion ||
+              capturedVersion.siteId !== initiallySelectedVersion.siteId ||
+              !capturedArtifact ||
+              capturedArtifact.siteVersionId !== capturedVersion.id ||
+              !capturedRawArtifact ||
+              capturedRawArtifact.id !== captureLineage.rawArtifactId
+            ) {
+              throw new Error('astro_generation_source_capture_lineage_missing')
+            }
+            sourceVersion = capturedVersion
+            sourceArtifact = capturedArtifact
+            rawArtifact = capturedRawArtifact
+          }
+          if (!sourceVersion || !sourceArtifact || sourceVersion.artifactId !== sourceArtifact.id) {
+            throw new Error('Astro regeneration source lineage is incomplete.')
+          }
+          if (!rawArtifact) throw new Error('astro_generation_source_artifact_missing')
+          await emitSiteAstroGenerationRequestedEvent({
+            actionId: action.id,
+            requestedAt: action.createdAt,
+            ownershipSiteId: siteId,
+            runtimeSiteId: sourceVersion.siteId,
+            sourceSiteVersionId: sourceVersion.id,
+            sourceArtifactId: sourceArtifact.id,
+            actor,
+            strategy: strategyResolution?.layoutStrategy ?? 'corporate_balanced',
+            requestedAdapterId: 'astro-static-site',
+            acceptedFunctionalReductions: request.acceptedFunctionalReductions,
+          })
+          return {
+            ok: true,
+            action: {
+              ...action,
+              resultSummary: `Astro generation queued with ${selection.adapterVersion}.`,
+              diagnostics: [`adapter:${selection.adapterId}`, `selection:${selection.reason}`],
+            },
+          }
+        }
+      }
+
+      await setSiteStatus({ siteId, status: 'migrating' })
 
       const execution = await runTransformationInternal({
         siteId,
@@ -718,9 +839,26 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
     }
 
     const sourceVersionId = await resolveSourceSiteVersion({ siteId, variantId: request.variantId })
-    await markSiteVersionPublished({ siteVersionId: sourceVersionId })
+    const publishVersion = await getSiteVersion(sourceVersionId)
+    const publishArtifact = publishVersion?.artifactId ? await getArtifactById(publishVersion.artifactId) : null
+    const isGeneratedAstro = Boolean(
+      publishArtifact?.manifest.astroCandidatePromotion && publishArtifact?.manifest.generatedOutputBuildEvidence,
+    )
+    let publishSummary: string
+    if (isGeneratedAstro) {
+      const activated = await publishApprovedSiteVersion({
+        siteVersionId: sourceVersionId,
+        actor,
+        stage: 'shadow',
+        generatedOutputPublicationDecisionResolver: createGeneratedOutputPublicationDecisionResolver(),
+      })
+      publishSummary = `Approved Astro artifact ${activated.artifactId} published to the internal shadow runtime.`
+    } else {
+      await markSiteVersionPublished({ siteVersionId: sourceVersionId })
+      publishSummary = `Legacy publish state recorded for runtime version ${sourceVersionId}.`
+    }
 
-    if (site.domain) {
+    if (site.domain && !isGeneratedAstro) {
       await setSiteStatus({ siteId, status: 'live' })
     } else {
       await touchSiteUpdatedAt(siteId)
@@ -730,16 +868,18 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
       siteId,
       siteVersionId: sourceVersionId,
       publishedBy: actor,
-      resultSummary: `Publish simulated for runtime version ${sourceVersionId}.`,
+      resultSummary: publishSummary,
     })
 
     const completed = await finalizeActionRow({
       actionId: action.id,
       status: 'completed',
       resultSummary: publish.resultSummary,
-      diagnostics: site.domain
-        ? []
-        : ['Site has no live domain configured. Publish remained a simulated state transition.'],
+      diagnostics: isGeneratedAstro
+        ? ['Activation stage: shadow. No external domain or provider operation was requested.']
+        : site.domain
+          ? []
+          : ['Site has no live domain configured. Legacy publish remained a state transition only.'],
     })
 
     return {
@@ -772,6 +912,7 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
 
 export const __siteActionTestUtils = {
   resolveRedesignStrategy,
+  resolveCurrentCaptureLineageRef,
   requiredAgencyActionForSiteAction,
   isRoleAuthorizedForSiteAction,
 }

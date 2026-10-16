@@ -14,7 +14,7 @@ import type { PreviewDocument } from '@/gnr8/migration/preview-document-model'
 import { importHtmlToPage } from '@/gnr8/importer/html-to-page'
 import { migrateImportedPageToCanonicalDraft } from '@/gnr8/runtime/migration-factory'
 import type { buildDeterministicArtifactBundle as buildDeterministicArtifactBundleType } from '@/gnr8/runtime/artifact-builder'
-import { deterministicId, normalizePagePath } from '@/gnr8/runtime/deterministic'
+import { deterministicId, normalizePagePath, sha256Hex, stableStringify } from '@/gnr8/runtime/deterministic'
 import {
   bindArtifactToVersion,
   createArtifact,
@@ -46,7 +46,10 @@ import {
   type MultiPageRawArtifactAssemblySummary,
   type RuntimeImportProvenanceSummary,
 } from '@/gnr8/runtime/types'
-import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import {
+  captureAssetsForAdditionalHtmlPages,
+  type UrlSinglePageImportSnapshot,
+} from '@/gnr8/validation/runtime/url-single-page-import'
 import type { VisualAnalysisModel } from '@/gnr8/visual-analysis/visual-analysis-model'
 import {
   extractStyleSignalModel,
@@ -138,7 +141,7 @@ const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
 }
 
 const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
-  maxPages: 20,
+  maxPages: 31,
   maxBytesPerPage: 1_000_000,
   requestTimeoutMs: 8_000,
 }
@@ -1696,6 +1699,48 @@ async function acquireScopedMultiPageHtml(input: {
   }
   pages.push(...skippedDiscoveryPages)
 
+  const fetchedAssetPages = pages.flatMap((page) => {
+    if (page.status !== 'fetched' || !page.bodyPath || !(page.finalUrl ?? page.normalizedUrl)) return []
+    try {
+      return [{
+        pageUrl: page.finalUrl ?? page.normalizedUrl!,
+        html: fs.readFileSync(page.bodyPath, 'utf8'),
+        bodyPath: page.bodyPath,
+      }]
+    } catch {
+      return []
+    }
+  })
+  const childAssetCapture = fetchedAssetPages.length > 0
+    ? await captureAssetsForAdditionalHtmlPages({
+        pages: fetchedAssetPages,
+        snapshotRootDirAbs: input.snapshot.snapshotRootDirAbs,
+        existingFetchManifest: input.snapshot.fetchManifest,
+      })
+    : null
+  if (childAssetCapture) {
+    input.snapshot.fetchManifest.push(...childAssetCapture.manifestEntries)
+    const captureByBodyPath = new Map(childAssetCapture.pages.map((page) => [page.bodyPath, page]))
+    for (const page of pages) {
+      if (!page.bodyPath) continue
+      const captured = captureByBodyPath.get(page.bodyPath)
+      if (!captured) continue
+      fs.writeFileSync(page.bodyPath, captured.html, 'utf8')
+      const bytes = Buffer.from(captured.html, 'utf8')
+      page.byteSize = bytes.byteLength
+      page.bodySha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+      page.assetAcquisition = {
+        discoveredReferenceCount: captured.discoveredReferenceCount,
+        fetchedAssetCount: captured.fetchedAssetCount,
+        failedRequiredAssetCount: captured.failedRequiredAssetCount,
+        deduplicatedReferenceCount: captured.deduplicatedReferenceCount,
+        failedRequiredResources: captured.failedRequiredResources,
+      }
+    }
+    diagnostics.push('MULTIPAGE_CHILD_ASSET_ACQUISITION_COMPLETED')
+    if (childAssetCapture.summary.failedRequiredAssetCount > 0) diagnostics.push('MULTIPAGE_CHILD_ASSET_ACQUISITION_INCOMPLETE')
+  }
+
   const sortedPages = pages
   const fetchedPageCount = sortedPages.filter((entry) => entry.status === 'fetched').length
   const failedPageCount = sortedPages.filter((entry) => entry.status === 'failed').length
@@ -1710,6 +1755,15 @@ async function acquireScopedMultiPageHtml(input: {
       fetchedPageCount,
       failedPageCount,
       skippedPageCount,
+      ...(childAssetCapture
+        ? {
+            discoveredAssetReferenceCount: childAssetCapture.summary.discoveredReferenceCount,
+            fetchedAssetCount: childAssetCapture.summary.fetchedAssetCount,
+            failedRequiredAssetCount: childAssetCapture.summary.failedRequiredAssetCount,
+            deduplicatedAssetReferenceCount: childAssetCapture.summary.deduplicatedReferenceCount,
+            failedRequiredResources: childAssetCapture.summary.failedRequiredResources,
+          }
+        : {}),
     },
     diagnostics: uniqueSorted([...diagnostics, 'MULTIPAGE_HTML_ACQUISITION_MANIFEST_PERSISTED']),
     generatedAt,
@@ -2068,6 +2122,7 @@ async function buildScopedMultiPageDiscovery(input: {
 
   const discoveredByRoute = new Map<string, MultiPageDiscoveryLinkEntry>()
   const prioritySourceByRoute = new Map<string, RoutePriorityCandidate<MultiPageDiscoveryLinkEntry>['source']>()
+  const prioritySourceOrderByRoute = new Map<string, number>()
   const skippedLinks: MultiPageDiscoveryLinkEntry[] = []
   const normalizedUrls: MultiPageDiscoveryManifest['normalizedUrls'] = []
 
@@ -2224,7 +2279,7 @@ async function buildScopedMultiPageDiscovery(input: {
     )
   }
 
-  for (const sitemapUrl of sitemapDiscoveryEvidence.discoveredUrls) {
+  for (const [sitemapSourceOrder, sitemapUrl] of sitemapDiscoveryEvidence.discoveredUrls.entries()) {
     normalizedUrls.push({
       originalHref: sitemapUrl.originalUrl,
       absoluteUrl: sitemapUrl.originalUrl,
@@ -2277,6 +2332,7 @@ async function buildScopedMultiPageDiscovery(input: {
     })
     discoveredByRoute.set(sitemapUrl.normalizedRoutePath, entry)
     prioritySourceByRoute.set(sitemapUrl.normalizedRoutePath, 'sitemap')
+    prioritySourceOrderByRoute.set(sitemapUrl.normalizedRoutePath, sitemapSourceOrder)
   }
 
   for (const canonical of canonicalDiscovery.canonicalEntries) {
@@ -2326,6 +2382,7 @@ async function buildScopedMultiPageDiscovery(input: {
     routePath: String(entry.normalizedRoutePath ?? ''),
     depth: entry.depth,
     source: prioritySourceByRoute.get(String(entry.normalizedRoutePath ?? '')) ?? 'link',
+    sourceOrder: prioritySourceOrderByRoute.get(String(entry.normalizedRoutePath ?? '')) ?? null,
     sourceContext: entry.sourceContext,
     value: entry,
   }))
@@ -3881,6 +3938,18 @@ export async function runScopedImportPipeline(input: {
         routeCount: rawPreviewValidationResult.evidence.routeEvidence.length,
         rewrittenLinksCount: rawPreviewValidationResult.previewValidation?.summary.rewrittenLinks ?? null,
       })
+      importProvenanceSummary = {
+        ...importProvenanceSummary,
+        currentRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+        currentMultiPagePreviewValidation: rawPreviewValidationResult.previewValidation,
+      } as RuntimeImportProvenanceSummary
+      const validationProvenanceWrite = await deps.setSiteVersionImportProvenanceSummary({
+        siteVersionId: migrated.siteVersionId,
+        importProvenanceSummary,
+      })
+      if (validationProvenanceWrite.affectedRows <= 0) {
+        throw new Error(`Validation provenance write affected 0 rows for site version ${migrated.siteVersionId}.`)
+      }
     }
 
     const rawEntryHtml = (() => {
@@ -3941,32 +4010,38 @@ export async function runScopedImportPipeline(input: {
     }
 
     writePathDiagnostics.artifactCreateAttempted = true
+    const artifactManifest = {
+      ...artifactBundle.manifest,
+      sourceKind: 'scoped_pipeline_import',
+      ...(rawPreviewValidationResult
+        ? {
+            latestRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+            rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+            ...(rawPreviewValidationResult.previewValidation
+              ? {
+                  multiPagePreviewValidation: {
+                    ...rawPreviewValidationResult.previewValidation,
+                    rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
+                  },
+                }
+              : {}),
+          }
+        : {}),
+    }
     const artifact = await deps.createArtifact({
       siteId: artifactBundle.siteId,
       siteVersionId: artifactBundle.siteVersionId,
       rendererCompatibilityVersion: artifactBundle.rendererCompatibilityVersion,
-      bundleSha256: artifactBundle.bundleSha256,
+      bundleSha256: sha256Hex(stableStringify({
+        htmlByPath: artifactBundle.htmlByPath,
+        compiledTokenStyles: artifactBundle.compiledTokenStyles,
+        assetFingerprintMap: artifactBundle.assetFingerprintMap,
+        manifest: artifactManifest,
+      })),
       htmlByPath: artifactBundle.htmlByPath,
       compiledTokenStyles: artifactBundle.compiledTokenStyles,
       assetFingerprintMap: artifactBundle.assetFingerprintMap,
-      manifest: {
-        ...artifactBundle.manifest,
-        sourceKind: 'scoped_pipeline_import',
-        ...(rawPreviewValidationResult
-          ? {
-              latestRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
-              rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
-              ...(rawPreviewValidationResult.previewValidation
-                ? {
-                    multiPagePreviewValidation: {
-                      ...rawPreviewValidationResult.previewValidation,
-                      rawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
-                    },
-                  }
-                : {}),
-            }
-          : {}),
-      },
+      manifest: artifactManifest,
       publishStage: 'shadow',
       shadowRestricted: false,
       artifactGovernance,

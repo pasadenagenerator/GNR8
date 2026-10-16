@@ -146,6 +146,13 @@ export type MultiPageHtmlAcquisitionPageEntry = {
   diagnostics: string[];
   skippedReason: string | null;
   failureReason: string | null;
+  assetAcquisition?: {
+    discoveredReferenceCount: number;
+    fetchedAssetCount: number;
+    failedRequiredAssetCount: number;
+    deduplicatedReferenceCount: number;
+    failedRequiredResources: string[];
+  };
 };
 
 export type MultiPageHtmlAcquisitionManifest = {
@@ -162,6 +169,11 @@ export type MultiPageHtmlAcquisitionManifest = {
     fetchedPageCount: number;
     failedPageCount: number;
     skippedPageCount: number;
+    discoveredAssetReferenceCount?: number;
+    fetchedAssetCount?: number;
+    failedRequiredAssetCount?: number;
+    deduplicatedAssetReferenceCount?: number;
+    failedRequiredResources?: string[];
   };
   diagnostics: string[];
   generatedAt: string;
@@ -234,6 +246,27 @@ export type MultiPageDiscoverySummary = {
 };
 
 export type RuntimeImportProvenanceSummary = {
+  derivedCapture?: {
+    kind: "dependency_complete_derived_capture_v1";
+    parentSiteVersionId: string;
+    parentArtifactId: string;
+    parentRawArtifactId: string;
+    parentFilesSha256: string;
+    derivedFilesSha256: string;
+    dependencyUrls: string[];
+    unusedCssDependencies: Array<{
+      stylesheetPath: string;
+      resolvedUrl: string;
+      selectors: string[];
+    }>;
+    rewrites: Array<{ from: string; to: string }>;
+    rewrittenHtmlFiles: Array<{
+      path: string;
+      beforeSha256: string;
+      afterSha256: string;
+      byteSize: number;
+    }>;
+  } | null;
   kind: "runtime_import_provenance_summary_v1";
   executionIdentity?: {
     snapshotId: string;

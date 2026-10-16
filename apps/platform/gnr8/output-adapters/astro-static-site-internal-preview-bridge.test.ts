@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,7 +48,9 @@ test("bridge converts deterministic single-page output and the unified preview s
     assert.deepEqual(first.manifest.assetHandling.inlinedStylesheetPaths, ["styles/global.css"]);
     assert.equal(first.compiledTokenStyles.includes("--gnr8-astro-accent: #0f766e;"), true);
     assert.equal(first.htmlByPath["/"].includes("<link"), false);
-    assert.equal(first.htmlByPath["/"].includes("<style data-gnr8-astro-source-href=\"/styles/global.css?v=proof#theme\">"), true);
+    assert.equal(first.htmlByPath["/"].includes("<style data-gnr8-astro-source-href=\"/styles/global.css?v=proof#theme\""), true);
+    assert.equal(first.htmlByPath["/"].includes("--gnr8-astro-accent: #0f766e;"), false);
+    assert.equal(first.htmlByPath["/"].includes("data-gnr8-astro-compiled-styles"), true);
     assert.equal(first.htmlByPath["/"].includes('href="/contact?plan=ops#form"'), true);
 
     const restore = setUnifiedRenderPreviewDependenciesForTest({
@@ -88,6 +91,164 @@ test("bridge converts deterministic single-page output and the unified preview s
     } finally {
       restore();
     }
+  });
+});
+
+test("bridge preserves canonical directory-index routes in one exact candidate", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    await mkdir(join(workspacePath, "dist", "about"));
+    await writeFile(
+      join(workspacePath, "dist", "about", "index.html"),
+      '<!doctype html><html><head><link rel="stylesheet" href="/styles/global.css"></head><body><a href="/">Home</a><h1>About</h1></body></html>',
+    );
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+    assert.deepEqual(Object.keys(candidate.htmlByPath).sort(), ["/", "/about"]);
+    assert.match(candidate.htmlByPath["/about"], /<h1>About<\/h1>/);
+    assert.equal(candidate.htmlByPath["/about"].includes("<link"), false);
+    assert.equal(candidate.htmlByPath["/about"].includes("--gnr8-astro-accent: #0f766e;"), false);
+  });
+});
+
+test("bridge stores one shared stylesheet for a 30-route candidate below the registry limit", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const stylesheet = `:root{--gnr8-astro-accent: #0f766e;}.shared{content:"${"x".repeat(70_000)}"}`;
+    await writeFixtureDist(workspacePath, stylesheet);
+    for (let index = 1; index < 30; index += 1) {
+      const routeDirectory = join(workspacePath, "dist", `route-${index}`);
+      await mkdir(routeDirectory, { recursive: true });
+      await writeFile(
+        join(routeDirectory, "index.html"),
+        `<!doctype html><html><head><link rel="stylesheet" href="/styles/global.css"></head><body><h1>Route ${index}</h1></body></html>`,
+      );
+    }
+
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+    const serializedBytes = Buffer.byteLength(JSON.stringify(candidate), "utf8");
+
+    assert.equal(Object.keys(candidate.htmlByPath).length, 30);
+    assert.ok(30 * Buffer.byteLength(stylesheet, "utf8") > 2 * 1024 * 1024);
+    assert.ok(serializedBytes < 2 * 1024 * 1024);
+    assert.equal(
+      Object.values(candidate.htmlByPath).every((html) => html.includes("data-gnr8-astro-compiled-styles")),
+      true,
+    );
+    assert.equal(
+      Object.values(candidate.htmlByPath).every((html) => !html.includes("--gnr8-astro-accent")),
+      true,
+    );
+  });
+});
+
+test("bridge preserves URL-safe identity for Unicode export directories", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    const routeDirectory = join(
+      workspacePath,
+      "dist",
+      "b",
+      "platform9-in-the-gartner®-magic-quadrant™",
+    );
+    await mkdir(routeDirectory, { recursive: true });
+    await writeFile(
+      join(routeDirectory, "index.html"),
+      '<!doctype html><html><head><link rel="stylesheet" href="/styles/global.css"></head><body><a href="/">Home</a><h1>Gartner</h1></body></html>',
+    );
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+    const route = "/b/platform9-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2";
+    assert.match(candidate.htmlByPath[route], /<h1>Gartner<\/h1>/);
+  });
+});
+
+test("bridge preserves a self-contained data URL image source", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    const indexPath = join(workspacePath, "dist", "index.html");
+    const fixtureHtml = await readFile(indexPath, "utf8");
+    await writeFile(
+      indexPath,
+      fixtureHtml.replace(
+        "</body>",
+        '<img alt="Pixel" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQYV2NgAAIAAAUAAarVyFEAAAAASUVORK5CYII="></body>',
+      ),
+    );
+
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+
+    assert.match(candidate.htmlByPath["/"], /src="data:image\/png;base64,/);
+  });
+});
+
+test("bridge inlines exact ownership-bound captured stylesheets and rejects missing, tampered, or wrong-owner evidence", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    const indexPath = join(workspacePath, "dist", "index.html");
+    const ownedHref = "/api/gnr8/runtime/preview-assets/source-site/source-version/assets/stylesheet/captured.css";
+    const renderedHref = `${ownedHref}?capture=1791785941#theme`;
+    const fixtureHtml = await readFile(indexPath, "utf8");
+    await writeFile(
+      indexPath,
+      fixtureHtml.replace("</head>", `<link rel="stylesheet" href="${renderedHref}"></head>`),
+    );
+    const retainedBytes = Buffer.from(".hero{background-image:url('../image/hero.webp')}", "utf8");
+    const materializedBytes = Buffer.from(
+      ".hero{background-image:url('/api/gnr8/runtime/preview-assets/source-site/source-version/assets/image/hero.webp')}",
+      "utf8",
+    );
+    const evidence = {
+      href: ownedHref,
+      siteId: "source-site",
+      siteVersionId: "source-version",
+      artifactId: "source-artifact",
+      filePath: "assets/stylesheet/captured.css",
+      mediaType: "text/css",
+      retainedSizeBytes: retainedBytes.byteLength,
+      retainedSha256: createHash("sha256").update(retainedBytes).digest("hex"),
+      retainedBytes,
+      materializedSizeBytes: materializedBytes.byteLength,
+      materializedSha256: createHash("sha256").update(materializedBytes).digest("hex"),
+      materializedBytes,
+    };
+    const inspected = await inspectAstroStaticExport(workspacePath);
+    const candidate = await convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+      ownedStylesheetEvidence: [evidence],
+    });
+    assert.match(candidate.compiledTokenStyles, /preview-assets\/source-site\/source-version\/assets\/image\/hero\.webp/);
+    assert.equal(candidate.htmlByPath["/"].includes("<link"), false);
+    assert.match(candidate.htmlByPath["/"], /data-gnr8-astro-source-href="[^"]*captured\.css\?capture=1791785941#theme"/);
+
+    await assertBridgeError(convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+    }), "stylesheet_missing");
+    await assertBridgeError(convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+      ownedStylesheetEvidence: [{ ...evidence, materializedBytes: Buffer.from("tampered") }],
+    }), "stylesheet_invalid");
+    await assertBridgeError(convertAstroExportToInternalPreviewCandidate({
+      inspectedExport: inspected,
+      candidateId: SYNTHETIC_CANDIDATE_ID,
+      siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID,
+      rendererCompatibilityVersion: "gnr8-renderer-v1",
+      sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256,
+      ownedStylesheetEvidence: [{ ...evidence, siteId: "wrong-owner" }],
+    }), "unsupported_asset_reference");
   });
 });
 
@@ -136,8 +297,8 @@ test("bridge revalidates corrupt, missing, and symlinked export bytes", async (t
   });
 });
 
-test("bridge fails explicitly for unsupported routes, file kinds, and CSS asset dependencies", async (t) => {
-  await t.test("second HTML route", async () => {
+test("bridge fails explicitly for unsupported file layouts, file kinds, and CSS asset dependencies", async (t) => {
+  await t.test("non-directory-index HTML route", async () => {
     await withWorkspace(async (workspacePath) => {
       await writeFixtureDist(workspacePath);
       await writeFile(join(workspacePath, "dist", "about.html"), "<!doctype html><html><body>About</body></html>");

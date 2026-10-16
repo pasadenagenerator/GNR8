@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getSupabaseServerClientReadOnly } from '@/src/auth/supabase-server-read-only'
+import { getSupabasePageReadClient } from '@/src/auth/supabase-page-read-client'
 
 type ClientRow = {
   id: string | null
@@ -16,11 +16,14 @@ function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
-export async function listSwitchableAgencyClientsForPage(input: { agencyId: string }): Promise<ClientSwitcherOption[]> {
+export async function listSwitchableAgencyClientsForPage(input: {
+  agencyId: string
+  serverOwned?: boolean
+}): Promise<ClientSwitcherOption[]> {
   const agencyId = normalizeText(input.agencyId)
   if (!agencyId) return []
 
-  const supabase = await getSupabaseServerClientReadOnly()
+  const supabase = await getSupabasePageReadClient({ serverOwned: input.serverOwned })
   const result = await supabase
     .from('organizations')
     .select('id,name')

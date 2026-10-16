@@ -12,7 +12,7 @@ export const DEFAULT_MULTI_PAGE_IMPORT_DISCOVERY_LIMITS = {
 } as const
 
 export const DEFAULT_MULTI_PAGE_IMPORT_HTML_ACQUISITION_LIMITS = {
-  maxPages: 20,
+  maxPages: 31,
   maxBytesPerPage: 1_000_000,
   requestTimeoutMs: 8_000,
 } as const

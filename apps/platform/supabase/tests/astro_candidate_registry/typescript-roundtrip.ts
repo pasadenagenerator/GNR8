@@ -8,6 +8,16 @@ import {
   type AstroProductionCandidateRecord,
 } from "../../../gnr8/output-adapters/astro-production-candidate-record";
 import { createSyntheticAstroInternalPreviewCandidate } from "../../../gnr8/output-adapters/astro-internal-preview-candidate-test-fixture";
+import { computeAstroInternalPreviewCandidateContentSha256 } from "../../../gnr8/output-adapters/astro-static-site-internal-preview-bridge";
+import {
+  computeAstroObjectBackedRegistrationIntentSha256,
+  prepareAstroObjectBackedCandidateRecord,
+  registrationIntentFromAstroObjectBackedRecord,
+  serializeAstroObjectBackedCandidateRecord,
+  serializeAstroObjectBackedUnsignedRecord,
+  type AstroObjectBackedCandidateRecord,
+  type AstroObjectBackedCandidateMeasurements,
+} from "../../../gnr8/output-adapters/astro-production-candidate-object-record";
 import { stableStringify } from "../../../gnr8/runtime/deterministic";
 
 export type TypeScriptRoundTripCase = {
@@ -18,6 +28,15 @@ export type TypeScriptRoundTripCase = {
   contentEnvelopeText: string;
   registrationIntentSha256: string;
   payloadSizeBytes: number;
+};
+
+export type ObjectBackedRoundTripCase = {
+  record: AstroObjectBackedCandidateRecord;
+  recordText: string;
+  unsignedRecordText: string;
+  registrationIntentText: string;
+  registrationIntentSha256: string;
+  measurements: AstroObjectBackedCandidateMeasurements;
 };
 
 export function createTypeScriptRoundTripCases(): {
@@ -75,5 +94,63 @@ export function createTypeScriptRoundTripCases(): {
   return {
     created: makeCase("2026-09-28T10:30:00.000Z"),
     retry: makeCase("2030-01-01T00:00:00.000Z"),
+  };
+}
+
+export function createObjectBackedRoundTripCases(): {
+  created: ObjectBackedRoundTripCase;
+  retry: ObjectBackedRoundTripCase;
+  conflict: ObjectBackedRoundTripCase;
+} {
+  const candidateId = createAstroProductionCandidateId("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+  const ownership = {
+    runtimeSiteId: "runtime-site-mvp12-test",
+    siteVersionId: "22222222-2222-4222-8222-222222222222",
+    ownershipSiteId: "33333333-3333-4333-8333-333333333333",
+    organizationId: "44444444-4444-4444-8444-444444444444",
+    agencyId: "55555555-5555-4555-8555-555555555555",
+  };
+  const registration = {
+    registeredByActorId: "actor:v3-database-roundtrip",
+    producerKind: "source_backed_astro_generation",
+    producerVersion: "source_backed_astro_generation:v1",
+    producerRef: "capture:v3-database-roundtrip",
+    idempotencyKey: "idem:v3:database-roundtrip",
+    correlationId: "correlation:v3:database-roundtrip",
+  };
+  const makeCase = (storedAt: string, aboutText: string): ObjectBackedRoundTripCase => {
+    const candidate = createSyntheticAstroInternalPreviewCandidate({
+      candidateId,
+      siteId: ownership.runtimeSiteId,
+      siteVersionId: ownership.siteVersionId,
+      createdAt: "2026-10-12T09:30:00.000Z",
+    });
+    candidate.htmlByPath = {
+      "/": "<!doctype html><html><head></head><body><a href=\"/about\">About</a></body></html>",
+      "/about": `<!doctype html><html><head></head><body><a href=\"/\">Home</a><p>${aboutText}</p></body></html>`,
+    };
+    candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(candidate);
+    candidate.manifest.provenance.convertedArtifactSha256 = candidate.contentSha256;
+    const prepared = prepareAstroObjectBackedCandidateRecord({
+      candidate,
+      ownership,
+      registration,
+      storedAt,
+      bucket: "gnr8-preview-bundles",
+    });
+    const registrationIntent = registrationIntentFromAstroObjectBackedRecord(prepared.record);
+    return {
+      record: prepared.record,
+      recordText: serializeAstroObjectBackedCandidateRecord(prepared.record),
+      unsignedRecordText: serializeAstroObjectBackedUnsignedRecord(prepared.record),
+      registrationIntentText: stableStringify(registrationIntent),
+      registrationIntentSha256: computeAstroObjectBackedRegistrationIntentSha256(prepared.record),
+      measurements: prepared.measurements,
+    };
+  };
+  return {
+    created: makeCase("2026-10-12T10:30:00.000Z", "Object-backed v3"),
+    retry: makeCase("2030-01-01T00:00:00.000Z", "Object-backed v3"),
+    conflict: makeCase("2026-10-12T10:30:00.000Z", "Changed object-backed v3"),
   };
 }

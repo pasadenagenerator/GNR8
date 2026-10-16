@@ -6,6 +6,8 @@ This file is intentionally small. Read only the on-demand docs that match the ta
 
 - Fast mode is forbidden for all GNR8 work.
 - One task equals one Codex session. Keep each session scoped and finishable.
+- Optimize for one working user outcome, not more MVP tasks or infrastructure. Follow the Outcome-First Delivery rules in `docs/agent/workflow-policy.md` for planning and execution.
+- Latest explicit user decisions override older notes and tests. Follow the Integration Loop Control rules in `docs/agent/workflow-policy.md`; hosted Generate is not the default debugger for locally reproducible defects.
 - Default to Low reasoning. Escalate only when the task meets `docs/agent/model-routing.md`.
 - Before non-trivial work, give a lightweight model/reasoning preflight for ChatGPT planning and Codex execution.
 - Subagents are off by default. Use them only when `docs/agent/workflow-policy.md` allows it.

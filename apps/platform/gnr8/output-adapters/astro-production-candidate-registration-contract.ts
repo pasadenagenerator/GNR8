@@ -121,6 +121,9 @@ export type AstroProductionCandidateRegistrationResult = {
     storedAt: string;
     contentSha256: string;
     storageSha256: string;
+    registryRecordUtf8Bytes: number;
+    resolvedCandidateUtf8Bytes: number;
+    objectPayloadUtf8Bytes: number;
   };
 };
 
@@ -141,12 +144,16 @@ export class AstroProductionCandidateRegistrationError extends Error {
   readonly code: AstroProductionCandidateRegistrationErrorCode;
   readonly correlationId: string | null;
   readonly retryable: boolean;
+  readonly measuredBytes: number | null;
+  readonly limitBytes: number | null;
 
   constructor(input: {
     code: AstroProductionCandidateRegistrationErrorCode;
     message: string;
     correlationId?: string | null;
     retryable?: boolean;
+    measuredBytes?: number;
+    limitBytes?: number;
     cause?: unknown;
   }) {
     super(input.message, input.cause === undefined ? undefined : { cause: input.cause });
@@ -154,5 +161,7 @@ export class AstroProductionCandidateRegistrationError extends Error {
     this.code = input.code;
     this.correlationId = input.correlationId ?? null;
     this.retryable = input.retryable ?? false;
+    this.measuredBytes = input.measuredBytes ?? null;
+    this.limitBytes = input.limitBytes ?? null;
   }
 }

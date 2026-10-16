@@ -4,6 +4,7 @@ import { lstat, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 
+import { decodeHtmlEntities } from "../importer/html-utils";
 import type { NormalizedStaticBusinessSiteContent } from "./astro-static-site-adapter";
 import { astroDevServerSmokeProofFixture } from "./astro-static-site-dev-server-smoke-proof";
 import {
@@ -68,14 +69,17 @@ export interface InspectedAstroStaticExport {
   manifest: AstroStaticExportManifest;
   indexHtml: string;
   stylesheetPaths: string[];
+  themeStylesheetPath: string | null;
   references: AstroStaticExportReference[];
   verifiedContent: string[];
-  verifiedThemeToken: string;
+  verifiedThemeToken: string | null;
+  verifiedStylesheetReferences: string[];
 }
 
 export interface AstroStaticExportVerification {
   expectedContent: string[];
-  expectedThemeToken: string;
+  expectedThemeToken: string | null;
+  expectedStylesheetReferences?: string[];
 }
 
 export interface CommandResult {
@@ -106,6 +110,7 @@ export interface AstroBuildExportProofEvidence {
   workspace: {
     path: string | null;
     baselineCommit: string | null;
+    baselineKind: PreparedAstroStaticSiteWorkspace["baselineKind"] | null;
     dependencyGeneratedFiles: string[];
     buildGeneratedFiles: string[];
     removed: boolean;
@@ -220,6 +225,7 @@ export async function runAstroBuildExportProof(
     evidence.timingsMs.prepare = elapsed(dependencies.now(), prepareStartedAt);
     evidence.workspace.path = prepared.workspacePath;
     evidence.workspace.baselineCommit = prepared.baselineCommit;
+    evidence.workspace.baselineKind = prepared.baselineKind;
     evidence.sourceComparison.baselineAggregateSha256 = prepared.sourceSnapshot.aggregateSha256;
 
     const installStartedAt = dependencies.now();
@@ -243,7 +249,7 @@ export async function runAstroBuildExportProof(
     }
     evidence.installation.completed = true;
     evidence.timingsMs.install = elapsed(dependencies.now(), installStartedAt);
-    evidence.workspace.dependencyGeneratedFiles = await gitStatusPaths(dependencies, prepared.workspacePath, input.signal);
+    evidence.workspace.dependencyGeneratedFiles = await generatedWorkspacePaths(prepared.workspacePath);
 
     const [pnpmVersion, astroPackageJson] = await Promise.all([
       dependencies.runCommand("pnpm", ["--version"], {
@@ -279,7 +285,7 @@ export async function runAstroBuildExportProof(
     evidence.build.completed = true;
     evidence.timingsMs.build = elapsed(dependencies.now(), buildStartedAt);
 
-    const generatedAfterBuild = await gitStatusPaths(dependencies, prepared.workspacePath, input.signal);
+    const generatedAfterBuild = await generatedWorkspacePaths(prepared.workspacePath);
     const dependencyGenerated = new Set(evidence.workspace.dependencyGeneratedFiles);
     evidence.workspace.buildGeneratedFiles = generatedAfterBuild.filter((path) => !dependencyGenerated.has(path));
 
@@ -420,25 +426,53 @@ export async function inspectAstroStaticExport(
   assertNoSourceOrDevDependency(indexHtml, canonicalWorkspace, "index.html");
   const verifiedContent = verifyFixtureHtml(indexHtml, verification.expectedContent);
   const filePaths = new Set(files.map((file) => file.path));
-  const references = verifyHtmlReferences(indexHtml, filePaths);
+  const htmlFiles = files.filter((file) => /(?:^|\/)index\.html$/i.test(file.path));
+  const references: AstroStaticExportReference[] = [];
+  const observedStylesheetReferences = new Set<string>();
+  for (const file of htmlFiles) {
+    if (file.bytes === 0) {
+      throw new AstroStaticExportValidationError("index_empty", `Astro route output is empty: ${file.path}.`);
+    }
+    const htmlBody = await readFile(join(canonicalDist, ...file.path.split("/")), "utf8");
+    assertNoSourceOrDevDependency(htmlBody, canonicalWorkspace, file.path);
+    for (const reference of stylesheetReferencesFromHtml(htmlBody)) {
+      observedStylesheetReferences.add(canonicalStylesheetReference(reference));
+    }
+    references.push(...verifyHtmlReferences(htmlBody, file.path, filePaths));
+  }
   const stylesheetPaths = Array.from(
     new Set(references.filter((reference) => reference.kind === "stylesheet").map((reference) => reference.resolvedPath)),
   ).sort();
-  if (stylesheetPaths.length === 0) {
+  const expectedStylesheetReferences = [...new Set(
+    (verification.expectedStylesheetReferences ?? []).map(canonicalStylesheetReference),
+  )].sort();
+  const missingExpectedStylesheetReferences = expectedStylesheetReferences
+    .filter((reference) => !observedStylesheetReferences.has(reference));
+  if (missingExpectedStylesheetReferences.length > 0) {
+    throw new AstroStaticExportValidationError(
+      "stylesheet_verification_failed",
+      `Built HTML is missing ${missingExpectedStylesheetReferences.length} expected source stylesheet reference(s).`,
+    );
+  }
+  if (stylesheetPaths.length === 0 && expectedStylesheetReferences.length === 0) {
     throw new AstroStaticExportValidationError("stylesheet_verification_failed", "Built HTML has no local stylesheet.");
   }
 
   const expectedThemeToken = verification.expectedThemeToken;
+  let themeStylesheetPath: string | null = null;
   for (const stylesheetPath of stylesheetPaths) {
     const stylesheet = await readFile(join(canonicalDist, ...stylesheetPath.split("/")), "utf8");
     assertNoSourceOrDevDependency(stylesheet, canonicalWorkspace, stylesheetPath);
-    if (!themeTokenPattern(expectedThemeToken).test(stylesheet)) {
-      throw new AstroStaticExportValidationError(
-        "stylesheet_verification_failed",
-        `Built stylesheet is missing the expected theme token: ${stylesheetPath}.`,
-      );
+    if (expectedThemeToken && !themeStylesheetPath && themeTokenPattern(expectedThemeToken).test(stylesheet)) {
+      themeStylesheetPath = stylesheetPath;
     }
     references.push(...verifyCssReferences(stylesheet, stylesheetPath, filePaths));
+  }
+  if (expectedThemeToken && !themeStylesheetPath) {
+    throw new AstroStaticExportValidationError(
+      "stylesheet_verification_failed",
+      "Built stylesheets are missing the expected theme token.",
+    );
   }
 
   references.sort((left, right) =>
@@ -449,9 +483,11 @@ export async function inspectAstroStaticExport(
     manifest,
     indexHtml,
     stylesheetPaths,
+    themeStylesheetPath,
     references,
     verifiedContent,
     verifiedThemeToken: expectedThemeToken,
+    verifiedStylesheetReferences: expectedStylesheetReferences,
   };
 }
 
@@ -508,6 +544,7 @@ export function createAstroBuildExportProofEvidence(): AstroBuildExportProofEvid
     workspace: {
       path: null,
       baselineCommit: null,
+      baselineKind: null,
       dependencyGeneratedFiles: [],
       buildGeneratedFiles: [],
       removed: false,
@@ -610,7 +647,7 @@ function verifyFixtureHtml(html: string, expectedContent: string[]): string[] {
   return verified;
 }
 
-function verifyHtmlReferences(html: string, filePaths: Set<string>): AstroStaticExportReference[] {
+function verifyHtmlReferences(html: string, sourcePath: string, filePaths: Set<string>): AstroStaticExportReference[] {
   const references: AstroStaticExportReference[] = [];
   const tags = html.match(/<(?:link|script|img|source|video|audio|object|embed|input)\b[^>]*>/gi) ?? [];
   for (const tag of tags) {
@@ -620,24 +657,35 @@ function verifyHtmlReferences(html: string, filePaths: Set<string>): AstroStatic
     for (const attribute of attributes) {
       const value = tag.match(new RegExp(`\\b${attribute}=["']([^"']+)["']`, "i"))?.[1];
       if (!value) continue;
-      const resolvedPath = resolveLocalReference(value, "index.html");
+      const resolvedPath = resolveLocalReference(value, sourcePath);
       if (!resolvedPath) continue;
       assertExportReferenceExists(resolvedPath, value, filePaths);
-      references.push({ sourcePath: "index.html", reference: value, resolvedPath, kind: isStylesheet ? "stylesheet" : "asset" });
+      references.push({ sourcePath, reference: value, resolvedPath, kind: isStylesheet ? "stylesheet" : "asset" });
     }
     const srcset = tag.match(/\bsrcset=["']([^"']+)["']/i)?.[1];
     if (srcset) {
       for (const candidate of srcset.split(",")) {
         const value = candidate.trim().split(/\s+/)[0];
         if (!value) continue;
-        const resolvedPath = resolveLocalReference(value, "index.html");
+        const resolvedPath = resolveLocalReference(value, sourcePath);
         if (!resolvedPath) continue;
         assertExportReferenceExists(resolvedPath, value, filePaths);
-        references.push({ sourcePath: "index.html", reference: value, resolvedPath, kind: "asset" });
+        references.push({ sourcePath, reference: value, resolvedPath, kind: "asset" });
       }
     }
   }
   return references;
+}
+
+function stylesheetReferencesFromHtml(html: string): string[] {
+  return [...new Set((html.match(/<link\b[^>]*>/gi) ?? [])
+    .filter((tag) => /\brel=["'][^"']*stylesheet[^"']*["']/i.test(tag))
+    .map((tag) => tag.match(/\bhref=["']([^"']+)["']/i)?.[1] ?? "")
+    .filter(Boolean))];
+}
+
+function canonicalStylesheetReference(reference: string): string {
+  return decodeHtmlEntities(reference).trim();
 }
 
 function verifyCssReferences(css: string, stylesheetPath: string, filePaths: Set<string>): AstroStaticExportReference[] {
@@ -655,7 +703,11 @@ function verifyCssReferences(css: string, stylesheetPath: string, filePaths: Set
 }
 
 function resolveLocalReference(reference: string, sourcePath: string): string | null {
-  if (reference.startsWith("#") || /^(?:data|mailto|tel|javascript):/i.test(reference)) return null;
+  if (
+    reference.startsWith("#") ||
+    /^(?:data|mailto|tel|javascript):/i.test(reference) ||
+    /^\/api\/gnr8\/runtime\/preview-assets\//i.test(reference)
+  ) return null;
   let url: URL;
   try {
     url = new URL(reference, `https://gnr8.invalid/${sourcePath}`);
@@ -724,9 +776,12 @@ async function verifyDistHttp(
     );
   }
 
-  const stylesheetPath = inspected.stylesheetPaths[0];
-  if (!stylesheetPath) {
-    throw proofError("stylesheet_verification_failed", "No built stylesheet is available for HTTP verification.", evidence);
+  const stylesheetPath = inspected.themeStylesheetPath;
+  if (!stylesheetPath || !inspected.verifiedThemeToken) {
+    if (inspected.verifiedStylesheetReferences.length === 0) {
+      throw proofError("stylesheet_verification_failed", "No verified stylesheet evidence is available for HTTP verification.", evidence);
+    }
+    return;
   }
   const sourceReference = inspected.references.find(
     (reference) => reference.kind === "stylesheet" && reference.resolvedPath === stylesheetPath,
@@ -779,10 +834,13 @@ function runCommand(
   args: string[],
   options: { cwd: string; timeoutMs: number; signal?: AbortSignal; env?: NodeJS.ProcessEnv },
 ): Promise<CommandResult> {
+  const bundledPnpmCli = executable === "pnpm" ? process.env.GNR8_PNPM_CLI_PATH?.trim() : "";
+  const command = bundledPnpmCli ? process.execPath : executable;
+  const commandArgs = bundledPnpmCli ? [bundledPnpmCli, ...args] : args;
   return new Promise((resolveCommand, rejectCommand) => {
     execFile(
-      executable,
-      args,
+      command,
+      commandArgs,
       {
         cwd: options.cwd,
         env: options.env ?? process.env,
@@ -799,26 +857,24 @@ function runCommand(
   });
 }
 
-async function gitStatusPaths(
-  dependencies: AstroBuildExportProofDependencies,
-  workspacePath: string,
-  signal?: AbortSignal,
-): Promise<string[]> {
-  const result = await dependencies.runCommand(
-    "git",
-    ["status", "--porcelain=v1", "--untracked-files=normal"],
-    { cwd: workspacePath, timeoutMs: 10_000, signal },
+async function generatedWorkspacePaths(workspacePath: string): Promise<string[]> {
+  const candidates = [".pnpm-store", "dist", "node_modules", "pnpm-lock.yaml"];
+  const present = await Promise.all(
+    candidates.map(async (path) => {
+      const exists = await lstat(join(workspacePath, path)).then(() => true).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      });
+      return exists ? path : null;
+    }),
   );
-  return result.stdout
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .map((line) => line.slice(3));
+  return present.filter((path): path is string => path !== null);
 }
 
 function proofEnvironment(): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    ASTRO_TELEMETRY_DISABLED: "1",
     CI: "1",
     NO_COLOR: "1",
     FORCE_COLOR: "0",

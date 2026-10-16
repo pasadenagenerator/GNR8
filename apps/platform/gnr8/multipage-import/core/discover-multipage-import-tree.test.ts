@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { stableStringify } from '../../migration/runtime/diagnostics'
-import { balanceRoutePriorityCandidates, discoverMultipageImportTree, summarizeMultipageImportTree } from '../index'
+import { balanceRoutePriorityCandidates, discoverMultipageImportTree, discoverSitemapUrls, summarizeMultipageImportTree } from '../index'
 
 type PageMap = Record<string, string>
 
@@ -262,6 +262,20 @@ test('priority balancing ranks mixed navigation canonical shallow and deep sitem
   assert.equal(result.evidence.tiers.find((tier) => tier.tier === 'tier_4_deep')?.excludedCount, 2)
 })
 
+test('priority balancing preserves publisher sitemap order within an equal tier', () => {
+  const result = balanceRoutePriorityCandidates({
+    maxRoutes: 2,
+    candidates: [
+      { routePath: '/b/oldest', depth: 1, source: 'sitemap', sourceOrder: 2, sourceContext: 'unknown', value: '/b/oldest' },
+      { routePath: '/b/newest', depth: 1, source: 'sitemap', sourceOrder: 0, sourceContext: 'unknown', value: '/b/newest' },
+      { routePath: '/b/middle', depth: 1, source: 'sitemap', sourceOrder: 1, sourceContext: 'unknown', value: '/b/middle' },
+    ],
+  })
+
+  assert.deepEqual(result.selected.map((candidate) => candidate.routePath), ['/b/newest', '/b/middle'])
+  assert.deepEqual(result.excluded.map((candidate) => candidate.routePath), ['/b/oldest'])
+})
+
 test('page role classification covers homepage/contact/legal/blog/article/listing/detail', async () => {
   const tree = await discoverMultipageImportTree(
     { siteId: 'site_test', seedUrl: 'https://example.com/' },
@@ -507,6 +521,35 @@ test('sitemap.xml discovery adds hidden route candidates', async () => {
   assert.equal(tree.sitemapDiscovery.fetchedSitemapUrls.length, 1)
   assert.equal(tree.sitemapDiscovery.urlCount, 1)
   assert.ok(tree.diagnostics.some((entry) => entry.startsWith('SITEMAP_URL_DISCOVERED:/hidden')))
+})
+
+test('sitemap discovery retains publisher-declared URL order', async () => {
+  const evidence = await discoverSitemapUrls({
+    seedUrl: 'https://example.com/',
+    canonicalHost: 'example.com',
+    limits: {
+      maxRoutes: 10,
+      maxDepth: 1,
+      maxLinksPerPage: 10,
+      maxTemplateLinksPerRoute: 10,
+      maxSitemaps: 2,
+      maxUrlsFromSitemaps: 10,
+      maxNestedSitemaps: 1,
+    },
+    fetchSitemap: createSitemapFetcher({
+      '/sitemap.xml': `<?xml version="1.0"?><urlset>
+        <url><loc>https://example.com/z-newest</loc></url>
+        <url><loc>https://example.com/m-middle</loc></url>
+        <url><loc>https://example.com/a-oldest</loc></url>
+      </urlset>`,
+    }),
+  })
+
+  assert.deepEqual(evidence.discoveredUrls.map((entry) => entry.normalizedRoutePath), [
+    '/z-newest',
+    '/m-middle',
+    '/a-oldest',
+  ])
 })
 
 test('sitemap_index.xml discovery traverses nested same-site sitemaps', async () => {

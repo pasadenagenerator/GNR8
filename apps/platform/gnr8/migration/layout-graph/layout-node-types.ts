@@ -20,6 +20,7 @@ export type LayoutSignals = {
 
 export type LayoutNode = {
   id: string;
+  tagName: string;
   type: LayoutNodeType;
   depth: number;
   domIndexStart: number;

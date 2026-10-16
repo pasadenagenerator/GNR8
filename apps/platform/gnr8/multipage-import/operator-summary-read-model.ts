@@ -187,7 +187,17 @@ function parsePreviewValidation(value: unknown): MultiPagePreviewValidation | nu
   const status = text(value.status)
   if (status !== 'ready' && status !== 'ready_with_warnings' && status !== 'blocked') return null
   const summary = isRecord(value.summary) ? value.summary : {}
+  const sourceIdentity = isRecord(value.sourceIdentity) ? value.sourceIdentity : null
   return {
+    ...(sourceIdentity
+      ? {
+          sourceIdentity: {
+            siteVersionId: text(sourceIdentity.siteVersionId),
+            rawArtifactId: text(sourceIdentity.rawArtifactId),
+            snapshotRunId: text(sourceIdentity.snapshotRunId),
+          },
+        }
+      : {}),
     status,
     summary: {
       discoveredRoutes: nonNegativeInt(summary.discoveredRoutes),
@@ -368,7 +378,12 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
       : {}
   const assembly = isRecord(discoveryContainer.rawArtifactAssembly) ? discoveryContainer.rawArtifactAssembly : null
   const assemblySummary = assembly ?? (isRecord(discoverySummary.rawArtifactAssembly) ? discoverySummary.rawArtifactAssembly : {})
-  const previewValidation = parsePreviewValidation(input.previewValidation)
+  const parsedPreviewValidation = parsePreviewValidation(input.previewValidation)
+  const executionIdentity = isRecord(provenance.executionIdentity) ? provenance.executionIdentity : null
+  const currentSnapshotRunId = text(executionIdentity?.snapshotRunId)
+  const previewValidation = currentSnapshotRunId && parsedPreviewValidation?.sourceIdentity?.snapshotRunId !== currentSnapshotRunId
+    ? null
+    : parsedPreviewValidation
 
   const routeCandidateCount = Array.isArray(discoveryManifest.routeCandidates)
     ? discoveryManifest.routeCandidates.length

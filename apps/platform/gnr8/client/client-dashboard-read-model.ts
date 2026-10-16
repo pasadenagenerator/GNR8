@@ -1,7 +1,7 @@
 import "server-only";
 
 import { resolveMigrationPipelineStatus, type MigrationPipelineStatus } from "@/gnr8/command-center/migration-state-automation";
-import { getSupabaseServerClientReadOnly } from "@/src/auth/supabase-server-read-only";
+import { getSupabasePageReadClient } from "@/src/auth/supabase-page-read-client";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_LIMIT = 100;
@@ -186,8 +186,9 @@ async function fetchSitesForClient(input: {
   clientId: string;
   agencyId: string;
   limit: number;
+  serverOwned?: boolean;
 }): Promise<SiteRow[]> {
-  const supabase = await getSupabaseServerClientReadOnly();
+  const supabase = await getSupabasePageReadClient({ serverOwned: input.serverOwned });
   const orderAttempts: Array<{ column: "created_at" | "updated_at" | "id"; ascending: boolean }> = [
     { column: "created_at", ascending: false },
     { column: "updated_at", ascending: false },
@@ -195,22 +196,30 @@ async function fetchSitesForClient(input: {
   ];
 
   let lastErrorMessage: string | null = null;
+  let includeOptionalName = true;
   for (let index = 0; index < orderAttempts.length; index += 1) {
     const orderAttempt = orderAttempts[index];
     const result = await supabase
       .from("sites")
-      .select("id,name,domain,status,agency_id,org_id,created_at,updated_at")
+      .select(includeOptionalName
+        ? "id,name,domain,status,agency_id,org_id,created_at,updated_at"
+        : "id,domain,status,agency_id,org_id,created_at,updated_at")
       .eq("org_id", input.clientId)
       .eq("agency_id", input.agencyId)
       .order(orderAttempt.column, { ascending: orderAttempt.ascending })
       .range(0, input.limit - 1);
 
     if (!result.error) {
-      return Array.isArray(result.data) ? (result.data as SiteRow[]) : [];
+      return Array.isArray(result.data) ? (result.data as unknown as SiteRow[]) : [];
     }
 
     lastErrorMessage = result.error.message;
     const lowered = result.error.message.toLowerCase();
+    if (includeOptionalName && lowered.includes("sites.name") && lowered.includes("does not exist")) {
+      includeOptionalName = false;
+      index -= 1;
+      continue;
+    }
     const mentionsColumn = lowered.includes(orderAttempt.column);
     const missingColumn = lowered.includes("does not exist");
     if (mentionsColumn && missingColumn && index < orderAttempts.length - 1) {
@@ -226,12 +235,13 @@ export async function getClientDashboardReadModelForPage(input: {
   clientId: string;
   agencyId: string;
   limit?: number;
+  serverOwned?: boolean;
 }): Promise<ClientDashboardReadModel> {
   const clientId = normalizeUuid(input.clientId, "clientId");
   const agencyId = normalizeUuid(input.agencyId, "agencyId");
   const limit = normalizeLimit(input.limit);
 
-  const supabase = await getSupabaseServerClientReadOnly();
+  const supabase = await getSupabasePageReadClient({ serverOwned: input.serverOwned });
   const [clientOrgResult, agencyResult] = await Promise.all([
     supabase.from("organizations").select("id,name,agency_id,organization_type").eq("id", clientId).limit(1).maybeSingle(),
     supabase.from("agencies").select("id,name").eq("id", agencyId).limit(1).maybeSingle(),
@@ -256,6 +266,7 @@ export async function getClientDashboardReadModelForPage(input: {
     clientId,
     agencyId,
     limit,
+    serverOwned: input.serverOwned,
   });
   assertClientScopedSiteRows({
     sites,

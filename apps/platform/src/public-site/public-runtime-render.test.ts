@@ -14,6 +14,15 @@ import { injectMonoOsmapPublicFallback } from "@/src/public-site/raw-template-ru
 import { materializeCmsContentSlotsForScopedImport } from "@/gnr8/site/scoped-import-pipeline";
 import { planBatchDraftUpserts } from "@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers";
 import type { ContentOverride, ContentSlot } from "@/gnr8/runtime/content-binding";
+import { ASTRO_RUNTIME_ARTIFACT_MATERIALIZATION_VERSION } from "@/gnr8/runtime/astro-artifact-materialization";
+import {
+  ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE,
+  computeAstroInternalPreviewCandidateContentSha256,
+} from "@/gnr8/output-adapters/astro-static-site-internal-preview-bridge";
+import { createSyntheticAstroInternalPreviewCandidate } from "@/gnr8/output-adapters/astro-internal-preview-candidate-test-fixture";
+import { prepareAstroObjectBackedCandidateRecord } from "@/gnr8/output-adapters/astro-production-candidate-object-record";
+import { createAstroProductionCandidateId } from "@/gnr8/output-adapters/astro-production-candidate-record";
+import type { RuntimeArtifact } from "@/gnr8/runtime/types";
 
 type ResolutionLogPayload = {
   runtimeResolutionMode: string;
@@ -66,6 +75,84 @@ async function captureConsoleInfo(run: () => Promise<Response>): Promise<{
   } finally {
     console.info = originalInfo;
   }
+}
+
+function publicAstroArtifact(input: {
+  htmlByPath: Record<string, string>;
+  compiledTokenStyles: string;
+}): RuntimeArtifact {
+  return {
+    id: "artifact_astro_public",
+    siteId: "site_astro_public",
+    siteVersionId: "11111111-1111-4111-8111-111111111111",
+    rendererCompatibilityVersion: "gnr8-renderer-v1",
+    htmlByPath: input.htmlByPath,
+    compiledTokenStyles: input.compiledTokenStyles,
+    assetFingerprintMap: {},
+    manifest: {
+      astroCandidatePromotion: {
+        version: ASTRO_RUNTIME_ARTIFACT_MATERIALIZATION_VERSION,
+        candidateId: "astro_candidate_11111111111141118111111111111111",
+        candidateContentSha256: "a".repeat(64),
+        candidateStorageSha256: "b".repeat(64),
+        sourceSnapshotSha256: "c".repeat(64),
+        exportSha256: "d".repeat(64),
+        convertedArtifactSha256: "e".repeat(64),
+        promotionIdentitySha256: "f".repeat(64),
+        actorUserId: "actor_public_runtime_test",
+        idempotencyKey: "public-runtime-test",
+        htmlTransformation: "none",
+        governanceEvaluation: { status: "evaluated", decision: "ALLOW", blockerCodes: [] },
+      },
+    },
+    publishStage: "production",
+    shadowRestricted: false,
+    artifactGovernance: {} as never,
+    bundleSha256: "1".repeat(64),
+    createdAt: "2026-10-07T00:00:00.000Z",
+  };
+}
+
+function publicArtifactResolution(input: {
+  artifact: RuntimeArtifact;
+  path: string;
+  html: string;
+}) {
+  return {
+    outcome: "artifact_hit",
+    host: "astro-public.example.com",
+    path: input.path,
+    normalizedPath: input.path,
+    siteId: input.artifact.siteId,
+    siteResolution: "host_match",
+    hostBindingId: "binding_astro_public",
+    hostBindingKind: "canonical",
+    hostBindingStatus: "ACTIVE",
+    activeSiteVersionId: input.artifact.siteVersionId,
+    artifactId: input.artifact.id,
+    artifact: input.artifact,
+    html: input.html,
+    resolvedPath: input.path,
+    diagnostics: [],
+    domain: "astro-public.example.com",
+    domainBindingId: "domain_binding_astro_public",
+    domainBindingStatus: "active",
+    legacyDomainSiteVersionId: null,
+  } as never;
+}
+
+function rawTemplateMiss() {
+  return {
+    outcome: "raw_template_miss",
+    host: "astro-public.example.com",
+    normalizedPath: "/",
+    siteId: null,
+    siteVersionId: null,
+    domain: null,
+    bindingId: null,
+    status: null,
+    reasonCode: "domain_not_found",
+  } as never;
 }
 
 test("public runtime artifact hit: serves artifact HTML with artifact-only diagnostics", async () => {
@@ -143,6 +230,160 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
   } finally {
     restoreDeps();
     restoreUsageDeps();
+  }
+});
+
+test("public runtime restores exact shared CSS for a compacted multi-page Astro artifact", async () => {
+  const sharedCss = ':root{--gnr8-astro-accent:#0f766e}.card::after{content:"shared css"}';
+  const rootHtml = "<!doctype html><html><head><title>Home</title></head><body><h1>Home</h1></body></html>";
+  const aboutHtml = `<!doctype html><html><head><style data-gnr8-astro-source-href="/_astro/site.css" ${ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE}></style></head><body><h1>About</h1></body></html>`;
+  const artifact = publicAstroArtifact({
+    htmlByPath: { "/": rootHtml, "/about": aboutHtml },
+    compiledTokenStyles: sharedCss,
+  });
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () => rawTemplateMiss(),
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      publicArtifactResolution({ artifact, path: "/about", html: aboutHtml }),
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "astro-public.example.com", path: "/about" });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /<h1>About<\/h1>/);
+    assert.doesNotMatch(html, /<h1>Home<\/h1>/);
+    assert.equal(html.includes(sharedCss), true);
+    assert.equal(html.split(sharedCss).length - 1, 1);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime resolves promoted object-backed Astro routes through the verified object contract", async () => {
+  const sharedCss = `/*${"shared-object-css".repeat(4_500)}*/:root{--object-backed:#0f766e}.object-route{color:var(--object-backed)}`;
+  const objectHtml = `<!doctype html><html><head><style ${ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE}></style></head><body class="object-route">Verified object route</body></html>`;
+  const candidate = createSyntheticAstroInternalPreviewCandidate({
+    candidateId: createAstroProductionCandidateId("87878787-8787-4787-8787-878787878787"),
+    siteId: "site_astro_public",
+    siteVersionId: "11111111-1111-4111-8111-111111111111",
+  });
+  candidate.htmlByPath = {
+    "/": "<!doctype html><html><head></head><body>Object home</body></html>",
+    "/about": objectHtml,
+  };
+  candidate.compiledTokenStyles = sharedCss;
+  candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(candidate);
+  candidate.manifest.provenance.convertedArtifactSha256 = candidate.contentSha256;
+  const prepared = prepareAstroObjectBackedCandidateRecord({
+    candidate,
+    ownership: {
+      runtimeSiteId: candidate.siteId,
+      siteVersionId: candidate.siteVersionId,
+      ownershipSiteId: "12121212-1212-4212-8212-121212121212",
+      organizationId: "13131313-1313-4313-8313-131313131313",
+      agencyId: "14141414-1414-4414-8414-141414141414",
+    },
+    registration: {
+      registeredByActorId: "actor:public-object-runtime-test",
+      producerKind: "source_backed_astro_generation",
+      producerVersion: "source_backed_astro_generation:v1",
+      producerRef: "capture:public-object-runtime-test",
+      idempotencyKey: "idem:public-object-runtime-test",
+      correlationId: "correlation:public-object-runtime-test",
+    },
+    storedAt: "2026-10-12T10:00:00.000Z",
+    bucket: "astro-candidates-private",
+  });
+  const databaseCopy = "<!doctype html><html><body>WRONG DATABASE COPY</body></html>";
+  assert.equal(typeof prepared.record.candidate.compiledTokenStyles, "object");
+  const artifact = publicAstroArtifact({
+    htmlByPath: { "/": databaseCopy, "/about": databaseCopy },
+    compiledTokenStyles: sharedCss,
+  });
+  artifact.assetFingerprintMap = structuredClone(candidate.assetFingerprintMap);
+  artifact.manifest.astroCandidateObjectRecord = prepared.record;
+  artifact.manifest.astroCandidatePromotion = {
+    ...(artifact.manifest.astroCandidatePromotion as Record<string, unknown>),
+    candidateId: candidate.id,
+    candidateContentSha256: candidate.contentSha256,
+    candidateStorageSha256: prepared.record.storageSha256,
+  };
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () => rawTemplateMiss(),
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      publicArtifactResolution({ artifact, path: "/about", html: databaseCopy }),
+    readAstroObjectRouteHtml: async ({ record, routePath }) => {
+      assert.deepEqual(record, prepared.record);
+      assert.equal(routePath, "/about");
+      return { html: objectHtml, compiledTokenStyles: sharedCss };
+    },
+  });
+
+  try {
+    const response = await renderPublicPathResponse({ host: "astro-public.example.com", path: "/about" });
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Verified object route/);
+    assert.doesNotMatch(html, /WRONG DATABASE COPY/);
+    assert.equal(html.includes(sharedCss), true);
+  } finally {
+    restoreDeps();
+  }
+});
+
+test("public runtime leaves non-compacted Astro and non-Astro artifacts unchanged", async (t) => {
+  const unchangedHtml = "<!doctype html><html><head><style>.existing{color:navy}</style></head><body>Existing</body></html>";
+  await t.test("non-compacted Astro", async () => {
+    const artifact = publicAstroArtifact({ htmlByPath: { "/": unchangedHtml }, compiledTokenStyles: ".unused{color:red}" });
+    const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+      resolveRawTemplateSiteForDomainAndPath: async () => rawTemplateMiss(),
+      resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+        publicArtifactResolution({ artifact, path: "/", html: unchangedHtml }),
+    });
+    try {
+      const response = await renderPublicPathResponse({ host: "astro-public.example.com", path: "/" });
+      assert.equal(await response.text(), unchangedHtml);
+    } finally {
+      restoreDeps();
+    }
+  });
+
+  await t.test("non-Astro", async () => {
+    const markerHtml = `<!doctype html><html><head><style ${ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE}></style></head><body>Legacy</body></html>`;
+    const artifact = { ...publicAstroArtifact({ htmlByPath: { "/": markerHtml }, compiledTokenStyles: "" }), manifest: {} };
+    const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+      resolveRawTemplateSiteForDomainAndPath: async () => rawTemplateMiss(),
+      resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+        publicArtifactResolution({ artifact, path: "/", html: markerHtml }),
+    });
+    try {
+      const response = await renderPublicPathResponse({ host: "astro-public.example.com", path: "/" });
+      assert.equal(await response.text(), markerHtml);
+    } finally {
+      restoreDeps();
+    }
+  });
+});
+
+test("public runtime fails explicitly when compacted Astro CSS is missing", async () => {
+  const compactedHtml = `<!doctype html><html><head><style ${ASTRO_INTERNAL_PREVIEW_SHARED_STYLES_ATTRIBUTE}></style></head><body>Missing CSS</body></html>`;
+  const artifact = publicAstroArtifact({ htmlByPath: { "/": compactedHtml }, compiledTokenStyles: "" });
+  const restoreDeps = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () => rawTemplateMiss(),
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () =>
+      publicArtifactResolution({ artifact, path: "/", html: compactedHtml }),
+  });
+
+  try {
+    await assert.rejects(
+      () => renderPublicPathResponse({ host: "astro-public.example.com", path: "/" }),
+      (error: unknown) => error instanceof Error &&
+        error.name === "AstroInternalPreviewBridgeError" &&
+        error.message === "Shared Astro stylesheet content is missing at the render boundary.",
+    );
+  } finally {
+    restoreDeps();
   }
 });
 
@@ -1016,6 +1257,33 @@ test("request host extraction prefers x-forwarded-host and keeps first host befo
   });
   assert.equal(host, "Beauty-Clinic.PasadenaGenerator.com:443");
   assert.equal(normalizePublicDomainHost(host), "beauty-clinic.pasadenagenerator.com");
+});
+
+test("request host extraction never accepts client-supplied internal runtime host overrides", () => {
+  const previousVercelEnvironment = process.env.VERCEL_ENV;
+  process.env.VERCEL_ENV = "preview";
+  try {
+    const stagingOverride = resolveRequestHost({
+      get(name: string): string | null {
+        if (name === "x-gnr8-internal-runtime-host") return "seed-runtime-coverage.staging.gnr8.test";
+        if (name === "x-forwarded-host") return "deployment.vercel.app";
+        return null;
+      },
+    });
+    assert.equal(stagingOverride, "deployment.vercel.app");
+
+    const customerOverride = resolveRequestHost({
+      get(name: string): string | null {
+        if (name === "x-gnr8-internal-runtime-host") return "customer.example.com";
+        if (name === "x-forwarded-host") return "deployment.vercel.app";
+        return null;
+      },
+    });
+    assert.equal(customerOverride, "deployment.vercel.app");
+  } finally {
+    if (previousVercelEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousVercelEnvironment;
+  }
 });
 
 test("public runtime regression guard: no builder-page fallback usage remains in serving path", async () => {

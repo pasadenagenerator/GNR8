@@ -4,6 +4,10 @@ import type {
   Gnr8OutputAdapterFile,
   Gnr8OutputAdapterFileManifest,
 } from "./output-adapter-contract";
+import {
+  decodeGeneratedOutputRoutePathForFile,
+  encodeGeneratedOutputRoutePath,
+} from "./generated-output-route-path";
 
 export interface NormalizedSiteNavItem {
   label: string;
@@ -34,6 +38,7 @@ export interface NormalizedSiteContact {
   heading: string;
   body: string;
   email?: string;
+  emails?: string[];
   phone?: string;
   address?: string;
 }
@@ -61,6 +66,20 @@ export interface NormalizedStaticBusinessSiteContent {
   contact: NormalizedSiteContact;
   footer: NormalizedSiteFooter;
   theme: NormalizedSiteThemeSignals;
+  /**
+   * Optional captured-route projection. When present it is the authoritative
+   * page set for the generated Astro workspace; the legacy structured fields
+   * remain the backwards-compatible single-page input.
+   */
+  pages?: NormalizedStaticSitePage[];
+}
+
+export interface NormalizedStaticSitePage {
+  path: string;
+  title: string;
+  headHtml?: string;
+  bodyAttributes?: Record<string, string>;
+  bodyHtml: string;
 }
 
 export const ASTRO_STATIC_SITE_PREVIEW_PORT = 4321;
@@ -86,10 +105,9 @@ export const astroStaticSiteAdapterDescriptor: Gnr8OutputAdapterDescriptor = {
   },
   supportedEditCategories: ["copy", "navigation", "theme", "layout", "sections", "cards", "contact", "assets"],
   limitations: [
-    "Skeleton adapter only; not wired into production generation, publishing, or deployment.",
-    "Single-page static business-site proof only.",
     "No ecommerce checkout, inventory, account, CMS, or application-state support.",
-    "No live pointer, DNS, provider, billing, dry-run, rollback, shadow-publish, or runtime artifact mutation.",
+    "Scripts and platform-specific theme/application state are rejected by the normal generation capability gate.",
+    "External-domain publication, DNS, provider, and billing operations remain outside this adapter.",
   ],
   mutationBoundary: {
     mutatesRuntimeArtifact: false,
@@ -129,19 +147,81 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
       role: "config",
       contents: createAstroConfig(),
     },
-    {
-      path: "src/pages/index.astro",
-      role: "source",
-      contents: createIndexAstro(input),
-    },
-    {
+  ];
+
+  const capturedPages = input.pages?.length ? normalizedCapturedPages(input.pages) : null;
+  const pages = capturedPages
+    ? capturedPages.map((page) => ({
+        path: sourcePathForRoute(page.path),
+        role: "source" as const,
+        contents: createCapturedPageAstro(page),
+      }))
+    : [{ path: "src/pages/index.astro", role: "source" as const, contents: createIndexAstro(input) }];
+  files.push(...pages);
+  if (!capturedPages) {
+    files.push({
       path: "public/styles/global.css",
       role: "style",
       contents: createGlobalCss(input.theme),
-    },
-  ];
+    });
+  }
 
   return { files };
+}
+
+function normalizedCapturedPages(pages: NormalizedStaticSitePage[]): NormalizedStaticSitePage[] {
+  const byPath = new Map<string, NormalizedStaticSitePage>();
+  for (const page of pages) {
+    const path = normalizeRoutePath(page.path);
+    if (byPath.has(path)) throw new Error(`duplicate_astro_route:${path}`);
+    if (/<script\b/i.test(page.bodyHtml)) throw new Error(`unsupported_astro_page_script:${path}`);
+    byPath.set(path, {
+      path,
+      title: page.title.trim() || "Untitled",
+      ...(page.headHtml?.trim() ? { headHtml: page.headHtml.trim() } : {}),
+      ...(page.bodyAttributes && Object.keys(page.bodyAttributes).length > 0
+        ? { bodyAttributes: { ...page.bodyAttributes } }
+        : {}),
+      bodyHtml: page.bodyHtml,
+    });
+  }
+  if (!byPath.has("/")) throw new Error("astro_root_route_required");
+  return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function normalizeRoutePath(value: string): string {
+  const withoutQuery = String(value ?? "").trim().split(/[?#]/, 1)[0] || "/";
+  const normalized = `/${withoutQuery.replace(/^\/+|\/+$/g, "")}`.replace(/\/{2,}/g, "/");
+  try {
+    return encodeGeneratedOutputRoutePath(normalized);
+  } catch {
+    throw new Error(`invalid_astro_route:${value}`);
+  }
+}
+
+function sourcePathForRoute(route: string): string {
+  return route === "/"
+    ? "src/pages/index.astro"
+    : `src/pages/${decodeGeneratedOutputRoutePathForFile(route)}/index.astro`;
+}
+
+function createCapturedPageAstro(page: NormalizedStaticSitePage): string {
+  const bodyAttributes = Object.entries(page.bodyAttributes ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => ` ${escapeAttribute(name)}="${escapeAttribute(value)}"`)
+    .join("");
+  return `<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(page.title)}</title>
+${page.headHtml ? `${page.headHtml}\n` : ""}
+  </head>
+  <body data-gnr8-source-route="${escapeAttribute(page.path)}"${bodyAttributes}>
+${page.bodyHtml}
+  </body>
+</html>
+`;
 }
 
 function createPackageJson(input: NormalizedStaticBusinessSiteContent): Record<string, unknown> {
@@ -177,6 +257,9 @@ function createIndexAstro(input: NormalizedStaticBusinessSiteContent): string {
   const sections = input.sections.map(renderSection).join("\n\n");
   const contactLinks = [
     input.contact.email ? `<a href="mailto:${escapeAttribute(input.contact.email)}">${escapeHtml(input.contact.email)}</a>` : null,
+    ...(input.contact.emails ?? [])
+      .filter((email) => email !== input.contact.email)
+      .map((email) => `<a href="mailto:${escapeAttribute(email)}">${escapeHtml(email)}</a>`),
     input.contact.phone ? `<a href="tel:${escapeAttribute(input.contact.phone)}">${escapeHtml(input.contact.phone)}</a>` : null,
     input.contact.address ? `<span>${escapeHtml(input.contact.address)}</span>` : null,
   ]
@@ -309,6 +392,18 @@ nav a {
   padding: clamp(56px, 8vw, 104px) clamp(20px, 6vw, 72px);
 }
 
+.contact > *,
+.contact address,
+.contact a,
+.contact span {
+  min-width: 0;
+}
+
+.contact a,
+.contact span {
+  overflow-wrap: anywhere;
+}
+
 .hero {
   max-width: 920px;
 }
@@ -398,9 +493,16 @@ footer {
 }
 
 @media (max-width: 720px) {
-  .site-header,
-  .contact {
+  .site-header {
     display: grid;
+  }
+
+  .contact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contact address {
+    width: 100%;
   }
 }
 `;

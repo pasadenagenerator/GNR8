@@ -55,6 +55,78 @@ test("valid dist exports a sorted hashed manifest and serves only emitted HTML a
   });
 });
 
+test("multipage export verifies the shared theme token in the stylesheet that contains it", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeValidDist(workspacePath, { stylesheetBody: "body{color:#123}" });
+    const distPath = join(workspacePath, "dist");
+    await mkdir(join(distPath, "about"), { recursive: true });
+    await writeFile(
+      join(distPath, "about", "index.html"),
+      '<!doctype html><html><head><link rel="stylesheet" href="/_astro/theme.css"></head><body>About</body></html>',
+    );
+    await writeFile(join(distPath, "_astro", "theme.css"), ":root{--gnr8-astro-accent:#0f766e;}");
+
+    const inspected = await inspectAstroStaticExport(workspacePath);
+
+    assert.deepEqual(inspected.stylesheetPaths, ["_astro/site.css", "_astro/theme.css"]);
+    assert.equal(inspected.themeStylesheetPath, "_astro/theme.css");
+  });
+});
+
+test("multipage export still rejects output when no referenced stylesheet contains the theme token", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeValidDist(workspacePath, { stylesheetBody: "body{color:#123}" });
+    await assertValidationError(inspectAstroStaticExport(workspacePath), "stylesheet_verification_failed");
+  });
+});
+
+test("source-backed export verifies exact captured stylesheet references without requiring a synthetic theme token", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const stylesheetHref = "/api/gnr8/runtime/preview-assets/site/version/assets/user-style.css";
+    await writeValidDist(workspacePath, { stylesheetHref, stylesheetBody: "body{color:#123}" });
+
+    const inspected = await inspectAstroStaticExport(workspacePath, {
+      expectedContent: ["<title>Northline Operations Proof</title>"],
+      expectedThemeToken: null,
+      expectedStylesheetReferences: [stylesheetHref],
+    });
+
+    assert.equal(inspected.themeStylesheetPath, null);
+    assert.equal(inspected.verifiedThemeToken, null);
+    assert.deepEqual(inspected.verifiedStylesheetReferences, [stylesheetHref]);
+  });
+});
+
+test("source-backed export treats HTML-entity serialization as the same stylesheet reference", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const serializedHref = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&display=swap&subset=latin-ext";
+    const capturedHref = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&amp;display=swap&amp;subset=latin-ext";
+    await writeValidDist(workspacePath, { stylesheetHref: serializedHref, stylesheetBody: "body{color:#123}" });
+
+    const inspected = await inspectAstroStaticExport(workspacePath, {
+      expectedContent: ["<title>Northline Operations Proof</title>"],
+      expectedThemeToken: null,
+      expectedStylesheetReferences: [capturedHref],
+    });
+
+    assert.deepEqual(inspected.verifiedStylesheetReferences, [serializedHref]);
+  });
+});
+
+test("source-backed export rejects a missing captured stylesheet reference", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeValidDist(workspacePath, { stylesheetBody: "body{color:#123}" });
+    await assertValidationError(
+      inspectAstroStaticExport(workspacePath, {
+        expectedContent: ["<title>Northline Operations Proof</title>"],
+        expectedThemeToken: null,
+        expectedStylesheetReferences: ["/api/gnr8/runtime/preview-assets/site/version/assets/missing.css"],
+      }),
+      "stylesheet_verification_failed",
+    );
+  });
+});
+
 test("export validation rejects missing or empty HTML and missing referenced assets", async () => {
   await withWorkspace(async (workspacePath) => {
     await mkdir(join(workspacePath, "dist"));
@@ -112,6 +184,39 @@ test("failed and timed-out builds remove only the prepared workspace", async (t)
   }
 });
 
+test("install and build commands disable Astro telemetry in ephemeral runtimes", async () => {
+  const workspacePath = "/tmp/owned-astro-build-export-telemetry";
+  const observedCommands: string[] = [];
+
+  await assert.rejects(
+    () =>
+      runAstroBuildExportProof({
+        dependencies: {
+          prepareWorkspace: async () => preparedWorkspace(workspacePath),
+          runCommand: async (_executable, args, options) => {
+            if (args[0] === "install") {
+              observedCommands.push("install");
+              assert.equal(options.env?.ASTRO_TELEMETRY_DISABLED, "1");
+              return { stdout: "installed", stderr: "" };
+            }
+            if (args[0] === "--version") return { stdout: "10.28.2\n", stderr: "" };
+            if (args[0] === "build") {
+              observedCommands.push("build");
+              assert.equal(options.env?.ASTRO_TELEMETRY_DISABLED, "1");
+              throw new Error("stop after environment assertion");
+            }
+            throw new Error(`unexpected command: ${args.join(" ")}`);
+          },
+          readFile: async () => JSON.stringify({ version: "5.18.2" }),
+          removeWorkspace: async () => undefined,
+        },
+      }),
+    (error: unknown) => error instanceof AstroBuildExportProofError && error.code === "build_failed",
+  );
+
+  assert.deepEqual(observedCommands, ["install", "build"]);
+});
+
 async function writeValidDist(
   workspacePath: string,
   options: { stylesheetHref?: string; stylesheetBody?: string } = {},
@@ -152,6 +257,7 @@ function preparedWorkspace(workspacePath: string): PreparedAstroStaticSiteWorksp
     adapterId: "astro-static-site",
     workspacePath,
     baselineCommit: "0123456789012345678901234567890123456789",
+    baselineKind: "git-commit",
     sourceSnapshot: {
       version: "gnr8-astro-source-snapshot:v1",
       files: [{ path: "package.json", bytes: 2, sha256: "a".repeat(64) }],

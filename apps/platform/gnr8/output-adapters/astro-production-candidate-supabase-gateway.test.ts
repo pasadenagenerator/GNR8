@@ -25,12 +25,21 @@ import {
 } from "./astro-production-candidate-repository";
 import {
   ASTRO_CANDIDATE_ACCESS_CHANGE_RPC,
+  ASTRO_CANDIDATE_OBJECT_REGISTRATION_RPC,
   ASTRO_CANDIDATE_METADATA_LIST_RPC,
   ASTRO_CANDIDATE_REGISTRATION_RPC,
   ASTRO_CANDIDATE_SCOPED_READ_RPC,
   SupabaseAstroProductionCandidateGateway,
   type AstroCandidateRpcClient,
 } from "./astro-production-candidate-supabase-gateway";
+import {
+  computeAstroObjectBackedRegistrationIntentSha256,
+  prepareAstroObjectBackedCandidateRecord,
+  serializeAstroObjectBackedCandidateRecord,
+  serializeAstroObjectBackedRegistrationIntent,
+  serializeAstroObjectBackedUnsignedRecord,
+  type AstroPersistedCandidateRecord,
+} from "./astro-production-candidate-object-record";
 import {
   computeAstroInternalPreviewCandidateContentSha256,
 } from "./astro-static-site-internal-preview-bridge";
@@ -69,6 +78,59 @@ test("registration maps exact RPC arguments and canonical serializers", async ()
       p_payload_size_bytes: measureAstroProductionCandidateRecordBytes(record),
     },
   }]);
+});
+
+test("multi-page v3 registration sends only the compact verified object manifest", async () => {
+  const candidate = createSyntheticAstroInternalPreviewCandidate({
+    candidateId: CANDIDATE_ID,
+    siteId: OWNERSHIP.runtimeSiteId,
+    siteVersionId: OWNERSHIP.siteVersionId,
+  });
+  candidate.htmlByPath = {
+    "/": "<!doctype html><html><body>Home</body></html>",
+    "/about": "<!doctype html><html><body>About</body></html>",
+  };
+  candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(candidate);
+  candidate.manifest.provenance.convertedArtifactSha256 = candidate.contentSha256;
+  const prepared = prepareAstroObjectBackedCandidateRecord({
+    candidate,
+    ownership: OWNERSHIP,
+    registration: {
+      registeredByActorId: "actor:mvp14",
+      producerKind: "source_backed_astro_generation",
+      producerVersion: "source_backed_astro_generation:v1",
+      producerRef: "capture:v3",
+      idempotencyKey: "idem:v3",
+      correlationId: "correlation:v3",
+    },
+    storedAt: "2026-10-12T10:00:00.000Z",
+    bucket: "astro-candidates-private",
+  });
+  const fake = new FakeRpcClient(async (_name, args) => ({
+    data: createResponse("created", JSON.parse(String(args.p_record_canonical_text))),
+    error: null,
+  }));
+  const gateway = new SupabaseAstroProductionCandidateGateway(() => fake);
+  await gateway.atomicCreate({
+    proposedRecord: prepared.record,
+    registrationIntentSha256: computeAstroObjectBackedRegistrationIntentSha256(prepared.record),
+    payloadSizeBytes: prepared.measurements.registryRecordUtf8Bytes,
+    resolvedPayloadSizeBytes: prepared.measurements.resolvedCandidateUtf8Bytes,
+    objectPayloadSizeBytes: prepared.measurements.objectPayloadUtf8Bytes,
+  });
+  assert.deepEqual(fake.calls, [{
+    name: ASTRO_CANDIDATE_OBJECT_REGISTRATION_RPC,
+    args: {
+      p_record_canonical_text: serializeAstroObjectBackedCandidateRecord(prepared.record),
+      p_unsigned_record_canonical_text: serializeAstroObjectBackedUnsignedRecord(prepared.record),
+      p_registration_intent_canonical_text: serializeAstroObjectBackedRegistrationIntent(prepared.record),
+      p_registration_intent_sha256: computeAstroObjectBackedRegistrationIntentSha256(prepared.record),
+      p_payload_size_bytes: prepared.measurements.registryRecordUtf8Bytes,
+      p_resolved_payload_size_bytes: prepared.measurements.resolvedCandidateUtf8Bytes,
+      p_object_payload_size_bytes: prepared.measurements.objectPayloadUtf8Bytes,
+    },
+  }]);
+  assert.equal(JSON.stringify(fake.calls[0]?.args).includes("htmlByPath"), false);
 });
 
 test("identical retry preserves the database winner's storedAt and immutable bytes", async () => {
@@ -367,6 +429,8 @@ function createGatewayInput(record: AstroProductionCandidateRecord) {
       registrationIntentFromRecord(record),
     ),
     payloadSizeBytes: measureAstroProductionCandidateRecordBytes(record),
+    resolvedPayloadSizeBytes: measureAstroProductionCandidateRecordBytes(record),
+    objectPayloadSizeBytes: 0,
   };
 }
 
@@ -386,7 +450,7 @@ function accessState(
   };
 }
 
-function registrationEvent(record: AstroProductionCandidateRecord) {
+function registrationEvent(record: AstroPersistedCandidateRecord) {
   return {
     candidateId: record.identity.candidateId,
     eventIndex: 1,
@@ -399,7 +463,7 @@ function registrationEvent(record: AstroProductionCandidateRecord) {
   };
 }
 
-function createResponse(status: "created" | "idempotent", record: AstroProductionCandidateRecord) {
+function createResponse(status: "created" | "idempotent", record: AstroPersistedCandidateRecord) {
   return {
     status,
     record,

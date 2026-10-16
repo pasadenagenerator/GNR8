@@ -19,8 +19,9 @@ import {
 } from "./astro-production-candidate-preview-feature-gate";
 import type {
   AstroProductionCandidateOwnership,
-  AstroProductionCandidateRecord,
 } from "./astro-production-candidate-record";
+import type { AstroResolvedCandidateRecord } from "./astro-production-candidate-object-record";
+import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
 
 export type AstroProductionCandidatePreviewRenderResult = {
   html: string;
@@ -37,9 +38,9 @@ export type AstroProductionCandidatePreviewDependencies = {
   readCandidate(input: {
     candidateId: string;
     trustedScope: AstroProductionCandidateOwnership;
-  }): Promise<AstroProductionCandidateRecord>;
+  }): Promise<AstroResolvedCandidateRecord>;
   renderCandidate(input: {
-    record: AstroProductionCandidateRecord;
+    record: AstroResolvedCandidateRecord;
     path: string;
   }): Promise<AstroProductionCandidatePreviewRenderResult>;
 };
@@ -56,6 +57,9 @@ export function createAstroProductionCandidatePreviewDependencies(): AstroProduc
   const resolver = new SupabaseAstroCandidateOwnershipResolver(() => readClient);
   const repository = new GatewayBackedAstroProductionCandidateRepository({
     gateway: new SupabaseAstroProductionCandidateGateway(() => readClient),
+    objectStore: new SupabaseAstroCandidateObjectStore({
+      getClient: () => readClient as never,
+    }),
   });
 
   return {
@@ -66,7 +70,7 @@ export function createAstroProductionCandidatePreviewDependencies(): AstroProduc
 }
 
 export async function renderAstroProductionCandidatePreview(input: {
-  record: AstroProductionCandidateRecord;
+  record: AstroResolvedCandidateRecord;
   path: string;
 }): Promise<AstroProductionCandidatePreviewRenderResult> {
   const { record } = input;
@@ -78,7 +82,9 @@ export async function renderAstroProductionCandidatePreview(input: {
       candidateId: record.identity.candidateId,
       siteId: record.identity.runtimeSiteId,
     },
-    astroCandidateContract: "production_v2",
+    astroCandidateContract: record.schemaVersion === "gnr8-astro-persisted-preview-candidate:v3"
+      ? "production_v3"
+      : "production_v2",
     astroCandidateLoader: async (candidateId) => (
       candidateId === record.identity.candidateId ? record.candidate : null
     ),

@@ -28,6 +28,31 @@ test('invalid redesign strategy falls back deterministically', () => {
   assert.equal(resolved.fallbackApplied, true)
 })
 
+test('Astro generation resolves the current validated raw-capture lineage instead of route-count lookalikes', () => {
+  assert.deepEqual(
+    __siteActionTestUtils.resolveCurrentCaptureLineageRef({
+      currentMultiPagePreviewValidation: {
+        sourceIdentity: {
+          siteVersionId: '0f032ddf-967c-4dd7-89f7-ee67c7c0336d',
+          rawArtifactId: 'b5d83d99-ee0d-43b5-bc74-2486c8216d78',
+          snapshotRunId: 'client-site-import-1791888642617-25056d3c',
+        },
+      },
+      historicalValidation: {
+        sourceIdentity: {
+          siteVersionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          rawArtifactId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      },
+    }),
+    {
+      siteVersionId: '0f032ddf-967c-4dd7-89f7-ee67c7c0336d',
+      rawArtifactId: 'b5d83d99-ee0d-43b5-bc74-2486c8216d78',
+    },
+  )
+  assert.equal(__siteActionTestUtils.resolveCurrentCaptureLineageRef({ routeCount: 36 }), null)
+})
+
 test('RBAC enforcement denies member and allows admin for site actions', () => {
   assert.equal(__siteActionTestUtils.isRoleAuthorizedForSiteAction('member', 'rerun_transformation'), false)
   assert.equal(__siteActionTestUtils.isRoleAuthorizedForSiteAction('member', 'publish_site'), false)

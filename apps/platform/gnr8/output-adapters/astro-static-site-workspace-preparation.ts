@@ -65,6 +65,7 @@ export interface PreparedAstroStaticSiteWorkspace {
   adapterId: "astro-static-site";
   workspacePath: string;
   baselineCommit: string;
+  baselineKind: "git-commit" | "source-snapshot";
   sourceSnapshot: AstroSourceSnapshot;
   snapshotInclusionRules: readonly string[];
   futureStepMetadata: {
@@ -99,20 +100,13 @@ export async function prepareAstroStaticSiteWorkspace(
   try {
     createdWorkspacePath = await createFreshWorkspace(input);
     await materializeManifest(createdWorkspacePath, manifest, sourcePaths);
-    await initializeGitBaseline(createdWorkspacePath, sourcePaths);
-
     const sourceSnapshot = await readAstroStaticSiteSourceSnapshot({
       workspacePath: createdWorkspacePath,
       sourcePaths,
     });
-    const baselineCommit = await runGit(createdWorkspacePath, ["rev-parse", "--verify", "HEAD"]);
-    const status = await runGit(createdWorkspacePath, ["status", "--porcelain=v1", "--untracked-files=all"]);
-    if (status.length > 0) {
-      throw new AstroWorkspacePreparationError(
-        "git_operation_failed",
-        "Astro proof workspace baseline is not clean after the baseline commit.",
-      );
-    }
+    const gitBaselineCommit = await initializeGitBaseline(createdWorkspacePath, sourcePaths);
+    const baselineCommit = gitBaselineCommit ?? sourceSnapshot.aggregateSha256;
+    const baselineKind = gitBaselineCommit ? "git-commit" : "source-snapshot";
 
     const devCommand = astroStaticSiteAdapterDescriptor.devCommand;
     const buildCommand = astroStaticSiteAdapterDescriptor.buildCommand;
@@ -127,6 +121,7 @@ export async function prepareAstroStaticSiteWorkspace(
       adapterId: "astro-static-site",
       workspacePath: createdWorkspacePath,
       baselineCommit,
+      baselineKind,
       sourceSnapshot,
       snapshotInclusionRules: [
         "Only files emitted by createAstroStaticSiteProjectManifest are included.",
@@ -406,8 +401,13 @@ function isInsideOrEqual(root: string, candidate: string): boolean {
   return relativePath === "" || (!relativePath.startsWith(`..${sep}`) && relativePath !== ".." && !isAbsolute(relativePath));
 }
 
-async function initializeGitBaseline(workspacePath: string, sourcePaths: string[]): Promise<void> {
-  await runGit(workspacePath, ["init", "--initial-branch=main"]);
+async function initializeGitBaseline(workspacePath: string, sourcePaths: string[]): Promise<string | null> {
+  try {
+    await runGit(workspacePath, ["init", "--initial-branch=main"]);
+  } catch (error) {
+    if (isMissingGitExecutable(error)) return null;
+    throw error;
+  }
   await runGit(workspacePath, ["config", "--local", "user.name", "GNR8 Astro Workspace Proof"]);
   await runGit(workspacePath, ["config", "--local", "user.email", "astro-workspace-proof@gnr8.local"]);
   await runGit(workspacePath, ["config", "--local", "core.hooksPath", devNull]);
@@ -415,6 +415,24 @@ async function initializeGitBaseline(workspacePath: string, sourcePaths: string[
   await runGit(workspacePath, ["config", "--local", "tag.gpgSign", "false"]);
   await runGit(workspacePath, ["add", "--", ...sourcePaths]);
   await runGit(workspacePath, ["commit", "--no-verify", "--no-gpg-sign", "-m", "GNR8 Astro source baseline"]);
+  const baselineCommit = await runGit(workspacePath, ["rev-parse", "--verify", "HEAD"]);
+  const status = await runGit(workspacePath, ["status", "--porcelain=v1", "--untracked-files=all"]);
+  if (status.length > 0) {
+    throw new AstroWorkspacePreparationError(
+      "git_operation_failed",
+      "Astro proof workspace baseline is not clean after the baseline commit.",
+    );
+  }
+  return baselineCommit;
+}
+
+function isMissingGitExecutable(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    if ("code" in current && current.code === "ENOENT") return true;
+    current = "cause" in current ? current.cause : null;
+  }
+  return false;
 }
 
 async function runGit(workspacePath: string, args: string[]): Promise<string> {

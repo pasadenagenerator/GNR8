@@ -13,6 +13,7 @@ import {
 } from '@/gnr8/site/scoped-import-pipeline'
 import { buildRenderedHtmlHash } from '@/gnr8/architecture/evidence-capture-expansion'
 import { __runtimeStoreTestUtils } from '@/gnr8/runtime/runtime-store'
+import { computeRuntimeArtifactBundleSha256 } from '@/gnr8/runtime/astro-artifact-materialization'
 import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 
@@ -1845,6 +1846,7 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
     let persistedImportSummary: any = null
     let linkedArtifactId: string | null = null
     let artifactManifest: any = null
+    let artifactCreateInput: any = null
 
     await runScopedImportPipeline({
       snapshot: {
@@ -1941,6 +1943,7 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
             manifest: {},
           }) as any,
         createArtifact: async (input) => {
+          artifactCreateInput = input
           artifactManifest = input.manifest
           return { artifactId: 'artifact-viroidoc-priority' }
         },
@@ -1986,6 +1989,12 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
     assert.equal(artifactManifest?.latestRawPreviewValidationEvidence?.siteVersionId, 'site-version-viroidoc-priority')
     assert.equal(artifactManifest?.latestRawPreviewValidationEvidence?.artifactId, 'raw-artifact-viroidoc-priority')
     assert.equal(artifactManifest?.multiPagePreviewValidation?.summary.rewrittenLinks > 0, true)
+    assert.equal(artifactCreateInput.bundleSha256, computeRuntimeArtifactBundleSha256({
+      htmlByPath: artifactCreateInput.htmlByPath,
+      compiledTokenStyles: artifactCreateInput.compiledTokenStyles,
+      assetFingerprintMap: artifactCreateInput.assetFingerprintMap,
+      manifest: artifactCreateInput.manifest,
+    }))
     for (const routePath of ['/', '/project', '/people', '/news']) {
       const evidence = artifactManifest.latestRawPreviewValidationEvidence.routeEvidence.find((entry: any) => entry.routePath === routePath)
       assert.equal(evidence?.validationStatus, 'valid', `${routePath} should have raw validation evidence`)

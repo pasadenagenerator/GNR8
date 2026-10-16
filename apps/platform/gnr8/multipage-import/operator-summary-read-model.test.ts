@@ -532,6 +532,60 @@ test('multi-page operator summary respects ready preview validation payloads', (
   assert.equal(summary.validation.blockers, 0)
 })
 
+test('multi-page operator summary does not present validation from another capture even when route counts match', () => {
+  const currentProvenance = {
+    ...provenance({
+      routeCandidates: ['/about'],
+      routeMap: [
+        { routePath: '/about', sourceUrl: 'https://example.com/about', finalUrl: 'https://example.com/about', rawFilePath: 'multipage/about.html' },
+      ],
+    }),
+    executionIdentity: {
+      snapshotId: 'snapshot-1',
+      snapshotRunId: 'capture-october-13',
+    },
+  }
+  const validation = {
+    sourceIdentity: {
+      siteVersionId: 'site-version-1',
+      rawArtifactId: 'raw-artifact-1',
+      snapshotRunId: 'capture-october-7',
+    },
+    status: 'ready',
+    summary: {
+      discoveredRoutes: 1,
+      fetchedPages: 1,
+      assembledPages: 1,
+      validPreviewRoutes: 1,
+      missingPreviewRoutes: 0,
+      rewrittenLinks: 9,
+      skippedLinks: 0,
+    },
+    routes: [],
+    links: [],
+    warnings: [],
+    blockers: [],
+    diagnostics: ['MULTIPAGE_PREVIEW_VALIDATION_READY'],
+  }
+
+  const stale = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: currentProvenance,
+    previewValidation: validation,
+  })
+  assert.equal(stale.validation.rewrittenLinks, null)
+  assert.equal(stale.validation.rewrittenLinksEvidenceSource, 'not_captured')
+
+  const current = buildMultiPageImportOperatorSummary({
+    importProvenanceSummary: currentProvenance,
+    previewValidation: {
+      ...validation,
+      sourceIdentity: { ...validation.sourceIdentity, snapshotRunId: 'capture-october-13' },
+    },
+  })
+  assert.equal(current.validation.rewrittenLinks, 9)
+  assert.equal(current.validation.rewrittenLinksEvidenceSource, 'preview_validation')
+})
+
 test('multi-page operator summary displays validation status and accurate warning/blocker counts', () => {
   const summary = buildMultiPageImportOperatorSummary({
     importProvenanceSummary: provenance({ routeCandidates: ['/', '/about'] }),

@@ -20,6 +20,7 @@ export type LayoutGraph = {
 
 export type LayoutNodeHint = {
   id: string;
+  tagName: string;
   type: LayoutNode["type"];
   depth: number;
   domIndexStart: number;

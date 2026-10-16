@@ -43,6 +43,7 @@ test('enabled multi-page import sends expected default payload', () => {
     limits: DEFAULT_MULTI_PAGE_IMPORT_DISCOVERY_LIMITS,
     htmlAcquisitionLimits: DEFAULT_MULTI_PAGE_IMPORT_HTML_ACQUISITION_LIMITS,
   })
+  assert.equal(payload.multiPageDiscovery?.htmlAcquisitionLimits.maxPages, 31)
 })
 
 test('edited multi-page import limits are respected', () => {

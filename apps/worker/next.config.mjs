@@ -4,7 +4,7 @@ const nextConfig = {
     tsconfigPath: './tsconfig.build.json',
   },
   output: 'standalone',
-  serverExternalPackages: ['pg', 'playwright', 'playwright-core', '@sparticuz/chromium'],
+  serverExternalPackages: ['pg', 'playwright', 'playwright-core', '@sparticuz/chromium', 'pnpm'],
   webpack(config, { isServer }) {
     if (isServer) {
       const externalPackages = new Set(['playwright', 'playwright-core', '@sparticuz/chromium'])
@@ -36,6 +36,9 @@ const nextConfig = {
       '../platform/**/fixtures/**',
       '../platform/.next/cache/**',
     ],
+  },
+  outputFileTracingIncludes: {
+    '/api/inngest': ['./node_modules/pnpm/**'],
   },
 }
 

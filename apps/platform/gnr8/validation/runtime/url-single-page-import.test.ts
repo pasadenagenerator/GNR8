@@ -6,7 +6,17 @@ import test from "node:test";
 
 import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture-worker";
 import { parseRenderedCaptureWorkerRequestDetailed } from "@/gnr8/import-rendered-capture-worker/worker-service";
-import { importPublicSinglePageUrlToSnapshot } from "@/gnr8/validation/runtime/url-single-page-import";
+import {
+  captureAssetsForAdditionalHtmlPages,
+  computeLocalPathCandidate,
+  importPublicSinglePageUrlToSnapshot,
+} from "@/gnr8/validation/runtime/url-single-page-import";
+
+function validWoff2Fixture(): Uint8Array {
+  const bytes = new Uint8Array(48);
+  bytes.set(new TextEncoder().encode("wOF2"), 0);
+  return bytes;
+}
 
 function unsupportedWorkerClient(): RenderedCaptureWorkerClient {
   return {
@@ -57,6 +67,198 @@ function makeHtmlResponse(html: string): Response {
     },
   });
 }
+
+test("additional child-page asset capture persists responsive and lazy images, deduplicates shared assets, and reports failures", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-page-assets-"));
+  const existingCdnFontPath = "assets/style_asset/existing-cdn-font.woff2";
+  fs.mkdirSync(path.resolve(root, path.dirname(existingCdnFontPath)), { recursive: true });
+  fs.writeFileSync(path.resolve(root, existingCdnFontPath), new Uint8Array([9, 8, 7, 6]));
+  const fetchCounts = new Map<string, number>();
+  const fetchImpl = async (request: string | URL | Request): Promise<Response> => {
+    const url = String(request instanceof Request ? request.url : request);
+    fetchCounts.set(url, (fetchCounts.get(url) ?? 0) + 1);
+    if (url.endsWith("/assets/child.css")) {
+      return new Response(".hero{background:url('/fonts/child.woff2')}", { status: 200, headers: { "content-type": "text/css" } });
+    }
+    if (url.endsWith("/uploads/missing.webp")) {
+      return new Response("missing", { status: 404, headers: { "content-type": "text/plain" } });
+    }
+    if (/\.(?:webp|png|woff2)$/.test(new URL(url).pathname)) {
+      return new Response(url.endsWith("woff2") ? validWoff2Fixture() : new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { "content-type": url.endsWith("woff2") ? "font/woff2" : "image/webp" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    fetchImpl,
+    pages: [
+      {
+        pageUrl: "https://example.com/about",
+        bodyPath: path.resolve(root, "about.html"),
+        html: [
+          "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/child.css\"><style>@font-face{src:url('https://www.example.com/fonts/inline.woff2'),url('https://assets.example-cdn.test/fonts/existing.woff2'),url('https://assets.example-cdn.test/fonts/child-only.woff2'),url('https://untrusted.example.net/fonts/blocked.woff2')}</style></head><body>",
+          "<img src=\"/uploads/child.webp\" srcset=\"/uploads/child-small.webp 480w, /uploads/shared.webp 960w\" data-src=\"/uploads/lazy.webp\">",
+          "<div style=\"background-image:url('/uploads/inline.webp')\"></div>",
+          "</body></html>",
+        ].join(""),
+      },
+      {
+        pageUrl: "https://www.example.com/contact",
+        bodyPath: path.resolve(root, "contact.html"),
+        html: "<!doctype html><html><body><img src=\"https://www.example.com/uploads/shared.webp\"><img data-lazy-src=\"/uploads/missing.webp\"></body></html>",
+      },
+    ],
+    existingFetchManifest: [{
+      tag: "link",
+      attribute: "href",
+      occurrence: 0,
+      rawRef: "https://assets.example-cdn.test/fonts/existing.woff2",
+      resolvedUrl: "https://assets.example-cdn.test/fonts/existing.woff2",
+      localPath: existingCdnFontPath,
+      assetKind: "style_asset",
+      fetchStatus: "fetched",
+      httpStatus: 200,
+      contentType: "font/woff2",
+      byteLength: 4,
+    }],
+  });
+
+  assert.equal(fetchCounts.get("https://example.com/uploads/shared.webp"), 1);
+  assert.equal(result.summary.failedRequiredAssetCount, 1);
+  assert.deepEqual(result.summary.failedRequiredResources, ["https://www.example.com/uploads/missing.webp"]);
+  assert.ok(result.summary.deduplicatedReferenceCount >= 1);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/child.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/child-small.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/lazy.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/shared.webp")), true);
+  assert.equal(fs.existsSync(path.resolve(root, "uploads/inline.webp")), true);
+  assert.doesNotMatch(result.pages[0]!.html, /https:\/\/www\.example\.com\/fonts\/inline\.woff2/);
+  assert.doesNotMatch(result.pages[0]!.html, /https:\/\/assets\.example-cdn\.test\/fonts\/(?:existing|child-only)\.woff2/);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/assets\/style_asset\/existing-cdn-font\.woff2/);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/assets\/style_asset\/[^"')]+-child-only\.woff2/);
+  assert.match(result.pages[0]!.html, /https:\/\/untrusted\.example\.net\/fonts\/blocked\.woff2/);
+  assert.equal(fetchCounts.has("https://assets.example-cdn.test/fonts/existing.woff2"), false);
+  assert.equal(fetchCounts.get("https://assets.example-cdn.test/fonts/child-only.woff2"), 1);
+  assert.equal(fetchCounts.has("https://untrusted.example.net/fonts/blocked.woff2"), false);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/assets\/style_asset\/[^"')]+-inline\.woff2/);
+  assert.match(result.pages[0]!.html, /url\(['"]?\/uploads\/inline\.webp/);
+  assert.equal(result.manifestEntries.some((entry) => entry.attribute === "srcset" && entry.fetchStatus === "fetched"), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-src" && entry.fetchStatus === "fetched"), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.attribute === "data-lazy-src" && entry.fetchStatus === "fetch_failed"), true);
+  const stylesheetEntry = result.manifestEntries.find((entry) => entry.assetKind === "stylesheet" && entry.fetchStatus === "fetched");
+  assert.ok(stylesheetEntry?.localPath);
+  const stylesheet = fs.readFileSync(path.resolve(root, stylesheetEntry!.localPath!), "utf8");
+  assert.match(stylesheet, /style_asset/);
+  assert.equal([...fetchCounts.keys()].some((url) => url.endsWith("/fonts/child.woff2")), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.assetKind === "style_asset" && entry.fetchStatus === "fetched"), true);
+});
+
+test("additional asset capture follows bounded trusted stylesheet imports and font URLs", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-css-import-assets-"));
+  const fetched: string[] = [];
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    trustedExternalOrigins: ["https://cdn.example.test", "https://fonts.example.test"],
+    pages: [{
+      pageUrl: "https://example.com/",
+      bodyPath: path.join(root, "index.html"),
+      html: '<!doctype html><html><head><link rel="stylesheet" href="https://cdn.example.test/theme.css"></head><body></body></html>',
+    }],
+    fetchImpl: async (request) => {
+      const url = String(request instanceof Request ? request.url : request);
+      fetched.push(url);
+      if (url === "https://cdn.example.test/theme.css") {
+        return new Response("@import url('https://fonts.example.test/font.css') screen;", { status: 200, headers: { "content-type": "text/css" } });
+      }
+      if (url === "https://fonts.example.test/font.css") {
+        return new Response("@font-face{font-family:Exact;src:url('./exact.woff2') format('woff2')}", { status: 200, headers: { "content-type": "text/css" } });
+      }
+      if (url === "https://fonts.example.test/exact.woff2") {
+        return new Response(validWoff2Fixture(), { status: 200, headers: { "content-type": "font/woff2" } });
+      }
+      return new Response("missing", { status: 404 });
+    },
+  });
+
+  assert.equal(result.summary.failedRequiredAssetCount, 0);
+  assert.deepEqual(fetched, [
+    "https://cdn.example.test/theme.css",
+    "https://fonts.example.test/font.css",
+    "https://fonts.example.test/exact.woff2",
+  ]);
+  assert.equal(result.manifestEntries.some((entry) => entry.resolvedUrl === "https://fonts.example.test/font.css" && entry.fetchStatus === "fetched"), true);
+  assert.equal(result.manifestEntries.some((entry) => entry.resolvedUrl === "https://fonts.example.test/exact.woff2" && entry.fetchStatus === "fetched"), true);
+  const theme = result.manifestEntries.find((entry) => entry.resolvedUrl === "https://cdn.example.test/theme.css");
+  const fontCss = result.manifestEntries.find((entry) => entry.resolvedUrl === "https://fonts.example.test/font.css");
+  assert.ok(theme?.localPath && fontCss?.localPath);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, theme!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, fontCss!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
+});
+
+test("additional asset capture rejects invalid TTF bytes and retains a valid sfnt font", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-font-validation-"));
+  const validTtf = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    trustedExternalOrigins: ["https://font-files.example.test"],
+    pages: [{
+      pageUrl: "https://example.com/",
+      bodyPath: path.join(root, "index.html"),
+      html: '<style>@font-face{font-family:Valid;src:url("https://font-files.example.test/valid.ttf")}@font-face{font-family:Invalid;src:url("https://font-files.example.test/invalid.ttf")}</style>',
+    }],
+    fetchImpl: async (request) => {
+      const url = String(request instanceof Request ? request.url : request);
+      return new Response(url.endsWith("/valid.ttf") ? validTtf : new TextEncoder().encode("not-a-font-file"), {
+        status: 200,
+        headers: { "content-type": "font/ttf" },
+      });
+    },
+  });
+
+  assert.deepEqual(result.summary.failedRequiredResources, ["https://font-files.example.test/invalid.ttf"]);
+  const validPath = computeLocalPathCandidate({
+    resolvedUrl: "https://font-files.example.test/valid.ttf",
+    assetKind: "style_asset",
+  });
+  const invalidPath = computeLocalPathCandidate({
+    resolvedUrl: "https://font-files.example.test/invalid.ttf",
+    assetKind: "style_asset",
+  });
+  assert.equal(fs.existsSync(path.join(root, validPath)), true);
+  assert.equal(fs.existsSync(path.join(root, invalidPath)), false);
+});
+
+test("additional asset capture skips only exact CSS dependencies proven unused by retained HTML", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-unused-css-assets-"));
+  const fetched: string[] = [];
+  const result = await captureAssetsForAdditionalHtmlPages({
+    snapshotRootDirAbs: root,
+    pages: [{
+      pageUrl: "https://example.com/",
+      bodyPath: path.join(root, "index.html"),
+      html: '<link rel="stylesheet" href="https://example.com/theme.css"><main class="hero"></main>',
+    }],
+    knownUnusedStylesheetDependencyUrls: ["https://example.com/images/unused.png"],
+    fetchImpl: async (request) => {
+      const url = String(request instanceof Request ? request.url : request);
+      fetched.push(url);
+      if (url === "https://example.com/theme.css") {
+        return new Response(".unused{background:url('./images/unused.png')}.hero{background:url('./images/required.png')}", {
+          status: 200,
+          headers: { "content-type": "text/css" },
+        });
+      }
+      if (url === "https://example.com/images/required.png") {
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/png" } });
+      }
+      return new Response("missing", { status: 404 });
+    },
+  });
+
+  assert.equal(result.summary.failedRequiredAssetCount, 0);
+  assert.deepEqual(fetched, ["https://example.com/theme.css", "https://example.com/images/required.png"]);
+});
 
 function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
   return {
@@ -516,6 +718,11 @@ test("url import fetches CSS url() upload image assets from style blocks and inl
   assert.ok(persistedUrlTargets.has(overlayUrl));
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "uploads/KcGdxACT/hero-01.jpg")));
   assert.ok(fs.existsSync(path.resolve(snapshot.snapshotRootDirAbs, "uploads/QBSeVQys/overlay.png")));
+  const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
+  assert.equal(writtenHtml.includes(heroUrl), false);
+  assert.equal(writtenHtml.includes(overlayUrl), false);
+  assert.match(writtenHtml, /url\(['"]?\/uploads\/KcGdxACT\/hero-01\.jpg/);
+  assert.match(writtenHtml, /url\(['"]?\/uploads\/QBSeVQys\/overlay\.png/);
 });
 
 test("url import accepts worker partial success as degraded usable rendered truth", async () => {
@@ -1200,9 +1407,9 @@ test("gallery data-req JSON payload double-prefixed preview-assets URL is normal
   assert.equal(writtenHtml.includes("/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/gallery/roboplast-gallery-3.jpg"), true);
 });
 
-test("background inline style image URLs remain unchanged by preview image rewrite", async () => {
-  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-background-inline-style-unchanged-"));
-  const backgroundUrl = "/uploads/gallery/background-image.jpg";
+test("background inline style image URLs use the retained root-relative asset path", async () => {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-background-inline-style-retained-"));
+  const backgroundUrl = "https://www.roboplast.si/uploads/gallery/background-image.jpg";
   const html = `<!doctype html><html><body><main><div style="background-image:url('${backgroundUrl}')"></div></main></body></html>`;
   const snapshot = await importPublicSinglePageUrlToSnapshot({
     sourceUrl: "https://www.roboplast.si/",
@@ -1213,7 +1420,8 @@ test("background inline style image URLs remain unchanged by preview image rewri
     fetchImpl: async () => makeHtmlResponse(html),
   });
   const writtenHtml = await fs.promises.readFile(snapshot.entryHtmlPathAbs, "utf8");
-  assert.equal(writtenHtml.includes(`background-image:url('${backgroundUrl}')`), true);
+  assert.equal(writtenHtml.includes(backgroundUrl), false);
+  assert.equal(writtenHtml.includes("background-image:url('/uploads/gallery/background-image.jpg')"), true);
   assert.equal(writtenHtml.includes("/api/gnr8/runtime/preview-assets/site_1/sv_1/uploads/gallery/background-image.jpg"), false);
 });
 

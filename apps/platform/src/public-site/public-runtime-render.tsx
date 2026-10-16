@@ -6,7 +6,21 @@ import {
   resolveRuntimeSiteForHost,
   type PublicRuntimeArtifactMissReasonCode,
 } from "@/gnr8/runtime/runtime-store";
+import { readAstroRuntimeArtifactPromotionEvidence } from "@/gnr8/runtime/astro-artifact-materialization";
+import { materializeAstroInternalPreviewHtml } from "@/gnr8/output-adapters/astro-static-site-internal-preview-bridge";
+import {
+  validateAstroObjectBackedCandidateRecord,
+  type AstroObjectBackedCandidateRecord,
+} from "@/gnr8/output-adapters/astro-production-candidate-object-record";
+import {
+  readVerifiedAstroCandidateSharedStyles,
+  readVerifiedAstroCandidateRouteHtml,
+  SupabaseAstroCandidateObjectStore,
+} from "@/gnr8/output-adapters/astro-production-candidate-object-store";
+import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 import { persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-logger";
+import type { RuntimeArtifact } from "@/gnr8/runtime/types";
+import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 import { applyContentOverridesToRawHtml } from "@/src/public-site/content-override-runtime";
 import { injectRuntimeDebugPanel, rewriteRawTemplateHtmlForRuntimeWithDiagnostics } from "@/src/public-site/raw-template-runtime";
 
@@ -132,6 +146,46 @@ function htmlResponse(input: { html: string; status?: number }): Response {
   });
 }
 
+async function materializePublicArtifactHtml(input: {
+  artifact: RuntimeArtifact;
+  html: string;
+  resolvedPath: string;
+}): Promise<string> {
+  const promotion = readAstroRuntimeArtifactPromotionEvidence(input.artifact.manifest);
+  if (!promotion) return input.html;
+  const storedObjectRecord = input.artifact.manifest.astroCandidateObjectRecord;
+  let html = input.html;
+  let compiledTokenStyles = input.artifact.compiledTokenStyles;
+  if (storedObjectRecord !== undefined) {
+    const record = validateAstroObjectBackedCandidateRecord(storedObjectRecord);
+    const persistedStyles = record.candidate.compiledTokenStyles;
+    const artifactStylesBytes = Buffer.from(input.artifact.compiledTokenStyles, "utf8");
+    if (
+      record.identity.runtimeSiteId !== input.artifact.siteId ||
+      record.identity.siteVersionId !== input.artifact.siteVersionId ||
+      record.candidate.contentSha256 !== promotion.candidateContentSha256 ||
+      record.storageSha256 !== promotion.candidateStorageSha256 ||
+      (typeof persistedStyles === "string"
+        ? persistedStyles !== input.artifact.compiledTokenStyles
+        : persistedStyles.sizeBytes !== artifactStylesBytes.byteLength ||
+          persistedStyles.sha256 !== sha256Hex(artifactStylesBytes)) ||
+      stableStringify(record.candidate.assetFingerprintMap) !== stableStringify(input.artifact.assetFingerprintMap)
+    ) {
+      throw new Error("Object-backed Astro runtime lineage does not match the promoted artifact.");
+    }
+    const resolved = await runtimeStoreDependencies.readAstroObjectRouteHtml({
+      record,
+      routePath: input.resolvedPath,
+    });
+    html = resolved.html;
+    compiledTokenStyles = resolved.compiledTokenStyles;
+  }
+  return materializeAstroInternalPreviewHtml({
+    html,
+    compiledTokenStyles,
+  });
+}
+
 function appShellHtmlResponse(): Response {
   return htmlResponse({
     status: 200,
@@ -159,6 +213,10 @@ type RuntimeStoreDependencies = {
   resolveRuntimeSiteForHost: typeof resolveRuntimeSiteForHost;
   listContentSlots: typeof listContentSlots;
   listContentOverrides: typeof listContentOverrides;
+  readAstroObjectRouteHtml(input: {
+    record: AstroObjectBackedCandidateRecord;
+    routePath: string;
+  }): Promise<{ html: string; compiledTokenStyles: string }>;
 };
 
 const runtimeStoreDependencies: RuntimeStoreDependencies = {
@@ -167,6 +225,27 @@ const runtimeStoreDependencies: RuntimeStoreDependencies = {
   resolveRuntimeSiteForHost,
   listContentSlots,
   listContentOverrides,
+  readAstroObjectRouteHtml: async ({ record, routePath }) => {
+    const ref = record.candidate.routePayloads[routePath];
+    if (!ref) throw new Error("Required immutable Astro route object is not registered for this path.");
+    const serviceRoleClient = getSupabaseServiceRoleClient();
+    if (!serviceRoleClient) throw new Error("Astro candidate object storage client is unavailable.");
+    const objectStore = new SupabaseAstroCandidateObjectStore({
+      getClient: () => serviceRoleClient as never,
+    });
+    const compiledTokenStyles = typeof record.candidate.compiledTokenStyles === "string"
+      ? record.candidate.compiledTokenStyles
+      : await readVerifiedAstroCandidateSharedStyles({
+          objectStore,
+          ref: record.candidate.compiledTokenStyles,
+        });
+    const html = await readVerifiedAstroCandidateRouteHtml({
+      objectStore,
+      ref,
+      compiledTokenStyles,
+    });
+    return { html, compiledTokenStyles };
+  },
 };
 
 type RuntimeUsageDependencies = {
@@ -699,9 +778,14 @@ export async function renderPublicPathResponse(input: {
         });
       }
     }
+    const materializedHtml = await materializePublicArtifactHtml({
+      artifact: artifactResolution.artifact,
+      html: artifactResolution.html,
+      resolvedPath: artifactResolution.resolvedPath,
+    });
     const requestEndedAt = Date.now();
     const computeMs = Math.max(0, requestEndedAt - requestStartedAt);
-    const bandwidthBytes = utf8ByteLength(artifactResolution.html);
+    const bandwidthBytes = utf8ByteLength(materializedHtml);
     await recordRuntimeUsage({
       siteId: artifactResolution.ownershipSiteId ?? artifactResolution.siteId,
       artifactId: artifactResolution.artifactId,
@@ -729,7 +813,7 @@ export async function renderPublicPathResponse(input: {
         artifactResolution.siteResolution === "fallback_latest_site" ? artifactResolution.siteResolution : null,
       statusCode: 200,
     });
-    return htmlResponse({ html: artifactResolution.html });
+    return htmlResponse({ html: materializedHtml });
   }
 
   const statusCode = artifactResolution.reasonCode === "artifact_stage_denied" ? 403 : 404;

@@ -16,7 +16,8 @@ import {
   resolveCurrentUserAgencyForPage,
   ResolveCurrentAgencyError,
 } from '@/src/auth/resolve-current-agency'
-import { canPerformAction } from '@/src/auth/rbac'
+import { requireSuperadminUserIdForPage } from '@/src/auth/require-superadmin-user-id'
+import { canPerformAction, type AgencyRole } from '@/src/auth/rbac'
 import {
   buildMultiPageRawTemplatePreviewDiagnostics,
   buildMultiPageRawTemplatePreviewLinks,
@@ -39,6 +40,10 @@ type Props = {
   activeTab: SiteWorkspaceTab
   params: Promise<Params>
   searchParams?: Promise<SearchParams>
+}
+
+type PageAgencyContext = Omit<Awaited<ReturnType<typeof resolveCurrentUserAgencyForPage>>, 'role'> & {
+  role: AgencyRole
 }
 
 function normalizeText(value: unknown): string {
@@ -1395,33 +1400,53 @@ export default async function SiteWorkspacePage(props: Props) {
     })
   }
 
-  let currentUserAgency: Awaited<ReturnType<typeof resolveCurrentUserAgencyForPage>> | null = null
+  let currentUserAgency: PageAgencyContext | null = null
   let agencyAccessErrorCode: ResolveCurrentAgencyError['code'] | null = null
   let availableAgencyMemberships: Awaited<ReturnType<typeof listCurrentUserAgencyMembershipsForPage>>['memberships'] = []
   let switchableClients: Awaited<ReturnType<typeof listSwitchableAgencyClientsForPage>> = []
 
-  try {
-    const resolvedAgency = await resolveCurrentUserAgencyForPage({
-      activeAgencyId: requestedAgencyId,
-    })
-    currentUserAgency = resolvedAgency
-    const membershipContext = await listCurrentUserAgencyMembershipsForPage()
-    availableAgencyMemberships = membershipContext.memberships
-    switchableClients = await listSwitchableAgencyClientsForPage({ agencyId: resolvedAgency.agency_id })
-  } catch (error) {
-    if (error instanceof ResolveCurrentAgencyError && error.code === 'UNAUTHORIZED') {
-      redirect('/login')
-    }
-    if (error instanceof ResolveCurrentAgencyError) {
-      agencyAccessErrorCode = error.code
-      try {
-        const membershipContext = await listCurrentUserAgencyMembershipsForPage()
-        availableAgencyMemberships = membershipContext.memberships
-      } catch {
-        // ignore secondary membership errors
+  if (adminView && requestedAgencyId) {
+    try {
+      const userId = await requireSuperadminUserIdForPage()
+      currentUserAgency = {
+        user_id: userId,
+        agency_id: requestedAgencyId,
+        agency_name: null,
+        agency_logo_url: null,
+        role: 'superadmin',
       }
-    } else {
+      switchableClients = await listSwitchableAgencyClientsForPage({
+        agencyId: requestedAgencyId,
+        serverOwned: true,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Unauthorized') redirect('/login')
       throw error
+    }
+  } else {
+    try {
+      const resolvedAgency = await resolveCurrentUserAgencyForPage({
+        activeAgencyId: requestedAgencyId,
+      })
+      currentUserAgency = resolvedAgency
+      const membershipContext = await listCurrentUserAgencyMembershipsForPage()
+      availableAgencyMemberships = membershipContext.memberships
+      switchableClients = await listSwitchableAgencyClientsForPage({ agencyId: resolvedAgency.agency_id })
+    } catch (error) {
+      if (error instanceof ResolveCurrentAgencyError && error.code === 'UNAUTHORIZED') {
+        redirect('/login')
+      }
+      if (error instanceof ResolveCurrentAgencyError) {
+        agencyAccessErrorCode = error.code
+        try {
+          const membershipContext = await listCurrentUserAgencyMembershipsForPage()
+          availableAgencyMemberships = membershipContext.memberships
+        } catch {
+          // ignore secondary membership errors
+        }
+      } else {
+        throw error
+      }
     }
   }
 
@@ -1453,6 +1478,7 @@ export default async function SiteWorkspacePage(props: Props) {
     clientId,
     siteId,
     selectedVariantId,
+    serverOwned: currentUserAgency.role === 'superadmin',
   })
 
   if (!readModel) {

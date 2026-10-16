@@ -1,4 +1,11 @@
-import { extractBodyHtml, extractElementFrom, extractTopLevelBlocksOrdered, innerHtmlOfElement, textFromHtml } from "@/gnr8/importer/html-utils";
+import {
+  extractBodyHtml,
+  extractElementFrom,
+  extractTopLevelBlocksOrdered,
+  innerHtmlOfElement,
+  parseNextTag,
+  textFromHtml,
+} from "@/gnr8/importer/html-utils";
 import { extractAllAnchorLinks, extractAllImgSrc } from "@/gnr8/importer/html-utils";
 
 import { collectSemanticLayoutHints, mapBlockOrdinalToLayoutHint } from "@/gnr8/migration/layout-graph/layout-graph-builder";
@@ -34,6 +41,11 @@ export type CanonicalLayoutBlockPlan = {
   structuralConfidence: number;
   confidenceComponents: StructuralConfidenceComponents;
   anomalies: string[];
+};
+
+type CanonicalHtmlBlock = {
+  html: string;
+  parentOnly: boolean;
 };
 
 function round2(value: number): number {
@@ -169,28 +181,58 @@ function filterLikelyMeaningfulBlocks(blocks: string[]): string[] {
 
   const scored = cleaned
     .map((block) => ({ block, score: estimateBlockScore(block) }))
-    .filter((entry) => entry.score >= 120);
+    .filter(
+      (entry) =>
+        entry.score >= 120 ||
+        /^\s*<(?:header|nav|section|article|footer|form)\b/i.test(entry.block),
+    );
 
   return scored.length >= 2 ? scored.map((entry) => entry.block) : cleaned;
 }
 
-function expandMainBlock(mainBlockHtml: string): string[] {
+function expandMainBlock(mainBlockHtml: string): CanonicalHtmlBlock[] {
   const inner = innerHtmlOfElement(mainBlockHtml, "main");
   if (!inner) return [];
 
-  const innerSemantic = extractTopLevelBlocksOrdered(inner, ["section", "article", "form", "div", "nav", "header", "footer"]);
-  if (innerSemantic.length > 0) return filterLikelyMeaningfulBlocks(innerSemantic);
+  const blocks: CanonicalHtmlBlock[] = [];
+  let cursor = 0;
+  while (cursor < inner.length) {
+    const token = parseNextTag(inner, cursor);
+    if (!token) {
+      const trailing = inner.slice(cursor);
+      if (textFromHtml(trailing)) blocks.push({ html: `<main data-gnr8-parent-only="true">${trailing}</main>`, parentOnly: true });
+      break;
+    }
 
-  return inner.trim() ? [inner.trim()] : [];
+    const leading = inner.slice(cursor, token.start);
+    if (textFromHtml(leading)) blocks.push({ html: `<main data-gnr8-parent-only="true">${leading}</main>`, parentOnly: true });
+
+    if (!token.isClosing && token.name && token.name !== "!" && token.name !== "!--") {
+      const element = extractElementFrom(inner, token.name, token.start);
+      if (element) {
+        blocks.push({ html: element.trim(), parentOnly: false });
+        cursor = token.start + element.length;
+        continue;
+      }
+    }
+    cursor = token.end;
+  }
+
+  const meaningfulChildren = filterLikelyMeaningfulBlocks(
+    blocks.filter((block) => !block.parentOnly).map((block) => block.html),
+  );
+  const meaningfulChildSet = new Set(meaningfulChildren);
+  const filtered = blocks.filter((block) => block.parentOnly || meaningfulChildSet.has(block.html));
+  return filtered.length > 0 ? filtered : [{ html: inner.trim(), parentOnly: true }];
 }
 
-function splitHtmlIntoCanonicalBlocks(html: string): string[] {
+function splitHtmlIntoCanonicalBlocks(html: string): CanonicalHtmlBlock[] {
   const body = extractBodyHtml(html);
   if (!body) return [];
 
   const topLevel = extractTopLevelBlocksOrdered(body, ["header", "nav", "main", "section", "article", "footer", "form", "div"]);
   if (topLevel.length > 0) {
-    const expanded: string[] = [];
+    const expanded: CanonicalHtmlBlock[] = [];
     for (const block of topLevel) {
       if (/^\s*<main\b/i.test(block)) {
         const mainExpanded = expandMainBlock(block);
@@ -199,10 +241,11 @@ function splitHtmlIntoCanonicalBlocks(html: string): string[] {
           continue;
         }
       }
-      expanded.push(block);
+      expanded.push({ html: block, parentOnly: false });
     }
 
-    const meaningful = filterLikelyMeaningfulBlocks(expanded);
+    const meaningfulHtml = new Set(filterLikelyMeaningfulBlocks(expanded.map((block) => block.html)));
+    const meaningful = expanded.filter((block) => block.parentOnly || meaningfulHtml.has(block.html));
     if (meaningful.length > 0) return meaningful;
   }
 
@@ -221,13 +264,15 @@ function splitHtmlIntoCanonicalBlocks(html: string): string[] {
   }
 
   const divs = extractTopLevelBlocksOrdered(body, ["div"]);
-  if (divs.length > 0) return filterLikelyMeaningfulBlocks(divs);
+  if (divs.length > 0) return filterLikelyMeaningfulBlocks(divs).map((block) => ({ html: block, parentOnly: false }));
 
-  return body.trim() ? [body.trim()] : [];
+  return body.trim() ? [{ html: body.trim(), parentOnly: false }] : [];
 }
 
 function blockCompatibilityScore(blockHtml: string, hint: LayoutNodeHint): number {
   const lower = blockHtml.toLowerCase();
+  const blockTagName = /^\s*<([a-zA-Z0-9:-]+)/.exec(blockHtml)?.[1]?.toLowerCase() ?? "";
+  const tagIdentityScore = blockTagName === hint.tagName ? 12 : -4;
   const textLen = textFromHtml(blockHtml).length;
   const linkCount = extractAllAnchorLinks(blockHtml, 40).length;
   const imageCount = extractAllImgSrc(blockHtml).length;
@@ -242,24 +287,24 @@ function blockCompatibilityScore(blockHtml: string, hint: LayoutNodeHint): numbe
 
   switch (hint.type) {
     case "nav":
-      return (hasNavTag ? 8 : 0) + (linkCount >= 2 ? 4 : 0) + (textLen <= 500 ? 2 : -2);
+      return tagIdentityScore + (hasNavTag ? 8 : 0) + (linkCount >= 2 ? 4 : 0) + (textLen <= 500 ? 2 : -2);
     case "footer":
-      return (hasFooterTag ? 8 : 0) + (hasLegalWords ? 4 : 0) + (hint.domIndexStart >= 2 ? 1 : 0);
+      return tagIdentityScore + (hasFooterTag ? 8 : 0) + (hasLegalWords ? 4 : 0) + (hint.domIndexStart >= 2 ? 1 : 0);
     case "legal":
-      return (hasLegalWords ? 8 : 0) + (hasFooterTag ? 2 : 0);
+      return tagIdentityScore + (hasLegalWords ? 8 : 0) + (hasFooterTag ? 2 : 0);
     case "hero":
-      return (hasH1 ? 6 : 0) + (hasHeroWords ? 3 : 0) + (imageCount >= 1 ? 2 : 0) + (linkCount <= 2 ? 1 : -1);
+      return tagIdentityScore + (hasH1 ? 6 : 0) + (hasHeroWords ? 3 : 0) + (imageCount >= 1 ? 2 : 0) + (linkCount <= 2 ? 1 : -1);
     case "gallery":
-      return (hasGalleryWords ? 6 : 0) + (imageCount >= 3 ? 4 : imageCount >= 2 ? 1 : -2);
+      return tagIdentityScore + (hasGalleryWords ? 6 : 0) + (imageCount >= 3 ? 4 : imageCount >= 2 ? 1 : -2);
     case "form":
-      return hasForm ? 8 : -3;
+      return tagIdentityScore + (hasForm ? 8 : -3);
     case "header":
-      return (hasNavTag ? 4 : 0) + (hasH1 ? 2 : 0);
+      return tagIdentityScore + (hasNavTag ? 4 : 0) + (hasH1 ? 2 : 0);
     case "section":
-      return textLen > 20 ? 2 : 0;
+      return tagIdentityScore + (textLen > 20 ? 2 : 0);
     case "unknown":
     default:
-      return 0;
+      return tagIdentityScore;
   }
 }
 
@@ -294,13 +339,31 @@ function resolveLayoutHintForBlock(input: {
 function assignGroupForBlock(input: {
   groups: CanonicalLayoutGroup[];
   blockOrdinal: number;
+  layoutHint: LayoutNodeHint | null;
 }): CanonicalLayoutGroup {
+  if (input.layoutHint) {
+    const intent = mapNodeTypeToIntent(input.layoutHint.type);
+    return {
+      id: deterministicId(
+        "layout-block-group",
+        `${input.blockOrdinal}:${input.layoutHint.domIndexStart}:${input.layoutHint.domIndexEnd}:${intent}:${input.layoutHint.id}`,
+      ),
+      order: input.blockOrdinal,
+      intent,
+      domIndexStart: input.layoutHint.domIndexStart,
+      domIndexEnd: input.layoutHint.domIndexEnd,
+      sourceNodeTypes: [input.layoutHint.type],
+      confidence: structuralConfidenceForHint(input.layoutHint),
+    };
+  }
+
   const groups = input.groups;
   const byIndex = groups[input.blockOrdinal] ?? null;
-  if (byIndex) return byIndex;
+  if (byIndex) return { ...byIndex, order: input.blockOrdinal };
   const bodyGroup = groups.find((group) => group.intent === "body") ?? null;
-  if (bodyGroup) return bodyGroup;
-  return groups[groups.length - 1] ?? {
+  if (bodyGroup) return { ...bodyGroup, order: input.blockOrdinal };
+  const fallback = groups[groups.length - 1];
+  return fallback ? { ...fallback, order: input.blockOrdinal } : {
     id: deterministicId("layout-group", "unknown"),
     order: 0,
     intent: "unknown",
@@ -342,7 +405,8 @@ export function buildLayoutToCanonicalBridge(input: {
 
   const rawBlocks = splitHtmlIntoCanonicalBlocks(input.html);
 
-  const plannedBlocks = rawBlocks.map((blockHtml, blockOrdinal) => {
+  const plannedBlocks = rawBlocks.map((rawBlock, blockOrdinal) => {
+    const blockHtml = rawBlock.html;
     const layoutHint = resolveLayoutHintForBlock({
       blockHtml,
       blockOrdinal,
@@ -350,18 +414,21 @@ export function buildLayoutToCanonicalBridge(input: {
       usedHintIds,
     });
 
-    const group = assignGroupForBlock({ groups, blockOrdinal });
+    const effectiveLayoutHint = rawBlock.parentOnly && layoutHint
+      ? { ...layoutHint, type: "section" as const, domIndexEnd: layoutHint.domIndexStart }
+      : layoutHint;
+    const group = assignGroupForBlock({ groups, blockOrdinal, layoutHint: effectiveLayoutHint });
 
     const structural = computeStructuralConfidence(
       {
         blockHtml,
         blockOrdinal,
         group,
-        layoutHint: layoutHint ? { type: layoutHint.type, depth: layoutHint.depth } : null,
+        layoutHint: effectiveLayoutHint ? { type: effectiveLayoutHint.type, depth: effectiveLayoutHint.depth } : null,
       },
       {
-        primary: layoutHint?.signals ?? null,
-        neighbors: collectNeighborSignals({ hints, layoutHint }),
+        primary: effectiveLayoutHint?.signals ?? null,
+        neighbors: collectNeighborSignals({ hints, layoutHint: effectiveLayoutHint }),
       },
     );
 
@@ -369,7 +436,7 @@ export function buildLayoutToCanonicalBridge(input: {
       blockHtml,
       blockOrdinal,
       group,
-      layoutHint,
+      layoutHint: effectiveLayoutHint,
       structuralConfidence: structural.score,
       confidenceComponents: structural.components,
       anomalies: structural.anomalies,
