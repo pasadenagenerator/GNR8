@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
+import { hashedImportAssetPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 import { createPreviewAssetsRouteHandlers as createPreviewAssetsRouteHandlersBase } from "@/app/api/gnr8/runtime/preview-assets/[siteId]/[siteVersionId]/[...assetPath]/preview-assets-route-handlers";
 
@@ -35,6 +37,37 @@ function getParams() {
     assetPath: ["assets", "main.css"],
   });
 }
+
+test("preview assets route recovers retained fonts using the same artifact's verified manifest", async () => {
+  const fontPath = "assets/style_asset/0123456789ab-icons.woff";
+  const sourceUrl = "https://example.com/cache/compiled/theme.css";
+  const corruptPath = hashedImportAssetPath("https://example.com/cache/compiled/style_asset/0123456789ab-icons.woff", "style_asset", "0123456789ab-icons.woff");
+  const manifestBytes = Buffer.from(JSON.stringify([{ localPath: "assets/main.css", assetKind: "stylesheet", fetchStatus: "fetched", resolvedUrl: sourceUrl }]));
+  const files = new Map([
+    ["assets/main.css", Buffer.from(`@font-face{src:url(style_asset/${corruptPath.split('/').pop()})}`)],
+    ["url-fetch-manifest.json", manifestBytes],
+    [fontPath, Buffer.from("wOFF-retained-font")],
+  ]);
+  const fileMap = Object.fromEntries([...files].map(([path, bytes]) => [path, { path, mediaType: path.endsWith('.css') ? 'text/css' : 'application/octet-stream', sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }]));
+  const reads: string[] = [];
+  const handlers = createPreviewAssetsRouteHandlers({
+    resolveDomainSiteVersionForHost: async () => ({ outcome: "domain_hit", host: "example.com", siteId: "site_1", siteVersionId: "sv_1", status: "active", bindingId: "binding_1" }) as never,
+    getRawImportedSiteArtifact: async () => ({ id: "artifact_1", artifactType: "raw_imported_site", siteId: "site_1", siteVersionId: "sv_1", entryHtmlPath: "index.html", assetBasePath: ".", fileMap }) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({ artifactId, siteVersionId, filePath }) => {
+      assert.equal(artifactId, "artifact_1");
+      assert.equal(siteVersionId, "sv_1");
+      reads.push(filePath);
+      const bytes = files.get(filePath);
+      return bytes ? { ...fileMap[filePath], bytes } : null;
+    },
+  });
+  const response = await handlers.GET(new Request("https://example.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css", { headers: { host: "example.com" } }), { params: getParams() });
+  assert.equal(response.status, 200);
+  assert.ok((await response.text()).includes(`/preview-assets/site_1/sv_1/${fontPath}`));
+  assert.deepEqual(reads, ["assets/main.css", "url-fetch-manifest.json"]);
+  assertRawDbLifecycleHeaders(response);
+});
 
 function assertRawDbLifecycleHeaders(response: Response, expectedAcquisitions = "1") {
   assert.equal(response.headers.get("x-gnr8-raw-db-client-acquisitions"), expectedAcquisitions);

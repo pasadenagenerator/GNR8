@@ -20,6 +20,7 @@ import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 import { URL_SINGLE_PAGE_IMPORT_VERSION, type RenderedDomQuality } from "./url-single-page-import-contract";
+import { hashedImportAssetPath, resolveRetainedCssDependencyPath } from "./retained-css-dependency-path";
 
 export type UrlImportExecutionScope = {
   includes: readonly [
@@ -803,12 +804,11 @@ export function computeLocalPathCandidate(input: { resolvedUrl: string; assetKin
   if (input.assetKind === "image" && normalizedPathname) {
     return normalizedPathname;
   }
-  const urlHash12 = sha256Hex(input.resolvedUrl).slice(0, 12);
   const rawBase = path.posix.basename(u.pathname || "") || "asset";
   const normalizedBase = normalizeBasename(rawBase);
   const hasExt = path.posix.extname(normalizedBase).length > 0;
   const suffix = hasExt ? "" : defaultExtensionForAssetKind(input.assetKind);
-  return `assets/${input.assetKind}/${urlHash12}-${normalizedBase}${suffix}`;
+  return hashedImportAssetPath(input.resolvedUrl, input.assetKind, `${normalizedBase}${suffix}`);
 }
 
 function resolvePathCollisions(
@@ -1346,6 +1346,7 @@ function rewriteCssUrlFunctions(input: {
   localPathByUrl: Map<string, string>;
   diagnostics: UrlImportDiagnostic[];
   referenceMode?: "relative" | "root-relative";
+  retainedFilePaths?: ReadonlySet<string>;
 }): string {
   const regex = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
   const replacements: Array<{ start: number; end: number; replacement: string }> = [];
@@ -1356,6 +1357,9 @@ function rewriteCssUrlFunctions(input: {
     const quote = match[1] ?? "";
     const rawUrl = (match[2] ?? "").trim();
     if (!rawUrl || rawUrl.startsWith("data:") || rawUrl.startsWith("#")) continue;
+    if (input.retainedFilePaths && resolveRetainedCssDependencyPath({
+      stylesheetPath: input.stylesheetLocalPath, rawReference: rawUrl, filePaths: input.retainedFilePaths,
+    })) continue;
 
     const resolvedUrl = resolveAssetUrl({
       rawRef: rawUrl,
@@ -1388,6 +1392,9 @@ function rewriteCssUrlFunctions(input: {
   return out.replace(
     /(@import\s+(?:url\(\s*)?)(["']?)([^"')\s;]+)(\2\s*\)?)/gi,
     (full, prefix, quote, rawUrl, suffix) => {
+      if (input.retainedFilePaths && resolveRetainedCssDependencyPath({
+        stylesheetPath: input.stylesheetLocalPath, rawReference: String(rawUrl), filePaths: input.retainedFilePaths,
+      })) return full;
       let resolvedUrl: string | null = null;
       try { resolvedUrl = new URL(String(rawUrl), input.baseUrl).toString(); } catch { return full; }
       const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
@@ -2151,7 +2158,7 @@ function collectAssetRefs(input: {
     }
   }
 
-  function nextOccurrence(sourceContext: "html" | "noscript", tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
+  function nextOccurrence(sourceContext: string, tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
     const occurrenceKey = `${sourceContext}:${tag}:${attribute}`;
     const occurrence = occurrenceCounter.get(occurrenceKey) ?? 0;
     occurrenceCounter.set(occurrenceKey, occurrence + 1);
@@ -2170,7 +2177,12 @@ function collectAssetRefs(input: {
     const trimmed = args.rawRef.trim();
     if (!trimmed) return;
     const sourceContext = args.sourceContext ?? "html";
-    const occurrence = nextOccurrence(sourceContext, args.tag, args.attribute);
+    // CSS URLs share the manifest's tag/attribute vocabulary, but must not
+    // consume the occurrence identities used to rewrite actual HTML links.
+    const keyContext = args.surface === "inline_style_url" || args.surface === "style_block_url"
+      ? `css:${sourceContext}`
+      : sourceContext;
+    const occurrence = nextOccurrence(keyContext, args.tag, args.attribute);
     const resolvedUrl = resolveAssetUrl({
       rawRef: trimmed,
       baseUrl: input.entryUrl,
@@ -2178,7 +2190,7 @@ function collectAssetRefs(input: {
       diagnosticContext: { tag: args.tag, attribute: args.attribute, surface: args.surface },
     });
     refs.push({
-      key: `${sourceContext}:${args.tag}:${args.attribute}:${occurrence}`,
+      key: `${keyContext}:${args.tag}:${args.attribute}:${occurrence}`,
       tag: args.tag,
       attribute: args.attribute,
       occurrence,
@@ -2858,6 +2870,31 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     }
   }
 
+  // A reused stylesheet already contains paths relative to its retained file.
+  // Resolve those through the existing manifest before considering public URLs.
+  const retainedStylesheetPaths = new Set<string>();
+  const retainedFilePaths = new Set(existingManifest.flatMap((entry) => {
+    if (entry.fetchStatus !== "fetched" || !entry.localPath || !entry.resolvedUrl) return [];
+    const root = path.resolve(input.snapshotRootDirAbs);
+    const absolute = path.resolve(root, entry.localPath);
+    if (!absolute.startsWith(`${root}${path.sep}`)) return [];
+    try {
+      const stat = fs.statSync(absolute);
+      if (!stat.isFile()) return [];
+      // CSS byteLength describes the fetched response, before its URLs were
+      // localized. Static dependencies retain their original bytes and size.
+      if (entry.assetKind === "stylesheet") retainedStylesheetPaths.add(entry.localPath);
+      else if (entry.byteLength !== null && stat.size !== entry.byteLength) return [];
+      if (isFontAssetUrl(entry.resolvedUrl) && !isValidFetchedFont(entry.resolvedUrl, entry.contentType, fs.readFileSync(absolute))) return [];
+      return [entry.localPath];
+    } catch { return []; }
+  }));
+  const retainedDependencyUrl = (rawReference: string, stylesheetPath: string): string | null => {
+    if (!retainedStylesheetPaths.has(stylesheetPath)) return null;
+    const retainedPath = resolveRetainedCssDependencyPath({ stylesheetPath, rawReference, filePaths: retainedFilePaths });
+    return retainedPath ? usedPathToUrl.get(retainedPath) ?? null : null;
+  };
+
   const refsByUrl = new Map<string, Array<ParsedAssetRef & { pageUrl: string }>>();
   for (const state of pageStates) {
     for (const ref of state.refs) {
@@ -2995,7 +3032,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     }
     const pageUrl = refsByUrl.get(stylesheetUrl)?.[0]?.pageUrl ?? stylesheetUrl;
     for (const rawRef of extractCssUrlCandidates(cssText)) {
-      const resolvedUrl = resolveAssetUrl({
+      const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
         rawRef,
         baseUrl: new URL(stylesheetUrl),
         diagnostics,
@@ -3039,7 +3076,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     try { cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8"); } catch { continue; }
     for (const rawRef of extractCssUrlCandidates(cssText)) {
       if (acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) break;
-      const resolvedUrl = resolveAssetUrl({
+      const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
         rawRef,
         baseUrl: new URL(stylesheetUrl),
         diagnostics,
@@ -3086,6 +3123,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         baseUrl: new URL(stylesheetUrl),
         localPathByUrl,
         diagnostics,
+        retainedFilePaths: retainedStylesheetPaths.has(localPath) ? retainedFilePaths : undefined,
       });
       if (rewritten !== cssText) fs.writeFileSync(absPath, rewritten, "utf8");
     } catch {
@@ -5110,6 +5148,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       const href = getAttr(node, "href");
       const kind = tag === "source" ? "image" : assetKindFromNode({ tag, rel, typeAttr, href });
       if (!kind && tag !== "img" && tag !== "source" && tag !== "a") return;
+      if (tag === "a" && (!href || !isImageLikeHrefRef(href) || !(hasDescendantTag(node, "img") || hasDescendantTag(node, "picture")))) return;
 
       const attrsToHandle: UrlImportAssetAttribute[] = [];
       if (tag === "link") attrsToHandle.push("href");
@@ -5345,6 +5384,25 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         }
       }
     });
+
+    // CSS dependencies have no direct HTML attribute to visit above. Persist
+    // their original URL mappings too, so subsequent pages can reuse them.
+    for (const ref of allRefs.filter((ref) => ref.key.startsWith("css:") || ref.key.includes(":css-url:"))) {
+      const outcome = ref.resolvedUrl ? fetchOutcomeByUrl.get(ref.resolvedUrl) : null;
+      fetchManifest.push({
+        tag: ref.tag,
+        attribute: ref.attribute,
+        occurrence: ref.occurrence,
+        rawRef: ref.rawRef,
+        resolvedUrl: ref.resolvedUrl,
+        localPath: ref.resolvedUrl ? localPathByUrl.get(ref.resolvedUrl) ?? null : null,
+        assetKind: ref.assetKind,
+        fetchStatus: outcome?.fetchStatus ?? (ref.resolvedUrl ? "fetch_failed" : "unsupported"),
+        httpStatus: outcome?.httpStatus ?? null,
+        contentType: outcome?.contentType ?? null,
+        byteLength: outcome?.byteLength ?? null,
+      });
+    }
 
     walkDomWithAncestors(document, (node) => {
       if (!isElement(node)) return;

@@ -12,6 +12,7 @@ import { createRuntimeCorrelationKey, normalizeRuntimeDomain, normalizeRuntimeHo
 import { RAW_PREVIEW_URI_DECODE_DIAGNOSTIC, safeDecodeURIComponent } from "@/gnr8/runtime/raw-preview-uri-decoding";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 import { getSuperadminPool } from "@/src/superadmin/db";
+import { retainedStylesheetSourceUrl } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
 
@@ -535,6 +536,18 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const effectivePath = resolvedPath ?? normalizedPath;
         const isCssAsset = effectivePath.toLowerCase().endsWith(".css");
+        let stylesheetSourceUrl: string | null = null;
+        const manifestEntry = artifact.fileMap["url-fetch-manifest.json"];
+        if (isCssAsset && artifact.artifactType === "raw_imported_site" && manifestEntry) {
+          recordDbRead();
+          const manifest = await deps.getRawTemplateSiteAsset({ siteVersionId, artifactId: artifact.id, filePath: "url-fetch-manifest.json", dbClient });
+          if (manifest) stylesheetSourceUrl = retainedStylesheetSourceUrl({
+            bytes: manifest.bytes,
+            expectedSha256: manifestEntry.sha256,
+            expectedSizeBytes: manifestEntry.sizeBytes,
+            stylesheetPath: effectivePath,
+          });
+        }
         let responseBody: BodyInit;
         try {
           const binaryBytes = new Uint8Array(asset.bytes);
@@ -548,6 +561,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 siteId,
                 siteVersionId,
                 assetFilePath: effectivePath,
+                stylesheetSourceUrl,
                 fileMapPaths:
                   Object.keys(artifact.fileMap ?? {}).length > 0
                     ? new Set(Object.keys(artifact.fileMap ?? {}))

@@ -1,4 +1,7 @@
 import path from 'node:path'
+import { rewriteInlineStyleAttributes } from '@/src/public-site/rewrite-inline-style-attributes'
+import { enhanceRetainedHeroSliders } from '@/src/public-site/retained-hero-slider'
+import { restoreRetainedEqualHeightLayout } from '@/src/public-site/retained-equal-height-layout'
 
 import { normalizePagePath } from '@/gnr8/runtime/deterministic'
 import { createRuntimeCorrelationKey } from '@/gnr8/runtime/identity/runtime-identity'
@@ -1594,7 +1597,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       })
       .join(', ')
 
-  const html = input.html
+  const html = rewriteInlineStyleAttributes(input.html, (css) => rewriteCssUrlTokens(css, 'inline_style'))
     .replace(/<([a-zA-Z][^\s/>]*)(\s[^>]*)?>/g, (full: string, tagName: string) => {
       const normalizedTagName = String(tagName ?? '').toLowerCase()
       return full
@@ -1615,10 +1618,6 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       /\bsrcset\s*=\s*(["'])(.*?)\1/gi,
       (_full, quote: string, value: string) => `srcset=${quote}${rewriteSrcset(value)}${quote}`,
     )
-    .replace(/\bstyle\s*=\s*(["'])([\s\S]*?)\1/gi, (_full, quote: string, value: string) => {
-      const rewritten = rewriteCssUrlTokens(value, 'inline_style')
-      return `style=${quote}${rewritten}${quote}`
-    })
     .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (_full, attrs: string, css: string) => {
       evidence.stylesheetsInspected += 1
       const rewritten = rewriteCssUrlTokens(css, 'style_block')
@@ -2507,6 +2506,8 @@ async function renderRawTemplateSiteVersionPreview(input: {
       reasonCode: 'raw_css_declares_dongle_without_font_source',
     })
   }
+  html = enhanceRetainedHeroSliders({ html, siteId: artifact.siteId, siteVersionId: artifact.siteVersionId, fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})) })
+  html = restoreRetainedEqualHeightLayout(html)
   const scriptPolicy = applyRawPreviewScriptPolicy(html)
   html = scriptPolicy.html
   const duplicateGuard = applyRawPreviewDuplicateInjectionGuard({

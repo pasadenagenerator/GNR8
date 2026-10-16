@@ -1,6 +1,10 @@
 import path from "node:path";
 import { parse } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
+import { rewriteInlineStyleAttributes } from "./rewrite-inline-style-attributes";
+import { enhanceRetainedHeroSliders } from "./retained-hero-slider";
+import { restoreRetainedEqualHeightLayout } from "./retained-equal-height-layout";
+import { recoverRelocalizedCssReferences } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi;
 const CSS_IMPORT_URL_PATTERN = /@import\s+url\(\s*(["']?)([^"')\s]+)\1\s*\)([^;]*)(;?)/gi;
@@ -348,15 +352,6 @@ function rewriteTagAttributes(html: string, context: RewriteContext): string {
   });
 }
 
-function rewriteInlineStyleAttributes(html: string, context: RewriteContext): string {
-  const stylePattern = /(\sstyle\s*=\s*)(["'])([\s\S]*?)(\2)/gi;
-  return html.replace(stylePattern, (full, prefix, quote, value, closingQuote) => {
-    const rewrittenCss = rewriteCssUrlTokens(String(value ?? ""), context);
-    if (rewrittenCss === value) return full;
-    return `${prefix}${quote}${rewrittenCss}${closingQuote}`;
-  });
-}
-
 function rewriteStyleTagBlocks(html: string, context: RewriteContext): string {
   return html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (full, attrs, css) => {
     const rewrittenCss = rewriteCssUrlTokens(String(css ?? ""), context);
@@ -654,9 +649,11 @@ export function rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input: {
   };
 
   let rewritten = rewriteTagAttributes(String(input.html ?? ""), context);
-  rewritten = rewriteInlineStyleAttributes(rewritten, context);
+  rewritten = rewriteInlineStyleAttributes(rewritten, (css) => rewriteCssUrlTokens(css, context));
   rewritten = rewriteStyleTagBlocks(rewritten, context);
   rewritten = injectBaseTag(rewritten);
+  rewritten = enhanceRetainedHeroSliders({ ...input, html: rewritten });
+  rewritten = restoreRetainedEqualHeightLayout(rewritten);
   return injectMonoOsmapPublicFallback(rewritten);
 }
 
@@ -666,8 +663,12 @@ export function rewriteRawTemplateCssForRuntime(input: {
   siteVersionId: string;
   assetFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  stylesheetSourceUrl?: string | null;
 }): string {
-  return rewriteCssUrlTokens(String(input.css ?? ""), {
+  const css = input.stylesheetSourceUrl && input.fileMapPaths
+    ? recoverRelocalizedCssReferences({ css: input.css, stylesheetPath: input.assetFilePath, stylesheetSourceUrl: input.stylesheetSourceUrl, filePaths: input.fileMapPaths })
+    : String(input.css ?? "");
+  return rewriteCssUrlTokens(css, {
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     contextFilePath: input.assetFilePath,

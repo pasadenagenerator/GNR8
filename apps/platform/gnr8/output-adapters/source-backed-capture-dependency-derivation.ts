@@ -1,4 +1,6 @@
 import "server-only";
+import { resolveRetainedCssDependencyPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
+export { resolveRetainedCssDependencyPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
@@ -858,24 +860,6 @@ export function existingCssDependencyManifest(input: {
   return entries;
 }
 
-export function resolveRetainedCssDependencyPath(input: {
-  stylesheetPath: string;
-  rawReference: string;
-  filePaths: ReadonlySet<string>;
-}): string | null {
-  const raw = input.rawReference.trim();
-  if (!raw || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(raw)) return null;
-  const withoutQueryOrHash = raw.split(/[?#]/, 1)[0] ?? "";
-  if (!withoutQueryOrHash) return null;
-  let decoded = withoutQueryOrHash;
-  try { decoded = decodeURIComponent(withoutQueryOrHash); } catch { return null; }
-  if (decoded.includes("\0") || decoded.includes("\\")) return null;
-  const candidate = decoded.startsWith("/")
-    ? posix.normalize(decoded.replace(/^\/+/, ""))
-    : posix.normalize(posix.join(posix.dirname(input.stylesheetPath), decoded));
-  if (!candidate || candidate === "." || candidate.startsWith("../") || posix.isAbsolute(candidate)) return null;
-  return input.filePaths.has(candidate) ? candidate : null;
-}
 
 function decodeOwnedPathname(pathname: string): string | null {
   const raw = pathname.replace(/^\/+/, "");
