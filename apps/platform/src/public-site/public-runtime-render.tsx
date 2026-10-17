@@ -669,6 +669,7 @@ export async function renderPublicPathResponse(input: {
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
+      fileMapPaths: new Set(rawTemplateResolution.fileMapPaths),
     });
     for (const diagnostic of rewrittenRawTemplate.diagnostics) {
       logPublicDomainDiagnostic(diagnostic.code, {

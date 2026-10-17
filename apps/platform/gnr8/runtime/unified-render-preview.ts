@@ -1,3 +1,4 @@
+import { versionRawCssUrl } from "../../src/public-site/raw-css-url-version";
 import path from 'node:path'
 import { rewriteInlineStyleAttributes } from '@/src/public-site/rewrite-inline-style-attributes'
 import { enhanceRetainedHeroSliders } from '@/src/public-site/retained-hero-slider'
@@ -1352,7 +1353,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
         originalUrl: ref,
         normalizedReference,
         resolvedCandidate,
-        rewrittenUrl: deduped,
+        rewrittenUrl: deduped.startsWith(`${assetRoot}/`) ? versionRawCssUrl(deduped) : deduped,
         normalizedPath: null,
         reason: deduped === ref ? 'already_preview_asset_url' : 'deduplicated_preview_asset_url',
         externalPreserved: false,
@@ -1384,7 +1385,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       originalUrl: ref,
       normalizedReference,
       resolvedCandidate,
-      rewrittenUrl: `${assetRoot}/${normalized}${suffix}`,
+      rewrittenUrl: versionRawCssUrl(`${assetRoot}/${normalized}${suffix}`),
       normalizedPath: normalized,
       reason: normalized === resolvedCandidate ? 'matched_persisted_file' : 'matched_persisted_file_variant',
       externalPreserved: false,

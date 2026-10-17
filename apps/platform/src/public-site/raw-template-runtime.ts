@@ -1,3 +1,4 @@
+import { versionRawCssUrl } from "./raw-css-url-version";
 import path from "node:path";
 import { parse } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
@@ -21,6 +22,7 @@ type RewriteContext = {
   siteVersionId: string;
   contextFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 };
 
 type RuntimeDebugContext = {
@@ -235,8 +237,9 @@ function resolveAssetPathFromReference(input: { reference: string; contextFilePa
   return null;
 }
 
-function buildPreviewAssetUrl(input: { siteId: string; siteVersionId: string; assetPath: string; suffix: string }): string {
-  return `${ASSET_ROUTE_PREFIX}/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/${input.assetPath}${input.suffix}`;
+function buildPreviewAssetUrl(input: { siteId: string; siteVersionId: string; assetPath: string; suffix: string; versionCssUrls?: boolean }): string {
+  const url = `${ASSET_ROUTE_PREFIX}/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/${input.assetPath}${input.suffix}`;
+  return input.versionCssUrls === false ? url : versionRawCssUrl(url);
 }
 
 function rebaseOwnedPreviewAssetUrl(input: {
@@ -244,6 +247,7 @@ function rebaseOwnedPreviewAssetUrl(input: {
   siteId: string;
   siteVersionId: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): string | null {
   const { pathname, suffix } = splitPreviewUrlSuffix(input.reference);
   const prefix = `${ASSET_ROUTE_PREFIX}/`;
@@ -259,6 +263,7 @@ function rebaseOwnedPreviewAssetUrl(input: {
     siteVersionId: input.siteVersionId,
     assetPath,
     suffix,
+    versionCssUrls: input.versionCssUrls,
   });
 }
 
@@ -268,6 +273,7 @@ export function rewriteAssetReferenceToRuntime(input: {
   siteVersionId: string;
   contextFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): string | null {
   const reference = String(input.reference ?? "").trim();
   if (reference.startsWith(ASSET_ROUTE_PREFIX)) {
@@ -276,6 +282,7 @@ export function rewriteAssetReferenceToRuntime(input: {
       siteId: input.siteId,
       siteVersionId: input.siteVersionId,
       fileMapPaths: input.fileMapPaths,
+      versionCssUrls: input.versionCssUrls,
     }) ?? reference;
   }
   const { pathname, suffix } = splitUrlSuffix(input.reference);
@@ -290,6 +297,7 @@ export function rewriteAssetReferenceToRuntime(input: {
     siteVersionId: input.siteVersionId,
     assetPath,
     suffix,
+    versionCssUrls: input.versionCssUrls,
   });
 }
 
@@ -301,6 +309,7 @@ function rewriteCssImportTokens(css: string, context: RewriteContext): string {
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     const safeQuote = quote || "";
@@ -313,6 +322,7 @@ function rewriteCssImportTokens(css: string, context: RewriteContext): string {
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     return `@import ${quote}${rewritten}${quote}${media ?? ""}${semicolon ?? ""}`;
@@ -330,6 +340,7 @@ function rewriteCssUrlTokens(css: string, context: RewriteContext): string {
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     const safeQuote = quote || "";
@@ -346,6 +357,7 @@ function rewriteTagAttributes(html: string, context: RewriteContext): string {
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     return `${prefix}${quote}${rewritten}${closingQuote}`;
@@ -630,6 +642,7 @@ export function rewriteRawTemplateHtmlForRuntime(input: {
   siteVersionId: string;
   resolvedFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): string {
   return rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input).html;
 }
@@ -640,12 +653,14 @@ export function rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input: {
   siteVersionId: string;
   resolvedFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): RawTemplateRuntimeRewriteResult {
   const context: RewriteContext = {
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     contextFilePath: input.resolvedFilePath,
     fileMapPaths: input.fileMapPaths,
+    versionCssUrls: input.versionCssUrls,
   };
 
   let rewritten = rewriteTagAttributes(String(input.html ?? ""), context);
@@ -663,6 +678,7 @@ export function rewriteRawTemplateCssForRuntime(input: {
   siteVersionId: string;
   assetFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
   stylesheetSourceUrl?: string | null;
 }): string {
   const css = input.stylesheetSourceUrl && input.fileMapPaths
@@ -673,6 +689,7 @@ export function rewriteRawTemplateCssForRuntime(input: {
     siteVersionId: input.siteVersionId,
     contextFilePath: input.assetFilePath,
     fileMapPaths: input.fileMapPaths,
+    versionCssUrls: input.versionCssUrls,
   });
 }
 

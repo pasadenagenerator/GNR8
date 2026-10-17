@@ -3266,6 +3266,8 @@ export type RawTemplateDomainResolution =
       normalizedPath: string;
       resolvedFilePath: string;
       html: string;
+      /** Server-only paths from the same resolved raw artifact. Never serialize as page data. */
+      fileMapPaths: string[];
     }
   | {
       outcome: "raw_template_miss";
@@ -3391,7 +3393,7 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
   const artifact =
     (await getRawImportedSiteArtifact(activeSiteVersionId, { dbClient: input.dbClient })) ??
     (await getRawTemplateSiteArtifact(activeSiteVersionId, { dbClient: input.dbClient }));
-  if (!artifact || artifact.siteId !== siteResolution.siteId) {
+  if (!artifact || artifact.siteId !== siteResolution.siteId || artifact.siteVersionId !== activeSiteVersionId) {
     return {
       outcome: "raw_template_miss",
       host: siteResolution.host,
@@ -3496,6 +3498,7 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
     normalizedPath,
     resolvedFilePath,
     html: htmlAsset.bytes.toString("utf8"),
+    fileMapPaths: Object.keys(artifact.fileMap),
   };
 }
 

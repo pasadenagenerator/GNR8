@@ -943,3 +943,11 @@ test("does not remove a generic api.js without security evidence inside a replac
     (error) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"),
   );
 });
+
+test("captured Revolution interaction is rejected by the static Astro boundary, not silently published as a slider", () => {
+  const slides = [1, 2].map(i => `<rs-slide><img src="/uploads/${i === 1 ? 'logo' : 'about'}.png"><rs-layer data-type="text" data-xy="x:40px;y:250px;" data-text="s:70;l:80;fw:500;" data-dim="w:804px;">Slide ${i}</rs-layer></rs-slide>`).join('');
+  const rootHtml = `<html><head><title>Captured hero</title></head><body><rs-module-wrap><rs-module id="hero">${slides}</rs-module></rs-module-wrap><script>jQuery('#hero').revolution({duration:"5000ms",gridwidth:1920,gridheight:900});</script></body></html>`;
+  const { version, artifact, rawArtifact } = fixture({ rootHtml });
+  assert.throws(() => createSourceBackedAstroGenerationInput({ siteVersion: version, artifact, rawArtifact }),
+    (error: unknown) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes('scripts'));
+});

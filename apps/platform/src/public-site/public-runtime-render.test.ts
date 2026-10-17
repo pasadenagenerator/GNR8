@@ -415,6 +415,7 @@ test("public runtime domain hit: serves raw template HTML and rewrites /assets U
         diagnostics: [],
         normalizedPath: "/",
         resolvedFilePath: "nested/page.html",
+        fileMapPaths: ["assets/main.css", "assets/nested.css", "assets/hero.jpg", "assets/body-bg.jpg", "nested/assets/app.js", "nested/assets/bg.jpg"],
         html: "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/main.css\" /><link rel=\"stylesheet\" href=\"../assets/nested.css\" /><style>.hero{background-image:url('./assets/bg.jpg')}</style></head><body style=\"background-image:url('../assets/body-bg.jpg')\"><img src=\"/assets/hero.jpg\" /><script src=\"./assets/app.js\"></script></body></html>",
       }) as never,
     resolveActiveArtifactForHostAndPathWithDiagnostics: async () => {
@@ -450,6 +451,7 @@ test("public runtime host match serves raw imported Maver HTML before recovered 
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
         outcome: "raw_template_hit",
+        fileMapPaths: ["assets/main.css"],
         host: "maver.app.pasadenagenerator.com",
         siteId: "site_maver",
         siteVersionId: "sv_maver_active",
@@ -596,6 +598,7 @@ test("public raw-template rendering injects Mono osmap fallback diagnostics", as
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
         outcome: "raw_template_hit",
+        fileMapPaths: [],
         host: "maver.app.pasadenagenerator.com",
         siteId: "site_maver",
         siteVersionId: "sv_maver_active",
@@ -650,6 +653,7 @@ test("public runtime domain hit: applies published content overrides and ignores
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
         outcome: "raw_template_hit",
+        fileMapPaths: [],
         host: "override.example.com",
         siteId: "site_override_1",
         siteVersionId: "sv_override_1",
@@ -819,6 +823,7 @@ test("migration MVP readiness: imported raw template renders published CMS overr
       assert.equal(activeSite.rawTemplateArtifactType, "raw_imported_site");
       return {
         outcome: "raw_template_hit",
+        fileMapPaths: [],
         host: domain,
         siteId,
         siteVersionId,
@@ -897,6 +902,7 @@ test("public runtime domain hit: supports nested paths when raw template page ex
     resolveRawTemplateSiteForDomainAndPath: async (input) =>
       ({
         outcome: "raw_template_hit",
+        fileMapPaths: [],
         host: String(input.host ?? ""),
         siteId: "site_raw_2",
         siteVersionId: "sv_raw_2",
@@ -928,6 +934,7 @@ test("public runtime debug mode: appends custom-domain runtime panel on raw-temp
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
         outcome: "raw_template_hit",
+        fileMapPaths: [],
         host: "debug.example.com",
         siteId: "site_debug_1",
         siteVersionId: "sv_debug_1",
@@ -1315,6 +1322,7 @@ test("public runtime domain hit: uses published overrides only (never draft)", a
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
         outcome: "raw_template_hit",
+        fileMapPaths: [],
         host: "published-only.example.com",
         siteId: "site_pub_1",
         siteVersionId: "sv_pub_1",
@@ -1385,6 +1393,7 @@ test("public runtime version isolation: overrides for v1 never leak into v2 rend
     resolveRawTemplateSiteForDomainAndPath: async () =>
       ({
         outcome: "raw_template_hit",
+        fileMapPaths: [],
         host: "versioned.example.com",
         siteId: "site_pub_2",
         siteVersionId: "sv_v2",
@@ -1521,4 +1530,28 @@ test("uploads variant path logs variant not found when both direct and fallback 
     console.info = originalInfo;
     restoreDeps();
   }
+});
+
+test("public retained hero uses resolved owned paths and the shared controller without leaking the manifest", async () => {
+  const siteId = "generic_site", siteVersionId = "generic_version";
+  const files = ["images/1.jpg", "images/2.jpg", "images/photo.jpg", "assets/theme.css", "private-manifest.json"];
+  const slides = [1, 2].map(i => `<rs-slide><img src="images/${i}.jpg"><rs-layer data-type="text" data-xy="x:40px;y:250px;" data-text="s:70;l:80;fw:500;" data-dim="w:804px;">Slide ${i}</rs-layer></rs-slide>`).join("");
+  const html = `<html><head><link rel="stylesheet" href="assets/theme.css"></head><body><rs-module-wrap id="hero_wrapper"><rs-module id="hero">${slides}</rs-module></rs-module-wrap><script>jQuery('#hero').revolution({duration:"5000ms",gridwidth:1920,gridheight:900});</script><img src="images/photo.jpg"></body></html>`;
+  const restoreUsage = __setPublicRuntimeUsageDependenciesForTest({ persistRuntimeUsageEvent: async () => ({ status: "written" }) });
+  const restore = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () => ({ outcome: "raw_template_hit", siteId, siteVersionId, activeArtifactId: "artifact", resolvedFilePath: "index.html", normalizedPath: "/", fileMapPaths: files, html, diagnostics: [] }) as never,
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => { throw new Error("Raw response must not be mistaken for Astro output"); },
+    listContentSlots: async () => [], listContentOverrides: async () => [],
+  });
+  try {
+    const response = await renderPublicPathResponse({ host: "generic.example", path: "/" });
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.equal((body.match(/data-hero-slide=/g) || []).length, 2);
+    assert.match(body, /data-gnr8-preview-runtime="retained-hero"/);
+    assert.match(body, /retained-hero-replaced/);
+    assert.match(body, /generic_site\/generic_version\/images\/photo.jpg/);
+    assert.match(body, /theme.css\?gnr8css=2/);
+    assert.ok(!body.includes("private-manifest.json"));
+  } finally { restore(); restoreUsage(); }
 });

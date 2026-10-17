@@ -1,3 +1,4 @@
+import { RAW_CSS_REVISION, RAW_CSS_REVISION_PARAM } from "@/src/public-site/raw-css-url-version";
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForPreviewSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import {
@@ -536,9 +537,14 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const effectivePath = resolvedPath ?? normalizedPath;
         const isCssAsset = effectivePath.toLowerCase().endsWith(".css");
+        const cssRevision = new URL(req.url).searchParams.get(RAW_CSS_REVISION_PARAM);
+        if (isCssAsset && cssRevision !== null && cssRevision !== RAW_CSS_REVISION) {
+          return (response = new Response("Unsupported CSS revision", { status: 400, headers: { "cache-control": "no-store" } }));
+        }
+        const versionedCss = cssRevision === RAW_CSS_REVISION;
         let stylesheetSourceUrl: string | null = null;
         const manifestEntry = artifact.fileMap["url-fetch-manifest.json"];
-        if (isCssAsset && artifact.artifactType === "raw_imported_site" && manifestEntry) {
+        if (isCssAsset && versionedCss && artifact.artifactType === "raw_imported_site" && manifestEntry) {
           recordDbRead();
           const manifest = await deps.getRawTemplateSiteAsset({ siteVersionId, artifactId: artifact.id, filePath: "url-fetch-manifest.json", dbClient });
           if (manifest) stylesheetSourceUrl = retainedStylesheetSourceUrl({
@@ -562,6 +568,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 siteVersionId,
                 assetFilePath: effectivePath,
                 stylesheetSourceUrl,
+                versionCssUrls: versionedCss,
                 fileMapPaths:
                   Object.keys(artifact.fileMap ?? {}).length > 0
                     ? new Set(Object.keys(artifact.fileMap ?? {}))

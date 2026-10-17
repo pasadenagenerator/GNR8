@@ -62,11 +62,18 @@ test("preview assets route recovers retained fonts using the same artifact's ver
       return bytes ? { ...fileMap[filePath], bytes } : null;
     },
   });
-  const response = await handlers.GET(new Request("https://example.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css", { headers: { host: "example.com" } }), { params: getParams() });
+  const response = await handlers.GET(new Request("https://example.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css?gnr8css=2", { headers: { host: "example.com" } }), { params: getParams() });
   assert.equal(response.status, 200);
   assert.ok((await response.text()).includes(`/preview-assets/site_1/sv_1/${fontPath}`));
   assert.deepEqual(reads, ["assets/main.css", "url-fetch-manifest.json"]);
   assertRawDbLifecycleHeaders(response);
+  reads.length = 0;
+  const legacy = await handlers.GET(new Request("https://example.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css", { headers: { host: "example.com" } }), { params: getParams() });
+  assert.ok((await legacy.text()).includes(corruptPath.split("/").pop()!));
+  assert.deepEqual(reads, ["assets/main.css"]);
+  const unknown = await handlers.GET(new Request("https://example.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css?gnr8css=999", { headers: { host: "example.com" } }), { params: getParams() });
+  assert.equal(unknown.status, 400);
+  assert.equal(unknown.headers.get("cache-control"), "no-store");
 });
 
 function assertRawDbLifecycleHeaders(response: Response, expectedAcquisitions = "1") {
