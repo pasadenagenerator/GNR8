@@ -1,3 +1,4 @@
+import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
 import { createHash } from "node:crypto";
 import { parse, parseFragment, serialize } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
@@ -464,7 +465,7 @@ function normalizePage(input: {
   // Candidate previews intentionally disable scripts. Parse using the same
   // scripting mode so noscript fallbacks can be normalized before Astro
   // serializes them into a sandboxed document.
-  const document = parse(input.html, { scriptingEnabled: false }) as DefaultTreeAdapterMap["document"];
+  let document = parse(input.html, { scriptingEnabled: false }) as DefaultTreeAdapterMap["document"];
   let elements = allElements(document);
   const unsupported: string[] = [];
   const forms = elements.filter((element) => element.tagName === "form");
@@ -525,7 +526,26 @@ function normalizePage(input: {
     if (isStaticIframeEmbed(element)) continue;
     unsupported.push("application_state");
   }
+  const routeSource = resolveRawTemplateRouteMapFile({
+    siteVersionId: input.siteVersion.id,
+    requestedPath: input.path,
+    entryHtmlPath: input.rawArtifact.entryHtmlPath,
+    fileMap: input.rawArtifact.fileMap,
+    importProvenanceSummary: input.siteVersion.importProvenanceSummary,
+    routeMapServingEnabled: true,
+  });
+  // Project supported elements before classifying scripts. Unknown source code
+  // remains present and is rejected below; only exact owned bytes may survive.
+  preserveAnchorHrefsForRuntimeRewrite(document);
+  document = parse(rewriteRawTemplateHtmlForRuntime({
+    html: serialize(document), siteId: input.rawArtifact.siteId,
+    siteVersionId: input.rawArtifact.siteVersionId,
+    resolvedFilePath: routeSource.outcome === "selected" ? routeSource.rawFilePath : input.rawArtifact.entryHtmlPath,
+    fileMapPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
+  }), { scriptingEnabled: false });
+  elements = allElements(document);
   for (const script of elements.filter((element) => element.tagName === "script")) {
+    if (isOwnedRetainedRuntimeScript(script)) continue;
     const type = (attribute(script, "type") ?? "").trim().toLowerCase();
     if (
       (type && ["application/json", "application/ld+json", "application/gnr8-disabled-script", "application/gnr8-disabled-preview-script"].includes(type)) ||
@@ -540,14 +560,6 @@ function normalizePage(input: {
       unsupported.push("scripts");
     }
   }
-  const routeSource = resolveRawTemplateRouteMapFile({
-    siteVersionId: input.siteVersion.id,
-    requestedPath: input.path,
-    entryHtmlPath: input.rawArtifact.entryHtmlPath,
-    fileMap: input.rawArtifact.fileMap,
-    importProvenanceSummary: input.siteVersion.importProvenanceSummary,
-    routeMapServingEnabled: true,
-  });
   if (input.path !== "/" && input.rawArtifact.metadata.multiPage?.enabled && routeSource.outcome !== "selected") {
     unsupported.push(`source_route_lineage_missing:${input.path}`);
   }

@@ -1,3 +1,4 @@
+import { restoreRetainedMobileNavigation } from "../../src/public-site/retained-mobile-navigation";
 import { versionRawCssUrl } from "../../src/public-site/raw-css-url-version";
 import path from 'node:path'
 import { rewriteInlineStyleAttributes } from '@/src/public-site/rewrite-inline-style-attributes'
@@ -2509,6 +2510,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
   }
   html = enhanceRetainedHeroSliders({ html, siteId: artifact.siteId, siteVersionId: artifact.siteVersionId, fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})) })
   html = restoreRetainedEqualHeightLayout(html)
+  html = restoreRetainedMobileNavigation(html)
   const scriptPolicy = applyRawPreviewScriptPolicy(html)
   html = scriptPolicy.html
   const duplicateGuard = applyRawPreviewDuplicateInjectionGuard({

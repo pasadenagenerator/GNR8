@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, realpath, rm, symlink, unlink, writeFile } fr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider";
 
 import {
   renderSiteVersionPreview,
@@ -24,6 +25,27 @@ const SOURCE_SNAPSHOT_SHA256 = "a".repeat(64);
 const SYNTHETIC_SITE_ID = "site-astro-mvp06-proof";
 const SYNTHETIC_SITE_VERSION_ID = "sv-astro-mvp06-proof";
 const SYNTHETIC_CANDIDATE_ID = "candidate-astro-mvp06-proof";
+
+test("bridge retains only exact owned hero code, including checking template content", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await writeFixtureDist(workspacePath);
+    const file = join(workspacePath, "dist", "index.html");
+    const base = await readFile(file, "utf8");
+    const owned = `<script data-gnr8-preview-runtime="retained-hero">${RETAINED_HERO_SCRIPT}</script>`;
+    await writeFile(file, base.replace("</body>", `${owned}</body>`));
+    const candidate = await convertFixture(await inspectAstroStaticExport(workspacePath));
+    assert.ok(candidate.htmlByPath["/"].includes(owned));
+    for (const script of [
+      '<script data-gnr8-preview-runtime="retained-hero">alert(1)</script>',
+      `<script src="https://example.invalid/retained-hero.js">${RETAINED_HERO_SCRIPT}</script>`,
+      '<template><script>unknown()</script></template>',
+    ]) {
+      await writeFile(file, base.replace("</body>", `${script}</body>`));
+      await assert.rejects(convertFixture(await inspectAstroStaticExport(workspacePath)),
+        (error: unknown) => error instanceof AstroInternalPreviewBridgeError && error.code === "unsupported_html");
+    }
+  });
+});
 
 test("bridge proof command remains inert when imported", async () => {
   const entrypoint = await import("./run-astro-static-site-internal-preview-proof");

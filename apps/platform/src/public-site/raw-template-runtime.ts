@@ -1,3 +1,4 @@
+import { restoreRetainedMobileNavigation } from "./retained-mobile-navigation";
 import { versionRawCssUrl } from "./raw-css-url-version";
 import path from "node:path";
 import { parse } from "parse5";
@@ -669,6 +670,7 @@ export function rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input: {
   rewritten = injectBaseTag(rewritten);
   rewritten = enhanceRetainedHeroSliders({ ...input, html: rewritten });
   rewritten = restoreRetainedEqualHeightLayout(rewritten);
+  rewritten = restoreRetainedMobileNavigation(rewritten);
   return injectMonoOsmapPublicFallback(rewritten);
 }
 

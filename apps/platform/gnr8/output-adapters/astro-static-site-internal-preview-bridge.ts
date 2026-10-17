@@ -1,3 +1,4 @@
+import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -472,8 +473,8 @@ function inlineExportedStylesheets(input: {
   }
 
   const elements = allElements(document);
-  if (elements.some((element) => element.tagName === "script")) {
-    throw new AstroInternalPreviewBridgeError("unsupported_html", "Script elements are not supported by the v1 bridge.");
+  if (elements.some((element) => element.tagName === "script" && !isOwnedRetainedRuntimeScript(element))) {
+    throw new AstroInternalPreviewBridgeError("unsupported_html", "Only the exact GNR8 retained hero controller is supported.");
   }
   for (const element of elements) assertNoUnsupportedResourceElement(element);
 
@@ -812,6 +813,9 @@ function walk(node: HtmlNode, visit: (element: HtmlElement) => void): void {
   if (isElement(node)) visit(node);
   const children = "childNodes" in node ? node.childNodes ?? [] : [];
   for (const child of children) walk(child, visit);
+  if (isElement(node) && node.tagName === "template") {
+    walk((node as DefaultTreeAdapterMap["template"]).content, visit);
+  }
 }
 
 function isElement(node: HtmlNode): node is HtmlElement {

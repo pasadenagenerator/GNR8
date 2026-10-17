@@ -1,3 +1,4 @@
+import { prepareOwnedRetainedRuntimeForAstro } from "../../src/public-site/owned-retained-runtime";
 import type {
   Gnr8OutputAdapter,
   Gnr8OutputAdapterDescriptor,
@@ -174,15 +175,19 @@ function normalizedCapturedPages(pages: NormalizedStaticSitePage[]): NormalizedS
   for (const page of pages) {
     const path = normalizeRoutePath(page.path);
     if (byPath.has(path)) throw new Error(`duplicate_astro_route:${path}`);
-    if (/<script\b/i.test(page.bodyHtml)) throw new Error(`unsupported_astro_page_script:${path}`);
+    let bodyHtml: string, headHtml: string;
+    try {
+      bodyHtml = prepareOwnedRetainedRuntimeForAstro(page.bodyHtml);
+      headHtml = prepareOwnedRetainedRuntimeForAstro(page.headHtml ?? "");
+    } catch { throw new Error(`unsupported_astro_page_script:${path}`); }
     byPath.set(path, {
       path,
       title: page.title.trim() || "Untitled",
-      ...(page.headHtml?.trim() ? { headHtml: page.headHtml.trim() } : {}),
+      ...(headHtml.trim() ? { headHtml: headHtml.trim() } : {}),
       ...(page.bodyAttributes && Object.keys(page.bodyAttributes).length > 0
         ? { bodyAttributes: { ...page.bodyAttributes } }
         : {}),
-      bodyHtml: page.bodyHtml,
+      bodyHtml,
     });
   }
   if (!byPath.has("/")) throw new Error("astro_root_route_required");

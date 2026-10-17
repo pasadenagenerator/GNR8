@@ -1,3 +1,4 @@
+import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -944,10 +945,18 @@ test("does not remove a generic api.js without security evidence inside a replac
   );
 });
 
-test("captured Revolution interaction is rejected by the static Astro boundary, not silently published as a slider", () => {
+test("captured Revolution interaction projects only the owned controller and keeps unknown scripts rejected", () => {
   const slides = [1, 2].map(i => `<rs-slide><img src="/uploads/${i === 1 ? 'logo' : 'about'}.png"><rs-layer data-type="text" data-xy="x:40px;y:250px;" data-text="s:70;l:80;fw:500;" data-dim="w:804px;">Slide ${i}</rs-layer></rs-slide>`).join('');
   const rootHtml = `<html><head><title>Captured hero</title></head><body><rs-module-wrap><rs-module id="hero">${slides}</rs-module></rs-module-wrap><script>jQuery('#hero').revolution({duration:"5000ms",gridwidth:1920,gridheight:900});</script></body></html>`;
   const { version, artifact, rawArtifact } = fixture({ rootHtml });
-  assert.throws(() => createSourceBackedAstroGenerationInput({ siteVersion: version, artifact, rawArtifact }),
-    (error: unknown) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes('scripts'));
+  const result = createSourceBackedAstroGenerationInput({ siteVersion: version, artifact, rawArtifact });
+  const home = result.content.pages!.find(p => p.path === "/")!;
+  assert.equal((home.bodyHtml.match(/data-hero-slide=/g) || []).length, 2);
+  assert.ok(home.bodyHtml.includes(RETAINED_HERO_SCRIPT));
+  assert.ok(!home.bodyHtml.includes(".revolution("));
+  for (const script of ['<script data-gnr8-preview-runtime="retained-hero">alert(1)</script>', '<script src="/retained-hero.js"></script>', `<script onload="alert(1)">${RETAINED_HERO_SCRIPT}</script>`]) {
+    const unsafe = fixture({ rootHtml: rootHtml.replace('</body>', script + '</body>') });
+    assert.throws(() => createSourceBackedAstroGenerationInput({ siteVersion: unsafe.version, artifact: unsafe.artifact, rawArtifact: unsafe.rawArtifact }),
+      (error: unknown) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes('scripts'));
+  }
 });

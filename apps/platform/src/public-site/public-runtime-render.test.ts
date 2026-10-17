@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { RETAINED_HERO_SCRIPT } from "./retained-hero-slider";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -231,6 +232,25 @@ test("public runtime artifact hit: serves artifact HTML with artifact-only diagn
     restoreDeps();
     restoreUsageDeps();
   }
+});
+
+test("public Astro rendering preserves the shared owned hero controller and native navigation", async () => {
+  const owned = `<script data-gnr8-preview-runtime="retained-hero">${RETAINED_HERO_SCRIPT}</script>`;
+  const navigation = '<details data-gnr8-mobile-navigation><summary>Menu</summary><nav><a href="/about">About</a></nav></details>';
+  const source = `<!doctype html><html><head></head><body>${navigation}${owned}</body></html>`;
+  const artifact = publicAstroArtifact({ htmlByPath: { "/": source }, compiledTokenStyles: "" });
+  const restore = __setPublicRuntimeRenderDependenciesForTest({
+    resolveRawTemplateSiteForDomainAndPath: async () => rawTemplateMiss(),
+    resolveActiveArtifactForHostAndPathWithDiagnostics: async () => publicArtifactResolution({ artifact, path: "/", html: source }),
+  });
+  try {
+    const response = await renderPublicPathResponse({ host: "astro-public.example.com", path: "/" });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.ok(html.includes(owned));
+    assert.ok(html.includes(navigation));
+    assert.equal(html.split(RETAINED_HERO_SCRIPT).length - 1, 1);
+  } finally { restore(); }
 });
 
 test("public runtime restores exact shared CSS for a compacted multi-page Astro artifact", async () => {
