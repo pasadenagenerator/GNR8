@@ -1,5 +1,5 @@
 import type { AcceptedFunctionalReductions } from './accepted-functional-reductions'
-export { parseAcceptedFunctionalReductions, type AcceptedFunctionalReductions } from './accepted-functional-reductions'
+export { parseAcceptedFunctionalReductions, isContactEmail, type AcceptedFunctionalReductions } from './accepted-functional-reductions'
 export const TEMPLATE_PROCESSING_REQUESTED_EVENT = 'template/processing.requested'
 export const TEMPLATE_PROCESSING_MAX_ATTEMPTS = 3
 export const TEMPLATE_PROCESSING_STUCK_AFTER_MINUTES = 10

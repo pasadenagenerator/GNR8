@@ -10,14 +10,28 @@ export type AcceptedFunctionalReductions = {
   tracking: 'remove-bundle'
   sourceWidgetRemovals?: never
   excludedRoutes?: Array<{ path: string; reason: 'obsolete-template' }>
+  contact?: { recipient: string; recipientConfirmed: true }
 }
 
-/** Shared API/Worker validation; the presentation variant never authorizes forms. */
+export function isContactEmail(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 254 &&
+    /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/.test(value)
+}
+
+/** Shared API/Worker validation; contact replacement requires explicit opt-in. */
 export function parseAcceptedFunctionalReductions(value: unknown): AcceptedFunctionalReductions | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const input = value as Record<string, unknown>
   if (input.kind === 'retained-presentation-v1') {
-    if (Object.keys(input).some(key => !['kind', 'search', 'map', 'tracking', 'excludedRoutes'].includes(key))) return null
+    if (Object.keys(input).some(key => !['kind', 'search', 'map', 'tracking', 'excludedRoutes', 'contact'].includes(key))) return null
+    let contact: { recipient: string; recipientConfirmed: true } | undefined
+    if (input.contact !== undefined) {
+      if (!input.contact || typeof input.contact !== 'object' || Array.isArray(input.contact)) return null
+      const value = input.contact as Record<string, unknown>
+      if (Object.keys(value).some(key => !['recipient', 'recipientConfirmed'].includes(key)) ||
+        value.recipientConfirmed !== true || !isContactEmail(value.recipient)) return null
+      contact = { recipient: value.recipient, recipientConfirmed: true }
+    }
     if (input.excludedRoutes !== undefined && (!Array.isArray(input.excludedRoutes) || input.excludedRoutes.length > 32)) return null
     const excludedRoutes: Array<{path:string;reason:'obsolete-template'}> = []
     for (const value of (input.excludedRoutes ?? []) as unknown[]) {
@@ -29,7 +43,7 @@ export function parseAcceptedFunctionalReductions(value: unknown): AcceptedFunct
       excludedRoutes.push({path,reason:'obsolete-template'})
     }
     return input.search === 'remove' && input.map === 'address-link' && input.tracking === 'remove-bundle'
-      ? { kind: input.kind, search: input.search, map: input.map, tracking: input.tracking, ...(excludedRoutes.length ? {excludedRoutes} : {}) } : null
+      ? { kind: input.kind, search: input.search, map: input.map, tracking: input.tracking, ...(excludedRoutes.length ? {excludedRoutes} : {}), ...(contact ? {contact} : {}) } : null
   }
   if (input.kind !== 'legacy-forms-to-disclosed-links-v1' || typeof input.contactEmail !== 'string' || input.commentLinks !== 'source-article') return null
   const email = input.contactEmail.trim().toLowerCase()

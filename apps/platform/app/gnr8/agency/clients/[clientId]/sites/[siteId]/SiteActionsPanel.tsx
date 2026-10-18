@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
+import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
+
 import { addRecentItem } from '@/src/workspace/workspace-recents'
 
 type SiteActionType = 'rerun_transformation' | 'generate_redesign' | 'publish_site'
@@ -108,6 +110,11 @@ export default function SiteActionsPanel(props: Props) {
   const [runningType, setRunningType] = useState<SiteActionType | null>(null)
   const [strategyInput, setStrategyInput] = useState('More visual')
   const [outputAdapterId, setOutputAdapterId] = useState<'default' | 'html-static-artifact'>('default')
+  const [presentation, setPresentation] = useState(false)
+  const [nativeContact, setNativeContact] = useState(false)
+  const [recipient, setRecipient] = useState('')
+  const [recipientConfirmed, setRecipientConfirmed] = useState(false)
+  const [excludedPaths, setExcludedPaths] = useState('')
   const [acceptLegacyFormReductions, setAcceptLegacyFormReductions] = useState(false)
   const [legacyFormContactEmail, setLegacyFormContactEmail] = useState('')
   const [removeCookieConsent, setRemoveCookieConsent] = useState(false)
@@ -145,6 +152,16 @@ export default function SiteActionsPanel(props: Props) {
       if (!confirmed) return
     }
 
+    const presentationSettings = presentation ? parseAcceptedFunctionalReductions({
+      kind: 'retained-presentation-v1', search: 'remove', map: 'address-link', tracking: 'remove-bundle',
+      excludedRoutes: excludedPaths.split('\n').map(path => path.trim()).filter(Boolean).map(path => ({path, reason: 'obsolete-template'})),
+      ...(nativeContact ? { contact: { recipient, recipientConfirmed } } : {}),
+    }) : undefined
+    if (type === 'generate_redesign' && outputAdapterId === 'default' && presentation && !presentationSettings) {
+      setLocalError('Check exact route exclusions and confirm the contact recipient before generating.')
+      return
+    }
+
     setRunningType(type)
     setLocalError(null)
     setLocalMessage(null)
@@ -161,7 +178,7 @@ export default function SiteActionsPanel(props: Props) {
             type === 'generate_redesign' && outputAdapterId === 'html-static-artifact'
               ? outputAdapterId
               : undefined,
-          acceptedFunctionalReductions:
+          acceptedFunctionalReductions: type === 'generate_redesign' && outputAdapterId === 'default' && presentation ? presentationSettings :
             type === 'generate_redesign' &&
             outputAdapterId === 'default' &&
             acceptLegacyFormReductions
@@ -298,12 +315,30 @@ export default function SiteActionsPanel(props: Props) {
                 gap: 6,
               }}
             >
+              <label>
+                <input type='checkbox' checked={presentation} disabled={!canRunMigration} onChange={event => { setPresentation(event.target.checked); if (event.target.checked) setAcceptLegacyFormReductions(false) }} />
+                For this candidate: remove recognized search; replace maps with their address and OpenStreetMap link; remove the recognized tracking and consent bundle together.
+              </label>
+              {presentation ? <>
+                <label>Exclude these obsolete routes from this site's candidate (one exact path per line; homepage cannot be excluded)
+                  <textarea value={excludedPaths} disabled={!canRunMigration} onChange={event => setExcludedPaths(event.target.value)} rows={4} style={{display:'block',width:'100%'}} />
+                </label>
+                <p>Captured files remain stored. Unknown scripts and unsupported forms block generation.</p>
+                <label><input type='checkbox' checked={nativeContact} disabled={!canRunMigration} onChange={event => setNativeContact(event.target.checked)} /> Replace supported ordinary contact forms with GNR8 forms, preserving their layout and required fields.</label>
+                {nativeContact ? <>
+                  <label>Approved recipient for this site
+                    <input type='email' value={recipient} disabled={!canRunMigration} onChange={event => {setRecipient(event.target.value);setRecipientConfirmed(false)}} style={{display:'block',width:'100%'}} />
+                  </label>
+                  <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site's recipient: {recipient || '(enter email)'}</label>
+                  <p>Supported: name, email, optional phone and message. Subject, consent and other special fields remain blocked. Preview cannot send. Delivery activation is unavailable until a verified sender and durable submission service are configured.</p>
+                </> : null}
+              </> : null}
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>
                 <input
                   type='checkbox'
                   checked={acceptLegacyFormReductions}
                   disabled={!canRunMigration}
-                  onChange={(event) => setAcceptLegacyFormReductions(event.target.checked)}
+                  onChange={(event) => { setAcceptLegacyFormReductions(event.target.checked); if (event.target.checked) setPresentation(false) }}
                 />
                 <span>
                   Accept form reductions for this generated candidate only: replace legacy contact forms with a disclosed email link and comment forms with links to the original articles.

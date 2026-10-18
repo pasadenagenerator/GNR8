@@ -474,7 +474,7 @@ function inlineExportedStylesheets(input: {
 
   const elements = allElements(document);
   if (elements.some((element) => element.tagName === "script" && !isOwnedRetainedRuntimeScript(element))) {
-    throw new AstroInternalPreviewBridgeError("unsupported_html", "Only the exact GNR8 retained hero controller is supported.");
+    throw new AstroInternalPreviewBridgeError("unsupported_html", "Only exact GNR8 owned runtime controllers are supported.");
   }
   for (const element of elements) assertNoUnsupportedResourceElement(element);
 

@@ -143,6 +143,16 @@ export async function enforceGeneratedOutputPublicationEligibility(input: {
   publishStage: PublishStage;
   resolver?: GeneratedOutputPublicationDecisionResolver;
 }): Promise<GeneratedOutputPublicationDecision | null> {
+  const workspace = record(input.artifact?.manifest.generatedOutputSourceWorkspace);
+  const reductions = record(workspace?.acceptedFunctionalReductions);
+  if (input.publishStage !== "shadow" && reductions?.kind === "retained-presentation-v1" && reductions.contact !== undefined) {
+    // Native contact remains review-only until a verified sender and durable
+    // submission implementation are bound. Do not publish a non-working form.
+    throw new GeneratedOutputPublicationBlockedError(
+      "Native contact delivery is not configured; this candidate is review-only.",
+      ["native_contact_delivery_unconfigured"],
+    );
+  }
   const provenance = classifyGeneratedOutputProvenance(input);
   if (provenance.kind === "source_migration") return null;
   if (provenance.kind === "unknown_or_mixed_provenance") {

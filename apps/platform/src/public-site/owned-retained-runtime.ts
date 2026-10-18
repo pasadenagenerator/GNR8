@@ -1,16 +1,20 @@
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { RETAINED_HERO_SCRIPT } from "./retained-hero-slider";
+import { CONTACT_FORM_SCRIPT } from "./contact-form-runtime";
 
 /** Content identity is the authority, never an imported filename or marker.
  * Keep a single inline controller so Astro does not rebundle/minify its bytes.
  */
 export function isOwnedRetainedRuntimeScript(element: DefaultTreeAdapterMap["element"]): boolean {
+  const kind = element.attrs.find(a => a.name === "data-gnr8-preview-runtime")?.value;
+  const expected = kind === "retained-hero" ? RETAINED_HERO_SCRIPT : kind === "contact-form" ? CONTACT_FORM_SCRIPT : null;
   return element.tagName === "script" &&
+    expected !== null &&
     element.attrs.every(a =>
-      (a.name === "data-gnr8-preview-runtime" && a.value === "retained-hero") ||
+      (a.name === "data-gnr8-preview-runtime" && a.value === kind) ||
       (a.name === "is:inline" && a.value === "")) &&
     element.childNodes.every(n => n.nodeName === "#text") &&
-    element.childNodes.map(n => "value" in n ? n.value : "").join("") === RETAINED_HERO_SCRIPT;
+    element.childNodes.map(n => "value" in n ? n.value : "").join("") === expected;
 }
 
 /** Reject every other script, including spoofed markers and src/onload attrs. */

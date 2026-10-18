@@ -1,5 +1,7 @@
 import { reduceRetainedPresentation, removableRetainedPresentationScript } from "./retained-presentation-reductions";
 import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
+import { CONTACT_FORM_SCRIPT } from "../../src/public-site/contact-form-runtime";
+import { replaceSupportedContactForm } from "../contact/contact-form";
 import { createHash } from "node:crypto";
 import { parse, parseFragment, serialize, serializeOuter } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
@@ -431,7 +433,9 @@ export function createSourceBackedAstroGenerationInput(input: {
         acceptedFunctionalReductions: {
           ...input.acceptedFunctionalReductions,
           limitations: input.acceptedFunctionalReductions.kind === "retained-presentation-v1" ? [
-            "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Contact forms remain unsupported.",
+            input.acceptedFunctionalReductions.contact
+              ? "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Only supported ordinary contact forms are replaced by GNR8 forms. Sending requires server-side delivery and durable submission configuration; previews cannot send."
+              : "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Contact forms remain unsupported.",
           ] : [
             `Legacy contact forms were replaced with disclosed mailto links to ${input.acceptedFunctionalReductions.contactEmail}.`,
             "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
@@ -501,6 +505,14 @@ function normalizePage(input: {
       replacedFormCount += 1;
     }
     elements = allElements(document);
+  } else if (forms.length === 1 && input.acceptedFunctionalReductions?.kind === "retained-presentation-v1" && input.acceptedFunctionalReductions.contact && replaceSupportedContactForm(forms[0]!, input.path)) {
+    replacedFormCount = 1;
+    const body = allElements(document).find(element => element.tagName === "body")!;
+    for (const child of parseFragment(`<script data-gnr8-preview-runtime="contact-form">${CONTACT_FORM_SCRIPT}</script>`).childNodes) {
+      child.parentNode = body;
+      body.childNodes.push(child);
+    }
+    elements = allElements(document);
   } else if (forms.length > 0) {
     unsupported.push("forms");
   }
@@ -556,7 +568,7 @@ function normalizePage(input: {
         script, elements, resolvedScriptPath: capturedScriptPath(script,input.rawArtifact), siteId: input.rawArtifact.siteId, siteVersionId: input.rawArtifact.siteVersionId, fileMap: input.rawArtifact.fileMap, sourceUrl: input.rawArtifact.metadata.finalUrl ?? input.rawArtifact.metadata.sourceUrl,
       })) ||
       isReplaceableStaticSiteScript(script, {
-        hasReplacedForms: replacedFormCount > 0,
+        hasReplacedForms: replacedFormCount > 0 && input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1",
         replacedFormSecurityRuntime,
         elements,
       })

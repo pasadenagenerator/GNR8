@@ -23,3 +23,10 @@ test('exact html route exclusions allow a final extension without accepting trav
   assert.deepEqual(parseAcceptedFunctionalReductions({...presentation,excludedRoutes:[{path,reason:'obsolete-template'}]}),{...presentation,excludedRoutes:[{path,reason:'obsolete-template'}]})
   for(const path of ['/','/../empty.html','/safe/../empty.html','/safe/./empty.html','/safe//empty.html','/safe/%2e%2e/empty.html','/safe/empty%2ehtml','/safe/empty.html?x=1','/safe/empty.html#x','/safe/empty.html/child','/safe/empty..html','//host/empty.html']) assert.equal(parseAcceptedFunctionalReductions({...presentation,excludedRoutes:[{path,reason:'obsolete-template'}]}),null)
 })
+
+test('native contact requires exact recipient confirmation and rejects hidden destination options',()=>{
+ const base={kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle'}
+ const contact={recipient:'approved@example.com',recipientConfirmed:true}
+ assert.deepEqual(parseAcceptedFunctionalReductions({...base,contact}),{...base,contact})
+ for(const value of [{...contact,recipientConfirmed:false},{...contact,recipient:'a@b.com\r\nBcc: c@d.com'},{...contact,recipient:['a@b.com']},{...contact,siteId:'foreign'},{...contact,recipient:'a'.repeat(255)+'@example.com'}]) assert.equal(parseAcceptedFunctionalReductions({...base,contact:value}),null)
+})

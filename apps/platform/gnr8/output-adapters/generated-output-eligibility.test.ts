@@ -464,3 +464,9 @@ function assertBlocked(result: ReturnType<typeof evaluateGeneratedOutputTechnica
   assert.equal(result.status, "BLOCKED");
   assert.equal(result.blockerReasons.some((item) => item.code === code), true, JSON.stringify(result.blockerReasons));
 }
+
+test('native contact cannot activate while durable delivery is unconfigured',async()=>{
+ const {siteVersion,artifact}=buildFixture()
+ artifact.manifest.generatedOutputSourceWorkspace={acceptedFunctionalReductions:{kind:'retained-presentation-v1',contact:{recipient:'approved@example.com',recipientConfirmed:true}}}
+ for(const publishStage of ['canary','production'] as const) await assert.rejects(enforceGeneratedOutputPublicationEligibility({siteVersion,artifact,publishStage}), (error:unknown)=>error instanceof GeneratedOutputPublicationBlockedError && error.blockerCodes.includes('native_contact_delivery_unconfigured'))
+})

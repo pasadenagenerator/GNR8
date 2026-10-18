@@ -1054,3 +1054,18 @@ test("html route exclusion is exact and retains similarly named routes and sourc
   assert.ok(html.includes(`data-gnr8-excluded-route-link="${excluded}"`));
   assert.ok(input.artifact.htmlByPath[excluded]);
 });
+
+test('explicit basic contact replacement preserves fields and routes without exposing recipient',()=>{
+ const form='<form class="wpcf7-form" method="post" action="/wp-json/contact"><div class="column one-second"><input name="your-name" aria-required="true" placeholder="Ime"></div><input type="email" name="your-email" required placeholder="E-mail"><textarea name="your-message" placeholder="Sporočilo"></textarea><input type="submit" value="Pošlji"></form>'
+ const {version,rawArtifact,artifact}=fixture({rootHtml:`<html><head><title>Contact</title></head><body>${form}</body></html>`})
+ const settings={...presentationReduction,contact:{recipient:'approved@example.com',recipientConfirmed:true as const}}
+ const generated=createSourceBackedAstroGenerationInput({siteVersion:version,rawArtifact,artifact,htmlByPath:artifact.htmlByPath,acceptedFunctionalReductions:settings})
+ const html=generated.content.pages.find(p=>p.path==='/')!.bodyHtml!
+ assert.match(html,/data-gnr8-contact="v1"/);assert.match(html,/action="\/api\/gnr8\/runtime\/contact\?path=%2F"/);assert.match(html,/data-gnr8-preview-runtime="contact-form"/)
+ assert.doesNotMatch(html,/wp-json|approved@example.com/)
+ assert.equal(generated.outputPaths.length,2)
+ for(const extra of ['<input name="your-subject">','<input type="checkbox" name="dovoljenje[]">','<script src="/assets/form.js"></script>']){
+  const source=extra.startsWith('<script')?form+extra:form.replace('</form>',extra+'</form>')
+  assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:version,rawArtifact,artifact,htmlByPath:{...artifact.htmlByPath,'/':`<html><body>${source}</body></html>`},acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError)
+ }
+})

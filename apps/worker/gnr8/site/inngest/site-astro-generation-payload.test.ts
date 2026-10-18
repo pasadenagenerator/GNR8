@@ -13,3 +13,8 @@ test('worker keeps the legacy reduction contract distinct',()=>{
   const acceptedFunctionalReductions={kind:'legacy-forms-to-disclosed-links-v1',contactEmail:'Test@Example.com',commentLinks:'source-article'}
   assert.deepEqual(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions})?.acceptedFunctionalReductions,{...acceptedFunctionalReductions,contactEmail:'test@example.com'})
 })
+test('worker forwards explicit native contact settings and does not infer recipient consent',()=>{
+ const acceptedFunctionalReductions={kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle',contact:{recipient:'approved@example.com',recipientConfirmed:true},excludedRoutes:[{path:'/obsolete',reason:'obsolete-template'}]}
+ assert.deepEqual(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions})?.acceptedFunctionalReductions,acceptedFunctionalReductions)
+ assert.equal(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions:{...acceptedFunctionalReductions,contact:{recipient:'approved@example.com'}}}),null)
+})
