@@ -68,6 +68,29 @@ function makeHtmlResponse(html: string): Response {
   });
 }
 
+test("url import removes a MIME-proven false stylesheet role without losing the image", async () => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-css-role-"));
+  const sourceUrl = "https://example.com/";
+  const requests: string[] = [];
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl, snapshotRootDirAbs: root, requestId: "css-role", renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async input => {
+        const url = String(input instanceof Request ? input.url : input); requests.push(url);
+        if (url === sourceUrl) return makeHtmlResponse('<!doctype html><html><head><title>Home</title><!-- <link rel="stylesheet" href="/comment.css"> --><link rel="stylesheet alternate" href="/photo.png"></head><body><main><h1>Home</h1><p>Representative retained image content.</p><img src="/photo.png"></main></body></html>');
+        if (url === `${sourceUrl}photo.png`) return new Response(new Uint8Array([137,80,78,71,1,2,3,4]), { headers: { "content-type": "image/png" } });
+        throw new Error(`Unexpected fixture request: ${url}`);
+      },
+    });
+    const html = fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8");
+    assert.match(html, /<link rel="alternate"/);
+    assert.match(html, /<img[^>]+src="\//);
+    assert.ok(!requests.some(url => url.endsWith("comment.css")));
+    const image = snapshot.fetchManifest.find(row => row.resolvedUrl === `${sourceUrl}photo.png` && row.fetchStatus === "fetched");
+    assert.ok(image?.localPath && fs.existsSync(path.join(snapshot.snapshotRootDirAbs, image.localPath)));
+  } finally { await fs.promises.rm(root, { recursive: true, force: true }); }
+});
+
 test("url import keeps CSS references separate from HTML link identities and retains dependency mappings", async () => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-reference-identity-"));
   const sourceUrl = "https://www.example.com/";

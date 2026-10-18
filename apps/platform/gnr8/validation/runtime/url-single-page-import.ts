@@ -5258,6 +5258,16 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
         const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
         const rewriteEligibleLocalPath = localPath && outcome?.fetchStatus === "fetched" ? localPath : null;
+        if (tag === "link" && attribute === "href" && rewriteEligibleLocalPath &&
+          /^(?:image\/|font\/|application\/(?:font|vnd\.ms-fontobject))/i.test(outcome?.contentType ?? "")) {
+          const roles = (getAttr(node, "rel") ?? "").split(/\s+/);
+          if (roles.some(role => role.toLowerCase() === "stylesheet")) {
+            // A URL can legitimately be shared by an image and a malformed
+            // stylesheet link. Drop only the contradicted role; retain bytes,
+            // the href, other link roles, and all actual image references.
+            setAttr(node, "rel", roles.filter(role => role.toLowerCase() !== "stylesheet").join(" "));
+          }
+        }
         const previewInspection =
           runtimeIdsAvailable && (tag === "img" || tag === "source")
             ? inspectAndNormalizePreviewAssetUrl({

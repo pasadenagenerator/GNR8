@@ -112,6 +112,19 @@ function page(path: string, title: string): CanonicalSiteVersionSnapshot["pages"
   };
 }
 
+test("captured head uses real CSS nodes and rejects only MIME-proven non-CSS roles", () => {
+  const input = fixture({ rootHtml: '<!doctype html><html><head><title>Home</title><!-- <link rel="stylesheet" href="/absent.css"><style>.comment-only{color:red}</style> --><link rel="stylesheet" href="/uploads/logo.png"><link rel="stylesheet" href="/theme.jpg"><style>.active{color:blue}</style></head><body><img src="/uploads/logo.png"><h1>Home</h1></body></html>' });
+  input.rawArtifact.fileMap["theme.jpg"] = { path: "theme.jpg", mediaType: "text/css", sizeBytes: 12, sha256: SHA };
+  const result = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
+  const root = result.sourceManifest.files.find(file => file.path === "src/pages/index.astro")!.contents;
+  assert.ok(!root.includes("absent.css"));
+  assert.ok(!root.includes("comment-only"));
+  assert.ok(root.includes(".active{color:blue}"));
+  assert.match(root, /<img[^>]+uploads\/logo\.png/);
+  assert.ok(!/<link[^>]+uploads\/logo\.png/.test(root));
+  assert.match(root, /<link[^>]+theme\.jpg/);
+});
+
 test("normal source input preserves captured routes, navigation, owned asset identity, and exact Astro source files", () => {
   const input = fixture();
   const generated = createSourceBackedAstroGenerationInput({

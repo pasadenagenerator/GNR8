@@ -1,6 +1,6 @@
 import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
 import { createHash } from "node:crypto";
-import { parse, parseFragment, serialize } from "parse5";
+import { parse, parseFragment, serialize, serializeOuter } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArtifact } from "@/gnr8/runtime/types";
@@ -576,6 +576,7 @@ function normalizePage(input: {
   const headStyles = extractCapturedHeadStyles(rewritten, {
     hasReplacedForms: replacedFormCount > 0,
     removals: input.acceptedFunctionalReductions?.sourceWidgetRemovals ?? [],
+    rawArtifact: input.rawArtifact,
   });
   if (hasStaticMobileNavigation) headStyles.push(STATIC_MOBILE_NAVIGATION_STYLE);
   for (const href of unresolvedRequiredStylesheetHrefs(headStyles, sourceHostFromRawArtifact(input.rawArtifact))) {
@@ -712,17 +713,27 @@ function removeClassTokens(element: HtmlElement, predicate: (token: string) => b
 
 function extractCapturedHeadStyles(
   html: string,
-  input: { hasReplacedForms: boolean; removals: SourceWidgetRemoval[] },
+  input: { hasReplacedForms: boolean; removals: SourceWidgetRemoval[]; rawArtifact: RawImportedSiteArtifact },
 ): string[] {
-  const head = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? "";
+  const document = parse(html);
+  const head = allElements(document).find(element => element.tagName === "head");
   const removeCaptcha = input.hasReplacedForms && input.removals.includes("form-captcha");
   const out: string[] = [];
-  for (const match of head.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>|<link\b[^>]*>/gi)) {
-    const markup = match[0];
+  // Only actual nodes participate: commented fallback tags are not CSS.
+  for (const element of head ? allElements(head) : []) {
+    if (element.tagName !== "style" && element.tagName !== "link") continue;
+    const markup = serializeOuter(element);
     if (/^<link\b/i.test(markup)) {
       const rel = htmlAttributeFromMarkup(markup, "rel").toLowerCase().split(/\s+/);
       if (!rel.includes("stylesheet")) continue;
       const href = htmlAttributeFromMarkup(markup, "href");
+      const prefix = `/api/gnr8/runtime/preview-assets/${input.rawArtifact.siteId}/${input.rawArtifact.siteVersionId}/`;
+      const filePath = ownedAssetPathFromUrl(href, prefix);
+      const retained = filePath ? input.rawArtifact.fileMap[filePath] : undefined;
+      // An existing image/font reference may have been reused in a link with
+      // an erroneous stylesheet role. Trust retained MIME evidence, not a
+      // filename: leave the asset and its valid image/font uses intact.
+      if (retained && /^(?:image\/|font\/|application\/(?:font|vnd\.ms-fontobject))/i.test(retained.mediaType)) continue;
       // Some legacy captures label font binaries as stylesheets. Browsers do
       // not parse those bytes as CSS; the real @font-face reference remains in
       // the captured stylesheet dependency graph.
