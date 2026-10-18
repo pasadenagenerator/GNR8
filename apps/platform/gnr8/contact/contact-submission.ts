@@ -1,16 +1,18 @@
 import { createHash } from 'node:crypto'
 import { isContactEmail } from '@gnr8/runtime-contracts'
-import { CONTACT_LIMITS, type ContactField, type ContactSchema } from './contact-form'
+import { CONTACT_LIMITS, type ContactField, type ContactSchema, type ContactAcceptance } from './contact-form'
 
-export type PublishedContact = ContactSchema & { siteId: string; siteVersionId: string; pagePath: string; recipient: string }
-export type ContactPayload = Partial<Record<ContactField,string>>
+export type PublishedContact = ContactSchema & { siteId: string; siteVersionId: string; pagePath: string; recipient: string; artifactId: string; artifactSha256: string }
+export type ContactPayload = Partial<Record<ContactField,string>> & { acceptance?: 'accepted' }
 export type ContactOutcome = 'notification_accepted' | 'notification_failed' | 'notification_unknown'
 /** Must be backed by durable, atomic storage; process memory does not satisfy
- * this interface. A pending/unknown claim is never automatically resent. */
+ * this interface. The durable claim must assign acceptance time using its own
+ * server/database clock on first insertion; no browser timestamp is accepted.
+ * A pending/unknown claim is never automatically resent. */
 export type ContactDelivery = {
   verifiedSender: string
-  claim(input: PublishedContact & { key: string; payloadHash: string; payload: ContactPayload }): Promise<
-    {status:'claimed'; submissionId:string} | {status:'duplicate'; outcome:ContactOutcome|'pending'} | {status:'rate_limited'|'conflict'}>
+  claim(input: PublishedContact & { key: string; payloadHash: string; payload: ContactPayload; acceptanceEvidence?: ContactAcceptance & { affirmative: true; artifactId: string; artifactSha256: string } }): Promise<
+    {status:'claimed'; submissionId:string} | {status:'duplicate'; outcome:ContactOutcome|'pending'} | {status:'rate_limited'} | {status:'conflict'}>
   finish(submissionId: string, outcome: ContactOutcome): Promise<void>
   send(input: {from:string; to:string; replyTo:string; subject:string; text:string; idempotencyKey:string}): Promise<'accepted'|'failed'>
 }
@@ -50,15 +52,19 @@ export function createContactPost(deps: ContactDependencies) {
     let site: PublishedContact | null
     try { site = await deps.resolve(url.host,path) } catch { return respond(req,503,'unavailable',messages.unavailable) }
     if (!site || site.pagePath !== path || !isContactEmail(site.recipient)) return respond(req,403,'forbidden',messages.forbidden)
-    const allowed = new Set<string>([...site.fields,'website','requestId'])
+    const allowed = new Set<string>([...site.fields,'website','requestId',...(site.acceptance ? ['acceptance','formVersion'] : [])])
     if ([...form.keys()].some(key => !allowed.has(key) || form.getAll(key).length !== 1) || form.get('website')) return respond(req,400,'invalid',messages.invalid)
     const payload: ContactPayload = {}
     for (const field of site.fields) {
       const value = form.get(field) ?? ''
       if (value.length > CONTACT_LIMITS[field] || (site.required.includes(field) && !value.trim()) ||
-        (field !== 'message' && /[\r\n\x00-\x1f\x7f]/.test(value)) || (field === 'message' && /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) ||
+        (field !== 'message' && /[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(value)) || (field === 'message' && /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) ||
         (field === 'email' && !isContactEmail(value))) return respond(req,400,'invalid',messages.invalid)
       payload[field] = value
+    }
+    if (site.acceptance) {
+      if (form.get('acceptance') !== site.acceptance.value || form.get('formVersion') !== site.acceptance.formVersion) return respond(req,400,'invalid',messages.invalid)
+      payload.acceptance = 'accepted'
     }
     const requestedKey = form.get('requestId') ?? ''
     if (requestedKey && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedKey)) return respond(req,400,'invalid',messages.invalid)
@@ -66,14 +72,14 @@ export function createContactPost(deps: ContactDependencies) {
     if (!delivery || !isContactEmail(delivery.verifiedSender)) return respond(req,503,'unavailable',messages.unavailable)
     const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
     // Native no-JS retry deduplication: identical content for this site version.
-    const key = createHash('sha256').update(JSON.stringify([site.siteId,site.siteVersionId,path,requestedKey || `native:${hash}`])).digest('hex')
+    const key = createHash('sha256').update(JSON.stringify([site.siteId,site.siteVersionId,site.artifactId,site.artifactSha256,path,requestedKey || `native:${hash}`])).digest('hex')
     try {
-      const claim = await delivery.claim({...site,key,payloadHash:hash,payload})
+      const claim = await delivery.claim({...site,key,payloadHash:hash,payload,...(site.acceptance ? {acceptanceEvidence:{...site.acceptance,affirmative:true as const,artifactId:site.artifactId,artifactSha256:site.artifactSha256}} : {})})
       if (claim.status === 'rate_limited') return respond(req,429,'rate_limited',messages.failed)
       if (claim.status === 'conflict') return respond(req,409,'conflict',messages.failed)
       if (claim.status === 'duplicate') return claim.outcome === 'notification_accepted' ? respond(req,200,claim.outcome,messages.accepted) : respond(req,409,claim.outcome,messages.failed)
       let outcome: ContactOutcome = 'notification_unknown'
-      try { outcome = await delivery.send({from:delivery.verifiedSender,to:site.recipient,replyTo:payload.email!,subject:'Website contact request',text:site.fields.map(field => `${field}: ${payload[field] ?? ''}`).join('\n\n'),idempotencyKey:key}) === 'accepted' ? 'notification_accepted' : 'notification_failed' }
+      try { outcome = await delivery.send({from:delivery.verifiedSender,to:site.recipient,replyTo:payload.email!,subject:payload.subject?.trim() || 'Website contact request',text:site.fields.map(field => `${field}: ${payload[field] ?? ''}`).join('\n\n'),idempotencyKey:key}) === 'accepted' ? 'notification_accepted' : 'notification_failed' }
       catch { /* Do not expose provider errors, secrets or content. Never retry an uncertain send. */ }
       await delivery.finish(claim.submissionId,outcome)
       return outcome === 'notification_accepted' ? respond(req,200,outcome,messages.accepted) : respond(req,502,outcome,messages.failed)

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
-import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
+import { createRetainedPresentationSettings } from '@gnr8/runtime-contracts'
 
 import { addRecentItem } from '@/src/workspace/workspace-recents'
 
@@ -152,10 +152,8 @@ export default function SiteActionsPanel(props: Props) {
       if (!confirmed) return
     }
 
-    const presentationSettings = presentation ? parseAcceptedFunctionalReductions({
-      kind: 'retained-presentation-v1', search: 'remove', map: 'address-link', tracking: 'remove-bundle',
-      excludedRoutes: excludedPaths.split('\n').map(path => path.trim()).filter(Boolean).map(path => ({path, reason: 'obsolete-template'})),
-      ...(nativeContact ? { contact: { recipient, recipientConfirmed } } : {}),
+    const presentationSettings = presentation ? createRetainedPresentationSettings({
+      excludedPaths, nativeContact, recipient, recipientConfirmed,
     }) : undefined
     if (type === 'generate_redesign' && outputAdapterId === 'default' && presentation && !presentationSettings) {
       setLocalError('Check exact route exclusions and confirm the contact recipient before generating.')
@@ -330,7 +328,7 @@ export default function SiteActionsPanel(props: Props) {
                     <input type='email' value={recipient} disabled={!canRunMigration} onChange={event => {setRecipient(event.target.value);setRecipientConfirmed(false)}} style={{display:'block',width:'100%'}} />
                   </label>
                   <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site's recipient: {recipient || '(enter email)'}</label>
-                  <p>Supported: name, email, optional phone and message. Subject, consent and other special fields remain blocked. Preview cannot send. Delivery activation is unavailable until a verified sender and durable submission service are configured.</p>
+                  <p>Supported: name, email, optional phone/subject and message; required fields stay as imported. The recognized required CF7 permission checkbox and its exact legal text are preserved, unchecked. Other fields remain blocked. Preview cannot send. Delivery activation is unavailable until a verified sender and durable submission service are configured.</p>
                 </> : null}
               </> : null}
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>

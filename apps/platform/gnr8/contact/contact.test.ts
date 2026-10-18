@@ -23,7 +23,7 @@ test('only exact owned contact script survives Astro',()=>{
   assert.match(prepareOwnedRetainedRuntimeForAstro(script),/is:inline/)
   for(const unsafe of [script.replace(CONTACT_FORM_SCRIPT,'alert(1)'),script.replace('<script ','<script src="contact.js" '),script.replace('<script ','<script onload="alert(1)" ')]) assert.throws(()=>prepareOwnedRetainedRuntimeForAstro(unsafe))
 })
-const site:PublishedContact={siteId:'site-one',siteVersionId:'version-one',pagePath:'/kontakt',recipient:'approved@example.com',fields:['name','email','phone','message'],required:['name','email']}
+const site:PublishedContact={siteId:'site-one',siteVersionId:'version-one',pagePath:'/kontakt',artifactId:'artifact-one',artifactSha256:'a'.repeat(64),recipient:'approved@example.com',fields:['name','email','phone','message'],required:['name','email']}
 function request(values:Record<string,string>={},headers:Record<string,string>={},url='https://site.example/api/gnr8/runtime/contact?path=%2Fkontakt') {
   return new Request(url,{method:'POST',headers:{origin:'https://site.example',accept:'application/json','content-type':'application/x-www-form-urlencoded',...headers},body:new URLSearchParams({name:'Example',email:'visitor@example.com',message:'Hello',website:'',requestId:'11111111-1111-4111-8111-111111111111',...values})})
 }
@@ -63,7 +63,7 @@ test('provider failure/uncertainty, storage failure and durable rate-limit rejec
 })
 test('published resolver enforces ownership, active version, explicit recipient and public binding',()=>{
   const settings={kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle',contact:{recipient:site.recipient,recipientConfirmed:true},scope:'generation-action',acceptedByActor:'user:owner'}
-  const resolution:any={outcome:'artifact_hit',siteResolution:'domain_match',ownershipSiteId:'owner',resolvedPath:'/kontakt',normalizedPath:'/kontakt',siteId:site.siteId,activeSiteVersionId:site.siteVersionId,domainBindingStatus:'active',hostBindingKind:null,html:converted().html,artifact:{siteId:site.siteId,siteVersionId:site.siteVersionId,publishStage:'production',shadowRestricted:false,manifest:{generatedOutputSourceWorkspace:{acceptedFunctionalReductions:settings}}}}
+  const resolution:any={outcome:'artifact_hit',siteResolution:'domain_match',ownershipSiteId:'owner',resolvedPath:'/kontakt',normalizedPath:'/kontakt',siteId:site.siteId,activeSiteVersionId:site.siteVersionId,artifactId:site.artifactId,domainBindingStatus:'active',hostBindingKind:null,html:converted().html,artifact:{id:site.artifactId,bundleSha256:site.artifactSha256,siteId:site.siteId,siteVersionId:site.siteVersionId,publishStage:'production',shadowRestricted:false,manifest:{generatedOutputSourceWorkspace:{acceptedFunctionalReductions:settings}}}}
   assert.deepEqual(publishedContactFromResolution(resolution,'/kontakt'),site)
   for(const patch of [{siteResolution:'preview_host_match'},{siteResolution:'fallback_latest_site'},{ownershipSiteId:null},{activeSiteVersionId:'foreign'},{siteId:'foreign'},{resolvedPath:'/'},{domainBindingStatus:'pending'},{hostBindingKind:'preview_host'}]) assert.equal(publishedContactFromResolution({...resolution,...patch},'/kontakt'),null)
 })
@@ -71,4 +71,37 @@ test('published resolver enforces ownership, active version, explicit recipient 
 test('native no-JS POST returns a static result without reflecting visitor input',async()=>{
  const f=fixture();const response=await f.post(request({requestId:'',message:'<script>private content</script>'},{accept:'text/html'}))
  assert.equal(response.status,200);assert.match(response.headers.get('content-type')!,/text\/html/);assert.doesNotMatch(await response.text(),/private content|<script>/)
+})
+
+const permission = '<span class="wpcf7-form-control-wrap dovoljenje"><span class="wpcf7-form-control wpcf7-checkbox wpcf7-validates-as-required"><span class="wpcf7-list-item first last"><label><input type="checkbox" name="dovoljenje[]" value="Fixture permission."><span class="wpcf7-list-item-label">Fixture permission.</span></label></span></span></span>'
+const subjectForm = basicForm.replace('</form>','<input name="your-subject" placeholder="Subject">'+permission+'<p>Unchanged explanatory text <a href="/privacy">Privacy</a></p></form>')
+test('optional subject and proven required permission preserve source text, structure and legal link',()=>{
+ const result=converted(subjectForm);assert.equal(result.ok,true)
+ const schema=readContactSchema(result.html)!;assert.ok(schema.fields.includes('subject'));assert.ok(!schema.required.includes('subject'));assert.ok(!schema.required.includes('message'))
+ assert.equal(schema.acceptance?.statement,'Fixture permission.');assert.match(schema.acceptance!.statementSha256,/^[a-f0-9]{64}$/);assert.match(schema.acceptance!.formSha256,/^[a-f0-9]{64}$/)
+ assert.match(result.html,/name="acceptance" value="accepted" required=""/);assert.doesNotMatch(result.html,/checked=/);assert.match(result.html,/<p>Unchanged explanatory text <a href="\/privacy">Privacy<\/a><\/p>/)
+ const changed=readContactSchema(converted(subjectForm.replaceAll('Fixture permission.','Different permission.')).html)!
+ assert.notEqual(changed.acceptance?.statementSha256,schema.acceptance?.statementSha256);assert.notEqual(changed.acceptance?.formSha256,schema.acceptance?.formSha256)
+ for(const source of [subjectForm.replace('name="dovoljenje[]"','name="newsletter"'),subjectForm.replace('type="checkbox"','type="checkbox" checked'),subjectForm.replace('value="Fixture permission."','value="different"'),subjectForm.replace('wpcf7-checkbox wpcf7-validates-as-required','wpcf7-checkbox'),subjectForm.replace('</form>',permission+'</form>'),subjectForm.replace('name="your-subject"','name="your-subject" required')]) assert.equal(converted(source).ok,false)
+ assert.equal(readContactSchema(result.html.replace('name="acceptance"','name="forged"')),null)
+ assert.equal(readContactSchema(result.html.replace('value="accepted"','value="on"')),null)
+ assert.equal(readContactSchema(result.html.replace('Unchanged explanatory text','Changed explanation')),null)
+ assert.equal(readContactSchema(result.html.replaceAll('</div><','</div> \n<').replace('<form ','<form data-astro-cid-example="" '))?.acceptance?.formVersion,schema.acceptance?.formVersion)
+})
+test('server requires exact affirmative acceptance, rejects tampering and binds evidence to server artifact',async()=>{
+ const schema=readContactSchema(converted(subjectForm).html)!
+ const configured={...site,...schema};let claims=0,sends=0,recorded:any
+ const delivery:ContactDelivery={verifiedSender:'verified@example.com',claim:async input=>{claims++;recorded=input;return {status:'claimed',submissionId:'record'}},finish:async()=>{},send:async input=>{sends++;assert.equal(input.subject,'Optional topic');assert.equal(input.to,site.recipient);assert.equal(input.replyTo,'visitor@example.com');return 'accepted'}}
+ const post=createContactPost({resolve:async()=>configured,delivery})
+ for(const value of [undefined,'','on','true','1','false','accepted ',schema.acceptance!.statement]) {
+   const response=await post(request(value===undefined?{}:{acceptance:value}));assert.equal(response.status,400)
+ }
+ for(const fields of [{subject:'a\r\nBcc:x@y.com'},{subject:'x'.repeat(201)},{subject:'a\0b'},{subject:'a\u0085b'},{subject:'a\u2028b'},{acceptanceText:'Forged'},{acceptedAt:'2000-01-01'},{artifactId:'foreign'},{formSha256:'f'.repeat(64)},{formVersion:'f'.repeat(64)}]) assert.equal((await post(request({acceptance:'accepted',formVersion:schema.acceptance!.formVersion,...fields}))).status,400)
+ const duplicate=request({acceptance:'accepted',formVersion:schema.acceptance!.formVersion});assert.equal((await post(new Request(duplicate.url,{method:'POST',headers:duplicate.headers,body:(await duplicate.text())+'&acceptance=accepted'}))).status,400)
+ assert.equal(claims,0);assert.equal(sends,0)
+ const native=request({acceptance:'accepted',formVersion:schema.acceptance!.formVersion,subject:'Optional topic',requestId:''},{accept:'text/html'});const fields=new URLSearchParams(await native.text());fields.delete('message')
+ const response=await post(new Request(native.url,{method:'POST',headers:native.headers,body:fields}));assert.equal(response.status,200);assert.match(response.headers.get('content-type')!,/text\/html/)
+ assert.deepEqual(recorded.acceptanceEvidence,{...schema.acceptance,affirmative:true,artifactId:site.artifactId,artifactSha256:site.artifactSha256});assert.equal(recorded.payload.acceptance,'accepted');assert.equal(recorded.payload.message,'');assert.equal(Object.hasOwn(recorded,'acceptedAt'),false)
+ delivery.send=async input=>{assert.equal(input.subject,'Website contact request');return 'accepted'}
+ assert.equal((await post(request({acceptance:'accepted',formVersion:schema.acceptance!.formVersion,message:'',subject:''}))).status,200)
 })

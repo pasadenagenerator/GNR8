@@ -5,7 +5,7 @@ import type { PublishedContact } from './contact-submission'
 
 export function publishedContactFromResolution(result: PublicRuntimeArtifactResolution, path: string): PublishedContact | null {
   if (result.outcome !== 'artifact_hit' || !['domain_match','host_match'].includes(result.siteResolution) ||
-    !result.ownershipSiteId || result.resolvedPath !== path || result.normalizedPath !== path ||
+    !result.ownershipSiteId || !result.artifactId || result.artifact.id !== result.artifactId || !/^[a-f0-9]{64}$/.test(result.artifact.bundleSha256) || result.resolvedPath !== path || result.normalizedPath !== path ||
     result.artifact.siteId !== result.siteId || result.artifact.siteVersionId !== result.activeSiteVersionId ||
     result.artifact.publishStage !== 'production' || result.artifact.shadowRestricted ||
     (result.hostBindingKind && ['shadow','canary','preview','candidate_preview','preview_host'].includes(result.hostBindingKind.trim().toLowerCase()))) return null
@@ -17,5 +17,5 @@ export function publishedContactFromResolution(result: PublicRuntimeArtifactReso
   const settings = parseAcceptedFunctionalReductions(configuration)
   const schema = readContactSchema(result.html)
   if (settings?.kind !== 'retained-presentation-v1' || !settings.contact || !schema) return null
-  return {...schema,siteId:result.siteId,siteVersionId:result.activeSiteVersionId,pagePath:path,recipient:settings.contact.recipient}
+  return {...schema,siteId:result.siteId,siteVersionId:result.activeSiteVersionId,pagePath:path,recipient:settings.contact.recipient,artifactId:result.artifactId,artifactSha256:result.artifact.bundleSha256}
 }

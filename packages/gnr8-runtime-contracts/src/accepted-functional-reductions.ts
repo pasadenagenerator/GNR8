@@ -54,3 +54,15 @@ export function parseAcceptedFunctionalReductions(value: unknown): AcceptedFunct
   return { kind: input.kind, contactEmail: email, commentLinks: input.commentLinks,
     ...(removals.length ? { sourceWidgetRemovals: removals as Array<'cookie-consent' | 'form-captcha' | 'back-to-top'> } : {}) }
 }
+
+/** The ordinary SiteActionsPanel uses this builder before the API and Worker
+ * independently validate the same serialized contract. No site defaults. */
+export function createRetainedPresentationSettings(input: {
+  excludedPaths: string; nativeContact: boolean; recipient: string; recipientConfirmed: boolean
+}): AcceptedFunctionalReductions | null {
+  return parseAcceptedFunctionalReductions({
+    kind: 'retained-presentation-v1', search: 'remove', map: 'address-link', tracking: 'remove-bundle',
+    excludedRoutes: input.excludedPaths.split('\n').map(path => path.trim()).filter(Boolean).map(path => ({path, reason: 'obsolete-template'})),
+    ...(input.nativeContact ? {contact:{recipient:input.recipient,recipientConfirmed:input.recipientConfirmed}} : {}),
+  })
+}

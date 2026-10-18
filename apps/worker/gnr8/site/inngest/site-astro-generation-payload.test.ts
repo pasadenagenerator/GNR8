@@ -18,3 +18,10 @@ test('worker forwards explicit native contact settings and does not infer recipi
  assert.deepEqual(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions})?.acceptedFunctionalReductions,acceptedFunctionalReductions)
  assert.equal(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions:{...acceptedFunctionalReductions,contact:{recipient:'approved@example.com'}}}),null)
 })
+test('ordinary UI builder round-trips through API validation and Worker without site defaults',async()=>{
+ const {createRetainedPresentationSettings,parseAcceptedFunctionalReductions}=await import('@gnr8/runtime-contracts')
+ const ui=createRetainedPresentationSettings({excludedPaths:'/obsolete\n/unused',nativeContact:true,recipient:'approved@example.com',recipientConfirmed:true})
+ const api=parseAcceptedFunctionalReductions(JSON.parse(JSON.stringify(ui)))
+ assert.deepEqual(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions:api})?.acceptedFunctionalReductions,ui)
+ assert.equal(createRetainedPresentationSettings({excludedPaths:'/obsolete',nativeContact:true,recipient:'approved@example.com',recipientConfirmed:false}),null)
+})
