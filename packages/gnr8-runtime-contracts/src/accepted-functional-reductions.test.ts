@@ -17,3 +17,9 @@ test('route exclusions are explicit, canonical, and cannot exclude the root or a
   for(const path of ['/','//home','/home?x=1','/home/../','/%68ome']) assert.equal(parseAcceptedFunctionalReductions({...presentation,excludedRoutes:[{path,reason:'obsolete-template'}]}),null)
   assert.equal(parseAcceptedFunctionalReductions({...presentation,excludedRoutes:[{path:'/home',reason:'obsolete-template'},{path:'/home/',reason:'obsolete-template'}]}),null)
 })
+
+test('exact html route exclusions allow a final extension without accepting traversal or encoded paths',()=>{
+  const path='/wp-content/plugins/smart-cookie-kit/res/empty.html'
+  assert.deepEqual(parseAcceptedFunctionalReductions({...presentation,excludedRoutes:[{path,reason:'obsolete-template'}]}),{...presentation,excludedRoutes:[{path,reason:'obsolete-template'}]})
+  for(const path of ['/','/../empty.html','/safe/../empty.html','/safe/./empty.html','/safe//empty.html','/safe/%2e%2e/empty.html','/safe/empty%2ehtml','/safe/empty.html?x=1','/safe/empty.html#x','/safe/empty.html/child','/safe/empty..html','//host/empty.html']) assert.equal(parseAcceptedFunctionalReductions({...presentation,excludedRoutes:[{path,reason:'obsolete-template'}]}),null)
+})

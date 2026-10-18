@@ -1034,3 +1034,23 @@ test("responsive image candidates use the same owned resolver through normal Ast
   const prefix=`/api/gnr8/runtime/preview-assets/${input.version.siteId}/${input.version.id}/uploads/`;
   assert.ok(generated.content.pages![0]!.bodyHtml.includes(`srcset="${prefix}logo.png 400w, ${prefix}about.png 800w"`));
 });
+
+test("html route exclusion is exact and retains similarly named routes and source content",()=>{
+  const excluded='/technical/empty.html', retained='/technical/empty.html-copy';
+  const input=fixture({rootHtml:`<html><body><a href="${excluded}">Obsolete technical page</a><a href="${retained}">Keep page</a></body></html>`});
+  input.artifact.htmlByPath[excluded]='<html><body></body></html>';
+  input.artifact.htmlByPath[retained]='<html><body><p>Keep content</p></body></html>';
+  input.version.importProvenanceSummary={multiPageDiscovery:{rawArtifactAssembly:{enabled:true,routeMap:[
+    {routePath:'/about',sourceUrl:'https://example.com/about',finalUrl:'https://example.com/about',rawFilePath:'pages/about/index.html',bodySha256:SHA,byteSize:1,status:'assembled'},
+    {routePath:retained,sourceUrl:`https://example.com${retained}`,finalUrl:`https://example.com${retained}`,rawFilePath:'pages/kept/index.html',bodySha256:SHA,byteSize:1,status:'assembled'},
+  ]}}} as CanonicalSiteVersionSnapshot['importProvenanceSummary'];
+  input.rawArtifact.fileMap['pages/kept/index.html']={path:'pages/kept/index.html',mediaType:'text/html',sizeBytes:1,sha256:SHA};
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:{...presentationReduction,excludedRoutes:[{path:excluded,reason:'obsolete-template'}]}});
+  assert.ok(!generated.outputPaths.includes(excluded));
+  assert.ok(generated.outputPaths.includes(retained));
+  const html=generated.content.pages!.find(p=>p.path==='/')!.bodyHtml;
+  assert.ok(!html.includes(`href="${excluded}"`));
+  assert.ok(html.includes(`href="${retained}"`));
+  assert.ok(html.includes(`data-gnr8-excluded-route-link="${excluded}"`));
+  assert.ok(input.artifact.htmlByPath[excluded]);
+});

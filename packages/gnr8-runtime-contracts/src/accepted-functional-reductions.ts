@@ -23,7 +23,7 @@ export function parseAcceptedFunctionalReductions(value: unknown): AcceptedFunct
     for (const value of (input.excludedRoutes ?? []) as unknown[]) {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return null
       const entry = value as Record<string,unknown>
-      if (Object.keys(entry).some(key => !['path','reason'].includes(key)) || entry.reason !== 'obsolete-template' || typeof entry.path !== 'string' || !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\/?$/.test(entry.path)) return null
+      if (Object.keys(entry).some(key => !['path','reason'].includes(key)) || entry.reason !== 'obsolete-template' || typeof entry.path !== 'string' || !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+(?:\.html)?\/?$/.test(entry.path)) return null
       const path = entry.path.replace(/\/$/,'')
       if (excludedRoutes.some(entry => entry.path === path)) return null
       excludedRoutes.push({path,reason:'obsolete-template'})
