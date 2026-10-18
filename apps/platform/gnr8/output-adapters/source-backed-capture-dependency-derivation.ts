@@ -1,3 +1,4 @@
+import { routeMapFromProvenance } from "@/gnr8/runtime/raw-template-route-map-resolver";
 import "server-only";
 import { resolveRetainedCssDependencyPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 export { resolveRetainedCssDependencyPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
@@ -97,7 +98,13 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     expectedSiteVersionId: parentSiteVersion.id,
     ownedRewrites: inheritedCaptureRewrites,
   });
-  const htmlFiles = parentFiles.filter((file) => /\.html?$/i.test(file.path));
+  const excludedRoutes = new Set(input.acceptedFunctionalReductions?.kind === "retained-presentation-v1"
+    ? (input.acceptedFunctionalReductions.excludedRoutes ?? []).map(entry => entry.path.replace(/\/$/, "")) : []);
+  const excludedHtmlPaths = new Set(routeMapFromProvenance(parentSiteVersion.importProvenanceSummary)
+    .filter(route => excludedRoutes.has(route.routePath.replace(/\/$/, ""))).map(route => route.rawFilePath));
+  // Plan dependencies only for the approved output scope. Parent rows and bytes
+  // remain intact, including shared assets and the excluded historical HTML.
+  const htmlFiles = parentFiles.filter((file) => /\.html?$/i.test(file.path) && !excludedHtmlPaths.has(file.path));
   const stylesheetPlan = planStylesheetDependencies({
     htmlFiles,
     filePaths: new Set(parentFiles.map((file) => file.path)),

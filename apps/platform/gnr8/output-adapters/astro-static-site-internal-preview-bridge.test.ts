@@ -458,3 +458,18 @@ async function withWorkspace(run: (workspacePath: string) => Promise<void>): Pro
     await rm(workspacePath, { recursive: true, force: true });
   }
 }
+
+test("bridge preserves empty retained routes without CSS but still rejects unstyled content and scripts",async()=>{
+  await withWorkspace(async workspacePath=>{
+    await writeFixtureDist(workspacePath);
+    await mkdir(join(workspacePath,"dist","empty"));
+    const file=join(workspacePath,"dist","empty","index.html");
+    await writeFile(file,'<!doctype html><html><head><title>Empty</title></head><body></body></html>');
+    const candidate=await convertFixture(await inspectAstroStaticExport(workspacePath));
+    assert.ok(candidate.htmlByPath["/empty"].includes('<body></body>'));
+    await writeFile(file,'<!doctype html><html><head><title>Empty</title></head><body><p>Content</p></body></html>');
+    await assertBridgeError(convertFixture(await inspectAstroStaticExport(workspacePath)),"stylesheet_missing");
+    await writeFile(file,'<!doctype html><html><head><title>Empty</title><script>unknown()</script></head><body></body></html>');
+    await assertBridgeError(convertFixture(await inspectAstroStaticExport(workspacePath)),"unsupported_html");
+  });
+});

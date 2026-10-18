@@ -481,7 +481,11 @@ function inlineExportedStylesheets(input: {
   const stylesheetLinks = elements.filter(
     (element) => element.tagName === "link" && attributeTokens(element, "rel").includes("stylesheet"),
   );
-  if (stylesheetLinks.length === 0) {
+  const body = elements.find(element => element.tagName === "body");
+  const emptyBody = body?.childNodes.every(node => node.nodeName === "#comment" || (node.nodeName === "#text" && !textContent(node).trim())) ?? false;
+  // A retained empty placeholder has no presentation to style. Resource and
+  // script checks above still apply; non-empty pages keep the stylesheet guard.
+  if (stylesheetLinks.length === 0 && !emptyBody) {
     throw new AstroInternalPreviewBridgeError("stylesheet_missing", "Astro index.html has no local stylesheet to inline.");
   }
 

@@ -351,7 +351,17 @@ function rewriteCssUrlTokens(css: string, context: RewriteContext): string {
 
 function rewriteTagAttributes(html: string, context: RewriteContext): string {
   const attributePattern = /(\s(?:src|href|xlink:href)\s*=\s*)(["'])([^"']*)(\2)/gi;
-  return html.replace(attributePattern, (full, prefix, quote, value, closingQuote) => {
+  const withResponsiveImages = html.replace(/(\ssrcset\s*=\s*)(["'])([^"']*)(\2)/gi, (full, prefix, quote, value, closingQuote) => {
+    // Preserve data URLs (whose commas are part of the URL). Ordinary captured
+    // candidates use the same ownership/path resolver as src, retaining sizes.
+    if (/data:/i.test(value)) return full;
+    const candidates = String(value).split(",").map(candidate => candidate.replace(/^(\s*)(\S+)/, (entry, space, reference) => {
+      const rewritten = rewriteAssetReferenceToRuntime({reference, siteId:context.siteId,siteVersionId:context.siteVersionId,contextFilePath:context.contextFilePath,fileMapPaths:context.fileMapPaths,versionCssUrls:context.versionCssUrls});
+      return rewritten ? space + rewritten : entry;
+    }));
+    return `${prefix}${quote}${candidates.join(",")}${closingQuote}`;
+  });
+  return withResponsiveImages.replace(attributePattern, (full, prefix, quote, value, closingQuote) => {
     const rewritten = rewriteAssetReferenceToRuntime({
       reference: String(value ?? ""),
       siteId: context.siteId,

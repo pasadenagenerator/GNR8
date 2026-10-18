@@ -973,3 +973,64 @@ test("captured Revolution interaction projects only the owned controller and kee
       (error: unknown) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes('scripts'));
   }
 });
+
+const presentationReduction = {kind:"retained-presentation-v1", search:"remove", map:"address-link", tracking:"remove-bundle"} as const;
+test("presentation-only reductions remove recognized search and map embed while preserving routes and legal content",()=>{
+  const rootHtml=`<html><head><title>Home</title></head><body><nav><a href="/about">About</a></nav><a id="search_button" href="#">Search</a><div class="search_wrapper"><form id="searchform" method="get" action="/"><input name="s"></form></div><p>Example Street 5<br>1000 Example City</p><iframe data-sck_ref="Google Maps" data-sck_unlock="profiling" data-blocked="https://www.google.com/maps/embed?pb=!2sExample%20Street%205%2C%201000%20Example%20City!5e0" src="/blocked.html"></iframe><div id="SCK"><button>Accept cookies</button></div><p>Legal policy retained</p></body></html>`;
+  const input=fixture({rootHtml});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:presentationReduction});
+  const html=generated.content.pages!.find(p=>p.path==="/")!.bodyHtml;
+  assert.ok(html.includes('Legal policy retained'));
+  assert.ok(html.includes('https://www.openstreetmap.org/search?query=Example%20Street%205%2C%201000%20Example%20City'));
+  assert.ok(!/<(?:form|iframe)\b/.test(html));
+  assert.ok(!/search_button|id="SCK"/.test(html));
+  assert.deepEqual(generated.outputPaths,["/","/about"]);
+  assert.equal(generated.sourceManifest.acceptedFunctionalReductions?.kind,"retained-presentation-v1");
+});
+
+test("presentation-only reductions keep forms and unknown script guards, including spoofed source names",()=>{
+  for(const [body,capability] of [
+    ['<form class="wpcf7-form" method="post" action="/contact"><input name="email"></form>',"forms"],
+    ['<script>window.unknownFeature()</script>',"scripts"],
+    ['<script>var NMOD_SCK_Options = {}; window.unknownFeature()</script>',"scripts"],
+    ['<script src="/scripts.js"></script>',"scripts"],
+    ['<iframe src="/placeholder" data-sck_unlock="profiling" data-sck_ref="Unknown video"></iframe>',"retained_unknown_gated_content"],
+  ]) {
+    const input=fixture({rootHtml:`<html><body>${body}</body></html>`});
+    assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:presentationReduction}), (e:unknown)=>e instanceof SourceBackedAstroUnsupportedError && e.unsupportedCapabilities.includes(capability!));
+  }
+});
+
+test("owned zoom targets remain asset links through Astro normalization, not uncaptured page routes",()=>{
+  const input=fixture({rootHtml:'<html><body><div><img src="/uploads/logo.png" alt="Picture"><a class="zoom" href="/uploads/logo.png">Zoom</a></div></body></html>'});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  const html=generated.content.pages!.find(p=>p.path==="/")!.bodyHtml;
+  const href=`/api/gnr8/runtime/preview-assets/${input.version.siteId}/${input.version.id}/uploads/logo.png`;
+  assert.ok(html.includes(`href="${href}"`));
+  assert.ok(html.includes('data-gnr8-image-zoom="true"'));
+  assert.ok(html.includes(RETAINED_HERO_SCRIPT));
+  assert.ok(!generated.contentManifest.requiredNavigation.some(n=>n.target===href));
+  assert.ok(generated.contentManifest.requiredAssets.some(a=>a.path===href));
+});
+
+test("approved route exclusion changes only requested output scope and home navigation",()=>{
+  const input=fixture({rootHtml:'<html><body><h1>Keep root</h1><a href="/about/">Domov</a><a id="logo" href="/about">Logo</a><a href="/about">Old template</a></body></html>'});
+  const unchanged=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  assert.equal(unchanged.outputPaths.length,2);
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:{...presentationReduction,excludedRoutes:[{path:'/about/',reason:'obsolete-template'}]}});
+  assert.deepEqual(generated.outputPaths,["/"]);
+  assert.ok(generated.content.pages![0]!.bodyHtml.includes('<h1>Keep root</h1>'));
+  assert.ok(generated.content.pages![0]!.bodyHtml.includes('href="/">Domov'));
+  assert.ok(!generated.contentManifest.requiredNavigation.some(n=>n.target.startsWith('/about')));
+  assert.ok(!generated.sourceManifest.assetEvidence.some(a=>a.path.endsWith('about.png')));
+  assert.equal(generated.sourceManifest.captureScopeLimitations?.[0]?.kind,'approved-obsolete-template-exclusion-v1');
+  assert.ok(input.artifact.htmlByPath['/about']);
+  assert.ok(input.rawArtifact.fileMap['uploads/about.png']);
+});
+
+test("responsive image candidates use the same owned resolver through normal Astro normalization",()=>{
+  const input=fixture({rootHtml:'<html><body><img src="/uploads/logo.png" srcset="/uploads/logo.png 400w, /uploads/about.png 800w"></body></html>'});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  const prefix=`/api/gnr8/runtime/preview-assets/${input.version.siteId}/${input.version.id}/uploads/`;
+  assert.ok(generated.content.pages![0]!.bodyHtml.includes(`srcset="${prefix}logo.png 400w, ${prefix}about.png 800w"`));
+});

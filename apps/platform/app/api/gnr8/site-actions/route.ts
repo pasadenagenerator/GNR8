@@ -1,3 +1,4 @@
+import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
@@ -65,27 +66,9 @@ export async function POST(request: NextRequest) {
       actor: `user:${actionContext.userId}`,
     }
 
-    const requestedReductions = body.acceptedFunctionalReductions && typeof body.acceptedFunctionalReductions === 'object'
-      ? body.acceptedFunctionalReductions as Record<string, unknown>
-      : null
-    const reductionKind = normalizeText(requestedReductions?.kind)
-    const reductionContactEmail = normalizeText(requestedReductions?.contactEmail).toLowerCase()
-    const reductionCommentLinks = normalizeText(requestedReductions?.commentLinks)
-    const reductionWidgetRemovals = Array.isArray(requestedReductions?.sourceWidgetRemovals)
-      ? requestedReductions.sourceWidgetRemovals.map(normalizeText)
-      : []
-    const allowedWidgetRemovals = new Set(['cookie-consent', 'form-captcha', 'back-to-top'])
-    if (
-      requestedReductions &&
-      (
-        actionType !== 'generate_redesign' ||
-        reductionKind !== 'legacy-forms-to-disclosed-links-v1' ||
-        !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reductionContactEmail) ||
-        reductionCommentLinks !== 'source-article' ||
-        reductionWidgetRemovals.some((item) => !allowedWidgetRemovals.has(item)) ||
-        new Set(reductionWidgetRemovals).size !== reductionWidgetRemovals.length
-      )
-    ) {
+    const acceptedFunctionalReductions = body.acceptedFunctionalReductions === undefined
+      ? undefined : parseAcceptedFunctionalReductions(body.acceptedFunctionalReductions)
+    if (acceptedFunctionalReductions === null || (acceptedFunctionalReductions && actionType !== 'generate_redesign')) {
       return NextResponse.json({ ok: false, error: 'acceptedFunctionalReductions is invalid' }, { status: 400 })
     }
 
@@ -106,16 +89,7 @@ export async function POST(request: NextRequest) {
                   : requestedOutputAdapterId === 'astro-static-site'
                     ? 'astro-static-site'
                     : undefined,
-              acceptedFunctionalReductions: requestedReductions
-                ? {
-                    kind: 'legacy-forms-to-disclosed-links-v1',
-                    contactEmail: reductionContactEmail,
-                    commentLinks: 'source-article',
-                    ...(reductionWidgetRemovals.length > 0
-                      ? { sourceWidgetRemovals: reductionWidgetRemovals as Array<'cookie-consent' | 'form-captcha' | 'back-to-top'> }
-                      : {}),
-                  }
-                : undefined,
+              acceptedFunctionalReductions,
             }
           : {
               ...baseRequest,

@@ -145,3 +145,9 @@ test('deterministic derived dependency failures are non-retriable', async () => 
     (error: unknown) => error instanceof NonRetriableError && error.message === message,
   )
 })
+
+test('worker preserves presentation-only reductions without introducing contact replacement',()=>{
+  const acceptedFunctionalReductions={kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle'}
+  assert.deepEqual(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions}),{...payload,acceptedFunctionalReductions})
+  assert.equal(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions:{...acceptedFunctionalReductions,contactEmail:'test@example.com'}}),null)
+})

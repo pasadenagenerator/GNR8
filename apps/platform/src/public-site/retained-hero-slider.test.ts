@@ -29,3 +29,36 @@ test("incomplete, foreign and unsupported captures are left intact",()=>{
   assert.equal(enhanceRetainedHeroSliders({...input,fileMapPaths:new Set(['images/1.jpg'])}),source);
   assert.equal(enhanceRetainedHeroSliders({...input,html:'<main>Unchanged child page</main>'}),'<main>Unchanged child page</main>');
 });
+
+test("single-slide Revolution uses the same projection without inventing autoplay",()=>{
+  const html=source.replace(slides,slides.slice(0,slides.indexOf('</rs-slide>')+11)).replace('duration:"5000ms",','');
+  const result=enhanceRetainedHeroSliders({...input,html});
+  assert.equal((result.match(/data-hero-slide=/g)||[]).length,1);
+  assert.ok(result.includes('data-interval="0"'));
+  assert.ok(result.includes('data-hero-controls hidden'));
+  assert.ok(result.includes(RETAINED_HERO_SCRIPT));
+});
+
+test("testimonials preserve content and source autoplay setting with the shared controller",()=>{
+  const items=[1,2,3].map(i=>`<li><div class="single-photo-img"><img src="${prefix}images/${i}.jpg" alt="Author ${i}"></div><div class="bq_wrapper"><blockquote>Quotation ${i}</blockquote></div><div class="author"><h5>Person ${i}</h5><span class="company">Company ${i}</span></div></li>`).join('');
+  const html=`<html lang="sl"><body><div class="testimonials_slider single-photo"><ul class="testimonials_slider_ul">${items}</ul></div><script>var mfn = {"slider":{"testimonials":0}};</script></body></html>`;
+  const result=enhanceRetainedHeroSliders({...input,html});
+  assert.equal((result.match(/data-hero-slide=/g)||[]).length,3);
+  assert.ok(result.includes('data-hero-kind="testimonials" data-interval="0"'));
+  assert.ok(result.includes('Person 1 Company 1'));
+  assert.ok(result.includes(RETAINED_HERO_SCRIPT));
+  assert.equal(enhanceRetainedHeroSliders({...input,html:result}),result);
+  const unsupported=html.replace('Quotation 1','<a href="/action">Action</a>');
+  assert.equal(enhanceRetainedHeroSliders({...input,html:unsupported}),unsupported);
+});
+
+test("owned image zoom preserves href and alt; foreign and executable links remain unsupported",()=>{
+  const html=`<html lang="sl"><body><div><img src="${prefix}images/1.jpg" alt="Full &amp; image"><a class="zoom" href="${prefix}images/1.jpg">Zoom</a></div></body></html>`;
+  const result=enhanceRetainedHeroSliders({...input,html});
+  assert.ok(result.includes('data-gnr8-image-zoom="true"'));
+  assert.ok(result.includes('data-zoom-alt="Full &amp; image"'));
+  assert.ok(result.includes('aria-label="Povečaj fotografijo"'));
+  assert.ok(result.includes(RETAINED_HERO_SCRIPT));
+  assert.equal(enhanceRetainedHeroSliders({...input,html:result}),result);
+  for(const bad of [html.replace(`href="${prefix}images/1.jpg"`,'href="https://outside.example/image.jpg"'),html.replace('class="zoom"','class="zoom" onclick="run()"')]) assert.equal(enhanceRetainedHeroSliders({...input,html:bad}),bad);
+});
