@@ -1,5 +1,7 @@
 import "server-only";
 
+import { contactDeliveryReadiness } from "@/gnr8/contact/contact-delivery";
+
 import {
   ASTRO_RUNTIME_ARTIFACT_MATERIALIZATION_VERSION,
   computeRuntimeArtifactBundleSha256,
@@ -145,9 +147,10 @@ export async function enforceGeneratedOutputPublicationEligibility(input: {
 }): Promise<GeneratedOutputPublicationDecision | null> {
   const workspace = record(input.artifact?.manifest.generatedOutputSourceWorkspace);
   const reductions = record(workspace?.acceptedFunctionalReductions);
-  if (input.publishStage !== "shadow" && reductions?.kind === "retained-presentation-v1" && reductions.contact !== undefined) {
-    // Native contact remains review-only until a verified sender and durable
-    // submission implementation are bound. Do not publish a non-working form.
+  if (input.publishStage !== "shadow" && reductions?.kind === "retained-presentation-v1" && reductions.contact !== undefined &&
+    !(await contactDeliveryReadiness()).ready) {
+    // Keep all existing provenance/review gates below. Readiness alone never
+    // publishes a candidate or moves an active pointer.
     throw new GeneratedOutputPublicationBlockedError(
       "Native contact delivery is not configured; this candidate is review-only.",
       ["native_contact_delivery_unconfigured"],

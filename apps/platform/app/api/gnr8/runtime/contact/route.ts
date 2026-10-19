@@ -1,12 +1,16 @@
 import { createContactPost } from '@/gnr8/contact/contact-submission'
-import { publishedContactFromResolution } from '@/gnr8/contact/published-contact'
-import { resolveActiveArtifactForHostAndPathWithDiagnostics } from '@/gnr8/runtime/runtime-store'
+import { contactDeliveryReadiness, createProductionContactDelivery, resolvePublishedContact } from '@/gnr8/contact/contact-delivery'
 
 export const runtime = 'nodejs'
-export const POST = createContactPost({
-  resolve: async (host,path) => publishedContactFromResolution(await resolveActiveArtifactForHostAndPathWithDiagnostics({host,path}),path),
-  // Deliberate activation boundary: the existing store only inserts submissions;
-  // no durable atomic deduplication/rate limiting or real sender exists yet.
-  // No fallback to the legacy endpoint and no fake acceptance.
-  delivery: null,
-})
+export async function POST(request: Request): Promise<Response> {
+  return createContactPost({
+    resolve:resolvePublishedContact,
+    delivery:createProductionContactDelivery(new URL(request.url).host),
+  })(request)
+}
+
+// Configuration/schema status only; never contacts Resend or creates a submission.
+export async function GET(): Promise<Response> {
+  const status = await contactDeliveryReadiness()
+  return Response.json(status,{status:status.ready ? 200 : 503,headers:{'cache-control':'no-store'}})
+}

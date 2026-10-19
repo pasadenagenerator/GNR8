@@ -1,5 +1,19 @@
 # GNR8 native contact: lokalna integracija in meja aktivacije
 
+## Odobrena trajna dostava — 2026-10-19
+
+Aktualni obseg ohranja dejanski Logatčanov obrazec iz `21dd28b7`, vključno z zadevo, sporočilom in obveznim izvornim soglasjem. Potrjeni prejemnik je `info@logatcan.si`, vedno v strežniški konfiguraciji tega spletnega mesta. Podpora obrazcu ne pomeni dovoljenja za objavo njegovega artefakta.
+
+Dodana je migracija `20261019090000_native_contact_delivery.sql`: obstoječa tabela dobi nullable idempotency ključ in stanje, unikaten indeks, trajno omejitev 20 novih oddaj na 15 minut na spletno mesto ter strežniške operacije resolve/claim/finish/readiness. Claim serializira oddaje po spletnem mestu, ponovno preveri aktivni artefakt, lastništvo, gostitelja in potrjenega prejemnika. Potrditev in čas oddaje se shranita iz strežniške sheme in podatkovne ure. Za nove zapise je vključena zaščita vrstic; anon/authenticated nimata dostopa do novih oddaj ali RPC. Legacy vrstice z NULL ključem ohranijo dosedanje pravice.
+
+Platform uporablja stateless service-role PostgREST, brez raw pg ali implicitnega ustvarjanja tabel v kontaktni poti. Resend adapter pošilja navadno besedilo iz `GNR8 <forms@notify.pasadenagenerator.com>`; obiskovalčev validirani naslov je samo Reply-To. Domena je v nadzorni plošči Verified in nima konfiguriranega sledenja. API uporablja isti idempotency ključ, brez samodejnih ponovitev. Pending in nejasen izid ostaneta zadržana; sprejeto sporočilo shrani ID ponudnika. Sprejem ponudnika ni dokaz dostave v nabiralnik. Napake, ključi in vsebina oddaj se ne beležijo.
+
+Aktivacija zahteva Production okolje, točen `GNR8_CONTACT_FROM`, prisoten `RESEND_API_KEY` in pripravljeno shemo. Ostali pogoji za lastništvo, pregled, poreklo in objavo ostajajo. GET `/api/gnr8/runtime/contact` vrne samo konfiguracijsko pripravljenost, brez pošiljanja ali poskusne oddaje; ne preverja veljavnosti ključa pri ponudniku. Preview ne pošilja. Pri pripravi te spremembe je bil v živi zbirki za Logatčan ugotovljen manjkajoč aktivni pointer; ta naloga ga ne ustvarja.
+
+Po zadnji uporabnikovi zahtevi ni novih testnih sklopov, replayev ali testnih sporočil. Preverijo se uporabljena shema, pravice, dovoljeni izvozi poti, diff in build ob izdaji. Prejšnji lokalni dokazi spodaj ostajajo zgodovinski. Spodnji predlog migracije je bil pozneje izrecno odobren in ga nadomesti ta implementacija; zgodovinske omejitve dovoljenj niso aktualna prepoved te ozke uvedbe.
+
+## Zgodovinsko lokalno stanje
+
 Stanje 2026-10-18: dejanski Logatčanov `/kontakt` je lokalno podprt, vključno z neobvezno zadevo in obvezno potrditvijo. To nadomesti prejšnjo odločitev o blokadi posebnih polj iz commita `1f14d8df`. Produkcijska dostava in objava ostajata blokirani. Zgodovinski zajem ni spremenjen.
 
 ## Običajni postopek in podprta oblika
@@ -38,7 +52,7 @@ Resolucija gostitelja, shramba in dostava so v lokalnem replayu nadomeščene na
 
 Širši integrirani TypeScript pregled Platform grafa je bil po 30 sekundah ustavljen brez zaključka ali TypeScript diagnostike. Zadnja sled je bila razreševanje standardnih TypeScript knjižnic; posamezna manjkajoča odvisnost ni dokazana. Ta gate ostaja nerešen. Celotni Next build ni bil ponavljan.
 
-## Najmanjši naslednji predlog za trajno dostavo — še ni odobren ali izveden
+## Zgodovinski predlog za trajno dostavo — pred odobritvijo 2026-10-19
 
 Obstoječa `gnr8_runtime_form_submissions` in `saveFormSubmission` shranjujeta podatke, vendar nimata atomskega claim/idempotence, trajnega omejevanja in statusa dostave. Resend v registru je placeholder. Konfiguracijskih skrivnosti, ponudniških API in nadzornih plošč nismo odpirali.
 

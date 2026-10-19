@@ -328,7 +328,7 @@ export default function SiteActionsPanel(props: Props) {
                     <input type='email' value={recipient} disabled={!canRunMigration} onChange={event => {setRecipient(event.target.value);setRecipientConfirmed(false)}} style={{display:'block',width:'100%'}} />
                   </label>
                   <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site's recipient: {recipient || '(enter email)'}</label>
-                  <p>Supported: name, email, optional phone/subject and message; required fields stay as imported. The recognized required CF7 permission checkbox and its exact legal text are preserved, unchecked. Other fields remain blocked. Preview cannot send. Delivery activation is unavailable until a verified sender and durable submission service are configured.</p>
+                  <p>Supported: name, email, optional phone/subject and message; required fields stay as imported. The recognized required CF7 permission checkbox and its exact legal text are preserved, unchecked. Other fields remain blocked. Preview cannot send. Publication checks the production sender configuration and durable submission service. Provider acceptance confirms submission for sending, not inbox delivery.</p>
                 </> : null}
               </> : null}
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>
