@@ -91,6 +91,23 @@ export function createGeneratedOutputPublicationDecisionResolver(): GeneratedOut
   return async (input) => resolveDecision(composition, input);
 }
 
+/** Normal Settings Publish uses the same evidence composition as exact-artifact
+ * review. Resolve lazily so legacy migration publication keeps its own policy. */
+export function createEvidenceBoundRuntimePublisher(dependencies: {
+  publish?: typeof import('@/gnr8/runtime/publish-activation-orchestrator').publishApprovedSiteVersion;
+  createResolver?: typeof createGeneratedOutputPublicationDecisionResolver;
+} = {}) {
+  const publish: typeof import('@/gnr8/runtime/publish-activation-orchestrator').publishApprovedSiteVersion = dependencies.publish ?? (async (input) => {
+    const runtime = await import('@/gnr8/runtime/publish-activation-orchestrator');
+    return runtime.publishApprovedSiteVersion(input);
+  });
+  const createResolver = dependencies.createResolver ?? createGeneratedOutputPublicationDecisionResolver;
+  return (input: Parameters<typeof publish>[0]) => publish({
+    ...input,
+    generatedOutputPublicationDecisionResolver: (selection) => createResolver()(selection),
+  });
+}
+
 export async function readGeneratedOutputReviewModel(siteVersionId: string): Promise<GeneratedOutputReviewModel> {
   const composition = createGeneratedOutputComposition();
   const context = await composition.runtimeStore.readContext(siteVersionId);

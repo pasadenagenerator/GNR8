@@ -514,3 +514,35 @@ test('explicit retained public derivative passes technical policy but still requ
   f.artifact.htmlByPath['/']+='changed';
   assertBlocked(check(),'public_preparation_lineage_invalid');
 });
+
+test('Settings publisher supplies evidence to the real guard and stops before activation on missing review or evidence failure', async () => {
+  const {createEvidenceBoundRuntimePublisher} = await import('./generated-output-publication-composition');
+  const f=buildFixture();
+  const technical=evaluate(f);
+  const review=createGeneratedOutputReviewRecord({reviewId:'settings-review',decision:'APPROVED',policyVersion:technical.policyVersion,
+    artifactId:f.artifact.id,artifactBundleSha256:f.artifact.bundleSha256,candidateId:f.record.identity.candidateId,
+    candidateContentSha256:f.record.candidate.contentSha256,contentManifestSha256:f.contentManifest.manifestSha256,
+    technicalEvaluationSha256:technical.evidenceSha256,reviewerActorId:'reviewer',reviewedAt:'2026-10-19T12:00:00.000Z'});
+  for(const mode of ['approved','missing_review','evidence_failure'] as const) {
+    let activations=0, resolverCalls=0;
+    const publish=createEvidenceBoundRuntimePublisher({
+      createResolver:()=>async selection=>{
+        resolverCalls++;
+        assert.equal(selection.artifact.bundleSha256,f.artifact.bundleSha256);
+        if(mode==='evidence_failure')throw new Error('store unavailable');
+        return evaluateGeneratedOutputPublicationDecision({technical,review:mode==='approved'?review:null});
+      },
+      publish:async input=>{
+        assert.equal(input.siteVersionId,f.siteVersion.id);
+        await enforceGeneratedOutputPublicationEligibility({siteVersion:f.siteVersion,artifact:f.artifact,publishStage:'shadow',resolver:input.generatedOutputPublicationDecisionResolver});
+        activations++;
+        return {} as never;
+      },
+    });
+    const result=()=>publish({siteVersionId:f.siteVersion.id,actor:'operator',stage:'shadow'});
+    if(mode==='approved')await result();
+    else await assert.rejects(result,GeneratedOutputPublicationBlockedError);
+    assert.equal(resolverCalls,1);
+    assert.equal(activations,mode==='approved'?1:0);
+  }
+});
