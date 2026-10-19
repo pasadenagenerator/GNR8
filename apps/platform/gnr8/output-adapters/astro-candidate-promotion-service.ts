@@ -183,7 +183,50 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
       );
     }
 
-    const governance = evaluateGovernance(initial);
+    const target = buildAstroCandidateRuntimeArtifact({
+      siteVersion: initial.siteVersion, artifact, record, ownership, input,
+    });
+    const bundleSha256 = target.bundleSha256;
+
+    const write = await dependencies.runtimeStore.compareAndSetArtifact({
+      expectedBundleSha256: artifact.bundleSha256,
+      artifact: target,
+    });
+    const reconciled = await readRuntimeContext(dependencies.runtimeStore, input.siteVersionId);
+    assertRuntimeContext(reconciled, ownership);
+    const reconciledEvidence = readAstroRuntimeArtifactPromotionEvidence(reconciled.artifact?.manifest);
+    if (
+      reconciledEvidence &&
+      samePromotedCandidate(reconciledEvidence, record) &&
+      preservesCandidateBytes(reconciled.artifact!, record) &&
+      sameGeneratedOutputEvidence(reconciled.artifact!, input.generatedOutputEvidence) &&
+      reconciled.artifact!.bundleSha256 === bundleSha256
+    ) {
+      return resultFromStoredContext({
+        context: reconciled,
+        record,
+        status: write === "updated" ? "materialized" : "idempotent",
+      });
+    }
+    if (write === "not_updated") {
+      throw promotionError("promotion_conflict", "Concurrent promotion changed the runtime artifact.");
+    }
+    throw promotionError(
+      write === "unavailable" ? "persistence_ambiguous" : "unavailable",
+      "Runtime artifact persistence could not be reconciled to the requested promotion.",
+    );
+  };
+}
+
+/** Shared deterministic materialization; persistence and publication stay with the caller. */
+export function buildAstroCandidateRuntimeArtifact({ siteVersion, artifact, record, ownership, input }: {
+  siteVersion: CanonicalSiteVersionSnapshot;
+  artifact: RuntimeArtifact;
+  record: AstroResolvedCandidateRecord;
+  ownership: AstroProductionCandidateOwnership;
+  input: AstroCandidatePromotionInput;
+}): RuntimeArtifact {
+    const governance = evaluateAstroCandidateGovernance(siteVersion);
     const promotionIdentitySha256 = sha256Hex(stableStringify({
       version: ASTRO_RUNTIME_ARTIFACT_MATERIALIZATION_VERSION,
       candidateId: record.identity.candidateId,
@@ -258,34 +301,7 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
       bundleSha256,
     };
 
-    const write = await dependencies.runtimeStore.compareAndSetArtifact({
-      expectedBundleSha256: artifact.bundleSha256,
-      artifact: target,
-    });
-    const reconciled = await readRuntimeContext(dependencies.runtimeStore, input.siteVersionId);
-    assertRuntimeContext(reconciled, ownership);
-    const reconciledEvidence = readAstroRuntimeArtifactPromotionEvidence(reconciled.artifact?.manifest);
-    if (
-      reconciledEvidence &&
-      samePromotedCandidate(reconciledEvidence, record) &&
-      preservesCandidateBytes(reconciled.artifact!, record) &&
-      sameGeneratedOutputEvidence(reconciled.artifact!, input.generatedOutputEvidence) &&
-      reconciled.artifact!.bundleSha256 === bundleSha256
-    ) {
-      return resultFromStoredContext({
-        context: reconciled,
-        record,
-        status: write === "updated" ? "materialized" : "idempotent",
-      });
-    }
-    if (write === "not_updated") {
-      throw promotionError("promotion_conflict", "Concurrent promotion changed the runtime artifact.");
-    }
-    throw promotionError(
-      write === "unavailable" ? "persistence_ambiguous" : "unavailable",
-      "Runtime artifact persistence could not be reconciled to the requested promotion.",
-    );
-  };
+  return target;
 }
 
 function sameGeneratedOutputEvidence(
@@ -331,9 +347,6 @@ export function evaluateAstroCandidateGovernance(siteVersion: CanonicalSiteVersi
   }
 }
 
-function evaluateGovernance(context: AstroCandidateRuntimeArtifactContext) {
-  return evaluateAstroCandidateGovernance(context.siteVersion);
-}
 
 function resultFromStoredContext(input: {
   context: AstroCandidateRuntimeArtifactContext;

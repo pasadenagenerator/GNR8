@@ -40,11 +40,14 @@ export const GENERATED_OUTPUT_CONTENT_MANIFEST_VERSION =
 export const GENERATED_OUTPUT_REVIEW_VERSION =
   "gnr8-generated-output-review:v1" as const;
 
+import { readPublicPreparation, PUBLIC_PREPARATION_PRODUCER } from './astro-public-preparation-contract';
+
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SUPPORTED_PRODUCERS = new Set([
   "chs_source_backed_astro_build_export_bridge:v1",
   "source_backed_astro_build_export_bridge:v1",
   "astro_successor_candidate_rebind:v1",
+  `${PUBLIC_PREPARATION_PRODUCER}:v1`,
 ]);
 
 type HtmlNode = DefaultTreeAdapterMap["node"];
@@ -225,6 +228,7 @@ export function evaluateGeneratedOutputTechnicalEligibility(input: {
   contentManifest: GeneratedOutputContentManifest;
   sourceCaptureSiteVersion: CanonicalSiteVersionSnapshot | null;
   sourceCaptureArtifact: RuntimeArtifact | null;
+  publicSourceArtifact?: RuntimeArtifact | null;
 }): GeneratedOutputTechnicalEligibility {
   const blockers: GeneratedOutputBlocker[] = [];
   const block = (code: string, message: string): void => {
@@ -313,6 +317,30 @@ export function evaluateGeneratedOutputTechnicalEligibility(input: {
       sourceCaptureArtifact: input.sourceCaptureArtifact,
       block,
     });
+  }
+
+  if (record?.registration.producerKind === PUBLIC_PREPARATION_PRODUCER || artifact.manifest.publicPreparation) {
+    const prep = readPublicPreparation(artifact.manifest);
+    const parent = input.publicSourceArtifact;
+    const parentContent = parent?.manifest.generatedOutputContentManifest as GeneratedOutputContentManifest | undefined;
+    const parentBuild = parent?.manifest.generatedOutputBuildEvidence as GeneratedOutputBuildEvidence | undefined;
+    const parentPromotion = parent && readAstroRuntimeArtifactPromotionEvidence(parent.manifest);
+    if (!prep || !parent || !parentPromotion || !parentContent || !parentBuild ||
+      buildEvidence?.derivedFromEvidenceSha256 !== parentBuild.evidenceSha256 ||
+      stableStringify(parentContent.requiredContent) !== stableStringify(contentManifest.requiredContent) ||
+      stableStringify(parentContent.requiredNavigation) !== stableStringify(contentManifest.requiredNavigation) ||
+      stableStringify(parentContent.requiredAssets) !== stableStringify(contentManifest.requiredAssets) ||
+      record?.registration.producerKind !== PUBLIC_PREPARATION_PRODUCER ||
+      parent.id !== prep.sourceArtifactId || parent.siteVersionId !== prep.sourceSiteVersionId || parent.siteId !== artifact.siteId ||
+      parent.bundleSha256 !== prep.sourceArtifactSha256 || computeArtifactBundleSha256(parent) !== parent.bundleSha256 ||
+      parentPromotion.candidateId !== prep.sourceCandidateId || parentPromotion.candidateContentSha256 !== prep.sourceCandidateContentSha256 ||
+      record.registration.producerRef !== prep.sourceCandidateId || parent.siteVersionId === artifact.siteVersionId ||
+      stableStringify(parent.htmlByPath) !== stableStringify(artifact.htmlByPath) || parent.compiledTokenStyles !== artifact.compiledTokenStyles ||
+      stableStringify(parent.assetFingerprintMap) !== stableStringify(artifact.assetFingerprintMap) ||
+      stableStringify(parent.manifest.generatedOutputSourceWorkspace) !== stableStringify(artifact.manifest.generatedOutputSourceWorkspace) ||
+      contentManifest.scope.allowedPublishStages.join(',') !== 'production' || artifact.publishStage !== 'production' || artifact.shadowRestricted) {
+      block('public_preparation_lineage_invalid', 'Public preparation must retain the exact source bytes, ownership, native settings and declared host scope.');
+    }
   }
 
   const expectedPaths = contentManifest.scope.outputPaths;
@@ -418,6 +446,9 @@ function evaluateHtmlAgainstManifest(input: {
   }
 
   const allowedTargets = new Map(input.manifest.requiredNavigation.map((item) => [item.target, item.kind]));
+  const capture = (input.artifact.manifest.generatedOutputBuildEvidence as GeneratedOutputBuildEvidence | undefined)?.sourceCapture;
+  const ownedPrefix = capture ? `/api/gnr8/runtime/preview-assets/${capture.runtimeSiteId}/${capture.siteVersionId}/` : null;
+  const ownedAssets = new Map(input.manifest.requiredAssets.map((item) => [item.path, item.sha256]));
   const hrefs = elements
     .filter((element) => element.tagName === "a")
     .map((element) => attribute(element, "href"))
@@ -429,6 +460,12 @@ function evaluateHtmlAgainstManifest(input: {
   }
   const ids = new Set(elements.map((element) => attribute(element, "id")).filter((value): value is string => Boolean(value)));
   for (const href of hrefs) {
+    // The producer classifies retained file anchors as assets, not page routes.
+    // Require both authoritative capture scope and the exact declared digest.
+    const assetPath = href.split(/[?#]/, 1)[0]!;
+    const assetHash = ownedAssets.get(assetPath);
+    if (ownedPrefix && assetPath.startsWith(ownedPrefix) && assetHash &&
+      input.artifact.assetFingerprintMap[assetPath] === assetHash) continue;
     const kind = allowedTargets.get(href);
     if (!kind) {
       input.block(`navigation_target_unapproved:${href}`, `Navigation target is outside the trusted manifest: ${href}.`);

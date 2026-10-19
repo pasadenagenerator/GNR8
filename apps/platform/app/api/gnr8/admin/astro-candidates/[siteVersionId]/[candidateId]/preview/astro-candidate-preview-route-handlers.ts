@@ -1,3 +1,4 @@
+import { PUBLIC_PREPARATION_PRODUCER } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import "server-only";
 import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
@@ -161,6 +162,8 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
         return repositoryErrorResponse(error);
       }
 
+      if (process.env.VERCEL_ENV === 'production' && record.registration.producerKind !== PUBLIC_PREPARATION_PRODUCER)
+        return jsonError(404, 'Preview not found.');
       let preview: AstroProductionCandidatePreviewRenderResult;
       try {
         preview = await previewDependencies.renderCandidate({ record, path: selectors.path });

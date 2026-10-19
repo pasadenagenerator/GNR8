@@ -1,3 +1,4 @@
+import { readPublicPreparation } from '../output-adapters/astro-public-preparation-contract'
 import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
 import type { PublicRuntimeArtifactResolution } from '../runtime/runtime-store'
 import { readContactSchema } from './contact-form'
@@ -10,6 +11,10 @@ export function publishedContactFromResolution(result: PublicRuntimeArtifactReso
     result.artifact.publishStage !== 'production' || result.artifact.shadowRestricted ||
     (result.hostBindingKind && ['shadow','canary','preview','candidate_preview','preview_host'].includes(result.hostBindingKind.trim().toLowerCase()))) return null
   if (result.siteResolution === 'host_match' ? result.hostBindingStatus !== 'ACTIVE' : result.domainBindingStatus !== 'active') return null
+  if (result.artifact.manifest.publicPreparation) {
+    const prep = readPublicPreparation(result.artifact.manifest)
+    if (!prep || prep.host !== result.host) return null
+  }
   const workspace = result.artifact.manifest.generatedOutputSourceWorkspace as Record<string,unknown> | undefined
   const stored = workspace?.acceptedFunctionalReductions as Record<string,unknown> | undefined
   if (!stored || stored.scope !== 'generation-action' || typeof stored.acceptedByActor !== 'string' || !stored.acceptedByActor) return null

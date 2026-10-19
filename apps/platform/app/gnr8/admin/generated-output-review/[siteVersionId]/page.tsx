@@ -22,7 +22,7 @@ export default async function GeneratedOutputReviewPage(props: { params: Promise
     if (message.startsWith("Forbidden")) redirect("/superadmin");
     throw error;
   }
-  if (process.env.VERCEL_ENV !== "preview" || !isAstroProductionCandidatePreviewFeatureEnabled()) notFound();
+  if (!isAstroProductionCandidatePreviewFeatureEnabled()) notFound();
   const { siteVersionId } = await props.params;
   if (!isCanonicalUuid(siteVersionId)) notFound();
   const model = await readGeneratedOutputReviewModel(siteVersionId).catch((error) => {
@@ -32,7 +32,7 @@ export default async function GeneratedOutputReviewPage(props: { params: Promise
     });
     return null;
   });
-  if (!model) notFound();
+  if (!model || (process.env.VERCEL_ENV !== "preview" && !model.publicPreparation)) notFound();
 
   const candidatePreview = (path: string) => `/api/gnr8/admin/astro-candidates/${encodeURIComponent(siteVersionId)}/${encodeURIComponent(model.candidateId)}/preview?path=${encodeURIComponent(path)}`;
   const technicalPass = model.decision.technical.status === "PASS";
@@ -43,7 +43,8 @@ export default async function GeneratedOutputReviewPage(props: { params: Promise
         <section style={{ padding: 22, border: "1px solid #cbd5e1", borderRadius: 12, background: "white" }}>
           <p style={{ margin: "0 0 8px", color: "#475569", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>Authenticated generated-output review</p>
           <h1 style={{ margin: "0 0 10px" }}>Astro website candidate</h1>
-          <p style={{ margin: "0 0 16px", color: "#475569" }}>Review the exact candidate bytes below. Approval is bound to this artifact, candidate, content manifest, technical evaluation, policy version, reviewer identity, and internal shadow stage.</p>
+          <p style={{ margin: "0 0 16px", color: "#475569" }}>Review the exact candidate bytes below. Approval is bound to this artifact, candidate, content manifest, technical evaluation, policy version, reviewer identity, and the declared publication scope.</p>
+          <p><strong>Publication scope:</strong> {model.publicPreparation ? `Public website at https://${model.publicPreparation.host}. Native contact delivery is enabled only after publication.` : "Internal shadow publication"}</p>
           <dl style={{ display: "grid", gridTemplateColumns: "max-content minmax(0, 1fr)", gap: "6px 14px", margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 }}>
             <dt>Version</dt><dd style={{ margin: 0, overflowWrap: "anywhere" }}>{model.siteVersionId} · {model.state}</dd>
             <dt>Artifact</dt><dd style={{ margin: 0, overflowWrap: "anywhere" }}>{model.artifactId}</dd>
@@ -70,9 +71,10 @@ export default async function GeneratedOutputReviewPage(props: { params: Promise
           ) : null}
           <p><Link href={candidatePreview("/")} target="_blank" rel="noreferrer">Open exact candidate in a new tab</Link></p>
           {approved ? (
-            <p style={{ padding: 12, background: "#dcfce7", border: "1px solid #86efac", borderRadius: 8 }}>This exact artifact is approved and ready for the existing target-readiness and shadow-activation workflow.</p>
+            <p style={{ padding: 12, background: "#dcfce7", border: "1px solid #86efac", borderRadius: 8 }}>This exact artifact is approved and ready for the normal Publish step after domain readiness.</p>
           ) : (
             <GeneratedOutputReviewAction
+              publicHost={model.publicPreparation?.host}
               siteVersionId={model.siteVersionId}
               artifactId={model.artifactId}
               artifactBundleSha256={model.artifactBundleSha256}

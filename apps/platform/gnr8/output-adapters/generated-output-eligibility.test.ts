@@ -470,3 +470,47 @@ test('native contact cannot activate while durable delivery is unconfigured',asy
  artifact.manifest.generatedOutputSourceWorkspace={acceptedFunctionalReductions:{kind:'retained-presentation-v1',contact:{recipient:'approved@example.com',recipientConfirmed:true}}}
  for(const publishStage of ['canary','production'] as const) await assert.rejects(enforceGeneratedOutputPublicationEligibility({siteVersion,artifact,publishStage}), (error:unknown)=>error instanceof GeneratedOutputPublicationBlockedError && error.blockerCodes.includes('native_contact_delivery_unconfigured'))
 })
+
+test('owned image anchors require capture scope, exact required asset and matching fingerprint', () => {
+  const path = '/api/gnr8/runtime/preview-assets/runtime-source-capture/77777777-7777-4777-8777-777777777777/photos/image.jpg';
+  const f = buildFixture(VALID_HTML.replace('</main>',`<a href="${path}">Photo</a></main>`));
+  f.artifact.manifest.generatedOutputBuildEvidence = f.buildEvidence;
+  f.artifact.assetFingerprintMap[path] = 'e'.repeat(64);
+  f.contentManifest = createGeneratedOutputContentManifest({...f.contentManifest,requiredAssets:[...f.contentManifest.requiredAssets,{path,sha256:'e'.repeat(64)}]});
+  const blockedNavigation = () => evaluate(f).blockerReasons.some(x=>x.code===`navigation_target_unapproved:${path}`);
+  assert.equal(blockedNavigation(),false);
+  f.artifact.assetFingerprintMap[path] = 'f'.repeat(64);
+  assert.equal(blockedNavigation(),true);
+  f.artifact.assetFingerprintMap[path] = 'e'.repeat(64);
+  f.artifact.manifest.generatedOutputBuildEvidence = {...f.buildEvidence,sourceCapture:{...f.buildEvidence.sourceCapture,runtimeSiteId:'other'}};
+  assert.equal(blockedNavigation(),true);
+});
+
+test('explicit retained public derivative passes technical policy but still requires fresh review; lineage drift blocks it', async () => {
+  const {buildSuccessorBoundAstroCandidate} = await import('./astro-successor-publication-service');
+  const {buildAstroCandidateRuntimeArtifact} = await import('./astro-candidate-promotion-service');
+  const {rebindBuildEvidenceToCandidate} = await import('./generated-output-evidence');
+  const {PUBLIC_PREPARATION_PRODUCER,PUBLIC_PREPARATION_VERSION} = await import('./astro-public-preparation-contract');
+  const f = buildFixture();
+  f.artifact.manifest.generatedOutputBuildEvidence=f.buildEvidence;
+  f.artifact.manifest.generatedOutputContentManifest=f.contentManifest;
+  f.artifact.bundleSha256=bundleHash(f.artifact);
+  const versionId='99999999-9999-4999-8999-999999999999';
+  const candidateId='astro_candidate_aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa';
+  const ownership={...OWNERSHIP,siteVersionId:versionId};
+  const candidate=buildSuccessorBoundAstroCandidate({source:f.record,successorSiteVersionId:versionId,successorCandidateId:candidateId,createdAt:f.siteVersion.createdAt});
+  const record=createAstroProductionCandidateRecord({candidate,ownership,storedAt:f.siteVersion.createdAt,registration:{...f.record.registration,producerKind:PUBLIC_PREPARATION_PRODUCER,producerRef:f.record.identity.candidateId}});
+  const buildEvidence=rebindBuildEvidenceToCandidate({sourceEvidence:f.buildEvidence,successorRecord:record});
+  const {version: _version, manifestSha256: _hash, ...contentInput}=f.contentManifest;
+  const contentManifest=createGeneratedOutputContentManifest({...contentInput,scope:{...f.contentManifest.scope,allowedPublishStages:['production']}});
+  const siteVersion={...f.siteVersion,id:versionId,state:'READY_FOR_REVIEW' as const};
+  const artifact=buildAstroCandidateRuntimeArtifact({siteVersion,artifact:{...f.artifact,id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',siteVersionId:versionId},record,ownership,input:{actorUserId:'preparer',siteVersionId:versionId,candidateId,expectedContentSha256:record.candidate.contentSha256,expectedStorageSha256:record.storageSha256,idempotencyKey:'prepare',generatedOutputEvidence:{buildEvidence,contentManifest}}});
+  artifact.manifest.publicPreparation={version:PUBLIC_PREPARATION_VERSION,host:'test.example.com',expectedActivePointer:null,sourceSiteVersionId:f.siteVersion.id,sourceArtifactId:f.artifact.id,sourceArtifactSha256:f.artifact.bundleSha256,sourceCandidateId:f.record.identity.candidateId,sourceCandidateContentSha256:f.record.candidate.contentSha256,sourceTechnicalEvidenceSha256:evaluate(f).evidenceSha256};
+  artifact.publishStage='production';artifact.shadowRestricted=false;
+  artifact.bundleSha256=bundleHash(artifact);
+  const check=()=>evaluateGeneratedOutputTechnicalEligibility({siteVersion,artifact,authoritativeOwnership:ownership,candidateRecord:record,buildEvidence,contentManifest,sourceCaptureSiteVersion:f.sourceCaptureSiteVersion,sourceCaptureArtifact:f.sourceCaptureArtifact,publicSourceArtifact:f.artifact});
+  assert.equal(check().status,'PASS',JSON.stringify(check().blockerReasons));
+  assert.equal(evaluateGeneratedOutputPublicationDecision({technical:check(),review:null}).activation,'BLOCKED');
+  f.artifact.htmlByPath['/']+='changed';
+  assertBlocked(check(),'public_preparation_lineage_invalid');
+});

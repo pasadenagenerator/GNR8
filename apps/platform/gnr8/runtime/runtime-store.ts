@@ -1,3 +1,4 @@
+import { readPublicPreparation } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import "server-only";
 
 import type { PoolClient } from "pg";
@@ -3878,6 +3879,10 @@ export async function switchActivePointer(input: {
   previousActivePointer: { siteVersionId: string; artifactId: string } | null;
 }> {
   return withTx(async (client) => {
+    // Serialize first publication and recovery on the site even when no pointer exists.
+    await client.query('select id from public.gnr8_runtime_sites where id = $1::text for update', [input.siteId]);
+    const targetArtifact = await getArtifactByIdWithClient(client, input.artifactId);
+    const preparation = targetArtifact ? readPublicPreparation(targetArtifact.manifest) : null;
     const previous = await client.query<{ active_site_version_id: string; active_artifact_id: string }>(
       `
       select active_site_version_id::text as active_site_version_id, active_artifact_id::text as active_artifact_id
@@ -3900,6 +3905,14 @@ export async function switchActivePointer(input: {
         switched: false,
         previousActivePointer,
       };
+    }
+
+    if (preparation) {
+      if (previousActivePointer || targetArtifact?.siteId !== input.siteId || targetArtifact.siteVersionId !== input.siteVersionId)
+        throw new Error('public_preparation_pointer_baseline_changed');
+      const domain = await client.query('select id from public.gnr8_runtime_domain_host_bindings where site_id=$1::text and site_version_id=$2::uuid and domain=$3::text and status=\'active\'',
+        [input.siteId,input.siteVersionId,preparation.host]);
+      if (domain.rows.length !== 1) throw new Error('public_preparation_domain_not_ready');
     }
 
     await client.query(
@@ -4144,6 +4157,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
   const servingEligibility = evaluateRuntimeArtifactServingEligibility({
     artifact: resolved.artifact,
     servingStage,
+    host: resolved.host,
   });
   if (!servingEligibility.allow) {
     return {
@@ -5410,3 +5424,30 @@ export const __runtimeStoreTestUtils = {
   canonicalizeRuntimePageVersionsForInsert,
   normalizeRuntimePageVersionIdentityPath,
 };
+
+/** Bounded recovery for a first public preparation. Caller must authenticate an
+ * operator and select the exact deployed artifact; immutable versions remain. */
+export async function recoverPreparedPublicSiteToUnpublished(input: {
+  siteId: string; siteVersionId: string; artifactId: string; expectedBundleSha256: string; actor: string;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<{ recovered: boolean }> {
+  return withTx(async (client) => {
+    await client.query('select id from public.gnr8_runtime_sites where id=$1::text for update',[input.siteId]);
+    const artifact = await getArtifactByIdWithClient(client,input.artifactId);
+    const prep = artifact && readPublicPreparation(artifact.manifest);
+    if (!artifact || !prep || artifact.siteId!==input.siteId || artifact.siteVersionId!==input.siteVersionId || artifact.bundleSha256!==input.expectedBundleSha256)
+      throw new Error('public_recovery_selection_mismatch');
+    const pointer = await client.query<{active_site_version_id:string;active_artifact_id:string}>(
+      'select active_site_version_id,active_artifact_id from public.gnr8_runtime_active_pointers where site_id=$1::text',[input.siteId]);
+    const current = pointer.rows[0];
+    if (!current) return {recovered:false};
+    if (current.active_site_version_id!==input.siteVersionId || current.active_artifact_id!==input.artifactId)
+      throw new Error('public_recovery_pointer_changed');
+    await client.query('delete from public.gnr8_runtime_active_pointers where site_id=$1::text and active_artifact_id=$2::uuid',[input.siteId,input.artifactId]);
+    await client.query("update public.gnr8_runtime_domain_host_bindings set status='pending',updated_at=now() where site_id=$1::text and site_version_id=$2::uuid and domain=$3::text",[input.siteId,input.siteVersionId,prep.host]);
+    await client.query(`insert into public.gnr8_runtime_version_audit (site_version_id,from_state,to_state,actor,source,details)
+      select id,state,state,$2::text,'manual',$3::jsonb from public.gnr8_runtime_site_versions where id=$1::uuid`,
+      [input.siteVersionId,input.actor,JSON.stringify({workflow:'public-preparation-recovery:v1',artifactId:input.artifactId,bundleSha256:input.expectedBundleSha256,restoredActivePointer:null})]);
+    return {recovered:true};
+  },{dbClient:input.dbClient});
+}
