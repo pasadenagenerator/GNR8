@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
+import { normalizeRetainedHeroWrapperSizing } from "@/src/public-site/retained-hero-slider";
 
 import { renderSiteVersionPreview } from "../runtime/unified-render-preview";
 import {
@@ -103,7 +104,7 @@ export async function renderAstroProductionCandidatePreview(input: {
   }
 
   return {
-    html: preview.html,
+    html: normalizeRetainedHeroWrapperSizing(preview.html),
     source: "astro_internal_preview_candidate",
     candidateId: preview.artifactId,
     runtimeSiteId: preview.siteId,

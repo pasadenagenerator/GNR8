@@ -14,6 +14,7 @@ import { RAW_PREVIEW_URI_DECODE_DIAGNOSTIC, safeDecodeURIComponent } from "@/gnr
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 import { getSuperadminPool } from "@/src/superadmin/db";
 import { retainedStylesheetSourceUrl } from "@/gnr8/validation/runtime/retained-css-dependency-path";
+import { readProtectedPreviewAsset } from "./protected-preview-asset";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
 
@@ -27,6 +28,7 @@ type PreviewAssetRouteDependencies = {
   resolveRawTemplateSiteForDomainAndPath: typeof resolveRawTemplateSiteForDomainAndPath;
   parseAgencyActionContextError: typeof parseAgencyActionContextError;
   acquireRuntimeDbClient: () => Promise<RuntimeStoreDbClient>;
+  readProtectedPreviewAsset: typeof readProtectedPreviewAsset;
 };
 
 const defaultDependencies: PreviewAssetRouteDependencies = {
@@ -39,6 +41,7 @@ const defaultDependencies: PreviewAssetRouteDependencies = {
   resolveRawTemplateSiteForDomainAndPath,
   parseAgencyActionContextError,
   acquireRuntimeDbClient: () => getSuperadminPool().connect(),
+  readProtectedPreviewAsset,
 };
 
 function normalizeText(value: unknown): string {
@@ -262,6 +265,10 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           lookupResult: null,
           reasonCode: "request_received",
         });
+        if (normalizedPath) {
+          const protectedAsset = await deps.readProtectedPreviewAsset({ siteId, siteVersionId, path: normalizedPath });
+          if (protectedAsset) return (response = protectedAsset);
+        }
         dbClient = await deps.acquireRuntimeDbClient();
         dbClientAcquisitionCount += 1;
         const debugMode = new URL(req.url).searchParams.get("__debug") === "1";

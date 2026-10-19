@@ -1,4 +1,8 @@
 import "server-only";
+import { createHash } from "node:crypto";
+import { parse, type DefaultTreeAdapterMap } from "parse5";
+import { isOwnedRetainedRuntimeScript } from "@/src/public-site/owned-retained-runtime";
+import { RETAINED_HERO_SCRIPT } from "@/src/public-site/retained-hero-slider";
 
 import {
   AstroCandidateOwnershipResolutionError,
@@ -37,6 +41,23 @@ export const ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP = [
   "form-action 'none'",
   "frame-ancestors 'none'",
 ].join("; ");
+
+function candidatePreviewCsp(html: string): string {
+  let hasHeroController = false;
+  const visit = (node: DefaultTreeAdapterMap["node"]) => {
+    if ("tagName" in node && isOwnedRetainedRuntimeScript(node) &&
+      node.attrs.some(a => a.name === "data-gnr8-preview-runtime" && a.value === "retained-hero")) hasHeroController = true;
+    if ("childNodes" in node) node.childNodes.forEach(visit);
+  };
+  visit(parse(html));
+  if (!hasHeroController) return ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP;
+  const hash = createHash("sha256").update(RETAINED_HERO_SCRIPT).digest("base64");
+  // Permit only the exact reviewed presentation controller. Contact scripts,
+  // arbitrary scripts, network calls and submissions remain blocked.
+  return ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP
+    .replace("sandbox allow-same-origin", "sandbox allow-same-origin allow-scripts")
+    .replace("script-src 'none'", `script-src 'sha256-${hash}'`);
+}
 
 export const ASTRO_PRODUCTION_CANDIDATE_PREVIEW_PERMISSIONS_POLICY = [
   "accelerometer=()",
@@ -163,7 +184,7 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
         headers: {
           ...COMMON_HEADERS,
           "content-type": "text/html; charset=utf-8",
-          "content-security-policy": ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP,
+          "content-security-policy": candidatePreviewCsp(html),
         },
       });
     },

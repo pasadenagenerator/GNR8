@@ -500,3 +500,19 @@ function assertErrorHeaders(response: Response): void {
 async function delay(milliseconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
+
+test("preview CSP allows only exact owned presentation bytes and continues blocking contact/network actions", async () => {
+  const { RETAINED_HERO_SCRIPT } = await import("@/src/public-site/retained-hero-slider");
+  const record = productionRecord();
+  for (const [script, allowed] of [[RETAINED_HERO_SCRIPT, true], [RETAINED_HERO_SCRIPT + " ", false]] as const) {
+    const deps = previewDependencies(record);
+    const original = deps.renderCandidate;
+    deps.renderCandidate = async args => ({ ...await original(args), html: `<html><body><script data-gnr8-preview-runtime="retained-hero">${script}</script></body></html>` });
+    const response = await enabledHandlers(deps).GET(request(), context());
+    const csp = response.headers.get("content-security-policy")!;
+    assert.equal(csp.includes("script-src 'sha256-"), allowed);
+    assert.ok(csp.includes("connect-src 'none'"));
+    assert.ok(csp.includes("form-action 'none'"));
+    assert.ok(!csp.includes("script-src 'unsafe-inline'"));
+  }
+});

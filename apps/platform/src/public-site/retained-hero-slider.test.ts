@@ -62,3 +62,16 @@ test("owned image zoom preserves href and alt; foreign and executable links rema
   assert.equal(enhanceRetainedHeroSliders({...input,html:result}),result);
   for(const bad of [html.replace(`href="${prefix}images/1.jpg"`,'href="https://outside.example/image.jpg"'),html.replace('class="zoom"','class="zoom" onclick="run()"')]) assert.equal(enhanceRetainedHeroSliders({...input,html:bad}),bad);
 });
+
+test("owned hero rendering discards captured wrapper height without changing other rules or bytes", async () => {
+  const { normalizeRetainedHeroWrapperSizing } = await import("./retained-hero-slider");
+  const html = '<html><head><style>#plugin_wrapper{height:640.312px;background:red}#other{height:400px}@media(max-width:600px){[data-gnr8-hero]{min-height:460px}}</style></head><body><section id="plugin_wrapper" data-gnr8-hero style="--hero-ratio:1920/900"></section><script>exact bytes</script></body></html>';
+  const result = normalizeRetainedHeroWrapperSizing(html);
+  assert.ok(!result.includes('height:640.312px'));
+  assert.ok(result.includes('#plugin_wrapper{background:red}'));
+  assert.ok(result.includes('#other{height:400px}'));
+  assert.ok(result.includes('min-height:460px'));
+  assert.ok(result.includes('<script>exact bytes</script>'));
+  assert.equal(normalizeRetainedHeroWrapperSizing(result), result);
+  assert.equal(normalizeRetainedHeroWrapperSizing(html.replaceAll('data-gnr8-hero', 'data-source-hero')), html.replaceAll('data-gnr8-hero', 'data-source-hero'));
+});

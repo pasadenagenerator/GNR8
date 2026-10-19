@@ -1,4 +1,5 @@
 import { parse, type DefaultTreeAdapterMap } from "parse5";
+import postcss from "postcss";
 
 type Node = DefaultTreeAdapterMap["node"];
 type Element = DefaultTreeAdapterMap["element"];
@@ -11,6 +12,32 @@ function text(node: Node): string {
   if (node.nodeName === "br") return "\n";
   if ("value" in node) return node.value;
   return "childNodes" in node ? node.childNodes.map(text).join("") : "";
+}
+
+/** A captured plugin wrapper height is obsolete once that wrapper is the owned
+ * ratio-based carousel. Remove only its exact ID sizing rule at render time;
+ * keep the immutable candidate, source sections and mobile carousel CSS intact. */
+export function normalizeRetainedHeroWrapperSizing(html: string): string {
+  const nodes = elements(parse(html, { sourceCodeLocationInfo: true }));
+  const ids = new Set(nodes.filter(node => node.tagName === "section" &&
+    node.attrs.some(a => a.name === "data-gnr8-hero") &&
+    attr(node, "style").includes("--hero-ratio:") && /^[A-Za-z][\w-]*$/.test(attr(node, "id")))
+    .map(node => `#${attr(node, "id")}`));
+  if (!ids.size) return html;
+  const edits: { start: number; end: number; css: string }[] = [];
+  for (const node of nodes.filter(node => node.tagName === "style")) {
+    const location = node.sourceCodeLocation;
+    if (!location?.startTag || !location.endTag) continue;
+    const original = html.slice(location.startTag.endOffset, location.endTag.startOffset);
+    const css = postcss.parse(original);
+    css.walkRules(rule => {
+      if (!ids.has(rule.selector.trim())) return;
+      rule.walkDecls(/^(?:height|min-height|max-height)$/, declaration => { declaration.remove(); });
+    });
+    if (css.toString() !== original) edits.push({ start: location.startTag.endOffset, end: location.endTag.startOffset, css: css.toString() });
+  }
+  for (const edit of edits.sort((a, b) => b.start - a.start)) html = html.slice(0, edit.start) + edit.css + html.slice(edit.end);
+  return html;
 }
 
 // Static, first-party code only. Captured text/settings are never executable.
