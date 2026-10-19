@@ -91,7 +91,7 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   artifact.manifest.publishStage = artifact.publishStage = 'production';
   artifact.manifest.shadowRestricted = artifact.shadowRestricted = false;
   artifact.manifest.enforcementDecision = 'ALLOW';
-  artifact.bundleSha256 = computeRuntimeArtifactBundleSha256(artifact);
+  artifact.bundleSha256 = computeRuntimeArtifactBundleSha256({htmlByPath:artifact.htmlByPath,compiledTokenStyles:artifact.compiledTokenStyles,assetFingerprintMap:artifact.assetFingerprintMap,manifest:artifact.manifest});
   const capture = await c.runtimeStore.readContext(buildEvidence.sourceCapture.siteVersionId);
   const technical = evaluateGeneratedOutputTechnicalEligibility({siteVersion:context.siteVersion,artifact,authoritativeOwnership:ownership,candidateRecord:record,buildEvidence,contentManifest,
     sourceCaptureSiteVersion:capture?.siteVersion??null,sourceCaptureArtifact:capture?.artifact??null,publicSourceArtifact:source.artifact});
