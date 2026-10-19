@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
+import { CONTACT_ACTION, readContactSchema } from "../contact/contact-form";
 
 import { parse } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
@@ -543,8 +545,24 @@ export function validateSelfContainedAstroProductionPayload(input: {
     throw corrupt("Production candidate HTML requires unsupported parser recovery.");
   }
   const elements = allElements(document);
-  if (elements.some((element) => element.tagName === "script")) {
+  if (elements.some((element) => element.tagName === "script" && !isOwnedRetainedRuntimeScript(element))) {
     throw corrupt("Production candidate HTML cannot contain scripts.");
+  }
+  const forms = elements.filter((element) => element.tagName === "form");
+  if (forms.length) {
+    const form = forms[0]!;
+    const action = attribute(form, "action") ?? "";
+    const destination = new URL(action, "https://candidate.invalid");
+    const path = destination.searchParams.get("path");
+    if (forms.length !== 1 || !readContactSchema(input.html) ||
+      attribute(form, "method")?.toLowerCase() !== "post" ||
+      !path || !isGeneratedOutputRoutePath(path) ||
+      action !== `${CONTACT_ACTION}?path=${encodeURIComponent(path)}` ||
+      form.attrs.some((item) => ["target", "enctype", "novalidate"].includes(item.name)) ||
+      elements.some((element) => element.attrs.some((item) =>
+        ["form", "formaction", "formtarget", "formmethod", "formenctype", "formnovalidate"].includes(item.name)))) {
+      throw corrupt("Production candidate HTML requires a validated native contact form.");
+    }
   }
   for (const element of elements) {
     assertNoUnsupportedResourceElement(element);
@@ -554,9 +572,6 @@ export function validateSelfContainedAstroProductionPayload(input: {
 }
 
 function assertNoUnsupportedResourceElement(element: HtmlElement): void {
-  if (element.tagName === "form") {
-    throw corrupt("Production candidate HTML cannot contain forms.");
-  }
   if (["iframe", "frame", "object", "embed"].includes(element.tagName)) {
     throw corrupt("Production candidate HTML cannot contain embedded application resources.");
   }

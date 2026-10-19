@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import { parse, serialize } from "parse5";
+import { contactElements, readContactSchema, replaceSupportedContactForm } from "../contact/contact-form";
+import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider";
+import { CONTACT_FORM_SCRIPT } from "../../src/public-site/contact-form-runtime";
+import { validateSelfContainedAstroProductionPayload } from "./astro-production-candidate-record";
 
 import { materializeAstroInternalPreviewHtml, computeAstroInternalPreviewCandidateContentSha256 } from "./astro-static-site-internal-preview-bridge";
 import { createSyntheticAstroInternalPreviewCandidate } from "./astro-internal-preview-candidate-test-fixture";
@@ -283,3 +288,32 @@ function prepareForStoreTest() {
     bytes,
   };
 }
+
+
+test("owned controllers and native contact survive immutable registration and readback; spoofing fails closed", async () => {
+  const source = '<form class="wpcf7-form" method="post"><input name="your-name" required placeholder="Name"><input type="email" name="your-email" required placeholder="Email"><input name="your-subject" placeholder="Subject"><textarea name="your-message" placeholder="Message"></textarea><input type="submit" value="Send"></form>';
+  const doc = parse(`<!doctype html>${source}`);
+  assert.equal(replaceSupportedContactForm(contactElements(doc).find(n => n.tagName === "form")!, "/contact"), true);
+  const scripts = `<script data-gnr8-preview-runtime="retained-hero">${RETAINED_HERO_SCRIPT}</script><script data-gnr8-preview-runtime="contact-form">${CONTACT_FORM_SCRIPT}</script>`;
+  const page = serialize(doc).replace("</body>", `${scripts}</body>`);
+  const input = createLargeInput();
+  input.candidate.htmlByPath = {"/": html("Home", scripts, ""), "/contact": page};
+  input.candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(input.candidate);
+  input.candidate.manifest.provenance.convertedArtifactSha256 = input.candidate.contentSha256;
+  const repository = createRepository(new InMemoryAstroProductionCandidateGateway(), new InMemoryAstroCandidateObjectStore());
+  await repository.create(input);
+  const restored = await repository.read({candidateId: CANDIDATE_ID, trustedScope: OWNERSHIP});
+  assert.equal(restored.candidate.htmlByPath["/contact"], page);
+  assert.deepEqual(readContactSchema(restored.candidate.htmlByPath["/contact"]!), {fields:["name","email","subject","message"],required:["name","email"]});
+  assert.equal((await repository.create(input)).status, "idempotent");
+  for (const invalid of [
+    page.replace(RETAINED_HERO_SCRIPT, "alert(1)"),
+    page.replace('<script ', '<script src="https://example.com/script.js" '),
+    page.replace('action="/api/gnr8/runtime/contact?path=%2Fcontact"', 'action="https://example.com/contact"'),
+    page.replace('name="subject"', 'name="recipient"'),
+    page.replace('type="submit"', 'type="submit" formaction="https://example.com/contact"'),
+    page.replace('data-gnr8-contact="v1"', 'data-gnr8-contact="fake"'),
+    page.replace('</body>', '<form method="post"></form></body>'),
+    page.replace('name="name"', 'name="name" onclick="alert(1)"'),
+  ]) assert.throws(() => validateSelfContainedAstroProductionPayload({html:invalid,compiledTokenStyles:""}));
+});
