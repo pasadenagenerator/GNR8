@@ -41,6 +41,16 @@ export type DerivedCaptureResult = {
 
 type FileRow = { path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer };
 
+export type DependencyAcquisitionEvidence = {
+  sourceUrl: string;
+  effectiveUrl: string;
+  retrievedAt: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+  provenance: "fresh-public-fetch-not-original-capture" | "reused-public-fetch-not-original-capture";
+};
+
 /** Call only after assertPersistedCaptureDependencyEvidence validates the owner
  * and file rows. The shared resolver never guesses targets from basenames.
  */
@@ -86,6 +96,13 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   ownershipSiteId: string;
   actor: string;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
+  /** Internal operator acquisition boundary. The normal importer still checks
+   * responses and closes the graph; this is not exposed in action payloads.
+   */
+  dependencyAcquisition?: {
+    fetchImpl: NonNullable<Parameters<typeof captureAssetsForAdditionalHtmlPages>[0]["fetchImpl"]>;
+    evidence: DependencyAcquisitionEvidence[];
+  };
 }): Promise<DerivedCaptureResult> {
   let parentSiteVersion = input.parentSiteVersion;
   let parentArtifact = input.parentArtifact;
@@ -143,11 +160,15 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   const parentFiles = restored.files;
   const excludedRoutes = new Set(input.acceptedFunctionalReductions?.kind === "retained-presentation-v1"
     ? (input.acceptedFunctionalReductions.excludedRoutes ?? []).map(entry => entry.path.replace(/\/$/, "")) : []);
-  const excludedHtmlPaths = new Set(routeMapFromProvenance(parentSiteVersion.importProvenanceSummary)
-    .filter(route => excludedRoutes.has(route.routePath.replace(/\/$/, ""))).map(route => route.rawFilePath));
+  const servedHtmlPaths = new Set([
+    parentRawArtifact.entryHtmlPath,
+    ...routeMapFromProvenance(parentSiteVersion.importProvenanceSummary)
+      .filter(route => !excludedRoutes.has(route.routePath.replace(/\/$/, "")))
+      .map(route => route.rawFilePath),
+  ]);
   // Plan dependencies only for the approved output scope. Parent rows and bytes
   // remain intact, including shared assets and the excluded historical HTML.
-  const htmlFiles = parentFiles.filter((file) => /\.html?$/i.test(file.path) && !excludedHtmlPaths.has(file.path));
+  const htmlFiles = parentFiles.filter((file) => servedHtmlPaths.has(file.path));
   const stylesheetPlan = planStylesheetDependencies({
     htmlFiles,
     sourceUrl: parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
@@ -262,6 +283,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       }],
       snapshotRootDirAbs: workspace,
       existingFetchManifest: existingManifest,
+      fetchImpl: input.dependencyAcquisition?.fetchImpl,
       trustedExternalOrigins: trustedOriginsForStylesheets([
         ...allStylesheetUrls,
         ...importOriginsFromRetainedStylesheets(parentFiles),
@@ -320,6 +342,26 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         bytes,
       });
     }
+    if (input.dependencyAcquisition?.evidence.length) {
+      const sources = input.dependencyAcquisition.evidence.map((source) => {
+        const entry = capture.manifestEntries.find((candidate) => candidate.resolvedUrl &&
+          dependencyRequestUrl(candidate.resolvedUrl) === dependencyRequestUrl(source.sourceUrl) && candidate.fetchStatus === "fetched");
+        if (!entry?.localPath || !Number.isFinite(Date.parse(source.retrievedAt)) ||
+          !/^[a-f0-9]{64}$/.test(source.sha256) || !Number.isSafeInteger(source.sizeBytes) || source.sizeBytes <= 0) {
+          throw new Error("astro_derived_capture_acquisition_evidence_invalid");
+        }
+        return { ...source, localPath: entry.localPath };
+      }).sort((left, right) => left.sourceUrl.localeCompare(right.sourceUrl));
+      const bytes = Buffer.from(stableStringify({
+        kind: "derived_dependency_acquisition_v1",
+        parentSiteVersionId: parentSiteVersion.id,
+        parentRawArtifactId: parentRawArtifact.id,
+        sources,
+      }), "utf8");
+      const digest = sha256(bytes);
+      const path = `dependency-acquisition/${digest}.json`;
+      if (!parentRawArtifact.fileMap[path]) newFiles.push({ path, mediaType: "application/json", sizeBytes: bytes.length, sha256: digest, bytes });
+    }
     const rewrites = mergeStylesheetRewrites([
       ...retainedStylesheetRewrites,
       ...stylesheetPlan.rewrites,
@@ -334,6 +376,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       .sort((left, right) => left.from.localeCompare(right.from));
     const rewrittenParentFiles = await Promise.all(parentFiles.map(async (file) => {
       if (/\.html?$/i.test(file.path)) {
+        if (!servedHtmlPaths.has(file.path)) return file;
         const html = rewriteStylesheetReferences(file.bytes.toString("utf8"), rewrites,
           parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl);
         const bytes = Buffer.from(html, "utf8");
@@ -349,7 +392,10 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       .sort((left, right) => left.path.localeCompare(right.path));
     const unresolvedDependencies = findUnresolvedRetainedStylesheetDependencies({
       files: derivedFiles,
-      rootStylesheetPaths: retainedStaticDependencyPlan.reachableStylesheetPaths,
+      rootStylesheetPaths: [...new Set([
+        ...retainedStaticDependencyPlan.reachableStylesheetPaths,
+        ...fetchedStylesheetEntries.map((entry) => entry.localPath!),
+      ])],
       knownUnusedDependencyUrls: unusedCssDependencies.map((entry) => entry.resolvedUrl),
       stylesheetSourceUrlsByPath: Object.fromEntries(retainedStylesheetRewrites.map((entry) => [
         entry.to.replace(/^\/+/, ""),
@@ -1047,4 +1093,11 @@ function mediaTypeFor(filePath: string, provided: string | null): string {
 }
 
 function sha256(bytes: Buffer): string { return createHash("sha256").update(bytes).digest("hex"); }
+function dependencyRequestUrl(value: string): string {
+  const url = new URL(value);
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new Error("astro_derived_capture_acquisition_url_invalid");
+  url.hash = "";
+  if (!url.search) url.search = "";
+  return url.href;
+}
 function escapeAttribute(value: string): string { return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;"); }
