@@ -1,5 +1,20 @@
 # GNR8 native contact: lokalna integracija in meja aktivacije
 
+## Settings Publish popravljeno — odobritev ohranjena, 2026-10-19
+
+Uporabnik je formalno odobril novi artefakt `f2fb122c-1f64-475d-a966-4a5e067115ae` / SHA `33f1ed10b00a9b3e8c66eab7f721885cd39c2b4dc3badfbf2199e4e496aaa450` in sam kliknil Publish. Napaka »Generated-output eligibility evidence resolver is unavailable.« je bila manjkajoč priklop v normalni Settings objavni poti, ne težava domene ali odobritve. Ta razdelek nadomesti spodnji status review MISSING in navodilo za prvo odobritev.
+
+Read-only uskladitev po uporabnikovem poskusu: različica `7152baf5-dc8a-5948-ac66-24cdb2a1f1c3` je APPROVED, technical PASS, review APPROVED (`generated_output_review_2095127720ee80a484d3b5c27c07d259`, reviewedAt `2026-10-19T12:04:24.670Z`). Točen artifact/hash sta nespremenjena; pointerjev je 0. Audit vsebuje samo DRAFT → READY_FOR_REVIEW → APPROVED, brez PUBLISHED. Domena active ostaja na novi različici, originalni artefakt/hash ostaja nespremenjen. Dokaz: `/private/tmp/gnr8-logatcan/publish-attempt-reconciliation.json`.
+
+Dokazani call chain: `SiteDomainSettingsPanel.publishSite` → POST `/api/gnr8/runtime/versions/[siteVersionId]/publish` → `publishApprovedSiteVersion` → `enforceGeneratedOutputPublicationEligibility`. V fc168878 route ni podal `generatedOutputPublicationDecisionResolver`; točno navedeno sporočilo vrže veja `if (!input.resolver)` pred zapisovanjem artefakta in pointerja. Obstoječi resolver iz pregledne poti je delujoč.
+
+Popravek `7f8cca21` normalno avtenticirano Publish pot poveže z obstoječo evidence composition prek `createEvidenceBoundRuntimePublisher`. Resolver se ustvari šele ob generiranem artefaktu. Ownership, lineage, hash, tehnični PASS in exact-artifact review ostajajo obvezni; napaka dokazov ne omogoči objave. Spremenjena sta objavni route in obstoječi composition modul, dodana je fokusirana regresijska preverba v obstoječem testu. Test dejanske kombinacije publisher → publication guard pokrije veljavno odobritev, manjkajoč review in napako branja dokazov; samo prvi doseže simulirano aktivacijsko mejo. En ciljni test, route exports in diff check uspešni.
+
+Minimalna Platform izdaja `dpl_6u9KDLjrTMvcGSY7eDRCzWkb96dE` je READY; build/lint/types so uspešni. Bralni inspect `app.pasadenagenerator.com` potrdi isto izdajo in production alias. To je ena dodatna Platform izdaja za ta popravek (skupaj dve production izdaji javnega pripravljalnega paketa). Brez Workerja, Generate, novega artefakta/approvala, DNS posega, pošte ali agentovega ponovnega Publish. Dokazi: `publish-wiring-test.log`, `publish-wiring-deploy.log`, `publish-wiring-live-alias.log` v `/private/tmp/gnr8-logatcan/`.
+
+Naslednji korak uporabnika: v že osveženih [Settings](https://app.pasadenagenerator.com/gnr8/agency/clients/9251b11f-3539-43ee-9a24-834c6a237852/sites/8c6eb062-8697-4f19-98a3-7539a274d916/settings?agency=00000000-0000-4000-8000-000000000001&admin_view=1) ponovno klikne **Publish**. Odobritve ni treba ponoviti. Dejanski ponovni Publish in javni prikaz po njem še nista preverjena, ker je ponovni klik izrecno prepuščen uporabniku. Recipient ostaja `pasadenagenerator@gmail.com`.
+
+
 ## Javna priprava zaključena — čaka formalno odobritev, 2026-10-19
 
 Odobreni paket iz 681aeaf2 je izveden do uporabnikove formalne odobritve. Ta razdelek nadomesti spodnji preflight in njegov takrat še neodobren predlog. Nobena odobritev, Publish, active pointer ali kontaktna oddaja ni bila izvedena.
