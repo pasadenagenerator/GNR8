@@ -223,7 +223,11 @@ function rewriteCandidatePreviewLinks(input: {
     if (!isGeneratedOutputRoutePath(normalizedPath) || !availablePaths.has(normalizedPath)) return tag;
 
     const rewrittenHref = `${previewBase}?path=${encodeURIComponent(normalizedPath)}${resolved.hash}`;
-    return tag.replace(/\bhref\s*=\s*(["'])(.*?)\1/i, `href=${quote}${rewrittenHref}${quote}`);
+    // The protected document cannot open popups. Keep captured navigation in
+    // this browsing context instead of relaxing its sandbox for authored targets.
+    return tag
+      .replace(/\bhref\s*=\s*(["'])(.*?)\1/i, `href=${quote}${rewrittenHref}${quote}`)
+      .replace(/\s+target\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   });
 }
 
