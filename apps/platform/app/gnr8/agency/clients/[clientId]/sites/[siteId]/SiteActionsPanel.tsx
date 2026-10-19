@@ -318,7 +318,7 @@ export default function SiteActionsPanel(props: Props) {
                 For this candidate: remove recognized search; replace maps with their address and OpenStreetMap link; remove the recognized tracking and consent bundle together.
               </label>
               {presentation ? <>
-                <label>Exclude these obsolete routes from this site's candidate (one exact path per line; homepage cannot be excluded)
+                <label>Exclude these obsolete routes from this site&apos;s candidate (one exact path per line; homepage cannot be excluded)
                   <textarea value={excludedPaths} disabled={!canRunMigration} onChange={event => setExcludedPaths(event.target.value)} rows={4} style={{display:'block',width:'100%'}} />
                 </label>
                 <p>Captured files remain stored. Unknown scripts and unsupported forms block generation.</p>
@@ -327,7 +327,7 @@ export default function SiteActionsPanel(props: Props) {
                   <label>Approved recipient for this site
                     <input type='email' value={recipient} disabled={!canRunMigration} onChange={event => {setRecipient(event.target.value);setRecipientConfirmed(false)}} style={{display:'block',width:'100%'}} />
                   </label>
-                  <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site's recipient: {recipient || '(enter email)'}</label>
+                  <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site&apos;s recipient: {recipient || '(enter email)'}</label>
                   <p>Supported: name, email, optional phone/subject and message; required fields stay as imported. The recognized required CF7 permission checkbox and its exact legal text are preserved, unchecked. Other fields remain blocked. Preview cannot send. Publication checks the production sender configuration and durable submission service. Provider acceptance confirms submission for sending, not inbox delivery.</p>
                 </> : null}
               </> : null}

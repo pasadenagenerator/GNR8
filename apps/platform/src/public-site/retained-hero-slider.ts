@@ -97,9 +97,9 @@ export function enhanceRetainedHeroSliders(input: {
   for (const wrapper of nodes.filter((node) => node.tagName === "rs-module-wrap")) {
     const location = wrapper.sourceCodeLocation;
     const descendants = elements(wrapper);
-    const module = descendants.find((node) => node.tagName === "rs-module");
-    if (!location || !module) continue;
-    const moduleId = attr(module, "id");
+    const sliderModule = descendants.find((node) => node.tagName === "rs-module");
+    if (!location || !sliderModule) continue;
+    const moduleId = attr(sliderModule, "id");
     if (!/^[\w-]+$/.test(moduleId)) continue;
     const initializer = scripts.filter((script) => text(script).includes(moduleId) && /\.revolution\s*\(/.test(text(script)));
     if (initializer.length !== 1) continue;
