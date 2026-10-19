@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
+import { captureAssetsForAdditionalHtmlPages, computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
+import { hashedImportAssetPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 import {
   assertPersistedCaptureDependencyEvidence,
@@ -15,6 +19,8 @@ import {
   planRetainedStylesheetImports,
   refreshDerivedHtmlProvenance,
   resolveRetainedCssDependencyPath,
+  restoreRetainedStylesheetReferences,
+  existingCssDependencyManifest,
 } from "./source-backed-capture-dependency-derivation";
 import type { RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 
@@ -22,6 +28,64 @@ const EXTERNAL_LIBS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780
 const GRIDS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780087e3f/css/grids.css?1791454204350";
 const GOOGLE = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&display=swap&subset=latin-ext";
 const EXTRA_CDN = "https://fonts.prod.extra-cdn.com/css?family=Roboto+Condensed:300,700|Roboto:400&display=swap";
+
+test("restored capture aliases survive acquisition and persisted readback without asset fetches", async () => {
+  const sourceUrl = "https://example.test/cache/bundle/style.css";
+  const cssPath = "assets/stylesheet/123456789abc-style.css";
+  const imagePath = "assets/style_asset/abcdef123456-pixel.png";
+  const mistakenUrl = "https://example.test/cache/style_asset/abcdef123456-pixel.png";
+  const alias = hashedImportAssetPath(mistakenUrl, "style_asset", "abcdef123456-pixel.png");
+  const row = (path: string, bytes: Buffer, mediaType: string) => ({
+    path, bytes, mediaType, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"),
+  });
+  const files = [
+    row(cssPath, Buffer.from(`.one{background:url(/${alias})}.two{background:url(/cache/style_asset/abcdef123456-pixel.png)}`), "text/css"),
+    row(imagePath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=", "base64"), "image/png"),
+    row("url-fetch-manifest.json", Buffer.from(JSON.stringify([
+      { assetKind: "stylesheet", fetchStatus: "fetched", localPath: cssPath, resolvedUrl: sourceUrl },
+    ])), "application/json"),
+  ];
+  const originalHash = files[0]!.sha256;
+  const restored = restoreRetainedStylesheetReferences(files);
+  assert.equal(restored.changed, true);
+  assert.equal(files[0]!.sha256, originalHash, "original immutable rows are untouched");
+  assert.deepEqual(planReachableRetainedStaticDependencies({
+    files: restored.files, stylesheetRewrites: restored.rewrites,
+    filePaths: new Set(files.map((file) => file.path)), rootStylesheetPaths: [cssPath],
+  }).missingUrls, []);
+  const workspace = await mkdtemp(join(tmpdir(), "gnr8-restored-css-test-"));
+  try {
+    for (const file of restored.files) {
+      await mkdir(dirname(join(workspace, file.path)), { recursive: true });
+      await writeFile(join(workspace, file.path), file.bytes);
+    }
+    const captured = await captureAssetsForAdditionalHtmlPages({
+      pages: [{ pageUrl: "https://example.test/", bodyPath: join(workspace, "probe.html"), html: `<link rel="stylesheet" href="${sourceUrl}">` }],
+      snapshotRootDirAbs: workspace,
+      existingFetchManifest: [{
+        tag: "link", attribute: "href", occurrence: 0, rawRef: sourceUrl, resolvedUrl: sourceUrl,
+        localPath: cssPath, assetKind: "stylesheet", fetchStatus: "fetched", httpStatus: 200,
+        contentType: "text/css", byteLength: restored.files[0]!.sizeBytes,
+      }, ...existingCssDependencyManifest({
+        parentFiles: restored.files, stylesheetRewrites: restored.rewrites,
+        filePaths: new Set(files.map((file) => file.path)), startingOccurrence: 1,
+      })],
+      fetchImpl: async () => { assert.fail("owned dependency must not be fetched"); },
+    });
+    assert.equal(captured.summary.failedRequiredAssetCount, 0);
+    const reread = await Promise.all(restored.files.map(async (file) => row(file.path, await readFile(join(workspace, file.path)), file.mediaType)));
+    assert.deepEqual(findUnresolvedRetainedStylesheetDependencies({ files: reread, rootStylesheetPaths: [cssPath] }), []);
+    assert.equal(restoreRetainedStylesheetReferences(reread).changed, false);
+  } finally { await rm(workspace, { recursive: true, force: true }); }
+  const tampered = files.map((file) => file.path === "url-fetch-manifest.json" ? { ...file, sha256: "wrong" } : file);
+  assert.equal(restoreRetainedStylesheetReferences(tampered).changed, false);
+});
+
+test("stylesheet planning ignores commented links and includes protocol-relative font CSS", () => {
+  const bytes = Buffer.from('<!-- <link rel="stylesheet" href="https://old.test/missing.css"> --><link rel="stylesheet" href="//fonts.test/styles"><a href="/assets/not-a-stylesheet.css">x</a>');
+  const htmlFiles = [{ path: "index.html", bytes, mediaType: "text/html", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }];
+  assert.deepEqual(planStylesheetDependencies({ htmlFiles, filePaths: new Set(), removeFormCaptcha: false, sourceUrl: "https://example.test/" }).missingUrls, ["https://fonts.test/styles"]);
+});
 
 test("immutable dependency completion uses a stable successor identity", () => {
   const parent = "8701e904-75f3-44d4-a669-e660f9792693";
