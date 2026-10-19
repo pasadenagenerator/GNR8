@@ -12,6 +12,8 @@ Aktivacija zahteva Production okolje, točen `GNR8_CONTACT_FROM`, prisoten `RESE
 
 Po zadnji uporabnikovi zahtevi ni novih testnih sklopov, replayev ali testnih sporočil. Preverijo se uporabljena shema, pravice, dovoljeni izvozi poti, diff in build ob izdaji. Prejšnji lokalni dokazi spodaj ostajajo zgodovinski. Spodnji predlog migracije je bil pozneje izrecno odobren in ga nadomesti ta implementacija; zgodovinske omejitve dovoljenj niso aktualna prepoved te ozke uvedbe.
 
+Migracija je uporabljena in zabeležena; readback potrjuje različico v1, RLS, dve politiki, RPC samo za service_role in nič novih oddaj. Prvi release build je ustavil lint, drugi tip praznega tekstovnega vozlišča. Po popravkih sta celotna lokalna grafa tipov Platform/Worker uspešna (z `composite: false`, enako kot Next build), prav tako osredotočeni lint in route-export gate. Worker potrebuje isto izdajo zaradi skupnega parserja in normalizatorja: zadnja živa izdaja 16. oktobra predhodi kontaktni pogodbi iz 18. oktobra. Ponovna sinhronizacija Inngest in Generate nista del te uvedbe. Za Logatčan so v živi zbirki potrjeni nič shranjenih Astro kandidatov, nič novih kontaktnih artefaktov in nič aktivnih pointerjev.
+
 ## Zgodovinsko lokalno stanje
 
 Stanje 2026-10-18: dejanski Logatčanov `/kontakt` je lokalno podprt, vključno z neobvezno zadevo in obvezno potrditvijo. To nadomesti prejšnjo odločitev o blokadi posebnih polj iz commita `1f14d8df`. Produkcijska dostava in objava ostajata blokirani. Zgodovinski zajem ni spremenjen.
