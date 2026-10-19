@@ -81,6 +81,7 @@ export type AstroProductionCandidatePreviewRouteDependencies = {
   requireSuperadminUserId: () => Promise<string>;
   isFeatureEnabled: () => boolean;
   loadPreviewDependencies: () => Promise<AstroProductionCandidatePreviewDependencies>;
+  previewBase?: string;
 };
 
 const COMMON_HEADERS = {
@@ -108,6 +109,7 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
     requireSuperadminUserId: dependencies.requireSuperadminUserId ?? defaultRequireSuperadminUserId,
     isFeatureEnabled: dependencies.isFeatureEnabled ?? isAstroProductionCandidatePreviewFeatureEnabled,
     loadPreviewDependencies: dependencies.loadPreviewDependencies ?? defaultLoadPreviewDependencies,
+    previewBase: dependencies.previewBase,
   };
 
   return {
@@ -176,6 +178,7 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
 
       const html = rewriteCandidatePreviewLinks({
         html: preview.html,
+        previewBase: resolved.previewBase,
         currentPath: selectors.path,
         availablePaths: Object.keys(record.candidate.htmlByPath),
         siteVersionId: selectors.siteVersionId,
@@ -195,6 +198,7 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
 }
 
 function rewriteCandidatePreviewLinks(input: {
+  previewBase?: string;
   html: string;
   currentPath: string;
   availablePaths: string[];
@@ -206,7 +210,7 @@ function rewriteCandidatePreviewLinks(input: {
     ? input.currentPath
     : `${input.currentPath}/`;
   const baseUrl = new URL(currentDirectory, "https://gnr8.invalid");
-  const previewBase = `/api/gnr8/admin/astro-candidates/${encodeURIComponent(input.siteVersionId)}/${encodeURIComponent(input.candidateId)}/preview`;
+  const previewBase = input.previewBase ?? `/api/gnr8/admin/astro-candidates/${encodeURIComponent(input.siteVersionId)}/${encodeURIComponent(input.candidateId)}/preview`;
 
   return input.html.replace(/<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>/gi, (tag: string, quote: string, rawHref: string) => {
     const href = rawHref.trim();
@@ -225,7 +229,7 @@ function rewriteCandidatePreviewLinks(input: {
       : resolved.pathname.replace(/\/+$/, "");
     if (!isGeneratedOutputRoutePath(normalizedPath) || !availablePaths.has(normalizedPath)) return tag;
 
-    const rewrittenHref = `${previewBase}?path=${encodeURIComponent(normalizedPath)}${resolved.hash}`;
+    const rewrittenHref = `${previewBase}${previewBase.includes("?") ? "&" : "?"}path=${encodeURIComponent(normalizedPath)}${resolved.hash}`;
     // The protected document cannot open popups. Keep captured navigation in
     // this browsing context instead of relaxing its sandbox for authored targets.
     return tag

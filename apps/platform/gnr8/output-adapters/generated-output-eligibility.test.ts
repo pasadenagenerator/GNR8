@@ -571,3 +571,103 @@ test('Settings publisher supplies evidence to the real guard and stops before ac
     assert.equal(activations,mode==='approved'?1:0);
   }
 });
+
+test('owner UI prepares, resumes, reviews and publishes the exact retained artifact through real services', async () => {
+  const { prepareRetainedAstroPublicArtifact: prepareOperation } = await import('./astro-public-preparation');
+  const { readGeneratedOutputReviewModel, approveGeneratedOutputReview, createEvidenceBoundRuntimePublisher } = await import('./generated-output-publication-composition');
+  const { createPublicOutputService } = await import('./public-output-service');
+  const { createPublicOutputRouteHandlers } = await import('./public-output-route-handlers');
+  const { publishApprovedSiteVersion } = await import('../runtime/publish-activation-orchestrator');
+  const { ensureRuntimeTables } = await import('../runtime/runtime-store');
+  await ensureRuntimeTables({dbClient: {query: async () => ({rows:[]})} as never});
+  const { transitionSiteVersionState } = await import('../runtime/version-lifecycle-enforcer');
+  const { renderAstroProductionCandidatePreview } = await import('./astro-production-candidate-preview-composition');
+  const f = buildFixture();
+  Object.assign(f.artifact.manifest,{generatedOutputBuildEvidence:f.buildEvidence,generatedOutputContentManifest:f.contentManifest});
+  f.artifact.bundleSha256 = bundleHash(f.artifact);
+  const versions = new Map([[f.siteVersion.id,f.siteVersion],[f.sourceCaptureSiteVersion.id,f.sourceCaptureSiteVersion]]);
+  const artifacts = new Map([[f.artifact.siteVersionId,f.artifact],[f.sourceCaptureArtifact.siteVersionId,f.sourceCaptureArtifact]]);
+  const records = new Map([[f.record.identity.candidateId,f.record]]);
+  const audits: {actor:string;details:Record<string,unknown>;timestamp:string;to_state:string}[] = [];
+  let pointer: {active_site_version_id:string;active_artifact_id:string}|null = null;
+  let domainReady = false, failBindOnce = true;
+  const snake = (value:object) => Object.fromEntries(Object.entries(value).map(([k,v])=>[k.replace(/[A-Z]/g,c=>`_${c.toLowerCase()}`),v]));
+  const db = {async query(raw:string,args:unknown[]=[]) {
+    const sql=raw.trim().replace(/\s+/g,' '), version=versions.get(String(args[0]));
+    const rows=(values:unknown[])=>({rows:values,rowCount:values.length});
+    if (['begin','commit','rollback'].includes(sql)) return rows([]);
+    if(sql.startsWith('select')&&sql.includes('from public.gnr8_runtime_site_versions')) return rows(version?[snake(version)]:[]);
+    if(sql.startsWith('select')&&sql.includes('from public.gnr8_runtime_page_versions')) return rows((version?.pages??[]).map(snake));
+    if(sql.startsWith('select')&&sql.includes('from public.gnr8_runtime_artifacts')) {
+      const a=sql.includes('where site_version_id')?artifacts.get(String(args[0])):[...artifacts.values()].find(a=>a.id===args[0]);return rows(a?[snake(a)]:[]);
+    }
+    if(sql.startsWith('select')&&sql.includes('from public.gnr8_runtime_active_pointers')) return rows(pointer?[pointer]:[]);
+    if(sql.startsWith('select id from public.gnr8_runtime_domain_host_bindings')) return rows(domainReady?[{id:'domain'}]:[]);
+    if(sql.startsWith('select id from public.gnr8_runtime_sites')) return rows([{id:SITE_ID}]);
+    if(sql.startsWith('update public.gnr8_runtime_site_versions set state')) {version!.state=args[1] as never;return rows([snake(version!)]);}
+    if(sql.startsWith('update public.gnr8_runtime_site_versions set artifact_id')) return rows([snake(version!)]);
+    if(sql.startsWith('update public.gnr8_runtime_artifacts')) {const a=[...artifacts.values()].find(a=>a.id===args[0])!;assert.equal(args[4],a.bundleSha256);return rows([snake(a)]);}
+    if(sql.startsWith('insert into public.gnr8_runtime_version_audit')) {audits.unshift({actor:String(args[3]),details:JSON.parse(String(args[5])),timestamp:new Date().toISOString(),to_state:String(args[2])});return rows([]);}
+    if(sql.startsWith('insert into public.gnr8_runtime_active_pointers')) {pointer={active_site_version_id:String(args[1]),active_artifact_id:String(args[2])};return rows([]);}
+    throw new Error(`Unexpected local query: ${sql.slice(0,120)}`);
+  }};
+  const c = {
+    runtimeStore:{async readContext(id:string){const siteVersion=versions.get(id);return siteVersion?{siteVersion,artifact:siteVersion.artifactId?artifacts.get(id):null,activePointerReferencesArtifact:false,previewBindingCount:0}:null;}},
+    ownershipResolver:{async resolve({siteVersionId}:{siteVersionId:string}){return {...OWNERSHIP,siteVersionId};}},
+    candidateRepository:{
+      async read({candidateId}:{candidateId:string}){const record=records.get(candidateId);if(!record)throw new Error('missing candidate');return record;},
+      async create(input:Omit<Parameters<typeof createAstroProductionCandidateRecord>[0], "ownership"> & {trustedScope: typeof OWNERSHIP}){
+        const record=records.get(input.candidate.id)??createAstroProductionCandidateRecord({...input,ownership:input.trustedScope,storedAt:f.siteVersion.createdAt});records.set(record.identity.candidateId,record);return {record};
+      },
+    },
+    client:{from(table:string){const q={select(){return q;},eq(){return q;},order(){return q;},async limit(){return {data:audits.filter(a=>a.to_state==='APPROVED'),error:null};},async maybeSingle(){assert.equal(table,'gnr8_runtime_active_pointers');return {data:pointer,error:null};}};return q;}},
+  } as unknown as ReturnType<typeof import('./generated-output-publication-composition').createGeneratedOutputComposition>;
+  const read=(id:string)=>readGeneratedOutputReviewModel(id,c);
+  const transition:typeof transitionSiteVersionState=input=>transitionSiteVersionState({...input,dbClient:db as never});
+  const prepare:typeof prepareOperation=input=>prepareOperation(input,{
+    composition:()=>c,readModel:read,lifecycle:{transitionSiteVersionState:transition},store:{
+      async createSiteVersionFromMigration(input){const id=input.siteVersionId!;if(!versions.has(id))versions.set(id,{...structuredClone(f.siteVersion),id,state:'DRAFT',artifactId:null,versionNo:2});return {siteId:SITE_ID,siteVersionId:id,versionNo:2};},
+      linkRuntimeSiteVersionOwnershipIfAllowed:async()=>undefined as never,
+      async createArtifact(input){if(!artifacts.has(input.siteVersionId))artifacts.set(input.siteVersionId,{...input,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',createdAt:f.siteVersion.createdAt});return {artifactId:artifacts.get(input.siteVersionId)!.id};},
+      async bindArtifactToVersion(input){if(failBindOnce){failBindOnce=false;throw new Error('simulated connection loss after artifact write');}versions.get(input.siteVersionId)!.artifactId=input.artifactId;return undefined as never;},
+    },
+  });
+  const authorize=async(scope:{siteId:string})=>{if(scope.siteId!==OWNERSHIP.ownershipSiteId)throw new Error('404|PUBLIC_OUTPUT_NOT_FOUND');return {userId:'owner'} as never;};
+  const service=createPublicOutputService({authorizeSite:authorize,authorizeVersion:async(scope,id)=>{await authorize(scope);if(!versions.has(id))throw new Error('404|PUBLIC_OUTPUT_NOT_FOUND');return {userId:'owner'} as never;},read,prepare,
+    approve:input=>approveGeneratedOutputReview(input,{readModel:read,composition:()=>c,transition}),
+    publish:createEvidenceBoundRuntimePublisher({requireExactSelection:true,createResolver:()=>async selection=>(await read(selection.siteVersion.id)).decision,publish:input=>publishApprovedSiteVersion({...input,dbClient:db as never})}),
+  });
+  const { createAstroProductionCandidatePreviewRouteHandlers } = await import('@/app/api/gnr8/admin/astro-candidates/[siteVersionId]/[candidateId]/preview/astro-candidate-preview-route-handlers');
+  const handlers=createPublicOutputRouteHandlers({service,list:async()=>[],preview:options=>createAstroProductionCandidatePreviewRouteHandlers({...options,loadPreviewDependencies:async()=>({
+    resolveOwnership:async({siteVersionId})=>({...OWNERSHIP,siteVersionId}),readCandidate:async({candidateId})=>records.get(candidateId)!,renderCandidate:renderAstroProductionCandidatePreview,
+  })})});
+  const context={params:Promise.resolve({clientId:OWNERSHIP.organizationId,siteId:OWNERSHIP.ownershipSiteId})};
+  const url=`https://platform.example/api/public-output?agencyId=${OWNERSHIP.agencyId}`;
+  const send=(body:object,ctx=context)=>handlers.POST(new Request(url,{method:'POST',headers:{origin:'https://platform.example','content-type':'application/json'},body:JSON.stringify(body)}),ctx);
+  const source={siteVersionId:f.siteVersion.id,artifactId:f.artifact.id,artifactBundleSha256:f.artifact.bundleSha256};
+  const preparation={...source,action:'prepare',host:'retained.example.com'};
+  assert.equal((await send(preparation)).status,409);
+  const [response, concurrent]=await Promise.all([send(preparation),send(preparation)]);assert.equal(response.status,200,await response.clone().text());assert.equal(concurrent.status,200,await concurrent.clone().text());
+  const target=(await response.json()).data;
+  const selection={siteVersionId:String(target.siteVersionId),artifactId:String(target.artifactId),artifactBundleSha256:String(target.artifactBundleSha256)};
+  const retry=(await(await send(preparation)).json()).data;
+  assert.deepEqual([retry.siteVersionId,retry.artifactId,retry.artifactBundleSha256],Object.values(selection));
+  assert.equal(versions.size,3);assert.equal(records.size,2);assert.equal(artifacts.size,3);
+  const readback=await handlers.GET(new Request(`${url}&${new URLSearchParams(selection)}`),context);assert.equal((await readback.json()).data.artifactId,selection.artifactId);
+  const preview=await handlers.preview(new Request(`${url}&${new URLSearchParams(selection)}&path=%2F`),context);
+  assert.equal(preview.status,200);assert.ok((await preview.text()).includes('Trusted homepage'));
+  assert.ok(preview.headers.get('content-security-policy')?.includes("form-action 'none'"));
+  assert.equal((await handlers.preview(new Request(`${url}&${new URLSearchParams({...selection,artifactBundleSha256:'0'.repeat(64)})}`),context)).status,409);
+  const action={...selection,host:preparation.host};
+  assert.equal((await send({...action,action:'publish'})).status,409);assert.equal(pointer,null);
+  assert.equal((await send({...action,action:'approve',confirmation:'approve-exact-generated-output-artifact',technicalEvaluationSha256:'0'.repeat(64)})).status,409);
+  assert.equal((await send({...action,artifactBundleSha256:'0'.repeat(64),action:'publish'})).status,409);
+  assert.equal((await send({...action,action:'publish'},{params:Promise.resolve({clientId:OWNERSHIP.organizationId,siteId:'ffffffff-ffff-4fff-8fff-ffffffffffff'})})).status,404);
+  const approval=await send({...action,action:'approve',confirmation:'approve-exact-generated-output-artifact',technicalEvaluationSha256:target.decision.technical.evidenceSha256});assert.equal(approval.status,200,await approval.clone().text());
+  assert.equal((await send({...action,action:'publish'})).status,409);assert.equal(pointer,null);
+  domainReady=true;
+  const published=await send({...action,action:'publish'});assert.equal(published.status,200,await published.clone().text());
+  assert.deepEqual(pointer,{active_site_version_id:selection.siteVersionId,active_artifact_id:selection.artifactId});
+  assert.equal((await published.json()).data.artifactBundleSha256,selection.artifactBundleSha256);
+  assert.equal((await send({...action,action:'publish'})).status,200);
+});

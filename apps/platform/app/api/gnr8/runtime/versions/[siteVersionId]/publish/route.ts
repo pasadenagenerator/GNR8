@@ -12,7 +12,7 @@ import {
 import { computeDomainDnsInstructions } from "@/src/lib/vercel/domain-dns-instructions";
 import { checkDomainStatus } from "@/src/lib/vercel/vercel-domain-client";
 
-const publishRuntimeVersion = createEvidenceBoundRuntimePublisher();
+const publishRuntimeVersion = createEvidenceBoundRuntimePublisher({ requireExactSelection: true });
 
 function logDomainEvent(event: string, details: Record<string, unknown>): void {
   console.info(`[gnr8.domain] ${event}`, details);
@@ -100,11 +100,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ siteVersionId:
       action: "publish",
       requestedAgencyId: agencyId,
     });
-    const body = (await req.json().catch(() => ({}))) as { actor?: string; stage?: "shadow" | "canary" | "production" };
-    const actor = String(body.actor ?? "operator:publish").trim() || "operator:publish";
+    const body = (await req.json().catch(() => ({}))) as { actor?: string; stage?: "shadow" | "canary" | "production"; expectedArtifact?: { artifactId: string; bundleSha256: string; host: string } };
+    const actor = actionContext.userId;
     const stage = body.stage === "shadow" || body.stage === "canary" || body.stage === "production" ? body.stage : undefined;
 
-    const result = await publishRuntimeVersion({ siteVersionId, actor, stage });
+    const result = await publishRuntimeVersion({ siteVersionId, actor, stage, expectedArtifact: body.expectedArtifact });
+    if (body.expectedArtifact) {
+      // Public preparation validates and switches its exact host in the pointer
+      // transaction. Do not subsequently rebind every active domain on the site.
+      return NextResponse.json({ ok: true, actor_mode: actionContext.actorMode,
+        activated_domain_bindings: 0, domain_warning: null, ...result });
+    }
     await reconcileDomainVerificationOnPublish({
       siteId: result.siteId,
       siteVersionId: result.siteVersionId,

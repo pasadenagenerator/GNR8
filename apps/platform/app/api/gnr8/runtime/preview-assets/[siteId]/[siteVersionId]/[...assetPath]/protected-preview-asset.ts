@@ -1,10 +1,9 @@
 import "server-only";
 import { retainedStylesheetSourceUrl } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 import { createHash } from "node:crypto";
-import { requireSuperadminUserId } from "@/src/auth/require-superadmin-user-id";
+import { requireOwnedPreviewVersion } from "@/gnr8/output-adapters/public-output-access";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 import { SupabaseAstroCandidateOwnershipResolver } from "@/gnr8/output-adapters/astro-production-candidate-ownership-resolver";
-import { isAstroProductionCandidatePreviewFeatureEnabled } from "@/gnr8/output-adapters/astro-production-candidate-preview-feature-gate";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 
 const headers = {
@@ -19,8 +18,8 @@ const headers = {
 export async function readProtectedPreviewAsset(
   input: { siteId: string; siteVersionId: string; path: string; host?: string },
   dependencies = {
-    enabled: () => (process.env.VERCEL_ENV === "preview" || (process.env.VERCEL_ENV === "production" && input.host === "app.pasadenagenerator.com")) && isAstroProductionCandidatePreviewFeatureEnabled(),
-    authenticate: requireSuperadminUserId,
+    enabled: () => process.env.VERCEL_ENV !== "production" || input.host === "app.pasadenagenerator.com",
+    authenticate: async () => { await requireOwnedPreviewVersion(input.siteVersionId, input.siteId); return "owned-preview"; },
     client: getSupabaseServiceRoleClient,
     ownership: (siteVersionId: string, expectedRuntimeSiteId: string) =>
       new SupabaseAstroCandidateOwnershipResolver().resolve({ siteVersionId, expectedRuntimeSiteId }),

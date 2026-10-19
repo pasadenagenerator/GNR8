@@ -3737,6 +3737,8 @@ export async function createArtifact(input: {
   dbClient?: RuntimeStoreDbClient;
 }): Promise<{ artifactId: string }> {
   return withTx(async (client) => {
+    // Serialize concurrent preparation retries before the immutable artifact lookup.
+    await client.query('select id from public.gnr8_runtime_site_versions where id = $1::uuid for update', [input.siteVersionId]);
     const existing = await client.query<{ id: string }>(
       `select id::text as id from public.gnr8_runtime_artifacts where site_version_id = $1::uuid limit 1`,
       [input.siteVersionId],

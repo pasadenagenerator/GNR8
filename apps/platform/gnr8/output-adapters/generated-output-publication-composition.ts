@@ -55,6 +55,7 @@ export type GeneratedOutputReviewModel = {
   siteVersionId: string;
   publicPreparation: PublicPreparation | null;
   state: string;
+  contactRecipient: string | null;
   artifactId: string;
   artifactBundleSha256: string;
   candidateId: string;
@@ -96,6 +97,7 @@ export function createGeneratedOutputPublicationDecisionResolver(): GeneratedOut
 export function createEvidenceBoundRuntimePublisher(dependencies: {
   publish?: typeof import('@/gnr8/runtime/publish-activation-orchestrator').publishApprovedSiteVersion;
   createResolver?: typeof createGeneratedOutputPublicationDecisionResolver;
+  requireExactSelection?: boolean;
 } = {}) {
   const publish: typeof import('@/gnr8/runtime/publish-activation-orchestrator').publishApprovedSiteVersion = dependencies.publish ?? (async (input) => {
     const runtime = await import('@/gnr8/runtime/publish-activation-orchestrator');
@@ -104,12 +106,19 @@ export function createEvidenceBoundRuntimePublisher(dependencies: {
   const createResolver = dependencies.createResolver ?? createGeneratedOutputPublicationDecisionResolver;
   return (input: Parameters<typeof publish>[0]) => publish({
     ...input,
-    generatedOutputPublicationDecisionResolver: (selection) => createResolver()(selection),
+    generatedOutputPublicationDecisionResolver: (selection) => {
+      if (dependencies.requireExactSelection && !input.expectedArtifact) throw new Error("public_output_selection_required");
+      if (input.expectedArtifact && (selection.artifact.id !== input.expectedArtifact.artifactId ||
+        selection.artifact.bundleSha256 !== input.expectedArtifact.bundleSha256 ||
+        readPublicPreparation(selection.artifact.manifest)?.host !== input.expectedArtifact.host)) {
+        throw new Error("public_output_selection_stale");
+      }
+      return createResolver()(selection);
+    },
   });
 }
 
-export async function readGeneratedOutputReviewModel(siteVersionId: string): Promise<GeneratedOutputReviewModel> {
-  const composition = createGeneratedOutputComposition();
+export async function readGeneratedOutputReviewModel(siteVersionId: string, composition = createGeneratedOutputComposition()): Promise<GeneratedOutputReviewModel> {
   const context = await composition.runtimeStore.readContext(siteVersionId);
   if (!context?.artifact) throw new Error("generated_output_review_target_missing");
   const provenance = classifyGeneratedOutputProvenance({ siteVersion: context.siteVersion, artifact: context.artifact });
@@ -129,6 +138,7 @@ export async function readGeneratedOutputReviewModel(siteVersionId: string): Pro
     siteVersionId,
     publicPreparation: readPublicPreparation(context.artifact.manifest),
     state: context.siteVersion.state,
+    contactRecipient: ((context.artifact.manifest.generatedOutputSourceWorkspace as { acceptedFunctionalReductions?: { contact?: { recipient?: string } } } | undefined)?.acceptedFunctionalReductions?.contact?.recipient) ?? null,
     artifactId: context.artifact.id,
     artifactBundleSha256: context.artifact.bundleSha256,
     candidateId: provenance.candidateId,
@@ -155,12 +165,19 @@ export async function approveGeneratedOutputReview(input: {
   expectedCandidateContentSha256: string;
   expectedContentManifestSha256: string;
   expectedTechnicalEvaluationSha256: string;
+}, dependencies = {
+  readModel: readGeneratedOutputReviewModel,
+  composition: createGeneratedOutputComposition,
+  transition: async (input: Parameters<typeof import('@/gnr8/runtime/version-lifecycle-enforcer').transitionSiteVersionState>[0]) => {
+    const mod = await import('@/gnr8/runtime/version-lifecycle-enforcer');
+    return mod.transitionSiteVersionState(input);
+  },
 }): Promise<{ status: "approved" | "idempotent"; review: GeneratedOutputReviewRecord; decision: GeneratedOutputPublicationDecision }> {
-  const before = await readGeneratedOutputReviewModel(input.siteVersionId);
+  const before = await dependencies.readModel(input.siteVersionId);
   assertExpectedReviewSelection(before, input);
   if (process.env.VERCEL_ENV === "production" && !before.publicPreparation) throw new Error("public_review_scope_required");
   if (before.decision.review.status === "APPROVED") {
-    const review = await readLatestReview(createGeneratedOutputComposition().client, input.siteVersionId);
+    const review = await readLatestReview(dependencies.composition().client, input.siteVersionId);
     if (!review) throw new Error("generated_output_review_readback_missing");
     return { status: "idempotent", review, decision: before.decision };
   }
@@ -188,8 +205,7 @@ export async function approveGeneratedOutputReview(input: {
   });
 
   try {
-    const mod = await import("@/gnr8/runtime/version-lifecycle-enforcer");
-    await mod.transitionSiteVersionState({
+    await dependencies.transition({
       siteVersionId: input.siteVersionId,
       nextState: "APPROVED",
       actor: input.reviewerActorId,
@@ -200,15 +216,15 @@ export async function approveGeneratedOutputReview(input: {
       },
     });
   } catch (error) {
-    const reconciled = await readGeneratedOutputReviewModel(input.siteVersionId).catch(() => null);
+    const reconciled = await dependencies.readModel(input.siteVersionId).catch(() => null);
     if (reconciled?.decision.review.status !== "APPROVED") throw error;
   }
 
-  const after = await readGeneratedOutputReviewModel(input.siteVersionId);
+  const after = await dependencies.readModel(input.siteVersionId);
   if (after.decision.review.status !== "APPROVED" || after.decision.activation !== "READY_FOR_TARGET_READINESS") {
     throw new Error("generated_output_review_readback_mismatch");
   }
-  const storedReview = await readLatestReview(createGeneratedOutputComposition().client, input.siteVersionId);
+  const storedReview = await readLatestReview(dependencies.composition().client, input.siteVersionId);
   if (!storedReview || storedReview.reviewSha256 !== review.reviewSha256) {
     throw new Error("generated_output_review_record_mismatch");
   }
