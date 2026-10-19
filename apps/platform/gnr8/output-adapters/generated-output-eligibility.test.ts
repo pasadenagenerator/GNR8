@@ -490,7 +490,7 @@ test('explicit retained public derivative passes technical policy but still requ
   const {buildSuccessorBoundAstroCandidate} = await import('./astro-successor-publication-service');
   const {buildAstroCandidateRuntimeArtifact} = await import('./astro-candidate-promotion-service');
   const {rebindBuildEvidenceToCandidate} = await import('./generated-output-evidence');
-  const {PUBLIC_PREPARATION_PRODUCER,PUBLIC_PREPARATION_VERSION} = await import('./astro-public-preparation-contract');
+  const {PUBLIC_PREPARATION_PRODUCER,PUBLIC_PREPARATION_VERSION,PUBLIC_CONTACT_UPDATE_VERSION,publicPreparationWorkspace} = await import('./astro-public-preparation-contract');
   const f = buildFixture();
   f.artifact.manifest.generatedOutputBuildEvidence=f.buildEvidence;
   f.artifact.manifest.generatedOutputContentManifest=f.contentManifest;
@@ -511,6 +511,31 @@ test('explicit retained public derivative passes technical policy but still requ
   const check=()=>evaluateGeneratedOutputTechnicalEligibility({siteVersion,artifact,authoritativeOwnership:ownership,candidateRecord:record,buildEvidence,contentManifest,sourceCaptureSiteVersion:f.sourceCaptureSiteVersion,sourceCaptureArtifact:f.sourceCaptureArtifact,publicSourceArtifact:f.artifact});
   assert.equal(check().status,'PASS',JSON.stringify(check().blockerReasons));
   assert.equal(evaluateGeneratedOutputPublicationDecision({technical:check(),review:null}).activation,'BLOCKED');
+  f.artifact.manifest.publicPreparation={...artifact.manifest.publicPreparation as object,sourceSiteVersionId:'previous',sourceArtifactId:'previous-artifact'};
+  f.artifact.publishStage='production'; f.artifact.shadowRestricted=false;
+  f.artifact.manifest.generatedOutputSourceWorkspace={acceptedFunctionalReductions:{kind:'retained-presentation-v1',scope:'generation-action',acceptedByActor:'original-owner',contact:{recipient:'before@example.com',recipientConfirmed:true},search:'remove'}};
+  f.artifact.bundleSha256=bundleHash(f.artifact);
+  const preparation: import('./astro-public-preparation-contract').PublicPreparation={...artifact.manifest.publicPreparation as import('./astro-public-preparation-contract').PublicPreparation,
+    version:PUBLIC_CONTACT_UPDATE_VERSION,sourceArtifactSha256:f.artifact.bundleSha256,
+    expectedActivePointer:{siteVersionId:f.siteVersion.id,artifactId:f.artifact.id},
+    contactRecipientChange:{from:'before@example.com',to:'after@example.com',requestedByActor:'operator'}};
+  artifact.manifest.publicPreparation=preparation;
+  artifact.manifest.generatedOutputSourceWorkspace=publicPreparationWorkspace(f.artifact.manifest.generatedOutputSourceWorkspace,preparation);
+  artifact.bundleSha256=bundleHash(artifact);
+  assert.equal(check().status,'PASS',JSON.stringify(check().blockerReasons));
+  assert.equal(evaluateGeneratedOutputPublicationDecision({technical:check(),review:null}).activation,'BLOCKED');
+  const workspace=artifact.manifest.generatedOutputSourceWorkspace as typeof f.artifact.manifest.generatedOutputSourceWorkspace;
+  const changed=structuredClone(workspace) as {acceptedFunctionalReductions:{contact:{recipient:string},search:string}};
+  changed.acceptedFunctionalReductions.search='keep'; artifact.manifest.generatedOutputSourceWorkspace=changed;
+  artifact.bundleSha256=bundleHash(artifact);
+  assertBlocked(check(),'public_preparation_lineage_invalid');
+  artifact.manifest.generatedOutputSourceWorkspace=workspace;
+  preparation.expectedActivePointer!.artifactId='other'; artifact.bundleSha256=bundleHash(artifact);
+  assertBlocked(check(),'public_preparation_lineage_invalid');
+  preparation.expectedActivePointer!.artifactId=f.artifact.id;
+  preparation.contactRecipientChange!.to='bad\r\nBcc: injected@example.com'; artifact.bundleSha256=bundleHash(artifact);
+  assertBlocked(check(),'public_preparation_lineage_invalid');
+  preparation.contactRecipientChange!.to='after@example.com'; artifact.bundleSha256=bundleHash(artifact);
   f.artifact.htmlByPath['/']+='changed';
   assertBlocked(check(),'public_preparation_lineage_invalid');
 });

@@ -3883,6 +3883,7 @@ export async function switchActivePointer(input: {
     await client.query('select id from public.gnr8_runtime_sites where id = $1::text for update', [input.siteId]);
     const targetArtifact = await getArtifactByIdWithClient(client, input.artifactId);
     const preparation = targetArtifact ? readPublicPreparation(targetArtifact.manifest) : null;
+    if (targetArtifact?.manifest.publicPreparation && !preparation) throw new Error('public_preparation_invalid');
     const previous = await client.query<{ active_site_version_id: string; active_artifact_id: string }>(
       `
       select active_site_version_id::text as active_site_version_id, active_artifact_id::text as active_artifact_id
@@ -3908,11 +3909,28 @@ export async function switchActivePointer(input: {
     }
 
     if (preparation) {
-      if (previousActivePointer || targetArtifact?.siteId !== input.siteId || targetArtifact.siteVersionId !== input.siteVersionId)
+      const expected = preparation.expectedActivePointer;
+      const baselineMatches = expected === null ? previousActivePointer === null :
+        previousActivePointer?.siteVersionId === expected.siteVersionId && previousActivePointer?.artifactId === expected.artifactId;
+      // The normal rollback/republication path may restore the exact parent of a
+      // contact-only update. Never permit an arbitrary stale publication switch.
+      const currentArtifact = !baselineMatches && previousActivePointer ? await getArtifactByIdWithClient(client,previousActivePointer.artifactId) : null;
+      const currentPreparation = currentArtifact && readPublicPreparation(currentArtifact.manifest);
+      const restoringParent = !!currentPreparation?.contactRecipientChange && currentArtifact?.siteId === input.siteId &&
+        currentArtifact.siteVersionId === previousActivePointer?.siteVersionId && currentPreparation.host === preparation.host &&
+        currentPreparation.sourceSiteVersionId === input.siteVersionId && currentPreparation.sourceArtifactId === input.artifactId &&
+        currentPreparation.sourceArtifactSha256 === targetArtifact?.bundleSha256;
+      if ((!baselineMatches && !restoringParent) || targetArtifact?.siteId !== input.siteId || targetArtifact.siteVersionId !== input.siteVersionId)
         throw new Error('public_preparation_pointer_baseline_changed');
+      const bindingVersion = previousActivePointer?.siteVersionId ?? input.siteVersionId;
       const domain = await client.query('select id from public.gnr8_runtime_domain_host_bindings where site_id=$1::text and site_version_id=$2::uuid and domain=$3::text and status=\'active\'',
-        [input.siteId,input.siteVersionId,preparation.host]);
+        [input.siteId,bindingVersion,preparation.host]);
       if (domain.rows.length !== 1) throw new Error('public_preparation_domain_not_ready');
+      if (bindingVersion !== input.siteVersionId) {
+        const updated = await client.query("update public.gnr8_runtime_domain_host_bindings set site_version_id=$4::uuid,updated_at=now() where site_id=$1::text and site_version_id=$2::uuid and domain=$3::text and status='active' returning id",
+          [input.siteId,bindingVersion,preparation.host,input.siteVersionId]);
+        if (updated.rows.length !== 1) throw new Error('public_preparation_domain_changed');
+      }
     }
 
     await client.query(
@@ -5435,7 +5453,7 @@ export async function recoverPreparedPublicSiteToUnpublished(input: {
     await client.query('select id from public.gnr8_runtime_sites where id=$1::text for update',[input.siteId]);
     const artifact = await getArtifactByIdWithClient(client,input.artifactId);
     const prep = artifact && readPublicPreparation(artifact.manifest);
-    if (!artifact || !prep || artifact.siteId!==input.siteId || artifact.siteVersionId!==input.siteVersionId || artifact.bundleSha256!==input.expectedBundleSha256)
+    if (!artifact || !prep || prep.expectedActivePointer !== null || artifact.siteId!==input.siteId || artifact.siteVersionId!==input.siteVersionId || artifact.bundleSha256!==input.expectedBundleSha256)
       throw new Error('public_recovery_selection_mismatch');
     const pointer = await client.query<{active_site_version_id:string;active_artifact_id:string}>(
       'select active_site_version_id,active_artifact_id from public.gnr8_runtime_active_pointers where site_id=$1::text',[input.siteId]);

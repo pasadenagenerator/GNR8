@@ -1,4 +1,5 @@
 import 'server-only';
+import { readPublicPreparation } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server';
 import { SupabaseAstroCandidateOwnershipResolver } from '@/gnr8/output-adapters/astro-production-candidate-ownership-resolver';
 import { readVerifiedRetainedAsset } from '@/app/api/gnr8/runtime/preview-assets/[siteId]/[siteVersionId]/[...assetPath]/protected-preview-asset';
@@ -26,9 +27,9 @@ export async function readPublishedRetainedAsset(input: { host: string; siteId: 
       .eq('id',pointer.data.active_artifact_id).maybeSingle();
     if (artifact.error) return denied();
     const a = artifact.data;
-    const preparation = a?.manifest?.publicPreparation;
-    if (!preparation) return null; // Existing sites retain their existing resolution path.
-    if (preparation.version !== 'gnr8-astro-public-preparation:v1' || preparation.host !== host ||
+    if (!a?.manifest?.publicPreparation) return null; // Existing sites retain their existing resolution path.
+    const preparation = readPublicPreparation(a.manifest);
+    if (!preparation || preparation.host !== host ||
       a.site_id !== input.siteId || binding.data.site_id !== input.siteId ||
       a.site_version_id !== pointer.data.active_site_version_id || binding.data.site_version_id !== a.site_version_id ||
       a.publish_stage !== 'production' || a.shadow_restricted) return denied();

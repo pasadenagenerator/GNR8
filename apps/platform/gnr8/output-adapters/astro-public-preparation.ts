@@ -10,7 +10,7 @@ import { createGeneratedOutputComposition, readGeneratedOutputReviewModel } from
 import { readGeneratedOutputBuildEvidence, readGeneratedOutputContentManifest, rebindBuildEvidenceToCandidate } from './generated-output-evidence';
 import { createGeneratedOutputContentManifest, evaluateGeneratedOutputTechnicalEligibility } from './generated-output-eligibility';
 
-import { PUBLIC_PREPARATION_VERSION, PUBLIC_PREPARATION_PRODUCER, readPublicPreparation, type PublicPreparation } from './astro-public-preparation-contract';
+import { PUBLIC_PREPARATION_VERSION, PUBLIC_CONTACT_UPDATE_VERSION, PUBLIC_PREPARATION_PRODUCER, publicPreparationWorkspace, readPublicPreparation, type PublicPreparation } from './astro-public-preparation-contract';
 
 /** Creates a new immutable derivative. Never approves, binds a host, or activates a pointer. */
 export async function prepareRetainedAstroPublicArtifact(input: {
@@ -20,6 +20,7 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   expectedSourceCandidateId: string;
   host: string;
   actor: string;
+  contactRecipientChange?: { from: string; to: string };
 }) {
   const c = createGeneratedOutputComposition();
   const store = await import('@/gnr8/runtime/runtime-store');
@@ -36,13 +37,19 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   const sourceContent = readGeneratedOutputContentManifest(source.artifact.manifest);
   if (!sourceBuild || !sourceContent) throw new Error('public_preparation_source_evidence_missing');
   const preparation: PublicPreparation = {
-    version:PUBLIC_PREPARATION_VERSION, host:input.host, expectedActivePointer:null,
+    version:input.contactRecipientChange ? PUBLIC_CONTACT_UPDATE_VERSION : PUBLIC_PREPARATION_VERSION, host:input.host,
+    expectedActivePointer:input.contactRecipientChange ? {siteVersionId:input.sourceSiteVersionId,artifactId:input.sourceArtifactId} : null,
+    ...(input.contactRecipientChange ? {contactRecipientChange:{...input.contactRecipientChange,requestedByActor:input.actor}} : {}),
     sourceSiteVersionId:input.sourceSiteVersionId,sourceArtifactId:source.artifact.id,
     sourceArtifactSha256:source.artifact.bundleSha256,sourceCandidateId:sourceRecord.identity.candidateId,
     sourceCandidateContentSha256:sourceRecord.candidate.contentSha256,
     sourceTechnicalEvidenceSha256:sourceReview.decision.technical.evidenceSha256,
   };
   if (!readPublicPreparation({publicPreparation:preparation})) throw new Error('public_preparation_invalid_host');
+  if (input.contactRecipientChange && (source.siteVersion.state !== 'PUBLISHED' || source.artifact.publishStage !== 'production' ||
+    source.artifact.shadowRestricted || sourceReview.decision.review.status !== 'APPROVED' || sourceReview.publicPreparation?.host !== input.host))
+    throw new Error('public_contact_update_requires_approved_public_source');
+  const sourceWorkspace = publicPreparationWorkspace(source.artifact.manifest.generatedOutputSourceWorkspace,preparation) as Record<string,unknown>;
   const seed = stableStringify(preparation);
   const siteVersionId = deterministicUuid(seed+':version');
   const operationId = deterministicUuid(seed+':candidate');
@@ -50,13 +57,14 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   const existing = await c.runtimeStore.readContext(siteVersionId);
   if (existing?.artifact) {
     if (stableStringify(existing.artifact.manifest.publicPreparation)!==seed) throw new Error('public_preparation_conflict');
-    if (existing.siteVersion.state === 'DRAFT') await lifecycle.transitionSiteVersionState({siteVersionId,nextState:'READY_FOR_REVIEW',actor:input.actor,source:'manual',details:{workflow:PUBLIC_PREPARATION_VERSION,publicPreparation:preparation}});
+    if (existing.siteVersion.state === 'DRAFT') await lifecycle.transitionSiteVersionState({siteVersionId,nextState:'READY_FOR_REVIEW',actor:input.actor,source:'manual',details:{workflow:preparation.version,publicPreparation:preparation}});
     const model = await readGeneratedOutputReviewModel(siteVersionId);
     if (model.decision.technical.status !== 'PASS') throw new Error('public_preparation_existing_invalid');
     return model;
   }
-  const pointer = await c.client.from('gnr8_runtime_active_pointers').select('site_id').eq('site_id',sourceOwnership.runtimeSiteId).maybeSingle();
-  if (pointer.error || pointer.data) throw new Error('public_preparation_requires_empty_pointer');
+  const pointer = await c.client.from('gnr8_runtime_active_pointers').select('active_site_version_id,active_artifact_id').eq('site_id',sourceOwnership.runtimeSiteId).maybeSingle();
+  const actualPointer = pointer.data ? {siteVersionId:pointer.data.active_site_version_id,artifactId:pointer.data.active_artifact_id} : null;
+  if (pointer.error || stableStringify(actualPointer) !== stableStringify(preparation.expectedActivePointer)) throw new Error('public_preparation_pointer_baseline_changed');
   if (!existing) {
     await store.createSiteVersionFromMigration({
       siteId:sourceOwnership.runtimeSiteId,sourceUrl:sourceBuild.sourceCapture.sourceUrl,actor:input.actor,
@@ -85,7 +93,7 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   const placeholder: RuntimeArtifact = {...source.artifact,id:deterministicUuid(seed+':artifact'),siteVersionId,manifest:{},createdAt:context.siteVersion.createdAt};
   const artifact = buildAstroCandidateRuntimeArtifact({siteVersion:context.siteVersion,artifact:placeholder,record,ownership,input:{
     actorUserId:input.actor,siteVersionId,candidateId,expectedContentSha256:record.candidate.contentSha256,expectedStorageSha256:record.storageSha256,
-    idempotencyKey:`public-preparation:${operationId}`,generatedOutputEvidence:{buildEvidence,contentManifest,sourceWorkspace:source.artifact.manifest.generatedOutputSourceWorkspace as Record<string,unknown>},
+    idempotencyKey:`public-preparation:${operationId}`,generatedOutputEvidence:{buildEvidence,contentManifest,sourceWorkspace},
   }});
   artifact.manifest.publicPreparation = preparation;
   artifact.manifest.publishStage = artifact.publishStage = 'production';
@@ -104,7 +112,7 @@ export async function prepareRetainedAstroPublicArtifact(input: {
     siteEnforcementState:{shadow:'DENY',canary:'DENY',production:'ALLOW'},publishStage:'production'};
   const persisted = await store.createArtifact(artifact);
   await store.bindArtifactToVersion({siteVersionId,artifactId:persisted.artifactId,rendererCompatibilityVersion:artifact.rendererCompatibilityVersion});
-  await lifecycle.transitionSiteVersionState({siteVersionId,nextState:'READY_FOR_REVIEW',actor:input.actor,source:'manual',details:{workflow:PUBLIC_PREPARATION_VERSION,publicPreparation:preparation}});
+  await lifecycle.transitionSiteVersionState({siteVersionId,nextState:'READY_FOR_REVIEW',actor:input.actor,source:'manual',details:{workflow:preparation.version,publicPreparation:preparation}});
   const model = await readGeneratedOutputReviewModel(siteVersionId);
   if (model.artifactBundleSha256!==artifact.bundleSha256 || model.decision.technical.status!=='PASS' || model.decision.review.status!=='MISSING')
     throw new Error('public_preparation_readback_mismatch');

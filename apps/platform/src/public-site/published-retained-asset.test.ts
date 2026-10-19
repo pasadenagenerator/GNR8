@@ -7,7 +7,7 @@ function fixture() {
   const host='test.example.com', siteId='runtime-one', sourceVersion='capture-one', activeVersion='public-one';
   const path='images/photo.jpg', url=`/api/gnr8/runtime/preview-assets/${siteId}/${sourceVersion}/${path}`, sha='a'.repeat(64);
   const artifact={site_id:siteId,site_version_id:activeVersion,publish_stage:'production',shadow_restricted:false,
-    asset_fingerprint_map:{[url]:sha},manifest:{publicPreparation:{version:'gnr8-astro-public-preparation:v1',host},generatedOutputBuildEvidence:{sourceCapture:{runtimeSiteId:siteId,siteVersionId:sourceVersion}},generatedOutputContentManifest:{requiredAssets:[{path:url,sha256:sha}]}}};
+    asset_fingerprint_map:{[url]:sha},manifest:{publicPreparation:{version:'gnr8-astro-public-preparation:v1',host,expectedActivePointer:null,sourceSiteVersionId:'source',sourceArtifactId:'source-artifact',sourceCandidateId:'source-candidate',sourceArtifactSha256:'b'.repeat(64),sourceCandidateContentSha256:'c'.repeat(64),sourceTechnicalEvidenceSha256:'d'.repeat(64)},generatedOutputBuildEvidence:{sourceCapture:{runtimeSiteId:siteId,siteVersionId:sourceVersion}},generatedOutputContentManifest:{requiredAssets:[{path:url,sha256:sha}]}}};
   const pointer={active_site_version_id:activeVersion,active_artifact_id:'artifact-one'};
   const binding={site_id:siteId,site_version_id:activeVersion,status:'active'};
   let reads=0;
@@ -27,4 +27,13 @@ test('prepared output never serves on the old source host',()=>{
   const artifact={manifest:{publicPreparation:{version:'gnr8-astro-public-preparation:v1',host:f.input.host,expectedActivePointer:null,sourceArtifactId:'a',sourceSiteVersionId:'v',sourceCandidateId:'c',sourceArtifactSha256:'a'.repeat(64),sourceCandidateContentSha256:'b'.repeat(64),sourceTechnicalEvidenceSha256:'c'.repeat(64)}},artifactGovernance:{siteEnforcementState:{production:'ALLOW'},pageEnforcementState:{production:['ALLOW']}}} as never;
   assert.equal(evaluateRuntimeArtifactServingEligibility({artifact,servingStage:'production',host:f.input.host}).allow,true);
   assert.equal(evaluateRuntimeArtifactServingEligibility({artifact,servingStage:'production',host:'original.example.com'}).allow,false);
+});
+
+test('contact update assets retain the same host, capture and ownership checks',async()=>{
+  const f=fixture();
+  Object.assign(f.artifact.manifest.publicPreparation,{version:'gnr8-astro-public-contact-update:v1',expectedActivePointer:{siteVersionId:'source',artifactId:'source-artifact'},contactRecipientChange:{from:'before@example.com',to:'after@example.com',requestedByActor:'owner'}});
+  assert.equal((await readPublishedRetainedAsset(f.input,f.deps))?.status,200);
+  assert.equal((await readPublishedRetainedAsset({...f.input,host:'other.example.com'},f.deps))?.status,403);
+  f.binding.site_version_id='source';
+  assert.equal((await readPublishedRetainedAsset(f.input,f.deps))?.status,403);
 });

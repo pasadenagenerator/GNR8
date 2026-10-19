@@ -40,7 +40,7 @@ export const GENERATED_OUTPUT_CONTENT_MANIFEST_VERSION =
 export const GENERATED_OUTPUT_REVIEW_VERSION =
   "gnr8-generated-output-review:v1" as const;
 
-import { readPublicPreparation, PUBLIC_PREPARATION_PRODUCER } from './astro-public-preparation-contract';
+import { readPublicPreparation, publicPreparationWorkspaceMatches, PUBLIC_PREPARATION_PRODUCER } from './astro-public-preparation-contract';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SUPPORTED_PRODUCERS = new Set([
@@ -337,7 +337,8 @@ export function evaluateGeneratedOutputTechnicalEligibility(input: {
       record.registration.producerRef !== prep.sourceCandidateId || parent.siteVersionId === artifact.siteVersionId ||
       stableStringify(parent.htmlByPath) !== stableStringify(artifact.htmlByPath) || parent.compiledTokenStyles !== artifact.compiledTokenStyles ||
       stableStringify(parent.assetFingerprintMap) !== stableStringify(artifact.assetFingerprintMap) ||
-      stableStringify(parent.manifest.generatedOutputSourceWorkspace) !== stableStringify(artifact.manifest.generatedOutputSourceWorkspace) ||
+      !publicPreparationWorkspaceMatches(parent.manifest.generatedOutputSourceWorkspace,artifact.manifest.generatedOutputSourceWorkspace,prep) ||
+      (prep.contactRecipientChange && (parent.publishStage !== 'production' || parent.shadowRestricted || readPublicPreparation(parent.manifest)?.host !== prep.host)) ||
       contentManifest.scope.allowedPublishStages.join(',') !== 'production' || artifact.publishStage !== 'production' || artifact.shadowRestricted) {
       block('public_preparation_lineage_invalid', 'Public preparation must retain the exact source bytes, ownership, native settings and declared host scope.');
     }

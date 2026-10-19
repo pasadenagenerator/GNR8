@@ -45,6 +45,7 @@ export default async function GeneratedOutputReviewPage(props: { params: Promise
           <h1 style={{ margin: "0 0 10px" }}>Astro website candidate</h1>
           <p style={{ margin: "0 0 16px", color: "#475569" }}>Review the exact candidate bytes below. Approval is bound to this artifact, candidate, content manifest, technical evaluation, policy version, reviewer identity, and the declared publication scope.</p>
           <p><strong>Publication scope:</strong> {model.publicPreparation ? `Public website at https://${model.publicPreparation.host}. Native contact delivery is enabled only after publication.` : "Internal shadow publication"}</p>
+          {model.publicPreparation?.contactRecipientChange ? <p><strong>Contact recipient change:</strong> {model.publicPreparation.contactRecipientChange.from} → {model.publicPreparation.contactRecipientChange.to}. Page content and form fields are unchanged. The current website remains active until Publish.</p> : null}
           <dl style={{ display: "grid", gridTemplateColumns: "max-content minmax(0, 1fr)", gap: "6px 14px", margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 }}>
             <dt>Version</dt><dd style={{ margin: 0, overflowWrap: "anywhere" }}>{model.siteVersionId} · {model.state}</dd>
             <dt>Artifact</dt><dd style={{ margin: 0, overflowWrap: "anywhere" }}>{model.artifactId}</dd>
