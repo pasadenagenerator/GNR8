@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { isContactEmail } from '@gnr8/runtime-contracts';
 import type { GeneratedOutputReviewModel } from '@/gnr8/output-adapters/generated-output-publication-composition';
 import type { PublicOutputSelection } from '@/gnr8/output-adapters/public-output-service';
 
@@ -15,6 +16,8 @@ export default function PublicOutputPanel(props: Props) {
   const [choices, setChoices] = useState<Choice[]>([]);
   const [selected, setSelected] = useState<PublicOutputSelection | null>(null);
   const [model, setModel] = useState<GeneratedOutputReviewModel | null>(null);
+  const [recipient, setRecipient] = useState('');
+  const [recipientConfirmed, setRecipientConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [notice, setNotice] = useState('Loading retained generated versions…');
@@ -30,7 +33,7 @@ export default function PublicOutputPanel(props: Props) {
     const value = { siteVersionId: input.siteVersionId, artifactId: input.artifactId, artifactBundleSha256: input.artifactBundleSha256 };
     // A resume hint only; every read/action revalidates ownership and exact hash.
     try { localStorage.setItem(storageKey, JSON.stringify({ ...value, host })); } catch { /* Storage is optional. */ }
-    setSelected(value); setModel(null); setConfirmed(false);
+    setSelected(value); setModel(null); setConfirmed(false); setRecipient(''); setRecipientConfirmed(false);
     props.onSelection(null, true);
   }
   useEffect(() => {
@@ -59,17 +62,17 @@ export default function PublicOutputPanel(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, endpoint, scope]);
 
-  async function act(action: 'prepare' | 'approve' | 'publish') {
+  async function act(action: 'prepare' | 'approve' | 'publish' | 'change-recipient') {
     if (!selected || !model || busy) return;
     setBusy(true); setNotice('');
     try { localStorage.setItem(storageKey, JSON.stringify({ ...selected, host: props.host })); } catch { /* Resume hints are optional. */ }
     try {
       const next: GeneratedOutputReviewModel = await request(`${endpoint}?${scope}`, { ...selected, action,
-        host: props.host.trim().toLowerCase(), ...(action === 'approve' ? { confirmation: 'approve-exact-generated-output-artifact', technicalEvaluationSha256: model.decision.technical.evidenceSha256 } : {}) });
+        host: props.host.trim().toLowerCase(), ...(action === 'change-recipient' ? { recipient: recipient.trim(), confirmation: 'confirm-contact-recipient' } : {}), ...(action === 'approve' ? { confirmation: 'approve-exact-generated-output-artifact', technicalEvaluationSha256: model.decision.technical.evidenceSha256 } : {}) });
       const target = { siteVersionId: next.siteVersionId, artifactId: next.artifactId, artifactBundleSha256: next.artifactBundleSha256 };
       setChoices(await request(`${endpoint}?${scope}`));
       remember(target); setModel(next);
-      setNotice(action === 'publish' ? 'This exact version is published.' : action === 'prepare' ? 'Public version saved. Open the preview before approving.' : 'Exact artifact approved. Domain readiness is checked separately by Publish.');
+      setNotice(action === 'publish' ? 'This exact version is published.' : action === 'prepare' || action === 'change-recipient' ? 'Public version saved. Open the preview before approving.' : 'Exact artifact approved. Domain readiness is checked separately by Publish.');
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Operation failed. Retry the same selection.'); }
     finally { setBusy(false); }
   }
@@ -87,6 +90,15 @@ export default function PublicOutputPanel(props: Props) {
     {model ? <>
       <div>Version: {model.siteVersionId}<br />Artifact: {model.artifactId}<br />SHA-256: {model.artifactBundleSha256}</div>
       <div>Target host: {model.publicPreparation?.host ?? (props.host || 'Enter a domain above')}<br />Contact recipient: {model.contactRecipient ?? 'No native contact configured'}<br />State: {model.state} · Technical: {model.decision.technical.status} · Human approval: {model.decision.review.status}</div>
+      {model.publicPreparation?.contactRecipientChange ? <p>Recipient change: {model.publicPreparation.contactRecipientChange.from} → {model.publicPreparation.contactRecipientChange.to}. {model.activePublication ? 'This recipient change is now active.' : 'The old recipient remains active until successful Publish.'}</p> : null}
+      {model.activePublication && model.contactRecipient ? <fieldset disabled={busy || !props.canPublish}>
+        <legend>Change contact recipient</legend>
+        <p>One recipient applies to all supported contact forms on this site. The current recipient remains active until you review, approve and publish the new artifact.</p>
+        <label>New recipient <input type="email" value={recipient} onChange={e => { setRecipient(e.target.value); setRecipientConfirmed(false); }} /></label>
+        <p>{model.contactRecipient} → {recipient || '(enter email)'}</p>
+        <label><input type="checkbox" checked={recipientConfirmed} onChange={e => setRecipientConfirmed(e.target.checked)} /> I confirm the new recipient: {recipient || '(enter email)'}</label>
+        <button disabled={!recipientConfirmed || !isContactEmail(recipient.trim()) || recipient.trim() === model.contactRecipient || !hostMatches} onClick={() => act('change-recipient')}>Prepare recipient change</button>
+      </fieldset> : null}
       {!model.publicPreparation ? <button disabled={busy || !props.canPublish || !technicalPass || !props.host.trim()} onClick={() => act('prepare')}>Prepare public version</button> : <>
         <div>{model.outputPaths.map(path => <a style={{ marginRight: 12 }} key={path} href={`${preview}&path=${encodeURIComponent(path)}`} target="_blank" rel="noreferrer">Preview {path}</a>)}</div>
         <p style={{ margin: 0 }}>Preview does not send email. Approval applies only to the artifact and hash shown here. Domain/TLS readiness and publication are separate checks. Mail acceptance does not prove inbox delivery.</p>

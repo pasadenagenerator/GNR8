@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { createRetainedPresentationSettings } from '@gnr8/runtime-contracts'
+
+import type { ContactSuggestionModel } from '@/gnr8/output-adapters/source-contact-suggestions'
 
 import { addRecentItem } from '@/src/workspace/workspace-recents'
 
@@ -112,6 +114,10 @@ export default function SiteActionsPanel(props: Props) {
   const [outputAdapterId, setOutputAdapterId] = useState<'default' | 'html-static-artifact'>('default')
   const [presentation, setPresentation] = useState(false)
   const [nativeContact, setNativeContact] = useState(false)
+  const recipientEdited = useRef(false)
+  const [suggestions, setSuggestions] = useState<ContactSuggestionModel | null>(null)
+  const [suggestionError, setSuggestionError] = useState('')
+  const [suggestionRefresh, setSuggestionRefresh] = useState(0)
   const [recipient, setRecipient] = useState('')
   const [recipientConfirmed, setRecipientConfirmed] = useState(false)
   const [excludedPaths, setExcludedPaths] = useState('')
@@ -122,6 +128,23 @@ export default function SiteActionsPanel(props: Props) {
   const [removeBackToTop, setRemoveBackToTop] = useState(false)
   const [localMessage, setLocalMessage] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!presentation || !nativeContact) { setRecipientConfirmed(false); return }
+    let active = true
+    setRecipientConfirmed(false)
+    setSuggestions(null)
+    setSuggestionError('')
+    fetch(`/api/gnr8/site-actions?${new URLSearchParams({ siteId: props.siteId, agencyId: props.agencyId, clientId: props.clientId })}`, { cache: 'no-store' })
+      .then(async response => { const json = await response.json(); if (!response.ok || !json.ok) throw new Error(json.error); return json.data as ContactSuggestionModel })
+      .then(value => {
+        if (!active) return
+        setSuggestions(value)
+        const candidates = [...new Set(value.suggestions.map(s => s.recipient))]
+        if (!recipientEdited.current) setRecipient(candidates.length === 1 ? candidates[0] : '')
+      }).catch(() => { if (active) setSuggestionError('Import suggestions could not be loaded. Refresh the import source before confirming.') })
+    return () => { active = false }
+  }, [props.siteId, props.agencyId, props.clientId, props.lastRunAt, suggestionRefresh, presentation, nativeContact])
 
   const isRunning = props.currentStatus === 'running' || runningType != null
 
@@ -153,7 +176,7 @@ export default function SiteActionsPanel(props: Props) {
     }
 
     const presentationSettings = presentation ? createRetainedPresentationSettings({
-      excludedPaths, nativeContact, recipient, recipientConfirmed,
+      excludedPaths, nativeContact, recipient, recipientConfirmed: recipientConfirmed && Boolean(suggestions),
     }) : undefined
     if (type === 'generate_redesign' && outputAdapterId === 'default' && presentation && !presentationSettings) {
       setLocalError('Check exact route exclusions and confirm the contact recipient before generating.')
@@ -169,6 +192,7 @@ export default function SiteActionsPanel(props: Props) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          contactSourceTarget: suggestions?.sourceTarget,
           siteId: props.siteId,
           actionType: type,
           strategy: type === 'generate_redesign' ? strategyInput : undefined,
@@ -198,6 +222,7 @@ export default function SiteActionsPanel(props: Props) {
 
       const json = (await response.json().catch(() => null)) as SiteActionsResponse | null
       if (!response.ok || !json?.ok || !json.result) {
+        if (json?.error?.includes('CONTACT_SOURCE_CHANGED')) { setRecipientConfirmed(false); setSuggestionRefresh(value => value + 1) }
         setLocalError(json?.error || `Action failed (HTTP ${response.status})`)
         return
       }
@@ -324,10 +349,20 @@ export default function SiteActionsPanel(props: Props) {
                 <p>Captured files remain stored. Unknown scripts and unsupported forms block generation.</p>
                 <label><input type='checkbox' checked={nativeContact} disabled={!canRunMigration} onChange={event => setNativeContact(event.target.checked)} /> Replace supported ordinary contact forms with GNR8 forms, preserving their layout and required fields.</label>
                 {nativeContact ? <>
-                  <label>Approved recipient for this site
-                    <input type='email' value={recipient} disabled={!canRunMigration} onChange={event => {setRecipient(event.target.value);setRecipientConfirmed(false)}} style={{display:'block',width:'100%'}} />
+                  <p>One confirmed recipient applies to all supported contact forms on this site. Public contact addresses are suggestions, not proof of the original form’s server recipient.</p>
+                  {suggestionError ? <p role="alert">{suggestionError}</p> : !suggestions ? <p>Loading retained import evidence…</p> : suggestions.suggestions.length ? <div>
+                    <p>Addresses found in the retained import. Choose one or enter another address:</p>
+                    {suggestions.suggestions.map((suggestion, index) => <div key={index}>
+                      <button type="button" disabled={!canRunMigration} onClick={() => { recipientEdited.current = true; setRecipient(suggestion.recipient); setRecipientConfirmed(false) }}>{suggestion.recipient}</button>
+                      {' — '}{suggestion.evidence === 'form-mailto' ? 'Listed in a static form mailto action' : 'Public contact address'}{' on '}
+                      <a href={suggestion.sourceUrl} target="_blank" rel="noreferrer">{suggestion.sourceUrl}</a>{suggestion.formId ? ` (form: ${suggestion.formId})` : ''}
+                    </div>)}
+                  </div> : <p>No recipient evidence found. Enter the recipient manually; hidden backend settings cannot be inferred.</p>}
+                  <button type="button" disabled={!canRunMigration} onClick={() => setSuggestionRefresh(value => value + 1)}>Refresh import suggestions</button>
+                  <label>Recipient for this site (requires confirmation)
+                    <input type='email' value={recipient} disabled={!canRunMigration} onChange={event => {recipientEdited.current = true;setRecipient(event.target.value);setRecipientConfirmed(false)}} style={{display:'block',width:'100%'}} />
                   </label>
-                  <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site&apos;s recipient: {recipient || '(enter email)'}</label>
+                  <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration || !suggestions} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site&apos;s recipient: {recipient || '(enter email)'}</label>
                   <p>Supported: name, email, optional phone/subject and message; required fields stay as imported. The recognized required CF7 permission checkbox and its exact legal text are preserved, unchecked. Other fields remain blocked. Preview cannot send. Publication checks the production sender configuration and durable submission service. Provider acceptance confirms submission for sending, not inbox delivery.</p>
                 </> : null}
               </> : null}

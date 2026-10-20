@@ -1,3 +1,4 @@
+import { readContactSuggestions } from '@/gnr8/site/contact-suggestion-read-model'
 import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,6 +16,7 @@ type SiteActionsBody = {
   strategy?: unknown
   variantId?: unknown
   outputAdapterId?: unknown
+  contactSourceTarget?: unknown
   acceptedFunctionalReductions?: unknown
   agencyId?: unknown
 }
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest) {
                     ? 'astro-static-site'
                     : undefined,
               acceptedFunctionalReductions,
+              contactSourceTarget: normalizeText(body.contactSourceTarget),
             }
           : {
               ...baseRequest,
@@ -120,5 +123,17 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 },
     )
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const query = request.nextUrl.searchParams;
+    const actor = await requireAgencyActionContext({ action: requiredAgencyActionForSiteAction('generate_redesign'), requestedAgencyId: query.get('agencyId') || undefined });
+    const data = await readContactSuggestions({ agencyId: actor.agencyId, siteId: query.get('siteId') || '', clientId: query.get('clientId') || '' });
+    return NextResponse.json({ ok: true, data }, { headers: { 'cache-control': 'private, no-store' } });
+  } catch (error) {
+    const mapped = parseAgencyActionContextError(error);
+    return NextResponse.json({ ok: false, error: 'Import suggestions are unavailable. Refresh before confirming a recipient.', reason: 'CONTACT_SOURCE_UNAVAILABLE' }, { status: mapped.status === 500 ? 409 : mapped.status });
   }
 }

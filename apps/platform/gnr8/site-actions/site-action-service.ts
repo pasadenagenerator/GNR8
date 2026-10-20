@@ -1,4 +1,5 @@
 import 'server-only'
+import { resolveAstroCaptureSource, astroSourceTarget, resolveCurrentCaptureLineageRef } from '@/gnr8/output-adapters/astro-capture-source'
 
 import { createHash } from 'node:crypto'
 
@@ -75,21 +76,6 @@ const REDESIGN_STRATEGY_MAP: Array<{ match: RegExp; layout: LayoutStrategy; labe
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-}
-
-function resolveCurrentCaptureLineageRef(value: unknown): { siteVersionId: string; rawArtifactId: string } | null {
-  const provenance = asRecord(value)
-  const validation = asRecord(provenance?.currentMultiPagePreviewValidation)
-  const sourceIdentity = asRecord(validation?.sourceIdentity)
-  const siteVersionId = normalizeText(sourceIdentity?.siteVersionId)
-  const rawArtifactId = normalizeText(sourceIdentity?.rawArtifactId)
-  return siteVersionId && rawArtifactId ? { siteVersionId, rawArtifactId } : null
 }
 
 function nowIso(): string {
@@ -726,43 +712,9 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
           throw new Error(`unsupported_capability:${selection.unsupportedCapabilities.join(',') || selection.reason}`)
         }
         if (selection.adapterId === 'astro-static-site') {
-          const buildEvidence = initiallySelectedArtifact.manifest.generatedOutputBuildEvidence as
-            | { sourceCapture?: { siteVersionId?: unknown; artifactId?: unknown } }
-            | undefined
-          const lineageVersionId = normalizeText(buildEvidence?.sourceCapture?.siteVersionId)
-          const lineageArtifactId = normalizeText(buildEvidence?.sourceCapture?.artifactId)
-          let sourceVersion = lineageVersionId ? await getSiteVersion(lineageVersionId) : initiallySelectedVersion
-          let sourceArtifact = lineageArtifactId ? await getArtifactById(lineageArtifactId) : initiallySelectedArtifact
-          let rawArtifact = sourceVersion ? await getRawImportedSiteArtifact(sourceVersion.id) : null
-
-          if (sourceVersion && sourceArtifact && !rawArtifact && !existingAdapterId) {
-            const captureLineage = resolveCurrentCaptureLineageRef(sourceVersion.importProvenanceSummary)
-            const capturedVersion = captureLineage ? await getSiteVersion(captureLineage.siteVersionId) : null
-            const capturedArtifact = capturedVersion?.artifactId
-              ? await getArtifactById(capturedVersion.artifactId)
-              : null
-            const capturedRawArtifact = capturedVersion
-              ? await getRawImportedSiteArtifact(capturedVersion.id)
-              : null
-            if (
-              !captureLineage ||
-              !capturedVersion ||
-              capturedVersion.siteId !== initiallySelectedVersion.siteId ||
-              !capturedArtifact ||
-              capturedArtifact.siteVersionId !== capturedVersion.id ||
-              !capturedRawArtifact ||
-              capturedRawArtifact.id !== captureLineage.rawArtifactId
-            ) {
-              throw new Error('astro_generation_source_capture_lineage_missing')
-            }
-            sourceVersion = capturedVersion
-            sourceArtifact = capturedArtifact
-            rawArtifact = capturedRawArtifact
-          }
-          if (!sourceVersion || !sourceArtifact || sourceVersion.artifactId !== sourceArtifact.id) {
-            throw new Error('Astro regeneration source lineage is incomplete.')
-          }
-          if (!rawArtifact) throw new Error('astro_generation_source_artifact_missing')
+          const { sourceVersion, sourceArtifact } = await resolveAstroCaptureSource(initiallySelectedVersion, initiallySelectedArtifact, existingAdapterId, { getSiteVersion, getArtifactById, getRawImportedSiteArtifact });
+          if (request.acceptedFunctionalReductions?.kind === 'retained-presentation-v1' && request.acceptedFunctionalReductions.contact &&
+            request.contactSourceTarget !== astroSourceTarget({ sourceVersion, sourceArtifact })) throw new Error('409|CONTACT_SOURCE_CHANGED: Refresh and confirm the recipient for the current import.');
           await emitSiteAstroGenerationRequestedEvent({
             actionId: action.id,
             requestedAt: action.createdAt,

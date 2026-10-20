@@ -572,7 +572,15 @@ test('Settings publisher supplies evidence to the real guard and stops before ac
   }
 });
 
-test('owner UI prepares, resumes, reviews and publishes the exact retained artifact through real services', async () => {
+test('owner UI prepares, resumes, reviews and publishes the exact retained artifact through real services', async (t) => {
+  const envKeys=['VERCEL_ENV','GNR8_CONTACT_FROM','RESEND_API_KEY','NEXT_PUBLIC_SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'] as const;
+  const oldEnv=Object.fromEntries(envKeys.map(key=>[key,process.env[key]]));
+  t.after(()=>{for(const key of envKeys) {if(oldEnv[key]===undefined) delete process.env[key];else process.env[key]=oldEnv[key];}});
+  Object.assign(process.env,{VERCEL_ENV:'production',GNR8_CONTACT_FROM:'GNR8 <forms@notify.pasadenagenerator.com>',RESEND_API_KEY:'local-test-only',NEXT_PUBLIC_SUPABASE_URL:'http://127.0.0.1:1',SUPABASE_SERVICE_ROLE_KEY:'local-test-only'});
+  t.mock.method(globalThis,'fetch',async (url:unknown)=>{
+    assert.equal(String(url),'http://127.0.0.1:1/rest/v1/rpc/gnr8_contact_delivery_readiness');
+    return Response.json('gnr8-native-contact-delivery:v1');
+  });
   const { prepareRetainedAstroPublicArtifact: prepareOperation } = await import('./astro-public-preparation');
   const { readGeneratedOutputReviewModel, approveGeneratedOutputReview, createEvidenceBoundRuntimePublisher } = await import('./generated-output-publication-composition');
   const { createPublicOutputService } = await import('./public-output-service');
@@ -584,11 +592,12 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
   const { renderAstroProductionCandidatePreview } = await import('./astro-production-candidate-preview-composition');
   const f = buildFixture();
   Object.assign(f.artifact.manifest,{generatedOutputBuildEvidence:f.buildEvidence,generatedOutputContentManifest:f.contentManifest});
+  f.artifact.manifest.generatedOutputSourceWorkspace = { acceptedFunctionalReductions: {kind:'retained-presentation-v1', contact:{recipient:'before@example.com',recipientConfirmed:true}, search:'remove', map:'address-link', tracking:'remove-bundle'} };
   f.artifact.bundleSha256 = bundleHash(f.artifact);
   const versions = new Map([[f.siteVersion.id,f.siteVersion],[f.sourceCaptureSiteVersion.id,f.sourceCaptureSiteVersion]]);
   const artifacts = new Map([[f.artifact.siteVersionId,f.artifact],[f.sourceCaptureArtifact.siteVersionId,f.sourceCaptureArtifact]]);
   const records = new Map([[f.record.identity.candidateId,f.record]]);
-  const audits: {actor:string;details:Record<string,unknown>;timestamp:string;to_state:string}[] = [];
+  const audits: {siteVersionId:string;actor:string;details:Record<string,unknown>;timestamp:string;to_state:string}[] = [];
   let pointer: {active_site_version_id:string;active_artifact_id:string}|null = null;
   let domainReady = false, failBindOnce = true;
   const snake = (value:object) => Object.fromEntries(Object.entries(value).map(([k,v])=>[k.replace(/[A-Z]/g,c=>`_${c.toLowerCase()}`),v]));
@@ -604,15 +613,16 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
     if(sql.startsWith('select')&&sql.includes('from public.gnr8_runtime_active_pointers')) return rows(pointer?[pointer]:[]);
     if(sql.startsWith('select id from public.gnr8_runtime_domain_host_bindings')) return rows(domainReady?[{id:'domain'}]:[]);
     if(sql.startsWith('select id from public.gnr8_runtime_sites')) return rows([{id:SITE_ID}]);
+    if(sql.startsWith('update public.gnr8_runtime_domain_host_bindings')) return rows([{id:'domain'}]);
     if(sql.startsWith('update public.gnr8_runtime_site_versions set state')) {version!.state=args[1] as never;return rows([snake(version!)]);}
     if(sql.startsWith('update public.gnr8_runtime_site_versions set artifact_id')) return rows([snake(version!)]);
     if(sql.startsWith('update public.gnr8_runtime_artifacts')) {const a=[...artifacts.values()].find(a=>a.id===args[0])!;assert.equal(args[4],a.bundleSha256);return rows([snake(a)]);}
-    if(sql.startsWith('insert into public.gnr8_runtime_version_audit')) {audits.unshift({actor:String(args[3]),details:JSON.parse(String(args[5])),timestamp:new Date().toISOString(),to_state:String(args[2])});return rows([]);}
+    if(sql.startsWith('insert into public.gnr8_runtime_version_audit')) {audits.unshift({siteVersionId:String(args[0]),actor:String(args[3]),details:JSON.parse(String(args[5])),timestamp:new Date().toISOString(),to_state:String(args[2])});return rows([]);}
     if(sql.startsWith('insert into public.gnr8_runtime_active_pointers')) {pointer={active_site_version_id:String(args[1]),active_artifact_id:String(args[2])};return rows([]);}
     throw new Error(`Unexpected local query: ${sql.slice(0,120)}`);
   }};
   const c = {
-    runtimeStore:{async readContext(id:string){const siteVersion=versions.get(id);return siteVersion?{siteVersion,artifact:siteVersion.artifactId?artifacts.get(id):null,activePointerReferencesArtifact:false,previewBindingCount:0}:null;}},
+    runtimeStore:{async readContext(id:string){const siteVersion=versions.get(id);return siteVersion?{siteVersion,artifact:siteVersion.artifactId?artifacts.get(id):null,activePointerReferencesArtifact:pointer?.active_site_version_id===id && pointer?.active_artifact_id===siteVersion.artifactId,previewBindingCount:0}:null;}},
     ownershipResolver:{async resolve({siteVersionId}:{siteVersionId:string}){return {...OWNERSHIP,siteVersionId};}},
     candidateRepository:{
       async read({candidateId}:{candidateId:string}){const record=records.get(candidateId);if(!record)throw new Error('missing candidate');return record;},
@@ -620,7 +630,7 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
         const record=records.get(input.candidate.id)??createAstroProductionCandidateRecord({...input,ownership:input.trustedScope,storedAt:f.siteVersion.createdAt});records.set(record.identity.candidateId,record);return {record};
       },
     },
-    client:{from(table:string){const q={select(){return q;},eq(){return q;},order(){return q;},async limit(){return {data:audits.filter(a=>a.to_state==='APPROVED'),error:null};},async maybeSingle(){assert.equal(table,'gnr8_runtime_active_pointers');return {data:pointer,error:null};}};return q;}},
+    client:{from(table:string){let versionId='';const q={select(){return q;},eq(key:string,value:string){if(key==='site_version_id')versionId=value;return q;},order(){return q;},async limit(){return {data:audits.filter(a=>a.to_state==='APPROVED' && a.siteVersionId===versionId),error:null};},async maybeSingle(){assert.equal(table,'gnr8_runtime_active_pointers');return {data:pointer,error:null};}};return q;}},
   } as unknown as ReturnType<typeof import('./generated-output-publication-composition').createGeneratedOutputComposition>;
   const read=(id:string)=>readGeneratedOutputReviewModel(id,c);
   const transition:typeof transitionSiteVersionState=input=>transitionSiteVersionState({...input,dbClient:db as never});
@@ -628,7 +638,7 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
     composition:()=>c,readModel:read,lifecycle:{transitionSiteVersionState:transition},store:{
       async createSiteVersionFromMigration(input){const id=input.siteVersionId!;if(!versions.has(id))versions.set(id,{...structuredClone(f.siteVersion),id,state:'DRAFT',artifactId:null,versionNo:2});return {siteId:SITE_ID,siteVersionId:id,versionNo:2};},
       linkRuntimeSiteVersionOwnershipIfAllowed:async()=>undefined as never,
-      async createArtifact(input){if(!artifacts.has(input.siteVersionId))artifacts.set(input.siteVersionId,{...input,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',createdAt:f.siteVersion.createdAt});return {artifactId:artifacts.get(input.siteVersionId)!.id};},
+      async createArtifact(input){if(!artifacts.has(input.siteVersionId))artifacts.set(input.siteVersionId,{...input,id:input.id ?? input.siteVersionId,createdAt:f.siteVersion.createdAt});return {artifactId:artifacts.get(input.siteVersionId)!.id};},
       async bindArtifactToVersion(input){if(failBindOnce){failBindOnce=false;throw new Error('simulated connection loss after artifact write');}versions.get(input.siteVersionId)!.artifactId=input.artifactId;return undefined as never;},
     },
   });
@@ -670,4 +680,37 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
   assert.deepEqual(pointer,{active_site_version_id:selection.siteVersionId,active_artifact_id:selection.artifactId});
   assert.equal((await published.json()).data.artifactBundleSha256,selection.artifactBundleSha256);
   assert.equal((await send({...action,action:'publish'})).status,200);
+  const parent = structuredClone(artifacts.get(selection.siteVersionId)!);
+  const oldPointer = structuredClone(pointer);
+  const change = {...action, action:'change-recipient', recipient:'after@example.com', confirmation:'confirm-contact-recipient'};
+  assert.equal((await send({...change,confirmation:undefined})).status,422);
+  const same=(await(await send({...change,recipient:'before@example.com'})).json()).data;
+  assert.equal(same.artifactId,parent.id); assert.equal(versions.size,3);
+  const [changeResponse, changeRetry]=await Promise.all([send(change),send(change)]);
+  assert.equal(changeResponse.status,200,await changeResponse.clone().text()); assert.equal(changeRetry.status,200,await changeRetry.clone().text());
+  const successor=(await changeResponse.json()).data;
+  assert.equal((await changeRetry.json()).data.artifactId,successor.artifactId);
+  assert.equal(versions.size,4); assert.equal(artifacts.size,4);
+  const successorArtifact=artifacts.get(successor.siteVersionId)!;
+  assert.deepEqual(successorArtifact.htmlByPath,parent.htmlByPath);
+  assert.equal(successorArtifact.compiledTokenStyles,parent.compiledTokenStyles);
+  assert.deepEqual(successorArtifact.assetFingerprintMap,parent.assetFingerprintMap);
+  const expectedWorkspace=structuredClone(parent.manifest.generatedOutputSourceWorkspace) as {acceptedFunctionalReductions:{contact:{recipient:string}}};
+  expectedWorkspace.acceptedFunctionalReductions.contact.recipient='after@example.com';
+  assert.deepEqual(successorArtifact.manifest.generatedOutputSourceWorkspace,expectedWorkspace);
+  assert.equal(successor.decision.review.status,'MISSING'); assert.equal(successor.contactRecipient,'after@example.com');
+  assert.deepEqual(pointer,oldPointer); assert.deepEqual(artifacts.get(selection.siteVersionId),parent);
+  const nextAction={siteVersionId:successor.siteVersionId,artifactId:successor.artifactId,artifactBundleSha256:successor.artifactBundleSha256,host:action.host};
+  assert.equal((await send({...nextAction,action:'publish'})).status,409); assert.deepEqual(pointer,oldPointer);
+  assert.equal((await send({...nextAction,action:'approve',confirmation:'approve-exact-generated-output-artifact',technicalEvaluationSha256:successor.decision.technical.evidenceSha256})).status,200);
+  domainReady=false;
+  assert.equal((await send({...nextAction,action:'publish'})).status,409); assert.deepEqual(pointer,oldPointer);
+  domainReady=true;
+  const finalPublish=await send({...nextAction,action:'publish'}); assert.equal(finalPublish.status,200,await finalPublish.clone().text());
+  assert.deepEqual(pointer,{active_site_version_id:successor.siteVersionId,active_artifact_id:successor.artifactId});
+  assert.equal((await send(change)).status,409); // A stale parent cannot start or resume a replacement.
+  assert.equal((await send(change,{params:Promise.resolve({clientId:OWNERSHIP.organizationId,siteId:'ffffffff-ffff-4fff-8fff-ffffffffffff'})})).status,404);
+  await assert.rejects(prepare({sourceSiteVersionId:parent.siteVersionId,sourceArtifactId:parent.id,expectedSourceArtifactSha256:parent.bundleSha256,expectedSourceCandidateId:target.candidateId,host:action.host,actor:'owner',contactRecipientChange:{from:'before@example.com',to:'after@example.com'}}),/pointer_baseline_changed/);
+  assert.equal(versions.size,4); assert.deepEqual(artifacts.get(selection.siteVersionId),parent);
+
 });

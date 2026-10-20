@@ -55,6 +55,7 @@ export type SiteActionRequest =
       actor: string
       strategy?: string
       outputAdapterId?: 'astro-static-site' | 'html-static-artifact'
+      contactSourceTarget?: string
       acceptedFunctionalReductions?: import('@gnr8/runtime-contracts').AcceptedFunctionalReductions
     }
   | {

@@ -60,6 +60,12 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   const siteVersionId = deterministicUuid(seed+':version');
   const operationId = deterministicUuid(seed+':candidate');
   const candidateId = createAstroProductionCandidateId(operationId);
+  const requireBaseline = async () => {
+    const pointer = await c.client.from('gnr8_runtime_active_pointers').select('active_site_version_id,active_artifact_id').eq('site_id',sourceOwnership.runtimeSiteId).maybeSingle();
+    const actualPointer = pointer.data ? {siteVersionId:pointer.data.active_site_version_id,artifactId:pointer.data.active_artifact_id} : null;
+    if (pointer.error || stableStringify(actualPointer) !== stableStringify(preparation.expectedActivePointer)) throw new Error('public_preparation_pointer_baseline_changed');
+  };
+  if (input.contactRecipientChange) await requireBaseline();
   try {
     const existing = await c.runtimeStore.readContext(siteVersionId);
     if (existing?.artifact) {
@@ -67,11 +73,10 @@ export async function prepareRetainedAstroPublicArtifact(input: {
       if (existing.siteVersion.state === 'DRAFT') await lifecycle.transitionSiteVersionState({siteVersionId,nextState:'READY_FOR_REVIEW',actor:input.actor,source:'manual',details:{workflow:preparation.version,publicPreparation:preparation}});
       const model = await readModel(siteVersionId);
       if (model.decision.technical.status !== 'PASS') throw new Error('public_preparation_existing_invalid');
+      if (input.contactRecipientChange) await requireBaseline();
       return model;
     }
-    const pointer = await c.client.from('gnr8_runtime_active_pointers').select('active_site_version_id,active_artifact_id').eq('site_id',sourceOwnership.runtimeSiteId).maybeSingle();
-    const actualPointer = pointer.data ? {siteVersionId:pointer.data.active_site_version_id,artifactId:pointer.data.active_artifact_id} : null;
-    if (pointer.error || stableStringify(actualPointer) !== stableStringify(preparation.expectedActivePointer)) throw new Error('public_preparation_pointer_baseline_changed');
+    if (!input.contactRecipientChange) await requireBaseline();
     if (!existing) {
       await store.createSiteVersionFromMigration({
         siteId:sourceOwnership.runtimeSiteId,sourceUrl:sourceBuild.sourceCapture.sourceUrl,actor:input.actor,
@@ -123,8 +128,10 @@ export async function prepareRetainedAstroPublicArtifact(input: {
     const model = await readModel(siteVersionId);
     if (model.artifactBundleSha256!==artifact.bundleSha256 || model.decision.technical.status!=='PASS' || model.decision.review.status!=='MISSING')
       throw new Error('public_preparation_readback_mismatch');
+    if (input.contactRecipientChange) await requireBaseline();
     return model;
   } catch (error) {
+    if (input.contactRecipientChange) await requireBaseline();
     // A concurrent retry may have completed the same immutable operation while
     // this request was writing or transitioning. Reconcile only its exact seed.
     const stored = await c.runtimeStore.readContext(siteVersionId).catch(() => null);

@@ -23,6 +23,8 @@ function failure(error: unknown): Response {
     public_preparation_source_technical_blocked: 'The retained generated source has technical blockers. Review its status before preparing.',
     public_preparation_invalid_host: 'Enter a valid hostname without a URL path or wildcard.',
     PUBLIC_OUTPUT_SELECTION_STALE: 'The selected artifact or its evidence changed. Reload and review the exact version again.',
+    PUBLIC_OUTPUT_RECIPIENT_CONFIRMATION_REQUIRED: 'Enter a valid recipient and explicitly confirm it.',
+    PUBLIC_OUTPUT_ACTIVE_CONTACT_REQUIRED: 'Select the currently active public artifact with a native contact form. Refresh if publication changed.',
     PUBLIC_OUTPUT_HOST_MISMATCH: 'The domain must match the prepared artifact.',
   };
   const blockerCodes = error && typeof error === 'object' && 'blockerCodes' in error && Array.isArray(error.blockerCodes)
@@ -51,9 +53,9 @@ export function createPublicOutputRouteHandlers(deps: {
       try {
         if (request.headers.get('origin') !== new URL(request.url).origin) throw new Error('403|PUBLIC_OUTPUT_ORIGIN_INVALID');
         const body = await request.json();
-        if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(k => !['siteVersionId','artifactId','artifactBundleSha256','action','host','confirmation','technicalEvaluationSha256'].includes(k)))
+        if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(k => !['siteVersionId','artifactId','artifactBundleSha256','action','host','confirmation','technicalEvaluationSha256','recipient'].includes(k)))
           throw new Error('422|PUBLIC_OUTPUT_REQUEST_INVALID');
-        const data = await deps.service.act(await scope(request, context), { ...selection(body), action: body.action, host: body.host, confirmation: body.confirmation, technicalEvaluationSha256: body.technicalEvaluationSha256 });
+        const data = await deps.service.act(await scope(request, context), { ...selection(body), action: body.action, host: body.host, confirmation: body.confirmation, technicalEvaluationSha256: body.technicalEvaluationSha256, recipient: body.recipient });
         return Response.json({ ok: true, data }, { headers });
       } catch (error) { return failure(error); }
     },

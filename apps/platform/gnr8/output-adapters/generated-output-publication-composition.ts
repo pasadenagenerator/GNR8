@@ -56,6 +56,7 @@ export type GeneratedOutputReviewModel = {
   publicPreparation: PublicPreparation | null;
   state: string;
   contactRecipient: string | null;
+  activePublication: boolean;
   artifactId: string;
   artifactBundleSha256: string;
   candidateId: string;
@@ -138,6 +139,7 @@ export async function readGeneratedOutputReviewModel(siteVersionId: string, comp
     siteVersionId,
     publicPreparation: readPublicPreparation(context.artifact.manifest),
     state: context.siteVersion.state,
+    activePublication: context.activePointerReferencesArtifact,
     contactRecipient: ((context.artifact.manifest.generatedOutputSourceWorkspace as { acceptedFunctionalReductions?: { contact?: { recipient?: string } } } | undefined)?.acceptedFunctionalReductions?.contact?.recipient) ?? null,
     artifactId: context.artifact.id,
     artifactBundleSha256: context.artifact.bundleSha256,

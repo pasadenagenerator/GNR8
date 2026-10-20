@@ -1069,3 +1069,70 @@ test('explicit basic contact replacement preserves fields and routes without exp
   assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:version,rawArtifact,artifact,htmlByPath:{...artifact.htmlByPath,'/':`<html><body>${source}</body></html>`},acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError)
  }
 })
+
+test('retained HTML suggestions preserve source evidence and only explicit confirmation reaches the source workspace', async () => {
+  const { findContactSuggestions } = await import('./source-contact-suggestions');
+  const { createRetainedPresentationSettings, parseAcceptedFunctionalReductions } = await import('@gnr8/runtime-contracts');
+  const { resolveAstroCaptureSource, astroSourceTarget } = await import('./astro-capture-source');
+  const input=fixture({rootHtml:'<html><body><h1>Contact</h1><a href="mailto:office@example.com">Email</a><form class="wpcf7-form" method="post" action="/contact"><input name="your-name" required placeholder="Name"><input type="email" name="your-email" required placeholder="visitor@example.com"><textarea name="your-message" placeholder="Message"></textarea><input type="submit" value="Send"></form></body></html>'});
+  const source=await resolveAstroCaptureSource(input.version,input.artifact,null,{getSiteVersion:async()=>input.version,getArtifactById:async()=>input.artifact,getRawImportedSiteArtifact:async()=>input.rawArtifact});
+  assert.equal(astroSourceTarget(source),`${input.version.id}:${input.artifact.id}:${input.artifact.bundleSha256}`);
+  await assert.rejects(resolveAstroCaptureSource(input.version,input.artifact,null,{getSiteVersion:async()=>input.version,getArtifactById:async()=>input.artifact,getRawImportedSiteArtifact:async()=>({...input.rawArtifact,siteId:'foreign'})}),/lineage_missing/);
+  const htmlByPath=await loadSourceBackedAstroHtmlByPath({siteVersion:input.version,rawArtifact:input.rawArtifact,getRawAsset:async ({filePath,artifactId,siteVersionId})=>{
+    assert.equal(artifactId,input.rawArtifact.id);assert.equal(siteVersionId,input.version.id);
+    const meta=input.rawArtifact.fileMap[filePath];return {bytes:Buffer.from(input.artifact.htmlByPath[filePath==='index.html'?'/':'/about']),mediaType:meta.mediaType,sizeBytes:meta.sizeBytes,sha256:meta.sha256};
+  }});
+  const evidence=findContactSuggestions([{sourceUrl:input.rawArtifact.metadata.sourceUrl,html:htmlByPath['/']}]);
+  assert.deepEqual(evidence,[{recipient:'office@example.com',sourceUrl:'https://example.com/',evidence:'public-mailto'}]);
+  assert.equal(createRetainedPresentationSettings({excludedPaths:'',nativeContact:true,recipient:evidence[0].recipient,recipientConfirmed:false}),null);
+  const settings=createRetainedPresentationSettings({excludedPaths:'',nativeContact:true,recipient:evidence[0].recipient,recipientConfirmed:true})!;
+  assert.deepEqual(parseAcceptedFunctionalReductions(settings),settings);
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,htmlByPath,acceptedFunctionalReductions:settings});
+  assert.equal((generated.sourceManifest.acceptedFunctionalReductions as {contact:{recipient:string}}).contact.recipient,'office@example.com');
+  assert.ok(generated.sourceManifest.files.some(f=>f.contents.includes('data-gnr8-contact')));
+  const noisy='<script>const recipient="secret@example.com"</script><input placeholder="visitor@example.com" value="visitor2@example.com"><textarea>visitor3@example.com</textarea><!-- hidden@example.com -->';
+  assert.deepEqual(findContactSuggestions([{sourceUrl:'https://example.com/kontakt',html:noisy}]),[]);
+  const multiple=findContactSuggestions([{sourceUrl:'https://example.com/kontakt',html:noisy+'<p>Kontakt: sales@example.com</p><a href="mailto:office@example.com">Office</a><form id="contact" action="mailto:forms@example.com"></form>'}]);
+  assert.deepEqual([...new Set(multiple.map(e=>e.recipient))],['sales@example.com','office@example.com','forms@example.com']);
+  assert.equal(multiple.find(e=>e.recipient==='forms@example.com')?.evidence,'form-mailto');
+  assert.deepEqual(findContactSuggestions([{sourceUrl:'https://example.com/services',html:'<section><p>E-pošta: nearby@example.com</p><form></form></section>'}]),[{recipient:'nearby@example.com',sourceUrl:'https://example.com/services',evidence:'public-contact-text'}]);
+});
+
+test('contact suggestion read-model reads only the scoped retained artifact and authoritative route files', async t => {
+  const { readContactSuggestions } = await import('../site/contact-suggestion-read-model');
+  const input=fixture({aboutHtml:'<html><body><a href="mailto:retained@example.com">Contact us</a></body></html>'});
+  const keys=['NEXT_PUBLIC_SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'] as const;
+  const previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  t.after(()=>{for(const k of keys){if(previous[k]===undefined)delete process.env[k];else process.env[k]=previous[k]}});
+  process.env.NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:1';process.env.SUPABASE_SERVICE_ROLE_KEY='local-only';
+  const snake=(value:object)=>Object.fromEntries(Object.entries(value).map(([k,v])=>[k.replace(/[A-Z]/g,c=>`_${c.toLowerCase()}`),v]));
+  const files=Object.fromEntries(Object.entries({'index.html':input.artifact.htmlByPath['/'],'pages/about/index.html':input.artifact.htmlByPath['/about']}).map(([path,html])=>{
+    const bytes=Buffer.from(html),sha256=createHash('sha256').update(bytes).digest('hex');
+    input.rawArtifact.fileMap[path]={path,mediaType:'text/html',sizeBytes:bytes.length,sha256};
+    return [path,{media_type:'text/html',file_size_bytes:bytes.length,sha256,content_bytes:'\\x'+bytes.toString('hex')}];
+  }));
+  let fileReads=0;
+  t.mock.method(globalThis,'fetch',async (request:unknown)=>{
+    const url=new URL(String(request));assert.equal(url.origin,'http://127.0.0.1:1');
+    const table=url.pathname.split('/').pop();let rows:unknown[]=[];
+    if(table==='sites')rows=url.searchParams.get('id')==='eq.owned-site'&&url.searchParams.get('agency_id')==='eq.agency'&&url.searchParams.get('org_id')==='eq.client'?[{id:'owned-site'}]:[];
+    else if(table==='gnr8_runtime_site_versions'){
+      if(url.searchParams.has('ownership_site_id'))assert.equal(url.searchParams.get('ownership_site_id'),'eq.owned-site');
+      rows=[snake(input.version)];
+    }else if(table==='gnr8_runtime_page_versions')rows=input.version.pages.map(snake);
+    else if(table==='gnr8_runtime_artifacts')rows=[snake(input.artifact)];
+    else if(table==='gnr8_runtime_raw_template_artifacts'){
+      assert.equal(url.searchParams.get('site_version_id'),`eq.${input.version.id}`);
+      rows=[{...snake(input.rawArtifact),metadata_json:input.rawArtifact.metadata}];
+    }else if(table==='gnr8_runtime_raw_template_artifact_files'){
+      assert.equal(url.searchParams.get('artifact_id'),`eq.${input.rawArtifact.id}`);fileReads++;
+      rows=[files[url.searchParams.get('file_path')!.slice(3)]];
+    }else assert.ok(['gnr8_runtime_active_pointers','gnr8_runtime_preview_host_bindings'].includes(table!));
+    return Response.json(rows,{headers:{'content-range':`0-${rows.length-1}/${rows.length}`}});
+  });
+  const model=await readContactSuggestions({siteId:'owned-site',agencyId:'agency',clientId:'client'});
+  assert.deepEqual(model,{sourceTarget:`${input.version.id}:${input.artifact.id}:${input.artifact.bundleSha256}`,suggestions:[{recipient:'retained@example.com',sourceUrl:'https://example.com/about',evidence:'public-mailto'}]});
+  assert.equal(fileReads,2);
+  await assert.rejects(readContactSuggestions({siteId:'foreign',agencyId:'agency',clientId:'client'}),/CONTACT_SITE_NOT_FOUND/);
+  assert.equal(fileReads,2);
+});

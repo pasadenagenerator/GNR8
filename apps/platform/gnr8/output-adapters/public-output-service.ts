@@ -1,4 +1,5 @@
 import 'server-only';
+import { isContactEmail } from '@gnr8/runtime-contracts';
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server';
 import { readGeneratedOutputReviewModel, approveGeneratedOutputReview, createEvidenceBoundRuntimePublisher } from './generated-output-publication-composition';
 import { prepareRetainedAstroPublicArtifact } from './astro-public-preparation';
@@ -24,7 +25,7 @@ export function createPublicOutputService(deps = defaults) {
   }
   return {
     read,
-    async act(scope: PublicOutputScope, input: PublicOutputSelection & { action: string; host?: string; confirmation?: string; technicalEvaluationSha256?: string }) {
+    async act(scope: PublicOutputScope, input: PublicOutputSelection & { action: string; host?: string; confirmation?: string; technicalEvaluationSha256?: string; recipient?: string }) {
       const actor = await deps.authorizeVersion(scope, input.siteVersionId);
       const model = await read(scope, input);
       if (input.action === 'prepare') {
@@ -35,6 +36,16 @@ export function createPublicOutputService(deps = defaults) {
           host: String(input.host ?? '').trim().toLowerCase(), actor: actor.userId });
       }
       if (!model.publicPreparation || model.publicPreparation.host !== input.host) throw new Error('409|PUBLIC_OUTPUT_HOST_MISMATCH');
+      if (input.action === 'change-recipient') {
+        if (input.confirmation !== 'confirm-contact-recipient' || !isContactEmail(input.recipient))
+          throw new Error('422|PUBLIC_OUTPUT_RECIPIENT_CONFIRMATION_REQUIRED');
+        if (!model.contactRecipient || model.state !== 'PUBLISHED' || !model.activePublication)
+          throw new Error('409|PUBLIC_OUTPUT_ACTIVE_CONTACT_REQUIRED');
+        if (input.recipient === model.contactRecipient) return model;
+        return deps.prepare({ sourceSiteVersionId: model.siteVersionId, sourceArtifactId: model.artifactId,
+          expectedSourceArtifactSha256: model.artifactBundleSha256, expectedSourceCandidateId: model.candidateId,
+          host: input.host!, actor: actor.userId, contactRecipientChange: { from: model.contactRecipient, to: input.recipient } });
+      }
       if (input.action === 'approve') {
         if (input.technicalEvaluationSha256 !== model.decision.technical.evidenceSha256) throw new Error('409|PUBLIC_OUTPUT_SELECTION_STALE');
         if (input.confirmation !== 'approve-exact-generated-output-artifact') throw new Error('422|PUBLIC_OUTPUT_CONFIRMATION_REQUIRED');
