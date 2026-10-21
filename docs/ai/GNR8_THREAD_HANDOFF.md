@@ -1,5 +1,31 @@
 # GNR8 THREAD HANDOFF
 
+## Stacki production rollout — 2026-10-21
+
+Production `app.pasadenagenerator.com` now runs `e5d1383d` /
+`dpl_FcUbgQHhB2bevtyKkmyBszUX99Gt` (one consolidated deployment, READY).
+Includes the previously Preview-only editor/session/source/Save dependency closure;
+all Stacki saves use one deduplicated store and dual reader. Existing public-output,
+recipient settings and native contact source were preserved from production `2f64d82f`.
+Pilot remains only `2c7ca7da-3f95-4a36-a385-7d5270eaaea7`; direct draft routes now
+share that boundary. No quotas or ownership policies changed.
+
+58 focused tests, local and hosted production build gates PASS. Prior broad TS
+174 unrelated diagnostics remain a separate non-green result. Uploaded source
+hashes matched all 42 release files; unrelated deployed inputs unchanged.
+Authenticated deployed readback verified legacy 5 and current v2 head 8, all 118
+files each; anonymous request 401. No new production UI Save, runtime start or
+revision: prior protected Preview Save/reopen evidence reused. All live pointers,
+domain bindings, Logatčan artifact/state hashes and public home/contact HTML preserved.
+
+Snapshot expires **2026-10-22 07:26 UTC / 09:26 Ljubljana**; 7/10 monthly starts
+reserved, 3 remain, no active sessions. No automatic paid renewal. Rollback must
+retain dual readability or disable affected editing in a new authorized release;
+project env changes alone do not change existing deployments. No migration,
+GitHub integration, customer Publish, DNS or contact send. This rollout is closed.
+[Rollout, evidence and recovery](../product/evidence/stacki-deduplicated-storage/README.md).
+
+
 This is the first file every new ChatGPT/Codex thread should read.
 
 ## Active Track

@@ -1,6 +1,27 @@
 # Stacki — deduplicirana hramba, lokalni in gostovani dokaz, 21. 10. 2026
 
-## Produkcijska izdaja — 21. 10. 2026 (pripravljena, namestitev še ni potrjena)
+## Produkcijska izdaja — 21. 10. 2026: aktivna in preverjena
+
+**READY**: `e5d1383daf74b5b1d29ff7af4323ea94442099a7`, deployment
+`dpl_FcUbgQHhB2bevtyKkmyBszUX99Gt` na [produkciji](https://app.pasadenagenerator.com).
+Izvedena je natanko **ena** produkcijska namestitev. [Dokazilo izdaje](production-evidence.json).
+
+Prijavljena produkcijska GET pot je preverila legacy **5** in v2 head **8**:
+pri obeh vseh **118 datotek / 7.649.623 B**, pričakovani checkpoint SHA in celotne
+trajne odvisnosti. Brez prijave pot vrne **401**. Stacki panel je viden obstoječemu
+pilotu. Save/reopen na produkciji ni bil izveden: gostovani dokaz 6/7 in restore 8
+ostaja dokaz z istega preverjenega Preview store/runtime, ne nov produkcijski Save.
+
+Vseh **42** izdajnih datotek se ujema z naloženimi viri; nepovezani app/package/script
+viri se ujemajo s prejšnjo produkcijo. Zasebni payloadi in okoljske datoteke niso
+naloženi. Gostovana compilation/lint/build-types/97-pages vrata so PASS. Runtime
+entry, Save bridge, capture in provider se bajtno ujemajo s preverjenim Previewom.
+Končno preverjanje 08:00 UTC: head 8 in legacy 5 nespremenjena; vsi aktivni kazalci,
+domenske vezave ter Logatčan version state/artifact manifest hashi nespremenjeni.
+Javna `/` in `/kontakt` vrneta HTTP 200 in bajtno enak HTML pred/po izdaji.
+Noben nov runtime, snapshot, reservation ali draft revision ni ustvarjen; še vedno
+**7/10** mesečnih rezervacij, vsi runtimei ustavljeni. Produktno vedenje: **da**,
+Stacki s skupno deduplicirano hrambo je zdaj aktiviran za obstoječi pilot.
 
 Obseg: ena konsolidirana izdaja `gnr8-platform` na obstoječi produkciji
 `app.pasadenagenerator.com`, iz preverjene produkcijske osnove `2f64d82f`.
@@ -8,6 +29,8 @@ Produkcija prej nima nobenega Stacki modula. Izdaja zato vključuje minimalno ce
 pripravo izvorov, draft/session store in poti, Save bridge, runtime adapter ter panel.
 Obe produkcijski kompoziciji uporabljata isti deduplicirani `SupabaseStackiDraftStore`.
 GitHub eksperiment in nepovezane lokalne spremembe niso del izdaje.
+Spodnje slike starejših dokazil so ohranjene lokalno; v tem commitu so vključeni
+le izbrani README in JSON dokazi, ne celotni slikovni/payload imeniki.
 
 - Skupna pilotna avtorizacija pokriva tudi neposredni GET/POST/PREPARE, ne samo sej.
   Obstoječe lastništvo se preveri pred pilotnim ID in ponovno pred potrditvijo Save.
@@ -44,6 +67,8 @@ Stackija; vračanje nanjo bi urednik odstranilo, zato ni rollback za nadaljnje u
 Nadaljnji release ali zagon canaryja zahteva svoj jasno določen obseg.
 
 ---
+
+## Predhodni lokalni in Preview dokaz (pred produkcijsko izdajo)
 
 **Lokalno in na enem odobrenem protected Previewu preverjeno.**
 Gostovani Save A/B je potrdil 6/7; revizija **8** povrne vseh 118 izhodiščnih

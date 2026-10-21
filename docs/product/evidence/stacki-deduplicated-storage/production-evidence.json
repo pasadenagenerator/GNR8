@@ -1,0 +1,354 @@
+{
+  "status": "production-active-readback-passed",
+  "completedAt": "2026-10-21T08:00:28.318Z",
+  "sourceRevision": "e5d1383daf74b5b1d29ff7af4323ea94442099a7",
+  "previousProductionDeployment": "dpl_8NEnmepjiBNxmoNRxfPSiPg1pUhZ",
+  "deployment": {
+    "checkedAt": "2026-10-21T07:58:18.821Z",
+    "id": "dpl_FcUbgQHhB2bevtyKkmyBszUX99Gt",
+    "url": "gnr8-platform-dqvfdjess-pasadena-generators-projects.vercel.app",
+    "target": "production",
+    "state": "READY",
+    "meta": {
+      "releaseRevision": "e5d1383daf74b5b1d29ff7af4323ea94442099a7",
+      "githubCommitSha": "e5d1383daf74b5b1d29ff7af4323ea94442099a7",
+      "actor": "codex",
+      "lambdaRuntimeStats": "{\"nodejs\":5}"
+    },
+    "aliasDeployment": "dpl_FcUbgQHhB2bevtyKkmyBszUX99Gt",
+    "aliases": [
+      "app.pasadenagenerator.com",
+      "*.app.pasadenagenerator.com",
+      "maver.app.pasadenagenerator.com",
+      "logatcan.app.pasadenagenerator.com",
+      "luxury-hotel.pasadenagenerator.com",
+      "beauty-clinic.pasadenagenerator.com",
+      "zakat-charity.pasadenagenerator.com",
+      "chs-airship.app.pasadenagenerator.com",
+      "holistic-energy.pasadenagenerator.com",
+      "aris-airship.app.pasadenagenerator.com",
+      "gnr8-platform.vercel.app",
+      "gnr8-platform-pasadena-generators-projects.vercel.app"
+    ],
+    "nodeVersion": "22.x",
+    "scopedInputFiles": 42,
+    "scopedInputMismatches": [],
+    "privateFilesUploaded": [],
+    "unrelatedInputMismatches": [],
+    "hostedBuild": {
+      "compiled": true,
+      "lintAndTypes": true,
+      "staticPages": true
+    }
+  },
+  "scope": {
+    "agencyId": "00000000-0000-4000-8000-000000000001",
+    "clientId": "9251b11f-3539-43ee-9a24-834c6a237852",
+    "siteId": "8c6eb062-8697-4f19-98a3-7539a274d916",
+    "siteVersionId": "cc5b8ffe-9cd9-47fa-aa38-2efe35592329"
+  },
+  "activation": {
+    "settings": {
+      "GNR8_STACKI_DRAFTS_ENABLED": "1",
+      "GNR8_STACKI_SESSIONS_ENABLED": "1",
+      "GNR8_STACKI_RUNTIME_SNAPSHOT": "snap_HmtOA1NZbuCdPh0fExvxcJW2tJ5g",
+      "GNR8_STACKI_PILOT_USER_ID": "2c7ca7da-3f95-4a36-a385-7d5270eaaea7"
+    },
+    "userScope": "existing single pilot only; ownership checks retained",
+    "authStorageProject": "ujfbpzugdsdmroqvhfvn",
+    "sharedAuthSettingsChanged": false,
+    "bucketPrivate": true,
+    "storageRls": true,
+    "directClientStoragePolicies": 0
+  },
+  "validation": {
+    "focusedTests": {
+      "passed": 58,
+      "failed": 0
+    },
+    "focusedTypeScript": "passed",
+    "focusedEslint": "passed with existing ESLintRC warning",
+    "routeExports": "passed: 204 routes",
+    "isolatedProductionBuild": "passed compilation/lint/build types/97 pages",
+    "initialLocalBuild": "compile/lint/types passed; packaging failed after archived env files removed during build; rerun passed with env files absent from startup",
+    "broadTypeScript": "174 prior unrelated diagnostics; previous result reused, not reported passed",
+    "bundleMarkers": {
+      "gnr8-stacki-manifest:v2": [
+        "chunks/4658.js"
+      ],
+      "stacki-file-objects/v1": [
+        "chunks/4658.js"
+      ],
+      "STACKI_PILOT_ONLY": [
+        "chunks/6414.js",
+        "chunks/4658.js"
+      ],
+      "STACKI_REVISION_INVALID": [
+        "chunks/4658.js"
+      ],
+      "STACKI_CAPTURE_FAILED": [
+        "app/api/gnr8/agency/clients/[clientId]/sites/[siteId]/stacki-drafts/[siteVersionId]/session/route.js"
+      ]
+    },
+    "runtimeSourcesMatchVerifiedPreview": true
+  },
+  "authenticatedProductionReadback": {
+    "method": "existing authenticated Chrome session; deployed GET verify=1 and revision=5; no cookie export or new login",
+    "panelVisible": true,
+    "checks": [
+      {
+        "revision": 5,
+        "checkpointSha256": "4957be4767153e0f0099d7668516929fe852fb930a4ac1f83d5d6323ddc95c88",
+        "files": 118,
+        "decodedBytes": 7649623,
+        "allDurableDependenciesVerified": true
+      },
+      {
+        "revision": 8,
+        "checkpointSha256": "1c8cf3feb634498c85073136b3c4fcb7dfbe7cc57d22846aa6a72947dc637f93",
+        "files": 118,
+        "decodedBytes": 7649623,
+        "allDurableDependenciesVerified": true
+      }
+    ]
+  },
+  "anonymousReadback": {
+    "checkedAt": "2026-10-21T08:00:51.089Z",
+    "status": 401,
+    "redirect": null,
+    "body": {
+      "ok": false,
+      "reason": "STACKI_DRAFT_UNAVAILABLE"
+    }
+  },
+  "preservation": {
+    "currentDraft": {
+      "revision": 8,
+      "sha256": "1c8cf3feb634498c85073136b3c4fcb7dfbe7cc57d22846aa6a72947dc637f93",
+      "files": 118,
+      "assets": 102
+    },
+    "legacyRevision5Unchanged": true,
+    "allLivePointersUnchanged": true,
+    "allDomainBindingsUnchanged": true,
+    "logatcanVersionStatesUnchanged": true,
+    "logatcanArtifactManifestHashesUnchanged": true,
+    "liveHashes": {
+      "gnr8_runtime_active_pointers": "c3fc747729ffad7888ec8ac7c8dafc17966cd2ad609adbd3246d620702731b25",
+      "gnr8_runtime_domain_host_bindings": "46b7f1919260e726bad9447390471ec71d96527afe8e5c847cb5d4b0168c285a"
+    },
+    "publishedHttpPages": [
+      {
+        "url": "https://logatcan.app.pasadenagenerator.com/",
+        "status": 200,
+        "bytes": 676956,
+        "sha256": "17459fb8414a2ecabb31d84e782121bf5075c9a51b29b4846d21e18fae07ab91",
+        "contentType": "text/html; charset=utf-8"
+      },
+      {
+        "url": "https://logatcan.app.pasadenagenerator.com/kontakt",
+        "status": 200,
+        "bytes": 660812,
+        "sha256": "f704729cb0d658bd38fe3dc0ba628c7cacdaf46ae91d4e17a8efb93e7f81f3e9",
+        "contentType": "text/html; charset=utf-8"
+      }
+    ],
+    "publishedHttpPagesByteIdentical": true
+  },
+  "runtime": {
+    "snapshot": {
+      "id": "snap_HmtOA1NZbuCdPh0fExvxcJW2tJ5g",
+      "status": "created",
+      "expiresAt": "2026-10-22T07:26:02.564Z",
+      "sizeBytes": 465337891
+    },
+    "monthlyReservations": 7,
+    "remainingStarts": 3,
+    "noActiveSessions": true,
+    "newRuntimeStarts": 0,
+    "newDraftRevisions": 0,
+    "automaticRenewalAdded": false
+  },
+  "hostedSaveEvidence": {
+    "reusedPreviewDeployment": "dpl_GK8zt8aFGmJwYUFdrYV6ndXgo4RU",
+    "savedRevisions": [
+      6,
+      7
+    ],
+    "restoredBaselineRevision": 8,
+    "productionUiSavePerformed": false
+  },
+  "releaseInputs": [
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-draft-route-handlers.ts",
+      "sha256": "d98440c8ad891baf7341d337dc63b4008a2116db22d948cafd9de799f725d7fe"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-source-project.test.ts",
+      "sha256": "ddabecfc5acbb9a81e9d8fad2b54f4ac81719223ae600f2f19ba7e6ff0dbfd35"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-deduplicated-storage.test.ts",
+      "sha256": "971fd67f0663d3b85e38b96839a5ec42b600d949dd18c55a35cacb970c5a97af"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-draft-composition.test.ts",
+      "sha256": "f22ae4e86d91f358bd406d61fe5b1a00e98b0a9bdc442aeb5423a5809283b43b"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-runtime-files.ts",
+      "sha256": "5f5c2531e344a6209a95fe4f11ebfa220b65aa5a034bbaf346124893cae82168"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-legacy-store.fixture.ts",
+      "sha256": "0c85a0f1c41c25f3578474f7c6e2a046df68a1374fffd2cd71e53b130f3b9bdb"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-draft-contract.ts",
+      "sha256": "52c132a46a8ffbcae1e08137e8bf3b9ef94ee093a935af0b398869a04558ae05"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/run-stacki-session-proof.ts",
+      "sha256": "b3db60ef2d4a67bee8aea52cdde8053794b07b0a879c2af26e3012a6685e9443"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-studio-patch.ts",
+      "sha256": "927b09e54d12c06573f828c975322614ecb571b845a38d86c8b255224f1fb8c0"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-source-project.ts",
+      "sha256": "06819dd4c5b282cad186f1c569936594b77780d47caff9ee18824fda6f2dbef4"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/run-stacki-deduplicated-proof.ts",
+      "sha256": "74dd659309e0a910026619bac32e82af387b81f8f3fd524300cce9c2884df3d8"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-session-store.ts",
+      "sha256": "5d2e6844a307e9b0037544d3178a8723face747416e7b4c4f68d550218de36fb"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-runtime-checkpoint.test.ts",
+      "sha256": "c65b484c58132021f5dea5de1ad1d1319f66dc6a846ff660234d15ff85a1e786"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-session-routes.ts",
+      "sha256": "158546b6ed1fe79576be31757fadbfa4386dedbaa590eafbdc6804489f13a1c3"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-vercel-provider.test.ts",
+      "sha256": "035dcbf9e500214fbeeb8c10b0c274bd047ad9df27cfde64479adefbaec32bcf"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-studio-save.tsx",
+      "sha256": "7dab76797216e4070ba407c4f59e21d93f6a3ac9da0dba3ac775db0bc7188d1c"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-draft-composition.ts",
+      "sha256": "98a21e0b8a8020e76415081036f5a28711ffbba69537fdf9a302c3cb2233ffc9"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-drafts.test.ts",
+      "sha256": "ddf52c1890e81782048c1e023256243873fa88a17bff7679e245ebff8f567776"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/prepare-stacki-runtime.ts",
+      "sha256": "64bfb86d7e0d4f6648c9fc2339906f9c856c7478765c463b4ad69dbd615a2db7"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-local-storage-transport.ts",
+      "sha256": "8602385e3556bff8b6a325a8ea7f47dd46acb0c425f0eb6143433d3b9b2c7a23"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-editor-gateway.ts",
+      "sha256": "292f8f47c0e5d55ad03c55f033dbbc8f1ab0ef1bf20344b9306d5e50d048ca96"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-session-composition.ts",
+      "sha256": "92ca11fb1c9a3ed7d262cf0a2cb3e8f894769270f1a9be991fa5791cc3f326c2"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-draft-store.ts",
+      "sha256": "6a8d16d036f4d0265372a4661314255517d78e450012d8191387e496bdc9f4d1"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-draft-recovery-proof.ts",
+      "sha256": "533d47f670ff6e9a89c6878fa1445912c255366c4a3fbae6f4d6240d7b74ec50"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-runtime-files.test.ts",
+      "sha256": "66ad032d98825c5d3c70c3a36c12616f58c216ba8cb07d55309dee565704fa73"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-vercel-provider.ts",
+      "sha256": "d287bf0b64776a1d03fe447297a946db79666235b2928dffd3a9e840a3974d80"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-editor-gateway.test.ts",
+      "sha256": "af548b20e5a088c43618fb3540d1230a1bebf94b54c578c7dd80e5fcc226f5a4"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-session.test.ts",
+      "sha256": "f77d90ac11cbb5a4a1efe7ce042007e0f2f96c26c539499050509b31d5431681"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-editor-runtime.ts",
+      "sha256": "c68bddc1cdfb4cd79623a883b09241452c49627134a24f1327e5013765758708"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-pilot-access.ts",
+      "sha256": "8c44b0c789ba0e6e4eb3855f2f97ea02e0fd1e5d19eeea5b10171cfa44072534"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-sandbox-entry.ts",
+      "sha256": "f627e112432d485b1b098259a0b4453a747e2e107007dede99bc732f55bf91cd"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-source-composition.ts",
+      "sha256": "e3b0806bbb4c75381ce7c010ea38d93f19880da1d749f4ee0708bf25692ce86b"
+    },
+    {
+      "path": "apps/platform/gnr8/stacki/stacki-runtime-checkpoint.ts",
+      "sha256": "5ccdba3d25d4a02dbb0c1188c4dd3ef5a4eee6e5e4a41fdda1a8083f0f7b4a13"
+    },
+    {
+      "path": "apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/[siteId]/stacki-drafts/[siteVersionId]/route.ts",
+      "sha256": "d8ecb826ee7f3d3ac439f73a119b1f8911527fd55309c86ab66473d8272de10b"
+    },
+    {
+      "path": "apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/[siteId]/stacki-drafts/[siteVersionId]/prepare/route.ts",
+      "sha256": "ad91dbf6e4ea69fa2235888b23865efaf69e1082b442e60cf9dfec7c795dd3e0"
+    },
+    {
+      "path": "apps/platform/app/api/gnr8/agency/clients/[clientId]/sites/[siteId]/stacki-drafts/[siteVersionId]/session/route.ts",
+      "sha256": "cd730991ce01dd76db961602c14d64ad9765485e55de251a7df1172e7abdce19"
+    },
+    {
+      "path": "apps/platform/app/gnr8/agency/clients/[clientId]/sites/[siteId]/StackiEditorPanel.tsx",
+      "sha256": "775c2d47b6bbf9f6eed9cc61bd3b069c9cd85f28b46bb51d47777d19759de140"
+    },
+    {
+      "path": "apps/platform/app/gnr8/agency/clients/[clientId]/sites/[siteId]/SiteWorkspacePage.tsx",
+      "sha256": "1ddfc42109d392b164d6cc9cdb86e93a03a7888ce1f67c33619a6cbd299de519"
+    },
+    {
+      "path": "apps/platform/gnr8/output-adapters/astro-static-site-workspace-preparation.ts",
+      "sha256": "7e6443b8ba93e34ada69141bc7eecc13d5818a784a881a8f2124cd07065689e7"
+    },
+    {
+      "path": "apps/platform/gnr8/output-adapters/generated-output-eligibility.ts",
+      "sha256": "876de578cabd0d0357e528e5f0977ca7c982aae6fce70864f0ea633df80ed632"
+    },
+    {
+      "path": "apps/platform/package.json",
+      "sha256": "95c0cdd9583a9bd21c4db50800402a1e74566f1ed54b63d15b4cc78f44a8f8c4"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "b43e3d71dbd1e4eaff1ed3115262c6d4f8090c579391693855b399ed714fc38f"
+    }
+  ],
+  "productionDeploymentsThisTask": 1,
+  "customerPublicationOrDnsOrContactSend": false,
+  "rollback": "Keep dual-format reader. Disable both Stacki flags in a newly authorized release if all editing must stop; changing project env alone does not affect already-built deployments. Never delete/renumber history or return to an old-only reader with editing active."
+}
