@@ -229,12 +229,31 @@ export async function readAstroStaticSiteSourceSnapshot(input: {
     throw new AstroWorkspacePreparationError("workspace_boundary_invalid", "Workspace path resolves through a symlink.");
   }
 
-  const files: AstroSourceSnapshotFile[] = [];
-  const aggregate = createHash("sha256").update(`${SOURCE_SNAPSHOT_VERSION}\0`, "utf8");
+  const snapshot = sourceSnapshotHasher();
   for (const path of sourcePaths) {
     const filePath = join(workspacePath, ...path.split("/"));
     await assertSafeSourceFile(filePath, workspacePath, path);
     const body = await readFile(filePath);
+    snapshot.add(path, body);
+  }
+  return snapshot.finish();
+}
+
+/** Same snapshot identity for retained source bytes and filesystem workspaces. */
+export function createAstroStaticSiteSourceSnapshot(contents: Array<{ path: string; body: Uint8Array }>): AstroSourceSnapshot {
+  const paths = validateAstroStaticSiteManifestPaths({
+    files: contents.map(file => ({ path: file.path, role: "source", contents: "" })),
+  });
+  const byPath = new Map(contents.map(file => [file.path, file.body]));
+  const snapshot = sourceSnapshotHasher();
+  for (const path of paths) snapshot.add(path, byPath.get(path)!);
+  return snapshot.finish();
+}
+
+function sourceSnapshotHasher() {
+  const files: AstroSourceSnapshotFile[] = [];
+  const aggregate = createHash("sha256").update(`${SOURCE_SNAPSHOT_VERSION}\0`, "utf8");
+  function add(path: string, body: Uint8Array) {
     const pathBytes = Buffer.from(path, "utf8");
     const pathLength = Buffer.allocUnsafe(4);
     pathLength.writeUInt32BE(pathBytes.byteLength);
@@ -248,11 +267,11 @@ export async function readAstroStaticSiteSourceSnapshot(input: {
     });
   }
 
-  return {
+  return { add, finish: (): AstroSourceSnapshot => ({
     version: SOURCE_SNAPSHOT_VERSION,
     files,
     aggregateSha256: aggregate.digest("hex"),
-  };
+  }) };
 }
 
 async function createFreshWorkspace(input: PrepareAstroStaticSiteWorkspaceInput): Promise<string> {

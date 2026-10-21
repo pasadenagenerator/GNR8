@@ -517,6 +517,13 @@ export function validateGeneratedOutputBuildEvidence(value: unknown): GeneratedO
 
 const validateBuildEvidence = validateGeneratedOutputBuildEvidence;
 
+export function validateGeneratedOutputContentManifest(value: unknown): GeneratedOutputContentManifest | null {
+  try {
+    return isValidContentManifest(value as GeneratedOutputContentManifest)
+      ? structuredClone(value as GeneratedOutputContentManifest) : null;
+  } catch { return null; }
+}
+
 function isValidContentManifest(manifest: GeneratedOutputContentManifest): boolean {
   if (manifest.version !== GENERATED_OUTPUT_CONTENT_MANIFEST_VERSION || !isSha256(manifest.manifestSha256)) return false;
   const { manifestSha256: _hash, ...unsigned } = manifest;

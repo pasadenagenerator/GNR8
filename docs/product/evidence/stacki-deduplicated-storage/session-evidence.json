@@ -1,0 +1,106 @@
+{
+  "localOnly": true,
+  "hostedExecutions": 0,
+  "actualPanel": "/Users/gregorzigon/Documents/Codex/GNR8/apps/platform/app/gnr8/agency/clients/[clientId]/sites/[siteId]/StackiEditorPanel.tsx",
+  "retainedInput": "/Users/gregorzigon/Documents/Codex/GNR8/.gnr8/stacki-pilot/logatcan-replay-lbrnrd/site",
+  "legacyInput": {
+    "revision": 5,
+    "sha256": "4957be4767153e0f0099d7668516929fe852fb930a4ac1f83d5d6323ddc95c88"
+  },
+  "actions": [
+    {
+      "action": "open",
+      "status": 200,
+      "browserStatus": 200,
+      "revision": 5
+    },
+    {
+      "action": "save",
+      "operationId": "ca5e1aa6-00df-4e3a-98db-1491e66ff4fd",
+      "status": 200,
+      "browserStatus": 503,
+      "revision": 6,
+      "closed": false
+    },
+    {
+      "action": "save",
+      "operationId": "ca5e1aa6-00df-4e3a-98db-1491e66ff4fd",
+      "status": 200,
+      "browserStatus": 200,
+      "revision": 6,
+      "closed": false
+    },
+    {
+      "action": "save",
+      "operationId": "dce57fb7-9a39-4e0a-98d4-37b292bdfc57",
+      "status": 200,
+      "browserStatus": 200,
+      "revision": 7,
+      "closed": false
+    },
+    {
+      "action": "save",
+      "operationId": "dce57fb7-9a39-4e0a-98d4-37b292bdfc57",
+      "status": 200,
+      "browserStatus": 200,
+      "revision": 7,
+      "closed": false
+    },
+    {
+      "action": "save-and-close",
+      "operationId": "dce57fb7-9a39-4e0a-98d4-37b292bdfc57",
+      "status": 200,
+      "browserStatus": 200,
+      "revision": 7,
+      "closed": true
+    },
+    {
+      "action": "open",
+      "status": 200,
+      "browserStatus": 200,
+      "revision": 7
+    },
+    {
+      "action": "discard",
+      "status": 200,
+      "browserStatus": 200
+    }
+  ],
+  "starts": 2,
+  "removedWorkspaces": [
+    "/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-stacki-session-ui-9KMeOa/fc75f391-dbce-45fa-8805-ba99bb0f8846",
+    "/var/folders/z3/0ph8dyh13y940w1y1wjgnqgr0000gn/T/gnr8-stacki-session-ui-9KMeOa/5160039c-9327-4fd1-b467-c1b12af9b51e"
+  ],
+  "latest": {
+    "revision": 7,
+    "sha256": "6bef69c4afcf1d6d47db25d7f9bb36ff6eec27c03d130cd5b92797353f45a9d1",
+    "files": 118,
+    "assets": 102,
+    "containsB": true
+  },
+  "activeRuntimes": 0,
+  "verifiedRevisions": [
+    {
+      "revision": 5,
+      "sha256": "4957be4767153e0f0099d7668516929fe852fb930a4ac1f83d5d6323ddc95c88",
+      "files": 118,
+      "untouchedAssetsAndOtherPages": 112,
+      "sourceAndYjsCoherent": true
+    },
+    {
+      "revision": 6,
+      "sha256": "4fb7035c91ae8067f4e334ec8f653d36bb637b3dc3990559ca21c07b13760744",
+      "files": 118,
+      "untouchedAssetsAndOtherPages": 112,
+      "sourceAndYjsCoherent": true
+    },
+    {
+      "revision": 7,
+      "sha256": "6bef69c4afcf1d6d47db25d7f9bb36ff6eec27c03d130cd5b92797353f45a9d1",
+      "files": 118,
+      "untouchedAssetsAndOtherPages": 112,
+      "sourceAndYjsCoherent": true
+    }
+  ],
+  "localRuntimesStopped": true
+}
