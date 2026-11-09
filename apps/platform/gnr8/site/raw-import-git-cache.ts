@@ -63,9 +63,18 @@ export class RawImportGitCache{
     for(let offset=0;offset<unique.length;offset+=8){
       const results=await Promise.allSettled(unique.slice(offset,offset+8).map(async file=>{
         const objectKey=key(ref,versionId,file.sha256);
-        // A failed upload may have committed. Exact readback reconciles it.
-        try{await bucket.upload(objectKey,file.bytes,{upsert:false,contentType:file.mediaType,cacheControl:'3600'});}catch{/* readback decides */}
-        await this.read(ref,versionId,file);
+        let uploadFailure='';
+        for(let attempt=0;attempt<3;attempt++){
+          // A failed upload may have committed. Exact readback reconciles it.
+          try{
+            const result=await bucket.upload(objectKey,file.bytes,{upsert:false,contentType:file.mediaType,cacheControl:'3600'});
+            uploadFailure=result.error?.message??'';
+          }catch(error){uploadFailure=error instanceof Error?error.message:String(error);}
+          try{await this.read(ref,versionId,file);return;}catch{
+            if(attempt<2)await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));
+          }
+        }
+        throw Error(`RAW_IMPORT_CACHE_INTEGRITY_FAILED:${file.path}:${uploadFailure||'readback_failed'}`);
       }));
       for(const result of results)if(result.status==='rejected')throw result.reason;
     }
