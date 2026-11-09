@@ -117,6 +117,31 @@ test("restored capture aliases survive acquisition and persisted readback withou
   assert.equal(restoreRetainedStylesheetReferences(tampered).changed, false);
 });
 
+test("a captured map PNG is never restored as a stylesheet despite a CSS media type", () => {
+  const path = "tactile/omnibox/reveal-entity-icons-20131112.png";
+  const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const manifestBytes = Buffer.from(JSON.stringify([{
+    assetKind: "stylesheet",
+    fetchStatus: "fetched",
+    localPath: path,
+    resolvedUrl: "https://maps.gstatic.com/tactile/omnibox/reveal-entity-icons-20131112.png",
+  }]));
+  const file = (filePath: string, content: Buffer, mediaType: string) => ({
+    path: filePath,
+    bytes: content,
+    mediaType,
+    sizeBytes: content.byteLength,
+    sha256: createHash("sha256").update(content).digest("hex"),
+  });
+  const restored = restoreRetainedStylesheetReferences([
+    file(path, bytes, "text/css"),
+    file("url-fetch-manifest.json", manifestBytes, "application/json"),
+  ]);
+  assert.deepEqual(restored.rewrites, []);
+  assert.equal(restored.changed, false);
+  assert.deepEqual(restored.files[0]?.bytes, bytes);
+});
+
 test("stylesheet planning ignores commented links and includes protocol-relative font CSS", () => {
   const bytes = Buffer.from('<!-- <link rel="stylesheet" href="https://old.test/missing.css"> --><link rel="stylesheet" href="//fonts.test/styles"><a href="/assets/not-a-stylesheet.css">x</a>');
   const htmlFiles = [{ path: "index.html", bytes, mediaType: "text/html", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }];

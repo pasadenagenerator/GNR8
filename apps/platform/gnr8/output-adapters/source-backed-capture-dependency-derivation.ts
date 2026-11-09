@@ -43,6 +43,12 @@ export type DerivedCaptureResult = {
 
 type FileRow = { path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer };
 
+function isStylesheetFile(file: Pick<FileRow, "path" | "mediaType">): boolean {
+  return /\.css$/i.test(file.path) ||
+    (/^text\/css\b/i.test(file.mediaType) &&
+      !/\.(?:png|jpe?g|gif|webp|avif|ico|svg|woff2?|ttf|otf|eot)$/i.test(file.path));
+}
+
 export type DependencyAcquisitionEvidence = {
   sourceUrl: string;
   effectiveUrl: string;
@@ -66,7 +72,7 @@ export function restoreRetainedStylesheetReferences(files: FileRow[]): {
   const rewrites: Array<{ from: string; to: string; reused: boolean }> = [];
   let changed = false;
   const restoredFiles = files.map((file) => {
-    if (!manifest || !/(?:^text\/css\b|\.css$)/i.test(`${file.mediaType} ${file.path}`)) return file;
+    if (!manifest || !isStylesheetFile(file)) return file;
     const sourceUrl = retainedStylesheetSourceUrl({
       bytes: manifest.bytes,
       expectedSha256: manifest.sha256,
@@ -193,7 +199,8 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     ...inheritedStylesheetRewrites,
     ...stylesheetPlan.rewrites,
     ...retainedLocalStylesheetRoots,
-  ]).filter((entry) => parentFiles.some((file) => file.path === entry.to.replace(/^\/+/, "")));
+  ]).filter((entry) => parentFiles.some((file) =>
+    file.path === entry.to.replace(/^\/+/, "") && isStylesheetFile(file)));
   const retainedStylesheetImportPlan = planRetainedStylesheetImports({
     files: parentFiles,
     stylesheetRewrites: retainedStylesheetRewrites,
@@ -401,7 +408,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         const bytes = Buffer.from(html, "utf8");
         return { ...file, bytes, sizeBytes: bytes.byteLength, sha256: sha256(bytes) };
       }
-      if (/(?:^text\/css\b|\.css$)/i.test(`${file.mediaType} ${file.path}`)) {
+      if (isStylesheetFile(file)) {
         const bytes = await readFile(join(workspace, ...file.path.split("/")));
         return { ...file, bytes, sizeBytes: bytes.byteLength, sha256: sha256(bytes) };
       }
@@ -687,7 +694,7 @@ export function planRetainedStylesheetImports(input: {
   const missingUrls = new Set<string>();
   const reusedUrls = new Set<string>();
   const sourceUrlByPath = new Map(input.stylesheetRewrites.map((entry) => [entry.to.replace(/^\/+/, ""), entry.from]));
-  for (const file of input.files.filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))) {
+  for (const file of input.files.filter(isStylesheetFile)) {
     const stylesheetPath = file.path;
     const stylesheetSourceUrl = sourceUrlByPath.get(stylesheetPath);
     for (const match of file.bytes.toString("utf8").matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
@@ -752,7 +759,7 @@ export function planReachableRetainedStaticDependencies(input: {
   knownUnusedDependencyUrls?: string[];
 }): { missingUrls: string[]; reusedUrls: string[]; reachableStylesheetPaths: string[] } {
   const cssByPath = new Map(input.files
-    .filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))
+    .filter(isStylesheetFile)
     .map((file) => [file.path, file]));
   const sourceUrlsByPath = new Map<string, string[]>();
   const pathBySourceUrl = new Map<string, string>();
@@ -829,7 +836,7 @@ export function planRetainedFontDependencies(input: {
   const missingUrls = new Set<string>();
   const reusedUrls = new Set<string>();
   const sourceUrlByPath = new Map(input.stylesheetRewrites.map((entry) => [entry.to.replace(/^\/+/, ""), entry.from]));
-  for (const file of input.files.filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))) {
+  for (const file of input.files.filter(isStylesheetFile)) {
     const stylesheetSourceUrl = sourceUrlByPath.get(file.path);
     for (const match of file.bytes.toString("utf8").matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
       const rawReference = String(match[2] ?? "").trim();
@@ -871,7 +878,7 @@ export function findUnresolvedRetainedStylesheetDependencies(input: {
 }): string[] {
   const filePaths = new Set(input.files.map((file) => file.path));
   const cssByPath = new Map(input.files
-    .filter((candidate) => /(?:^text\/css\b|\.css$)/i.test(`${candidate.mediaType} ${candidate.path}`))
+    .filter(isStylesheetFile)
     .map((file) => [file.path, file]));
   const unresolved = new Set<string>();
   const knownUnusedDependencyUrls = new Set(input.knownUnusedDependencyUrls ?? []);
@@ -1100,7 +1107,7 @@ export function existingCssDependencyManifest(input: {
       if (!input.filePaths.has(dependencyPath)) continue;
       const dependency = input.parentFiles.find((candidate) => candidate.path === dependencyPath);
       if (!dependency) continue;
-      const assetKind = /(?:^text\/css\b|\.css$)/i.test(`${dependency.mediaType} ${dependency.path}`)
+      const assetKind = isStylesheetFile(dependency)
         ? "stylesheet" as const
         : image ? "image" as const : "style_asset" as const;
       entries.push({
