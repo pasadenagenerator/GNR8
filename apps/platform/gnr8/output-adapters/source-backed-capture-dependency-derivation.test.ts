@@ -23,6 +23,7 @@ import {
   resolveRetainedCssDependencyPath,
   restoreRetainedStylesheetReferences,
   existingCssDependencyManifest,
+  trustedOriginsForStylesheets,
 } from "./source-backed-capture-dependency-derivation";
 import type { RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 
@@ -368,6 +369,8 @@ test("derived capture follows fetched extensionless CSS imports through their fo
   const rootPath = "assets/user-style.css";
   const nestedPath = computeLocalPathCandidate({ resolvedUrl: nestedUrl, assetKind: "stylesheet" });
   const fontPath = computeLocalPathCandidate({ resolvedUrl: fontUrl, assetKind: "style_asset" });
+  assert.ok(trustedOriginsForStylesheets([nestedUrl]).includes("https://font-files.prod.extra-cdn.com"));
+  assert.ok(!trustedOriginsForStylesheets([rootUrl]).includes("https://font-files.prod.extra-cdn.com"));
   const row = (path: string, mediaType: string, bytes: Buffer) => ({
     path, mediaType, bytes, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"),
   });
@@ -394,7 +397,7 @@ test("derived capture follows fetched extensionless CSS imports through their fo
         html: `<link rel="stylesheet" href="${rootUrl}">` }],
       snapshotRootDirAbs: root,
       existingFetchManifest,
-      trustedExternalOrigins: ["https://fonts.prod.extra-cdn.com", "https://font-files.prod.extra-cdn.com"],
+      trustedExternalOrigins: trustedOriginsForStylesheets([rootUrl, nestedUrl]),
       fetchImpl: async (request) => {
         const url = String(request instanceof Request ? request.url : request);
         if (url === nestedUrl) return new Response(`@font-face{src:url('${fontUrl}')}`, {

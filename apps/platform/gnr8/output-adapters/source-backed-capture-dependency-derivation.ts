@@ -913,7 +913,7 @@ function rewriteStylesheetReferences(html: string, rewrites: Array<{ from: strin
   });
 }
 
-function trustedOriginsForStylesheets(urls: string[]): string[] {
+export function trustedOriginsForStylesheets(urls: string[]): string[] {
   const origins = new Set<string>();
   for (const value of urls) {
     try { origins.add(new URL(value).origin); } catch { /* rejected by the importer */ }
@@ -922,6 +922,11 @@ function trustedOriginsForStylesheets(urls: string[]): string[] {
     try { return new URL(url).hostname === "fonts.googleapis.com"; } catch { return false; }
   })) {
     origins.add("https://fonts.gstatic.com");
+  }
+  if (urls.some((url) => {
+    try { return new URL(url).hostname === "fonts.prod.extra-cdn.com"; } catch { return false; }
+  })) {
+    origins.add("https://font-files.prod.extra-cdn.com");
   }
   return [...origins].sort();
 }
