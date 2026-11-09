@@ -3,6 +3,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 
 import { parse } from 'parse5'
+import { approvedUnusedCssDependencies } from './approved-unused-css-dependencies'
 import { createImportManifest } from '@/gnr8/import/import-manifest'
 import { importStaticSite } from '@/gnr8/import/runtime/import-static-site'
 import { runLinearMigrationPipeline } from '@/gnr8/migration/runtime/run-linear-migration-pipeline'
@@ -148,23 +149,6 @@ const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
   maxPages: 120,
   maxBytesPerPage: 1_000_000,
   requestTimeoutMs: 8_000,
-}
-
-// CHS owner approved omitting these four upstream-404 map icons on 2026-11-09.
-// Each is omitted only when the retained HTML proves its CSS selector unused.
-const CHS_APPROVED_UNUSED_CSS_DEPENDENCIES = [
-  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/geocoder.png',
-  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/layers-2x.png',
-  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/layers.png',
-  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/throbber.gif',
-] as const
-
-function approvedUnusedCssDependencies(sourceUrl: string, ownershipSiteId: string | undefined): string[] {
-  if (ownershipSiteId !== '9ff5613e-1625-43f1-844e-c5c91a813d4f') return []
-  try {
-    if (new URL(sourceUrl).hostname.replace(/^www\./, '') !== 'chs.si') return []
-  } catch { return [] }
-  return [...CHS_APPROVED_UNUSED_CSS_DEPENDENCIES]
 }
 
 function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPageDiscoverySummary {

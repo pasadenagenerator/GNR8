@@ -7,6 +7,8 @@ import test from "node:test";
 
 import { captureAssetsForAdditionalHtmlPages, computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
 import { hashedImportAssetPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
+import { approvedUnusedCssDependencies } from "@/gnr8/site/approved-unused-css-dependencies";
+import { findProvablyUnusedCssDependencies } from "./source-backed-css-dependency-analysis";
 
 import {
   assertPersistedCaptureDependencyEvidence,
@@ -28,6 +30,39 @@ const EXTERNAL_LIBS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780
 const GRIDS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780087e3f/css/grids.css?1791454204350";
 const GOOGLE = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&display=swap&subset=latin-ext";
 const EXTRA_CDN = "https://fonts.prod.extra-cdn.com/css?family=Roboto+Condensed:300,700|Roboto:400&display=swap";
+
+test("CHS approved missing map icons are excluded only when retained pages cannot use them", () => {
+  const sourceUrl = "https://www.chs.si/";
+  const stylesheetUrl = `${sourceUrl}assets/stylesheet/35ede9ad6068-external-libs.css`;
+  const stylesheetPath = "assets/stylesheet/35ede9ad6068-external-libs.css";
+  const css = ".leaflet-control-geocoder-icon{background:url(images/geocoder.png)}" +
+    ".leaflet-control-layers-toggle{background:url(images/layers.png)}";
+  const approved = new Set(approvedUnusedCssDependencies(sourceUrl, "9ff5613e-1625-43f1-844e-c5c91a813d4f"));
+  assert.equal(approvedUnusedCssDependencies(sourceUrl, "another-site").length, 0);
+  const unused = findProvablyUnusedCssDependencies({
+    css, stylesheetUrl, htmlDocuments: ["<main>CHS news</main>"],
+  }).filter((entry) => approved.has(entry.resolvedUrl));
+  assert.deepEqual(unused.map((entry) => entry.resolvedUrl), [
+    `${sourceUrl}assets/stylesheet/images/geocoder.png`,
+    `${sourceUrl}assets/stylesheet/images/layers.png`,
+  ]);
+  const bytes = Buffer.from(css);
+  const input = {
+    files: [{ path: stylesheetPath, bytes, mediaType: "text/css", sizeBytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex") }],
+    stylesheetRewrites: [{ from: stylesheetUrl, to: `/${stylesheetPath}`, reused: true }],
+    filePaths: new Set([stylesheetPath]), rootStylesheetPaths: [stylesheetPath],
+  };
+  assert.deepEqual(planReachableRetainedStaticDependencies({
+    ...input, knownUnusedDependencyUrls: unused.map((entry) => entry.resolvedUrl),
+  }).missingUrls, []);
+  const used = findProvablyUnusedCssDependencies({
+    css, stylesheetUrl, htmlDocuments: ['<main class="leaflet-control-layers-toggle"></main>'],
+  });
+  assert.deepEqual(used.map((entry) => entry.resolvedUrl), [
+    `${sourceUrl}assets/stylesheet/images/geocoder.png`,
+  ]);
+});
 
 test("restored capture aliases survive acquisition and persisted readback without asset fetches", async () => {
   const sourceUrl = "https://example.test/cache/bundle/style.css";

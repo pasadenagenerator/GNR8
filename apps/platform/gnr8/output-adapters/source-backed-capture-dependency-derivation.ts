@@ -31,6 +31,7 @@ import {
 
 import type { AcceptedSourceFunctionalReductions } from "./source-backed-astro-input";
 import { findProvablyUnusedCssDependencies } from "./source-backed-css-dependency-analysis";
+import { approvedUnusedCssDependencies } from "@/gnr8/site/approved-unused-css-dependencies";
 
 export type DerivedCaptureResult = {
   siteVersion: CanonicalSiteVersionSnapshot;
@@ -198,17 +199,16 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     filePaths: new Set(parentFiles.map((file) => file.path)),
   });
   const inheritedUnusedCssDependencies = parentSiteVersion.importProvenanceSummary?.derivedCapture?.unusedCssDependencies ?? [];
-  const retainedStaticDependencyPlan = planReachableRetainedStaticDependencies({
-    files: parentFiles,
-    stylesheetRewrites: retainedStylesheetRewrites,
-    filePaths: new Set(parentFiles.map((file) => file.path)),
-    rootStylesheetPaths: retainedStylesheetRewrites.map((entry) => entry.to.replace(/^\/+/, "")),
-    knownUnusedDependencyUrls: inheritedUnusedCssDependencies.map((entry) => entry.resolvedUrl),
-  });
-  const unusedCssDependencies = [
-    ...inheritedUnusedCssDependencies,
-    ...stylesheetPlan.rewrites
+  const approvedUnusedUrls = new Set(approvedUnusedCssDependencies(
+    parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
+    input.ownershipSiteId,
+  ));
+  const legacyAnalyzedStylesheetPaths = new Set(stylesheetPlan.rewrites
     .filter((entry) => entry.reused)
+    .map((entry) => entry.to.replace(/^\/+/, "")));
+  const sourceUrlByStylesheetPath = new Map(retainedStylesheetRewrites
+    .map((entry) => [entry.to.replace(/^\/+/, ""), entry.from] as const));
+  const provedUnusedCssDependencies = retainedStylesheetRewrites
     .flatMap((stylesheet) => {
       const stylesheetPath = stylesheet.to.replace(/^\/+/, "");
       const file = parentFiles.find((candidate) => candidate.path === stylesheetPath);
@@ -217,11 +217,29 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         css: file.bytes.toString("utf8"),
         stylesheetUrl: stylesheet.from,
         htmlDocuments: htmlFiles.map((htmlFile) => htmlFile.bytes.toString("utf8")),
-      }).map((dependency) => ({ stylesheetPath, ...dependency }));
-    }),
+      }).filter((dependency) => legacyAnalyzedStylesheetPaths.has(stylesheetPath) ||
+        approvedUnusedUrls.has(dependency.resolvedUrl))
+        .map((dependency) => ({ stylesheetPath, stylesheetUrl: stylesheet.from, ...dependency }));
+    });
+  const unusedCssDependencies = [
+    ...inheritedUnusedCssDependencies,
+    ...provedUnusedCssDependencies
+      .filter((entry) => sourceUrlByStylesheetPath.get(entry.stylesheetPath) === entry.stylesheetUrl)
+      .map(({ stylesheetPath, resolvedUrl, selectors }) => ({ stylesheetPath, resolvedUrl, selectors })),
   ].filter((entry, index, all) => all.findIndex((candidate) =>
     candidate.stylesheetPath === entry.stylesheetPath && candidate.resolvedUrl === entry.resolvedUrl,
   ) === index).sort((left, right) => left.resolvedUrl.localeCompare(right.resolvedUrl));
+  const knownUnusedDependencyUrls = [...new Set([
+    ...unusedCssDependencies.map((entry) => entry.resolvedUrl),
+    ...provedUnusedCssDependencies.map((entry) => entry.resolvedUrl),
+  ])];
+  const retainedStaticDependencyPlan = planReachableRetainedStaticDependencies({
+    files: parentFiles,
+    stylesheetRewrites: retainedStylesheetRewrites,
+    filePaths: new Set(parentFiles.map((file) => file.path)),
+    rootStylesheetPaths: retainedStylesheetRewrites.map((entry) => entry.to.replace(/^\/+/, "")),
+    knownUnusedDependencyUrls,
+  });
   if (
     stylesheetPlan.missingUrls.length === 0 &&
     stylesheetPlan.rewrites.length === 0 &&
@@ -289,7 +307,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         ...importOriginsFromRetainedStylesheets(parentFiles),
         ...retainedStaticDependencyPlan.missingUrls,
       ]),
-      knownUnusedStylesheetDependencyUrls: unusedCssDependencies.map((entry) => entry.resolvedUrl),
+      knownUnusedStylesheetDependencyUrls: knownUnusedDependencyUrls,
     });
     if (capture.summary.failedRequiredAssetCount > 0) {
       throw new Error(`astro_derived_capture_dependency_fetch_failed:${capture.summary.failedRequiredResources.join(",")}`);
@@ -396,7 +414,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         ...retainedStaticDependencyPlan.reachableStylesheetPaths,
         ...fetchedStylesheetEntries.map((entry) => entry.localPath!),
       ])],
-      knownUnusedDependencyUrls: unusedCssDependencies.map((entry) => entry.resolvedUrl),
+      knownUnusedDependencyUrls,
       stylesheetSourceUrlsByPath: Object.fromEntries(retainedStylesheetRewrites.map((entry) => [
         entry.to.replace(/^\/+/, ""),
         entry.from,
