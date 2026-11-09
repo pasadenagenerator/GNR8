@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {pushStandaloneGit,readStandaloneGit} from '../standalone/publication-git';
+import {githubCommitAuthor,githubDataBranchVercelConfig} from '../stacki/github-commit-author';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type File={path:string;mediaType:string;sizeBytes:number;sha256:string;bytes:Buffer};
@@ -28,7 +29,8 @@ export function rawImportGitPackage(input:{scope:Scope;runtimeSiteId:string;site
  const manifest:Archive={format:'gnr8-raw-import-git:v1',scope:input.scope,runtimeSiteId:input.runtimeSiteId,
    siteVersionId:input.siteVersionId,files};
  const prefix=`raw-import/${input.siteVersionId}/`;
- const gitFiles:GitFile[]=[...input.files.map(f=>({path:prefix+f.path,body:f.bytes})),
+ const gitFiles:GitFile[]=[{path:'vercel.json',body:githubDataBranchVercelConfig},
+   ...input.files.map(f=>({path:prefix+f.path,body:f.bytes})),
    {path:prefix+'.gnr8-import-manifest.json',body:Buffer.from(JSON.stringify(manifest))}];
  return {manifest,prefix,gitFiles,manifestSha256:hash(gitFiles.at(-1)!.body)};
 }
@@ -47,7 +49,7 @@ export async function writeRawImportGitArchive(input:{scope:Scope;runtimeSiteId:
  if(existingCommit!==undefined&&!/^[a-f0-9]{40}$/.test(existingCommit))invalid();
  const commit=existingCommit??(await (deps.push??pushStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
   defaultBranch,parent,ref:`heads/${branch}`,manifestSha256,files:gitFiles,token:input.target.token,
-  author:{name:'GNR8 Import',email:'import@gnr8.invalid'}})).commit;
+  author:githubCommitAuthor(input.target, 'GNR8 Import')})).commit;
  const read=await (deps.read??readStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
   branch,commit,token:input.target.token});
  if(read.commit!==commit||read.parent!==parent||read.parentCount!==1||

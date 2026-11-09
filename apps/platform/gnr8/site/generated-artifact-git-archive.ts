@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {pushStandaloneGit,readStandaloneGit} from '../standalone/publication-git';
+import {githubCommitAuthor,githubDataBranchVercelConfig} from '../stacki/github-commit-author';
 import {validateExportPath,type AstroExportResource} from '../output-adapters/astro-export-resources';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
@@ -42,7 +43,8 @@ export function generatedArtifactGitPackage(input:Input){
     return {sourcePath:file.path,path:`${prefix}resources/${Buffer.from(file.path).toString('base64url')}-${file.sha256}`,
       mediaType:file.mediaType,body,bytes:body.length,sha256:file.sha256};
   }).sort((a,b)=>a.sourcePath.localeCompare(b.sourcePath));
-  const gitFiles=[...files.map(({path,body})=>({path,body})),
+  const gitFiles=[{path:'vercel.json',body:githubDataBranchVercelConfig},
+    ...files.map(({path,body})=>({path,body})),
     {path:`${prefix}compiled-token-styles.css`,body:styles},
     {path:`${prefix}runtime-manifest.json`,body:manifest},
     ...resources.map(({path,body})=>({path,body}))];
@@ -72,7 +74,7 @@ export async function writeGeneratedArtifactGitArchive(input:Input,deps:{
     owner:input.target.owner,repository:input.target.repository,defaultBranch,parent,
     ref:`heads/${branch}`,manifestSha256:packageData.manifestSha256,
     files:packageData.gitFiles,token:input.target.token,
-    author:{name:'GNR8 Artifact',email:'artifact@gnr8.invalid'},
+    author:githubCommitAuthor(input.target, 'GNR8 Artifact'),
   })).commit;
   const read=await (deps.read??readStandaloneGit)({owner:input.target.owner,
     repository:input.target.repository,branch,commit,token:input.target.token});

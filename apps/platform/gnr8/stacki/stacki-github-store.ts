@@ -1,3 +1,4 @@
+import {githubCommitAuthor} from './github-commit-author';
 import type { StackiGitHubDelivery } from './stacki-github-delivery';
 import { createHash } from 'node:crypto';
 import { createStackiRecord, parseStackiRecord, StackiDraftError,
@@ -374,7 +375,7 @@ export class GitHubStackiStore {
         entries.push({path:metadataPath,mode:'100644',type:'blob',sha:metadataOid});
         const tree = await this.request('/git/trees','POST',{base_tree:priorTree,tree:entries});
         if (!sha1.test(tree?.sha)) throw new StackiDraftError(503,'STACKI_DRAFT_SAVE_UNCONFIRMED');
-        const author = {name:'GNR8 Stacki',email:'stacki@gnr8.invalid'};
+        const author = githubCommitAuthor(this.target, 'GNR8 Stacki');
         const createdCommit = await this.request('/git/commits','POST',{
           message:`Stacki revision ${record.revision}`,tree:tree!.sha,parents:[head],author,committer:author});
         if (!sha1.test(createdCommit?.sha)) throw new StackiDraftError(503,'STACKI_DRAFT_SAVE_UNCONFIRMED');
@@ -384,7 +385,7 @@ export class GitHubStackiStore {
         const pushed = await this.pushGit({ owner: this.target.owner, repository: this.target.repository,
           defaultBranch: repo!.default_branch, parent, ref: `heads/${this.branch}`,
           manifestSha256: record.sha256, token: this.target.token,
-          author: { name: 'GNR8 Stacki', email: 'stacki@gnr8.invalid' },
+          author: githubCommitAuthor(this.target, 'GNR8 Stacki'),
           files: [ ...projectBodies, ...assetBodies.map(asset => ({ path: `${assetPrefix}${asset.name}`, body: asset.body })),
             { path: metadataPath, body: Buffer.from(JSON.stringify(manifest)) } ] }, this.transport);
         commit = pushed.commit;
