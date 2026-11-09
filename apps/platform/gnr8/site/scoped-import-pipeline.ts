@@ -22,6 +22,7 @@ import {
   getSiteVersion,
   persistRawImportedSiteArtifact,
   setSiteVersionImportProvenanceSummary,
+  GIT_BACKED_IMPORT_MARKER,
   upsertContentSlots,
 } from '@/gnr8/runtime/runtime-store'
 import {
@@ -76,9 +77,12 @@ import { evaluateMultipageSameSiteUrl, normalizeInternalHref, normalizeMultipage
 import { buildSafeSiteTreeFromSeedPage, normalizeRoutePath, type SiteTree } from '@/gnr8/site-tree'
 import { buildFamilyHandoffModel, summarizeTemplateFamilies, type FamilyHandoffModel } from '@/gnr8/family-mode'
 import { runSemanticImportEngine, type SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
-import { inferContentSlotsFromSemanticImport } from '@/gnr8/runtime/content-binding'
+import { inferContentSlotsFromSemanticImport, separateGitBackedContentSlotSources } from '@/gnr8/runtime/content-binding'
 import { validateLatestRawMultiPagePreviewEvidence } from '@/gnr8/runtime/multipage-preview-validation'
 import { attachEvidenceCaptureBaselineArtifact } from '@/gnr8/architecture/evidence-capture-baseline-artifact'
+import { writeRawImportGitArchive } from './raw-import-git-archive'
+import { writeGeneratedArtifactGitArchive } from './generated-artifact-git-archive'
+import { GeneratedArtifactGitCache } from './generated-artifact-git-cache'
 
 const SECTION_INTENT_BY_SEMANTIC_TYPE: Record<string, string> = {
   header: 'header_nav',
@@ -131,9 +135,9 @@ export type ScopedMultiPageDiscoveryOption =
     }
 
 const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
-  maxRoutes: 60,
-  maxDepth: 1,
-  maxLinksPerPage: 120,
+  maxRoutes: 120,
+  maxDepth: 3,
+  maxLinksPerPage: 300,
   maxTemplateLinksPerRoute: 25,
   maxSitemaps: 6,
   maxUrlsFromSitemaps: 120,
@@ -141,9 +145,26 @@ const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
 }
 
 const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
-  maxPages: 31,
+  maxPages: 120,
   maxBytesPerPage: 1_000_000,
   requestTimeoutMs: 8_000,
+}
+
+// CHS owner approved omitting these four upstream-404 map icons on 2026-11-09.
+// Each is omitted only when the retained HTML proves its CSS selector unused.
+const CHS_APPROVED_UNUSED_CSS_DEPENDENCIES = [
+  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/geocoder.png',
+  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/layers-2x.png',
+  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/layers.png',
+  'https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/throbber.gif',
+] as const
+
+function approvedUnusedCssDependencies(sourceUrl: string, ownershipSiteId: string | undefined): string[] {
+  if (ownershipSiteId !== '9ff5613e-1625-43f1-844e-c5c91a813d4f') return []
+  try {
+    if (new URL(sourceUrl).hostname.replace(/^www\./, '') !== 'chs.si') return []
+  } catch { return [] }
+  return [...CHS_APPROVED_UNUSED_CSS_DEPENDENCIES]
 }
 
 function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPageDiscoverySummary {
@@ -1455,6 +1476,9 @@ async function acquireScopedMultiPageHtml(input: {
   snapshot: UrlSinglePageImportSnapshot
   discovery: { summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null }
   option: ReturnType<typeof resolveMultiPageDiscoveryOption>
+  robotsEvidence?: Parameters<typeof applyRobotsRouteGovernance>[0]
+  verifyCssUsage?: boolean
+  approvedUnusedCssDependencies?: string[]
 }): Promise<{ summary: MultiPageHtmlAcquisitionSummary; manifest: MultiPageHtmlAcquisitionManifest | null }> {
   if (!input.option.acquireHtml) return { summary: disabledHtmlAcquisitionSummary(), manifest: null }
 
@@ -1495,6 +1519,10 @@ async function acquireScopedMultiPageHtml(input: {
 
   const candidates = input.discovery.manifest.discoveredPages
     .filter((entry) => entry.status === 'discovered' && normalizeText(entry.normalizedUrl))
+  const seenRoutes = new Set([
+    normalizedSeed.path,
+    ...candidates.map((entry) => normalizeText(entry.normalizedRoutePath)),
+  ])
   const skippedDiscoveryPages = input.discovery.manifest.skippedLinks.map((skipped) =>
     buildSkippedAcquisitionEntry({
       discoveryEntry: skipped,
@@ -1674,6 +1702,59 @@ async function acquireScopedMultiPageHtml(input: {
         skippedReason: null,
         failureReason: null,
       })
+      {
+        const refs = collectSeedDiscoveryRefs(body).filter((ref) => ref.sourceClassification === 'anchor' && !ref.download)
+        for (const ref of refs.slice(0, input.option.limits.maxLinksPerPage)) {
+          const absoluteUrl = resolveAbsoluteUrl(ref.href, finalUrl)
+          if (resolveDiscoveryPreNormalizationSkip({ absoluteUrl, canonicalHost: normalizedSeed.canonicalHost })) continue
+          const normalized = normalizeInternalHref({
+            href: ref.href,
+            currentPageUrl: finalUrl,
+            canonicalHost: normalizedSeed.canonicalHost,
+          })
+          if ('skip' in normalized || seenRoutes.has(normalized.normalized.path)) continue
+          if (candidate.depth >= input.option.limits.maxDepth) {
+            diagnostics.push('MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED')
+            continue
+          }
+          const entry: MultiPageDiscoveryLinkEntry = {
+            ...buildDiscoveryLinkEntry({
+              href: ref.href,
+              absoluteUrl,
+              normalizedUrl: normalized.normalized.url,
+              normalizedRoutePath: normalized.normalized.path,
+              sourceContext: ref.sourceContext,
+              sourceClassification: 'anchor',
+              status: 'discovered',
+              skippedReason: null,
+            }),
+            depth: candidate.depth + 1,
+          }
+          if (input.robotsEvidence && applyRobotsRouteGovernance(input.robotsEvidence, [{
+            routePath: normalized.normalized.path,
+            normalizedUrl: normalized.normalized.url,
+          }]).routeGovernance[0]?.status === 'disallowed') continue
+          seenRoutes.add(normalized.normalized.path)
+          if (candidates.length >= input.option.limits.maxRoutes) {
+            input.discovery.manifest.skippedLinks.push({ ...entry, status: 'skipped', skippedReason: 'route_limit' })
+            diagnostics.push('MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED')
+            continue
+          }
+          candidates.push(entry)
+          input.discovery.manifest.discoveredPages.push(entry)
+          input.discovery.manifest.routeCandidates.push(normalized.normalized.path)
+          input.discovery.manifest.normalizedUrls.push({
+            originalHref: ref.href,
+            absoluteUrl,
+            normalizedUrl: normalized.normalized.url,
+            normalizedRoutePath: normalized.normalized.path,
+            changed: absoluteUrl !== normalized.normalized.url,
+          })
+          input.discovery.manifest.depth.maxDiscoveredDepth = Math.max(input.discovery.manifest.depth.maxDiscoveredDepth, entry.depth)
+          diagnostics.push('MULTIPAGE_CHILD_LINK_DISCOVERED')
+        }
+        if (refs.length > input.option.limits.maxLinksPerPage) diagnostics.push('MULTIPAGE_CHILD_LINK_LIMIT_REACHED')
+      }
     } catch (error) {
       diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
       pages.push({
@@ -1716,6 +1797,13 @@ async function acquireScopedMultiPageHtml(input: {
         pages: fetchedAssetPages,
         snapshotRootDirAbs: input.snapshot.snapshotRootDirAbs,
         existingFetchManifest: input.snapshot.fetchManifest,
+        ...(input.verifyCssUsage ? {
+          fullHtmlDocumentsForCssUsage: [
+            fs.readFileSync(input.snapshot.entryHtmlPathAbs, 'utf8'),
+            ...fetchedAssetPages.map((page) => page.html),
+          ],
+          approvedUnusedStylesheetDependencyUrls: input.approvedUnusedCssDependencies ?? [],
+        } : {}),
       })
     : null
   if (childAssetCapture) {
@@ -1738,6 +1826,9 @@ async function acquireScopedMultiPageHtml(input: {
       }
     }
     diagnostics.push('MULTIPAGE_CHILD_ASSET_ACQUISITION_COMPLETED')
+    diagnostics.push(...childAssetCapture.summary.skippedUnusedStylesheetDependencies.map(
+      (url) => `MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:${url}`,
+    ))
     if (childAssetCapture.summary.failedRequiredAssetCount > 0) diagnostics.push('MULTIPAGE_CHILD_ASSET_ACQUISITION_INCOMPLETE')
   }
 
@@ -1977,6 +2068,8 @@ async function buildScopedMultiPageDiscovery(input: {
   option?: ScopedMultiPageDiscoveryOption
   sourceUrl: string
   snapshot: UrlSinglePageImportSnapshot
+  verifyCssUsage?: boolean
+  approvedUnusedCssDependencies?: string[]
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
@@ -2402,14 +2495,14 @@ async function buildScopedMultiPageDiscovery(input: {
 
   const discoveredPages = routePriorityBalancing.selected.map((candidate) => candidate.value)
   const routeCandidates = discoveredPages.map((entry) => String(entry.normalizedRoutePath ?? '')).filter(Boolean)
-  const robotsDiscoveryEvidence = applyRobotsRouteGovernance(
+  let robotsDiscoveryEvidence = applyRobotsRouteGovernance(
     robotsDiscoveryInitial,
     discoveredPages.map((entry) => ({
       routePath: String(entry.normalizedRoutePath ?? ''),
       normalizedUrl: entry.normalizedUrl,
     })),
   )
-  const robotsDiscovery = summarizeRobotsDiscoveryForProvenance(robotsDiscoveryEvidence)
+  let robotsDiscovery = summarizeRobotsDiscoveryForProvenance(robotsDiscoveryEvidence)
   diagnostics.push(...robotsDiscovery.diagnostics)
   const routeGovernance = robotsDiscoveryEvidence.routeGovernance.map((entry) => ({
     routePath: entry.routePath,
@@ -2468,7 +2561,24 @@ async function buildScopedMultiPageDiscovery(input: {
     snapshot: input.snapshot,
     discovery: discoveryResult,
     option,
+    robotsEvidence: robotsDiscoveryInitial,
+    verifyCssUsage: input.verifyCssUsage,
+    approvedUnusedCssDependencies: input.approvedUnusedCssDependencies,
   })
+  discoveryResult.summary.discoveredPageCount = manifest.discoveredPages.length
+  discoveryResult.summary.routeCandidateCount = manifest.routeCandidates.length
+  discoveryResult.summary.skippedLinkCount = manifest.skippedLinks.length
+  robotsDiscoveryEvidence = applyRobotsRouteGovernance(robotsDiscoveryInitial, manifest.discoveredPages.map((entry) => ({
+    routePath: String(entry.normalizedRoutePath ?? ''),
+    normalizedUrl: entry.normalizedUrl,
+  })))
+  robotsDiscovery = summarizeRobotsDiscoveryForProvenance(robotsDiscoveryEvidence)
+  manifest.routeGovernance = robotsDiscoveryEvidence.routeGovernance.map((entry) => ({
+    routePath: entry.routePath,
+    normalizedUrl: entry.normalizedUrl,
+    status: entry.status,
+    matchedRule: entry.matchedRule,
+  }))
   const observedUrls = [
     { url: normalizedSeed.url, routePath: normalizedSeed.path, source: 'seed' as const },
     ...manifest.normalizedUrls.flatMap((entry) => [
@@ -2527,6 +2637,22 @@ async function buildScopedMultiPageDiscovery(input: {
     acquisition: acquisition.manifest,
     rawArtifactAssembly: assembly.manifest,
   }
+}
+
+function gitCaptureIncompleteReasons(
+  snapshot: Pick<UrlSinglePageImportSnapshot, 'fetchManifest'>,
+  discovery: Awaited<ReturnType<typeof buildScopedMultiPageDiscovery>>,
+): string[] {
+  const acquisition = discovery.acquisition
+  return [
+    ...(!acquisition ? ['html_acquisition_missing'] : []),
+    ...(acquisition?.pages.some((page) => page.status === 'failed' ||
+      (page.status === 'skipped' && ['acquisition_page_limit', 'max_bytes_per_page_exceeded'].includes(page.skippedReason ?? ''))) ? ['page_failed_or_limited'] : []),
+    ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
+    ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed') ? ['seed_asset_missing'] : []),
+    ...(discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
+    ...(acquisition?.diagnostics.some((code) => ['MULTIPAGE_CHILD_LINK_LIMIT_REACHED', 'MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED', 'MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED'].includes(code)) ? ['child_link_limited'] : []),
+  ]
 }
 
 function derivePageSectionsByPathFromPreparedSite(preparedSite: PreparedSiteModel | null): Record<string, Array<{
@@ -3575,6 +3701,8 @@ export async function runScopedImportPipeline(input: {
   snapshot: UrlSinglePageImportSnapshot
   sourceUrl: string
   actor: string
+  /** Ownership identity supplied by the authorized caller; runtimeIdentity is a separate capture identity. */
+  ownershipScope?: { agencyId: string; clientId: string; siteId: string }
   fallbackToLegacyOnPipelineFailure?: boolean
   legacySlug?: string
   legacyTitle?: string
@@ -3607,6 +3735,20 @@ export async function runScopedImportPipeline(input: {
     throw new Error('Multi-page raw artifact assembly requires multiPageDiscovery.acquireHtml=true.')
   }
   const deps = await defaultDependencies(input.deps)
+  const explicitGitPreflight = process.env.GNR8_GITHUB_IMPORT_PREFLIGHT === '1'
+  if (explicitGitPreflight && !input.ownershipScope) throw new Error('GITHUB_IMPORT_OWNERSHIP_REQUIRED')
+  let gitArchiveSelected = false
+  if (input.ownershipScope && (explicitGitPreflight || process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1')) {
+    const {configuredGitHubTarget,stackiGithubSelected} = await import('@/gnr8/stacki/stacki-github-config')
+    // Repository verification does not access a version branch. A fresh UUID is
+    // used only for this store constructor; no checkpoint or Git write occurs.
+    const storeScope = {...input.ownershipScope,siteVersionId:crypto.randomUUID()}
+    gitArchiveSelected = stackiGithubSelected(storeScope)
+    if (explicitGitPreflight || gitArchiveSelected) {
+      const {GitHubStackiStore} = await import('@/gnr8/stacki/stacki-github-store')
+      await new GitHubStackiStore(storeScope, configuredGitHubTarget(storeScope)).verifyTarget()
+    }
+  }
   const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
   let assetsDirPath: string | null = null
   try {
@@ -3666,6 +3808,8 @@ export async function runScopedImportPipeline(input: {
     option: input.multiPageDiscovery,
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
+    verifyCssUsage: process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected,
+    approvedUnusedCssDependencies: approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
   })
   let importProvenanceSummary = await buildImportProvenanceSummary({
     sourceUrl: input.sourceUrl,
@@ -3709,6 +3853,36 @@ export async function runScopedImportPipeline(input: {
       deduplication: canonicalInput.pageVersionDeduplication,
     })
 
+    // The verified Git commit must exist before any import content is written to
+    // the runtime database. A failed push/readback leaves the preallocated
+    // identity retryable without a partially persisted import.
+    if (process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected) {
+      const incomplete = gitCaptureIncompleteReasons(input.snapshot, multiPageDiscovery)
+      if (incomplete.length > 0) throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
+    }
+    const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
+    const rawGitArchive = process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected
+      ? await (async () => {
+          const scope = input.ownershipScope
+          const siteVersionId = input.runtimeIdentity?.siteVersionId
+          if (!scope || !siteVersionId) throw new Error('GITHUB_IMPORT_IDENTITY_REQUIRED')
+          const {configuredGitHubTarget} = await import('@/gnr8/stacki/stacki-github-config')
+          const storeScope = {...scope, siteVersionId}
+          const target = configuredGitHubTarget(storeScope)
+          const {GitHubStackiStore} = await import('@/gnr8/stacki/stacki-github-store')
+          const store = new GitHubStackiStore(storeScope, target)
+          return writeRawImportGitArchive({
+            scope, runtimeSiteId: canonicalInput.siteId, siteVersionId,
+            files: persistedFileRows, target,
+          }, {repository: () => store.rawImportRepository(siteVersionId)})
+        })()
+      : null
+    const rawGitArchiveRef = rawGitArchive && input.ownershipScope ? {
+      scope: input.ownershipScope,
+      repository: rawGitArchive.repository, commit: rawGitArchive.commit,
+      manifestPath: rawGitArchive.manifestPath, manifestSha256: rawGitArchive.manifestSha256,
+    } : null
+
     const migrated = await deps.createSiteVersionFromMigration({
       siteId: canonicalInput.siteId,
       sourceUrl: canonicalInput.sourceUrl,
@@ -3717,6 +3891,7 @@ export async function runScopedImportPipeline(input: {
       rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
       importProvenanceSummary,
       siteVersionId: input.runtimeIdentity?.siteVersionId,
+      metadataOnly: Boolean(rawGitArchiveRef),
     })
     writePathDiagnostics.createdVersionId = migrated.siteVersionId
     writePathDiagnostics.provenancePayloadBeforeWrite = summarizeProvenancePayload(importProvenanceSummary)
@@ -3727,7 +3902,7 @@ export async function runScopedImportPipeline(input: {
     writePathDiagnostics.provenanceWriteAttempted = true
     const provenanceWrite = await deps.setSiteVersionImportProvenanceSummary({
       siteVersionId: migrated.siteVersionId,
-      importProvenanceSummary,
+      importProvenanceSummary: rawGitArchiveRef ? GIT_BACKED_IMPORT_MARKER : importProvenanceSummary,
     })
     writePathDiagnostics.provenanceWriteAffectedRows = provenanceWrite.affectedRows
     console.info('[scoped-import] write-path:provenance-before-write', {
@@ -3750,7 +3925,6 @@ export async function runScopedImportPipeline(input: {
       siteId: migrated.siteId,
       siteVersionId: migrated.siteVersionId,
     })
-    const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
     const fetchManifest = Array.isArray(input.snapshot.fetchManifest) ? input.snapshot.fetchManifest : []
     const unresolvedExternalAssets = fetchManifest.filter((entry) => entry.fetchStatus !== 'fetched' && Boolean(entry.resolvedUrl))
     const rawAssemblySummary = importProvenanceSummary.multiPageDiscovery?.summary.rawArtifactAssembly ?? null
@@ -3770,6 +3944,7 @@ export async function runScopedImportPipeline(input: {
       assetBasePath: path.posix.dirname(importInput.entryHtmlPath) || '.',
       fileRows: persistedFileRows,
       metadata: {
+        ...(rawGitArchiveRef ? {gitArchive: rawGitArchiveRef} : {}),
         sourceUrl: input.snapshot.sourceUrl,
         finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
         htmlByteLength,
@@ -3871,7 +4046,7 @@ export async function runScopedImportPipeline(input: {
     })
     await deps.setSiteVersionImportProvenanceSummary({
       siteVersionId: migrated.siteVersionId,
-      importProvenanceSummary,
+      importProvenanceSummary: rawGitArchiveRef ? GIT_BACKED_IMPORT_MARKER : importProvenanceSummary,
     })
     console.info('[scoped-import] RAW_IMPORT_ASSET_PERSIST_COMPLETED', {
       siteId: migrated.siteId,
@@ -3945,7 +4120,7 @@ export async function runScopedImportPipeline(input: {
       } as RuntimeImportProvenanceSummary
       const validationProvenanceWrite = await deps.setSiteVersionImportProvenanceSummary({
         siteVersionId: migrated.siteVersionId,
-        importProvenanceSummary,
+        importProvenanceSummary: rawGitArchiveRef ? GIT_BACKED_IMPORT_MARKER : importProvenanceSummary,
       })
       if (validationProvenanceWrite.affectedRows <= 0) {
         throw new Error(`Validation provenance write affected 0 rows for site version ${migrated.siteVersionId}.`)
@@ -3959,12 +4134,17 @@ export async function runScopedImportPipeline(input: {
         return ''
       }
     })()
+    const cmsSlotSources:Array<{slotKey:string;sourceText:string|null}>=[]
     const cmsContentSlots = await materializeCmsContentSlotsForScopedImport({
       siteId: migrated.siteId,
       siteVersionId: migrated.siteVersionId,
       html: rawEntryHtml,
       semanticImport: importProvenanceSummary.semanticImport ?? resolveSemanticImportForSnapshot(input.snapshot),
-      persistContentSlots: deps.upsertContentSlots,
+      persistContentSlots: rawGitArchiveRef ? async slotInput=>{
+        const separated=separateGitBackedContentSlotSources(slotInput.slots)
+        cmsSlotSources.push(...separated.sources)
+        return deps.upsertContentSlots({...slotInput,slots:separated.databaseSlots})
+      } : deps.upsertContentSlots,
     })
     console.info('[scoped-import] CMS_SLOT_MATERIALIZATION_COMPLETED', {
       siteId: migrated.siteId,
@@ -3981,8 +4161,21 @@ export async function runScopedImportPipeline(input: {
       throw new Error('Pipeline succeeded but created site version could not be loaded for artifact generation.')
     }
 
+    const artifactSourceVersion = rawGitArchiveRef ? (() => {
+      const sourcePages = new Map(canonicalInput.pages.map(page => [page.pageId, page]))
+      if (sourcePages.size !== siteVersion.pages.length) throw new Error('GITHUB_IMPORT_PAGE_IDENTITY_MISMATCH')
+      return {
+        ...siteVersion,
+        importProvenanceSummary,
+        pages: siteVersion.pages.map(page => {
+          const source = sourcePages.get(page.pageId)
+          if (!source || normalizePagePath(source.path) !== page.path) throw new Error('GITHUB_IMPORT_PAGE_IDENTITY_MISMATCH')
+          return {...page, ...source}
+        }),
+      }
+    })() : siteVersion
     const artifactBundle = deps.buildDeterministicArtifactBundle({
-      siteVersion,
+      siteVersion: artifactSourceVersion,
       renderMode: 'PREVIEW',
     })
     if (artifactBundle.siteVersionId !== migrated.siteVersionId) {
@@ -4010,9 +4203,20 @@ export async function runScopedImportPipeline(input: {
     }
 
     writePathDiagnostics.artifactCreateAttempted = true
+    const sourceMigrationPayload = rawGitArchiveRef ? {
+      pages: canonicalInput.pages,
+      importProvenanceSummary,
+    } : null
     const artifactManifest = {
       ...artifactBundle.manifest,
       sourceKind: 'scoped_pipeline_import',
+      ...(sourceMigrationPayload ? {
+        sourceMigrationPayload,
+        sourceMigrationPayloadSha256: sha256Hex(stableStringify(sourceMigrationPayload)),
+      } : {}),
+      ...(rawGitArchiveRef ? {cmsSlotSources,cmsSlotSourcesVersion:'v1',
+        cmsSlotSourcesCount:cmsSlotSources.length,
+        cmsSlotSourcesSha256:sha256Hex(stableStringify(cmsSlotSources))} : {}),
       ...(rawPreviewValidationResult
         ? {
             latestRawPreviewValidationEvidence: rawPreviewValidationResult.evidence,
@@ -4028,6 +4232,33 @@ export async function runScopedImportPipeline(input: {
           }
         : {}),
     }
+    const generatedGitArchive = rawGitArchiveRef
+      ? await (async () => {
+          const {configuredGitHubTarget} = await import('@/gnr8/stacki/stacki-github-config')
+          const {GitHubStackiStore} = await import('@/gnr8/stacki/stacki-github-store')
+          const scope = rawGitArchiveRef.scope
+          const storeScope = {...scope,siteVersionId:migrated.siteVersionId}
+          const target = configuredGitHubTarget(storeScope)
+          const store = new GitHubStackiStore(storeScope,target)
+          return writeGeneratedArtifactGitArchive({scope,runtimeSiteId:artifactBundle.siteId,
+            siteVersionId:artifactBundle.siteVersionId,htmlByPath:artifactBundle.htmlByPath,
+            compiledTokenStyles:artifactBundle.compiledTokenStyles,manifest:artifactManifest,target},
+          {repository:branch=>store.immutableRepository(branch)})
+        })()
+      : null
+    if (generatedGitArchive) await new GeneratedArtifactGitCache().prepare(generatedGitArchive,
+      artifactBundle.siteVersionId,{htmlByPath:artifactBundle.htmlByPath,
+        compiledTokenStyles:artifactBundle.compiledTokenStyles,manifest:artifactManifest})
+    if (generatedGitArchive) await deps.setSiteVersionImportProvenanceSummary({
+      siteVersionId: migrated.siteVersionId,
+      importProvenanceSummary: {
+        ...GIT_BACKED_IMPORT_MARKER,
+        runtimeSiteId: migrated.siteId,
+        sourceGitArchive: generatedGitArchive,
+      },
+    })
+    const persistedArtifactManifest = generatedGitArchive
+      ? {...artifactManifest,generatedGitArchive} : artifactManifest
     const artifact = await deps.createArtifact({
       siteId: artifactBundle.siteId,
       siteVersionId: artifactBundle.siteVersionId,
@@ -4036,12 +4267,12 @@ export async function runScopedImportPipeline(input: {
         htmlByPath: artifactBundle.htmlByPath,
         compiledTokenStyles: artifactBundle.compiledTokenStyles,
         assetFingerprintMap: artifactBundle.assetFingerprintMap,
-        manifest: artifactManifest,
+        manifest: persistedArtifactManifest,
       })),
       htmlByPath: artifactBundle.htmlByPath,
       compiledTokenStyles: artifactBundle.compiledTokenStyles,
       assetFingerprintMap: artifactBundle.assetFingerprintMap,
-      manifest: artifactManifest,
+      manifest: persistedArtifactManifest,
       publishStage: 'shadow',
       shadowRestricted: false,
       artifactGovernance,
@@ -4287,4 +4518,5 @@ export async function runScopedImportPipeline(input: {
 export const __scopedImportPipelineTestUtils = {
   buildCanonicalMigrationInputFromPipeline,
   inferPagePathFromSourcePath,
+  gitCaptureIncompleteReasons,
 }

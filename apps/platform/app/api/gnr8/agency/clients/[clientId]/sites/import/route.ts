@@ -8,6 +8,8 @@ import { buildSiteImportCreatePayload } from '@/gnr8/site/site-import-create-pay
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
 import { resolveImportPreview } from '@/gnr8/site/import-preview-resolution'
 import { extractTitleFromHtmlDocument, resolveImportedSiteName } from '@/gnr8/site/site-import-site-name'
+import { buildScopedImportRuntimeIdentity, newScopedImportOwnershipSiteId } from '@/gnr8/site/site-import-runtime-identity'
+import { stackiGithubSelected } from '@/gnr8/stacki/stacki-github-config'
 import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
 import { deterministicId } from '@/gnr8/runtime/deterministic'
 import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
@@ -100,20 +102,37 @@ function parseHttpUrl(value: unknown): URL | null {
   }
 }
 
-function buildScopedImportRuntimeIdentity(input: { sourceUrl: string; clientId: string; agencyId: string }): {
-  siteId: string
-  siteVersionId: string
-  correlationKey: string
-} {
-  const siteId = deterministicId('site', `${input.sourceUrl}|/`)
-  const correlationKey = deterministicId('runtime-import-correlation', `${input.agencyId}|${input.clientId}|${input.sourceUrl}|${siteId}`)
-  const digest = crypto.createHash('sha256').update(`${correlationKey}|site-version`).digest()
-  const bytes = Uint8Array.from(digest.subarray(0, 16))
-  bytes[6] = (bytes[6] & 0x0f) | 0x40
-  bytes[8] = (bytes[8] & 0x3f) | 0x80
-  const hex = Buffer.from(bytes).toString('hex')
-  const siteVersionId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
-  return { siteId, siteVersionId, correlationKey }
+async function legacyRuntimeSiteBelongsToScope(input: {
+  runtimeSiteId: string
+  clientId: string
+  agencyId: string
+}): Promise<boolean> {
+  const result = await getSuperadminPool().query<{ exists: boolean }>(
+    `
+    select exists (
+      select 1
+      from public.gnr8_runtime_site_versions v
+      join public.sites s on s.id = v.ownership_site_id
+      where v.site_id = $1::text
+        and s.org_id = $2::uuid
+        and s.agency_id = $3::uuid
+    ) as exists
+    `,
+    [input.runtimeSiteId, input.clientId, input.agencyId],
+  )
+  return result.rows[0]?.exists === true
+}
+
+async function resolveScopedImportRuntimeIdentity(input: {
+  sourceUrl: string; clientId: string; agencyId: string; captureRevision?: 'github-complete-capture-v1'
+}) {
+  const legacySiteId = deterministicId('site', `${input.sourceUrl}|/`)
+  const reuseLegacyRuntimeSiteId = await legacyRuntimeSiteBelongsToScope({
+    runtimeSiteId: legacySiteId,
+    clientId: input.clientId,
+    agencyId: input.agencyId,
+  })
+  return buildScopedImportRuntimeIdentity({ ...input, reuseLegacyRuntimeSiteId })
 }
 
 function sha256Text(value: string): string {
@@ -344,6 +363,7 @@ async function resolveOrCreateOwnershipSiteId(input: {
   agencyId: string
   siteName: string
   domainHost: string | null
+  newSiteId: string
 }): Promise<string> {
   const pool = getSuperadminPool()
   const client = await pool.connect()
@@ -409,19 +429,19 @@ async function resolveOrCreateOwnershipSiteId(input: {
       const inserted = siteNameColumn.rows[0]?.has_name
         ? await client.query<{ site_id: string }>(
             `
-            insert into public.sites (org_id, agency_id, name, status, domain, is_template)
-            values ($1::uuid, $2::uuid, $3::text, 'draft'::public.site_status_enum, $4::text, false)
+            insert into public.sites (id, org_id, agency_id, name, status, domain, is_template)
+            values ($5::uuid, $1::uuid, $2::uuid, $3::text, 'draft'::public.site_status_enum, $4::text, false)
             returning id::text as site_id
             `,
-            [input.clientId, input.agencyId, input.siteName, input.domainHost],
+            [input.clientId, input.agencyId, input.siteName, input.domainHost, input.newSiteId],
           )
         : await client.query<{ site_id: string }>(
             `
-            insert into public.sites (org_id, agency_id, status, domain, is_template)
-            values ($1::uuid, $2::uuid, 'draft'::public.site_status_enum, $3::text, false)
+            insert into public.sites (id, org_id, agency_id, status, domain, is_template)
+            values ($4::uuid, $1::uuid, $2::uuid, 'draft'::public.site_status_enum, $3::text, false)
             returning id::text as site_id
             `,
-            [input.clientId, input.agencyId, input.domainHost],
+            [input.clientId, input.agencyId, input.domainHost, input.newSiteId],
           )
       ownershipSiteId = normalizeText(inserted.rows[0]?.site_id)
       if (!ownershipSiteId) {
@@ -479,10 +499,18 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     })
     const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
 
-    const runtimeIdentity = buildScopedImportRuntimeIdentity({
+    const proposedOwnershipSiteId = newScopedImportOwnershipSiteId({
+      sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
+    })
+    const githubCaptureSelected = process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' &&
+      stackiGithubSelected({ agencyId: actionContext.agencyId, clientId,
+        siteId: proposedOwnershipSiteId, siteVersionId: '' })
+
+    const runtimeIdentity = await resolveScopedImportRuntimeIdentity({
       sourceUrl: importUrl.toString(),
       clientId,
       agencyId: actionContext.agencyId,
+      captureRevision: githubCaptureSelected ? 'github-complete-capture-v1' : undefined,
     })
     const preallocatedIdentity = await preallocateSiteVersionIdentity({
       siteId: runtimeIdentity.siteId,
@@ -603,10 +631,25 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       )
     }
 
+    const ownershipSiteId = await resolveOrCreateOwnershipSiteId({
+      runtimeSiteId: preallocatedIdentity.siteId,
+      siteVersionId: preallocatedIdentity.siteVersionId,
+      clientId: createPayload.clientId,
+      agencyId: createPayload.agencyId,
+      siteName: createPayload.name,
+      domainHost: normalizeText(importUrl.host) || null,
+      newSiteId: proposedOwnershipSiteId,
+    })
+
     const imported = await runScopedImportPipeline({
       snapshot,
       sourceUrl: importUrl.toString(),
       actor: `agency:client-scoped-import:${actionContext.actorMode}`,
+      ownershipScope: {
+        agencyId: actionContext.agencyId,
+        clientId,
+        siteId: ownershipSiteId,
+      },
       fallbackToLegacyOnPipelineFailure: false,
       runtimeIdentity: {
         siteId: preallocatedIdentity.siteId,
@@ -615,14 +658,9 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       multiPageDiscovery: body.multiPageDiscovery,
     })
 
-    const ownershipSiteId = await resolveOrCreateOwnershipSiteId({
-      runtimeSiteId: imported.siteId,
-      siteVersionId: imported.siteVersionId,
-      clientId: createPayload.clientId,
-      agencyId: createPayload.agencyId,
-      siteName: createPayload.name,
-      domainHost: normalizeText(importUrl.host) || null,
-    })
+    if (imported.siteId !== preallocatedIdentity.siteId || imported.siteVersionId !== preallocatedIdentity.siteVersionId) {
+      throw new Error('Imported runtime identity did not match preallocated site ownership.')
+    }
     diagnostics.push('SITE_IMPORT_SITE_CREATE_COMPLETED')
     console.info('[site-import] SITE_IMPORT_SITE_CREATE_COMPLETED', {
       siteId: ownershipSiteId,

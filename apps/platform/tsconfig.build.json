@@ -30,5 +30,8 @@
     "**/_tests/**",
     "**/__fixtures__/**",
     "**/fixtures/**"
+  ],
+  "files": [
+    "gnr8/runtime/twin/fixtures/stable-import-snapshot.ts"
   ]
 }

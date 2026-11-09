@@ -535,6 +535,13 @@ export type RawImportedSiteArtifactMetadata = {
   sourceUrl: string;
   finalUrl: string | null;
   htmlByteLength: number;
+  gitArchive?: {
+    scope: { agencyId: string; clientId: string; siteId: string };
+    repository: string;
+    commit: string;
+    manifestPath: string;
+    manifestSha256: string;
+  };
   multiPage?: {
     enabled: boolean;
     pageCount: number;

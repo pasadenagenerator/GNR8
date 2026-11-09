@@ -1152,6 +1152,7 @@ export async function bootstrapRuntimeFromTemplateSite(input: {
         snapshot,
         sourceUrl: normalizeDomainAsUrl(input.site.domain),
         actor: `template-bootstrap:${siteId}`,
+        ownershipScope: { agencyId: input.site.agencyId, clientId: input.site.clientId, siteId },
         fallbackToLegacyOnPipelineFailure: false,
       })
     } catch (pipelineError) {
