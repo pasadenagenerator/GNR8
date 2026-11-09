@@ -268,7 +268,11 @@ export async function runSourceBackedAstroGeneration(
     const promote = createAstroCandidatePromotionService({
       resolveOwnership: (input) => ownershipResolver.resolve(input),
       readCandidate: (input) => repository.read(input),
-      runtimeStore,
+      runtimeStore: new SupabaseAstroCandidateRuntimeArtifactStore(serviceClient, {
+        siteVersionId: generationVersion.id,
+        artifactId: generationVersion.artifactId,
+        htmlByPath: record.candidate.htmlByPath,
+      }),
     });
     const promoted = await promote({
       actorUserId: payload.actor,

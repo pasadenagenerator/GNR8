@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { computeRuntimeArtifactBundleSha256 } from "@/gnr8/runtime/astro-artifact-materialization";
 
 import type {
   CanonicalPageVersionSnapshot,
@@ -132,7 +133,14 @@ const ARTIFACT_COLUMNS = [
 ].join(",");
 
 export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidateRuntimeArtifactStore {
-  constructor(private readonly client: SupabaseClient) {}
+  constructor(
+    private readonly client: SupabaseClient,
+    private readonly knownHtml?: {
+      siteVersionId: string;
+      artifactId: string;
+      htmlByPath: Record<string, string>;
+    },
+  ) {}
 
   async readContext(siteVersionId: string): Promise<AstroCandidateRuntimeArtifactContext | null> {
     const [versionResult, pagesResult] = await Promise.all([
@@ -177,10 +185,12 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
       };
     }
 
+    const useKnownHtml = this.knownHtml?.siteVersionId === siteVersionId &&
+      this.knownHtml.artifactId === version.artifact_id;
     const [artifactResult, pointerResult, previewBindingsResult] = await Promise.all([
       this.client
         .from("gnr8_runtime_artifacts")
-        .select(ARTIFACT_COLUMNS)
+        .select(useKnownHtml ? ARTIFACT_COLUMNS.replace("html_by_path,", "") : ARTIFACT_COLUMNS)
         .eq("id", version.artifact_id)
         .eq("site_version_id", siteVersionId)
         .limit(2),
@@ -201,9 +211,21 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
     if (!Array.isArray(artifactResult.data) || artifactResult.data.length !== 1) {
       throw new Error("runtime_artifact_binding_incomplete");
     }
+    const artifact = mapArtifact({
+      ...(artifactResult.data[0] as unknown as ArtifactRow),
+      ...(useKnownHtml ? { html_by_path: this.knownHtml!.htmlByPath } : {}),
+    });
+    if (useKnownHtml && computeRuntimeArtifactBundleSha256({
+      htmlByPath: artifact.htmlByPath,
+      compiledTokenStyles: artifact.compiledTokenStyles,
+      assetFingerprintMap: artifact.assetFingerprintMap,
+      manifest: artifact.manifest,
+    }) !== artifact.bundleSha256) {
+      throw new Error("runtime_artifact_known_html_integrity_mismatch");
+    }
     return {
       siteVersion,
-      artifact: mapArtifact(artifactResult.data[0] as unknown as ArtifactRow),
+      artifact,
       activePointerReferencesArtifact: Array.isArray(pointerResult.data) && pointerResult.data.length > 0,
       previewBindingCount: previewBindingsResult.count ?? 0,
     };
@@ -214,14 +236,18 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
     artifact: AstroCandidateRuntimeArtifactWrite;
   }): Promise<"updated" | "not_updated" | "unavailable"> {
     try {
+      const useKnownHtml = this.knownHtml?.siteVersionId === input.artifact.siteVersionId &&
+        this.knownHtml.artifactId === input.artifact.id;
       const result = await this.client
         .from("gnr8_runtime_artifacts")
         .update({
           renderer_compatibility_version: input.artifact.rendererCompatibilityVersion,
           bundle_sha256: input.artifact.bundleSha256,
-          html_by_path: input.artifact.htmlByPath,
-          compiled_token_styles: input.artifact.compiledTokenStyles,
-          asset_fingerprint_map: input.artifact.assetFingerprintMap,
+          ...(useKnownHtml ? {} : {
+            html_by_path: input.artifact.htmlByPath,
+            compiled_token_styles: input.artifact.compiledTokenStyles,
+            asset_fingerprint_map: input.artifact.assetFingerprintMap,
+          }),
           manifest: input.artifact.manifest,
           publish_stage: input.artifact.publishStage,
           shadow_restricted: input.artifact.shadowRestricted,
