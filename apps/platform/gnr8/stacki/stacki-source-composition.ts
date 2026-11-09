@@ -12,7 +12,7 @@ export async function loadConfiguredStackiSource(scope: StackiDraftScope) {
   const client = getSupabaseServiceRoleClient();
   if (!client) throw new StackiDraftError(503, "STACKI_SOURCE_UNAVAILABLE");
   const runtime = new SupabaseAstroCandidateRuntimeArtifactStore(client);
-  const selected = await runtime.readContext(scope.siteVersionId);
+  const selected = await runtime.readContext(scope.siteVersionId, { omitHtmlByPath: true });
   if (!selected?.artifact || selected.siteVersion.id !== scope.siteVersionId ||
       selected.artifact.siteVersionId !== scope.siteVersionId ||
       selected.artifact.id !== selected.siteVersion.artifactId ||
@@ -26,7 +26,7 @@ export async function loadConfiguredStackiSource(scope: StackiDraftScope) {
   const capture = build.sourceCapture;
   // Provenance is not authorization: independently check the original capture.
   await requirePublicOutputVersion(scope, capture.siteVersionId);
-  const source = await runtime.readContext(capture.siteVersionId);
+  const source = await runtime.readContext(capture.siteVersionId, { omitHtmlByPath: true });
   if (!source?.artifact || source.siteVersion.id !== capture.siteVersionId ||
       source.siteVersion.siteId !== selected.siteVersion.siteId || source.artifact.siteId !== selected.siteVersion.siteId ||
       source.siteVersion.artifactId !== capture.artifactId || source.artifact.id !== capture.artifactId ||

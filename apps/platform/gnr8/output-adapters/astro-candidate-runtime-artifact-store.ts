@@ -142,7 +142,10 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
     },
   ) {}
 
-  async readContext(siteVersionId: string): Promise<AstroCandidateRuntimeArtifactContext | null> {
+  async readContext(
+    siteVersionId: string,
+    options?: { omitHtmlByPath?: boolean },
+  ): Promise<AstroCandidateRuntimeArtifactContext | null> {
     const [versionResult, pagesResult] = await Promise.all([
       this.client
         .from("gnr8_runtime_site_versions")
@@ -187,10 +190,11 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
 
     const useKnownHtml = this.knownHtml?.siteVersionId === siteVersionId &&
       this.knownHtml.artifactId === version.artifact_id;
+    const omitHtmlByPath = useKnownHtml || options?.omitHtmlByPath === true;
     const [artifactResult, pointerResult, previewBindingsResult] = await Promise.all([
       this.client
         .from("gnr8_runtime_artifacts")
-        .select(useKnownHtml ? ARTIFACT_COLUMNS.replace("html_by_path,", "") : ARTIFACT_COLUMNS)
+        .select(omitHtmlByPath ? ARTIFACT_COLUMNS.replace("html_by_path,", "") : ARTIFACT_COLUMNS)
         .eq("id", version.artifact_id)
         .eq("site_version_id", siteVersionId)
         .limit(2),
@@ -213,7 +217,7 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
     }
     const artifact = mapArtifact({
       ...(artifactResult.data[0] as unknown as ArtifactRow),
-      ...(useKnownHtml ? { html_by_path: this.knownHtml!.htmlByPath } : {}),
+      ...(omitHtmlByPath ? { html_by_path: useKnownHtml ? this.knownHtml!.htmlByPath : {} } : {}),
     });
     if (useKnownHtml && computeRuntimeArtifactBundleSha256({
       htmlByPath: artifact.htmlByPath,
