@@ -457,6 +457,17 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       rewrites,
       rewrittenHtmlFiles,
     };
+    // A derived capture is a new immutable import. The parent's Git reference
+    // points at a different version and cannot be reused for these file rows.
+    const derivedGitArchiveRef = !resumableRawArtifact && parentRawArtifact.metadata.gitArchive
+      ? await writeDerivedRawGitArchive({
+          parentRef: parentRawArtifact.metadata.gitArchive,
+          ownershipSiteId: input.ownershipSiteId,
+          runtimeSiteId: parentRawArtifact.siteId,
+          siteVersionId: derivedSiteVersionId,
+          files: derivedFiles,
+        })
+      : undefined;
     const createdVersion = existingVersion
       ? { siteVersionId: existingVersion.id }
       : await createSiteVersionFromMigration({
@@ -484,6 +495,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
           fileRows: derivedFiles,
           metadata: {
             ...parentRawArtifact.metadata,
+            ...(derivedGitArchiveRef ? { gitArchive: derivedGitArchiveRef } : {}),
             diagnostics: {
               codes: [...new Set([
                 ...parentRawArtifact.metadata.diagnostics.codes,
@@ -542,6 +554,43 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
+}
+
+async function writeDerivedRawGitArchive(input: {
+  parentRef: NonNullable<RawImportedSiteArtifact["metadata"]["gitArchive"]>;
+  ownershipSiteId: string;
+  runtimeSiteId: string;
+  siteVersionId: string;
+  files: FileRow[];
+}): Promise<NonNullable<RawImportedSiteArtifact["metadata"]["gitArchive"]>> {
+  const parentRef = input.parentRef;
+  if (!parentRef || parentRef.scope.siteId !== input.ownershipSiteId) {
+    throw new Error("astro_derived_capture_git_owner_mismatch");
+  }
+  const { configuredGitHubTarget } = await import("@/gnr8/stacki/stacki-github-config");
+  const { GitHubStackiStore } = await import("@/gnr8/stacki/stacki-github-store");
+  const { writeRawImportGitArchive } = await import("@/gnr8/site/raw-import-git-archive");
+  const scope = parentRef.scope;
+  const storeScope = { ...scope, siteVersionId: input.siteVersionId };
+  const target = configuredGitHubTarget(storeScope);
+  if (`${target.owner}/${target.repository}` !== parentRef.repository) {
+    throw new Error("astro_derived_capture_git_repository_mismatch");
+  }
+  const store = new GitHubStackiStore(storeScope, target);
+  const archive = await writeRawImportGitArchive({
+    scope,
+    runtimeSiteId: input.runtimeSiteId,
+    siteVersionId: input.siteVersionId,
+    files: input.files,
+    target,
+  }, { repository: () => store.rawImportRepository(input.siteVersionId) });
+  return {
+    scope,
+    repository: archive.repository,
+    commit: archive.commit,
+    manifestPath: archive.manifestPath,
+    manifestSha256: archive.manifestSha256,
+  };
 }
 
 function mergeStylesheetRewrites(
