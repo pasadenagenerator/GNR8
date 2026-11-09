@@ -137,7 +137,8 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
     bytes: Buffer;
   }>();
   for (const file of Object.values(input.rawArtifact.fileMap)
-    .filter((entry) => /(?:^text\/css\b|\.css$)/i.test(`${entry.mediaType} ${entry.path}`))
+    .filter((entry) => /\.css$/i.test(entry.path) ||
+      (/^text\/css\b/i.test(entry.mediaType) && !/\.(?:png|jpe?g|gif|webp|avif|ico|svg|woff2?|ttf|otf|eot)$/i.test(entry.path)))
     .sort((left, right) => left.path.localeCompare(right.path))) {
     const asset = await input.getRawAsset({
       siteVersionId: input.siteVersion.id,

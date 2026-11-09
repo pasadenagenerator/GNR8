@@ -330,6 +330,32 @@ test("loads and verifies retained stylesheet bytes for generation dependency evi
   assert.deepEqual(Object.keys(source.htmlByPath), ["/", "/about"]);
 });
 
+test("does not parse a captured PNG as CSS when its response has a CSS media type", async () => {
+  const input = fixture();
+  const imagePath = "tactile/omnibox/reveal-entity-icons-20131112.png";
+  const imageBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  input.rawArtifact.fileMap[imagePath] = {
+    path: imagePath,
+    mediaType: "text/css",
+    sizeBytes: imageBytes.byteLength,
+    sha256: createHash("sha256").update(imageBytes).digest("hex"),
+  };
+  const sourceBytes: Record<string, Buffer> = {
+    "index.html": Buffer.from(input.artifact.htmlByPath["/"]),
+    "pages/about/index.html": Buffer.from(input.artifact.htmlByPath["/about"]),
+  };
+  const source = await loadSourceBackedAstroGenerationSource({
+    siteVersion: input.version,
+    rawArtifact: input.rawArtifact,
+    getRawAsset: async ({ filePath }) => {
+      const bytes = sourceBytes[filePath];
+      const metadata = input.rawArtifact.fileMap[filePath];
+      return bytes && metadata ? { ...metadata, bytes } : null;
+    },
+  });
+  assert.deepEqual(source.ownedStylesheetEvidence, []);
+});
+
 test("materializes audited unused vendor rules without changing retained stylesheet bytes", async () => {
   const input = fixture({
     rootHtml: '<!doctype html><html><head><title>Home</title></head><body><main class="hero"><h1>Home</h1></main></body></html>',
