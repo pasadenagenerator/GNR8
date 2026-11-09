@@ -949,7 +949,7 @@ export function existingCssDependencyManifest(input: {
     rawRef: string;
     resolvedUrl: string;
     localPath: string;
-    assetKind: "image" | "style_asset";
+    assetKind: "image" | "style_asset" | "stylesheet";
     fetchStatus: "fetched";
     httpStatus: number;
     contentType: string;
@@ -971,13 +971,17 @@ export function existingCssDependencyManifest(input: {
       });
       let resolvedUrl = retainedPath ? sourceUrlByOwnedPath.get(retainedPath) ?? null : null;
       try { resolvedUrl ??= new URL(rawRef, stylesheet.from).toString(); } catch { continue; }
-      const assetKind = /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?)(?:[?#]|$)/i.test(resolvedUrl)
-        ? "image" as const
-        : "style_asset" as const;
-      const dependencyPath = retainedPath ?? computeLocalPathCandidate({ resolvedUrl, assetKind });
+      const image = /\.(?:apng|avif|gif|ico|jpe?g|png|svg|webp|bmp|tiff?)(?:[?#]|$)/i.test(resolvedUrl);
+      const stylesheetPath = computeLocalPathCandidate({ resolvedUrl, assetKind: "stylesheet" });
+      const dependencyPath = retainedPath ?? (input.filePaths.has(stylesheetPath)
+        ? stylesheetPath
+        : computeLocalPathCandidate({ resolvedUrl, assetKind: image ? "image" : "style_asset" }));
       if (!input.filePaths.has(dependencyPath)) continue;
       const dependency = input.parentFiles.find((candidate) => candidate.path === dependencyPath);
       if (!dependency) continue;
+      const assetKind = /(?:^text\/css\b|\.css$)/i.test(`${dependency.mediaType} ${dependency.path}`)
+        ? "stylesheet" as const
+        : image ? "image" as const : "style_asset" as const;
       entries.push({
         tag: "link",
         attribute: "href",

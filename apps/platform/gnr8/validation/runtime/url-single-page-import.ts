@@ -2886,6 +2886,9 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   });
 
   const existingManifest = input.existingFetchManifest ?? [];
+  const retainedStylesheetUrls = new Set(existingManifest
+    .filter((entry) => entry.assetKind === "stylesheet" && entry.fetchStatus === "fetched" && entry.resolvedUrl)
+    .map((entry) => entry.resolvedUrl!));
   const localPathByUrl = new Map<string, string>();
   const outcomeByUrl = new Map<string, FetchOutcome>();
   const usedPathToUrl = new Map<string, string>();
@@ -3125,7 +3128,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
       });
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, pageUrl, trustedExternalOrigins)) continue;
-      const assetKind = inferCssUrlAssetKind(rawRef);
+      const assetKind = retainedStylesheetUrls.has(resolvedUrl) ? "stylesheet" : inferCssUrlAssetKind(rawRef);
       const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
       if (knownUnusedStylesheetDependencyIdentities.has(identity)) continue;
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
@@ -3170,7 +3173,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
       });
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, stylesheetUrl, trustedExternalOrigins)) continue;
-      const assetKind = inferCssUrlAssetKind(rawRef);
+      const assetKind = retainedStylesheetUrls.has(resolvedUrl) ? "stylesheet" : inferCssUrlAssetKind(rawRef);
       const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
       if (knownUnusedStylesheetDependencyIdentities.has(identity)) continue;
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;

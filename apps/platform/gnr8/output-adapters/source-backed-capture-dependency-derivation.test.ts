@@ -360,6 +360,63 @@ test("retained font planner resolves exact source URLs and reuses matching immut
   });
 });
 
+test("derived capture follows retained extensionless CSS imports through their font assets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "gnr8-retained-font-closure-"));
+  const rootUrl = "https://www.chs.si/assets/user-style.css";
+  const nestedUrl = "https://fonts.prod.extra-cdn.com/css?family=Roboto";
+  const fontUrl = "https://font-files.prod.extra-cdn.com/roboto.ttf";
+  const rootPath = "assets/user-style.css";
+  const nestedPath = computeLocalPathCandidate({ resolvedUrl: nestedUrl, assetKind: "stylesheet" });
+  const fontPath = computeLocalPathCandidate({ resolvedUrl: fontUrl, assetKind: "style_asset" });
+  const row = (path: string, mediaType: string, bytes: Buffer) => ({
+    path, mediaType, bytes, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"),
+  });
+  const files = [
+    row(rootPath, "text/css", Buffer.from(`@import url('${nestedUrl}');`)),
+    row(nestedPath, "text/css", Buffer.from(`@font-face{src:url('${fontUrl}')}`)),
+  ];
+  try {
+    for (const file of files) {
+      const target = join(root, file.path);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, file.bytes);
+    }
+    const existingFetchManifest = [{
+      tag: "link" as const, attribute: "href" as const, occurrence: 0,
+      rawRef: rootUrl, resolvedUrl: rootUrl, localPath: rootPath,
+      assetKind: "stylesheet" as const, fetchStatus: "fetched" as const,
+      httpStatus: 200, contentType: "text/css", byteLength: files[0]!.sizeBytes,
+    }, ...existingCssDependencyManifest({
+      parentFiles: files,
+      stylesheetRewrites: [{ from: rootUrl, to: `/${rootPath}`, reused: true }],
+      filePaths: new Set(files.map((file) => file.path)), startingOccurrence: 1,
+    })];
+    assert.equal(existingFetchManifest[1]?.assetKind, "stylesheet");
+    const captured = await captureAssetsForAdditionalHtmlPages({
+      pages: [{ pageUrl: "https://www.chs.si/", bodyPath: join(root, "probe.html"),
+        html: `<link rel="stylesheet" href="${rootUrl}">` }],
+      snapshotRootDirAbs: root,
+      existingFetchManifest,
+      trustedExternalOrigins: ["https://font-files.prod.extra-cdn.com"],
+      fetchImpl: async (request) => {
+        assert.equal(String(request instanceof Request ? request.url : request), fontUrl);
+        return new Response(new Uint8Array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), {
+          status: 200, headers: { "content-type": "font/ttf" },
+        });
+      },
+    });
+    assert.equal(captured.summary.failedRequiredAssetCount, 0);
+    const rootCss = await readFile(join(root, rootPath));
+    const nestedCss = await readFile(join(root, nestedPath));
+    assert.ok(nestedCss.toString().includes(fontPath.split("/").at(-1)!));
+    const fontBytes = await readFile(join(root, fontPath));
+    assert.deepEqual(findUnresolvedRetainedStylesheetDependencies({
+      files: [row(rootPath, "text/css", rootCss), row(nestedPath, "text/css", nestedCss), row(fontPath, "font/ttf", fontBytes)],
+      rootStylesheetPaths: [rootPath],
+    }), []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("dependency closure follows reachable imports and ignores unrelated retained CSS", () => {
   const rootCss = Buffer.from("@import './nested.css'; .hero{background:url('../images/hero.png')}", "utf8");
   const nestedCss = Buffer.from("@font-face{font-family:Roboto;src:url('../style_asset/font.ttf')}", "utf8");
