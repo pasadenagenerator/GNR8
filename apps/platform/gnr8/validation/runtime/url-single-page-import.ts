@@ -954,12 +954,14 @@ function extractCssUrlCandidates(rawCssText: string): string[] {
     if (!candidate || candidate.startsWith("data:") || candidate.startsWith("#")) continue;
     out.add(candidate);
   }
-  for (const importMatch of cssText.matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)) {
-    const candidate = String(importMatch[2] ?? "").trim();
-    if (!candidate || candidate.startsWith("data:") || candidate.startsWith("#")) continue;
-    out.add(candidate);
-  }
+  for (const candidate of extractCssImportCandidates(cssText)) out.add(candidate);
   return [...out];
+}
+
+function extractCssImportCandidates(cssText: string): string[] {
+  return [...cssText.matchAll(/@import\s+(?:url\(\s*)?(["']?)([^"')\s;]+)\1\s*\)?/gi)]
+    .map((match) => String(match[2] ?? "").trim())
+    .filter((candidate) => candidate && !candidate.startsWith("data:") && !candidate.startsWith("#"));
 }
 
 function inferCssUrlAssetKind(rawRef: string): UrlImportAssetKind {
@@ -3119,6 +3121,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       continue;
     }
     markProvablyUnused(cssText, stylesheetUrl);
+    const importedCssRefs = new Set(extractCssImportCandidates(cssText));
     const pageUrl = refsByUrl.get(stylesheetUrl)?.[0]?.pageUrl ?? stylesheetUrl;
     for (const rawRef of extractCssUrlCandidates(cssText)) {
       const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
@@ -3128,7 +3131,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
       });
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, pageUrl, trustedExternalOrigins)) continue;
-      const assetKind = retainedStylesheetUrls.has(resolvedUrl) ? "stylesheet" : inferCssUrlAssetKind(rawRef);
+      const assetKind = importedCssRefs.has(rawRef) || retainedStylesheetUrls.has(resolvedUrl)
+        ? "stylesheet" : inferCssUrlAssetKind(rawRef);
       const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
       if (knownUnusedStylesheetDependencyIdentities.has(identity)) continue;
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
@@ -3164,6 +3168,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     let cssText = "";
     try { cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8"); } catch { continue; }
     markProvablyUnused(cssText, stylesheetUrl);
+    const importedCssRefs = new Set(extractCssImportCandidates(cssText));
     for (const rawRef of extractCssUrlCandidates(cssText)) {
       if (acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) break;
       const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
@@ -3173,7 +3178,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
       });
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, stylesheetUrl, trustedExternalOrigins)) continue;
-      const assetKind = retainedStylesheetUrls.has(resolvedUrl) ? "stylesheet" : inferCssUrlAssetKind(rawRef);
+      const assetKind = importedCssRefs.has(rawRef) || retainedStylesheetUrls.has(resolvedUrl)
+        ? "stylesheet" : inferCssUrlAssetKind(rawRef);
       const identity = canonicalAdditionalPageAssetIdentity(resolvedUrl);
       if (knownUnusedStylesheetDependencyIdentities.has(identity)) continue;
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;

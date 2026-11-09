@@ -360,7 +360,7 @@ test("retained font planner resolves exact source URLs and reuses matching immut
   });
 });
 
-test("derived capture follows retained extensionless CSS imports through their font assets", async () => {
+test("derived capture follows fetched extensionless CSS imports through their font assets", async () => {
   const root = await mkdtemp(join(tmpdir(), "gnr8-retained-font-closure-"));
   const rootUrl = "https://www.chs.si/assets/user-style.css";
   const nestedUrl = "https://fonts.prod.extra-cdn.com/css?family=Roboto";
@@ -371,10 +371,7 @@ test("derived capture follows retained extensionless CSS imports through their f
   const row = (path: string, mediaType: string, bytes: Buffer) => ({
     path, mediaType, bytes, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"),
   });
-  const files = [
-    row(rootPath, "text/css", Buffer.from(`@import url('${nestedUrl}');`)),
-    row(nestedPath, "text/css", Buffer.from(`@font-face{src:url('${fontUrl}')}`)),
-  ];
+  const files = [row(rootPath, "text/css", Buffer.from(`@import url('${nestedUrl}');`))];
   try {
     for (const file of files) {
       const target = join(root, file.path);
@@ -391,15 +388,19 @@ test("derived capture follows retained extensionless CSS imports through their f
       stylesheetRewrites: [{ from: rootUrl, to: `/${rootPath}`, reused: true }],
       filePaths: new Set(files.map((file) => file.path)), startingOccurrence: 1,
     })];
-    assert.equal(existingFetchManifest[1]?.assetKind, "stylesheet");
+    assert.equal(existingFetchManifest.length, 1, "the imported CSS is absent from the parent capture");
     const captured = await captureAssetsForAdditionalHtmlPages({
       pages: [{ pageUrl: "https://www.chs.si/", bodyPath: join(root, "probe.html"),
         html: `<link rel="stylesheet" href="${rootUrl}">` }],
       snapshotRootDirAbs: root,
       existingFetchManifest,
-      trustedExternalOrigins: ["https://font-files.prod.extra-cdn.com"],
+      trustedExternalOrigins: ["https://fonts.prod.extra-cdn.com", "https://font-files.prod.extra-cdn.com"],
       fetchImpl: async (request) => {
-        assert.equal(String(request instanceof Request ? request.url : request), fontUrl);
+        const url = String(request instanceof Request ? request.url : request);
+        if (url === nestedUrl) return new Response(`@font-face{src:url('${fontUrl}')}`, {
+          status: 200, headers: { "content-type": "text/css" },
+        });
+        assert.equal(url, fontUrl);
         return new Response(new Uint8Array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), {
           status: 200, headers: { "content-type": "font/ttf" },
         });
