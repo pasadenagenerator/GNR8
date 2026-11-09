@@ -133,3 +133,39 @@ test("cache reports the file and storage error after failed readback", async () 
   await assert.rejects(new RawImportGitCache(client, "gnr8-astro-candidate-routes").prepare(ref, version, [file]),
     /RAW_IMPORT_CACHE_INTEGRITY_FAILED:assets\/chs\.txt:storage unavailable/);
 });
+
+test("cache repairs an existing object whose bytes fail exact readback", async () => {
+  const version = "43bb405b-912e-47e7-af85-f995cd2ed384";
+  const bytes = Buffer.from("correct CHS SVG");
+  const file = { path: "assets/style_asset/chs.svg", mediaType: "image/svg+xml", sizeBytes: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"), bytes };
+  const objects = new Map<string, Buffer>();
+  const upsertFlags: boolean[] = [];
+  const client = { storage: {
+    getBucket: async () => ({ data: { public: false }, error: null }),
+    from: () => ({
+      upload: async (key: string, value: Buffer, options: { upsert: boolean }) => {
+        upsertFlags.push(options.upsert);
+        if (objects.has(key) && !options.upsert) return { data: null, error: new Error("The resource already exists") };
+        objects.set(key, value);
+        return { data: {}, error: null };
+      },
+      download: async (key: string) => {
+        const value = objects.get(key);
+        return value ? { data: new Blob([new Uint8Array(value)]), error: null }
+          : { data: null, error: new Error("missing") };
+      },
+    }),
+  } } as unknown as ConstructorParameters<typeof RawImportGitCache>[0];
+  const ref = { scope: { agencyId: "00000000-0000-4000-8000-000000000001",
+    clientId: "3d44ad6f-01e5-4884-a492-585de3b3af49",
+    siteId: "9ff5613e-1625-43f1-844e-c5c91a813d4f" },
+    repository: "pasadenagenerator/gnr8-chs", commit: "a".repeat(40),
+    manifestPath: `raw-import/${version}/.gnr8-import-manifest.json`, manifestSha256: "b".repeat(64) };
+  const cache = new RawImportGitCache(client, "gnr8-astro-candidate-routes");
+  const objectKey = `raw-import-cache/v1/${ref.scope.agencyId}/${ref.scope.clientId}/${ref.scope.siteId}/${version}/${ref.commit}/${file.sha256}`;
+  objects.set(objectKey, Buffer.from("stale bytes"));
+  await cache.prepare(ref, version, [file]);
+  assert.deepEqual(upsertFlags, [false, true]);
+  assert.deepEqual(await cache.read(ref, version, file), bytes);
+});

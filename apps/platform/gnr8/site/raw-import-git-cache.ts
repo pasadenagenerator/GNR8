@@ -67,7 +67,9 @@ export class RawImportGitCache{
         for(let attempt=0;attempt<3;attempt++){
           // A failed upload may have committed. Exact readback reconciles it.
           try{
-            const result=await bucket.upload(objectKey,file.bytes,{upsert:false,contentType:file.mediaType,cacheControl:'3600'});
+            // The cache is disposable and content-addressed. Replace an existing
+            // object only after exact readback has failed, repairing stale bytes.
+            const result=await bucket.upload(objectKey,file.bytes,{upsert:attempt>0,contentType:file.mediaType,cacheControl:'3600'});
             uploadFailure=result.error?.message??'';
           }catch(error){uploadFailure=error instanceof Error?error.message:String(error);}
           try{await this.read(ref,versionId,file);return;}catch{
