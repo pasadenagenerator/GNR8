@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
-import {GeneratedArtifactGitCache,type GeneratedGitRef} from './generated-artifact-git-cache';
+import {GeneratedArtifactGitCache,generatedArtifactReferenceColumns,type GeneratedGitRef} from './generated-artifact-git-cache';
 
 test('generated cache repairs stale bytes and verifies the Git artifact',async()=>{
   const version='43bb405b-912e-47e7-af85-f995cd2ed384';
@@ -38,4 +38,10 @@ test('generated cache repairs stale bytes and verifies the Git artifact',async()
   await cache.prepare(ref,version,{htmlByPath:{'/':html},compiledTokenStyles:styles,manifest});
   assert.deepEqual(flags.filter(entry=>entry.key===key).map(entry=>entry.upsert),[false,true]);
   assert.equal(await cache.readRoute(ref,version,'/'),html);
+  const stored=generatedArtifactReferenceColumns({siteVersionId:version,htmlByPath:{'/':html},
+    compiledTokenStyles:styles,manifest:{...manifest,generatedGitArchive:ref}});
+  assert.deepEqual(stored.htmlByPath,{'/':routeFile.sha256});
+  await assert.rejects(async()=>generatedArtifactReferenceColumns({siteVersionId:'0b609c81-98c5-42cc-a9f2-18b3bbc1f3c0',
+    htmlByPath:{'/':html},compiledTokenStyles:styles,manifest:{...manifest,generatedGitArchive:ref}}),
+  /GENERATED_ARTIFACT_CACHE_INTEGRITY_FAILED/);
 });

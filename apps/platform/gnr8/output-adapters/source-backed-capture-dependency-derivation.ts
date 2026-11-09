@@ -23,6 +23,7 @@ import {
   persistRawImportedSiteArtifact,
 } from "@/gnr8/runtime/runtime-store";
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArtifact, RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
+import type { GeneratedGitRef } from "@/gnr8/site/generated-artifact-git-cache";
 import {
   captureAssetsForAdditionalHtmlPages,
   computeLocalPathCandidate,
@@ -508,8 +509,10 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
             },
           },
         });
-    const manifest = {
-      ...structuredClone(parentArtifact.manifest),
+    const { generatedGitArchive: parentGeneratedGitArchive, ...parentManifestWithoutGitRef } =
+      structuredClone(parentArtifact.manifest);
+    const manifestWithoutGitRef = {
+      ...parentManifestWithoutGitRef,
       sourceKind: "dependency_complete_derived_capture",
       parentSiteVersionId: parentSiteVersion.id,
       parentArtifactId: parentArtifact.id,
@@ -517,6 +520,23 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       rawArtifactId: rawResult.artifactId,
       derivedFilesSha256,
     };
+    // A generated Git descriptor is scoped to its original version and exact
+    // manifest bytes. The derived version needs its own immutable archive.
+    const generatedGitArchive = parentGeneratedGitArchive && parentRawArtifact.metadata.gitArchive
+      ? await writeDerivedGeneratedGitArchive({
+          parentRef: parentGeneratedGitArchive as GeneratedGitRef,
+          rawRef: parentRawArtifact.metadata.gitArchive,
+          parentSiteVersionId: parentSiteVersion.id,
+          siteVersionId: createdVersion.siteVersionId,
+          runtimeSiteId: parentArtifact.siteId,
+          htmlByPath: parentArtifact.htmlByPath,
+          compiledTokenStyles: parentArtifact.compiledTokenStyles,
+          manifest: manifestWithoutGitRef,
+        })
+      : undefined;
+    const manifest = generatedGitArchive
+      ? { ...manifestWithoutGitRef, generatedGitArchive }
+      : manifestWithoutGitRef;
     const artifactBundleSha256 = computeRuntimeArtifactBundleSha256({
       htmlByPath: parentArtifact.htmlByPath,
       compiledTokenStyles: parentArtifact.compiledTokenStyles,
@@ -591,6 +611,53 @@ async function writeDerivedRawGitArchive(input: {
     manifestPath: archive.manifestPath,
     manifestSha256: archive.manifestSha256,
   };
+}
+
+async function writeDerivedGeneratedGitArchive(input: {
+  parentRef: GeneratedGitRef;
+  rawRef: NonNullable<RawImportedSiteArtifact["metadata"]["gitArchive"]>;
+  parentSiteVersionId: string;
+  siteVersionId: string;
+  runtimeSiteId: string;
+  htmlByPath: Record<string, string>;
+  compiledTokenStyles: string;
+  manifest: Record<string, unknown>;
+}): Promise<GeneratedGitRef> {
+  const { configuredGitHubTarget } = await import("@/gnr8/stacki/stacki-github-config");
+  const { GitHubStackiStore } = await import("@/gnr8/stacki/stacki-github-store");
+  const { GeneratedArtifactGitCache } = await import("@/gnr8/site/generated-artifact-git-cache");
+  const { writeGeneratedArtifactGitArchive } = await import("@/gnr8/site/generated-artifact-git-archive");
+  const scope = input.rawRef.scope;
+  if (input.parentRef.scope.siteId !== scope.siteId ||
+      input.parentRef.repository !== input.rawRef.repository) {
+    throw new Error("astro_derived_capture_generated_git_scope_mismatch");
+  }
+  const target = configuredGitHubTarget({ ...scope, siteVersionId: input.siteVersionId });
+  if (`${target.owner}/${target.repository}` !== input.parentRef.repository) {
+    throw new Error("astro_derived_capture_generated_git_repository_mismatch");
+  }
+  const store = new GitHubStackiStore({ ...scope, siteVersionId: input.siteVersionId }, target);
+  const cache = new GeneratedArtifactGitCache();
+  const exportedFiles = input.parentRef.resources?.length
+    ? await cache.hydrateResources(input.parentRef, input.parentSiteVersionId)
+    : undefined;
+  const archive = await writeGeneratedArtifactGitArchive({
+    scope,
+    runtimeSiteId: input.runtimeSiteId,
+    siteVersionId: input.siteVersionId,
+    htmlByPath: input.htmlByPath,
+    compiledTokenStyles: input.compiledTokenStyles,
+    manifest: input.manifest,
+    ...(exportedFiles ? { exportedFiles } : {}),
+    target,
+  }, { repository: (branch) => store.immutableRepository(branch) });
+  await cache.prepare(archive, input.siteVersionId, {
+    htmlByPath: input.htmlByPath,
+    compiledTokenStyles: input.compiledTokenStyles,
+    manifest: input.manifest,
+    ...(exportedFiles ? { exportedFiles } : {}),
+  });
+  return archive;
 }
 
 function mergeStylesheetRewrites(
