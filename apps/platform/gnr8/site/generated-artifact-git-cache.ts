@@ -177,8 +177,19 @@ export class GeneratedArtifactGitCache{
     }
     for(let offset=0;offset<unique.length;offset+=8){
       const results=await Promise.allSettled(unique.slice(offset,offset+8).map(async({file,body,key})=>{
-        try{await bucket.upload(key,body,{upsert:false,contentType:'application/octet-stream',cacheControl:'3600'});}catch{/* exact readback decides */}
-        await this.read(ref,versionId,file);
+        let uploadFailure='';
+        for(let attempt=0;attempt<3;attempt++){
+          // A cache object can exist with stale bytes. Repair it only after
+          // exact readback fails; Git remains the immutable source of truth.
+          try{
+            const result=await bucket.upload(key,body,{upsert:attempt>0,contentType:'application/octet-stream',cacheControl:'3600'});
+            uploadFailure=result.error?.message??'';
+          }catch(error){uploadFailure=error instanceof Error?error.message:String(error);}
+          try{await this.read(ref,versionId,file);return;}catch{
+            if(attempt<2)await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));
+          }
+        }
+        throw Error(`GENERATED_ARTIFACT_CACHE_INTEGRITY_FAILED:${file.path}:${uploadFailure||'readback_failed'}`);
       }));
       for(const result of results)if(result.status==='rejected')throw result.reason;
     }
