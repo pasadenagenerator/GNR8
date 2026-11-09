@@ -227,6 +227,63 @@ test("additional child-page asset capture persists responsive and lazy images, d
   assert.equal(result.manifestEntries.some((entry) => entry.assetKind === "style_asset" && entry.fetchStatus === "fetched"), true);
 });
 
+test("child-page capture retries a transient background image failure", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-background-retry-"));
+  const assetUrl = "https://www.example.com/uploads/news-background.webp";
+  let attempts = 0;
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{
+        pageUrl: "https://www.example.com/news",
+        bodyPath: path.join(root, "news.html"),
+        html: '<html><head><style>#hero{background-image:url(/uploads/news-background.webp)}</style></head><body><main id="hero">News</main></body></html>',
+      }],
+      fetchImpl: async (request) => {
+        assert.equal(String(request instanceof Request ? request.url : request), assetUrl);
+        attempts += 1;
+        if (attempts === 1) throw new Error("terminated");
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/webp" } });
+      },
+    });
+    assert.equal(attempts, 2);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.equal(fs.readFileSync(path.join(root, 'uploads/news-background.webp')).byteLength, 3);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("seed-page capture retries a transient background image failure", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-seed-background-retry-"));
+  const sourceUrl = "https://www.example.com/";
+  const assetUrl = `${sourceUrl}uploads/home-background.webp`;
+  let attempts = 0;
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl,
+      snapshotRootDirAbs: root,
+      requestId: "seed-background-retry",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        if (url === sourceUrl) return makeHtmlResponse('<html><head><style>#hero{background-image:url(/uploads/home-background.webp)}</style></head><body><main id="hero"><h1>Home</h1></main></body></html>');
+        assert.equal(url, assetUrl);
+        attempts += 1;
+        if (attempts === 1) throw new Error("terminated");
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/webp" } });
+      },
+    });
+    assert.equal(attempts, 2);
+    const asset = snapshot.fetchManifest.find((entry) => entry.resolvedUrl === assetUrl);
+    assert.equal(asset?.fetchStatus, "fetched");
+    assert.ok(asset?.localPath);
+    assert.equal(fs.readFileSync(path.join(snapshot.snapshotRootDirAbs, asset.localPath)).byteLength, 3);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("additional asset capture follows bounded trusted stylesheet imports and font URLs", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-css-import-assets-"));
   const fetched: string[] = [];

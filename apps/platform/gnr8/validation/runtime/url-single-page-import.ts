@@ -2930,7 +2930,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   };
 
   const failedRequiredResources = new Set<string>();
-  const fetchOne = async (resolvedUrl: string, assetKind: UrlImportAssetKind, pageUrl: string): Promise<void> => {
+  const fetchOne = async (resolvedUrl: string, assetKind: UrlImportAssetKind, pageUrl: string, attempt = 0): Promise<void> => {
     if (outcomeByUrl.get(resolvedUrl)?.fetchStatus === "fetched") return;
     const localPath = assignLocalPath(resolvedUrl, assetKind);
     const controller = new AbortController();
@@ -2995,6 +2995,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         byteLength: bytes.byteLength,
       });
     } catch {
+      if (attempt === 0) {
+        await fetchOne(resolvedUrl, assetKind, pageUrl, 1);
+        return;
+      }
       outcomeByUrl.set(resolvedUrl, { fetchStatus: "fetch_failed", httpStatus: null, contentType: null, byteLength: null });
       failedRequiredResources.add(resolvedUrl);
     } finally {
@@ -4777,6 +4781,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       resolvedUrl: string,
       localPath: string,
       messageLabel: "Direct asset fetch" | "Stylesheet-linked asset fetch",
+      attempt = 0,
     ): Promise<FetchOutcome> {
       const htmlImageRefs = htmlImageRefByUrl.get(resolvedUrl) ?? [];
       for (const ref of htmlImageRefs) {
@@ -4872,6 +4877,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           byteLength: bytes.byteLength,
         };
       } catch (error) {
+        if (attempt === 0) return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);
         if (htmlImageRefs.length > 0) {
           for (const ref of htmlImageRefs) {
             const entry = imageAssetDiscoveryEntries.get(ref.key);
