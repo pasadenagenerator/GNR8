@@ -51,6 +51,18 @@ function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+function nativeStackiUrlForSite(siteId: string): string | null {
+  try {
+    // One platform setting maps each GNR8 site ID to its own native Studio /studio URL.
+    const urls: unknown = JSON.parse(process.env.GNR8_STACKI_STUDIO_URLS || '{}')
+    if (!urls || typeof urls !== 'object' || Array.isArray(urls)) return null
+    const value = (urls as Record<string, unknown>)[siteId]
+    if (typeof value !== 'string') return null
+    const url = new URL(value)
+    return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null
+  } catch { return null }
+}
+
 function sectionCardStyle(): CSSProperties {
   return {
     border: '1px solid #dbe6f1',
@@ -1390,14 +1402,7 @@ export default async function SiteWorkspacePage(props: Props) {
 
   const clientId = normalizeText(resolvedParams.clientId)
   const siteId = normalizeText(resolvedParams.siteId)
-  const nativeStackiUrl = siteId === '9ff5613e-1625-43f1-844e-c5c91a813d4f'
-    ? (() => {
-        try {
-          const url = new URL(process.env.GNR8_CHS_STACKI_STUDIO_URL || '')
-          return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null
-        } catch { return null }
-      })()
-    : null
+  const nativeStackiUrl = nativeStackiUrlForSite(siteId)
   const requestedAgencyId = normalizeText(resolvedSearchParams?.agency) || null
   const adminView = normalizeText(resolvedSearchParams?.admin_view) === '1'
   const selectedVariantId = normalizeText(resolvedSearchParams?.variant) || null
