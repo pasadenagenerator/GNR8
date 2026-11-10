@@ -1,5 +1,17 @@
 # GNR8 CURRENT STATE SNAPSHOT
 
+## Urgent next task — Astro 7 across GNR8-generated sites (2026-11-10)
+
+Grega requested an ASAP general upgrade to Astro 7. Keep this as a focused task
+after the CHS native Stacki path is stabilized. The CHS local proof used Astro
+7.3.8 with the unmodified Stacki Studio 1.0.22; Astro 5.18.2 could not start
+that Studio because its CLI path differs. Inventory GNR8's Astro project
+templates, generated projects, dev/build launchers and fixtures, then migrate
+them together while preserving existing site output and import data. In
+particular, `astro-static-site-dev-server-smoke-proof.ts` still refers to the
+Astro 5 `astro.js` launcher. Do not roll this broad upgrade into the CHS site
+change or infer production readiness from the CHS local proof.
+
 ## Stacki production rollout — 2026-10-21
 
 Production `app.pasadenagenerator.com` now runs `e5d1383d` /
