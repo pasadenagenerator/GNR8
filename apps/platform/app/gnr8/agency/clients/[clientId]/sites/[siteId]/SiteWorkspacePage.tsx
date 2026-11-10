@@ -1557,7 +1557,7 @@ export default async function SiteWorkspacePage(props: Props) {
         {props.activeTab === 'design' && canPublish && nativeStackiUrl ? (
           <section style={sectionCardStyle()} aria-label="Stacki Studio">
             <h2 style={{ margin: 0, fontSize: 18 }}>Stacki Studio</h2>
-            <p>CHS projekt odprite v nativnem Stackiju. Spremembe in objave se shranjujejo neposredno v GitHub.</p>
+            <p>Projekt odprite v nativnem Stackiju. Spremembe in objave se shranjujejo neposredno v GitHub.</p>
             <a href={nativeStackiUrl} target="_blank" rel="noopener noreferrer">Odpri Stacki Studio</a>
           </section>
         ) : null}
