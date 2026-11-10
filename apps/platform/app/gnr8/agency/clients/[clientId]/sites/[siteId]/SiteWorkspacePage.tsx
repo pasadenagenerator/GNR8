@@ -1390,6 +1390,14 @@ export default async function SiteWorkspacePage(props: Props) {
 
   const clientId = normalizeText(resolvedParams.clientId)
   const siteId = normalizeText(resolvedParams.siteId)
+  const nativeStackiUrl = siteId === '9ff5613e-1625-43f1-844e-c5c91a813d4f'
+    ? (() => {
+        try {
+          const url = new URL(process.env.GNR8_CHS_STACKI_STUDIO_URL || '')
+          return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null
+        } catch { return null }
+      })()
+    : null
   const requestedAgencyId = normalizeText(resolvedSearchParams?.agency) || null
   const adminView = normalizeText(resolvedSearchParams?.admin_view) === '1'
   const selectedVariantId = normalizeText(resolvedSearchParams?.variant) || null
@@ -1541,7 +1549,14 @@ export default async function SiteWorkspacePage(props: Props) {
             })
           : null}
         {props.activeTab === 'structure' ? renderStructureContent(readModel) : null}
-        {props.activeTab === 'design' && canPublish &&
+        {props.activeTab === 'design' && canPublish && nativeStackiUrl ? (
+          <section style={sectionCardStyle()} aria-label="Stacki Studio">
+            <h2 style={{ margin: 0, fontSize: 18 }}>Stacki Studio</h2>
+            <p>CHS projekt odprite v nativnem Stackiju. Spremembe in objave se shranjujejo neposredno v GitHub.</p>
+            <a href={nativeStackiUrl} target="_blank" rel="noopener noreferrer">Odpri Stacki Studio</a>
+          </section>
+        ) : null}
+        {props.activeTab === 'design' && canPublish && !nativeStackiUrl &&
           process.env.GNR8_STACKI_SESSIONS_ENABLED === '1' &&
           process.env.GNR8_STACKI_DRAFTS_ENABLED === '1' &&
           process.env.GNR8_STACKI_RUNTIME_SNAPSHOT &&
