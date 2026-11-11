@@ -3068,6 +3068,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       });
       const finalUrl = response.url || resolvedUrl;
       const contentType = safeContentType(response.headers.get("content-type"));
+      if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+        await fetchOne(resolvedUrl, assetKind, pageUrl, 1);
+        return;
+      }
       if (!response.ok || !isAllowedAdditionalPageAssetUrl(finalUrl, pageUrl, trustedExternalOrigins)) {
         outcomeByUrl.set(resolvedUrl, {
           fetchStatus: "fetch_failed",
@@ -4971,6 +4975,9 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
 
         const contentType = safeContentType(response.headers.get("content-type"));
         if (!response.ok) {
+          if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+            return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);
+          }
           for (const ref of htmlImageRefs) {
             const entry = imageAssetDiscoveryEntries.get(ref.key);
             if (entry) {

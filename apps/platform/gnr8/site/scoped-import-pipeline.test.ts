@@ -17,6 +17,22 @@ import { computeRuntimeArtifactBundleSha256 } from '@/gnr8/runtime/astro-artifac
 import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 
+test('Git capture ignores broken child links outside the sitemap but requires sitemap pages', () => {
+  const brokenPage = {
+    status: 'failed', httpStatusCode: 404, normalizedRoutePath: '/cgp/broken-link',
+    normalizedUrl: 'https://example.com/cgp/broken-link', failureReason: 'non_2xx_status', skippedReason: null,
+  }
+  const discovery = {
+    acquisition: { pages: [brokenPage], summary: { failedRequiredAssetCount: 0 }, diagnostics: [] },
+    sitemapDiscovery: { discoveredUrls: [{ normalizedRoutePath: '/' }] },
+    manifest: { skippedLinks: [] },
+  } as any
+  const snapshot = { fetchManifest: [] } as any
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+  discovery.sitemapDiscovery.discoveredUrls.push({ normalizedRoutePath: '/cgp/broken-link' })
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['page_failed_or_limited'])
+})
+
 function createSuccessPipelineFixture() {
   const preparedSite = {
     kind: 'prepared_site_model_v1',

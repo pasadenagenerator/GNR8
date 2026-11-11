@@ -1414,19 +1414,29 @@ async function readResponseBytesWithLimit(response: Response, maxBytes: number):
 }
 
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, {
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: {
-        accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
-      },
-    })
-  } finally {
-    clearTimeout(timeout)
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(url, {
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
+        },
+      })
+      if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+        await response.body?.cancel()
+        continue
+      }
+      return response
+    } catch (error) {
+      if (attempt > 0) throw error
+    } finally {
+      clearTimeout(timeout)
+    }
   }
+  throw new Error('HTML fetch retry exhausted')
 }
 
 function buildSkippedAcquisitionEntry(input: {
@@ -2628,10 +2638,18 @@ function gitCaptureIncompleteReasons(
   discovery: Awaited<ReturnType<typeof buildScopedMultiPageDiscovery>>,
 ): string[] {
   const acquisition = discovery.acquisition
+  const sitemapRoutes = new Set(discovery.sitemapDiscovery?.discoveredUrls.map((entry) => entry.normalizedRoutePath) ?? [])
+  const requiredPageFailed = acquisition?.pages.some((page) => {
+    // A broken link outside the sitemap has no page content to retain. Keep
+    // it in the acquisition manifest, but do not block reachable content.
+    if (page.status === 'failed' && page.httpStatusCode === 404 &&
+      page.normalizedRoutePath && !sitemapRoutes.has(page.normalizedRoutePath)) return false
+    return page.status === 'failed' ||
+      (page.status === 'skipped' && ['acquisition_page_limit', 'max_bytes_per_page_exceeded'].includes(page.skippedReason ?? ''))
+  })
   return [
     ...(!acquisition ? ['html_acquisition_missing'] : []),
-    ...(acquisition?.pages.some((page) => page.status === 'failed' ||
-      (page.status === 'skipped' && ['acquisition_page_limit', 'max_bytes_per_page_exceeded'].includes(page.skippedReason ?? ''))) ? ['page_failed_or_limited'] : []),
+    ...(requiredPageFailed ? ['page_failed_or_limited'] : []),
     ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
     ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed') ? ['seed_asset_missing'] : []),
     ...(discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
@@ -3842,7 +3860,17 @@ export async function runScopedImportPipeline(input: {
     // identity retryable without a partially persisted import.
     if (process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected) {
       const incomplete = gitCaptureIncompleteReasons(input.snapshot, multiPageDiscovery)
-      if (incomplete.length > 0) throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
+      if (incomplete.length > 0) {
+        console.warn('[site-import] GITHUB_IMPORT_INCOMPLETE_CAPTURE_DETAIL', {
+          reasons: incomplete,
+          failedPages: multiPageDiscovery.acquisition?.pages.filter((page) => page.status === 'failed')
+            .slice(0, 8).map((page) => ({ url: page.normalizedUrl, status: page.httpStatusCode, reason: page.failureReason })),
+          failedChildAssets: multiPageDiscovery.acquisition?.summary.failedRequiredResources?.slice(0, 8),
+          failedSeedAssets: input.snapshot.fetchManifest.filter((asset) => asset.fetchStatus === 'fetch_failed')
+            .slice(0, 8).map((asset) => ({ url: asset.resolvedUrl, status: asset.httpStatus })),
+        })
+        throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
+      }
     }
     const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
     const rawGitArchive = process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected
