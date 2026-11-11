@@ -2,19 +2,19 @@ export const MULTI_PAGE_IMPORT_STATIC_SITE_GUARDRAIL =
   'Multi-page import is for static websites. Dynamic content, forms, authenticated areas, and commerce are not imported yet.'
 
 export const DEFAULT_MULTI_PAGE_IMPORT_DISCOVERY_LIMITS = {
-  maxRoutes: 120,
+  maxRoutes: 180,
   maxDepth: 3,
   maxLinksPerPage: 300,
   maxTemplateLinksPerRoute: 30,
   maxSitemaps: 5,
-  maxUrlsFromSitemaps: 100,
+  maxUrlsFromSitemaps: 180,
   maxNestedSitemaps: 5,
 } as const
 
 export const DEFAULT_MULTI_PAGE_IMPORT_HTML_ACQUISITION_LIMITS = {
-  maxPages: 120,
+  maxPages: 180,
   maxBytesPerPage: 1_000_000,
-  requestTimeoutMs: 8_000,
+  requestTimeoutMs: 20_000,
 } as const
 
 export type SiteImportMultiPageLimitState = {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import sharp from "sharp";
 import test from "node:test";
 
 import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture-worker";
@@ -67,6 +68,50 @@ function makeHtmlResponse(html: string): Response {
     },
   });
 }
+
+test("seed and child imports retain raster images as WebP with rewritten references", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-webp-import-"));
+  const sourceUrl = "https://example.com/";
+  const jpeg = await sharp({ create: { width: 32, height: 24, channels: 3, background: "#336699" } }).jpeg().toBuffer();
+  const png = await sharp({ create: { width: 32, height: 24, channels: 4, background: "#dd8844" } }).png().toBuffer();
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl, snapshotRootDirAbs: root, requestId: "webp-import",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async input => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url === sourceUrl) return makeHtmlResponse('<!doctype html><html><body><main><h1>Home</h1><p>Retained image content.</p><img src="/photo.jpg"></main></body></html>');
+        if (url === `${sourceUrl}photo.jpg`) return new Response(jpeg as any, { headers: { "content-type": "image/jpeg" } });
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    });
+    const seedImage = snapshot.fetchManifest.find(row => row.resolvedUrl === `${sourceUrl}photo.jpg`);
+    assert.equal(seedImage?.contentType, "image/webp");
+    assert.match(seedImage?.localPath ?? "", /\.webp$/);
+    assert.ok(fs.readFileSync(path.join(snapshot.snapshotRootDirAbs, seedImage!.localPath!)).subarray(8, 12).equals(Buffer.from("WEBP")));
+    assert.ok(fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8").includes(`/${seedImage!.localPath}`));
+
+    const child = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
+      existingFetchManifest: snapshot.fetchManifest,
+      pages: [{ pageUrl: `${sourceUrl}about`, bodyPath: path.join(root, "about.html"),
+        html: '<html><head><style>.hero{background:url("/background.png")}</style></head><body><div class="hero"><img srcset="/background.png 1x"></div></body></html>' }],
+      fetchImpl: async input => {
+        const url = String(input instanceof Request ? input.url : input);
+        assert.equal(url, `${sourceUrl}background.png`);
+        return new Response(png as any, { headers: { "content-type": "image/png" } });
+      },
+    });
+    assert.equal(child.summary.failedRequiredAssetCount, 0);
+    const childImage = child.manifestEntries.find(row => row.resolvedUrl === `${sourceUrl}background.png`);
+    assert.equal(childImage?.contentType, "image/webp");
+    assert.match(childImage?.localPath ?? "", /\.webp$/);
+    assert.ok(fs.readFileSync(path.join(snapshot.snapshotRootDirAbs, childImage!.localPath!)).subarray(8, 12).equals(Buffer.from("WEBP")));
+    assert.ok(child.pages[0]!.html.includes(`/${childImage!.localPath}`));
+    assert.doesNotMatch(child.pages[0]!.html, /background\.png/);
+    assert.match(child.pages[0]!.html, /background\.webp/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
 
 test("url import removes a MIME-proven false stylesheet role without losing the image", async () => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-css-role-"));

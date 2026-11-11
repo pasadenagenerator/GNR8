@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
+import sharp from "sharp";
 
 import { parse, parseFragment, serialize } from "parse5";
 import { findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
@@ -2747,10 +2748,43 @@ export type AdditionalHtmlPageAssetCaptureResult = {
   };
 };
 
-const ADDITIONAL_PAGE_ASSET_MAX_COUNT = 512;
-const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 12 * 1024 * 1024;
+const ADDITIONAL_PAGE_ASSET_MAX_COUNT = 2048;
+const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 20 * 1024 * 1024;
+const ADDITIONAL_PAGE_RETAINED_IMAGE_MAX_BYTES = 12 * 1024 * 1024;
 const ADDITIONAL_PAGE_ASSET_TIMEOUT_MS = 12_000;
 const ADDITIONAL_PAGE_ASSET_CONCURRENCY = 4;
+
+async function convertRetainedRasterImage(input: {
+  bytes: Uint8Array;
+  contentType: string | null;
+  url: string;
+}): Promise<{ bytes: Uint8Array; contentType: string | null; localPath: string | null }> {
+  const { bytes, contentType, url } = input;
+  const type = contentType?.toLowerCase().split(";", 1)[0]?.trim();
+  const extension = path.posix.extname(new URL(url).pathname).toLowerCase();
+  const jpeg = type === "image/jpeg" && (extension === ".jpg" || extension === ".jpeg");
+  const webp = type === "image/webp" && extension === ".webp";
+  const png = type === "image/png" && extension === ".png";
+  if (!jpeg && !webp && !png) return { bytes, contentType, localPath: null };
+  if (webp && bytes.byteLength < 100_000) return { bytes, contentType: "image/webp", localPath: null };
+  try {
+    const compact = await sharp(Buffer.from(bytes), { failOn: "error" })
+      .rotate()
+      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 76, effort: 4 })
+      .toBuffer();
+    const retained = webp && compact.byteLength >= bytes.byteLength ? bytes : compact;
+    const basename = path.posix.basename(new URL(url).pathname);
+    const stem = basename.slice(0, basename.length - extension.length) || "image";
+    return {
+      bytes: retained,
+      contentType: "image/webp",
+      localPath: webp ? null : hashedImportAssetPath(url, "image", `${stem}.webp`),
+    };
+  } catch {
+    return { bytes, contentType, localPath: null };
+  }
+}
 
 async function fetchAssetBytesWithNodeFallback(input: {
   url: string;
@@ -3064,7 +3098,22 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         failedRequiredResources.add(resolvedUrl);
         return;
       }
-      const absPath = path.resolve(input.snapshotRootDirAbs, localPath);
+      const retained = await convertRetainedRasterImage({ bytes, contentType, url: finalUrl });
+      const retainedBytes = retained.bytes;
+      if (retainedBytes.byteLength > ADDITIONAL_PAGE_RETAINED_IMAGE_MAX_BYTES) {
+        outcomeByUrl.set(resolvedUrl, {
+          fetchStatus: "fetch_failed",
+          httpStatus: response.status,
+          contentType: retained.contentType,
+          byteLength: retainedBytes.byteLength,
+        });
+        failedRequiredResources.add(resolvedUrl);
+        return;
+      }
+      const retainedPath = retained.localPath ?? localPath;
+      const existingPathOwner = usedPathToUrl.get(retainedPath);
+      if (existingPathOwner && existingPathOwner !== resolvedUrl) throw new Error("converted_image_path_collision");
+      const absPath = path.resolve(input.snapshotRootDirAbs, retainedPath);
       const rootWithSeparator = `${path.resolve(input.snapshotRootDirAbs)}${path.sep}`;
       if (!absPath.startsWith(rootWithSeparator)) {
         outcomeByUrl.set(resolvedUrl, { fetchStatus: "unsupported", httpStatus: null, contentType: null, byteLength: null });
@@ -3072,12 +3121,17 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         return;
       }
       fs.mkdirSync(path.dirname(absPath), { recursive: true });
-      fs.writeFileSync(absPath, bytes);
+      fs.writeFileSync(absPath, retainedBytes);
+      if (retainedPath !== localPath) {
+        usedPathToUrl.delete(localPath);
+        usedPathToUrl.set(retainedPath, resolvedUrl);
+        localPathByUrl.set(resolvedUrl, retainedPath);
+      }
       outcomeByUrl.set(resolvedUrl, {
         fetchStatus: "fetched",
         httpStatus: response.status,
-        contentType,
-        byteLength: bytes.byteLength,
+        contentType: retained.contentType,
+        byteLength: retainedBytes.byteLength,
       });
       failedRequiredResources.delete(resolvedUrl);
     } catch {
@@ -4952,15 +5006,25 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           };
         }
 
-        const absPath = path.resolve(snapshotRootDirAbs, localPath);
+        const retained = await convertRetainedRasterImage({ bytes, contentType, url: response.url || resolvedUrl });
+        const retainedPath = retained.localPath ?? localPath;
+        const existingPathOwner = usedPathToUrl.get(retainedPath);
+        if (existingPathOwner && existingPathOwner !== resolvedUrl) throw new Error("converted_image_path_collision");
+        const absPath = path.resolve(snapshotRootDirAbs, retainedPath);
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
-        fs.writeFileSync(absPath, bytes);
+        fs.writeFileSync(absPath, retained.bytes);
+        if (retainedPath !== localPath) {
+          usedPathToUrl.delete(localPath);
+          usedPathToUrl.set(retainedPath, resolvedUrl);
+          localPathByUrl.set(resolvedUrl, retainedPath);
+        }
         if (htmlImageRefs.length > 0) {
           for (const ref of htmlImageRefs) {
             const entry = imageAssetDiscoveryEntries.get(ref.key);
             if (entry) {
               entry.fetchStatus = "fetched";
               entry.persisted = true;
+              entry.normalizedLocalPath = retainedPath;
             }
           }
           diagnostics.push(
@@ -4969,21 +5033,21 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
               code: "RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED",
               message: "HTML image candidate asset persisted.",
               targetUrl: resolvedUrl,
-              details: { normalizedLocalPath: localPath, fetchStatus: "fetched", byteLength: bytes.byteLength },
+              details: { normalizedLocalPath: retainedPath, fetchStatus: "fetched", byteLength: retained.bytes.byteLength },
             }),
           );
           console.info("[raw-import] RAW_IMPORT_HTML_IMAGE_ASSET_PERSISTED", {
             resolvedUrl,
-            localPath,
-            byteLength: bytes.byteLength,
+            localPath: retainedPath,
+            byteLength: retained.bytes.byteLength,
           });
         }
 
         return {
           fetchStatus: "fetched",
           httpStatus: response.status,
-          contentType,
-          byteLength: bytes.byteLength,
+          contentType: retained.contentType,
+          byteLength: retained.bytes.byteLength,
         };
       } catch (error) {
         if (attempt === 0) return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);

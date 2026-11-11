@@ -136,19 +136,19 @@ export type ScopedMultiPageDiscoveryOption =
     }
 
 const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
-  maxRoutes: 120,
+  maxRoutes: 180,
   maxDepth: 3,
   maxLinksPerPage: 300,
   maxTemplateLinksPerRoute: 25,
   maxSitemaps: 6,
-  maxUrlsFromSitemaps: 120,
+  maxUrlsFromSitemaps: 180,
   maxNestedSitemaps: 4,
 }
 
 const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
-  maxPages: 120,
+  maxPages: 180,
   maxBytesPerPage: 1_000_000,
-  requestTimeoutMs: 8_000,
+  requestTimeoutMs: 20_000,
 }
 
 function disabledMultiPageDiscoverySummary(diagnostics: string[] = []): MultiPageDiscoverySummary {

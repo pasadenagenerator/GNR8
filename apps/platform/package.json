@@ -31,6 +31,7 @@
     "playwright": "^1.59.1",
     "playwright-core": "^1.59.1",
     "postcss": "^8.5.8",
+    "sharp": "0.34.5",
     "server-only": "^0.0.1",
     "stripe": "^18.3.0",
     "tailwindcss": "^4.2.1"
