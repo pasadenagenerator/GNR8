@@ -19,6 +19,7 @@ import { getSuperadminPool } from '@/src/superadmin/db'
 import { recordSingleSiteCaptureSpine, type SingleSiteCaptureSpineEvidenceRefInput } from '@/gnr8/single-site/single-site-capture-spine-adapter'
 
 export const runtime = 'nodejs'
+export const maxDuration = 800
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
