@@ -472,6 +472,29 @@ test('raw preview duplicate guard preserves child-route hero without root/home f
   assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 0)
 })
 
+test('raw preview duplicate guard preserves project content with a shared navigation menu', () => {
+  const html = [
+    '<!doctype html><html><body>',
+    '<div class="row designRow"><header><nav>',
+    '<a href="/project">Project</a><a href="/people">People</a><a href="/news">News</a>',
+    '</nav></header><div><h2>Research focus areas</h2><p>ViroiDoc project content</p></div></div>',
+    '</body></html>',
+  ].join('')
+  const guarded = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
+    html,
+    routePath: '/project',
+  })
+  const runtimeGuard = __unifiedRenderPreviewTestUtils.injectRawPreviewRuntimeDuplicateGuard({
+    html: guarded.html,
+    routePath: '/project',
+    duplicateGuardEvidence: guarded.rawPreviewDuplicateGuardEvidence,
+  })
+
+  assert.equal(guarded.html.includes('Research focus areas'), true)
+  assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 0)
+  assert.equal(runtimeGuard.html.includes('routeMenuDetected'), false)
+})
+
 test('raw preview runtime duplicate guard is injected before allowed script and targets appended root/home blocks', () => {
   const html = [
     '<!doctype html><html><head><title>News</title></head><body>',
