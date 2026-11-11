@@ -3888,7 +3888,7 @@ export async function runScopedImportPipeline(input: {
             scope, runtimeSiteId: canonicalInput.siteId, siteVersionId,
             files: persistedFileRows, target,
           }, {repository: () => store.rawImportRepository(siteVersionId),
-            allowAdvanceExisting: pendingVersion?.artifactId === null && pendingVersion.pages.length === 0})
+            allowAdvanceExisting: pendingVersion?.artifactId === null})
         })()
       : null
     const rawGitArchiveRef = rawGitArchive && input.ownershipScope ? {

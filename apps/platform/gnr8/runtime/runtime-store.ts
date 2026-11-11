@@ -4647,6 +4647,22 @@ export async function persistRawImportedSiteArtifact(input: {
     const artifactId = upsert.rows[0]?.id;
     if (!artifactId) throw new Error("RAW_IMPORT_ARTIFACT_UPSERT_FAILED");
     await client.query(`delete from public.gnr8_runtime_raw_template_artifact_files where artifact_id = $1::uuid`, [artifactId]);
+    if (input.metadata.gitArchive) {
+      const rows = Object.values(fileMap);
+      await client.query(
+        `
+        insert into public.gnr8_runtime_raw_template_artifact_files (
+          artifact_id, file_path, media_type, file_size_bytes, sha256, content_bytes
+        )
+        select $1::uuid, item.file_path, item.media_type, item.size_bytes, item.sha256, ''::bytea
+        from unnest($2::text[], $3::text[], $4::integer[], $5::text[])
+          as item(file_path, media_type, size_bytes, sha256)
+        `,
+        [artifactId, rows.map(row => row.path), rows.map(row => row.mediaType),
+          rows.map(row => row.sizeBytes), rows.map(row => row.sha256)],
+      );
+      return { artifactId, fileCount: rows.length };
+    }
     for (const file of input.fileRows) {
       const filePath = normalizeRawTemplateFilePath(file.path);
       if (!filePath) continue;
@@ -4662,8 +4678,7 @@ export async function persistRawImportedSiteArtifact(input: {
         )
         values ($1::uuid, $2::text, $3::text, $4::integer, $5::text, $6::bytea)
         `,
-        [artifactId, filePath, file.mediaType, file.sizeBytes, file.sha256,
-          input.metadata.gitArchive ? Buffer.alloc(0) : file.bytes],
+        [artifactId, filePath, file.mediaType, file.sizeBytes, file.sha256, file.bytes],
       );
     }
     return { artifactId, fileCount: Object.keys(fileMap).length };

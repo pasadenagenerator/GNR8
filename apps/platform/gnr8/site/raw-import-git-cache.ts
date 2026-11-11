@@ -60,8 +60,8 @@ export class RawImportGitCache{
       seen.add(objectKey);
       unique.push(file);
     }
-    for(let offset=0;offset<unique.length;offset+=8){
-      const results=await Promise.allSettled(unique.slice(offset,offset+8).map(async file=>{
+    for(let offset=0;offset<unique.length;offset+=32){
+      const results=await Promise.allSettled(unique.slice(offset,offset+32).map(async file=>{
         const objectKey=key(ref,versionId,file.sha256);
         let uploadFailure='';
         for(let attempt=0;attempt<3;attempt++){
@@ -79,6 +79,7 @@ export class RawImportGitCache{
         throw Error(`RAW_IMPORT_CACHE_INTEGRITY_FAILED:${file.path}:${uploadFailure||'readback_failed'}`);
       }));
       for(const result of results)if(result.status==='rejected')throw result.reason;
+      console.info('[raw-import-cache] prepared', {completed:Math.min(offset+32,unique.length),total:unique.length});
     }
   }
 }
