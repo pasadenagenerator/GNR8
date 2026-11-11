@@ -65,6 +65,28 @@ test("CHS approved missing map icons are excluded only when retained pages canno
   ]);
 });
 
+test("ViroiDoc approval is limited to its site and the same four unused map icons", () => {
+  const sourceUrl = "https://www.viroidoc.eu/";
+  const siteId = "dbdd5b9f-6ae1-4736-917b-20adf94838c6";
+  const approved = approvedUnusedCssDependencies(sourceUrl, siteId);
+  assert.equal(approved.length, 8);
+  assert.equal(approvedUnusedCssDependencies(sourceUrl, "another-site").length, 0);
+  assert.equal(approvedUnusedCssDependencies("https://www.chs.si/", siteId).length, 0);
+  const css = ".leaflet-control-geocoder-icon{background:url(images/geocoder.png)}";
+  const unused = findProvablyUnusedCssDependencies({
+    css,
+    stylesheetUrl: "https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/external-libs.css",
+    htmlDocuments: ["<main>ViroiDoc</main>"],
+  });
+  assert.equal(unused.length, 1);
+  assert.ok(approved.includes(unused[0]!.resolvedUrl));
+  assert.equal(findProvablyUnusedCssDependencies({
+    css,
+    stylesheetUrl: "https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/external-libs.css",
+    htmlDocuments: ['<main class="leaflet-control-geocoder-icon"></main>'],
+  }).length, 0);
+});
+
 test("restored capture aliases survive acquisition and persisted readback without asset fetches", async () => {
   const sourceUrl = "https://example.test/cache/bundle/style.css";
   const cssPath = "assets/stylesheet/123456789abc-style.css";

@@ -1,6 +1,6 @@
-// CHS owner approved omitting these four upstream-404 map icons on 2026-11-09.
+// These shared upstream-404 map icons may be omitted only for approved sites.
 // Consumers must also prove that the retained HTML cannot match their CSS rules.
-const CHS_UNUSED_MAP_ICON_NAMES = [
+const UNUSED_MAP_ICON_NAMES = [
   'geocoder.png',
   'layers-2x.png',
   'layers.png',
@@ -8,13 +8,18 @@ const CHS_UNUSED_MAP_ICON_NAMES = [
 ] as const
 
 export function approvedUnusedCssDependencies(sourceUrl: string, ownershipSiteId: string | undefined): string[] {
-  if (ownershipSiteId !== '9ff5613e-1625-43f1-844e-c5c91a813d4f') return []
+  const approvedHostsBySiteId: Record<string, string> = {
+    '9ff5613e-1625-43f1-844e-c5c91a813d4f': 'chs.si',
+    'dbdd5b9f-6ae1-4736-917b-20adf94838c6': 'viroidoc.eu',
+  }
+  const approvedHost = ownershipSiteId ? approvedHostsBySiteId[ownershipSiteId] : undefined
+  if (!approvedHost) return []
   let source: URL
   try {
     source = new URL(sourceUrl)
-    if (source.hostname.replace(/^www\./, '') !== 'chs.si') return []
+    if (source.hostname.replace(/^www\./, '') !== approvedHost) return []
   } catch { return [] }
-  return CHS_UNUSED_MAP_ICON_NAMES.flatMap((name) => [
+  return UNUSED_MAP_ICON_NAMES.flatMap((name) => [
     `https://site-assets.cdnmns.com/4461fb153de0bd0ff5b12a5c05bd5a61/css/images/${name}`,
     new URL(`/assets/stylesheet/images/${name}`, source).toString(),
   ])
