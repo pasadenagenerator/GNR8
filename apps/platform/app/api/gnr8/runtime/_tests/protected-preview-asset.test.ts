@@ -58,3 +58,41 @@ test("manifest and persisted byte integrity fail closed", async () => {
     assert.equal((await readProtectedPreviewAsset(input, f.deps))?.status, 500, corruption);
   }
 });
+
+test("protected asset reads a Git-backed image instead of empty database bytes", async () => {
+  const f = fixture();
+  const scope = { agencyId: "00000000-0000-4000-8000-000000000001",
+    clientId: "3d44ad6f-01e5-4884-a492-585de3b3af49",
+    siteId: "9ff5613e-1625-43f1-844e-c5c91a813d4f" };
+  const ref = { scope, repository: "pasadenagenerator/gnr8-viroidoc", commit: "a".repeat(40),
+    manifestPath: `raw-import/${input.siteVersionId}/.gnr8-import-manifest.json`,
+    manifestSha256: "b".repeat(64) };
+  const artifact = { id: "artifact", file_map: { [input.path]: f.entry }, metadata_json: { gitArchive: ref } };
+  const oldClient = f.deps.client;
+  f.deps.client = (() => ({ from(table: string) {
+    return { select() { return this; }, eq() { return this; }, in() { return this; },
+      async limit() { return { data: table.endsWith("_files") ? [{ ...f.file, content_bytes: "\\x" }] : [artifact], error: null }; } };
+  } })) as typeof oldClient;
+  const keys = ["GNR8_STACKI_GITHUB_ENABLED", "GNR8_STACKI_GITHUB_SITE_IDS",
+    "GNR8_STACKI_GITHUB_TARGETS", "GNR8_STACKI_GITHUB_TOKEN"] as const;
+  const prior = keys.map(key => process.env[key]);
+  const oldFetch = globalThis.fetch;
+  process.env.GNR8_STACKI_GITHUB_ENABLED = "1";
+  process.env.GNR8_STACKI_GITHUB_SITE_IDS = JSON.stringify([scope.siteId]);
+  process.env.GNR8_STACKI_GITHUB_TARGETS = JSON.stringify({ [scope.siteId]: {
+    owner: "pasadenagenerator", ownerId: 1, repository: "gnr8-viroidoc", repositoryId: 2 } });
+  process.env.GNR8_STACKI_GITHUB_TOKEN = "test";
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    assert.match(String(url), /\/contents\/raw-import\/.*\/assets\/logo\.png\?ref=/);
+    return new Response(f.bytes);
+  }) as typeof fetch;
+  try {
+    const response = await readProtectedPreviewAsset(input, f.deps);
+    assert.equal(response?.status, 200);
+    assert.deepEqual(Buffer.from(await response!.arrayBuffer()), f.bytes);
+  } finally {
+    globalThis.fetch = oldFetch;
+    keys.forEach((key, index) => { if (prior[index] === undefined) delete process.env[key];
+      else process.env[key] = prior[index]; });
+  }
+});
