@@ -58,14 +58,21 @@ test("derived capture cache rejects the parent Git ref and accepts its own versi
   const commit = "c".repeat(40);
   const parent = "d".repeat(40);
   const tree = "e".repeat(40);
+  const blobSha = (body: Buffer) => createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
+  const blobs = new Map(packageFiles.map((entry) => [blobSha(entry.body), entry.body]));
   const transport = (tamper = false) => (async (url: string | URL | Request) => {
     const path = new URL(String(url)).pathname;
     const result = path.includes("/git/ref/") ? { object: { sha: commit } }
       : path.includes("/git/commits/") ? { tree: { sha: tree }, parents: [{ sha: parent }] }
+      : path.includes("/git/blobs/") ? (() => {
+          const body = blobs.get(path.split("/").at(-1) ?? "");
+          assert.ok(body);
+          return { encoding: "base64", size: body.length, content: body.toString("base64") };
+        })()
       : { truncated: false, tree: packageFiles.map((entry, index) => ({
           path: entry.path, type: "blob", mode: "100644", size: entry.body.length,
           sha: tamper && index === 0 ? "f".repeat(40)
-            : createHash("sha1").update(`blob ${entry.body.length}\0`).update(entry.body).digest("hex"),
+            : blobSha(entry.body),
         })) };
     return Response.json(result);
   }) as typeof fetch;
@@ -75,7 +82,16 @@ test("derived capture cache rejects the parent Git ref and accepts its own versi
     transport: transport(),
   };
   const archive = await writeRawImportGitArchive(archiveInput, archiveDeps);
-  await assert.rejects(writeRawImportGitArchive(archiveInput,
+  const changed = Buffer.from("new capture metadata");
+  const retryFile = { ...file, bytes: changed, sizeBytes: changed.length,
+    sha256: createHash("sha256").update(changed).digest("hex") };
+  const retryInput = { ...archiveInput, files: [retryFile] };
+  const resumed = await writeRawImportGitArchive(retryInput,
+    { ...archiveDeps, repository: async () => ({ defaultBranch: "main", parent, existingCommit: commit }) });
+  assert.equal(resumed.restoredFiles.length, 1);
+  assert.deepEqual(retryFile.bytes, bytes);
+  assert.equal(resumed.manifestSha256, archive.manifestSha256);
+  await assert.rejects(writeRawImportGitArchive(retryInput,
     { ...archiveDeps, repository: async () => ({ defaultBranch: "main", parent, existingCommit: commit }),
       transport: transport(true) }), /RAW_IMPORT_GIT_ARCHIVE_INVALID/);
   const derivedRef = {

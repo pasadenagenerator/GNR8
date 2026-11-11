@@ -3889,6 +3889,13 @@ export async function runScopedImportPipeline(input: {
           }, {repository: () => store.rawImportRepository(siteVersionId)})
         })()
       : null
+    for (const file of rawGitArchive?.restoredFiles ?? []) {
+      const root = path.resolve(input.snapshot.snapshotRootDirAbs)
+      const destination = path.resolve(root, file.path)
+      if (!destination.startsWith(root + path.sep) || !fs.existsSync(destination))
+        throw new Error('RAW_IMPORT_GIT_ARCHIVE_INVALID')
+      fs.writeFileSync(destination, file.body)
+    }
     const rawGitArchiveRef = rawGitArchive && input.ownershipScope ? {
       scope: input.ownershipScope,
       repository: rawGitArchive.repository, commit: rawGitArchive.commit,
