@@ -232,3 +232,42 @@ test("cache repairs an existing object whose bytes fail exact readback", async (
   assert.deepEqual(upsertFlags, [false, true]);
   assert.deepEqual(await cache.read(ref, version, file), bytes);
 });
+
+test("cache stays below the storage connection limit across many files", async () => {
+  const version = "43bb405b-912e-47e7-af85-f995cd2ed384";
+  const files = Array.from({ length: 24 }, (_, index) => {
+    const bytes = Buffer.from(`ViroiDoc asset ${index}`);
+    return { path: `assets/${index}.txt`, mediaType: "text/plain", sizeBytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"), bytes };
+  });
+  const objects = new Map<string, Buffer>();
+  let active = 0, maxActive = 0;
+  const limited = async <T>(run: () => T): Promise<T> => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setTimeout(resolve, 2));
+    try { if (active > 8) throw new Error("Too many connections issued to the database"); return run(); }
+    finally { active--; }
+  };
+  const client = { storage: {
+    getBucket: async () => ({ data: { public: false }, error: null }),
+    from: () => ({
+      upload: (key: string, value: Buffer) => limited(() => {
+        objects.set(key, value); return { data: {}, error: null };
+      }),
+      download: (key: string) => limited(() => {
+        const value = objects.get(key);
+        return value ? { data: new Blob([new Uint8Array(value)]), error: null }
+          : { data: null, error: new Error("missing") };
+      }),
+    }),
+  } } as unknown as ConstructorParameters<typeof RawImportGitCache>[0];
+  const ref = { scope: { agencyId: "00000000-0000-4000-8000-000000000001",
+    clientId: "3d44ad6f-01e5-4884-a492-585de3b3af49",
+    siteId: "9ff5613e-1625-43f1-844e-c5c91a813d4f" },
+    repository: "pasadenagenerator/gnr8-chs", commit: "a".repeat(40),
+    manifestPath: `raw-import/${version}/.gnr8-import-manifest.json`, manifestSha256: "b".repeat(64) };
+  await new RawImportGitCache(client, "gnr8-astro-candidate-routes").prepare(ref, version, files);
+  assert.equal(objects.size, files.length);
+  assert.equal(maxActive, 8);
+});
