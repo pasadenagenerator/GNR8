@@ -27,12 +27,22 @@ export async function readRawImportGitFile(ref:Ref,versionId:string,file:File,ta
     !file.path||file.path.length>500||file.path.includes('\\')||
     file.path.split('/').some(part=>!part||part==='.'||part==='..'||part==='.git'))invalid();
   const path=`raw-import/${versionId}/${file.path.split('/').map(encodeURIComponent).join('/')}`;
-  const response=await transport(`https://api.github.com/repos/${target.owner}/${target.repository}/contents/${path}?ref=${ref.commit}`,
-    {redirect:'error',signal:AbortSignal.timeout(30_000),headers:{
+  let response=await transport(`https://api.github.com/repos/${target.owner}/${target.repository}/contents/${path}?ref=${ref.commit}`,
+    {redirect:'manual',signal:AbortSignal.timeout(30_000),headers:{
       authorization:`Bearer ${target.token}`,accept:'application/vnd.github.raw+json',
       'X-GitHub-Api-Version':'2022-11-28',
     }});
-  if(!response.ok||response.headers.get('x-oauth-scopes')?.split(',').map(x=>x.trim()).includes('repo'))invalid();
+  if(response.headers.get('x-oauth-scopes')?.split(',').map(x=>x.trim()).includes('repo'))invalid();
+  if(response.status===302){
+    let location:URL;
+    try{location=new URL(response.headers.get('location')??'');}catch{invalid();}
+    if(location.protocol!=='https:'||location.username||location.password||location.hash||
+      !/^[a-z0-9-]+\.githubusercontent\.com$/.test(location.hostname))invalid();
+    // GitHub's temporary download URL is already authorized. Never forward
+    // the repository credential to the CDN host or follow another redirect.
+    response=await transport(location,{redirect:'error',signal:AbortSignal.timeout(30_000)});
+  }
+  if(!response.ok)invalid();
   const bytes=Buffer.from(await response.arrayBuffer());
   if(bytes.length!==file.sizeBytes||createHash('sha256').update(bytes).digest('hex')!==file.sha256)invalid();
   return bytes;

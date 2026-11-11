@@ -17,7 +17,7 @@ test('reads a path from the immutable Git commit and verifies exact bytes',async
     sha256:createHash('sha256').update(bytes).digest('hex'),sizeBytes:bytes.length};
   const transport=(async (url:string|URL|Request,options?:RequestInit)=>{
     assert.equal(String(url),`https://api.github.com/repos/pasadenagenerator/gnr8-viroidoc/contents/raw-import/${version}/${file.path}?ref=${ref.commit}`);
-    assert.equal(options?.redirect,'error');
+    assert.equal(options?.redirect,'manual');
     assert.equal((options?.headers as Record<string,string>).accept,'application/vnd.github.raw+json');
     return new Response(bytes);
   }) as typeof fetch;
@@ -28,4 +28,24 @@ test('reads a path from the immutable Git commit and verifies exact bytes',async
     /RAW_IMPORT_GIT_FILE_INVALID/);
   await assert.rejects(readRawImportGitFile(ref,version,{...file,path:'../secret'},target,transport),
     /RAW_IMPORT_GIT_FILE_INVALID/);
+});
+
+test('follows only GitHub raw-file redirects without forwarding the credential',async()=>{
+  const bytes=Buffer.from('ViroiDoc logo');
+  const file={path:'uploads/logo.webp',sha256:createHash('sha256').update(bytes).digest('hex'),
+    sizeBytes:bytes.length};
+  let calls=0;
+  const transport=(async (url:string|URL|Request,options?:RequestInit)=>{
+    calls++;
+    if(calls===1)return new Response(null,{status:302,headers:{location:'https://raw.githubusercontent.com/signed/logo.webp'}});
+    assert.equal(String(url),'https://raw.githubusercontent.com/signed/logo.webp');
+    assert.equal(options?.redirect,'error');
+    assert.equal(options?.headers,undefined);
+    return new Response(bytes);
+  }) as typeof fetch;
+  assert.deepEqual(await readRawImportGitFile(ref,version,file,target,transport),bytes);
+  assert.equal(calls,2);
+  await assert.rejects(readRawImportGitFile(ref,version,file,target,
+    (async()=>new Response(null,{status:302,headers:{location:'https://example.com/steal'}})) as typeof fetch),
+  /RAW_IMPORT_GIT_FILE_INVALID/);
 });
