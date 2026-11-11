@@ -49,6 +49,31 @@ function verifyFiles(entries:Map<string,any>,files:GitFile[]){
   if(entry?.type!=='blob'||entry.mode!=='100644'||entry.sha!==blobId(file.body)||entry.size!==file.body.length)invalid();
  }
 }
+async function verifyExistingArchive(input:Verification,scope:Scope,runtimeSiteId:string,transport?:typeof fetch){
+ const read=await readRawImportGitTree(input,transport);
+ const manifestPath=`raw-import/${input.branch.slice('imports/'.length)}/.gnr8-import-manifest.json`;
+ const entry=read.entries.get(manifestPath);
+ if(entry?.type!=='blob'||entry.mode!=='100644'||entry.size>1024*1024)invalid();
+ const body=await read.blob(entry.sha);
+ let manifest:Archive;
+ try{manifest=JSON.parse(body.toString('utf8'));}catch{invalid();}
+ if(manifest.format!=='gnr8-raw-import-git:v1'||manifest.siteVersionId!==input.branch.slice('imports/'.length)||
+  manifest.runtimeSiteId!==runtimeSiteId||JSON.stringify(manifest.scope)!==JSON.stringify(scope)||
+  !Array.isArray(manifest.files)||read.entries.size!==manifest.files.length+2)invalid();
+ const seen=new Set<string>();
+ for(const file of manifest.files){
+  filePath(file.path);
+  if(seen.has(file.path))invalid();
+  seen.add(file.path);
+  const item=read.entries.get(`raw-import/${manifest.siteVersionId}/${file.path}`);
+  if(!item||item.type!=='blob'||item.mode!=='100644'||item.size!==file.bytes||
+   !/^[a-f0-9]{64}$/.test(file.sha256))invalid();
+ }
+ const config=read.entries.get('vercel.json');
+ if(config?.type!=='blob'||config.mode!=='100644'||
+  config.sha!==blobId(githubDataBranchVercelConfig))invalid();
+ return hash(body);
+}
 function filePath(path:string){
  if(typeof path!=='string'||path.length>500||!path||path.includes('\\')||path.split('/').some(s=>!s||s==='.'||s==='..'||s==='.git'||s.startsWith('.gnr8')))invalid();
  return path;
@@ -73,51 +98,33 @@ export function rawImportGitPackage(input:{scope:Scope;runtimeSiteId:string;site
  return {manifest,prefix,gitFiles,manifestSha256:hash(gitFiles.at(-1)!.body)};
 }
 
-/** Immutable raw capture branch. The caller must authenticate the owner and
- * verify the exact private target first. No DB write is performed here. */
+/** A failed import may add another commit to the same branch; a bound import
+ * must not advance it. Every capture commit remains immutable in Git history. */
 export async function writeRawImportGitArchive(input:{scope:Scope;runtimeSiteId:string;siteVersionId:string;
  files:File[];target:Target},deps:{
  repository:()=>Promise<{defaultBranch:string;parent:string;existingCommit?:string}>;
- push?:typeof pushStandaloneGit;transport?:typeof fetch;
-}):Promise<{repository:string;commit:string;manifestPath:string;manifestSha256:string;files:Archive['files'];restoredFiles:GitFile[]}>{
+ allowAdvanceExisting?:boolean;push?:typeof pushStandaloneGit;transport?:typeof fetch;
+}):Promise<{repository:string;commit:string;manifestPath:string;manifestSha256:string;files:Archive['files']}>{
+ const {manifest,prefix,gitFiles,manifestSha256}=rawImportGitPackage(input);
  const {defaultBranch,parent,existingCommit}=await deps.repository();
  if(!/^[a-zA-Z0-9._/-]{1,100}$/.test(defaultBranch)||!/^[a-f0-9]{40}$/.test(parent))invalid();
  const branch=`imports/${input.siteVersionId}`;
  if(existingCommit!==undefined&&!/^[a-f0-9]{40}$/.test(existingCommit))invalid();
- const restoredFiles:GitFile[]=[];
- const existing=existingCommit ? await readRawImportGitTree({target:input.target,branch,commit:existingCommit,parent},deps.transport) : null;
- if(existing){
-  const manifestPath=`raw-import/${input.siteVersionId}/.gnr8-import-manifest.json`;
-  const manifestEntry=existing.entries.get(manifestPath);
-  if(manifestEntry?.mode!=='100644'||manifestEntry?.type!=='blob')invalid();
-  const manifestBody=await existing.blob(manifestEntry.sha);
-  let archived:Archive;
-  try{archived=JSON.parse(manifestBody.toString('utf8'));}catch{invalid();}
-  if(archived.format!=='gnr8-raw-import-git:v1'||archived.siteVersionId!==input.siteVersionId||
-   archived.runtimeSiteId!==input.runtimeSiteId||JSON.stringify(archived.scope)!==JSON.stringify(input.scope)||
-   !Array.isArray(archived.files)||archived.files.length!==input.files.length)invalid();
-  const byPath=new Map(input.files.map(file=>[file.path,file]));
-  if(byPath.size!==input.files.length)invalid();
-  for(const archivedFile of archived.files){
-   const file=byPath.get(archivedFile.path);
-   const entry=existing.entries.get(`raw-import/${input.siteVersionId}/${archivedFile.path}`);
-   if(!file||!entry||entry.type!=='blob'||entry.mode!=='100644'||
-    entry.size!==archivedFile.bytes||!/^[a-f0-9]{64}$/.test(archivedFile.sha256))invalid();
-   file.mediaType=archivedFile.mediaType;
-   if(file.sha256!==archivedFile.sha256||file.sizeBytes!==archivedFile.bytes){
-    const body=await existing.blob(entry.sha);
-    if(body.length!==archivedFile.bytes||hash(body)!==archivedFile.sha256)invalid();
-    file.bytes=body;file.sizeBytes=body.length;file.sha256=archivedFile.sha256;
-    restoredFiles.push({path:archivedFile.path,body});
-   }
-  }
+ let useExisting=false;
+ if(existingCommit){
+  const oldManifestSha=await verifyExistingArchive({target:input.target,branch,commit:existingCommit,parent},
+   input.scope,input.runtimeSiteId,deps.transport);
+  useExisting=oldManifestSha===manifestSha256;
+  if(!useExisting&&!deps.allowAdvanceExisting)invalid();
  }
- const {manifest,prefix,gitFiles,manifestSha256}=rawImportGitPackage(input);
- const commit=existingCommit??(await (deps.push??pushStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
-  defaultBranch,parent,ref:`heads/${branch}`,manifestSha256,files:gitFiles,token:input.target.token,
+ const commit=useExisting ? existingCommit! : (await (deps.push??pushStandaloneGit)({
+  owner:input.target.owner,repository:input.target.repository,
+  defaultBranch:existingCommit ? branch : defaultBranch,
+  parent:existingCommit??parent,ref:`heads/${branch}`,manifestSha256,files:gitFiles,token:input.target.token,
   author:githubCommitAuthor(input.target, 'GNR8 Import')})).commit;
- const read=existing??await readRawImportGitTree({target:input.target,branch,commit,parent},deps.transport);
+ const read=await readRawImportGitTree({target:input.target,branch,commit,
+  parent:useExisting ? parent : existingCommit??parent},deps.transport);
  verifyFiles(read.entries,gitFiles);
  return {repository:`${input.target.owner}/${input.target.repository}`,commit,
-  manifestPath:prefix+'.gnr8-import-manifest.json',manifestSha256,files:manifest.files,restoredFiles};
+  manifestPath:prefix+'.gnr8-import-manifest.json',manifestSha256,files:manifest.files};
 }

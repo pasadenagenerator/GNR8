@@ -82,16 +82,7 @@ test("derived capture cache rejects the parent Git ref and accepts its own versi
     transport: transport(),
   };
   const archive = await writeRawImportGitArchive(archiveInput, archiveDeps);
-  const changed = Buffer.from("new capture metadata");
-  const retryFile = { ...file, bytes: changed, sizeBytes: changed.length,
-    sha256: createHash("sha256").update(changed).digest("hex") };
-  const retryInput = { ...archiveInput, files: [retryFile] };
-  const resumed = await writeRawImportGitArchive(retryInput,
-    { ...archiveDeps, repository: async () => ({ defaultBranch: "main", parent, existingCommit: commit }) });
-  assert.equal(resumed.restoredFiles.length, 1);
-  assert.deepEqual(retryFile.bytes, bytes);
-  assert.equal(resumed.manifestSha256, archive.manifestSha256);
-  await assert.rejects(writeRawImportGitArchive(retryInput,
+  await assert.rejects(writeRawImportGitArchive(archiveInput,
     { ...archiveDeps, repository: async () => ({ defaultBranch: "main", parent, existingCommit: commit }),
       transport: transport(true) }), /RAW_IMPORT_GIT_ARCHIVE_INVALID/);
   const derivedRef = {
@@ -104,6 +95,51 @@ test("derived capture cache rejects the parent Git ref and accepts its own versi
   assert.equal(archive.manifestPath, `raw-import/${derivedVersion}/.gnr8-import-manifest.json`);
   await cache.prepare(derivedRef, derivedVersion, [file]);
   assert.deepEqual(await cache.read(derivedRef, derivedVersion, file), bytes);
+});
+
+test("a changed capture advances only an unbound import branch", async () => {
+  const version = "d33d44df-7be3-48d8-9cf6-245474f95ca5";
+  const scope = { agencyId: "00000000-0000-4000-8000-000000000001",
+    clientId: "3d44ad6f-01e5-4884-a492-585de3b3af49",
+    siteId: "9ff5613e-1625-43f1-844e-c5c91a813d4f" };
+  const makeInput = (text: string) => {
+    const bytes = Buffer.from(text);
+    return { scope, runtimeSiteId: "chs", siteVersionId: version,
+      files: [{ path: "index.html", mediaType: "text/html", bytes, sizeBytes: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex") }],
+      target: { owner: "pasadenagenerator", ownerId: 1, repository: "gnr8-chs", repositoryId: 2, token: "test" } };
+  };
+  const oldInput = makeInput("old capture");
+  const newInput = makeInput("new capture");
+  const oldCommit = "a".repeat(40), newCommit = "b".repeat(40), base = "c".repeat(40), tree = "d".repeat(40);
+  const blobSha = (body: Buffer) => createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
+  let head = oldCommit, parent = base, files = rawImportGitPackage(oldInput).gitFiles;
+  const oldBlobs = new Map(files.map((file) => [blobSha(file.body), file.body]));
+  const transport = (async (url: string | URL | Request) => {
+    const path = new URL(String(url)).pathname;
+    if (path.includes("/git/ref/")) return Response.json({ object: { sha: head } });
+    if (path.includes("/git/commits/")) return Response.json({ tree: { sha: tree }, parents: [{ sha: parent }] });
+    if (path.includes("/git/blobs/")) {
+      const body = oldBlobs.get(path.split("/").at(-1) ?? "");
+      assert.ok(body);
+      return Response.json({ encoding: "base64", size: body.length, content: body.toString("base64") });
+    }
+    return Response.json({ truncated: false, tree: files.map((file) => ({ path: file.path,
+      type: "blob", mode: "100644", size: file.body.length, sha: blobSha(file.body) })) });
+  }) as typeof fetch;
+  const repository = async () => ({ defaultBranch: "main", parent: base, existingCommit: oldCommit });
+  const push = (async (input: {defaultBranch:string;parent:string}) => {
+    assert.equal(input.defaultBranch, `imports/${version}`);
+    assert.equal(input.parent, oldCommit);
+    head = newCommit; parent = oldCommit; files = rawImportGitPackage(newInput).gitFiles;
+    return { commit: newCommit };
+  }) as never;
+  await assert.rejects(writeRawImportGitArchive(newInput, { repository, transport, push }), /RAW_IMPORT_GIT_ARCHIVE_INVALID/);
+  assert.equal(head, oldCommit);
+  const result = await writeRawImportGitArchive(newInput,
+    { repository, transport, push, allowAdvanceExisting: true });
+  assert.equal(result.commit, newCommit);
+  assert.equal(result.manifestSha256, rawImportGitPackage(newInput).manifestSha256);
 });
 
 test("cache retries a transient upload failure and verifies readback", async () => {
