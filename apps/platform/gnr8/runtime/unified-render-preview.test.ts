@@ -477,7 +477,8 @@ test('raw preview duplicate guard preserves project content with a shared naviga
     '<!doctype html><html><body>',
     '<div class="row designRow"><header><nav>',
     '<a href="/project">Project</a><a href="/people">People</a><a href="/news">News</a>',
-    '</nav></header><div><h2>Research focus areas</h2><p>ViroiDoc project content</p></div></div>',
+    '</nav></header><div><h2>Research focus areas</h2><p>ViroiDoc project content</p></div>',
+    '<footer>The ViroiDoc - Advanced Research on Viroid Pathogenesis project is coordinated by the university.</footer></div>',
     '</body></html>',
   ].join('')
   const guarded = __unifiedRenderPreviewTestUtils.applyRawPreviewDuplicateInjectionGuard({
@@ -493,6 +494,7 @@ test('raw preview duplicate guard preserves project content with a shared naviga
   assert.equal(guarded.html.includes('Research focus areas'), true)
   assert.equal(guarded.rawPreviewDuplicateGuardEvidence.duplicateRootBlockRemovedCount, 0)
   assert.equal(runtimeGuard.html.includes('routeMenuDetected'), false)
+  assert.equal(runtimeGuard.html.includes('headingText+" "+text'), false)
 })
 
 test('raw preview runtime duplicate guard is injected before allowed script and targets appended root/home blocks', () => {
