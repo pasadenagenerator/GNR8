@@ -1,5 +1,6 @@
 import { verifiedRawFileRow } from './verified-raw-file-row';
-import { RawImportGitCache } from '../site/raw-import-git-cache';
+import { readRawImportGitFile } from '../site/raw-import-git-reader';
+import { configuredGitHubTarget } from '../stacki/stacki-github-config';
 import {GeneratedArtifactGitCache,generatedArtifactReferenceColumns,type GeneratedGitRef} from '../site/generated-artifact-git-cache';
 import { readPublicPreparation } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import "server-only";
@@ -541,6 +542,7 @@ type RawTemplateArtifactRow = {
 };
 
 type RawTemplateArtifactFileRow = {
+  file_path?: string;
   media_type: string;
   file_size_bytes: number;
   sha256: string;
@@ -777,13 +779,13 @@ function parseRawImportedSiteArtifactMetadata(value: unknown): RawImportedSiteAr
   };
 }
 
-export async function verifiedRawArtifactFile(row: RawTemplateArtifactFileRow, siteVersionId: string,
-  cache?: Pick<RawImportGitCache,'read'>) {
+export async function verifiedRawArtifactFile(row: RawTemplateArtifactFileRow, siteVersionId: string) {
   const ref = parseRawImportedSiteArtifactMetadata(row.metadata_json).gitArchive;
   if (!ref) return verifiedRawFileRow(row);
-  const bytes = await (cache??new RawImportGitCache()).read(ref, siteVersionId, {
-    sha256: row.sha256, sizeBytes: row.file_size_bytes,
-  });
+  const target = configuredGitHubTarget({...ref.scope, siteVersionId});
+  const bytes = await readRawImportGitFile(ref, siteVersionId, {
+    path: row.file_path ?? '', sha256: row.sha256, sizeBytes: row.file_size_bytes,
+  }, target);
   return verifiedRawFileRow({ ...row, content_bytes: bytes });
 }
 
@@ -4515,6 +4517,7 @@ export async function getRawTemplateSiteAsset(input: {
       ? await client.query<RawTemplateArtifactFileRow>(
           `
           select
+            f.file_path::text as file_path,
             f.media_type::text as media_type,
             f.file_size_bytes::integer as file_size_bytes,
             f.sha256::text as sha256,
@@ -4532,6 +4535,7 @@ export async function getRawTemplateSiteAsset(input: {
       : await client.query<RawTemplateArtifactFileRow>(
           `
           select
+            f.file_path::text as file_path,
             f.media_type::text as media_type,
             f.file_size_bytes::integer as file_size_bytes,
             f.sha256::text as sha256,
@@ -4614,10 +4618,6 @@ export async function persistRawImportedSiteArtifact(input: {
     fileMap[p] = { path: p, mediaType: row.mediaType, sizeBytes: row.sizeBytes, sha256: row.sha256 };
   }
   if (!fileMap[entryHtmlPath]) throw new Error("RAW_IMPORT_ARTIFACT_ENTRY_HTML_MISSING");
-
-  if (input.metadata.gitArchive) {
-    await new RawImportGitCache().prepare(input.metadata.gitArchive, input.siteVersionId, input.fileRows);
-  }
 
   return withTx(async (client) => {
     const upsert = await client.query<{ id: string }>(

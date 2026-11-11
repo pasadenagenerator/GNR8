@@ -3,7 +3,8 @@ import { retainedStylesheetSourceUrl } from "@/gnr8/validation/runtime/retained-
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
-import { RawImportGitCache } from '@/gnr8/site/raw-import-git-cache';
+import { readRawImportGitFile } from '@/gnr8/site/raw-import-git-reader';
+import { configuredGitHubTarget } from '@/gnr8/stacki/stacki-github-config';
 import type { RawImportedSiteArtifactMetadata } from '@/gnr8/runtime/types';
 
 const headers = {
@@ -24,8 +25,7 @@ export type RetainedAssetReadFailure = {
 type FailureObserver=(failure:RetainedAssetReadFailure)=>void;
 
 /** Request-local immutable metadata cache. Never share across actors or requests. */
-export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchFiles = false, batchPaths?: string[],onFailure?:FailureObserver,
-  cache?:Pick<RawImportGitCache,'read'>) {
+export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchFiles = false, batchPaths?: string[],onFailure?:FailureObserver) {
   const artifacts = new Map<string, ReturnType<typeof readArtifact>>();
   const manifests = new Map<string, ReturnType<typeof readManifest>>();
   const fileBatches = new Map<string, Promise<{ data: any[] | null; error: unknown; status?:number }>>();
@@ -88,7 +88,7 @@ export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchF
       if (!manifests.has(id)) manifests.set(id, readManifest(id));
       return manifests.get(id)!;
     },
-  },onFailure,cache);
+  },onFailure);
 }
 
 /** Caller must establish either authenticated ownership or an active public artifact binding. */
@@ -103,7 +103,7 @@ async function readAsset(input: AssetInput, client: SupabaseClient, reads: {
   artifact: () => PromiseLike<{ data: any; error: unknown }>;
   files: (id: string, fileMap: Record<string, { sizeBytes: number }>) => PromiseLike<{ data: any[] | null; error: unknown; status?:number }>;
   manifest: (id: string) => PromiseLike<{ data: any; error: unknown }>;
-},onFailure?:FailureObserver,cache?:Pick<RawImportGitCache,'read'>): Promise<Response> {
+},onFailure?:FailureObserver): Promise<Response> {
   const fail = (status: number,reason:RetainedAssetReadFailure['reason'],error?:unknown,upstreamStatus?:number) => {
     const code=(error as {code?:unknown}|null)?.code;
     // Codes only, never PostgreSQL messages/details, URLs, names or file bytes.
@@ -124,11 +124,12 @@ async function readAsset(input: AssetInput, client: SupabaseClient, reads: {
     if (files?.length !== 1) return fail(404,'file_missing');
     const file = files[0];
     const gitArchive = (artifact.metadata_json as RawImportedSiteArtifactMetadata | undefined)?.gitArchive;
-    // Legacy rows retain PostgreSQL bytea. New rows carry only a Git reference;
-    // the private, immutable serving cache is verified on every read.
+    // Legacy rows retain PostgreSQL bytea. New rows read the immutable Git
+    // commit and verify each file against the artifact metadata.
     let bytes: Buffer;
-    if (gitArchive) bytes = await (cache??new RawImportGitCache()).read(gitArchive, input.siteVersionId,
-      {sha256:file.sha256,sizeBytes:file.file_size_bytes});
+    if (gitArchive) bytes = await readRawImportGitFile(gitArchive, input.siteVersionId,
+      {path:input.path,sha256:file.sha256,sizeBytes:file.file_size_bytes},
+      configuredGitHubTarget({...gitArchive.scope,siteVersionId:input.siteVersionId}));
     else {
       if (typeof file.content_bytes !== "string" || !/^\\x(?:[a-f0-9]{2})*$/i.test(file.content_bytes)) return fail(500,'bytea_invalid');
       bytes = Buffer.from(file.content_bytes.slice(2), "hex");
@@ -142,8 +143,9 @@ async function readAsset(input: AssetInput, client: SupabaseClient, reads: {
     const sourceMap = artifact.file_map['url-fetch-manifest.json'];
     if (stylesheet && sourceMap) {
       let manifestBytes: Buffer;
-      if (gitArchive) manifestBytes = await (cache??new RawImportGitCache()).read(gitArchive, input.siteVersionId,
-        {sha256:sourceMap.sha256,sizeBytes:sourceMap.sizeBytes});
+      if (gitArchive) manifestBytes = await readRawImportGitFile(gitArchive, input.siteVersionId,
+        {path:'url-fetch-manifest.json',sha256:sourceMap.sha256,sizeBytes:sourceMap.sizeBytes},
+        configuredGitHubTarget({...gitArchive.scope,siteVersionId:input.siteVersionId}));
       else {
         const result = await reads.manifest(artifact.id);
         if (result.error || typeof result.data?.content_bytes !== 'string' || !/^\\x(?:[a-f0-9]{2})*$/i.test(result.data.content_bytes)) return fail(500,'stylesheet_manifest',result.error);
