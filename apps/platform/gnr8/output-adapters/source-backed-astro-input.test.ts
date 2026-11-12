@@ -145,7 +145,7 @@ test("captured styles omit obsolete IE star declarations while keeping modern ru
 });
 
 test("captured styles omit invalid standalone false declarations", () => {
-  const input = fixture({ rootHtml: '<html><head><style>#mc_embed_signup{background:#fff; false;clear:left;font:14px Helvetica,Arial,sans-serif}</style></head><body><h1>Home</h1></body></html>' });
+  const input = fixture({ rootHtml: '<html><head></head><body><h1>Home</h1><style>#mc_embed_signup{background:#fff; false;clear:left;font:14px Helvetica,Arial,sans-serif}</style></body></html>' });
   const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
   const css = generated.sourceManifest.files.find((file) => file.path.startsWith("public/gnr8-inline-style-"))?.contents ?? "";
   assert.match(css, /background:#fff;clear:left/);

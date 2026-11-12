@@ -268,8 +268,13 @@ function externalizeCapturedStyles(page: NormalizedStaticSitePage): {
   const replaceStyles = (html: string) => html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi, (markup, attributes: string, css: string) => {
     if (!css.trim()) return markup;
     const media = attributes.match(/\bmedia\s*=\s*(["'])(.*?)\1/i)?.[2];
-    const name = `gnr8-inline-style-${++index}-${createHash("sha256").update(css).digest("hex").slice(0, 12)}.css`;
-    styles.push({ path: `public/${routeDirectory}${name}`, role: "style", contents: css });
+    // Apply to head and body styles alike. Legacy browsers ignored these invalid
+    // declarations, while the preview bridge rejects the entire stylesheet.
+    const normalizedCss = css
+      .replace(/([;{])\s*\*[a-z_-][\w-]*\s*:[^;}]*(?=;|})/gi, "$1")
+      .replace(/([;{])\s*false\s*;/gi, "$1");
+    const name = `gnr8-inline-style-${++index}-${createHash("sha256").update(normalizedCss).digest("hex").slice(0, 12)}.css`;
+    styles.push({ path: `public/${routeDirectory}${name}`, role: "style", contents: normalizedCss });
     return `<link rel="stylesheet" href="/${routeDirectory}${name}"${media ? ` media="${escapeAttribute(media)}"` : ""}>`;
   });
   return {
