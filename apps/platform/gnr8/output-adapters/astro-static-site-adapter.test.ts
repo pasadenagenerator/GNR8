@@ -95,6 +95,13 @@ test("captured pages preserve their source shell without adding synthetic naviga
   assert.doesNotMatch(page, /Construction Health Solutions/);
 });
 
+test("captured page titles containing braces remain valid Astro expressions", () => {
+  const content = chsFixture();
+  content.pages = [{ path: "/", title: "Project {year: 2026}", bodyHtml: "<h1>Project</h1>" }];
+  const page = fileMap(createAstroStaticSiteProjectManifest(content).files).get("src/pages/index.astro") ?? "";
+  assert.match(page, /<title>\{"Project \{year: 2026\}"\}<\/title>/);
+});
+
 test("captured CSS is served as a page-relative file rather than parsed by Astro", () => {
   const content = chsFixture();
   content.pages = [{

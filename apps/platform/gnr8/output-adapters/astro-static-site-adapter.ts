@@ -331,7 +331,7 @@ function createCapturedPageAstro(page: NormalizedStaticSitePage): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(page.title)}</title>
+    <title>{${JSON.stringify(page.title)}}</title>
 ${page.headHtml ? `${page.headHtml}\n` : ""}
   </head>
   <body data-gnr8-source-route="${escapeAttribute(page.path)}"${bodyAttributes}>
