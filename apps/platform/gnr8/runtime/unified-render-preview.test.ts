@@ -355,6 +355,32 @@ test('raw template preview rewrites local asset references to preview-assets rou
   )
 })
 
+test('raw preview restores retained lazy image fallback before rewriting assets', () => {
+  const html = '<div><img src="data:image/png;base64,AAAA" alt="Photo"> <noscript data-lazyload-src="/uploads/photo.webp"><img class="postImg" src="/uploads/photo.webp" alt="Photo"></noscript></div>'
+  const restored = __unifiedRenderPreviewTestUtils.restoreRetainedLazyImageFallbacks(html)
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html: restored,
+    siteId: 'site-lazy',
+    siteVersionId: 'sv-lazy',
+    entryHtmlPath: 'index.html',
+    fileMapPaths: new Set(['uploads/photo.webp']),
+  })
+  assert.equal(rewritten.html.includes('data:image/png;base64,AAAA'), false)
+  assert.equal(rewritten.html.includes('class="postImg"'), true)
+  assert.equal(rewritten.html.includes('/api/gnr8/runtime/preview-assets/site-lazy/sv-lazy/uploads/photo.webp'), true)
+  assert.equal(rewritten.html.includes('<noscript'), false)
+})
+
+test('raw preview reveals retained YouTube background video with a poster fallback', () => {
+  const html = '<html><head></head><body><div id="r2802" class="row videobg"><iframe class="monovideobg" data-videotype="youtube" src="https://www.youtube-nocookie.com/embed/oc0vLyBos3Q?controls=0&amp;playlist=oc0vLyBos3Q"></iframe></div></body></html>'
+  const restored = __unifiedRenderPreviewTestUtils.restoreRetainedVideoBackgrounds(html)
+  assert.equal(restored.includes('autoplay=1'), true)
+  assert.equal(restored.includes('mute=1'), true)
+  assert.equal(restored.includes('maxresdefault.jpg'), true)
+  assert.equal(restored.includes('#r2802>iframe.monovideobg{opacity:1!important}'), true)
+  assert.equal(restored.includes('allow="autoplay; encrypted-media; picture-in-picture"'), true)
+})
+
 test('raw preview script policy preserves local and widget scripts while blocking tracking and destructive injection', () => {
   const html = [
     '<!doctype html><html><body>',

@@ -1707,6 +1707,57 @@ function defaultRawPreviewScriptPolicyEvidence(): RawPreviewScriptPolicyEvidence
   }
 }
 
+// Some source sites ship a transparent placeholder and put the real image only
+// inside a noscript fallback. The original lazy loader may not run in preview.
+function restoreRetainedLazyImageFallbacks(html: string): string {
+  return html.replace(
+    /(<img\b[^>]*>)(\s*)<noscript\b([^>]*)>\s*(<img\b[^>]*>)\s*<\/noscript>/gi,
+    (original, placeholder: string, spacing: string, noscriptAttrs: string, fallback: string) => {
+      const placeholderSrc = String(parseHtmlTagAttributes(placeholder).src ?? '')
+      const expectedSrc = String(parseHtmlTagAttributes(noscriptAttrs)['data-lazyload-src'] ?? '')
+      const fallbackSrc = String(parseHtmlTagAttributes(fallback).src ?? '')
+      if (!placeholderSrc.startsWith('data:image/') || !expectedSrc || fallbackSrc !== expectedSrc) return original
+      return fallback + spacing
+    },
+  )
+}
+
+// The source video loader reveals YouTube background iframes after initialization.
+// Preview does not depend on that loader, so keep the video visible and give the
+// section a thumbnail when playback is unavailable.
+function restoreRetainedVideoBackgrounds(html: string): string {
+  const rules: string[] = []
+  const rewritten = html.replace(/(<div\b[^>]*>)(\s*)(<iframe\b[^>]*>)/gi, (original, rowTag: string, spacing: string, iframeTag: string) => {
+    const row = parseHtmlTagAttributes(rowTag)
+    const frame = parseHtmlTagAttributes(iframeTag)
+    if (!String(row.class ?? '').split(/\s+/).includes('videobg') ||
+        !String(frame.class ?? '').split(/\s+/).includes('monovideobg') ||
+        frame['data-videotype'] !== 'youtube' || !/^[a-z][\w-]*$/i.test(row.id ?? '')) return original
+
+    let videoUrl: URL
+    try { videoUrl = new URL(String(frame.src ?? '')) } catch { return original }
+    if (!['www.youtube-nocookie.com', 'www.youtube.com'].includes(videoUrl.hostname)) return original
+    const videoId = /^\/embed\/([A-Za-z0-9_-]{11})$/.exec(videoUrl.pathname)?.[1]
+    if (!videoId) return original
+
+    videoUrl.searchParams.set('autoplay', '1')
+    videoUrl.searchParams.set('mute', '1')
+    videoUrl.searchParams.set('loop', '1')
+    videoUrl.searchParams.set('playlist', videoId)
+    const updatedFrame = iframeTag.replace(/\bsrc\s*=\s*(["'])(.*?)\1/i, (_match, quote: string) =>
+      `src=${quote}${escapeHtmlAttribute(videoUrl.toString())}${quote}`)
+    const frameWithAutoplay = /\ballow\s*=/.test(updatedFrame)
+      ? updatedFrame
+      : updatedFrame.replace(/>$/, ' allow="autoplay; encrypted-media; picture-in-picture">')
+    rules.push(`#${row.id}{background-image:url("https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg");background-size:cover;background-position:center}`)
+    rules.push(`#${row.id}>iframe.monovideobg{opacity:1!important}`)
+    return rowTag + spacing + frameWithAutoplay
+  })
+  if (rules.length === 0) return html
+  const style = `<style data-gnr8-restored-video-background>${rules.join('')}</style>`
+  return /<\/head>/i.test(rewritten) ? rewritten.replace(/<\/head>/i, `${style}</head>`) : style + rewritten
+}
+
 function isPreviewAssetScriptUrl(value: string): boolean {
   return /^\/api\/gnr8\/runtime\/preview-assets\/[^/?#]+\/[^/?#]+\/.+/i.test(String(value ?? '').trim())
 }
@@ -2433,7 +2484,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     reportedSizeBytes: entryAsset.sizeBytes,
   })
   const assetRewrite = rewriteRawTemplateAssetReferencesWithCounts({
-    html: rawHtml,
+    html: restoreRetainedLazyImageFallbacks(rawHtml),
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: selectedHtmlPath,
@@ -2507,6 +2558,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     })
   }
   html = enhanceRetainedHeroSliders({ html, siteId: artifact.siteId, siteVersionId: artifact.siteVersionId, fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})) })
+  html = restoreRetainedVideoBackgrounds(html)
   html = restoreRetainedEqualHeightLayout(html)
   html = restoreRetainedMobileNavigation(html)
   const scriptPolicy = applyRawPreviewScriptPolicy(html)
@@ -3818,6 +3870,8 @@ export const __unifiedRenderPreviewTestUtils = {
   resolveRenderedCapturePreviewTruth,
   rewriteRawTemplateAssetReferences,
   rewriteRawTemplateAssetReferencesWithCounts,
+  restoreRetainedLazyImageFallbacks,
+  restoreRetainedVideoBackgrounds,
   rewriteRawTemplateMultiPageLinks,
   applyRawPreviewScriptPolicy,
   applyRawPreviewDuplicateInjectionGuard,
