@@ -89,12 +89,12 @@ importers:
       postcss:
         specifier: ^8.5.8
         version: 8.5.8
-      sharp:
-        specifier: 0.34.5
-        version: 0.34.5
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
+      sharp:
+        specifier: 0.34.5
+        version: 0.34.5
       stripe:
         specifier: ^18.3.0
         version: 18.5.0(@types/node@25.2.3)
@@ -150,6 +150,9 @@ importers:
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
+      sharp:
+        specifier: 0.34.5
+        version: 0.34.5
 
   packages/core: {}
 
