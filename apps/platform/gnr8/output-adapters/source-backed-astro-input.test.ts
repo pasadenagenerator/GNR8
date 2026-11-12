@@ -126,6 +126,14 @@ test("captured head uses real CSS nodes and rejects only MIME-proven non-CSS rol
   assert.match(root, /<link[^>]+theme\.jpg/);
 });
 
+test("captured styles omit obsolete IE star declarations while keeping modern rules", () => {
+  const input = fixture({ rootHtml: '<html><head><style>button{*zoom:1;color:#123456;*vertical-align:middle}</style></head><body><h1>Home</h1></body></html>' });
+  const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
+  const root = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")!.contents;
+  assert.match(root, /button\{[^}]*color:#123456/);
+  assert.doesNotMatch(root, /\*(?:zoom|vertical-align)\s*:/);
+});
+
 test("normal source input preserves captured routes, navigation, owned asset identity, and exact Astro source files", () => {
   const input = fixture();
   const generated = createSourceBackedAstroGenerationInput({

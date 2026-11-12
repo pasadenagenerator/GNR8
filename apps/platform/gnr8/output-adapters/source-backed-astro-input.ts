@@ -772,9 +772,16 @@ function extractCapturedHeadStyles(
       continue;
     }
     if (removeCaptcha && isObsoleteFormSecurityCss(markup)) continue;
-    out.push(/\bis:global\b/i.test(markup) ? markup : markup.replace(/^<style\b/i, "<style is:global"));
+    const modernMarkup = removeLegacyStarPropertyHacks(markup);
+    out.push(/\bis:global\b/i.test(modernMarkup) ? modernMarkup : modernMarkup.replace(/^<style\b/i, "<style is:global"));
   }
   return out;
+}
+
+function removeLegacyStarPropertyHacks(markup: string): string {
+  // Old IE accepted declarations such as *zoom:1. Astro's CSS compiler rejects
+  // them, while current browsers ignore them, so they are safe to omit.
+  return markup.replace(/([;{])\s*\*[a-z_-][\w-]*\s*:[^;}]*(?=;|})/gi, "$1");
 }
 
 function unresolvedRequiredStylesheetHrefs(headMarkup: string[], sourceHost: string): string[] {
