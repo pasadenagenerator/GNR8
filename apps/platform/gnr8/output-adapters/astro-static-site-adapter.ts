@@ -353,7 +353,7 @@ function createPackageJson(input: NormalizedStaticBusinessSiteContent): Record<s
       preview: "astro preview --host 127.0.0.1 --port 4321",
     },
     dependencies: {
-      astro: "^5.0.0",
+      astro: "^7.0.0",
     },
   };
 }
