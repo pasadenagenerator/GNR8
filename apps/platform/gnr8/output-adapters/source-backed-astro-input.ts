@@ -774,7 +774,7 @@ function extractCapturedHeadStyles(
       continue;
     }
     if (removeCaptcha && isObsoleteFormSecurityCss(markup)) continue;
-    const modernMarkup = removeLegacyStarPropertyHacks(markup);
+    const modernMarkup = removeLegacyInvalidDeclarations(removeLegacyStarPropertyHacks(markup));
     out.push(/\bis:global\b/i.test(modernMarkup) ? modernMarkup : modernMarkup.replace(/^<style\b/i, "<style is:global"));
   }
   return out;
@@ -784,6 +784,12 @@ function removeLegacyStarPropertyHacks(markup: string): string {
   // Old IE accepted declarations such as *zoom:1. Astro's CSS compiler rejects
   // them, while current browsers ignore them, so they are safe to omit.
   return markup.replace(/([;{])\s*\*[a-z_-][\w-]*\s*:[^;}]*(?=;|})/gi, "$1");
+}
+
+function removeLegacyInvalidDeclarations(markup: string): string {
+  // Some captured embeds contain a standalone `false;` where CSS expects a
+  // property declaration. Browsers ignore it; PostCSS rejects the whole sheet.
+  return markup.replace(/([;{])\s*false\s*;/gi, "$1");
 }
 
 function unresolvedRequiredStylesheetHrefs(headMarkup: string[], sourceHost: string): string[] {

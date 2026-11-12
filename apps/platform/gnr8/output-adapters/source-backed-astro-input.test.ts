@@ -2,6 +2,7 @@ import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import postcss from "postcss";
 
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
 import { hashedImportAssetPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
@@ -138,9 +139,18 @@ test("captured head uses real CSS nodes and rejects only MIME-proven non-CSS rol
 test("captured styles omit obsolete IE star declarations while keeping modern rules", () => {
   const input = fixture({ rootHtml: '<html><head><style>button{*zoom:1;color:#123456;*vertical-align:middle}</style></head><body><h1>Home</h1></body></html>' });
   const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
-  const root = generated.sourceManifest.files.find((file) => file.path === "src/pages/index.astro")!.contents;
-  assert.match(root, /button\{[^}]*color:#123456/);
-  assert.doesNotMatch(root, /\*(?:zoom|vertical-align)\s*:/);
+  const css = generated.sourceManifest.files.find((file) => file.path.startsWith("public/gnr8-inline-style-"))?.contents ?? "";
+  assert.match(css, /button\{[^}]*color:#123456/);
+  assert.doesNotMatch(css, /\*(?:zoom|vertical-align)\s*:/);
+});
+
+test("captured styles omit invalid standalone false declarations", () => {
+  const input = fixture({ rootHtml: '<html><head><style>#mc_embed_signup{background:#fff; false;clear:left;font:14px Helvetica,Arial,sans-serif}</style></head><body><h1>Home</h1></body></html>' });
+  const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
+  const css = generated.sourceManifest.files.find((file) => file.path.startsWith("public/gnr8-inline-style-"))?.contents ?? "";
+  assert.match(css, /background:#fff;clear:left/);
+  assert.doesNotMatch(css, /;\s*false\s*;/);
+  assert.doesNotThrow(() => postcss.parse(css));
 });
 
 test("normal source input preserves captured routes, navigation, owned asset identity, and exact Astro source files", () => {
