@@ -105,8 +105,8 @@ export function getSuperadminPool(): Pool {
     },
 
     // Vercel serverless optimizacija
-    max: 5,
-    idleTimeoutMillis: 30000,
+    max: 2,
+    idleTimeoutMillis: 1_000,
     connectionTimeoutMillis: 5000,
   })
 
