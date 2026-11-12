@@ -335,8 +335,10 @@ export async function runSourceBackedAstroGeneration(
           ...(payload.acceptedFunctionalReductions.kind === "legacy-forms-to-disclosed-links-v1" ? [
             `accepted-functional-reduction:contact-mailto:${payload.acceptedFunctionalReductions.contactEmail}`,
             "accepted-functional-reduction:comments:source-article-links",
-          ] : ["accepted-functional-reduction:search-removed:map-address-link:tracking-bundle-removed:forms-preserved"]),
-          ...(payload.acceptedFunctionalReductions.sourceWidgetRemovals ?? [])
+          ] : payload.acceptedFunctionalReductions.kind === "static-content-v1"
+            ? ["accepted-functional-reduction:source-scripts-removed"]
+            : ["accepted-functional-reduction:search-removed:map-address-link:tracking-bundle-removed:forms-preserved"]),
+          ...(payload.acceptedFunctionalReductions.kind === "legacy-forms-to-disclosed-links-v1" ? payload.acceptedFunctionalReductions.sourceWidgetRemovals ?? [] : [])
             .map((removal) => `accepted-functional-reduction:source-widget-removed:${removal}`),
         ] : []),
       ],

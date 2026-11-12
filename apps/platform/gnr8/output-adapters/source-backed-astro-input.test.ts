@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
+import { hashedImportAssetPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArtifact } from "@/gnr8/runtime/types";
 
@@ -178,6 +179,25 @@ test("normalizes rendered navigation with the same targets used by governance ev
   assert.doesNotMatch(rootSource, /<a\b[^>]*href="\/api\/gnr8\/runtime\/preview-assets\//);
   assert.match(rootSource, /src="\/api\/gnr8\/runtime\/preview-assets\/runtime-site\/11111111-1111-4111-8111-111111111111\/uploads\/logo\.png"/);
   assert.deepEqual([...targets].sort(), ["#details", "/", "/about", "https://outside.test/article"]);
+});
+
+test("uses a captured WebP for source image references and keeps document links as downloads", () => {
+  const imageUrl = "https://example.com/uploads/NewsPhoto.JPG";
+  const imagePath = hashedImportAssetPath(imageUrl, "image", "NewsPhoto.webp");
+  const input = fixture({
+    rootHtml: `<html><head><title>Home</title></head><body><img src="/uploads/NewsPhoto.JPG"><a href="/uploads/NewsPhoto.JPG">Full image</a><a href="/uploads/report.pdf">Report</a></body></html>`,
+  });
+  input.rawArtifact.fileMap[imagePath] = { path: imagePath, mediaType: "image/webp", sizeBytes: 10, sha256: SHA };
+
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact,
+  });
+  const source = generated.sourceManifest.files.find(file => file.path === "src/pages/index.astro")!.contents;
+  assert.match(source, new RegExp(`preview-assets/runtime-site/${input.version.id}/${imagePath}`));
+  assert.match(source, /href="https:\/\/example\.com\/uploads\/report\.pdf"/);
+  assert.ok(generated.sourceManifest.assetEvidence.some(asset => asset.path.endsWith(imagePath)));
+  assert.ok(generated.sourceManifest.captureScopeLimitations?.some(entry =>
+    entry.kind === "source-download-external-link-v1" && entry.route === "/uploads/report.pdf"));
 });
 
 test("materializes a script-free mobile fallback only for the recognized captured navigation contract", () => {
@@ -517,6 +537,18 @@ test("uncaptured required routes and executable source behavior return explicit 
     () => createSourceBackedAstroGenerationInput({ siteVersion: scripted.version, artifact: scripted.artifact, rawArtifact: scripted.rawArtifact }),
     (error) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"),
   );
+});
+
+test("static content reduction omits source scripts only when explicitly accepted", () => {
+  const input = fixture({ aboutHtml: '<html><head><title>About</title></head><body><h1>About</h1><script>window.app = true</script></body></html>' });
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact,
+    acceptedFunctionalReductions: { kind: "static-content-v1", scripts: "remove" },
+  });
+  const about = generated.sourceManifest.files.find(file => file.path === "src/pages/about/index.astro")!.contents;
+  assert.match(about, /<h1>About<\/h1>/);
+  assert.doesNotMatch(about, /window\.app/);
+  assert.match(generated.sourceManifest.acceptedFunctionalReductions!.limitations[0]!, /Source JavaScript is omitted/);
 });
 
 test("preserves page-limit omissions as disclosed source links while other uncaptured routes still fail", () => {

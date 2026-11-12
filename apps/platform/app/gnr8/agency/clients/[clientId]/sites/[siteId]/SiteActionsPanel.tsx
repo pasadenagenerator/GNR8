@@ -113,6 +113,7 @@ export default function SiteActionsPanel(props: Props) {
   const [strategyInput, setStrategyInput] = useState('More visual')
   const [outputAdapterId, setOutputAdapterId] = useState<'default' | 'html-static-artifact'>('default')
   const [presentation, setPresentation] = useState(false)
+  const [staticContent, setStaticContent] = useState(false)
   const [nativeContact, setNativeContact] = useState(false)
   const recipientEdited = useRef(false)
   const [suggestions, setSuggestions] = useState<ContactSuggestionModel | null>(null)
@@ -200,7 +201,9 @@ export default function SiteActionsPanel(props: Props) {
             type === 'generate_redesign' && outputAdapterId === 'html-static-artifact'
               ? outputAdapterId
               : undefined,
-          acceptedFunctionalReductions: type === 'generate_redesign' && outputAdapterId === 'default' && presentation ? presentationSettings :
+          acceptedFunctionalReductions: type === 'generate_redesign' && outputAdapterId === 'default' && staticContent
+            ? { kind: 'static-content-v1', scripts: 'remove' } :
+            type === 'generate_redesign' && outputAdapterId === 'default' && presentation ? presentationSettings :
             type === 'generate_redesign' &&
             outputAdapterId === 'default' &&
             acceptLegacyFormReductions
@@ -339,7 +342,11 @@ export default function SiteActionsPanel(props: Props) {
               }}
             >
               <label>
-                <input type='checkbox' checked={presentation} disabled={!canRunMigration} onChange={event => { setPresentation(event.target.checked); if (event.target.checked) setAcceptLegacyFormReductions(false) }} />
+                <input type='checkbox' checked={staticContent} disabled={!canRunMigration} onChange={event => { setStaticContent(event.target.checked); if (event.target.checked) { setPresentation(false); setAcceptLegacyFormReductions(false) } }} />
+                Static content only: omit source scripts from this Astro candidate. Script-driven interactions may stop working; uncaptured document downloads remain linked to the source site. Review the generated result before publishing.
+              </label>
+              <label>
+                <input type='checkbox' checked={presentation} disabled={!canRunMigration} onChange={event => { setPresentation(event.target.checked); if (event.target.checked) { setAcceptLegacyFormReductions(false); setStaticContent(false) } }} />
                 For this candidate: remove recognized search; replace maps with their address and OpenStreetMap link; remove the recognized tracking and consent bundle together.
               </label>
               {presentation ? <>
@@ -371,7 +378,7 @@ export default function SiteActionsPanel(props: Props) {
                   type='checkbox'
                   checked={acceptLegacyFormReductions}
                   disabled={!canRunMigration}
-                  onChange={(event) => { setAcceptLegacyFormReductions(event.target.checked); if (event.target.checked) setPresentation(false) }}
+                  onChange={(event) => { setAcceptLegacyFormReductions(event.target.checked); if (event.target.checked) { setPresentation(false); setStaticContent(false) } }}
                 />
                 <span>
                   Accept form reductions for this generated candidate only: replace legacy contact forms with a disclosed email link and comment forms with links to the original articles.

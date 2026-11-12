@@ -1,4 +1,7 @@
 export type AcceptedFunctionalReductions = {
+  kind: 'static-content-v1'
+  scripts: 'remove'
+} | {
   kind: 'legacy-forms-to-disclosed-links-v1'
   contactEmail: string
   commentLinks: 'source-article'
@@ -22,6 +25,10 @@ export function isContactEmail(value: unknown): value is string {
 export function parseAcceptedFunctionalReductions(value: unknown): AcceptedFunctionalReductions | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const input = value as Record<string, unknown>
+  if (input.kind === 'static-content-v1') {
+    return Object.keys(input).length === 2 && input.scripts === 'remove'
+      ? { kind: 'static-content-v1', scripts: 'remove' } : null
+  }
   if (input.kind === 'retained-presentation-v1') {
     if (Object.keys(input).some(key => !['kind', 'search', 'map', 'tracking', 'excludedRoutes', 'contact'].includes(key))) return null
     let contact: { recipient: string; recipientConfirmed: true } | undefined

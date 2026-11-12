@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseAcceptedFunctionalReductions } from './accepted-functional-reductions'
 const presentation = {kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle'}
+test('static content reduction requires explicit script removal and no hidden options',()=>{
+  assert.deepEqual(parseAcceptedFunctionalReductions({kind:'static-content-v1',scripts:'remove'}),{kind:'static-content-v1',scripts:'remove'})
+  assert.equal(parseAcceptedFunctionalReductions({kind:'static-content-v1',scripts:'keep'}),null)
+  assert.equal(parseAcceptedFunctionalReductions({kind:'static-content-v1',scripts:'remove',forms:'remove'}),null)
+})
 test('presentation reductions are explicit and cannot authorize contact replacement or partial tracking removal',()=>{
   assert.deepEqual(parseAcceptedFunctionalReductions(presentation),presentation)
   for(const value of [null,[],{}, {...presentation,tracking:'banner-only'}, {...presentation,contactEmail:'test@example.com'}, {...presentation,sourceWidgetRemovals:['form-captcha']}, {...presentation,map:undefined}]) assert.equal(parseAcceptedFunctionalReductions(value),null)
