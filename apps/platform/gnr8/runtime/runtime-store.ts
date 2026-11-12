@@ -782,7 +782,7 @@ function parseRawImportedSiteArtifactMetadata(value: unknown): RawImportedSiteAr
 export async function verifiedRawArtifactFile(row: RawTemplateArtifactFileRow, siteVersionId: string) {
   const ref = parseRawImportedSiteArtifactMetadata(row.metadata_json).gitArchive;
   if (!ref) return verifiedRawFileRow(row);
-  const target = configuredGitHubTarget({...ref.scope, siteVersionId});
+  const target = await configuredGitHubTarget({...ref.scope, siteVersionId}, ref.repository);
   const bytes = await readRawImportGitFile(ref, siteVersionId, {
     path: row.file_path ?? '', sha256: row.sha256, sizeBytes: row.file_size_bytes,
   }, target);

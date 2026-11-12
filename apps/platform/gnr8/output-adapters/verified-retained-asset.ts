@@ -129,7 +129,7 @@ async function readAsset(input: AssetInput, client: SupabaseClient, reads: {
     let bytes: Buffer;
     if (gitArchive) bytes = await readRawImportGitFile(gitArchive, input.siteVersionId,
       {path:input.path,sha256:file.sha256,sizeBytes:file.file_size_bytes},
-      configuredGitHubTarget({...gitArchive.scope,siteVersionId:input.siteVersionId}));
+      await configuredGitHubTarget({...gitArchive.scope,siteVersionId:input.siteVersionId},gitArchive.repository));
     else {
       if (typeof file.content_bytes !== "string" || !/^\\x(?:[a-f0-9]{2})*$/i.test(file.content_bytes)) return fail(500,'bytea_invalid');
       bytes = Buffer.from(file.content_bytes.slice(2), "hex");
@@ -145,7 +145,7 @@ async function readAsset(input: AssetInput, client: SupabaseClient, reads: {
       let manifestBytes: Buffer;
       if (gitArchive) manifestBytes = await readRawImportGitFile(gitArchive, input.siteVersionId,
         {path:'url-fetch-manifest.json',sha256:sourceMap.sha256,sizeBytes:sourceMap.sizeBytes},
-        configuredGitHubTarget({...gitArchive.scope,siteVersionId:input.siteVersionId}));
+        await configuredGitHubTarget({...gitArchive.scope,siteVersionId:input.siteVersionId},gitArchive.repository));
       else {
         const result = await reads.manifest(artifact.id);
         if (result.error || typeof result.data?.content_bytes !== 'string' || !/^\\x(?:[a-f0-9]{2})*$/i.test(result.data.content_bytes)) return fail(500,'stylesheet_manifest',result.error);

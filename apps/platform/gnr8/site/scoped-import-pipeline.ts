@@ -3784,7 +3784,7 @@ export async function runScopedImportPipeline(input: {
     gitArchiveSelected = stackiGithubSelected(storeScope)
     if (explicitGitPreflight || gitArchiveSelected) {
       const {GitHubStackiStore} = await import('@/gnr8/stacki/stacki-github-store')
-      await new GitHubStackiStore(storeScope, configuredGitHubTarget(storeScope)).verifyTarget()
+      await new GitHubStackiStore(storeScope, await configuredGitHubTarget(storeScope)).verifyTarget()
     }
   }
   const fallbackToLegacy = input.fallbackToLegacyOnPipelineFailure ?? true
@@ -3947,7 +3947,7 @@ export async function runScopedImportPipeline(input: {
           if (!scope || !siteVersionId) throw new Error('GITHUB_IMPORT_IDENTITY_REQUIRED')
           const {configuredGitHubTarget} = await import('@/gnr8/stacki/stacki-github-config')
           const storeScope = {...scope, siteVersionId}
-          const target = configuredGitHubTarget(storeScope)
+          const target = await configuredGitHubTarget(storeScope)
           const {GitHubStackiStore} = await import('@/gnr8/stacki/stacki-github-store')
           const store = new GitHubStackiStore(storeScope, target)
           const pendingVersion = await deps.getSiteVersion(siteVersionId)
@@ -4319,7 +4319,7 @@ export async function runScopedImportPipeline(input: {
           const {GitHubStackiStore} = await import('@/gnr8/stacki/stacki-github-store')
           const scope = rawGitArchiveRef.scope
           const storeScope = {...scope,siteVersionId:migrated.siteVersionId}
-          const target = configuredGitHubTarget(storeScope)
+          const target = await configuredGitHubTarget(storeScope, rawGitArchiveRef.repository)
           const store = new GitHubStackiStore(storeScope,target)
           return writeGeneratedArtifactGitArchive({scope,runtimeSiteId:artifactBundle.siteId,
             siteVersionId:artifactBundle.siteVersionId,htmlByPath:artifactBundle.htmlByPath,

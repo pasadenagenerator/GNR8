@@ -599,7 +599,7 @@ async function writeDerivedRawGitArchive(input: {
   const { writeRawImportGitArchive } = await import("@/gnr8/site/raw-import-git-archive");
   const scope = parentRef.scope;
   const storeScope = { ...scope, siteVersionId: input.siteVersionId };
-  const target = configuredGitHubTarget(storeScope);
+  const target = await configuredGitHubTarget(storeScope, parentRef.repository);
   if (`${target.owner}/${target.repository}` !== parentRef.repository) {
     throw new Error("astro_derived_capture_git_repository_mismatch");
   }
@@ -639,7 +639,7 @@ async function writeDerivedGeneratedGitArchive(input: {
       input.parentRef.repository !== input.rawRef.repository) {
     throw new Error("astro_derived_capture_generated_git_scope_mismatch");
   }
-  const target = configuredGitHubTarget({ ...scope, siteVersionId: input.siteVersionId });
+  const target = await configuredGitHubTarget({ ...scope, siteVersionId: input.siteVersionId }, input.rawRef.repository);
   if (`${target.owner}/${target.repository}` !== input.parentRef.repository) {
     throw new Error("astro_derived_capture_generated_git_repository_mismatch");
   }
