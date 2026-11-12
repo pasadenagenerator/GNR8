@@ -618,8 +618,10 @@ function normalizePage(input: {
   const bodyMarkup = rewritten.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1]?.trim() ?? rewritten;
   const headHtml = headStyles.join("\n");
   const bodyHtml = bodyMarkup;
+  const sourceTitle = elements.find((element) => element.tagName === "title");
   const title = input.siteVersion.pages.find((page) => page.path === input.path)?.title?.trim() ||
-    textContent(elements.find((element) => element.tagName === "title") ?? document).trim().slice(0, 200) || input.path;
+    (sourceTitle ? textContent(sourceTitle).trim().slice(0, 200) : "") ||
+    input.path.replace(/^\/+|\/+$/g, "").replace(/[-_]+/g, " ") || "Home";
   return { path: input.path, title, headHtml, bodyAttributes, bodyHtml, unsupported };
 }
 

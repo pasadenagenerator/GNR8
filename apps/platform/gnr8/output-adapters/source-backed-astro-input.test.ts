@@ -113,6 +113,15 @@ function page(path: string, title: string): CanonicalSiteVersionSnapshot["pages"
   };
 }
 
+test("untitled captured routes use their route name instead of stylesheet text", () => {
+  const input = fixture({ aboutHtml: '<html><head><style>body{color:red}</style></head><body><p>About story</p></body></html>' });
+  input.version.pages = input.version.pages.filter((entry) => entry.path !== "/about");
+  const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
+  const about = generated.sourceManifest.files.find((file) => file.path === "src/pages/about/index.astro")?.contents ?? "";
+  assert.match(about, /<title>\{"about"\}<\/title>/);
+  assert.doesNotMatch(about, /<title>[^\n]*color:red/);
+});
+
 test("captured head uses real CSS nodes and rejects only MIME-proven non-CSS roles", () => {
   const input = fixture({ rootHtml: '<!doctype html><html><head><title>Home</title><!-- <link rel="stylesheet" href="/absent.css"><style>.comment-only{color:red}</style> --><link rel="stylesheet" href="/uploads/logo.png"><link rel="stylesheet" href="/theme.jpg"><style>.active{color:blue}</style></head><body><img src="/uploads/logo.png"><h1>Home</h1></body></html>' });
   input.rawArtifact.fileMap["theme.jpg"] = { path: "theme.jpg", mediaType: "text/css", sizeBytes: 12, sha256: SHA };
