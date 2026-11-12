@@ -26,7 +26,10 @@ export async function readRawImportGitFile(ref:Ref,versionId:string,file:File,ta
     !Number.isSafeInteger(file.sizeBytes)||file.sizeBytes<0||file.sizeBytes>100*1024*1024||
     !file.path||file.path.length>500||file.path.includes('\\')||
     file.path.split('/').some(part=>!part||part==='.'||part==='..'||part==='.git'))invalid();
-  const path=`raw-import/${versionId}/${file.path.split('/').map(encodeURIComponent).join('/')}`;
+  const archivePath=ref.format==='gnr8-raw-import-git:v2'
+    ? `blobs/${file.sha256}`
+    : file.path;
+  const path=`raw-import/${versionId}/${archivePath.split('/').map(encodeURIComponent).join('/')}`;
   let response=await transport(`https://api.github.com/repos/${target.owner}/${target.repository}/contents/${path}?ref=${ref.commit}`,
     {redirect:'manual',signal:AbortSignal.timeout(30_000),headers:{
       authorization:`Bearer ${target.token}`,accept:'application/vnd.github.raw+json',

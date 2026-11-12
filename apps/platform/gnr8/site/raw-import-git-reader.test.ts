@@ -30,6 +30,19 @@ test('reads a path from the immutable Git commit and verifies exact bytes',async
     /RAW_IMPORT_GIT_FILE_INVALID/);
 });
 
+test('reads duplicate paths from one content-addressed archive blob',async()=>{
+  const bytes=Buffer.from('<html>Same article</html>');
+  const sha256=createHash('sha256').update(bytes).digest('hex');
+  const file={path:'pages/b/article/index.html',sha256,sizeBytes:bytes.length};
+  const v2Ref={...ref,format:'gnr8-raw-import-git:v2' as const};
+  const transport=(async (url:string|URL|Request)=>{
+    assert.equal(String(url),`https://api.github.com/repos/pasadenagenerator/gnr8-viroidoc/contents/raw-import/${version}/blobs/${sha256}?ref=${ref.commit}`);
+    return new Response(bytes);
+  }) as typeof fetch;
+  assert.deepEqual(await readRawImportGitFile(v2Ref,version,file,target,transport),bytes);
+  assert.deepEqual(await readRawImportGitFile(v2Ref,version,{...file,path:'multipage-html-acquisition/article.html'},target,transport),bytes);
+});
+
 test('follows only GitHub raw-file redirects without forwarding the credential',async()=>{
   const bytes=Buffer.from('ViroiDoc logo');
   const file={path:'uploads/logo.webp',sha256:createHash('sha256').update(bytes).digest('hex'),

@@ -536,6 +536,7 @@ export type RawImportedSiteArtifactMetadata = {
   finalUrl: string | null;
   htmlByteLength: number;
   gitArchive?: {
+    format?: "gnr8-raw-import-git:v2";
     scope: { agencyId: string; clientId: string; siteId: string };
     repository: string;
     commit: string;

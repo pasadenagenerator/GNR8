@@ -7,7 +7,7 @@ type File={path:string;mediaType:string;sizeBytes:number;sha256:string;bytes:Buf
 type Target={owner:string;ownerId:number;repository:string;repositoryId:number;token:string};
 type GitFile={path:string;body:Buffer};
 type Verification={target:Target;branch:string;commit:string;parent:string};
-type Archive={format:'gnr8-raw-import-git:v1';scope:Scope;runtimeSiteId:string;siteVersionId:string;
+type Archive={format:'gnr8-raw-import-git:v2';scope:Scope;runtimeSiteId:string;siteVersionId:string;
  files:Array<{path:string;mediaType:string;bytes:number;sha256:string}>};
 const hash=(body:Uint8Array)=>createHash('sha256').update(body).digest('hex');
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -57,18 +57,23 @@ async function verifyExistingArchive(input:Verification,scope:Scope,runtimeSiteI
  const body=await read.blob(entry.sha);
  let manifest:Archive;
  try{manifest=JSON.parse(body.toString('utf8'));}catch{invalid();}
- if(manifest.format!=='gnr8-raw-import-git:v1'||manifest.siteVersionId!==input.branch.slice('imports/'.length)||
+ if(manifest.format!=='gnr8-raw-import-git:v2'||manifest.siteVersionId!==input.branch.slice('imports/'.length)||
   manifest.runtimeSiteId!==runtimeSiteId||JSON.stringify(manifest.scope)!==JSON.stringify(scope)||
-  !Array.isArray(manifest.files)||read.entries.size!==manifest.files.length+2)invalid();
- const seen=new Set<string>();
+  !Array.isArray(manifest.files))invalid();
+ const seen=new Set<string>(),unique=new Map<string,number>();
  for(const file of manifest.files){
   filePath(file.path);
   if(seen.has(file.path))invalid();
   seen.add(file.path);
-  const item=read.entries.get(`raw-import/${manifest.siteVersionId}/${file.path}`);
+  if(!/^[a-f0-9]{64}$/.test(file.sha256)||!Number.isSafeInteger(file.bytes)||file.bytes<0)invalid();
+  const knownSize=unique.get(file.sha256);
+  if(knownSize!==undefined&&knownSize!==file.bytes)invalid();
+  unique.set(file.sha256,file.bytes);
+  const item=read.entries.get(`raw-import/${manifest.siteVersionId}/blobs/${file.sha256}`);
   if(!item||item.type!=='blob'||item.mode!=='100644'||item.size!==file.bytes||
    !/^[a-f0-9]{64}$/.test(file.sha256))invalid();
  }
+ if(read.entries.size!==unique.size+2)invalid();
  const config=read.entries.get('vercel.json');
  if(config?.type!=='blob'||config.mode!=='100644'||
   config.sha!==blobId(githubDataBranchVercelConfig))invalid();
@@ -89,11 +94,12 @@ export function rawImportGitPackage(input:{scope:Scope;runtimeSiteId:string;site
   seen.add(key);total+=file.bytes.length;if(total>128*1024*1024)invalid();
   return {path,mediaType:file.mediaType,bytes:file.sizeBytes,sha256:file.sha256};
  }).sort((a,b)=>a.path.localeCompare(b.path));
- const manifest:Archive={format:'gnr8-raw-import-git:v1',scope:input.scope,runtimeSiteId:input.runtimeSiteId,
+ const manifest:Archive={format:'gnr8-raw-import-git:v2',scope:input.scope,runtimeSiteId:input.runtimeSiteId,
    siteVersionId:input.siteVersionId,files};
  const prefix=`raw-import/${input.siteVersionId}/`;
+ const uniqueBlobs=new Map(input.files.map(file=>[file.sha256,file.bytes]));
  const gitFiles:GitFile[]=[{path:'vercel.json',body:githubDataBranchVercelConfig},
-   ...input.files.map(f=>({path:prefix+f.path,body:f.bytes})),
+   ...[...uniqueBlobs].sort(([left],[right])=>left.localeCompare(right)).map(([sha256,body])=>({path:`${prefix}blobs/${sha256}`,body})),
    {path:prefix+'.gnr8-import-manifest.json',body:Buffer.from(JSON.stringify(manifest))}];
  return {manifest,prefix,gitFiles,manifestSha256:hash(gitFiles.at(-1)!.body)};
 }
@@ -104,7 +110,7 @@ export async function writeRawImportGitArchive(input:{scope:Scope;runtimeSiteId:
  files:File[];target:Target},deps:{
  repository:()=>Promise<{defaultBranch:string;parent:string;existingCommit?:string}>;
  allowAdvanceExisting?:boolean;push?:typeof pushStandaloneGit;transport?:typeof fetch;
-}):Promise<{repository:string;commit:string;manifestPath:string;manifestSha256:string;files:Archive['files']}>{
+}):Promise<{format:Archive['format'];repository:string;commit:string;manifestPath:string;manifestSha256:string;files:Archive['files']}>{
  const {manifest,prefix,gitFiles,manifestSha256}=rawImportGitPackage(input);
  const {defaultBranch,parent,existingCommit}=await deps.repository();
  if(!/^[a-zA-Z0-9._/-]{1,100}$/.test(defaultBranch)||!/^[a-f0-9]{40}$/.test(parent))invalid();
@@ -125,6 +131,6 @@ export async function writeRawImportGitArchive(input:{scope:Scope;runtimeSiteId:
  const read=await readRawImportGitTree({target:input.target,branch,commit,
   parent:useExisting ? parent : existingCommit??parent},deps.transport);
  verifyFiles(read.entries,gitFiles);
- return {repository:`${input.target.owner}/${input.target.repository}`,commit,
+ return {format:manifest.format,repository:`${input.target.owner}/${input.target.repository}`,commit,
   manifestPath:prefix+'.gnr8-import-manifest.json',manifestSha256,files:manifest.files};
 }

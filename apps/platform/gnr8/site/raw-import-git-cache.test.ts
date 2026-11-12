@@ -5,6 +5,24 @@ import test from "node:test";
 import { RawImportGitCache } from "./raw-import-git-cache";
 import { rawImportGitPackage, writeRawImportGitArchive } from "./raw-import-git-archive";
 
+test("raw import archive stores duplicate HTML and images once", () => {
+  const version = "43bb405b-912e-47e7-af85-f995cd2ed384";
+  const scope = { agencyId: "00000000-0000-4000-8000-000000000001",
+    clientId: "3d44ad6f-01e5-4884-a492-585de3b3af49",
+    siteId: "9ff5613e-1625-43f1-844e-c5c91a813d4f" };
+  const bytes = Buffer.from("identical content");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const file = (path: string) => ({ path, bytes, sha256, mediaType: "text/html", sizeBytes: bytes.length });
+  const packaged = rawImportGitPackage({ scope, runtimeSiteId: "viroidoc", siteVersionId: version,
+    files: [file("pages/article/index.html"), file("multipage-html-acquisition/article.html")] });
+  assert.equal(packaged.manifest.format, "gnr8-raw-import-git:v2");
+  assert.equal(packaged.manifest.files.length, 2);
+  assert.deepEqual(packaged.gitFiles.map((entry) => entry.path), [
+    "vercel.json", `raw-import/${version}/blobs/${sha256}`,
+    `raw-import/${version}/.gnr8-import-manifest.json`,
+  ]);
+});
+
 test("derived capture cache rejects the parent Git ref and accepts its own version", async () => {
   const parentVersion = "0b609c81-98c5-42cc-a9f2-18b3bbc1f3c0";
   const derivedVersion = "d33d44df-7be3-48d8-9cf6-245474f95ca5";

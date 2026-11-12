@@ -63,9 +63,10 @@ test("percent-encoded Unicode routes use literal source filenames while keeping 
 
   const manifest = createAstroStaticSiteProjectManifest(content);
   assert.ok(manifest.files.some((file) =>
-    file.path === "src/pages/b/platform9-recognized-in-the-gartner®-magic-quadrant™/index.astro"));
+    file.path.startsWith("src/content/blog/platform9-recognized-in-the-gartner®-magic-quadrant™-")));
   assert.ok(manifest.files.some((file) =>
-    file.contents.includes('data-gnr8-source-route="/b/platform9-recognized-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2"')));
+    file.path.startsWith("src/content/blog/") &&
+    JSON.parse(file.contents).route === "/b/platform9-recognized-in-the-gartner%C2%AE-magic-quadrant%E2%84%A2"));
 });
 
 test("captured pages preserve their source shell without adding synthetic navigation or footer", () => {
@@ -85,11 +86,49 @@ test("captured pages preserve their source shell without adding synthetic naviga
   assert.match(page, /<img src="\/logo\.gif" alt="CHS">/);
   assert.match(page, /<footer data-source-footer>Source footer<\/footer>/);
   assert.match(page, /assets\/user-style\.css/);
-  assert.match(page, /<style is:global>\.home/);
+  assert.match(page, /href="\/gnr8-inline-style-1-[a-f0-9]{12}\.css"/);
+  assert.ok(manifest.files.some((file) => file.path.startsWith("public/gnr8-inline-style-1-") && file.contents === ".home{display:block}"));
   assert.doesNotMatch(page, /href="\/styles\/global\.css"/);
   assert.equal(fileMap(manifest.files).has("public/styles/global.css"), false);
   assert.doesNotMatch(page, /class="site-header"/);
   assert.doesNotMatch(page, /Construction Health Solutions/);
+});
+
+test("captured CSS is served as a page-relative file rather than parsed by Astro", () => {
+  const content = chsFixture();
+  content.pages = [{
+    path: "/cgp",
+    title: "CGP",
+    headHtml: '<style media="screen">.hero{background:url(../image.webp);*zoom:1}</style>',
+    bodyHtml: '<main><style>.content{color:#123}</style><h1>CGP</h1></main>',
+  }];
+  content.pages.unshift({ path: "/", title: "Home", bodyHtml: "<h1>Home</h1>" });
+  const files = fileMap(createAstroStaticSiteProjectManifest(content).files);
+  const page = files.get("src/pages/cgp/index.astro") ?? "";
+  assert.match(page, /href="\/cgp\/gnr8-inline-style-1-[a-f0-9]{12}\.css" media="screen"/);
+  assert.match(page, /href="\/cgp\/gnr8-inline-style-2-[a-f0-9]{12}\.css"/);
+  assert.doesNotMatch(page, /<style\b|\*zoom/);
+  assert.ok([...files].some(([path, css]) => path.startsWith("public/cgp/gnr8-inline-style-1-") && css.includes("url(../image.webp)")));
+});
+
+test("blog articles become Stacki CMS entries with one shared Astro route", () => {
+  const content = chsFixture();
+  content.pages = [
+    { path: "/", title: "Home", bodyHtml: "<h1>Home</h1>" },
+    { path: "/b/first-post", title: "First post", bodyHtml: "<article><p>Full article text</p></article>" },
+    { path: "/b/second-post", title: "Second post", bodyHtml: "<article><p>Second article</p></article>" },
+  ];
+  const files = fileMap(createAstroStaticSiteProjectManifest(content).files);
+  assert.equal(files.has("src/pages/b/first-post/index.astro"), false);
+  assert.equal(files.has("src/pages/b/second-post/index.astro"), false);
+  assert.equal(files.has("src/pages/[...slug].astro"), true);
+  assert.equal(files.has("src/content.config.ts"), true);
+  const entries = [...files].filter(([path]) => path.startsWith("src/content/blog/"));
+  assert.equal(entries.length, 2);
+  assert.ok(entries.some(([, contents]) => {
+    const post = JSON.parse(contents);
+    return post.route === "/b/first-post" && post.title === "First post" && post.mainHtml.includes("Full article text");
+  }));
 });
 
 test("candidate brand variables are available to Stacki without changing captured pages", () => {

@@ -613,6 +613,7 @@ async function writeDerivedRawGitArchive(input: {
     target,
   }, { repository: () => store.rawImportRepository(input.siteVersionId) });
   return {
+    format: archive.format,
     scope,
     repository: archive.repository,
     commit: archive.commit,

@@ -3959,6 +3959,7 @@ export async function runScopedImportPipeline(input: {
         })()
       : null
     const rawGitArchiveRef = rawGitArchive && input.ownershipScope ? {
+      format: rawGitArchive.format,
       scope: input.ownershipScope,
       repository: rawGitArchive.repository, commit: rawGitArchive.commit,
       manifestPath: rawGitArchive.manifestPath, manifestSha256: rawGitArchive.manifestSha256,

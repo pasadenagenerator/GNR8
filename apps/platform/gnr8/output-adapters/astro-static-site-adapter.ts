@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { prepareOwnedRetainedRuntimeForAstro } from "../../src/public-site/owned-retained-runtime";
 import type {
   Gnr8OutputAdapter,
@@ -153,14 +154,41 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
   ];
 
   const capturedPages = input.pages?.length ? normalizedCapturedPages(input.pages) : null;
+  const blogPages = capturedPages?.filter((page) => isBlogArticleRoute(page.path)) ?? [];
   const pages = capturedPages
-    ? capturedPages.map((page) => ({
-        path: sourcePathForRoute(page.path),
-        role: "source" as const,
-        contents: createCapturedPageAstro(page),
-      }))
+    ? capturedPages.map((page): Gnr8OutputAdapterFile | null => {
+        const captured = externalizeCapturedStyles(page);
+        files.push(...captured.styles);
+        if (isBlogArticleRoute(page.path)) {
+          const slug = decodeGeneratedOutputRoutePathForFile(page.path).split("/").at(-1) ?? "post";
+          const digest = createHash("sha256").update(page.path).digest("hex").slice(0, 10);
+          files.push({
+            path: `src/content/blog/${slug}-${digest}.json`,
+            role: "source" as const,
+            contents: `${JSON.stringify({
+              route: page.path,
+              title: page.title,
+              headHtml: captured.page.headHtml ?? "",
+              bodyAttributes: captured.page.bodyAttributes ?? {},
+              mainHtml: captured.page.bodyHtml,
+            })}\n`,
+          });
+          return null;
+        }
+        return {
+          path: sourcePathForRoute(page.path),
+          role: "source" as const,
+          contents: createCapturedPageAstro(captured.page),
+        };
+      }).filter((page): page is Gnr8OutputAdapterFile => page !== null)
     : [{ path: "src/pages/index.astro", role: "source" as const, contents: createIndexAstro(input) }];
   files.push(...pages);
+  if (blogPages.length > 0) {
+    files.push(
+      { path: "src/content.config.ts", role: "source", contents: blogCollectionConfig() },
+      { path: "src/pages/[...slug].astro", role: "source", contents: blogArticlePage() },
+    );
+  }
   if (input.brandCss) {
     files.push({
       path: "src/styles/gnr8-brand.css",
@@ -177,6 +205,81 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
   }
 
   return { files };
+}
+
+function isBlogArticleRoute(route: string): boolean {
+  return /^\/(?:b|blog|news|posts?)\/[^/]+$/i.test(route);
+}
+
+function blogCollectionConfig(): string {
+  return `import { defineCollection, z } from 'astro:content';
+import { glob } from 'astro/loaders';
+
+export const collections = {
+  blog: defineCollection({
+    loader: glob({ pattern: '*.json', base: './src/content/blog' }),
+    schema: z.object({
+      route: z.string(),
+      title: z.string(),
+      headHtml: z.string(),
+      bodyAttributes: z.record(z.string()),
+      mainHtml: z.string(),
+    }),
+  }),
+};
+`;
+}
+
+function blogArticlePage(): string {
+  return `---
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog');
+  return posts.map((post) => ({
+    params: { slug: decodeURIComponent(post.data.route.slice(1)) },
+    props: { page: post.data },
+  }));
+}
+
+const { page } = Astro.props;
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{page.title}</title>
+    <Fragment set:html={page.headHtml} />
+  </head>
+  <body data-gnr8-source-route={page.route} {...page.bodyAttributes}>
+    <Fragment set:html={page.mainHtml} />
+  </body>
+</html>
+`;
+}
+
+function externalizeCapturedStyles(page: NormalizedStaticSitePage): {
+  page: NormalizedStaticSitePage;
+  styles: Gnr8OutputAdapterFile[];
+} {
+  const styles: Gnr8OutputAdapterFile[] = [];
+  const routeDirectory = page.path === "/" ? "" : `${decodeGeneratedOutputRoutePathForFile(page.path)}/`;
+  let index = 0;
+  const replaceStyles = (html: string) => html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi, (markup, attributes: string, css: string) => {
+    if (!css.trim()) return markup;
+    const media = attributes.match(/\bmedia\s*=\s*(["'])(.*?)\1/i)?.[2];
+    const name = `gnr8-inline-style-${++index}-${createHash("sha256").update(css).digest("hex").slice(0, 12)}.css`;
+    styles.push({ path: `public/${routeDirectory}${name}`, role: "style", contents: css });
+    return `<link rel="stylesheet" href="/${routeDirectory}${name}"${media ? ` media="${escapeAttribute(media)}"` : ""}>`;
+  });
+  return {
+    page: {
+      ...page,
+      headHtml: replaceStyles(page.headHtml ?? ""),
+      bodyHtml: replaceStyles(page.bodyHtml),
+    },
+    styles,
+  };
 }
 
 function normalizedCapturedPages(pages: NormalizedStaticSitePage[]): NormalizedStaticSitePage[] {
