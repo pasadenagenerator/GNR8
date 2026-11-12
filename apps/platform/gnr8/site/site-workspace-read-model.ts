@@ -2721,6 +2721,16 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       completedAt: toIsoOrNull(row.completed_at),
     }))
     .filter((row) => row.actionId && row.type && row.status)
+    .map((action) => {
+      const age = action.createdAt ? Date.now() - Date.parse(action.createdAt) : 0
+      if (action.type !== 'generate_redesign' || action.status !== 'running' || age < 30 * 60_000) return action
+      return {
+        ...action,
+        status: 'failed' as const,
+        resultSummary: 'Astro generation stopped without a completion result. Start a new attempt after reviewing the failure.',
+        diagnostics: [...action.diagnostics, 'ASTRO_GENERATION_STALE'],
+      }
+    })
 
   const rawSiteVariants = !siteVariantsResult.error && Array.isArray(siteVariantsResult.data)
     ? (siteVariantsResult.data as SiteVariantRow[])
