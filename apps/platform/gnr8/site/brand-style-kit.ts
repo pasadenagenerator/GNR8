@@ -39,7 +39,7 @@ export function buildBrandStyleKit(input: {
   const hero = sample('hero')
   const root = sample('root')
   const logos = input.assets.filter((asset) => asset.assetKind === 'image' && asset.fetchStatus === 'fetched' && asset.resolvedUrl && asset.localPath &&
-    /(?:^|[\/_-])logo(?:[\/_\-.]|$)/i.test(`${asset.rawRef} ${asset.resolvedUrl}`))
+    /logo/i.test(`${asset.rawRef} ${asset.resolvedUrl}`))
     .map((asset) => ({ sourceUrl: asset.resolvedUrl!, localPath: asset.localPath! }))
   return {
     format: 'gnr8-brand-style-kit:v1', status: 'candidate_requires_review', sourceUrl: input.sourceUrl,
