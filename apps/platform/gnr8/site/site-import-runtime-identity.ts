@@ -21,7 +21,7 @@ export function buildScopedImportRuntimeIdentity(input: {
   clientId: string
   agencyId: string
   reuseLegacyRuntimeSiteId: boolean
-  captureRevision?: 'github-complete-capture-v1'
+  captureRevision?: 'github-complete-capture-v1' | `reviewed-import-v2:${string}`
 }): { siteId: string; siteVersionId: string; correlationKey: string } {
   const siteId = input.reuseLegacyRuntimeSiteId
     ? deterministicId('site', `${input.sourceUrl}|/`)

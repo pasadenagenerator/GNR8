@@ -67,6 +67,8 @@ export interface NormalizedStaticBusinessSiteContent {
   contact: NormalizedSiteContact;
   footer: NormalizedSiteFooter;
   theme: NormalizedSiteThemeSignals;
+  /** Reviewed in Stacki before application; kept as a native editable CSS file. */
+  brandCss?: string;
   /**
    * Optional captured-route projection. When present it is the authoritative
    * page set for the generated Astro workspace; the legacy structured fields
@@ -159,6 +161,13 @@ export function createAstroStaticSiteProjectManifest(input: NormalizedStaticBusi
       }))
     : [{ path: "src/pages/index.astro", role: "source" as const, contents: createIndexAstro(input) }];
   files.push(...pages);
+  if (input.brandCss) {
+    files.push({
+      path: "src/styles/gnr8-brand.css",
+      role: "style",
+      contents: input.brandCss,
+    });
+  }
   if (!capturedPages) {
     files.push({
       path: "public/styles/global.css",

@@ -111,6 +111,7 @@ export async function runSourceBackedAstroGeneration(
       rawArtifact,
       htmlByPath: sourceGenerationSource.htmlByPath,
       stylesheetCssByPath: sourceGenerationSource.stylesheetCssByPath,
+      brandCss: sourceGenerationSource.stylesheetCssByPath['src/styles/gnr8-brand.css'],
       acceptedFunctionalReductions: payload.acceptedFunctionalReductions,
     });
     const selection = selectOutputAdapter({

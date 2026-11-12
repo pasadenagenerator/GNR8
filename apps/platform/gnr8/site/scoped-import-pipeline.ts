@@ -82,6 +82,8 @@ import { inferContentSlotsFromSemanticImport, separateGitBackedContentSlotSource
 import { validateLatestRawMultiPagePreviewEvidence } from '@/gnr8/runtime/multipage-preview-validation'
 import { attachEvidenceCaptureBaselineArtifact } from '@/gnr8/architecture/evidence-capture-baseline-artifact'
 import { writeRawImportGitArchive } from './raw-import-git-archive'
+import { buildBrandStyleKit, brandStyleKitCss } from './brand-style-kit'
+import { cleanImportedHtml, isTrackingReference, type SiteImportContentOptions } from './site-import-html-cleanup'
 import { writeGeneratedArtifactGitArchive } from './generated-artifact-git-archive'
 import { GeneratedArtifactGitCache } from './generated-artifact-git-cache'
 
@@ -132,6 +134,7 @@ export type ScopedMultiPageDiscoveryOption =
         maxBytesPerPage?: number
         requestTimeoutMs?: number
       }
+      selectedRoutes?: string[]
       generatedAt?: string
     }
 
@@ -237,6 +240,7 @@ function resolveMultiPageDiscoveryOption(option: ScopedMultiPageDiscoveryOption 
     requestTimeoutMs: number
   }
   generatedAt: string | null
+  selectedRoutes: Set<string> | null
 } {
   const rawLimits = typeof option === 'object' && option ? option.limits : undefined
   const rawHtmlLimits = typeof option === 'object' && option ? option.htmlAcquisitionLimits : undefined
@@ -271,6 +275,9 @@ function resolveMultiPageDiscoveryOption(option: ScopedMultiPageDiscoveryOption 
       requestTimeoutMs: Math.max(250, Math.floor(rawHtmlLimits?.requestTimeoutMs ?? DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS.requestTimeoutMs)),
     },
     generatedAt: typeof option === 'object' && option?.generatedAt ? normalizeText(option.generatedAt) || null : null,
+    selectedRoutes: typeof option === 'object' && Array.isArray(option?.selectedRoutes)
+      ? new Set(option.selectedRoutes.filter((route): route is string => typeof route === 'string' && route.startsWith('/') && !route.includes('..')))
+      : null,
   }
 }
 
@@ -1470,6 +1477,7 @@ async function acquireScopedMultiPageHtml(input: {
   snapshot: UrlSinglePageImportSnapshot
   discovery: { summary: MultiPageDiscoverySummary; manifest: MultiPageDiscoveryManifest | null }
   option: ReturnType<typeof resolveMultiPageDiscoveryOption>
+  contentOptions?: SiteImportContentOptions
   robotsEvidence?: Parameters<typeof applyRobotsRouteGovernance>[0]
   verifyCssUsage?: boolean
   approvedUnusedCssDependencies?: string[]
@@ -1525,8 +1533,17 @@ async function acquireScopedMultiPageHtml(input: {
     }),
   )
 
-  for (const [candidateIndex, candidate] of candidates.entries()) {
-    if (candidateIndex >= input.option.htmlAcquisitionLimits.maxPages) {
+  let selectedCandidateCount = 0
+  for (const candidate of candidates) {
+    if (input.option.selectedRoutes && !input.option.selectedRoutes.has(normalizeText(candidate.normalizedRoutePath))) {
+      pages.push(buildSkippedAcquisitionEntry({
+        discoveryEntry: candidate,
+        skippedReason: 'operator_excluded',
+        diagnostics: ['MULTIPAGE_HTML_FETCH_SKIPPED'],
+      }))
+      continue
+    }
+    if (selectedCandidateCount >= input.option.htmlAcquisitionLimits.maxPages) {
       diagnostics.push('MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED')
       pages.push(
         buildSkippedAcquisitionEntry({
@@ -1537,6 +1554,7 @@ async function acquireScopedMultiPageHtml(input: {
       )
       continue
     }
+    selectedCandidateCount += 1
 
     const normalizedUrl = normalizeText(candidate.normalizedUrl)
     if (!normalizedUrl) {
@@ -1777,9 +1795,11 @@ async function acquireScopedMultiPageHtml(input: {
   const fetchedAssetPages = pages.flatMap((page) => {
     if (page.status !== 'fetched' || !page.bodyPath || !(page.finalUrl ?? page.normalizedUrl)) return []
     try {
+      const html = cleanImportedHtml(fs.readFileSync(page.bodyPath, 'utf8'), input.contentOptions)
+      fs.writeFileSync(page.bodyPath, html, 'utf8')
       return [{
         pageUrl: page.finalUrl ?? page.normalizedUrl!,
-        html: fs.readFileSync(page.bodyPath, 'utf8'),
+        html,
         bodyPath: page.bodyPath,
       }]
     } catch {
@@ -1824,6 +1844,15 @@ async function acquireScopedMultiPageHtml(input: {
       (url) => `MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:${url}`,
     ))
     if (childAssetCapture.summary.failedRequiredAssetCount > 0) diagnostics.push('MULTIPAGE_CHILD_ASSET_ACQUISITION_INCOMPLETE')
+  }
+
+  for (const page of pages) {
+    if (page.status !== 'fetched' || !page.bodyPath) continue
+    const cleaned = cleanImportedHtml(fs.readFileSync(page.bodyPath, 'utf8'), input.contentOptions)
+    fs.writeFileSync(page.bodyPath, cleaned, 'utf8')
+    const bytes = Buffer.from(cleaned)
+    page.byteSize = bytes.byteLength
+    page.bodySha256 = crypto.createHash('sha256').update(bytes).digest('hex')
   }
 
   const sortedPages = pages
@@ -2064,6 +2093,7 @@ async function buildScopedMultiPageDiscovery(input: {
   snapshot: UrlSinglePageImportSnapshot
   verifyCssUsage?: boolean
   approvedUnusedCssDependencies?: string[]
+  contentOptions?: SiteImportContentOptions
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
@@ -2124,6 +2154,7 @@ async function buildScopedMultiPageDiscovery(input: {
       snapshot: input.snapshot,
       discovery: { summary: { ...disabledMultiPageDiscoverySummary(manifest.diagnostics), enabled: true }, manifest },
       option,
+      contentOptions: input.contentOptions,
     })
     const assembly = await assembleScopedMultiPageRawArtifactPages({
       sourceUrl: input.sourceUrl,
@@ -2556,6 +2587,7 @@ async function buildScopedMultiPageDiscovery(input: {
     discovery: discoveryResult,
     option,
     robotsEvidence: robotsDiscoveryInitial,
+    contentOptions: input.contentOptions,
     verifyCssUsage: input.verifyCssUsage,
     approvedUnusedCssDependencies: input.approvedUnusedCssDependencies,
   })
@@ -2636,6 +2668,7 @@ async function buildScopedMultiPageDiscovery(input: {
 function gitCaptureIncompleteReasons(
   snapshot: Pick<UrlSinglePageImportSnapshot, 'fetchManifest'>,
   discovery: Awaited<ReturnType<typeof buildScopedMultiPageDiscovery>>,
+  selectedRoutes?: string[] | null,
 ): string[] {
   const acquisition = discovery.acquisition
   const sitemapRoutes = new Set(discovery.sitemapDiscovery?.discoveredUrls.map((entry) => entry.normalizedRoutePath) ?? [])
@@ -2651,9 +2684,9 @@ function gitCaptureIncompleteReasons(
     ...(!acquisition ? ['html_acquisition_missing'] : []),
     ...(requiredPageFailed ? ['page_failed_or_limited'] : []),
     ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
-    ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed') ? ['seed_asset_missing'] : []),
-    ...(discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
-    ...(acquisition?.diagnostics.some((code) => ['MULTIPAGE_CHILD_LINK_LIMIT_REACHED', 'MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED', 'MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED'].includes(code)) ? ['child_link_limited'] : []),
+    ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed' && !isTrackingReference(asset.resolvedUrl ?? asset.rawRef)) ? ['seed_asset_missing'] : []),
+    ...(!selectedRoutes && discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
+    ...(!selectedRoutes && acquisition?.diagnostics.some((code) => ['MULTIPAGE_CHILD_LINK_LIMIT_REACHED', 'MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED', 'MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED'].includes(code)) ? ['child_link_limited'] : []),
   ]
 }
 
@@ -3659,6 +3692,7 @@ function mediaTypeFromPath(filePath: string): string {
   const ext = path.posix.extname(filePath.toLowerCase())
   if (ext === '.html' || ext === '.htm') return 'text/html; charset=utf-8'
   if (ext === '.css') return 'text/css; charset=utf-8'
+  if (ext === '.json') return 'application/json'
   if (ext === '.js' || ext === '.mjs' || ext === '.cjs') return 'application/javascript; charset=utf-8'
   if (ext === '.svg') return 'image/svg+xml'
   if (ext === '.png') return 'image/png'
@@ -3672,7 +3706,7 @@ function mediaTypeFromPath(filePath: string): string {
   return 'application/octet-stream'
 }
 
-function collectRawImportFiles(snapshotRootDirAbs: string): Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }> {
+function collectRawImportFiles(snapshotRootDirAbs: string, contentOptions?: SiteImportContentOptions, excludedPaths?: ReadonlySet<string>): Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }> {
   const out: Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }> = []
   const stack = [snapshotRootDirAbs]
   while (stack.length > 0) {
@@ -3685,8 +3719,9 @@ function collectRawImportFiles(snapshotRootDirAbs: string): Array<{ path: string
       }
       if (!entry.isFile()) continue
       const rel = path.relative(snapshotRootDirAbs, abs).replaceAll('\\', '/').replace(/^\/+/, '')
-      if (!rel || rel.includes('..')) continue
-      const bytes = fs.readFileSync(abs)
+      if (!rel || rel.includes('..') || excludedPaths?.has(rel)) continue
+      const original = fs.readFileSync(abs)
+      const bytes = /\.html?$/i.test(rel) ? Buffer.from(cleanImportedHtml(original.toString('utf8'), contentOptions)) : original
       out.push({
         path: rel,
         mediaType: mediaTypeFromPath(rel),
@@ -3713,6 +3748,7 @@ export async function runScopedImportPipeline(input: {
     siteVersionId: string
   }
   multiPageDiscovery?: ScopedMultiPageDiscoveryOption
+  contentOptions?: SiteImportContentOptions
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
   if (
@@ -3812,7 +3848,17 @@ export async function runScopedImportPipeline(input: {
     snapshot: input.snapshot,
     verifyCssUsage: process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected,
     approvedUnusedCssDependencies: approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
+    contentOptions: input.contentOptions,
   })
+  if (typeof input.multiPageDiscovery === 'object' && Array.isArray(input.multiPageDiscovery.selectedRoutes)) {
+    const captured = new Set([
+      '/',
+      ...(multiPageDiscovery.acquisition?.pages ?? []).filter((page) => page.status === 'fetched')
+        .map((page) => normalizeText(page.finalNormalizedRoutePath ?? page.normalizedRoutePath)),
+    ])
+    const missing = input.multiPageDiscovery.selectedRoutes.filter((route) => !captured.has(route))
+    if (missing.length > 0) throw new Error(`SELECTED_ROUTES_NOT_CAPTURED:${missing.slice(0, 5).join(',')}`)
+  }
   let importProvenanceSummary = await buildImportProvenanceSummary({
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
@@ -3859,7 +3905,8 @@ export async function runScopedImportPipeline(input: {
     // the runtime database. A failed push/readback leaves the preallocated
     // identity retryable without a partially persisted import.
     if (process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected) {
-      const incomplete = gitCaptureIncompleteReasons(input.snapshot, multiPageDiscovery)
+      const incomplete = gitCaptureIncompleteReasons(input.snapshot, multiPageDiscovery,
+        typeof input.multiPageDiscovery === 'object' ? input.multiPageDiscovery.selectedRoutes : null)
       if (incomplete.length > 0) {
         console.warn('[site-import] GITHUB_IMPORT_INCOMPLETE_CAPTURE_DETAIL', {
           reasons: incomplete,
@@ -3872,7 +3919,27 @@ export async function runScopedImportPipeline(input: {
         throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
       }
     }
-    const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
+    if (gitArchiveSelected) {
+      const kit = buildBrandStyleKit({
+        sourceUrl: input.sourceUrl,
+        signals: styleSignals,
+        samples: input.snapshot.renderedCapture.computedStyleSamples,
+        assets: input.snapshot.fetchManifest,
+      })
+      const brandDir = path.resolve(input.snapshot.snapshotRootDirAbs, 'brand')
+      const styleDir = path.resolve(input.snapshot.snapshotRootDirAbs, 'src/styles')
+      fs.mkdirSync(brandDir, { recursive: true })
+      fs.mkdirSync(styleDir, { recursive: true })
+      if (fs.existsSync(path.resolve(brandDir, 'kit.json')) || fs.existsSync(path.resolve(styleDir, 'gnr8-brand.css'))) {
+        throw new Error('BRAND_STYLE_KIT_PATH_CONFLICT')
+      }
+      fs.writeFileSync(path.resolve(brandDir, 'kit.json'), `${JSON.stringify(kit, null, 2)}\n`)
+      fs.writeFileSync(path.resolve(styleDir, 'gnr8-brand.css'), brandStyleKitCss(kit))
+    }
+    const excludedTrackingPaths = new Set(input.snapshot.fetchManifest
+      .filter((asset) => asset.localPath && isTrackingReference(asset.resolvedUrl ?? asset.rawRef))
+      .map((asset) => asset.localPath!.replaceAll('\\', '/').replace(/^\/+/, '')))
+    const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs, input.contentOptions, excludedTrackingPaths)
     const rawGitArchive = process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected
       ? await (async () => {
           const scope = input.ownershipScope

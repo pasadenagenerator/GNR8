@@ -284,6 +284,7 @@ export function createSourceBackedAstroGenerationInput(input: {
   rawArtifact: RawImportedSiteArtifact;
   htmlByPath?: Record<string, string> & { "/": string };
   stylesheetCssByPath?: Record<string, string>;
+  brandCss?: string;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
 }): SourceBackedAstroGenerationInput {
   const sourceHtmlByPath = input.htmlByPath ?? input.artifact.htmlByPath;
@@ -363,6 +364,7 @@ export function createSourceBackedAstroGenerationInput(input: {
     contact: { heading: "", body: "" },
     footer: { text: siteName },
     theme: { accentHex: accent, backgroundHex: background, textHex: text, fontFamily },
+    ...(input.brandCss ? { brandCss: input.brandCss } : {}),
     pages: normalizedPages,
   };
   const requiredNavigation = [...new Map(allNavigationItems.map((item) => [`${item.label}\0${item.href}`, item])).values()].map((item, index) => ({

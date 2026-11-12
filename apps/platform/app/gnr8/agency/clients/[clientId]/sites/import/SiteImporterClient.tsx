@@ -13,6 +13,7 @@ import {
   type SiteImportMultiPageLimitState,
 } from '@/gnr8/site/site-import-multipage-ui'
 import { agencyClientDashboardHref } from '@/gnr8/site/site-importer-routing'
+import type { SiteImportAnalysis } from '@/gnr8/site/site-import-analysis'
 
 type Props = {
   clientId: string
@@ -65,6 +66,12 @@ export default function SiteImporterClient(props: Props) {
   const [url, setUrl] = useState('')
   const [siteName, setSiteName] = useState('')
   const [multiPageImportEnabled, setMultiPageImportEnabled] = useState(false)
+  const [analysis, setAnalysis] = useState<SiteImportAnalysis | null>(null)
+  const [importRunId, setImportRunId] = useState<string | null>(null)
+  const [selectedRoutes, setSelectedRoutes] = useState<string[]>([])
+  const [contentOptions, setContentOptions] = useState({
+    omitCookies: true, omitBackToTop: true, omitAccessibility: true, omitSearch: true, omitForms: true, lazyLoadImages: true,
+  })
   const [multiPageLimits, setMultiPageLimits] = useState<SiteImportMultiPageLimitState>(DEFAULT_SITE_IMPORT_MULTI_PAGE_LIMIT_STATE)
   const [error, setError] = useState<string | null>(null)
   const [statusText, setStatusText] = useState<string | null>(null)
@@ -110,6 +117,27 @@ export default function SiteImporterClient(props: Props) {
 
     try {
       setIsSubmitting(true)
+      if (!analysis) {
+        const response = await fetch(`/api/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/import`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'analyze', url: normalizedUrl, agencyId: props.agencyId }),
+        })
+        const result = await response.json().catch(() => null) as { ok?: boolean; analysis?: SiteImportAnalysis; importRunId?: string; error?: string } | null
+        if (!response.ok || !result?.ok || !result.analysis || !result.importRunId) {
+          setError(result?.error ?? `Analysis failed (HTTP ${response.status})`)
+          return
+        }
+        setAnalysis(result.analysis)
+        setImportRunId(result.importRunId)
+        setSelectedRoutes(result.analysis.routes.filter((route) => route.language === result.analysis?.baseLanguage).map((route) => route.path))
+        setMultiPageImportEnabled(true)
+        return
+      }
+      if (!selectedRoutes.includes('/')) {
+        setError('The home page must be included.')
+        return
+      }
+      if (!importRunId) { setError('Analyze the website again before import.'); return }
       const response = await fetch(
         `/api/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/import`,
         {
@@ -123,6 +151,9 @@ export default function SiteImporterClient(props: Props) {
               adminView: props.adminView ?? false,
               multiPageImportEnabled,
               multiPageLimits,
+              selectedRoutes,
+              contentOptions,
+              importRunId,
             }),
           ),
         },
@@ -188,7 +219,10 @@ export default function SiteImporterClient(props: Props) {
             required
             value={url}
             placeholder='https://example.com'
-            onChange={(event) => setUrl(event.currentTarget.value)}
+            onChange={(event) => {
+              setUrl(event.currentTarget.value); setAnalysis(null); setImportRunId(null); setSelectedRoutes([])
+              setContentOptions({ omitCookies: true, omitBackToTop: true, omitAccessibility: true, omitSearch: true, omitForms: true, lazyLoadImages: true })
+            }}
             style={{
               border: '1px solid #cbd5e1',
               borderRadius: 8,
@@ -218,15 +252,51 @@ export default function SiteImporterClient(props: Props) {
           Imported site name: <strong>{resolvedSiteNamePreview}</strong>
         </p>
 
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, display: 'grid', gap: 10 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a', fontSize: 13, fontWeight: 700 }}>
-            <input
-              type='checkbox'
-              checked={multiPageImportEnabled}
-              onChange={(event) => setMultiPageImportEnabled(event.currentTarget.checked)}
-            />
-            Enable multi-page import
-          </label>
+        {analysis ? (
+          <div style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 12, display: 'grid', gap: 12 }}>
+            <strong>Review what will be imported</strong>
+            <p style={{ margin: 0, fontSize: 13 }}>Found {analysis.routes.length} pages, including about {analysis.blogPostCount} blog posts. The entry page contains {analysis.formsOnEntryPage} form(s).</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#475569' }}>Base language: {analysis.baseLanguage}. Other languages start unchecked.</p>
+            {analysis.languages.length > 1 ? <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {analysis.languages.map((language) => <label key={language} style={{ fontSize: 13 }}>
+                <input type='checkbox' checked={analysis.routes.filter((route) => route.language === language).every((route) => selectedRoutes.includes(route.path))}
+                  onChange={(event) => { const checked = event.currentTarget.checked; setSelectedRoutes((current) => checked
+                    ? [...new Set([...current, ...analysis.routes.filter((route) => route.language === language).map((route) => route.path)])]
+                    : current.filter((path) => path === '/' || !analysis.routes.some((route) => route.path === path && route.language === language))) }} /> {language}
+              </label>)}
+            </div> : null}
+            <div style={{ maxHeight: 240, overflowY: 'auto', display: 'grid', gap: 4 }}>
+              {analysis.routes.map((route) => <label key={route.path} style={{ fontSize: 12 }}>
+                <input type='checkbox' checked={selectedRoutes.includes(route.path)} disabled={route.path === '/'}
+                  onChange={(event) => { const checked = event.currentTarget.checked; setSelectedRoutes((current) => checked ? [...current, route.path] : current.filter((path) => path !== route.path)) }} /> {route.path} {route.title ? `— ${route.title}` : ''} {route.role === 'article' ? '(post)' : ''}
+              </label>)}
+            </div>
+            <div style={{ display: 'grid', gap: 5, fontSize: 13 }}>
+              <strong>Optional functions</strong>
+              {([
+                ['cookies', 'omitCookies', 'Import cookie controls'],
+                ['backToTop', 'omitBackToTop', 'Import back-to-top button'],
+                ['accessibility', 'omitAccessibility', 'Import accessibility widget'],
+                ['search', 'omitSearch', 'Import search'],
+              ] as const).filter(([feature]) => analysis.features[feature]).map(([, key, label]) =>
+                <label key={key}><input type='checkbox' checked={!contentOptions[key]}
+                  onChange={(event) => { const checked = event.currentTarget.checked; setContentOptions((current) => ({ ...current, [key]: !checked })) }} /> {label}</label>)}
+              {analysis.formsOnEntryPage > 0 ? <label><input type='checkbox' checked={!contentOptions.omitForms}
+                onChange={(event) => { const checked = event.currentTarget.checked; setContentOptions((current) => ({ ...current, omitForms: !checked })) }} /> Import forms</label> : null}
+              <label><input type='checkbox' checked={contentOptions.lazyLoadImages}
+                onChange={(event) => { const checked = event.currentTarget.checked; setContentOptions((current) => ({ ...current, lazyLoadImages: checked })) }} /> Lazy load images</label>
+              <span>Known analytics and tracking scripts are always removed.</span>
+            </div>
+            {analysis.features.video ? <p style={{ margin: 0, fontSize: 12 }}>Video detected. It stays linked to its source.</p> : null}
+            {analysis.features.map ? <p style={{ margin: 0, fontSize: 12 }}>Map detected. OpenStreetMap replacement needs review after import.</p> : null}
+            {analysis.unsupportedFeatures.length > 0 ? <p style={{ margin: 0, fontSize: 12 }}>Functions needing manual review: {analysis.unsupportedFeatures.join(', ')}.</p> : null}
+            {analysis.notes.map((note) => <p key={note} style={{ margin: 0, fontSize: 12, color: '#475569' }}>{note}</p>)}
+          </div>
+        ) : null}
+
+        <details style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10 }}>
+          <summary style={{ fontSize: 13, fontWeight: 700 }}>Advanced import limits</summary>
+        <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
           <p style={{ margin: 0, color: '#475569', fontSize: 12 }}>{MULTI_PAGE_IMPORT_STATIC_SITE_GUARDRAIL}</p>
           {multiPageImportEnabled ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
@@ -257,6 +327,7 @@ export default function SiteImporterClient(props: Props) {
             </div>
           ) : null}
         </div>
+        </details>
 
         {error ? (
           <div
@@ -294,7 +365,7 @@ export default function SiteImporterClient(props: Props) {
               opacity: isSubmitting || isPending ? 0.8 : 1,
             }}
           >
-            {isSubmitting || isPending ? 'Importing...' : 'Import Website'}
+            {isSubmitting || isPending ? (analysis ? 'Importing...' : 'Analyzing...') : (analysis ? 'Import selected content' : 'Analyze website')}
           </button>
           <Link
             href={dashboardHref}

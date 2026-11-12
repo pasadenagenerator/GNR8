@@ -92,6 +92,15 @@ test("captured pages preserve their source shell without adding synthetic naviga
   assert.doesNotMatch(page, /Construction Health Solutions/);
 });
 
+test("candidate brand variables are available to Stacki without changing captured pages", () => {
+  const content = chsFixture();
+  content.pages = [{ path: "/", title: "Home", bodyHtml: "<h1>Source home</h1>" }];
+  content.brandCss = ":root { --brand-500: #f36e21; }\n";
+  const files = fileMap(createAstroStaticSiteProjectManifest(content).files);
+  assert.equal(files.get("src/styles/gnr8-brand.css"), content.brandCss);
+  assert.doesNotMatch(files.get("src/pages/index.astro") ?? "", /gnr8-brand\.css/);
+});
+
 test("authoritative CHS source mapping preserves routes, content, contacts, footer, and mobile layout", () => {
   const manifest = createAstroStaticSiteProjectManifest(chsAstroSourceContent());
   const files = fileMap(manifest.files);

@@ -40,6 +40,15 @@ export type SiteImportRequestPayload = {
   siteName: string | null
   agencyId: string
   adminView: boolean
+  importRunId?: string
+  contentOptions?: {
+    omitCookies?: boolean
+    omitBackToTop?: boolean
+    omitAccessibility?: boolean
+    omitSearch?: boolean
+    omitForms?: boolean
+    lazyLoadImages?: boolean
+  }
   multiPageDiscovery?: {
     enabled: true
     acquireHtml: true
@@ -58,6 +67,7 @@ export type SiteImportRequestPayload = {
       maxBytesPerPage: number
       requestTimeoutMs: number
     }
+    selectedRoutes?: string[]
   }
 }
 
@@ -89,12 +99,17 @@ export function buildSiteImportRequestPayload(input: {
   adminView?: boolean
   multiPageImportEnabled?: boolean
   multiPageLimits?: Partial<SiteImportMultiPageLimitState> | null
+  selectedRoutes?: string[]
+  importRunId?: string
+  contentOptions?: SiteImportRequestPayload['contentOptions']
 }): SiteImportRequestPayload {
   const payload: SiteImportRequestPayload = {
     url: normalizeText(input.url),
     siteName: normalizeText(input.siteName) || null,
     agencyId: normalizeText(input.agencyId),
     adminView: input.adminView ?? false,
+    ...(input.importRunId ? { importRunId: input.importRunId } : {}),
+    ...(input.contentOptions ? { contentOptions: input.contentOptions } : {}),
   }
 
   if (!input.multiPageImportEnabled) return payload
@@ -118,6 +133,7 @@ export function buildSiteImportRequestPayload(input: {
       maxBytesPerPage: limits.maxBytesPerPage,
       requestTimeoutMs: limits.requestTimeoutMs,
     },
+    ...(input.selectedRoutes ? { selectedRoutes: [...new Set(input.selectedRoutes)] } : {}),
   }
 
   return payload

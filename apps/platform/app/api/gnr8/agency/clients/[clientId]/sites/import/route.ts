@@ -15,6 +15,7 @@ import { deterministicId } from '@/gnr8/runtime/deterministic'
 import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
 import { getArtifactById, preallocateSiteVersionIdentity } from '@/gnr8/runtime/runtime-store'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import { analyzePublicSiteForImport } from '@/gnr8/site/site-import-analysis'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { recordSingleSiteCaptureSpine, type SingleSiteCaptureSpineEvidenceRefInput } from '@/gnr8/single-site/single-site-capture-spine-adapter'
 
@@ -30,10 +31,20 @@ type Params = {
 }
 
 type Body = {
+  action?: 'analyze'
+  importRunId?: string
   url?: string
   siteName?: string
   agencyId?: string
   adminView?: boolean
+  contentOptions?: {
+    omitCookies?: boolean
+    omitBackToTop?: boolean
+    omitAccessibility?: boolean
+    omitSearch?: boolean
+    omitForms?: boolean
+    lazyLoadImages?: boolean
+  }
   multiPageDiscovery?:
     | boolean
     | {
@@ -54,6 +65,7 @@ type Body = {
           maxBytesPerPage?: number
           requestTimeoutMs?: number
         }
+        selectedRoutes?: string[]
       }
 }
 
@@ -125,7 +137,7 @@ async function legacyRuntimeSiteBelongsToScope(input: {
 }
 
 async function resolveScopedImportRuntimeIdentity(input: {
-  sourceUrl: string; clientId: string; agencyId: string; captureRevision?: 'github-complete-capture-v1'
+  sourceUrl: string; clientId: string; agencyId: string; captureRevision?: 'github-complete-capture-v1' | `reviewed-import-v2:${string}`
 }) {
   const legacySiteId = deterministicId('site', `${input.sourceUrl}|/`)
   const reuseLegacyRuntimeSiteId = await legacyRuntimeSiteBelongsToScope({
@@ -498,6 +510,21 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       clientId,
       agencyId: actionContext.agencyId,
     })
+    if (body.action === 'analyze') {
+      try {
+        return NextResponse.json({ ok: true, analysis: await analyzePublicSiteForImport(importUrl.toString()), importRunId: crypto.randomUUID() })
+      } catch (error) {
+        return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : 'Site analysis failed.' }, { status: 422 })
+      }
+    }
+    const selectedRoutes = typeof body.multiPageDiscovery === 'object' ? body.multiPageDiscovery?.selectedRoutes : undefined
+    if (selectedRoutes && (!body.importRunId || !UUID_RE.test(body.importRunId))) {
+      return NextResponse.json({ ok: false, error: 'A fresh site analysis is required before import.' }, { status: 400 })
+    }
+    if (selectedRoutes && (!Array.isArray(selectedRoutes) || selectedRoutes.length > 180 || !selectedRoutes.includes('/') ||
+      selectedRoutes.some((route) => typeof route !== 'string' || !route.startsWith('/') || route.includes('..')))) {
+      return NextResponse.json({ ok: false, error: 'Selected routes are invalid.' }, { status: 400 })
+    }
     const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
 
     const proposedOwnershipSiteId = newScopedImportOwnershipSiteId({
@@ -511,7 +538,9 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       sourceUrl: importUrl.toString(),
       clientId,
       agencyId: actionContext.agencyId,
-      captureRevision: githubCaptureSelected ? 'github-complete-capture-v1' : undefined,
+      captureRevision: githubCaptureSelected
+        ? body.importRunId ? `reviewed-import-v2:${body.importRunId}` : 'github-complete-capture-v1'
+        : undefined,
     })
     const preallocatedIdentity = await preallocateSiteVersionIdentity({
       siteId: runtimeIdentity.siteId,
@@ -657,6 +686,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteVersionId: preallocatedIdentity.siteVersionId,
       },
       multiPageDiscovery: body.multiPageDiscovery,
+      contentOptions: body.contentOptions,
     })
 
     if (imported.siteId !== preallocatedIdentity.siteId || imported.siteVersionId !== preallocatedIdentity.siteVersionId) {
