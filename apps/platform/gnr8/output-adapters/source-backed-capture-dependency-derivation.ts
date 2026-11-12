@@ -182,7 +182,8 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     sourceUrl: parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
     filePaths: new Set(parentFiles.map((file) => file.path)),
     removeFormCaptcha: Boolean(
-      input.acceptedFunctionalReductions?.sourceWidgetRemovals?.includes("form-captcha"),
+      input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1" &&
+      input.acceptedFunctionalReductions.sourceWidgetRemovals?.includes("form-captcha"),
     ),
   });
   const inheritedStylesheetRewrites = inheritedCaptureRewrites
