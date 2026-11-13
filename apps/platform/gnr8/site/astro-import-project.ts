@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
+import packageLockTemplate from './astro-import-package-lock.json'
 
 type SourceFile = { path: string; contents: string }
 type CaptureFile = { path: string; bytes: Buffer; sha256: string }
@@ -133,6 +134,23 @@ export function createAstroImportProject(input: {
   if (!output.has('src/pages/index.astro') || !output.has('package.json') || !output.has('astro.config.mjs')) {
     throw new Error('ASTRO_IMPORT_PROJECT_INCOMPLETE')
   }
+  const packageManifest = JSON.parse(output.get('package.json')!.toString('utf8')) as {
+    name?: string; version?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string>
+  }
+  const dependencies = packageManifest.dependencies ?? {}
+  if (dependencies.astro !== '^7.0.0' || Object.keys(dependencies).length !== 1 ||
+      Object.keys(packageManifest.devDependencies ?? {}).length !== 0) {
+    throw new Error('ASTRO_IMPORT_PACKAGE_LOCK_UNSUPPORTED')
+  }
+  // Native Stacki requires an npm lockfile and its container uses npm ci.
+  // Keep the resolved dependency tree fixed while matching each site's name.
+  const lock = structuredClone(packageLockTemplate)
+  lock.name = packageManifest.name ?? 'gnr8-imported-site'
+  lock.version = packageManifest.version ?? '0.0.0'
+  lock.packages[''].name = lock.name
+  lock.packages[''].version = lock.version
+  lock.packages[''].dependencies.astro = dependencies.astro
+  output.set('package-lock.json', Buffer.from(`${JSON.stringify(lock, null, 2)}\n`))
   output.set('README.md', Buffer.from(`# Imported Astro site\n\nSource: ${source.origin}\n\nThis editable Astro project was made from the retained GNR8 capture without a second crawl. Page markup is in \`src/pages\`; blog entries are in \`src/content/blog\`. The Brand Style candidate is in \`brand/kit.json\` and \`src/styles/gnr8-brand.css\` when available. Review source-specific interactive functions before publication.\n`))
   output.set('.gitignore', Buffer.from('node_modules/\ndist/\n.astro/\n'))
   return {

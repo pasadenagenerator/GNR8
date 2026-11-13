@@ -30,6 +30,7 @@ test('makes one editable Astro project from retained capture with local assets a
   const files = new Map(result.files.map(file => [file.path, file.body.toString('utf8')]))
   assert.equal(result.routeCount, 2)
   assert.equal(result.assetCount, 3)
+  assert.equal(JSON.parse(files.get('package-lock.json')!).packages[''].dependencies.astro, '^7.0.0')
   assert.deepEqual(result.externalFallbacks, ['uploads/missing.pdf'])
   assert.equal([...files.keys()].filter(path => path.startsWith('public/styles/captured/')).length, 1)
   assert.equal([...files.keys()].filter(path => path.startsWith('public/assets/')).length, 2)
