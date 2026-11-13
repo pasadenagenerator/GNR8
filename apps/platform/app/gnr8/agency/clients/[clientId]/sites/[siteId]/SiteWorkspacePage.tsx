@@ -122,6 +122,11 @@ function renderOverviewContent(props: {
           <div>{templateSourceLabel}: {readModel.overview.templateSource ?? 'unknown'}</div>
           {isImportedSite ? <div>Import source URL: {readModel.overview.rawImportSourceUrl ?? 'n/a'}</div> : null}
           {isImportedSite ? <div>Final URL: {readModel.overview.rawImportFinalUrl ?? 'n/a'}</div> : null}
+          {readModel.overview.astroImportProject ? <div>
+            Astro project: {readModel.overview.astroImportProject.routeCount} pages, {readModel.overview.astroImportProject.assetCount} local files.{' '}
+            <a href={`https://github.com/${readModel.overview.astroImportProject.repository}/tree/${readModel.overview.astroImportProject.branch}`}
+              target="_blank" rel="noopener noreferrer">Open editable GitHub branch</a>
+          </div> : null}
         </div>
         <SiteBootstrapStatusPanel
           clientId={readModel.client.clientId}
@@ -1559,6 +1564,14 @@ export default async function SiteWorkspacePage(props: Props) {
             <h2 style={{ margin: 0, fontSize: 18 }}>Stacki Studio</h2>
             <p>Projekt odprite v nativnem Stackiju. Spremembe in objave se shranjujejo neposredno v GitHub.</p>
             <a href={nativeStackiUrl} target="_blank" rel="noopener noreferrer">Odpri Stacki Studio</a>
+          </section>
+        ) : null}
+        {props.activeTab === 'design' && readModel.overview.astroImportProject && !nativeStackiUrl ? (
+          <section style={sectionCardStyle()} aria-label="Astro project">
+            <h2 style={{ margin: 0, fontSize: 18 }}>Astro project ready</h2>
+            <p>The editable project is in GitHub. Hosted Stacki Studio still needs a site connection.</p>
+            <a href={`https://github.com/${readModel.overview.astroImportProject.repository}/tree/${readModel.overview.astroImportProject.branch}`}
+              target="_blank" rel="noopener noreferrer">Open Astro project</a>
           </section>
         ) : null}
         {props.activeTab === 'design' && canPublish && !nativeStackiUrl &&

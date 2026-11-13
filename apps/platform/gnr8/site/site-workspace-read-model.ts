@@ -335,6 +335,7 @@ export type SiteWorkspaceReadModel = {
     rawImportExternalFallbackAssetCount: number
     rawImportSourceUrl: string | null
     rawImportFinalUrl: string | null
+    astroImportProject: { repository: string; branch: string; routeCount: number; assetCount: number } | null
     contentSlotCount: number
     previewReady: boolean
     publishReady: boolean
@@ -3016,6 +3017,15 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const latestImportProvenance = isRecord(latestImportRuntimeRow?.import_provenance_summary)
     ? latestImportRuntimeRow.import_provenance_summary
     : null
+  const astroProjectRef = isRecord(latestImportProvenance?.astroImportProject)
+    ? latestImportProvenance.astroImportProject : null
+  const astroImportProject = typeof astroProjectRef?.repository === 'string' &&
+    /^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(astroProjectRef.repository) &&
+    typeof astroProjectRef.branch === 'string' && /^astro\/[a-f0-9-]{36}$/.test(astroProjectRef.branch) &&
+    Number.isSafeInteger(astroProjectRef.routeCount) && Number.isSafeInteger(astroProjectRef.assetCount)
+      ? { repository: astroProjectRef.repository, branch: astroProjectRef.branch,
+          routeCount: Number(astroProjectRef.routeCount), assetCount: Number(astroProjectRef.assetCount) }
+      : null
   if (isRecord(latestImportProvenance?.currentMultiPagePreviewValidation)) {
     latestImportPreviewValidationPayload = latestImportProvenance.currentMultiPagePreviewValidation
   }
@@ -3249,6 +3259,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       rawImportExternalFallbackAssetCount,
       rawImportSourceUrl,
       rawImportFinalUrl,
+      astroImportProject,
       contentSlotCount,
       previewReady,
       publishReady,

@@ -530,9 +530,11 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     const proposedOwnershipSiteId = newScopedImportOwnershipSiteId({
       sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
     })
-    const githubCaptureSelected = process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' &&
-      stackiGithubSelected({ agencyId: actionContext.agencyId, clientId,
+    const githubCaptureSelected = stackiGithubSelected({ agencyId: actionContext.agencyId, clientId,
         siteId: proposedOwnershipSiteId, siteVersionId: '' })
+    if (!githubCaptureSelected) {
+      return NextResponse.json({ ok: false, error: 'GitHub storage for Astro import is not configured.' }, { status: 503 })
+    }
 
     const runtimeIdentity = await resolveScopedImportRuntimeIdentity({
       sourceUrl: importUrl.toString(),
@@ -681,6 +683,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteId: ownershipSiteId,
       },
       fallbackToLegacyOnPipelineFailure: false,
+      requireAstroProject: true,
       runtimeIdentity: {
         siteId: preallocatedIdentity.siteId,
         siteVersionId: preallocatedIdentity.siteVersionId,
@@ -796,6 +799,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         appliedTransformationsCount: preview.appliedTransformationsCount,
         diagnostics: [...new Set([...preview.diagnostics, ...diagnostics, ...cmsDiagnostics])],
         contentSlotMaterialization: cmsContentSlots,
+        astroImportProject: imported.mode === 'pipeline' ? imported.reporting.astroImportProject ?? null : null,
         ...(multiPageDiscovery.enabled ? { multiPageDiscovery } : {}),
         siteName: siteNameResolution.resolvedName,
         siteNameSource: siteNameResolution.source,

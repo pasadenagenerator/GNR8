@@ -93,6 +93,7 @@ export class GitHubStackiStore {
   /** Resolve a predeclared immutable import or generated-artifact branch. */
   async immutableRepository(branch: string): Promise<{defaultBranch:string;parent:string;existingCommit?:string}> {
     if (!/^imports\/[a-f0-9-]{36}$/.test(branch) &&
+        !/^astro\/[a-f0-9-]{36}$/.test(branch) &&
         !/^artifacts\/[a-f0-9-]{36}\/[a-f0-9]{64}$/.test(branch))
       throw new StackiDraftError(503, 'STACKI_GITHUB_NOT_CONFIGURED');
     const repo = await this.repository();

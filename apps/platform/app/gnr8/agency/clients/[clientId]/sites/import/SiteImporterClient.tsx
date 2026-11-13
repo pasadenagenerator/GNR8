@@ -207,7 +207,7 @@ export default function SiteImporterClient(props: Props) {
       <header style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Import site for {props.clientName}</h2>
         <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>
-          Paste a public website URL to import it directly into this client workspace.
+          Analyze a public website, choose its content, and prepare an editable Astro project for Stacki.
         </p>
       </header>
 
@@ -365,7 +365,7 @@ export default function SiteImporterClient(props: Props) {
               opacity: isSubmitting || isPending ? 0.8 : 1,
             }}
           >
-            {isSubmitting || isPending ? (analysis ? 'Importing...' : 'Analyzing...') : (analysis ? 'Import selected content' : 'Analyze website')}
+            {isSubmitting || isPending ? (analysis ? 'Preparing Astro project...' : 'Analyzing...') : (analysis ? 'Import selected content into Astro' : 'Analyze website')}
           </button>
           <Link
             href={dashboardHref}

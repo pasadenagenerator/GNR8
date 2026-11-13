@@ -3398,6 +3398,7 @@ export type ScopedImportPipelineSuccess = {
     multiPageDiscovery: MultiPageDiscoverySummary
     cmsContentSlots: ScopedImportCmsSlotMaterializationResult
     artifactGenerated: boolean
+    astroImportProject?: { repository: string; branch: string; commit: string; fileCount: number; routeCount: number; assetCount: number; externalFallbackCount: number }
     writePath: {
       createdVersionId: string
       provenancePayloadBeforeWrite: Record<string, unknown> | null
@@ -3741,6 +3742,7 @@ export async function runScopedImportPipeline(input: {
   /** Ownership identity supplied by the authorized caller; runtimeIdentity is a separate capture identity. */
   ownershipScope?: { agencyId: string; clientId: string; siteId: string }
   fallbackToLegacyOnPipelineFailure?: boolean
+  requireAstroProject?: boolean
   legacySlug?: string
   legacyTitle?: string
   runtimeIdentity?: {
@@ -3774,14 +3776,15 @@ export async function runScopedImportPipeline(input: {
   }
   const deps = await defaultDependencies(input.deps)
   const explicitGitPreflight = process.env.GNR8_GITHUB_IMPORT_PREFLIGHT === '1'
-  if (explicitGitPreflight && !input.ownershipScope) throw new Error('GITHUB_IMPORT_OWNERSHIP_REQUIRED')
+  if ((explicitGitPreflight || input.requireAstroProject) && !input.ownershipScope) throw new Error('GITHUB_IMPORT_OWNERSHIP_REQUIRED')
   let gitArchiveSelected = false
-  if (input.ownershipScope && (explicitGitPreflight || process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1')) {
+  if (input.ownershipScope && (explicitGitPreflight || input.requireAstroProject || process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1')) {
     const {configuredGitHubTarget,stackiGithubSelected} = await import('@/gnr8/stacki/stacki-github-config')
     // Repository verification does not access a version branch. A fresh UUID is
     // used only for this store constructor; no checkpoint or Git write occurs.
     const storeScope = {...input.ownershipScope,siteVersionId:crypto.randomUUID()}
     gitArchiveSelected = stackiGithubSelected(storeScope)
+    if (input.requireAstroProject && !gitArchiveSelected) throw new Error('ASTRO_IMPORT_GITHUB_NOT_CONFIGURED')
     if (explicitGitPreflight || gitArchiveSelected) {
       const {GitHubStackiStore} = await import('@/gnr8/stacki/stacki-github-store')
       await new GitHubStackiStore(storeScope, await configuredGitHubTarget(storeScope)).verifyTarget()
@@ -3940,7 +3943,7 @@ export async function runScopedImportPipeline(input: {
       .filter((asset) => asset.localPath && isTrackingReference(asset.resolvedUrl ?? asset.rawRef))
       .map((asset) => asset.localPath!.replaceAll('\\', '/').replace(/^\/+/, '')))
     const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs, input.contentOptions, excludedTrackingPaths)
-    const rawGitArchive = process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1' && gitArchiveSelected
+    const rawGitArchive = gitArchiveSelected && (input.requireAstroProject || process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED === '1')
       ? await (async () => {
           const scope = input.ownershipScope
           const siteVersionId = input.runtimeIdentity?.siteVersionId
@@ -4416,6 +4419,100 @@ export async function runScopedImportPipeline(input: {
       throw new Error(`Import provenance summary is empty after write on site version ${migrated.siteVersionId}.`)
     }
 
+    // The Git-backed import already has verified source bytes in memory. Make
+    // the editable Astro branch here, before the request reports completion,
+    // rather than asking the user to launch a second Generate workflow.
+    const astroImportProject = rawGitArchiveRef ? await (async () => {
+      const { loadSourceBackedAstroGenerationSource, createSourceBackedAstroGenerationInput } =
+        await import('@/gnr8/output-adapters/source-backed-astro-input')
+      const { createAstroImportProject } = await import('./astro-import-project')
+      const { writeAstroImportGitProject } = await import('./astro-import-git-project')
+      const { configuredGitHubTarget } = await import('@/gnr8/stacki/stacki-github-config')
+      const { GitHubStackiStore } = await import('@/gnr8/stacki/stacki-github-store')
+      const rowByPath = new Map(persistedFileRows.map(row => [row.path, row]))
+      const rawSource = {
+        id: rawImportArtifact.artifactId, artifactType: 'raw_imported_site' as const,
+        siteId: migrated.siteId, siteVersionId: migrated.siteVersionId,
+        entryHtmlPath: importInput.entryHtmlPath,
+        assetBasePath: path.posix.dirname(importInput.entryHtmlPath) || '.',
+        fileMap: rawImportFileMap,
+        metadata: {
+          sourceUrl: input.snapshot.sourceUrl,
+          finalUrl: input.snapshot.importIntake?.evidence?.finalUrl ?? null,
+          htmlByteLength,
+          ...(rawAssemblySummary?.enabled ? { multiPage: { enabled: true,
+            pageCount: rawAssemblySummary.assembledPageCount + 1,
+            routeMapRef: rawAssemblySummary.routeMapRef ?? 'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly.routeMap' } } : {}),
+          diagnostics: { codes: [] }, assetSummary: { persistedAssetCount: persistedFileRows.length,
+            externalFallbackAssetCount: unresolvedExternalAssets.length },
+        },
+        createdAt: new Date().toISOString(),
+      }
+      const source = await loadSourceBackedAstroGenerationSource({
+        siteVersion: artifactSourceVersion, rawArtifact: rawSource,
+        getRawAsset: async ({ filePath }) => {
+          const row = rowByPath.get(filePath)
+          return row ? { mediaType: row.mediaType, sizeBytes: row.sizeBytes,
+            sha256: row.sha256, bytes: row.bytes } : null
+        },
+      })
+      const generation = createSourceBackedAstroGenerationInput({
+        siteVersion: artifactSourceVersion,
+        artifact: { id: artifact.artifactId,
+          bundleSha256: sha256Hex(stableStringify({
+            htmlByPath: artifactBundle.htmlByPath,
+            compiledTokenStyles: artifactBundle.compiledTokenStyles,
+            assetFingerprintMap: artifactBundle.assetFingerprintMap,
+            manifest: persistedArtifactManifest,
+          })) } as unknown as Parameters<typeof createSourceBackedAstroGenerationInput>[0]['artifact'],
+        rawArtifact: rawSource,
+        htmlByPath: source.htmlByPath,
+        stylesheetCssByPath: source.stylesheetCssByPath,
+        brandCss: source.stylesheetCssByPath['src/styles/gnr8-brand.css'],
+        acceptedFunctionalReductions: [
+          input.contentOptions?.omitCookies, input.contentOptions?.omitBackToTop,
+          input.contentOptions?.omitAccessibility, input.contentOptions?.omitSearch,
+          input.contentOptions?.omitForms,
+        ].every(value => value !== false)
+          ? { kind: 'static-content-v1', scripts: 'remove' }
+          : undefined,
+      })
+      const project = createAstroImportProject({
+        runtimeSiteId: migrated.siteId, siteVersionId: migrated.siteVersionId,
+        sourceUrl: input.sourceUrl,
+        sourceFiles: [
+          ...generation.sourceManifest.files,
+          ...(rowByPath.has('brand/kit.json') ? [{ path: 'brand/kit.json',
+            contents: rowByPath.get('brand/kit.json')!.bytes.toString('utf8') }] : []),
+        ],
+        captureFiles: persistedFileRows,
+        materializedCssByPath: source.stylesheetCssByPath,
+      })
+      const scope = rawGitArchiveRef.scope
+      const storeScope = { ...scope, siteVersionId: migrated.siteVersionId }
+      const target = await configuredGitHubTarget(storeScope, rawGitArchiveRef.repository)
+      const store = new GitHubStackiStore(storeScope, target)
+      const written = await writeAstroImportGitProject({
+        siteVersionId: migrated.siteVersionId, runtimeSiteId: migrated.siteId,
+        sourceImportCommit: rawGitArchiveRef.commit, files: project.files, target,
+      }, { repository: branch => store.immutableRepository(branch) })
+      return { repository: rawGitArchiveRef.repository, branch: written.branch, commit: written.commit,
+        fileCount: written.fileCount, routeCount: project.routeCount,
+        assetCount: project.assetCount, externalFallbackCount: project.externalFallbacks.length }
+    })() : undefined
+    if (astroImportProject && generatedGitArchive) {
+      const persisted = await deps.setSiteVersionImportProvenanceSummary({
+        siteVersionId: migrated.siteVersionId,
+        importProvenanceSummary: {
+          ...GIT_BACKED_IMPORT_MARKER,
+          runtimeSiteId: migrated.siteId,
+          sourceGitArchive: generatedGitArchive,
+          astroImportProject,
+        },
+      })
+      if (persisted.affectedRows <= 0) throw new Error('ASTRO_IMPORT_PROJECT_REFERENCE_NOT_PERSISTED')
+    }
+
     const reporting = computePipelineReporting({
       pipelineResult,
       preparedSite,
@@ -4440,6 +4537,7 @@ export async function runScopedImportPipeline(input: {
         multiPageDiscovery: multiPageDiscovery.summary,
         cmsContentSlots,
         artifactGenerated: true,
+        ...(astroImportProject ? { astroImportProject } : {}),
         writePath: writePathDiagnostics,
       },
     }

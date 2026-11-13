@@ -41,6 +41,7 @@ export type GitBackedImportMarker = {
   githubSource: true;
   runtimeSiteId?: string;
   sourceGitArchive?: GeneratedGitRef;
+  astroImportProject?: { repository: string; branch: string; commit: string; routeCount: number; assetCount: number; externalFallbackCount: number };
   importReview?: unknown;
   brandStyleGuide?: unknown;
   confirmedImport?: unknown;
@@ -3624,7 +3625,7 @@ export async function getSiteVersion(siteVersionId: string, options: RuntimeStor
       return {...page, ...source};
     });
     const summary = {...payload.importProvenanceSummary} as RuntimeImportProvenanceSummary & Record<string, unknown>;
-    for (const key of ["importReview", "brandStyleGuide", "confirmedImport"] as const) {
+    for (const key of ["importReview", "brandStyleGuide", "confirmedImport", "astroImportProject"] as const) {
       if (Object.hasOwn(marker, key)) summary[key] = marker[key];
     }
     snapshot.importProvenanceSummary = summary;
