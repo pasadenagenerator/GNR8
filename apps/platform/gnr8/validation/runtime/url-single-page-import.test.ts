@@ -371,6 +371,46 @@ test("additional asset capture follows bounded trusted stylesheet imports and fo
   assert.doesNotMatch(fs.readFileSync(path.join(root, fontCss!.localPath!), "utf8"), /https:\/\/fonts\.example\.test/);
 });
 
+test("additional pages complete a seed-captured script-injected font stylesheet", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-seed-font-import-"));
+  const stylesheetUrl = "https://www.example.com/assets/user-style.css?capture=1";
+  const fontCssUrl = "https://fonts.prod.extra-cdn.com/css?family=IBM+Plex+Serif:400&display=swap";
+  const fontUrl = "https://font-files.prod.extra-cdn.com/ibm-plex-serif.woff2";
+  const stylesheetPath = "assets/user-style.css";
+  const stylesheet = `@import url('${fontCssUrl}');body{font-family:'IBM Plex Serif'}`;
+  fs.mkdirSync(path.join(root, "assets"), { recursive: true });
+  fs.writeFileSync(path.join(root, stylesheetPath), stylesheet);
+  try {
+    const fetched: string[] = [];
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      existingFetchManifest: [{
+        tag: "link", attribute: "href", occurrence: 0, rawRef: stylesheetUrl,
+        resolvedUrl: stylesheetUrl, localPath: stylesheetPath, assetKind: "stylesheet",
+        fetchStatus: "fetched", httpStatus: 200, contentType: "text/css", byteLength: Buffer.byteLength(stylesheet),
+      }],
+      pages: [{
+        pageUrl: "https://www.example.com/project",
+        bodyPath: path.join(root, "project.html"),
+        html: `<html><head><script>l.href='/assets/user-style.css?capture=1'</script></head><body>Project</body></html>`,
+      }],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        fetched.push(url);
+        if (url === fontCssUrl) return new Response(`@font-face{font-family:'IBM Plex Serif';src:url('${fontUrl}')}`, { status: 200, headers: { "content-type": "text/css" } });
+        if (url === fontUrl) return new Response(Buffer.from(validWoff2Fixture()) as unknown as BodyInit, { status: 200, headers: { "content-type": "font/woff2" } });
+        return new Response("missing", { status: 404 });
+      },
+    });
+    assert.deepEqual(fetched, [fontCssUrl, fontUrl]);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.ok(result.manifestEntries.some((entry) => entry.resolvedUrl === fontCssUrl && entry.fetchStatus === "fetched"));
+    assert.ok(result.manifestEntries.some((entry) => entry.resolvedUrl === fontUrl && entry.fetchStatus === "fetched"));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("additional asset capture rejects invalid TTF bytes and retains a valid sfnt font", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-font-validation-"));
   const validTtf = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);

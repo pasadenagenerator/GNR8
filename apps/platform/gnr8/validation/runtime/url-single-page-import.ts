@@ -2875,6 +2875,22 @@ function isAllowedAdditionalPageAssetUrl(
   }
 }
 
+function trustCapturedFontStylesheetImport(url: string, trustedOrigins: Set<string>): void {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return;
+    if (parsed.hostname === "fonts.googleapis.com") {
+      trustedOrigins.add(parsed.origin);
+      trustedOrigins.add("https://fonts.gstatic.com");
+    } else if (parsed.hostname === "fonts.prod.extra-cdn.com") {
+      trustedOrigins.add(parsed.origin);
+      trustedOrigins.add("https://font-files.prod.extra-cdn.com");
+    }
+  } catch {
+    // A malformed CSS reference is handled by the normal URL resolver.
+  }
+}
+
 async function mapWithBoundedConcurrency<T>(
   values: T[],
   concurrency: number,
@@ -3160,7 +3176,13 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     await fetchOne(resolvedUrl, exemplar.assetKind, exemplar.pageUrl);
   });
 
-  const stylesheetUrls = limitedDirectUrls.filter((url) => refsByUrl.get(url)?.some((ref) => ref.assetKind === "stylesheet"));
+  // The seed capture may already own a stylesheet injected by source JavaScript.
+  // Its @imports must be scanned even when child HTML has no static <link>.
+  const stylesheetUrls = [...new Set([
+    ...existingManifest.filter((entry) => entry.assetKind === "stylesheet" && entry.fetchStatus === "fetched" && entry.resolvedUrl && entry.localPath)
+      .map((entry) => entry.resolvedUrl!),
+    ...limitedDirectUrls.filter((url) => refsByUrl.get(url)?.some((ref) => ref.assetKind === "stylesheet")),
+  ])];
   const allStylesheetUrls = new Set(stylesheetUrls);
   const stylesheetDependencyUrls = new Map<string, {
     assetKind: UrlImportAssetKind;
@@ -3188,6 +3210,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnostics,
         diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
       });
+      if (resolvedUrl && importedCssRefs.has(rawRef)) trustCapturedFontStylesheetImport(resolvedUrl, trustedExternalOrigins);
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, pageUrl, trustedExternalOrigins)) continue;
       const assetKind = importedCssRefs.has(rawRef) || retainedStylesheetUrls.has(resolvedUrl)
         ? "stylesheet" : inferCssUrlAssetKind(rawRef);
@@ -3235,6 +3258,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         diagnostics,
         diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
       });
+      if (resolvedUrl && importedCssRefs.has(rawRef)) trustCapturedFontStylesheetImport(resolvedUrl, trustedExternalOrigins);
       if (!resolvedUrl || !isAllowedAdditionalPageAssetUrl(resolvedUrl, stylesheetUrl, trustedExternalOrigins)) continue;
       const assetKind = importedCssRefs.has(rawRef) || retainedStylesheetUrls.has(resolvedUrl)
         ? "stylesheet" : inferCssUrlAssetKind(rawRef);
