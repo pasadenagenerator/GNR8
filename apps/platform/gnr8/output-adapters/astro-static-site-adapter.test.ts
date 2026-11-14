@@ -19,6 +19,7 @@ test("CHS-like content produces a deterministic Astro source project manifest", 
   const manifest = createAstroStaticSiteProjectManifest(chsFixture());
   const files = fileMap(manifest.files);
   assert.equal(JSON.parse(files.get("package.json") ?? "{}").dependencies.astro, "^7.0.0");
+  assert.equal(JSON.parse(files.get("package.json") ?? "{}").studio.displayName, "CHS Site Proof");
 
   assert.deepEqual(
     manifest.files.map((file) => file.path),

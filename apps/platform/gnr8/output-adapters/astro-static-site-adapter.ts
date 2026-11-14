@@ -349,6 +349,7 @@ ${page.bodyHtml}
 function createPackageJson(input: NormalizedStaticBusinessSiteContent): Record<string, unknown> {
   return {
     name: slugify(input.siteName || input.brandName || "gnr8-astro-site"),
+    studio: { displayName: input.siteName || input.brandName || "GNR8 site" },
     version: "0.0.0",
     private: true,
     type: "module",
