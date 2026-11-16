@@ -104,10 +104,14 @@ test('a new personal-account site provisions once and the same binding serves im
     GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED:'1'})
   delete process.env.GNR8_STACKI_LAZY_ASSETS_ENABLED
   const store=storage(),calls:string[]=[]
-  let created=false
+  let created=false,checkingProvisionerCredentials=true
   const transport:typeof fetch=async(url,options)=>{
     const path=new URL(String(url)).pathname,method=options?.method??'GET'
     calls.push(`${method} ${path}`)
+    if(checkingProvisionerCredentials&&(path==='/user'||path==='/user/repos'))
+      assert.equal(new Headers(options?.headers).get('authorization'),'Bearer local-provision-token')
+    if(checkingProvisionerCredentials&&path===`/repos/pasadenagenerator/${store.getStored()?.repository}`)
+      assert.equal(new Headers(options?.headers).get('authorization'),'Bearer local-content-token')
     if(path==='/user')return Response.json({id:12,login:'pasadenagenerator',type:'User'})
     if(path==='/users/pasadenagenerator')return Response.json({id:12,login:'pasadenagenerator',type:'User'})
     if(path==='/v2/teams/team_123')return Response.json({id:'team_123',membership:{role:'OWNER',confirmed:true}})
@@ -133,6 +137,7 @@ test('a new personal-account site provisions once and the same binding serves im
     contentToken:'local-content-token'}
   assert.equal(await githubImportReady(scope,true,transport,store.client),false)
   const provisioned=await new SiteGitHubRepositoryProvisioner(binding,transport).ensure(scope,owner)
+  checkingProvisionerCredentials=false
   assert.match(provisioned.repository,/^gnr8-site-[a-f0-9]{32}-[a-f0-9]{16}$/)
   assert.equal(calls.filter(call=>call==='POST /user/repos').length,1)
   assert.equal(await githubImportReady(scope,true,transport,store.client),true)
@@ -152,6 +157,7 @@ test('a new personal-account site provisions once and the same binding serves im
   assert.equal(connectionTarget(connection,selection,publicationRepository).provisionedRepositoryId,34)
   assert.equal((await new PublicationConnectionProvider(connection.tokens,transport)
     .verify(settings,scope,{read:async()=>null} as never,publicationRepository)).repository,'bound')
+  checkingProvisionerCredentials=true
   await new SiteGitHubRepositoryProvisioner(binding,transport).ensure(scope,owner)
   assert.equal(calls.filter(call=>call==='POST /user/repos').length,1)
 })

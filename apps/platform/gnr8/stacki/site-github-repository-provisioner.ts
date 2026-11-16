@@ -61,7 +61,7 @@ export class SiteGitHubRepositoryProvisioner {
       (account.type&&account.type!==ownerKind))
       throw Error('site_github_owner_mismatch')
     const path=`/repos/${owner.owner}/${reservation.repository}`
-    let repository=await this.request(owner.provisionToken,path,'GET',undefined,true)
+    let repository=await this.request(owner.contentToken,path,'GET',undefined,true)
     if(state.state==='reserved'){
       if(repository)throw Error('site_github_repository_name_occupied')
       if(await this.binding.startCreation(scope,reservation)){
@@ -73,8 +73,8 @@ export class SiteGitHubRepositoryProvisioner {
             description:`GNR8 standalone site ${scope.siteId}`,
           })
         }catch{/* Reconcile the exact reserved repository after an ambiguous response. */}
-        repository=await this.request(owner.provisionToken,path,'GET',undefined,true)
-      }else repository=await this.request(owner.provisionToken,path,'GET',undefined,true)
+        repository=await this.request(owner.contentToken,path,'GET',undefined,true)
+      }else repository=await this.request(owner.contentToken,path,'GET',undefined,true)
     }
     if(!repository)throw Error('site_github_creation_unconfirmed')
     if(repository.private!==true||!Number.isSafeInteger(repository.id)||repository.id<1||
