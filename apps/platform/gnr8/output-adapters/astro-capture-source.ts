@@ -12,6 +12,20 @@ export async function resolveAstroCaptureSource(initiallySelectedVersion: Canoni
   let sourceArtifact = lineageArtifactId ? await getArtifactById(lineageArtifactId) : initiallySelectedArtifact
   let rawArtifact = sourceVersion ? await getRawImportedSiteArtifact(sourceVersion.id) : null
 
+  // The build capture may include acquired dependencies. A Lumos proposal's
+  // saved guide still belongs to its original capture, not that derivative.
+  const workspace = record(initiallySelectedArtifact.manifest.generatedOutputSourceWorkspace)
+  const brand = record(workspace?.lumosBrand)
+  if (existingAdapter === 'astro-static-site' && brand?.format === 'gnr8-lumos-brand:v1') {
+    if (typeof brand.siteVersionId !== 'string' || typeof brand.artifactId !== 'string')
+      throw new Error('astro_generation_source_capture_lineage_missing')
+    sourceVersion = await getSiteVersion(brand.siteVersionId)
+    sourceArtifact = sourceVersion?.artifactId ? await getArtifactById(sourceVersion.artifactId) : null
+    rawArtifact = sourceVersion ? await getRawImportedSiteArtifact(sourceVersion.id) : null
+    if (!rawArtifact || rawArtifact.id !== brand.artifactId)
+      throw new Error('astro_generation_source_capture_lineage_missing')
+  }
+
   if (sourceVersion && sourceArtifact && !rawArtifact && !existingAdapter) {
     const captureLineage = resolveCurrentCaptureLineageRef(sourceVersion.importProvenanceSummary)
     const capturedVersion = captureLineage ? await getSiteVersion(captureLineage.siteVersionId) : null
