@@ -137,7 +137,7 @@ export function selectStackiCandidateSource(input: {
           const originalStyle=before.slice(x.startTag.endOffset,x.endTag.startOffset);
           const editedStyle=after.slice(y.startTag.endOffset,y.endTag.startOffset);
           if(originalStyle!==editedStyle){
-            if(aa.namespaceURI!=='http://www.w3.org/1999/xhtml'||aa.attrs.some(attr=>!['is:global','id'].includes(attr.name)))
+            if(aa.namespaceURI!=='http://www.w3.org/1999/xhtml'||aa.attrs.some(attr=>!['is:global','is:inline','id'].includes(attr.name)))
               fail('STACKI_CANDIDATE_STYLE_CHANGE_UNSUPPORTED');
             styleWarnings.push(...requireSupportedStackiStyleEdit(originalStyle,editedStyle,selectors).map(w=>({...w,path})));
             edits.push({start:x.startTag.endOffset,end:x.endTag.startOffset,value:editedStyle});

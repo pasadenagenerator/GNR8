@@ -50,7 +50,10 @@ export function projectRetainedFunctions(document:DefaultTreeAdapterMap['documen
      /^(?:UA-\d+-\d+|G-[A-Z0-9]+)$/.test(url.searchParams.get('id')??'')&&!text(n).trim()){
     const span=parseFragment('<span hidden></span>').childNodes[0] as Element;
     set(span,'data-gnr8-consent-tag',url.searchParams.get('id')!);
-    if(n.parentNode){span.parentNode=n.parentNode;n.parentNode.childNodes.splice(n.parentNode.childNodes.indexOf(n),1,span)}
+    // A span is not valid head content: reparsing it there moves subsequent
+    // stylesheet nodes into the body. Keep inert consent data in the body.
+    const body=nodes.find(node=>node.tagName==='body');
+    if(body){remove(n);span.parentNode=body;body.childNodes.push(span)}
    }else throw Error();
   }catch{errors.push('retained_consent_destination_unsupported')}
  }

@@ -113,6 +113,15 @@ test('existing static style blocks accept bounded layout changes while preservin
  }
 });
 
+test('retained inline styles remain editable without allowing directive changes',()=>{
+ const original=html.replace('</head>','<style is:inline>.container{width:100%}</style></head>').replace('<body>','<body class="container">');
+ const updated=original.replace('width:100%','width:80%');
+ const f=select(updated);f.input.baseline=f.input.baseline.map(entry=>entry.path==='src/pages/index.astro'?file(entry.path,original):entry);
+ assert.deepEqual(f.result().changes.map(c=>c.kind),['style']);
+ const bad=select(updated.replace('is:inline','is:global'));bad.input.baseline=f.input.baseline;
+ assert.throws(()=>bad.result(),/STACKI_CANDIDATE_/);
+});
+
 test('Studio may remove fixed image dimensions, preserving every byte of other attributes and source',()=>{
  const original=html.replace('alt="Original"','alt="Original" width="599" height="77"');
  const updated=original.replace('width="599"','').replace('height="77"','');

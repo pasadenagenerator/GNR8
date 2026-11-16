@@ -28,6 +28,12 @@ export function prepareOwnedRetainedRuntimeForAstro(html: string): string {
       if (!isOwnedRetainedRuntimeScript(node)) throw new Error("unsupported_astro_page_script");
       if (!node.attrs.some(a => a.name === "is:inline")) edits.push(node.sourceCodeLocation!.startTag!.endOffset - 1);
     }
+    // Captured CSS must stay at its original position relative to linked
+    // resets and theme sheets. Astro's default style processing hoists and
+    // scopes it, changing both the cascade and inherited typography.
+    if ("tagName" in node && node.tagName === "style" && !node.attrs.some(a => a.name === "is:inline")) {
+      edits.push(node.sourceCodeLocation!.startTag!.endOffset - 1);
+    }
     if ("childNodes" in node) node.childNodes.forEach(walk);
     if ("tagName" in node && node.tagName === "template") walk((node as DefaultTreeAdapterMap["template"]).content);
   };
