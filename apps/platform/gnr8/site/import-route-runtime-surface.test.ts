@@ -14,7 +14,9 @@ test('scoped import API route is pinned to nodejs runtime surface', () => {
   const routeSource = readFileFromWorkspace('app/api/gnr8/agency/clients/[clientId]/sites/import/route.ts')
   assert.match(routeSource, /export const runtime = ['"]nodejs['"]/)
   assert.doesNotMatch(routeSource, /export const runtime = ['"]edge['"]/)
-  assert.match(routeSource, /insert into public\.sites \(org_id, agency_id, name, status, domain, is_template\)/)
+  assert.match(routeSource, /insert into public\.sites \(id, org_id, agency_id, name, status, domain, is_template\)/)
+  assert.ok(routeSource.indexOf('SiteGitHubRepositoryProvisioner(binding).ensure(') <
+    routeSource.indexOf('importPublicSinglePageUrlToSnapshot({'))
   assert.match(routeSource, /preallocateSiteVersionIdentity\(/)
   assert.match(routeSource, /importPublicSinglePageUrlToSnapshot\(\{[\s\S]*siteId:\s*preallocatedIdentity\.siteId,[\s\S]*siteVersionId:\s*preallocatedIdentity\.siteVersionId,/)
   assert.match(routeSource, /RUNTIME_IMPORT_IDENTITY_PREALLOCATED/)

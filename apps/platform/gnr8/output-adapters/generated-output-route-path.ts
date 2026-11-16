@@ -1,6 +1,15 @@
 const ENCODED_ROUTE_SEGMENT = /^(?:[a-z0-9._~-]|%[0-9a-f]{2})+$/i;
 const UNSAFE_DECODED_ROUTE_SEGMENT = /[\u0000-\u001f\u007f/\\?#]/;
 
+/** Navigation only: this does not authorize fetching an external resource. */
+export function isExplicitExternalNavigationUrl(value: string): boolean {
+  if (!/^https?:\/\//i.test(value) || /[\s\\\u0000-\u001f\u007f]/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname) && !url.username && !url.password;
+  } catch { return false; }
+}
+
 export function encodeGeneratedOutputRoutePath(value: string): string {
   const raw = String(value ?? "").trim();
   if (raw === "/") return "/";

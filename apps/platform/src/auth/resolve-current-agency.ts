@@ -198,7 +198,7 @@ async function requireCurrentUserId(supabase: SupabaseClient): Promise<string> {
   return userId
 }
 
-async function listAgencyMembershipCandidates(
+export async function listAgencyMembershipCandidates(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<CurrentUserAgencyMembership[]> {

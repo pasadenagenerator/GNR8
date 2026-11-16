@@ -1,10 +1,14 @@
+import { verifiedRawFileRow } from './verified-raw-file-row';
+import { RawImportGitCache } from '../site/raw-import-git-cache';
+import {GeneratedArtifactGitCache,generatedArtifactReferenceColumns,type GeneratedGitRef} from '../site/generated-artifact-git-cache';
+import { readPublicPreparation } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import "server-only";
 
 import type { PoolClient } from "pg";
 
 import { getSuperadminPool } from "@/src/superadmin/db";
 
-import { normalizePagePath, stableStringify } from "@/gnr8/runtime/deterministic";
+import { normalizePagePath, sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 import {
   normalizeRuntimeDomain as normalizeRuntimeDomainIdentity,
   normalizeRuntimeHost as normalizeRuntimeHostIdentity,
@@ -30,6 +34,23 @@ import { RUNTIME_HOST_BINDING_BACKFILL_SQL } from "@/gnr8/runtime/runtime-host-b
 
 export type RuntimeStoreDbClient = PoolClient;
 export type RuntimeStoreDbOptions = { dbClient?: RuntimeStoreDbClient };
+
+export type GitBackedImportMarker = {
+  kind: "runtime_import_provenance_summary_v1";
+  githubSource: true;
+  runtimeSiteId?: string;
+  sourceGitArchive?: GeneratedGitRef;
+  importReview?: unknown;
+  brandStyleGuide?: unknown;
+  confirmedImport?: unknown;
+};
+export const GIT_BACKED_IMPORT_MARKER: GitBackedImportMarker = {
+  kind: "runtime_import_provenance_summary_v1",
+  githubSource: true,
+};
+export function isGitBackedImportMarker(value: unknown): value is GitBackedImportMarker {
+  return Boolean(value && typeof value === "object" && (value as GitBackedImportMarker).githubSource === true);
+}
 
 let tablesReady: Promise<void> | null = null;
 
@@ -524,6 +545,7 @@ type RawTemplateArtifactFileRow = {
   file_size_bytes: number;
   sha256: string;
   content_bytes: Buffer | Uint8Array;
+  metadata_json?: unknown;
 };
 
 export type RuntimeHostBindingStatus = "ACTIVE" | "INACTIVE";
@@ -733,6 +755,8 @@ function parseRawImportedSiteArtifactMetadata(value: unknown): RawImportedSiteAr
     sourceUrl: String(record.sourceUrl ?? "").trim(),
     finalUrl: String(record.finalUrl ?? "").trim() || null,
     htmlByteLength: Math.max(0, Math.floor(Number(record.htmlByteLength ?? 0) || 0)),
+    gitArchive: record.gitArchive && typeof record.gitArchive === 'object' && !Array.isArray(record.gitArchive)
+      ? record.gitArchive as RawImportedSiteArtifactMetadata['gitArchive'] : undefined,
     multiPage:
       record.multiPage && typeof record.multiPage === "object" && !Array.isArray(record.multiPage)
         ? {
@@ -751,6 +775,16 @@ function parseRawImportedSiteArtifactMetadata(value: unknown): RawImportedSiteAr
       externalFallbackAssetCount: Math.max(0, Math.floor(Number(assetSummary.externalFallbackAssetCount ?? 0) || 0)),
     },
   };
+}
+
+export async function verifiedRawArtifactFile(row: RawTemplateArtifactFileRow, siteVersionId: string,
+  cache?: Pick<RawImportGitCache,'read'>) {
+  const ref = parseRawImportedSiteArtifactMetadata(row.metadata_json).gitArchive;
+  if (!ref) return verifiedRawFileRow(row);
+  const bytes = await (cache??new RawImportGitCache()).read(ref, siteVersionId, {
+    sha256: row.sha256, sizeBytes: row.file_size_bytes,
+  });
+  return verifiedRawFileRow({ ...row, content_bytes: bytes });
 }
 
 function resolveServingStageFromBindingKind(bindingKind: string | null): "shadow" | "canary" | "production" {
@@ -1105,8 +1139,21 @@ export async function createSiteVersionFromMigration(
     rendererCompatibilityVersion: string;
     siteVersionId?: string;
     createSourceHostBinding?: boolean;
+    metadataOnly?: boolean;
+    sourceGitArchive?: GeneratedGitRef;
+    dbClient?: RuntimeStoreDbClient;
   },
 ): Promise<{ siteId: string; siteVersionId: string; versionNo: number }> {
+  if(input.sourceGitArchive&&!input.metadataOnly)throw Error('GITHUB_IMPORT_SOURCE_REQUIRES_METADATA_ONLY');
+  if(input.sourceGitArchive&&(!input.siteVersionId||
+    input.sourceGitArchive.manifestPath!==`generated/${input.siteVersionId}/.gnr8-generated-manifest.json`||
+    input.sourceGitArchive.runtimeManifest?.path!==`generated/${input.siteVersionId}/runtime-manifest.json`||
+    !/^[a-f0-9]{40}$/.test(input.sourceGitArchive.commit)||
+    !/^[a-f0-9]{64}$/.test(input.sourceGitArchive.manifestSha256)))
+    throw Error('GITHUB_IMPORT_SOURCE_REFERENCE_INVALID');
+  const sourceMarker:GitBackedImportMarker=input.sourceGitArchive
+    ? {...GIT_BACKED_IMPORT_MARKER,runtimeSiteId:input.siteId,sourceGitArchive:input.sourceGitArchive}
+    : GIT_BACKED_IMPORT_MARKER;
   return withTx(async (client) => {
     const sourceHost = (() => {
       try {
@@ -1156,6 +1203,18 @@ export async function createSiteVersionFromMigration(
       }
       siteVersionId = existingSiteVersion.rows[0].id;
       versionNo = existingSiteVersion.rows[0].version_no;
+      if (input.sourceGitArchive) {
+        const attached = await client.query<{ id: string }>(
+          `update public.gnr8_runtime_site_versions
+           set import_provenance_summary = $2::jsonb, updated_at = now()
+           where id = $1::uuid
+             and (import_provenance_summary->>'kind' = 'runtime_import_preallocation_v1'
+               or import_provenance_summary = $2::jsonb)
+           returning id::text as id`,
+          [siteVersionId, JSON.stringify(sourceMarker)],
+        );
+        if (!attached.rows[0]) throw new Error("GITHUB_IMPORT_SOURCE_REFERENCE_CONFLICT");
+      }
     } else {
       versionNo = await getNextSiteVersionNo(client, input.siteId);
       const siteVersionInsert = await client.query<{ id: string }>(
@@ -1179,7 +1238,7 @@ export async function createSiteVersionFromMigration(
           versionNo,
           input.actor,
           input.rendererCompatibilityVersion,
-          input.importProvenanceSummary ? JSON.stringify(input.importProvenanceSummary) : null,
+          input.metadataOnly ? JSON.stringify(sourceMarker) : input.importProvenanceSummary ? JSON.stringify(input.importProvenanceSummary) : null,
         ],
       );
       siteVersionId = siteVersionInsert.rows[0]!.id;
@@ -1229,7 +1288,7 @@ export async function createSiteVersionFromMigration(
         set import_provenance_summary = $2::jsonb, updated_at = now()
         where id = $1::uuid
         `,
-        [siteVersionId, JSON.stringify(importProvenanceSummaryForWrite)],
+        [siteVersionId, JSON.stringify(input.metadataOnly ? sourceMarker : importProvenanceSummaryForWrite)],
       );
     }
 
@@ -1244,7 +1303,7 @@ export async function createSiteVersionFromMigration(
           path = excluded.path,
           title = excluded.title
         `,
-        [page.pageId, input.siteId, path, page.title],
+        [page.pageId, input.siteId, path, input.metadataOnly ? null : page.title],
       );
 
       await client.query(
@@ -1281,13 +1340,13 @@ export async function createSiteVersionFromMigration(
           siteVersionId,
           page.pageId,
           path,
-          page.title,
-          JSON.stringify(page.structureModel),
-          JSON.stringify(page.contentModel),
-          JSON.stringify(page.styleTokens),
-          JSON.stringify(page.assetGraph),
-          JSON.stringify(page.semanticSignals),
-          page.migrationGovernance ? JSON.stringify(page.migrationGovernance) : null,
+          input.metadataOnly ? null : page.title,
+          JSON.stringify(input.metadataOnly ? {} : page.structureModel),
+          JSON.stringify(input.metadataOnly ? {} : page.contentModel),
+          JSON.stringify(input.metadataOnly ? {} : page.styleTokens),
+          JSON.stringify(input.metadataOnly ? [] : page.assetGraph),
+          JSON.stringify(input.metadataOnly ? [] : page.semanticSignals),
+          input.metadataOnly ? null : page.migrationGovernance ? JSON.stringify(page.migrationGovernance) : null,
           page.source,
           page.actor,
         ],
@@ -1303,7 +1362,7 @@ export async function createSiteVersionFromMigration(
     );
 
     return { siteId: input.siteId, siteVersionId, versionNo };
-  });
+  }, { dbClient: input.dbClient });
 }
 
 export async function preallocateSiteVersionIdentity(input: {
@@ -3188,7 +3247,7 @@ export async function resolveActiveServingArtifactForHostAndPath(input: {
       };
     }
 
-    const artifact = await getArtifactByIdWithClient(client, pointerRow.artifact_id);
+    const artifact = await getArtifactByIdWithClient(client, pointerRow.artifact_id, normalizedPath);
     if (!artifact) {
       return {
         ...base,
@@ -3266,6 +3325,8 @@ export type RawTemplateDomainResolution =
       normalizedPath: string;
       resolvedFilePath: string;
       html: string;
+      /** Server-only paths from the same resolved raw artifact. Never serialize as page data. */
+      fileMapPaths: string[];
     }
   | {
       outcome: "raw_template_miss";
@@ -3391,7 +3452,7 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
   const artifact =
     (await getRawImportedSiteArtifact(activeSiteVersionId, { dbClient: input.dbClient })) ??
     (await getRawTemplateSiteArtifact(activeSiteVersionId, { dbClient: input.dbClient }));
-  if (!artifact || artifact.siteId !== siteResolution.siteId) {
+  if (!artifact || artifact.siteId !== siteResolution.siteId || artifact.siteVersionId !== activeSiteVersionId) {
     return {
       outcome: "raw_template_miss",
       host: siteResolution.host,
@@ -3496,6 +3557,7 @@ export async function resolveRawTemplateSiteForDomainAndPath(input: {
     normalizedPath,
     resolvedFilePath,
     html: htmlAsset.bytes.toString("utf8"),
+    fileMapPaths: Object.keys(artifact.fileMap),
   };
 }
 
@@ -3547,7 +3609,7 @@ export async function getSiteVersion(siteVersionId: string, options: RuntimeStor
       [siteVersionId],
     );
 
-    return {
+    const snapshot: CanonicalSiteVersionSnapshot = {
       id: row.id,
       siteId: row.site_id,
       versionNo: row.version_no,
@@ -3560,12 +3622,65 @@ export async function getSiteVersion(siteVersionId: string, options: RuntimeStor
       artifactId: row.artifact_id,
       pages: pages.rows.map(mapPageVersionRow),
     };
+    if (!isGitBackedImportMarker(row.import_provenance_summary)) return snapshot;
+    const marker = row.import_provenance_summary as GitBackedImportMarker;
+    // A preallocated version may carry its verified source reference before
+    // the generated artifact is attached. An unreferenced draft stays metadata-only.
+    if (!row.artifact_id && !marker.sourceGitArchive) return snapshot;
+    if (marker.runtimeSiteId !== row.site_id) throw new Error("GITHUB_IMPORT_SOURCE_IDENTITY_MISMATCH");
+    const ref = marker.sourceGitArchive;
+    if (!ref) throw new Error("GITHUB_IMPORT_SOURCE_REFERENCE_MISSING");
+    let manifest: Record<string, unknown>;
+    try {
+      const body = await new GeneratedArtifactGitCache().read(ref, row.id, ref.runtimeManifest);
+      manifest = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+    } catch {
+      throw new Error("GITHUB_IMPORT_SOURCE_INTEGRITY_FAILED");
+    }
+    if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("GITHUB_IMPORT_SOURCE_INTEGRITY_FAILED");
+    const payload = manifest.sourceMigrationPayload as {pages?: CanonicalPageVersionInput[];importProvenanceSummary?:RuntimeImportProvenanceSummary} | undefined;
+    if (!payload || manifest.sourceMigrationPayloadSha256 !== sha256Hex(stableStringify(payload)) ||
+      !Array.isArray(payload.pages) || !payload.importProvenanceSummary ||
+      payload.pages.length !== snapshot.pages.length) throw new Error("GITHUB_IMPORT_SOURCE_INTEGRITY_FAILED");
+    const sourcePages = new Map(payload.pages.map(page => [page.pageId, page]));
+    snapshot.pages = snapshot.pages.map(page => {
+      const source = sourcePages.get(page.pageId);
+      if (!source || normalizePagePath(source.path) !== page.path) throw new Error("GITHUB_IMPORT_PAGE_IDENTITY_MISMATCH");
+      return {...page, ...source};
+    });
+    const summary = {...payload.importProvenanceSummary} as RuntimeImportProvenanceSummary & Record<string, unknown>;
+    for (const key of ["importReview", "brandStyleGuide", "confirmedImport"] as const) {
+      if (Object.hasOwn(marker, key)) summary[key] = marker[key];
+    }
+    snapshot.importProvenanceSummary = summary;
+    return snapshot;
+  });
+}
+
+export async function getSiteVersionGitSourceStatus(siteVersionId:string,
+  options:RuntimeStoreDbOptions={}):Promise<{reference:GeneratedGitRef;metadataOnly:boolean}|null>{
+  return withRuntimeClient(options,async client=>{
+    const result=await client.query<{import_provenance_summary:unknown;metadata_only:boolean}>(`
+      select v.import_provenance_summary,
+        not exists (
+          select 1 from public.gnr8_runtime_page_versions p
+          where p.site_version_id = v.id
+            and (p.title is not null or p.structure_model <> '{}'::jsonb or
+              p.content_model <> '{}'::jsonb or p.style_tokens <> '{}'::jsonb or
+              p.asset_graph <> '[]'::jsonb or p.semantic_signals <> '[]'::jsonb or
+              p.migration_governance is not null)
+        ) as metadata_only
+      from public.gnr8_runtime_site_versions v
+      where v.id = $1::uuid limit 1`,[siteVersionId]);
+    const row=result.rows[0],marker=row?.import_provenance_summary;
+    return isGitBackedImportMarker(marker)&&marker.sourceGitArchive
+      ? {reference:marker.sourceGitArchive,metadataOnly:row.metadata_only}:null;
   });
 }
 
 export async function setSiteVersionImportProvenanceSummary(input: {
   siteVersionId: string;
-  importProvenanceSummary: RuntimeImportProvenanceSummary;
+  importProvenanceSummary: RuntimeImportProvenanceSummary | GitBackedImportMarker;
 }, options: RuntimeStoreDbOptions = {}): Promise<{ affectedRows: number }> {
   return withTx(async (client) => {
     const updated = await client.query<{ id: string }>(
@@ -3573,6 +3688,7 @@ export async function setSiteVersionImportProvenanceSummary(input: {
       update public.gnr8_runtime_site_versions
       set import_provenance_summary = $2::jsonb, updated_at = now()
       where id = $1::uuid
+        and (import_provenance_summary->'sourceGitArchive' is null or $2::jsonb ? 'sourceGitArchive')
       returning id::text as id
       `,
       [input.siteVersionId, JSON.stringify(input.importProvenanceSummary)],
@@ -3599,6 +3715,7 @@ export async function compareAndSetSiteVersionImportProvenanceSummary(input: {
         and (import_provenance_summary #>> '{latestCandidateReviewPackageArtifact,artifactId}')
           is not distinct from $3::text
         and import_provenance_summary is not distinct from $4::jsonb
+        and import_provenance_summary->'sourceGitArchive' is null
       returning id::text as id
       `,
       [
@@ -3732,7 +3849,10 @@ export async function createArtifact(input: {
   artifactGovernance: RuntimeArtifact["artifactGovernance"];
   dbClient?: RuntimeStoreDbClient;
 }): Promise<{ artifactId: string }> {
+  const fileColumns=generatedArtifactReferenceColumns(input);
   return withTx(async (client) => {
+    // Serialize concurrent preparation retries before the immutable artifact lookup.
+    await client.query('select id from public.gnr8_runtime_site_versions where id = $1::uuid for update', [input.siteVersionId]);
     const existing = await client.query<{ id: string }>(
       `select id::text as id from public.gnr8_runtime_artifacts where site_version_id = $1::uuid limit 1`,
       [input.siteVersionId],
@@ -3763,10 +3883,10 @@ export async function createArtifact(input: {
         input.siteVersionId,
         input.rendererCompatibilityVersion,
         input.bundleSha256,
-        JSON.stringify(input.htmlByPath),
-        input.compiledTokenStyles,
+        JSON.stringify(fileColumns.htmlByPath),
+        fileColumns.compiledTokenStyles,
         JSON.stringify(input.assetFingerprintMap),
-        JSON.stringify(input.manifest),
+        JSON.stringify(fileColumns.manifest),
         input.publishStage,
         input.shadowRestricted,
         JSON.stringify(input.artifactGovernance),
@@ -3792,6 +3912,7 @@ export async function refreshArtifactForVersionPublishCandidate(input: {
   artifactGovernance: RuntimeArtifact["artifactGovernance"];
   dbClient?: RuntimeStoreDbClient;
 }): Promise<{ affectedRows: number }> {
+  const fileColumns=generatedArtifactReferenceColumns(input);
   return withTx(async (client) => {
     const updated = await client.query<{ id: string }>(
       `
@@ -3817,10 +3938,10 @@ export async function refreshArtifactForVersionPublishCandidate(input: {
         input.siteVersionId,
         input.rendererCompatibilityVersion,
         input.bundleSha256,
-        JSON.stringify(input.htmlByPath),
-        input.compiledTokenStyles,
+        JSON.stringify(fileColumns.htmlByPath),
+        fileColumns.compiledTokenStyles,
         JSON.stringify(input.assetFingerprintMap),
-        JSON.stringify(input.manifest),
+        JSON.stringify(fileColumns.manifest),
         input.publishStage,
         input.shadowRestricted,
         JSON.stringify(input.artifactGovernance),
@@ -3875,6 +3996,11 @@ export async function switchActivePointer(input: {
   previousActivePointer: { siteVersionId: string; artifactId: string } | null;
 }> {
   return withTx(async (client) => {
+    // Serialize first publication and recovery on the site even when no pointer exists.
+    await client.query('select id from public.gnr8_runtime_sites where id = $1::text for update', [input.siteId]);
+    const targetArtifact = await getArtifactByIdWithClient(client, input.artifactId, null);
+    const preparation = targetArtifact ? readPublicPreparation(targetArtifact.manifest) : null;
+    if (targetArtifact?.manifest.publicPreparation && !preparation) throw new Error('public_preparation_invalid');
     const previous = await client.query<{ active_site_version_id: string; active_artifact_id: string }>(
       `
       select active_site_version_id::text as active_site_version_id, active_artifact_id::text as active_artifact_id
@@ -3897,6 +4023,31 @@ export async function switchActivePointer(input: {
         switched: false,
         previousActivePointer,
       };
+    }
+
+    if (preparation) {
+      const expected = preparation.expectedActivePointer;
+      const baselineMatches = expected === null ? previousActivePointer === null :
+        previousActivePointer?.siteVersionId === expected.siteVersionId && previousActivePointer?.artifactId === expected.artifactId;
+      // The normal rollback/republication path may restore the exact parent of a
+      // contact-only update. Never permit an arbitrary stale publication switch.
+      const currentArtifact = !baselineMatches && previousActivePointer ? await getArtifactByIdWithClient(client,previousActivePointer.artifactId,null) : null;
+      const currentPreparation = currentArtifact && readPublicPreparation(currentArtifact.manifest);
+      const restoringParent = !!currentPreparation?.contactRecipientChange && currentArtifact?.siteId === input.siteId &&
+        currentArtifact.siteVersionId === previousActivePointer?.siteVersionId && currentPreparation.host === preparation.host &&
+        currentPreparation.sourceSiteVersionId === input.siteVersionId && currentPreparation.sourceArtifactId === input.artifactId &&
+        currentPreparation.sourceArtifactSha256 === targetArtifact?.bundleSha256;
+      if ((!baselineMatches && !restoringParent) || targetArtifact?.siteId !== input.siteId || targetArtifact.siteVersionId !== input.siteVersionId)
+        throw new Error('public_preparation_pointer_baseline_changed');
+      const bindingVersion = previousActivePointer?.siteVersionId ?? input.siteVersionId;
+      const domain = await client.query('select id from public.gnr8_runtime_domain_host_bindings where site_id=$1::text and site_version_id=$2::uuid and domain=$3::text and status=\'active\'',
+        [input.siteId,bindingVersion,preparation.host]);
+      if (domain.rows.length !== 1) throw new Error('public_preparation_domain_not_ready');
+      if (bindingVersion !== input.siteVersionId) {
+        const updated = await client.query("update public.gnr8_runtime_domain_host_bindings set site_version_id=$4::uuid,updated_at=now() where site_id=$1::text and site_version_id=$2::uuid and domain=$3::text and status='active' returning id",
+          [input.siteId,bindingVersion,preparation.host,input.siteVersionId]);
+        if (updated.rows.length !== 1) throw new Error('public_preparation_domain_changed');
+      }
     }
 
     await client.query(
@@ -3947,7 +4098,7 @@ export async function getArtifactById(artifactId: string, options: RuntimeStoreD
 
 type QueryableClient = Pick<PoolClient, "query">;
 
-async function getArtifactByIdWithClient(client: QueryableClient, artifactId: string): Promise<RuntimeArtifact | null> {
+async function getArtifactByIdWithClient(client: QueryableClient, artifactId: string, requestedRoute?:string|null): Promise<RuntimeArtifact | null> {
   const res = await client.query<{
     id: string;
     site_id: string;
@@ -3986,16 +4137,22 @@ async function getArtifactByIdWithClient(client: QueryableClient, artifactId: st
   );
   const row = res.rows[0];
   if (!row) return null;
+  const gitRef=row.manifest?.generatedGitArchive as GeneratedGitRef|undefined;
+  const cache=gitRef && requestedRoute!==null?new GeneratedArtifactGitCache():null;
+  const generated=cache && gitRef
+    ? await cache.hydrate(gitRef,row.site_version_id,requestedRoute??undefined) : null;
+  const manifest=cache && gitRef && requestedRoute===undefined
+    ? await cache.restoreManifest(gitRef,row.site_version_id,row.manifest) : row.manifest;
 
   return {
     id: row.id,
     siteId: row.site_id,
     siteVersionId: row.site_version_id,
     rendererCompatibilityVersion: row.renderer_compatibility_version,
-    htmlByPath: row.html_by_path,
-    compiledTokenStyles: row.compiled_token_styles,
+    htmlByPath: generated?.htmlByPath ?? row.html_by_path,
+    compiledTokenStyles: generated?.compiledTokenStyles ?? row.compiled_token_styles,
     assetFingerprintMap: row.asset_fingerprint_map,
-    manifest: row.manifest,
+    manifest,
     publishStage: row.publish_stage,
     shadowRestricted: row.shadow_restricted,
     artifactGovernance: row.artifact_governance,
@@ -4141,6 +4298,7 @@ export async function resolveActiveArtifactForHostAndPathWithDiagnostics(input: 
   const servingEligibility = evaluateRuntimeArtifactServingEligibility({
     artifact: resolved.artifact,
     servingStage,
+    host: resolved.host,
   });
   if (!servingEligibility.allow) {
     return {
@@ -4408,13 +4566,16 @@ export async function getRawTemplateSiteAsset(input: {
             f.media_type::text as media_type,
             f.file_size_bytes::integer as file_size_bytes,
             f.sha256::text as sha256,
-            f.content_bytes
+            f.content_bytes,
+            a.metadata_json
           from public.gnr8_runtime_raw_template_artifact_files f
+          join public.gnr8_runtime_raw_template_artifacts a on a.id = f.artifact_id
           where f.artifact_id = $1::uuid
+            and a.site_version_id = $3::uuid
             and f.file_path = $2::text
           limit 1
           `,
-          [artifactId, normalizedFilePath],
+          [artifactId, normalizedFilePath, input.siteVersionId],
         )
       : await client.query<RawTemplateArtifactFileRow>(
           `
@@ -4422,7 +4583,8 @@ export async function getRawTemplateSiteAsset(input: {
             f.media_type::text as media_type,
             f.file_size_bytes::integer as file_size_bytes,
             f.sha256::text as sha256,
-            f.content_bytes
+            f.content_bytes,
+            a.metadata_json
           from public.gnr8_runtime_raw_template_artifacts a
           join public.gnr8_runtime_raw_template_artifact_files f
             on f.artifact_id = a.id
@@ -4448,13 +4610,7 @@ export async function getRawTemplateSiteAsset(input: {
       mediaType: hit.media_type,
       sizeBytes: Number(hit.file_size_bytes) || 0,
     });
-    const bytes = Buffer.isBuffer(hit.content_bytes) ? hit.content_bytes : Buffer.from(hit.content_bytes);
-    return {
-      mediaType: hit.media_type,
-      sizeBytes: Math.max(0, Math.floor(Number(hit.file_size_bytes) || 0)),
-      sha256: hit.sha256,
-      bytes,
-    };
+    return verifiedRawArtifactFile(hit, input.siteVersionId);
   });
 }
 
@@ -4471,7 +4627,8 @@ export async function getRawTemplateSiteArtifactFiles(input: {
         f.media_type::text as media_type,
         f.file_size_bytes::integer as file_size_bytes,
         f.sha256::text as sha256,
-        f.content_bytes
+        f.content_bytes,
+        a.metadata_json
       from public.gnr8_runtime_raw_template_artifacts a
       join public.gnr8_runtime_raw_template_artifact_files f on f.artifact_id = a.id
       where a.id = $1::uuid
@@ -4480,13 +4637,9 @@ export async function getRawTemplateSiteArtifactFiles(input: {
       `,
       [input.artifactId, input.siteVersionId],
     );
-    return result.rows.map((row) => ({
-      path: row.file_path,
-      mediaType: row.media_type,
-      sizeBytes: Math.max(0, Math.floor(Number(row.file_size_bytes) || 0)),
-      sha256: row.sha256,
-      bytes: Buffer.isBuffer(row.content_bytes) ? row.content_bytes : Buffer.from(row.content_bytes),
-    }));
+    const out = [];
+    for (const row of result.rows) out.push({path: row.file_path, ...await verifiedRawArtifactFile(row, input.siteVersionId)});
+    return out;
   });
 }
 
@@ -4509,6 +4662,10 @@ export async function persistRawImportedSiteArtifact(input: {
     fileMap[p] = { path: p, mediaType: row.mediaType, sizeBytes: row.sizeBytes, sha256: row.sha256 };
   }
   if (!fileMap[entryHtmlPath]) throw new Error("RAW_IMPORT_ARTIFACT_ENTRY_HTML_MISSING");
+
+  if (input.metadata.gitArchive) {
+    await new RawImportGitCache().prepare(input.metadata.gitArchive, input.siteVersionId, input.fileRows);
+  }
 
   return withTx(async (client) => {
     const upsert = await client.query<{ id: string }>(
@@ -4553,7 +4710,8 @@ export async function persistRawImportedSiteArtifact(input: {
         )
         values ($1::uuid, $2::text, $3::text, $4::integer, $5::text, $6::bytea)
         `,
-        [artifactId, filePath, file.mediaType, file.sizeBytes, file.sha256, file.bytes],
+        [artifactId, filePath, file.mediaType, file.sizeBytes, file.sha256,
+          input.metadata.gitArchive ? Buffer.alloc(0) : file.bytes],
       );
     }
     return { artifactId, fileCount: Object.keys(fileMap).length };
@@ -4592,6 +4750,9 @@ export async function upsertMigrationActivationLineage(input: {
   artifact: RuntimeArtifact;
   actor: string;
 }): Promise<void> {
+  const fileColumns=generatedArtifactReferenceColumns({siteVersionId:input.siteVersionId,
+    htmlByPath:input.artifact.htmlByPath,compiledTokenStyles:input.artifact.compiledTokenStyles,
+    manifest:input.artifact.manifest});
   await withTx(async (client) => {
     const sourceHost = (() => {
       try {
@@ -4721,10 +4882,10 @@ export async function upsertMigrationActivationLineage(input: {
           input.siteVersionId,
           input.artifact.rendererCompatibilityVersion,
           input.artifact.bundleSha256,
-          JSON.stringify(input.artifact.htmlByPath),
-          input.artifact.compiledTokenStyles,
+          JSON.stringify(fileColumns.htmlByPath),
+          fileColumns.compiledTokenStyles,
           JSON.stringify(input.artifact.assetFingerprintMap),
-          JSON.stringify(input.artifact.manifest),
+          JSON.stringify(fileColumns.manifest),
           input.artifact.publishStage,
           input.artifact.shadowRestricted,
           JSON.stringify(input.artifact.artifactGovernance),
@@ -4866,7 +5027,7 @@ export async function listContentSlots(siteVersionId: string, options: RuntimeSt
       `,
       [siteVersionId],
     );
-    return res.rows.map((row: any) => ({
+    const slots:ContentSlot[]=res.rows.map((row: any) => ({
       id: row.id,
       siteId: row.site_id,
       siteVersionId: row.site_version_id,
@@ -4880,6 +5041,32 @@ export async function listContentSlots(siteVersionId: string, options: RuntimeSt
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
+    if(!slots.length||slots.some(slot=>slot.sourceText!==null))return slots;
+    const artifactRes=await client.query<{manifest:Record<string,unknown>}>(`
+      select a.manifest from public.gnr8_runtime_site_versions v
+      join public.gnr8_runtime_artifacts a on a.id = v.artifact_id
+      where v.id = $1::uuid limit 1
+    `,[siteVersionId]);
+    const stored=artifactRes.rows[0]?.manifest;
+    if(stored?.cmsSlotSourcesVersion!=='v1')return slots;
+    const ref=stored.generatedGitArchive as GeneratedGitRef|undefined;
+    if(!ref)throw Error('GENERATED_ARTIFACT_CACHE_INTEGRITY_FAILED');
+    const restored=await new GeneratedArtifactGitCache().restoreManifest(ref,siteVersionId,stored);
+    const sources=restored.cmsSlotSources;
+    if(!Array.isArray(sources)||sources.length!==stored.cmsSlotSourcesCount||
+      sha256Hex(stableStringify(sources))!==stored.cmsSlotSourcesSha256)
+      throw Error('GENERATED_ARTIFACT_CACHE_INTEGRITY_FAILED');
+    const byKey=new Map<string,string|null>();
+    for(const source of sources){
+      if(!source||typeof source!=='object'||Array.isArray(source)||
+        typeof source.slotKey!=='string'||
+        !(source.sourceText===null||typeof source.sourceText==='string')||byKey.has(source.slotKey))
+        throw Error('GENERATED_ARTIFACT_CACHE_INTEGRITY_FAILED');
+      byKey.set(source.slotKey,source.sourceText);
+    }
+    if(byKey.size!==slots.length||slots.some(slot=>!byKey.has(slot.slotKey)||slot.sourceText!==null))
+      throw Error('GENERATED_ARTIFACT_CACHE_INTEGRITY_FAILED');
+    return slots.map(slot=>({...slot,sourceText:byKey.get(slot.slotKey)??null}));
   });
 }
 
@@ -5407,3 +5594,30 @@ export const __runtimeStoreTestUtils = {
   canonicalizeRuntimePageVersionsForInsert,
   normalizeRuntimePageVersionIdentityPath,
 };
+
+/** Bounded recovery for a first public preparation. Caller must authenticate an
+ * operator and select the exact deployed artifact; immutable versions remain. */
+export async function recoverPreparedPublicSiteToUnpublished(input: {
+  siteId: string; siteVersionId: string; artifactId: string; expectedBundleSha256: string; actor: string;
+  dbClient?: RuntimeStoreDbClient;
+}): Promise<{ recovered: boolean }> {
+  return withTx(async (client) => {
+    await client.query('select id from public.gnr8_runtime_sites where id=$1::text for update',[input.siteId]);
+    const artifact = await getArtifactByIdWithClient(client,input.artifactId,null);
+    const prep = artifact && readPublicPreparation(artifact.manifest);
+    if (!artifact || !prep || prep.expectedActivePointer !== null || artifact.siteId!==input.siteId || artifact.siteVersionId!==input.siteVersionId || artifact.bundleSha256!==input.expectedBundleSha256)
+      throw new Error('public_recovery_selection_mismatch');
+    const pointer = await client.query<{active_site_version_id:string;active_artifact_id:string}>(
+      'select active_site_version_id,active_artifact_id from public.gnr8_runtime_active_pointers where site_id=$1::text',[input.siteId]);
+    const current = pointer.rows[0];
+    if (!current) return {recovered:false};
+    if (current.active_site_version_id!==input.siteVersionId || current.active_artifact_id!==input.artifactId)
+      throw new Error('public_recovery_pointer_changed');
+    await client.query('delete from public.gnr8_runtime_active_pointers where site_id=$1::text and active_artifact_id=$2::uuid',[input.siteId,input.artifactId]);
+    await client.query("update public.gnr8_runtime_domain_host_bindings set status='pending',updated_at=now() where site_id=$1::text and site_version_id=$2::uuid and domain=$3::text",[input.siteId,input.siteVersionId,prep.host]);
+    await client.query(`insert into public.gnr8_runtime_version_audit (site_version_id,from_state,to_state,actor,source,details)
+      select id,state,state,$2::text,'manual',$3::jsonb from public.gnr8_runtime_site_versions where id=$1::uuid`,
+      [input.siteVersionId,input.actor,JSON.stringify({workflow:'public-preparation-recovery:v1',artifactId:input.artifactId,bundleSha256:input.expectedBundleSha256,restoredActivePointer:null})]);
+    return {recovered:true};
+  },{dbClient:input.dbClient});
+}

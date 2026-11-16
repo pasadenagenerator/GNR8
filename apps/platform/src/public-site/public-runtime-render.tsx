@@ -22,6 +22,7 @@ import { persistRuntimeUsageEvent } from "@/gnr8/runtime/runtime-usage-event-log
 import type { RuntimeArtifact } from "@/gnr8/runtime/types";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 import { applyContentOverridesToRawHtml } from "@/src/public-site/content-override-runtime";
+import { normalizeRetainedHeroWrapperSizing } from "@/src/public-site/retained-hero-slider";
 import { injectRuntimeDebugPanel, rewriteRawTemplateHtmlForRuntimeWithDiagnostics } from "@/src/public-site/raw-template-runtime";
 
 export type Gnr8PublicRuntimeMode = "artifact-only";
@@ -180,10 +181,10 @@ async function materializePublicArtifactHtml(input: {
     html = resolved.html;
     compiledTokenStyles = resolved.compiledTokenStyles;
   }
-  return materializeAstroInternalPreviewHtml({
+  return normalizeRetainedHeroWrapperSizing(materializeAstroInternalPreviewHtml({
     html,
     compiledTokenStyles,
-  });
+  }));
 }
 
 function appShellHtmlResponse(): Response {
@@ -669,6 +670,7 @@ export async function renderPublicPathResponse(input: {
       siteId: rawTemplateResolution.siteId,
       siteVersionId: rawTemplateResolution.siteVersionId,
       resolvedFilePath: rawTemplateResolution.resolvedFilePath,
+      fileMapPaths: new Set(rawTemplateResolution.fileMapPaths),
     });
     for (const diagnostic of rewrittenRawTemplate.diagnostics) {
       logPublicDomainDiagnostic(diagnostic.code, {

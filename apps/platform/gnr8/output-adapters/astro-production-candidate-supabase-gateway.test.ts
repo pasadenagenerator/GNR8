@@ -80,7 +80,8 @@ test("registration maps exact RPC arguments and canonical serializers", async ()
   }]);
 });
 
-test("multi-page v3 registration sends only the compact verified object manifest", async () => {
+test("one- and multi-page v3 registration send only compact verified object manifests", async () => {
+ for (const onePage of [true,false]) {
   const candidate = createSyntheticAstroInternalPreviewCandidate({
     candidateId: CANDIDATE_ID,
     siteId: OWNERSHIP.runtimeSiteId,
@@ -88,7 +89,7 @@ test("multi-page v3 registration sends only the compact verified object manifest
   });
   candidate.htmlByPath = {
     "/": "<!doctype html><html><body>Home</body></html>",
-    "/about": "<!doctype html><html><body>About</body></html>",
+    ...(!onePage ? {"/about": "<!doctype html><html><body>About</body></html>"} : {}),
   };
   candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(candidate);
   candidate.manifest.provenance.convertedArtifactSha256 = candidate.contentSha256;
@@ -131,6 +132,7 @@ test("multi-page v3 registration sends only the compact verified object manifest
     },
   }]);
   assert.equal(JSON.stringify(fake.calls[0]?.args).includes("htmlByPath"), false);
+ }
 });
 
 test("identical retry preserves the database winner's storedAt and immutable bytes", async () => {

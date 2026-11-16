@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { importHtmlToPage } from "@/gnr8/importer/html-to-page";
+import {computeRuntimeArtifactBundleSha256} from '@/gnr8/runtime/astro-artifact-materialization';
 import type { CanonicalSiteVersionSnapshot, RuntimeArtifact } from "@/gnr8/runtime/types";
 
 import type {
@@ -114,6 +115,45 @@ test("materializes object-backed lineage for the public runtime and preserves it
   const replay = await promote({ ...input(record), idempotencyKey: "astro-object-promotion-retry" });
   assert.equal(replay.status, "idempotent");
   assert.equal(store.successfulWriteCount, 1);
+});
+
+test('candidate promotion records its own verified generated Git reference and stable bundle',async()=>{
+  const record=productionRecord(),store=new MemoryStore(runtimeContext());
+  let archives=0;
+  const archive={scope:{agencyId:AGENCY_ID,clientId:ORGANIZATION_ID,siteId:OWNERSHIP_SITE_ID},
+    repository:'owner/site',commit:'a'.repeat(40),
+    manifestPath:`generated/${SITE_VERSION_ID}/.gnr8-generated-manifest.json`,manifestSha256:'b'.repeat(64),
+    routes:[],styles:{path:'styles.css',bytes:0,sha256:'c'.repeat(64)},
+    runtimeManifest:{path:'runtime-manifest.json',bytes:0,sha256:'d'.repeat(64)}};
+  const promote=createAstroCandidatePromotionService({resolveOwnership:async()=>OWNERSHIP,
+    readCandidate:async()=>record,runtimeStore:store,
+    prepareGeneratedGit:async(artifact,owner)=>{
+      archives++;assert.equal(owner.ownershipSiteId,OWNERSHIP_SITE_ID);
+      assert.deepEqual(artifact.htmlByPath,record.candidate.htmlByPath);
+      return archive;
+    }});
+  const first=await promote(input(record));
+  assert.equal(first.status,'materialized');assert.equal(archives,1);
+  const persisted=store.context.artifact!;
+  assert.deepEqual(persisted.manifest.generatedGitArchive,archive);
+  assert.equal(persisted.bundleSha256,computeRuntimeArtifactBundleSha256({htmlByPath:persisted.htmlByPath,
+    compiledTokenStyles:persisted.compiledTokenStyles,assetFingerprintMap:persisted.assetFingerprintMap,
+    manifest:persisted.manifest}));
+  assert.equal((await promote(input(record))).status,'idempotent');assert.equal(archives,1);
+});
+
+test('Git-selected promotion stops before replacing an artifact when its archive is missing',async t=>{
+  const keys=['GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED','GNR8_STACKI_GITHUB_ENABLED','GNR8_STACKI_GITHUB_SITE_IDS'] as const;
+  const previous=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  t.after(()=>{for(const key of keys)if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];});
+  Object.assign(process.env,{GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED:'1',GNR8_STACKI_GITHUB_ENABLED:'1',
+    GNR8_STACKI_GITHUB_SITE_IDS:JSON.stringify([OWNERSHIP_SITE_ID])});
+  const record=productionRecord(),store=new MemoryStore(runtimeContext());
+  const promote=createAstroCandidatePromotionService({resolveOwnership:async()=>OWNERSHIP,
+    readCandidate:async()=>record,runtimeStore:store,prepareGeneratedGit:async()=>null});
+  await assert.rejects(promote(input(record)),(error:unknown)=>error instanceof AstroCandidatePromotionError&&
+    error.code==='unavailable'&&error.blockerCodes.includes('generated_git_archive_required'));
+  assert.equal(store.writeCount,0);
 });
 
 test("rejects ownership mismatch before candidate storage access", async () => {
@@ -248,6 +288,7 @@ function objectBackedRecord() {
   return resolveAstroObjectBackedCandidateRecord({
     record: prepared.record,
     htmlByPath: candidate.htmlByPath,
+    compiledTokenStyles: candidate.compiledTokenStyles,
   });
 }
 

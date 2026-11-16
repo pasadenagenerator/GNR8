@@ -1,3 +1,6 @@
+import { createAstroStaticSiteSourceSnapshot } from "./astro-static-site-workspace-preparation";
+import { REVIEWED_LUMOS_SOURCE, isReviewedLumosTextSource, RESOURCE_CONVERSION_VERSION, exportMediaType, validateReviewedExport, exportHtmlByPath, type AstroExportResource } from "./astro-export-resources";
+import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -59,7 +62,7 @@ export class AstroInternalPreviewBridgeError extends Error {
 
 export type AstroInternalPreviewCandidateManifest = {
   sourceKind: typeof ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND;
-  conversionVersion: typeof ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION;
+  conversionVersion: typeof ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION | typeof RESOURCE_CONVERSION_VERSION;
   adapterId: "astro-static-site";
   ownership: {
     siteId: string;
@@ -72,9 +75,9 @@ export type AstroInternalPreviewCandidateManifest = {
     convertedArtifactSha256: string;
   };
   assetHandling: {
-    mode: typeof ASTRO_INTERNAL_PREVIEW_ASSET_MODE;
+    mode: typeof ASTRO_INTERNAL_PREVIEW_ASSET_MODE | "typed_export_resources";
     inlinedStylesheetPaths: string[];
-    externalAssetStorageRequired: false;
+    externalAssetStorageRequired: boolean;
   };
   lifecycle: AstroInternalPreviewCandidateLifecycle;
 };
@@ -90,6 +93,7 @@ export type AstroInternalPreviewCandidate = {
   siteId: string;
   siteVersionId: string;
   rendererCompatibilityVersion: string;
+  exportedFiles?: AstroExportResource[];
   htmlByPath: Record<string, string> & { "/": string };
   compiledTokenStyles: string;
   assetFingerprintMap: Record<string, string>;
@@ -99,6 +103,7 @@ export type AstroInternalPreviewCandidate = {
 };
 
 export type ConvertAstroExportToInternalPreviewCandidateInput = {
+  reviewedSourceFiles?: {path:string;body:Buffer}[];
   inspectedExport: InspectedAstroStaticExport;
   candidateId: string;
   siteId: string;
@@ -107,6 +112,8 @@ export type ConvertAstroExportToInternalPreviewCandidateInput = {
   sourceSnapshotSha256: string;
   /** Existing owned raw-capture assets referenced by generated HTML/CSS. */
   ownedAssetFingerprints?: Record<string, string>;
+  /** Explicit saved image bytes, verified against the export before embedding. */
+  embeddedImageFiles?: Record<string, { sha256: string; mediaType: string }>;
   /**
    * Stylesheets loaded through the authenticated raw-artifact boundary. The
    * bridge never dereferences hrefs; it accepts only exact, ownership-bound
@@ -140,7 +147,24 @@ export async function convertAstroExportToInternalPreviewCandidate(
   const identity = validateIdentity(input);
   const revalidated = await revalidateInspectedExport(input.inspectedExport);
   const bytesByPath = await readAndRevalidateExportBytes(revalidated);
-  assertSupportedFiles(revalidated.manifest.files);
+  if(input.reviewedSourceFiles && (!isReviewedLumosTextSource(input.reviewedSourceFiles) || createAstroStaticSiteSourceSnapshot(input.reviewedSourceFiles).aggregateSha256!==identity.sourceSnapshotSha256))throw new Error('Unreviewed Lumos source or build binding');
+  if (identity.sourceSnapshotSha256 === REVIEWED_LUMOS_SOURCE || input.reviewedSourceFiles) {
+    const exportedFiles = revalidated.manifest.files.map(file => ({ path:file.path, mediaType:exportMediaType(file.path), sizeBytes:bytesByPath.get(file.path)!.length, sha256:file.sha256, base64:bytesByPath.get(file.path)!.toString('base64') }));
+    validateReviewedExport(exportedFiles, identity.sourceSnapshotSha256);
+    const candidate: AstroInternalPreviewCandidate = {
+      kind:ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND,id:identity.candidateId,siteId:identity.siteId,siteVersionId:identity.siteVersionId,
+      rendererCompatibilityVersion:identity.rendererCompatibilityVersion,exportedFiles,htmlByPath:exportHtmlByPath(exportedFiles),compiledTokenStyles:'',
+      assetFingerprintMap:Object.fromEntries(exportedFiles.map(f=>['/'+f.path,f.sha256])),createdAt:input.createdAt ?? new Date().toISOString(),contentSha256:'',
+      manifest:{sourceKind:ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND,conversionVersion:RESOURCE_CONVERSION_VERSION,adapterId:'astro-static-site',ownership:{siteId:identity.siteId,siteVersionId:identity.siteVersionId},
+        provenance:{sourceSnapshotSha256:identity.sourceSnapshotSha256,exportManifestVersion:ASTRO_STATIC_EXPORT_MANIFEST_VERSION,exportSha256:revalidated.manifest.aggregateSha256,convertedArtifactSha256:''},
+        assetHandling:{mode:'typed_export_resources',inlinedStylesheetPaths:[],externalAssetStorageRequired:true},
+        lifecycle:{storage:'caller_owned_in_memory',lifetime:'proof_invocation_only',durableRegistration:false}},
+    };
+    candidate.contentSha256=computeAstroInternalPreviewCandidateContentSha256(candidate);
+    candidate.manifest.provenance.convertedArtifactSha256=candidate.contentSha256;
+    return candidate;
+  }
+  assertSupportedFiles(revalidated.manifest.files, input.embeddedImageFiles ?? {});
 
   const routeConversions: Array<{
     routePath: string;
@@ -157,6 +181,7 @@ export async function convertAstroExportToInternalPreviewCandidate(
       htmlPath: file.path,
       bytesByPath,
       ownedStylesheetEvidence: input.ownedStylesheetEvidence ?? [],
+      embeddedImageFiles: input.embeddedImageFiles ?? {},
     });
     routeConversions.push({ routePath, conversion });
     conversion.inlinedStylesheetPaths.forEach((path) => allStylesheetPaths.add(path));
@@ -178,6 +203,8 @@ export async function convertAstroExportToInternalPreviewCandidate(
   }
   for (const file of revalidated.manifest.files) {
     if (/(?:^|\/)index\.html$/i.test(file.path) || allStylesheetPaths.has(file.path)) continue;
+    const image = input.embeddedImageFiles?.[file.path];
+    if (image && image.sha256 === file.sha256 && /^(image\/png|image\/jpeg|image\/webp|image\/svg\+xml)$/.test(image.mediaType)) continue;
     throw new AstroInternalPreviewBridgeError(
       "unsupported_file_kind",
       `Unreferenced exported file cannot be represented by the runtime bridge: ${file.path}.`,
@@ -185,6 +212,11 @@ export async function convertAstroExportToInternalPreviewCandidate(
   }
   const assetFingerprintMap = {
     ...structuredClone(input.ownedAssetFingerprints ?? {}),
+    ...Object.fromEntries(Object.entries(input.embeddedImageFiles ?? {}).map(([path, image]) => {
+      if (fileByPath(revalidated.manifest, path).sha256 !== image.sha256)
+        throw new AstroInternalPreviewBridgeError("export_bytes_mismatch", `Saved image changed during build: ${path}.`);
+      return ['/' + path, image.sha256];
+    })),
     ...Object.fromEntries([...allStylesheetPaths]
       .filter((path) => revalidated.manifest.files.some((file) => file.path === path))
       .sort()
@@ -245,6 +277,7 @@ export function isAstroInternalPreviewCandidate(value: unknown): value is AstroI
   const candidate = value as Partial<AstroInternalPreviewCandidate>;
   const structurallyValid = (
     hasExactKeys(candidate, [
+      ...(candidate.exportedFiles ? ["exportedFiles"] : []),
       "kind",
       "id",
       "siteId",
@@ -268,7 +301,7 @@ export function isAstroInternalPreviewCandidate(value: unknown): value is AstroI
       "lifecycle",
     ]) &&
     candidate.manifest?.sourceKind === ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND &&
-    candidate.manifest?.conversionVersion === ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION &&
+    candidate.manifest?.conversionVersion === (candidate.exportedFiles ? RESOURCE_CONVERSION_VERSION : ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION) &&
     candidate.manifest?.adapterId === "astro-static-site" &&
     hasExactKeys(candidate.manifest?.ownership, ["siteId", "siteVersionId"]) &&
     candidate.manifest?.ownership?.siteId === candidate.siteId &&
@@ -296,15 +329,21 @@ export function isAstroInternalPreviewCandidate(value: unknown): value is AstroI
       "inlinedStylesheetPaths",
       "externalAssetStorageRequired",
     ]) &&
-    candidate.manifest?.assetHandling?.mode === ASTRO_INTERNAL_PREVIEW_ASSET_MODE &&
+    candidate.manifest?.assetHandling?.mode === (candidate.exportedFiles ? "typed_export_resources" : ASTRO_INTERNAL_PREVIEW_ASSET_MODE) &&
     Array.isArray(candidate.manifest?.assetHandling?.inlinedStylesheetPaths) &&
     candidate.manifest.assetHandling.inlinedStylesheetPaths.every(isNonEmptyTrimmedString) &&
-    candidate.manifest.assetHandling.externalAssetStorageRequired === false &&
+    candidate.manifest.assetHandling.externalAssetStorageRequired === Boolean(candidate.exportedFiles) &&
     isSupportedLifecycle(candidate.manifest?.lifecycle) &&
     isIsoTimestamp(candidate.createdAt)
   );
   if (!structurallyValid) return false;
   const complete = candidate as AstroInternalPreviewCandidate;
+  if (complete.exportedFiles) {
+    try {
+      validateReviewedExport(complete.exportedFiles,complete.manifest.provenance.sourceSnapshotSha256);
+      if (stableStringify(complete.htmlByPath)!==stableStringify(exportHtmlByPath(complete.exportedFiles)) || complete.compiledTokenStyles!=='') return false;
+    } catch { return false; }
+  }
   return computeAstroInternalPreviewCandidateContentSha256(complete) === complete.contentSha256;
 }
 
@@ -316,6 +355,7 @@ export type AstroInternalPreviewCandidateContentEnvelopeInput = Pick<
   | "htmlByPath"
   | "compiledTokenStyles"
   | "assetFingerprintMap"
+  | "exportedFiles"
 > & {
   manifest: Pick<AstroInternalPreviewCandidateManifest, "provenance">;
 };
@@ -330,7 +370,8 @@ export function serializeAstroInternalPreviewCandidateContentEnvelope(
   candidate: AstroInternalPreviewCandidateContentEnvelopeInput,
 ): string {
   return stableStringify({
-    conversionVersion: ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
+    ...(candidate.exportedFiles ? { exportedFiles: candidate.exportedFiles } : {}),
+    conversionVersion: candidate.exportedFiles ? RESOURCE_CONVERSION_VERSION : ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
     adapterId: "astro-static-site",
     ownership: { siteId: candidate.siteId, siteVersionId: candidate.siteVersionId },
     rendererCompatibilityVersion: candidate.rendererCompatibilityVersion,
@@ -432,8 +473,9 @@ async function readAndRevalidateExportBytes(inspected: InspectedAstroStaticExpor
   return bytesByPath;
 }
 
-function assertSupportedFiles(files: AstroStaticExportFile[]): void {
+function assertSupportedFiles(files: AstroStaticExportFile[], images: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput['embeddedImageFiles']>): void {
   for (const file of files) {
+    if (images[file.path]?.sha256 === file.sha256 && /^(image\/png|image\/jpeg|image\/webp|image\/svg\+xml)$/.test(images[file.path]!.mediaType)) continue;
     if (/\.html?$/i.test(file.path) && !/(?:^|\/)index\.html$/i.test(file.path)) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_route",
@@ -454,6 +496,7 @@ function inlineExportedStylesheets(input: {
   htmlPath: string;
   bytesByPath: Map<string, Buffer>;
   ownedStylesheetEvidence: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput["ownedStylesheetEvidence"]>;
+  embeddedImageFiles: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput["embeddedImageFiles"]>;
 }): {
   html: string;
   compiledStyles: string[];
@@ -472,15 +515,30 @@ function inlineExportedStylesheets(input: {
   }
 
   const elements = allElements(document);
-  if (elements.some((element) => element.tagName === "script")) {
-    throw new AstroInternalPreviewBridgeError("unsupported_html", "Script elements are not supported by the v1 bridge.");
+  for (const element of elements.filter(element => element.tagName === 'img')) {
+    const src = element.attrs.find(attr => attr.name === 'src');
+    if (!src || !src.value.startsWith('/')) continue;
+    const path = src.value.slice(1);
+    const image = input.embeddedImageFiles[path];
+    if (!image) continue;
+    const bytes = input.bytesByPath.get(path);
+    if (!bytes || sha256(bytes) !== image.sha256 || !/^(image\/png|image\/jpeg|image\/webp|image\/svg\+xml)$/.test(image.mediaType))
+      throw new AstroInternalPreviewBridgeError('export_bytes_mismatch', `Saved image does not match exported bytes: ${path}.`);
+    src.value = `data:${image.mediaType};base64,${bytes.toString('base64')}`;
+  }
+  if (elements.some((element) => element.tagName === "script" && !isOwnedRetainedRuntimeScript(element))) {
+    throw new AstroInternalPreviewBridgeError("unsupported_html", "Only exact GNR8 owned runtime controllers are supported.");
   }
   for (const element of elements) assertNoUnsupportedResourceElement(element);
 
   const stylesheetLinks = elements.filter(
     (element) => element.tagName === "link" && attributeTokens(element, "rel").includes("stylesheet"),
   );
-  if (stylesheetLinks.length === 0) {
+  const body = elements.find(element => element.tagName === "body");
+  const emptyBody = body?.childNodes.every(node => node.nodeName === "#comment" || (node.nodeName === "#text" && "value" in node && !node.value.trim())) ?? false;
+  // A retained empty placeholder has no presentation to style. Resource and
+  // script checks above still apply; non-empty pages keep the stylesheet guard.
+  if (stylesheetLinks.length === 0 && !emptyBody) {
     throw new AstroInternalPreviewBridgeError("stylesheet_missing", "Astro index.html has no local stylesheet to inline.");
   }
 
@@ -812,6 +870,9 @@ function walk(node: HtmlNode, visit: (element: HtmlElement) => void): void {
   if (isElement(node)) visit(node);
   const children = "childNodes" in node ? node.childNodes ?? [] : [];
   for (const child of children) walk(child, visit);
+  if (isElement(node) && node.tagName === "template") {
+    walk((node as DefaultTreeAdapterMap["template"]).content, visit);
+  }
 }
 
 function isElement(node: HtmlNode): node is HtmlElement {

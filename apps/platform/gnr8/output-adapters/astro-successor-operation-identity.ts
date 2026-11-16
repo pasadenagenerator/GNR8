@@ -36,7 +36,7 @@ export function deriveAstroSuccessorOperationIdentity(input: {
   };
 }
 
-function deterministicUuid(seed: string): string {
+export function deterministicUuid(seed: string): string {
   const bytes = createHash("sha256").update(seed, "utf8").digest().subarray(0, 16);
   bytes[6] = (bytes[6]! & 0x0f) | 0x50;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;

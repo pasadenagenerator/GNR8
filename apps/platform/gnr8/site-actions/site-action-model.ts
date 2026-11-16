@@ -55,12 +55,10 @@ export type SiteActionRequest =
       actor: string
       strategy?: string
       outputAdapterId?: 'astro-static-site' | 'html-static-artifact'
-      acceptedFunctionalReductions?: {
-        kind: 'legacy-forms-to-disclosed-links-v1'
-        contactEmail: string
-        commentLinks: 'source-article'
-        sourceWidgetRemovals?: Array<'cookie-consent' | 'form-captcha' | 'back-to-top'>
-      }
+      contactSourceTarget?: string
+      stackiBaseline?: import('../stacki/stacki-draft-contract').StackiDraftScope
+      stackiRevision?: import('../stacki/stacki-candidate-selection').StackiCandidateSelection
+      acceptedFunctionalReductions?: import('@gnr8/runtime-contracts').AcceptedFunctionalReductions
     }
   | {
       siteId: string

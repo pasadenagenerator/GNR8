@@ -1,7 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { formatVariantTimestamp, useVariantNavigation } from './VariantNavigation'
+
+import { createRetainedPresentationSettings, parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
+
+import type { ContactSuggestionModel } from '@/gnr8/output-adapters/source-contact-suggestions'
 
 import { addRecentItem } from '@/src/workspace/workspace-recents'
 
@@ -101,13 +106,27 @@ function buildSiteRecentHref(input: {
 }
 
 export default function SiteActionsPanel(props: Props) {
+  const variantNavigation = useVariantNavigation()
   const router = useRouter()
   const pathname = usePathname() || ''
   const searchParams = useSearchParams()
 
+  const [refreshPending, startRefresh] = useTransition()
   const [runningType, setRunningType] = useState<SiteActionType | null>(null)
   const [strategyInput, setStrategyInput] = useState('More visual')
   const [outputAdapterId, setOutputAdapterId] = useState<'default' | 'html-static-artifact'>('default')
+  const [presentation, setPresentation] = useState(false)
+  const [sourceLinks, setSourceLinks] = useState(false)
+  const [sourceMediaLinks, setSourceMediaLinks] = useState('')
+  const [removeTrackingAndChat, setRemoveTrackingAndChat] = useState(false)
+  const [nativeContact, setNativeContact] = useState(false)
+  const recipientEdited = useRef(false)
+  const [suggestions, setSuggestions] = useState<ContactSuggestionModel | null>(null)
+  const [suggestionError, setSuggestionError] = useState('')
+  const [suggestionRefresh, setSuggestionRefresh] = useState(0)
+  const [recipient, setRecipient] = useState('')
+  const [recipientConfirmed, setRecipientConfirmed] = useState(false)
+  const [excludedPaths, setExcludedPaths] = useState('')
   const [acceptLegacyFormReductions, setAcceptLegacyFormReductions] = useState(false)
   const [legacyFormContactEmail, setLegacyFormContactEmail] = useState('')
   const [removeCookieConsent, setRemoveCookieConsent] = useState(false)
@@ -115,6 +134,23 @@ export default function SiteActionsPanel(props: Props) {
   const [removeBackToTop, setRemoveBackToTop] = useState(false)
   const [localMessage, setLocalMessage] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if ((!presentation && !sourceLinks) || !nativeContact) { setRecipientConfirmed(false); return }
+    let active = true
+    setRecipientConfirmed(false)
+    setSuggestions(null)
+    setSuggestionError('')
+    fetch(`/api/gnr8/site-actions?${new URLSearchParams({ siteId: props.siteId, agencyId: props.agencyId, clientId: props.clientId })}`, { cache: 'no-store' })
+      .then(async response => { const json = await response.json(); if (!response.ok || !json.ok) throw new Error(json.error); return json.data as ContactSuggestionModel })
+      .then(value => {
+        if (!active) return
+        setSuggestions(value)
+        const candidates = [...new Set(value.suggestions.map(s => s.recipient))]
+        if (!recipientEdited.current) setRecipient(candidates.length === 1 ? candidates[0] : '')
+      }).catch(() => { if (active) setSuggestionError('Import suggestions could not be loaded. Refresh the import source before confirming.') })
+    return () => { active = false }
+  }, [props.siteId, props.agencyId, props.clientId, props.lastRunAt, suggestionRefresh, presentation, sourceLinks, nativeContact])
 
   const isRunning = props.currentStatus === 'running' || runningType != null
 
@@ -126,10 +162,13 @@ export default function SiteActionsPanel(props: Props) {
   const canPublish = props.canPublish && !isRunning
 
   useEffect(() => {
-    if (props.currentStatus !== 'running') return
-    const timer = window.setInterval(() => router.refresh(), 2_000)
-    return () => window.clearInterval(timer)
-  }, [props.currentStatus, router])
+    if (props.currentStatus !== 'running' || refreshPending) return
+    // Wait for the previous server render to finish before scheduling another read.
+    const timer = window.setTimeout(() => {
+      startRefresh(() => router.refresh())
+    }, 10_000)
+    return () => window.clearTimeout(timer)
+  }, [props.currentStatus, props.lastAction, refreshPending, router])
 
   const activeVariant = useMemo(
     () => props.variants.rows.find((variant) => variant.id === props.variants.selectedVariantId) ?? null,
@@ -145,6 +184,14 @@ export default function SiteActionsPanel(props: Props) {
       if (!confirmed) return
     }
 
+    const presentationSettings = sourceLinks ? parseAcceptedFunctionalReductions({kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',sourceMediaLinks:sourceMediaLinks.split('\n').map(value => value.trim()).filter(Boolean),...(removeTrackingAndChat ? {trackingAndChat:'remove'} : {}),contact:{recipient,recipientConfirmed:recipientConfirmed && Boolean(suggestions)}}) : presentation ? createRetainedPresentationSettings({
+      excludedPaths, nativeContact, recipient, recipientConfirmed: recipientConfirmed && Boolean(suggestions),
+    }) : undefined
+    if (type === 'generate_redesign' && outputAdapterId === 'default' && (presentation || sourceLinks) && !presentationSettings) {
+      setLocalError('Check exact route exclusions and confirm the contact recipient before generating.')
+      return
+    }
+
     setRunningType(type)
     setLocalError(null)
     setLocalMessage(null)
@@ -154,6 +201,7 @@ export default function SiteActionsPanel(props: Props) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          contactSourceTarget: suggestions?.sourceTarget,
           siteId: props.siteId,
           actionType: type,
           strategy: type === 'generate_redesign' ? strategyInput : undefined,
@@ -161,7 +209,7 @@ export default function SiteActionsPanel(props: Props) {
             type === 'generate_redesign' && outputAdapterId === 'html-static-artifact'
               ? outputAdapterId
               : undefined,
-          acceptedFunctionalReductions:
+          acceptedFunctionalReductions: type === 'generate_redesign' && outputAdapterId === 'default' && (presentation || sourceLinks) ? presentationSettings :
             type === 'generate_redesign' &&
             outputAdapterId === 'default' &&
             acceptLegacyFormReductions
@@ -183,6 +231,7 @@ export default function SiteActionsPanel(props: Props) {
 
       const json = (await response.json().catch(() => null)) as SiteActionsResponse | null
       if (!response.ok || !json?.ok || !json.result) {
+        if (json?.error?.includes('CONTACT_SOURCE_CHANGED')) { setRecipientConfirmed(false); setSuggestionRefresh(value => value + 1) }
         setLocalError(json?.error || `Action failed (HTTP ${response.status})`)
         return
       }
@@ -235,11 +284,11 @@ export default function SiteActionsPanel(props: Props) {
         <h3 style={{ margin: 0, fontSize: 14, color: '#0f172a' }}>Site Actions</h3>
         <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
           Status: <strong>{isRunning ? 'running' : props.lastAction.status}</strong>
-          {props.lastRunAt ? ` · Last run: ${new Date(props.lastRunAt).toLocaleString()}` : ''}
+          {props.lastRunAt ? ` · Last run: ${formatVariantTimestamp(props.lastRunAt)}` : ''}
         </p>
         <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
           Last action: <strong>{actionTypeLabel(props.lastAction.type)}</strong>
-          {props.lastAction.completedAt ? ` · ${new Date(props.lastAction.completedAt).toLocaleString()}` : ''}
+          {props.lastAction.completedAt ? ` · ${formatVariantTimestamp(props.lastAction.completedAt)}` : ''}
         </p>
       </div>
 
@@ -298,12 +347,48 @@ export default function SiteActionsPanel(props: Props) {
                 gap: 6,
               }}
             >
+              <label>
+                <input type='checkbox' checked={presentation} disabled={!canRunMigration} onChange={event => { setPresentation(event.target.checked); if (event.target.checked) { setAcceptLegacyFormReductions(false); setSourceLinks(false) } }} />
+                For this candidate: remove recognized search; replace maps with their address and OpenStreetMap link; remove the recognized tracking and consent bundle together.
+              </label>
+              <label>
+                <input type='checkbox' checked={sourceLinks} disabled={!canRunMigration} onChange={event => {setSourceLinks(event.target.checked); setRecipientConfirmed(false); if(event.target.checked){setPresentation(false);setAcceptLegacyFormReductions(false);setNativeContact(true)}}} />
+                Keep captured pages; link omitted routes and complex forms to the original site. Use GNR8 for supported ordinary contact forms with the recipient confirmed below. Unknown scripts still block generation.
+              </label>
+              {sourceLinks ? <label><input type='checkbox' checked={removeTrackingAndChat} disabled={!canRunMigration} onChange={event => setRemoveTrackingAndChat(event.target.checked)} /> Omit recognized tracking and Facebook chat from this candidate. Keep native contact, page content and video controls.</label> : null}
+              {sourceLinks ? <label>Original animation links (optional, one exact HTTPS GIF URL per line). Only listed images from this source site become clearly labelled links; other images remain included.
+                <textarea value={sourceMediaLinks} disabled={!canRunMigration} onChange={event => setSourceMediaLinks(event.target.value)} rows={3} />
+              </label> : null}
+              {presentation || sourceLinks ? <>
+                {presentation ? <label>Exclude these obsolete routes from this site&apos;s candidate (one exact path per line; homepage cannot be excluded)
+                  <textarea value={excludedPaths} disabled={!canRunMigration} onChange={event => setExcludedPaths(event.target.value)} rows={4} style={{display:'block',width:'100%'}} />
+                </label> : null}
+                <p>Captured files remain stored. Unknown scripts and unsupported forms block generation.</p>
+                <label><input type='checkbox' checked={nativeContact} disabled={!canRunMigration || sourceLinks} onChange={event => setNativeContact(event.target.checked)} /> Replace supported ordinary contact forms with GNR8 forms, preserving their layout and required fields.</label>
+                {nativeContact ? <>
+                  <p>One confirmed recipient applies to all supported contact forms on this site. Public contact addresses are suggestions, not proof of the original form’s server recipient.</p>
+                  {suggestionError ? <p role="alert">{suggestionError}</p> : !suggestions ? <p>Loading retained import evidence…</p> : suggestions.suggestions.length ? <div>
+                    <p>Addresses found in the retained import. Choose one or enter another address:</p>
+                    {suggestions.suggestions.map((suggestion, index) => <div key={index}>
+                      <button type="button" disabled={!canRunMigration} onClick={() => { recipientEdited.current = true; setRecipient(suggestion.recipient); setRecipientConfirmed(false) }}>{suggestion.recipient}</button>
+                      {' — '}{suggestion.evidence === 'form-mailto' ? 'Listed in a static form mailto action' : 'Public contact address'}{' on '}
+                      <a href={suggestion.sourceUrl} target="_blank" rel="noreferrer">{suggestion.sourceUrl}</a>{suggestion.formId ? ` (form: ${suggestion.formId})` : ''}
+                    </div>)}
+                  </div> : <p>No recipient evidence found. Enter the recipient manually; hidden backend settings cannot be inferred.</p>}
+                  <button type="button" disabled={!canRunMigration} onClick={() => setSuggestionRefresh(value => value + 1)}>Refresh import suggestions</button>
+                  <label>Recipient for this site (requires confirmation)
+                    <input type='email' value={recipient} disabled={!canRunMigration} onChange={event => {recipientEdited.current = true;setRecipient(event.target.value);setRecipientConfirmed(false)}} style={{display:'block',width:'100%'}} />
+                  </label>
+                  <label><input type='checkbox' checked={recipientConfirmed} disabled={!canRunMigration || !suggestions} onChange={event => setRecipientConfirmed(event.target.checked)} /> I confirm this site&apos;s recipient: {recipient || '(enter email)'}</label>
+                  <p>Supported: name, email, optional phone/subject and message; required fields stay as imported. The recognized required CF7 permission checkbox and its exact legal text are preserved, unchecked. Other fields remain blocked. Preview cannot send. Publication checks the production sender configuration and durable submission service. Provider acceptance confirms submission for sending, not inbox delivery.</p>
+                </> : null}
+              </> : null}
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#78350f' }}>
                 <input
                   type='checkbox'
                   checked={acceptLegacyFormReductions}
                   disabled={!canRunMigration}
-                  onChange={(event) => setAcceptLegacyFormReductions(event.target.checked)}
+                  onChange={(event) => { setAcceptLegacyFormReductions(event.target.checked); if (event.target.checked) {setPresentation(false);setSourceLinks(false)} }}
                 />
                 <span>
                   Accept form reductions for this generated candidate only: replace legacy contact forms with a disclosed email link and comment forms with links to the original articles.
@@ -390,19 +475,10 @@ export default function SiteActionsPanel(props: Props) {
         <label style={{ fontSize: 12, color: '#334155' }}>
           Variant
           <select
-            value={props.variants.selectedVariantId ?? ''}
-            onChange={(event) => {
-              const value = normalizeText(event.target.value) || null
-              const params = new URLSearchParams(searchParams?.toString() ?? '')
-              if (value) {
-                params.set('variant', value)
-              } else {
-                params.delete('variant')
-              }
-              const query = params.toString()
-              router.replace(query ? `${pathname}?${query}` : pathname)
-              router.refresh()
-            }}
+            value={variantNavigation?.selected ?? props.variants.selectedVariantId ?? ''}
+            disabled={!variantNavigation || variantNavigation.pending}
+            aria-busy={variantNavigation?.pending ?? false}
+            onChange={(event) => variantNavigation?.select(event.target.value)}
             style={{
               marginTop: 4,
               width: '100%',
@@ -416,11 +492,12 @@ export default function SiteActionsPanel(props: Props) {
             <option value=''>Latest runtime</option>
             {props.variants.rows.map((variant) => (
               <option key={variant.id} value={variant.id}>
-                {variant.label} · {new Date(variant.createdAt).toLocaleString()}
+                {variant.label} · {formatVariantTimestamp(variant.createdAt)}
               </option>
             ))}
           </select>
         </label>
+        {variantNavigation?.pending ? <p role="status">Izbiram različico … Počakajte pred odpiranjem urejevalnika.</p> : null}
         {activeVariant ? (
           <div style={{ display: 'grid', gap: 4 }}>
             <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>

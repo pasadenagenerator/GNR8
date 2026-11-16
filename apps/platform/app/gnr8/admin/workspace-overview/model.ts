@@ -6,7 +6,7 @@ import type { RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 import {
   STABLE_IMPORT_SNAPSHOT_FIXTURE,
   type StableImportSnapshotFixture,
-} from "@/gnr8/runtime/twin/fixtures/stable-import-snapshot";
+} from "@/gnr8/runtime/twin/stable-import-snapshot";
 import { buildWebsiteDigitalTwin } from "@/gnr8/runtime/twin/twin-builder";
 import { generateTwinInsights, TWIN_INSIGHT_DIAGNOSTICS } from "@/gnr8/runtime/twin/twin-insights";
 import { generateTwinObservations, TWIN_OBSERVATION_DIAGNOSTICS } from "@/gnr8/runtime/twin/twin-observations";

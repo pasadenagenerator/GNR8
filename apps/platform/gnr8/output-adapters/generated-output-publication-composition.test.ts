@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { readLatestReview } from "./generated-output-publication-composition";
+import { createGeneratedOutputComposition, readLatestReview } from "./generated-output-publication-composition";
 
 const SITE_VERSION_ID = "8ac51260-8180-5f64-ae5e-4f7259c971ab";
 
@@ -58,4 +58,38 @@ test("keeps audit query failures explicit", async () => {
     () => readLatestReview(reviewClient({ data: null, error: { code: "42703" } }, calls), SITE_VERSION_ID),
     /generated_output_review_store_unavailable/,
   );
+});
+
+test("Stacki candidate composition requires Git for selected sites only", async () => {
+  const keys = ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY",
+    "GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED", "GNR8_STACKI_GITHUB_ENABLED",
+    "GNR8_STACKI_GITHUB_SITE_IDS", "GNR8_STACKI_GITHUB_BINDINGS_ENABLED"] as const;
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const siteId = "33333333-3333-4333-8333-333333333333";
+  try {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://local.invalid";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "local-test-key";
+    process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED = "1";
+    process.env.GNR8_STACKI_GITHUB_ENABLED = "1";
+    process.env.GNR8_STACKI_GITHUB_SITE_IDS = JSON.stringify([siteId]);
+    process.env.GNR8_STACKI_GITHUB_BINDINGS_ENABLED = "0";
+    const repository = createGeneratedOutputComposition().candidateRepository as unknown as {
+      prepareGeneratedGit?: unknown;
+      gitArchiveRequired?: (owner: { agencyId: string; organizationId: string;
+        ownershipSiteId: string; siteVersionId: string; runtimeSiteId: string }) => Promise<boolean>;
+    };
+    assert.equal(typeof repository.prepareGeneratedGit, "function");
+    const owner = { agencyId: "11111111-1111-4111-8111-111111111111",
+      organizationId: "22222222-2222-4222-8222-222222222222", ownershipSiteId: siteId,
+      siteVersionId: "44444444-4444-4444-8444-444444444444", runtimeSiteId: "site_123" };
+    assert.equal(await repository.gitArchiveRequired?.(owner), true);
+    assert.equal(await repository.gitArchiveRequired?.({ ...owner, ownershipSiteId: "55555555-5555-4555-8555-555555555555" }), false);
+    process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED = "0";
+    assert.equal(await repository.gitArchiveRequired?.(owner), false);
+  } finally {
+    for (const key of keys) {
+      const value = previous[key];
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

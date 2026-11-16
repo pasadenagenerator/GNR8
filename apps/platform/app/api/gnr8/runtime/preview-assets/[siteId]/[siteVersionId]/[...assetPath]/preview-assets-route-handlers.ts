@@ -1,3 +1,4 @@
+import { RAW_CSS_REVISION, RAW_CSS_REVISION_PARAM } from "@/src/public-site/raw-css-url-version";
 import { parseAgencyActionContextError, requireAgencyActionContext } from "@/app/api/gnr8/agency/_lib/agency-action-access";
 import { resolveAgencyIdForPreviewSiteVersion } from "@/app/api/gnr8/runtime/_lib/runtime-agency-scope";
 import {
@@ -12,6 +13,9 @@ import { createRuntimeCorrelationKey, normalizeRuntimeDomain, normalizeRuntimeHo
 import { RAW_PREVIEW_URI_DECODE_DIAGNOSTIC, safeDecodeURIComponent } from "@/gnr8/runtime/raw-preview-uri-decoding";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 import { getSuperadminPool } from "@/src/superadmin/db";
+import { retainedStylesheetSourceUrl } from "@/gnr8/validation/runtime/retained-css-dependency-path";
+import { readProtectedPreviewAsset } from "./protected-preview-asset";
+import { readPublishedRetainedAsset } from "@/src/public-site/published-retained-asset";
 
 type PreviewAssetGetContext = { params: Promise<{ siteId: string; siteVersionId: string; assetPath?: string[] }> };
 
@@ -25,6 +29,8 @@ type PreviewAssetRouteDependencies = {
   resolveRawTemplateSiteForDomainAndPath: typeof resolveRawTemplateSiteForDomainAndPath;
   parseAgencyActionContextError: typeof parseAgencyActionContextError;
   acquireRuntimeDbClient: () => Promise<RuntimeStoreDbClient>;
+  readProtectedPreviewAsset: typeof readProtectedPreviewAsset;
+  readPublishedRetainedAsset: typeof readPublishedRetainedAsset;
 };
 
 const defaultDependencies: PreviewAssetRouteDependencies = {
@@ -37,6 +43,8 @@ const defaultDependencies: PreviewAssetRouteDependencies = {
   resolveRawTemplateSiteForDomainAndPath,
   parseAgencyActionContextError,
   acquireRuntimeDbClient: () => getSuperadminPool().connect(),
+  readProtectedPreviewAsset,
+  readPublishedRetainedAsset,
 };
 
 function normalizeText(value: unknown): string {
@@ -260,6 +268,12 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           lookupResult: null,
           reasonCode: "request_received",
         });
+        if (normalizedPath) {
+          const publishedAsset = await deps.readPublishedRetainedAsset({ host: requestHost, siteId, siteVersionId, path: normalizedPath });
+          if (publishedAsset) return (response = publishedAsset);
+          const protectedAsset = await deps.readProtectedPreviewAsset({ siteId, siteVersionId, path: normalizedPath, host: requestHost });
+          if (protectedAsset) return (response = protectedAsset);
+        }
         dbClient = await deps.acquireRuntimeDbClient();
         dbClientAcquisitionCount += 1;
         const debugMode = new URL(req.url).searchParams.get("__debug") === "1";
@@ -535,6 +549,23 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
 
         const effectivePath = resolvedPath ?? normalizedPath;
         const isCssAsset = effectivePath.toLowerCase().endsWith(".css");
+        const cssRevision = new URL(req.url).searchParams.get(RAW_CSS_REVISION_PARAM);
+        if (isCssAsset && cssRevision !== null && cssRevision !== RAW_CSS_REVISION) {
+          return (response = new Response("Unsupported CSS revision", { status: 400, headers: { "cache-control": "no-store" } }));
+        }
+        const versionedCss = cssRevision === RAW_CSS_REVISION;
+        let stylesheetSourceUrl: string | null = null;
+        const manifestEntry = artifact.fileMap["url-fetch-manifest.json"];
+        if (isCssAsset && versionedCss && artifact.artifactType === "raw_imported_site" && manifestEntry) {
+          recordDbRead();
+          const manifest = await deps.getRawTemplateSiteAsset({ siteVersionId, artifactId: artifact.id, filePath: "url-fetch-manifest.json", dbClient });
+          if (manifest) stylesheetSourceUrl = retainedStylesheetSourceUrl({
+            bytes: manifest.bytes,
+            expectedSha256: manifestEntry.sha256,
+            expectedSizeBytes: manifestEntry.sizeBytes,
+            stylesheetPath: effectivePath,
+          });
+        }
         let responseBody: BodyInit;
         try {
           const binaryBytes = new Uint8Array(asset.bytes);
@@ -548,6 +579,8 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 siteId,
                 siteVersionId,
                 assetFilePath: effectivePath,
+                stylesheetSourceUrl,
+                versionCssUrls: versionedCss,
                 fileMapPaths:
                   Object.keys(artifact.fileMap ?? {}).length > 0
                     ? new Set(Object.keys(artifact.fileMap ?? {}))

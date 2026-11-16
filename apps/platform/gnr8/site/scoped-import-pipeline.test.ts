@@ -17,6 +17,25 @@ import { computeRuntimeArtifactBundleSha256 } from '@/gnr8/runtime/astro-artifac
 import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 
+test('Git-backed import rejects the retained CHS failure modes before archiving', () => {
+  const snapshot = { fetchManifest: [{ fetchStatus: 'fetch_failed' }] } as any
+  const discovery = {
+    manifest: { skippedLinks: [] },
+    acquisition: {
+      pages: [{ status: 'skipped', skippedReason: 'acquisition_page_limit' }],
+      summary: { failedRequiredAssetCount: 17 },
+      diagnostics: [],
+    },
+  } as any
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [
+    'page_failed_or_limited', 'required_child_asset_missing', 'seed_asset_missing',
+  ])
+  discovery.acquisition.pages = [{ status: 'fetched', skippedReason: null }]
+  discovery.acquisition.summary.failedRequiredAssetCount = 0
+  snapshot.fetchManifest = [{ fetchStatus: 'fetched' }]
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+})
+
 function createSuccessPipelineFixture() {
   const preparedSite = {
     kind: 'prepared_site_model_v1',
@@ -830,7 +849,29 @@ test('import-created slots support draft save planning, publish promotion, and r
   assert.ok(!rendered.html.includes('Original Hero'))
 })
 
-test('scoped pipeline import uses pipeline path, maps consolidated sections, and links artifact', async () => {
+test('required raw Git archive rejects missing ownership or an unselected repository before database writes', async (t) => {
+  const envKeys=['GNR8_GITHUB_IMPORT_PREFLIGHT','GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED',
+    'GNR8_STACKI_GITHUB_ENABLED','GNR8_STACKI_GITHUB_SITE_IDS'] as const
+  const oldEnv=Object.fromEntries(envKeys.map(key=>[key,process.env[key]]))
+  t.after(()=>{for(const key of envKeys)if(oldEnv[key]===undefined)delete process.env[key];else process.env[key]=oldEnv[key]})
+  Object.assign(process.env,{GNR8_GITHUB_IMPORT_PREFLIGHT:'0',GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED:'1',
+    GNR8_STACKI_GITHUB_ENABLED:'0',GNR8_STACKI_GITHUB_SITE_IDS:'[]'})
+  let writes=0
+  const base={snapshot:{} as any,sourceUrl:'https://example.com/',actor:'test:scoped-import',
+    deps:{createSiteVersionFromMigration:async()=>{writes++;throw Error('unexpected write')}}}
+  await assert.rejects(runScopedImportPipeline(base),/GITHUB_IMPORT_OWNERSHIP_REQUIRED/)
+  await assert.rejects(runScopedImportPipeline({...base,ownershipScope:{agencyId:'11111111-1111-4111-8111-111111111111',
+    clientId:'22222222-2222-4222-8222-222222222222',siteId:'33333333-3333-4333-8333-333333333333'}}),/GITHUB_IMPORT_TARGET_NOT_SELECTED/)
+  assert.equal(writes,0)
+})
+
+test('scoped pipeline import uses pipeline path, maps consolidated sections, and links artifact', async (t) => {
+  const envKeys=['GNR8_GITHUB_IMPORT_PREFLIGHT','GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED',
+    'GNR8_STACKI_GITHUB_ENABLED','GNR8_STACKI_GITHUB_SITE_IDS'] as const
+  const oldEnv=Object.fromEntries(envKeys.map(key=>[key,process.env[key]]))
+  t.after(()=>{for(const key of envKeys)if(oldEnv[key]===undefined)delete process.env[key];else process.env[key]=oldEnv[key]})
+  Object.assign(process.env,{GNR8_GITHUB_IMPORT_PREFLIGHT:'0',GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED:'0',
+    GNR8_STACKI_GITHUB_ENABLED:'1',GNR8_STACKI_GITHUB_SITE_IDS:'["33333333-3333-4333-8333-333333333333"]'})
   const pipeline = createSuccessPipelineFixture()
   let createInput: any = null
   let persistedImportSummary: any = null
@@ -901,6 +942,8 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
         issues: [{ code: 'RENDERED_CAPTURE_RECOVERED_ON_RETRY' }],
       },
     } as any,
+    ownershipScope:{agencyId:'11111111-1111-4111-8111-111111111111',
+      clientId:'22222222-2222-4222-8222-222222222222',siteId:'44444444-4444-4444-8444-444444444444'},
     sourceUrl: 'https://example.com/',
     actor: 'test:scoped-import',
     deps: {
@@ -956,6 +999,10 @@ test('scoped pipeline import uses pipeline path, maps consolidated sections, and
           assetFingerprintMap: {},
           manifest: {},
         }) as any,
+      persistRawImportedSiteArtifact:async(input)=>{
+        assert.equal(input.metadata.gitArchive,undefined)
+        return {artifactId:'raw-artifact-unselected',fileCount:input.fileRows.length} as any
+      },
       createArtifact: async () => ({ artifactId: 'artifact-1' }),
       bindArtifactToVersion: async (input) => {
         bindCalls += 1
@@ -1309,11 +1356,17 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
 })
 
 test('scoped pipeline multi-page HTML acquisition fetches child evidence without public serving changes', async () => {
+  const aboutHtml = '<!doctype html><html><body><h1>About</h1><a href="/article">Article</a></body></html>'
   const server = http.createServer((req, res) => {
     const url = req.url ?? '/'
     if (url === '/about') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      res.end('<!doctype html><html><body><h1>About</h1></body></html>')
+      res.end(aboutHtml)
+      return
+    }
+    if (url === '/article') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end('<!doctype html><html><body><h1>Article</h1></body></html>')
       return
     }
     if (url === '/final') {
@@ -1425,7 +1478,7 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
         enabled: true,
         acquireHtml: true,
         generatedAt: '2026-06-06T00:00:00.000Z',
-        limits: { maxRoutes: 10, maxDepth: 1, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 },
+        limits: { maxRoutes: 10, maxDepth: 2, maxLinksPerPage: 20, maxTemplateLinksPerRoute: 10 },
         htmlAcquisitionLimits: { maxPages: 10, maxBytesPerPage: 20_000, requestTimeoutMs: 5_000 },
       },
       deps: {
@@ -1492,7 +1545,7 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
 
     assert.equal(outcome.mode, 'pipeline')
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.enabled, true)
-    assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.fetchedPageCount, 2)
+    assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.fetchedPageCount, 3)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.failedPageCount, 1)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.manifestRef, 'importProvenanceSummary.multiPageDiscovery.acquisition')
     assert.ok(outcome.reporting.multiPageDiscovery.htmlAcquisition?.skippedPageCount ?? 0 >= 4)
@@ -1501,7 +1554,7 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
     const acquisition = persistedImportSummary.importProvenanceSummary.multiPageDiscovery.acquisition
     assert.equal(persistedImportSummary.importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly ?? null, null)
     assert.equal(acquisition.kind, 'multi_page_html_acquisition_manifest_v1')
-    assert.equal(acquisition.summary.fetchedPageCount, 2)
+    assert.equal(acquisition.summary.fetchedPageCount, 3)
     assert.equal(acquisition.summary.failedPageCount, 1)
     assert.ok(acquisition.diagnostics.includes('MULTIPAGE_HTML_ACQUISITION_STARTED'))
     assert.ok(acquisition.diagnostics.includes('MULTIPAGE_HTML_FETCH_SUCCEEDED'))
@@ -1513,9 +1566,11 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
     assert.equal(about.status, 'fetched')
     assert.equal(about.httpStatusCode, 200)
     assert.match(about.contentType, /text\/html/)
-    assert.equal(about.byteSize, Buffer.byteLength('<!doctype html><html><body><h1>About</h1></body></html>'))
-    assert.equal(about.bodySha256, crypto.createHash('sha256').update('<!doctype html><html><body><h1>About</h1></body></html>').digest('hex'))
+    const capturedAbout = fs.readFileSync(about.bodyPath)
+    assert.equal(about.byteSize, capturedAbout.byteLength)
+    assert.equal(about.bodySha256, crypto.createHash('sha256').update(capturedAbout).digest('hex'))
     assert.match(about.bodyPath, /multipage-html-acquisition\/pages\/about-/)
+    assert.equal(acquisition.pages.find((entry: any) => entry.normalizedRoutePath === '/article')?.status, 'fetched')
 
     const redirected = acquisition.pages.find((entry: any) => entry.normalizedRoutePath === '/redirect')
     assert.equal(redirected.status, 'fetched')
@@ -2456,6 +2511,51 @@ test('scoped pipeline import passes null assetsDirPath when snapshot assets dire
   assert.equal(capturedImportInput.rootDir, root)
   assert.equal(capturedImportInput.source.entryHtmlPath, 'index.html')
   assert.equal(capturedImportInput.source.assetsDirPath, null)
+})
+
+test('required Git archive never falls back to a database-only import after pipeline failure', async (t) => {
+  const keys=['GNR8_GITHUB_IMPORT_PREFLIGHT','GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED',
+    'GNR8_STACKI_GITHUB_ENABLED','GNR8_STACKI_GITHUB_SITE_IDS','GNR8_STACKI_GITHUB_TARGETS','GNR8_STACKI_GITHUB_TOKEN'] as const
+  const previous=Object.fromEntries(keys.map(key=>[key,process.env[key]]))
+  const originalFetch=globalThis.fetch
+  t.after(()=>{globalThis.fetch=originalFetch;for(const key of keys)if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key]})
+  const ownedSite='33333333-3333-4333-8333-333333333333'
+  Object.assign(process.env,{GNR8_GITHUB_IMPORT_PREFLIGHT:'0',GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED:'1',
+    GNR8_STACKI_GITHUB_ENABLED:'1',GNR8_STACKI_GITHUB_SITE_IDS:JSON.stringify([ownedSite]),
+    GNR8_STACKI_GITHUB_TARGETS:JSON.stringify({[ownedSite]:{owner:'owner',ownerId:10,repository:'site',repositoryId:12}}),
+    GNR8_STACKI_GITHUB_TOKEN:'local-test-token'})
+  let repositoryReads=0,legacyWrites=0
+  globalThis.fetch=async(url)=>{
+    assert.equal(String(url),'https://api.github.com/repos/owner/site')
+    repositoryReads++
+    return Response.json({private:true,id:12,owner:{id:10,login:'owner'},name:'site',
+      permissions:{push:true},description:`GNR8 standalone site ${ownedSite}`})
+  }
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gnr8-archive-failure-'))
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}))
+  const entry=path.join(dir,'index.html')
+  fs.writeFileSync(entry,'<!doctype html><html><body><h1>Retained</h1></body></html>')
+  await assert.rejects(runScopedImportPipeline({
+    snapshot:{snapshotRootDirAbs:dir,entryHtmlPathAbs:entry,assetsDirAbs:path.join(dir,'assets'),
+      sourceMode:'raw_html_fallback',sourceSelection:{sourceMode:'raw_html_fallback',fidelityStatus:'degraded_import',
+        selectedSourceHtmlPathAbs:entry,renderedDomQuality:{quality:'weak',bodyTextLength:8,meaningfulNodeCount:2,
+          sectionCandidateCount:1,hasHeading:true,reason:'test'},degraded:true},
+      renderedCapture:{status:'unavailable',screenshots:[],computedStyleSamples:[]},importDiagnostics:{issues:[]}} as any,
+    sourceUrl:'https://example.com/',actor:'test:archive-failure',
+    ownershipScope:{agencyId:'11111111-1111-4111-8111-111111111111',
+      clientId:'22222222-2222-4222-8222-222222222222',siteId:ownedSite},
+    fallbackToLegacyOnPipelineFailure:true,
+    deps:{importStaticSite:async()=>({status:'ok',documentMeta:{source:{kind:'single-entry-html'}}}) as any,
+      createImportManifest:()=>({status:'success'}) as any,
+      runLinearMigrationPipeline:()=>({status:'failed',summary:'pipeline failed',diagnostics:[],
+        stages:[{stageId:'import_intake',status:'failed',summary:'import failed',diagnostics:[]}],
+        input:{importOutput:{documentMeta:{source:{kind:'single-entry-html'}}}}}) as any,
+      createSiteVersionFromMigration:async()=>{legacyWrites++;throw Error('unexpected write')},
+      migrateImportedPageToCanonicalDraft:async()=>{legacyWrites++;throw Error('unexpected fallback')},
+      importHtmlToPage:()=>{legacyWrites++;throw Error('unexpected fallback')}}
+  }),/Pipeline failed|scoped_import_pipeline/i)
+  assert.equal(repositoryReads,1)
+  assert.equal(legacyWrites,0)
 })
 
 test('scoped pipeline import falls back to legacy when pipeline fails', async () => {

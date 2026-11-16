@@ -1,3 +1,4 @@
+import { RESOURCE_RECORD_VERSION, RESOURCE_CONVERSION_VERSION, validateReviewedDescriptors, validateReviewedExport, exportHtmlByPath, type AstroExportResource, type AstroExportResourceRef } from "./astro-export-resources";
 import {
   ASTRO_INTERNAL_PREVIEW_ASSET_MODE,
   ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND,
@@ -10,6 +11,7 @@ import { ASTRO_STATIC_EXPORT_MANIFEST_VERSION } from "./astro-static-site-build-
 import { isGeneratedOutputRoutePath } from "./generated-output-route-path";
 import { RENDERER_COMPATIBILITY_VERSION } from "../runtime/types";
 import { sha256Hex, stableStringify } from "../runtime/deterministic";
+import type {GeneratedGitRef} from "../site/generated-artifact-git-cache";
 import {
   ASTRO_PRODUCTION_CANDIDATE_ADAPTER_ID,
   ASTRO_PRODUCTION_CANDIDATE_LIFETIME,
@@ -35,7 +37,6 @@ export const ASTRO_OBJECT_CANDIDATE_MEDIA_TYPE = "text/html; charset=utf-8" as c
 export const ASTRO_OBJECT_CANDIDATE_STYLES_MEDIA_TYPE = "text/css; charset=utf-8" as const;
 
 const TEXT_MAX_CHARACTERS = 1024;
-const COMPILED_STYLES_OBJECT_THRESHOLD_BYTES = 64 * 1024;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ISO_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 
@@ -57,12 +58,13 @@ export type AstroCandidateStylesObjectRef = {
   mediaType: typeof ASTRO_OBJECT_CANDIDATE_STYLES_MEDIA_TYPE;
 };
 
-export type AstroCandidateStoredObjectRef = AstroCandidateRouteObjectRef | AstroCandidateStylesObjectRef;
+export type AstroCandidateStoredObjectRef = AstroCandidateRouteObjectRef | AstroCandidateStylesObjectRef | AstroExportResourceRef;
 
 export type AstroObjectBackedCandidatePayload = Omit<
   AstroInternalPreviewCandidate,
-  "htmlByPath" | "manifest" | "compiledTokenStyles"
+  "htmlByPath" | "manifest" | "compiledTokenStyles" | "exportedFiles"
 > & {
+  resourcePayloads?: AstroExportResourceRef[];
   routePayloads: Record<string, AstroCandidateRouteObjectRef> & { "/": AstroCandidateRouteObjectRef };
   compiledTokenStyles: string | AstroCandidateStylesObjectRef;
   manifest: Omit<AstroInternalPreviewCandidate["manifest"], "lifecycle"> & {
@@ -75,18 +77,20 @@ export type AstroObjectBackedCandidatePayload = Omit<
 };
 
 export type AstroObjectBackedCandidateRecord = {
-  schemaVersion: typeof ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION;
+  schemaVersion: typeof ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION | typeof RESOURCE_RECORD_VERSION;
   recordKind: typeof ASTRO_OBJECT_CANDIDATE_RECORD_KIND;
   identity: AstroProductionCandidateIdentity;
   registration: AstroProductionCandidateRegistration;
   candidate: AstroObjectBackedCandidatePayload;
+  generatedGitArchive?: GeneratedGitRef;
   storageSha256: string;
 };
 
 export type AstroObjectBackedResolvedCandidate = Omit<
   AstroObjectBackedCandidatePayload,
-  "routePayloads" | "compiledTokenStyles"
+  "routePayloads" | "compiledTokenStyles" | "resourcePayloads"
 > & {
+  exportedFiles?: AstroExportResource[];
   htmlByPath: Record<string, string> & { "/": string };
   compiledTokenStyles: string;
 };
@@ -95,6 +99,7 @@ export type AstroObjectBackedResolvedRecord = Omit<AstroObjectBackedCandidateRec
   candidate: AstroObjectBackedResolvedCandidate;
   objectManifest: Record<string, AstroCandidateRouteObjectRef> & { "/": AstroCandidateRouteObjectRef };
   stylesObjectRef: AstroCandidateStylesObjectRef | null;
+  resourceObjectRefs?: AstroExportResourceRef[];
 };
 
 export type AstroPersistedCandidateRecord =
@@ -128,14 +133,15 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
   registration: AstroProductionCandidateRegistrationContext;
   storedAt: string;
   bucket: string;
+  generatedGitArchive?: GeneratedGitRef;
 }): PreparedAstroObjectBackedCandidateRecord {
   if (!isAstroInternalPreviewCandidate(input.candidate)) {
     throw corrupt("Source candidate failed the established candidate validation contract.");
   }
   const routeEntries = Object.entries(input.candidate.htmlByPath)
     .sort(([left], [right]) => left.localeCompare(right));
-  if (routeEntries.length < 2) {
-    throw unsupported("Object-backed candidate storage is reserved for new multi-page candidates.");
+  if (routeEntries.length < 1) {
+    throw unsupported("Object-backed candidate storage requires a root route.");
   }
   const identity = validateAstroProductionCandidateIdentity({
     candidateId: input.candidate.id,
@@ -152,7 +158,7 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
   }
   const bucket = boundedText(input.bucket, "candidate object bucket");
   const routeUploads = routeEntries.map(([routePath, html]) => {
-    validateSelfContainedAstroProductionPayload({
+    if (!input.candidate.exportedFiles) validateSelfContainedAstroProductionPayload({
       html,
       compiledTokenStyles: input.candidate.compiledTokenStyles,
     });
@@ -173,14 +179,19 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
   });
   const routePayloads = Object.fromEntries(routeUploads.map((upload) => [upload.ref.routePath, upload.ref]));
   const compiledStylesBytes = Buffer.from(input.candidate.compiledTokenStyles, "utf8");
-  const stylesUpload = compiledStylesBytes.byteLength > COMPILED_STYLES_OBJECT_THRESHOLD_BYTES
+  const stylesUpload = compiledStylesBytes.byteLength > 0
     ? createStylesUpload({ identity, bucket, bytes: compiledStylesBytes })
     : null;
   const uploads: AstroCandidateObjectUpload[] = stylesUpload
     ? [...routeUploads, stylesUpload]
     : routeUploads;
+  const resourceUploads: AstroCandidateObjectUpload[] = (input.candidate.exportedFiles ?? []).map(({base64,...file})=>({
+    ref:{...file,kind:'export_resource',bucket,key:resourceObjectKey(identity,file.path,file.sha256)},bytes:Buffer.from(base64,'base64'),
+  }));
+  uploads.push(...resourceUploads);
   const registration = validateRegistration({ ...input.registration, storedAt: input.storedAt });
   const candidate: AstroObjectBackedCandidatePayload = {
+    ...(input.candidate.exportedFiles ? { resourcePayloads: resourceUploads.map(u=>u.ref as AstroExportResourceRef) } : {}),
     kind: input.candidate.kind,
     id: input.candidate.id,
     siteId: input.candidate.siteId,
@@ -201,11 +212,12 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
     createdAt: input.candidate.createdAt,
   };
   const unsigned = {
-    schemaVersion: ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION,
+    schemaVersion: input.candidate.exportedFiles ? RESOURCE_RECORD_VERSION : ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION,
     recordKind: ASTRO_OBJECT_CANDIDATE_RECORD_KIND,
     identity,
     registration,
     candidate,
+    ...(input.generatedGitArchive ? {generatedGitArchive:input.generatedGitArchive} : {}),
   } satisfies Omit<AstroObjectBackedCandidateRecord, "storageSha256">;
   const record: AstroObjectBackedCandidateRecord = {
     ...unsigned,
@@ -221,7 +233,7 @@ export function prepareAstroObjectBackedCandidateRecord(input: {
       // The deployed v3 RPC contract records route-object bytes by summing
       // candidate.routePayloads. Additional immutable objects remain fully
       // sized and hashed by their own registry refs.
-      objectPayloadUtf8Bytes: routeUploads.reduce((total, upload) => total + upload.ref.sizeBytes, 0),
+      objectPayloadUtf8Bytes: (input.candidate.exportedFiles ? uploads : routeUploads).reduce((total, upload) => total + upload.ref.sizeBytes, 0),
     },
   };
 }
@@ -231,18 +243,26 @@ export function validateAstroObjectBackedCandidateRecord(
   options: { maxBytes?: number } = {},
 ): AstroObjectBackedCandidateRecord {
   if (!isRecord(value)) throw corrupt("Object-backed candidate record must be an object.");
-  if (typeof value.schemaVersion === "string" && value.schemaVersion !== ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION) {
+  if (typeof value.schemaVersion === "string" && !isObjectSchema(value.schemaVersion)) {
     throw unsupported("Object-backed candidate schema version is unsupported.");
   }
   if (typeof value.recordKind === "string" && value.recordKind !== ASTRO_OBJECT_CANDIDATE_RECORD_KIND) {
     throw unsupported("Object-backed candidate record kind is unsupported.");
   }
-  if (!hasExactKeys(value, ["schemaVersion", "recordKind", "identity", "registration", "candidate", "storageSha256"])) {
+  if (!hasExactKeys(value, ["schemaVersion", "recordKind", "identity", "registration", "candidate", "storageSha256",
+    ...(value.generatedGitArchive ? ["generatedGitArchive"] : [])])) {
     throw corrupt("Object-backed candidate record shape is invalid.");
   }
   const identity = validateAstroProductionCandidateIdentity(value.identity, "corrupt");
   const registration = validateRegistration(value.registration, "corrupt");
   const candidate = validateObjectCandidatePayload(value.candidate);
+  if ((value.schemaVersion === RESOURCE_RECORD_VERSION) !== Boolean(candidate.resourcePayloads)) throw corrupt('Resource contract version mismatch');
+  if (value.generatedGitArchive) {
+    if (!isCandidateGitRef(value.generatedGitArchive,identity,candidate)) throw corrupt('Candidate Git reference is invalid');
+  }
+  if(candidate.resourcePayloads) for(const ref of candidate.resourcePayloads) {
+    if(ref.key!==resourceObjectKey(identity,ref.path,ref.sha256)) throw corrupt('Resource object ownership mismatch');
+  }
   if (
     candidate.id !== identity.candidateId ||
     candidate.siteId !== identity.runtimeSiteId ||
@@ -257,11 +277,12 @@ export function validateAstroObjectBackedCandidateRecord(
   }
   if (!isSha256(value.storageSha256)) throw corrupt("Object-backed candidate storage hash is invalid.");
   const unsigned = {
-    schemaVersion: ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION,
+    schemaVersion: value.schemaVersion as AstroObjectBackedCandidateRecord["schemaVersion"],
     recordKind: ASTRO_OBJECT_CANDIDATE_RECORD_KIND,
     identity,
     registration,
     candidate,
+    ...(value.generatedGitArchive ? {generatedGitArchive:value.generatedGitArchive as GeneratedGitRef} : {}),
   } satisfies Omit<AstroObjectBackedCandidateRecord, "storageSha256">;
   if (computeAstroObjectBackedCandidateStorageSha256(unsigned) !== value.storageSha256) {
     throw corrupt("Object-backed candidate storage-integrity hash does not match.");
@@ -283,6 +304,7 @@ export function resolveAstroObjectBackedCandidateRecord(input: {
   record: AstroObjectBackedCandidateRecord;
   htmlByPath: Record<string, string>;
   compiledTokenStyles?: string;
+  exportedFiles?: AstroExportResource[];
 }): AstroObjectBackedResolvedRecord {
   const record = validateAstroObjectBackedCandidateRecord(input.record);
   const expectedRoutes = Object.keys(record.candidate.routePayloads).sort();
@@ -311,11 +333,17 @@ export function resolveAstroObjectBackedCandidateRecord(input: {
     if (bytes.byteLength !== ref.sizeBytes || sha256Hex(bytes) !== ref.sha256) {
       throw corrupt("Resolved candidate route payload failed immutable size or hash verification.");
     }
-    validateSelfContainedAstroProductionPayload({ html, compiledTokenStyles });
+    if (!record.candidate.resourcePayloads) validateSelfContainedAstroProductionPayload({ html, compiledTokenStyles });
   }
-  const { routePayloads, compiledTokenStyles: persistedStyles, ...candidateMetadata } = record.candidate;
+  if(record.candidate.resourcePayloads) {
+    if(!input.exportedFiles) throw corrupt('Missing export resources');
+    validateReviewedExport(input.exportedFiles,record.candidate.manifest.provenance.sourceSnapshotSha256);
+    if(stableStringify(exportHtmlByPath(input.exportedFiles))!==stableStringify(input.htmlByPath)) throw corrupt('Route export mismatch');
+  } else if(input.exportedFiles) throw corrupt('Unexpected resources');
+  const { routePayloads, resourcePayloads, compiledTokenStyles: persistedStyles, ...candidateMetadata } = record.candidate;
   const candidate: AstroObjectBackedResolvedCandidate = {
     ...candidateMetadata,
+    ...(input.exportedFiles ? { exportedFiles: structuredClone(input.exportedFiles) } : {}),
     htmlByPath: structuredClone(input.htmlByPath) as AstroObjectBackedResolvedCandidate["htmlByPath"],
     compiledTokenStyles,
   };
@@ -328,8 +356,10 @@ export function resolveAstroObjectBackedCandidateRecord(input: {
     identity: structuredClone(record.identity),
     registration: structuredClone(record.registration),
     candidate,
+    ...(record.generatedGitArchive ? {generatedGitArchive:structuredClone(record.generatedGitArchive)} : {}),
     storageSha256: record.storageSha256,
     objectManifest: structuredClone(record.candidate.routePayloads),
+    ...(resourcePayloads ? {resourceObjectRefs:structuredClone(resourcePayloads)} : {}),
     stylesObjectRef: typeof persistedStyles === "string" ? null : structuredClone(persistedStyles),
   };
 }
@@ -349,6 +379,7 @@ export function registrationIntentFromAstroObjectBackedRecord(record: AstroObjec
       correlationId: validated.registration.correlationId,
     },
     candidate: validated.candidate,
+    ...(validated.generatedGitArchive ? {generatedGitArchive:validated.generatedGitArchive} : {}),
   };
 }
 
@@ -381,7 +412,7 @@ export function measureAstroObjectBackedCandidateRecordBytes(record: AstroObject
 }
 
 export function isAstroObjectBackedCandidateRecord(value: unknown): value is AstroObjectBackedCandidateRecord {
-  return isRecord(value) && value.schemaVersion === ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION;
+  return isRecord(value) && isObjectSchema(value.schemaVersion);
 }
 
 export function isAstroObjectBackedResolvedCandidate(value: unknown): value is AstroObjectBackedResolvedCandidate {
@@ -391,6 +422,11 @@ export function isAstroObjectBackedResolvedCandidate(value: unknown): value is A
     value.manifest.lifecycle.lifetime !== ASTRO_PRODUCTION_CANDIDATE_LIFETIME ||
     value.manifest.lifecycle.durableRegistration !== true
   ) return false;
+  if(value.exportedFiles) {
+    const translated=structuredClone(value);
+    translated.manifest.lifecycle={storage:'caller_owned_in_memory',lifetime:'proof_invocation_only',durableRegistration:false};
+    return isAstroInternalPreviewCandidate(translated);
+  }
   const translated = structuredClone(value);
   translated.manifest.lifecycle.storage = ASTRO_PRODUCTION_CANDIDATE_STORAGE;
   return isAstroProductionCandidate(translated);
@@ -399,20 +435,21 @@ export function isAstroObjectBackedResolvedCandidate(value: unknown): value is A
 export function isAstroObjectBackedResolvedRecord(
   value: AstroResolvedCandidateRecord,
 ): value is AstroObjectBackedResolvedRecord {
-  return value.schemaVersion === ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION &&
+  return isObjectSchema(value.schemaVersion) &&
     isAstroObjectBackedResolvedCandidate(value.candidate) &&
-    isRecord(value.objectManifest);
+    "objectManifest" in value && isRecord(value.objectManifest);
 }
 
 export function validateAstroResolvedCandidateRecord(value: unknown): AstroResolvedCandidateRecord {
-  if (isRecord(value) && value.schemaVersion === ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION) {
+  if (isRecord(value) && isObjectSchema(value.schemaVersion)) {
     if (!hasExactKeys(value, [
       "schemaVersion", "recordKind", "identity", "registration", "candidate", "storageSha256", "objectManifest",
-      "stylesObjectRef",
+    "stylesObjectRef", ...(value.resourceObjectRefs ? ["resourceObjectRefs"] : []),
+      ...(value.generatedGitArchive ? ["generatedGitArchive"] : []),
     ]) || !isRecord(value.candidate) || !isRecord(value.objectManifest)) {
       throw corrupt("Resolved object-backed candidate record shape is invalid.");
     }
-    const { htmlByPath, compiledTokenStyles, ...candidateMetadata } = value.candidate;
+    const { htmlByPath, exportedFiles, compiledTokenStyles, ...candidateMetadata } = value.candidate;
     const persisted = validateAstroObjectBackedCandidateRecord({
       schemaVersion: value.schemaVersion,
       recordKind: value.recordKind,
@@ -420,14 +457,17 @@ export function validateAstroResolvedCandidateRecord(value: unknown): AstroResol
       registration: value.registration,
       candidate: {
         ...candidateMetadata,
+        ...(value.resourceObjectRefs ? {resourcePayloads:value.resourceObjectRefs} : {}),
         routePayloads: value.objectManifest,
         compiledTokenStyles: value.stylesObjectRef ?? compiledTokenStyles,
       },
+      ...(value.generatedGitArchive ? {generatedGitArchive:value.generatedGitArchive} : {}),
       storageSha256: value.storageSha256,
     });
     if (!isRecord(htmlByPath)) throw corrupt("Resolved candidate routes are invalid.");
     return resolveAstroObjectBackedCandidateRecord({
       record: persisted,
+      exportedFiles,
       htmlByPath: htmlByPath as Record<string, string>,
       compiledTokenStyles,
     });
@@ -442,7 +482,7 @@ export function persistedAstroObjectBackedRecordFromResolved(
   if (!isAstroObjectBackedResolvedRecord(resolved)) {
     throw corrupt("Resolved candidate is not backed by immutable route objects.");
   }
-  const { htmlByPath: _htmlByPath, compiledTokenStyles, ...candidateMetadata } = resolved.candidate;
+  const { htmlByPath: _htmlByPath, exportedFiles: _exportedFiles, compiledTokenStyles, ...candidateMetadata } = resolved.candidate;
   return validateAstroObjectBackedCandidateRecord({
     schemaVersion: resolved.schemaVersion,
     recordKind: resolved.recordKind,
@@ -450,15 +490,23 @@ export function persistedAstroObjectBackedRecordFromResolved(
     registration: resolved.registration,
     candidate: {
       ...candidateMetadata,
+      ...(resolved.resourceObjectRefs ? {resourcePayloads:resolved.resourceObjectRefs} : {}),
       routePayloads: resolved.objectManifest,
       compiledTokenStyles: resolved.stylesObjectRef ?? compiledTokenStyles,
     },
+    ...(resolved.generatedGitArchive ? {generatedGitArchive:resolved.generatedGitArchive} : {}),
     storageSha256: resolved.storageSha256,
   });
 }
 
 function validateObjectCandidatePayload(value: unknown): AstroObjectBackedCandidatePayload {
+  const resources=isRecord(value) && value.resourcePayloads;
+  if(resources) {
+    validateReviewedDescriptors(resources,value.manifest?.provenance?.sourceSnapshotSha256);
+    for(const ref of resources) if(!hasExactKeys(ref,['path','mediaType','sizeBytes','sha256','kind','bucket','key']) || ref.kind!=='export_resource' || !isBoundedText(ref.bucket) || !isBoundedText(ref.key)) throw corrupt('Invalid resource ref');
+  }
   if (!hasExactKeys(value, [
+    ...(resources ? ["resourcePayloads"] : []),
     "kind", "id", "siteId", "siteVersionId", "rendererCompatibilityVersion", "routePayloads",
     "compiledTokenStyles", "assetFingerprintMap", "manifest", "contentSha256", "createdAt",
   ])) throw corrupt("Object-backed candidate payload shape is invalid.");
@@ -474,12 +522,12 @@ function validateObjectCandidatePayload(value: unknown): AstroObjectBackedCandid
   if (
     value.kind !== ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND ||
     value.manifest.sourceKind !== ASTRO_INTERNAL_PREVIEW_CANDIDATE_KIND ||
-    value.manifest.conversionVersion !== ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION ||
+    value.manifest.conversionVersion !== (resources ? RESOURCE_CONVERSION_VERSION : ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION) ||
     value.manifest.adapterId !== ASTRO_PRODUCTION_CANDIDATE_ADAPTER_ID ||
     value.manifest.provenance.exportManifestVersion !== ASTRO_STATIC_EXPORT_MANIFEST_VERSION ||
     value.rendererCompatibilityVersion !== RENDERER_COMPATIBILITY_VERSION ||
-    value.manifest.assetHandling.mode !== ASTRO_INTERNAL_PREVIEW_ASSET_MODE ||
-    value.manifest.assetHandling.externalAssetStorageRequired !== false ||
+    value.manifest.assetHandling.mode !== (resources ? "typed_export_resources" : ASTRO_INTERNAL_PREVIEW_ASSET_MODE) ||
+    value.manifest.assetHandling.externalAssetStorageRequired !== Boolean(resources) ||
     value.manifest.lifecycle.storage !== ASTRO_OBJECT_CANDIDATE_STORAGE ||
     value.manifest.lifecycle.lifetime !== ASTRO_PRODUCTION_CANDIDATE_LIFETIME ||
     value.manifest.lifecycle.durableRegistration !== true ||
@@ -500,7 +548,7 @@ function validateObjectCandidatePayload(value: unknown): AstroObjectBackedCandid
 function validateRoutePayloads(value: unknown): AstroObjectBackedCandidatePayload["routePayloads"] {
   if (!isRecord(value)) throw corrupt("Object-backed candidate route manifest is invalid.");
   const entries = Object.entries(value);
-  if (entries.length < 2 || !value["/"]) throw corrupt("Object-backed candidate must contain at least two routes including root.");
+  if (entries.length < 1 || !value["/"]) throw corrupt("Object-backed candidate must contain a root route.");
   const keys = new Set<string>();
   const normalized: Record<string, AstroCandidateRouteObjectRef> = {};
   for (const [routePath, raw] of entries) {
@@ -516,6 +564,51 @@ function validateRoutePayloads(value: unknown): AstroObjectBackedCandidatePayloa
     normalized[routePath] = raw as unknown as AstroCandidateRouteObjectRef;
   }
   return normalized as AstroObjectBackedCandidatePayload["routePayloads"];
+}
+
+function isCandidateGitRef(value:unknown,identity:AstroProductionCandidateIdentity,
+  candidate:AstroObjectBackedCandidatePayload):value is GeneratedGitRef {
+  if(!isRecord(value)||!isRecord(value.scope)||!Array.isArray(value.routes)||
+    value.scope.agencyId!==identity.agencyId||value.scope.clientId!==identity.organizationId||
+    value.scope.siteId!==identity.ownershipSiteId||
+    !/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(String(value.repository))||
+    !/^[a-f0-9]{40}$/.test(String(value.commit))||
+    !/^[a-f0-9]{64}$/.test(String(value.manifestSha256))||
+    value.manifestPath!==`generated/${identity.siteVersionId}/.gnr8-generated-manifest.json`||
+    !isRecord(value.styles)||!isRecord(value.runtimeManifest)||
+    value.styles.path!==`generated/${identity.siteVersionId}/compiled-token-styles.css`||
+    value.runtimeManifest.path!==`generated/${identity.siteVersionId}/runtime-manifest.json`||
+    !/^[a-f0-9]{64}$/.test(String(value.runtimeManifest.sha256))||
+    !Number.isSafeInteger(value.runtimeManifest.bytes)||Number(value.runtimeManifest.bytes)<1)return false;
+  const refs=Object.entries(candidate.routePayloads);
+  if(value.routes.length!==refs.length)return false;
+  const byRoute=new Map<string,Record<string,unknown>>();
+  for(const item of value.routes){
+    if(!isRecord(item)||typeof item.route!=='string'||byRoute.has(item.route))return false;
+    byRoute.set(item.route,item);
+  }
+  for(const [route,ref] of refs){
+    const git=byRoute.get(route);
+    if(!git||git.path!==`generated/${identity.siteVersionId}/html/${sha256Hex(Buffer.from(route))}.html`||
+      git.sha256!==ref.sha256||git.bytes!==ref.sizeBytes)return false;
+  }
+  const css=candidate.compiledTokenStyles;
+  const cssSha=typeof css==='string'?sha256Hex(Buffer.from(css)):css.sha256;
+  const cssBytes=typeof css==='string'?Buffer.byteLength(css):css.sizeBytes;
+  if(value.styles.sha256!==cssSha||value.styles.bytes!==cssBytes)return false;
+  if(!candidate.resourcePayloads)return !('resources' in value);
+  if(!Array.isArray(value.resources)||value.resources.length!==candidate.resourcePayloads.length)return false;
+  const byPath=new Map<string,Record<string,unknown>>();
+  for(const item of value.resources){
+    if(!isRecord(item)||typeof item.sourcePath!=='string'||byPath.has(item.sourcePath))return false;
+    byPath.set(item.sourcePath,item);
+  }
+  for(const ref of candidate.resourcePayloads){
+    const git=byPath.get(ref.path);
+    if(!git||git.path!==`generated/${identity.siteVersionId}/resources/${Buffer.from(ref.path).toString('base64url')}-${ref.sha256}`||
+      git.sha256!==ref.sha256||git.bytes!==ref.sizeBytes||git.mediaType!==ref.mediaType)return false;
+  }
+  return true;
 }
 
 function objectKeyFor(input: {
@@ -618,3 +711,10 @@ function hasExactKeys(value: unknown, expected: readonly string[]): value is Rec
 }
 function unsupported(message: string) { return new AstroProductionCandidateValidationError("unsupported_version", message); }
 function corrupt(message: string) { return new AstroProductionCandidateValidationError("corrupt", message); }
+
+function isObjectSchema(version: unknown): version is AstroObjectBackedCandidateRecord['schemaVersion'] {
+  return version===ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION || version===RESOURCE_RECORD_VERSION;
+}
+function resourceObjectKey(identity:AstroProductionCandidateIdentity,path:string,sha256:string):string {
+  return ['candidate-v4',identity.organizationId,identity.ownershipSiteId,identity.siteVersionId,identity.candidateId,'resources',Buffer.from(path).toString('base64url')+'-'+sha256].join('/');
+}

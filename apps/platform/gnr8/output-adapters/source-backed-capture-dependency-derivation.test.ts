@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
+import { captureAssetsForAdditionalHtmlPages, computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
+import { hashedImportAssetPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 import {
+  assertDerivedCaptureGitResumeLineage,
   assertPersistedCaptureDependencyEvidence,
   deriveDependencySuccessorSiteVersionId,
   findUnresolvedRetainedStylesheetDependencies,
@@ -15,6 +20,11 @@ import {
   planRetainedStylesheetImports,
   refreshDerivedHtmlProvenance,
   resolveRetainedCssDependencyPath,
+  restoreRetainedStylesheetReferences,
+  existingCssDependencyManifest,
+  planRetainedFallbackImages,
+  trustedOriginsForStylesheets,
+  rewriteRetainedFallbackImages,
 } from "./source-backed-capture-dependency-derivation";
 import type { RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 
@@ -22,6 +32,93 @@ const EXTERNAL_LIBS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780
 const GRIDS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780087e3f/css/grids.css?1791454204350";
 const GOOGLE = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&display=swap&subset=latin-ext";
 const EXTRA_CDN = "https://fonts.prod.extra-cdn.com/css?family=Roboto+Condensed:300,700|Roboto:400&display=swap";
+
+test('derived capture cannot resume a byte-backed record from a Git-backed parent',()=>{
+  const version='44444444-4444-4444-8444-444444444444';
+  const scope={agencyId:'11111111-1111-4111-8111-111111111111',
+    clientId:'22222222-2222-4222-8222-222222222222',siteId:'33333333-3333-4333-8333-333333333333'};
+  const parent={metadata:{gitArchive:{scope,commit:'a'.repeat(40)}}} as never;
+  const rawWithoutGit={metadata:{}} as never;
+  const rawWithGit={metadata:{gitArchive:{scope,commit:'b'.repeat(40),
+    manifestPath:`raw-import/${version}/.gnr8-import-manifest.json`}}} as never;
+  const artifactWithoutGit={manifest:{}} as never;
+  const artifactWithGit={manifest:{generatedGitArchive:{scope,commit:'c'.repeat(40),
+    manifestPath:`generated/${version}/.gnr8-generated-manifest.json`}}} as never;
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithoutGit,resumableArtifact:null}),/astro_derived_capture_raw_git_lineage_missing/);
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithGit,resumableArtifact:artifactWithoutGit}),/astro_derived_capture_generated_git_lineage_missing/);
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:{metadata:{gitArchive:{scope:{...scope,siteId:'other'},commit:'b'.repeat(40),
+      manifestPath:`raw-import/${version}/.gnr8-import-manifest.json`}}} as never,
+    resumableArtifact:artifactWithGit}),/astro_derived_capture_raw_git_lineage_mismatch/);
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithGit,
+    resumableArtifact:{manifest:{generatedGitArchive:{scope,manifestPath:'generated/other/.gnr8-generated-manifest.json'}}} as never,
+  }),/astro_derived_capture_generated_git_lineage_mismatch/);
+  assert.doesNotThrow(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithGit,resumableArtifact:artifactWithGit}));
+  assert.doesNotThrow(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:{metadata:{}} as never,
+    derivedSiteVersionId:version,resumableRawArtifact:rawWithoutGit,resumableArtifact:artifactWithoutGit}));
+});
+
+test("restored capture aliases survive acquisition and persisted readback without asset fetches", async () => {
+  const sourceUrl = "https://example.test/cache/bundle/style.css";
+  const cssPath = "assets/stylesheet/123456789abc-style.css";
+  const imagePath = "assets/style_asset/abcdef123456-pixel.png";
+  const mistakenUrl = "https://example.test/cache/style_asset/abcdef123456-pixel.png";
+  const alias = hashedImportAssetPath(mistakenUrl, "style_asset", "abcdef123456-pixel.png");
+  const row = (path: string, bytes: Buffer, mediaType: string) => ({
+    path, bytes, mediaType, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"),
+  });
+  const files = [
+    row(cssPath, Buffer.from(`.one{background:url(/${alias})}.two{background:url(/cache/style_asset/abcdef123456-pixel.png)}`), "text/css"),
+    row(imagePath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=", "base64"), "image/png"),
+    row("url-fetch-manifest.json", Buffer.from(JSON.stringify([
+      { assetKind: "stylesheet", fetchStatus: "fetched", localPath: cssPath, resolvedUrl: sourceUrl },
+    ])), "application/json"),
+  ];
+  const originalHash = files[0]!.sha256;
+  const restored = restoreRetainedStylesheetReferences(files);
+  assert.equal(restored.changed, true);
+  assert.equal(files[0]!.sha256, originalHash, "original immutable rows are untouched");
+  assert.deepEqual(planReachableRetainedStaticDependencies({
+    files: restored.files, stylesheetRewrites: restored.rewrites,
+    filePaths: new Set(files.map((file) => file.path)), rootStylesheetPaths: [cssPath],
+  }).missingUrls, []);
+  const workspace = await mkdtemp(join(tmpdir(), "gnr8-restored-css-test-"));
+  try {
+    for (const file of restored.files) {
+      await mkdir(dirname(join(workspace, file.path)), { recursive: true });
+      await writeFile(join(workspace, file.path), file.bytes);
+    }
+    const captured = await captureAssetsForAdditionalHtmlPages({
+      pages: [{ pageUrl: "https://example.test/", bodyPath: join(workspace, "probe.html"), html: `<link rel="stylesheet" href="${sourceUrl}">` }],
+      snapshotRootDirAbs: workspace,
+      existingFetchManifest: [{
+        tag: "link", attribute: "href", occurrence: 0, rawRef: sourceUrl, resolvedUrl: sourceUrl,
+        localPath: cssPath, assetKind: "stylesheet", fetchStatus: "fetched", httpStatus: 200,
+        contentType: "text/css", byteLength: restored.files[0]!.sizeBytes,
+      }, ...existingCssDependencyManifest({
+        parentFiles: restored.files, stylesheetRewrites: restored.rewrites,
+        filePaths: new Set(files.map((file) => file.path)), startingOccurrence: 1,
+      })],
+      fetchImpl: async () => { assert.fail("owned dependency must not be fetched"); },
+    });
+    assert.equal(captured.summary.failedRequiredAssetCount, 0);
+    const reread = await Promise.all(restored.files.map(async (file) => row(file.path, await readFile(join(workspace, file.path)), file.mediaType)));
+    assert.deepEqual(findUnresolvedRetainedStylesheetDependencies({ files: reread, rootStylesheetPaths: [cssPath] }), []);
+    assert.equal(restoreRetainedStylesheetReferences(reread).changed, false);
+  } finally { await rm(workspace, { recursive: true, force: true }); }
+  const tampered = files.map((file) => file.path === "url-fetch-manifest.json" ? { ...file, sha256: "wrong" } : file);
+  assert.equal(restoreRetainedStylesheetReferences(tampered).changed, false);
+});
+
+test("stylesheet planning ignores commented links and includes protocol-relative font CSS", () => {
+  const bytes = Buffer.from('<!-- <link rel="stylesheet" href="https://old.test/missing.css"> --><link rel="stylesheet" href="//fonts.test/styles"><a href="/assets/not-a-stylesheet.css">x</a>');
+  const htmlFiles = [{ path: "index.html", bytes, mediaType: "text/html", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }];
+  assert.deepEqual(planStylesheetDependencies({ htmlFiles, filePaths: new Set(), removeFormCaptcha: false, sourceUrl: "https://example.test/" }).missingUrls, ["https://fonts.test/styles"]);
+});
 
 test("immutable dependency completion uses a stable successor identity", () => {
   const parent = "8701e904-75f3-44d4-a669-e660f9792693";
@@ -438,4 +535,39 @@ test("derived capture refreshes rewritten route hashes and invalidates only curr
   assert.equal(provenance.currentRawPreviewValidationEvidence, null);
   assert.equal(provenance.currentMultiPagePreviewValidation, null);
   assert.deepEqual(provenance.historicalValidation, { artifactId: "parent" });
+});
+
+
+test("paired noscript images use the existing bounded acquisition and retained rewrite, without crawling links",async()=>{
+ const imageUrl='https://example.test/uploads/figure..png';
+ const html='<html><body><img src="data:image/png;base64,AA=="><noscript data-lazyload-src="/uploads/figure..png"><img src="/uploads/figure..png" alt="Diagram"></noscript><a href="https://other.test/product">Product</a></body></html>';
+ const bytes=Buffer.from(html), file={path:'pages/help/index.html',bytes,mediaType:'text/html',sizeBytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+ const input={htmlFiles:[file],filePaths:new Set<string>(),sourceUrl:'https://example.test/',pageUrls:new Map([[file.path,'https://example.test/help']])};
+ const plan=planRetainedFallbackImages(input);
+ assert.deepEqual(plan,[{htmlPath:file.path,reference:'/uploads/figure..png',sourceUrl:imageUrl}]);
+ assert.deepEqual(planRetainedFallbackImages({...input,sourceMediaLinks:[imageUrl]}),[]);
+ assert.deepEqual(planRetainedFallbackImages({...input,sourceMediaLinks:[imageUrl+'?different=1']}),plan);
+ assert.deepEqual(planRetainedFallbackImages({...input,filePaths:new Set(['uploads/figure..png'])}),[]);
+ assert.deepEqual(planRetainedFallbackImages({...input,htmlFiles:[{...file,bytes:Buffer.from(html.replaceAll('/uploads/figure..png','https://other.test/figure.png'))}]}),[]);
+ const workspace=await mkdtemp(join(tmpdir(),'gnr8-fallback-image-'));
+ try {
+  const requests:string[]=[];
+  const captured=await captureAssetsForAdditionalHtmlPages({pages:[{pageUrl:input.sourceUrl,bodyPath:join(workspace,'probe.html'),html:`<img src="${plan[0]!.sourceUrl}">`}],snapshotRootDirAbs:workspace,existingFetchManifest:[],fetchImpl:async url=>{
+   requests.push(String(url));
+   assert.equal(String(url),imageUrl);
+   return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=','base64'),{headers:{'content-type':'image/png'}});
+  }});
+  assert.equal(captured.summary.failedRequiredAssetCount,0); assert.deepEqual(requests,[imageUrl]);
+  const entry=captured.manifestEntries.find(entry=>entry.fetchStatus==='fetched')!;
+  const rewritten=rewriteRetainedFallbackImages(html,[{...plan[0]!,to:`/${entry.localPath}`}]);
+  assert.match(rewritten,/alt="Diagram"/);assert.match(rewritten,/https:\/\/other.test\/product/);
+  assert.ok(rewritten.includes(`src="/${entry.localPath}"`));
+  assert.ok((await readFile(join(workspace,entry.localPath!))).length > 0);
+  assert.deepEqual(planRetainedFallbackImages({...input,htmlFiles:[{...file,bytes:Buffer.from(rewritten)}],filePaths:new Set([entry.localPath!])}),[]);
+ } finally {await rm(workspace,{recursive:true,force:true});}
+});
+
+test('recognized font stylesheet permits only its exact font-file origin',()=>{
+ assert.ok(trustedOriginsForStylesheets(['https://fonts.prod.extra-cdn.com/css?family=Exo']).includes('https://font-files.prod.extra-cdn.com'));
+ assert.ok(!trustedOriginsForStylesheets(['https://fonts.prod.extra-cdn.com.attacker.test/css']).includes('https://font-files.prod.extra-cdn.com'));
 });

@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 
 import { SupabaseAstroCandidateRuntimeArtifactStore } from "./astro-candidate-runtime-artifact-store";
-import { createAstroCandidatePromotionService } from "./astro-candidate-promotion-service";
+import { createAstroCandidatePromotionService, prepareGeneratedCandidateGit } from "./astro-candidate-promotion-service";
 import {
   SupabaseAstroCandidateOwnershipResolver,
   type AstroCandidateOwnershipReadClient,
@@ -17,6 +17,7 @@ import { AstroProductionCandidatePreviewConfigurationError } from "./astro-produ
 import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
 import { createAstroSuccessorPublicationService } from "./astro-successor-publication-service";
 import { createGeneratedOutputPublicationDecisionResolver } from "./generated-output-publication-composition";
+import { githubArchiveRequired } from "../stacki/stacki-github-config";
 
 export function createAstroSuccessorPublicationOperation() {
   const serviceRoleClient = getSupabaseServiceRoleClient();
@@ -26,6 +27,10 @@ export function createAstroSuccessorPublicationOperation() {
   const candidateRepository = new GatewayBackedAstroProductionCandidateRepository({
     gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
     objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => serviceRoleClient as never }),
+    prepareGeneratedGit: prepareGeneratedCandidateGit,
+    gitArchiveRequired: ownership =>
+      githubArchiveRequired({ agencyId: ownership.agencyId, clientId: ownership.organizationId,
+        siteId: ownership.ownershipSiteId, siteVersionId: ownership.siteVersionId }),
   });
   const runtimeStore = new SupabaseAstroCandidateRuntimeArtifactStore(serviceRoleClient);
   const promoteCandidate = createAstroCandidatePromotionService({
@@ -41,6 +46,10 @@ export function createAstroSuccessorPublicationOperation() {
     getSiteVersion: async (...args) => {
       const mod = await import("@/gnr8/runtime/runtime-store");
       return mod.getSiteVersion(...args);
+    },
+    getSiteVersionGitSourceStatus:async (...args)=>{
+      const mod=await import("@/gnr8/runtime/runtime-store");
+      return mod.getSiteVersionGitSourceStatus(...args);
     },
     getRuntimeSiteSummary: async (...args) => {
       const mod = await import("@/gnr8/runtime/runtime-store");
@@ -74,6 +83,7 @@ export function createAstroSuccessorPublicationOperation() {
       const mod = await import("@/gnr8/runtime/runtime-store");
       return mod.createArtifact(...args);
     },
+    prepareGeneratedGit: prepareGeneratedCandidateGit,
     bindArtifactToVersion: async (...args) => {
       const mod = await import("@/gnr8/runtime/runtime-store");
       return mod.bindArtifactToVersion(...args);

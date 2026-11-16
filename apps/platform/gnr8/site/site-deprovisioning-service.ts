@@ -129,16 +129,86 @@ export async function deprovisionSite(input: {
     }
 
     let runtimeSiteIds: string[] = []
+    let runtimeSiteVersionIds: string[] = []
     if (await tableExists(client, 'gnr8_runtime_site_versions')) {
-      const runtimeSiteRows = await client.query<{ site_id: string | null }>(
+      const runtimeSiteRows = await client.query<{ id: string; site_id: string | null }>(
         `
-        select distinct site_id::text as site_id
+        select id::text as id, site_id::text as site_id
         from public.gnr8_runtime_site_versions
         where ownership_site_id = $1::uuid
         `,
         [siteId],
       )
-      runtimeSiteIds = runtimeSiteRows.rows.map((row) => normalizeText(row.site_id)).filter(Boolean)
+      runtimeSiteIds = [...new Set(runtimeSiteRows.rows.map((row) => normalizeText(row.site_id)).filter(Boolean))]
+      if (runtimeSiteIds.length > 0) {
+        const allVersionRows = await client.query<{ id: string; ownership_site_id: string | null }>(
+          `select id::text as id, ownership_site_id::text as ownership_site_id
+           from public.gnr8_runtime_site_versions where site_id = any($1::text[])`,
+          [runtimeSiteIds],
+        )
+        if (allVersionRows.rows.some((row) => row.ownership_site_id && row.ownership_site_id !== siteId)) {
+          throw new SiteDeprovisioningError('DEPENDENCY_BLOCK', 'Runtime site contains a version owned by another site.')
+        }
+        runtimeSiteVersionIds = allVersionRows.rows.map((row) => row.id)
+      }
+    }
+
+    if (await tableExists(client, 'gnr8_ddom_readiness_snapshots')) {
+      const snapshots = await client.query<{ count: string }>(
+        `select count(*)::text as count from public.gnr8_ddom_readiness_snapshots
+         where ownership_site_id = $1::uuid or site_id = any($2::text[])`,
+        [siteId, runtimeSiteIds],
+      )
+      if (Number(snapshots.rows[0]?.count ?? '0') > 0) {
+        throw new SiteDeprovisioningError('DEPENDENCY_BLOCK', 'Site has retained domain-readiness snapshots.')
+      }
+    }
+
+    if (
+      runtimeSiteVersionIds.length > 0 &&
+      (await tableExists(client, 'gnr8_airship_publish_readiness_packages')) &&
+      (await tableExists(client, 'gnr8_airship_internal_preview_candidate_reviews'))
+    ) {
+      await client.query(
+        `delete from public.gnr8_airship_publish_readiness_packages
+         where reviewed_candidate_site_version_id = any($1::uuid[])
+            or review_record_id in (
+              select id from public.gnr8_airship_internal_preview_candidate_reviews
+              where candidate_site_version_id = any($1::uuid[])
+            )`,
+        [runtimeSiteVersionIds],
+      )
+    }
+    if (runtimeSiteVersionIds.length > 0 && (await tableExists(client, 'gnr8_airship_internal_preview_candidate_reviews'))) {
+      await client.query(
+        `delete from public.gnr8_airship_internal_preview_candidate_reviews
+         where candidate_site_version_id = any($1::uuid[])`,
+        [runtimeSiteVersionIds],
+      )
+    }
+
+    if (await tableExists(client, 'gnr8_astro_candidate_records')) {
+      // The database trigger permits only DELETEs for this exact site in this transaction.
+      await client.query(`select set_config('gnr8.deprovision_ownership_site_id', $1::text, true)`, [siteId])
+      if (await tableExists(client, 'gnr8_astro_candidate_access_events')) {
+        await client.query(
+          `delete from public.gnr8_astro_candidate_access_events as event
+           using public.gnr8_astro_candidate_records as candidate
+           where event.candidate_id = candidate.candidate_id
+             and candidate.ownership_site_id = $1::uuid`,
+          [siteId],
+        )
+      }
+      if (await tableExists(client, 'gnr8_astro_candidate_access_states')) {
+        await client.query(
+          `delete from public.gnr8_astro_candidate_access_states as state
+           using public.gnr8_astro_candidate_records as candidate
+           where state.candidate_id = candidate.candidate_id
+             and candidate.ownership_site_id = $1::uuid`,
+          [siteId],
+        )
+      }
+      await client.query(`delete from public.gnr8_astro_candidate_records where ownership_site_id = $1::uuid`, [siteId])
     }
 
     let runtimeSitesDeleted = 0

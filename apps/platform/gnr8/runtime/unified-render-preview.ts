@@ -1,4 +1,12 @@
+import { restoreRetainedMobileNavigation } from "../../src/public-site/retained-mobile-navigation";
+import { versionRawCssUrl } from "../../src/public-site/raw-css-url-version";
 import path from 'node:path'
+import { rewriteInlineStyleAttributes } from '@/src/public-site/rewrite-inline-style-attributes'
+import { enhanceRetainedHeroSliders } from '@/src/public-site/retained-hero-slider'
+import { enhanceRetainedGalleries } from '@/src/public-site/retained-gallery'
+import { restoreRetainedMonoNavigation } from '@/src/public-site/retained-mono-navigation'
+import { materializeRetainedStylesheets } from '@/src/public-site/materialize-retained-stylesheets'
+import { restoreRetainedEqualHeightLayout } from '@/src/public-site/retained-equal-height-layout'
 
 import { normalizePagePath } from '@/gnr8/runtime/deterministic'
 import { createRuntimeCorrelationKey } from '@/gnr8/runtime/identity/runtime-identity'
@@ -1345,11 +1353,17 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
     }
     if (lower.startsWith('/api/gnr8/runtime/preview-assets/')) {
       const deduped = ref.replace(duplicatePreviewPrefixPattern, `${assetRoot}/`)
+      // Derived captures can retain an earlier version's URLs. Rebind only
+      // same-site files actually present in this version's authoritative map.
+      const retained = /^\/api\/gnr8\/runtime\/preview-assets\/([^/]+)\/([^/]+)\/(.+)$/.exec(deduped)
+      const retainedPath = retained ? splitPreviewAssetUrlSuffix(retained[3]!).pathname : null
+      const rebound = retained && retained[1] === encodeURIComponent(input.siteId) && retainedPath && input.fileMapPaths?.has(retainedPath)
+        ? `${assetRoot}/${retained[3]}` : deduped
       return {
         originalUrl: ref,
         normalizedReference,
         resolvedCandidate,
-        rewrittenUrl: deduped,
+        rewrittenUrl: rebound.startsWith(`${assetRoot}/`) ? versionRawCssUrl(rebound) : rebound,
         normalizedPath: null,
         reason: deduped === ref ? 'already_preview_asset_url' : 'deduplicated_preview_asset_url',
         externalPreserved: false,
@@ -1381,7 +1395,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       originalUrl: ref,
       normalizedReference,
       resolvedCandidate,
-      rewrittenUrl: `${assetRoot}/${normalized}${suffix}`,
+      rewrittenUrl: versionRawCssUrl(`${assetRoot}/${normalized}${suffix}`),
       normalizedPath: normalized,
       reason: normalized === resolvedCandidate ? 'matched_persisted_file' : 'matched_persisted_file_variant',
       externalPreserved: false,
@@ -1594,7 +1608,7 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       })
       .join(', ')
 
-  const html = input.html
+  const html = rewriteInlineStyleAttributes(input.html, (css) => rewriteCssUrlTokens(css, 'inline_style'))
     .replace(/<([a-zA-Z][^\s/>]*)(\s[^>]*)?>/g, (full: string, tagName: string) => {
       const normalizedTagName = String(tagName ?? '').toLowerCase()
       return full
@@ -1602,7 +1616,20 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
           /\b(href|src|poster|data-src|data-srcset|data-lazy-src|data-original|data-background|data-bg|data-bgset)\s*=\s*(["'])(.*?)\2/gi,
           (attrFull: string, attr: string, quote: string, value: string) => {
             const normalizedAttr = String(attr ?? '').toLowerCase()
-            if (normalizedTagName === 'a' && normalizedAttr === 'href') return attrFull
+            if (normalizedTagName === 'a' && normalizedAttr === 'href') {
+              // Page navigation belongs to the route rewriter. Gallery links
+              // are assets only when the retained map confirms the image.
+              if (!input.fileMapPaths || !isImageAssetPath(value) || /^(?:https?:)?\/\//i.test(value)) return attrFull
+              const alreadyPreview = value.startsWith(`${assetRoot}/`)
+              const candidates = candidatePathsForReference(value, 'html_attr')
+              const directMatch = candidates.some(candidate => input.fileMapPaths!.has(candidate))
+              const suffixMatches = [...input.fileMapPaths].filter(path => candidates.some(candidate => path.endsWith(`/${candidate}`)))
+              if (!alreadyPreview && !directMatch && suffixMatches.length !== 1) return attrFull
+              const resolution = resolveReference(value, 'image', 'html_attr')
+              if (!resolution.rewrittenUrl || (!resolution.normalizedPath && !resolution.alreadyRewritten)) return attrFull
+              recordHtmlReferenceEvidence(resolution, 'html_attr')
+              return `${attr}=${quote}${resolution.rewrittenUrl}${quote}`
+            }
             if (normalizedAttr === 'srcset' || normalizedAttr === 'data-srcset' || normalizedAttr === 'data-bgset') {
               return `${attr}=${quote}${rewriteSrcset(value)}${quote}`
             }
@@ -1615,10 +1642,6 @@ function rewriteRawTemplateAssetReferencesWithCounts(input: {
       /\bsrcset\s*=\s*(["'])(.*?)\1/gi,
       (_full, quote: string, value: string) => `srcset=${quote}${rewriteSrcset(value)}${quote}`,
     )
-    .replace(/\bstyle\s*=\s*(["'])([\s\S]*?)\1/gi, (_full, quote: string, value: string) => {
-      const rewritten = rewriteCssUrlTokens(value, 'inline_style')
-      return `style=${quote}${rewritten}${quote}`
-    })
     .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (_full, attrs: string, css: string) => {
       evidence.stylesheetsInspected += 1
       const rewritten = rewriteCssUrlTokens(css, 'style_block')
@@ -2434,7 +2457,7 @@ async function renderRawTemplateSiteVersionPreview(input: {
     reportedSizeBytes: entryAsset.sizeBytes,
   })
   const assetRewrite = rewriteRawTemplateAssetReferencesWithCounts({
-    html: rawHtml,
+    html: materializeRetainedStylesheets(rawHtml, new Set(Object.keys(artifact.fileMap ?? {}))),
     siteId: artifact.siteId,
     siteVersionId: artifact.siteVersionId,
     entryHtmlPath: selectedHtmlPath,
@@ -2507,6 +2530,11 @@ async function renderRawTemplateSiteVersionPreview(input: {
       reasonCode: 'raw_css_declares_dongle_without_font_source',
     })
   }
+  html = enhanceRetainedHeroSliders({ html, siteId: artifact.siteId, siteVersionId: artifact.siteVersionId, fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})) })
+  html = restoreRetainedEqualHeightLayout(html)
+  html = restoreRetainedMobileNavigation(html)
+  html = restoreRetainedMonoNavigation(html)
+  html = enhanceRetainedGalleries({ html, siteId: artifact.siteId, siteVersionId: artifact.siteVersionId, fileMapPaths: new Set(Object.keys(artifact.fileMap ?? {})) })
   const scriptPolicy = applyRawPreviewScriptPolicy(html)
   html = scriptPolicy.html
   const duplicateGuard = applyRawPreviewDuplicateInjectionGuard({
@@ -2978,7 +3006,9 @@ async function renderAstroInternalPreviewCandidate(input: {
     : input.candidateContract === 'production_v3'
       ? isAstroObjectBackedResolvedCandidate(candidate)
       : isAstroInternalPreviewCandidate(candidate)
-  if (!candidate || !candidateIsValid) {
+  // Resource candidates contain reviewed scripts and require the isolated CSP
+  // response path. Never pass their raw HTML through the general renderer.
+  if (!candidate || !candidateIsValid || (typeof candidate === 'object' && 'exportedFiles' in candidate)) {
     throw new SiteVersionPreviewUnavailableError({
       code: 'TRANSFORMED_ARTIFACT_NOT_AVAILABLE',
       message: 'Requested Astro internal preview candidate is missing or invalid.',

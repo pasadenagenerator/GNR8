@@ -225,7 +225,7 @@ function classifyWidgetSource(source: string): WidgetInventoryClassification {
   if (value.includes("onetrust") || value.includes("cookiebot") || value.includes("cookieyes") || value.includes("cookiebanner") || value.includes("cookie-banner") || value.includes("cookie")) return "cookie_banner";
   if (value.includes("intercom") || value.includes("drift") || value.includes("tawk.to") || value.includes("zendesk") || value.includes("crisp.chat") || value.includes("chat-widget") || value.includes("chat")) return "chat_widget";
   if (value.includes("swiper") || value.includes("slick") || value.includes("carousel") || value.includes("lightbox") || value.includes("fancybox") || value.includes("gallery")) return "gallery";
-  if (value.includes("form")) return "native_form";
+  if (/(?:^|[^a-z0-9])form(?:[^a-z0-9]|$)/.test(value)) return "native_form";
   return "unknown";
 }
 

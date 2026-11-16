@@ -1,0 +1,1 @@
+{"name":"standalone-website","version":"1.0.0","private":true,"type":"module","engines":{"node":"26.x"},"scripts":{"build":"astro build && node scripts/optimize.mjs","dev":"astro dev"},"dependencies":{"astro":"7.4.4","sharp":"0.34.5","parse5":"7.3.0","postcss":"8.5.8"}}

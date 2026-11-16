@@ -1,4 +1,10 @@
+import { validateExportPath } from "@/gnr8/output-adapters/astro-export-resources";
+import { PUBLIC_PREPARATION_PRODUCER } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import "server-only";
+import { createHash } from "node:crypto";
+import { parse, type DefaultTreeAdapterMap } from "parse5";
+import { isOwnedRetainedRuntimeScript } from "@/src/public-site/owned-retained-runtime";
+import { RETAINED_HERO_SCRIPT } from "@/src/public-site/retained-hero-slider";
 
 import {
   AstroCandidateOwnershipResolutionError,
@@ -38,6 +44,23 @@ export const ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
+function candidatePreviewCsp(html: string): string {
+  let hasHeroController = false;
+  const visit = (node: DefaultTreeAdapterMap["node"]) => {
+    if ("tagName" in node && isOwnedRetainedRuntimeScript(node) &&
+      node.attrs.some(a => a.name === "data-gnr8-preview-runtime" && a.value === "retained-hero")) hasHeroController = true;
+    if ("childNodes" in node) node.childNodes.forEach(visit);
+  };
+  visit(parse(html));
+  if (!hasHeroController) return ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP;
+  const hash = createHash("sha256").update(RETAINED_HERO_SCRIPT).digest("base64");
+  // Permit only the exact reviewed presentation controller. Contact scripts,
+  // arbitrary scripts, network calls and submissions remain blocked.
+  return ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP
+    .replace("sandbox allow-same-origin", "sandbox allow-same-origin allow-scripts")
+    .replace("script-src 'none'", `script-src 'sha256-${hash}'`);
+}
+
 export const ASTRO_PRODUCTION_CANDIDATE_PREVIEW_PERMISSIONS_POLICY = [
   "accelerometer=()",
   "camera=()",
@@ -59,6 +82,7 @@ export type AstroProductionCandidatePreviewRouteDependencies = {
   requireSuperadminUserId: () => Promise<string>;
   isFeatureEnabled: () => boolean;
   loadPreviewDependencies: () => Promise<AstroProductionCandidatePreviewDependencies>;
+  previewBase?: string;
 };
 
 const COMMON_HEADERS = {
@@ -86,6 +110,7 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
     requireSuperadminUserId: dependencies.requireSuperadminUserId ?? defaultRequireSuperadminUserId,
     isFeatureEnabled: dependencies.isFeatureEnabled ?? isAstroProductionCandidatePreviewFeatureEnabled,
     loadPreviewDependencies: dependencies.loadPreviewDependencies ?? defaultLoadPreviewDependencies,
+    previewBase: dependencies.previewBase,
   };
 
   return {
@@ -140,6 +165,14 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
         return repositoryErrorResponse(error);
       }
 
+      if (process.env.VERCEL_ENV === 'production' && record.registration.producerKind !== PUBLIC_PREPARATION_PRODUCER)
+        return jsonError(404, 'Preview not found.');
+      if(selectors.interactiveState && !record.candidate.exportedFiles) return jsonError(404,'Preview not found.');
+      if(selectors.file) {
+        const resource=record.candidate.exportedFiles?.find(f=>f.path===selectors.file);
+        if(!resource)return jsonError(404,'Resource not found.');
+        return new Response(Buffer.from(resource.base64,'base64'), {status:200,headers:{...COMMON_HEADERS,'content-type':resource.mediaType,'content-disposition':'attachment','content-security-policy':"sandbox; default-src 'none'; frame-ancestors 'none'"}});
+      }
       let preview: AstroProductionCandidatePreviewRenderResult;
       try {
         preview = await previewDependencies.renderCandidate({ record, path: selectors.path });
@@ -152,18 +185,20 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
 
       const html = rewriteCandidatePreviewLinks({
         html: preview.html,
+        previewBase: resolved.previewBase,
         currentPath: selectors.path,
         availablePaths: Object.keys(record.candidate.htmlByPath),
+        isolatedExport: Boolean(preview.isolatedExport),
         siteVersionId: selectors.siteVersionId,
         candidateId: selectors.candidateId,
       });
 
       return new Response(html, {
-        status: 200,
+        status: preview.isolatedExport?.status ?? 200,
         headers: {
           ...COMMON_HEADERS,
           "content-type": "text/html; charset=utf-8",
-          "content-security-policy": ASTRO_PRODUCTION_CANDIDATE_PREVIEW_HTML_CSP,
+          "content-security-policy": preview.isolatedExport?.csp ?? candidatePreviewCsp(html),
         },
       });
     },
@@ -171,9 +206,11 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
 }
 
 function rewriteCandidatePreviewLinks(input: {
+  previewBase?: string;
   html: string;
   currentPath: string;
   availablePaths: string[];
+  isolatedExport?: boolean;
   siteVersionId: string;
   candidateId: string;
 }): string {
@@ -182,7 +219,7 @@ function rewriteCandidatePreviewLinks(input: {
     ? input.currentPath
     : `${input.currentPath}/`;
   const baseUrl = new URL(currentDirectory, "https://gnr8.invalid");
-  const previewBase = `/api/gnr8/admin/astro-candidates/${encodeURIComponent(input.siteVersionId)}/${encodeURIComponent(input.candidateId)}/preview`;
+  const previewBase = input.previewBase ?? `/api/gnr8/admin/astro-candidates/${encodeURIComponent(input.siteVersionId)}/${encodeURIComponent(input.candidateId)}/preview`;
 
   return input.html.replace(/<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>/gi, (tag: string, quote: string, rawHref: string) => {
     const href = rawHref.trim();
@@ -199,10 +236,14 @@ function rewriteCandidatePreviewLinks(input: {
     const normalizedPath = resolved.pathname === "/"
       ? "/"
       : resolved.pathname.replace(/\/+$/, "");
-    if (!isGeneratedOutputRoutePath(normalizedPath) || !availablePaths.has(normalizedPath)) return tag;
+    if (!isGeneratedOutputRoutePath(normalizedPath) || (!input.isolatedExport && !availablePaths.has(normalizedPath))) return tag;
 
-    const rewrittenHref = `${previewBase}?path=${encodeURIComponent(normalizedPath)}${resolved.hash}`;
-    return tag.replace(/\bhref\s*=\s*(["'])(.*?)\1/i, `href=${quote}${rewrittenHref}${quote}`);
+    const rewrittenHref = `${previewBase}${previewBase.includes("?") ? "&" : "?"}path=${encodeURIComponent(normalizedPath)}${resolved.hash}`;
+    // The protected document cannot open popups. Keep captured navigation in
+    // this browsing context instead of relaxing its sandbox for authored targets.
+    return tag
+      .replace(/\bhref\s*=\s*(["'])(.*?)\1/i, `href=${quote}${rewrittenHref}${quote}`)
+      .replace(/\s+target\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   });
 }
 
@@ -210,6 +251,8 @@ async function resolveSelectors(request: Request, context: RouteContext): Promis
   siteVersionId: string;
   candidateId: string;
   path: string;
+  file?: string;
+  interactiveState?: boolean;
 } | null> {
   let params: { siteVersionId: string; candidateId: string };
   let url: URL;
@@ -222,7 +265,15 @@ async function resolveSelectors(request: Request, context: RouteContext): Promis
   if (!isCanonicalUuid(params.siteVersionId) || !isAstroProductionCandidateId(params.candidateId)) {
     return null;
   }
-  if ([...url.searchParams.keys()].some((key) => key !== "path")) return null;
+  const interactiveKeys=['tab','services','showcase','modal'];
+  if ([...url.searchParams.keys()].some((key) => key !== "path" && key !== "file" && !interactiveKeys.includes(key))) return null;
+  for(const key of interactiveKeys) {
+    const values=url.searchParams.getAll(key);
+    if(values.length>1 || (values.length && !/^[a-z0-9-]{1,80}$/.test(values[0])))return null;
+  }
+  const files=url.searchParams.getAll('file');
+  if(files.length>1 || (files.length && url.searchParams.has('path')))return null;
+  if(files.length)try{validateExportPath(files[0]);}catch{return null;}
   const paths = url.searchParams.getAll("path");
   const path = paths[0] ?? "/";
   if (paths.length > 1 || !isGeneratedOutputRoutePath(path)) return null;
@@ -230,6 +281,8 @@ async function resolveSelectors(request: Request, context: RouteContext): Promis
     siteVersionId: params.siteVersionId,
     candidateId: params.candidateId,
     path,
+    ...(files.length ? {file:files[0]} : {}),
+    interactiveState:interactiveKeys.some(key=>url.searchParams.has(key)),
   };
 }
 

@@ -29,7 +29,7 @@ import {
   ASTRO_INTERNAL_PREVIEW_ASSET_MODE,
   ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
 } from "./astro-static-site-internal-preview-bridge";
-import { isGeneratedOutputRoutePath } from "./generated-output-route-path";
+import { isGeneratedOutputRoutePath, isExplicitExternalNavigationUrl } from "./generated-output-route-path";
 
 export const GENERATED_OUTPUT_ELIGIBILITY_POLICY_VERSION =
   "gnr8-generated-output-eligibility:v1" as const;
@@ -40,11 +40,17 @@ export const GENERATED_OUTPUT_CONTENT_MANIFEST_VERSION =
 export const GENERATED_OUTPUT_REVIEW_VERSION =
   "gnr8-generated-output-review:v1" as const;
 
+import { readPublicPreparation, publicPreparationWorkspaceMatches, PUBLIC_PREPARATION_PRODUCER } from './astro-public-preparation-contract';
+import { parseStackiCandidateSelection } from '../stacki/stacki-candidate-selection';
+import { createAstroStaticSiteSourceSnapshot } from './astro-static-site-workspace-preparation';
+
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SUPPORTED_PRODUCERS = new Set([
+  "stacki_saved_source_build_export_bridge:v1",
   "chs_source_backed_astro_build_export_bridge:v1",
   "source_backed_astro_build_export_bridge:v1",
   "astro_successor_candidate_rebind:v1",
+  `${PUBLIC_PREPARATION_PRODUCER}:v1`,
 ]);
 
 type HtmlNode = DefaultTreeAdapterMap["node"];
@@ -85,7 +91,7 @@ export type GeneratedOutputBuildEvidence = {
   producerKind: string;
   producerVersion: string;
   adapterId: typeof ASTRO_PRODUCTION_CANDIDATE_ADAPTER_ID;
-  conversionVersion: typeof ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION;
+  conversionVersion: import("./astro-static-site-internal-preview-bridge").AstroInternalPreviewCandidateManifest["conversionVersion"];
   exportManifestVersion: typeof ASTRO_STATIC_EXPORT_MANIFEST_VERSION;
   rendererCompatibilityVersion: string;
   sourceCapture: {
@@ -225,6 +231,7 @@ export function evaluateGeneratedOutputTechnicalEligibility(input: {
   contentManifest: GeneratedOutputContentManifest;
   sourceCaptureSiteVersion: CanonicalSiteVersionSnapshot | null;
   sourceCaptureArtifact: RuntimeArtifact | null;
+  publicSourceArtifact?: RuntimeArtifact | null;
 }): GeneratedOutputTechnicalEligibility {
   const blockers: GeneratedOutputBlocker[] = [];
   const block = (code: string, message: string): void => {
@@ -313,6 +320,49 @@ export function evaluateGeneratedOutputTechnicalEligibility(input: {
       sourceCaptureArtifact: input.sourceCaptureArtifact,
       block,
     });
+  }
+  if (record?.registration.producerKind === 'stacki_saved_source_build_export_bridge') {
+    try {
+      const workspace = artifact.manifest.generatedOutputSourceWorkspace as Record<string, unknown>;
+      const ref = workspace.stackiRevision as Record<string, unknown>;
+      const selected = parseStackiCandidateSelection({ scope: ref.scope, revision: ref.revision, sha256: ref.sha256 });
+      const ownership = input.authoritativeOwnership;
+      if (selected.scope.agencyId !== ownership.agencyId || selected.scope.clientId !== ownership.organizationId || selected.scope.siteId !== ownership.ownershipSiteId ||
+        ref.canonicalRelation !== 'source-edited-canonical-not-synchronized:v1' || !isSha256(ref.sourceArtifactSha256) ||
+        buildEvidence?.submissionAttestation.packageSha256 !== selected.sha256 ||
+        record.registration.producerRef !== `stacki:${selected.scope.siteVersionId}:${selected.revision}:${selected.sha256}` || !Array.isArray(workspace.files)) throw new Error('binding');
+      const files = workspace.files.map((file: { path: string; contents?: string; base64?: string; sha256: string; bytes: number }) => {
+        const body = typeof file.base64 === 'string' ? Buffer.from(file.base64, 'base64') : Buffer.from(file.contents ?? '', 'utf8');
+        if (sha256Hex(body) !== file.sha256 || body.length !== file.bytes) throw new Error('source');
+        return { path: file.path, body };
+      });
+      if (createAstroStaticSiteSourceSnapshot(files).aggregateSha256 !== buildEvidence.sourceSnapshotSha256) throw new Error('snapshot');
+    } catch { block('stacki_revision_lineage_invalid', 'Saved Stacki revision, ownership and exact built source must match. Canonical models are not synchronized.'); }
+  }
+
+  if (record?.registration.producerKind === PUBLIC_PREPARATION_PRODUCER || artifact.manifest.publicPreparation) {
+    const prep = readPublicPreparation(artifact.manifest);
+    const parent = input.publicSourceArtifact;
+    const parentContent = parent?.manifest.generatedOutputContentManifest as GeneratedOutputContentManifest | undefined;
+    const parentBuild = parent?.manifest.generatedOutputBuildEvidence as GeneratedOutputBuildEvidence | undefined;
+    const parentPromotion = parent && readAstroRuntimeArtifactPromotionEvidence(parent.manifest);
+    if (!prep || !parent || !parentPromotion || !parentContent || !parentBuild ||
+      buildEvidence?.derivedFromEvidenceSha256 !== parentBuild.evidenceSha256 ||
+      stableStringify(parentContent.requiredContent) !== stableStringify(contentManifest.requiredContent) ||
+      stableStringify(parentContent.requiredNavigation) !== stableStringify(contentManifest.requiredNavigation) ||
+      stableStringify(parentContent.requiredAssets) !== stableStringify(contentManifest.requiredAssets) ||
+      record?.registration.producerKind !== PUBLIC_PREPARATION_PRODUCER ||
+      parent.id !== prep.sourceArtifactId || parent.siteVersionId !== prep.sourceSiteVersionId || parent.siteId !== artifact.siteId ||
+      parent.bundleSha256 !== prep.sourceArtifactSha256 || computeArtifactBundleSha256(parent) !== parent.bundleSha256 ||
+      parentPromotion.candidateId !== prep.sourceCandidateId || parentPromotion.candidateContentSha256 !== prep.sourceCandidateContentSha256 ||
+      record.registration.producerRef !== prep.sourceCandidateId || parent.siteVersionId === artifact.siteVersionId ||
+      stableStringify(parent.htmlByPath) !== stableStringify(artifact.htmlByPath) || parent.compiledTokenStyles !== artifact.compiledTokenStyles ||
+      stableStringify(parent.assetFingerprintMap) !== stableStringify(artifact.assetFingerprintMap) ||
+      !publicPreparationWorkspaceMatches(parent.manifest.generatedOutputSourceWorkspace,artifact.manifest.generatedOutputSourceWorkspace,prep) ||
+      (prep.contactRecipientChange && (parent.publishStage !== 'production' || parent.shadowRestricted || readPublicPreparation(parent.manifest)?.host !== prep.host)) ||
+      contentManifest.scope.allowedPublishStages.join(',') !== 'production' || artifact.publishStage !== 'production' || artifact.shadowRestricted) {
+      block('public_preparation_lineage_invalid', 'Public preparation must retain the exact source bytes, ownership, native settings and declared host scope.');
+    }
   }
 
   const expectedPaths = contentManifest.scope.outputPaths;
@@ -418,6 +468,9 @@ function evaluateHtmlAgainstManifest(input: {
   }
 
   const allowedTargets = new Map(input.manifest.requiredNavigation.map((item) => [item.target, item.kind]));
+  const capture = (input.artifact.manifest.generatedOutputBuildEvidence as GeneratedOutputBuildEvidence | undefined)?.sourceCapture;
+  const ownedPrefix = capture ? `/api/gnr8/runtime/preview-assets/${capture.runtimeSiteId}/${capture.siteVersionId}/` : null;
+  const ownedAssets = new Map(input.manifest.requiredAssets.map((item) => [item.path, item.sha256]));
   const hrefs = elements
     .filter((element) => element.tagName === "a")
     .map((element) => attribute(element, "href"))
@@ -429,7 +482,18 @@ function evaluateHtmlAgainstManifest(input: {
   }
   const ids = new Set(elements.map((element) => attribute(element, "id")).filter((value): value is string => Boolean(value)));
   for (const href of hrefs) {
-    const kind = allowedTargets.get(href);
+    // The producer classifies retained file anchors as assets, not page routes.
+    // Require both authoritative capture scope and the exact declared digest.
+    const assetPath = href.split(/[?#]/, 1)[0]!;
+    const assetHash = ownedAssets.get(assetPath);
+    if (ownedPrefix && assetPath.startsWith(ownedPrefix) && assetHash &&
+      input.artifact.assetFingerprintMap[assetPath] === assetHash) continue;
+    const declaredKind = allowedTargets.get(href);
+    // Older retained-source manifests mislabeled explicit HTTP links as local
+    // routes. Interpret only that exact trusted target; do not mutate its
+    // immutable manifest, upgrade the URL, or authorize undeclared navigation.
+    const kind = declaredKind === "local_route" && /^http:\/\//i.test(href) && isExplicitExternalNavigationUrl(href)
+      ? "external_url" : declaredKind;
     if (!kind) {
       input.block(`navigation_target_unapproved:${href}`, `Navigation target is outside the trusted manifest: ${href}.`);
       continue;
@@ -440,8 +504,8 @@ function evaluateHtmlAgainstManifest(input: {
     if (kind === "local_route" && !input.manifest.scope.outputPaths.includes(href.split(/[?#]/, 1)[0] || "/")) {
       input.block(`local_route_unsupported:${href}`, `Local route is not included in the supported delivery scope: ${href}.`);
     }
-    if (kind === "external_url" && !/^https:\/\//.test(href)) {
-      input.block(`external_navigation_invalid:${href}`, `External navigation must be an explicit HTTPS URL: ${href}.`);
+    if (kind === "external_url" && !isExplicitExternalNavigationUrl(href)) {
+      input.block(`external_navigation_invalid:${href}`, `External navigation must be an explicit HTTP or HTTPS URL without credentials: ${href}.`);
     }
     if (kind === "mailto" && !href.startsWith("mailto:")) input.block(`mailto_invalid:${href}`, "Mail link is invalid.");
     if (kind === "tel" && !href.startsWith("tel:")) input.block(`tel_invalid:${href}`, "Telephone link is invalid.");
@@ -478,6 +542,13 @@ export function validateGeneratedOutputBuildEvidence(value: unknown): GeneratedO
 }
 
 const validateBuildEvidence = validateGeneratedOutputBuildEvidence;
+
+export function validateGeneratedOutputContentManifest(value: unknown): GeneratedOutputContentManifest | null {
+  try {
+    return isValidContentManifest(value as GeneratedOutputContentManifest)
+      ? structuredClone(value as GeneratedOutputContentManifest) : null;
+  } catch { return null; }
+}
 
 function isValidContentManifest(manifest: GeneratedOutputContentManifest): boolean {
   if (manifest.version !== GENERATED_OUTPUT_CONTENT_MANIFEST_VERSION || !isSha256(manifest.manifestSha256)) return false;

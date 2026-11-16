@@ -1,3 +1,5 @@
+import type { AcceptedFunctionalReductions } from './accepted-functional-reductions'
+export { createRetainedPresentationSettings, parseAcceptedFunctionalReductions, isContactEmail, type AcceptedFunctionalReductions } from './accepted-functional-reductions'
 export const TEMPLATE_PROCESSING_REQUESTED_EVENT = 'template/processing.requested'
 export const TEMPLATE_PROCESSING_MAX_ATTEMPTS = 3
 export const TEMPLATE_PROCESSING_STUCK_AFTER_MINUTES = 10
@@ -45,12 +47,14 @@ export type SiteAstroGenerationRequestedPayload = {
   actor: string
   strategy: string
   requestedAdapterId?: 'astro-static-site' | 'html-static-artifact'
-  acceptedFunctionalReductions?: {
-    kind: 'legacy-forms-to-disclosed-links-v1'
-    contactEmail: string
-    commentLinks: 'source-article'
-    sourceWidgetRemovals?: Array<'cookie-consent' | 'form-captcha' | 'back-to-top'>
+  acceptedFunctionalReductions?: AcceptedFunctionalReductions
+  stackiBaseline?: { agencyId: string; clientId: string; siteId: string; siteVersionId: string }
+  stackiRevision?: {
+    scope: { agencyId: string; clientId: string; siteId: string; siteVersionId: string }
+    revision: number
+    sha256: string
   }
+  stackiSourceArtifactSha256?: string
 }
 
 export type DomainVerificationCheckPayload = {

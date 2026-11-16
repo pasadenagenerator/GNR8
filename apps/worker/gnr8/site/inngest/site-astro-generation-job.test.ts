@@ -9,7 +9,14 @@ import {
   resolveBundledPnpmCliPath,
   runSiteAstroGenerationJob,
   SITE_ASTRO_GENERATION_JOB_TRIGGER_EVENT,
+  assertAstroExecutorNode,
 } from './site-astro-generation-job'
+
+test('Astro executor accepts supported Node 26 patches and rejects other majors', () => {
+  assert.doesNotThrow(() => assertAstroExecutorNode('26.13.0'))
+  assert.doesNotThrow(() => assertAstroExecutorNode('26.14.1'))
+  for (const version of ['22.23.4', '25.0.0', '27.0.0']) assert.throws(() => assertAstroExecutorNode(version), NonRetriableError)
+})
 
 test('worker resolves the bundled pnpm CLI without relying on a system pnpm executable', () => {
   assert.match(resolveBundledPnpmCliPath() ?? '', /pnpm\/bin\/pnpm\.cjs$/)
@@ -144,4 +151,10 @@ test('deterministic derived dependency failures are non-retriable', async () => 
     }),
     (error: unknown) => error instanceof NonRetriableError && error.message === message,
   )
+})
+
+test('worker preserves presentation-only reductions without introducing contact replacement',()=>{
+  const acceptedFunctionalReductions={kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle'}
+  assert.deepEqual(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions}),{...payload,acceptedFunctionalReductions})
+  assert.equal(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions:{...acceptedFunctionalReductions,contactEmail:'test@example.com'}}),null)
 })

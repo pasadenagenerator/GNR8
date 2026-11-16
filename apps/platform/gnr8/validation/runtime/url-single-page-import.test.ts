@@ -68,6 +68,79 @@ function makeHtmlResponse(html: string): Response {
   });
 }
 
+test("url import removes a MIME-proven false stylesheet role without losing the image", async () => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-css-role-"));
+  const sourceUrl = "https://example.com/";
+  const requests: string[] = [];
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl, snapshotRootDirAbs: root, requestId: "css-role", renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async input => {
+        const url = String(input instanceof Request ? input.url : input); requests.push(url);
+        if (url === sourceUrl) return makeHtmlResponse('<!doctype html><html><head><title>Home</title><!-- <link rel="stylesheet" href="/comment.css"> --><link rel="stylesheet alternate" href="/photo.png"></head><body><main><h1>Home</h1><p>Representative retained image content.</p><img src="/photo.png"></main></body></html>');
+        if (url === `${sourceUrl}photo.png`) return new Response(new Uint8Array([137,80,78,71,1,2,3,4]), { headers: { "content-type": "image/png" } });
+        throw new Error(`Unexpected fixture request: ${url}`);
+      },
+    });
+    const html = fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8");
+    assert.match(html, /<link rel="alternate"/);
+    assert.match(html, /<img[^>]+src="\//);
+    assert.ok(!requests.some(url => url.endsWith("comment.css")));
+    const image = snapshot.fetchManifest.find(row => row.resolvedUrl === `${sourceUrl}photo.png` && row.fetchStatus === "fetched");
+    assert.ok(image?.localPath && fs.existsSync(path.join(snapshot.snapshotRootDirAbs, image.localPath)));
+  } finally { await fs.promises.rm(root, { recursive: true, force: true }); }
+});
+
+test("url import keeps CSS references separate from HTML link identities and retains dependency mappings", async () => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-reference-identity-"));
+  const sourceUrl = "https://www.example.com/";
+  const html = '<!doctype html><html><head><style>.hero{background:url("/hero.png")}</style><link rel="stylesheet" href="/theme.css"></head><body><main><h1>Fixture page</h1><p>Representative page content for retained asset identity verification.</p></main><a href="/about">About</a><a href="/gallery.png"><img src="/thumb.png"></a></body></html>';
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl,
+      snapshotRootDirAbs: root,
+      requestId: "reference-identity",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async (input) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url === sourceUrl) return makeHtmlResponse(html);
+        if (url === `${sourceUrl}theme.css`) return new Response('@font-face{font-family:icons;src:url("/fonts/icons.woff2")}', { headers: { "content-type": "text/css" } });
+        if (url === `${sourceUrl}fonts/icons.woff2`) return new Response(validWoff2Fixture(), { headers: { "content-type": "font/woff2" } });
+        if (/\/(hero|gallery|thumb)\.png$/.test(url)) return new Response(new Uint8Array([137, 80, 78, 71, 1, 2, 3, 4]), { headers: { "content-type": "image/png" } });
+        throw new Error(`Unexpected fixture request: ${url}`);
+      },
+    });
+    const output = fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8");
+    const manifest = JSON.parse(fs.readFileSync(path.join(snapshot.snapshotRootDirAbs, "url-fetch-manifest.json"), "utf8")) as typeof snapshot.fetchManifest;
+    assert.ok(manifest.length > 0, JSON.stringify(snapshot.importDiagnostics));
+    const stylesheet = manifest.find((entry) => entry.rawRef === "/theme.css");
+    assert.equal(stylesheet?.resolvedUrl, `${sourceUrl}theme.css`);
+    assert.equal(stylesheet?.assetKind, "stylesheet");
+    assert.ok(stylesheet?.localPath);
+    assert.ok(output.includes(`href="/${stylesheet.localPath}"`));
+    assert.match(output, /href="\/about"/);
+    assert.equal(manifest.some((entry) => entry.rawRef === "/about"), false);
+    for (const resource of ["hero.png", "gallery.png", "fonts/icons.woff2"]) {
+      const entry = manifest.find((row) => row.resolvedUrl === `${sourceUrl}${resource}`);
+      assert.equal(entry?.fetchStatus, "fetched", resource);
+      assert.ok(entry?.localPath && fs.existsSync(path.join(snapshot.snapshotRootDirAbs, entry.localPath)), resource);
+    }
+    const cssPath = path.join(snapshot.snapshotRootDirAbs, stylesheet.localPath);
+    const persistedCss = fs.readFileSync(cssPath, "utf8");
+    const childCapture = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
+      existingFetchManifest: manifest,
+      pages: [{ pageUrl: `${sourceUrl}about`, bodyPath: path.join(snapshot.snapshotRootDirAbs, "about.html"), html: '<link rel="stylesheet" href="/theme.css"><main>About</main>' }],
+      fetchImpl: async () => { throw new Error("Persisted stylesheet and font must be reused"); },
+    });
+    assert.equal(childCapture.summary.failedRequiredAssetCount, 0);
+    assert.equal(fs.readFileSync(cssPath, "utf8"), persistedCss);
+    assert.ok(childCapture.manifestEntries.some((entry) => entry.resolvedUrl === `${sourceUrl}fonts/icons.woff2` && entry.fetchStatus === "fetched"));
+  } finally {
+    await fs.promises.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("additional child-page asset capture persists responsive and lazy images, deduplicates shared assets, and reports failures", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-page-assets-"));
   const existingCdnFontPath = "assets/style_asset/existing-cdn-font.woff2";
@@ -152,6 +225,63 @@ test("additional child-page asset capture persists responsive and lazy images, d
   assert.match(stylesheet, /style_asset/);
   assert.equal([...fetchCounts.keys()].some((url) => url.endsWith("/fonts/child.woff2")), true);
   assert.equal(result.manifestEntries.some((entry) => entry.assetKind === "style_asset" && entry.fetchStatus === "fetched"), true);
+});
+
+test("child-page capture retries a transient background image failure", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-background-retry-"));
+  const assetUrl = "https://www.example.com/uploads/news-background.webp";
+  let attempts = 0;
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{
+        pageUrl: "https://www.example.com/news",
+        bodyPath: path.join(root, "news.html"),
+        html: '<html><head><style>#hero{background-image:url(/uploads/news-background.webp)}</style></head><body><main id="hero">News</main></body></html>',
+      }],
+      fetchImpl: async (request) => {
+        assert.equal(String(request instanceof Request ? request.url : request), assetUrl);
+        attempts += 1;
+        if (attempts === 1) throw new Error("terminated");
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/webp" } });
+      },
+    });
+    assert.equal(attempts, 2);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.equal(fs.readFileSync(path.join(root, 'uploads/news-background.webp')).byteLength, 3);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("seed-page capture retries a transient background image failure", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-seed-background-retry-"));
+  const sourceUrl = "https://www.example.com/";
+  const assetUrl = `${sourceUrl}uploads/home-background.webp`;
+  let attempts = 0;
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl,
+      snapshotRootDirAbs: root,
+      requestId: "seed-background-retry",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        if (url === sourceUrl) return makeHtmlResponse('<html><head><style>#hero{background-image:url(/uploads/home-background.webp)}</style></head><body><main id="hero"><h1>Home</h1></main></body></html>');
+        assert.equal(url, assetUrl);
+        attempts += 1;
+        if (attempts === 1) throw new Error("terminated");
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/webp" } });
+      },
+    });
+    assert.equal(attempts, 2);
+    const asset = snapshot.fetchManifest.find((entry) => entry.resolvedUrl === assetUrl);
+    assert.equal(asset?.fetchStatus, "fetched");
+    assert.ok(asset?.localPath);
+    assert.equal(fs.readFileSync(path.join(snapshot.snapshotRootDirAbs, asset.localPath)).byteLength, 3);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("additional asset capture follows bounded trusted stylesheet imports and font URLs", async () => {
@@ -239,7 +369,8 @@ test("additional asset capture skips only exact CSS dependencies proven unused b
       bodyPath: path.join(root, "index.html"),
       html: '<link rel="stylesheet" href="https://example.com/theme.css"><main class="hero"></main>',
     }],
-    knownUnusedStylesheetDependencyUrls: ["https://example.com/images/unused.png"],
+    fullHtmlDocumentsForCssUsage: ['<main class="hero"></main>'],
+    approvedUnusedStylesheetDependencyUrls: ["https://example.com/images/unused.png"],
     fetchImpl: async (request) => {
       const url = String(request instanceof Request ? request.url : request);
       fetched.push(url);
@@ -257,6 +388,7 @@ test("additional asset capture skips only exact CSS dependencies proven unused b
   });
 
   assert.equal(result.summary.failedRequiredAssetCount, 0);
+  assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, ["https://example.com/images/unused.png"]);
   assert.deepEqual(fetched, ["https://example.com/theme.css", "https://example.com/images/required.png"]);
 });
 
@@ -1727,4 +1859,37 @@ test("script-assigned root-relative stylesheet is fetched and persisted at local
   const persistedCssAbs = path.resolve(snapshot.snapshotRootDirAbs, "assets/user-style.css");
   const persistedCss = await fs.promises.readFile(persistedCssAbs, "utf8");
   assert.match(persistedCss, /opacity:1/);
+});
+
+
+test("additional page capture reuses persisted CSS font mappings after reload without hashing local names again", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-retained-css-"));
+  try {
+    const cssPath = 'assets/stylesheet/abc-theme.css';
+    const fontPath = 'assets/style_asset/def-icons.woff2';
+    const css = '@font-face{font-family:icons;src:url(../style_asset/def-icons.woff2#icons)}';
+    const font = validWoff2Fixture();
+    for (const [file, bytes] of [[cssPath, Buffer.from(css)], [fontPath, font]] as const) {
+      fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+      fs.writeFileSync(path.join(root, file), bytes);
+    }
+    const manifest = JSON.parse(JSON.stringify([
+      { tag: 'link', attribute: 'href', occurrence: 0, rawRef: '/theme.css', resolvedUrl: 'https://example.test/theme.css', localPath: cssPath, assetKind: 'stylesheet', fetchStatus: 'fetched', httpStatus: 200, contentType: 'text/css', byteLength: Buffer.byteLength(css) },
+      { tag: 'link', attribute: 'href', occurrence: 1, rawRef: '/fonts/icons.woff2', resolvedUrl: 'https://example.test/fonts/icons.woff2', localPath: fontPath, assetKind: 'style_asset', fetchStatus: 'fetched', httpStatus: 200, contentType: 'font/woff2', byteLength: font.byteLength },
+    ]));
+    const calls: string[] = [];
+    const input = {
+      snapshotRootDirAbs: root,
+      existingFetchManifest: manifest,
+      pages: [{ pageUrl: 'https://example.test/about/', bodyPath: path.join(root, 'about.html'), html: '<link rel="stylesheet" href="/theme.css"><i class="icon"></i>' }],
+      fetchImpl: async (request: string | URL | Request) => { calls.push(String(request)); return new Response('missing', { status: 404 }); },
+    };
+    const first = await captureAssetsForAdditionalHtmlPages(input);
+    const second = await captureAssetsForAdditionalHtmlPages(input);
+    assert.deepEqual(calls, []);
+    assert.equal(first.summary.failedRequiredAssetCount, 0);
+    assert.deepEqual(second, first);
+    assert.equal(fs.readFileSync(path.join(root, cssPath), 'utf8'), css);
+    assert.ok(first.manifestEntries.some((entry) => entry.resolvedUrl === 'https://example.test/fonts/icons.woff2' && entry.localPath === fontPath && entry.fetchStatus === 'fetched'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

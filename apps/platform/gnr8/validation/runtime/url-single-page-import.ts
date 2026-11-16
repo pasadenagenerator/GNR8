@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import https from "node:https";
 import path from "node:path";
 
 import { parse, parseFragment, serialize } from "parse5";
+import { findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "../../import-semantic/semantic-import-engine";
@@ -20,6 +22,7 @@ import type { JsonValue } from "../../import/import-contract";
 import { stableStringify } from "../../migration/runtime/diagnostics";
 import { resolveUrlImportSnapshotRootDirAbs } from "./url-import-snapshot-root";
 import { URL_SINGLE_PAGE_IMPORT_VERSION, type RenderedDomQuality } from "./url-single-page-import-contract";
+import { hashedImportAssetPath, resolveRetainedCssDependencyPath } from "./retained-css-dependency-path";
 
 export type UrlImportExecutionScope = {
   includes: readonly [
@@ -803,12 +806,11 @@ export function computeLocalPathCandidate(input: { resolvedUrl: string; assetKin
   if (input.assetKind === "image" && normalizedPathname) {
     return normalizedPathname;
   }
-  const urlHash12 = sha256Hex(input.resolvedUrl).slice(0, 12);
   const rawBase = path.posix.basename(u.pathname || "") || "asset";
   const normalizedBase = normalizeBasename(rawBase);
   const hasExt = path.posix.extname(normalizedBase).length > 0;
   const suffix = hasExt ? "" : defaultExtensionForAssetKind(input.assetKind);
-  return `assets/${input.assetKind}/${urlHash12}-${normalizedBase}${suffix}`;
+  return hashedImportAssetPath(input.resolvedUrl, input.assetKind, `${normalizedBase}${suffix}`);
 }
 
 function resolvePathCollisions(
@@ -1346,6 +1348,7 @@ function rewriteCssUrlFunctions(input: {
   localPathByUrl: Map<string, string>;
   diagnostics: UrlImportDiagnostic[];
   referenceMode?: "relative" | "root-relative";
+  retainedFilePaths?: ReadonlySet<string>;
 }): string {
   const regex = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
   const replacements: Array<{ start: number; end: number; replacement: string }> = [];
@@ -1356,6 +1359,9 @@ function rewriteCssUrlFunctions(input: {
     const quote = match[1] ?? "";
     const rawUrl = (match[2] ?? "").trim();
     if (!rawUrl || rawUrl.startsWith("data:") || rawUrl.startsWith("#")) continue;
+    if (input.retainedFilePaths && resolveRetainedCssDependencyPath({
+      stylesheetPath: input.stylesheetLocalPath, rawReference: rawUrl, filePaths: input.retainedFilePaths,
+    })) continue;
 
     const resolvedUrl = resolveAssetUrl({
       rawRef: rawUrl,
@@ -1388,6 +1394,9 @@ function rewriteCssUrlFunctions(input: {
   return out.replace(
     /(@import\s+(?:url\(\s*)?)(["']?)([^"')\s;]+)(\2\s*\)?)/gi,
     (full, prefix, quote, rawUrl, suffix) => {
+      if (input.retainedFilePaths && resolveRetainedCssDependencyPath({
+        stylesheetPath: input.stylesheetLocalPath, rawReference: String(rawUrl), filePaths: input.retainedFilePaths,
+      })) return full;
       let resolvedUrl: string | null = null;
       try { resolvedUrl = new URL(String(rawUrl), input.baseUrl).toString(); } catch { return full; }
       const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
@@ -2151,7 +2160,7 @@ function collectAssetRefs(input: {
     }
   }
 
-  function nextOccurrence(sourceContext: "html" | "noscript", tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
+  function nextOccurrence(sourceContext: string, tag: UrlImportAssetTag, attribute: UrlImportAssetAttribute): number {
     const occurrenceKey = `${sourceContext}:${tag}:${attribute}`;
     const occurrence = occurrenceCounter.get(occurrenceKey) ?? 0;
     occurrenceCounter.set(occurrenceKey, occurrence + 1);
@@ -2170,7 +2179,12 @@ function collectAssetRefs(input: {
     const trimmed = args.rawRef.trim();
     if (!trimmed) return;
     const sourceContext = args.sourceContext ?? "html";
-    const occurrence = nextOccurrence(sourceContext, args.tag, args.attribute);
+    // CSS URLs share the manifest's tag/attribute vocabulary, but must not
+    // consume the occurrence identities used to rewrite actual HTML links.
+    const keyContext = args.surface === "inline_style_url" || args.surface === "style_block_url"
+      ? `css:${sourceContext}`
+      : sourceContext;
+    const occurrence = nextOccurrence(keyContext, args.tag, args.attribute);
     const resolvedUrl = resolveAssetUrl({
       rawRef: trimmed,
       baseUrl: input.entryUrl,
@@ -2178,7 +2192,7 @@ function collectAssetRefs(input: {
       diagnosticContext: { tag: args.tag, attribute: args.attribute, surface: args.surface },
     });
     refs.push({
-      key: `${sourceContext}:${args.tag}:${args.attribute}:${occurrence}`,
+      key: `${keyContext}:${args.tag}:${args.attribute}:${occurrence}`,
       tag: args.tag,
       attribute: args.attribute,
       occurrence,
@@ -2727,6 +2741,7 @@ export type AdditionalHtmlPageAssetCaptureResult = {
     failedRequiredAssetCount: number;
     deduplicatedReferenceCount: number;
     failedRequiredResources: string[];
+    skippedUnusedStylesheetDependencies: string[];
   };
 };
 
@@ -2734,6 +2749,52 @@ const ADDITIONAL_PAGE_ASSET_MAX_COUNT = 512;
 const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 12 * 1024 * 1024;
 const ADDITIONAL_PAGE_ASSET_TIMEOUT_MS = 12_000;
 const ADDITIONAL_PAGE_ASSET_CONCURRENCY = 4;
+
+async function fetchAssetBytesWithNodeFallback(input: {
+  url: string;
+  pageUrl: string;
+  fetcher: FetchLike;
+  init: RequestInit;
+  allowFallback: boolean;
+}): Promise<{ response: Pick<Response, "ok" | "status" | "statusText" | "headers" | "url">; bytes: Uint8Array }> {
+  try {
+    const response = await input.fetcher(input.url, input.init);
+    return { response, bytes: response.ok ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array() };
+  } catch (error) {
+    const asset = new URL(input.url);
+    const page = new URL(input.pageUrl);
+    if (!input.allowFallback || asset.protocol !== "https:" ||
+        canonicalAssetHost(asset.hostname) !== canonicalAssetHost(page.hostname)) throw error;
+    return new Promise((resolve, reject) => {
+      const request = https.get(asset, { headers: { "accept-encoding": "identity", accept: "image/*,text/css,*/*;q=0.8" } }, (incoming) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        incoming.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > ADDITIONAL_PAGE_ASSET_MAX_BYTES) {
+            request.destroy(new Error("asset_too_large"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        incoming.on("error", reject);
+        incoming.on("end", () => {
+          if (!incoming.complete) return reject(new Error("asset_transfer_incomplete"));
+          const status = incoming.statusCode ?? 0;
+          const headers = new Headers();
+          const contentType = incoming.headers["content-type"];
+          if (typeof contentType === "string") headers.set("content-type", contentType);
+          resolve({
+            response: { ok: status >= 200 && status < 300, status, statusText: incoming.statusMessage ?? "", headers, url: input.url },
+            bytes: new Uint8Array(Buffer.concat(chunks)),
+          });
+        });
+      });
+      request.setTimeout(ADDITIONAL_PAGE_ASSET_TIMEOUT_MS, () => request.destroy(new Error("asset_timeout")));
+      request.on("error", reject);
+    });
+  }
+}
 
 function canonicalAssetHost(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, "");
@@ -2808,6 +2869,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   trustedExternalOrigins?: string[];
   /** Exact stylesheet dependency URLs proven not to match retained HTML. */
   knownUnusedStylesheetDependencyUrls?: string[];
+  /** Complete HTML evidence for checking whether stylesheet selectors can match. */
+  fullHtmlDocumentsForCssUsage?: string[];
+  /** Explicitly approved missing URLs; proof alone does not authorize omission. */
+  approvedUnusedStylesheetDependencyUrls?: string[];
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -2830,6 +2895,27 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const knownUnusedStylesheetDependencyIdentities = new Set(
     (input.knownUnusedStylesheetDependencyUrls ?? []).map(canonicalAdditionalPageAssetIdentity),
   );
+  const skippedUnusedStylesheetDependencies = new Set<string>();
+  const approvedUnusedStylesheetDependencyIdentities = new Set(
+    (input.approvedUnusedStylesheetDependencyUrls ?? []).map(canonicalAdditionalPageAssetIdentity),
+  );
+  const markProvablyUnused = (css: string, stylesheetUrl: string): void => {
+    if (!input.fullHtmlDocumentsForCssUsage || approvedUnusedStylesheetDependencyIdentities.size === 0) return;
+    try {
+      for (const dependency of findProvablyUnusedCssDependencies({
+        css,
+        stylesheetUrl,
+        htmlDocuments: input.fullHtmlDocumentsForCssUsage,
+      })) {
+        const identity = canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl);
+        if (!approvedUnusedStylesheetDependencyIdentities.has(identity)) continue;
+        knownUnusedStylesheetDependencyIdentities.add(identity);
+        skippedUnusedStylesheetDependencies.add(dependency.resolvedUrl);
+      }
+    } catch {
+      // Unparseable CSS cannot prove that a dependency is unused.
+    }
+  };
   for (const value of input.trustedExternalOrigins ?? []) {
     const origin = canonicalAdditionalPageAssetOrigin(value);
     if (origin) trustedExternalOrigins.add(origin);
@@ -2857,6 +2943,31 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       if (origin) trustedExternalOrigins.add(origin);
     }
   }
+
+  // A reused stylesheet already contains paths relative to its retained file.
+  // Resolve those through the existing manifest before considering public URLs.
+  const retainedStylesheetPaths = new Set<string>();
+  const retainedFilePaths = new Set(existingManifest.flatMap((entry) => {
+    if (entry.fetchStatus !== "fetched" || !entry.localPath || !entry.resolvedUrl) return [];
+    const root = path.resolve(input.snapshotRootDirAbs);
+    const absolute = path.resolve(root, entry.localPath);
+    if (!absolute.startsWith(`${root}${path.sep}`)) return [];
+    try {
+      const stat = fs.statSync(absolute);
+      if (!stat.isFile()) return [];
+      // CSS byteLength describes the fetched response, before its URLs were
+      // localized. Static dependencies retain their original bytes and size.
+      if (entry.assetKind === "stylesheet") retainedStylesheetPaths.add(entry.localPath);
+      else if (entry.byteLength !== null && stat.size !== entry.byteLength) return [];
+      if (isFontAssetUrl(entry.resolvedUrl) && !isValidFetchedFont(entry.resolvedUrl, entry.contentType, fs.readFileSync(absolute))) return [];
+      return [entry.localPath];
+    } catch { return []; }
+  }));
+  const retainedDependencyUrl = (rawReference: string, stylesheetPath: string): string | null => {
+    if (!retainedStylesheetPaths.has(stylesheetPath)) return null;
+    const retainedPath = resolveRetainedCssDependencyPath({ stylesheetPath, rawReference, filePaths: retainedFilePaths });
+    return retainedPath ? usedPathToUrl.get(retainedPath) ?? null : null;
+  };
 
   const refsByUrl = new Map<string, Array<ParsedAssetRef & { pageUrl: string }>>();
   for (const state of pageStates) {
@@ -2893,20 +3004,27 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   };
 
   const failedRequiredResources = new Set<string>();
-  const fetchOne = async (resolvedUrl: string, assetKind: UrlImportAssetKind, pageUrl: string): Promise<void> => {
+  const fetchOne = async (resolvedUrl: string, assetKind: UrlImportAssetKind, pageUrl: string, attempt = 0): Promise<void> => {
     if (outcomeByUrl.get(resolvedUrl)?.fetchStatus === "fetched") return;
     const localPath = assignLocalPath(resolvedUrl, assetKind);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
     try {
-      const response = await fetcher(resolvedUrl, {
+      const { response, bytes } = await fetchAssetBytesWithNodeFallback({
+        url: resolvedUrl,
+        pageUrl,
+        fetcher,
+        allowFallback: !input.fetchImpl,
+        init: {
         method: "GET",
         cache: "no-store",
         redirect: "follow",
         signal: controller.signal,
         headers: {
           accept: "text/css,image/*,*/*;q=0.8",
+          "accept-encoding": "identity",
           "user-agent": "GNR8-Operator-URL-Import/1.1 (+multi-page-assets)",
+        },
         },
       });
       const finalUrl = response.url || resolvedUrl;
@@ -2921,7 +3039,6 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         failedRequiredResources.add(resolvedUrl);
         return;
       }
-      const bytes = new Uint8Array(await response.arrayBuffer());
       if (bytes.byteLength > ADDITIONAL_PAGE_ASSET_MAX_BYTES) {
         outcomeByUrl.set(resolvedUrl, {
           fetchStatus: "fetch_failed",
@@ -2957,7 +3074,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         contentType,
         byteLength: bytes.byteLength,
       });
+      failedRequiredResources.delete(resolvedUrl);
     } catch {
+      if (attempt === 0) {
+        await fetchOne(resolvedUrl, assetKind, pageUrl, 1);
+        return;
+      }
       outcomeByUrl.set(resolvedUrl, { fetchStatus: "fetch_failed", httpStatus: null, contentType: null, byteLength: null });
       failedRequiredResources.add(resolvedUrl);
     } finally {
@@ -2993,9 +3115,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     } catch {
       continue;
     }
+    markProvablyUnused(cssText, stylesheetUrl);
     const pageUrl = refsByUrl.get(stylesheetUrl)?.[0]?.pageUrl ?? stylesheetUrl;
     for (const rawRef of extractCssUrlCandidates(cssText)) {
-      const resolvedUrl = resolveAssetUrl({
+      const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
         rawRef,
         baseUrl: new URL(stylesheetUrl),
         diagnostics,
@@ -3037,9 +3160,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     if (!localPath) continue;
     let cssText = "";
     try { cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8"); } catch { continue; }
+    markProvablyUnused(cssText, stylesheetUrl);
     for (const rawRef of extractCssUrlCandidates(cssText)) {
       if (acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) break;
-      const resolvedUrl = resolveAssetUrl({
+      const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
         rawRef,
         baseUrl: new URL(stylesheetUrl),
         diagnostics,
@@ -3064,6 +3188,16 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     }
   }
 
+  // Retry only interrupted transfers once more, sequentially, after the
+  // concurrent pass has finished. A real 4xx/5xx remains a required failure.
+  for (const [resolvedUrl, outcome] of outcomeByUrl) {
+    if (outcome.fetchStatus !== "fetch_failed" || outcome.httpStatus !== null) continue;
+    const direct = refsByUrl.get(resolvedUrl)?.[0];
+    const dependency = stylesheetDependencyUrls.get(resolvedUrl);
+    if (direct) await fetchOne(resolvedUrl, direct.assetKind, direct.pageUrl);
+    else if (dependency) await fetchOne(resolvedUrl, dependency.assetKind, dependency.pageUrl);
+  }
+
   for (const [representative, meta] of stylesheetDependencyUrls) {
     const localPath = localPathByUrl.get(representative);
     if (localPath) localPathByUrl.set(meta.resolvedUrl, localPath);
@@ -3086,6 +3220,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         baseUrl: new URL(stylesheetUrl),
         localPathByUrl,
         diagnostics,
+        retainedFilePaths: retainedStylesheetPaths.has(localPath) ? retainedFilePaths : undefined,
       });
       if (rewritten !== cssText) fs.writeFileSync(absPath, rewritten, "utf8");
     } catch {
@@ -3237,6 +3372,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       failedRequiredAssetCount: failedRequiredResources.size,
       deduplicatedReferenceCount: Math.max(0, directReferenceCount - refsByUrl.size),
       failedRequiredResources: [...failedRequiredResources].sort((left, right) => left.localeCompare(right)),
+      skippedUnusedStylesheetDependencies: [...skippedUnusedStylesheetDependencies].sort((left, right) => left.localeCompare(right)),
     },
   };
 }
@@ -4739,6 +4875,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       resolvedUrl: string,
       localPath: string,
       messageLabel: "Direct asset fetch" | "Stylesheet-linked asset fetch",
+      attempt = 0,
     ): Promise<FetchOutcome> {
       const htmlImageRefs = htmlImageRefByUrl.get(resolvedUrl) ?? [];
       for (const ref of htmlImageRefs) {
@@ -4753,12 +4890,19 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         });
       }
       try {
-        const response = await fetcher(resolvedUrl, {
+        const { response, bytes } = await fetchAssetBytesWithNodeFallback({
+          url: resolvedUrl,
+          pageUrl: input.sourceUrl,
+          fetcher,
+          allowFallback: !input.fetchImpl,
+          init: {
           method: "GET",
           cache: "no-store",
           headers: {
             accept: "text/css,text/javascript,application/javascript,image/*,*/*;q=0.8",
+            "accept-encoding": "identity",
             "user-agent": "GNR8-Operator-URL-Import/1.0 (+single-page)",
+          },
           },
         });
 
@@ -4799,7 +4943,6 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           };
         }
 
-        const bytes = new Uint8Array(await response.arrayBuffer());
         const absPath = path.resolve(snapshotRootDirAbs, localPath);
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, bytes);
@@ -4834,6 +4977,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           byteLength: bytes.byteLength,
         };
       } catch (error) {
+        if (attempt === 0) return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);
         if (htmlImageRefs.length > 0) {
           for (const ref of htmlImageRefs) {
             const entry = imageAssetDiscoveryEntries.get(ref.key);
@@ -5110,6 +5254,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       const href = getAttr(node, "href");
       const kind = tag === "source" ? "image" : assetKindFromNode({ tag, rel, typeAttr, href });
       if (!kind && tag !== "img" && tag !== "source" && tag !== "a") return;
+      if (tag === "a" && (!href || !isImageLikeHrefRef(href) || !(hasDescendantTag(node, "img") || hasDescendantTag(node, "picture")))) return;
 
       const attrsToHandle: UrlImportAssetAttribute[] = [];
       if (tag === "link") attrsToHandle.push("href");
@@ -5219,6 +5364,16 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         const localPath = resolvedUrl ? localPathByUrl.get(resolvedUrl) ?? null : null;
         const outcome = resolvedUrl ? fetchOutcomeByUrl.get(resolvedUrl) : null;
         const rewriteEligibleLocalPath = localPath && outcome?.fetchStatus === "fetched" ? localPath : null;
+        if (tag === "link" && attribute === "href" && rewriteEligibleLocalPath &&
+          /^(?:image\/|font\/|application\/(?:font|vnd\.ms-fontobject))/i.test(outcome?.contentType ?? "")) {
+          const roles = (getAttr(node, "rel") ?? "").split(/\s+/);
+          if (roles.some(role => role.toLowerCase() === "stylesheet")) {
+            // A URL can legitimately be shared by an image and a malformed
+            // stylesheet link. Drop only the contradicted role; retain bytes,
+            // the href, other link roles, and all actual image references.
+            setAttr(node, "rel", roles.filter(role => role.toLowerCase() !== "stylesheet").join(" "));
+          }
+        }
         const previewInspection =
           runtimeIdsAvailable && (tag === "img" || tag === "source")
             ? inspectAndNormalizePreviewAssetUrl({
@@ -5345,6 +5500,25 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         }
       }
     });
+
+    // CSS dependencies have no direct HTML attribute to visit above. Persist
+    // their original URL mappings too, so subsequent pages can reuse them.
+    for (const ref of allRefs.filter((ref) => ref.key.startsWith("css:") || ref.key.includes(":css-url:"))) {
+      const outcome = ref.resolvedUrl ? fetchOutcomeByUrl.get(ref.resolvedUrl) : null;
+      fetchManifest.push({
+        tag: ref.tag,
+        attribute: ref.attribute,
+        occurrence: ref.occurrence,
+        rawRef: ref.rawRef,
+        resolvedUrl: ref.resolvedUrl,
+        localPath: ref.resolvedUrl ? localPathByUrl.get(ref.resolvedUrl) ?? null : null,
+        assetKind: ref.assetKind,
+        fetchStatus: outcome?.fetchStatus ?? (ref.resolvedUrl ? "fetch_failed" : "unsupported"),
+        httpStatus: outcome?.httpStatus ?? null,
+        contentType: outcome?.contentType ?? null,
+        byteLength: outcome?.byteLength ?? null,
+      });
+    }
 
     walkDomWithAncestors(document, (node) => {
       if (!isElement(node)) return;

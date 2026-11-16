@@ -20,6 +20,11 @@ export type ContentSlot = {
   updatedAt?: string
 }
 
+export function separateGitBackedContentSlotSources<T extends Pick<ContentSlot,'slotKey'|'sourceText'>>(slots:T[]){
+  return {sources:slots.map(slot=>({slotKey:slot.slotKey,sourceText:slot.sourceText})),
+    databaseSlots:slots.map(slot=>({...slot,sourceText:null}))}
+}
+
 export type ContentOverride = {
   id: string
   siteId: string

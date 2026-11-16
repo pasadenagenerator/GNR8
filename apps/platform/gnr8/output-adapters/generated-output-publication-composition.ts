@@ -1,3 +1,4 @@
+import { readPublicPreparation, type PublicPreparation } from './astro-public-preparation-contract';
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -6,6 +7,7 @@ import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 
 import { SupabaseAstroCandidateRuntimeArtifactStore } from "./astro-candidate-runtime-artifact-store";
+import type { AstroCandidateRuntimeArtifactContext } from "./astro-candidate-runtime-artifact-store";
 import {
   SupabaseAstroCandidateOwnershipResolver,
   type AstroCandidateOwnershipReadClient,
@@ -17,6 +19,8 @@ import {
 } from "./astro-production-candidate-supabase-gateway";
 import { AstroProductionCandidatePreviewConfigurationError } from "./astro-production-candidate-preview-feature-gate";
 import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
+import { prepareGeneratedCandidateGit } from "./astro-candidate-promotion-service";
+import { githubArchiveRequired } from "../stacki/stacki-github-config";
 import {
   readGeneratedOutputBuildEvidence,
   readGeneratedOutputContentManifest,
@@ -51,8 +55,12 @@ type Composition = {
 };
 
 export type GeneratedOutputReviewModel = {
+  stackiRevision?: { revision: number; sha256: string; canonicalRelation: string } | null;
   siteVersionId: string;
+  publicPreparation: PublicPreparation | null;
   state: string;
+  contactRecipient: string | null;
+  activePublication: boolean;
   artifactId: string;
   artifactBundleSha256: string;
   candidateId: string;
@@ -69,7 +77,7 @@ export type GeneratedOutputReviewModel = {
   decision: GeneratedOutputPublicationDecision;
 };
 
-function createComposition(): Composition {
+export function createGeneratedOutputComposition(): Composition {
   const client = getSupabaseServiceRoleClient();
   if (!client) throw new AstroProductionCandidatePreviewConfigurationError();
   const candidateClient = client as unknown as AstroCandidateOwnershipReadClient & AstroCandidateRpcClient;
@@ -80,18 +88,48 @@ function createComposition(): Composition {
     candidateRepository: new GatewayBackedAstroProductionCandidateRepository({
       gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
       objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => client as never }),
+      prepareGeneratedGit: prepareGeneratedCandidateGit,
+      gitArchiveRequired: ownership =>
+        githubArchiveRequired({ agencyId: ownership.agencyId, clientId: ownership.organizationId,
+          siteId: ownership.ownershipSiteId, siteVersionId: ownership.siteVersionId }),
     }),
   };
 }
 
 export function createGeneratedOutputPublicationDecisionResolver(): GeneratedOutputPublicationDecisionResolver {
-  const composition = createComposition();
+  const composition = createGeneratedOutputComposition();
   return async (input) => resolveDecision(composition, input);
 }
 
-export async function readGeneratedOutputReviewModel(siteVersionId: string): Promise<GeneratedOutputReviewModel> {
-  const composition = createComposition();
-  const context = await composition.runtimeStore.readContext(siteVersionId);
+/** Normal Settings Publish uses the same evidence composition as exact-artifact
+ * review. Resolve lazily so legacy migration publication keeps its own policy. */
+export function createEvidenceBoundRuntimePublisher(dependencies: {
+  publish?: typeof import('@/gnr8/runtime/publish-activation-orchestrator').publishApprovedSiteVersion;
+  createResolver?: typeof createGeneratedOutputPublicationDecisionResolver;
+  requireExactSelection?: boolean;
+} = {}) {
+  const publish: typeof import('@/gnr8/runtime/publish-activation-orchestrator').publishApprovedSiteVersion = dependencies.publish ?? (async (input) => {
+    const runtime = await import('@/gnr8/runtime/publish-activation-orchestrator');
+    return runtime.publishApprovedSiteVersion(input);
+  });
+  const createResolver = dependencies.createResolver ?? createGeneratedOutputPublicationDecisionResolver;
+  return (input: Parameters<typeof publish>[0]) => publish({
+    ...input,
+    generatedOutputPublicationDecisionResolver: (selection) => {
+      if (dependencies.requireExactSelection && !input.expectedArtifact) throw new Error("public_output_selection_required");
+      if (input.expectedArtifact && (selection.artifact.id !== input.expectedArtifact.artifactId ||
+        selection.artifact.bundleSha256 !== input.expectedArtifact.bundleSha256 ||
+        readPublicPreparation(selection.artifact.manifest)?.host !== input.expectedArtifact.host)) {
+        throw new Error("public_output_selection_stale");
+      }
+      return createResolver()(selection);
+    },
+  });
+}
+
+export async function readGeneratedOutputReviewModel(siteVersionId: string, composition = createGeneratedOutputComposition(), existingContext?: AstroCandidateRuntimeArtifactContext): Promise<GeneratedOutputReviewModel> {
+  const context = existingContext?.siteVersion.id === siteVersionId
+    ? existingContext : await composition.runtimeStore.readContext(siteVersionId);
   if (!context?.artifact) throw new Error("generated_output_review_target_missing");
   const provenance = classifyGeneratedOutputProvenance({ siteVersion: context.siteVersion, artifact: context.artifact });
   if (provenance.kind !== "supported_generated_output") {
@@ -108,7 +146,11 @@ export async function readGeneratedOutputReviewModel(siteVersionId: string): Pro
   if (!buildEvidence || !contentManifest) throw new Error("generated_output_review_evidence_missing");
   return {
     siteVersionId,
+    stackiRevision: ((context.artifact.manifest.generatedOutputSourceWorkspace as { stackiRevision?: { revision: number; sha256: string; canonicalRelation: string } } | undefined)?.stackiRevision) ?? null,
+    publicPreparation: readPublicPreparation(context.artifact.manifest),
     state: context.siteVersion.state,
+    activePublication: context.activePointerReferencesArtifact,
+    contactRecipient: ((context.artifact.manifest.generatedOutputSourceWorkspace as { acceptedFunctionalReductions?: { contact?: { recipient?: string } } } | undefined)?.acceptedFunctionalReductions?.contact?.recipient) ?? null,
     artifactId: context.artifact.id,
     artifactBundleSha256: context.artifact.bundleSha256,
     candidateId: provenance.candidateId,
@@ -135,11 +177,19 @@ export async function approveGeneratedOutputReview(input: {
   expectedCandidateContentSha256: string;
   expectedContentManifestSha256: string;
   expectedTechnicalEvaluationSha256: string;
+}, dependencies = {
+  readModel: readGeneratedOutputReviewModel,
+  composition: createGeneratedOutputComposition,
+  transition: async (input: Parameters<typeof import('@/gnr8/runtime/version-lifecycle-enforcer').transitionSiteVersionState>[0]) => {
+    const mod = await import('@/gnr8/runtime/version-lifecycle-enforcer');
+    return mod.transitionSiteVersionState(input);
+  },
 }): Promise<{ status: "approved" | "idempotent"; review: GeneratedOutputReviewRecord; decision: GeneratedOutputPublicationDecision }> {
-  const before = await readGeneratedOutputReviewModel(input.siteVersionId);
+  const before = await dependencies.readModel(input.siteVersionId);
   assertExpectedReviewSelection(before, input);
+  if (process.env.VERCEL_ENV === "production" && !before.publicPreparation) throw new Error("public_review_scope_required");
   if (before.decision.review.status === "APPROVED") {
-    const review = await readLatestReview(createComposition().client, input.siteVersionId);
+    const review = await readLatestReview(dependencies.composition().client, input.siteVersionId);
     if (!review) throw new Error("generated_output_review_readback_missing");
     return { status: "idempotent", review, decision: before.decision };
   }
@@ -167,8 +217,7 @@ export async function approveGeneratedOutputReview(input: {
   });
 
   try {
-    const mod = await import("@/gnr8/runtime/version-lifecycle-enforcer");
-    await mod.transitionSiteVersionState({
+    await dependencies.transition({
       siteVersionId: input.siteVersionId,
       nextState: "APPROVED",
       actor: input.reviewerActorId,
@@ -179,15 +228,15 @@ export async function approveGeneratedOutputReview(input: {
       },
     });
   } catch (error) {
-    const reconciled = await readGeneratedOutputReviewModel(input.siteVersionId).catch(() => null);
+    const reconciled = await dependencies.readModel(input.siteVersionId).catch(() => null);
     if (reconciled?.decision.review.status !== "APPROVED") throw error;
   }
 
-  const after = await readGeneratedOutputReviewModel(input.siteVersionId);
+  const after = await dependencies.readModel(input.siteVersionId);
   if (after.decision.review.status !== "APPROVED" || after.decision.activation !== "READY_FOR_TARGET_READINESS") {
     throw new Error("generated_output_review_readback_mismatch");
   }
-  const storedReview = await readLatestReview(createComposition().client, input.siteVersionId);
+  const storedReview = await readLatestReview(dependencies.composition().client, input.siteVersionId);
   if (!storedReview || storedReview.reviewSha256 !== review.reviewSha256) {
     throw new Error("generated_output_review_record_mismatch");
   }
@@ -210,6 +259,8 @@ async function resolveDecision(
     composition.runtimeStore.readContext(buildEvidence.sourceCapture.siteVersionId),
     readLatestReview(composition.client, input.siteVersion.id),
   ]);
+  const preparation = readPublicPreparation(input.artifact.manifest);
+  const publicSource = preparation ? await composition.runtimeStore.readContext(preparation.sourceSiteVersionId) : null;
   const technical = evaluateGeneratedOutputTechnicalEligibility({
     siteVersion: input.siteVersion,
     artifact: input.artifact,
@@ -219,6 +270,7 @@ async function resolveDecision(
     contentManifest,
     sourceCaptureSiteVersion: captureContext?.siteVersion ?? null,
     sourceCaptureArtifact: captureContext?.artifact ?? null,
+    publicSourceArtifact: publicSource?.artifact ?? null,
   });
   if (!technical.scope.allowedPublishStages.includes(input.publishStage)) {
     return evaluateGeneratedOutputPublicationDecision({ technical, review: null });

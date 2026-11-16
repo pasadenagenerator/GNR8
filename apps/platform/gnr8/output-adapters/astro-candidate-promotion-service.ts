@@ -31,6 +31,10 @@ import type {
   GeneratedOutputBuildEvidence,
   GeneratedOutputContentManifest,
 } from "./generated-output-eligibility";
+import {writeGeneratedArtifactGitArchive} from '../site/generated-artifact-git-archive';
+import {GeneratedArtifactGitCache} from '../site/generated-artifact-git-cache';
+import type {GeneratedGitRef} from '../site/generated-artifact-git-cache';
+import {githubArchiveRequired} from '../stacki/stacki-github-config';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const MAX_IDENTITY_LENGTH = 512;
@@ -56,6 +60,8 @@ export type AstroCandidatePromotionDependencies = {
     trustedScope: AstroProductionCandidateOwnership;
   }): Promise<AstroResolvedCandidateRecord>;
   runtimeStore: AstroCandidateRuntimeArtifactStore;
+  prepareGeneratedGit?: (artifact:RuntimeArtifact & {exportedFiles?:import('./astro-export-resources').AstroExportResource[]},
+    ownership:AstroProductionCandidateOwnership)=>Promise<GeneratedGitRef|null>;
 };
 
 export type AstroCandidatePromotionResult = {
@@ -118,6 +124,28 @@ export class AstroCandidatePromotionError extends Error {
   }
 }
 
+export async function prepareGeneratedCandidateGit(artifact:Pick<RuntimeArtifact,'htmlByPath'|'compiledTokenStyles'|'manifest'> &
+  {exportedFiles?:import('./astro-export-resources').AstroExportResource[]},
+  ownership:AstroProductionCandidateOwnership):Promise<GeneratedGitRef|null>{
+  if(process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED!=='1')return null;
+  const scope={agencyId:ownership.agencyId,clientId:ownership.organizationId,siteId:ownership.ownershipSiteId};
+  const {resolvedGitHubTarget}=await import('../stacki/stacki-github-config');
+  const storeScope={...scope,siteVersionId:ownership.siteVersionId};
+  const githubTarget=await resolvedGitHubTarget(storeScope);
+  if(!githubTarget)return null;
+  const {GitHubStackiStore}=await import('../stacki/stacki-github-store');
+  const store=new GitHubStackiStore(storeScope,githubTarget);
+  const archive=await writeGeneratedArtifactGitArchive({scope,runtimeSiteId:ownership.runtimeSiteId,
+    siteVersionId:ownership.siteVersionId,htmlByPath:artifact.htmlByPath,
+    compiledTokenStyles:artifact.compiledTokenStyles,manifest:artifact.manifest,
+    exportedFiles:artifact.exportedFiles,target:githubTarget},
+  {repository:branch=>store.immutableRepository(branch)});
+  await new GeneratedArtifactGitCache().prepare(archive,ownership.siteVersionId,{
+    htmlByPath:artifact.htmlByPath,compiledTokenStyles:artifact.compiledTokenStyles,
+    manifest:artifact.manifest,exportedFiles:artifact.exportedFiles});
+  return archive;
+}
+
 export function createAstroCandidatePromotionService(dependencies: AstroCandidatePromotionDependencies) {
   return async function promoteAstroCandidate(
     rawInput: AstroCandidatePromotionInput,
@@ -142,6 +170,9 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
       throw promotionError("candidate_hash_mismatch", "Selected candidate hashes do not match the stored immutable record.");
     }
 
+    if(record.candidate.exportedFiles) {
+      throw promotionError("render_integrity_denied", "Resource candidates require isolated preview; runtime publication is not supported.");
+    }
     const initial = await readRuntimeContext(dependencies.runtimeStore, input.siteVersionId);
     assertRuntimeContext(initial, ownership);
     const artifact = initial.artifact!;
@@ -183,7 +214,63 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
       );
     }
 
-    const governance = evaluateGovernance(initial);
+    const target = buildAstroCandidateRuntimeArtifact({
+      siteVersion: initial.siteVersion, artifact, record, ownership, input,
+    });
+    const archive=await (dependencies.prepareGeneratedGit??prepareGeneratedCandidateGit)({
+      ...target,...('exportedFiles' in record.candidate?{exportedFiles:record.candidate.exportedFiles}:{})
+    },ownership);
+    if(!archive&&await githubArchiveRequired({agencyId:ownership.agencyId,clientId:ownership.organizationId,
+        siteId:ownership.ownershipSiteId,siteVersionId:ownership.siteVersionId}))
+      throw promotionError('unavailable','Generated Git archive is required before candidate promotion.',
+        ['generated_git_archive_required']);
+    if (archive) {
+      target.manifest={...target.manifest,generatedGitArchive:archive};
+      target.bundleSha256=computeRuntimeArtifactBundleSha256({htmlByPath:target.htmlByPath,
+        compiledTokenStyles:target.compiledTokenStyles,assetFingerprintMap:target.assetFingerprintMap,
+        manifest:target.manifest});
+    }
+    const bundleSha256 = target.bundleSha256;
+
+    const write = await dependencies.runtimeStore.compareAndSetArtifact({
+      expectedBundleSha256: artifact.bundleSha256,
+      artifact: target,
+    });
+    const reconciled = await readRuntimeContext(dependencies.runtimeStore, input.siteVersionId);
+    assertRuntimeContext(reconciled, ownership);
+    const reconciledEvidence = readAstroRuntimeArtifactPromotionEvidence(reconciled.artifact?.manifest);
+    if (
+      reconciledEvidence &&
+      samePromotedCandidate(reconciledEvidence, record) &&
+      preservesCandidateBytes(reconciled.artifact!, record) &&
+      sameGeneratedOutputEvidence(reconciled.artifact!, input.generatedOutputEvidence) &&
+      reconciled.artifact!.bundleSha256 === bundleSha256
+    ) {
+      return resultFromStoredContext({
+        context: reconciled,
+        record,
+        status: write === "updated" ? "materialized" : "idempotent",
+      });
+    }
+    if (write === "not_updated") {
+      throw promotionError("promotion_conflict", "Concurrent promotion changed the runtime artifact.");
+    }
+    throw promotionError(
+      write === "unavailable" ? "persistence_ambiguous" : "unavailable",
+      "Runtime artifact persistence could not be reconciled to the requested promotion.",
+    );
+  };
+}
+
+/** Shared deterministic materialization; persistence and publication stay with the caller. */
+export function buildAstroCandidateRuntimeArtifact({ siteVersion, artifact, record, ownership, input }: {
+  siteVersion: CanonicalSiteVersionSnapshot;
+  artifact: RuntimeArtifact;
+  record: AstroResolvedCandidateRecord;
+  ownership: AstroProductionCandidateOwnership;
+  input: AstroCandidatePromotionInput;
+}): RuntimeArtifact {
+    const governance = evaluateAstroCandidateGovernance(siteVersion);
     const promotionIdentitySha256 = sha256Hex(stableStringify({
       version: ASTRO_RUNTIME_ARTIFACT_MATERIALIZATION_VERSION,
       candidateId: record.identity.candidateId,
@@ -258,34 +345,7 @@ export function createAstroCandidatePromotionService(dependencies: AstroCandidat
       bundleSha256,
     };
 
-    const write = await dependencies.runtimeStore.compareAndSetArtifact({
-      expectedBundleSha256: artifact.bundleSha256,
-      artifact: target,
-    });
-    const reconciled = await readRuntimeContext(dependencies.runtimeStore, input.siteVersionId);
-    assertRuntimeContext(reconciled, ownership);
-    const reconciledEvidence = readAstroRuntimeArtifactPromotionEvidence(reconciled.artifact?.manifest);
-    if (
-      reconciledEvidence &&
-      samePromotedCandidate(reconciledEvidence, record) &&
-      preservesCandidateBytes(reconciled.artifact!, record) &&
-      sameGeneratedOutputEvidence(reconciled.artifact!, input.generatedOutputEvidence) &&
-      reconciled.artifact!.bundleSha256 === bundleSha256
-    ) {
-      return resultFromStoredContext({
-        context: reconciled,
-        record,
-        status: write === "updated" ? "materialized" : "idempotent",
-      });
-    }
-    if (write === "not_updated") {
-      throw promotionError("promotion_conflict", "Concurrent promotion changed the runtime artifact.");
-    }
-    throw promotionError(
-      write === "unavailable" ? "persistence_ambiguous" : "unavailable",
-      "Runtime artifact persistence could not be reconciled to the requested promotion.",
-    );
-  };
+  return target;
 }
 
 function sameGeneratedOutputEvidence(
@@ -331,9 +391,6 @@ export function evaluateAstroCandidateGovernance(siteVersion: CanonicalSiteVersi
   }
 }
 
-function evaluateGovernance(context: AstroCandidateRuntimeArtifactContext) {
-  return evaluateAstroCandidateGovernance(context.siteVersion);
-}
 
 function resultFromStoredContext(input: {
   context: AstroCandidateRuntimeArtifactContext;

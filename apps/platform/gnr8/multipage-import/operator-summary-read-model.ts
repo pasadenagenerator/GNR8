@@ -601,8 +601,10 @@ export function buildMultiPageImportOperatorSummary(input: BuildInput = {}): Mul
         priorityTier: existingRoot?.priorityTier ?? null,
         selectionReason: existingRoot?.selectionReason ?? 'root_entry',
         skippedReason: null,
-        sourceUrl: existingRoot?.sourceUrl ?? previewRootRoute.sourceUrl ?? null,
-        finalUrl: existingRoot?.finalUrl ?? previewRootRoute.sourceUrl ?? null,
+        // A skipped external URL can share pathname '/' with the seed. Only
+        // validated root evidence identifies the assembled root document.
+        sourceUrl: previewRootRoute.sourceUrl ?? null,
+        finalUrl: previewRootRoute.sourceUrl ?? null,
         rawFilePath: previewRootRoute.rawFilePath,
       })
     }

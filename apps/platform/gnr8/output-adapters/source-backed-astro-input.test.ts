@@ -1,3 +1,4 @@
+import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -14,6 +15,14 @@ import {
 } from "./source-backed-astro-input";
 
 const SHA = "a".repeat(64);
+
+test('retained HTTP partner links are explicit external navigation without upgrading or crawling them', () => {
+  const href='http://partner.example/catalog';
+  const input=fixture({rootHtml:`<!doctype html><html><body><h1>Home</h1><a href="${href}">Partner</a></body></html>`});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  assert.equal(generated.contentManifest.requiredNavigation.find(item=>item.target===href)?.kind,'external_url');
+  assert.deepEqual(generated.outputPaths,['/','/about']);
+});
 
 function fixture(overrides: { aboutHtml?: string; rootHtml?: string } = {}) {
   const version = {
@@ -110,6 +119,19 @@ function page(path: string, title: string): CanonicalSiteVersionSnapshot["pages"
     createdAt: "2026-10-02T10:00:00.000Z",
   };
 }
+
+test("captured head uses real CSS nodes and rejects only MIME-proven non-CSS roles", () => {
+  const input = fixture({ rootHtml: '<!doctype html><html><head><title>Home</title><!-- <link rel="stylesheet" href="/absent.css"><style>.comment-only{color:red}</style> --><link rel="stylesheet" href="/uploads/logo.png"><link rel="stylesheet" href="/theme.jpg"><style>.active{color:blue}</style></head><body><img src="/uploads/logo.png"><h1>Home</h1></body></html>' });
+  input.rawArtifact.fileMap["theme.jpg"] = { path: "theme.jpg", mediaType: "text/css", sizeBytes: 12, sha256: SHA };
+  const result = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
+  const root = result.sourceManifest.files.find(file => file.path === "src/pages/index.astro")!.contents;
+  assert.ok(!root.includes("absent.css"));
+  assert.ok(!root.includes("comment-only"));
+  assert.ok(root.includes(".active{color:blue}"));
+  assert.match(root, /<img[^>]+uploads\/logo\.png/);
+  assert.ok(!/<link[^>]+uploads\/logo\.png/.test(root));
+  assert.match(root, /<link[^>]+theme\.jpg/);
+});
 
 test("normal source input preserves captured routes, navigation, owned asset identity, and exact Astro source files", () => {
   const input = fixture();
@@ -943,3 +965,268 @@ test("does not remove a generic api.js without security evidence inside a replac
     (error) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"),
   );
 });
+
+test("captured Revolution interaction projects only the owned controller and keeps unknown scripts rejected", () => {
+  const slides = [1, 2].map(i => `<rs-slide><img src="/uploads/${i === 1 ? 'logo' : 'about'}.png"><rs-layer data-type="text" data-xy="x:40px;y:250px;" data-text="s:70;l:80;fw:500;" data-dim="w:804px;">Slide ${i}</rs-layer></rs-slide>`).join('');
+  const rootHtml = `<html><head><title>Captured hero</title></head><body><rs-module-wrap><rs-module id="hero">${slides}</rs-module></rs-module-wrap><script>jQuery('#hero').revolution({duration:"5000ms",gridwidth:1920,gridheight:900});</script></body></html>`;
+  const { version, artifact, rawArtifact } = fixture({ rootHtml });
+  const result = createSourceBackedAstroGenerationInput({ siteVersion: version, artifact, rawArtifact });
+  const home = result.content.pages!.find(p => p.path === "/")!;
+  assert.equal((home.bodyHtml.match(/data-hero-slide=/g) || []).length, 2);
+  assert.ok(home.bodyHtml.includes(RETAINED_HERO_SCRIPT));
+  assert.ok(!home.bodyHtml.includes(".revolution("));
+  for (const script of ['<script data-gnr8-preview-runtime="retained-hero">alert(1)</script>', '<script src="/retained-hero.js"></script>', `<script onload="alert(1)">${RETAINED_HERO_SCRIPT}</script>`]) {
+    const unsafe = fixture({ rootHtml: rootHtml.replace('</body>', script + '</body>') });
+    assert.throws(() => createSourceBackedAstroGenerationInput({ siteVersion: unsafe.version, artifact: unsafe.artifact, rawArtifact: unsafe.rawArtifact }),
+      (error: unknown) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes('scripts'));
+  }
+});
+
+const presentationReduction = {kind:"retained-presentation-v1", search:"remove", map:"address-link", tracking:"remove-bundle"} as const;
+test("presentation-only reductions remove recognized search and map embed while preserving routes and legal content",()=>{
+  const rootHtml=`<html><head><title>Home</title></head><body><nav><a href="/about">About</a></nav><a id="search_button" href="#">Search</a><div class="search_wrapper"><form id="searchform" method="get" action="/"><input name="s"></form></div><p>Example Street 5<br>1000 Example City</p><iframe data-sck_ref="Google Maps" data-sck_unlock="profiling" data-blocked="https://www.google.com/maps/embed?pb=!2sExample%20Street%205%2C%201000%20Example%20City!5e0" src="/blocked.html"></iframe><div id="SCK"><button>Accept cookies</button></div><p>Legal policy retained</p></body></html>`;
+  const input=fixture({rootHtml});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:presentationReduction});
+  const html=generated.content.pages!.find(p=>p.path==="/")!.bodyHtml;
+  assert.ok(html.includes('Legal policy retained'));
+  assert.ok(html.includes('https://www.openstreetmap.org/search?query=Example%20Street%205%2C%201000%20Example%20City'));
+  assert.ok(!/<(?:form|iframe)\b/.test(html));
+  assert.ok(!/search_button|id="SCK"/.test(html));
+  assert.deepEqual(generated.outputPaths,["/","/about"]);
+  assert.equal(generated.sourceManifest.acceptedFunctionalReductions?.kind,"retained-presentation-v1");
+});
+
+test("presentation-only reductions keep forms and unknown script guards, including spoofed source names",()=>{
+  for(const [body,capability] of [
+    ['<form class="wpcf7-form" method="post" action="/contact"><input name="email"></form>',"forms"],
+    ['<script>window.unknownFeature()</script>',"scripts"],
+    ['<script>var NMOD_SCK_Options = {}; window.unknownFeature()</script>',"scripts"],
+    ['<script src="/scripts.js"></script>',"scripts"],
+    ['<iframe src="/placeholder" data-sck_unlock="profiling" data-sck_ref="Unknown video"></iframe>',"retained_unknown_gated_content"],
+  ]) {
+    const input=fixture({rootHtml:`<html><body>${body}</body></html>`});
+    assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:presentationReduction}), (e:unknown)=>e instanceof SourceBackedAstroUnsupportedError && e.unsupportedCapabilities.includes(capability!));
+  }
+});
+
+test("owned zoom targets remain asset links through Astro normalization, not uncaptured page routes",()=>{
+  const input=fixture({rootHtml:'<html><body><div><img src="/uploads/logo.png" alt="Picture"><a class="zoom" href="/uploads/logo.png">Zoom</a></div></body></html>'});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  const html=generated.content.pages!.find(p=>p.path==="/")!.bodyHtml;
+  const href=`/api/gnr8/runtime/preview-assets/${input.version.siteId}/${input.version.id}/uploads/logo.png`;
+  assert.ok(html.includes(`href="${href}"`));
+  assert.ok(html.includes('data-gnr8-image-zoom="true"'));
+  assert.ok(html.includes(RETAINED_HERO_SCRIPT));
+  assert.ok(!generated.contentManifest.requiredNavigation.some(n=>n.target===href));
+  assert.ok(generated.contentManifest.requiredAssets.some(a=>a.path===href));
+});
+
+test("approved route exclusion changes only requested output scope and home navigation",()=>{
+  const input=fixture({rootHtml:'<html><body><h1>Keep root</h1><a href="/about/">Domov</a><a id="logo" href="/about">Logo</a><a href="/about">Old template</a></body></html>'});
+  const unchanged=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  assert.equal(unchanged.outputPaths.length,2);
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:{...presentationReduction,excludedRoutes:[{path:'/about/',reason:'obsolete-template'}]}});
+  assert.deepEqual(generated.outputPaths,["/"]);
+  assert.ok(generated.content.pages![0]!.bodyHtml.includes('<h1>Keep root</h1>'));
+  assert.ok(generated.content.pages![0]!.bodyHtml.includes('href="/">Domov'));
+  assert.ok(!generated.contentManifest.requiredNavigation.some(n=>n.target.startsWith('/about')));
+  assert.ok(!generated.sourceManifest.assetEvidence.some(a=>a.path.endsWith('about.png')));
+  assert.equal(generated.sourceManifest.captureScopeLimitations?.[0]?.kind,'approved-obsolete-template-exclusion-v1');
+  assert.ok(input.artifact.htmlByPath['/about']);
+  assert.ok(input.rawArtifact.fileMap['uploads/about.png']);
+});
+
+test("responsive image candidates use the same owned resolver through normal Astro normalization",()=>{
+  const input=fixture({rootHtml:'<html><body><img src="/uploads/logo.png" srcset="/uploads/logo.png 400w, /uploads/about.png 800w"></body></html>'});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  const prefix=`/api/gnr8/runtime/preview-assets/${input.version.siteId}/${input.version.id}/uploads/`;
+  assert.ok(generated.content.pages![0]!.bodyHtml.includes(`srcset="${prefix}logo.png 400w, ${prefix}about.png 800w"`));
+});
+
+test("html route exclusion is exact and retains similarly named routes and source content",()=>{
+  const excluded='/technical/empty.html', retained='/technical/empty.html-copy';
+  const input=fixture({rootHtml:`<html><body><a href="${excluded}">Obsolete technical page</a><a href="${retained}">Keep page</a></body></html>`});
+  input.artifact.htmlByPath[excluded]='<html><body></body></html>';
+  input.artifact.htmlByPath[retained]='<html><body><p>Keep content</p></body></html>';
+  input.version.importProvenanceSummary={multiPageDiscovery:{rawArtifactAssembly:{enabled:true,routeMap:[
+    {routePath:'/about',sourceUrl:'https://example.com/about',finalUrl:'https://example.com/about',rawFilePath:'pages/about/index.html',bodySha256:SHA,byteSize:1,status:'assembled'},
+    {routePath:retained,sourceUrl:`https://example.com${retained}`,finalUrl:`https://example.com${retained}`,rawFilePath:'pages/kept/index.html',bodySha256:SHA,byteSize:1,status:'assembled'},
+  ]}}} as CanonicalSiteVersionSnapshot['importProvenanceSummary'];
+  input.rawArtifact.fileMap['pages/kept/index.html']={path:'pages/kept/index.html',mediaType:'text/html',sizeBytes:1,sha256:SHA};
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,acceptedFunctionalReductions:{...presentationReduction,excludedRoutes:[{path:excluded,reason:'obsolete-template'}]}});
+  assert.ok(!generated.outputPaths.includes(excluded));
+  assert.ok(generated.outputPaths.includes(retained));
+  const html=generated.content.pages!.find(p=>p.path==='/')!.bodyHtml;
+  assert.ok(!html.includes(`href="${excluded}"`));
+  assert.ok(html.includes(`href="${retained}"`));
+  assert.ok(html.includes(`data-gnr8-excluded-route-link="${excluded}"`));
+  assert.ok(input.artifact.htmlByPath[excluded]);
+});
+
+test('explicit basic contact replacement preserves fields and routes without exposing recipient',()=>{
+ const form='<form class="wpcf7-form" method="post" action="/wp-json/contact"><div class="column one-second"><input name="your-name" aria-required="true" placeholder="Ime"></div><input type="email" name="your-email" required placeholder="E-mail"><textarea name="your-message" placeholder="Sporočilo"></textarea><input type="submit" value="Pošlji"></form>'
+ const {version,rawArtifact,artifact}=fixture({rootHtml:`<html><head><title>Contact</title></head><body>${form}</body></html>`})
+ const settings={...presentationReduction,contact:{recipient:'approved@example.com',recipientConfirmed:true as const}}
+ const generated=createSourceBackedAstroGenerationInput({siteVersion:version,rawArtifact,artifact,htmlByPath:artifact.htmlByPath,acceptedFunctionalReductions:settings})
+ const html=generated.content.pages.find(p=>p.path==='/')!.bodyHtml!
+ assert.match(html,/data-gnr8-contact="v1"/);assert.match(html,/action="\/api\/gnr8\/runtime\/contact\?path=%2F"/);assert.match(html,/data-gnr8-preview-runtime="contact-form"/)
+ assert.doesNotMatch(html,/wp-json|approved@example.com/)
+ assert.equal(generated.outputPaths.length,2)
+ for(const extra of ['<input name="your-subject">','<input type="checkbox" name="dovoljenje[]">','<script src="/assets/form.js"></script>']){
+  const source=extra.startsWith('<script')?form+extra:form.replace('</form>',extra+'</form>')
+  assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:version,rawArtifact,artifact,htmlByPath:{...artifact.htmlByPath,'/':`<html><body>${source}</body></html>`},acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError)
+ }
+})
+
+test('retained HTML suggestions preserve source evidence and only explicit confirmation reaches the source workspace', async () => {
+  const { findContactSuggestions } = await import('./source-contact-suggestions');
+  const { createRetainedPresentationSettings, parseAcceptedFunctionalReductions } = await import('@gnr8/runtime-contracts');
+  const { resolveAstroCaptureSource, astroSourceTarget } = await import('./astro-capture-source');
+  const input=fixture({rootHtml:'<html><body><h1>Contact</h1><a href="mailto:office@example.com">Email</a><form class="wpcf7-form" method="post" action="/contact"><input name="your-name" required placeholder="Name"><input type="email" name="your-email" required placeholder="visitor@example.com"><textarea name="your-message" placeholder="Message"></textarea><input type="submit" value="Send"></form></body></html>'});
+  const source=await resolveAstroCaptureSource(input.version,input.artifact,null,{getSiteVersion:async()=>input.version,getArtifactById:async()=>input.artifact,getRawImportedSiteArtifact:async()=>input.rawArtifact});
+  assert.equal(astroSourceTarget(source),`${input.version.id}:${input.artifact.id}:${input.artifact.bundleSha256}`);
+  await assert.rejects(resolveAstroCaptureSource(input.version,input.artifact,null,{getSiteVersion:async()=>input.version,getArtifactById:async()=>input.artifact,getRawImportedSiteArtifact:async()=>({...input.rawArtifact,siteId:'foreign'})}),/lineage_missing/);
+  const htmlByPath=await loadSourceBackedAstroHtmlByPath({siteVersion:input.version,rawArtifact:input.rawArtifact,getRawAsset:async ({filePath,artifactId,siteVersionId})=>{
+    assert.equal(artifactId,input.rawArtifact.id);assert.equal(siteVersionId,input.version.id);
+    const meta=input.rawArtifact.fileMap[filePath];return {bytes:Buffer.from(input.artifact.htmlByPath[filePath==='index.html'?'/':'/about']),mediaType:meta.mediaType,sizeBytes:meta.sizeBytes,sha256:meta.sha256};
+  }});
+  const evidence=findContactSuggestions([{sourceUrl:input.rawArtifact.metadata.sourceUrl,html:htmlByPath['/']}]);
+  assert.deepEqual(evidence,[{recipient:'office@example.com',sourceUrl:'https://example.com/',evidence:'public-mailto'}]);
+  assert.equal(createRetainedPresentationSettings({excludedPaths:'',nativeContact:true,recipient:evidence[0].recipient,recipientConfirmed:false}),null);
+  const settings=createRetainedPresentationSettings({excludedPaths:'',nativeContact:true,recipient:evidence[0].recipient,recipientConfirmed:true})!;
+  assert.deepEqual(parseAcceptedFunctionalReductions(settings),settings);
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,htmlByPath,acceptedFunctionalReductions:settings});
+  assert.equal((generated.sourceManifest.acceptedFunctionalReductions as {contact:{recipient:string}}).contact.recipient,'office@example.com');
+  assert.ok(generated.sourceManifest.files.some(f=>f.contents.includes('data-gnr8-contact')));
+  const noisy='<script>const recipient="secret@example.com"</script><input placeholder="visitor@example.com" value="visitor2@example.com"><textarea>visitor3@example.com</textarea><!-- hidden@example.com -->';
+  assert.deepEqual(findContactSuggestions([{sourceUrl:'https://example.com/kontakt',html:noisy}]),[]);
+  const multiple=findContactSuggestions([{sourceUrl:'https://example.com/kontakt',html:noisy+'<p>Kontakt: sales@example.com</p><a href="mailto:office@example.com">Office</a><form id="contact" action="mailto:forms@example.com"></form>'}]);
+  assert.deepEqual([...new Set(multiple.map(e=>e.recipient))],['sales@example.com','office@example.com','forms@example.com']);
+  assert.equal(multiple.find(e=>e.recipient==='forms@example.com')?.evidence,'form-mailto');
+  assert.deepEqual(findContactSuggestions([{sourceUrl:'https://example.com/services',html:'<section><p>E-pošta: nearby@example.com</p><form></form></section>'}]),[{recipient:'nearby@example.com',sourceUrl:'https://example.com/services',evidence:'public-contact-text'}]);
+});
+
+test('contact suggestion read-model reads only the scoped retained artifact and authoritative route files', async t => {
+  const { readContactSuggestions } = await import('../site/contact-suggestion-read-model');
+  const input=fixture({aboutHtml:'<html><body><a href="mailto:retained@example.com">Contact us</a></body></html>'});
+  const keys=['NEXT_PUBLIC_SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'] as const;
+  const previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  t.after(()=>{for(const k of keys){if(previous[k]===undefined)delete process.env[k];else process.env[k]=previous[k]}});
+  process.env.NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:1';process.env.SUPABASE_SERVICE_ROLE_KEY='local-only';
+  const snake=(value:object)=>Object.fromEntries(Object.entries(value).map(([k,v])=>[k.replace(/[A-Z]/g,c=>`_${c.toLowerCase()}`),v]));
+  const files=Object.fromEntries(Object.entries({'index.html':input.artifact.htmlByPath['/'],'pages/about/index.html':input.artifact.htmlByPath['/about']}).map(([path,html])=>{
+    const bytes=Buffer.from(html),sha256=createHash('sha256').update(bytes).digest('hex');
+    input.rawArtifact.fileMap[path]={path,mediaType:'text/html',sizeBytes:bytes.length,sha256};
+    return [path,{media_type:'text/html',file_size_bytes:bytes.length,sha256,content_bytes:'\\x'+bytes.toString('hex')}];
+  }));
+  let fileReads=0;
+  t.mock.method(globalThis,'fetch',async (request:unknown)=>{
+    const url=new URL(String(request));assert.equal(url.origin,'http://127.0.0.1:1');
+    const table=url.pathname.split('/').pop();let rows:unknown[]=[];
+    if(table==='sites')rows=url.searchParams.get('id')==='eq.owned-site'&&url.searchParams.get('agency_id')==='eq.agency'&&url.searchParams.get('org_id')==='eq.client'?[{id:'owned-site'}]:[];
+    else if(table==='gnr8_runtime_site_versions'){
+      if(url.searchParams.has('ownership_site_id'))assert.equal(url.searchParams.get('ownership_site_id'),'eq.owned-site');
+      rows=[snake(input.version)];
+    }else if(table==='gnr8_runtime_page_versions')rows=input.version.pages.map(snake);
+    else if(table==='gnr8_runtime_artifacts')rows=[snake(input.artifact)];
+    else if(table==='gnr8_runtime_raw_template_artifacts'){
+      assert.equal(url.searchParams.get('site_version_id'),`eq.${input.version.id}`);
+      rows=[{...snake(input.rawArtifact),metadata_json:input.rawArtifact.metadata}];
+    }else if(table==='gnr8_runtime_raw_template_artifact_files'){
+      assert.equal(url.searchParams.get('artifact_id'),`eq.${input.rawArtifact.id}`);fileReads++;
+      rows=[files[url.searchParams.get('file_path')!.slice(3)]];
+    }else assert.ok(['gnr8_runtime_active_pointers','gnr8_runtime_preview_host_bindings'].includes(table!));
+    return Response.json(rows,{headers:{'content-range':`0-${rows.length-1}/${rows.length}`}});
+  });
+  const model=await readContactSuggestions({siteId:'owned-site',agencyId:'agency',clientId:'client'});
+  assert.deepEqual(model,{sourceTarget:`${input.version.id}:${input.artifact.id}:${input.artifact.bundleSha256}`,suggestions:[{recipient:'retained@example.com',sourceUrl:'https://example.com/about',evidence:'public-mailto'}]});
+  assert.equal(fileReads,2);
+  await assert.rejects(readContactSuggestions({siteId:'foreign',agencyId:'agency',clientId:'client'}),/CONTACT_SITE_NOT_FOUND/);
+  assert.equal(fileReads,2);
+});
+
+test('accepted source links preserve captured routes and source URL queries while complex forms open their own original page',()=>{
+ const f=fixture({rootHtml:'<html><body><a href="/about">About</a><a href="https://example.com/en/p/basic?offer=1#details">Package</a><a href="https://other.example/product">External</a><a href="http://example.com/en/p/http-plan">HTTP source</a><a href="http://login.other.example/">Login</a></body></html>',aboutHtml:'<html><body><h1>About</h1><form><select name="plan"><option>Complex</option></select></form></body></html>'})
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}} as const
+ const input={siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact}
+ assert.throws(()=>createSourceBackedAstroGenerationInput(input),SourceBackedAstroUnsupportedError)
+ const result=createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings})
+ const root=result.sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents
+ const about=result.sourceManifest.files.find(f=>f.path==='src/pages/about/index.astro')!.contents
+ assert.match(root,/href="\/about"/)
+ assert.match(root,/https:\/\/example.com\/en\/p\/basic\?offer=1#details/)
+ assert.match(root,/https:\/\/other.example\/product/)
+ assert.match(root,/http:\/\/example.com\/en\/p\/http-plan/)
+ assert.match(root,/http:\/\/login.other.example\//)
+ assert.match(about,/https:\/\/example.com\/about/)
+ assert.doesNotMatch(about,/<form/)
+ assert.match(about,/Open original form/)
+ assert.equal(result.outputPaths.length,2)
+ f.artifact.htmlByPath['/']+='<script>unknownRuntime()</script>'
+ assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError)
+})
+
+test('explicit tracking/chat omission preserves announcement and click-to-load video with owned controls',()=>{
+ const f=fixture({rootHtml:'<html><body><div class="fb-customerchat"></div><div class="engagement promomessage" style="display:block"><a class="closeBtn" href="#"></a><p>Retained announcement</p><a href="/about">Details</a></div><div><iframe src="about:blank" data-src-original="//fast.wistia.com/embed/iframe/fixture123" class="hidden"></iframe></div><script src="/analytics.js"></script></body></html>'});
+ f.rawArtifact.fileMap['analytics.js']={path:'analytics.js',mediaType:'application/javascript',sizeBytes:1,sha256:'f1a61277e3f902f50ab42015d8b07218db9b7601bb0967e54a52bfdcb4fa7e81'};
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}} as const;
+ const input={siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact};
+ assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError);
+ const result=createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,trackingAndChat:'remove'}});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/Retained announcement/);assert.match(root,/data-gnr8-close-announcement/);
+ assert.match(root,/data-gnr8-video-src="https:\/\/fast.wistia.com\/embed\/iframe\/fixture123"/);
+ assert.doesNotMatch(root,/<iframe\b|src="about:blank"/);assert.match(root,/data-gnr8-preview-runtime="retained-mono-controls"/);
+ assert.doesNotMatch(root,/fb-customerchat|src="[^\"]*analytics.js/);
+ f.rawArtifact.fileMap['analytics.js']!.sha256='b'.repeat(64);
+ assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,trackingAndChat:'remove'}}),SourceBackedAstroUnsupportedError);
+})
+
+test('recognized embedded Typeform is a disclosed original-page link under accepted complex-form scope',()=>{
+ const f=fixture({aboutHtml:'<html><body><div class="typeform-widget" data-url="https://example.typeform.com/to/fixture" data-text="Questionnaire" style="height:1100px"></div></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}}});
+ const page=result.sourceManifest.files.find(f=>f.path==='src/pages/about/index.astro')!.contents;
+ assert.match(page,/href="https:\/\/example.com\/about"/);assert.match(page,/Questionnaire/);assert.doesNotMatch(page,/typeform-widget|height:1100/);
+})
+
+test('Mono controller uses the existing exact-byte owned-runtime contract',async()=>{
+ const {RETAINED_MONO_CONTROLS_SCRIPT}=await import('../../src/public-site/retained-mono-controls');
+ const {prepareOwnedRetainedRuntimeForAstro}=await import('../../src/public-site/owned-retained-runtime');
+ const script=`<script data-gnr8-preview-runtime="retained-mono-controls">${RETAINED_MONO_CONTROLS_SCRIPT}</script>`;
+ assert.match(prepareOwnedRetainedRuntimeForAstro(script),/is:inline/);
+ for(const html of [script.replace(RETAINED_MONO_CONTROLS_SCRIPT,'alert(1)'),script.replace('<script ','<script src="other.js" '),script.replace('<script ','<script onload="alert(1)" ')])assert.throws(()=>prepareOwnedRetainedRuntimeForAstro(html));
+})
+
+test('only explicitly selected source animations become disclosed links in generated Astro',()=>{
+ const url='https://example.com/uploads/large.gif';
+ const f=fixture({rootHtml:'<html><body><img src="data:image/gif;base64,AA=="><noscript data-lazyload-src="/uploads/large.gif"><img src="/uploads/large.gif" alt="Navodila &amp; primer"></noscript><h1>Retained content</h1></body></html>'});
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}} as const;
+ const input={siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact};
+ for(const links of [[],['https://other.example/uploads/large.gif'],[url+'?different=1']]) {
+  assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,sourceMediaLinks:links}}),SourceBackedAstroUnsupportedError);
+ }
+ const result=createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,sourceMediaLinks:[url]}});
+ const page=result.sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents;
+ assert.match(page,/href="https:\/\/example.com\/uploads\/large.gif"/);
+ assert.match(page,/Open original animation/);assert.match(page,/Navodila &amp; primer/);
+ assert.match(page,/Retained content/);assert.doesNotMatch(page,/<img|<noscript/);
+ assert.equal(result.outputPaths.length,2);
+});
+
+test('missing titles use visible heading and stray quote attributes cannot corrupt exported HTML',()=>{
+ const f=fixture({rootHtml:'<html><head><style>.thing{color:red}</style></head><body><h1>Visible heading</h1><span "></span></body></html>'});
+ f.version.pages[0]!.title='';
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact});
+ const page=result.sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents;
+ assert.match(page,/<title>Visible heading<\/title>/);assert.doesNotMatch(page,/<span "=/);
+ f.version.pages[0]!.title='Literal {example: 1}';
+ const literal=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact}).sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents;
+ assert.match(literal,/<title>Literal &#123;example: 1&#125;<\/title>/);
+});
+
+ test('retained Redactor empty-style quote repair preserves swallowed heading and paragraph',()=>{
+ const f=fixture({rootHtml:'<!DOCTYPE html><html><body><p><span data-redactor-="" style=">2.4. HELP</span></p><p class=" bodytext"="">Help explanation.</p></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/>2.4. HELP<\/span>/);assert.match(root,/Help explanation/);assert.doesNotMatch(root,/style=">2.4/);
+ });

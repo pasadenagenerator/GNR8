@@ -1,6 +1,12 @@
+import { restoreRetainedMobileNavigation } from "./retained-mobile-navigation";
+import { versionRawCssUrl } from "./raw-css-url-version";
 import path from "node:path";
 import { parse } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
+import { rewriteInlineStyleAttributes } from "./rewrite-inline-style-attributes";
+import { enhanceRetainedHeroSliders } from "./retained-hero-slider";
+import { restoreRetainedEqualHeightLayout } from "./retained-equal-height-layout";
+import { recoverRelocalizedCssReferences } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^"')]+)\1\s*\)/gi;
 const CSS_IMPORT_URL_PATTERN = /@import\s+url\(\s*(["']?)([^"')\s]+)\1\s*\)([^;]*)(;?)/gi;
@@ -17,6 +23,7 @@ type RewriteContext = {
   siteVersionId: string;
   contextFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 };
 
 type RuntimeDebugContext = {
@@ -231,8 +238,9 @@ function resolveAssetPathFromReference(input: { reference: string; contextFilePa
   return null;
 }
 
-function buildPreviewAssetUrl(input: { siteId: string; siteVersionId: string; assetPath: string; suffix: string }): string {
-  return `${ASSET_ROUTE_PREFIX}/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/${input.assetPath}${input.suffix}`;
+function buildPreviewAssetUrl(input: { siteId: string; siteVersionId: string; assetPath: string; suffix: string; versionCssUrls?: boolean }): string {
+  const url = `${ASSET_ROUTE_PREFIX}/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.siteVersionId)}/${input.assetPath}${input.suffix}`;
+  return input.versionCssUrls === false ? url : versionRawCssUrl(url);
 }
 
 function rebaseOwnedPreviewAssetUrl(input: {
@@ -240,6 +248,7 @@ function rebaseOwnedPreviewAssetUrl(input: {
   siteId: string;
   siteVersionId: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): string | null {
   const { pathname, suffix } = splitPreviewUrlSuffix(input.reference);
   const prefix = `${ASSET_ROUTE_PREFIX}/`;
@@ -255,6 +264,7 @@ function rebaseOwnedPreviewAssetUrl(input: {
     siteVersionId: input.siteVersionId,
     assetPath,
     suffix,
+    versionCssUrls: input.versionCssUrls,
   });
 }
 
@@ -264,6 +274,7 @@ export function rewriteAssetReferenceToRuntime(input: {
   siteVersionId: string;
   contextFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): string | null {
   const reference = String(input.reference ?? "").trim();
   if (reference.startsWith(ASSET_ROUTE_PREFIX)) {
@@ -272,6 +283,7 @@ export function rewriteAssetReferenceToRuntime(input: {
       siteId: input.siteId,
       siteVersionId: input.siteVersionId,
       fileMapPaths: input.fileMapPaths,
+      versionCssUrls: input.versionCssUrls,
     }) ?? reference;
   }
   const { pathname, suffix } = splitUrlSuffix(input.reference);
@@ -286,6 +298,7 @@ export function rewriteAssetReferenceToRuntime(input: {
     siteVersionId: input.siteVersionId,
     assetPath,
     suffix,
+    versionCssUrls: input.versionCssUrls,
   });
 }
 
@@ -297,6 +310,7 @@ function rewriteCssImportTokens(css: string, context: RewriteContext): string {
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     const safeQuote = quote || "";
@@ -309,6 +323,7 @@ function rewriteCssImportTokens(css: string, context: RewriteContext): string {
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     return `@import ${quote}${rewritten}${quote}${media ?? ""}${semicolon ?? ""}`;
@@ -326,6 +341,7 @@ function rewriteCssUrlTokens(css: string, context: RewriteContext): string {
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     const safeQuote = quote || "";
@@ -335,25 +351,27 @@ function rewriteCssUrlTokens(css: string, context: RewriteContext): string {
 
 function rewriteTagAttributes(html: string, context: RewriteContext): string {
   const attributePattern = /(\s(?:src|href|xlink:href)\s*=\s*)(["'])([^"']*)(\2)/gi;
-  return html.replace(attributePattern, (full, prefix, quote, value, closingQuote) => {
+  const withResponsiveImages = html.replace(/(\ssrcset\s*=\s*)(["'])([^"']*)(\2)/gi, (full, prefix, quote, value, closingQuote) => {
+    // Preserve data URLs (whose commas are part of the URL). Ordinary captured
+    // candidates use the same ownership/path resolver as src, retaining sizes.
+    if (/data:/i.test(value)) return full;
+    const candidates = String(value).split(",").map(candidate => candidate.replace(/^(\s*)(\S+)/, (entry, space, reference) => {
+      const rewritten = rewriteAssetReferenceToRuntime({reference, siteId:context.siteId,siteVersionId:context.siteVersionId,contextFilePath:context.contextFilePath,fileMapPaths:context.fileMapPaths,versionCssUrls:context.versionCssUrls});
+      return rewritten ? space + rewritten : entry;
+    }));
+    return `${prefix}${quote}${candidates.join(",")}${closingQuote}`;
+  });
+  return withResponsiveImages.replace(attributePattern, (full, prefix, quote, value, closingQuote) => {
     const rewritten = rewriteAssetReferenceToRuntime({
       reference: String(value ?? ""),
       siteId: context.siteId,
       siteVersionId: context.siteVersionId,
       contextFilePath: context.contextFilePath,
       fileMapPaths: context.fileMapPaths,
+      versionCssUrls: context.versionCssUrls,
     });
     if (!rewritten) return full;
     return `${prefix}${quote}${rewritten}${closingQuote}`;
-  });
-}
-
-function rewriteInlineStyleAttributes(html: string, context: RewriteContext): string {
-  const stylePattern = /(\sstyle\s*=\s*)(["'])([\s\S]*?)(\2)/gi;
-  return html.replace(stylePattern, (full, prefix, quote, value, closingQuote) => {
-    const rewrittenCss = rewriteCssUrlTokens(String(value ?? ""), context);
-    if (rewrittenCss === value) return full;
-    return `${prefix}${quote}${rewrittenCss}${closingQuote}`;
   });
 }
 
@@ -635,6 +653,7 @@ export function rewriteRawTemplateHtmlForRuntime(input: {
   siteVersionId: string;
   resolvedFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): string {
   return rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input).html;
 }
@@ -645,18 +664,23 @@ export function rewriteRawTemplateHtmlForRuntimeWithDiagnostics(input: {
   siteVersionId: string;
   resolvedFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
 }): RawTemplateRuntimeRewriteResult {
   const context: RewriteContext = {
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     contextFilePath: input.resolvedFilePath,
     fileMapPaths: input.fileMapPaths,
+    versionCssUrls: input.versionCssUrls,
   };
 
   let rewritten = rewriteTagAttributes(String(input.html ?? ""), context);
-  rewritten = rewriteInlineStyleAttributes(rewritten, context);
+  rewritten = rewriteInlineStyleAttributes(rewritten, (css) => rewriteCssUrlTokens(css, context));
   rewritten = rewriteStyleTagBlocks(rewritten, context);
   rewritten = injectBaseTag(rewritten);
+  rewritten = enhanceRetainedHeroSliders({ ...input, html: rewritten });
+  rewritten = restoreRetainedEqualHeightLayout(rewritten);
+  rewritten = restoreRetainedMobileNavigation(rewritten);
   return injectMonoOsmapPublicFallback(rewritten);
 }
 
@@ -666,12 +690,18 @@ export function rewriteRawTemplateCssForRuntime(input: {
   siteVersionId: string;
   assetFilePath: string;
   fileMapPaths?: ReadonlySet<string>;
+  versionCssUrls?: boolean;
+  stylesheetSourceUrl?: string | null;
 }): string {
-  return rewriteCssUrlTokens(String(input.css ?? ""), {
+  const css = input.stylesheetSourceUrl && input.fileMapPaths
+    ? recoverRelocalizedCssReferences({ css: input.css, stylesheetPath: input.assetFilePath, stylesheetSourceUrl: input.stylesheetSourceUrl, filePaths: input.fileMapPaths })
+    : String(input.css ?? "");
+  return rewriteCssUrlTokens(css, {
     siteId: input.siteId,
     siteVersionId: input.siteVersionId,
     contextFilePath: input.assetFilePath,
     fileMapPaths: input.fileMapPaths,
+    versionCssUrls: input.versionCssUrls,
   });
 }
 

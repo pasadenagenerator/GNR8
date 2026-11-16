@@ -1,0 +1,272 @@
+{
+  "checkedAt": "2026-10-21T06:56:21.856Z",
+  "localOnly": true,
+  "hostedCalls": 0,
+  "retainedInput": {
+    "revision": 5,
+    "sha256": "4957be4767153e0f0099d7668516929fe852fb930a4ac1f83d5d6323ddc95c88",
+    "files": 118,
+    "originalInputHash": "0b34b6bc058db31589999915fb3dce5bc57bca94a07ea5b9a32a4c762c37f621",
+    "logicalBytes": 7649623
+  },
+  "root": "/Users/gregorzigon/Documents/Codex/GNR8/.gnr8/stacki-deduplicated-storage/run-huT9vh",
+  "measurements": [
+    {
+      "kind": "legacy",
+      "storedBytes": 30657707,
+      "save": {
+        "calls": 22,
+        "uploads": 3,
+        "downloads": 7,
+        "metadataCalls": 12,
+        "uploadBytes": 30657707,
+        "downloadBytes": 71534715,
+        "metadataRequestBytes": 980,
+        "metadataResponseBytes": 853
+      },
+      "saves": [
+        {
+          "label": "initial",
+          "ms": 230.03491700000006,
+          "calls": 5,
+          "uploads": 1,
+          "downloads": 1,
+          "metadataCalls": 3,
+          "uploadBytes": 10219209,
+          "downloadBytes": 10219209,
+          "metadataRequestBytes": 245,
+          "metadataResponseBytes": 142
+        },
+        {
+          "label": "A",
+          "ms": 315.56229099999996,
+          "calls": 6,
+          "uploads": 1,
+          "downloads": 2,
+          "metadataCalls": 3,
+          "uploadBytes": 10219197,
+          "downloadBytes": 20438406,
+          "metadataRequestBytes": 245,
+          "metadataResponseBytes": 237
+        },
+        {
+          "label": "B",
+          "ms": 334.276875,
+          "calls": 6,
+          "uploads": 1,
+          "downloads": 2,
+          "metadataCalls": 3,
+          "uploadBytes": 10219301,
+          "downloadBytes": 20438498,
+          "metadataRequestBytes": 245,
+          "metadataResponseBytes": 237
+        },
+        {
+          "label": "retry-B",
+          "ms": 328.2907089999999,
+          "calls": 5,
+          "uploads": 0,
+          "downloads": 2,
+          "metadataCalls": 3,
+          "uploadBytes": 0,
+          "downloadBytes": 20438602,
+          "metadataRequestBytes": 245,
+          "metadataResponseBytes": 237
+        }
+      ],
+      "recovery": {
+        "ms": 128.179709,
+        "calls": 3,
+        "uploads": 0,
+        "downloads": 1,
+        "metadataCalls": 2,
+        "uploadBytes": 0,
+        "downloadBytes": 10219301,
+        "metadataRequestBytes": 245,
+        "metadataResponseBytes": 167
+      }
+    },
+    {
+      "kind": "deduplicated",
+      "storedBytes": 7943813,
+      "save": {
+        "calls": 262,
+        "uploads": 122,
+        "downloads": 125,
+        "metadataCalls": 15,
+        "uploadBytes": 7943813,
+        "downloadBytes": 8030144,
+        "metadataRequestBytes": 2716,
+        "metadataResponseBytes": 104090
+      },
+      "saves": [
+        {
+          "label": "initial",
+          "ms": 188.41062499999998,
+          "calls": 236,
+          "uploads": 116,
+          "downloads": 116,
+          "metadataCalls": 4,
+          "uploadBytes": 7508734,
+          "downloadBytes": 7508734,
+          "metadataRequestBytes": 741,
+          "metadataResponseBytes": 17032
+        },
+        {
+          "label": "A",
+          "ms": 135.99900000000025,
+          "calls": 11,
+          "uploads": 3,
+          "downloads": 4,
+          "metadataCalls": 4,
+          "uploadBytes": 217500,
+          "downloadBytes": 246277,
+          "metadataRequestBytes": 741,
+          "metadataResponseBytes": 34376
+        },
+        {
+          "label": "B",
+          "ms": 135.14308399999982,
+          "calls": 11,
+          "uploads": 3,
+          "downloads": 4,
+          "metadataCalls": 4,
+          "uploadBytes": 217579,
+          "downloadBytes": 246356,
+          "metadataRequestBytes": 741,
+          "metadataResponseBytes": 34968
+        },
+        {
+          "label": "retry-B",
+          "ms": 100.97208300000011,
+          "calls": 4,
+          "uploads": 0,
+          "downloads": 1,
+          "metadataCalls": 3,
+          "uploadBytes": 0,
+          "downloadBytes": 28777,
+          "metadataRequestBytes": 493,
+          "metadataResponseBytes": 17714
+        }
+      ],
+      "recovery": {
+        "ms": 93.50324999999975,
+        "calls": 118,
+        "uploads": 0,
+        "downloads": 116,
+        "metadataCalls": 2,
+        "uploadBytes": 0,
+        "downloadBytes": 7508802,
+        "metadataRequestBytes": 245,
+        "metadataResponseBytes": 164
+      },
+      "assetCase": {
+        "ms": 134.4046659999999,
+        "calls": 9,
+        "uploads": 2,
+        "downloads": 3,
+        "metadataCalls": 4,
+        "uploadBytes": 409555,
+        "downloadBytes": 438332,
+        "metadataRequestBytes": 741,
+        "metadataResponseBytes": 35413,
+        "additionalStoredBytes": 409555,
+        "bytes": 380778,
+        "sha256": "19fa21d0dd5288aa2c14c9d5940cc84e11b2d940f7db4096929687203a032557"
+      }
+    },
+    {
+      "kind": "mixed",
+      "storedBytes": 17945511,
+      "save": {
+        "calls": 257,
+        "uploads": 120,
+        "downloads": 123,
+        "metadataCalls": 14,
+        "uploadBytes": 17945511,
+        "downloadBytes": 28222274,
+        "metadataRequestBytes": 2220,
+        "metadataResponseBytes": 69063
+      },
+      "saves": [
+        {
+          "label": "initial",
+          "ms": 205.63591700000006,
+          "calls": 5,
+          "uploads": 1,
+          "downloads": 1,
+          "metadataCalls": 3,
+          "uploadBytes": 10219209,
+          "downloadBytes": 10219209,
+          "metadataRequestBytes": 245,
+          "metadataResponseBytes": 142
+        },
+        {
+          "label": "A",
+          "ms": 271.1520419999997,
+          "calls": 237,
+          "uploads": 116,
+          "downloads": 117,
+          "metadataCalls": 4,
+          "uploadBytes": 7508723,
+          "downloadBytes": 17727932,
+          "metadataRequestBytes": 741,
+          "metadataResponseBytes": 17127
+        },
+        {
+          "label": "B",
+          "ms": 134.12520799999993,
+          "calls": 11,
+          "uploads": 3,
+          "downloads": 4,
+          "metadataCalls": 4,
+          "uploadBytes": 217579,
+          "downloadBytes": 246356,
+          "metadataRequestBytes": 741,
+          "metadataResponseBytes": 34376
+        },
+        {
+          "label": "retry-B",
+          "ms": 101.88083299999971,
+          "calls": 4,
+          "uploads": 0,
+          "downloads": 1,
+          "metadataCalls": 3,
+          "uploadBytes": 0,
+          "downloadBytes": 28777,
+          "metadataRequestBytes": 493,
+          "metadataResponseBytes": 17418
+        }
+      ],
+      "recovery": {
+        "ms": 90.78808299999946,
+        "calls": 118,
+        "uploads": 0,
+        "downloads": 116,
+        "metadataCalls": 2,
+        "uploadBytes": 0,
+        "downloadBytes": 7508802,
+        "metadataRequestBytes": 245,
+        "metadataResponseBytes": 164
+      }
+    }
+  ],
+  "reduction": 0.740886916298078,
+  "assertions": {
+    "exactAllFileRecovery": true,
+    "earlierRevisionRecovery": true,
+    "sourceAndYjsCoherent": true,
+    "all102AssetsUnchangedInComparison": true,
+    "untouchedRoutesAndContactUnchanged": true,
+    "disposableWorkspacesDeleted": true,
+    "freshClients": true,
+    "originalInputUnchanged": true
+  },
+  "limits": [
+    "Local transport and OS cache; not hosted latency.",
+    "Payload and metadata bytes exclude HTTP/TLS overhead.",
+    "Comparison uses the exact retained initial/A/B captures (B also switches an image reference, without changing asset bytes).",
+    "Fresh new-format history comparison; a retained full legacy revision adds its full bytes and is never deleted.",
+    "Runtime capture remains complete and is excluded from persistence timings."
+  ]
+}

@@ -1,0 +1,360 @@
+{
+  "status": "passed",
+  "preflight": {
+    "checkedAt": "2026-10-21T07:10:53.461Z",
+    "projectId": "prj_wwKE86zgSBVF7bMkLnRC0eL204Ys",
+    "pilotVerified": true,
+    "access": "existing superadmin allowlist",
+    "scope": {
+      "agencyId": "00000000-0000-4000-8000-000000000001",
+      "clientId": "9251b11f-3539-43ee-9a24-834c6a237852",
+      "siteId": "8c6eb062-8697-4f19-98a3-7539a274d916",
+      "siteVersionId": "cc5b8ffe-9cd9-47fa-aa38-2efe35592329"
+    },
+    "bucket": {
+      "private": true,
+      "allowedMimeTypes": null,
+      "fileSizeLimit": null,
+      "metadataVerified": true
+    },
+    "creditObservedInBilling": {
+      "used": 2.35,
+      "included": 20
+    },
+    "reservations": 5,
+    "remainingStarts": 5,
+    "activeReservations": [],
+    "draft": {
+      "revision": 5,
+      "sha256": "4957be4767153e0f0099d7668516929fe852fb930a4ac1f83d5d6323ddc95c88",
+      "files": 118,
+      "assets": 102
+    },
+    "canonicalArtifact": {
+      "id": "08e5a63d-8022-4578-9199-658fe7e9e576",
+      "manifestSha256": "54c9768965c72a342084a55bced37211e59b2bd581a9931aade644379ae79e9c"
+    },
+    "snapshot": {
+      "id": "snap_HmtOA1NZbuCdPh0fExvxcJW2tJ5g",
+      "status": "created",
+      "expiresAt": "2026-10-21T16:19:27.190Z",
+      "sizeBytes": 465337891
+    },
+    "sandboxes": [
+      {
+        "name": "gnr8-stacki-save-open-build-20261020",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-pilot-size-fix-20261020-v3",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-pilot-size-fix-20261020-v2",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-pilot-size-fix-20261020",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-pilot-build-20261020-v2",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-pilot-build-20261020",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-ffd0e949-8c4a-451a-aef0-34690b6f5865",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-aecebaee-a788-40da-b578-ced1d0dd8344",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-9ff6f12b-71c3-4dbf-8bfa-0e172a7c4c78",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-89f47413-fc0b-4d22-99c8-3e653e3b076f",
+        "status": "stopped",
+        "persistent": false
+      },
+      {
+        "name": "gnr8-stacki-4602f1d1-a846-4403-b689-fcb87b1b6ea4",
+        "status": "stopped",
+        "persistent": false
+      }
+    ],
+    "allowedToStart": true
+  },
+  "deployment": {
+    "checkedAt": "2026-10-21T07:16:37.228Z",
+    "id": "dpl_GK8zt8aFGmJwYUFdrYV6ndXgo4RU",
+    "url": "gnr8-platform-ctrdz07sh-pasadena-generators-projects.vercel.app",
+    "readyState": "READY",
+    "target": null,
+    "ready": 1792566994286,
+    "createdAt": 1792566693389
+  },
+  "source": {
+    "directory": "/private/tmp/gnr8-stacki-preview-pyje3rfn",
+    "files": [
+      {
+        "path": "apps/platform/gnr8/stacki/stacki-draft-contract.ts",
+        "sha256": "52c132a46a8ffbcae1e08137e8bf3b9ef94ee093a935af0b398869a04558ae05"
+      },
+      {
+        "path": "apps/platform/gnr8/stacki/stacki-draft-store.ts",
+        "sha256": "6a8d16d036f4d0265372a4661314255517d78e450012d8191387e496bdc9f4d1"
+      },
+      {
+        "path": "apps/platform/gnr8/stacki/stacki-draft-route-handlers.ts",
+        "sha256": "0c16650ea07edff7b107f98984cf7875ab99acab482c688623f241aae96c42aa"
+      },
+      {
+        "path": "apps/platform/gnr8/stacki/stacki-session-routes.ts",
+        "sha256": "158546b6ed1fe79576be31757fadbfa4386dedbaa590eafbdc6804489f13a1c3"
+      },
+      {
+        "path": "apps/platform/gnr8/stacki/stacki-draft-composition.ts",
+        "sha256": "d5359f4508695ec3d56ba59cd645eeb26b7010ab8af906b447d581bda1480e91"
+      }
+    ]
+  },
+  "hostedSaves": 3,
+  "editorStarts": 2,
+  "builderStarts": 0,
+  "buildGates": "passed",
+  "approval": "User: Da, dovolim",
+  "baselinePrivate": true,
+  "completedAt": "2026-10-21T07:29:48.773Z",
+  "afterA": {
+    "checkedAt": "2026-10-21T07:24:10.472Z",
+    "label": "after-a",
+    "revision": 6,
+    "sha256": "619c9c9b53fb89f3d398ca373e87c568375e2a206aa510c61cafa91132becbef",
+    "files": 118,
+    "assets": 102,
+    "assetsUnchanged": true,
+    "canonicalArtifact": {
+      "id": "08e5a63d-8022-4578-9199-658fe7e9e576",
+      "manifestSha256": "54c9768965c72a342084a55bced37211e59b2bd581a9931aade644379ae79e9c"
+    },
+    "allFilesEqualBaseline": false
+  },
+  "afterB": {
+    "checkedAt": "2026-10-21T07:24:46.768Z",
+    "label": "after-b",
+    "revision": 7,
+    "sha256": "4ca536b75ea87309f2206df1e799430e2df8b3e68dfeb72e1af317ba5531d97b",
+    "files": 118,
+    "assets": 102,
+    "assetsUnchanged": true,
+    "canonicalArtifact": {
+      "id": "08e5a63d-8022-4578-9199-658fe7e9e576",
+      "manifestSha256": "54c9768965c72a342084a55bced37211e59b2bd581a9931aade644379ae79e9c"
+    },
+    "checkpoints": [
+      {
+        "name": "0001.json",
+        "bytes": 9482436
+      },
+      {
+        "name": "0002.json",
+        "bytes": 9617067
+      },
+      {
+        "name": "0003.json",
+        "bytes": 10219121
+      },
+      {
+        "name": "0004.json",
+        "bytes": 10219153
+      },
+      {
+        "name": "0005.json",
+        "bytes": 10219209
+      },
+      {
+        "name": "0006.json",
+        "bytes": 28777
+      },
+      {
+        "name": "0007.json",
+        "bytes": 28777
+      }
+    ],
+    "allFilesEqualBaseline": false
+  },
+  "afterClose": {
+    "checkedAt": "2026-10-21T07:25:30.683Z",
+    "label": "after-close",
+    "revision": 7,
+    "sha256": "4ca536b75ea87309f2206df1e799430e2df8b3e68dfeb72e1af317ba5531d97b",
+    "files": 118,
+    "assets": 102,
+    "assetsUnchanged": true,
+    "canonicalArtifact": {
+      "id": "08e5a63d-8022-4578-9199-658fe7e9e576",
+      "manifestSha256": "54c9768965c72a342084a55bced37211e59b2bd581a9931aade644379ae79e9c"
+    },
+    "checkpoints": [
+      {
+        "name": "0001.json",
+        "bytes": 9482436
+      },
+      {
+        "name": "0002.json",
+        "bytes": 9617067
+      },
+      {
+        "name": "0003.json",
+        "bytes": 10219121
+      },
+      {
+        "name": "0004.json",
+        "bytes": 10219153
+      },
+      {
+        "name": "0005.json",
+        "bytes": 10219209
+      },
+      {
+        "name": "0006.json",
+        "bytes": 28777
+      },
+      {
+        "name": "0007.json",
+        "bytes": 28777
+      }
+    ],
+    "allFilesEqualBaseline": false
+  },
+  "freshRestore": {
+    "checkedAt": "2026-10-21T07:26:28.243Z",
+    "sandboxName": "gnr8-stacki-6aad0003-3a32-4ba7-b7e9-2f5423e5d92d",
+    "persistent": false,
+    "revision": 7,
+    "allFilesMatch": true,
+    "files": 118,
+    "assets": 102
+  },
+  "baselineRestoration": {
+    "checkedAt": "2026-10-21T07:27:06.473Z",
+    "revision": 8,
+    "sha256": "1c8cf3feb634498c85073136b3c4fcb7dfbe7cc57d22846aa6a72947dc637f93",
+    "allFilesEqualBaseline": true,
+    "files": 118,
+    "method": "existing SupabaseStackiDraftStore with same scope, CAS, pilot/ownership reauthorization and complete readback"
+  },
+  "final": {
+    "checkedAt": "2026-10-21T07:29:31.850Z",
+    "label": "final",
+    "revision": 8,
+    "sha256": "1c8cf3feb634498c85073136b3c4fcb7dfbe7cc57d22846aa6a72947dc637f93",
+    "files": 118,
+    "assets": 102,
+    "assetsUnchanged": true,
+    "canonicalArtifact": {
+      "id": "08e5a63d-8022-4578-9199-658fe7e9e576",
+      "manifestSha256": "54c9768965c72a342084a55bced37211e59b2bd581a9931aade644379ae79e9c"
+    },
+    "checkpoints": [
+      {
+        "name": "0001.json",
+        "bytes": 9482436
+      },
+      {
+        "name": "0002.json",
+        "bytes": 9617067
+      },
+      {
+        "name": "0003.json",
+        "bytes": 10219121
+      },
+      {
+        "name": "0004.json",
+        "bytes": 10219153
+      },
+      {
+        "name": "0005.json",
+        "bytes": 10219209
+      },
+      {
+        "name": "0006.json",
+        "bytes": 28777
+      },
+      {
+        "name": "0007.json",
+        "bytes": 28777
+      },
+      {
+        "name": "0008.json",
+        "bytes": 28777
+      }
+    ],
+    "allFilesEqualBaseline": true,
+    "originalRevisionUnchanged": true,
+    "monthlyReservations": 7,
+    "newSessionsClosed": true
+  },
+  "runtime": {
+    "sandboxes": [
+      {
+        "name": "gnr8-stacki-6aad0003-3a32-4ba7-b7e9-2f5423e5d92d",
+        "status": "stopped",
+        "persistent": false,
+        "createdAt": 1792567561231
+      },
+      {
+        "name": "gnr8-stacki-67ea9130-e330-4e6a-b3c2-68f8067209c6",
+        "status": "stopped",
+        "persistent": false,
+        "createdAt": 1792567322747
+      }
+    ],
+    "snapshot": {
+      "id": "snap_HmtOA1NZbuCdPh0fExvxcJW2tJ5g",
+      "status": "created",
+      "expiresAt": "2026-10-22T07:26:02.564Z"
+    }
+  },
+  "deduplicationB": {
+    "newObjects": 2,
+    "newBinaryBytes": 188793,
+    "manifestBytes": 28777,
+    "reusedObjects": 115,
+    "priorObjectsUnchanged": true,
+    "changedPaths": [
+      ".studio-state/c3JjL3BhZ2VzL2luZGV4LmFzdHJv.bin",
+      "src/pages/index.astro"
+    ]
+  },
+  "billing": {
+    "beforeIncludedCreditUsedUsd": 2.35,
+    "afterDisplayedIncludedCreditUsedUsd": 2.52,
+    "includedCreditUsd": 20,
+    "displayedDeltaUsd": 0.17,
+    "onDemandSpendDisplayedUsd": 0,
+    "finalInvoiceAmountVerified": false,
+    "note": "Team-level displayed usage; metering may lag. No purchase or limit changes."
+  },
+  "uiEvidence": [
+    "hosted-saved-b.png",
+    "hosted-closed.png",
+    "hosted-restored-b.png",
+    "hosted-final-closed.png"
+  ]
+}

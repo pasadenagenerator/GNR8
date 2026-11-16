@@ -1,3 +1,4 @@
+import { readPublicPreparation } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import { buildEnforcementAdapterDecision, type EnforcementAdapterDecision, type EnforcementAdapterStage } from "@/gnr8/migration/enforcement/enforcement-adapter";
 import { evaluateSiteRolloutEnforcementByStage } from "@/gnr8/migration/enforcement/site-enforcement";
 import { evaluateSiteRolloutPolicy, toSiteRolloutPolicyPageResult } from "@/gnr8/migration/policy/site-rollout-policy";
@@ -99,7 +100,13 @@ export function evaluatePublishEnforcement(input: {
 export function evaluateRuntimeArtifactServingEligibility(input: {
   artifact: RuntimeArtifact;
   servingStage: EnforcementAdapterStage;
+  host?: string;
 }): { allow: boolean; reason: string } {
+  if (input.artifact.manifest.publicPreparation && input.host !== undefined) {
+    const preparation = readPublicPreparation(input.artifact.manifest);
+    if (!preparation || preparation.host !== input.host.toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '') || input.servingStage !== 'production')
+      return { allow:false, reason:'public_preparation_host_denied' };
+  }
   const governance = input.artifact.artifactGovernance;
   if (!governance || !governance.siteEnforcementState) return { allow: false, reason: "artifact_missing_governance_metadata" };
 

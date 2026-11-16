@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
+import { resolveAstroNodeExecutor, runPinnedCommand, executorEnvironment, type AstroNodeExecutor } from './astro-node-executor';
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
-import { isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 
 import { decodeHtmlEntities } from "../importer/html-utils";
 import type { NormalizedStaticBusinessSiteContent } from "./astro-static-site-adapter";
@@ -74,12 +75,15 @@ export interface InspectedAstroStaticExport {
   verifiedContent: string[];
   verifiedThemeToken: string | null;
   verifiedStylesheetReferences: string[];
+  /** Build output bound to the independently selected immutable source. */
+  compiledStylesheetSourceSha256?: string;
 }
 
 export interface AstroStaticExportVerification {
   expectedContent: string[];
   expectedThemeToken: string | null;
   expectedStylesheetReferences?: string[];
+  compiledStylesheetSource?: { sourcePaths: string[]; aggregateSha256: string };
 }
 
 export interface CommandResult {
@@ -106,7 +110,7 @@ export interface AstroBuildExportProofEvidence {
     httpVerification: number;
     cleanup: number;
   };
-  versions: { node: string; pnpm: string; astro: string };
+  versions: { node: string; pnpm: string; astro: string; npm?: string };
   workspace: {
     path: string | null;
     baselineCommit: string | null;
@@ -128,6 +132,7 @@ export interface AstroBuildExportProofEvidence {
     stylesheetPaths: string[];
     verifiedContent: string[];
     verifiedThemeToken: string | null;
+    compiledStylesheetSourceSha256?: string;
   };
   server: { started: boolean; host: typeof ASTRO_BUILD_EXPORT_HOST; port: number | null; url: string | null; stopped: boolean };
   http: {
@@ -137,6 +142,7 @@ export interface AstroBuildExportProofEvidence {
     stylesheetStatus: number | null;
     stylesheetContentType: string | null;
     verifiedThemeToken: string | null;
+    compiledStylesheets?: { path: string; sha256: string; status: number }[];
   };
   sourceComparison: {
     baselineAggregateSha256: string | null;
@@ -201,6 +207,10 @@ export interface RunAstroBuildExportProofInput {
   verification?: AstroStaticExportVerification;
   signal?: AbortSignal;
   installTimeoutMs?: number;
+  /** Standalone exports carry package-lock.json and must never resolve new versions. */
+  packageManager?: "npm";
+  /** Explicit child environment for standalone builds; never inherit provider credentials. */
+  commandEnvironment?: NodeJS.ProcessEnv;
   buildTimeoutMs?: number;
   dependencies?: Partial<AstroBuildExportProofDependencies>;
 }
@@ -227,17 +237,28 @@ export async function runAstroBuildExportProof(
     evidence.workspace.baselineCommit = prepared.baselineCommit;
     evidence.workspace.baselineKind = prepared.baselineKind;
     evidence.sourceComparison.baselineAggregateSha256 = prepared.sourceSnapshot.aggregateSha256;
+    const sourcePackage = JSON.parse(await dependencies.readFile(join(prepared.workspacePath, "package.json"), "utf8"));
+    const executor = await resolveAstroNodeExecutor(prepared.workspacePath, input.signal);
+    const executorVersion = executor?.version ?? process.versions.node;
+    evidence.versions.node = `v${executorVersion}`;
+    const pinnedNode = sourcePackage.engines?.node;
+    if (typeof pinnedNode === "string" && /^\d+\.\d+\.\d+$/.test(pinnedNode) && pinnedNode !== executorVersion)
+      throw proofError("build_failed", `Saved source requires Node ${pinnedNode}; executor uses ${executorVersion}.`, evidence);
+    if (executor && !input.dependencies?.runCommand) dependencies.runCommand = (command, args, options) => runCommand(command, args, options, executor);
+    const commandEnvironment=proofEnvironment(executor ? await executorEnvironment(prepared.workspacePath, executor.path, executor.libraryPath) : input.commandEnvironment===undefined?process.env:{
+      HOME:prepared.workspacePath,USERPROFILE:prepared.workspacePath,...input.commandEnvironment,
+    });
 
     const installStartedAt = dependencies.now();
     try {
       await dependencies.runCommand(
-        "pnpm",
-        ["install", "--ignore-workspace", "--no-frozen-lockfile", "--store-dir", ".pnpm-store"],
+        input.packageManager === "npm" ? "npm" : "pnpm",
+        input.packageManager === "npm" ? ["ci", "--no-audit", "--no-fund"] : ["install", "--ignore-workspace", "--no-frozen-lockfile", "--store-dir", ".pnpm-store"],
         {
           cwd: prepared.workspacePath,
           timeoutMs: input.installTimeoutMs ?? DEFAULT_INSTALL_TIMEOUT_MS,
           signal: input.signal,
-          env: proofEnvironment(),
+          env: commandEnvironment,
         },
       );
     } catch (error) {
@@ -247,29 +268,32 @@ export async function runAstroBuildExportProof(
       const code = isTimeoutError(error) ? "install_timeout" : "install_failed";
       throw proofError(code, `Astro dependency installation failed: ${messageFor(error)}`, evidence, error);
     }
+    if (input.packageManager === "npm") evidence.installation.command = "npm ci --no-audit --no-fund";
     evidence.installation.completed = true;
     evidence.timingsMs.install = elapsed(dependencies.now(), installStartedAt);
     evidence.workspace.dependencyGeneratedFiles = await generatedWorkspacePaths(prepared.workspacePath);
 
-    const [pnpmVersion, astroPackageJson] = await Promise.all([
-      dependencies.runCommand("pnpm", ["--version"], {
+    const [packageManagerVersion, astroPackageJson] = await Promise.all([
+      dependencies.runCommand(input.packageManager === "npm" ? "npm" : "pnpm", ["--version"], {
         cwd: prepared.workspacePath,
         timeoutMs: 10_000,
         signal: input.signal,
+        env: commandEnvironment,
       }),
       dependencies.readFile(join(prepared.workspacePath, "node_modules", "astro", "package.json"), "utf8"),
     ]);
-    evidence.versions.pnpm = pnpmVersion.stdout.trim();
+    if(input.packageManager==='npm')evidence.versions.npm=packageManagerVersion.stdout.trim();
+    else evidence.versions.pnpm = packageManagerVersion.stdout.trim();
     evidence.versions.astro = readPackageVersion(astroPackageJson, "astro");
 
     throwIfAborted(input.signal, evidence);
     const buildStartedAt = dependencies.now();
     try {
-      const result = await dependencies.runCommand("pnpm", ["build"], {
+      const result = await dependencies.runCommand(input.packageManager === "npm" ? "npm" : "pnpm", input.packageManager === "npm" ? ["run", "build"] : ["build"], {
         cwd: prepared.workspacePath,
         timeoutMs: input.buildTimeoutMs ?? DEFAULT_BUILD_TIMEOUT_MS,
         signal: input.signal,
-        env: proofEnvironment(),
+        env: commandEnvironment,
       });
       evidence.build.stdout = bounded(result.stdout);
       evidence.build.stderr = bounded(result.stderr);
@@ -282,6 +306,7 @@ export async function runAstroBuildExportProof(
       const code = isTimeoutError(error) ? "build_timeout" : "build_failed";
       throw proofError(code, `Astro production build failed: ${messageFor(error)}`, evidence, error);
     }
+    if (input.packageManager === "npm") evidence.build.command = "npm run build";
     evidence.build.completed = true;
     evidence.timingsMs.build = elapsed(dependencies.now(), buildStartedAt);
 
@@ -311,6 +336,7 @@ export async function runAstroBuildExportProof(
     evidence.export.stylesheetPaths = inspected.stylesheetPaths;
     evidence.export.verifiedContent = inspected.verifiedContent;
     evidence.export.verifiedThemeToken = inspected.verifiedThemeToken;
+    evidence.export.compiledStylesheetSourceSha256 = inspected.compiledStylesheetSourceSha256;
 
     throwIfAborted(input.signal, evidence);
     server = await dependencies.startStaticServer(inspected);
@@ -380,6 +406,16 @@ export async function inspectAstroStaticExport(
   }
 
   const distPath = join(canonicalWorkspace, "dist");
+  let compiledStylesheetSourceSha256: string | undefined;
+  if (verification.compiledStylesheetSource) {
+    const binding = verification.compiledStylesheetSource;
+    if (!binding.sourcePaths.some(path => path.startsWith("src/") && path.endsWith(".css")))
+      throw new AstroStaticExportValidationError("stylesheet_verification_failed", "Compiled styles require retained CSS source.");
+    const snapshot = await readAstroStaticSiteSourceSnapshot({ workspacePath: canonicalWorkspace, sourcePaths: binding.sourcePaths });
+    if (snapshot.aggregateSha256 !== binding.aggregateSha256)
+      throw new AstroStaticExportValidationError("stylesheet_verification_failed", "Compiled stylesheet source differs from the selected revision.");
+    compiledStylesheetSourceSha256 = snapshot.aggregateSha256;
+  }
   const distStat = await lstat(distPath).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") {
       throw new AstroStaticExportValidationError("dist_missing", "Astro build did not create dist.", { cause: error });
@@ -488,6 +524,7 @@ export async function inspectAstroStaticExport(
     verifiedContent,
     verifiedThemeToken: expectedThemeToken,
     verifiedStylesheetReferences: expectedStylesheetReferences,
+    ...(compiledStylesheetSourceSha256 ? { compiledStylesheetSourceSha256 } : {}),
   };
 }
 
@@ -777,8 +814,24 @@ async function verifyDistHttp(
   }
 
   const stylesheetPath = inspected.themeStylesheetPath;
+  if (inspected.compiledStylesheetSourceSha256) {
+    evidence.http.compiledStylesheets = [];
+    if (!inspected.stylesheetPaths.length)
+      throw proofError("stylesheet_verification_failed", "Compiled source produced no linked local stylesheet.", evidence);
+    for (const path of inspected.stylesheetPaths) {
+      const expected = inspected.manifest.files.find(file => file.path === path);
+      const response = await fetchImpl(new URL(`/${path}`, baseUrl).toString(), {
+        cache: "no-store", redirect: "error", signal: boundedSignal(signal, DEFAULT_REQUEST_TIMEOUT_MS),
+      });
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!expected || response.status !== 200 || !response.headers.get("content-type")?.toLowerCase().includes("text/css") ||
+          bytes.length !== expected.bytes || createHash("sha256").update(bytes).digest("hex") !== expected.sha256)
+        throw proofError("stylesheet_verification_failed", `Compiled stylesheet HTTP bytes differ from build manifest: ${path}`, evidence);
+      evidence.http.compiledStylesheets.push({ path, sha256: expected.sha256, status: response.status });
+    }
+  }
   if (!stylesheetPath || !inspected.verifiedThemeToken) {
-    if (inspected.verifiedStylesheetReferences.length === 0) {
+    if (inspected.verifiedStylesheetReferences.length === 0 && !inspected.compiledStylesheetSourceSha256) {
       throw proofError("stylesheet_verification_failed", "No verified stylesheet evidence is available for HTTP verification.", evidence);
     }
     return;
@@ -833,17 +886,25 @@ function runCommand(
   executable: string,
   args: string[],
   options: { cwd: string; timeoutMs: number; signal?: AbortSignal; env?: NodeJS.ProcessEnv },
+  executor?: AstroNodeExecutor,
 ): Promise<CommandResult> {
   const bundledPnpmCli = executable === "pnpm" ? process.env.GNR8_PNPM_CLI_PATH?.trim() : "";
-  const command = bundledPnpmCli ? process.execPath : executable;
-  const commandArgs = bundledPnpmCli ? [bundledPnpmCli, ...args] : args;
+  const bundledNpmCli = executable === "npm" ? process.env.GNR8_NPM_CLI_PATH?.trim() : "";
+  const bundledCli = bundledPnpmCli || bundledNpmCli;
+  if (executor) {
+    if (!bundledCli || !isAbsolute(bundledCli)) return Promise.reject(new Error('ASTRO_PACKAGE_MANAGER_NOT_CONFIGURED'));
+    return runPinnedCommand(executor.path, [bundledCli, ...args], options);
+  }
+  const command = bundledCli ? process.execPath : executable;
+  const commandArgs = bundledCli ? [bundledCli, ...args] : args;
   return new Promise((resolveCommand, rejectCommand) => {
     execFile(
       command,
       commandArgs,
       {
         cwd: options.cwd,
-        env: options.env ?? process.env,
+        env: { ...(options.env ?? process.env),
+          PATH: `${dirname(process.execPath)}${delimiter}${(options.env ?? process.env).PATH ?? ""}` },
         encoding: "utf8",
         maxBuffer: 2 * 1024 * 1024,
         timeout: options.timeoutMs,
@@ -871,9 +932,9 @@ async function generatedWorkspacePaths(workspacePath: string): Promise<string[]>
   return present.filter((path): path is string => path !== null);
 }
 
-function proofEnvironment(): NodeJS.ProcessEnv {
+function proofEnvironment(base:NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
-    ...process.env,
+    ...base,
     ASTRO_TELEMETRY_DISABLED: "1",
     CI: "1",
     NO_COLOR: "1",

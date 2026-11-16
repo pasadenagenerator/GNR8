@@ -1,3 +1,7 @@
+import { readContactSuggestions } from '@/gnr8/site/contact-suggestion-read-model'
+import { parseStackiScope } from '@/gnr8/stacki/stacki-draft-contract'
+import { parseStackiCandidateSelection } from '@/gnr8/stacki/stacki-candidate-selection'
+import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
@@ -14,8 +18,11 @@ type SiteActionsBody = {
   strategy?: unknown
   variantId?: unknown
   outputAdapterId?: unknown
+  contactSourceTarget?: unknown
   acceptedFunctionalReductions?: unknown
   agencyId?: unknown
+  stackiRevision?: unknown
+  stackiBaseline?: unknown
 }
 
 function normalizeText(value: unknown): string {
@@ -35,6 +42,10 @@ export async function POST(request: NextRequest) {
     const body = ((await request.json().catch(() => null)) ?? {}) as SiteActionsBody
 
     const actionType = parseActionType(body.actionType)
+    if ((body.stackiRevision !== undefined || body.stackiBaseline !== undefined) && (actionType !== 'generate_redesign' || request.headers.get('origin') !== request.nextUrl.origin))
+      return NextResponse.json({ ok: false, error: 'Invalid Stacki preparation request.' }, { status: 403 })
+    if (body.stackiRevision !== undefined && body.stackiBaseline !== undefined)
+      return NextResponse.json({ ok: false, error: 'Choose one Stacki operation.' }, { status: 400 })
     if (!actionType) {
       return NextResponse.json({ ok: false, error: 'actionType is required' }, { status: 400 })
     }
@@ -65,27 +76,9 @@ export async function POST(request: NextRequest) {
       actor: `user:${actionContext.userId}`,
     }
 
-    const requestedReductions = body.acceptedFunctionalReductions && typeof body.acceptedFunctionalReductions === 'object'
-      ? body.acceptedFunctionalReductions as Record<string, unknown>
-      : null
-    const reductionKind = normalizeText(requestedReductions?.kind)
-    const reductionContactEmail = normalizeText(requestedReductions?.contactEmail).toLowerCase()
-    const reductionCommentLinks = normalizeText(requestedReductions?.commentLinks)
-    const reductionWidgetRemovals = Array.isArray(requestedReductions?.sourceWidgetRemovals)
-      ? requestedReductions.sourceWidgetRemovals.map(normalizeText)
-      : []
-    const allowedWidgetRemovals = new Set(['cookie-consent', 'form-captcha', 'back-to-top'])
-    if (
-      requestedReductions &&
-      (
-        actionType !== 'generate_redesign' ||
-        reductionKind !== 'legacy-forms-to-disclosed-links-v1' ||
-        !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reductionContactEmail) ||
-        reductionCommentLinks !== 'source-article' ||
-        reductionWidgetRemovals.some((item) => !allowedWidgetRemovals.has(item)) ||
-        new Set(reductionWidgetRemovals).size !== reductionWidgetRemovals.length
-      )
-    ) {
+    const acceptedFunctionalReductions = body.acceptedFunctionalReductions === undefined
+      ? undefined : parseAcceptedFunctionalReductions(body.acceptedFunctionalReductions)
+    if (acceptedFunctionalReductions === null || (acceptedFunctionalReductions && actionType !== 'generate_redesign')) {
       return NextResponse.json({ ok: false, error: 'acceptedFunctionalReductions is invalid' }, { status: 400 })
     }
 
@@ -106,16 +99,10 @@ export async function POST(request: NextRequest) {
                   : requestedOutputAdapterId === 'astro-static-site'
                     ? 'astro-static-site'
                     : undefined,
-              acceptedFunctionalReductions: requestedReductions
-                ? {
-                    kind: 'legacy-forms-to-disclosed-links-v1',
-                    contactEmail: reductionContactEmail,
-                    commentLinks: 'source-article',
-                    ...(reductionWidgetRemovals.length > 0
-                      ? { sourceWidgetRemovals: reductionWidgetRemovals as Array<'cookie-consent' | 'form-captcha' | 'back-to-top'> }
-                      : {}),
-                  }
-                : undefined,
+              acceptedFunctionalReductions,
+              contactSourceTarget: normalizeText(body.contactSourceTarget),
+              ...(body.stackiBaseline === undefined ? {} : { stackiBaseline: parseStackiScope(body.stackiBaseline) }),
+              ...(body.stackiRevision === undefined ? {} : { stackiRevision: parseStackiCandidateSelection(body.stackiRevision) }),
             }
           : {
               ...baseRequest,
@@ -146,5 +133,17 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 },
     )
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const query = request.nextUrl.searchParams;
+    const actor = await requireAgencyActionContext({ action: requiredAgencyActionForSiteAction('generate_redesign'), requestedAgencyId: query.get('agencyId') || undefined });
+    const data = await readContactSuggestions({ agencyId: actor.agencyId, siteId: query.get('siteId') || '', clientId: query.get('clientId') || '' });
+    return NextResponse.json({ ok: true, data }, { headers: { 'cache-control': 'private, no-store' } });
+  } catch (error) {
+    const mapped = parseAgencyActionContextError(error);
+    return NextResponse.json({ ok: false, error: 'Import suggestions are unavailable. Refresh before confirming a recipient.', reason: 'CONTACT_SOURCE_UNAVAILABLE' }, { status: mapped.status === 500 ? 409 : mapped.status });
   }
 }

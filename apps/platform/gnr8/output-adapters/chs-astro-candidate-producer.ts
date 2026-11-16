@@ -42,6 +42,7 @@ export type ChsSourceBackedAstroCandidateProducerDependencies = {
   producerVersion: string;
   verification: RunAstroBuildExportProofInput["verification"];
   ownedAssetFingerprints: Record<string, string>;
+  embeddedImageFiles?: Record<string, { sha256: string; mediaType: string }>;
   ownedStylesheetEvidence: NonNullable<ConvertAstroExportToInternalPreviewCandidateInput["ownedStylesheetEvidence"]>;
   now(): string;
 };
@@ -111,6 +112,7 @@ export function createSourceBackedAstroCandidateProducer(
       expectedThemeToken: CHS_ASTRO_EXPORT_VERIFICATION.expectedThemeToken,
     },
     ownedAssetFingerprints: structuredClone(dependencies.ownedAssetFingerprints ?? {}),
+    embeddedImageFiles: structuredClone(dependencies.embeddedImageFiles ?? {}),
     ownedStylesheetEvidence: (dependencies.ownedStylesheetEvidence ?? []).map((entry) => ({
       ...entry,
       retainedBytes: Buffer.from(entry.retainedBytes),
@@ -164,6 +166,7 @@ export function createSourceBackedAstroCandidateProducer(
                 rendererCompatibilityVersion: RENDERER_COMPATIBILITY_VERSION,
                 sourceSnapshotSha256: prepared.sourceSnapshot.aggregateSha256,
                 ownedAssetFingerprints: resolved.ownedAssetFingerprints,
+                embeddedImageFiles: resolved.embeddedImageFiles,
                 ownedStylesheetEvidence: resolved.ownedStylesheetEvidence,
                 createdAt: input.candidateCreatedAt,
               });

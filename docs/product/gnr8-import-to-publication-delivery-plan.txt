@@ -1,0 +1,477 @@
+GNR8 — izvedbena navodila: celovit uvoz → Astro/Lumos → Stacki → objava
+Odločitev uporabnika: 30. 10. 2026. Status: ODOBREN OBSEG; izvedba ni zaključena.
+
+AKTUALNI OBSEG — 15. 11. 2026
+Uporabnik je pojasnil, da so bile vse strani razen Pasadena Generatorja
+izbrisane. Pasadena Generator je že uvožen in je obstoječi primer za lokalno
+preverjanje univerzalnega poteka; ni cilj novega uvoza. Najprej dokončati
+univerzalni uvozni potek, nato z uporabnikom preizkusiti nove uvoze CHS,
+Logatčana, Ladje Žabe in drugih strani. Spodnji zapisi o prejšnjem uvozu
+Ladje Žabe so zgodovina, ne dovoljenje za nov zajem ali obnovitev zdaj.
+Dejansko stanje brisanja v gostovani shrambi ni bilo neodvisno preverjeno.
+Uporabnik je ponovno potrdil, da je za nove uvoze cilj zapis datotek v GitHub,
+ne shranjevanje njihovih bajtov v bazo. Lokalna koda še vsebuje združljivostno
+pot za uvoz brez GitHub arhiva in stikalo/izbor strani za GitHub pot; zato
+univerzalnega GitHub-only workflowa še ni dovoljeno označiti za dokončanega.
+Prejšnji opis »tihega starega zapisa v bazo« je opisoval to lokalno vejo kode,
+ne potrjenega gostovanega obnašanja. Pred novimi testnimi uvozi mora nova pot
+za vse strani doseči GitHub arhiv in preverjen odčitek; stari zajemi ostanejo
+berljivi brez ponovnega uvoza.
+
+PREVERJENA OMEJITEV GITHUB CILJA — 15. 11. 2026
+Novi uvoz se lokalno ustavi pred zajemom, če GitHub arhiv ni vključen ali če
+za izračunano identiteto strani ni popolnega cilja (lastnik, repozitorij, ID-ja
+in poverilnica). Pred zajemom potek z GitHubom preveri dejanski zasebni
+repozitorij, ID, lastnika, opis in pravico pisanja; pred arhiviranjem ga ponovno
+preveri. Lokalni test uporablja nadomestni odgovor in ne izvaja GitHub klicev.
+Pred preverjanjem potek prebere obstoječo vezavo strani na različico uvoza ali
+domeno v istem naročniku; za novo stran uporabi predvideno identiteto. Če se
+identiteta med zajemom spremeni, uvoz ustavi pred zapisom datotek.
+Cilji pilotnih strani so nastavljeni z okoljskim seznamom do 100 strani in preslikavo
+identitete strani v repozitorij. Obstoječa trajna povezava za objavo zahteva tudi podatke za
+Vercel in nastane kasneje, zato je ni mogoče uporabiti kot cilj novega uvoza.
+Univerzalni potek še potrebuje trajno vezavo ali samodejno pripravo repozitorija
+za poljubno novo stran ter poenotenje branja in pisanja datotek prek te vezave.
+Nobene nove strani nismo uvozili in nobenega repozitorija ustvarili.
+
+LOKALNA PRIPRAVA TRAJNE VEZAVE — 15. 11. 2026
+Dodana je migracija za trajno vezavo strani na zasebni GitHub
+repozitorij z omejitvami lastništva in enoličnosti. Strežniški zapis najprej
+preveri natančen repozitorij in pravico pisanja v GitHubu, nato shrani le
+identiteto; poverilnice ne shrani. To je lokalna priprava: migracija ni bila
+izvedena v gostovani bazi. Lokalni Stacki Open/Save, zgodovina, priprava
+kandidata, neposredna priprava Studio ter začetno preverjanje in arhiviranje
+uvoza znajo ob ločenem stikalu prebrati to vezavo. Preverjanje obveznega
+GitHub arhiva ter priprava kandidata, naslednika in javnega izhoda zdaj
+uporabljajo isto asinhrono izbiro. Pilotni okoljski seznam ostaja združljiv;
+če je stran na njem, manjkajoč cilj še vedno blokira zapis. Stikalo ni bilo
+vključeno. Gostovana migracija ni bila izvedena. Samodejna priprava
+repozitorija za novo stran je priklopljena le lokalno in še ni aktivirana;
+zato univerzalnega uvoza še ni dovoljeno označiti za dokončanega. Lokalni testi
+uporabljajo nadomestni GitHub in nadomestno shrambo.
+
+POTRJEN CILJ ZA NOVE REPOZITORIJE — 16. 11. 2026
+Uporabnik je potrdil isti GitHub račun pasadenagenerator, ločen zaseben
+repozitorij za vsako novo stran in skupno predpono gnr8-site-. GNR8 je
+aplikacijski repozitorij pod tem računom; novih strani ne shranjujemo v
+njegovo mapo. Pasadena obdrži svojo obstoječo povezavo.
+Lokalna vezava zdaj podpira rezervacijo točnega imena pred provider dejanjem,
+enkratni prehod v stanje ustvarjanja in vezavo po preverjenem odčitku. Lokalni
+ustvarjalnik pripravi zaseben repozitorij v izrecno določenem osebnem računu;
+po izgubljenem odgovoru preveri isto rezervirano ime brez drugega klica za
+ustvarjanje. Rezervacija ne vsebuje poverilnice; pred stanjem vezave noben
+porabnik ne sme uporabiti repozitorija. Lokalna shema hrani tudi vrsto lastnika,
+da objava uporabi isti osebni račun. Gostovanega ustvarjanja, migracij in
+aktivacije ni bilo.
+
+GOSTOVANA VKLJUČITEV POTRJENEGA CILJA — še ni izvedena
+Pred prvim novim uvozom morata biti uporabljeni migraciji
+20261115120000_site_github_repository_bindings.sql in
+20261116120000_site_github_owner_kind.sql. Strežniška nastavitev mora
+vključiti Git arhiv, trajne vezave in samodejno pripravo; lastnik mora biti
+vrste User z imenom pasadenagenerator in preverjenim številskim ID-jem.
+Ključ za ustvarjanje in ključ za vsebino morata biti nastavljena kot
+strežniški skrivnosti z ustreznim dostopom. Šele nato je smiseln en dejanski
+nov uvoz in pregled od zajema do objave. Nobena skrivnost ni zapisana tu.
+Točne strežniške nastavitve: GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED=1,
+GNR8_STACKI_GITHUB_BINDINGS_ENABLED=1, GNR8_SITE_GITHUB_PROVISION_ENABLED=1,
+GNR8_SITE_GITHUB_OWNER_KIND=User, GNR8_SITE_GITHUB_OWNER=pasadenagenerator,
+GNR8_SITE_GITHUB_OWNER_ID=201065362; skrivnosti sta
+GNR8_SITE_GITHUB_PROVISION_TOKEN in GNR8_STACKI_GITHUB_TOKEN. GitHubova
+povezava je 16. 11. 2026 potrdila prijavljeni osebni račun pasadenagenerator,
+njegov ID in skrbniški dostop do pasadenagenerator/GNR8. Veljavnosti in
+obsega dovoljenj obeh ključev za nove zasebne repozitorije še nismo preverili.
+
+PREGLED GOSTOVANIH CILJEV — 16. 11. 2026
+Uporabnik je izrecno dovolil vključitev. V produkcijskem projektu Supabase
+GNR8 (ujfbpzugdsdmroqvhfvn) je zadnja evidentirana migracija
+20261019090000_native_contact_delivery. Zato pred aktivacijo preveriti in
+v pravilnem zaporedju uskladiti šest naslednjih lokalnih migracij: samostojna
+objava (30. 10.), enojna pot kandidata (7. 11.), v4 viri kandidata (7. 11.),
+brisanje kandidata pri izrecni odstranitvi strani (9. 11.) in obe migraciji
+vezave na GitHub (15. in 16. 11.). Dve novi migraciji za vezavo sami ne
+zadoščata. V projektu Vercel gnr8-platform je GNR8_STACKI_GITHUB_TOKEN
+trenutno naveden za Preview, nastavitve za samodejno pripravo zasebnih
+repozitorijev pa niso navedene. Tega ne smemo vključiti pred objavo
+preverjene kode in uskladitvijo baze. Na lokalnem računalniku Supabase CLI
+nima prijavljenega dostopnega žetona. Ni bila izvedena nobena gostovana
+sprememba ali nov uvoz.
+
+PREGLED IZDAJE — 16. 11. 2026
+Vercelov aktivni produkcijski deployment gnr8-platform je z 2. 11. 2026
+in izvira iz ročne CLI izdaje; nove lokalne spremembe univerzalnega uvoza
+še niso del te izdaje. Lokalni delovni imenik vsebuje 315 spremenjenih ali
+novih poti iz več tokov dela, zato celotnega imenika ni varno poslati kot
+eno izdajo brez izbora datotek. TypeScript pregled s produkcijsko konfiguracijo
+in pregled 209 oblik poti sta uspela. Po umiku stare mape .next je čista
+lokalna produkcijska gradnja uspela; samo prevajanje je trajalo približno
+2,6 minute, celoten postopek pa je zaključil tudi pripravo strani in sledi.
+Predhodna prekinitev po nekaj več kot minuti je bila prezgodnja, ne dokaz
+zastoja. Običajni testni TypeScript pregled ni primeren kot
+izdajni dokaz, ker vključuje testne datoteke ter podvojene ustvarjene
+datoteke v .next/types. Pred objavo je treba sestaviti izrecen nabor
+sprememb in preveriti Preview; uspešna lokalna gradnja velja za celotno
+trenutno delovno stanje, ne še za izbrani nabor izdaje.
+
+KANDIDATKA IZDAJE — 16. 11. 2026
+V ločeni lokalni veji codex/universal-import-release je pripravljen nabor
+izvorne kode, šestih migracij in potrebnih skript brez dokaznih posnetkov,
+lokalnih nastavitev, začasnih datotek in predpomnilnikov. Čisti gradnji
+platforme in delavca sta uspeli; izdajni TypeScript pregled delavca je po
+popravku konfiguracije uspel. Devet usmerjenih testov vezave/uvedbe GitHuba,
+41 testov delavca in pregled 209 oblik poti so uspeli. Pregled sprememb ne
+kaže dodanih datotek z imeni skrivnosti ali ključev in ni našel tipičnih
+vzorčnih žetonov. Celotna lokalna gradnja velja za trenutno stanje; pred
+prvim uvozom še potrebujemo preverjen Preview iste revizije, gostovane
+migracije in strežniške skrivnosti.
+
+LOKALNI PRIKLOP NOVEGA UVOZA — 16. 11. 2026
+Ob izrecnih stikalih in popolni strežniški konfiguraciji uvoz pred zajemom
+ustvari zapis lastništva strani, pripravi zasebni repozitorij in ponovno
+preveri trajno vezavo. Obstoječe strani najprej uporabijo svoj preverjeni
+cilj; neuspešen pilotni cilj ne sproži ustvarjanja drugega repozitorija.
+Začasno ime nove strani po zajemu zamenja z razrešenim naslovom, če je še
+nespremenjeno. Stikala ostajajo izključena. Lokalni testi preverjajo vrstni
+red, nastavitve in nadomestne odgovore GitHuba; dejanski novi uvoz, vizualna
+zvestoba in celoten potek do objave še niso preverjeni.
+
+Povezani lokalni preizkus zdaj začne brez pilotnega seznama, ustvari natanko
+en zaseben repozitorij ter iz iste trajne vezave potrdi pripravljenost uvoza
+in izbiro Stackija. Pri pregledu celotne poti je bila najdena še manjkajoča
+povezava pri samostojni objavi: nastavitev je že ustvarjeni repozitorij
+obravnavala kot tuj ali zaseden. Objava zdaj prebere vezavo strani, preveri
+natančnega lastnika, ime in ID repozitorija, ga pokaže kot že povezanega in
+pripne isti ID k cilju izdaje. Pasadena brez take vezave uporablja obstoječo
+pot. Lokalni testi preverijo tudi zavrnitev drugega repozitorija. Gostovana
+aktivacija, dejanski novi uvoz in vizualni pregled še niso izvedeni.
+
+PREVERJANJE ZAPISA USTVARJENEGA ARTEFAKTA — 16. 11. 2026
+Za GitHub podprt uvoz dejanski zapisovalnik artefakta po preveritvi
+GitHub reference v bazo pošlje le zgoščene vrednosti poti, prazno polje CSS
+in manifest brez izvornega migracijskega besedila, izvornih besedil CMS polj
+ter teles projektnih datotek. Lokalni test prestreže dejanske parametre
+vstavitve v bazo in preveri, da v njih teh bajtov ni. Tudi različica strani
+pri takem uvozu zapiše le metapodatke, surovi arhiv pa za datoteke zapiše
+prazne označevalce ob referenci na GitHub. To je dokaz lokalne veje zapisa,
+ne še potrditev celotnega poteka ali gostovanega stanja.
+
+NASLOVI STRANI PRI GITHUB UVOZU — 16. 11. 2026
+Lokalni pregled je razkril, da sta se izvorna naslova strani kljub praznim
+vsebinskim poljem še zapisovala v obe tabeli strani. GitHub pot zdaj v teh
+dveh poljih zapiše NULL; preverjeni odčitek različice naslov obnovi iz
+zasebne predpomnilniške kopije GitHub arhiva. Lokalni test prestreže oba
+zapisa in potrdi, da starejša pot brez GitHub arhiva ohrani dosedanji zapis.
+Gostovanega uvoza ni bilo.
+
+PREVERJANJE OBNOVE IZVORNE STRANI — 16. 11. 2026
+Lokalni test dejanskega odčitka različice potrdi obnovo naslova in vsebine
+iz preverjene predpomnilniške kopije GitHub arhiva, kadar v bazi ni besedila.
+Če kopija manjka, jo odčitek ustvarjenega artefakta zdaj lokalno zna obnoviti
+iz pripetega GitHub commita po ponovnem preverjanju zasebnega repozitorija,
+točnega manifesta in bajtov. Poškodovana obstoječa kopija še vedno blokira
+odčitek. Lokalni testi uporabljajo nadomestni GitHub; dejanski odčitek iz
+gostovanega GitHuba ni bil izveden. Enaka lokalna obnova je zdaj dodana tudi
+za surove datoteke zajema: preveri točen zasebni repozitorij, pripeti commit,
+manifest in zgoščeno vrednost datoteke. Poškodovana obstoječa kopija še
+naprej blokira odčitek. Pri obeh vrstah datotek obnova uspe šele po
+preverjenem ponovnem zapisu v zasebni predpomnilnik; neuspešna predpomnitev
+ne sme povzročiti GitHub klica za vsakega obiskovalca. Gostovanega preizkusa
+in celotne vizualne potrditve
+uvoza še ni bilo, zato univerzalni workflow ni dokončan.
+
+PREGLED ZAPISA KANDIDATA — 16. 11. 2026
+Pot kandidata pri zahtevanem GitHub arhivu pred registracijo preveri Git
+referenco in zasebne izpeljane kopije HTML, CSS ter virov. Zapis kandidata
+v bazo vsebuje reference, zgoščene vrednosti in omejen manifest metapodatkov;
+odčitek za tak kandidat uporabi preverjene Git datoteke. Ciljni lokalni test
+registracije in odčitka je uspel. To ne potrjuje še izdaje, objave, dejanske
+gostovane nastavitve ali vizualne zvestobe novega uvoza.
+
+ODPRTA VRZEL PRI NASLEDNIŠKI IZDAJI — 16. 11. 2026
+Pri pripravi nasledniške izdaje pot najprej pokliče zapis različice iz
+migracije z vsebinskimi polji strani, šele pozneje pripravi GitHub arhiv
+artefakta. Za GitHub podprto stran bi ta vrstni red v bazo zapisal besedilo
+in strukturo strani. Kandidat sam ima pravilen omejen manifest, vendar to
+ne zaščiti zapisa nasledniške različice. Pred oznako univerzalnega poteka
+za dokončanega je treba vsebino nasledniške različice najprej zanesljivo
+shraniti v GitHub, v bazo zapisati samo metapodatke in preveriti odčitek
+ter potrditev objave. Lokalna pot zdaj pred ustvarjanjem različice pripravi
+in preveri ločen Git arhiv izvorne strani. V bazo zapiše njegovo referenco
+ter prazna vsebinska polja. Odčitek obnovi kanonično stran pred nastankom
+artefakta; ponovitev zavrne starejšo različico brez Git reference ali z
+nepraznimi vsebinskimi polji v bazi. Kasnejši
+artefakt še vedno dobi svoj preverjeni Git arhiv. Starejša pot brez
+zahtevanega GitHub arhiva ostaja enaka. Lokalni testi preverjajo arhivski
+vhod, dejanske parametre vstavitve in odčitek. Če je izvorna različica že
+GitHub podprta, nasledniška pot zahteva GitHub tudi ob pozneje izključeni
+konfiguraciji. Prisotnost Git reference in stanje praznih vsebinskih polj
+sta preverjena ločeno: starejša izvorna različica ne sme izklopiti zahteve
+za GitHub, obstoječi naslednik z vsebino v bazi pa ne sme nadaljevati;
+celotna nasledniška objava
+ter gostovana izdaja še nista bili izvedeni.
+Povezani lokalni preizkus zdaj iz nasledniške strani pripravi Git paket,
+shrani preverjeno zasebno kopijo, z dejanskim zapisovalnikom prestreže samo
+Git referenco in prazna vsebinska polja ter z dejanskim odčitkom obnovi
+naslov in vsebino pred nastankom artefakta. Manjkajoča kopija odčitek ustavi.
+Tudi že rezervirana različica zdaj v isti transakciji pripne Git referenco
+pred zapisom metapodatkov strani; konflikt obstoječe reference ustavi zapis.
+To je lokalni dokaz podatkovnega toka, ne celoten preizkus objave ali novega uvoza.
+Dejanski klic nasledniške storitve je lokalno preverjen še pri ponovitvi:
+obstoječa različica brez Git reference ali z vsebino v bazi se ustavi pred
+odčitkom kandidata. Ustrezna referenca z metapodatkovnimi vrsticami nadaljuje
+tudi, če sta pozneje izključeni stikali za novi Git uvoz. Koraki po odčitku
+kandidata in celotna objava ostajajo nepreverjeni v tem preizkusu.
+
+ODČITEK PRED ARTEFAKTOM — 16. 11. 2026
+Odčitek različice zdaj zna obnoviti naslov, vsebino in izvorno sled iz
+preverjene GitHub reference tudi pred vezavo ustvarjenega artefakta. Osnutek
+brez reference ostane berljiv kot metapodatkovni zapis. Lokalni test preveri
+odčitek brez artefakta in ustavitev ob manjkajoči datoteki. To je potreben
+korak za spremembo vrstnega reda nasledniške izdaje; lokalni zapis v GitHub
+pred bazo je zdaj povezan, celotna objava še ni preverjena.
+
+LOKALNO NADALJEVANJE 15. 11. 2026 — PREGLED IZBRANEGA OBSEGA
+Zaključni pregled izbranih poti zdaj razlikuje med splošnimi opozorili o mejah
+pregleda in dejanskimi vrzelmi v zajemu. Preverjena shranjena stran zaradi
+splošnega opozorila ne ostane trajno blokirana; opozorila ostanejo prikazana
+in vključena v dokaz. Telefon, e-pošta, sidro ter zunanja povezava niso
+manjkajoče notranje strani. Neznan razlog, manjkajoča notranja stran in
+nepreverjena povezava na datoteko še naprej blokirajo. Lokalno je uspelo
+25 ciljnih testov; preizkus s celotnim ohranjenim vhodom Ladje Žabe je bil
+preskočen, ker lokalni imenik vhoda ni bil na voljo. Gostovanega uvoza ni bilo.
+To še ni dokaz odkritja vseh strani izvirnega spletišča.
+
+CILJ
+GNR8 iz izvorne strani ohrani vsebino, njeno mesto, strukturo, vizualno identiteto
+in podprte funkcije. Iz tega pripravi uredljiv Astro projekt, ki ga uporabnik
+pregleda, popravi in shrani v Stacki ter objavi kot samostojno izdajo.
+Merilo je delujoč uporabniški postopek, ne število modulov ali uspešnih testov.
+
+VELJAVNE ODLOČITVE
+- Zajem: naslovi, vsa besedila, slike, ikone, pisave, video/reference, povezave,
+  semantične vloge, vrstni red in položaji na izvornih straneh.
+- Struktura: header, navigacija, body/sekcije in footer; upoštevati desktop/mobile.
+- Ločeno evidentirati interaktivni prikaz, vsebinske zbirke in storitvene funkcije.
+- Galerija/slajder: shraniti vse elemente in vrstni red, ne le vidnega prvega.
+- Blog: članki kot vsebina; zbirke/metapodatki in zmožnost nadaljnjega urejanja
+  imajo ločeno podporo. Obrazec: polja in pravila ločeno od dostave sporočila.
+- Trgovino prepoznati in navesti omejitev, migracije trgovine ne implementirati.
+- Pri Ladji Žabi obrazca ni; ne dodajati ga in ne odstranjevati domnevnega obrazca.
+- Brand style guide izpeljati iz shranjenih dokazov, nato omogočiti pregled in
+  popravek; opaženo ni samodejno potrjena identiteta znamke.
+- Lumos je ciljna oblikovna/komponentna plast, ne nadomestek za zajem in dokazila.
+- Astro ohrani logo/položaj, barvne vloge, vsebino, vrstni red in funkcije.
+  Dovoljene manjše oblikovne izboljšave ne dovolijo izpuščanja vsebine. Višino
+  slajderja in druge vidne spremembe prikazati kot izbiro izboljšave.
+- Obstoječe okolje in baza; brez nepotrebnih vzporednih baz/Preview workflowov.
+- Brez Fast načina ali podagentov. Ohrani vse predhodno necommitano delo.
+- Izvornega hostinga, DNS in pošte ne spreminjati. Brez nakupov ali nadgradenj.
+- Vsebinsko sprejetje in končni Publish ostajata uporabnikova odločitev.
+
+AVTORITATIVNI VHOD ZA PRVI KORAK
+URL: https://www.ladjazaba.si/
+Agency: 00000000-0000-4000-8000-000000000001
+Client: bf4e543f-b1ce-4fa6-940f-e566596c57f7 / Fridrih Franc s.p.
+Ownership site: 266023f6-930c-41a9-aef0-ff386a9c7bf2
+Runtime site: site_c41db03fb0574ea5b865
+Capture version: 4f8e9a19-a4f3-4026-b0c7-ee899bf30a09
+Artifact: f4ec212e-e19c-4781-99b5-7dd866664ed4
+Import run: client-site-import-1793367672538
+Routes: /, /en, /it. Raw file map: 423 entries.
+Doslej: en uvoz, en Generate; Generate neuspešen unsupported_capability:scripts.
+Inngest run: 01M66GSYE4XXMGB615YV8K0DQS.
+Dokazi: evidence/standalone-publication/general-local-2026-10-30/ladja-zaba-import.json.
+Ne izvajaj novega zajema za razhroščevanje nadaljnje pretvorbe.
+
+1 — CELOVIT UVOZ LADJE ŽABE
+Najprej sledi dejanskemu shranjenemu vhodu skozi manifest → resolver → response
+→ DOM. Razloči manjkajoče bajte, napačno preslikavo, neuspešno serviranje,
+blokirano pisavo ter neizvedeno inicializacijo gradnika. Ne popravljaj samo URL
+pripon ali imen datotek na slepo in ne dodajaj splošnega dovoljenja za skripte.
+Znano: 15 galerijskih img v predogledu ni bilo naloženih; href za povečave ostaja
+/uploads/...; ikone se prikazujejo kot kvadratki. To so simptomi, ne popolna diagnoza.
+Preveri tudi font MIME/byte integrity ter CSS url()/@import odvisnosti.
+Ponovno uporabi verified-retained-asset in obstoječe preview forensics/resolverje.
+Sprejem: vse 3 poti; 15/15 galerijskih slik; ikone na desktop/mobile; odpiranje,
+naprej/nazaj/zapiranje galerije s tipkovnico; navigacija in jezikovne povezave;
+brez izgube besedila. Prikaz in delovanje preveri proti izvirniku.
+
+2 — ENOTEN OPIS ZAJETE STRANI IN CELOVITOST
+Razširi obstoječe capture/layout/navigation/section/widget podatke in manifest.
+Ne uvajaj vzporednega modela za iste identitete ali novega orchestration sistema.
+Vsak element naj ima stabilno referenco na source route/element, vrsto, vsebino,
+asset reference, sekcijo, vrstni red, geometrijo/viewport in stopnjo zaupanja.
+Vsak najdeni element ima stanje zajet/manjka/nepodprt z razlogom. Število
+shranjenih datotek ali HTTP 200 ni dokaz celovitosti. Omejitve crawla so vidne.
+Neznani gradniki ostanejo v inventarju in viru; pretvorba jih ne sme tiho izpustiti.
+Sprejem: pregled vsebine in funkcij na Ladji Žabi ter primer s petimi slajdi,
+videom in običajnim obrazcem v lokalnih ohranjenih vhodih, brez testne e-pošte.
+
+3 — BRAND STYLE GUIDE + LUMOS
+Uporabi obstoječe computed style samples, style signals in continuity candidates.
+Vodič: logo/variante, semantične barve, font family/weights/sizes/line heights,
+spacing scale, širine, robovi, radius, sence, gumbi, breakpoint obnašanje.
+Loči opaženi vir, normalizirani predlog in uporabnikove potrjene popravke.
+Ohrani sledljivost do originala; ne prepiši dokazov s potrjenim vodičem.
+Pred vključitvijo preveri konkretno Lumos različico, Astro/Node združljivost,
+licenco in Stacki podporo; različico pripni. Ne nadgrajuj drugih projektov.
+Implementiraj izrecno preslikavo vodiča v Lumos tokens/themes in komponente.
+Uporabi isti uredljiv Astro izvor za build, Stacki Save in objavo.
+Sprejem: rdeča/bela izvorna identiteta ostane rdeča/bela, logo levo ostane levo;
+sprememba potrjenega tokena se dosledno odrazi v predogledu in shranjenem izvoru.
+
+4 — ASTRO POUSTVARITEV IN PODPRTE INTERAKCIJE
+Iz inventarja in potrjenega vodiča sestavi semantične komponente. Prednost imajo
+majhne lastne oziroma Lumos komponente pred ponovnim izvajanjem tujega runtime.
+Ohrani vse slajde, napise, povezave in vrstni red; ustrezno obravnavaj responsive
+prikaz, tipkovnico in reduced-motion. Videu ohrani vir, naslov/poster in controls.
+Nepodprta funkcija da konkretno blokado z izvornim elementom, ne le 'scripts'.
+Obrazci uporabljajo obstoječo kontaktno pot in izrecno potrjenega prejemnika;
+predogledi ne pošiljajo. Blog vsebina ne pomeni samodejno obstoječega CMS.
+Sprejem: primerjava inventarja izvora/izvoza, asset closure, build in vizualni
+pregled desktop/mobile; brez tihih odstranitev ali zamenjave z izmišljeno vsebino.
+
+5 — STACKI IN SAMOSTOJNA OBJAVA
+Ponovno uporabi obstoječe session/source/revision/save in publication servise.
+Preveri uredljivost komponent, tokens in vsebine ter Save → ponovno odpiranje
+→ priprava točno shranjene revizije. Pilotne omejitve razširi po preverjeni
+tenant/membership pogodbi, ne z odstranitvijo lastniških kontrol.
+GitHub je izvorna koda; domeno streže izbrani hosting. Izvoz ohrani lastne assets
+in deluje brez GNR8/Stacki med obiskom. Kontakt ima ločeno dokumentirano odvisnost.
+Pred gostovanim pisanjem konkretiziraj release files, resource IDs, kvote in
+rollback na obstoječih povezavah; ohrani uporabnikov končni pregled/Publish.
+Sprejem: nova stranka → zajem → Astro → Stacki sprememba → Save/reopen → isti
+zamrznjeni izvoz → GitHub/Vercel → uporabnikova objava → preverjena povrnitev.
+
+AKTUALNA ODLOČITEV 5. 11. 2026 — ENA PRIVZETA POT
+Novi potrjeni potek mora biti hkrati privzeta in edina pot za vse uvoze strani.
+Uporabnik je odobril namestitev za ta cilj. Ne nameščati zgolj delnega zaslona
+za pregled kot izpolnitve te odločitve. Obstoječe stranke in shranjeni zajemi
+morajo ostati dostopni; preklop starih vstopov brez delujoče nadomestne poti ni
+sprejemljiv. Uporabnikova potrditev vsebine/Brand in končni Publish ostaneta
+izrecni dejanji. Izvorni CSS width:66,666% ostane brez popravka.
+
+IZVEDBENA DISCIPLINA
+To je en program z zaporednimi zaključljivimi koraki, ne ena ogromna uvedba.
+Vsak korak zahteva najmanjšo povezano implementacijo in dokaz uporabniškega izida.
+Ne razglasiti celote za zaključeno ob uspehu koraka 1. Ne graditi naslednje plasti
+na nepojasnjeni izgubi vsebine. Vnovič uporabiti veljavne teste in shranjene vhode.
+Po dveh hosted napakah istega razreda prekiniti hosted ponavljanja in popraviti
+dejansko verigo lokalno. Ne reševati napake z novim zajemom ali novimi identitetami.
+Stanje sproti zapisovati ob dokazih: lokalno implementirano, lokalno preverjeno,
+gostovano preverjeno, uporabniško sprejeto, objavljeno — vsako ločeno.
+
+IZVEDENO 30. 10. 2026 — LOKALNI POPRAVEK PREDOGLEDA
+Galerija, povečave, jezikovni/mobilni meni in manjkajoča glavna CSS datoteka na
+jezikovnih poteh so lokalno popravljeni in preverjeni na shranjenem vhodu.
+Aktualni izbrani vhod ob izvedbi: 584a869a-f127-4bea-a02c-438f4e4bba52,
+raw artifact b84a2d20-4262-4a67-a1a0-3751e3b134fd, 478 datotek. Starejši vhod,
+naveden zgoraj, ni bil izbrisan ali ponovno zajet. V tej izvedbi ni bilo uvoza.
+Dokaz in natančna meja: evidence/standalone-publication/general-local-2026-10-30/ladja-gallery-local-report.txt.
+Gostovana uvedba in celoten korak 1 še nista potrjena. Nadaljnji koraki 2–5
+ostajajo odobreni, neizvedeni deli programa. Galerija še ni vključena v Astro.
+
+NADALJEVANJE 30. 10. 2026 — POPRAVEK NAMEŠČEN IN PREVERJEN
+Predogledni popravek je na obstoječem GNR8 nameščen kot
+ dpl_7c13jRVQJJaGMASmmYULmR2xZEze (prejšnja izdaja GPfvthtB9kDRxTZy5Tbg5mGrVU7X ostaja).
+Vseh 113 usmerjenih testov in gostovana gradnja sta uspešna. V prijavljenem
+brskalniku preverjene vse 3 poti, 15/15 slik, povečava/tipkovnica in mobilni meni.
+Ni bilo novega zajema, Generate, baze, spremembe DNS ali objave strankine strani.
+Dokaz: evidence/standalone-publication/general-local-2026-10-30/ladja-gallery-hosted-report.txt.
+Prejšnji zapis 'lokalno, ne nameščeno' je zgodovinsko stanje, ki ga ta zapis nadomesti.
+
+KONČNO STANJE ISTE IZVEDBE 30. 10. 2026
+Aktivna izdaja je dpl_EMhRSg1qXkgem7E7yTig1eNaHnha: dodatno popravi
+izginjanje dostopnih povezav menija pri spremembi širine zaslona (64 testov).
+Skupaj 2 gradnji in 2 izrecni aktivaciji, brez novega zajema ali Generate.
+Pri zadnjem pregledu so se pojavile vmesne napake 500 pri slikah/pisavah.
+Brez spremembe izdaje se je prikaz obnovil; potrjenih 15/15 slik in povečava.
+Vzrok vmesnih napak ni potrjen. Zanesljivost dostave datotek ostaja odprta;
+prejšnje besedilo o uspešnem pregledu ne pomeni, da je ta težava odpravljena.
+
+UPORABNIŠKO SPREJETJE PREDOGLEDA — 30. 10. 2026
+Uporabnik potrjuje, da Ladja Žaba v GNR8 izgleda dobro. Izrecno odlaga
+nezanesljivo nalaganje slik in manjkajočo ikono za pomik na vrh strani.
+Obe težavi ostajata odprti, vendar ne blokirata nadaljevanja programa.
+Naslednji korak je 2: enoten opis zajete strani in preverjanje celovitosti
+na obstoječem shranjenem vhodu; nato Brand style guide/Lumos, Astro in Stacki.
+Sprejetje predogleda ni potrditev celovitosti zajema ali končna objava.
+
+KORAK 2 — LOKALNI PREGLED ZAJETE VSEBINE, 30. 10. 2026
+V obstoječi pregled strani je dodan seznam vsebine po izvornih poteh in elementih,
+sekcijah ter vrstnem redu. Ločuje opažene podatke, sklepe, manjkajoče sklice in
+nepreverjene oziroma nepodprte funkcije. Uporablja obstoječe resolverje in branje.
+Lokalni replay trenutne Ladje Žaba potrdi /, /en, /it, po 15 galerijskih slik
+v vrstnem redu in brez obrazca. 72 usmerjenih testov uspešnih; lokalni vizualni
+pregled iste komponente opravljen. Na gostovani GNR8 še ni nameščeno.
+Širši tipski pregled ni uspešen (napake zunaj spremenjenih implementacijskih datotek).
+Omejitve CSS/dinamične vsebine, responsive stanj in popolnosti crawla ostajajo
+izrecno navedene; to ni potrditev popolnega zajema vseh vrst vsebine.
+Dokaz: evidence/standalone-publication/content-review-2026-10-30/report.txt.
+
+KORAK 2 — DOKONČAN OMEJENI PREGLED IN NAMEŠČEN, 30. 10. 2026
+Popravljeni lažni manjkajoči href na slikah, srcset/picture alternative in
+razlikovanje Swiper/slajd. Zajem vsebine je ločen od podpore funkciji. Znane
+neuspele/izločene poti imajo razloge, izločeni ne-stranski sklici so združeni.
+Pokritost CSS, ikon/pisav, responsive in dinamične vsebine ima konkretne dokaze
+ali oznako delno/nepreverjeno. To ni potrditev popolnosti izvornega zajema.
+77 testov na točnem izdajnem paketu uspešnih; 2 uspešni gradnji in aktivaciji.
+V prijavljenem GNR8 preverjene /, /en, /it, po 15 članov galerije, brez obrazcev,
+24 združenih ne-stranskih povezav in pravilna identiteta shranjenega vhoda.
+Aktivna izdaja: dpl_FdDHsjGLa339hkDofXiCfYVKinNK. Prejšnja meja povrnitve:
+dpl_EMhRSg1qXkgem7E7yTig1eNaHnha. Odloženi težavi sta ostali nedotaknjeni.
+Podrobnosti: evidence/standalone-publication/content-review-completion-2026-10-30/report.txt.
+Naslednji programski korak ostaja Brand style guide + preverjena povezava Lumos.
+
+
+2026-10-30 — Uredljiv Brand style guide, del programskega koraka 3
+Na Ladji Žaba je v zavihku Design dodan uredljiv vodič iz obstoječega vhoda
+584a869a-f127-4bea-a02c-438f4e4bba52 / b84a2d20-4262-4a67-a1a0-3751e3b134fd.
+Opažanja, predlogi in uporabniške potrditve so ločeni. Osnutek se shrani v
+obstoječo provenance JSON mejo različice z zaščito pred sočasnim prepisom.
+Gostovano je preverjen Save → ponovno nalaganje → Open (revizija 1, nepotrjeno).
+Ohranjeni so izvorni dokazi; noben nov zajem, Generate, baza, DNS ali objava
+strankine strani ni bila izvedena. Dve manjši korekciji inventarja sta vključeni.
+
+Lumos raziskovalni pin: v1.0.1 / 968d013064bd9b3f1b7a73afec7abe9925ac9560, MIT.
+Zahteva Astro 7.4.2 / Node >=22.23.4; trenutni Stacki je pripet na Astro 5.18.2.
+Zato Lumos ni nameščen in celoten programski korak 3 še ni zaključen.
+Naslednje: pregled/potrditev vodiča, odločitev o združljivi Astro/Stacki osnovi,
+izrecna preslikava potrjenih vrednosti v isti uredljivi izvor ter preverjanje
+Save/reopen/build. Prazne vloge in manjkajoča odzivna dokazila niso potrjena.
+Dokazi: docs/product/evidence/brand-guide/report.txt in validation.json.
+
+2026-10-30 — Zanesljivost uredljivega vodiča
+Dodana je validacija po vrsti polja, primerjava/obnova osnutka po konfliktu in
+predogled z dejansko naloženim shranjenim Barlow ter osnovno debelino pisave.
+Gostovano preverjeno v dveh zavihkih: brez tihe izgube osnutka, ohranjena
+neurejena polja zadnje revizije, Save → reload → Open. Končna revizija 4
+ohrani začetne vidne vrednosti; nobena vrednost ni samodejno potrjena.
+Dokazi: docs/product/evidence/brand-guide-reliability/validation.json.
+Nespremenjeno: naslednja odločitev ostaja združljiva Astro/Lumos/Stacki povezava.
+
+2026-10-30 — Lokalno preverjena omejena Lumos povezava
+Celotna predloga Lumos v1.0.1 zahteva novejši Astro/Node, vendar sta njena
+nespremenjena base.css/patterns.css in komponenta Paragraph (s prilagojeno
+relativno potjo uvoza) lokalno preverjeni na Astro 5.18.2 / Node 22.22.3.
+Potrjeni sintetični tokeni se odrazijo v izvoru in prikazu; obstoječi Stacki
+checkpoint/store ohrani datoteke pri Save/reopen in ponovni Astro gradnji.
+To ni dokaz uporabniškega Save v urejevalniku ali gostovane združljivosti.
+Priprava kandidata pravilno zavrne spremenjeni CSS. Naslednji korak mora vezati
+potrjeno revizijo vodiča na nov preverjen Astro izvor ter preveriti njegovo
+uredljivost na aktualnem Stacki runtime (checkpointHook 2, entryReopenVersion 1),
+ne sprostiti splošne prepovedi sprememb kode. Lumos privzete vrednosti niso
+potrjena identiteta znamke. Gostovanje in vodič Ladje Žaba ostajata nedotaknjena.
+Dokaz: evidence/lumos-compatibility-local/report.txt.
+
+2026-10-30 — Usklajena lokalna nadgradnja Astro/Stacki/Lumos
+Lokalno preverjeni Node 26.13.0 LTS, Astro 7.4.4, Studio 0.1.94
+(2ed510fbaf19e120c642f96a8e3047f15bcd71ab) in celotna Lumos 1.0.1 predloga.
+Dejanski GNR8 Open → vizualna sprememba → Save (tudi ponovitev izgubljenega
+odgovora) → nova seja/ponovno odpiranje → build obnovljenega izvora je uspel.
+50 usmerjenih testov uspešnih. Ohranjeni tokeni, vse nepovezane datoteke in
+kontrole dostopa; dodano ohranjanje tsconfig.json. Spremembe CSS/kode pri
+pripravi kandidata ostajajo blokirane. Gostovanje ni nadgrajeno: pred izdajo
+potrebujemo Linux runtime, preverjeno Node podporo in usklajen preklop izdajne
+kode ter obstoječe runtime konfiguracije. Ladja Žaba ni bila spremenjena.
+Dokaz in načrt povrnitve: evidence/stacki-astro-lumos-upgrade/report.txt.

@@ -7,7 +7,7 @@ import {
   computeRuntimeArtifactBundleSha256,
   readAstroRuntimeArtifactPromotionEvidence,
 } from "@/gnr8/runtime/astro-artifact-materialization";
-import { stableStringify } from "@/gnr8/runtime/deterministic";
+import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 import { publishApprovedSiteVersion } from "@/gnr8/runtime/publish-activation-orchestrator";
 import { evaluatePublishEnforcement } from "@/gnr8/runtime/publish-enforcement";
 import {
@@ -21,17 +21,21 @@ import {
   getRuntimeSiteSummary,
   getRuntimeSiteVersionOwnershipSnapshot,
   getSiteVersion,
+  getSiteVersionGitSourceStatus,
   linkRuntimeSiteVersionOwnershipIfAllowed,
 } from "@/gnr8/runtime/runtime-store";
 import { rollbackToSiteVersionArtifact } from "@/gnr8/runtime/rollback-switch";
 import { transitionSiteVersionState } from "@/gnr8/runtime/version-lifecycle-enforcer";
 import type {
   CanonicalSiteVersionSnapshot,
+  CanonicalPageVersionInput,
   RuntimeArtifact,
   RuntimeImportProvenanceSummary,
 } from "@/gnr8/runtime/types";
 
-import type { AstroCandidatePromotionResult } from "./astro-candidate-promotion-service";
+import { prepareGeneratedCandidateGit, type AstroCandidatePromotionResult } from "./astro-candidate-promotion-service";
+import { githubArchiveRequired } from "../stacki/stacki-github-config";
+import type {GeneratedGitRef} from '../site/generated-artifact-git-cache';
 import {
   ASTRO_SUCCESSOR_PUBLICATION_VERSION,
   deriveAstroSuccessorOperationIdentity,
@@ -62,6 +66,34 @@ export {
 } from "./astro-successor-operation-identity";
 export const ASTRO_SUCCESSOR_PRODUCER_KIND = "astro_successor_candidate_rebind" as const;
 export const ASTRO_SUCCESSOR_PRODUCER_VERSION = "v1" as const;
+
+export async function prepareSuccessorSourceGit(input:{pages:CanonicalPageVersionInput[];
+  lineage:RuntimeImportProvenanceSummary;candidate:AstroResolvedCandidateRecord['candidate'];
+  ownership:AstroProductionCandidateOwnership;prepareGeneratedGit?:typeof prepareGeneratedCandidateGit;
+}):Promise<GeneratedGitRef|null>{
+  const sourceMigrationPayload={pages:input.pages,importProvenanceSummary:input.lineage};
+  return (input.prepareGeneratedGit??prepareGeneratedCandidateGit)({
+    htmlByPath:input.candidate.htmlByPath,compiledTokenStyles:input.candidate.compiledTokenStyles,
+    ...('exportedFiles' in input.candidate?{exportedFiles:input.candidate.exportedFiles}:{}),
+    manifest:{sourceKind:'astro_successor_source',sourceMigrationPayload,
+      sourceMigrationPayloadSha256:sha256Hex(stableStringify(sourceMigrationPayload))},
+  },input.ownership);
+}
+
+export async function prepareSuccessorPreallocationManifest(input:{
+  candidate:AstroInternalPreviewCandidate;manifest:Record<string,unknown>;
+  ownership:AstroProductionCandidateOwnership;prepareGeneratedGit?:typeof prepareGeneratedCandidateGit;
+}):Promise<Record<string,unknown>>{
+  const archive=await (input.prepareGeneratedGit??prepareGeneratedCandidateGit)({
+    htmlByPath:input.candidate.htmlByPath,compiledTokenStyles:input.candidate.compiledTokenStyles,
+    manifest:input.manifest,
+    ...('exportedFiles' in input.candidate?{exportedFiles:input.candidate.exportedFiles}:{}),
+  },input.ownership);
+  if(!archive&&await githubArchiveRequired({agencyId:input.ownership.agencyId,clientId:input.ownership.organizationId,
+      siteId:input.ownership.ownershipSiteId,siteVersionId:input.ownership.siteVersionId}))
+    throw publicationError('successor_git_archive_required','Successor Git archive is required before artifact allocation.');
+  return archive?{...input.manifest,generatedGitArchive:archive}:input.manifest;
+}
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -163,6 +195,7 @@ export type AstroSuccessorPublicationDependencies = {
     };
   }): Promise<AstroCandidatePromotionResult>;
   getSiteVersion: typeof getSiteVersion;
+  getSiteVersionGitSourceStatus:typeof getSiteVersionGitSourceStatus;
   getRuntimeSiteSummary: typeof getRuntimeSiteSummary;
   getActiveHostBindingForHost: typeof getActiveHostBindingForHost;
   getActivePointerForSite: typeof getActivePointerForSite;
@@ -171,6 +204,7 @@ export type AstroSuccessorPublicationDependencies = {
   createSiteVersionFromMigration: typeof createSiteVersionFromMigration;
   linkRuntimeSiteVersionOwnershipIfAllowed: typeof linkRuntimeSiteVersionOwnershipIfAllowed;
   createArtifact: typeof createArtifact;
+  prepareGeneratedGit?: typeof prepareGeneratedCandidateGit;
   bindArtifactToVersion: typeof bindArtifactToVersion;
   bindHostToSite: typeof bindHostToSite;
   transitionSiteVersionState: typeof transitionSiteVersionState;
@@ -269,6 +303,20 @@ export function createAstroSuccessorPublicationService(
       successorSiteVersionId: operation.successorSiteVersionId,
       successorArtifactId: existingSuccessorAtStart?.artifactId ?? null,
     });
+    const gitRequired=Boolean(await dependencies.getSiteVersionGitSourceStatus(input.sourceSiteVersionId))||
+      await githubArchiveRequired({agencyId:sourceOwnership.agencyId,
+      clientId:sourceOwnership.organizationId,siteId:sourceOwnership.ownershipSiteId,
+      siteVersionId:sourceOwnership.siteVersionId});
+    if(gitRequired&&existingSuccessorAtStart){
+      const status=await dependencies.getSiteVersionGitSourceStatus(operation.successorSiteVersionId);
+      const ref=status?.reference;
+      if(!status?.metadataOnly||!ref||ref.scope.agencyId!==sourceOwnership.agencyId||
+        ref.scope.clientId!==sourceOwnership.organizationId||
+        ref.scope.siteId!==sourceOwnership.ownershipSiteId||
+        ref.manifestPath!==`generated/${operation.successorSiteVersionId}/.gnr8-generated-manifest.json`)
+        throw publicationError('successor_git_source_reference_missing',
+          'Existing successor version has no verified site-owned Git source reference.');
+    }
 
     const sourceCandidate = await dependencies.candidateRepository.read({
       candidateId: input.sourceCandidateId,
@@ -324,6 +372,18 @@ export function createAstroSuccessorPublicationService(
         actor: input.actorUserId,
       });
       const page = canonical.pages[0]!;
+      const pages=[{
+        ...page,pageId:sourcePage.pageId,
+        semanticSignals:[...page.semanticSignals,
+          {label:'astro.successor.source_candidate' as const,confidence:1,source:'migration' as const}],
+        actor:input.actorUserId,
+      }];
+      const sourceArchive=gitRequired?await prepareSuccessorSourceGit({pages,lineage,
+        candidate:sourceCandidate.candidate,
+        ownership:{...sourceOwnership,siteVersionId:operation.successorSiteVersionId},
+        prepareGeneratedGit:dependencies.prepareGeneratedGit}):null;
+      if(gitRequired&&!sourceArchive)throw publicationError('successor_git_source_archive_required',
+        'Successor source Git archive is required before version creation.');
       const created = await dependencies.createSiteVersionFromMigration({
         ...canonical,
         siteId: input.runtimeSiteId,
@@ -332,15 +392,9 @@ export function createAstroSuccessorPublicationService(
         siteVersionId: operation.successorSiteVersionId,
         createSourceHostBinding: false,
         importProvenanceSummary: lineage,
-        pages: [{
-          ...page,
-          pageId: sourcePage.pageId,
-          semanticSignals: [
-            ...page.semanticSignals,
-            { label: "astro.successor.source_candidate", confidence: 1, source: "migration" },
-          ],
-          actor: input.actorUserId,
-        }],
+        pages,
+        metadataOnly:Boolean(sourceArchive),
+        ...(sourceArchive?{sourceGitArchive:sourceArchive}:{}),
         rendererCompatibilityVersion: sourceCandidate.candidate.rendererCompatibilityVersion,
       });
       successorVersion = await dependencies.getSiteVersion(created.siteVersionId);
@@ -432,11 +486,15 @@ export function createAstroSuccessorPublicationService(
         shadowRestricted: enforcement.shadowRestricted,
         enforcementDecision: enforcement.adapter.decision,
       };
+      const persistedManifest = await prepareSuccessorPreallocationManifest({
+        candidate:successorCandidate,manifest,ownership:successorOwnership,
+        prepareGeneratedGit:dependencies.prepareGeneratedGit,
+      });
       const bundleSha256 = computeRuntimeArtifactBundleSha256({
         htmlByPath: successorCandidate.htmlByPath,
         compiledTokenStyles: successorCandidate.compiledTokenStyles,
         assetFingerprintMap: successorCandidate.assetFingerprintMap,
-        manifest,
+        manifest:persistedManifest,
       });
       const created = await dependencies.createArtifact({
         siteId: input.runtimeSiteId,
@@ -446,7 +504,7 @@ export function createAstroSuccessorPublicationService(
         htmlByPath: successorCandidate.htmlByPath,
         compiledTokenStyles: successorCandidate.compiledTokenStyles,
         assetFingerprintMap: successorCandidate.assetFingerprintMap,
-        manifest,
+        manifest:persistedManifest,
         publishStage: "shadow",
         shadowRestricted: enforcement.shadowRestricted,
         artifactGovernance: enforcement.artifactGovernance,

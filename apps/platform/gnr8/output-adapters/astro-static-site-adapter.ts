@@ -1,3 +1,4 @@
+import { prepareOwnedRetainedRuntimeForAstro } from "../../src/public-site/owned-retained-runtime";
 import type {
   Gnr8OutputAdapter,
   Gnr8OutputAdapterDescriptor,
@@ -174,15 +175,19 @@ function normalizedCapturedPages(pages: NormalizedStaticSitePage[]): NormalizedS
   for (const page of pages) {
     const path = normalizeRoutePath(page.path);
     if (byPath.has(path)) throw new Error(`duplicate_astro_route:${path}`);
-    if (/<script\b/i.test(page.bodyHtml)) throw new Error(`unsupported_astro_page_script:${path}`);
+    let bodyHtml: string, headHtml: string;
+    try {
+      bodyHtml = prepareOwnedRetainedRuntimeForAstro(page.bodyHtml);
+      headHtml = prepareOwnedRetainedRuntimeForAstro(page.headHtml ?? "");
+    } catch { throw new Error(`unsupported_astro_page_script:${path}`); }
     byPath.set(path, {
       path,
       title: page.title.trim() || "Untitled",
-      ...(page.headHtml?.trim() ? { headHtml: page.headHtml.trim() } : {}),
+      ...(headHtml.trim() ? { headHtml: headHtml.trim() } : {}),
       ...(page.bodyAttributes && Object.keys(page.bodyAttributes).length > 0
         ? { bodyAttributes: { ...page.bodyAttributes } }
         : {}),
-      bodyHtml: page.bodyHtml,
+      bodyHtml,
     });
   }
   if (!byPath.has("/")) throw new Error("astro_root_route_required");
@@ -230,13 +235,14 @@ function createPackageJson(input: NormalizedStaticBusinessSiteContent): Record<s
     version: "0.0.0",
     private: true,
     type: "module",
+    engines: { node: "26.x" },
     scripts: {
       dev: "astro dev --host 127.0.0.1 --port 4321",
       build: "astro build",
       preview: "astro preview --host 127.0.0.1 --port 4321",
     },
     dependencies: {
-      astro: "^5.0.0",
+      astro: "7.4.4",
     },
   };
 }
@@ -527,7 +533,9 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/'/g, "&#39;")
+    .replace(/\{/g, "&#123;")
+    .replace(/\}/g, "&#125;");
 }
 
 function escapeAttribute(value: string): string {

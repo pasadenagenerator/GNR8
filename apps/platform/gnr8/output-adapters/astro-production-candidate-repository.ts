@@ -29,11 +29,14 @@ import {
   readVerifiedAstroCandidateRouteHtml,
   type AstroCandidateObjectStore,
 } from "./astro-production-candidate-object-store";
+import {GeneratedArtifactGitCache,generatedArtifactReferenceColumns,
+  type GeneratedGitRef} from "../site/generated-artifact-git-cache";
 
 const LIST_LIMIT_MAX = 100;
 const TEXT_MAX_CHARACTERS = 512;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const OBJECT_ROUTE_READ_CONCURRENCY = 8;
+const OBJECT_WRITE_CONCURRENCY = 4;
 
 export type AstroProductionCandidateAccessState = {
   candidateId: string;
@@ -233,17 +236,32 @@ export class GatewayBackedAstroProductionCandidateRepository {
   private readonly now: () => Date;
   private readonly maxRecordBytes: number;
   private readonly objectStore: AstroCandidateObjectStore | null;
+  private readonly prepareGeneratedGit?: (artifact:{htmlByPath:Record<string,string>;
+    compiledTokenStyles:string;manifest:Record<string,unknown>;
+    exportedFiles?:AstroInternalPreviewCandidate['exportedFiles']},
+    ownership:AstroProductionCandidateOwnership)=>Promise<GeneratedGitRef|null>;
+  private readonly generatedCache?:Pick<GeneratedArtifactGitCache,'hydrate'|'hydrateResources'|'read'>;
+  private readonly gitArchiveRequired?: (ownership:AstroProductionCandidateOwnership)=>boolean|Promise<boolean>;
 
   constructor(input: {
     gateway: AstroProductionCandidateGateway;
     now?: () => Date;
     maxRecordBytes?: number;
     objectStore?: AstroCandidateObjectStore | null;
+    prepareGeneratedGit?: (artifact:{htmlByPath:Record<string,string>;
+      compiledTokenStyles:string;manifest:Record<string,unknown>;
+      exportedFiles?:AstroInternalPreviewCandidate['exportedFiles']},
+      ownership:AstroProductionCandidateOwnership)=>Promise<GeneratedGitRef|null>;
+    generatedCache?:Pick<GeneratedArtifactGitCache,'hydrate'|'hydrateResources'|'read'>;
+    gitArchiveRequired?: (ownership:AstroProductionCandidateOwnership)=>boolean|Promise<boolean>;
   }) {
     this.gateway = input.gateway;
     this.now = input.now ?? (() => new Date());
     this.maxRecordBytes = input.maxRecordBytes ?? ASTRO_PRODUCTION_CANDIDATE_MAX_BYTES;
     this.objectStore = input.objectStore ?? null;
+    this.prepareGeneratedGit=input.prepareGeneratedGit;
+    this.generatedCache=input.generatedCache;
+    this.gitArchiveRequired=input.gitArchiveRequired;
   }
 
   async create(input: {
@@ -255,21 +273,53 @@ export class GatewayBackedAstroProductionCandidateRepository {
     let measurements: AstroProductionCandidateCreateResult["measurements"];
     try {
       const storedAt = toIsoTimestamp(this.now());
-      if (Object.keys(input.candidate.htmlByPath).length > 1) {
+      const gitRequired=await this.gitArchiveRequired?.(input.trustedScope)??false;
+      if(gitRequired&&!this.prepareGeneratedGit)
+        throw repositoryError(input.candidate.exportedFiles?"unsupported_version":"unavailable",
+          "Candidate Git archive is not configured.");
+      if(gitRequired&&!this.objectStore)
+        throw repositoryError("unavailable", "Candidate object storage is required for Git-backed registration.");
+      if (Object.keys(input.candidate.htmlByPath).length > 1 || this.objectStore) {
         if (!this.objectStore) {
-          throw repositoryError("unavailable", "Multi-page candidate object storage is not configured.");
+          throw repositoryError("unavailable", "Candidate object storage is not configured.");
         }
         if (!this.objectStore.bucket) {
-          throw repositoryError("unavailable", "Multi-page candidate object storage bucket is not configured.");
+          throw repositoryError("unavailable", "Candidate object storage bucket is not configured.");
         }
-        const prepared = prepareAstroObjectBackedCandidateRecord({
+        const preparedBase = prepareAstroObjectBackedCandidateRecord({
           candidate: input.candidate,
           ownership: input.trustedScope,
           registration: input.registration,
           storedAt,
           bucket: this.objectStore.bucket,
         });
-        for (const upload of prepared.uploads) await this.objectStore.putVerified(upload);
+        const gitArchive=this.prepareGeneratedGit
+          ? await this.prepareGeneratedGit({htmlByPath:input.candidate.htmlByPath,
+            compiledTokenStyles:input.candidate.compiledTokenStyles,
+            manifest:preparedBase.record.candidate.manifest,
+            exportedFiles:input.candidate.exportedFiles},input.trustedScope) : null;
+        if(gitRequired&&!gitArchive)
+          throw repositoryError("unavailable", "Candidate Git archive is required before registration.");
+        if(gitArchive)generatedArtifactReferenceColumns({siteVersionId:input.trustedScope.siteVersionId,
+          htmlByPath:input.candidate.htmlByPath,compiledTokenStyles:input.candidate.compiledTokenStyles,
+          manifest:{...preparedBase.record.candidate.manifest,generatedGitArchive:gitArchive}});
+        const prepared=gitArchive?prepareAstroObjectBackedCandidateRecord({
+          candidate:input.candidate,ownership:input.trustedScope,registration:input.registration,
+          storedAt,bucket:this.objectStore.bucket,generatedGitArchive:gitArchive}):preparedBase;
+        let nextUpload = 0;
+        let failed = false;
+        let writeError: unknown;
+        const writeWorker = async () => {
+          while (!failed && nextUpload < prepared.uploads.length) {
+            const upload = prepared.uploads[nextUpload++];
+            try { await this.objectStore!.putVerified(upload); }
+            catch (error) { if (!failed) writeError = error; failed = true; }
+          }
+        };
+        // Drain in-flight verification before returning an error. Registration
+        // remains after every immutable object has been durably verified.
+        await Promise.all(Array.from({ length: Math.min(OBJECT_WRITE_CONCURRENCY, prepared.uploads.length) }, writeWorker));
+        if (failed) throw writeError;
         proposedRecord = prepared.record;
         measurements = prepared.measurements;
       } else {
@@ -429,6 +479,21 @@ export class GatewayBackedAstroProductionCandidateRepository {
 
   private async resolveRecord(record: AstroPersistedCandidateRecord): Promise<AstroResolvedCandidateRecord> {
     if (!isAstroObjectBackedCandidateRecord(record)) return record;
+    if(record.generatedGitArchive){
+      try{
+        const cache=this.generatedCache??new GeneratedArtifactGitCache();
+        const ref=record.generatedGitArchive;
+        const manifest=JSON.parse((await cache.read(ref,record.identity.siteVersionId,ref.runtimeManifest)).toString('utf8'));
+        if(stableStringify(manifest)!==stableStringify(record.candidate.manifest))throw Error('candidate_git_manifest_mismatch');
+        const generated=await cache.hydrate(ref,record.identity.siteVersionId);
+        if(typeof record.candidate.compiledTokenStyles==='string'&&
+          record.candidate.compiledTokenStyles!==generated.compiledTokenStyles)throw Error('candidate_git_css_mismatch');
+        return resolveAstroObjectBackedCandidateRecord({record,
+          htmlByPath:generated.htmlByPath,compiledTokenStyles:generated.compiledTokenStyles,
+          exportedFiles:record.candidate.resourcePayloads
+            ? await cache.hydrateResources(ref,record.identity.siteVersionId) : undefined});
+      }catch(error){throw mapValidationError(error);}
+    }
     if (!this.objectStore) throw repositoryError("unavailable", "Candidate object storage is not configured.");
     if (!this.objectStore.bucket) throw repositoryError("unavailable", "Candidate object storage bucket is not configured.");
     try {
@@ -446,7 +511,9 @@ export class GatewayBackedAstroProductionCandidateRepository {
           const routeIndex = nextRouteIndex;
           nextRouteIndex += 1;
           const [routePath, ref] = routeEntries[routeIndex];
-          const html = await readVerifiedAstroCandidateRouteHtml({
+          const html = record.candidate.resourcePayloads
+            ? new TextDecoder("utf-8",{fatal:true}).decode(await this.objectStore!.readVerified(ref))
+            : await readVerifiedAstroCandidateRouteHtml({
             objectStore: this.objectStore!,
             ref,
             compiledTokenStyles,
@@ -461,7 +528,8 @@ export class GatewayBackedAstroProductionCandidateRepository {
         ),
       );
       const htmlByPath = Object.fromEntries(resolvedEntries);
-      return resolveAstroObjectBackedCandidateRecord({ record, htmlByPath, compiledTokenStyles });
+      const exportedFiles = record.candidate.resourcePayloads ? await Promise.all(record.candidate.resourcePayloads.map(async ref=>({path:ref.path,mediaType:ref.mediaType,sizeBytes:ref.sizeBytes,sha256:ref.sha256,base64:Buffer.from(await this.objectStore!.readVerified(ref)).toString('base64')}))) : undefined;
+      return resolveAstroObjectBackedCandidateRecord({ record, htmlByPath, compiledTokenStyles, exportedFiles });
     } catch (error) {
       throw mapValidationError(error);
     }

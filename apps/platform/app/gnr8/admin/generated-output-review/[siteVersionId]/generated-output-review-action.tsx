@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function GeneratedOutputReviewAction(props: {
+  publicHost?: string;
   siteVersionId: string;
   artifactId: string;
   artifactBundleSha256: string;
@@ -64,7 +65,7 @@ export function GeneratedOutputReviewAction(props: {
           fontWeight: 800,
         }}
       >
-        {pending ? "Approving exact artifact…" : "Approve this exact artifact for internal shadow publication"}
+        {pending ? "Approving exact artifact…" : props.publicHost ? `Approve this exact artifact for publication at ${props.publicHost}` : "Approve this exact artifact for internal shadow publication"}
       </button>
       {result ? <pre role="status" style={{ margin: 0, padding: 12, overflow: "auto", background: "#f1f5f9", borderRadius: 8 }}>{JSON.stringify(result, null, 2)}</pre> : null}
     </section>

@@ -206,8 +206,11 @@ test("candidate review keeps same-origin assets enabled and rewrites only captur
       "<!doctype html><html><body>",
       '<img src="/api/gnr8/runtime/preview-assets/site/version/uploads/logo.png">',
       '<a href="/about#team">About</a>',
+      '<a target="_blank" href="/about">Header contact</a>',
+      "<a href='/about' target='_top'>Mobile contact</a>",
+      '<a href="/about" target=review>Named target</a>',
       '<a href="/">Home</a>',
-      '<a href="https://chs.si/about">External</a>',
+      '<a href="https://chs.si/about" target="_blank">External</a>',
       '<a href="mailto:mailto@chs.si">Contact</a>',
       '<a href="/missing">Missing</a>',
       '<a href="/about?mode=details">Stateful</a>',
@@ -232,6 +235,10 @@ test("candidate review keeps same-origin assets enabled and rewrites only captur
   assert.match(html, new RegExp(`href="${previewBase}\\?path=%2Fabout#team"`));
   assert.match(html, new RegExp(`href="${previewBase}\\?path=%2F"`));
   assert.match(html, /href="https:\/\/chs\.si\/about"/);
+  assert.match(html, /href="https:\/\/chs\.si\/about" target="_blank"/);
+  assert.match(html, new RegExp(`<a href="${previewBase}\\?path=%2Fabout">Header contact</a>`));
+  assert.match(html, new RegExp(`<a href='${previewBase}\\?path=%2Fabout'>Mobile contact</a>`));
+  assert.match(html, new RegExp(`<a href="${previewBase}\\?path=%2Fabout">Named target</a>`));
   assert.match(html, /href="mailto:mailto@chs\.si"/);
   assert.match(html, /href="\/missing"/);
   assert.match(html, /href="\/about\?mode=details"/);
@@ -500,3 +507,19 @@ function assertErrorHeaders(response: Response): void {
 async function delay(milliseconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
+
+test("preview CSP allows only exact owned presentation bytes and continues blocking contact/network actions", async () => {
+  const { RETAINED_HERO_SCRIPT } = await import("@/src/public-site/retained-hero-slider");
+  const record = productionRecord();
+  for (const [script, allowed] of [[RETAINED_HERO_SCRIPT, true], [RETAINED_HERO_SCRIPT + " ", false]] as const) {
+    const deps = previewDependencies(record);
+    const original = deps.renderCandidate;
+    deps.renderCandidate = async args => ({ ...await original(args), html: `<html><body><script data-gnr8-preview-runtime="retained-hero">${script}</script></body></html>` });
+    const response = await enabledHandlers(deps).GET(request(), context());
+    const csp = response.headers.get("content-security-policy")!;
+    assert.equal(csp.includes("script-src 'sha256-"), allowed);
+    assert.ok(csp.includes("connect-src 'none'"));
+    assert.ok(csp.includes("form-action 'none'"));
+    assert.ok(!csp.includes("script-src 'unsafe-inline'"));
+  }
+});

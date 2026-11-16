@@ -866,6 +866,7 @@ export async function executeMigrationPublishActivation(input: {
 }
 
 export async function publishApprovedSiteVersion(input: {
+  expectedArtifact?: { artifactId: string; bundleSha256: string; host: string };
   siteVersionId: string;
   actor: string;
   stage?: "shadow" | "canary" | "production";

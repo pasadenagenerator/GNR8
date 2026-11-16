@@ -70,7 +70,10 @@ type StorageBucketClient = {
   download(key: string): PromiseLike<StorageDownloadResult>;
   info(key: string): PromiseLike<StorageInfoResult>;
 };
-type StorageClient = { storage: { from(bucket: string): StorageBucketClient } };
+type StorageClient = { storage: {
+  from(bucket: string): StorageBucketClient;
+  getBucket(bucket: string): PromiseLike<{data:{public:boolean}|null;error:unknown}>;
+} };
 
 /**
  * Uses an already-provisioned private bucket. It never creates buckets, changes
@@ -90,13 +93,26 @@ export class SupabaseAstroCandidateObjectStore implements AstroCandidateObjectSt
   }
 
   private readonly getClient: () => StorageClient | null;
+  private checkedBucket?: Promise<StorageBucketClient>;
+
+  private privateBucket(): Promise<StorageBucketClient> {
+    this.checkedBucket ??= (async () => {
+      const client = this.getClient();
+      if (!client) throw storeError("unavailable", "Candidate object storage client is unavailable.");
+      let result: {data:{public:boolean}|null;error:unknown};
+      try { result = await client.storage.getBucket(this.bucket); }
+      catch (error) { throw storeError("unavailable", "Candidate object bucket cannot be verified.", error); }
+      if (result.error || !result.data) throw storeError("unavailable", "Candidate object bucket cannot be verified.", result.error);
+      if (result.data.public !== false) throw storeError("configuration_invalid", "Candidate object bucket must be private.");
+      return client.storage.from(this.bucket);
+    })();
+    return this.checkedBucket;
+  }
 
   async putVerified(upload: AstroCandidateObjectUpload): Promise<void> {
     assertRefScope(upload.ref, validateBucket(this.bucket));
     verifyBytes(upload.bytes, upload.ref);
-    const client = this.getClient();
-    if (!client) throw storeError("unavailable", "Candidate object storage client is unavailable.");
-    const bucket = client.storage.from(this.bucket);
+    const bucket = await this.privateBucket();
     try {
       const result = await bucket.upload(upload.ref.key, upload.bytes, {
         cacheControl: "31536000, immutable",
@@ -116,9 +132,7 @@ export class SupabaseAstroCandidateObjectStore implements AstroCandidateObjectSt
 
   async readVerified(ref: AstroCandidateStoredObjectRef): Promise<Uint8Array> {
     assertRefScope(ref, validateBucket(this.bucket));
-    const client = this.getClient();
-    if (!client) throw storeError("unavailable", "Candidate object storage client is unavailable.");
-    return this.downloadAndVerify(client.storage.from(this.bucket), ref);
+    return this.downloadAndVerify(await this.privateBucket(), ref);
   }
 
   private async verifyExisting(

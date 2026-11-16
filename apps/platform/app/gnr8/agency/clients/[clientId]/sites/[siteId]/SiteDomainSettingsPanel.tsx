@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PublicOutputPanel from "./PublicOutputPanel";
+import type { PublicOutputSelection } from "@/gnr8/output-adapters/public-output-service";
 
 type DomainBindingStatus = "pending" | "verifying" | "active" | "failed";
 type DomainType = "apex_domain" | "subdomain" | "wildcard_domain" | "unknown";
@@ -113,11 +115,13 @@ function buildDnsCards(binding: DomainBinding): Array<{ title: string; record: D
 }
 
 export default function SiteDomainSettingsPanel(props: Props) {
+  const [publicSelection, setPublicSelection] = useState<PublicOutputSelection | null>(null);
+  const [hasGenerated, setHasGenerated] = useState(true);
   const [domain, setDomain] = useState(props.initialDomain ?? "");
   const [busyMode, setBusyMode] = useState<"connect" | "publish" | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [domainBinding, setDomainBinding] = useState<DomainBinding | null>(props.initialDomainBinding);
-  const resolvedSiteVersionId = useMemo(() => (props.siteVersionId ?? "").trim() || null, [props.siteVersionId]);
+  const resolvedSiteVersionId = useMemo(() => ((hasGenerated ? publicSelection?.siteVersionId : props.siteVersionId) ?? "").trim() || null, [props.siteVersionId, hasGenerated, publicSelection]);
   const canConnectDomain = props.canPublish && resolvedSiteVersionId != null && normalizeDomainInput(domain).length > 0;
 
   async function connectDomain(): Promise<void> {
@@ -250,7 +254,7 @@ export default function SiteDomainSettingsPanel(props: Props) {
         >
           {busyMode === "connect" ? "Connecting..." : "Connect domain"}
         </button>
-        <button
+        {!hasGenerated ? <button
           type="button"
           onClick={publishSite}
           disabled={!props.canPublish || resolvedSiteVersionId == null || busyMode != null}
@@ -266,8 +270,11 @@ export default function SiteDomainSettingsPanel(props: Props) {
           }}
         >
           {busyMode === "publish" ? "Publishing..." : "Publish"}
-        </button>
+        </button> : null}
       </div>
+
+      <PublicOutputPanel agencyId={props.agencyId} clientId={props.clientId} siteId={props.siteId} host={domain} onHost={setDomain} canPublish={props.canPublish}
+        onSelection={(selection, generated) => { setPublicSelection(selection); setHasGenerated(generated); }} />
 
       {domainBinding?.domainType === "wildcard_domain" ? (
         <p style={{ margin: 0, color: "#7f1d1d", fontSize: 12 }}>Wildcard domains are not supported yet in this flow.</p>

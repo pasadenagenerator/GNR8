@@ -7,6 +7,8 @@ import type {
   CanonicalSiteVersionSnapshot,
   RuntimeArtifact,
 } from "@/gnr8/runtime/types";
+import {GeneratedArtifactGitCache,generatedArtifactReferenceColumns,type GeneratedGitRef} from '../site/generated-artifact-git-cache';
+import {getSiteVersion,isGitBackedImportMarker} from '@/gnr8/runtime/runtime-store';
 
 export type AstroCandidateRuntimeArtifactContext = {
   siteVersion: CanonicalSiteVersionSnapshot;
@@ -132,10 +134,35 @@ const ARTIFACT_COLUMNS = [
 ].join(",");
 
 export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidateRuntimeArtifactStore {
-  constructor(private readonly client: SupabaseClient) {}
+  constructor(private readonly client: SupabaseClient,
+    private readonly generatedCache?:Pick<GeneratedArtifactGitCache,'hydrate'|'restoreManifest'>) {}
+
+  /** Source preparation needs immutable provenance, not page models, HTML or
+   * publication pointers. Authorization remains the caller's responsibility. */
+  async readSourceContext(siteVersionId: string) {
+    const version = await this.client.from("gnr8_runtime_site_versions")
+      .select("id,site_id,artifact_id").eq("id", siteVersionId).limit(2);
+    if (version.error || !Array.isArray(version.data) || version.data.length > 1)
+      throw new Error("runtime_artifact_context_unavailable");
+    if (!version.data.length || !version.data[0].artifact_id) return null;
+    const row = version.data[0];
+    const artifact = await this.client.from("gnr8_runtime_artifacts")
+      .select("id,site_id,site_version_id,bundle_sha256,manifest")
+      .eq("id", row.artifact_id).eq("site_version_id", siteVersionId).limit(2);
+    if (artifact.error || !Array.isArray(artifact.data) || artifact.data.length !== 1)
+      throw new Error("runtime_artifact_binding_incomplete");
+    const value = artifact.data[0];
+    let manifest=value.manifest as Record<string,unknown>;
+    const gitRef=manifest.generatedGitArchive as GeneratedGitRef|undefined;
+    if(gitRef)manifest=await (this.generatedCache??new GeneratedArtifactGitCache())
+      .restoreManifest(gitRef,value.site_version_id,manifest);
+    return { siteVersion: { id: row.id, siteId: row.site_id, artifactId: row.artifact_id },
+      artifact: { id: value.id, siteId: value.site_id, siteVersionId: value.site_version_id,
+        bundleSha256: value.bundle_sha256, manifest } };
+  }
 
   async readContext(siteVersionId: string): Promise<AstroCandidateRuntimeArtifactContext | null> {
-    const [versionResult, pagesResult] = await Promise.all([
+    const readVersionAndPages = () => Promise.all([
       this.client
         .from("gnr8_runtime_site_versions")
         .select(SITE_VERSION_COLUMNS)
@@ -147,6 +174,14 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
         .eq("site_version_id", siteVersionId)
         .order("path", { ascending: true }),
     ]);
+    let [versionResult, pagesResult] = await readVersionAndPages();
+    if (versionResult.error || pagesResult.error) {
+      console.warn("[astro-runtime-context] source read failed", {
+        versionCode: versionResult.error?.code ?? null,
+        pagesCode: pagesResult.error?.code ?? null,
+      });
+      [versionResult, pagesResult] = await readVersionAndPages();
+    }
     if (versionResult.error || pagesResult.error) throw new Error("runtime_artifact_context_unavailable");
     if (!Array.isArray(versionResult.data) || versionResult.data.length === 0) return null;
     if (versionResult.data.length !== 1 || !Array.isArray(pagesResult.data)) {
@@ -155,7 +190,7 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
 
     const version = versionResult.data[0] as unknown as SiteVersionRow;
     const pages = pagesResult.data as unknown as PageVersionRow[];
-    const siteVersion: CanonicalSiteVersionSnapshot = {
+    let siteVersion: CanonicalSiteVersionSnapshot = {
       id: version.id,
       siteId: version.site_id,
       versionNo: version.version_no,
@@ -168,6 +203,13 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
       importProvenanceSummary: version.import_provenance_summary ?? null,
       pages: pages.map(mapPage),
     };
+    if (isGitBackedImportMarker(version.import_provenance_summary) && version.artifact_id) {
+      const hydrated = await getSiteVersion(siteVersionId);
+      if (!hydrated || hydrated.siteId !== version.site_id || hydrated.artifactId !== version.artifact_id) {
+        throw new Error('GITHUB_IMPORT_SOURCE_IDENTITY_MISMATCH');
+      }
+      siteVersion = hydrated;
+    }
     if (!version.artifact_id) {
       return {
         siteVersion,
@@ -177,7 +219,7 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
       };
     }
 
-    const [artifactResult, pointerResult, previewBindingsResult] = await Promise.all([
+    const readArtifactAndBindings = () => Promise.all([
       this.client
         .from("gnr8_runtime_artifacts")
         .select(ARTIFACT_COLUMNS)
@@ -195,15 +237,34 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
         .eq("candidate_artifact_id", version.artifact_id)
         .eq("status", "ACTIVE"),
     ]);
+    let [artifactResult, pointerResult, previewBindingsResult] = await readArtifactAndBindings();
+    if (artifactResult.error || pointerResult.error || previewBindingsResult.error) {
+      console.warn("[astro-runtime-context] artifact read failed", {
+        artifactCode: artifactResult.error?.code ?? null,
+        pointerCode: pointerResult.error?.code ?? null,
+        previewCode: previewBindingsResult.error?.code ?? null,
+      });
+      [artifactResult, pointerResult, previewBindingsResult] = await readArtifactAndBindings();
+    }
     if (artifactResult.error || pointerResult.error || previewBindingsResult.error) {
       throw new Error("runtime_artifact_context_unavailable");
     }
     if (!Array.isArray(artifactResult.data) || artifactResult.data.length !== 1) {
       throw new Error("runtime_artifact_binding_incomplete");
     }
+    const artifactRow=artifactResult.data[0] as unknown as ArtifactRow;
+    const artifact=mapArtifact(artifactRow);
+    const gitRef=artifact.manifest.generatedGitArchive as GeneratedGitRef|undefined;
+    if(gitRef){
+      const cache=this.generatedCache??new GeneratedArtifactGitCache();
+      const generated=await cache.hydrate(gitRef,artifact.siteVersionId);
+      artifact.htmlByPath=generated.htmlByPath;
+      artifact.compiledTokenStyles=generated.compiledTokenStyles;
+      artifact.manifest=await cache.restoreManifest(gitRef,artifact.siteVersionId,artifact.manifest);
+    }
     return {
       siteVersion,
-      artifact: mapArtifact(artifactResult.data[0] as unknown as ArtifactRow),
+      artifact,
       activePointerReferencesArtifact: Array.isArray(pointerResult.data) && pointerResult.data.length > 0,
       previewBindingCount: previewBindingsResult.count ?? 0,
     };
@@ -214,15 +275,16 @@ export class SupabaseAstroCandidateRuntimeArtifactStore implements AstroCandidat
     artifact: AstroCandidateRuntimeArtifactWrite;
   }): Promise<"updated" | "not_updated" | "unavailable"> {
     try {
+      const fileColumns=generatedArtifactReferenceColumns(input.artifact);
       const result = await this.client
         .from("gnr8_runtime_artifacts")
         .update({
           renderer_compatibility_version: input.artifact.rendererCompatibilityVersion,
           bundle_sha256: input.artifact.bundleSha256,
-          html_by_path: input.artifact.htmlByPath,
-          compiled_token_styles: input.artifact.compiledTokenStyles,
+          html_by_path: fileColumns.htmlByPath,
+          compiled_token_styles: fileColumns.compiledTokenStyles,
           asset_fingerprint_map: input.artifact.assetFingerprintMap,
-          manifest: input.artifact.manifest,
+          manifest: fileColumns.manifest,
           publish_stage: input.artifact.publishStage,
           shadow_restricted: input.artifact.shadowRestricted,
           artifact_governance: input.artifact.artifactGovernance,

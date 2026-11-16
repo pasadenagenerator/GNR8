@@ -86,6 +86,24 @@ export interface PreparedAstroStaticSiteWorkspace {
 export async function prepareAstroStaticSiteWorkspace(
   input: PrepareAstroStaticSiteWorkspaceInput,
 ): Promise<PreparedAstroStaticSiteWorkspace> {
+  return prepareManifestWorkspace(input, createAstroStaticSiteProjectManifest(input.content));
+}
+
+/** Materializes already validated source without invoking the generator. */
+export async function prepareAstroStaticSiteSourceWorkspace(input: {
+  files: Array<{ path: string; body: Buffer }>;
+  workspaceRoot?: string;
+}): Promise<PreparedAstroStaticSiteWorkspace> {
+  return prepareManifestWorkspace(input, { files: input.files.map(file => ({
+    path: file.path, contents: "", role: "source" as const,
+  })) }, new Map(input.files.map(file => [file.path, Buffer.from(file.body)])));
+}
+
+async function prepareManifestWorkspace(
+  input: { workspaceRoot?: string; workspacePath?: string },
+  manifest: Gnr8OutputAdapterFileManifest,
+  exactBytes?: Map<string, Buffer>,
+): Promise<PreparedAstroStaticSiteWorkspace> {
   if (input.workspaceRoot && input.workspacePath) {
     throw new AstroWorkspacePreparationError(
       "workspace_boundary_invalid",
@@ -93,13 +111,12 @@ export async function prepareAstroStaticSiteWorkspace(
     );
   }
 
-  const manifest = createAstroStaticSiteProjectManifest(input.content);
   const sourcePaths = validateAstroStaticSiteManifestPaths(manifest);
   let createdWorkspacePath: string | null = null;
 
   try {
     createdWorkspacePath = await createFreshWorkspace(input);
-    await materializeManifest(createdWorkspacePath, manifest, sourcePaths);
+    await materializeManifest(createdWorkspacePath, manifest, sourcePaths, exactBytes);
     const sourceSnapshot = await readAstroStaticSiteSourceSnapshot({
       workspacePath: createdWorkspacePath,
       sourcePaths,
@@ -124,7 +141,7 @@ export async function prepareAstroStaticSiteWorkspace(
       baselineKind,
       sourceSnapshot,
       snapshotInclusionRules: [
-        "Only files emitted by createAstroStaticSiteProjectManifest are included.",
+        "Only files in the selected source manifest are included.",
         "Files are read back from disk and ordered by their validated manifest paths.",
         "The aggregate hashes framed path bytes and exact file bytes; .git and proof metadata are excluded.",
       ],
@@ -229,12 +246,31 @@ export async function readAstroStaticSiteSourceSnapshot(input: {
     throw new AstroWorkspacePreparationError("workspace_boundary_invalid", "Workspace path resolves through a symlink.");
   }
 
-  const files: AstroSourceSnapshotFile[] = [];
-  const aggregate = createHash("sha256").update(`${SOURCE_SNAPSHOT_VERSION}\0`, "utf8");
+  const snapshot = sourceSnapshotHasher();
   for (const path of sourcePaths) {
     const filePath = join(workspacePath, ...path.split("/"));
     await assertSafeSourceFile(filePath, workspacePath, path);
     const body = await readFile(filePath);
+    snapshot.add(path, body);
+  }
+  return snapshot.finish();
+}
+
+/** Same snapshot identity for retained source bytes and filesystem workspaces. */
+export function createAstroStaticSiteSourceSnapshot(contents: Array<{ path: string; body: Uint8Array }>): AstroSourceSnapshot {
+  const paths = validateAstroStaticSiteManifestPaths({
+    files: contents.map(file => ({ path: file.path, role: "source", contents: "" })),
+  });
+  const byPath = new Map(contents.map(file => [file.path, file.body]));
+  const snapshot = sourceSnapshotHasher();
+  for (const path of paths) snapshot.add(path, byPath.get(path)!);
+  return snapshot.finish();
+}
+
+function sourceSnapshotHasher() {
+  const files: AstroSourceSnapshotFile[] = [];
+  const aggregate = createHash("sha256").update(`${SOURCE_SNAPSHOT_VERSION}\0`, "utf8");
+  function add(path: string, body: Uint8Array) {
     const pathBytes = Buffer.from(path, "utf8");
     const pathLength = Buffer.allocUnsafe(4);
     pathLength.writeUInt32BE(pathBytes.byteLength);
@@ -248,14 +284,14 @@ export async function readAstroStaticSiteSourceSnapshot(input: {
     });
   }
 
-  return {
+  return { add, finish: (): AstroSourceSnapshot => ({
     version: SOURCE_SNAPSHOT_VERSION,
     files,
     aggregateSha256: aggregate.digest("hex"),
-  };
+  }) };
 }
 
-async function createFreshWorkspace(input: PrepareAstroStaticSiteWorkspaceInput): Promise<string> {
+async function createFreshWorkspace(input: { workspaceRoot?: string; workspacePath?: string }): Promise<string> {
   if (input.workspacePath) {
     const workspacePath = resolve(input.workspacePath);
     await assertCanonicalDirectory(dirname(workspacePath));
@@ -318,6 +354,7 @@ async function materializeManifest(
   workspacePath: string,
   manifest: Gnr8OutputAdapterFileManifest,
   sourcePaths: string[],
+  exactBytes?: Map<string, Buffer>,
 ): Promise<void> {
   const byPath = new Map(manifest.files.map((file) => [file.path, file]));
   const directoryPaths = Array.from(
@@ -352,14 +389,14 @@ async function materializeManifest(
       });
     });
     try {
-      await handle.writeFile(Buffer.from(file.contents, "utf8"));
+      await handle.writeFile(exactBytes?.get(path) ?? Buffer.from(file.contents, "utf8"));
     } finally {
       await handle.close();
     }
   }
 
   for (const path of sourcePaths) {
-    const expected = Buffer.from(byPath.get(path)?.contents ?? "", "utf8");
+    const expected = exactBytes?.get(path) ?? Buffer.from(byPath.get(path)?.contents ?? "", "utf8");
     const filePath = join(workspacePath, ...path.split("/"));
     await assertSafeSourceFile(filePath, workspacePath, path);
     const actual = await readFile(filePath);
