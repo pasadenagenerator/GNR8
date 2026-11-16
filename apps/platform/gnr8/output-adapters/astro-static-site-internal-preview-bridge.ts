@@ -1,3 +1,4 @@
+import { isRetainedDocumentRelationship } from './retained-link-metadata';
 import { createAstroStaticSiteSourceSnapshot } from "./astro-static-site-workspace-preparation";
 import { REVIEWED_LUMOS_SOURCE, isReviewedLumosTextSource, RESOURCE_CONVERSION_VERSION, exportMediaType, validateReviewedExport, exportHtmlByPath, type AstroExportResource } from "./astro-export-resources";
 import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
@@ -756,7 +757,7 @@ function assertNoCssUrlDependency(value: string, sourcePath: string): void {
 function assertNoUnsupportedResourceElement(element: HtmlElement): void {
   if (element.tagName === "link") {
     const rel = attributeTokens(element, "rel");
-    if (!rel.includes("stylesheet") && attribute(element, "href")) {
+    if (!rel.includes("stylesheet") && attribute(element, "href") && !isRetainedDocumentRelationship(element) && !(rel.length > 0 && rel.every(value => ["icon", "shortcut", "apple-touch-icon"].includes(value)) && isOwnedRuntimeAssetReference(attribute(element, "href") ?? ""))) {
       throw new AstroInternalPreviewBridgeError(
         "unsupported_asset_reference",
         `Non-stylesheet link resources are unsupported: ${attribute(element, "href")}.`,

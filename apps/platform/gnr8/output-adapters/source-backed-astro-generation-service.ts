@@ -1,6 +1,8 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { requireLumosBrand, parseLumosBrandReference } from '../brand/lumos-source-proposal';
+import { prepareAstroStaticSiteSourceWorkspace } from './astro-static-site-workspace-preparation';
 
 import type { SiteAstroGenerationRequestedPayload } from "@gnr8/runtime-contracts";
 
@@ -125,6 +127,11 @@ export async function runSourceBackedAstroGeneration(
     if (!sourceArtifact || sourceArtifact.siteVersionId !== sourceVersion.id || !rawArtifact) {
       throw new Error("astro_generation_source_artifact_missing");
     }
+    const brandReference = payload.lumosBrand ? parseLumosBrandReference(payload.lumosBrand) : null;
+    if (brandReference && (brandReference.siteVersionId !== sourceVersion.id || brandReference.artifactId !== rawArtifact.id))
+      throw new Error('lumos_source_changed');
+    const lumosBrand = brandReference ? requireLumosBrand(
+      (sourceVersion.importProvenanceSummary as Record<string, unknown>)?.brandStyleGuide, brandReference) : undefined;
 
     const identities = deriveIdentities(payload.actionId);
     const dependencyCapture = await ensureDependencyCompleteDerivedCapture({
@@ -135,6 +142,7 @@ export async function runSourceBackedAstroGeneration(
       ownershipSiteId: payload.ownershipSiteId,
       actor: payload.actor,
       acceptedFunctionalReductions: payload.acceptedFunctionalReductions,
+      retainedFunctions:payload.retainedFunctions,
     });
     sourceVersion = dependencyCapture.siteVersion;
     sourceArtifact = dependencyCapture.artifact;
@@ -152,6 +160,8 @@ export async function runSourceBackedAstroGeneration(
       htmlByPath: sourceGenerationSource.htmlByPath,
       stylesheetCssByPath: sourceGenerationSource.stylesheetCssByPath,
       acceptedFunctionalReductions: payload.acceptedFunctionalReductions,
+      lumosBrand,
+      retainedFunctions:payload.retainedFunctions,
     });
     const selection = selectOutputAdapter({
       generationKind: "new",
@@ -211,6 +221,9 @@ export async function runSourceBackedAstroGeneration(
     });
     const producer = createSourceBackedAstroCandidateProducer({
       content: generationInput.content,
+      ...(lumosBrand ? { prepareWorkspace: async ({ workspaceRoot }: { workspaceRoot?: string }) =>
+        prepareAstroStaticSiteSourceWorkspace({ workspaceRoot, files: generationInput.sourceManifest.files.map(file =>
+          ({ path: file.path, body: Buffer.from(file.contents) })) }) } : {}),
       inputId: identities.producerInputId,
       verification: generationInput.verification,
       ownedAssetFingerprints: generationInput.ownedAssetFingerprints,
@@ -331,7 +344,9 @@ export async function runSourceBackedAstroGeneration(
       generatedOutputEvidence: {
         buildEvidence,
         contentManifest: generationInput.contentManifest,
-        sourceWorkspace: payload.acceptedFunctionalReductions
+        sourceWorkspace: payload.retainedFunctions ? {...generationInput.sourceManifest,
+          retainedFunctions:{...payload.retainedFunctions,scope:'generation-action',acceptedByActor:payload.actor,acceptedAt:payload.requestedAt}}
+          : payload.acceptedFunctionalReductions
           ? {
               ...generationInput.sourceManifest,
               acceptedFunctionalReductions: {
@@ -367,7 +382,7 @@ export async function runSourceBackedAstroGeneration(
       variantId: identities.variantId,
       siteVersionId: generationVersion.id,
       strategy: payload.strategy || "corporate_balanced",
-      label: `Astro redesign · ${payload.strategy || "Balanced"}`,
+      label: lumosBrand ? `Lumos · vodič ${lumosBrand.revision}` : `Astro redesign · ${payload.strategy || "Balanced"}`,
       diagnostics: [
         `adapter:${selection.adapterId}@${selection.adapterVersion}`,
         `candidate:${candidateId}`,

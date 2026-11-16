@@ -1,3 +1,4 @@
+import { isRetainedDocumentRelationship } from './retained-link-metadata';
 import { randomUUID } from "node:crypto";
 import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
 import { CONTACT_ACTION, readContactSchema } from "../contact/contact-form";
@@ -548,7 +549,17 @@ export function validateSelfContainedAstroProductionPayload(input: {
   if (elements.some((element) => element.tagName === "script" && !isOwnedRetainedRuntimeScript(element))) {
     throw corrupt("Production candidate HTML cannot contain scripts.");
   }
-  const forms = elements.filter((element) => element.tagName === "form");
+  const hasThemeController = elements.some(element =>
+    attribute(element, "data-gnr8-preview-runtime") === "retained-theme-controls" && isOwnedRetainedRuntimeScript(element));
+  const searchForms = elements.filter(element => element.tagName === "form" && attribute(element, "data-gnr8-search") === "v1");
+  if (searchForms.length > 1 || searchForms.some(form => {
+    const controls = allElements(form).filter(element => ["input", "textarea", "select", "button"].includes(element.tagName));
+    return !hasThemeController || attribute(form, "method")?.toLowerCase() !== "get" || attribute(form, "action") !== "/" ||
+      controls.length !== 2 || !controls.some(element => element.tagName === "input" && attribute(element, "name") === "s" && attribute(element, "type") === "text") ||
+      !controls.some(element => element.tagName === "input" && attribute(element, "type") === "submit") ||
+      [form, ...allElements(form)].some(element => element.attrs.some(item => ["target", "form", "formaction", "formtarget", "formmethod", "formenctype", "formnovalidate"].includes(item.name)));
+  })) throw corrupt("Production candidate HTML requires validated retained search.");
+  const forms = elements.filter((element) => element.tagName === "form" && !searchForms.includes(element));
   if (forms.length) {
     const form = forms[0]!;
     const action = attribute(form, "action") ?? "";
@@ -565,14 +576,22 @@ export function validateSelfContainedAstroProductionPayload(input: {
     }
   }
   for (const element of elements) {
-    assertNoUnsupportedResourceElement(element);
+    assertNoUnsupportedResourceElement(element, hasThemeController);
     if (element.tagName === "style") assertSelfContainedCss(textContent(element));
   }
   assertSelfContainedCss(input.compiledTokenStyles);
 }
 
-function assertNoUnsupportedResourceElement(element: HtmlElement): void {
-  if (["iframe", "frame", "object", "embed"].includes(element.tagName)) {
+function assertNoUnsupportedResourceElement(element: HtmlElement, hasThemeController = false): void {
+  let consentMap = false;
+  if (hasThemeController && element.tagName === "iframe" && attribute(element, "src") === "about:blank" && !attribute(element, "srcdoc")) {
+    try {
+      const destination = new URL(attribute(element, "data-gnr8-consent-map") ?? "");
+      consentMap = destination.protocol === "https:" && destination.hostname === "www.google.com" &&
+        destination.pathname === "/maps/embed" && !destination.username && !destination.password && !destination.port;
+    } catch { /* Unrecognized embeds remain rejected. */ }
+  }
+  if (["iframe", "frame", "object", "embed"].includes(element.tagName) && !consentMap) {
     throw corrupt("Production candidate HTML cannot contain embedded application resources.");
   }
   if (
@@ -587,7 +606,7 @@ function assertNoUnsupportedResourceElement(element: HtmlElement): void {
     }
     if (item.name.toLowerCase() === "style") assertSelfContainedCss(`a{${item.value}}`);
   }
-  if (element.tagName === "link" && attribute(element, "href")) {
+  if (element.tagName === "link" && attribute(element, "href") && !isRetainedDocumentRelationship(element) && !((attribute(element, "rel") ?? "").split(/\s+/).every(value => ["icon", "shortcut", "apple-touch-icon"].includes(value)) && isOwnedRuntimeAssetReference(attribute(element, "href") ?? ""))) {
     throw corrupt("Production candidate HTML cannot contain linked resources.");
   }
   const resourceAttributes: Record<string, string[]> = {
@@ -605,7 +624,7 @@ function assertNoUnsupportedResourceElement(element: HtmlElement): void {
   };
   for (const name of resourceAttributes[element.tagName] ?? []) {
     const value = attribute(element, name);
-    if (value && !resourceAttributeIsOwnedOrExternal(value, name)) {
+    if (value && !(consentMap && name === "src" && value === "about:blank") && !resourceAttributeIsOwnedOrExternal(value, name)) {
       throw corrupt("Production candidate HTML contains an unsupported asset reference.");
     }
   }

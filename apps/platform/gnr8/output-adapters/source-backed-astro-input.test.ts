@@ -16,6 +16,21 @@ import {
 
 const SHA = "a".repeat(64);
 
+test('universal import emits a Lumos workspace bound to the saved guide without changing route or asset selection', () => {
+  const input = fixture();
+  const baseline = createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  const proposal = createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,
+    lumosBrand:{kind:'brand_style_guide_v1',siteVersionId:input.version.id,artifactId:input.rawArtifact.id,revision:1,
+      savedAt:'2026-11-16T00:00:00Z',savedBy:'actor',decisions:{text:{value:'#123456',confirmed:true}}}});
+  assert.deepEqual(proposal.outputPaths, baseline.outputPaths);
+  assert.deepEqual(proposal.contentManifest, baseline.contentManifest);
+  assert.deepEqual(proposal.sourceManifest.assetEvidence, baseline.sourceManifest.assetEvidence);
+  assert.equal(proposal.sourceManifest.lumosBrand?.siteVersionId,input.version.id);
+  assert.ok(proposal.verification.compiledStylesheetSource?.aggregateSha256);
+  assert.ok(proposal.sourceManifest.files.some(file=>file.path==='src/gnr8-lumos/Heading.astro'));
+  assert.ok(proposal.sourceManifest.files.filter(file=>file.path.startsWith('src/pages/')).every(file=>file.contents.includes('LumosHeading')));
+});
+
 test('retained HTTP partner links are explicit external navigation without upgrading or crawling them', () => {
   const href='http://partner.example/catalog';
   const input=fixture({rootHtml:`<!doctype html><html><body><h1>Home</h1><a href="${href}">Partner</a></body></html>`});

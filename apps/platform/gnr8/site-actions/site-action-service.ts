@@ -674,6 +674,9 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
   const previousSiteStatus = normalizeText(site.status)
 
   try {
+    if (request.type === 'generate_redesign' && request.lumosBrand &&
+        (request.stackiRevision || request.stackiBaseline || request.outputAdapterId !== 'astro-static-site'))
+      throw new Error('409|LUMOS_SOURCE_SELECTION_INVALID');
     if (request.type === 'generate_redesign' && (request.stackiRevision || request.stackiBaseline)) {
       const { queueStackiPreparation } = await import('../stacki/stacki-preparation-action');
       const { authorizeConfiguredStackiPilot } = await import('../stacki/stacki-draft-composition');
@@ -739,6 +742,20 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
         }
         if (selection.adapterId === 'astro-static-site') {
           const { sourceVersion, sourceArtifact } = await resolveAstroCaptureSource(initiallySelectedVersion, initiallySelectedArtifact, existingAdapterId, { getSiteVersion, getArtifactById, getRawImportedSiteArtifact });
+          if (request.lumosBrand) {
+            const { requireLumosBrand } = await import('../brand/lumos-source-proposal');
+            const raw = await getRawImportedSiteArtifact(sourceVersion.id);
+            if (sourceVersion.id !== request.lumosBrand.siteVersionId || raw?.id !== request.lumosBrand.artifactId)
+              throw new Error('409|LUMOS_SOURCE_CHANGED');
+            requireLumosBrand((sourceVersion.importProvenanceSummary as Record<string, unknown>)?.brandStyleGuide, request.lumosBrand);
+            const { SupabaseAstroCandidateOwnershipResolver } = await import('../output-adapters/astro-production-candidate-ownership-resolver');
+            const { resolvedGitHubTarget } = await import('../stacki/stacki-github-config');
+            const owner = await new SupabaseAstroCandidateOwnershipResolver().resolve({siteVersionId:sourceVersion.id});
+            if (owner.agencyId !== agencyId || owner.ownershipSiteId !== siteId)
+              throw new Error('403|LUMOS_SOURCE_SCOPE_MISMATCH');
+            if (!await resolvedGitHubTarget({agencyId,clientId:owner.organizationId,siteId,siteVersionId:sourceVersion.id}))
+              throw new Error('409|LUMOS_GITHUB_REQUIRED');
+          }
           if ((request.acceptedFunctionalReductions?.kind === 'retained-presentation-v1' || request.acceptedFunctionalReductions?.kind === 'retained-source-links-v1') && request.acceptedFunctionalReductions.contact &&
             request.contactSourceTarget !== astroSourceTarget({ sourceVersion, sourceArtifact })) throw new Error('409|CONTACT_SOURCE_CHANGED: Refresh and confirm the recipient for the current import.');
           await emitSiteAstroGenerationRequestedEvent({
@@ -752,6 +769,8 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
             strategy: strategyResolution?.layoutStrategy ?? 'corporate_balanced',
             requestedAdapterId: 'astro-static-site',
             acceptedFunctionalReductions: request.acceptedFunctionalReductions,
+            ...(request.lumosBrand ? { lumosBrand: request.lumosBrand } : {}),
+            ...(request.retainedFunctions ? {retainedFunctions:request.retainedFunctions} : {}),
           })
           return {
             ok: true,

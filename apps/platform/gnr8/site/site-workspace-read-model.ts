@@ -381,6 +381,7 @@ export type SiteWorkspaceReadModel = {
     rationale: string[]
   }
   preview: {
+    lumosBrand?: { siteVersionId: string; artifactId: string; revision: number } | null
     readiness: SiteWorkspacePreviewReadiness
     sourceType: SitePreviewType | null
     previewUrl: string | null
@@ -3344,6 +3345,13 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       ],
     },
     preview: {
+      lumosBrand: (() => {
+        const workspace=selectedArtifactManifest?.generatedOutputSourceWorkspace as Record<string,unknown>|undefined;
+        const binding=workspace?.lumosBrand as {format?:string;siteVersionId?:unknown;artifactId?:unknown;revision?:unknown}|undefined;
+        return binding?.format==='gnr8-lumos-brand:v1' && typeof binding.siteVersionId==='string' &&
+          typeof binding.artifactId==='string' && Number.isSafeInteger(binding.revision) && Number(binding.revision)>0
+          ? {siteVersionId:binding.siteVersionId,artifactId:binding.artifactId,revision:Number(binding.revision)} : null;
+      })(),
       readiness: resolvedPreview.status,
       sourceType: resolvedPreview.sourceType,
       previewUrl,

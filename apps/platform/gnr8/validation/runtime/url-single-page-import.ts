@@ -2873,6 +2873,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   fullHtmlDocumentsForCssUsage?: string[];
   /** Explicitly approved missing URLs; proof alone does not authorize omission. */
   approvedUnusedStylesheetDependencyUrls?: string[];
+  /** Exact script URLs acquired as inert bytes for reviewed-hash validation. */
+  retainedScriptDependencyUrls?: string[];
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -2880,7 +2882,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const pageStates = input.pages.map((page) => {
     const document = parse(page.html);
     const refs = collectAssetRefs({ document, entryUrl: new URL(page.pageUrl), diagnostics, rawHtml: page.html })
-      .filter((ref) => ref.assetKind !== "script")
+      .filter((ref) => ref.assetKind !== "script" || (ref.resolvedUrl !== null && (input.retainedScriptDependencyUrls ?? []).includes(ref.resolvedUrl)))
       .map((ref) => ({ ...ref, pageUrl: page.pageUrl }));
     return { page, document, refs };
   });
@@ -3295,10 +3297,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
           if (typeof textNode.value === "string") textNode.value = rewriteInlineCss(textNode.value);
         }
       }
-      if (tag !== "img" && tag !== "source" && tag !== "link") return;
+      if (tag !== "img" && tag !== "source" && tag !== "link" && tag !== "script") return;
       const attrs: UrlImportAssetAttribute[] = tag === "link"
         ? ["href"]
-        : ["src", ...SRCSET_ATTRS, ...(tag === "img" ? LAZY_IMAGE_ATTR_PRIORITY : [])];
+        : tag === "script" ? ["src"] : ["src", ...SRCSET_ATTRS, ...(tag === "img" ? LAZY_IMAGE_ATTR_PRIORITY : [])];
       for (const attribute of attrs) {
         const rawValue = getAttr(node, attribute);
         if (!rawValue?.trim()) continue;
@@ -3314,6 +3316,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
           });
           if (
             !resolvedUrl ||
+            (tag === "script" && !(input.retainedScriptDependencyUrls ?? []).includes(resolvedUrl)) ||
             !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl, trustedExternalOrigins)
           ) continue;
           discoveredReferenceCount += 1;

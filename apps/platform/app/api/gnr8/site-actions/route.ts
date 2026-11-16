@@ -1,7 +1,8 @@
 import { readContactSuggestions } from '@/gnr8/site/contact-suggestion-read-model'
+import { parseLumosBrandReference } from '@/gnr8/brand/lumos-source-proposal'
 import { parseStackiScope } from '@/gnr8/stacki/stacki-draft-contract'
 import { parseStackiCandidateSelection } from '@/gnr8/stacki/stacki-candidate-selection'
-import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
+import { parseAcceptedFunctionalReductions, parseRetainedFunctions } from '@gnr8/runtime-contracts'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app/api/gnr8/agency/_lib/agency-action-access'
@@ -23,6 +24,8 @@ type SiteActionsBody = {
   agencyId?: unknown
   stackiRevision?: unknown
   stackiBaseline?: unknown
+  lumosBrand?: unknown
+  retainedFunctions?: unknown
 }
 
 function normalizeText(value: unknown): string {
@@ -82,6 +85,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'acceptedFunctionalReductions is invalid' }, { status: 400 })
     }
 
+    const retainedFunctions=body.retainedFunctions===undefined?undefined:parseRetainedFunctions(body.retainedFunctions)
+    if(retainedFunctions===null || (retainedFunctions && (actionType!=='generate_redesign'||acceptedFunctionalReductions||!body.lumosBrand)))
+      return NextResponse.json({ok:false,error:'retainedFunctions is invalid'},{status:400})
     const actionRequest: SiteActionRequest =
       actionType === 'rerun_transformation'
         ? {
@@ -100,6 +106,8 @@ export async function POST(request: NextRequest) {
                     ? 'astro-static-site'
                     : undefined,
               acceptedFunctionalReductions,
+              ...(body.lumosBrand === undefined ? {} : { lumosBrand: parseLumosBrandReference(body.lumosBrand) }),
+              ...(retainedFunctions ? {retainedFunctions} : {}),
               contactSourceTarget: normalizeText(body.contactSourceTarget),
               ...(body.stackiBaseline === undefined ? {} : { stackiBaseline: parseStackiScope(body.stackiBaseline) }),
               ...(body.stackiRevision === undefined ? {} : { stackiRevision: parseStackiCandidateSelection(body.stackiRevision) }),

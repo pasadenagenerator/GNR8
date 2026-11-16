@@ -2,13 +2,14 @@ import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { RETAINED_HERO_SCRIPT } from "./retained-hero-slider";
 import { CONTACT_FORM_SCRIPT } from "./contact-form-runtime";
 import { RETAINED_MONO_CONTROLS_SCRIPT } from "./retained-mono-controls";
+import { RETAINED_THEME_CONTROLS_SCRIPT } from './retained-theme-controls';
 
 /** Content identity is the authority, never an imported filename or marker.
  * Keep a single inline controller so Astro does not rebundle/minify its bytes.
  */
 export function isOwnedRetainedRuntimeScript(element: DefaultTreeAdapterMap["element"]): boolean {
   const kind = element.attrs.find(a => a.name === "data-gnr8-preview-runtime")?.value;
-  const expected = kind === "retained-hero" ? RETAINED_HERO_SCRIPT : kind === "contact-form" ? CONTACT_FORM_SCRIPT : kind === "retained-mono-controls" ? RETAINED_MONO_CONTROLS_SCRIPT : null;
+  const expected = kind === "retained-hero" ? RETAINED_HERO_SCRIPT : kind === "contact-form" ? CONTACT_FORM_SCRIPT : kind === "retained-mono-controls" ? RETAINED_MONO_CONTROLS_SCRIPT : kind === 'retained-theme-controls' ? RETAINED_THEME_CONTROLS_SCRIPT : null;
   return element.tagName === "script" &&
     expected !== null &&
     element.attrs.every(a =>

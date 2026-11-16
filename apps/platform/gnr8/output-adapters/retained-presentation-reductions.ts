@@ -106,6 +106,7 @@ export function removableRetainedPresentationScript(input: {
   fileMap: Record<string, {sha256:string}>;
   sourceUrl?: string;
   resolvedScriptPath?: string;
+  retainedFunctions?: boolean;
 }): boolean {
   const {script,elements}=input;
   // Recognize the theme through its parsed data and actual navigation, rather
@@ -114,7 +115,7 @@ export function removableRetainedPresentationScript(input: {
     elements.some(n=>attr(n,"id")==="Top_bar");
   if(!hasTheme) return false;
   const remainingWidget = elements.some(n=> /(?:^|\s)(?:accordion|tabs_wrapper|ui-tabs|jp-jplayer|masonry|isotope|portfolio_slider|offer_slider|twentytwenty-container)(?:\s|$)/.test(attr(n,"class")) ||
-    n.tagName==="rs-module" || cls(n,"testimonials_slider") || (n.tagName==="a" && cls(n,"zoom") && attr(n,"data-gnr8-image-zoom")!=="true"));
+    n.tagName==="rs-module" || (cls(n,"testimonials_slider") && !(input.retainedFunctions && attr(n,'data-gnr8-testimonials')==='v1')) || (n.tagName==="a" && cls(n,"zoom") && attr(n,"data-gnr8-image-zoom")!=="true"));
   if(remainingWidget) return false;
   const body = text(script).trim();
   const src=attr(script,"src"),prefix=`/api/gnr8/runtime/preview-assets/${input.siteId}/${input.siteVersionId}/`;
