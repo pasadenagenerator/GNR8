@@ -74,7 +74,7 @@ export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:st
     <p style={{margin:0}}>Opaženi slog → predlog → vaša potrditev. Urejanje vodiča ne spreminja sprejetega predogleda strani.</p>
     {!guide?<button disabled={busy||!props.siteVersionId} onClick={()=>request()}>{busy?'Odpiram …':'Odpri vodič znamke'}</button>:<>
       <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
-        <button disabled={busy||!props.canEdit||!dirty||invalidEdits||conflict||!!latest} onClick={()=>request(true)}>Shrani vodič</button>
+        <button disabled={busy||!props.canEdit||(!dirty&&guide.revision>0)||invalidEdits||conflict||!!latest} onClick={()=>request(true)}>Shrani vodič</button>
         <button disabled={busy} onClick={()=>request(false,dirty)}>{dirty?'Primerjaj z zadnjo shranjeno različico':'Ponovno odpri shranjeno'}</button>
         <span>{dirty?'Neshranjene spremembe':guide.revision?`Shranjena revizija ${guide.revision}`:'Predlog še ni shranjen'}{guide.savedAt?` · ${guide.savedAt}`:''}</span>
       </div>
