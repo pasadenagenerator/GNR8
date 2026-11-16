@@ -36,6 +36,30 @@ test('Git-backed import rejects the retained CHS failure modes before archiving'
   assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
 })
 
+test('Git-backed import records stale sitemap pages and missing source scripts without blocking capture', () => {
+  const snapshot = { fetchManifest: [
+    { fetchStatus: 'fetch_failed', assetKind: 'script', httpStatus: 404 },
+  ] } as any
+  const failedPage = { status: 'failed', failureReason: 'non_2xx_status',
+    httpStatusCode: 404, normalizedRoutePath: '/old-page' }
+  const discovery = {
+    manifest: { skippedLinks: [], routePriorityBalancing: { assignments: [
+      { routePath: '/old-page', selected: true, source: 'sitemap' },
+    ] } },
+    acquisition: { pages: [failedPage], summary: { failedRequiredAssetCount: 0 }, diagnostics: [] },
+  } as any
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+
+  discovery.manifest.routePriorityBalancing.assignments[0].source = 'navigation'
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['page_failed_or_limited'])
+  discovery.manifest.routePriorityBalancing.assignments[0].source = 'sitemap'
+  snapshot.fetchManifest[0].httpStatus = null
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['seed_asset_missing'])
+  snapshot.fetchManifest[0].httpStatus = 404
+  snapshot.fetchManifest[0].assetKind = 'stylesheet'
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['seed_asset_missing'])
+})
+
 function createSuccessPipelineFixture() {
   const preparedSite = {
     kind: 'prepared_site_model_v1',
