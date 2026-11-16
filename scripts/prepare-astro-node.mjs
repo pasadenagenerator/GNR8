@@ -25,9 +25,9 @@ if (process.argv[2] === '--download') {
       }
       await writeFile(resolve(temporary, name), Buffer.concat(chunks));
     }
-    const binary = execFileSync('tar', ['-xOf', resolve(temporary, 'node.tar.xz'), 'node-v26.13.0-linux-x64/bin/node'], { maxBuffer: 200 * 1024 * 1024 });
+    const binary = execFileSync('tar', ['-xJOf', resolve(temporary, 'node.tar.xz'), 'node-v26.13.0-linux-x64/bin/node'], { maxBuffer: 200 * 1024 * 1024 });
     const data = execFileSync('ar', ['p', resolve(temporary, 'libatomic.deb'), 'data.tar.xz'], { maxBuffer: 1024 * 1024 });
-    const library = execFileSync('tar', ['-xOf', '-', './usr/lib/x86_64-linux-gnu/libatomic.so.1.2.0'], { input: data, maxBuffer: 1024 * 1024 });
+    const library = execFileSync('tar', ['-xJOf', '-', './usr/lib/x86_64-linux-gnu/libatomic.so.1.2.0'], { input: data, maxBuffer: 1024 * 1024 });
     await writeFile(resolve(temporary, 'node'), binary);
     await writeFile(resolve(temporary, 'libatomic.so.1'), library);
     // Reuse the exact integrity/license packaging path below in a fresh process.
