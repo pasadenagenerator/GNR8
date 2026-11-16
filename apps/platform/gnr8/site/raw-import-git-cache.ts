@@ -1,5 +1,6 @@
 import 'server-only';
 import {createHash} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {getSupabaseServiceRoleClient} from '@/src/supabase/service-role-server';
 import {ASTRO_CANDIDATE_OBJECT_BUCKET_ENV} from '../output-adapters/astro-production-candidate-object-store';
@@ -113,10 +114,26 @@ export class RawImportGitCache{
         const objectKey=key(ref,versionId,file.sha256);
         // A failed upload may have committed. Exact readback reconciles it.
         try{await bucket.upload(objectKey,file.bytes,{upsert:false,contentType:file.mediaType,cacheControl:'3600'});}catch{/* readback decides */}
-        const result=await bucket.download(objectKey);
-        if(result.error||!result.data||result.data.size!==file.sizeBytes)invalid();
-        const cached=Buffer.from(await result.data.arrayBuffer());
-        if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256)invalid();
+        // Upload can succeed while the serving read briefly fails. Retry only
+        // unavailable reads; never accept or overwrite bytes that fail integrity.
+        for(let attempt=0;attempt<3;attempt++){
+          let result:Awaited<ReturnType<typeof bucket.download>>;
+          try{result=await bucket.download(objectKey);}catch{
+            if(attempt<2){await delay(250*(attempt+1));continue;}
+            throw Error(`RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:${file.sha256}:transport`);
+          }
+          if(result.error||!result.data){
+            if(attempt<2){await delay(250*(attempt+1));continue;}
+            const status=String((result.error as {statusCode?:unknown}|null)?.statusCode??'unknown');
+            throw Error(`RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:${file.sha256}:${/^\d{3}$/.test(status)?status:'unknown'}`);
+          }
+          const cached=Buffer.from(await result.data.arrayBuffer());
+          if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256){
+            const error=Object.assign(Error(`RAW_IMPORT_CACHE_INTEGRITY_FAILED:${file.sha256}:${file.sizeBytes}:${cached.length}`),{retryable:false});
+            throw error;
+          }
+          break;
+        }
       }));
       for(const result of results)if(result.status==='rejected')throw result.reason;
     }

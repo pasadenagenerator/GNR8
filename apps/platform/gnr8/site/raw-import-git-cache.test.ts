@@ -13,6 +13,26 @@ const ref={scope:{agencyId:'11111111-1111-4111-8111-111111111111',
   repository:'owner/site',commit:'a'.repeat(40),
   manifestPath:`raw-import/${versionId}/.gnr8-import-manifest.json`,manifestSha256:'b'.repeat(64)};
 
+test('prepare reconciles transient read failures without retrying corrupted bytes',async()=>{
+  let reads=0,corrupt=false;
+  const client={storage:{getBucket:async()=>({data:{public:false},error:null}),from:()=>({
+    upload:async()=>({data:null,error:{statusCode:'409'}}),
+    download:async()=>{
+      reads++;
+      if(reads===1)return {data:null,error:{statusCode:'503',message:'private provider detail'}};
+      return {data:new Blob([new Uint8Array(corrupt?Buffer.from('changed'):body)]),error:null};
+    },
+  })}};
+  const cache=new RawImportGitCache(client as never,'private-assets');
+  await cache.prepare(ref,versionId,[file]);assert.equal(reads,2);
+  corrupt=true;
+  await assert.rejects(cache.prepare(ref,versionId,[file]),error=>{
+    assert.equal((error as {retryable?:boolean}).retryable,false);
+    assert.match(String(error),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);return true;
+  });
+  assert.equal(reads,3);
+});
+
 test('private raw import cache prepares and verifies bytes; corruption and public bucket fail closed',async()=>{
   const objects=new Map<string,Buffer>();let publicBucket=false;
   const client={storage:{
