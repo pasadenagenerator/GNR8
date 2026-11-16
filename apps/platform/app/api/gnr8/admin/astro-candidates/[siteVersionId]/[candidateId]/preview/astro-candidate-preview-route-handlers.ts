@@ -1,3 +1,4 @@
+import { validateExportPath } from "@/gnr8/output-adapters/astro-export-resources";
 import { PUBLIC_PREPARATION_PRODUCER } from '@/gnr8/output-adapters/astro-public-preparation-contract';
 import "server-only";
 import { createHash } from "node:crypto";
@@ -166,6 +167,12 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
 
       if (process.env.VERCEL_ENV === 'production' && record.registration.producerKind !== PUBLIC_PREPARATION_PRODUCER)
         return jsonError(404, 'Preview not found.');
+      if(selectors.interactiveState && !record.candidate.exportedFiles) return jsonError(404,'Preview not found.');
+      if(selectors.file) {
+        const resource=record.candidate.exportedFiles?.find(f=>f.path===selectors.file);
+        if(!resource)return jsonError(404,'Resource not found.');
+        return new Response(Buffer.from(resource.base64,'base64'), {status:200,headers:{...COMMON_HEADERS,'content-type':resource.mediaType,'content-disposition':'attachment','content-security-policy':"sandbox; default-src 'none'; frame-ancestors 'none'"}});
+      }
       let preview: AstroProductionCandidatePreviewRenderResult;
       try {
         preview = await previewDependencies.renderCandidate({ record, path: selectors.path });
@@ -181,16 +188,17 @@ export function createAstroProductionCandidatePreviewRouteHandlers(
         previewBase: resolved.previewBase,
         currentPath: selectors.path,
         availablePaths: Object.keys(record.candidate.htmlByPath),
+        isolatedExport: Boolean(preview.isolatedExport),
         siteVersionId: selectors.siteVersionId,
         candidateId: selectors.candidateId,
       });
 
       return new Response(html, {
-        status: 200,
+        status: preview.isolatedExport?.status ?? 200,
         headers: {
           ...COMMON_HEADERS,
           "content-type": "text/html; charset=utf-8",
-          "content-security-policy": candidatePreviewCsp(html),
+          "content-security-policy": preview.isolatedExport?.csp ?? candidatePreviewCsp(html),
         },
       });
     },
@@ -202,6 +210,7 @@ function rewriteCandidatePreviewLinks(input: {
   html: string;
   currentPath: string;
   availablePaths: string[];
+  isolatedExport?: boolean;
   siteVersionId: string;
   candidateId: string;
 }): string {
@@ -227,7 +236,7 @@ function rewriteCandidatePreviewLinks(input: {
     const normalizedPath = resolved.pathname === "/"
       ? "/"
       : resolved.pathname.replace(/\/+$/, "");
-    if (!isGeneratedOutputRoutePath(normalizedPath) || !availablePaths.has(normalizedPath)) return tag;
+    if (!isGeneratedOutputRoutePath(normalizedPath) || (!input.isolatedExport && !availablePaths.has(normalizedPath))) return tag;
 
     const rewrittenHref = `${previewBase}${previewBase.includes("?") ? "&" : "?"}path=${encodeURIComponent(normalizedPath)}${resolved.hash}`;
     // The protected document cannot open popups. Keep captured navigation in
@@ -242,6 +251,8 @@ async function resolveSelectors(request: Request, context: RouteContext): Promis
   siteVersionId: string;
   candidateId: string;
   path: string;
+  file?: string;
+  interactiveState?: boolean;
 } | null> {
   let params: { siteVersionId: string; candidateId: string };
   let url: URL;
@@ -254,7 +265,15 @@ async function resolveSelectors(request: Request, context: RouteContext): Promis
   if (!isCanonicalUuid(params.siteVersionId) || !isAstroProductionCandidateId(params.candidateId)) {
     return null;
   }
-  if ([...url.searchParams.keys()].some((key) => key !== "path")) return null;
+  const interactiveKeys=['tab','services','showcase','modal'];
+  if ([...url.searchParams.keys()].some((key) => key !== "path" && key !== "file" && !interactiveKeys.includes(key))) return null;
+  for(const key of interactiveKeys) {
+    const values=url.searchParams.getAll(key);
+    if(values.length>1 || (values.length && !/^[a-z0-9-]{1,80}$/.test(values[0])))return null;
+  }
+  const files=url.searchParams.getAll('file');
+  if(files.length>1 || (files.length && url.searchParams.has('path')))return null;
+  if(files.length)try{validateExportPath(files[0]);}catch{return null;}
   const paths = url.searchParams.getAll("path");
   const path = paths[0] ?? "/";
   if (paths.length > 1 || !isGeneratedOutputRoutePath(path)) return null;
@@ -262,6 +281,8 @@ async function resolveSelectors(request: Request, context: RouteContext): Promis
     siteVersionId: params.siteVersionId,
     candidateId: params.candidateId,
     path,
+    ...(files.length ? {file:files[0]} : {}),
+    interactiveState:interactiveKeys.some(key=>url.searchParams.has(key)),
   };
 }
 

@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "composite": false,
     "plugins": [
       {
         "name": "next"
@@ -8,6 +9,10 @@
     ]
   },
   "include": [
+    "../../scripts/stacki/release-pin.mjs",
+    "../../scripts/stacki/prepare-native-studio.mjs",
+    "../../scripts/stacki/load-pinned-release.mjs",
+    "../../scripts/stacki/prepare-from-confirmed-export.mjs",
     "next-env.build.d.ts",
     ".next/types/**/*.ts",
     "app/**/*.ts",

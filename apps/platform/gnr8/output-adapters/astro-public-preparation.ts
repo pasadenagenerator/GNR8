@@ -2,13 +2,14 @@ import 'server-only';
 import type { RuntimeArtifact } from '@/gnr8/runtime/types';
 import { computeRuntimeArtifactBundleSha256 } from '@/gnr8/runtime/astro-artifact-materialization';
 import { stableStringify } from '@/gnr8/runtime/deterministic';
-import { buildAstroCandidateRuntimeArtifact } from './astro-candidate-promotion-service';
+import { buildAstroCandidateRuntimeArtifact, prepareGeneratedCandidateGit } from './astro-candidate-promotion-service';
 import { deterministicUuid } from './astro-successor-operation-identity';
 import { buildSuccessorBoundAstroCandidate } from './astro-successor-publication-service';
 import { createAstroProductionCandidateId } from './astro-production-candidate-record';
 import { createGeneratedOutputComposition, readGeneratedOutputReviewModel } from './generated-output-publication-composition';
 import { readGeneratedOutputBuildEvidence, readGeneratedOutputContentManifest, rebindBuildEvidenceToCandidate } from './generated-output-evidence';
 import { createGeneratedOutputContentManifest, evaluateGeneratedOutputTechnicalEligibility } from './generated-output-eligibility';
+import { githubArchiveRequired } from '../stacki/stacki-github-config';
 
 import { PUBLIC_PREPARATION_VERSION, PUBLIC_CONTACT_UPDATE_VERSION, PUBLIC_PREPARATION_PRODUCER, publicPreparationWorkspace, readPublicPreparation, type PublicPreparation } from './astro-public-preparation-contract';
 
@@ -26,6 +27,7 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   store?: Pick<typeof import('@/gnr8/runtime/runtime-store'), 'createSiteVersionFromMigration' | 'linkRuntimeSiteVersionOwnershipIfAllowed' | 'createArtifact' | 'bindArtifactToVersion'>;
   lifecycle?: Pick<typeof import('@/gnr8/runtime/version-lifecycle-enforcer'), 'transitionSiteVersionState'>;
   readModel?: typeof readGeneratedOutputReviewModel;
+  prepareGeneratedGit?: typeof prepareGeneratedCandidateGit;
 } = {}) {
   const c = (dependencies.composition ?? createGeneratedOutputComposition)();
   const store = dependencies.store ?? await import('@/gnr8/runtime/runtime-store');
@@ -39,6 +41,7 @@ export async function prepareRetainedAstroPublicArtifact(input: {
     throw new Error('public_preparation_source_technical_blocked');
   const sourceOwnership = await c.ownershipResolver.resolve({siteVersionId:input.sourceSiteVersionId});
   const sourceRecord = await c.candidateRepository.read({candidateId:input.expectedSourceCandidateId,trustedScope:sourceOwnership});
+  if (sourceRecord.candidate.exportedFiles) throw new Error('public_preparation_resource_candidate_unsupported');
   const sourceBuild = readGeneratedOutputBuildEvidence(source.artifact.manifest);
   const sourceContent = readGeneratedOutputContentManifest(source.artifact.manifest);
   if (!sourceBuild || !sourceContent) throw new Error('public_preparation_source_evidence_missing');
@@ -122,6 +125,21 @@ export async function prepareRetainedAstroPublicArtifact(input: {
     artifact.artifactGovernance = {pageGateState:pages.map(()=>'GENERATED_OUTPUT_PASS'),pageRolloutPolicyState:pages.map(()=>'EXACT_ARTIFACT_REVIEW_REQUIRED'),
       pageEnforcementState:{shadow:pages.map(()=>'DENY'),canary:pages.map(()=>'DENY'),production:pages},siteGateState:'GENERATED_OUTPUT_PASS',siteRolloutPolicyState:'EXACT_ARTIFACT_REVIEW_REQUIRED',
       siteEnforcementState:{shadow:'DENY',canary:'DENY',production:'ALLOW'},publishStage:'production'};
+    const archive = await (dependencies.prepareGeneratedGit ?? prepareGeneratedCandidateGit)(artifact,ownership);
+    if (!archive && await githubArchiveRequired({agencyId:ownership.agencyId,clientId:ownership.organizationId,
+        siteId:ownership.ownershipSiteId,siteVersionId:ownership.siteVersionId}))
+      throw new Error('public_preparation_git_archive_required');
+    if (archive) {
+      artifact.manifest = {...artifact.manifest,generatedGitArchive:archive};
+      artifact.bundleSha256 = computeRuntimeArtifactBundleSha256({htmlByPath:artifact.htmlByPath,
+        compiledTokenStyles:artifact.compiledTokenStyles,assetFingerprintMap:artifact.assetFingerprintMap,
+        manifest:artifact.manifest});
+      const finalTechnical = evaluateGeneratedOutputTechnicalEligibility({siteVersion:context.siteVersion,
+        artifact,authoritativeOwnership:ownership,candidateRecord:record,buildEvidence,contentManifest,
+        sourceCaptureSiteVersion:capture?.siteVersion??null,sourceCaptureArtifact:capture?.artifact??null,
+        publicSourceArtifact:source.artifact});
+      if (finalTechnical.status !== 'PASS') throw new Error(`public_preparation_blocked:${finalTechnical.blockerReasons.map(x=>x.code).join(',')}`);
+    }
     const persisted = await store.createArtifact(artifact);
     await store.bindArtifactToVersion({siteVersionId,artifactId:persisted.artifactId,rendererCompatibilityVersion:artifact.rendererCompatibilityVersion});
     await lifecycle.transitionSiteVersionState({siteVersionId,nextState:'READY_FOR_REVIEW',actor:input.actor,source:'manual',details:{workflow:preparation.version,publicPreparation:preparation}});

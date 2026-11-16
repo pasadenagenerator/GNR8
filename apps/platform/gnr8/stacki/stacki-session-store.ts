@@ -5,7 +5,8 @@ import { isCanonicalUuid } from "../output-adapters/astro-production-candidate-r
 
 // Fixed pilot ceiling across ALL actors/sites, not a per-browser allowance.
 // Reservations are never refunded, including failed/ambiguous starts.
-export const STACKI_MONTHLY_STARTS = 10;
+// Preview has four additional slots for the bounded GitHub Save and Publish checks.
+export const STACKI_MONTHLY_STARTS = process.env.VERCEL_ENV === 'preview' ? 14 : 10;
 export const STACKI_PROVIDER_TIMEOUT_MS = 20 * 60_000;
 export type StackiSession = {
   id: string; scope: StackiDraftScope; actorUserId: string; baseRevision: number; platformOrigin: string;
@@ -17,7 +18,13 @@ export type StackiSaveOperation = { operationId: string; expectedRevision: numbe
 
 export class StackiSessionStore {
   constructor(private readonly client: StackiStorageClient, private readonly bucket: string) {}
-  private async storage() {
+  // Stores are constructed per request. Share only bucket validation, never
+  // mutable/absent receipts or slot contents used by the reservation CAS.
+  private bucketRead?: Promise<ReturnType<StackiStorageClient["storage"]["from"]>>;
+  private storage() {
+    return this.bucketRead ??= this.checkedStorage();
+  }
+  private async checkedStorage() {
     if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(this.bucket)) unavailable();
     const result = await this.client.storage.getBucket(this.bucket);
     if (result.error || result.data?.public !== false) unavailable();
@@ -89,9 +96,13 @@ export class StackiSessionStore {
     // Include previous month for sessions opened immediately before UTC rollover.
     const previous = new Date(); previous.setUTCDate(0);
     const months = [new Date().toISOString().slice(0, 7), previous.toISOString().slice(0, 7)];
-    for (const month of months) for (let slot = 1; slot <= STACKI_MONTHLY_STARTS; slot++) {
-      const session = await this.read<StackiSession>(`stacki-sessions/v1/${month}/${slot}.json`);
-      if (session?.id === id) { this.assertOwner(session, { scope, actorUserId }); return session; }
+    for (const month of months) for (let first = 1; first <= STACKI_MONTHLY_STARTS; first += 4) {
+      const slots = Array.from({ length: Math.min(4, STACKI_MONTHLY_STARTS - first + 1) }, (_, i) => first + i);
+      const records = await Promise.all(slots.map(slot =>
+        this.read<StackiSession>(`stacki-sessions/v1/${month}/${slot}.json`)));
+      for (const session of records) {
+        if (session?.id === id) { this.assertOwner(session, { scope, actorUserId }); return session; }
+      }
     }
     throw new StackiDraftError(404, "STACKI_SESSION_NOT_FOUND");
   }

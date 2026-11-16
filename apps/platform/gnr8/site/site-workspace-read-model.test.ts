@@ -13,6 +13,22 @@ const AGENCY_ID = '00000000-0000-4000-8000-000000000011'
 const CLIENT_ID = '00000000-0000-4000-8000-000000000101'
 const SITE_ID = '00000000-0000-4000-8000-000000009001'
 
+test('unbound preparation draft stays visible as progress without displacing the usable source', () => {
+  const source = { id: 'retained-source', site_id: 'runtime-site', ownership_site_id: SITE_ID,
+    state: 'PUBLISHED', version_no: 6, artifact_id: 'retained-artifact', import_provenance_summary: null,
+    created_at: '2026-10-22T08:00:00.000Z', updated_at: '2026-10-22T08:00:00.000Z' }
+  const pending = { ...source, id: 'pending-astro7', state: 'DRAFT', version_no: 7, artifact_id: null,
+    created_at: '2026-11-01T17:00:00.000Z', updated_at: '2026-11-01T17:00:00.000Z' }
+  const select = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow
+  const result = select([pending, source])
+  assert.equal(result.selected?.id, source.id)
+  assert.equal(result.latest?.id, pending.id)
+  assert.ok(result.diagnostics.includes('UNBOUND_DRAFT_RETAINED_AS_PROGRESS_ONLY'))
+  assert.equal(select([pending]).selected?.id, pending.id, 'first import progress remains visible')
+  assert.equal(select([{ ...pending, artifact_id: 'completed-artifact' }, source]).selected?.id, pending.id,
+    'completed preparation becomes selectable normally')
+})
+
 function runtimeSummaryFixture(input: {
   requestId: string
   sourceMode: 'rendered_dom' | 'raw_html_fallback'
@@ -590,6 +606,36 @@ test('same-import arbitration tie-break is deterministic for equal-quality runs'
   assert.equal(first.selected?.id, 'tie-run-b')
   assert.equal(second.selected?.id, 'tie-run-b')
   assert.deepEqual(first.diagnostics, second.diagnostics)
+})
+
+test('saving a review on an older capture does not make it the latest workspace version', () => {
+  const summary = runtimeSummaryFixture({
+    requestId: 'client-site-import-1779000000000',
+    sourceMode: 'rendered_dom',
+    renderedCaptureStatus: 'available',
+    renderedDomQuality: 'strong',
+    nodeCount: 50,
+    screenshotCount: 1,
+  })
+  const selection = __siteWorkspaceReadModelTestUtils.selectPrimaryRuntimeVersionRow([
+    {
+      id: 'capture', site_id: 'runtime-site-a', ownership_site_id: SITE_ID,
+      state: 'DRAFT', version_no: 2, import_provenance_summary: summary,
+      artifact_id: 'capture-artifact',
+      created_at: '2026-10-21T11:29:46.000Z',
+      updated_at: '2026-11-05T13:02:28.000Z',
+    } as any,
+    {
+      id: 'generated', site_id: 'runtime-site-a', ownership_site_id: SITE_ID,
+      state: 'READY_FOR_REVIEW', version_no: 8, import_provenance_summary: summary,
+      artifact_id: 'generated-artifact',
+      created_at: '2026-11-01T18:28:01.000Z',
+      updated_at: '2026-11-01T18:28:01.000Z',
+    } as any,
+  ])
+
+  assert.equal(selection.latest?.id, 'generated')
+  assert.equal(selection.selected?.id, 'generated')
 })
 
 test('same-import arbitration diagnostics include read-model alignment when rendered run is selected', () => {

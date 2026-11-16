@@ -3,22 +3,49 @@
 import { useEffect, useState } from "react";
 
 type Document = { whenSaved(): Promise<void> };
-type Config = { platformOrigin: string; sessionId: string; revision: number };
+type Config = { platformOrigin: string; sessionId: string; revision: number; storage?: 'gnr8' | 'github'; sourceUnchanged?: boolean; sourceSha256?: string };
 type Operation = { operationId: string; expectedRevision: number; generation: number };
-type Receipt = { revision: number; sha256: string; closed?: boolean };
+type Receipt = { revision: number; sha256: string; sourceSha256?: string; closed?: boolean };
+let confirmedSource: { revision:number; sourceSha256:string } | undefined;
 const documents = new Set<Document>();
 const listeners = new Set<() => void>();
 let generation = 0, revision = 0, requests = 0;
 let config: Config | undefined, platform: Window | undefined;
 let busy = false, sessionClosed = false, status = "Connecting to GNR8", pending: Operation | undefined, lastSaved: Operation | undefined;
 let reply: { id: string; resolve(value: Receipt): void; reject(error: Error): void } | undefined;
+type GitEntry = {revision:number;sha256:string;commit:string};
+const gitReplies = new Map<string,{resolve(value:GitEntry[]):void;reject(error:Error):void;timer:ReturnType<typeof setTimeout>}>();
+const publicationReplies = new Map<string,{resolve(value:number):void;reject(error:Error):void;timer:ReturnType<typeof setTimeout>}>();
 const emit = () => listeners.forEach(listener => listener());
-export function registerGnr8Document(document: Document) { documents.add(document); }
+const destination = () => config?.storage === 'github' ? 'GitHub' : 'GNR8';
+export function registerGnr8Document(document: Document) { documents.add(document); if (config) void verifyRestoredSource(); }
 export function gnr8Dirty() { generation++; if (!busy && !status.startsWith("Save failed")) status = "Unsaved changes"; emit(); }
 export function gnr8Request(options?: RequestInit) {
   const mutation = options?.method && !["GET", "HEAD"].includes(options.method.toUpperCase());
   if (mutation) { requests++; gnr8Dirty(); }
   return () => { if (mutation) requests--; };
+}
+export function requestGnr8GitHistory():Promise<GitEntry[]> {
+  return new Promise((resolve,reject) => {
+    if (!config || !platform || config.storage !== 'github') {
+      reject(new Error('GitHub history is not connected to this GNR8 session.')); return;
+    }
+    const requestId=crypto.randomUUID();
+    const timer=setTimeout(() => {gitReplies.delete(requestId);reject(new Error('GitHub history did not respond. Retry.'));},30_000);
+    gitReplies.set(requestId,{resolve,reject,timer});
+    platform.postMessage({type:'gnr8:git-history',sessionId:config.sessionId,requestId},config.platformOrigin);
+  });
+}
+function requestGnr8Publication(savedRevision:number):Promise<number> {
+  return new Promise((resolve,reject) => {
+    if (!config || !platform || config.storage !== 'github') {
+      reject(new Error('Keep the GNR8 tab open and reconnect the editor.')); return;
+    }
+    const requestId=crypto.randomUUID();
+    const timer=setTimeout(() => {publicationReplies.delete(requestId);reject(new Error('GNR8 did not confirm preparation. Check the site action before retrying.'));},30_000);
+    publicationReplies.set(requestId,{resolve,reject,timer});
+    platform.postMessage({type:'gnr8:prepare-publication',sessionId:config.sessionId,requestId,revision:savedRevision},config.platformOrigin);
+  });
 }
 function persist(operation: Operation, close = false) {
   return new Promise<Receipt>((resolve, reject) => {
@@ -35,7 +62,7 @@ function persist(operation: Operation, close = false) {
 }
 async function save(close = false) {
   if (busy) return;
-  busy = true; status = "Saving to GNR8"; emit();
+  busy = true; status = `Saving to ${destination()}`; emit();
   const root = window.document.getElementById("root");
   if (root) root.inert = true;
   try {
@@ -57,23 +84,61 @@ async function save(close = false) {
       throw new Error("GNR8 returned an invalid save receipt.");
     revision = result.revision;
     sessionStorage.setItem("gnr8:revision", String(revision));
-    const unchanged = generation === operation.generation;
-    lastSaved = operation;
+    const unchanged = generation === operation.generation || await matchesConfirmedSource(result.sourceSha256);
+    if (result.sourceSha256 && /^[a-f0-9]{64}$/.test(result.sourceSha256)) confirmedSource = {revision,sourceSha256:result.sourceSha256};
+    lastSaved = unchanged ? {...operation,generation} : operation;
     pending = undefined; sessionStorage.removeItem("gnr8:pending-save");
-    status = unchanged ? `Saved to GNR8 · revision ${revision}` : "Unsaved changes";
+    status = unchanged ? `Saved to ${destination()} · revision ${revision}` : "Unsaved changes";
+    try { if (typeof Event !== 'undefined') window.dispatchEvent(new Event('gnr8:save-confirmed')); }
+    catch { /* history refresh cannot invalidate a durable Save receipt */ }
     if (close) {
       if (!unchanged) throw new Error("Earlier save recovered. Save your newer edits before closing.");
       // Close retries use the same confirmed operation and never add a revision.
       pending = operation; sessionStorage.setItem("gnr8:pending-save", JSON.stringify(operation));
       await persist(operation, true);
       pending = undefined; sessionStorage.removeItem("gnr8:pending-save");
-      status = `Saved to GNR8 · revision ${revision} · closed`;
+      status = `Saved to ${destination()} · revision ${revision} · closed`;
       sessionClosed = true;
       window.close();
     }
   } catch (error) {
     status = `Save failed: ${error instanceof Error ? error.message : "Retry Save."}`;
   } finally { if (root) root.inert = false; busy = false; emit(); }
+}
+async function matchesConfirmedSource(sourceSha256?:string):Promise<boolean> {
+  if (!sourceSha256 || !/^[a-f0-9]{64}$/.test(sourceSha256)) return false;
+  const checkedGeneration=generation;
+  try {
+    await Promise.all([...documents].map(document=>document.whenSaved()));
+    const response=await fetch("/studio/api/gnr8-persistence");
+    if(!response.ok)return false;
+    const current:Config=await response.json();
+    return !requests && generation===checkedGeneration && current.sessionId===config?.sessionId && current.sourceSha256===sourceSha256;
+  } catch { return false; }
+}
+// A fresh runtime is clean only after the real writer queue matches the restored
+// source. Never infer durability from readiness, a revision number or editor metadata.
+async function verifyRestoredSource() {
+  if (!config || pending || busy || lastSaved || !documents.size) return;
+  const sessionId = config.sessionId, checkedGeneration = generation;
+  try {
+    const start = Date.now();
+    while (requests) {
+      if (Date.now() - start > 15_000) throw new Error("Change still pending");
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await Promise.all([...documents].map(document => document.whenSaved()));
+    const response = await fetch("/studio/api/gnr8-persistence");
+    if (!response.ok) throw new Error("Cannot verify restored source");
+    const state: Config = await response.json();
+    if (generation !== checkedGeneration || requests || pending || busy || lastSaved || state.sessionId !== sessionId) return;
+    const matches = confirmedSource?.revision === revision
+      ? state.sourceSha256 === confirmedSource.sourceSha256
+      : state.sourceUnchanged && state.revision === revision;
+    status = matches
+      ? `Saved to ${destination()} · revision ${revision}` : "Unsaved changes";
+    emit();
+  } catch { if (generation === checkedGeneration && !pending && !busy && !lastSaved) { status = "Saved state unverified · retry Save"; emit(); } }
 }
 let initialized = false;
 function initialize() {
@@ -93,6 +158,7 @@ function initialize() {
       status = "Save not confirmed · retry Save";
     }
     emit();
+    void verifyRestoredSource();
   }).catch(error => { status = `Save unavailable: ${error.message}`; emit(); });
   window.addEventListener("message", event => {
     if (!config || event.origin !== config.platformOrigin || !event.source ||
@@ -100,11 +166,37 @@ function initialize() {
     if (event.data.type === "gnr8:connect" && (!platform || event.source === platform)) {
       if (!platform && !pending && Number.isInteger(event.data.revision) && event.data.revision >= revision &&
           event.data.revision <= 64) revision = event.data.revision;
+      const source = event.data.sourceSha256;
+      const changedReceipt = /^[a-f0-9]{64}$/.test(source ?? "") && Number.isInteger(event.data.revision) &&
+        event.data.revision === revision && (confirmedSource?.revision !== revision || confirmedSource?.sourceSha256 !== source);
+      if (changedReceipt) confirmedSource = {revision,sourceSha256:source};
       platform = event.source as Window;
+      if (changedReceipt) void verifyRestoredSource();
       platform.postMessage({ type: "gnr8:connected", sessionId: config.sessionId }, config.platformOrigin);
       emit();
     }
     if (event.source !== platform) return;
+    if (event.data.type === 'gnr8:git-history-result') {
+      const waiting=gitReplies.get(event.data.requestId);
+      if (waiting) {
+        gitReplies.delete(event.data.requestId);clearTimeout(waiting.timer);
+        if (event.data.ok && Array.isArray(event.data.history) && event.data.history.length<=20 &&
+            event.data.history.every((item:GitEntry) => Number.isInteger(item.revision) &&
+              /^[a-f0-9]{64}$/.test(item.sha256) && /^[a-f0-9]{40}$/.test(item.commit)))
+          waiting.resolve(event.data.history);
+        else waiting.reject(new Error('GitHub history is unavailable. Retry.'));
+      }
+      return;
+    }
+    if (event.data.type === 'gnr8:prepare-publication-result') {
+      const waiting=publicationReplies.get(event.data.requestId);
+      if (waiting) {
+        publicationReplies.delete(event.data.requestId);clearTimeout(waiting.timer);
+        if (event.data.ok && Number.isInteger(event.data.revision)) waiting.resolve(event.data.revision);
+        else waiting.reject(new Error(typeof event.data.reason === 'string' ? event.data.reason : 'GNR8 could not prepare this revision.'));
+      }
+      return;
+    }
     if (event.data.type === "gnr8:closed") { sessionClosed = true; window.close(); }
     if (event.data.type === "gnr8:request-save") void save(true);
     if (event.data.type === "gnr8:save-result" && reply && reply.id === event.data.operationId) {
@@ -113,11 +205,15 @@ function initialize() {
       else current.reject(new Error(event.data.reason === "STACKI_DRAFT_CONFLICT" ||
           event.data.reason === "STACKI_SAVE_OPERATION_CONFLICT"
         ? "Conflicting revision. Your edits remain here; no newer draft was overwritten."
-        : "Save not confirmed. Retry before this session expires."));
+        : event.data.reason === 'STACKI_SESSION_EXPIRED'
+          ? 'This editing session expired. Open a new Stacki session from GNR8.'
+          : event.data.reason === 'STACKI_DRAFT_STORAGE_UNAVAILABLE'
+            ? 'GitHub storage did not confirm this Save. Retry before the session expires.'
+            : "Save not confirmed. Retry before this session expires."));
     }
   });
   window.addEventListener("beforeunload", event => {
-    if (!sessionClosed && (!status.startsWith("Saved to GNR8") || busy || pending)) { event.preventDefault(); event.returnValue = ""; }
+    if (!sessionClosed && (!status.startsWith(`Saved to ${destination()}`) || busy || pending)) { event.preventDefault(); event.returnValue = ""; }
   });
 }
 export function Gnr8Save() {
@@ -125,11 +221,48 @@ export function Gnr8Save() {
   useEffect(() => { const update = () => render(value => value + 1); listeners.add(update); initialize();
     return () => { listeners.delete(update); }; }, []);
   return <>
-    <button onClick={() => void save()} disabled={busy || !platform} title="Save a private draft in GNR8">Save</button>
+    <button onClick={() => void save()} disabled={busy || !platform} title={`Save a private draft in ${destination()}`}>Save</button>
     <span className="save-state" role="status">{status}</span>
-    {busy && <div role="dialog" aria-label="Saving to GNR8" aria-modal="true"
+    {busy && <div role="dialog" aria-label={`Saving to ${destination()}`} aria-modal="true"
       style={{ position: "fixed", inset: 0, zIndex: 999999, background: "#111b", display: "grid", placeItems: "center" }}>
-      Saving to GNR8…
+      Saving to {destination()}…
     </div>}
   </>;
+}
+
+export function Gnr8Publish() {
+  const [, render] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
+  const [preparedRevision, setPreparedRevision] = useState<number>();
+  useEffect(() => { const update = () => render(value => value + 1); listeners.add(update);
+    return () => { listeners.delete(update); }; }, []);
+  const saved = status === `Saved to GitHub · revision ${revision}` && !busy && !pending && !requests;
+  async function prepare() {
+    if (!saved || submitting || preparedRevision === revision) return;
+    setSubmitting(true); setMessage('GNR8 preverja shranjeno revizijo …');
+    try {
+      const prepared = await requestGnr8Publication(revision);
+      setPreparedRevision(prepared);
+      setMessage(`Revizija ${prepared} je v pripravi v GNR8. Nadaljujte v zavihku GNR8: preglejte izdajo, jo odobrite in nato objavite na delovni domeni.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Priprava ni uspela.'); }
+    finally { setSubmitting(false); }
+  }
+  return <div className="publish-control">
+    <button className="primary" onClick={() => { setMessage(''); setOpen(true); }}>Publish</button>
+    {open && <div role="dialog" aria-modal="true" aria-label="Publish with GNR8"
+      style={{position:'fixed',inset:0,zIndex:999999,background:'#111c',display:'grid',placeItems:'center'}}>
+      <div style={{background:'#181818',color:'white',border:'1px solid #555',borderRadius:12,padding:24,maxWidth:460,display:'grid',gap:14}}>
+        <h2 style={{margin:0}}>Publish with GNR8</h2>
+        <p style={{margin:0}}>GNR8 pripravi shranjeno GitHub revizijo. Pred objavo na delovni domeni boste pregledali predogled in odobrili točno izdajo.</p>
+        <p style={{margin:0}}>{saved ? `Shranjena revizija ${revision}` : 'Najprej kliknite Save in počakajte na potrditev »Saved to GitHub«.'}</p>
+        {message && <p role="status" style={{margin:0}}>{message}</p>}
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button onClick={() => setOpen(false)} disabled={submitting}>Zapri</button>
+          <button className="primary" onClick={() => void prepare()} disabled={!saved || submitting || !platform || preparedRevision === revision}>Pripravi v GNR8</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
 }

@@ -48,6 +48,13 @@ export type SiteAstroGenerationRequestedPayload = {
   strategy: string
   requestedAdapterId?: 'astro-static-site' | 'html-static-artifact'
   acceptedFunctionalReductions?: AcceptedFunctionalReductions
+  stackiBaseline?: { agencyId: string; clientId: string; siteId: string; siteVersionId: string }
+  stackiRevision?: {
+    scope: { agencyId: string; clientId: string; siteId: string; siteVersionId: string }
+    revision: number
+    sha256: string
+  }
+  stackiSourceArtifactSha256?: string
 }
 
 export type DomainVerificationCheckPayload = {

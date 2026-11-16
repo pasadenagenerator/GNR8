@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import https from "node:https";
 import path from "node:path";
 
 import { parse, parseFragment, serialize } from "parse5";
+import { findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "../../import-semantic/semantic-import-engine";
@@ -2739,6 +2741,7 @@ export type AdditionalHtmlPageAssetCaptureResult = {
     failedRequiredAssetCount: number;
     deduplicatedReferenceCount: number;
     failedRequiredResources: string[];
+    skippedUnusedStylesheetDependencies: string[];
   };
 };
 
@@ -2746,6 +2749,52 @@ const ADDITIONAL_PAGE_ASSET_MAX_COUNT = 512;
 const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 12 * 1024 * 1024;
 const ADDITIONAL_PAGE_ASSET_TIMEOUT_MS = 12_000;
 const ADDITIONAL_PAGE_ASSET_CONCURRENCY = 4;
+
+async function fetchAssetBytesWithNodeFallback(input: {
+  url: string;
+  pageUrl: string;
+  fetcher: FetchLike;
+  init: RequestInit;
+  allowFallback: boolean;
+}): Promise<{ response: Pick<Response, "ok" | "status" | "statusText" | "headers" | "url">; bytes: Uint8Array }> {
+  try {
+    const response = await input.fetcher(input.url, input.init);
+    return { response, bytes: response.ok ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array() };
+  } catch (error) {
+    const asset = new URL(input.url);
+    const page = new URL(input.pageUrl);
+    if (!input.allowFallback || asset.protocol !== "https:" ||
+        canonicalAssetHost(asset.hostname) !== canonicalAssetHost(page.hostname)) throw error;
+    return new Promise((resolve, reject) => {
+      const request = https.get(asset, { headers: { "accept-encoding": "identity", accept: "image/*,text/css,*/*;q=0.8" } }, (incoming) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        incoming.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > ADDITIONAL_PAGE_ASSET_MAX_BYTES) {
+            request.destroy(new Error("asset_too_large"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        incoming.on("error", reject);
+        incoming.on("end", () => {
+          if (!incoming.complete) return reject(new Error("asset_transfer_incomplete"));
+          const status = incoming.statusCode ?? 0;
+          const headers = new Headers();
+          const contentType = incoming.headers["content-type"];
+          if (typeof contentType === "string") headers.set("content-type", contentType);
+          resolve({
+            response: { ok: status >= 200 && status < 300, status, statusText: incoming.statusMessage ?? "", headers, url: input.url },
+            bytes: new Uint8Array(Buffer.concat(chunks)),
+          });
+        });
+      });
+      request.setTimeout(ADDITIONAL_PAGE_ASSET_TIMEOUT_MS, () => request.destroy(new Error("asset_timeout")));
+      request.on("error", reject);
+    });
+  }
+}
 
 function canonicalAssetHost(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, "");
@@ -2820,6 +2869,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   trustedExternalOrigins?: string[];
   /** Exact stylesheet dependency URLs proven not to match retained HTML. */
   knownUnusedStylesheetDependencyUrls?: string[];
+  /** Complete HTML evidence for checking whether stylesheet selectors can match. */
+  fullHtmlDocumentsForCssUsage?: string[];
+  /** Explicitly approved missing URLs; proof alone does not authorize omission. */
+  approvedUnusedStylesheetDependencyUrls?: string[];
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -2842,6 +2895,27 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const knownUnusedStylesheetDependencyIdentities = new Set(
     (input.knownUnusedStylesheetDependencyUrls ?? []).map(canonicalAdditionalPageAssetIdentity),
   );
+  const skippedUnusedStylesheetDependencies = new Set<string>();
+  const approvedUnusedStylesheetDependencyIdentities = new Set(
+    (input.approvedUnusedStylesheetDependencyUrls ?? []).map(canonicalAdditionalPageAssetIdentity),
+  );
+  const markProvablyUnused = (css: string, stylesheetUrl: string): void => {
+    if (!input.fullHtmlDocumentsForCssUsage || approvedUnusedStylesheetDependencyIdentities.size === 0) return;
+    try {
+      for (const dependency of findProvablyUnusedCssDependencies({
+        css,
+        stylesheetUrl,
+        htmlDocuments: input.fullHtmlDocumentsForCssUsage,
+      })) {
+        const identity = canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl);
+        if (!approvedUnusedStylesheetDependencyIdentities.has(identity)) continue;
+        knownUnusedStylesheetDependencyIdentities.add(identity);
+        skippedUnusedStylesheetDependencies.add(dependency.resolvedUrl);
+      }
+    } catch {
+      // Unparseable CSS cannot prove that a dependency is unused.
+    }
+  };
   for (const value of input.trustedExternalOrigins ?? []) {
     const origin = canonicalAdditionalPageAssetOrigin(value);
     if (origin) trustedExternalOrigins.add(origin);
@@ -2936,14 +3010,21 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
     try {
-      const response = await fetcher(resolvedUrl, {
+      const { response, bytes } = await fetchAssetBytesWithNodeFallback({
+        url: resolvedUrl,
+        pageUrl,
+        fetcher,
+        allowFallback: !input.fetchImpl,
+        init: {
         method: "GET",
         cache: "no-store",
         redirect: "follow",
         signal: controller.signal,
         headers: {
           accept: "text/css,image/*,*/*;q=0.8",
+          "accept-encoding": "identity",
           "user-agent": "GNR8-Operator-URL-Import/1.1 (+multi-page-assets)",
+        },
         },
       });
       const finalUrl = response.url || resolvedUrl;
@@ -2958,7 +3039,6 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         failedRequiredResources.add(resolvedUrl);
         return;
       }
-      const bytes = new Uint8Array(await response.arrayBuffer());
       if (bytes.byteLength > ADDITIONAL_PAGE_ASSET_MAX_BYTES) {
         outcomeByUrl.set(resolvedUrl, {
           fetchStatus: "fetch_failed",
@@ -2994,6 +3074,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         contentType,
         byteLength: bytes.byteLength,
       });
+      failedRequiredResources.delete(resolvedUrl);
     } catch {
       if (attempt === 0) {
         await fetchOne(resolvedUrl, assetKind, pageUrl, 1);
@@ -3034,6 +3115,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     } catch {
       continue;
     }
+    markProvablyUnused(cssText, stylesheetUrl);
     const pageUrl = refsByUrl.get(stylesheetUrl)?.[0]?.pageUrl ?? stylesheetUrl;
     for (const rawRef of extractCssUrlCandidates(cssText)) {
       const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
@@ -3078,6 +3160,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     if (!localPath) continue;
     let cssText = "";
     try { cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8"); } catch { continue; }
+    markProvablyUnused(cssText, stylesheetUrl);
     for (const rawRef of extractCssUrlCandidates(cssText)) {
       if (acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) break;
       const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
@@ -3103,6 +3186,16 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         nestedQueue.push(representative);
       }
     }
+  }
+
+  // Retry only interrupted transfers once more, sequentially, after the
+  // concurrent pass has finished. A real 4xx/5xx remains a required failure.
+  for (const [resolvedUrl, outcome] of outcomeByUrl) {
+    if (outcome.fetchStatus !== "fetch_failed" || outcome.httpStatus !== null) continue;
+    const direct = refsByUrl.get(resolvedUrl)?.[0];
+    const dependency = stylesheetDependencyUrls.get(resolvedUrl);
+    if (direct) await fetchOne(resolvedUrl, direct.assetKind, direct.pageUrl);
+    else if (dependency) await fetchOne(resolvedUrl, dependency.assetKind, dependency.pageUrl);
   }
 
   for (const [representative, meta] of stylesheetDependencyUrls) {
@@ -3279,6 +3372,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       failedRequiredAssetCount: failedRequiredResources.size,
       deduplicatedReferenceCount: Math.max(0, directReferenceCount - refsByUrl.size),
       failedRequiredResources: [...failedRequiredResources].sort((left, right) => left.localeCompare(right)),
+      skippedUnusedStylesheetDependencies: [...skippedUnusedStylesheetDependencies].sort((left, right) => left.localeCompare(right)),
     },
   };
 }
@@ -4796,12 +4890,19 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         });
       }
       try {
-        const response = await fetcher(resolvedUrl, {
+        const { response, bytes } = await fetchAssetBytesWithNodeFallback({
+          url: resolvedUrl,
+          pageUrl: input.sourceUrl,
+          fetcher,
+          allowFallback: !input.fetchImpl,
+          init: {
           method: "GET",
           cache: "no-store",
           headers: {
             accept: "text/css,text/javascript,application/javascript,image/*,*/*;q=0.8",
+            "accept-encoding": "identity",
             "user-agent": "GNR8-Operator-URL-Import/1.0 (+single-page)",
+          },
           },
         });
 
@@ -4842,7 +4943,6 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           };
         }
 
-        const bytes = new Uint8Array(await response.arrayBuffer());
         const absPath = path.resolve(snapshotRootDirAbs, localPath);
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, bytes);

@@ -3,12 +3,15 @@ import {
   type StackiDraftScope, type StackiDraftFile,
 } from "./stacki-draft-contract";
 import type { SupabaseStackiDraftStore } from "./stacki-draft-store";
+import type { StackiDraftRecord } from "./stacki-draft-contract";
 
 export type StackiDraftRouteDependencies = {
   enabled(): boolean;
   authorize(scope: StackiDraftScope): Promise<{ userId: string; agencyId: string }>;
-  store(): Pick<SupabaseStackiDraftStore, "latest" | "revision" | "save">;
+  store(scope: StackiDraftScope): Pick<SupabaseStackiDraftStore, "latest" | "revision" | "save"> |
+    Promise<Pick<SupabaseStackiDraftStore, "latest" | "revision" | "save">>;
   source?(scope: StackiDraftScope): Promise<StackiDraftFile[]>;
+  bootstrap?(scope: StackiDraftScope, actor: string, confirm: () => Promise<void>): Promise<StackiDraftRecord | null>;
 };
 type Context = { params: Promise<{ clientId: string; siteId: string; siteVersionId: string }> };
 const headers = { "cache-control": "private, no-store", "x-content-type-options": "nosniff" };
@@ -36,9 +39,12 @@ export function createStackiDraftRouteHandlers(deps: StackiDraftRouteDependencie
         // Source content, actor and revision are server-owned in this operation.
         if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length)
           throw new StackiDraftError(422, "STACKI_PREPARE_BODY_INVALID");
-        const store = deps.store();
+        const store = await deps.store(scope);
         const existing = await store.latest(scope);
         if (existing) return Response.json({ ok: true, reused: true, revision: existing.revision, sha256: existing.sha256 }, { headers });
+        const bootstrapped = await deps.bootstrap?.(scope, actor.userId, confirm);
+        if (bootstrapped) return Response.json({ ok: true, reused: true, revision: bootstrapped.revision,
+          sha256: bootstrapped.sha256 }, { headers });
         if (!deps.source) throw new StackiDraftError(503, "STACKI_SOURCE_UNAVAILABLE");
         const files = await deps.source(scope);
         // Recheck membership after source/asset loading before the first write.
@@ -66,7 +72,7 @@ export function createStackiDraftRouteHandlers(deps: StackiDraftRouteDependencie
         const revision = query.get("revision");
         if (revision !== null && (!/^[1-9][0-9]*$/.test(revision) || Number(revision) > STACKI_DRAFT_MAX_REVISIONS))
           throw new StackiDraftError(422, "STACKI_REVISION_INVALID");
-        const store = deps.store();
+        const store = await deps.store(scope);
         const checkpoint = revision === null ? await store.latest(scope) : await store.revision(scope, Number(revision));
         // Verify every durable byte through the same dual reader before returning
         // a small recovery receipt. Large projects exceed serverless response limits.
@@ -80,7 +86,7 @@ export function createStackiDraftRouteHandlers(deps: StackiDraftRouteDependencie
         const { scope, actor, confirm } = await access(request, context);
         requireSameOriginJson(request);
         const save = parseStackiSave(await readBoundedJson(request));
-        const checkpoint = await deps.store().save(scope, actor.userId, save, confirm);
+        const checkpoint = await (await deps.store(scope)).save(scope, actor.userId, save, confirm);
         return Response.json({ ok: true, revision: checkpoint.revision, sha256: checkpoint.sha256 }, { headers });
       } catch (error) { return failure(error); }
     },

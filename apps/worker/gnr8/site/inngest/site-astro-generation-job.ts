@@ -3,6 +3,7 @@ export { parseSiteAstroGenerationPayload } from './site-astro-generation-payload
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { NonRetriableError } from 'inngest'
+import { ASTRO_NODE_LINUX_SHA256 } from '../../../../platform/gnr8/output-adapters/astro-node-executor'
 
 import {
   type SiteAstroGenerationRequestedPayload,
@@ -27,10 +28,20 @@ type GenerationResult = {
 
 type RunGeneration = (payload: SiteAstroGenerationRequestedPayload) => Promise<GenerationResult>
 
+export function assertAstroExecutorNode(version = process.versions.node) {
+  if (!/^26\.\d+\.\d+$/.test(version)) throw new NonRetriableError(`Astro build executor requires Node 26.x; received ${version}`)
+}
+
 const runDefaultGeneration: RunGeneration = async (payload) => {
+  assertAstroExecutorNode()
   const pnpmCliPath = resolveBundledPnpmCliPath()
   if (!pnpmCliPath) throw new Error('Bundled pnpm CLI is unavailable in the worker runtime.')
   process.env.GNR8_PNPM_CLI_PATH = pnpmCliPath
+  const nodePath = [join(process.cwd(), 'toolchains/node-26.13.0-linux-x64/bin/node'),
+    join(process.cwd(), 'apps/worker/toolchains/node-26.13.0-linux-x64/bin/node')].find(existsSync)
+  if (!nodePath) throw new NonRetriableError('Pinned Astro Node executable is missing from the Worker package.')
+  process.env.GNR8_ASTRO_NODE_PATH = nodePath
+  process.env.GNR8_ASTRO_NODE_SHA256 = ASTRO_NODE_LINUX_SHA256
   const mod = await import('@/gnr8/output-adapters/source-backed-astro-generation-service')
   return mod.runSourceBackedAstroGeneration(payload)
 }
@@ -68,7 +79,12 @@ function isDeterministicGenerationFailure(error: unknown): boolean {
   const candidate = error as { code?: unknown; retryable?: unknown; message?: unknown }
   if (candidate.retryable === false) return true
   if (candidate.code === 'unsupported_capability' || candidate.code === 'record_too_large') return true
+  if (typeof candidate.code === 'string' && candidate.code.startsWith('STACKI_CANDIDATE_')) return true
   return typeof candidate.message === 'string' && (
+    candidate.message.startsWith('stacki_candidate_blocked:') ||
+    candidate.message.startsWith('stacki_candidate_source_not_supported:') ||
+    candidate.message === 'stacki_candidate_source_stale' ||
+    candidate.message === 'stacki_candidate_ownership_mismatch' ||
     candidate.message.startsWith('unsupported_capability:') ||
     candidate.message === 'astro_generation_source_artifact_missing' ||
     candidate.message === 'astro_generation_source_capture_lineage_missing' ||

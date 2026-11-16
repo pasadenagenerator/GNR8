@@ -7,6 +7,7 @@ import { loadSourceBackedAstroHtmlByPath } from '@/gnr8/output-adapters/source-b
 import { findContactSuggestions, type ContactSuggestionModel } from '@/gnr8/output-adapters/source-contact-suggestions';
 import { routeMapFromProvenance } from '@/gnr8/runtime/raw-template-route-map-resolver';
 import type { RawImportedSiteArtifact } from '@/gnr8/runtime/types';
+import { RawImportGitCache } from './raw-import-git-cache';
 
 /** Uses only retained storage. Scope is checked before loading capture bytes. */
 export async function readContactSuggestions(scope: { siteId: string; agencyId: string; clientId: string }): Promise<ContactSuggestionModel> {
@@ -41,8 +42,14 @@ export async function readContactSuggestions(scope: { siteId: string; agencyId: 
     const result = await client.from('gnr8_runtime_raw_template_artifact_files').select('media_type,file_size_bytes,sha256,content_bytes').eq('artifact_id', input.artifactId).eq('file_path', input.filePath).maybeSingle();
     if (result.error || !result.data) return null;
     const row = result.data;
-    if (typeof row.content_bytes !== 'string' || !row.content_bytes.startsWith('\\x')) throw new Error('409|CONTACT_SOURCE_INVALID');
-    const bytes = Buffer.from(row.content_bytes.slice(2), 'hex');
+    const ref = source.rawArtifact.metadata.gitArchive;
+    const bytes = ref
+      ? await new RawImportGitCache().read(ref, source.rawArtifact.siteVersionId,
+          {sha256:row.sha256,sizeBytes:row.file_size_bytes})
+      : (() => {
+          if (typeof row.content_bytes !== 'string' || !row.content_bytes.startsWith('\\x')) throw new Error('409|CONTACT_SOURCE_INVALID');
+          return Buffer.from(row.content_bytes.slice(2), 'hex');
+        })();
     if (bytes.length !== row.file_size_bytes || createHash('sha256').update(bytes).digest('hex') !== row.sha256) throw new Error('409|CONTACT_SOURCE_INVALID');
     return { bytes, mediaType: row.media_type, sizeBytes: row.file_size_bytes, sha256: row.sha256 };
   } });

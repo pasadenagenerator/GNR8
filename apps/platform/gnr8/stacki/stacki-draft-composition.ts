@@ -1,11 +1,8 @@
 import "server-only";
 import { requirePublicOutputVersion } from "../output-adapters/public-output-access";
-import { ASTRO_CANDIDATE_OBJECT_BUCKET_ENV } from "../output-adapters/astro-production-candidate-object-store";
-import { getSupabaseServiceRoleClient } from "../../src/supabase/service-role-server";
 import { createStackiDraftRouteHandlers } from "./stacki-draft-route-handlers";
-import { StackiDraftError } from "./stacki-draft-contract";
 import { createStackiPilotAuthorizer } from "./stacki-pilot-access";
-import { SupabaseStackiDraftStore } from "./stacki-draft-store";
+import { configuredStackiStore, bootstrapStackiGithub } from './stacki-github-composition';
 
 /**
  * Opt-in only. Reuses the current owner/admin site/version authorization and
@@ -33,10 +30,7 @@ export function createConfiguredStackiDraftRoutes() {
     enabled: () => process.env.GNR8_STACKI_DRAFTS_ENABLED === "1",
     authorize: authorizeConfiguredStackiPilot,
     source: async scope => (await import("./stacki-source-composition")).loadConfiguredStackiSource(scope),
-    store: () => {
-      const client = getSupabaseServiceRoleClient();
-      if (!client) throw new StackiDraftError(503, "STACKI_DRAFT_STORAGE_UNAVAILABLE");
-      return new SupabaseStackiDraftStore(client, process.env[ASTRO_CANDIDATE_OBJECT_BUCKET_ENV] ?? "");
-    },
+    store: configuredStackiStore,
+    bootstrap: bootstrapStackiGithub,
   });
 }

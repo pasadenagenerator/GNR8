@@ -1,4 +1,6 @@
 import { parseAcceptedFunctionalReductions, type SiteAstroGenerationRequestedPayload } from '@gnr8/runtime-contracts'
+import { parseStackiScope } from '../../../../platform/gnr8/stacki/stacki-draft-contract'
+import { parseStackiCandidateSelection } from '../../../../platform/gnr8/stacki/stacki-candidate-selection'
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -21,6 +23,23 @@ export function parseSiteAstroGenerationPayload(value: unknown): SiteAstroGenera
   const acceptedFunctionalReductions = record.acceptedFunctionalReductions === undefined
     ? undefined : parseAcceptedFunctionalReductions(record.acceptedFunctionalReductions)
   if (acceptedFunctionalReductions === null) return null
+  let stackiBaseline: SiteAstroGenerationRequestedPayload['stackiBaseline']
+  if (record.stackiBaseline !== undefined) {
+    try { stackiBaseline = parseStackiScope(record.stackiBaseline) } catch { return null }
+    if (record.stackiRevision !== undefined || acceptedFunctionalReductions ||
+      stackiBaseline.siteId !== ownershipSiteId || stackiBaseline.siteVersionId !== sourceSiteVersionId ||
+      strategy !== 'stacki_astro7_baseline' || requestedAdapterId !== 'astro-static-site' ||
+      typeof record.stackiSourceArtifactSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.stackiSourceArtifactSha256)) return null
+  }
+  let stackiRevision: SiteAstroGenerationRequestedPayload['stackiRevision']
+  if (record.stackiRevision !== undefined) {
+    try { stackiRevision = parseStackiCandidateSelection(record.stackiRevision) } catch { return null }
+    if (acceptedFunctionalReductions || stackiRevision.scope.siteId !== ownershipSiteId ||
+      stackiRevision.scope.siteVersionId !== sourceSiteVersionId ||
+      typeof record.stackiSourceArtifactSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.stackiSourceArtifactSha256)) return null
+  } else if (!stackiBaseline && record.stackiSourceArtifactSha256 !== undefined) return null
+
+  if (strategy === 'stacki_astro7_baseline' && !stackiBaseline) return null
 
   return {
     actionId,
@@ -33,5 +52,7 @@ export function parseSiteAstroGenerationPayload(value: unknown): SiteAstroGenera
     strategy,
     ...(requestedAdapterId ? { requestedAdapterId } : {}),
     ...(acceptedFunctionalReductions ? { acceptedFunctionalReductions } : {}),
+    ...(stackiBaseline ? { stackiBaseline, stackiSourceArtifactSha256: record.stackiSourceArtifactSha256 } : {}),
+    ...(stackiRevision ? { stackiRevision, stackiSourceArtifactSha256: record.stackiSourceArtifactSha256 } : {}),
   } as SiteAstroGenerationRequestedPayload
 }

@@ -20,6 +20,10 @@ const nextConfig = {
   // and matching API routes) will fail
   // at runtime when it attempts to read fixture files from disk.
   outputFileTracingIncludes: {
+    '/api/gnr8/agency/clients/[clientId]/sites/[siteId]/stacki-drafts/[siteVersionId]/session': [
+      './gnr8/stacki/studio-client.bundle.js',
+      './gnr8/stacki/studio-client.bundle.css',
+    ],
     '/validation': [
       './gnr8/validation/fixtures/real-site-01/**',
       './gnr8/validation/fixtures/real-site-02/**',

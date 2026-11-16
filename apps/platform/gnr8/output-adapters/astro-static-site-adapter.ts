@@ -235,13 +235,14 @@ function createPackageJson(input: NormalizedStaticBusinessSiteContent): Record<s
     version: "0.0.0",
     private: true,
     type: "module",
+    engines: { node: "26.x" },
     scripts: {
       dev: "astro dev --host 127.0.0.1 --port 4321",
       build: "astro build",
       preview: "astro preview --host 127.0.0.1 --port 4321",
     },
     dependencies: {
-      astro: "^5.0.0",
+      astro: "7.4.4",
     },
   };
 }
@@ -532,7 +533,9 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/'/g, "&#39;")
+    .replace(/\{/g, "&#123;")
+    .replace(/\}/g, "&#125;");
 }
 
 function escapeAttribute(value: string): string {

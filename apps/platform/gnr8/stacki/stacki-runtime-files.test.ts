@@ -17,8 +17,11 @@ test("capture keeps source, binary image and editor state, excluding credentials
     await writeFile(join(root, "public/image.png"), Buffer.from([0, 255, 128]));
     await writeFile(join(root, ".studio-state/page.bin"), Buffer.from([254, 1]));
     await writeFile(join(root, ".env"), "PRIVATE");
+    const config = JSON.stringify({compilerOptions:{paths:{"@/*":["./src/*"]}}});
+    await writeFile(join(root, "tsconfig.json"), config);
     const files = await captureStackiRuntimeFiles(root);
-    assert.equal(files.length, 5);
+    assert.equal(files.length, 6);
+    assert.equal(Buffer.from(files.find(f => f.path === "tsconfig.json")!.base64,"base64").toString(), config);
     assert.deepEqual(Buffer.from(files.find(f => f.path === "public/image.png")!.base64, "base64"), Buffer.from([0, 255, 128]));
     assert(!files.some(f => f.path === ".env"));
     await symlink(join(root, ".env"), join(root, "public/leaked.txt"));

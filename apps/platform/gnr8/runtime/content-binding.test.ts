@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { applyContentOverridesToRawHtml, inferContentSlotsFromSemanticImport } from '@/gnr8/runtime/content-binding'
+import { applyContentOverridesToRawHtml, inferContentSlotsFromSemanticImport, separateGitBackedContentSlotSources } from '@/gnr8/runtime/content-binding'
 import type { SemanticImportResult } from '@/gnr8/import-semantic/semantic-import-engine'
 
 const semantic: SemanticImportResult = {
@@ -64,6 +64,15 @@ test('slot inference creates hero and section slots', () => {
   assert.ok(out.slots.find((s) => s.slotKey === 'sections.0.items.0.title'))
   assert.ok(out.slots.find((s) => s.slotKey === 'sections.1.gallery.0.image'))
   assert.ok(out.slots.find((s) => s.slotKey === 'sections.2.contact.email'))
+})
+
+test('Git-backed slot write keeps originals in its package and clears database text',()=>{
+  const slots=[{slotKey:'hero.title',sourceText:'Original title',slotType:'text' as const},
+    {slotKey:'hero.image',sourceText:null,slotType:'image' as const}]
+  const separated=separateGitBackedContentSlotSources(slots)
+  assert.deepEqual(separated.sources,[{slotKey:'hero.title',sourceText:'Original title'},
+    {slotKey:'hero.image',sourceText:null}])
+  assert.deepEqual(separated.databaseSlots,slots.map(slot=>({...slot,sourceText:null})))
 })
 
 test('duplicate text becomes low confidence and missing selector is safe', () => {

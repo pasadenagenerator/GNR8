@@ -38,7 +38,7 @@ const nextConfig = {
     ],
   },
   outputFileTracingIncludes: {
-    '/api/inngest': ['./node_modules/pnpm/**'],
+    '/api/inngest': ['./node_modules/pnpm/**', './node_modules/npm/**', './toolchains/node-26.13.0-linux-x64/**', '../platform/gnr8/standalone/templates/**'],
   },
 }
 

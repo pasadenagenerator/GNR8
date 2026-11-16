@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
+import StandalonePublicationPanel from './StandalonePublicationPanel';
+import ImportReviewPanel from './ImportReviewPanel';
 import { isContactEmail } from '@gnr8/runtime-contracts';
 import type { GeneratedOutputReviewModel } from '@/gnr8/output-adapters/generated-output-publication-composition';
 import type { PublicOutputSelection } from '@/gnr8/output-adapters/public-output-service';
@@ -25,6 +27,9 @@ export default function PublicOutputPanel(props: Props) {
 
   async function request(url: string, body?: unknown) {
     const response = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
+    if (!response.headers.get('content-type')?.includes('application/json')) {
+      throw new Error('The server did not finish this request. Do not repeat preparation yet; refresh the selected status to check for a retained result. Nothing is approved or published by preparation.');
+    }
     const payload = await response.json();
     if (!response.ok || !payload.ok) throw new Error(`${payload.error ?? 'Unable to load public version.'}${payload.reason ? ` (${payload.reason})` : ''}${payload.blockers?.length ? `: ${payload.blockers.join(', ')}` : ''}`);
     return payload.data;
@@ -62,17 +67,18 @@ export default function PublicOutputPanel(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, endpoint, scope]);
 
-  async function act(action: 'prepare' | 'approve' | 'publish' | 'change-recipient') {
+  async function act(action: 'prepare' | 'approve' | 'publish' | 'change-recipient' | 'withdraw') {
     if (!selected || !model || busy) return;
     setBusy(true); setNotice('');
     try { localStorage.setItem(storageKey, JSON.stringify({ ...selected, host: props.host })); } catch { /* Resume hints are optional. */ }
     try {
       const next: GeneratedOutputReviewModel = await request(`${endpoint}?${scope}`, { ...selected, action,
+        ...(action === 'withdraw' ? { confirmation: 'withdraw-exact-first-publication' } : {}),
         host: props.host.trim().toLowerCase(), ...(action === 'change-recipient' ? { recipient: recipient.trim(), confirmation: 'confirm-contact-recipient' } : {}), ...(action === 'approve' ? { confirmation: 'approve-exact-generated-output-artifact', technicalEvaluationSha256: model.decision.technical.evidenceSha256 } : {}) });
       const target = { siteVersionId: next.siteVersionId, artifactId: next.artifactId, artifactBundleSha256: next.artifactBundleSha256 };
       setChoices(await request(`${endpoint}?${scope}`));
       remember(target); setModel(next);
-      setNotice(action === 'publish' ? 'This exact version is published.' : action === 'prepare' || action === 'change-recipient' ? 'Public version saved. Open the preview before approving.' : 'Exact artifact approved. Domain readiness is checked separately by Publish.');
+      setNotice(action === 'withdraw' ? 'First publication withdrawn. Saved source, candidate and approval remain retained. Verify the working domain again before republishing.' : action === 'publish' ? 'This exact version is published.' : action === 'prepare' || action === 'change-recipient' ? 'Public version saved. Open the preview before approving.' : 'Exact artifact approved. Domain readiness is checked separately by Publish.');
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Operation failed. Retry the same selection.'); }
     finally { setBusy(false); }
   }
@@ -89,6 +95,11 @@ export default function PublicOutputPanel(props: Props) {
     }}><option value="">Choose a version</option>{choices.map(c => <option key={c.siteVersionId} value={c.siteVersionId}>Version {c.versionNo} · {c.host ?? 'Generated source'} · {c.state}</option>)}</select></label>
     {model ? <>
       <div>Version: {model.siteVersionId}<br />Artifact: {model.artifactId}<br />SHA-256: {model.artifactBundleSha256}</div>
+      {model.stackiRevision && <p>Saved Stacki revision: {model.stackiRevision.revision}<br />Draft SHA-256: {model.stackiRevision.sha256}<br />These source edits are retained in this artifact. Canonical content/design are not synchronized; regenerate only from the saved source.</p>}
+      {model.state === 'PUBLISHED' && !model.activePublication && <p>This artifact is not currently serving on the working domain.</p>}
+      {model.activePublication && model.publicPreparation?.expectedActivePointer === null && <button disabled={busy || !props.canPublish || !hostMatches} onClick={() => {
+        if (window.confirm(`Withdraw this exact first publication from ${model.publicPreparation!.host}? Retained drafts and artifacts will be preserved.`)) void act('withdraw');
+      }}>Withdraw first publication</button>}
       <div>Target host: {model.publicPreparation?.host ?? (props.host || 'Enter a domain above')}<br />Contact recipient: {model.contactRecipient ?? 'No native contact configured'}<br />State: {model.state} · Technical: {model.decision.technical.status} · Human approval: {model.decision.review.status}</div>
       {model.publicPreparation?.contactRecipientChange ? <p>Recipient change: {model.publicPreparation.contactRecipientChange.from} → {model.publicPreparation.contactRecipientChange.to}. {model.activePublication ? 'This recipient change is now active.' : 'The old recipient remains active until successful Publish.'}</p> : null}
       {model.activePublication && model.contactRecipient ? <fieldset disabled={busy || !props.canPublish}>
@@ -111,6 +122,8 @@ export default function PublicOutputPanel(props: Props) {
       </>}
       {model.decision.blockerReasons.length ? <ul>{model.decision.blockerReasons.map(b => <li key={b.code}>{b.message} ({b.code})</li>)}</ul> : null}
     </> : null}
+    {selected && model ? <ImportReviewPanel agencyId={props.agencyId} clientId={props.clientId} siteId={props.siteId} selection={selected} canEdit={props.canPublish} preview={model.publicPreparation?preview:null} /> : null}
+    {selected && model?.stackiRevision ? <StandalonePublicationPanel agencyId={props.agencyId} clientId={props.clientId} siteId={props.siteId} selection={selected} canPublish={props.canPublish} /> : null}
     {selected ? <button disabled={busy} onClick={() => setSelected({ ...selected })}>Refresh selected status</button> : null}
     <p role="status" style={{ margin: 0 }}>{busy ? 'Processing the selected version…' : notice}</p>
   </section>;

@@ -29,7 +29,7 @@ import {
   ASTRO_INTERNAL_PREVIEW_ASSET_MODE,
   ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION,
 } from "./astro-static-site-internal-preview-bridge";
-import { isGeneratedOutputRoutePath } from "./generated-output-route-path";
+import { isGeneratedOutputRoutePath, isExplicitExternalNavigationUrl } from "./generated-output-route-path";
 
 export const GENERATED_OUTPUT_ELIGIBILITY_POLICY_VERSION =
   "gnr8-generated-output-eligibility:v1" as const;
@@ -41,9 +41,12 @@ export const GENERATED_OUTPUT_REVIEW_VERSION =
   "gnr8-generated-output-review:v1" as const;
 
 import { readPublicPreparation, publicPreparationWorkspaceMatches, PUBLIC_PREPARATION_PRODUCER } from './astro-public-preparation-contract';
+import { parseStackiCandidateSelection } from '../stacki/stacki-candidate-selection';
+import { createAstroStaticSiteSourceSnapshot } from './astro-static-site-workspace-preparation';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SUPPORTED_PRODUCERS = new Set([
+  "stacki_saved_source_build_export_bridge:v1",
   "chs_source_backed_astro_build_export_bridge:v1",
   "source_backed_astro_build_export_bridge:v1",
   "astro_successor_candidate_rebind:v1",
@@ -88,7 +91,7 @@ export type GeneratedOutputBuildEvidence = {
   producerKind: string;
   producerVersion: string;
   adapterId: typeof ASTRO_PRODUCTION_CANDIDATE_ADAPTER_ID;
-  conversionVersion: typeof ASTRO_INTERNAL_PREVIEW_CONVERSION_VERSION;
+  conversionVersion: import("./astro-static-site-internal-preview-bridge").AstroInternalPreviewCandidateManifest["conversionVersion"];
   exportManifestVersion: typeof ASTRO_STATIC_EXPORT_MANIFEST_VERSION;
   rendererCompatibilityVersion: string;
   sourceCapture: {
@@ -318,6 +321,24 @@ export function evaluateGeneratedOutputTechnicalEligibility(input: {
       block,
     });
   }
+  if (record?.registration.producerKind === 'stacki_saved_source_build_export_bridge') {
+    try {
+      const workspace = artifact.manifest.generatedOutputSourceWorkspace as Record<string, unknown>;
+      const ref = workspace.stackiRevision as Record<string, unknown>;
+      const selected = parseStackiCandidateSelection({ scope: ref.scope, revision: ref.revision, sha256: ref.sha256 });
+      const ownership = input.authoritativeOwnership;
+      if (selected.scope.agencyId !== ownership.agencyId || selected.scope.clientId !== ownership.organizationId || selected.scope.siteId !== ownership.ownershipSiteId ||
+        ref.canonicalRelation !== 'source-edited-canonical-not-synchronized:v1' || !isSha256(ref.sourceArtifactSha256) ||
+        buildEvidence?.submissionAttestation.packageSha256 !== selected.sha256 ||
+        record.registration.producerRef !== `stacki:${selected.scope.siteVersionId}:${selected.revision}:${selected.sha256}` || !Array.isArray(workspace.files)) throw new Error('binding');
+      const files = workspace.files.map((file: { path: string; contents?: string; base64?: string; sha256: string; bytes: number }) => {
+        const body = typeof file.base64 === 'string' ? Buffer.from(file.base64, 'base64') : Buffer.from(file.contents ?? '', 'utf8');
+        if (sha256Hex(body) !== file.sha256 || body.length !== file.bytes) throw new Error('source');
+        return { path: file.path, body };
+      });
+      if (createAstroStaticSiteSourceSnapshot(files).aggregateSha256 !== buildEvidence.sourceSnapshotSha256) throw new Error('snapshot');
+    } catch { block('stacki_revision_lineage_invalid', 'Saved Stacki revision, ownership and exact built source must match. Canonical models are not synchronized.'); }
+  }
 
   if (record?.registration.producerKind === PUBLIC_PREPARATION_PRODUCER || artifact.manifest.publicPreparation) {
     const prep = readPublicPreparation(artifact.manifest);
@@ -467,7 +488,12 @@ function evaluateHtmlAgainstManifest(input: {
     const assetHash = ownedAssets.get(assetPath);
     if (ownedPrefix && assetPath.startsWith(ownedPrefix) && assetHash &&
       input.artifact.assetFingerprintMap[assetPath] === assetHash) continue;
-    const kind = allowedTargets.get(href);
+    const declaredKind = allowedTargets.get(href);
+    // Older retained-source manifests mislabeled explicit HTTP links as local
+    // routes. Interpret only that exact trusted target; do not mutate its
+    // immutable manifest, upgrade the URL, or authorize undeclared navigation.
+    const kind = declaredKind === "local_route" && /^http:\/\//i.test(href) && isExplicitExternalNavigationUrl(href)
+      ? "external_url" : declaredKind;
     if (!kind) {
       input.block(`navigation_target_unapproved:${href}`, `Navigation target is outside the trusted manifest: ${href}.`);
       continue;
@@ -478,8 +504,8 @@ function evaluateHtmlAgainstManifest(input: {
     if (kind === "local_route" && !input.manifest.scope.outputPaths.includes(href.split(/[?#]/, 1)[0] || "/")) {
       input.block(`local_route_unsupported:${href}`, `Local route is not included in the supported delivery scope: ${href}.`);
     }
-    if (kind === "external_url" && !/^https:\/\//.test(href)) {
-      input.block(`external_navigation_invalid:${href}`, `External navigation must be an explicit HTTPS URL: ${href}.`);
+    if (kind === "external_url" && !isExplicitExternalNavigationUrl(href)) {
+      input.block(`external_navigation_invalid:${href}`, `External navigation must be an explicit HTTP or HTTPS URL without credentials: ${href}.`);
     }
     if (kind === "mailto" && !href.startsWith("mailto:")) input.block(`mailto_invalid:${href}`, "Mail link is invalid.");
     if (kind === "tel" && !href.startsWith("tel:")) input.block(`tel_invalid:${href}`, "Telephone link is invalid.");

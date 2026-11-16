@@ -1,9 +1,13 @@
+import { BrandGuidePanel } from './BrandGuidePanel'
+import { stackiGithubSelected } from '@/gnr8/stacki/stacki-github-config'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
 
+import CapturedContentReviewPanel from './CapturedContentReviewPanel'
 import SiteContextLayout from './SiteContextLayout'
 import SiteActionsPanel from './SiteActionsPanel'
+import { VariantNavigation } from './VariantNavigation'
 import StackiEditorPanel from './StackiEditorPanel'
 import ContentBindingsPanel from './ContentBindingsPanel'
 import SiteDeletePanel from './SiteDeletePanel'
@@ -153,6 +157,7 @@ function renderOverviewContent(props: {
 
       {renderMultiPageImportOperatorContent(readModel)}
 
+      <CapturedContentReviewPanel review={readModel.capturedContentReview} />
       {renderOriginalMirrorFidelity(readModel)}
       {renderReconstructionReadiness(readModel)}
 
@@ -1479,6 +1484,7 @@ export default async function SiteWorkspacePage(props: Props) {
     clientId,
     siteId,
     selectedVariantId,
+    includeCapturedContentReview: props.activeTab === 'overview',
     serverOwned: currentUserAgency.role === 'superadmin',
   })
 
@@ -1514,6 +1520,7 @@ export default async function SiteWorkspacePage(props: Props) {
       clientOptions={switchableClients}
       selectedVariantId={readModel.variants.selectedVariantId}
     >
+      <VariantNavigation selectedVariantId={readModel.variants.selectedVariantId} agencyId={currentUserAgency.agency_id}>
       <div style={{ display: 'grid', gap: 12 }}>
         <SiteActionsPanel
           siteId={readModel.site.id}
@@ -1548,6 +1555,9 @@ export default async function SiteWorkspacePage(props: Props) {
           process.env.GNR8_STACKI_PILOT_USER_ID === currentUserAgency.user_id &&
           readModel.pipeline.runtimeSelection.selectedVersionId ? (
           <StackiEditorPanel
+            storage={stackiGithubSelected({agencyId:currentUserAgency.agency_id,clientId,siteId,
+              siteVersionId:readModel.pipeline.runtimeSelection.selectedVersionId}) ? 'GitHub' : 'GNR8'}
+            candidatePreparationEnabled={process.env.GNR8_STACKI_CANDIDATES_ENABLED === '1'}
             key={readModel.pipeline.runtimeSelection.selectedVersionId}
             agencyId={currentUserAgency.agency_id}
             clientId={clientId}
@@ -1555,6 +1565,7 @@ export default async function SiteWorkspacePage(props: Props) {
             siteVersionId={readModel.pipeline.runtimeSelection.selectedVersionId}
           />
         ) : null}
+        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.pipeline.importVersion.latestImportSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')} /> : null}
         {props.activeTab === 'design' ? renderDesignContent(readModel) : null}
         {props.activeTab === 'preview' ? renderPreviewContent(readModel) : null}
         {props.activeTab === 'settings'
@@ -1569,6 +1580,7 @@ export default async function SiteWorkspacePage(props: Props) {
             })
           : null}
       </div>
+      </VariantNavigation>
     </SiteContextLayout>
   )
 }

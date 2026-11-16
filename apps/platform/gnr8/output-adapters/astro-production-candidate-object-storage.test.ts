@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import {generatedArtifactGitPackage} from "../site/generated-artifact-git-archive";
+import {createObjectBackedRoundTripCases} from "../../supabase/tests/astro_candidate_registry/typescript-roundtrip";
+import policy from "./lumos-reviewed-export.json";
+import {exportMediaType,RESOURCE_RECORD_VERSION,RESOURCE_CONVERSION_VERSION,REVIEWED_LUMOS_SOURCE} from "./astro-export-resources";
 import test from "node:test";
 import { parse, serialize } from "parse5";
 import { contactElements, readContactSchema, replaceSupportedContactForm } from "../contact/contact-form";
@@ -12,6 +16,8 @@ import { createSyntheticAstroInternalPreviewCandidate } from "./astro-internal-p
 import { createAstroProductionCandidateId, type AstroProductionCandidateOwnership } from "./astro-production-candidate-record";
 import {
   ASTRO_OBJECT_CANDIDATE_SCHEMA_VERSION,
+  computeAstroObjectBackedCandidateStorageSha256,
+  validateAstroObjectBackedCandidateRecord,
   type AstroObjectBackedResolvedRecord,
 } from "./astro-production-candidate-object-record";
 import {
@@ -34,6 +40,37 @@ const OWNERSHIP: AstroProductionCandidateOwnership = {
   agencyId: "55555555-5555-4555-8555-555555555555",
 };
 
+test("object writes are bounded and all verification drains before registration or failure", async () => {
+  for (const fail of [false, true]) {
+    const gateway = new InMemoryAstroProductionCandidateGateway();
+    const store = new InMemoryAstroCandidateObjectStore();
+    const original = store.putVerified.bind(store);
+    let active = 0, peak = 0, writes = 0, registered = 0;
+    store.putVerified = async upload => {
+      active++; peak = Math.max(peak, active);
+      const index = writes++;
+      try {
+        await new Promise<void>(resolve => setImmediate(resolve));
+        if (fail && index === 0) throw new Error('verification unavailable');
+        await original(upload);
+      } finally { active--; }
+    };
+    const register = gateway.atomicCreate.bind(gateway);
+    gateway.atomicCreate = async input => { assert.equal(active, 0); registered++; return register(input); };
+    const input = createLargeInput();
+    input.candidate.htmlByPath = Object.fromEntries(Array.from({length:10},(_,i)=>[i ? `/page-${i}` : '/', html('Page','Retained content','')])) as typeof input.candidate.htmlByPath;
+    input.candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(input.candidate);
+    input.candidate.manifest.provenance.convertedArtifactSha256 = input.candidate.contentSha256;
+    const operation = createRepository(gateway,store).create(input);
+    if (fail) await assert.rejects(operation);
+    else assert.equal((await operation).status,'created');
+    assert.equal(peak,4);
+    assert.equal(active,0);
+    assert.equal(registered,fail ? 0 : 1);
+    assert.equal(writes,fail ? 4 : 11);
+  }
+});
+
 test("a multi-page candidate larger than the inline limit is stored, resolved, and rendered exactly", async () => {
   const gateway = new InMemoryAstroProductionCandidateGateway();
   const objectStore = new InMemoryAstroCandidateObjectStore();
@@ -45,6 +82,9 @@ test("a multi-page candidate larger than the inline limit is stored, resolved, a
   assert.ok(created.measurements.resolvedCandidateUtf8Bytes > 2 * 1024 * 1024);
   assert.ok(created.measurements.registryRecordUtf8Bytes < 2 * 1024 * 1024);
   assert.ok(created.measurements.objectPayloadUtf8Bytes > 2 * 1024 * 1024);
+  const stylesRef = (created.record as AstroObjectBackedResolvedRecord).stylesObjectRef;
+  assert.ok(stylesRef, "short shared CSS is stored outside the candidate record");
+  assert.equal(stylesRef.sizeBytes, Buffer.byteLength(input.candidate.compiledTokenStyles));
   const retry = await repository.create(input);
   assert.equal(retry.status, "idempotent");
   assert.equal(retry.record.storageSha256, created.record.storageSha256);
@@ -59,6 +99,138 @@ test("a multi-page candidate larger than the inline limit is stored, resolved, a
   assert.match(rendered, /data-gnr8-astro-compiled-styles/);
   assert.match(rendered, /--brand:#123456/);
   assert.match(rendered, /href="mailto:sales@chs\.si"/);
+});
+
+test("a one-page candidate stores HTML and CSS as verified objects", async () => {
+  const gateway = new InMemoryAstroProductionCandidateGateway();
+  const repository = createRepository(gateway, new InMemoryAstroCandidateObjectStore());
+  const input = createLargeInput();
+  input.candidate.htmlByPath = {"/": html("Home", "One page", "")};
+  input.candidate.contentSha256 = computeAstroInternalPreviewCandidateContentSha256(input.candidate);
+  input.candidate.manifest.provenance.convertedArtifactSha256 = input.candidate.contentSha256;
+
+  await repository.create(input);
+  const saved = await gateway.readForScope({candidateId:CANDIDATE_ID,trustedScope:OWNERSHIP});
+  assert.equal(saved.status,"found");
+  if(saved.status!=="found")return;
+  assert.equal(JSON.stringify(saved.record).includes("One page"),false);
+  assert.equal(JSON.stringify(saved.record).includes("--brand:#123456"),false);
+  const restored = await repository.read({candidateId:CANDIDATE_ID,trustedScope:OWNERSHIP});
+  assert.equal(restored.candidate.htmlByPath["/"],input.candidate.htmlByPath["/"]);
+  assert.equal(restored.candidate.compiledTokenStyles,input.candidate.compiledTokenStyles);
+});
+
+test("Git-selected one-page candidate cannot fall back to inline registration", async () => {
+  const gateway=new InMemoryAstroProductionCandidateGateway();
+  const input=createLargeInput();
+  input.candidate.htmlByPath={"/":html("Home","Git-selected page","")};
+  input.candidate.contentSha256=computeAstroInternalPreviewCandidateContentSha256(input.candidate);
+  input.candidate.manifest.provenance.convertedArtifactSha256=input.candidate.contentSha256;
+  let gitCalls=0,registrations=0;
+  gateway.atomicCreate=async()=>{registrations++;throw Error("unexpected registration");};
+  const repository=new GatewayBackedAstroProductionCandidateRepository({gateway,
+    gitArchiveRequired:()=>true,prepareGeneratedGit:async()=>{gitCalls++;return null;}});
+  await assert.rejects(repository.create(input),
+    (error:unknown)=>error instanceof AstroProductionCandidateRepositoryError&&error.code==='unavailable');
+  assert.equal(gitCalls,0);
+  assert.equal(registrations,0);
+});
+
+test("Git-backed candidate registers only after its archive is verified and reads Git bytes", async () => {
+  const gateway=new InMemoryAstroProductionCandidateGateway();
+  const objects=new InMemoryAstroCandidateObjectStore();
+  const input=createLargeInput();
+  input.candidate.htmlByPath={"/":html("Home","Git candidate","")};
+  input.candidate.contentSha256=computeAstroInternalPreviewCandidateContentSha256(input.candidate);
+  input.candidate.manifest.provenance.convertedArtifactSha256=input.candidate.contentSha256;
+  const events:string[]=[];
+  let archivedManifest:Record<string,unknown>|null=null;
+  let corrupt=false;
+  const originalPut=objects.putVerified.bind(objects);
+  objects.putVerified=async upload=>{events.push('cache');await originalPut(upload);};
+  const originalCreate=gateway.atomicCreate.bind(gateway);
+  gateway.atomicCreate=async value=>{events.push('register');return originalCreate(value);};
+  const repository=new GatewayBackedAstroProductionCandidateRepository({gateway,objectStore:objects,
+    now:()=>new Date("2026-10-12T10:00:00.000Z"),
+    prepareGeneratedGit:async artifact=>{
+      archivedManifest=artifact.manifest;
+      const pkg=generatedArtifactGitPackage({scope:{agencyId:OWNERSHIP.agencyId,
+        clientId:OWNERSHIP.organizationId,siteId:OWNERSHIP.ownershipSiteId},
+        runtimeSiteId:OWNERSHIP.runtimeSiteId,siteVersionId:OWNERSHIP.siteVersionId,
+        htmlByPath:artifact.htmlByPath,compiledTokenStyles:artifact.compiledTokenStyles,
+        manifest:artifact.manifest,target:{owner:'owner',ownerId:1,repository:'repo',repositoryId:1,token:'token'}});
+      events.push('git');
+      return {scope:pkg.descriptor.scope,repository:'owner/repo',commit:'a'.repeat(40),
+        manifestPath:pkg.manifestPath,manifestSha256:pkg.manifestSha256,
+        routes:pkg.descriptor.routes,styles:pkg.descriptor.styles,runtimeManifest:pkg.descriptor.runtimeManifest};
+    },
+    generatedCache:{read:async()=>Buffer.from(JSON.stringify(archivedManifest)),
+      hydrate:async()=>({htmlByPath:{"/":corrupt?'changed':input.candidate.htmlByPath["/"]},
+        compiledTokenStyles:input.candidate.compiledTokenStyles})} as never,
+  });
+  const created=await repository.create(input);
+  assert.deepEqual(events.slice(0,2),['git','cache']);
+  assert.equal(events.at(-1),'register');
+  assert.ok('generatedGitArchive' in created.record);
+  const saved=await gateway.readForScope({candidateId:CANDIDATE_ID,trustedScope:OWNERSHIP});
+  assert.equal(saved.status,'found');
+  assert.equal(JSON.stringify(saved).includes('Git candidate'),false);
+  assert.equal((await repository.read({candidateId:CANDIDATE_ID,trustedScope:OWNERSHIP})).candidate.htmlByPath['/'],
+    input.candidate.htmlByPath['/']);
+  corrupt=true;
+  await assert.rejects(repository.read({candidateId:CANDIDATE_ID,trustedScope:OWNERSHIP}),
+    (error:unknown)=>error instanceof AstroProductionCandidateRepositoryError&&error.code==='corrupt');
+});
+
+test("selected resource candidate stops before any byte or registry write", async () => {
+  const gateway=new InMemoryAstroProductionCandidateGateway();
+  const objects=new InMemoryAstroCandidateObjectStore();
+  const input=createLargeInput();
+  input.candidate.exportedFiles=[];
+  let uploads=0,registrations=0;
+  objects.putVerified=async()=>{uploads++;};
+  gateway.atomicCreate=async()=>{registrations++;throw Error('unexpected registration');};
+  const repository=new GatewayBackedAstroProductionCandidateRepository({gateway,objectStore:objects,
+    gitArchiveRequired:()=>true});
+  await assert.rejects(repository.create(input),
+    (error:unknown)=>error instanceof AstroProductionCandidateRepositoryError&&error.code==='unsupported_version');
+  assert.equal(uploads,0);
+  assert.equal(registrations,0);
+});
+
+test("v4 Git reference binds all reviewed resource descriptors to the immutable record",()=>{
+  const record=structuredClone(createObjectBackedRoundTripCases().created.record) as any;
+  const id=record.identity, version=id.siteVersionId;
+  record.schemaVersion=RESOURCE_RECORD_VERSION;
+  record.candidate.manifest.conversionVersion=RESOURCE_CONVERSION_VERSION;
+  record.candidate.manifest.provenance.sourceSnapshotSha256=REVIEWED_LUMOS_SOURCE;
+  record.candidate.manifest.assetHandling.mode='typed_export_resources';
+  record.candidate.manifest.assetHandling.externalAssetStorageRequired=true;
+  record.candidate.resourcePayloads=policy.files.map(file=>({path:file.path,mediaType:exportMediaType(file.path),
+    sizeBytes:file.sizeBytes,sha256:file.sha256,kind:'export_resource',bucket:'gnr8-preview-bundles',
+    key:['candidate-v4',id.organizationId,id.ownershipSiteId,version,id.candidateId,'resources',
+      Buffer.from(file.path).toString('base64url')+'-'+file.sha256].join('/')}));
+  const pkg=generatedArtifactGitPackage({scope:{agencyId:id.agencyId,clientId:id.organizationId,
+    siteId:id.ownershipSiteId},runtimeSiteId:id.runtimeSiteId,siteVersionId:version,
+    htmlByPath:{'/':'<!doctype html><html></html>'},compiledTokenStyles:'',
+    manifest:record.candidate.manifest,target:{owner:'owner',ownerId:1,repository:'repo',repositoryId:1,token:'token'}});
+  record.generatedGitArchive={scope:pkg.descriptor.scope,repository:'owner/repo',commit:'a'.repeat(40),
+    manifestPath:pkg.manifestPath,manifestSha256:pkg.manifestSha256,
+    routes:Object.entries(record.candidate.routePayloads).map(([route,ref]:[string,any])=>({route,
+      path:`generated/${version}/html/${createHash('sha256').update(route).digest('hex')}.html`,
+      bytes:ref.sizeBytes,sha256:ref.sha256})),
+    styles:{path:`generated/${version}/compiled-token-styles.css`,bytes:record.candidate.compiledTokenStyles.sizeBytes,
+      sha256:record.candidate.compiledTokenStyles.sha256},runtimeManifest:pkg.descriptor.runtimeManifest,
+    resources:record.candidate.resourcePayloads.map((ref:any)=>({sourcePath:ref.path,
+      path:`generated/${version}/resources/${Buffer.from(ref.path).toString('base64url')}-${ref.sha256}`,
+      mediaType:ref.mediaType,bytes:ref.sizeBytes,sha256:ref.sha256}))};
+  const {storageSha256:_old,...unsigned}=record;
+  record.storageSha256=computeAstroObjectBackedCandidateStorageSha256(unsigned);
+  assert.equal(validateAstroObjectBackedCandidateRecord(record).schemaVersion,RESOURCE_RECORD_VERSION);
+  record.generatedGitArchive.resources[0].sha256='0'.repeat(64);
+  const {storageSha256:_hash,...changed}=record;
+  record.storageSha256=computeAstroObjectBackedCandidateStorageSha256(changed);
+  assert.throws(()=>validateAstroObjectBackedCandidateRecord(record));
 });
 
 test("large shared CSS is retained as an immutable object and resolved before rendering", async () => {
@@ -175,7 +347,8 @@ test("Supabase object writes never overwrite and verify ambiguous retries by byt
   };
   const store = new SupabaseAstroCandidateObjectStore({
     bucket: "astro-candidates-private",
-    getClient: () => ({ storage: { from: () => bucketClient } }) as never,
+    getClient: () => ({ storage: { getBucket: async () => ({data:{public:false},error:null}),
+      from: () => bucketClient } }) as never,
   });
   const prepared = prepareForStoreTest();
   await store.putVerified(prepared);
@@ -195,6 +368,23 @@ test("Supabase object writes never overwrite and verify ambiguous retries by byt
     store.putVerified(prepared),
     (error: unknown) => error instanceof AstroCandidateObjectStoreError && error.code === "integrity_mismatch",
   );
+});
+
+test("public candidate bucket is rejected before file access", async () => {
+  let fileAccesses = 0;
+  const store = new SupabaseAstroCandidateObjectStore({
+    bucket: "astro-candidates-private",
+    getClient: () => ({storage:{
+      getBucket: async () => ({data:{public:true},error:null}),
+      from: () => {fileAccesses++; throw Error("unexpected file access");},
+    }}) as never,
+  });
+  const file = prepareForStoreTest();
+  for (const action of [() => store.putVerified(file), () => store.readVerified(file.ref)]) {
+    await assert.rejects(action(),
+      (error: unknown) => error instanceof AstroCandidateObjectStoreError && error.code === "configuration_invalid");
+  }
+  assert.equal(fileAccesses, 0);
 });
 
 function createRepository(

@@ -29,12 +29,14 @@ export async function captureStackiRuntimeFiles(root: string): Promise<StackiDra
       files.push({ path, base64: bytes.subarray(0, bytesRead).toString("base64") });
     } finally { await handle.close(); }
   }
-  for (const path of ["src", "public", ".studio-state", "package.json", "package-lock.json", "astro.config.mjs"]) {
+  for (const path of ["src", "public", ".studio-state", "package.json", "package-lock.json", "tsconfig.json", "astro.config.mjs"]) {
     try { await lstat(join(canonical, path)); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && ["public", ".studio-state", "package-lock.json"].includes(path)) continue;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && ["public", ".studio-state", "package-lock.json", "tsconfig.json"].includes(path)) continue;
       throw error;
     }
     await visit(path);
   }
   return parseStackiSave({ expectedRevision: 0, files }).files;
 }
+
+export { stackiSourceSha256 } from "./stacki-draft-contract";

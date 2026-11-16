@@ -28,6 +28,7 @@ import { SupabaseAstroCandidateRuntimeArtifactStore } from "./astro-candidate-ru
 import {
   createAstroCandidatePromotionService,
   evaluateAstroCandidateGovernance,
+  prepareGeneratedCandidateGit,
 } from "./astro-candidate-promotion-service";
 import {
   SupabaseAstroCandidateOwnershipResolver,
@@ -43,6 +44,7 @@ import {
   type AstroCandidateRpcClient,
 } from "./astro-production-candidate-supabase-gateway";
 import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
+import {githubArchiveRequired} from '../stacki/stacki-github-config';
 import {
   createSourceBackedAstroCandidateProducer,
   SOURCE_BACKED_ASTRO_PRODUCER_KIND,
@@ -72,8 +74,46 @@ export type SourceBackedAstroGenerationResult = {
 
 export async function runSourceBackedAstroGeneration(
   payload: SiteAstroGenerationRequestedPayload,
+  dependencies: {
+    stacki?: Parameters<typeof import('../stacki/stacki-candidate-preparation').prepareStackiCandidate>[1];
+    completeAction?: typeof completeQueuedAstroGenerationAction;
+    failAction?: typeof failQueuedAstroGenerationAction;
+  } = {},
 ): Promise<SourceBackedAstroGenerationResult> {
   try {
+    if (payload.stackiBaseline) {
+      const { prepareStackiAstro7Version } = await import('../stacki/stacki-candidate-preparation');
+      // Only the authenticated queue reaches this service. Recheck the current
+      // pilot restriction here; ownership is rechecked by the preparation service.
+      const authorizePreparation = async (scope: typeof payload.stackiBaseline & {}) => {
+        if (!process.env.GNR8_STACKI_PILOT_USER_ID || payload.actor !== process.env.GNR8_STACKI_PILOT_USER_ID ||
+          scope.agencyId !== payload.stackiBaseline!.agencyId || scope.clientId !== payload.stackiBaseline!.clientId ||
+          scope.siteId !== payload.ownershipSiteId) throw new Error('stacki_baseline_access_denied');
+        return {userId:payload.actor,agencyId:scope.agencyId};
+      };
+      const result = await prepareStackiAstro7Version({scope:payload.stackiBaseline,
+        sourceArtifactId:payload.sourceArtifactId,sourceArtifactSha256:payload.stackiSourceArtifactSha256 ?? '',actor:payload.actor},
+        {...dependencies.stacki,authorizePreparation});
+      await (dependencies.completeAction ?? completeQueuedAstroGenerationAction)({actionId:payload.actionId,
+        ownershipSiteId:payload.ownershipSiteId,variantId:result.variantId,siteVersionId:result.siteVersionId,
+        strategy:'stacki_astro7_baseline',label:'Astro 7 · uredljiva osnova',diagnostics:['stacki-astro7-baseline','shadow-only; review required']});
+      return {generationSiteVersionId:result.siteVersionId,candidateId:result.candidateId,artifactId:result.model.artifactId,
+        artifactBundleSha256:result.model.artifactBundleSha256,routePaths:result.model.outputPaths,variantId:result.variantId,candidateSizes:result.candidateSizes};
+    }
+    if (payload.stackiRevision) {
+      const { prepareStackiCandidate } = await import('../stacki/stacki-candidate-preparation');
+      const result = await prepareStackiCandidate({ selection: payload.stackiRevision, sourceArtifactId: payload.sourceArtifactId,
+        sourceArtifactSha256: payload.stackiSourceArtifactSha256 ?? '', actor: payload.actor }, dependencies.stacki);
+      await (dependencies.completeAction ?? completeQueuedAstroGenerationAction)({ actionId: payload.actionId, ownershipSiteId: payload.ownershipSiteId,
+        variantId: result.variantId, siteVersionId: result.siteVersionId, strategy: 'stacki_saved_revision',
+        label: `Stacki revision ${payload.stackiRevision.revision}`, diagnostics: [
+          `stacki-revision:${payload.stackiRevision.revision}`, `stacki-sha256:${payload.stackiRevision.sha256}`,
+          'Canonical content/design are not synchronized; regenerate from this saved source only.',
+        ] });
+      return { generationSiteVersionId: result.siteVersionId, candidateId: result.candidateId, artifactId: result.model.artifactId,
+        artifactBundleSha256: result.model.artifactBundleSha256, routePaths: result.model.outputPaths, variantId: result.variantId,
+        candidateSizes: result.candidateSizes };
+    }
     let sourceVersion = await getSiteVersion(payload.sourceSiteVersionId);
     if (!sourceVersion || sourceVersion.siteId !== payload.runtimeSiteId || sourceVersion.artifactId !== payload.sourceArtifactId) {
       throw new Error("astro_generation_source_lineage_mismatch");
@@ -155,6 +195,10 @@ export async function runSourceBackedAstroGeneration(
     const repository = new GatewayBackedAstroProductionCandidateRepository({
       gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
       objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => serviceClient as never }),
+      prepareGeneratedGit: prepareGeneratedCandidateGit,
+      gitArchiveRequired: ownership =>
+        githubArchiveRequired({agencyId:ownership.agencyId,clientId:ownership.organizationId,
+          siteId:ownership.ownershipSiteId,siteVersionId:ownership.siteVersionId}),
     });
     const runtimeStore = new SupabaseAstroCandidateRuntimeArtifactStore(serviceClient);
     sourceArtifact = await reconcileScopedImportArtifactBundle({
@@ -215,6 +259,13 @@ export async function runSourceBackedAstroGeneration(
           blockerCodes: enforcement.blockerCodes,
         },
       };
+      const generatedGitArchive = await prepareGeneratedCandidateGit({
+        htmlByPath: record.candidate.htmlByPath,
+        compiledTokenStyles: record.candidate.compiledTokenStyles,
+        manifest,
+        ...('exportedFiles' in record.candidate?{exportedFiles:record.candidate.exportedFiles}:{}),
+      }, ownership);
+      const persistedManifest = generatedGitArchive ? {...manifest,generatedGitArchive} : manifest;
       const created = await createArtifact({
         siteId: payload.runtimeSiteId,
         siteVersionId: generationVersion.id,
@@ -223,12 +274,12 @@ export async function runSourceBackedAstroGeneration(
           htmlByPath: record.candidate.htmlByPath,
           compiledTokenStyles: record.candidate.compiledTokenStyles,
           assetFingerprintMap: record.candidate.assetFingerprintMap,
-          manifest,
+          manifest: persistedManifest,
         }),
         htmlByPath: record.candidate.htmlByPath,
         compiledTokenStyles: record.candidate.compiledTokenStyles,
         assetFingerprintMap: record.candidate.assetFingerprintMap,
-        manifest,
+        manifest: persistedManifest,
         publishStage: "shadow",
         shadowRestricted: enforcement.shadowRestricted,
         artifactGovernance: enforcement.artifactGovernance,
@@ -351,7 +402,7 @@ export async function runSourceBackedAstroGeneration(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "astro_generation_failed";
-    await failQueuedAstroGenerationAction({
+    await (dependencies.failAction ?? failQueuedAstroGenerationAction)({
       actionId: payload.actionId,
       ownershipSiteId: payload.ownershipSiteId,
       message,

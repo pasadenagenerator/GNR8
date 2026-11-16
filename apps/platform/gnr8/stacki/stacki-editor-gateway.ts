@@ -1,3 +1,5 @@
+import { validStackiDeliveryPath } from './stacki-delivery-path';
+import type { StackiAssetDelivery } from './stacki-github-delivery';
 /**
  * Runs beside Studio inside an isolated editor runtime, never inside Next.js.
  * Only this port may be exposed by the runtime provider. Astro stays on loopback.
@@ -20,6 +22,7 @@ export type StackiEditorGatewayOptions = {
   entryTicket: string;
   expiresAt: number;
   allowLocalHttp?: boolean;
+  assetDelivery?: StackiAssetDelivery;
 };
 
 export function createStackiEditorGateway(options: StackiEditorGatewayOptions) {
@@ -32,6 +35,21 @@ export function createStackiEditorGateway(options: StackiEditorGatewayOptions) {
       !Number.isSafeInteger(options.expiresAt) || options.expiresAt <= Date.now() ||
       options.expiresAt > Date.now() + STACKI_SESSION_MAX_MS) {
     throw new Error("STACKI_GATEWAY_CONFIG_INVALID");
+  }
+  // Delivery URLs come only from the control plane, outside editable source.
+  // Never allow arbitrary upstream redirects or expose storage credentials.
+  const assetRedirects = new Map<string,string>();
+  if (options.assetDelivery) {
+    if (!/^[a-f0-9]{40}$/.test(options.assetDelivery.commit) ||
+        Object.keys(options.assetDelivery.redirects).length > 2000) throw new Error('STACKI_GATEWAY_DELIVERY_INVALID');
+    for (const [path, target] of Object.entries(options.assetDelivery.redirects)) {
+      const url = new URL(target);
+      if (!validStackiDeliveryPath(path) ||
+          url.protocol !== 'https:' || url.username || url.password || url.hash ||
+          !url.pathname.includes('/object/sign/') || !url.searchParams.get('token'))
+        throw new Error('STACKI_GATEWAY_DELIVERY_INVALID');
+      assetRedirects.set(path, target);
+    }
   }
   const cookieName = local ? LOCAL_COOKIE : COOKIE;
   const ticketDigest = digest(options.entryTicket);
@@ -61,7 +79,7 @@ export function createStackiEditorGateway(options: StackiEditorGatewayOptions) {
     if (!sameHost(req) || !active()) return respond(res, 403, "Urejevalna seja ni na voljo.");
     // Raw path equality prevents alternate encodings from becoming entry routes.
     if (req.url === ENTRY && req.method === "GET") {
-      if (authorized(req)) { res.writeHead(303, { Location: "/studio" }); res.end(); return; }
+      if (authorized(req)) { res.writeHead(303, { Location: "/studio#" }); res.end(); return; }
       const nonce = randomBytes(16).toString("base64");
       res.setHeader("Content-Security-Policy", `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`);
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -69,6 +87,13 @@ export function createStackiEditorGateway(options: StackiEditorGatewayOptions) {
       return;
     }
     if (req.url === ENTRY && req.method === "POST") {
+      // A cross-site navigation omits SameSite=Strict cookies on the first GET.
+      // Its entry document then makes a same-origin POST with the existing
+      // cookie. Resume only that authenticated browser, never redeem twice.
+      if (sameOrigin(req) && authorized(req)) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true })); return;
+      }
       if (!sameOrigin(req) || consumed || Date.now() >= entryExpiresAt ||
           req.headers["content-type"] !== "text/plain;charset=UTF-8")
         return respond(res, 403, "Povezava je potekla. Ponovno odpri urejevalnik iz GNR8.");
@@ -92,6 +117,13 @@ export function createStackiEditorGateway(options: StackiEditorGatewayOptions) {
       return respond(res, 403, "Odpri urejevalnik iz GNR8.");
     if (!req.url?.startsWith("/") || req.url.startsWith("//"))
       return respond(res, 400, "Neveljavna pot.");
+    const assetTarget = assetRedirects.get(new URL(req.url, origin).pathname);
+    if (assetTarget) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return respond(res, 405, 'Method not allowed');
+      // Same auth gate as the editor; short-lived, exact-object capabilities only.
+      // CSS/SVG stay on loopback so nested and relative URLs retain their base.
+      res.writeHead(307, {Location:assetTarget}); res.end(); return;
+    }
     const proxy = upstreamRequest({
       hostname: "127.0.0.1", port: options.upstreamPort,
       path: req.url, method: req.method, headers: proxyHeaders(req.headers, loopback),

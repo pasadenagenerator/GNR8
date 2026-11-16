@@ -118,7 +118,7 @@ function validPath(path: string) {
     ["node_modules", ".git"].includes(part.toLowerCase()) ||
     (part.startsWith(".") && part !== ".studio-state"))) return false;
   if (path.startsWith("src/") || path.startsWith("public/")) return !parts.includes(".studio-state");
-  if (["package.json", "package-lock.json", "astro.config.mjs"].includes(path)) return true;
+  if (["package.json", "package-lock.json", "tsconfig.json", "astro.config.mjs"].includes(path)) return true;
   return /^\.studio-state\/(?:[A-Za-z0-9_-]+\.bin|(?:project|github-base|asset-state|cms-deleted)\.json|component-preview\.astro|uploads\/[A-Za-z0-9_-]+\.bin)$/.test(path);
 }
 
@@ -154,4 +154,9 @@ function object(input: unknown, keys: string[]): Record<string, unknown> {
   const row = input as Record<string, unknown>;
   if (Object.keys(row).length !== keys.length || keys.some(key => !Object.hasOwn(row, key))) invalid();
   return row;
+}
+
+/** Content fingerprint excludes transient editor metadata, never customer source. */
+export function stackiSourceSha256(files: StackiDraftFile[]): string {
+  return hash(files.filter(f => !f.path.startsWith(".studio-state/")).slice().sort((a,b)=>a.path.localeCompare(b.path)));
 }

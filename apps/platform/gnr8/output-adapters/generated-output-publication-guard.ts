@@ -147,7 +147,7 @@ export async function enforceGeneratedOutputPublicationEligibility(input: {
 }): Promise<GeneratedOutputPublicationDecision | null> {
   const workspace = record(input.artifact?.manifest.generatedOutputSourceWorkspace);
   const reductions = record(workspace?.acceptedFunctionalReductions);
-  if (input.publishStage !== "shadow" && reductions?.kind === "retained-presentation-v1" && reductions.contact !== undefined &&
+  if (input.publishStage !== "shadow" && (reductions?.kind === "retained-presentation-v1" || reductions?.kind === "retained-source-links-v1") && reductions.contact !== undefined &&
     !(await contactDeliveryReadiness()).ready) {
     // Keep all existing provenance/review gates below. Readiness alone never
     // publishes a candidate or moves an active pointer.

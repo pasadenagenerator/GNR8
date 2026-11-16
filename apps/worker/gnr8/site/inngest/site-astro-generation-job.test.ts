@@ -9,7 +9,14 @@ import {
   resolveBundledPnpmCliPath,
   runSiteAstroGenerationJob,
   SITE_ASTRO_GENERATION_JOB_TRIGGER_EVENT,
+  assertAstroExecutorNode,
 } from './site-astro-generation-job'
+
+test('Astro executor accepts supported Node 26 patches and rejects other majors', () => {
+  assert.doesNotThrow(() => assertAstroExecutorNode('26.13.0'))
+  assert.doesNotThrow(() => assertAstroExecutorNode('26.14.1'))
+  for (const version of ['22.23.4', '25.0.0', '27.0.0']) assert.throws(() => assertAstroExecutorNode(version), NonRetriableError)
+})
 
 test('worker resolves the bundled pnpm CLI without relying on a system pnpm executable', () => {
   assert.match(resolveBundledPnpmCliPath() ?? '', /pnpm\/bin\/pnpm\.cjs$/)

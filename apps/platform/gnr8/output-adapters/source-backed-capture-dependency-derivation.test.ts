@@ -9,6 +9,7 @@ import { captureAssetsForAdditionalHtmlPages, computeLocalPathCandidate } from "
 import { hashedImportAssetPath } from "@/gnr8/validation/runtime/retained-css-dependency-path";
 
 import {
+  assertDerivedCaptureGitResumeLineage,
   assertPersistedCaptureDependencyEvidence,
   deriveDependencySuccessorSiteVersionId,
   findUnresolvedRetainedStylesheetDependencies,
@@ -21,6 +22,9 @@ import {
   resolveRetainedCssDependencyPath,
   restoreRetainedStylesheetReferences,
   existingCssDependencyManifest,
+  planRetainedFallbackImages,
+  trustedOriginsForStylesheets,
+  rewriteRetainedFallbackImages,
 } from "./source-backed-capture-dependency-derivation";
 import type { RuntimeImportProvenanceSummary } from "@/gnr8/runtime/types";
 
@@ -28,6 +32,35 @@ const EXTERNAL_LIBS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780
 const GRIDS = "https://site-assets.cdnmns.com/a2e388a232383bbdcb49c06780087e3f/css/grids.css?1791454204350";
 const GOOGLE = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&display=swap&subset=latin-ext";
 const EXTRA_CDN = "https://fonts.prod.extra-cdn.com/css?family=Roboto+Condensed:300,700|Roboto:400&display=swap";
+
+test('derived capture cannot resume a byte-backed record from a Git-backed parent',()=>{
+  const version='44444444-4444-4444-8444-444444444444';
+  const scope={agencyId:'11111111-1111-4111-8111-111111111111',
+    clientId:'22222222-2222-4222-8222-222222222222',siteId:'33333333-3333-4333-8333-333333333333'};
+  const parent={metadata:{gitArchive:{scope,commit:'a'.repeat(40)}}} as never;
+  const rawWithoutGit={metadata:{}} as never;
+  const rawWithGit={metadata:{gitArchive:{scope,commit:'b'.repeat(40),
+    manifestPath:`raw-import/${version}/.gnr8-import-manifest.json`}}} as never;
+  const artifactWithoutGit={manifest:{}} as never;
+  const artifactWithGit={manifest:{generatedGitArchive:{scope,commit:'c'.repeat(40),
+    manifestPath:`generated/${version}/.gnr8-generated-manifest.json`}}} as never;
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithoutGit,resumableArtifact:null}),/astro_derived_capture_raw_git_lineage_missing/);
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithGit,resumableArtifact:artifactWithoutGit}),/astro_derived_capture_generated_git_lineage_missing/);
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:{metadata:{gitArchive:{scope:{...scope,siteId:'other'},commit:'b'.repeat(40),
+      manifestPath:`raw-import/${version}/.gnr8-import-manifest.json`}}} as never,
+    resumableArtifact:artifactWithGit}),/astro_derived_capture_raw_git_lineage_mismatch/);
+  assert.throws(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithGit,
+    resumableArtifact:{manifest:{generatedGitArchive:{scope,manifestPath:'generated/other/.gnr8-generated-manifest.json'}}} as never,
+  }),/astro_derived_capture_generated_git_lineage_mismatch/);
+  assert.doesNotThrow(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:parent,derivedSiteVersionId:version,
+    resumableRawArtifact:rawWithGit,resumableArtifact:artifactWithGit}));
+  assert.doesNotThrow(()=>assertDerivedCaptureGitResumeLineage({parentRawArtifact:{metadata:{}} as never,
+    derivedSiteVersionId:version,resumableRawArtifact:rawWithoutGit,resumableArtifact:artifactWithoutGit}));
+});
 
 test("restored capture aliases survive acquisition and persisted readback without asset fetches", async () => {
   const sourceUrl = "https://example.test/cache/bundle/style.css";
@@ -502,4 +535,39 @@ test("derived capture refreshes rewritten route hashes and invalidates only curr
   assert.equal(provenance.currentRawPreviewValidationEvidence, null);
   assert.equal(provenance.currentMultiPagePreviewValidation, null);
   assert.deepEqual(provenance.historicalValidation, { artifactId: "parent" });
+});
+
+
+test("paired noscript images use the existing bounded acquisition and retained rewrite, without crawling links",async()=>{
+ const imageUrl='https://example.test/uploads/figure..png';
+ const html='<html><body><img src="data:image/png;base64,AA=="><noscript data-lazyload-src="/uploads/figure..png"><img src="/uploads/figure..png" alt="Diagram"></noscript><a href="https://other.test/product">Product</a></body></html>';
+ const bytes=Buffer.from(html), file={path:'pages/help/index.html',bytes,mediaType:'text/html',sizeBytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+ const input={htmlFiles:[file],filePaths:new Set<string>(),sourceUrl:'https://example.test/',pageUrls:new Map([[file.path,'https://example.test/help']])};
+ const plan=planRetainedFallbackImages(input);
+ assert.deepEqual(plan,[{htmlPath:file.path,reference:'/uploads/figure..png',sourceUrl:imageUrl}]);
+ assert.deepEqual(planRetainedFallbackImages({...input,sourceMediaLinks:[imageUrl]}),[]);
+ assert.deepEqual(planRetainedFallbackImages({...input,sourceMediaLinks:[imageUrl+'?different=1']}),plan);
+ assert.deepEqual(planRetainedFallbackImages({...input,filePaths:new Set(['uploads/figure..png'])}),[]);
+ assert.deepEqual(planRetainedFallbackImages({...input,htmlFiles:[{...file,bytes:Buffer.from(html.replaceAll('/uploads/figure..png','https://other.test/figure.png'))}]}),[]);
+ const workspace=await mkdtemp(join(tmpdir(),'gnr8-fallback-image-'));
+ try {
+  const requests:string[]=[];
+  const captured=await captureAssetsForAdditionalHtmlPages({pages:[{pageUrl:input.sourceUrl,bodyPath:join(workspace,'probe.html'),html:`<img src="${plan[0]!.sourceUrl}">`}],snapshotRootDirAbs:workspace,existingFetchManifest:[],fetchImpl:async url=>{
+   requests.push(String(url));
+   assert.equal(String(url),imageUrl);
+   return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=','base64'),{headers:{'content-type':'image/png'}});
+  }});
+  assert.equal(captured.summary.failedRequiredAssetCount,0); assert.deepEqual(requests,[imageUrl]);
+  const entry=captured.manifestEntries.find(entry=>entry.fetchStatus==='fetched')!;
+  const rewritten=rewriteRetainedFallbackImages(html,[{...plan[0]!,to:`/${entry.localPath}`}]);
+  assert.match(rewritten,/alt="Diagram"/);assert.match(rewritten,/https:\/\/other.test\/product/);
+  assert.ok(rewritten.includes(`src="/${entry.localPath}"`));
+  assert.ok((await readFile(join(workspace,entry.localPath!))).length > 0);
+  assert.deepEqual(planRetainedFallbackImages({...input,htmlFiles:[{...file,bytes:Buffer.from(rewritten)}],filePaths:new Set([entry.localPath!])}),[]);
+ } finally {await rm(workspace,{recursive:true,force:true});}
+});
+
+test('recognized font stylesheet permits only its exact font-file origin',()=>{
+ assert.ok(trustedOriginsForStylesheets(['https://fonts.prod.extra-cdn.com/css?family=Exo']).includes('https://font-files.prod.extra-cdn.com'));
+ assert.ok(!trustedOriginsForStylesheets(['https://fonts.prod.extra-cdn.com.attacker.test/css']).includes('https://font-files.prod.extra-cdn.com'));
 });

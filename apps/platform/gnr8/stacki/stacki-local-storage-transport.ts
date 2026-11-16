@@ -36,6 +36,20 @@ export function createStackiLocalStorage(root: string, options: {
         return { name, metadata: { size: bytes.length, eTag: `"${createHash("md5").update(bytes).digest("hex")}"` } };
       })));
     }
+    const infoPrefix = `/storage/v1/object/info/${bucket}/`;
+    if(path.startsWith(infoPrefix) && request.method==='GET') {
+      const file=safePath(root,path.slice(infoPrefix.length));
+      try { const contentType=await readFile(file+'.mime','utf8'); return Response.json({contentType,metadata:{mimetype:contentType}}); }
+      catch { return storageError(404,'Object metadata not found'); }
+    }
+    if (path === `/storage/v1/object/sign/${bucket}` && request.method === 'POST') {
+      const {paths, expiresIn} = await request.json();
+      assert(Number.isInteger(expiresIn) && expiresIn > 0 && expiresIn <= 1200);
+      return Response.json(await Promise.all(paths.map(async (key: string) => {
+        await readFile(safePath(root, key));
+        return {path:key,error:null,signedURL:`/object/sign/${bucket}/${key}?token=local-proof-${expiresIn}`};
+      })));
+    }
     const prefix = `/storage/v1/object/${bucket}/`;
     assert(path.startsWith(prefix), `Unexpected storage request: ${path}`);
     const file = safePath(root, path.slice(prefix.length));
@@ -50,13 +64,14 @@ export function createStackiLocalStorage(root: string, options: {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         return storageError(409, "The resource already exists");
       } finally { await rm(temporary); }
+      await writeFile(file+'.mime',request.headers.get('content-type') ?? 'application/octet-stream');
       if (options.loseUploadResponse) return storageError(503, "Local injected ambiguous response");
       return Response.json({ Id: randomUUID(), Key: `${bucket}/${path.slice(prefix.length)}` });
     }
     assert.equal(request.method, "GET");
     if (options.failDownload) return storageError(503, "Local injected read failure");
     try {
-      return new Response(await readFile(file), { headers: { "content-type": "application/json" } });
+      return new Response(await readFile(file), { headers: { "content-type": await readFile(file+".mime","utf8").catch(()=>"application/json") } });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return storageError(404, "Object not found");
@@ -80,7 +95,7 @@ export function createStackiLocalStorage(root: string, options: {
 }
 
 function safePath(root: string, key: unknown) {
-  assert(typeof key === "string" && /^[a-zA-Z0-9_/-]+(?:\.json)?$/.test(key));
+  assert(typeof key === "string" && /^[a-zA-Z0-9_/-]+(?:\.(?:json|html|css))?$/.test(key));
   assert(key.split("/").every(part => part && part !== "." && part !== ".."));
   return join(root, key);
 }

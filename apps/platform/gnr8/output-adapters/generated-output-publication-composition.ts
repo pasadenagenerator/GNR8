@@ -7,6 +7,7 @@ import { sha256Hex, stableStringify } from "@/gnr8/runtime/deterministic";
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 
 import { SupabaseAstroCandidateRuntimeArtifactStore } from "./astro-candidate-runtime-artifact-store";
+import type { AstroCandidateRuntimeArtifactContext } from "./astro-candidate-runtime-artifact-store";
 import {
   SupabaseAstroCandidateOwnershipResolver,
   type AstroCandidateOwnershipReadClient,
@@ -18,6 +19,8 @@ import {
 } from "./astro-production-candidate-supabase-gateway";
 import { AstroProductionCandidatePreviewConfigurationError } from "./astro-production-candidate-preview-feature-gate";
 import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
+import { prepareGeneratedCandidateGit } from "./astro-candidate-promotion-service";
+import { githubArchiveRequired } from "../stacki/stacki-github-config";
 import {
   readGeneratedOutputBuildEvidence,
   readGeneratedOutputContentManifest,
@@ -52,6 +55,7 @@ type Composition = {
 };
 
 export type GeneratedOutputReviewModel = {
+  stackiRevision?: { revision: number; sha256: string; canonicalRelation: string } | null;
   siteVersionId: string;
   publicPreparation: PublicPreparation | null;
   state: string;
@@ -84,6 +88,10 @@ export function createGeneratedOutputComposition(): Composition {
     candidateRepository: new GatewayBackedAstroProductionCandidateRepository({
       gateway: new SupabaseAstroProductionCandidateGateway(() => candidateClient),
       objectStore: new SupabaseAstroCandidateObjectStore({ getClient: () => client as never }),
+      prepareGeneratedGit: prepareGeneratedCandidateGit,
+      gitArchiveRequired: ownership =>
+        githubArchiveRequired({ agencyId: ownership.agencyId, clientId: ownership.organizationId,
+          siteId: ownership.ownershipSiteId, siteVersionId: ownership.siteVersionId }),
     }),
   };
 }
@@ -119,8 +127,9 @@ export function createEvidenceBoundRuntimePublisher(dependencies: {
   });
 }
 
-export async function readGeneratedOutputReviewModel(siteVersionId: string, composition = createGeneratedOutputComposition()): Promise<GeneratedOutputReviewModel> {
-  const context = await composition.runtimeStore.readContext(siteVersionId);
+export async function readGeneratedOutputReviewModel(siteVersionId: string, composition = createGeneratedOutputComposition(), existingContext?: AstroCandidateRuntimeArtifactContext): Promise<GeneratedOutputReviewModel> {
+  const context = existingContext?.siteVersion.id === siteVersionId
+    ? existingContext : await composition.runtimeStore.readContext(siteVersionId);
   if (!context?.artifact) throw new Error("generated_output_review_target_missing");
   const provenance = classifyGeneratedOutputProvenance({ siteVersion: context.siteVersion, artifact: context.artifact });
   if (provenance.kind !== "supported_generated_output") {
@@ -137,6 +146,7 @@ export async function readGeneratedOutputReviewModel(siteVersionId: string, comp
   if (!buildEvidence || !contentManifest) throw new Error("generated_output_review_evidence_missing");
   return {
     siteVersionId,
+    stackiRevision: ((context.artifact.manifest.generatedOutputSourceWorkspace as { stackiRevision?: { revision: number; sha256: string; canonicalRelation: string } } | undefined)?.stackiRevision) ?? null,
     publicPreparation: readPublicPreparation(context.artifact.manifest),
     state: context.siteVersion.state,
     activePublication: context.activePointerReferencesArtifact,

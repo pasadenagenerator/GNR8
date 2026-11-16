@@ -674,12 +674,36 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
   const previousSiteStatus = normalizeText(site.status)
 
   try {
+    if (request.type === 'generate_redesign' && (request.stackiRevision || request.stackiBaseline)) {
+      const { queueStackiPreparation } = await import('../stacki/stacki-preparation-action');
+      const { authorizeConfiguredStackiPilot } = await import('../stacki/stacki-draft-composition');
+      const summary = await queueStackiPreparation({ ...request, siteId, agencyId, actor,
+        actionId: action.id, requestedAt: action.createdAt }, {
+        enabled: () => process.env.GNR8_STACKI_CANDIDATES_ENABLED === '1' &&
+          (!request.stackiBaseline || process.env.GNR8_STACKI_DRAFTS_ENABLED === '1'),
+        authorize: authorizeConfiguredStackiPilot,
+        source: async id => {
+          const version = await getSiteVersion(id);
+          const artifact = version?.artifactId ? await getArtifactById(version.artifactId) : null;
+          return version && artifact ? { versionId:version.id, runtimeSiteId:version.siteId,
+            artifactId:artifact.id, sha256:artifact.bundleSha256 } : null;
+        },
+        emit: emitSiteAstroGenerationRequestedEvent,
+      });
+      return { ok: true, action: { ...action, ...summary } };
+    }
     if (request.type === 'rerun_transformation' || request.type === 'generate_redesign') {
       const strategyResolution = request.type === 'generate_redesign' ? resolveRedesignStrategy(request.strategy) : undefined
       let sourceVersionId = await resolveSourceSiteVersion({
         siteId,
         requireArtifact: request.type === 'generate_redesign',
       })
+      if (request.type === 'rerun_transformation') {
+        const selected = await getSiteVersion(sourceVersionId);
+        const artifact = selected?.artifactId ? await getArtifactById(selected.artifactId) : null;
+        if ((artifact?.manifest.generatedOutputSourceWorkspace as { stackiRevision?: unknown } | undefined)?.stackiRevision)
+          throw new Error('409|STACKI_SAVED_SOURCE_REQUIRED: Prepare the saved Stacki source; canonical transformation would discard these edits.');
+      }
 
       if (request.type === 'generate_redesign') {
         const initiallySelectedVersion = await getSiteVersion(sourceVersionId)
@@ -690,8 +714,10 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
           throw new Error('Source runtime artifact was not found.')
         }
         const sourceWorkspace = initiallySelectedArtifact.manifest.generatedOutputSourceWorkspace as
-          | { adapterId?: unknown }
+          | { adapterId?: unknown; stackiRevision?: unknown }
           | undefined
+        if (sourceWorkspace?.stackiRevision)
+          throw new Error('409|STACKI_SAVED_SOURCE_REQUIRED: This version contains source edits not synchronized with canonical models. Prepare its saved Stacki revision instead of regenerating the original capture.');
         const candidateManifest = initiallySelectedArtifact.manifest.astroCandidateManifest as
           | { adapterId?: unknown }
           | undefined
@@ -713,7 +739,7 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
         }
         if (selection.adapterId === 'astro-static-site') {
           const { sourceVersion, sourceArtifact } = await resolveAstroCaptureSource(initiallySelectedVersion, initiallySelectedArtifact, existingAdapterId, { getSiteVersion, getArtifactById, getRawImportedSiteArtifact });
-          if (request.acceptedFunctionalReductions?.kind === 'retained-presentation-v1' && request.acceptedFunctionalReductions.contact &&
+          if ((request.acceptedFunctionalReductions?.kind === 'retained-presentation-v1' || request.acceptedFunctionalReductions?.kind === 'retained-source-links-v1') && request.acceptedFunctionalReductions.contact &&
             request.contactSourceTarget !== astroSourceTarget({ sourceVersion, sourceArtifact })) throw new Error('409|CONTACT_SOURCE_CHANGED: Refresh and confirm the recipient for the current import.');
           await emitSiteAstroGenerationRequestedEvent({
             actionId: action.id,

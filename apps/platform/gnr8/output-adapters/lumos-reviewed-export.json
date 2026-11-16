@@ -1,0 +1,394 @@
+{
+  "template": "lumos@1.0.1",
+  "commit": "968d013064bd9b3f1b7a73afec7abe9925ac9560",
+  "sourceSnapshotSha256": "6ccf13c49342c50bd53c504ce92f2d71c24497ae31c1b0c0a053fbddadde97eb",
+  "files": [
+    {
+      "path": "_astro/arrow-full.5f4DYEvp.svg",
+      "sha256": "edda4c6b3fc528f884f7dd22c39b713970e114d2d4c01d15232e67844d98cb60",
+      "sizeBytes": 381
+    },
+    {
+      "path": "_astro/arrow.DDHOqM-J.svg",
+      "sha256": "7b3e4030c3adf1bb05876c7d579ec45241147d433e4900196c683b84f1b58350",
+      "sizeBytes": 237
+    },
+    {
+      "path": "_astro/check.CelqxO3V.svg",
+      "sha256": "42bddf9f19a52a73f0cac904f58100b39d355f3574a88c77c0651b780b11ded7",
+      "sizeBytes": 234
+    },
+    {
+      "path": "_astro/close.Be5Vk65L.svg",
+      "sha256": "d0a9c0d6fcd5e5a916d65f43aa0e598a0e4006875b05af48d27ca9e816342eb7",
+      "sizeBytes": 371
+    },
+    {
+      "path": "_astro/ContentWrapper.BCggkAG8.css",
+      "sha256": "d64c4f78fa56a1978ef12eaddc91ac19bc4735aa3ce0cdf65e9a9f804c8c27a1",
+      "sizeBytes": 47663
+    },
+    {
+      "path": "_astro/example-components.D9F4_0av.css",
+      "sha256": "d4275b70fcfa95b06d15d3f4ce251a372ac01280bd1ba4986b05ac0550d0be6b",
+      "sizeBytes": 23642
+    },
+    {
+      "path": "_astro/fonts/62d3b62d6a7271da.woff2",
+      "sha256": "7c96a1c7aeae2908016ae480fb1db52fd63af7986fce405264aa5dc3fbd716dd",
+      "sizeBytes": 115780
+    },
+    {
+      "path": "_astro/logo-icon.C-p3CA6j.svg",
+      "sha256": "53d02a46fe8a211d806cc9196bad44efd06282f58c93d5cd82ce20e7ad914459",
+      "sizeBytes": 428
+    },
+    {
+      "path": "_astro/logo.BzYB4fuq.svg",
+      "sha256": "149e2a8c04f9a2f0baae6e93e6cd7410b8e4e3d81a5077e6eea4f5665f25f349",
+      "sizeBytes": 2503
+    },
+    {
+      "path": "_astro/lumos-background.5qCYr5D9_8x27H.svg",
+      "sha256": "f9a8a9f71ed3f0de7ff292be635e8a218e577db5994b1db0745e0e6ed6e95379",
+      "sizeBytes": 1389
+    },
+    {
+      "path": "_astro/lumos-background.5qCYr5D9.svg",
+      "sha256": "f9a8a9f71ed3f0de7ff292be635e8a218e577db5994b1db0745e0e6ed6e95379",
+      "sizeBytes": 1389
+    },
+    {
+      "path": "_astro/pause.CKfsdEuD.svg",
+      "sha256": "5d9ff892b13f88f7e2c205746c059da26358dcc414d3cf6c76669051c6567fa8",
+      "sizeBytes": 223
+    },
+    {
+      "path": "_astro/play.DHwvYPF8.svg",
+      "sha256": "b344fc8debd8f3d93b2a2401eca88bb2962e3d3f42acbf6e05e3959d32d76823",
+      "sizeBytes": 178
+    },
+    {
+      "path": "404.html",
+      "sha256": "9437427f8b9069b1089d7888a4be3aaf617faff4767918cb2941977fca58448c",
+      "sizeBytes": 9749,
+      "textShapeSha256": "fb99e3490b9fd8b6e927ed6beafcc5ed79e92215a563ad210e81d193cea9e5a4"
+    },
+    {
+      "path": "example-components/index.html",
+      "sha256": "11387675faa8a026ca36f3f33b83948b3c1b295d8a75401a70e9db44d3fb587e",
+      "sizeBytes": 98653,
+      "textShapeSha256": "bdfff3793692ab0be7f87bfabda95ef4d1f77cdb4eb5ba7d389998199491e7ba"
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "f49b4c3c03f9505039f024adb8a5650bd8e48cdd15df7e5aa74fd99d56eb66d2",
+      "sizeBytes": 2890
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "dfd170c148fa3fee6b84a6f924e9f59c297e6e00d17b461647e2e411445ba19c",
+      "sizeBytes": 397
+    },
+    {
+      "path": "index.html",
+      "sha256": "86334be651deee5e1558001e4ed72c923d86abac57f835aa01196606c7892a8a",
+      "sizeBytes": 10871,
+      "textShapeSha256": "ce28c31f197ba92059d7408b29a88e255f0e860a71e478de84036b9dcef3555b"
+    },
+    {
+      "path": "og-image.jpg",
+      "sha256": "ead3cf794c16f7a400961cc0d8a2f49231c6e341a4d5e82593c2337077b912ea",
+      "sizeBytes": 367211
+    },
+    {
+      "path": "robots.txt",
+      "sha256": "e0bad266c0c232c81d6fa9d468af3f7938adc924008f6a3712c1b0a93cd46306",
+      "sizeBytes": 86
+    },
+    {
+      "path": "sitemap-0.xml",
+      "sha256": "41c5e2da0f9483af431ea092316cf827ef5db9ae964f369fb2cfb34f81c7f486",
+      "sizeBytes": 467
+    },
+    {
+      "path": "sitemap-index.xml",
+      "sha256": "9e50530afb0d78358432c741ddade677c646fbc053270a8793b8f877bc10ca6b",
+      "sizeBytes": 197
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "astro.config.mjs",
+      "sha256": "c0f83ca7af4c54cca76f55abf2db1ffb636752387a49371c99225dd236d8428f"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "6d70fe6c00e0e0c793e5334ed4bec2a51a9804cb16186ba07dfbd894dae94a18"
+    },
+    {
+      "path": "package.json",
+      "sha256": "2e9db42f9e152dbe1653635c6eaa50083841b894ee819fef1d9432ca55da33bb"
+    },
+    {
+      "path": "public/favicon.ico",
+      "sha256": "f49b4c3c03f9505039f024adb8a5650bd8e48cdd15df7e5aa74fd99d56eb66d2"
+    },
+    {
+      "path": "public/favicon.svg",
+      "sha256": "dfd170c148fa3fee6b84a6f924e9f59c297e6e00d17b461647e2e411445ba19c"
+    },
+    {
+      "path": "public/og-image.jpg",
+      "sha256": "ead3cf794c16f7a400961cc0d8a2f49231c6e341a4d5e82593c2337077b912ea"
+    },
+    {
+      "path": "src/assets/fonts/inter-regular.woff2",
+      "sha256": "7c96a1c7aeae2908016ae480fb1db52fd63af7986fce405264aa5dc3fbd716dd"
+    },
+    {
+      "path": "src/assets/graphics/lumos-background.svg",
+      "sha256": "f9a8a9f71ed3f0de7ff292be635e8a218e577db5994b1db0745e0e6ed6e95379"
+    },
+    {
+      "path": "src/assets/icons/arrow-full.svg",
+      "sha256": "edda4c6b3fc528f884f7dd22c39b713970e114d2d4c01d15232e67844d98cb60"
+    },
+    {
+      "path": "src/assets/icons/arrow.svg",
+      "sha256": "7b3e4030c3adf1bb05876c7d579ec45241147d433e4900196c683b84f1b58350"
+    },
+    {
+      "path": "src/assets/icons/check.svg",
+      "sha256": "42bddf9f19a52a73f0cac904f58100b39d355f3574a88c77c0651b780b11ded7"
+    },
+    {
+      "path": "src/assets/icons/close.svg",
+      "sha256": "d0a9c0d6fcd5e5a916d65f43aa0e598a0e4006875b05af48d27ca9e816342eb7"
+    },
+    {
+      "path": "src/assets/icons/pause.svg",
+      "sha256": "5d9ff892b13f88f7e2c205746c059da26358dcc414d3cf6c76669051c6567fa8"
+    },
+    {
+      "path": "src/assets/icons/play.svg",
+      "sha256": "b344fc8debd8f3d93b2a2401eca88bb2962e3d3f42acbf6e05e3959d32d76823"
+    },
+    {
+      "path": "src/assets/logo/logo-icon.svg",
+      "sha256": "53d02a46fe8a211d806cc9196bad44efd06282f58c93d5cd82ce20e7ad914459"
+    },
+    {
+      "path": "src/assets/logo/logo.svg",
+      "sha256": "149e2a8c04f9a2f0baae6e93e6cd7410b8e4e3d81a5077e6eea4f5665f25f349"
+    },
+    {
+      "path": "src/components/Button.astro",
+      "sha256": "a576d66e393e21af14e8d7aa513a5fc3a9831bb795c30d8b4a4b8adff5487497"
+    },
+    {
+      "path": "src/components/form/Choice.astro",
+      "sha256": "a74d229704378f295b3a8fde279af582feb24466b5ed4c908f8d336beb215537"
+    },
+    {
+      "path": "src/components/form/Fieldset.astro",
+      "sha256": "751af9652d853983bf37bdbf0f4d3176e0b16053cb9de579e7b42c8c36084286"
+    },
+    {
+      "path": "src/components/form/Form.astro",
+      "sha256": "aaecedb75b03115863f6f5460c6cff89a9472f673f4239ef7e94ada8f0cf8c1d"
+    },
+    {
+      "path": "src/components/form/Input.astro",
+      "sha256": "10a394cfff5c6f76cd5c26ba3c438d9013658cbefbc7e86a3b2bbb1fb639325b"
+    },
+    {
+      "path": "src/components/form/Range.astro",
+      "sha256": "52f8077fe462e61a7593d128f668f1a7e0600b2d9c58a4343ad8d7981c103215"
+    },
+    {
+      "path": "src/components/form/Select.astro",
+      "sha256": "f57dfbe7a08f152a2e581df7afa609871dc996c244cc43a3e6d854e0a7ed14d9"
+    },
+    {
+      "path": "src/components/form/Textarea.astro",
+      "sha256": "1db3e2f062f003b4f4504fe3066f7a3957d0e941f85025d34547b7432996dee9"
+    },
+    {
+      "path": "src/components/global/Footer.astro",
+      "sha256": "6f5dee9eb75d0e8255f554380d61c922c8025e8b9a08e0e47edf00a15ab69dad"
+    },
+    {
+      "path": "src/components/global/Nav.astro",
+      "sha256": "4e5d6a52d3dc047bb8a9ce5646b3f7fa6cf62ddc03ea2b75aedf630df791e322"
+    },
+    {
+      "path": "src/components/global/NavLink.astro",
+      "sha256": "88b5cb085d10668a95ff512e064c0ac4118d8bac06b274feb86337eea4e3c5f8"
+    },
+    {
+      "path": "src/components/global/SkipLink.astro",
+      "sha256": "337d9f93b4da99a7f59ccf1369aa1758a196c3d70ec6c6abb27972f675aa8a57"
+    },
+    {
+      "path": "src/components/interactive/Accordion.astro",
+      "sha256": "46a8bc3f927cd70f3faa0549af0e001a11b3ce8967be19664c2465e623542db1"
+    },
+    {
+      "path": "src/components/interactive/AccordionItem.astro",
+      "sha256": "9f72106ea7262d0d85847589f5eda1f4bfdaef28d619fff9869673c25a98a19b"
+    },
+    {
+      "path": "src/components/interactive/Dropdown.astro",
+      "sha256": "81c2140955c2554e0f7a7a8817a370c0183bada72a3cc20617405dab05822435"
+    },
+    {
+      "path": "src/components/interactive/Marquee.astro",
+      "sha256": "a29e649315ad9ebb98dc69e131ce9f53a165cd0fed58b76fe6ae3bca31a00c9d"
+    },
+    {
+      "path": "src/components/interactive/Modal.astro",
+      "sha256": "4fb9b90614825a77c8ebdb28747a65bd8df266e9f777c8ca46ea8ae1b8eeb982"
+    },
+    {
+      "path": "src/components/interactive/Slider.astro",
+      "sha256": "6d9b1ec856034a912ee00354f3c2949a19d0cb633b7a9022ec143ff0b8655b36"
+    },
+    {
+      "path": "src/components/interactive/TabLink.astro",
+      "sha256": "12bec42d7a4c5993aee556d37a0f4793f23cbe52e8f8811f15e0e5621d9ad406"
+    },
+    {
+      "path": "src/components/interactive/Tabs.astro",
+      "sha256": "886c4b2ae811308bcc30e1378cb11c44bcaa77d7fecf76a0fd90233a2db23d4b"
+    },
+    {
+      "path": "src/components/item/Card.astro",
+      "sha256": "894ef8b68c333be3d63dfa448c51d7550184197dd4e3e2bacec5163d16150a3a"
+    },
+    {
+      "path": "src/components/media/Icon.astro",
+      "sha256": "bd4f315e09b3fbf8dba32ebb67dcd4ffbb19f420fdc94c836dbf919d2308970c"
+    },
+    {
+      "path": "src/components/media/Img.astro",
+      "sha256": "d01f584c6e7de7f56fc180e052811cd67dbaf84657fa940c431f32f471f4d88d"
+    },
+    {
+      "path": "src/components/media/Overlay.astro",
+      "sha256": "6c98b1eceb80c64d6de0f83992f4410bae12dc0ec7a95706e38acaa85ace6d33"
+    },
+    {
+      "path": "src/components/media/Video.astro",
+      "sha256": "2101efd4e14b0f786c58bea7987604dc4039a4a89a5a2d42e494a91b1b055619"
+    },
+    {
+      "path": "src/components/typography/Eyebrow.astro",
+      "sha256": "a0ab8f1b2667f07b8bc18cf93ca87a6c0075f034a53933fbaedb0e52dba220fa"
+    },
+    {
+      "path": "src/components/typography/Heading.astro",
+      "sha256": "1355b8b037421bf059f6c8fb293b73fdd2aa3841c50f5987270c182424923016"
+    },
+    {
+      "path": "src/components/typography/Paragraph.astro",
+      "sha256": "8b8ae26e90fde15898bebf4bfc430f1d2f5e01c0cb28177df0cee04792dda85c"
+    },
+    {
+      "path": "src/components/typography/RichText.astro",
+      "sha256": "9a3f8173bce2616ad5faa06449077e06a756c62db7c645567ac6b141c3656543"
+    },
+    {
+      "path": "src/components/utility/BaseHead.astro",
+      "sha256": "871f3502d282205a3d837078a818ed43f7d627f37c1b50a8e09480d97df7b2c8"
+    },
+    {
+      "path": "src/components/utility/FormattedDate.astro",
+      "sha256": "27101a290597efc64d057453d40d8d214aa7ce0c4d073efbea80afdcf40e3b46"
+    },
+    {
+      "path": "src/components/wrapper/ButtonWrapper.astro",
+      "sha256": "df3715676ff3108487cb324886d0ab179736e21e5f8d9981102fd4b4043e176d"
+    },
+    {
+      "path": "src/components/wrapper/ContentWrapper.astro",
+      "sha256": "1e5a1a54f906c14815604ef846d52fb4fc2cd8ef93d6422ccbc9374be560d605"
+    },
+    {
+      "path": "src/components/wrapper/Grid.astro",
+      "sha256": "eb226158cbfa778961de941fce62f7085dea9180467b017c2cdcc95c2081e090"
+    },
+    {
+      "path": "src/components/wrapper/Section.astro",
+      "sha256": "cafd2e38ffc1cd26ca4352ac1799e778312808a0812d2a6b82c083095c8e89a0"
+    },
+    {
+      "path": "src/consts.ts",
+      "sha256": "dc3825b4d932a66120bf8708ffbd9ebc4c615eacf9b621fc82dcd3176e3e030a"
+    },
+    {
+      "path": "src/layouts/BaseLayout.astro",
+      "sha256": "648f35fae25bf06aa05e77af8ef5657bb2c4c5371b8d09f06bd1f50c61643b4d"
+    },
+    {
+      "path": "src/pages/404.astro",
+      "sha256": "74a818835b85cea493b317239bf312248f2a591387547c2642205382c4382dfa"
+    },
+    {
+      "path": "src/pages/example-components.astro",
+      "sha256": "d7fbeb1036e76b27cc3cd2d2c6ac9e3a0b97a52894177276e1e406c6ea868c28"
+    },
+    {
+      "path": "src/pages/index.astro",
+      "sha256": "88cc2e01892160375cc5b97369e24a540eb313c499273d407682cb4a8d283686"
+    },
+    {
+      "path": "src/pages/robots.txt.ts",
+      "sha256": "cb6027c87e73f358c9a179e298f8d672afdf1d005d6c2c902836219802db157b"
+    },
+    {
+      "path": "src/styles/base.css",
+      "sha256": "72d9b936a5c60b17302ee5b24c928fc2a176dbfac0425605879abc516c13f415"
+    },
+    {
+      "path": "src/styles/global.css",
+      "sha256": "fdf6dd2e5a5df96ba82a7a5912da406977a56612588a82ff2f7e9141a5e1e8e5"
+    },
+    {
+      "path": "src/styles/gnr8-brand.css",
+      "sha256": "f990550df6be25eecd3d06b8d767d10727ddb2005a4ea86e23a4ea237877dffb"
+    },
+    {
+      "path": "src/styles/patterns.css",
+      "sha256": "63a69c93dbb156440941be41d615e3147bdb7c4f0eb69170f3480ce9d036eae4"
+    },
+    {
+      "path": "src/styles/utilities.css",
+      "sha256": "5cc0250beae8d1997692ca0b832b1498016268cec350dc59d4f00efff4f36cd2"
+    },
+    {
+      "path": "src/types.ts",
+      "sha256": "7481514025f0694bd721ce40745c9256a46e09fe5ee6b361860b0accc2d4abbc"
+    },
+    {
+      "path": "src/utils/seo.ts",
+      "sha256": "ac537c468f001ba535958c84655a105055f2a6dd4b7d96321d8420feef608ce0"
+    },
+    {
+      "path": "src/utils/slots.ts",
+      "sha256": "3bb47b446377f5e23243fcc443178745d917ab3d3ffb865c55df5b04884190dc"
+    },
+    {
+      "path": "src/utils/slug.ts",
+      "sha256": "3a73ee57a32500e1f365ecd2fce489979c985edb1806d2315009aa362f2fa661"
+    },
+    {
+      "path": "src/utils/unique-id.ts",
+      "sha256": "61a5b74bf817836039a4769789ea0312a7a64c8850fc8e333b7f2a2e8c78acc7"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "1bd8f2a338747d137b53c40748ee5b408b58efbaba7c0ec0856c0505072f09d1"
+    }
+  ]
+}

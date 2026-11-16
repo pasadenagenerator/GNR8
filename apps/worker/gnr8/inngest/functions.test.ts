@@ -96,12 +96,14 @@ test('worker inngest registration includes required function ids and exact trigg
   assert.equal(eventsById.get(DOMAIN_VERIFICATION_CHECK_JOB_ID), 'domain/verification.check')
 })
 
-test('worker production inngest registration exposes exactly the safe four-function manifest', () => {
+test('worker production inngest registration exposes exactly the safe six-function manifest', () => {
   const registrations = resolveWorkerInngestFunctionRegistrations({ vercelEnvironment: 'production' })
 
   assert.deepEqual(
     registrations.map((entry) => entry.id),
     [
+      'native-studio-preparation-job',
+      'standalone-publication-job',
       SITE_ASTRO_GENERATION_JOB_ID,
       TEMPLATE_PROCESSING_JOB_ID,
       SITE_TEMPLATE_BOOTSTRAP_JOB_ID,

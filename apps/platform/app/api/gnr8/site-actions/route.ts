@@ -1,4 +1,6 @@
 import { readContactSuggestions } from '@/gnr8/site/contact-suggestion-read-model'
+import { parseStackiScope } from '@/gnr8/stacki/stacki-draft-contract'
+import { parseStackiCandidateSelection } from '@/gnr8/stacki/stacki-candidate-selection'
 import { parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -19,6 +21,8 @@ type SiteActionsBody = {
   contactSourceTarget?: unknown
   acceptedFunctionalReductions?: unknown
   agencyId?: unknown
+  stackiRevision?: unknown
+  stackiBaseline?: unknown
 }
 
 function normalizeText(value: unknown): string {
@@ -38,6 +42,10 @@ export async function POST(request: NextRequest) {
     const body = ((await request.json().catch(() => null)) ?? {}) as SiteActionsBody
 
     const actionType = parseActionType(body.actionType)
+    if ((body.stackiRevision !== undefined || body.stackiBaseline !== undefined) && (actionType !== 'generate_redesign' || request.headers.get('origin') !== request.nextUrl.origin))
+      return NextResponse.json({ ok: false, error: 'Invalid Stacki preparation request.' }, { status: 403 })
+    if (body.stackiRevision !== undefined && body.stackiBaseline !== undefined)
+      return NextResponse.json({ ok: false, error: 'Choose one Stacki operation.' }, { status: 400 })
     if (!actionType) {
       return NextResponse.json({ ok: false, error: 'actionType is required' }, { status: 400 })
     }
@@ -93,6 +101,8 @@ export async function POST(request: NextRequest) {
                     : undefined,
               acceptedFunctionalReductions,
               contactSourceTarget: normalizeText(body.contactSourceTarget),
+              ...(body.stackiBaseline === undefined ? {} : { stackiBaseline: parseStackiScope(body.stackiBaseline) }),
+              ...(body.stackiRevision === undefined ? {} : { stackiRevision: parseStackiCandidateSelection(body.stackiRevision) }),
             }
           : {
               ...baseRequest,

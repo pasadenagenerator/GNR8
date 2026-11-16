@@ -1,4 +1,5 @@
 .git/
+.gnr8/
 .vercel/
 **/.vercel/
 .env

@@ -505,7 +505,7 @@ function runCommand(
 function startAstroDevServer(workspacePath: string): AstroDevServerHandle {
   const child = spawn(
     process.execPath,
-    [join(workspacePath, "node_modules", "astro", "astro.js"), "dev", "--host", ASTRO_DEV_SERVER_SMOKE_HOST, "--port", String(ASTRO_DEV_SERVER_SMOKE_PORT), "--strictPort"],
+    [join(workspacePath, "node_modules", "astro", "bin", "astro.mjs"), "dev", "--host", ASTRO_DEV_SERVER_SMOKE_HOST, "--port", String(ASTRO_DEV_SERVER_SMOKE_PORT), "--strictPort", "--ignore-lock"],
     {
       cwd: workspacePath,
       env: { ...process.env, CI: "1", NO_COLOR: "1", FORCE_COLOR: "0" },

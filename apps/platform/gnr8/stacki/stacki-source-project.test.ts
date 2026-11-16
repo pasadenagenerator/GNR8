@@ -89,3 +89,60 @@ test("oversize assets and path traversal fail before fetching; corrupt binary by
     path.endsWith(".png") ? Buffer.from("corrupted") : originalRead(asset, path, allowedPaths);
   await assert.rejects(prepareStackiSourceProject(corrupted), /SOURCE_PROJECT_INVALID/);
 });
+
+test('immutable runtime dependencies do not consume editable checkpoint limits',async()=>{
+ const f=fixture();f.workspace.assetEvidence[0]!.sizeBytes=2*1024*1024;
+ const result=await prepareStackiSourceProject({...f,assetMode:'runtime-overlay'});
+ assert.equal(f.reads.length,0);
+ assert.equal(result.runtimeAssets?.length,3);
+ assert.ok(result.files.every(file=>!file.path.startsWith('public/api/')));
+ const config=Buffer.from(result.files.find(file=>file.path==='astro.config.mjs')!.base64,'base64').toString();
+ assert.match(config,/gnr8-retained-assets-v1/);assert.match(config,/apply:'serve'/);
+ const huge=fixture();huge.workspace.files[0]!.contents='x'.repeat(2*1024*1024);
+ await assert.rejects(prepareStackiSourceProject({...huge,assetMode:'runtime-overlay'}),/SOURCE_PROJECT_INVALID/);
+ const unsafe=fixture();unsafe.workspace.assetEvidence[0]!.path=prefix+'../escape';
+ unsafe.binding.requiredAssets[0]!.path=prefix+'../escape';
+ await assert.rejects(prepareStackiSourceProject({...unsafe,assetMode:'runtime-overlay'}),/SOURCE_PROJECT_INVALID/);
+});
+
+test('explicit Astro 7 baseline preserves every unrelated byte and binds the old source hash', async () => {
+  const { prepareStackiAstro7Baseline } = await import('./stacki-source-project');
+  const pkg = { name: 'home', version: '0.0.0', private: true, type: 'module', scripts: {
+    dev: 'astro dev --host 127.0.0.1 --port 4321', build: 'astro build', preview: 'astro preview --host 127.0.0.1 --port 4321',
+  }, dependencies: { astro: '^5.0.0' } };
+  const { projectStackiRetainedAssets } = await import('./stacki-retained-assets');
+  const config = projectStackiRetainedAssets([{path:'astro.config.mjs',base64:Buffer.from('import { defineConfig } from "astro/config";\n\nexport default defineConfig({\n  output: "static",\n});\n').toString('base64')}], [])[0]!;
+  const files = [{ path: 'package.json', base64: Buffer.from(JSON.stringify(pkg)).toString('base64') },
+    config,
+    { path: 'src/pages/index.astro', base64: Buffer.from('<h1>Preserve me</h1>').toString('base64') }];
+  const before = structuredClone(files);
+  const snapshot = createAstroStaticSiteSourceSnapshot(files.map(f => ({ path: f.path, body: Buffer.from(f.base64, 'base64') })));
+  const result = prepareStackiAstro7Baseline({ files, expectedSourceSnapshotSha256: snapshot.aggregateSha256 });
+  assert.deepEqual(files, before);
+  for (const f of files.filter(f=>!result.changedPaths.some(p=>p===f.path))) assert.deepEqual(result.files.find(g=>g.path===f.path),f);
+  assert.deepEqual(result.changedPaths, ['package.json', 'astro.config.mjs']);
+  const actualConfig=Buffer.from(result.files.find(f=>f.path==='astro.config.mjs')!.base64,'base64').toString();
+  assert.equal(actualConfig.replace('build:{cssMinify:false},',''),Buffer.from(config.base64,'base64').toString());
+  const unknown=files.map(f=>f.path==='astro.config.mjs'?{...f,base64:Buffer.from('export default {}').toString('base64')}:f);
+  assert.throws(()=>prepareStackiAstro7Baseline({files:unknown,expectedSourceSnapshotSha256:createAstroStaticSiteSourceSnapshot(unknown.map(f=>({path:f.path,body:Buffer.from(f.base64,'base64')}))).aggregateSha256}));
+  assert.notEqual(result.sourceSnapshot.aggregateSha256, snapshot.aggregateSha256);
+  assert.equal(JSON.parse(Buffer.from(result.files.find(f=>f.path==='package.json')!.base64, 'base64').toString()).dependencies.astro, '7.4.4');
+  assert.equal(result.derivedFromSourceSnapshot.aggregateSha256, snapshot.aggregateSha256);
+  const { createStackiRecord } = await import('./stacki-draft-contract');
+  const { selectStackiCandidateSource } = await import('./stacki-candidate-source');
+  const scope = {agencyId:'11111111-1111-4111-8111-111111111111',clientId:'22222222-2222-4222-8222-222222222222',siteId:'33333333-3333-4333-8333-333333333333',siteVersionId:'44444444-4444-4444-8444-444444444444'};
+  const checkpoint=createStackiRecord(scope,'55555555-5555-4555-8555-555555555555',{expectedRevision:0,files:result.files});
+  const selection={checkpoint,scope,expectedRevision:checkpoint.revision,expectedSha256:checkpoint.sha256,baseline:files,sourcePaths:files.map(f=>f.path),ownedImagePaths:[]};
+  assert.throws(()=>selectStackiCandidateSource(selection),/CODE_OR_ASSET_CHANGE_UNSUPPORTED/);
+  assert.doesNotThrow(()=>selectStackiCandidateSource({...selection,baseline:result.files}));
+
+  assert.throws(() => prepareStackiAstro7Baseline({ files, expectedSourceSnapshotSha256: '0'.repeat(64) }));
+  for (const bad of [{ ...pkg, scripts: { ...pkg.scripts, postinstall: 'unreviewed' } }, { ...pkg, dependencies: { astro: '^5.0.0', unreviewed: '1.0.0' } }]) {
+    const changed = [{ ...files[0], base64: Buffer.from(JSON.stringify(bad)).toString('base64') }, ...files.slice(1)];
+    const expectedSourceSnapshotSha256 = createAstroStaticSiteSourceSnapshot(changed.map(f => ({path:f.path,body:Buffer.from(f.base64,'base64')}))).aggregateSha256;
+    assert.throws(() => prepareStackiAstro7Baseline({ files: changed, expectedSourceSnapshotSha256 }));
+  }
+  const locked = [...files, { path: 'package-lock.json', base64: Buffer.from('{}').toString('base64') }];
+  const lockedHash = createAstroStaticSiteSourceSnapshot(locked.map(f => ({path:f.path,body:Buffer.from(f.base64,'base64')}))).aggregateSha256;
+  assert.throws(() => prepareStackiAstro7Baseline({ files: locked, expectedSourceSnapshotSha256: lockedHash }));
+});

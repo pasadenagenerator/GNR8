@@ -867,7 +867,9 @@ test("workspace overview model: proposal candidates are present and remain read-
     ]);
     assert.deepEqual(contractReadiness?.requirementsMissing, ["conversion_baseline", "design_evidence"]);
     const bundlePreview = bundlePreviewByTitle.get("Improve Homepage Conversion Flow");
-    assert.equal(bundlePreview?.bundleId, "execution_bundle_preview_proposal_candidate_conversion_flow");
+    assert.equal(contractReadiness?.proposalId, "proposal_candidate_opt_homepage_conversion_review");
+    assert.equal(bundlePreview?.proposalId, contractReadiness?.proposalId);
+    assert.equal(bundlePreview?.bundleId, `execution_bundle_preview_${contractReadiness?.proposalId}`);
     assert.equal(bundlePreview?.bundleState, "bundle_incomplete");
     assert.equal(bundlePreview?.readinessState, contractReadiness?.readinessState);
     assert.equal(bundlePreview?.readinessScore, contractReadiness?.readinessScore);

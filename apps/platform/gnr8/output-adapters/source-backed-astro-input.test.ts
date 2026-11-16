@@ -16,6 +16,14 @@ import {
 
 const SHA = "a".repeat(64);
 
+test('retained HTTP partner links are explicit external navigation without upgrading or crawling them', () => {
+  const href='http://partner.example/catalog';
+  const input=fixture({rootHtml:`<!doctype html><html><body><h1>Home</h1><a href="${href}">Partner</a></body></html>`});
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  assert.equal(generated.contentManifest.requiredNavigation.find(item=>item.target===href)?.kind,'external_url');
+  assert.deepEqual(generated.outputPaths,['/','/about']);
+});
+
 function fixture(overrides: { aboutHtml?: string; rootHtml?: string } = {}) {
   const version = {
     id: "11111111-1111-4111-8111-111111111111",
@@ -1136,3 +1144,89 @@ test('contact suggestion read-model reads only the scoped retained artifact and 
   await assert.rejects(readContactSuggestions({siteId:'foreign',agencyId:'agency',clientId:'client'}),/CONTACT_SITE_NOT_FOUND/);
   assert.equal(fileReads,2);
 });
+
+test('accepted source links preserve captured routes and source URL queries while complex forms open their own original page',()=>{
+ const f=fixture({rootHtml:'<html><body><a href="/about">About</a><a href="https://example.com/en/p/basic?offer=1#details">Package</a><a href="https://other.example/product">External</a><a href="http://example.com/en/p/http-plan">HTTP source</a><a href="http://login.other.example/">Login</a></body></html>',aboutHtml:'<html><body><h1>About</h1><form><select name="plan"><option>Complex</option></select></form></body></html>'})
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}} as const
+ const input={siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact}
+ assert.throws(()=>createSourceBackedAstroGenerationInput(input),SourceBackedAstroUnsupportedError)
+ const result=createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings})
+ const root=result.sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents
+ const about=result.sourceManifest.files.find(f=>f.path==='src/pages/about/index.astro')!.contents
+ assert.match(root,/href="\/about"/)
+ assert.match(root,/https:\/\/example.com\/en\/p\/basic\?offer=1#details/)
+ assert.match(root,/https:\/\/other.example\/product/)
+ assert.match(root,/http:\/\/example.com\/en\/p\/http-plan/)
+ assert.match(root,/http:\/\/login.other.example\//)
+ assert.match(about,/https:\/\/example.com\/about/)
+ assert.doesNotMatch(about,/<form/)
+ assert.match(about,/Open original form/)
+ assert.equal(result.outputPaths.length,2)
+ f.artifact.htmlByPath['/']+='<script>unknownRuntime()</script>'
+ assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError)
+})
+
+test('explicit tracking/chat omission preserves announcement and click-to-load video with owned controls',()=>{
+ const f=fixture({rootHtml:'<html><body><div class="fb-customerchat"></div><div class="engagement promomessage" style="display:block"><a class="closeBtn" href="#"></a><p>Retained announcement</p><a href="/about">Details</a></div><div><iframe src="about:blank" data-src-original="//fast.wistia.com/embed/iframe/fixture123" class="hidden"></iframe></div><script src="/analytics.js"></script></body></html>'});
+ f.rawArtifact.fileMap['analytics.js']={path:'analytics.js',mediaType:'application/javascript',sizeBytes:1,sha256:'f1a61277e3f902f50ab42015d8b07218db9b7601bb0967e54a52bfdcb4fa7e81'};
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}} as const;
+ const input={siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact};
+ assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError);
+ const result=createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,trackingAndChat:'remove'}});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/Retained announcement/);assert.match(root,/data-gnr8-close-announcement/);
+ assert.match(root,/data-gnr8-video-src="https:\/\/fast.wistia.com\/embed\/iframe\/fixture123"/);
+ assert.doesNotMatch(root,/<iframe\b|src="about:blank"/);assert.match(root,/data-gnr8-preview-runtime="retained-mono-controls"/);
+ assert.doesNotMatch(root,/fb-customerchat|src="[^\"]*analytics.js/);
+ f.rawArtifact.fileMap['analytics.js']!.sha256='b'.repeat(64);
+ assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,trackingAndChat:'remove'}}),SourceBackedAstroUnsupportedError);
+})
+
+test('recognized embedded Typeform is a disclosed original-page link under accepted complex-form scope',()=>{
+ const f=fixture({aboutHtml:'<html><body><div class="typeform-widget" data-url="https://example.typeform.com/to/fixture" data-text="Questionnaire" style="height:1100px"></div></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}}});
+ const page=result.sourceManifest.files.find(f=>f.path==='src/pages/about/index.astro')!.contents;
+ assert.match(page,/href="https:\/\/example.com\/about"/);assert.match(page,/Questionnaire/);assert.doesNotMatch(page,/typeform-widget|height:1100/);
+})
+
+test('Mono controller uses the existing exact-byte owned-runtime contract',async()=>{
+ const {RETAINED_MONO_CONTROLS_SCRIPT}=await import('../../src/public-site/retained-mono-controls');
+ const {prepareOwnedRetainedRuntimeForAstro}=await import('../../src/public-site/owned-retained-runtime');
+ const script=`<script data-gnr8-preview-runtime="retained-mono-controls">${RETAINED_MONO_CONTROLS_SCRIPT}</script>`;
+ assert.match(prepareOwnedRetainedRuntimeForAstro(script),/is:inline/);
+ for(const html of [script.replace(RETAINED_MONO_CONTROLS_SCRIPT,'alert(1)'),script.replace('<script ','<script src="other.js" '),script.replace('<script ','<script onload="alert(1)" ')])assert.throws(()=>prepareOwnedRetainedRuntimeForAstro(html));
+})
+
+test('only explicitly selected source animations become disclosed links in generated Astro',()=>{
+ const url='https://example.com/uploads/large.gif';
+ const f=fixture({rootHtml:'<html><body><img src="data:image/gif;base64,AA=="><noscript data-lazyload-src="/uploads/large.gif"><img src="/uploads/large.gif" alt="Navodila &amp; primer"></noscript><h1>Retained content</h1></body></html>'});
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}} as const;
+ const input={siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact};
+ for(const links of [[],['https://other.example/uploads/large.gif'],[url+'?different=1']]) {
+  assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,sourceMediaLinks:links}}),SourceBackedAstroUnsupportedError);
+ }
+ const result=createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:{...settings,sourceMediaLinks:[url]}});
+ const page=result.sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents;
+ assert.match(page,/href="https:\/\/example.com\/uploads\/large.gif"/);
+ assert.match(page,/Open original animation/);assert.match(page,/Navodila &amp; primer/);
+ assert.match(page,/Retained content/);assert.doesNotMatch(page,/<img|<noscript/);
+ assert.equal(result.outputPaths.length,2);
+});
+
+test('missing titles use visible heading and stray quote attributes cannot corrupt exported HTML',()=>{
+ const f=fixture({rootHtml:'<html><head><style>.thing{color:red}</style></head><body><h1>Visible heading</h1><span "></span></body></html>'});
+ f.version.pages[0]!.title='';
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact});
+ const page=result.sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents;
+ assert.match(page,/<title>Visible heading<\/title>/);assert.doesNotMatch(page,/<span "=/);
+ f.version.pages[0]!.title='Literal {example: 1}';
+ const literal=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact}).sourceManifest.files.find(f=>f.path==='src/pages/index.astro')!.contents;
+ assert.match(literal,/<title>Literal &#123;example: 1&#125;<\/title>/);
+});
+
+ test('retained Redactor empty-style quote repair preserves swallowed heading and paragraph',()=>{
+ const f=fixture({rootHtml:'<!DOCTYPE html><html><body><p><span data-redactor-="" style=">2.4. HELP</span></p><p class=" bodytext"="">Help explanation.</p></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/>2.4. HELP<\/span>/);assert.match(root,/Help explanation/);assert.doesNotMatch(root,/style=">2.4/);
+ });

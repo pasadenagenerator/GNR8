@@ -21,6 +21,6 @@ export function publishedContactFromResolution(result: PublicRuntimeArtifactReso
   const {scope: _scope, acceptedByActor: _actor, acceptedAt: _at, limitations: _limits, ...configuration} = stored
   const settings = parseAcceptedFunctionalReductions(configuration)
   const schema = readContactSchema(result.html)
-  if (settings?.kind !== 'retained-presentation-v1' || !settings.contact || !schema) return null
+  if ((settings?.kind !== 'retained-presentation-v1' && settings?.kind !== 'retained-source-links-v1') || !settings.contact || !schema) return null
   return {...schema,siteId:result.siteId,siteVersionId:result.activeSiteVersionId,pagePath:path,recipient:settings.contact.recipient,artifactId:result.artifactId,artifactSha256:result.artifact.bundleSha256}
 }

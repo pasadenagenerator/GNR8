@@ -217,6 +217,24 @@ test("install and build commands disable Astro telemetry in ephemeral runtimes",
   assert.deepEqual(observedCommands, ["install", "build"]);
 });
 
+test('standalone npm builds isolate every child command and do not require pnpm',async()=>{
+ const workspacePath='/tmp/owned-standalone-build';const seen:string[]=[];
+ process.env.GNR8_TEST_SECRET_SENTINEL='must-not-reach-build';
+ try {
+  await assert.rejects(runAstroBuildExportProof({packageManager:'npm',commandEnvironment:{PATH:'/safe/bin',NODE_ENV:'production'},dependencies:{
+   prepareWorkspace:async()=>preparedWorkspace(workspacePath),
+   runCommand:async(command,args,options)=>{
+    assert.equal(command,'npm');assert.equal(options.env?.GNR8_TEST_SECRET_SENTINEL,undefined);
+    assert.equal(options.env?.HOME,workspacePath);assert.equal(options.env?.NODE_ENV,'production');
+    assert.equal(options.env?.ASTRO_TELEMETRY_DISABLED,'1');seen.push(args.join(' '));
+    if(args[0]==='run')throw Error('stop after environment assertion');
+    return {stdout:'10.9.8',stderr:''};
+   },readFile:async()=>JSON.stringify({version:'5.18.2'}),removeWorkspace:async()=>{},
+  }}),e=>e instanceof AstroBuildExportProofError&&e.code==='build_failed'&&e.evidence.versions.npm==='10.9.8'&&e.evidence.versions.pnpm==='');
+  assert.deepEqual(seen,['ci --no-audit --no-fund','--version','run build']);
+ } finally {delete process.env.GNR8_TEST_SECRET_SENTINEL;}
+});
+
 async function writeValidDist(
   workspacePath: string,
   options: { stylesheetHref?: string; stylesheetBody?: string } = {},
@@ -302,3 +320,55 @@ async function withWorkspace(run: (workspacePath: string) => Promise<void>): Pro
     await rm(workspacePath, { recursive: true, force: true });
   }
 }
+
+test('compiled CSS is bound to retained source and every HTTP stylesheet byte', async () => {
+  const { readAstroStaticSiteSourceSnapshot } = await import('./astro-static-site-workspace-preparation');
+  for (const scenario of ['valid', 'changed-source', 'changed-http', 'missing-output', 'missing-http']) {
+    await withWorkspace(async workspacePath => {
+      await mkdir(join(workspacePath, 'src'));
+      await writeFile(join(workspacePath, 'src/style.css'), 'body{color:red}');
+      const snapshot = await readAstroStaticSiteSourceSnapshot({ workspacePath, sourcePaths: ['src/style.css'] });
+      const input = {
+        verification: { expectedContent: [], expectedThemeToken: null,
+          compiledStylesheetSource: { sourcePaths: ['src/style.css'], aggregateSha256: snapshot.aggregateSha256 } },
+        dependencies: {
+          prepareWorkspace: async () => ({ ...preparedWorkspace(workspacePath), sourceSnapshot: snapshot }),
+          readFile: async () => JSON.stringify({ version: '7.4.4' }),
+          runCommand: async (_command: string, args: string[]) => {
+            if (args[0] === 'build') {
+              await writeValidDist(workspacePath, { stylesheetBody: 'body{color:red}' });
+              if (scenario === 'changed-source') await writeFile(join(workspacePath, 'src/style.css'), 'body{color:blue}');
+              if (scenario === 'missing-output') await rm(join(workspacePath, 'dist/_astro/site.css'));
+            }
+            return { stdout: '10.28.2', stderr: '' };
+          },
+          fetch: (async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+            if (scenario === 'changed-http' && String(url).endsWith('.css'))
+              return new Response('body{color:tan}', { headers: { 'content-type': 'text/css' } });
+            if (scenario === 'missing-http' && String(url).endsWith('.css'))
+              return new Response('', { status: 404 });
+            return fetch(url, init);
+          }) as typeof fetch,
+        },
+      };
+      if (scenario === 'valid') {
+        const result = await runAstroBuildExportProof(input);
+        assert.equal(result.sourceComparison.unchanged, true);
+        assert.equal(result.export.compiledStylesheetSourceSha256, snapshot.aggregateSha256);
+        assert.equal(result.http.compiledStylesheets?.length, 1);
+      } else await assert.rejects(runAstroBuildExportProof(input), (error: unknown) =>
+        error instanceof AstroBuildExportProofError && ['stylesheet_verification_failed', 'asset_missing'].includes(error.code));
+    });
+  }
+});
+
+test('an exact Node pin in saved source fails before installation on a different executor', async () => {
+  let invoked = false;
+  await assert.rejects(runAstroBuildExportProof({ dependencies: {
+    prepareWorkspace: async () => preparedWorkspace('/tmp/node-pin-proof'),
+    readFile: async () => JSON.stringify({ engines: { node: '0.0.1' } }),
+    runCommand: async () => { invoked = true; return { stdout: '', stderr: '' }; },
+    removeWorkspace: async () => {},
+  } }), /Saved source requires Node 0.0.1/);
+  assert.equal(invoked, false);
+});

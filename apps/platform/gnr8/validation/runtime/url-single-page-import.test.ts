@@ -369,7 +369,8 @@ test("additional asset capture skips only exact CSS dependencies proven unused b
       bodyPath: path.join(root, "index.html"),
       html: '<link rel="stylesheet" href="https://example.com/theme.css"><main class="hero"></main>',
     }],
-    knownUnusedStylesheetDependencyUrls: ["https://example.com/images/unused.png"],
+    fullHtmlDocumentsForCssUsage: ['<main class="hero"></main>'],
+    approvedUnusedStylesheetDependencyUrls: ["https://example.com/images/unused.png"],
     fetchImpl: async (request) => {
       const url = String(request instanceof Request ? request.url : request);
       fetched.push(url);
@@ -387,6 +388,7 @@ test("additional asset capture skips only exact CSS dependencies proven unused b
   });
 
   assert.equal(result.summary.failedRequiredAssetCount, 0);
+  assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, ["https://example.com/images/unused.png"]);
   assert.deepEqual(fetched, ["https://example.com/theme.css", "https://example.com/images/required.png"]);
 });
 

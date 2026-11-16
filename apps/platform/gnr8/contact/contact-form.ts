@@ -66,6 +66,8 @@ function permissionStatement(node: Element, generated: boolean): string | null {
 /** Intentionally narrow: ordinary CF7 contact only. Inspect everything before
  * mutating; only the proven single required CF7 permission structure is accepted. */
 export function replaceSupportedContactForm(form: Element, pagePath: string): boolean {
+  const classes = attr(form,'class').split(/\s+/)
+  if (classes.includes('module') && classes.includes('form')) return replaceMonoContactForm(form,pagePath)
   if (!attr(form,'class').split(/\s+/).includes('wpcf7-form') || attr(form,'method').toLowerCase() !== 'post') return false
   const nodes = contactElements(form)
   if (nodes.some(n => ['form','iframe','object','embed','script','select','button'].includes(n.tagName))) return false
@@ -117,6 +119,59 @@ export function replaceSupportedContactForm(form: Element, pagePath: string): bo
   for (const node of nodes.filter(n => attr(n,'class').split(/\s+/).includes('wpcf7-response-output'))) remove(node)
   append(form,'<div hidden aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div><input type="hidden" name="requestId" value=""><p data-gnr8-contact-status role="status" aria-live="polite"></p>')
   if (permission) append(form,`<input type="hidden" name="formVersion" value="${contactFormVersion(form)}">`)
+  return true
+}
+
+/** Observed Mono name/email/message contact format. Complex questionnaires,
+ * opt-ins and unknown controls are deliberately not projected into this schema.
+ * Work on a clone so a rejected format leaves the captured source intact. */
+function replaceMonoContactForm(form: Element, pagePath: string): boolean {
+  const id = attr(form,'id')
+  if (!/^m\d+$/.test(id) || attr(form,'method').toLowerCase() !== 'post' ||
+    attr(form,'data-url') !== `?m=${id}` || attr(form,'onsubmit') !== 'return _monoForm.submitForm(this);' ||
+    has(form,'action') || has(form,'target')) return false
+  const nodes = contactElements(form)
+  if (nodes.some(n => ['form','iframe','object','embed','script','select','button'].includes(n.tagName)) ||
+    nodes.some(n => n.attrs.some(a => /^on/i.test(a.name))) ||
+    [form,...nodes].some(n => n.attrs.some(a => ['form','formaction','formtarget','formmethod','formenctype','formnovalidate','disabled','readonly'].includes(a.name)))) return false
+  const controls = nodes.filter(n => ['input','textarea'].includes(n.tagName))
+  const seed = controls.find(n => attr(n,'name') === '_ha_seed')
+  if (!seed || attr(seed,'type') !== 'hidden' || !/^[a-f0-9]{8}$/.test(attr(seed,'value')) || controls.length !== 8) return false
+  const fieldNames = ['field_0','field_1','field_2','__requestToken','_ha_seed',`form_${id}`,attr(seed,'value'),'']
+  if (new Set(controls.map(n => attr(n,'name'))).size !== 8 || controls.some(n => !fieldNames.includes(attr(n,'name')))) return false
+  for (const [index,label] of [/^(Ime in priimek|Full name|Name)\*?$/i,/^(E-pošta|E-mail|Email)\*?$/i,/^(Vprašanje|Sporočilo|Question|Message)\*?$/i].entries()) {
+    const field = controls.find(n => attr(n,'name') === `field_${index}`)!
+    if (field.tagName !== (index === 2 ? 'textarea' : 'input') || (index < 2 && attr(field,'type') !== 'text') ||
+      (index === 1 && attr(field,'data-type') !== 'email') || attr(field,'data-required') !== 'true' ||
+      attr(field,'aria-required') !== 'true' || !label.test(attr(field,'placeholder').trim())) return false
+  }
+  if (!controls.filter(n => ['__requestToken',`form_${id}`].includes(attr(n,'name'))).every(n => n.tagName === 'input' && attr(n,'type') === 'hidden')) return false
+  const trap = controls.find(n => attr(n,'name') === attr(seed,'value'))!
+  if (trap.tagName !== 'textarea' || !cls(trap.parentNode,'veiled') || !/display\s*:\s*none/i.test(attr(trap.parentNode,'style'))) return false
+  const submit = controls.find(n => !attr(n,'name'))!
+  if (submit.tagName !== 'input' || attr(submit,'type') !== 'submit') return false
+  const optins = nodes.filter(n => cls(n,'optins'))
+  if (optins.some(n => text(n).trim() || contactElements(n).length)) return false
+  const clone = contactElements(parseFragment(serializeOuter(form))).find(n => n.tagName === 'form')!
+  const originalClass = attr(clone,'class')
+  set(clone,'class','wpcf7-form')
+  clone.attrs = clone.attrs.filter(a => !['onsubmit','data-url','data-req','data-track-action'].includes(a.name))
+  for (const node of contactElements(clone)) {
+    if (['input','textarea'].includes(node.tagName)) {
+      const name = attr(node,'name'), index = ['field_0','field_1','field_2'].indexOf(name)
+      if (index >= 0) {
+        set(node,'name',['your-name','your-email','your-message'][index]!)
+        if (index === 1) set(node,'type','email')
+        node.attrs = node.attrs.filter(a => !['data-type','data-required'].includes(a.name))
+      } else if (name) remove(node)
+    }
+    if (['veiled','h-captcha','hcaptcha-badge','hcaptcha-badge-legal'].some(c => cls(node,c))) remove(node)
+  }
+  if (!replaceSupportedContactForm(clone,pagePath)) return false
+  set(clone,'class',originalClass)
+  form.attrs = clone.attrs
+  form.childNodes = clone.childNodes
+  for (const child of form.childNodes) child.parentNode = form
   return true
 }
 

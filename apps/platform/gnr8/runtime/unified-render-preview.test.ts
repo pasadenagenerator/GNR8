@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { rewriteRawTemplateHtmlForRuntime } from '@/src/public-site/raw-template-runtime'
+import { enhanceRetainedGalleries } from '@/src/public-site/retained-gallery'
 
 import {
   PreviewDbBackpressureError,
@@ -758,6 +759,29 @@ test('raw template asset rewrite preserves anchor hrefs for navigation rewrite',
   assert.equal(rewritten.includes('/api/gnr8/runtime/preview-assets/site-nav/sv-nav/uploads/logo.png'), true)
 })
 
+test('retained gallery full-size links use the mapped host-prefixed files', () => {
+  const fileMapPaths = new Set(['www.example.com/uploads/first.webp', 'www.example.com/uploads/second.webp'])
+  const items = ['first', 'second'].map(name => `<li><a href="/uploads/${name}.webp"><span><img src="/uploads/${name}.webp" alt="${name}"></span></a></li>`).join('')
+  const source = `<html lang="sl"><body><div class="gallery" data-req="gallery,lightbox" data-settings="view=normal"><div class="slide"><ul class="pics">${items}</ul></div></div><a href="/about">About</a></body></html>`
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({html:source,siteId:'site',siteVersionId:'version',entryHtmlPath:'index.html',fileMapPaths})
+  const assetRoot = '/api/gnr8/runtime/preview-assets/site/version/www.example.com/uploads/'
+  for (const name of ['first','second']) {
+    assert.ok(rewritten.includes(`href="${assetRoot}${name}.webp"`))
+    assert.ok(rewritten.includes(`src="${assetRoot}${name}.webp"`))
+  }
+  assert.ok(rewritten.includes('<a href="/about">About</a>'))
+  const enhanced = enhanceRetainedGalleries({html:rewritten,siteId:'site',siteVersionId:'version',fileMapPaths})
+  assert.equal((enhanced.match(/data-gallery-image /g)??[]).length,2)
+  assert.ok(enhanced.includes('data-gnr8-preview-runtime="retained-gallery"'))
+})
+
+test('gallery links without one retained file match stay unchanged', () => {
+  const html = '<a href="/uploads/unknown.webp"><img src="/uploads/unknown.webp"></a><a href="/uploads/shared.webp">Shared</a><a href="https://outside.test/uploads/remote.webp">Remote</a>'
+  const rewritten = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferences({html,siteId:'site',siteVersionId:'version',entryHtmlPath:'index.html',
+    fileMapPaths:new Set(['one.example/uploads/shared.webp','two.example/uploads/shared.webp'])})
+  for (const href of ['/uploads/unknown.webp','/uploads/shared.webp','https://outside.test/uploads/remote.webp']) assert.ok(rewritten.includes(`href="${href}"`))
+})
+
 test('raw template multipage link rewrite normalizes routes and emits deterministic counts', () => {
   const logs: Array<{ code: string; payload: Record<string, unknown> }> = []
   const originalInfo = console.info
@@ -1209,8 +1233,15 @@ test('raw template preview preserves Viroidoc-like CSS cascade order and layout 
     assert.equal(preview.html.includes('type="application/gnr8-disabled-script"'), false)
     assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.totalScriptsFound, 1)
     assert.equal(preview.rawTemplatePreviewEvidence?.rawPreviewScriptPolicyEvidence?.scriptsPreserved, 1)
-    assert.equal(preview.html.includes('/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/user-style.css?ver=1#main'), true)
-    assert.equal(preview.html.includes('@import url("/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/generated.css?x=1") screen;'), true)
+    // Runtime CSS has its own cache revision. Source queries and fragments
+    // must survive alongside it, independently of parameter ordering.
+    const stylesheetUrl = new URL(preview.html.match(/href="([^"]*\/assets\/user-style\.css[^"]*)"/)![1], 'https://preview.invalid')
+    assert.equal(stylesheetUrl.pathname, '/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/user-style.css')
+    assert.deepEqual(Object.fromEntries(stylesheetUrl.searchParams), { ver: '1', gnr8css: '2' })
+    assert.equal(stylesheetUrl.hash, '#main')
+    const importedCssUrl = new URL(preview.html.match(/@import url\("([^"]*\/assets\/generated\.css[^"]*)"\) screen;/)![1], 'https://preview.invalid')
+    assert.equal(importedCssUrl.pathname, '/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/assets/generated.css')
+    assert.deepEqual(Object.fromEntries(importedCssUrl.searchParams), { x: '1', gnr8css: '2' })
     assert.equal(preview.html.includes('as="font" href="/api/gnr8/runtime/preview-assets/site-viroidoc-css/sv-viroidoc-css/fonts/dongle.woff2"'), true)
     assert.equal(graph?.cssOrderChanged, false)
     assert.equal(graph?.inlineStyleBlockCount, 1)
@@ -1550,6 +1581,21 @@ test('Transporti-Maver-like raw preview preserves gallery map form and lazyload 
   }
   assert.equal(acquireCount, 1)
   assert.equal(releaseCount, 1)
+})
+
+test('raw preview keeps retained gallery links and derived image URLs on the selected version without rewriting navigation', () => {
+  const result = __unifiedRenderPreviewTestUtils.rewriteRawTemplateAssetReferencesWithCounts({
+    html: '<a href="/uploads/gallery.webp#full">Photo</a><img src="/api/gnr8/runtime/preview-assets/site-gallery/old/uploads/gallery.webp"><a href="/en">English</a><a href="#gallery">Gallery</a><a href="https://other.example/missing.jpg">External</a><img src="/api/gnr8/runtime/preview-assets/other/old/uploads/gallery.webp"><img src="/api/gnr8/runtime/preview-assets/site-gallery/old/missing.jpg">',
+    siteId: 'site-gallery', siteVersionId: 'current', entryHtmlPath: 'pages/en/index.html',
+    fileMapPaths: new Set(['uploads/gallery.webp', 'pages/en/index.html']),
+  })
+  assert.match(result.html, /href="\/api\/gnr8\/runtime\/preview-assets\/site-gallery\/current\/uploads\/gallery.webp#full"/)
+  assert.match(result.html, /src="\/api\/gnr8\/runtime\/preview-assets\/site-gallery\/current\/uploads\/gallery.webp"/)
+  assert.match(result.html, /href="\/en"/)
+  assert.match(result.html, /href="#gallery"/)
+  assert.match(result.html, /href="https:\/\/other.example\/missing.jpg"/)
+  assert.match(result.html, /src="\/api\/gnr8\/runtime\/preview-assets\/other\/old\/uploads\/gallery.webp"/)
+  assert.match(result.html, /src="\/api\/gnr8\/runtime\/preview-assets\/site-gallery\/old\/missing.jpg"/)
 })
 
 test('raw template preview resolves root and child CSS/font URLs through the same file-map-aware base logic', () => {

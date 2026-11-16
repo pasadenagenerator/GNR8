@@ -15,7 +15,15 @@ const defaults = {
   publish: createEvidenceBoundRuntimePublisher({ requireExactSelection: true }),
 };
 
-export function createPublicOutputService(deps = defaults) {
+async function withdrawFirstPublication(input: PublicOutputSelection & { actor: string }) {
+  const store = await import('../runtime/runtime-store');
+  const version = await store.getSiteVersion(input.siteVersionId);
+  if (!version || version.artifactId !== input.artifactId) throw new Error('409|PUBLIC_OUTPUT_SELECTION_STALE');
+  return store.recoverPreparedPublicSiteToUnpublished({ siteId: version.siteId, siteVersionId: input.siteVersionId,
+    artifactId: input.artifactId, expectedBundleSha256: input.artifactBundleSha256, actor: input.actor });
+}
+
+export function createPublicOutputService(deps = defaults, withdraw = withdrawFirstPublication) {
   async function read(scope: PublicOutputScope, selection: PublicOutputSelection) {
     await deps.authorizeVersion(scope, selection.siteVersionId);
     const model = await deps.read(selection.siteVersionId);
@@ -33,9 +41,19 @@ export function createPublicOutputService(deps = defaults) {
         if (model.publicPreparation) throw new Error('409|PUBLIC_OUTPUT_ALREADY_PREPARED');
         return deps.prepare({ sourceSiteVersionId: model.siteVersionId, sourceArtifactId: model.artifactId,
           expectedSourceArtifactSha256: model.artifactBundleSha256, expectedSourceCandidateId: model.candidateId,
-          host: String(input.host ?? '').trim().toLowerCase(), actor: actor.userId });
+          host: String(input.host ?? '').trim().toLowerCase(), actor: actor.userId }, {
+          // This exact source was authorized and evaluated above in this request.
+          // Keep successor readback fresh; never reuse across requests or actions.
+          readModel: id => id === model.siteVersionId ? Promise.resolve(model) : deps.read(id),
+        });
       }
       if (!model.publicPreparation || model.publicPreparation.host !== input.host) throw new Error('409|PUBLIC_OUTPUT_HOST_MISMATCH');
+      if (input.action === 'withdraw') {
+        if (input.confirmation !== 'withdraw-exact-first-publication' || model.publicPreparation.expectedActivePointer !== null || model.state !== 'PUBLISHED')
+          throw new Error('422|PUBLIC_OUTPUT_RECOVERY_CONFIRMATION_REQUIRED');
+        await withdraw({ ...input, actor: actor.userId });
+        return read(scope, input);
+      }
       if (input.action === 'change-recipient') {
         if (input.confirmation !== 'confirm-contact-recipient' || !isContactEmail(input.recipient))
           throw new Error('422|PUBLIC_OUTPUT_RECIPIENT_CONFIRMATION_REQUIRED');

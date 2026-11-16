@@ -8,6 +8,14 @@ import { buildSiteImportCreatePayload } from '@/gnr8/site/site-import-create-pay
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
 import { resolveImportPreview } from '@/gnr8/site/import-preview-resolution'
 import { extractTitleFromHtmlDocument, resolveImportedSiteName } from '@/gnr8/site/site-import-site-name'
+import { buildScopedImportRuntimeIdentity, newScopedImportOwnershipSiteId } from '@/gnr8/site/site-import-runtime-identity'
+import { githubImportReady } from '@/gnr8/site/site-import-github-readiness'
+import { configuredImportGitHubOwner } from '@/gnr8/site/site-import-github-provisioning-config'
+import { stackiGithubSelected } from '@/gnr8/stacki/stacki-github-config'
+import { SiteGitHubRepositoryBinding } from '@/gnr8/stacki/site-github-repository-binding'
+import { SiteGitHubRepositoryProvisioner } from '@/gnr8/stacki/site-github-repository-provisioner'
+import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server'
+import { lookupImportOwnershipSiteId } from '@/gnr8/site/site-import-ownership-lookup'
 import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
 import { deterministicId } from '@/gnr8/runtime/deterministic'
 import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
@@ -71,11 +79,7 @@ type ClientScopeRow = {
   organization_type: string
 }
 
-type ExistingSiteRow = {
-  site_id: string
-  org_id: string
-  agency_id: string
-}
+type ExistingSiteRow = {site_id:string;org_id:string;agency_id:string;domain:string|null}
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -100,20 +104,37 @@ function parseHttpUrl(value: unknown): URL | null {
   }
 }
 
-function buildScopedImportRuntimeIdentity(input: { sourceUrl: string; clientId: string; agencyId: string }): {
-  siteId: string
-  siteVersionId: string
-  correlationKey: string
-} {
-  const siteId = deterministicId('site', `${input.sourceUrl}|/`)
-  const correlationKey = deterministicId('runtime-import-correlation', `${input.agencyId}|${input.clientId}|${input.sourceUrl}|${siteId}`)
-  const digest = crypto.createHash('sha256').update(`${correlationKey}|site-version`).digest()
-  const bytes = Uint8Array.from(digest.subarray(0, 16))
-  bytes[6] = (bytes[6] & 0x0f) | 0x40
-  bytes[8] = (bytes[8] & 0x3f) | 0x80
-  const hex = Buffer.from(bytes).toString('hex')
-  const siteVersionId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
-  return { siteId, siteVersionId, correlationKey }
+async function legacyRuntimeSiteBelongsToScope(input: {
+  runtimeSiteId: string
+  clientId: string
+  agencyId: string
+}): Promise<boolean> {
+  const result = await getSuperadminPool().query<{ exists: boolean }>(
+    `
+    select exists (
+      select 1
+      from public.gnr8_runtime_site_versions v
+      join public.sites s on s.id = v.ownership_site_id
+      where v.site_id = $1::text
+        and s.org_id = $2::uuid
+        and s.agency_id = $3::uuid
+    ) as exists
+    `,
+    [input.runtimeSiteId, input.clientId, input.agencyId],
+  )
+  return result.rows[0]?.exists === true
+}
+
+async function resolveScopedImportRuntimeIdentity(input: {
+  sourceUrl: string; clientId: string; agencyId: string; captureRevision?: 'github-complete-capture-v1'
+}) {
+  const legacySiteId = deterministicId('site', `${input.sourceUrl}|/`)
+  const reuseLegacyRuntimeSiteId = await legacyRuntimeSiteBelongsToScope({
+    runtimeSiteId: legacySiteId,
+    clientId: input.clientId,
+    agencyId: input.agencyId,
+  })
+  return buildScopedImportRuntimeIdentity({ ...input, reuseLegacyRuntimeSiteId })
 }
 
 function sha256Text(value: string): string {
@@ -339,11 +360,12 @@ async function assertClientScope(input: {
 
 async function resolveOrCreateOwnershipSiteId(input: {
   runtimeSiteId: string
-  siteVersionId: string
+  siteVersionId?: string
   clientId: string
   agencyId: string
   siteName: string
   domainHost: string | null
+  newSiteId: string
 }): Promise<string> {
   const pool = getSuperadminPool()
   const client = await pool.connect()
@@ -351,48 +373,13 @@ async function resolveOrCreateOwnershipSiteId(input: {
   try {
     await client.query('begin')
 
-    const latestBoundSiteResult = await client.query<ExistingSiteRow>(
-      `
-      select
-        s.id::text as site_id,
-        s.org_id::text as org_id,
-        s.agency_id::text as agency_id
-      from public.gnr8_runtime_site_versions sv
-      join public.sites s on s.id = sv.ownership_site_id
-      where sv.site_id = $1::text
-      order by sv.version_no desc, sv.updated_at desc, sv.created_at desc, sv.id::text desc
-      limit 1
-      `,
-      [input.runtimeSiteId],
-    )
+    // Serialize same-client ownership decisions before a provider claim.
+    await client.query('select id from public.organizations where id = $1::uuid for update',[input.clientId])
 
-    let ownershipSiteId = normalizeText(latestBoundSiteResult.rows[0]?.site_id)
-    if (ownershipSiteId) {
-      const row = latestBoundSiteResult.rows[0]!
-      if (row.org_id !== input.clientId || row.agency_id !== input.agencyId) {
-        throw new Error('Import scope mismatch: runtime site is already linked to a different client context.')
-      }
-    }
-
-    if (!ownershipSiteId && input.domainHost) {
-      const existingDomainSite = await client.query<ExistingSiteRow>(
-        `
-        select
-          s.id::text as site_id,
-          s.org_id::text as org_id,
-          s.agency_id::text as agency_id
-        from public.sites s
-        where s.org_id = $1::uuid
-          and s.agency_id = $2::uuid
-          and lower(coalesce(s.domain, '')) = lower($3::text)
-        order by s.updated_at desc, s.id::text desc
-        limit 1
-        `,
-        [input.clientId, input.agencyId, input.domainHost],
-      )
-
-      ownershipSiteId = normalizeText(existingDomainSite.rows[0]?.site_id)
-    }
+    let ownershipSiteId = await lookupImportOwnershipSiteId(client,{
+      runtimeSiteId:input.runtimeSiteId,clientId:input.clientId,
+      agencyId:input.agencyId,domainHost:input.domainHost,
+    })
 
     if (!ownershipSiteId) {
       const siteNameColumn = await client.query<{ has_name: boolean }>(
@@ -409,39 +396,50 @@ async function resolveOrCreateOwnershipSiteId(input: {
       const inserted = siteNameColumn.rows[0]?.has_name
         ? await client.query<{ site_id: string }>(
             `
-            insert into public.sites (org_id, agency_id, name, status, domain, is_template)
-            values ($1::uuid, $2::uuid, $3::text, 'draft'::public.site_status_enum, $4::text, false)
-            returning id::text as site_id
+            insert into public.sites (id, org_id, agency_id, name, status, domain, is_template)
+            values ($5::uuid, $1::uuid, $2::uuid, $3::text, 'draft'::public.site_status_enum, $4::text, false)
+            on conflict (id) do nothing returning id::text as site_id
             `,
-            [input.clientId, input.agencyId, input.siteName, input.domainHost],
+            [input.clientId, input.agencyId, input.siteName, input.domainHost, input.newSiteId],
           )
         : await client.query<{ site_id: string }>(
             `
-            insert into public.sites (org_id, agency_id, status, domain, is_template)
-            values ($1::uuid, $2::uuid, 'draft'::public.site_status_enum, $3::text, false)
-            returning id::text as site_id
+            insert into public.sites (id, org_id, agency_id, status, domain, is_template)
+            values ($4::uuid, $1::uuid, $2::uuid, 'draft'::public.site_status_enum, $3::text, false)
+            on conflict (id) do nothing returning id::text as site_id
             `,
-            [input.clientId, input.agencyId, input.domainHost],
+            [input.clientId, input.agencyId, input.domainHost, input.newSiteId],
           )
       ownershipSiteId = normalizeText(inserted.rows[0]?.site_id)
+      if(!ownershipSiteId){
+        const claimed=await client.query<ExistingSiteRow>(`
+          select id::text as site_id,org_id::text as org_id,agency_id::text as agency_id,domain
+          from public.sites where id=$1::uuid`,[input.newSiteId])
+        const row=claimed.rows[0]
+        if(!row||row.org_id!==input.clientId||row.agency_id!==input.agencyId||
+          row.domain?.toLowerCase()!==input.domainHost?.toLowerCase())
+          throw new Error('Import scope mismatch: ownership site ID is already occupied.')
+        ownershipSiteId=row.site_id
+      }
       if (!ownershipSiteId) {
         throw new Error('Unable to create client site ownership record for imported runtime site.')
       }
     }
 
-    const ownershipLink = await client.query<{ id: string }>(
-      `
-      update public.gnr8_runtime_site_versions
-      set ownership_site_id = $2::uuid
-      where id = $1::uuid
-        and (ownership_site_id is null or ownership_site_id = $2::uuid)
-      returning id::text as id
-      `,
-      [input.siteVersionId, ownershipSiteId],
-    )
-
-    if (!ownershipLink.rows[0]) {
-      throw new Error('Unable to link imported runtime version to scoped site ownership.')
+    if(input.siteVersionId){
+      const ownershipLink = await client.query<{ id: string }>(
+        `
+        update public.gnr8_runtime_site_versions
+        set ownership_site_id = $2::uuid
+        where id = $1::uuid
+          and (ownership_site_id is null or ownership_site_id = $2::uuid)
+        returning id::text as id
+        `,
+        [input.siteVersionId, ownershipSiteId],
+      )
+      if (!ownershipLink.rows[0]) {
+        throw new Error('Unable to link imported runtime version to scoped site ownership.')
+      }
     }
 
     await client.query('commit')
@@ -452,6 +450,19 @@ async function resolveOrCreateOwnershipSiteId(input: {
   } finally {
     client.release()
   }
+}
+
+async function updateProvisionalImportSiteName(input:{siteId:string;agencyId:string;
+  clientId:string;provisionalName:string;resolvedName:string}){
+  if(input.provisionalName===input.resolvedName)return
+  const pool=getSuperadminPool()
+  const column=await pool.query<{has_name:boolean}>(`
+    select exists (select 1 from information_schema.columns
+      where table_schema='public' and table_name='sites' and column_name='name') as has_name`)
+  if(!column.rows[0]?.has_name)return
+  await pool.query(`update public.sites set name=$5::text
+    where id=$1::uuid and org_id=$2::uuid and agency_id=$3::uuid and name=$4::text`,
+    [input.siteId,input.clientId,input.agencyId,input.provisionalName,input.resolvedName])
 }
 
 export async function POST(req: Request, ctx: { params: Promise<Params> }) {
@@ -479,11 +490,55 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     })
     const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
 
-    const runtimeIdentity = buildScopedImportRuntimeIdentity({
-      sourceUrl: importUrl.toString(),
-      clientId,
-      agencyId: actionContext.agencyId,
+    const runtimeIdentity = await resolveScopedImportRuntimeIdentity({
+      sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
+      captureRevision: 'github-complete-capture-v1',
     })
+    const proposedOwnershipSiteId = newScopedImportOwnershipSiteId({
+      sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
+    })
+    const lookupClient = await getSuperadminPool().connect()
+    let existingOwnershipSiteId: string | null
+    try {
+      existingOwnershipSiteId = await lookupImportOwnershipSiteId(lookupClient,{
+        runtimeSiteId:runtimeIdentity.siteId,clientId,agencyId:actionContext.agencyId,
+        domainHost:importUrl.host || null,
+      })
+    } finally {
+      lookupClient.release()
+    }
+    const expectedOwnershipSiteId = existingOwnershipSiteId ?? proposedOwnershipSiteId
+    const provisionalSiteName=buildSiteImportCreatePayload({
+      userProvidedSiteName:body.siteName,sourceUrl:importUrl.toString(),
+      documentTitle:null,clientId,agencyId:actionContext.agencyId,
+    }).name
+    let autoProvisionedGitHub = false
+    let githubCaptureSelected = await githubImportReady({agencyId:actionContext.agencyId,clientId,
+      siteId:expectedOwnershipSiteId})
+    if(!githubCaptureSelected && !stackiGithubSelected({agencyId:actionContext.agencyId,clientId,
+      siteId:expectedOwnershipSiteId,siteVersionId:runtimeIdentity.siteVersionId})){
+      const owner=configuredImportGitHubOwner()
+      if(owner){
+        const ownershipSiteId=await resolveOrCreateOwnershipSiteId({
+          runtimeSiteId:runtimeIdentity.siteId,clientId,agencyId:actionContext.agencyId,
+          siteName:provisionalSiteName,
+          domainHost:normalizeText(importUrl.host)||null,newSiteId:proposedOwnershipSiteId,
+        })
+        if(ownershipSiteId!==expectedOwnershipSiteId)
+          throw new Error('Import ownership changed before GitHub provisioning.')
+        const serviceClient=getSupabaseServiceRoleClient()
+        if(!serviceClient)throw new Error('site_github_binding_unavailable')
+        const binding=new SiteGitHubRepositoryBinding(serviceClient)
+        await new SiteGitHubRepositoryProvisioner(binding).ensure({
+          agencyId:actionContext.agencyId,clientId,siteId:ownershipSiteId,
+        },owner)
+        autoProvisionedGitHub=true
+        githubCaptureSelected=await githubImportReady({agencyId:actionContext.agencyId,clientId,
+          siteId:ownershipSiteId})
+      }
+    }
+    if (!githubCaptureSelected) return NextResponse.json({ok:false,
+      error:'Uvoz trenutno ni pripravljen za shranjevanje v GitHub. Zajem se ni začel.'}, {status:503})
     const preallocatedIdentity = await preallocateSiteVersionIdentity({
       siteId: runtimeIdentity.siteId,
       siteVersionId: runtimeIdentity.siteVersionId,
@@ -537,6 +592,12 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       clientId,
       agencyId: actionContext.agencyId,
     })
+    if(autoProvisionedGitHub&&expectedOwnershipSiteId===proposedOwnershipSiteId){
+      await updateProvisionalImportSiteName({siteId:expectedOwnershipSiteId,
+        agencyId:actionContext.agencyId,clientId,
+        provisionalName:provisionalSiteName,
+        resolvedName:createPayload.name})
+    }
     if (siteNameResolution.source !== 'user_provided') {
       diagnostics.push('SITE_IMPORT_SITE_NAME_FALLBACK_USED')
       console.info('[site-import] SITE_IMPORT_SITE_NAME_FALLBACK_USED', {
@@ -603,10 +664,28 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       )
     }
 
+    const ownershipSiteId = await resolveOrCreateOwnershipSiteId({
+      runtimeSiteId: preallocatedIdentity.siteId,
+      siteVersionId: preallocatedIdentity.siteVersionId,
+      clientId: createPayload.clientId,
+      agencyId: createPayload.agencyId,
+      siteName: createPayload.name,
+      domainHost: normalizeText(importUrl.host) || null,
+      newSiteId: proposedOwnershipSiteId,
+    })
+    if (ownershipSiteId !== expectedOwnershipSiteId) {
+      throw new Error('Import ownership changed after GitHub preflight.')
+    }
+
     const imported = await runScopedImportPipeline({
       snapshot,
       sourceUrl: importUrl.toString(),
       actor: `agency:client-scoped-import:${actionContext.actorMode}`,
+      ownershipScope: {
+        agencyId: actionContext.agencyId,
+        clientId,
+        siteId: ownershipSiteId,
+      },
       fallbackToLegacyOnPipelineFailure: false,
       runtimeIdentity: {
         siteId: preallocatedIdentity.siteId,
@@ -615,14 +694,9 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       multiPageDiscovery: body.multiPageDiscovery,
     })
 
-    const ownershipSiteId = await resolveOrCreateOwnershipSiteId({
-      runtimeSiteId: imported.siteId,
-      siteVersionId: imported.siteVersionId,
-      clientId: createPayload.clientId,
-      agencyId: createPayload.agencyId,
-      siteName: createPayload.name,
-      domainHost: normalizeText(importUrl.host) || null,
-    })
+    if (imported.siteId !== preallocatedIdentity.siteId || imported.siteVersionId !== preallocatedIdentity.siteVersionId) {
+      throw new Error('Imported runtime identity did not match preallocated site ownership.')
+    }
     diagnostics.push('SITE_IMPORT_SITE_CREATE_COMPLETED')
     console.info('[site-import] SITE_IMPORT_SITE_CREATE_COMPLETED', {
       siteId: ownershipSiteId,

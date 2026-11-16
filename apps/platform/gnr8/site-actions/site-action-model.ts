@@ -56,6 +56,8 @@ export type SiteActionRequest =
       strategy?: string
       outputAdapterId?: 'astro-static-site' | 'html-static-artifact'
       contactSourceTarget?: string
+      stackiBaseline?: import('../stacki/stacki-draft-contract').StackiDraftScope
+      stackiRevision?: import('../stacki/stacki-candidate-selection').StackiCandidateSelection
       acceptedFunctionalReductions?: import('@gnr8/runtime-contracts').AcceptedFunctionalReductions
     }
   | {

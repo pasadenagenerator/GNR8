@@ -1,4 +1,8 @@
 import 'server-only'
+import { loadCapturedContentReview } from './captured-content-review-loader'
+import type { CapturedContentReview } from '@/gnr8/architecture/captured-content-review'
+import { createVerifiedRetainedAssetReader } from '@/gnr8/output-adapters/verified-retained-asset'
+import type { RawTemplateSiteFileMeta } from '@/gnr8/runtime/types'
 
 import { toSiteEntity, type RawSiteRow, type SiteEntity } from '@/gnr8/site/site-entity'
 import { resolveSiteWorkspacePreview, type SitePreviewType, type SiteWorkspacePreviewReadiness } from '@/gnr8/site/site-preview-contract'
@@ -18,6 +22,7 @@ import {
   type ReconstructionReadinessProjection,
 } from '@/gnr8/site/evidence-capture-baseline-read-model'
 import { getSupabasePageReadClient } from '@/src/auth/supabase-page-read-client'
+import {getSiteVersion,isGitBackedImportMarker} from '@/gnr8/runtime/runtime-store'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -290,6 +295,7 @@ export type SiteWorkspaceReadModel = {
     }
   }
   multiPageImport: MultiPageImportOperatorSummary
+  capturedContentReview?: CapturedContentReview | null
   originalMirrorFidelity: OriginalMirrorFidelityProjection
   reconstructionReadiness: ReconstructionReadinessProjection
   actions: {
@@ -591,11 +597,17 @@ type RuntimeRowArbitrationResult = {
 const ARBITRATION_FALLBACK_WAVE_WINDOW_MS = 10 * 60 * 1000
 
 function compareRuntimeRowsByRecency(a: RuntimeVersionRow, b: RuntimeVersionRow): number {
-  const updatedDelta = toEpoch(a.updated_at) - toEpoch(b.updated_at)
-  if (updatedDelta !== 0) return updatedDelta
-
-  const createdDelta = toEpoch(a.created_at) - toEpoch(b.created_at)
+  // A review or other metadata write can update an older capture. Runtime
+  // ordering follows the creation of the immutable version, not its edits.
+  const aCreated = toEpoch(a.created_at)
+  const bCreated = toEpoch(b.created_at)
+  const createdDelta = aCreated - bCreated
   if (createdDelta !== 0) return createdDelta
+
+  if (!aCreated && !bCreated) {
+    const updatedDelta = toEpoch(a.updated_at) - toEpoch(b.updated_at)
+    if (updatedDelta !== 0) return updatedDelta
+  }
 
   return String(a.id ?? '').localeCompare(String(b.id ?? ''))
 }
@@ -745,7 +757,7 @@ function selectPrimaryRuntimeVersionRow(runtimeRows: RuntimeVersionRow[]): Runti
   const candidates = runtimeRows.map((row) => {
     const summary = parseImportProvenanceSummary(row.import_provenance_summary)
     const ranking = scoreRuntimeRowForRenderedArbitration(summary)
-    const recencyEpoch = Math.max(toEpoch(row.updated_at), toEpoch(row.created_at))
+    const recencyEpoch = toEpoch(row.created_at) || toEpoch(row.updated_at)
     return {
       row,
       summary,
@@ -758,16 +770,24 @@ function selectPrimaryRuntimeVersionRow(runtimeRows: RuntimeVersionRow[]): Runti
   })
 
   const latest = candidates.slice().sort((left, right) => compareRuntimeRowsByRecency(right.row, left.row))[0] ?? null
-  const waveKey = latest?.waveKey ?? ''
-  const inSameWave = candidates.filter((candidate) => {
+  // Preparation reserves a DRAFT before its artifact is bound. Keep that row
+  // visible as latest progress, but do not replace a usable workspace with it.
+  const usableCandidates = candidates.filter(candidate =>
+    normalizeText(candidate.row.state).toUpperCase() !== 'DRAFT' || toTextOrNull(candidate.row.artifact_id) !== null,
+  )
+  const primaryCandidates = usableCandidates.length > 0 ? usableCandidates : candidates
+  const primaryLatest = primaryCandidates.slice().sort((left, right) => compareRuntimeRowsByRecency(right.row, left.row))[0] ?? latest
+  const waveKey = primaryLatest?.waveKey ?? ''
+  const inSameWave = primaryCandidates.filter((candidate) => {
     if (candidate.waveKey !== waveKey) return false
     if (!waveKey.startsWith('ownership-site:')) return true
-    return Math.abs(candidate.recencyEpoch - (latest?.recencyEpoch ?? 0)) <= ARBITRATION_FALLBACK_WAVE_WINDOW_MS
+    return Math.abs(candidate.recencyEpoch - (primaryLatest?.recencyEpoch ?? 0)) <= ARBITRATION_FALLBACK_WAVE_WINDOW_MS
   })
-  const evaluationPool = inSameWave.length > 0 ? inSameWave : candidates
+  const evaluationPool = inSameWave.length > 0 ? inSameWave : primaryCandidates
   const selected = evaluationPool.slice().sort((left, right) => compareRuntimeRowCandidates(right, left))[0] ?? latest
 
   const diagnostics: string[] = ['RENDERED_RUN_ARBITRATION_STARTED', 'RENDERED_RUN_EVALUATED', 'RENDERED_RUN_SELECTED_AS_PRIMARY']
+  if (latest && !primaryCandidates.includes(latest)) diagnostics.push('UNBOUND_DRAFT_RETAINED_AS_PROGRESS_ONLY')
   if (latest && selected && latest.row.id !== selected.row.id && selected.score > latest.score) {
     diagnostics.push('LATEST_RUN_SUPERSEDED_BY_BETTER_RENDERED_RUN')
     if (latest.renderedFailed && selected.usableRendered) {
@@ -2614,6 +2634,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   clientId: string
   siteId: string
   selectedVariantId?: string | null
+  includeCapturedContentReview?: boolean
   serverOwned?: boolean
 }): Promise<SiteWorkspaceReadModel | null> {
   const agencyId = normalizeUuid(input.agencyId, 'agencyId')
@@ -2797,6 +2818,17 @@ export async function getSiteWorkspaceReadModelForPage(input: {
   const latestRuntimeRow = runtimeArbitration.selected
   const latestImportRuntimeRow = runtimeArbitration.latest ?? latestRuntimeRow
   const latestImportRuntimeSiteVersionId = toTextOrNull(latestImportRuntimeRow?.id)
+  const gitBackedVersionIds = new Set<string>()
+  let latestImportSource: Awaited<ReturnType<typeof getSiteVersion>> = null
+  if (latestImportRuntimeSiteVersionId && latestImportRuntimeRow?.artifact_id &&
+      isGitBackedImportMarker(latestImportRuntimeRow.import_provenance_summary)) {
+    gitBackedVersionIds.add(latestImportRuntimeSiteVersionId)
+    const source = await getSiteVersion(latestImportRuntimeSiteVersionId)
+    if (!source || source.siteId !== latestImportRuntimeRow.site_id ||
+        source.artifactId !== latestImportRuntimeRow.artifact_id) throw new Error('GITHUB_IMPORT_SOURCE_IDENTITY_MISMATCH')
+    latestImportSource = source
+    latestImportRuntimeRow.import_provenance_summary = source.importProvenanceSummary
+  }
   const runtimeArbitrationDiagnostics = [...new Set(runtimeArbitration.diagnostics)].sort((a, b) => a.localeCompare(b))
   const runtimeSnapshot: RuntimeSnapshot | null = latestRuntimeRow
     ? {
@@ -2890,6 +2922,20 @@ export async function getSiteWorkspaceReadModelForPage(input: {
 
     if (!pageResult.error && Array.isArray(pageResult.data)) {
       pageRows = pageResult.data as RuntimePageVersionRow[]
+    }
+    if (selectedRuntimeRow?.artifact_id && (gitBackedVersionIds.has(selectedRuntimeSiteVersionId) ||
+        isGitBackedImportMarker(selectedRuntimeRow.import_provenance_summary))) {
+      const source = selectedRuntimeSiteVersionId === latestImportRuntimeSiteVersionId && latestImportSource
+        ? latestImportSource : await getSiteVersion(selectedRuntimeSiteVersionId)
+      if (!source || source.siteId !== selectedRuntimeRow.site_id ||
+          source.artifactId !== selectedRuntimeRow.artifact_id) throw new Error('GITHUB_IMPORT_SOURCE_IDENTITY_MISMATCH')
+      selectedRuntimeRow.import_provenance_summary = source.importProvenanceSummary
+      pageRows = source.pages.map(page => ({
+        id: page.id, site_version_id: page.siteVersionId, page_id: page.pageId,
+        path: page.path, title: page.title, structure_model: page.structureModel,
+        content_model: page.contentModel, semantic_signals: page.semanticSignals,
+        migration_governance: page.migrationGovernance ?? null,
+      }))
     }
   }
 
@@ -3080,6 +3126,19 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     latestImportRuntimeRow?.import_provenance_summary ?? null,
   )
   const originalMirrorFidelity = buildOriginalMirrorFidelityProjection(evidenceCaptureBaselineArtifact)
+  let capturedContentReview: CapturedContentReview | null = null
+  if (input.includeCapturedContentReview && rawTemplateArtifact?.id && rawTemplateArtifact.site_id && rawTemplateArtifact.site_version_id === latestImportRuntimeSiteVersionId && rawTemplateArtifact.entry_html_path && isRecord(rawTemplateArtifact.file_map)) {
+    const artifact = rawTemplateArtifact
+    const read = createVerifiedRetainedAssetReader(supabase)
+    capturedContentReview = await loadCapturedContentReview({
+      siteId: artifact.site_id!, siteVersionId: artifact.site_version_id!, artifactId: artifact.id!,
+      entryHtmlPath: artifact.entry_html_path!, fileMap: artifact.file_map as Record<string, RawTemplateSiteFileMeta>,
+      provenance: latestImportRuntimeRow?.import_provenance_summary as RuntimeImportProvenanceSummary | null,
+      baseline: evidenceCaptureBaselineArtifact,
+      read: path => read({siteId:artifact.site_id!, siteVersionId:artifact.site_version_id!, path}),
+    })
+  }
+
   const reconstructionReadiness = buildReconstructionReadinessProjection(evidenceCaptureBaselineArtifact)
   const diagnosticsSummary = Array.from(
     new Set([
@@ -3191,6 +3250,7 @@ export async function getSiteWorkspaceReadModelForPage(input: {
     },
     multiPageImport: multiPageImportOperatorSummary,
     originalMirrorFidelity,
+    capturedContentReview,
     reconstructionReadiness,
     actions: {
       currentStatus: normalizedSiteActions.find((action) => action.status === 'running')?.status ?? (lastAction?.status ?? 'idle'),

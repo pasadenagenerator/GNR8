@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { formatVariantTimestamp, useVariantNavigation } from './VariantNavigation'
 
-import { createRetainedPresentationSettings } from '@gnr8/runtime-contracts'
+import { createRetainedPresentationSettings, parseAcceptedFunctionalReductions } from '@gnr8/runtime-contracts'
 
 import type { ContactSuggestionModel } from '@/gnr8/output-adapters/source-contact-suggestions'
 
@@ -105,14 +106,19 @@ function buildSiteRecentHref(input: {
 }
 
 export default function SiteActionsPanel(props: Props) {
+  const variantNavigation = useVariantNavigation()
   const router = useRouter()
   const pathname = usePathname() || ''
   const searchParams = useSearchParams()
 
+  const [refreshPending, startRefresh] = useTransition()
   const [runningType, setRunningType] = useState<SiteActionType | null>(null)
   const [strategyInput, setStrategyInput] = useState('More visual')
   const [outputAdapterId, setOutputAdapterId] = useState<'default' | 'html-static-artifact'>('default')
   const [presentation, setPresentation] = useState(false)
+  const [sourceLinks, setSourceLinks] = useState(false)
+  const [sourceMediaLinks, setSourceMediaLinks] = useState('')
+  const [removeTrackingAndChat, setRemoveTrackingAndChat] = useState(false)
   const [nativeContact, setNativeContact] = useState(false)
   const recipientEdited = useRef(false)
   const [suggestions, setSuggestions] = useState<ContactSuggestionModel | null>(null)
@@ -130,7 +136,7 @@ export default function SiteActionsPanel(props: Props) {
   const [localError, setLocalError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!presentation || !nativeContact) { setRecipientConfirmed(false); return }
+    if ((!presentation && !sourceLinks) || !nativeContact) { setRecipientConfirmed(false); return }
     let active = true
     setRecipientConfirmed(false)
     setSuggestions(null)
@@ -144,7 +150,7 @@ export default function SiteActionsPanel(props: Props) {
         if (!recipientEdited.current) setRecipient(candidates.length === 1 ? candidates[0] : '')
       }).catch(() => { if (active) setSuggestionError('Import suggestions could not be loaded. Refresh the import source before confirming.') })
     return () => { active = false }
-  }, [props.siteId, props.agencyId, props.clientId, props.lastRunAt, suggestionRefresh, presentation, nativeContact])
+  }, [props.siteId, props.agencyId, props.clientId, props.lastRunAt, suggestionRefresh, presentation, sourceLinks, nativeContact])
 
   const isRunning = props.currentStatus === 'running' || runningType != null
 
@@ -156,10 +162,13 @@ export default function SiteActionsPanel(props: Props) {
   const canPublish = props.canPublish && !isRunning
 
   useEffect(() => {
-    if (props.currentStatus !== 'running') return
-    const timer = window.setInterval(() => router.refresh(), 2_000)
-    return () => window.clearInterval(timer)
-  }, [props.currentStatus, router])
+    if (props.currentStatus !== 'running' || refreshPending) return
+    // Wait for the previous server render to finish before scheduling another read.
+    const timer = window.setTimeout(() => {
+      startRefresh(() => router.refresh())
+    }, 10_000)
+    return () => window.clearTimeout(timer)
+  }, [props.currentStatus, props.lastAction, refreshPending, router])
 
   const activeVariant = useMemo(
     () => props.variants.rows.find((variant) => variant.id === props.variants.selectedVariantId) ?? null,
@@ -175,10 +184,10 @@ export default function SiteActionsPanel(props: Props) {
       if (!confirmed) return
     }
 
-    const presentationSettings = presentation ? createRetainedPresentationSettings({
+    const presentationSettings = sourceLinks ? parseAcceptedFunctionalReductions({kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',sourceMediaLinks:sourceMediaLinks.split('\n').map(value => value.trim()).filter(Boolean),...(removeTrackingAndChat ? {trackingAndChat:'remove'} : {}),contact:{recipient,recipientConfirmed:recipientConfirmed && Boolean(suggestions)}}) : presentation ? createRetainedPresentationSettings({
       excludedPaths, nativeContact, recipient, recipientConfirmed: recipientConfirmed && Boolean(suggestions),
     }) : undefined
-    if (type === 'generate_redesign' && outputAdapterId === 'default' && presentation && !presentationSettings) {
+    if (type === 'generate_redesign' && outputAdapterId === 'default' && (presentation || sourceLinks) && !presentationSettings) {
       setLocalError('Check exact route exclusions and confirm the contact recipient before generating.')
       return
     }
@@ -200,7 +209,7 @@ export default function SiteActionsPanel(props: Props) {
             type === 'generate_redesign' && outputAdapterId === 'html-static-artifact'
               ? outputAdapterId
               : undefined,
-          acceptedFunctionalReductions: type === 'generate_redesign' && outputAdapterId === 'default' && presentation ? presentationSettings :
+          acceptedFunctionalReductions: type === 'generate_redesign' && outputAdapterId === 'default' && (presentation || sourceLinks) ? presentationSettings :
             type === 'generate_redesign' &&
             outputAdapterId === 'default' &&
             acceptLegacyFormReductions
@@ -275,11 +284,11 @@ export default function SiteActionsPanel(props: Props) {
         <h3 style={{ margin: 0, fontSize: 14, color: '#0f172a' }}>Site Actions</h3>
         <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
           Status: <strong>{isRunning ? 'running' : props.lastAction.status}</strong>
-          {props.lastRunAt ? ` · Last run: ${new Date(props.lastRunAt).toLocaleString()}` : ''}
+          {props.lastRunAt ? ` · Last run: ${formatVariantTimestamp(props.lastRunAt)}` : ''}
         </p>
         <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
           Last action: <strong>{actionTypeLabel(props.lastAction.type)}</strong>
-          {props.lastAction.completedAt ? ` · ${new Date(props.lastAction.completedAt).toLocaleString()}` : ''}
+          {props.lastAction.completedAt ? ` · ${formatVariantTimestamp(props.lastAction.completedAt)}` : ''}
         </p>
       </div>
 
@@ -339,15 +348,23 @@ export default function SiteActionsPanel(props: Props) {
               }}
             >
               <label>
-                <input type='checkbox' checked={presentation} disabled={!canRunMigration} onChange={event => { setPresentation(event.target.checked); if (event.target.checked) setAcceptLegacyFormReductions(false) }} />
+                <input type='checkbox' checked={presentation} disabled={!canRunMigration} onChange={event => { setPresentation(event.target.checked); if (event.target.checked) { setAcceptLegacyFormReductions(false); setSourceLinks(false) } }} />
                 For this candidate: remove recognized search; replace maps with their address and OpenStreetMap link; remove the recognized tracking and consent bundle together.
               </label>
-              {presentation ? <>
-                <label>Exclude these obsolete routes from this site&apos;s candidate (one exact path per line; homepage cannot be excluded)
+              <label>
+                <input type='checkbox' checked={sourceLinks} disabled={!canRunMigration} onChange={event => {setSourceLinks(event.target.checked); setRecipientConfirmed(false); if(event.target.checked){setPresentation(false);setAcceptLegacyFormReductions(false);setNativeContact(true)}}} />
+                Keep captured pages; link omitted routes and complex forms to the original site. Use GNR8 for supported ordinary contact forms with the recipient confirmed below. Unknown scripts still block generation.
+              </label>
+              {sourceLinks ? <label><input type='checkbox' checked={removeTrackingAndChat} disabled={!canRunMigration} onChange={event => setRemoveTrackingAndChat(event.target.checked)} /> Omit recognized tracking and Facebook chat from this candidate. Keep native contact, page content and video controls.</label> : null}
+              {sourceLinks ? <label>Original animation links (optional, one exact HTTPS GIF URL per line). Only listed images from this source site become clearly labelled links; other images remain included.
+                <textarea value={sourceMediaLinks} disabled={!canRunMigration} onChange={event => setSourceMediaLinks(event.target.value)} rows={3} />
+              </label> : null}
+              {presentation || sourceLinks ? <>
+                {presentation ? <label>Exclude these obsolete routes from this site&apos;s candidate (one exact path per line; homepage cannot be excluded)
                   <textarea value={excludedPaths} disabled={!canRunMigration} onChange={event => setExcludedPaths(event.target.value)} rows={4} style={{display:'block',width:'100%'}} />
-                </label>
+                </label> : null}
                 <p>Captured files remain stored. Unknown scripts and unsupported forms block generation.</p>
-                <label><input type='checkbox' checked={nativeContact} disabled={!canRunMigration} onChange={event => setNativeContact(event.target.checked)} /> Replace supported ordinary contact forms with GNR8 forms, preserving their layout and required fields.</label>
+                <label><input type='checkbox' checked={nativeContact} disabled={!canRunMigration || sourceLinks} onChange={event => setNativeContact(event.target.checked)} /> Replace supported ordinary contact forms with GNR8 forms, preserving their layout and required fields.</label>
                 {nativeContact ? <>
                   <p>One confirmed recipient applies to all supported contact forms on this site. Public contact addresses are suggestions, not proof of the original form’s server recipient.</p>
                   {suggestionError ? <p role="alert">{suggestionError}</p> : !suggestions ? <p>Loading retained import evidence…</p> : suggestions.suggestions.length ? <div>
@@ -371,7 +388,7 @@ export default function SiteActionsPanel(props: Props) {
                   type='checkbox'
                   checked={acceptLegacyFormReductions}
                   disabled={!canRunMigration}
-                  onChange={(event) => { setAcceptLegacyFormReductions(event.target.checked); if (event.target.checked) setPresentation(false) }}
+                  onChange={(event) => { setAcceptLegacyFormReductions(event.target.checked); if (event.target.checked) {setPresentation(false);setSourceLinks(false)} }}
                 />
                 <span>
                   Accept form reductions for this generated candidate only: replace legacy contact forms with a disclosed email link and comment forms with links to the original articles.
@@ -458,19 +475,10 @@ export default function SiteActionsPanel(props: Props) {
         <label style={{ fontSize: 12, color: '#334155' }}>
           Variant
           <select
-            value={props.variants.selectedVariantId ?? ''}
-            onChange={(event) => {
-              const value = normalizeText(event.target.value) || null
-              const params = new URLSearchParams(searchParams?.toString() ?? '')
-              if (value) {
-                params.set('variant', value)
-              } else {
-                params.delete('variant')
-              }
-              const query = params.toString()
-              router.replace(query ? `${pathname}?${query}` : pathname)
-              router.refresh()
-            }}
+            value={variantNavigation?.selected ?? props.variants.selectedVariantId ?? ''}
+            disabled={!variantNavigation || variantNavigation.pending}
+            aria-busy={variantNavigation?.pending ?? false}
+            onChange={(event) => variantNavigation?.select(event.target.value)}
             style={{
               marginTop: 4,
               width: '100%',
@@ -484,11 +492,12 @@ export default function SiteActionsPanel(props: Props) {
             <option value=''>Latest runtime</option>
             {props.variants.rows.map((variant) => (
               <option key={variant.id} value={variant.id}>
-                {variant.label} · {new Date(variant.createdAt).toLocaleString()}
+                {variant.label} · {formatVariantTimestamp(variant.createdAt)}
               </option>
             ))}
           </select>
         </label>
+        {variantNavigation?.pending ? <p role="status">Izbiram različico … Počakajte pred odpiranjem urejevalnika.</p> : null}
         {activeVariant ? (
           <div style={{ display: 'grid', gap: 4 }}>
             <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>

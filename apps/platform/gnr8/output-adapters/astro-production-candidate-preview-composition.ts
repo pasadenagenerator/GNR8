@@ -1,4 +1,6 @@
 import "server-only";
+import { renderReviewedExport } from "./astro-export-resources";
+import { validateAstroResolvedCandidateRecord } from "./astro-production-candidate-object-record";
 
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 import { normalizeRetainedHeroWrapperSizing } from "@/src/public-site/retained-hero-slider";
@@ -26,6 +28,7 @@ import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-
 
 export type AstroProductionCandidatePreviewRenderResult = {
   html: string;
+  isolatedExport?: {status:number;csp:string};
   source: "astro_internal_preview_candidate";
   candidateId: string;
   runtimeSiteId: string;
@@ -75,6 +78,11 @@ export async function renderAstroProductionCandidatePreview(input: {
   path: string;
 }): Promise<AstroProductionCandidatePreviewRenderResult> {
   const { record } = input;
+  if(record.candidate.exportedFiles) {
+    validateAstroResolvedCandidateRecord(record);
+    const rendered=renderReviewedExport(record.candidate.exportedFiles,record.candidate.manifest.provenance.sourceSnapshotSha256,input.path);
+    return {html:rendered.html,isolatedExport:{status:rendered.status,csp:rendered.csp},source:'astro_internal_preview_candidate',candidateId:record.identity.candidateId,runtimeSiteId:record.identity.runtimeSiteId,siteVersionId:record.identity.siteVersionId,path:input.path,fallbackUsed:false};
+  }
   const preview = await renderSiteVersionPreview({
     siteVersionId: record.identity.siteVersionId,
     path: input.path,

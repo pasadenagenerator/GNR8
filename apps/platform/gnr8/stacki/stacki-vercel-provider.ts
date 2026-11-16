@@ -1,8 +1,14 @@
+import type { StackiAssetDelivery } from './stacki-github-delivery';
+import { STACKI_RETAINED_DIRECTORY, type StackiRuntimeAsset } from './stacki-retained-assets';
 import { Sandbox, Snapshot } from "@vercel/sandbox";
 import { parseStackiSave, STACKI_CHECKPOINT_MAX_BYTES, StackiDraftError, type StackiDraftFile } from "./stacki-draft-contract";
 import type { StackiSessionProvider } from "./stacki-session-routes";
 import { type StackiSession, type StackiSaveOperation } from "./stacki-session-store";
 import { checkpointName } from "./stacki-runtime-checkpoint";
+import { resolvedGitHubTarget } from './stacki-github-config';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 const root = "/vercel/sandbox/gnr8";
 /** Explicitly ephemeral: no auto-resume, snapshots, drives or egress on user launches. */
@@ -11,8 +17,16 @@ export class VercelStackiProvider implements StackiSessionProvider {
     private readonly snapshots: Pick<typeof Snapshot, "get"> = Snapshot) {
     if (!/^snap_[A-Za-z0-9]+$/.test(snapshotId)) throw new StackiDraftError(503, "STACKI_RUNTIME_NOT_CONFIGURED");
   }
-  async start(session: StackiSession, files: StackiDraftFile[]) {
+  async start(session: StackiSession, files: StackiDraftFile[], retainedAssets:StackiRuntimeAsset[] = [], delivery?: StackiAssetDelivery) {
     parseStackiSave({ expectedRevision: session.baseRevision, files });
+    const names=new Set<string>();let retainedBytes=0;
+    for(const asset of retainedAssets){
+      retainedBytes+=asset.body.length;
+      if(!/^[a-f0-9]{64}$/.test(asset.name)||names.has(asset.name)||asset.body.length>12*1024*1024||
+        retainedAssets.length>2000||retainedBytes>128*1024*1024)throw new StackiDraftError(422,'STACKI_RETAINED_ASSETS_INVALID');
+      names.add(asset.name);
+    }
+    if (delivery && retainedBytes > 12 * 1024 * 1024) throw new StackiDraftError(413, 'STACKI_CHECKPOINT_TOO_LARGE');
     const remaining = session.expiresAt - Date.now();
     if (remaining < 120_000) throw new StackiDraftError(410, "STACKI_SESSION_EXPIRED");
     try {
@@ -24,6 +38,17 @@ export class VercelStackiProvider implements StackiSessionProvider {
         throw new StackiDraftError(503, "STACKI_RUNTIME_REFRESH_REQUIRED");
       throw error;
     }
+    const github = Boolean(await resolvedGitHubTarget(session.scope));
+    const studioAssets = github ? await Promise.all([
+      ['studio-client.bundle.js','50b962be90f0dc8cdcd85fe9ca93abde7f8110d0eb5a7f7d6ea3636144f72291'],
+      ['studio-client.bundle.css','e10129bfb34852fc62db3e93652c4bd87a2808670aa06ed70e1054088dff05af'],
+    ].map(async ([name, expected]) => {
+      const body = await readFile(join(process.cwd(),'gnr8/stacki',name)).catch(() =>
+        readFile(join(process.cwd(),'apps/platform/gnr8/stacki',name)));
+      if (createHash('sha256').update(body).digest('hex') !== expected)
+        throw new StackiDraftError(503,'STACKI_RUNTIME_REFRESH_REQUIRED');
+      return {path:`${root}/studio/dist/${name.endsWith('.css')?'studio.css':'studio.js'}`,content:body};
+    })) : [];
     const sandbox = await this.sdk.create({
       name: this.name(session), source: { type: "snapshot", snapshotId: this.snapshotId },
       persistent: false, timeout: remaining, resources: { vcpus: 2 },
@@ -33,22 +58,47 @@ export class VercelStackiProvider implements StackiSessionProvider {
       const manifest = await readBounded(sandbox, `${root}/runtime.json`, 16_384);
       const pinned = manifest ? JSON.parse(manifest.toString()) : null;
       if (pinned?.format !== "gnr8-stacki-runtime:v1" || pinned.platform !== "linux" ||
-          pinned.studio !== "0.1.59" || pinned.astro !== "5.18.2" || pinned.checkpointHook !== 2 ||
-          pinned.checkpointMaxBytes !== STACKI_CHECKPOINT_MAX_BYTES || pinned.siteDependenciesInstalled !== true ||
-          pinned.upstreamCommit !== "36bab90a9ba5fb19134a13f6f1a9e71b2ea7ce24")
+          pinned.node !== "26.13.0" || pinned.studio !== "0.1.94" || pinned.astro !== "7.4.4" || pinned.checkpointHook !== 2 || pinned.entryReopenVersion !== 1 ||
+          pinned.checkpointMaxBytes !== STACKI_CHECKPOINT_MAX_BYTES || pinned.siteDependenciesInstalled !== true || (delivery && pinned.lazyAssetsVersion !== 1) ||
+          pinned.upstreamCommit !== "2ed510fbaf19e120c642f96a8e3047f15bcd71ab")
         throw new StackiDraftError(503, "STACKI_RUNTIME_REFRESH_REQUIRED");
       const clean = await sandbox.runCommand({ cmd: "node", args: ["--input-type=module", "-e",
         `import{readdir}from'node:fs/promises';const root=${JSON.stringify(root)};` +
         `const names=await readdir(root);if(names.some(n=>!['runtime.json','studio','entry.mjs','capture.mjs','site'].includes(n)))process.exit(1);` +
         `const site=await readdir(root+'/site');if(site.length!==1||site[0]!=='node_modules')process.exit(1);`] });
       if (clean.exitCode !== 0) throw new Error("STACKI_RUNTIME_IMAGE_NOT_CLEAN");
+      if (github) {
+        // The pinned image predates the GNR8 Git panel. Replace only its
+        // verified browser bundle in this ephemeral, GitHub-selected VM.
+        const originalCheck = await sandbox.runCommand({ cmd: "node", args: ["--input-type=module", "-e", `
+          import {readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          const path=${JSON.stringify(`${root}/studio/dist/studio.js`)};
+          if(createHash('sha256').update(await readFile(path)).digest('hex')!==
+            '92442222a57a2dce89a1e84e1c66d97644ee4085acc5e61907a52fcb70a5bb12')process.exit(2);
+        `] });
+        if (originalCheck.exitCode !== 0) throw new StackiDraftError(503, "STACKI_RUNTIME_REFRESH_REQUIRED");
+        await sandbox.writeFiles(studioAssets);
+      }
       const origin = sandbox.domain(4357);
       if (new URL(origin).protocol !== "https:") throw new Error("STACKI_PROVIDER_ORIGIN_INVALID");
       // The snapshot contains clean, pinned dependencies; no draft or credentials.
-      await sandbox.writeFiles(files.map(file => ({ path: `${root}/site/${file.path}`, content: Buffer.from(file.base64, "base64") })));
+      const projectFiles = files.map(file => ({ path: `${root}/site/${file.path}`, content: Buffer.from(file.base64, "base64") }));
+      const localAssets = retainedAssets.map(asset => ({path:`${root}/site/${STACKI_RETAINED_DIRECTORY}/${asset.name}`,content:asset.body}));
+      if (delivery) {
+        // The SDK streams a single archive. Hundreds of small linked SVG/CSS
+        // files need no per-16-file round trips before the first page.
+        await sandbox.writeFiles([...projectFiles, ...localAssets]);
+      } else {
+        await sandbox.writeFiles(projectFiles);
+        for (let offset = 0; offset < localAssets.length; offset += 16)
+          await sandbox.writeFiles(localAssets.slice(offset, offset + 16));
+      }
       await sandbox.writeFiles([{ path: `${root}/session.json`, content: Buffer.from(JSON.stringify({
         publicOrigin: origin, entryTicket: session.ticket, expiresAt: session.expiresAt - 60_000,
-        persistence: { platformOrigin: session.platformOrigin, sessionId: session.id, revision: session.baseRevision },
+        ...(delivery ? {assetDelivery:delivery} : {}),
+        persistence: { platformOrigin: session.platformOrigin, sessionId: session.id, revision: session.baseRevision,
+          storage: github ? 'github' : 'gnr8' },
       })) }]);
       await sandbox.runCommand({ cmd: "node", args: [`${root}/entry.mjs`], detached: true });
       for (let n = 0; n < 60; n++) {

@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { createStackiEditorGateway, STACKI_SESSION_MAX_MS } from "./stacki-editor-gateway";
 
-async function fixture(t: test.TestContext, lifetime = 60_000) {
+async function fixture(t: test.TestContext, lifetime = 60_000, assetDelivery?: import('./stacki-github-delivery').StackiAssetDelivery) {
   let seen: IncomingHttpHeaders = {};
   const upstream = createServer((req, res) => {
     seen = req.headers;
@@ -32,7 +32,7 @@ async function fixture(t: test.TestContext, lifetime = 60_000) {
   const ticket = randomBytes(32).toString("base64url");
   const gateway = createStackiEditorGateway({
     publicOrigin: origin, upstreamPort: (upstream.address() as AddressInfo).port,
-    entryTicket: ticket, expiresAt: Date.now() + lifetime, allowLocalHttp: true,
+    entryTicket: ticket, expiresAt: Date.now() + lifetime, allowLocalHttp: true, assetDelivery,
   });
   await gateway.listen(port);
   t.after(async () => {
@@ -61,6 +61,16 @@ test("entry is one-use; every editor path needs a session; no secrets reach Stud
   const setCookie = simultaneous.find(r => r.ok)!.headers.get("set-cookie")!;
   assert.match(setCookie, /HttpOnly; SameSite=Strict/);
   const cookie = setCookie.split(";")[0];
+  const returningEntry = await fetch(`${f.origin}/__gnr8/enter`, { headers: { Cookie: cookie }, redirect: "manual" });
+  assert.equal(returningEntry.headers.get("location"), "/studio#", "do not inherit the entry ticket fragment");
+  // Cross-site top-level GET has no Strict cookie; subsequent same-origin
+  // entry POST carries it. The original ticket remains consumed for everyone else.
+  assert.equal((await fetch(`${f.origin}/__gnr8/enter`)).status, 200);
+  assert.equal((await fetch(`${f.origin}/__gnr8/enter`, { method: "POST",
+    headers: { Cookie: cookie, Origin: f.origin, "Content-Type": "text/plain;charset=UTF-8" }, body: f.ticket })).status, 200);
+  assert.equal((await f.redeem()).status, 403);
+  assert.equal((await fetch(`${f.origin}/__gnr8/enter`, { method: "POST",
+    headers: { Cookie: cookie, Origin: "https://evil.example" }, body: f.ticket })).status, 403);
   const response = await fetch(f.origin + "/studio", { headers: {
     Cookie: `${cookie}; platform-session=private`, Authorization: "Bearer platform-secret",
     "X-Forwarded-Host": "evil.example",
@@ -168,4 +178,26 @@ test("unsafe hosted configuration fails before a server starts", () => {
     { upstreamPort: 0 }, { expiresAt: Date.now() - 1 },
     { expiresAt: Date.now() + STACKI_SESSION_MAX_MS + 60_000 },
   ]) assert.throws(() => createStackiEditorGateway({ ...valid, ...patch }), /CONFIG_INVALID/);
+});
+
+
+test('lazy asset redirects require the editor cookie, exact path and GET/HEAD; other paths stay local', async t => {
+  const path='/api/gnr8/runtime/preview-assets/site_f34311640a819fb56f3c/22222222-2222-4222-8222-222222222222/image';
+  const signed='https://storage.invalid/object/sign/private/exact-hash?token=temporary';
+  const f=await fixture(t,60000,{commit:'a'.repeat(40),redirects:{[path]:signed}});
+  assert.equal((await fetch(f.origin+path,{redirect:'manual'})).status,403);
+  const cookie=(await f.redeem()).headers.get('set-cookie')!.split(';')[0];
+  for(const method of ['GET','HEAD']) {
+    const result=await fetch(f.origin+path+'?v=1',{method,headers:{Cookie:cookie},redirect:'manual'});
+    assert.equal(result.status,307);assert.equal(result.headers.get('location'),signed);
+    assert.equal(result.headers.get('cache-control'),'no-store');
+    assert.equal(result.headers.get('referrer-policy'),'no-referrer');
+  }
+  assert.equal((await fetch(f.origin+path,{method:'POST',headers:{Cookie:cookie,Origin:f.origin}})).status,405);
+  const other=await fetch(f.origin+path+'-different',{headers:{Cookie:cookie},redirect:'manual'});
+  assert.equal(other.status,200);assert.equal(other.headers.get('location'),null);
+  const cross=await fetch(f.origin+path,{headers:{Cookie:cookie,Origin:'https://other.invalid'},redirect:'manual'});
+  assert.equal(cross.status,403);
+  f.gateway.revoke();
+  assert.equal((await fetch(f.origin+path,{headers:{Cookie:cookie},redirect:'manual'})).status,403);
 });

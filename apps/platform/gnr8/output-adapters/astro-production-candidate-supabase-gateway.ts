@@ -1,4 +1,5 @@
 import "server-only";
+import { RESOURCE_RECORD_VERSION } from "./astro-export-resources";
 
 import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server";
 
@@ -86,7 +87,7 @@ export class SupabaseAstroProductionCandidateGateway implements AstroProductionC
     }
 
     const result = objectBacked
-      ? await this.rpc(ASTRO_CANDIDATE_OBJECT_REGISTRATION_RPC, {
+      ? await this.rpc(record.schemaVersion === RESOURCE_RECORD_VERSION ? "gnr8_register_astro_candidate_v4" : ASTRO_CANDIDATE_OBJECT_REGISTRATION_RPC, {
           p_record_canonical_text: serializeAstroObjectBackedCandidateRecord(record),
           p_unsigned_record_canonical_text: serializeAstroObjectBackedUnsignedRecord(record),
           p_registration_intent_canonical_text: serializeAstroObjectBackedRegistrationIntent(record),

@@ -1,3 +1,4 @@
+import type { StackiAssetDelivery } from './stacki-github-delivery';
 /**
  * Editor-runtime entry point, not a Platform request handler.
  *
@@ -6,6 +7,7 @@
  * an owner-authorized one-use entry ticket. No package installation, provider
  * calls, production publication or credential injection happens here.
  */
+import { captureStackiRuntimeFiles, stackiSourceSha256 } from "./stacki-runtime-files";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,15 +23,17 @@ export async function startStackiEditorRuntime(input: {
   entryTicket: string;
   expiresAt: number;
   allowLocalHttp?: boolean;
+  assetDelivery?: StackiAssetDelivery;
   /** Bundled module exporting captureStackiRuntimeFiles; requires patched Studio. */
   checkpointModule?: string;
-  persistence?: { platformOrigin: string; sessionId: string; revision: number };
+  persistence?: { platformOrigin: string; sessionId: string; revision: number; storage?: 'gnr8' | 'github' };
 }) {
   if (!Number.isInteger(input.gatewayPort) || input.gatewayPort < 1 || input.gatewayPort > 65535 ||
       input.gatewayPort === input.astroPort) throw new Error("STACKI_RUNTIME_PORT_INVALID");
   const gateway = createStackiEditorGateway({
     publicOrigin: input.publicOrigin, upstreamPort: input.astroPort,
     entryTicket: input.entryTicket, expiresAt: input.expiresAt, allowLocalHttp: input.allowLocalHttp,
+    assetDelivery: input.assetDelivery,
   });
   let child: ChildProcess | undefined;
   let closing: Promise<void> | undefined;
@@ -57,19 +61,21 @@ export async function startStackiEditorRuntime(input: {
     const studio = await realpath(input.studio);
     const astro = JSON.parse(await readFile(join(workspace, "node_modules/astro/package.json"), "utf8"));
     const manifest = JSON.parse(await readFile(join(studio, "package.json"), "utf8"));
-    if (astro.version !== "5.18.2" || astro.bin?.astro !== "astro.js" || manifest.version !== "0.1.59")
+    if (process.versions.node !== "26.13.0" || astro.version !== "7.4.4" || astro.bin?.astro !== "./bin/astro.mjs" || manifest.version !== "0.1.94")
       throw new Error("STACKI_RUNTIME_VERSION_NOT_VERIFIED");
     await mkdir(join(workspace, ".studio-state"), { recursive: true });
+    const restoredSourceSha = stackiSourceSha256(await captureStackiRuntimeFiles(workspace));
     await writeFile(join(workspace, "astro.studio.config.ts"),
       `import config from './astro.config.mjs';\nimport studio from ${JSON.stringify(pathToFileURL(join(studio, "dist/integration.mjs")).href)};\n` +
-      (input.checkpointModule ? `import {captureStackiRuntimeFiles} from ${JSON.stringify(pathToFileURL(input.checkpointModule).href)};\n` : "") +
+      (input.checkpointModule ? `import {captureStackiRuntimeFiles,stackiSourceSha256} from ${JSON.stringify(pathToFileURL(input.checkpointModule).href)};\n` : "") +
       `export default {...config,devToolbar:{enabled:false},integrations:[...(config.integrations??[]),` +
       `studio({...${JSON.stringify({ root: workspace, assets: join(studio, "dist"), port: input.astroPort })}` +
       (input.checkpointModule ? `,gnr8Checkpoint:()=>captureStackiRuntimeFiles(${JSON.stringify(workspace)})` : "") +
-      (input.persistence ? `,gnr8Persistence:${JSON.stringify(input.persistence)}` : "") + `})]};\n`);
+      (input.persistence ? `,gnr8Persistence:${JSON.stringify(input.persistence)}` : "") +
+      (input.persistence && input.checkpointModule ? `,gnr8SourceState:async()=>{const sourceSha256=stackiSourceSha256(await captureStackiRuntimeFiles(${JSON.stringify(workspace)}));return {sourceSha256,sourceUnchanged:sourceSha256===${JSON.stringify(restoredSourceSha)}}}` : "") + `})]};\n`);
     if (closing) throw new Error("STACKI_RUNTIME_EXPIRED");
     child = spawn(process.execPath, [
-      join(workspace, "node_modules/astro/astro.js"),
+      join(workspace, "node_modules/astro/bin/astro.mjs"),
       "dev", "--config", "./astro.studio.config.ts", "--port", String(input.astroPort), "--host", "127.0.0.1",
     ], {
       cwd: workspace, stdio: ["ignore", "pipe", "pipe"],

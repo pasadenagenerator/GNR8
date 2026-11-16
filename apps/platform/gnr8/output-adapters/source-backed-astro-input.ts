@@ -1,4 +1,6 @@
+import {materializeRetainedStylesheetDocument} from "../../src/public-site/materialize-retained-stylesheets";
 import { reduceRetainedPresentation, removableRetainedPresentationScript } from "./retained-presentation-reductions";
+import {projectMonoControls, projectAcceptedMediaLinks, removableMonoScript} from "./retained-mono-projection";
 import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
 import { CONTACT_FORM_SCRIPT } from "../../src/public-site/contact-form-runtime";
 import { replaceSupportedContactForm } from "../contact/contact-form";
@@ -19,7 +21,7 @@ import {
 } from "@/src/public-site/raw-template-runtime";
 
 import { createGeneratedOutputContentManifest, type GeneratedOutputContentManifest } from "./generated-output-eligibility";
-import { encodeGeneratedOutputRoutePath } from "./generated-output-route-path";
+import { encodeGeneratedOutputRoutePath, isExplicitExternalNavigationUrl } from "./generated-output-route-path";
 import { createAstroStaticSiteProjectManifest, type NormalizedStaticBusinessSiteContent, type NormalizedStaticSitePage } from "./astro-static-site-adapter";
 import type { OutputAdapterCapability } from "./output-adapter-selection";
 import { removeProvablyUnusedCssDependencyRules } from "./source-backed-css-dependency-analysis";
@@ -312,6 +314,7 @@ export function createSourceBackedAstroGenerationInput(input: {
     knownRoutes,
     outOfScopeSourceUrls,
     captureScopeLimitations,
+    uncapturedRoutesToSource: input.acceptedFunctionalReductions?.kind === "retained-source-links-v1",
     excludedRoutes,
     ownedAssetUrls: new Set(Object.keys(input.rawArtifact.fileMap).map(path => ownedAssetUrl(input.rawArtifact.siteId,input.rawArtifact.siteVersionId,path))),
     unsupported,
@@ -436,6 +439,11 @@ export function createSourceBackedAstroGenerationInput(input: {
             input.acceptedFunctionalReductions.contact
               ? "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Only supported ordinary contact forms are replaced by GNR8 forms. Sending requires server-side delivery and durable submission configuration; previews cannot send."
               : "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Contact forms remain unsupported.",
+          ] : input.acceptedFunctionalReductions.kind === "retained-source-links-v1" ? [
+            "Uncaptured routes and unsupported forms open the corresponding original page. Supported ordinary contact forms use the explicitly confirmed GNR8 recipient; previews cannot send.",
+            ...(input.acceptedFunctionalReductions.trackingAndChat === 'remove' ? ['Recognized tracking, its consent controls and Facebook chat are omitted.'] : []),
+            ...(input.acceptedFunctionalReductions.sourceMediaLinks?.length ? ['Explicitly selected large animations are displayed as labelled links to the original media, not embedded.'] : []),
+            'Recognized announcements and Wistia video use owned controls. Source parallax initialization is static; the original service worker is not installed on the generated host.',
           ] : [
             `Legacy contact forms were replaced with disclosed mailto links to ${input.acceptedFunctionalReductions.contactEmail}.`,
             "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
@@ -468,9 +476,21 @@ function normalizePage(input: {
   // Candidate previews intentionally disable scripts. Parse using the same
   // scripting mode so noscript fallbacks can be normalized before Astro
   // serializes them into a sandboxed document.
-  let document = parse(input.html, { scriptingEnabled: false }) as DefaultTreeAdapterMap["document"];
+  // A retained Redactor empty-style typo swallowed the following heading and
+  // paragraph tags into the attribute. Repair only this recognizable boundary;
+  // preserve the text instead of dropping the invalid style and its content.
+  const html = input.html.replace(/(<span\s+data-redactor-=""\s+)style=">(?=[^<]+<\/span><\/p><p class=")/g, '$1style="">');
+  let document = parse(html, { scriptingEnabled: false }) as DefaultTreeAdapterMap["document"];
   let elements = allElements(document);
   const unsupported: string[] = [];
+  // HTML recovery may retain stray quote tokens as attribute names. They have
+  // no valid serialized HTML representation and must not corrupt Astro output.
+  for (const element of elements) element.attrs = element.attrs.filter(attr => !/[\s"'<>/=\u0000-\u001f\u007f]/.test(attr.name));
+  if(input.acceptedFunctionalReductions?.kind === 'retained-source-links-v1') {
+    projectAcceptedMediaLinks(document,input.acceptedFunctionalReductions.sourceMediaLinks ?? [],sourcePageUrlForRoute(input.rawArtifact,input.siteVersion.importProvenanceSummary,input.path));
+    projectMonoControls(document,input.acceptedFunctionalReductions.trackingAndChat === 'remove',sourcePageUrlForRoute(input.rawArtifact,input.siteVersion.importProvenanceSummary,input.path));
+    elements=allElements(document);
+  }
   if (input.acceptedFunctionalReductions?.kind === "retained-presentation-v1") {
     unsupported.push(...reduceRetainedPresentation(document));
     elements = allElements(document);
@@ -503,6 +523,26 @@ function normalizePage(input: {
         ? commentReplacementMarkup(sourcePageUrl!)
         : contactReplacementMarkup(input.acceptedFunctionalReductions.contactEmail));
       replacedFormCount += 1;
+    }
+    elements = allElements(document);
+  } else if (input.acceptedFunctionalReductions?.kind === "retained-source-links-v1") {
+    let nativeForms = 0;
+    for (const form of forms) {
+      if (forms.length === 1 && replaceSupportedContactForm(form,input.path)) {
+        nativeForms++;
+      } else {
+        const sourceUrl = sourcePageUrlForRoute(input.rawArtifact,input.siteVersion.importProvenanceSummary,input.path);
+        if (!sourceUrl) { unsupported.push(`form_source_url_missing:${input.path}`); continue; }
+        replacedFormSecurityRuntime ||= formHasSecurityRuntime(form);
+        replaceNodeWithMarkup(form, `<aside data-gnr8-accepted-limitation="complex-form-source-link"><p>Ta obrazec je na voljo na izvirni strani.</p><a href="#" data-gnr8-source-link data-gnr8-source-href="${escapeHtml(sourceUrl)}">Odpri izvirni obrazec / Open original form</a></aside>`);
+      }
+      replacedFormCount++;
+    }
+    if (nativeForms) {
+      const body = allElements(document).find(element => element.tagName === "body")!;
+      for (const child of parseFragment(`<script data-gnr8-preview-runtime="contact-form">${CONTACT_FORM_SCRIPT}</script>`).childNodes) {
+        child.parentNode = body; body.childNodes.push(child);
+      }
     }
     elements = allElements(document);
   } else if (forms.length === 1 && input.acceptedFunctionalReductions?.kind === "retained-presentation-v1" && input.acceptedFunctionalReductions.contact && replaceSupportedContactForm(forms[0]!, input.path)) {
@@ -564,6 +604,10 @@ function normalizePage(input: {
     const type = (attribute(script, "type") ?? "").trim().toLowerCase();
     if (
       (type && ["application/json", "application/ld+json", "application/gnr8-disabled-script", "application/gnr8-disabled-preview-script"].includes(type)) ||
+      (input.acceptedFunctionalReductions?.kind === 'retained-source-links-v1' && removableMonoScript({script,elements,
+        trackingAndChat:input.acceptedFunctionalReductions.trackingAndChat === 'remove',
+        fileSha256:input.rawArtifact.fileMap[capturedScriptPath(script,input.rawArtifact) ?? '']?.sha256,
+      })) ||
       (input.acceptedFunctionalReductions?.kind === "retained-presentation-v1" && removableRetainedPresentationScript({
         script, elements, resolvedScriptPath: capturedScriptPath(script,input.rawArtifact), siteId: input.rawArtifact.siteId, siteVersionId: input.rawArtifact.siteVersionId, fileMap: input.rawArtifact.fileMap, sourceUrl: input.rawArtifact.metadata.finalUrl ?? input.rawArtifact.metadata.sourceUrl,
       })) ||
@@ -607,8 +651,9 @@ function normalizePage(input: {
   const bodyMarkup = rewritten.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1]?.trim() ?? rewritten;
   const headHtml = headStyles.join("\n");
   const bodyHtml = bodyMarkup;
+  const titleElement = elements.find(element => element.tagName === "title") ?? elements.find(element => element.tagName === "h1");
   const title = input.siteVersion.pages.find((page) => page.path === input.path)?.title?.trim() ||
-    textContent(elements.find((element) => element.tagName === "title") ?? document).trim().slice(0, 200) || input.path;
+    (titleElement ? textContent(titleElement).trim().slice(0, 200) : "") || input.path;
   return { path: input.path, title, headHtml, bodyAttributes, bodyHtml, unsupported };
 }
 
@@ -860,6 +905,7 @@ function normalizeNavigationTarget(
   outOfScopeSourceUrls: Map<string, string>,
   captureScopeLimitations: Map<string, string>,
   unsupported: Set<string>,
+  uncapturedRoutesToSource = false,
 ): string {
   const trimmed = href.trim();
   if (/^(?:mailto:|tel:|#)/i.test(trimmed)) return trimmed;
@@ -868,12 +914,12 @@ function normalizeNavigationTarget(
     const normalizedPath = `/${url.pathname.replace(/^\/+|\/+$/g, "")}`.replace(/\/{2,}/g, "/");
     const route = normalizedPath === "/" ? "/" : normalizedPath;
     const localHost = url.hostname.replace(/^www\./, "") === sourceHost;
-    if (!localHost) return url.protocol === "https:" ? url.toString() : "";
+    if (!localHost) return /^https?:$/.test(url.protocol) ? url.toString() : "";
     if (isFeedResourcePath(route)) return url.protocol === "https:" ? url.toString() : "";
     const routeIdentity = canonicalRouteIdentity(route);
     const capturedRoute = knownRoutes.get(routeIdentity);
     if (!capturedRoute) {
-      const sourceUrl = outOfScopeSourceUrls.get(routeIdentity);
+      const sourceUrl = outOfScopeSourceUrls.get(routeIdentity) ?? (uncapturedRoutesToSource && /^https?:$/.test(url.protocol) ? url.href : undefined);
       if (sourceUrl) {
         captureScopeLimitations.set(route, sourceUrl);
         return sourceUrl;
@@ -894,6 +940,7 @@ function normalizePageNavigation(input: {
   outOfScopeSourceUrls: Map<string, string>;
   captureScopeLimitations: Map<string, string>;
   ownedAssetUrls: ReadonlySet<string>;
+  uncapturedRoutesToSource?: boolean;
   excludedRoutes: ReadonlySet<string>;
   unsupported: Set<string>;
 }): { html: string; items: Array<{ label: string; href: string }> } {
@@ -934,6 +981,7 @@ function normalizePageNavigation(input: {
         input.outOfScopeSourceUrls,
         input.captureScopeLimitations,
         input.unsupported,
+        input.uncapturedRoutesToSource,
       );
     if (!normalized) {
       anchor.attrs = anchor.attrs.filter((item) => item.name !== "href");
@@ -964,7 +1012,7 @@ function classifyNavigation(href: string): "local_anchor" | "local_route" | "ext
   if (href.startsWith("#")) return "local_anchor";
   if (href.startsWith("mailto:")) return "mailto";
   if (href.startsWith("tel:")) return "tel";
-  if (/^https:\/\//i.test(href)) return "external_url";
+  if (isExplicitExternalNavigationUrl(href)) return "external_url";
   return "local_route";
 }
 
@@ -1110,42 +1158,9 @@ function materializeScriptAssignedStylesheets(input: {
   siteVersion: CanonicalSiteVersionSnapshot;
   rawArtifact: RawImportedSiteArtifact;
 }): void {
-  const elements = allElements(input.document);
-  const existingStylesheetPaths = new Set(elements
-    .filter((element) => element.tagName === "link")
-    .map((element) => attribute(element, "href"))
-    .filter((value): value is string => Boolean(value))
-    .map(normalizeReferenceIdentity));
-
-  for (const script of elements.filter((element) => element.tagName === "script")) {
-    const body = textContent(script);
-    if (!/createelement\s*\(\s*["']link["']\s*\)/i.test(body) ||
-        !/rel\s*=\s*["']stylesheet["']/i.test(body)) continue;
-    const targetId = body.match(/getElementById\s*\(\s*(["'])([^"']+)\1\s*\)/i)?.[2];
-    if (!targetId) continue;
-    const target = elements.find((element) => attribute(element, "id") === targetId);
-    const parent = target?.parentNode;
-    if (!target || !parent) continue;
-
-    for (const match of body.matchAll(/\bhref\s*=\s*(["'])(\/assets\/[^"'?#\s>]+\.css(?:\?[^"'#\s>]*)?(?:#[^"'\s>]*)?)\1/gi)) {
-      const sourceHref = (match[2] ?? "").trim();
-      const href = resolveDerivedStylesheetReference({
-        sourceHref,
-        siteVersion: input.siteVersion,
-        rawArtifact: input.rawArtifact,
-      });
-      const identity = normalizeReferenceIdentity(href);
-      if (!href || existingStylesheetPaths.has(identity)) continue;
-      const fragment = parseFragment(`<link rel="stylesheet" href="${escapeHtml(href)}" data-gnr8-materialized-script-stylesheet>`) as DefaultTreeAdapterMap["documentFragment"];
-      const link = fragment.childNodes.find((node): node is HtmlElement => "tagName" in node && node.tagName === "link");
-      if (!link) continue;
-      const index = parent.childNodes.indexOf(target);
-      if (index < 0) continue;
-      link.parentNode = parent;
-      parent.childNodes.splice(index, 0, link);
-      existingStylesheetPaths.add(identity);
-    }
-  }
+  materializeRetainedStylesheetDocument(input.document, sourceHref => resolveDerivedStylesheetReference({
+    sourceHref, siteVersion: input.siteVersion, rawArtifact: input.rawArtifact,
+  }));
 }
 
 function resolveDerivedStylesheetReference(input: {
@@ -1261,6 +1276,10 @@ function removeLazyRuntimeInitialStyles(element: HtmlElement): void {
 function capturedScriptPath(script: HtmlElement, rawArtifact: RawImportedSiteArtifact): string {
   const src = attribute(script,"src");
   if (!src) return "";
+  const prefix=`/api/gnr8/runtime/preview-assets/${rawArtifact.siteId}/${rawArtifact.siteVersionId}/`;
+  if(src.startsWith(prefix)) {
+    try {const path=src.slice(prefix.length).split(/[?#]/,1)[0]!.split('/').map(decodeURIComponent).join('/');return rawArtifact.fileMap[path] ? path : '';} catch{return '';}
+  }
   try {return computeLocalPathCandidate({resolvedUrl:new URL(src,rawArtifact.metadata.finalUrl ?? rawArtifact.metadata.sourceUrl).href,assetKind:"script"});}
   catch {return "";}
 }
@@ -1436,6 +1455,7 @@ function isFormSecurityEmbed(element: HtmlElement): boolean {
 function isStaticIframeEmbed(element: HtmlElement): boolean {
   if (element.tagName !== "iframe") return false;
   const src = attribute(element, "src") ?? "";
+  if(src === 'about:blank' && /^https:\/\/fast\.wistia\.com\/embed\/iframe\/[a-zA-Z0-9]+$/.test(attribute(element,'data-gnr8-video-src') ?? '') && attribute(element,'hidden') !== null) return true;
   if (!src) return false;
   try {
     const url = new URL(src, "https://gnr8.invalid/");

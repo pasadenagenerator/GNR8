@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {readFileSync} from 'node:fs'
 import {parse,serialize} from 'parse5'
 import {contactElements,readContactSchema,replaceSupportedContactForm} from './contact-form'
 import {createContactPost, type ContactDelivery, type ContactOutcome, type PublishedContact} from './contact-submission'
@@ -65,6 +66,11 @@ test('published resolver enforces ownership, active version, explicit recipient 
   const settings={kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle',contact:{recipient:site.recipient,recipientConfirmed:true},scope:'generation-action',acceptedByActor:'user:owner'}
   const resolution:any={outcome:'artifact_hit',siteResolution:'domain_match',ownershipSiteId:'owner',resolvedPath:'/kontakt',normalizedPath:'/kontakt',siteId:site.siteId,activeSiteVersionId:site.siteVersionId,artifactId:site.artifactId,domainBindingStatus:'active',hostBindingKind:null,html:converted().html,artifact:{id:site.artifactId,bundleSha256:site.artifactSha256,siteId:site.siteId,siteVersionId:site.siteVersionId,publishStage:'production',shadowRestricted:false,manifest:{generatedOutputSourceWorkspace:{acceptedFunctionalReductions:settings}}}}
   assert.deepEqual(publishedContactFromResolution(resolution,'/kontakt'),site)
+  const sourceSettings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:settings.contact,scope:settings.scope,acceptedByActor:settings.acceptedByActor}
+  const sourceResolution={...resolution,artifact:{...resolution.artifact,manifest:{generatedOutputSourceWorkspace:{acceptedFunctionalReductions:sourceSettings}}}}
+  assert.deepEqual(publishedContactFromResolution(sourceResolution,'/kontakt'),site)
+  assert.equal(publishedContactFromResolution({...sourceResolution,domainBindingStatus:'pending'},'/kontakt'),null)
+  assert.equal(publishedContactFromResolution({...sourceResolution,ownershipSiteId:null},'/kontakt'),null)
   for(const patch of [{siteResolution:'preview_host_match'},{siteResolution:'fallback_latest_site'},{ownershipSiteId:null},{activeSiteVersionId:'foreign'},{siteId:'foreign'},{resolvedPath:'/'},{domainBindingStatus:'pending'},{hostBindingKind:'preview_host'}]) assert.equal(publishedContactFromResolution({...resolution,...patch},'/kontakt'),null)
 })
 
@@ -104,4 +110,27 @@ test('server requires exact affirmative acceptance, rejects tampering and binds 
  assert.deepEqual(recorded.acceptanceEvidence,{...schema.acceptance,affirmative:true,artifactId:site.artifactId,artifactSha256:site.artifactSha256});assert.equal(recorded.payload.acceptance,'accepted');assert.equal(recorded.payload.message,'');assert.equal(Object.hasOwn(recorded,'acceptedAt'),false)
  delivery.send=async input=>{assert.equal(input.subject,'Website contact request');return 'accepted'}
  assert.equal((await post(request({acceptance:'accepted',formVersion:schema.acceptance!.formVersion,message:'',subject:''}))).status,200)
+})
+
+const monoForm = readFileSync(new URL('./fixtures/mono-contact.html',import.meta.url),'utf8')
+test('observed Mono contact projects required name/email/message into the existing native contract',()=>{
+  const result=converted(monoForm)
+  assert.equal(result.ok,true)
+  assert.deepEqual(readContactSchema(result.html),{fields:['name','email','message'],required:['name','email','message']})
+  assert.match(result.html,/class="module form"/)
+  assert.match(result.html,/placeholder="Vprašanje\*"/)
+  assert.match(result.html,/action="\/api\/gnr8\/runtime\/contact\?path=%2Fkontakt"/)
+  assert.doesNotMatch(result.html,/_monoForm|__requestToken|_ha_seed|hcaptcha|data-req=/)
+  for (const source of [
+    monoForm.replace('</form>','<select name="plan"></select></form>'),
+    monoForm.replace('</form>','<input type="hidden" name="recipient" value="other@example.com"></form>'),
+    monoForm.replace('Vprašanje*','Booking dates*'),
+    monoForm.replace('data-required="true"','data-required="false"'),
+    monoForm.replace('class="optins clear"','class="optins clear"><p>Consent required</p></div><div'),
+    monoForm.replace('return _monoForm.submitForm(this);','otherSubmit(this);'),
+  ]) {
+    const rejected=converted(source)
+    assert.equal(rejected.ok,false)
+    assert.equal(rejected.html,serialize(parse(source)))
+  }
 })

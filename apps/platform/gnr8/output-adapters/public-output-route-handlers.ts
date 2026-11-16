@@ -26,6 +26,7 @@ function failure(error: unknown): Response {
     PUBLIC_OUTPUT_RECIPIENT_CONFIRMATION_REQUIRED: 'Enter a valid recipient and explicitly confirm it.',
     PUBLIC_OUTPUT_ACTIVE_CONTACT_REQUIRED: 'Select the currently active public artifact with a native contact form. Refresh if publication changed.',
     PUBLIC_OUTPUT_HOST_MISMATCH: 'The domain must match the prepared artifact.',
+    PUBLIC_OUTPUT_RECOVERY_CONFIRMATION_REQUIRED: 'Explicitly confirm withdrawal of this exact first publication. Replacement publications require their existing rollback procedure.',
   };
   const blockerCodes = error && typeof error === 'object' && 'blockerCodes' in error && Array.isArray(error.blockerCodes)
     ? error.blockerCodes.filter((code): code is string => typeof code === 'string' && /^[a-z_]+$/.test(code)) : [];

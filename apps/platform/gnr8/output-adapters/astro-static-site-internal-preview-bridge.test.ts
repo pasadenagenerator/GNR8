@@ -26,6 +26,25 @@ const SYNTHETIC_SITE_ID = "site-astro-mvp06-proof";
 const SYNTHETIC_SITE_VERSION_ID = "sv-astro-mvp06-proof";
 const SYNTHETIC_CANDIDATE_ID = "candidate-astro-mvp06-proof";
 
+test('saved images are embedded only with exact explicit export evidence', async () => {
+  await withWorkspace(async workspacePath => {
+    await writeFixtureDist(workspacePath);
+    const image = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>');
+    await writeFile(join(workspacePath, 'dist', 'saved.svg'), image);
+    const page = join(workspacePath, 'dist', 'index.html');
+    await writeFile(page, (await readFile(page, 'utf8')).replace('</body>', '<img src="/saved.svg" alt="Saved"></body>'));
+    const inspectedExport = await inspectAstroStaticExport(workspacePath);
+    await assertBridgeError(convertFixture(inspectedExport), 'unsupported_file_kind');
+    const input = { inspectedExport, candidateId: SYNTHETIC_CANDIDATE_ID, siteId: SYNTHETIC_SITE_ID,
+      siteVersionId: SYNTHETIC_SITE_VERSION_ID, rendererCompatibilityVersion: 'gnr8-renderer-v1', sourceSnapshotSha256: SOURCE_SNAPSHOT_SHA256 };
+    const sha256 = createHash('sha256').update(image).digest('hex');
+    const candidate = await convertAstroExportToInternalPreviewCandidate({ ...input, embeddedImageFiles: { 'saved.svg': { sha256, mediaType: 'image/svg+xml' } } });
+    assert.ok(candidate.htmlByPath['/'].includes(`data:image/svg+xml;base64,${image.toString('base64')}`));
+    assert.equal(candidate.assetFingerprintMap['/saved.svg'], sha256);
+    await assert.rejects(convertAstroExportToInternalPreviewCandidate({ ...input, embeddedImageFiles: { 'saved.svg': { sha256: '0'.repeat(64), mediaType: 'image/svg+xml' } } }));
+  });
+});
+
 test("bridge retains only exact owned hero code, including checking template content", async () => {
   await withWorkspace(async (workspacePath) => {
     await writeFixtureDist(workspacePath);
