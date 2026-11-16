@@ -2644,12 +2644,26 @@ function gitCaptureIncompleteReasons(
   discovery: Awaited<ReturnType<typeof buildScopedMultiPageDiscovery>>,
 ): string[] {
   const acquisition = discovery.acquisition
+  const sitemapOnlyRoutes = new Set(discovery.manifest?.routePriorityBalancing?.assignments
+    .filter((assignment) => assignment.selected && assignment.source === 'sitemap')
+    .map((assignment) => assignment.routePath) ?? [])
+  const failedRequiredPage = acquisition?.pages.some((page) => {
+    if (page.status === 'skipped') {
+      return ['acquisition_page_limit', 'max_bytes_per_page_exceeded'].includes(page.skippedReason ?? '')
+    }
+    if (page.status !== 'failed') return false
+    // A sitemap can retain deleted URLs. Keep the 404 in provenance, but do not
+    // require a page that the source site no longer serves.
+    return !(page.failureReason === 'non_2xx_status' &&
+      [404, 410].includes(page.httpStatusCode ?? 0) &&
+      sitemapOnlyRoutes.has(page.normalizedRoutePath ?? ''))
+  })
   return [
     ...(!acquisition ? ['html_acquisition_missing'] : []),
-    ...(acquisition?.pages.some((page) => page.status === 'failed' ||
-      (page.status === 'skipped' && ['acquisition_page_limit', 'max_bytes_per_page_exceeded'].includes(page.skippedReason ?? ''))) ? ['page_failed_or_limited'] : []),
+    ...(failedRequiredPage ? ['page_failed_or_limited'] : []),
     ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
-    ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed') ? ['seed_asset_missing'] : []),
+    ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed' &&
+      !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0))) ? ['seed_asset_missing'] : []),
     ...(discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
     ...(acquisition?.diagnostics.some((code) => ['MULTIPAGE_CHILD_LINK_LIMIT_REACHED', 'MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED', 'MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED'].includes(code)) ? ['child_link_limited'] : []),
   ]
