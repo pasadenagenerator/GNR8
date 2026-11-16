@@ -16,7 +16,7 @@ function githubHttp(url:string,transport:typeof fetch,deadline:number):GitHttp{r
  }};}
 export async function readStandaloneGit(input:{owner:string;repository:string;branch:string;commit:string;token:string},transport:typeof fetch=fetch){
  const dir=await mkdtemp(join(tmpdir(),'gnr8-stacki-git-read-'));const url=`https://github.com/${input.owner}/${input.repository}.git`;
- const http=githubHttp(url,transport,Date.now()+90_000);const onAuth=()=>({username:input.token,password:'x-oauth-basic'});
+ const http=githubHttp(url,transport,Date.now()+90_000);const onAuth=()=>({username:'x-access-token',password:input.token});
  try{
   await git.clone({fs,http,dir,url,ref:input.branch,singleBranch:true,noCheckout:true,noTags:true,depth:65,onAuth,onAuthFailure:()=>{throw Error('standalone_git_auth_failed');}});
   const node=await git.readCommit({fs,dir,oid:input.commit});
@@ -36,7 +36,7 @@ export async function pushStandaloneGit(input:{owner:string;repository:string;de
  const dir=await mkdtemp(join(tmpdir(),'gnr8-standalone-git-'));const url=`https://github.com/${input.owner}/${input.repository}.git`;
  const deadline=Date.now()+180000;
  const http=githubHttp(url,transport,deadline);
- const onAuth=()=>({username:input.token,password:'x-oauth-basic'});
+ const onAuth=()=>({username:'x-access-token',password:input.token});
  try{
   await git.clone({fs,http,dir,url,ref:input.defaultBranch,singleBranch:true,noCheckout:true,noTags:true,depth:1,onAuth,onAuthFailure:()=>{throw Error('standalone_git_auth_failed');}});
   const parent=await git.resolveRef({fs,dir,ref:input.defaultBranch});if(parent!==input.parent)throw Error('standalone_git_parent_changed');
