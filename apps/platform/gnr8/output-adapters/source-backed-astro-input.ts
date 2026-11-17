@@ -2,6 +2,8 @@ import {materializeRetainedStylesheetDocument} from "../../src/public-site/mater
 import { reduceRetainedPresentation, removableRetainedPresentationScript } from "./retained-presentation-reductions";
 import {projectMonoControls, projectAcceptedMediaLinks, removableMonoScript} from "./retained-mono-projection";
 import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
+import { restoreRetainedMonoNavigation } from "../../src/public-site/retained-mono-navigation";
+import { enhanceRetainedGalleries } from "../../src/public-site/retained-gallery";
 import { CONTACT_FORM_SCRIPT } from "../../src/public-site/contact-form-runtime";
 import { replaceSupportedContactForm } from "../contact/contact-form";
 import { createHash } from "node:crypto";
@@ -639,13 +641,26 @@ function normalizePage(input: {
   // Project supported elements before classifying scripts. Unknown source code
   // remains present and is rejected below; only exact owned bytes may survive.
   preserveAnchorHrefsForRuntimeRewrite(document);
-  document = parse(rewriteRawTemplateHtmlForRuntime({
+  let projectedHtml = rewriteRawTemplateHtmlForRuntime({
     html: serialize(document), siteId: input.rawArtifact.siteId,
     siteVersionId: input.rawArtifact.siteVersionId,
     resolvedFilePath: routeSource.outcome === "selected" ? routeSource.rawFilePath : input.rawArtifact.entryHtmlPath,
     fileMapPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
-  }), { scriptingEnabled: false });
+  });
+  projectedHtml = restoreRetainedMonoNavigation(projectedHtml);
+  projectedHtml = enhanceRetainedGalleries({html: projectedHtml, siteId: input.rawArtifact.siteId,
+    siteVersionId: input.rawArtifact.siteVersionId, fileMapPaths: new Set(Object.keys(input.rawArtifact.fileMap))});
+  document = parse(projectedHtml, { scriptingEnabled: false });
   elements = allElements(document);
+  // Mono's empty animation is only a visibility transition. Materialize its
+  // final state so the captured animation initializer is no longer required.
+  for (const element of elements) if (element.attrs.some(attr => attr.name === "data-animate" && attr.value === "")) {
+    element.attrs = element.attrs.filter(attr => attr.name !== "data-animate");
+    const classes = (attribute(element, "class") ?? "").split(/\s+/).filter(Boolean);
+    for (const name of ["animated", "animationDone"]) if (!classes.includes(name)) classes.push(name);
+    element.attrs = element.attrs.filter(attr => attr.name !== "class");
+    element.attrs.push({name: "class", value: classes.join(" ")});
+  }
   for (const script of elements.filter((element) => element.tagName === "script")) {
     if (isOwnedRetainedRuntimeScript(script)) continue;
     const type = (attribute(script, "type") ?? "").trim().toLowerCase();

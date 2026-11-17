@@ -1,6 +1,7 @@
 import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
@@ -15,6 +16,35 @@ import {
 } from "./source-backed-astro-input";
 
 const SHA = "a".repeat(64);
+
+test('retained Ladja capture replay',{skip:!process.env.GNR8_LADJA_CAPTURE_DIR},()=>{
+  const dir=process.env.GNR8_LADJA_CAPTURE_DIR!;
+  const manifest=JSON.parse(readFileSync(`${dir}/.gnr8-import-manifest.json`,'utf8')) as {files:Array<{path:string;mediaType:string;bytes:number;sha256:string}>};
+  const input=fixture({rootHtml:readFileSync(`${dir}/index.html`,'utf8')});
+  input.version.siteId='site_33f0b6c4e632be571754';
+  input.version.id='11b6ea9b-80ef-487f-bb37-d781fe91fe41';
+  input.artifact.siteId=input.version.siteId;
+  input.artifact.siteVersionId=input.version.id;
+  input.rawArtifact.siteId=input.version.siteId;
+  input.rawArtifact.siteVersionId=input.version.id;
+  input.version.pages=[page('/','Home'),page('/en','English'),page('/it','Italiano')];
+  input.version.importProvenanceSummary={multiPageDiscovery:{rawArtifactAssembly:{enabled:true,routeMap:['en','it'].map(lang=>({routePath:`/${lang}`,sourceUrl:`https://www.ladjazaba.si/${lang}`,finalUrl:`https://www.ladjazaba.si/${lang}`,rawFilePath:`pages/${lang}/index.html`,bodySha256:SHA,byteSize:1,status:'assembled'}))}}} as CanonicalSiteVersionSnapshot['importProvenanceSummary'];
+  input.artifact.htmlByPath={'/':input.artifact.htmlByPath['/']!, '/en':readFileSync(`${dir}/pages/en/index.html`,'utf8'),'/it':readFileSync(`${dir}/pages/it/index.html`,'utf8')};
+  input.rawArtifact.fileMap=Object.fromEntries(manifest.files.map(f=>[f.path,{path:f.path,mediaType:f.mediaType,sizeBytes:f.bytes,sha256:f.sha256}]));
+  input.rawArtifact.metadata.sourceUrl='https://www.ladjazaba.si/';
+  input.rawArtifact.metadata.finalUrl='https://www.ladjazaba.si/';
+  input.rawArtifact.metadata.multiPage={enabled:true,pageCount:3,routeMapRef:'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly'};
+  const stylesheetCssByPath=Object.fromEntries(manifest.files.filter(f=>f.path.endsWith('.css')).map(f=>[f.path,readFileSync(`${dir}/${f.path}`,'utf8')]));
+  try{const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,
+    htmlByPath:input.artifact.htmlByPath as never,stylesheetCssByPath,retainedFunctions:{kind:'retained-functions-v1'}});
+    assert.deepEqual(generated.outputPaths,['/','/en','/it']);
+    const root=generated.content.pages?.find(page=>page.path==='/')?.bodyHtml??'';
+    assert.equal((root.match(/<a data-gallery-image\b/g)??[]).length,15);
+    assert.match(root,/data-gnr8-mono-locale/);
+    assert.match(root,/data-gnr8-preview-runtime="retained-gallery"/);
+    assert.doesNotMatch(root,/data-animate=/);
+  }catch(error){if(error instanceof SourceBackedAstroUnsupportedError){process.stderr.write(JSON.stringify({capabilities:error.unsupportedCapabilities,scripts:error.scriptEvidence})+'\n');}throw error;}
+});
 
 test('retained functions need a confirmed recipient only when a supported contact form exists',()=>{
   const noForm=fixture();
