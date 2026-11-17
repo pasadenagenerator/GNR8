@@ -937,6 +937,14 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
     await assert.rejects(renderPublicPathResponse({host:action.host,path:'/'}),/GENERATED_ARTIFACT_CACHE_INTEGRITY_FAILED/);
     gitObjects.set(homepageKey,Buffer.from(restored.htmlByPath['/']));
   }finally{restorePublicUsage();restorePublicRender();}
+  const hostMove=await prepare({sourceSiteVersionId:successor.siteVersionId,sourceArtifactId:successor.artifactId,
+    expectedSourceArtifactSha256:successor.artifactBundleSha256,expectedSourceCandidateId:successor.candidateId,
+    host:'new-working.app.pasadenagenerator.com',actor:'owner'});
+  assert.equal(hostMove.publicPreparation?.version,'gnr8-astro-public-host-transition:v1');
+  assert.deepEqual(hostMove.publicPreparation?.expectedActivePointer,{siteVersionId:third.siteVersionId,artifactId:third.artifactId});
+  assert.equal(hostMove.decision.technical.status,'PASS');
+  assert.equal(hostMove.decision.review.status,'MISSING');
+  assert.deepEqual(pointer,{active_site_version_id:third.siteVersionId,active_artifact_id:third.artifactId});
   Object.assign(process.env,{GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED:'1',GNR8_STACKI_GITHUB_ENABLED:'1',
     GNR8_STACKI_GITHUB_SITE_IDS:JSON.stringify([OWNERSHIP.ownershipSiteId])});
   const artifactCount=artifacts.size;

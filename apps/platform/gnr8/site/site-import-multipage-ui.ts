@@ -37,6 +37,7 @@ export const DEFAULT_SITE_IMPORT_MULTI_PAGE_LIMIT_STATE: SiteImportMultiPageLimi
 
 export type SiteImportRequestPayload = {
   url: string
+  workingDomain?: string
   importAttemptId?: string
   siteName: string | null
   agencyId: string
@@ -85,6 +86,7 @@ export function normalizeSiteImportMultiPageLimits(input?: Partial<SiteImportMul
 
 export function buildSiteImportRequestPayload(input: {
   url: string
+  workingDomain?: string
   importAttemptId?: string
   siteName?: string | null
   agencyId: string
@@ -94,6 +96,7 @@ export function buildSiteImportRequestPayload(input: {
 }): SiteImportRequestPayload {
   const payload: SiteImportRequestPayload = {
     url: normalizeText(input.url),
+    ...(input.workingDomain ? {workingDomain:normalizeText(input.workingDomain)} : {}),
     ...(input.importAttemptId ? {importAttemptId:input.importAttemptId} : {}),
     siteName: normalizeText(input.siteName) || null,
     agencyId: normalizeText(input.agencyId),
