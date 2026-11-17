@@ -3877,7 +3877,30 @@ export async function runScopedImportPipeline(input: {
     // identity retryable without a partially persisted import.
     if (gitArchiveRequired && gitArchiveSelected) {
       const incomplete = gitCaptureIncompleteReasons(input.snapshot, multiPageDiscovery)
-      if (incomplete.length > 0) throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
+      if (incomplete.length > 0) {
+        const safeAssetPath = (value: string): string => {
+          try {
+            const url = new URL(value)
+            return `${url.origin}${url.pathname}`
+          } catch {
+            return '[invalid asset URL]'
+          }
+        }
+        const failedSeedAssets = input.snapshot.fetchManifest
+          .filter((asset) => asset.fetchStatus === 'fetch_failed' &&
+            !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0)))
+          .map((asset) => ({ path: safeAssetPath(asset.resolvedUrl ?? ''), kind: asset.assetKind, status: asset.httpStatus }))
+        const failedChildAssets = (multiPageDiscovery.acquisition?.summary.failedRequiredResources ?? [])
+          .map(safeAssetPath)
+        console.error('[site-import] GITHUB_IMPORT_INCOMPLETE_CAPTURE_DETAILS', {
+          reasons: incomplete,
+          failedSeedAssets: failedSeedAssets.slice(0, 40),
+          failedSeedAssetCount: failedSeedAssets.length,
+          failedChildAssets: failedChildAssets.slice(0, 40),
+          failedChildAssetCount: failedChildAssets.length,
+        })
+        throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
+      }
     }
     const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
     const rawGitArchive = gitArchiveRequired && gitArchiveSelected
