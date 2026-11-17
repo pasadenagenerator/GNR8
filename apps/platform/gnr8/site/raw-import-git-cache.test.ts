@@ -33,6 +33,37 @@ test('prepare reconciles transient read failures without retrying corrupted byte
   assert.equal(reads,3);
 });
 
+test('prepare retries an upload that did not create its private object',async()=>{
+  let uploads=0,reads=0;
+  let stored:Buffer|null=null;
+  const client={storage:{getBucket:async()=>({data:{public:false},error:null}),from:()=>({
+    upload:async(_key:string,bytes:Buffer)=>{
+      uploads++;
+      if(uploads===1)return {data:null,error:{statusCode:'503'}};
+      stored=Buffer.from(bytes);return {data:{},error:null};
+    },
+    download:async()=>{
+      reads++;
+      return stored?{data:new Blob([new Uint8Array(stored)]),error:null}:
+        {data:null,error:{status:404}};
+    },
+  })}};
+  await new RawImportGitCache(client as never,'private-assets').prepare(ref,versionId,[file]);
+  assert.equal(uploads,2);
+  assert.equal(reads,2);
+});
+
+test('prepare leaves a persistently missing object unavailable after bounded retries',async()=>{
+  let uploads=0;
+  const client={storage:{getBucket:async()=>({data:{public:false},error:null}),from:()=>({
+    upload:async()=>{uploads++;return {data:null,error:{statusCode:'503'}};},
+    download:async()=>({data:null,error:{status:404}}),
+  })}};
+  await assert.rejects(new RawImportGitCache(client as never,'private-assets').prepare(ref,versionId,[file]),
+    /RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:[a-f0-9]{64}:404/);
+  assert.equal(uploads,4);
+});
+
 test('private raw import cache prepares and verifies bytes; corruption and public bucket fail closed',async()=>{
   const objects=new Map<string,Buffer>();let publicBucket=false;
   const client={storage:{

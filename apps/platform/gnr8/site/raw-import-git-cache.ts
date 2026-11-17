@@ -112,19 +112,20 @@ export class RawImportGitCache{
     for(let offset=0;offset<unique.length;offset+=8){
       const results=await Promise.allSettled(unique.slice(offset,offset+8).map(async file=>{
         const objectKey=key(ref,versionId,file.sha256);
-        // A failed upload may have committed. Exact readback reconciles it.
-        try{await bucket.upload(objectKey,file.bytes,{upsert:false,contentType:file.mediaType,cacheControl:'3600'});}catch{/* readback decides */}
-        // Upload can succeed while the serving read briefly fails. Retry only
-        // unavailable reads; never accept or overwrite bytes that fail integrity.
-        for(let attempt=0;attempt<3;attempt++){
+        // A failed upload may have committed, so every attempt starts with an
+        // idempotent upload and ends with exact readback. A missing readback
+        // retries the upload too; retrying download alone cannot repair it.
+        for(let attempt=0;attempt<4;attempt++){
+          try{await bucket.upload(objectKey,file.bytes,{upsert:false,contentType:file.mediaType,cacheControl:'3600'});}catch{/* readback decides */}
           let result:Awaited<ReturnType<typeof bucket.download>>;
           try{result=await bucket.download(objectKey);}catch{
-            if(attempt<2){await delay(250*(attempt+1));continue;}
+            if(attempt<3){await delay(250*(attempt+1));continue;}
             throw Error(`RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:${file.sha256}:transport`);
           }
           if(result.error||!result.data){
-            if(attempt<2){await delay(250*(attempt+1));continue;}
-            const status=String((result.error as {statusCode?:unknown}|null)?.statusCode??'unknown');
+            if(attempt<3){await delay(250*(attempt+1));continue;}
+            const error=result.error as {statusCode?:unknown;status?:unknown}|null;
+            const status=String(error?.statusCode??error?.status??'unknown');
             throw Error(`RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:${file.sha256}:${/^\d{3}$/.test(status)?status:'unknown'}`);
           }
           const cached=Buffer.from(await result.data.arrayBuffer());
