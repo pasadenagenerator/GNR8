@@ -2965,6 +2965,18 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       return [entry.localPath];
     } catch { return []; }
   }));
+  // Seed capture can already own a stylesheet used by child pages. Analyze its
+  // retained bytes as well, otherwise a proven unused upstream-404 CSS image
+  // remains a required child dependency simply because the CSS was reused.
+  for (const entry of existingManifest) {
+    if (entry.assetKind !== "stylesheet" || entry.fetchStatus !== "fetched" ||
+        !entry.resolvedUrl || !entry.localPath || !retainedStylesheetPaths.has(entry.localPath)) continue;
+    try {
+      markProvablyUnused(fs.readFileSync(path.resolve(input.snapshotRootDirAbs, entry.localPath), "utf8"), entry.resolvedUrl);
+    } catch {
+      // Missing or unreadable retained CSS cannot prove an asset unused.
+    }
+  }
   const retainedDependencyUrl = (rawReference: string, stylesheetPath: string): string | null => {
     if (!retainedStylesheetPaths.has(stylesheetPath)) return null;
     const retainedPath = resolveRetainedCssDependencyPath({ stylesheetPath, rawReference, filePaths: retainedFilePaths });

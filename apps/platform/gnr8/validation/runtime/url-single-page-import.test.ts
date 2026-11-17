@@ -392,6 +392,37 @@ test("additional asset capture skips only exact CSS dependencies proven unused b
   assert.deepEqual(fetched, ["https://example.com/theme.css", "https://example.com/images/required.png"]);
 });
 
+test("additional asset capture reconciles an already failed seed CSS image", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-reused-css-404-"));
+  const stylesheetUrl = "https://assets.example.test/theme.css";
+  const missingUrl = "https://assets.example.test/images/geocoder.png";
+  const stylesheetPath = "assets/theme.css";
+  fs.mkdirSync(path.join(root, "assets"), { recursive: true });
+  fs.writeFileSync(path.join(root, stylesheetPath), ".leaflet-control-geocoder-icon{background-image:url(images/geocoder.png)}");
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://example.com/en", bodyPath: path.join(root, "en.html"),
+        html: "<main>English</main>" }],
+      fullHtmlDocumentsForCssUsage: ["<main>Home</main>", "<main>English</main>"],
+      approvedUnusedStylesheetDependencyUrls: [missingUrl],
+      existingFetchManifest: [
+        { tag: "link", attribute: "href", occurrence: 0, rawRef: stylesheetUrl, resolvedUrl: stylesheetUrl,
+          localPath: stylesheetPath, assetKind: "stylesheet", fetchStatus: "fetched", httpStatus: 200,
+          contentType: "text/css", byteLength: 82 },
+        { tag: "link", attribute: "href", occurrence: 0, rawRef: "images/geocoder.png", resolvedUrl: missingUrl,
+          localPath: null, assetKind: "image", fetchStatus: "fetch_failed", httpStatus: 404,
+          contentType: null, byteLength: null },
+      ],
+      fetchImpl: async () => { throw new Error("No request expected for the proven unused asset"); },
+    });
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, [missingUrl]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
   return {
     async execute(request) {
