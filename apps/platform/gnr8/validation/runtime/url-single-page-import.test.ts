@@ -392,6 +392,36 @@ test("additional asset capture skips only exact CSS dependencies proven unused b
   assert.deepEqual(fetched, ["https://example.com/theme.css", "https://example.com/images/required.png"]);
 });
 
+test("child stylesheet reconciles an upstream 404 without a seed manifest candidate", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-css-auto-404-"));
+  const stylesheetUrl = "https://cdn.example.test/theme.css";
+  const missingUrl = "https://cdn.example.test/images/geocoder.png";
+  const fetched: string[] = [];
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://example.com/en", bodyPath: path.join(root, "en.html"),
+        html: `<link rel="stylesheet" href="${stylesheetUrl}"><main>English</main>` }],
+      trustedExternalOrigins: ["https://cdn.example.test"],
+      fullHtmlDocumentsForCssUsage: ["<main>Home</main>", "<main>English</main>"],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        fetched.push(url);
+        if (url === stylesheetUrl) return new Response(".leaflet-control-geocoder-icon{background:url(images/geocoder.png)}", {
+          headers: { "content-type": "text/css" },
+        });
+        if (url === missingUrl) return new Response("missing", { status: 404 });
+        throw new Error(`Unexpected fixture request: ${url}`);
+      },
+    });
+    assert.deepEqual(fetched, [stylesheetUrl, missingUrl]);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, [missingUrl]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("additional asset capture reconciles an already failed seed CSS image", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-reused-css-404-"));
   const stylesheetUrl = "https://assets.example.test/theme.css";

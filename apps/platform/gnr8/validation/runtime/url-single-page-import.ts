@@ -2876,7 +2876,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   fullHtmlDocumentsForCssUsage?: string[];
   /** URL of the seed document when its retained style blocks need usage proof. */
   seedPageUrlForCssUsage?: string;
-  /** Explicitly approved missing URLs; proof alone does not authorize omission. */
+  /** Optional known missing URLs; a newly discovered 404 still needs CSS usage proof. */
   approvedUnusedStylesheetDependencyUrls?: string[];
   /** Exact script URLs acquired as inert bytes for reviewed-hash validation. */
   retainedScriptDependencyUrls?: string[];
@@ -2919,9 +2919,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const approvedUnusedStylesheetDependencyIdentities = new Set(
     (input.approvedUnusedStylesheetDependencyUrls ?? []).map(canonicalAdditionalPageAssetIdentity),
   );
+  const provablyUnusedCssDependencies = new Map<string, string>();
   const requiredCssDependencyIdentities = new Set<string>();
   const markProvablyUnused = (css: string, stylesheetUrl: string): void => {
-    if (!input.fullHtmlDocumentsForCssUsage || approvedUnusedStylesheetDependencyIdentities.size === 0) return;
+    if (!input.fullHtmlDocumentsForCssUsage) return;
     try {
       const unused = findProvablyUnusedCssDependencies({
         css,
@@ -2932,8 +2933,9 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       for (const rawRef of extractCssUrlCandidates(css)) {
         try {
           const identity = canonicalAdditionalPageAssetIdentity(new URL(rawRef, stylesheetUrl).toString());
-          if (approvedUnusedStylesheetDependencyIdentities.has(identity) && !unusedIdentities.has(identity)) {
+          if (!unusedIdentities.has(identity)) {
             requiredCssDependencyIdentities.add(identity);
+            provablyUnusedCssDependencies.delete(identity);
             knownUnusedStylesheetDependencyIdentities.delete(identity);
             for (const url of skippedUnusedStylesheetDependencies) {
               if (canonicalAdditionalPageAssetIdentity(url) === identity) skippedUnusedStylesheetDependencies.delete(url);
@@ -2943,10 +2945,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       }
       for (const dependency of unused) {
         const identity = canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl);
-        if (!approvedUnusedStylesheetDependencyIdentities.has(identity) ||
-            directRequiredIdentities.has(identity) || requiredCssDependencyIdentities.has(identity)) continue;
-        knownUnusedStylesheetDependencyIdentities.add(identity);
-        skippedUnusedStylesheetDependencies.add(dependency.resolvedUrl);
+        if (directRequiredIdentities.has(identity) || requiredCssDependencyIdentities.has(identity)) continue;
+        provablyUnusedCssDependencies.set(identity, dependency.resolvedUrl);
+        if (approvedUnusedStylesheetDependencyIdentities.has(identity)) {
+          knownUnusedStylesheetDependencyIdentities.add(identity);
+          skippedUnusedStylesheetDependencies.add(dependency.resolvedUrl);
+        }
       }
     } catch {
       // Unparseable CSS cannot prove that a dependency is unused.
@@ -3264,6 +3268,19 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     const dependency = stylesheetDependencyUrls.get(resolvedUrl);
     if (direct) await fetchOne(resolvedUrl, direct.assetKind, direct.pageUrl);
     else if (dependency) await fetchOne(resolvedUrl, dependency.assetKind, dependency.pageUrl);
+  }
+
+  // Child stylesheets are discovered after the seed manifest exists. A 404
+  // dependency can only be omitted after the fetched CSS proves its selectors
+  // unused across every retained page; successful assets remain captured.
+  for (const url of [...failedRequiredResources]) {
+    const identity = canonicalAdditionalPageAssetIdentity(url);
+    if (outcomeByUrl.get(url)?.httpStatus !== 404 ||
+        directRequiredIdentities.has(identity) || requiredCssDependencyIdentities.has(identity)) continue;
+    const provenUrl = provablyUnusedCssDependencies.get(identity);
+    if (!provenUrl) continue;
+    failedRequiredResources.delete(url);
+    skippedUnusedStylesheetDependencies.add(provenUrl);
   }
 
   for (const [representative, meta] of stylesheetDependencyUrls) {
