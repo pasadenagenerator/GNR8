@@ -2667,7 +2667,7 @@ function gitCaptureIncompleteReasons(
     ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
     ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed' &&
       !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0)) &&
-      !(asset.assetKind === 'image' && asset.httpStatus === 404 &&
+      !((asset.assetKind === 'image' || asset.assetKind === 'style_asset') && asset.httpStatus === 404 &&
         Boolean(asset.resolvedUrl && provenUnusedCssDependencies.has(asset.resolvedUrl)))) ? ['seed_asset_missing'] : []),
     ...(discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
     ...(acquisition?.diagnostics.some((code) => ['MULTIPAGE_CHILD_LINK_LIMIT_REACHED', 'MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED', 'MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED'].includes(code)) ? ['child_link_limited'] : []),
@@ -3836,7 +3836,7 @@ export async function runScopedImportPipeline(input: {
     approvedUnusedCssDependencies: [
       ...approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
       ...input.snapshot.fetchManifest
-        .filter((asset) => asset.assetKind === 'image' && asset.fetchStatus === 'fetch_failed' &&
+        .filter((asset) => (asset.assetKind === 'image' || asset.assetKind === 'style_asset') && asset.fetchStatus === 'fetch_failed' &&
           asset.httpStatus === 404 && Boolean(asset.resolvedUrl))
         .map((asset) => asset.resolvedUrl!),
     ],

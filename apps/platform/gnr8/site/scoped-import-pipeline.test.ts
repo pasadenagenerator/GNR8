@@ -72,6 +72,8 @@ test('Git-backed import accepts a source 404 image only after CSS analysis prove
   assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['seed_asset_missing'])
   discovery.acquisition.diagnostics.push(`MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:${url}`)
   assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+  snapshot.fetchManifest[0].assetKind = 'style_asset'
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
   snapshot.fetchManifest[0].httpStatus = 500
   assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['seed_asset_missing'])
 })

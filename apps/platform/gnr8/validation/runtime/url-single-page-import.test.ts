@@ -423,6 +423,51 @@ test("additional asset capture reconciles an already failed seed CSS image", asy
   }
 });
 
+test("seed capture and child capture jointly prove an upstream 404 CSS icon unused", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-seed-child-css-404-"));
+  const sourceUrl = "https://example.com/";
+  const stylesheetUrl = "https://example.com/theme.css";
+  const missingUrl = "https://example.com/images/geocoder.png";
+  const childHtml = `<link rel="stylesheet" href="${stylesheetUrl}"><main>English</main>`;
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl,
+      snapshotRootDirAbs: root,
+      requestId: "seed-child-css-404",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        if (url === sourceUrl) return makeHtmlResponse(`<html><head><link rel="stylesheet" href="${stylesheetUrl}"></head><body><main>Home</main></body></html>`);
+        if (url === stylesheetUrl) return new Response(".leaflet-control-geocoder-icon{background-image:url(images/geocoder.png)}", {
+          headers: { "content-type": "text/css" },
+        });
+        if (url === missingUrl) return new Response("missing", { status: 404 });
+        throw new Error(`Unexpected fixture request: ${url}`);
+      },
+    });
+    assert.equal(snapshot.fetchManifest.some((entry) => entry.resolvedUrl === missingUrl && entry.httpStatus === 404), true);
+    const retainedStylesheet = snapshot.fetchManifest.find((entry) => entry.resolvedUrl === stylesheetUrl);
+    assert.ok(retainedStylesheet?.localPath);
+    assert.match(fs.readFileSync(path.join(snapshot.snapshotRootDirAbs, retainedStylesheet.localPath), 'utf8'), /url\(images\/geocoder\.png\)/);
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
+      pages: [{ pageUrl: `${sourceUrl}en`, bodyPath: path.join(snapshot.snapshotRootDirAbs, "en.html"), html: childHtml }],
+      existingFetchManifest: snapshot.fetchManifest,
+      fullHtmlDocumentsForCssUsage: [fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8"), childHtml],
+      approvedUnusedStylesheetDependencyUrls: [missingUrl],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        if (url === missingUrl) return new Response("missing", { status: 404 });
+        throw new Error(`Unexpected child request: ${url}`);
+      },
+    });
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, [missingUrl]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
   return {
     async execute(request) {

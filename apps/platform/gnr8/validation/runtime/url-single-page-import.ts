@@ -1346,6 +1346,7 @@ function rewriteCssUrlFunctions(input: {
   stylesheetLocalPath: string;
   baseUrl: URL;
   localPathByUrl: Map<string, string>;
+  fetchedUrls: ReadonlySet<string>;
   diagnostics: UrlImportDiagnostic[];
   referenceMode?: "relative" | "root-relative";
   retainedFilePaths?: ReadonlySet<string>;
@@ -1370,6 +1371,7 @@ function rewriteCssUrlFunctions(input: {
       diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
     });
     if (!resolvedUrl) continue;
+    if (!input.fetchedUrls.has(resolvedUrl)) continue;
     const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
     if (!targetLocalPath) continue;
 
@@ -1399,6 +1401,7 @@ function rewriteCssUrlFunctions(input: {
       })) return full;
       let resolvedUrl: string | null = null;
       try { resolvedUrl = new URL(String(rawUrl), input.baseUrl).toString(); } catch { return full; }
+      if (!input.fetchedUrls.has(resolvedUrl)) return full;
       const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
       if (!targetLocalPath) return full;
       const rewrittenUrl = input.referenceMode === "root-relative"
@@ -3221,6 +3224,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     if (localPath) localPathByUrl.set(alias, localPath);
   }
 
+  const fetchedUrls = new Set([...outcomeByUrl].filter(([, outcome]) => outcome.fetchStatus === "fetched").map(([url]) => url));
   for (const stylesheetUrl of allStylesheetUrls) {
     if (outcomeByUrl.get(stylesheetUrl)?.fetchStatus !== "fetched") continue;
     const localPath = localPathByUrl.get(stylesheetUrl);
@@ -3233,6 +3237,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         stylesheetLocalPath: localPath,
         baseUrl: new URL(stylesheetUrl),
         localPathByUrl,
+        fetchedUrls,
         diagnostics,
         retainedFilePaths: retainedStylesheetPaths.has(localPath) ? retainedFilePaths : undefined,
       });
@@ -3276,6 +3281,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       stylesheetLocalPath: "index.html",
       baseUrl: new URL(state.page.pageUrl),
       localPathByUrl,
+      fetchedUrls,
       diagnostics,
       referenceMode: "root-relative",
     });
@@ -5215,6 +5221,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       fetchOutcomeByUrl.set(ref.resolvedUrl, outcome);
     }
 
+    const fetchedUrls = new Set([...fetchOutcomeByUrl].filter(([, outcome]) => outcome.fetchStatus === "fetched").map(([url]) => url));
     for (const stylesheetRef of stylesheetRefs.sort((a, b) => (a.resolvedUrl ?? "").localeCompare(b.resolvedUrl ?? ""))) {
       const stylesheetUrl = stylesheetRef.resolvedUrl;
       if (!stylesheetUrl) continue;
@@ -5234,6 +5241,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         stylesheetLocalPath,
         baseUrl: new URL(stylesheetUrl),
         localPathByUrl,
+        fetchedUrls,
         diagnostics,
       });
       if (rewrittenCss !== cssText) fs.writeFileSync(stylesheetAbsPath, rewrittenCss, "utf8");
@@ -5248,6 +5256,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       stylesheetLocalPath: "index.html",
       baseUrl: normalizedUrl,
       localPathByUrl,
+      fetchedUrls,
       diagnostics,
       referenceMode: "root-relative",
     });
