@@ -27,6 +27,19 @@ test('the same source URL stays isolated across clients while a scoped legacy im
   assert.equal(complete.siteId, fresh.siteId)
   assert.notEqual(complete.siteVersionId, fresh.siteVersionId)
   assert.deepEqual(completeRetry, complete)
+  const attemptA = buildScopedImportRuntimeIdentity({ sourceUrl, agencyId, clientId,
+    reuseLegacyRuntimeSiteId: false, captureRevision: 'github-complete-capture-v1',
+    importAttemptId: '11111111-1111-4111-8111-111111111111' })
+  const attemptARetry = buildScopedImportRuntimeIdentity({ sourceUrl, agencyId, clientId,
+    reuseLegacyRuntimeSiteId: false, captureRevision: 'github-complete-capture-v1',
+    importAttemptId: '11111111-1111-4111-8111-111111111111' })
+  const attemptB = buildScopedImportRuntimeIdentity({ sourceUrl, agencyId, clientId,
+    reuseLegacyRuntimeSiteId: false, captureRevision: 'github-complete-capture-v1',
+    importAttemptId: '22222222-2222-4222-8222-222222222222' })
+  assert.deepEqual(attemptARetry, attemptA)
+  assert.equal(attemptA.siteId, attemptB.siteId)
+  assert.notEqual(attemptA.siteVersionId, attemptB.siteVersionId)
+  assert.notEqual(attemptA.siteVersionId, complete.siteVersionId)
   assert.equal(legacy.siteId, 'site_57d9665a3a5867edf6ef')
   const ownership = newScopedImportOwnershipSiteId({sourceUrl, agencyId, clientId})
   assert.match(ownership, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/)

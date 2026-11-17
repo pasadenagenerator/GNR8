@@ -4664,7 +4664,14 @@ export async function persistRawImportedSiteArtifact(input: {
   if (!fileMap[entryHtmlPath]) throw new Error("RAW_IMPORT_ARTIFACT_ENTRY_HTML_MISSING");
 
   if (input.metadata.gitArchive) {
-    await new RawImportGitCache().prepare(input.metadata.gitArchive, input.siteVersionId, input.fileRows);
+    try {
+      await new RawImportGitCache().prepare(input.metadata.gitArchive, input.siteVersionId, input.fileRows);
+    } catch (error) {
+      // The Git archive has already passed exact readback. Missing serving
+      // copies are recovered from that pinned commit on demand.
+      if (!(error instanceof Error) || !error.message.startsWith('RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:')) throw error;
+      console.warn('[raw-import] PRIVATE_CACHE_PREWARM_UNAVAILABLE', {siteVersionId:input.siteVersionId});
+    }
   }
 
   return withTx(async (client) => {

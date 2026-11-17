@@ -114,5 +114,12 @@ test('missing raw derivative restores exact pinned Git bytes and rejects wrong s
   repo='site';files.set(`raw-import/${versionId}/${file.path}`,Buffer.from('changed'));
   await assert.rejects(cache.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   files.set(`raw-import/${versionId}/${file.path}`,Buffer.from(body));uploadBlocked=true;
-  await assert.rejects(cache.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  assert.deepEqual(await cache.read(pinned,versionId,file),body,
+    'verified Git bytes remain readable when the disposable cache cannot be filled');
+  const unavailable={storage:{getBucket:async()=>({data:{public:false},error:null}),from:()=>({
+    upload:async()=>{throw Error('cache unavailable');},
+    download:async()=>{throw Error('cache unavailable');},
+  })}};
+  assert.deepEqual(await new RawImportGitCache(unavailable as never,'private-assets',git as never)
+    .read(pinned,versionId,file),body);
 });

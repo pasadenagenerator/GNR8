@@ -118,6 +118,7 @@ export default function SiteImporterClient(props: Props) {
           body: JSON.stringify(
             buildSiteImportRequestPayload({
               url: normalizedUrl,
+              importAttemptId: crypto.randomUUID(),
               siteName,
               agencyId: props.agencyId,
               adminView: props.adminView ?? false,

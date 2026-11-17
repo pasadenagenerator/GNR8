@@ -36,6 +36,7 @@ type Params = {
 
 type Body = {
   url?: string
+  importAttemptId?: string
   siteName?: string
   agencyId?: string
   adminView?: boolean
@@ -126,7 +127,7 @@ async function legacyRuntimeSiteBelongsToScope(input: {
 }
 
 async function resolveScopedImportRuntimeIdentity(input: {
-  sourceUrl: string; clientId: string; agencyId: string; captureRevision?: 'github-complete-capture-v1'
+  sourceUrl: string; clientId: string; agencyId: string; captureRevision?: 'github-complete-capture-v1'; importAttemptId:string
 }) {
   const legacySiteId = deterministicId('site', `${input.sourceUrl}|/`)
   const reuseLegacyRuntimeSiteId = await legacyRuntimeSiteBelongsToScope({
@@ -490,9 +491,12 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     })
     const diagnostics: string[] = ['SITE_IMPORT_SITE_NAME_RESOLVED']
 
+    if(body.importAttemptId!==undefined&&!normalizeUuid(body.importAttemptId))
+      return NextResponse.json({ok:false,error:'Invalid import attempt ID.'},{status:400})
     const runtimeIdentity = await resolveScopedImportRuntimeIdentity({
       sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
       captureRevision: 'github-complete-capture-v1',
+      importAttemptId:body.importAttemptId??crypto.randomUUID(),
     })
     const proposedOwnershipSiteId = newScopedImportOwnershipSiteId({
       sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,

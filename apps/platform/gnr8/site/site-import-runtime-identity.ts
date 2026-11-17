@@ -22,12 +22,13 @@ export function buildScopedImportRuntimeIdentity(input: {
   agencyId: string
   reuseLegacyRuntimeSiteId: boolean
   captureRevision?: 'github-complete-capture-v1'
+  importAttemptId?: string
 }): { siteId: string; siteVersionId: string; correlationKey: string } {
   const siteId = input.reuseLegacyRuntimeSiteId
     ? deterministicId('site', `${input.sourceUrl}|/`)
     : deterministicId('site', `${input.agencyId}|${input.clientId}|${input.sourceUrl}|/`)
   const correlationKey = deterministicId('runtime-import-correlation',
-    `${input.agencyId}|${input.clientId}|${input.sourceUrl}|${siteId}${input.captureRevision ? `|${input.captureRevision}` : ''}`)
+    `${input.agencyId}|${input.clientId}|${input.sourceUrl}|${siteId}${input.captureRevision ? `|${input.captureRevision}` : ''}${input.importAttemptId ? `|attempt:${input.importAttemptId}` : ''}`)
   const siteVersionId = scopedUuid(`${correlationKey}|site-version`)
   return { siteId, siteVersionId, correlationKey }
 }

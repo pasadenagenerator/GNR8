@@ -46,6 +46,15 @@ test('enabled multi-page import sends expected default payload', () => {
   assert.equal(payload.multiPageDiscovery?.htmlAcquisitionLimits.maxPages, 120)
 })
 
+test('an explicit import action carries its stable attempt identity', () => {
+  const payload = buildSiteImportRequestPayload({
+    url: 'https://www.ladjazaba.si/', siteName: 'Ladja Žaba', agencyId: 'agency-1',
+    importAttemptId: '11111111-1111-4111-8111-111111111111', multiPageImportEnabled: true,
+  })
+  assert.equal(payload.importAttemptId, '11111111-1111-4111-8111-111111111111')
+  assert.equal(payload.multiPageDiscovery?.enabled, true)
+})
+
 test('edited multi-page import limits are respected', () => {
   const payload = buildSiteImportRequestPayload({
     url: 'https://example.com/',

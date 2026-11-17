@@ -82,13 +82,18 @@ export class RawImportGitCache{
     const objectKey=key(ref,versionId,file.sha256);
     if(!Number.isSafeInteger(file.sizeBytes)||file.sizeBytes<0||file.sizeBytes>128*1024*1024)invalid();
     const bucket=await this.bucket();
-    const result=await bucket.download(objectKey);
-    if(!result.data){
+    let result:Awaited<ReturnType<typeof bucket.download>>|null;
+    try{result=await bucket.download(objectKey);}catch{result=null;}
+    if(!result?.data){
       const bytes=await this.recover(ref,versionId,file);
       try{await bucket.upload(objectKey,bytes,{upsert:false,contentType:'application/octet-stream',cacheControl:'3600'});}
       catch{/* Exact readback reconciles an ambiguous upload. */}
-      const restored=await bucket.download(objectKey);
-      if(restored.error||!restored.data||restored.data.size!==file.sizeBytes)invalid();
+      let restored:Awaited<ReturnType<typeof bucket.download>>;
+      try{restored=await bucket.download(objectKey);}catch{return bytes;}
+      // Git is the verified source of truth. A disposable cache outage must not
+      // make a pinned, integrity-checked import unreadable.
+      if(restored.error||!restored.data)return bytes;
+      if(restored.data.size!==file.sizeBytes)invalid();
       const cached=Buffer.from(await restored.data.arrayBuffer());
       if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256)invalid();
       return cached;
