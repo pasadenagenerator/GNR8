@@ -22,3 +22,18 @@ test('Lumos regeneration resolves the saved guide capture, not its build depende
   original.siteId='site';artifact.manifest.generatedOutputSourceWorkspace.lumosBrand.artifactId='wrong';
   await assert.rejects(resolve(),/source_capture_lineage_missing/);
 });
+
+test('failed dependency capture does not replace the saved Lumos source', async () => {
+  const original = {id:'original',siteId:'site',artifactId:'original-artifact',importProvenanceSummary:{}};
+  const derived = {id:'derived',siteId:'site',artifactId:'derived-artifact',
+    importProvenanceSummary:{derivedCapture:{parentSiteVersionId:'original'}}};
+  const artifact = {id:'derived-artifact',siteVersionId:'derived',manifest:{}};
+  const deps = {
+    getSiteVersion:async(id:string)=>id==='original'?original:null,
+    getArtifactById:async(id:string)=>id==='original-artifact'?{id,siteVersionId:'original'}:null,
+    getRawImportedSiteArtifact:async(id:string)=>id==='original'?{id:'original-raw',siteId:'site',siteVersionId:'original'}:null,
+  };
+  const resolved=await resolveAstroCaptureSource(derived as never,artifact as never,null,deps as never,'original');
+  assert.equal(resolved.sourceVersion.id,'original');
+  await assert.rejects(resolveAstroCaptureSource(derived as never,artifact as never,null,deps as never,'unrelated'),/LUMOS_SOURCE_CHANGED/);
+});

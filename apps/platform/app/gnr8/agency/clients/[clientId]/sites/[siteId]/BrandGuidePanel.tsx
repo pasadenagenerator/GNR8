@@ -58,7 +58,7 @@ export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:st
           excludedRoutes:excludedRoutes.split('\n').map(path=>path.trim()).filter(Boolean).map(path=>({path,reason:'obsolete-template'}))}}:{}),
       })});
       const result=await response.json();
-      if(!response.ok||!result.ok)throw Error(result.error??result.action?.resultSummary??'Priprava ni uspela.');
+      if(!response.ok||!result.ok)throw Error(result.error??result.result?.action?.resultSummary??'Priprava ni uspela.');
       setMessage('Priprava je v čakalni vrsti. Po zaključku dejanja izberite različico »Lumos · vodič '+guide.revision+'«. Tu se prikaže njen predogled, nato jo lahko odprete v Stackiju. Predlog ni javno objavljen.');
     }catch(error){setMessage(error instanceof Error?error.message:'Priprava ni uspela.');}finally{setBusy(false);}
   }

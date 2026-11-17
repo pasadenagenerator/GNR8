@@ -1,7 +1,7 @@
 import type { CanonicalSiteVersionSnapshot, RuntimeArtifact } from '@/gnr8/runtime/types';
 import type * as Store from '@/gnr8/runtime/runtime-store';
 
-export async function resolveAstroCaptureSource(initiallySelectedVersion: CanonicalSiteVersionSnapshot, initiallySelectedArtifact: RuntimeArtifact, existingAdapter: string | null, deps: Pick<typeof Store, 'getSiteVersion' | 'getArtifactById' | 'getRawImportedSiteArtifact'>) {
+export async function resolveAstroCaptureSource(initiallySelectedVersion: CanonicalSiteVersionSnapshot, initiallySelectedArtifact: RuntimeArtifact, existingAdapter: string | null, deps: Pick<typeof Store, 'getSiteVersion' | 'getArtifactById' | 'getRawImportedSiteArtifact'>, savedGuideSiteVersionId?: string) {
   const { getSiteVersion, getArtifactById, getRawImportedSiteArtifact } = deps;
   const buildEvidence = initiallySelectedArtifact.manifest.generatedOutputBuildEvidence as
     | { sourceCapture?: { siteVersionId?: unknown; artifactId?: unknown } }
@@ -24,6 +24,21 @@ export async function resolveAstroCaptureSource(initiallySelectedVersion: Canoni
     rawArtifact = sourceVersion ? await getRawImportedSiteArtifact(sourceVersion.id) : null
     if (!rawArtifact || rawArtifact.id !== brand.artifactId)
       throw new Error('astro_generation_source_capture_lineage_missing')
+  }
+
+  if (savedGuideSiteVersionId && existingAdapter !== 'astro-static-site' && initiallySelectedVersion.id !== savedGuideSiteVersionId) {
+    let ancestor: CanonicalSiteVersionSnapshot | null = initiallySelectedVersion;
+    const seen = new Set<string>();
+    for (let depth = 0; depth < 12 && ancestor && ancestor.id !== savedGuideSiteVersionId; depth++) {
+      if (seen.has(ancestor.id)) break;
+      seen.add(ancestor.id);
+      const parentId: unknown = record(ancestor.importProvenanceSummary?.derivedCapture)?.parentSiteVersionId;
+      ancestor = typeof parentId === 'string' && parentId ? await getSiteVersion(parentId) : null;
+    }
+    if (ancestor?.id !== savedGuideSiteVersionId) throw new Error('409|LUMOS_SOURCE_CHANGED');
+    sourceVersion = ancestor;
+    sourceArtifact = ancestor.artifactId ? await getArtifactById(ancestor.artifactId) : null;
+    rawArtifact = await getRawImportedSiteArtifact(ancestor.id);
   }
 
   if (sourceVersion && sourceArtifact && !rawArtifact && !existingAdapter) {

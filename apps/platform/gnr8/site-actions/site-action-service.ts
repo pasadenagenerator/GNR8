@@ -741,7 +741,7 @@ export async function runSiteAction(request: SiteActionRequest): Promise<SiteAct
           throw new Error(`unsupported_capability:${selection.unsupportedCapabilities.join(',') || selection.reason}`)
         }
         if (selection.adapterId === 'astro-static-site') {
-          const { sourceVersion, sourceArtifact } = await resolveAstroCaptureSource(initiallySelectedVersion, initiallySelectedArtifact, existingAdapterId, { getSiteVersion, getArtifactById, getRawImportedSiteArtifact });
+          const { sourceVersion, sourceArtifact } = await resolveAstroCaptureSource(initiallySelectedVersion, initiallySelectedArtifact, existingAdapterId, { getSiteVersion, getArtifactById, getRawImportedSiteArtifact }, request.lumosBrand?.siteVersionId);
           if (request.lumosBrand) {
             const { requireLumosBrand } = await import('../brand/lumos-source-proposal');
             const raw = await getRawImportedSiteArtifact(sourceVersion.id);
