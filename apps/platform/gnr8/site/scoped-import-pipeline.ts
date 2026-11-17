@@ -1802,6 +1802,7 @@ async function acquireScopedMultiPageHtml(input: {
             fs.readFileSync(input.snapshot.entryHtmlPathAbs, 'utf8'),
             ...fetchedAssetPages.map((page) => page.html),
           ],
+          seedPageUrlForCssUsage: input.snapshot.normalizedUrl,
           approvedUnusedStylesheetDependencyUrls: input.approvedUnusedCssDependencies ?? [],
         } : {}),
       })

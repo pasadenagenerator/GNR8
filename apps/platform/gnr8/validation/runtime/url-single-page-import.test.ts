@@ -468,6 +468,79 @@ test("seed capture and child capture jointly prove an upstream 404 CSS icon unus
   }
 });
 
+test("seed and child style blocks skip only a proven unused 404 CSS image", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-style-block-css-404-"));
+  const sourceUrl = "https://example.com/";
+  const missingUrl = "https://example.com/images/geocoder.png";
+  const style = "<style>.leaflet-control-geocoder-icon{background-image:url(images/geocoder.png)}</style>";
+  const seedHtml = `<html><head>${style}</head><body><main>Home</main></body></html>`;
+  const childHtml = `<html><head>${style}</head><body><main>English</main></body></html>`;
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl, snapshotRootDirAbs: root, requestId: "style-block-css-404",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        if (url === sourceUrl) return makeHtmlResponse(seedHtml);
+        if (url === missingUrl) return new Response("missing", { status: 404 });
+        throw new Error(`Unexpected fixture request: ${url}`);
+      },
+    });
+    assert.equal(snapshot.fetchManifest.some((entry) => entry.resolvedUrl === missingUrl && entry.httpStatus === 404), true);
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: snapshot.snapshotRootDirAbs,
+      pages: [{ pageUrl: `${sourceUrl}en`, bodyPath: path.join(snapshot.snapshotRootDirAbs, "en.html"), html: childHtml }],
+      existingFetchManifest: snapshot.fetchManifest,
+      seedPageUrlForCssUsage: sourceUrl,
+      fullHtmlDocumentsForCssUsage: [fs.readFileSync(snapshot.entryHtmlPathAbs, "utf8"), childHtml],
+      approvedUnusedStylesheetDependencyUrls: [missingUrl],
+      fetchImpl: async () => { throw new Error("Proven unused URL must not be fetched again"); },
+    });
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, [missingUrl]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("CSS usage proof keeps a missing image required when HTML references it directly", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-css-direct-image-"));
+  const missingUrl = "https://example.com/images/broken.png";
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://example.com/en", bodyPath: path.join(root, "en.html"),
+        html: `<style>.unused{background:url(${missingUrl})}</style><img src="${missingUrl}">` }],
+      fullHtmlDocumentsForCssUsage: ["<main>Home</main>"],
+      approvedUnusedStylesheetDependencyUrls: [missingUrl],
+      fetchImpl: async () => new Response("missing", { status: 404 }),
+    });
+    assert.deepEqual(result.summary.failedRequiredResources, [missingUrl]);
+    assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("CSS usage proof keeps a missing image required by another style block", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-css-used-style-"));
+  const missingUrl = "https://example.com/images/broken.png";
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://example.com/en", bodyPath: path.join(root, "en.html"),
+        html: `<style>.unused{background:url(${missingUrl})}</style><style>.hero{background:url(${missingUrl})}</style><main class="hero">Home</main>` }],
+      fullHtmlDocumentsForCssUsage: ["<main class=\"hero\">Home</main>"],
+      approvedUnusedStylesheetDependencyUrls: [missingUrl],
+      fetchImpl: async () => new Response("missing", { status: 404 }),
+    });
+    assert.deepEqual(result.summary.failedRequiredResources, [missingUrl]);
+    assert.deepEqual(result.summary.skippedUnusedStylesheetDependencies, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function renderedDomWorkerClient(renderedHtml: string): RenderedCaptureWorkerClient {
   return {
     async execute(request) {
