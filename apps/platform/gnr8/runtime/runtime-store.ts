@@ -4619,7 +4619,7 @@ export async function getRawTemplateSiteArtifactFiles(input: {
   artifactId: string;
   dbClient?: RuntimeStoreDbClient;
 }): Promise<Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }>> {
-  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
+  const rows = await withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
     const result = await client.query<RawTemplateArtifactFileRow & { file_path: string }>(
       `
       select
@@ -4637,10 +4637,12 @@ export async function getRawTemplateSiteArtifactFiles(input: {
       `,
       [input.artifactId, input.siteVersionId],
     );
-    const out = [];
-    for (const row of result.rows) out.push({path: row.file_path, ...await verifiedRawArtifactFile(row, input.siteVersionId)});
-    return out;
+    return result.rows;
   });
+  const cache = new RawImportGitCache();
+  const out = [];
+  for (const row of rows) out.push({path: row.file_path, ...await verifiedRawArtifactFile(row, input.siteVersionId, cache)});
+  return out;
 }
 
 export async function persistRawImportedSiteArtifact(input: {
@@ -4664,14 +4666,10 @@ export async function persistRawImportedSiteArtifact(input: {
   if (!fileMap[entryHtmlPath]) throw new Error("RAW_IMPORT_ARTIFACT_ENTRY_HTML_MISSING");
 
   if (input.metadata.gitArchive) {
-    try {
-      await new RawImportGitCache().prepare(input.metadata.gitArchive, input.siteVersionId, input.fileRows);
-    } catch (error) {
-      // The Git archive has already passed exact readback. Missing serving
-      // copies are recovered from that pinned commit on demand.
-      if (!(error instanceof Error) || !error.message.startsWith('RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:')) throw error;
-      console.warn('[raw-import] PRIVATE_CACHE_PREWARM_UNAVAILABLE', {siteVersionId:input.siteVersionId});
-    }
+    for (const row of input.fileRows) verifiedRawFileRow({
+      media_type: row.mediaType, file_size_bytes: row.sizeBytes,
+      sha256: row.sha256, content_bytes: row.bytes,
+    });
   }
 
   return withTx(async (client) => {

@@ -13,58 +13,7 @@ const ref={scope:{agencyId:'11111111-1111-4111-8111-111111111111',
   repository:'owner/site',commit:'a'.repeat(40),
   manifestPath:`raw-import/${versionId}/.gnr8-import-manifest.json`,manifestSha256:'b'.repeat(64)};
 
-test('prepare reconciles transient read failures without retrying corrupted bytes',async()=>{
-  let reads=0,corrupt=false;
-  const client={storage:{getBucket:async()=>({data:{public:false},error:null}),from:()=>({
-    upload:async()=>({data:null,error:{statusCode:'409'}}),
-    download:async()=>{
-      reads++;
-      if(reads===1)return {data:null,error:{statusCode:'503',message:'private provider detail'}};
-      return {data:new Blob([new Uint8Array(corrupt?Buffer.from('changed'):body)]),error:null};
-    },
-  })}};
-  const cache=new RawImportGitCache(client as never,'private-assets');
-  await cache.prepare(ref,versionId,[file]);assert.equal(reads,2);
-  corrupt=true;
-  await assert.rejects(cache.prepare(ref,versionId,[file]),error=>{
-    assert.equal((error as {retryable?:boolean}).retryable,false);
-    assert.match(String(error),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);return true;
-  });
-  assert.equal(reads,3);
-});
-
-test('prepare retries an upload that did not create its private object',async()=>{
-  let uploads=0,reads=0;
-  let stored:Buffer|null=null;
-  const client={storage:{getBucket:async()=>({data:{public:false},error:null}),from:()=>({
-    upload:async(_key:string,bytes:Buffer)=>{
-      uploads++;
-      if(uploads===1)return {data:null,error:{statusCode:'503'}};
-      stored=Buffer.from(bytes);return {data:{},error:null};
-    },
-    download:async()=>{
-      reads++;
-      return stored?{data:new Blob([new Uint8Array(stored)]),error:null}:
-        {data:null,error:{status:404}};
-    },
-  })}};
-  await new RawImportGitCache(client as never,'private-assets').prepare(ref,versionId,[file]);
-  assert.equal(uploads,2);
-  assert.equal(reads,2);
-});
-
-test('prepare leaves a persistently missing object unavailable after bounded retries',async()=>{
-  let uploads=0;
-  const client={storage:{getBucket:async()=>({data:{public:false},error:null}),from:()=>({
-    upload:async()=>{uploads++;return {data:null,error:{statusCode:'503'}};},
-    download:async()=>({data:null,error:{status:404}}),
-  })}};
-  await assert.rejects(new RawImportGitCache(client as never,'private-assets').prepare(ref,versionId,[file]),
-    /RAW_IMPORT_CACHE_READBACK_UNAVAILABLE:[a-f0-9]{64}:404/);
-  assert.equal(uploads,4);
-});
-
-test('private raw import cache prepares and verifies bytes; corruption and public bucket fail closed',async()=>{
+test('private raw import cache verifies bytes; corruption and public bucket fail closed',async()=>{
   const objects=new Map<string,Buffer>();let publicBucket=false;
   const client={storage:{
     getBucket:async()=>({data:{public:publicBucket},error:null}),
@@ -75,13 +24,18 @@ test('private raw import cache prepares and verifies bytes; corruption and publi
     }),
   }};
   const cache=new RawImportGitCache(client as never,'private-assets');
-  await cache.prepare(ref,versionId,[file]);
-  assert.deepEqual(await cache.read(ref,versionId,file),body);
+  const pkg=rawImportGitPackage({scope:ref.scope,runtimeSiteId:'site_123',siteVersionId:versionId,files:[file]});
+  const pinned={...ref,manifestSha256:pkg.manifestSha256};
+  const files=new Map(pkg.gitFiles.map(entry=>[entry.path,Buffer.from(entry.body)]));
+  const git={resolveTarget:async()=>({owner:'owner',ownerId:1,repository:'site',repositoryId:2,token:'local'}),
+    verifyTarget:async()=>{},read:async()=>({commit:pinned.commit,parent:'c'.repeat(40),parentCount:1,files})};
+  const verified=new RawImportGitCache(client as never,'private-assets',git as never);
+  assert.deepEqual(await verified.read(pinned,versionId,file),body);
   const key=[...objects.keys()][0];
   objects.set(key,Buffer.from('corrupt'));
-  await assert.rejects(cache.read(ref,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  await assert.rejects(verified.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   publicBucket=true;
-  await assert.rejects(new RawImportGitCache(client as never,'private-assets').read(ref,versionId,file),
+  await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never).read(pinned,versionId,file),
     /RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
 });
 
@@ -109,10 +63,12 @@ test('missing raw derivative restores exact pinned Git bytes and rejects wrong s
   await assert.rejects(cache.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   assert.equal(reads,1);
   objects.delete(key);repo='other';
-  await assert.rejects(cache.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never)
+    .read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   assert.equal(reads,1);
   repo='site';files.set(`raw-import/${versionId}/${file.path}`,Buffer.from('changed'));
-  await assert.rejects(cache.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never)
+    .read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   files.set(`raw-import/${versionId}/${file.path}`,Buffer.from(body));uploadBlocked=true;
   assert.deepEqual(await cache.read(pinned,versionId,file),body,
     'verified Git bytes remain readable when the disposable cache cannot be filled');
@@ -122,4 +78,22 @@ test('missing raw derivative restores exact pinned Git bytes and rejects wrong s
   })}};
   assert.deepEqual(await new RawImportGitCache(unavailable as never,'private-assets',git as never)
     .read(pinned,versionId,file),body);
+});
+
+test('unavailable cache metadata restores multiple files from one verified Git read',async()=>{
+  const secondBody=Buffer.from('<p>English</p>');
+  const second={path:'en/index.html',mediaType:'text/html',sizeBytes:secondBody.length,
+    sha256:createHash('sha256').update(secondBody).digest('hex'),bytes:secondBody};
+  const pkg=rawImportGitPackage({scope:ref.scope,runtimeSiteId:'site_123',siteVersionId:versionId,files:[file,second]});
+  const pinned={...ref,manifestSha256:pkg.manifestSha256};
+  const files=new Map(pkg.gitFiles.map(entry=>[entry.path,Buffer.from(entry.body)]));
+  let reads=0;
+  const git={resolveTarget:async()=>({owner:'owner',ownerId:1,repository:'site',repositoryId:2,token:'local'}),
+    verifyTarget:async()=>{},read:async()=>{reads++;return {commit:pinned.commit,parent:'c'.repeat(40),parentCount:1,files};}};
+  const unavailable={storage:{getBucket:async()=>{throw Error('storage unavailable');}}};
+  const cache=new RawImportGitCache(unavailable as never,'private-assets',git as never);
+  assert.deepEqual(await cache.read(pinned,versionId,file),body);
+  assert.deepEqual(await cache.read(pinned,versionId,second),secondBody);
+  assert.equal(reads,1);
+  assert.deepEqual(await new RawImportGitCache(null,'',git as never).read(pinned,versionId,file),body);
 });
