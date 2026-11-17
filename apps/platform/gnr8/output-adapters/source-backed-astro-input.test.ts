@@ -766,7 +766,7 @@ test("preserves route-specific stylesheet order and applies only explicitly acce
   const userHref = `/api/gnr8/runtime/preview-assets/runtime-site/${input.version.id}/assets/user-style.css`;
 
   assert.ok(rootSource.indexOf(externalHref) < rootSource.indexOf(userHref));
-  assert.match(rootSource, /<style is:global>\.page-specific/);
+  assert.match(rootSource, /<style is:global is:inline>\.page-specific/);
   assert.doesNotMatch(rootSource, /href="\/styles\/global\.css"/);
   assert.doesNotMatch(rootSource, /infobar-wrapper|cookie-row|scrollIcon|h-captcha|hcaptcha\.com/i);
   assert.match(rootSource, /class="sticky-navigation"/);
