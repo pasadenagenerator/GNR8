@@ -13,6 +13,7 @@ import {
   type SiteImportMultiPageLimitState,
 } from '@/gnr8/site/site-import-multipage-ui'
 import { agencyClientDashboardHref } from '@/gnr8/site/site-importer-routing'
+import { suggestWorkingDomain } from '@/gnr8/site/working-domain'
 
 type Props = {
   clientId: string
@@ -64,6 +65,8 @@ export default function SiteImporterClient(props: Props) {
   const router = useRouter()
   const [url, setUrl] = useState('')
   const [siteName, setSiteName] = useState('')
+  const [workingDomain, setWorkingDomain] = useState('')
+  const [workingDomainEdited, setWorkingDomainEdited] = useState(false)
   const [multiPageImportEnabled, setMultiPageImportEnabled] = useState(false)
   const [multiPageLimits, setMultiPageLimits] = useState<SiteImportMultiPageLimitState>(DEFAULT_SITE_IMPORT_MULTI_PAGE_LIMIT_STATE)
   const [error, setError] = useState<string | null>(null)
@@ -96,6 +99,8 @@ export default function SiteImporterClient(props: Props) {
     if (hostnamePlaceholder && hostnamePlaceholder !== 'example.com') return hostnamePlaceholder
     return 'Imported Site'
   }, [hostnamePlaceholder, siteName])
+  const proposedWorkingDomain = useMemo(() => suggestWorkingDomain(url.trim()), [url])
+  const selectedWorkingDomain = workingDomainEdited ? workingDomain : proposedWorkingDomain
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -118,6 +123,7 @@ export default function SiteImporterClient(props: Props) {
           body: JSON.stringify(
             buildSiteImportRequestPayload({
               url: normalizedUrl,
+              workingDomain: selectedWorkingDomain,
               importAttemptId: crypto.randomUUID(),
               siteName,
               agencyId: props.agencyId,
@@ -218,6 +224,15 @@ export default function SiteImporterClient(props: Props) {
         <p style={{ margin: 0, fontSize: 12, color: '#475569' }}>
           Imported site name: <strong>{resolvedSiteNamePreview}</strong>
         </p>
+
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={{ fontSize: 12, color: '#334155' }}>Delovna domena</span>
+          <input type='text' required value={selectedWorkingDomain}
+            placeholder='ime.app.pasadenagenerator.com'
+            onChange={(event) => { setWorkingDomainEdited(true); setWorkingDomain(event.currentTarget.value) }}
+            style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 14 }} />
+          <span style={{ fontSize: 12, color: '#475569' }}>Zasebni predogled ostane v GNR8. Po potrditvi bo stran objavljena na tej domeni.</span>
+        </label>
 
         <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, display: 'grid', gap: 10 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a', fontSize: 13, fontWeight: 700 }}>

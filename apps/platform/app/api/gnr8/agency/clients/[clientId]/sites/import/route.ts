@@ -6,6 +6,7 @@ import { parseAgencyActionContextError, requireAgencyActionContext } from '@/app
 import { SCOPED_SITE_IMPORT_CANONICAL_PATH } from '@/gnr8/site/site-import-contract'
 import { buildSiteImportCreatePayload } from '@/gnr8/site/site-import-create-payload'
 import { importerSuccessRedirectHref } from '@/gnr8/site/site-importer-routing'
+import { normalizeWorkingDomain, suggestWorkingDomain } from '@/gnr8/site/working-domain'
 import { resolveImportPreview } from '@/gnr8/site/import-preview-resolution'
 import { extractTitleFromHtmlDocument, resolveImportedSiteName } from '@/gnr8/site/site-import-site-name'
 import { buildScopedImportRuntimeIdentity, newScopedImportOwnershipSiteId } from '@/gnr8/site/site-import-runtime-identity'
@@ -36,6 +37,7 @@ type Params = {
 
 type Body = {
   url?: string
+  workingDomain?: string
   importAttemptId?: string
   siteName?: string
   agencyId?: string
@@ -466,6 +468,24 @@ async function updateProvisionalImportSiteName(input:{siteId:string;agencyId:str
     [input.siteId,input.clientId,input.agencyId,input.provisionalName,input.resolvedName])
 }
 
+async function assertWorkingDomainAvailable(input:{workingDomain:string;ownershipSiteId:string;sourceHost:string}) {
+  const result=await getSuperadminPool().query<{id:string;domain:string|null}>(`
+    select id::text as id,domain from public.sites
+    where id=$2::uuid or lower(domain)=$1::text`,[input.workingDomain,input.ownershipSiteId])
+  if(result.rows.some(row=>row.id!==input.ownershipSiteId))throw new Error('Delovna domena je že dodeljena drugemu spletišču.')
+  const current=result.rows.find(row=>row.id===input.ownershipSiteId)?.domain?.toLowerCase()
+  if(current&&current!==input.sourceHost&&current!==input.workingDomain)
+    throw new Error(`Spletišče že ima drugo delovno domeno: ${current}. Spremeni jo v nastavitvah spletišča.`)
+}
+
+async function saveWorkingDomain(input:{workingDomain:string;ownershipSiteId:string;sourceHost:string}) {
+  const result=await getSuperadminPool().query(`
+    update public.sites set domain=$2::text,updated_at=now()
+    where id=$1::uuid and (domain is null or lower(domain)=$3::text or lower(domain)=$2::text)
+    returning id`,[input.ownershipSiteId,input.workingDomain,input.sourceHost])
+  if(result.rows.length!==1)throw new Error('Delovna domena se je med uvozom spremenila.')
+}
+
 export async function POST(req: Request, ctx: { params: Promise<Params> }) {
   try {
     const { clientId: rawClientId } = await ctx.params
@@ -479,6 +499,8 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     if (!importUrl) {
       return NextResponse.json({ ok: false, error: 'url must be valid http(s).' }, { status: 400 })
     }
+    const workingDomain=normalizeWorkingDomain(body.workingDomain ?? suggestWorkingDomain(importUrl.toString()))
+    if(!workingDomain)return NextResponse.json({ok:false,error:'Delovna domena mora biti ime.app.pasadenagenerator.com.'},{status:400})
 
     const actionContext = await requireAgencyActionContext({
       action: 'run_migration',
@@ -512,6 +534,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       lookupClient.release()
     }
     const expectedOwnershipSiteId = existingOwnershipSiteId ?? proposedOwnershipSiteId
+    await assertWorkingDomainAvailable({workingDomain,ownershipSiteId:expectedOwnershipSiteId,sourceHost:importUrl.hostname.toLowerCase()})
     const provisionalSiteName=buildSiteImportCreatePayload({
       userProvidedSiteName:body.siteName,sourceUrl:importUrl.toString(),
       documentTitle:null,clientId,agencyId:actionContext.agencyId,
@@ -701,6 +724,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     if (imported.siteId !== preallocatedIdentity.siteId || imported.siteVersionId !== preallocatedIdentity.siteVersionId) {
       throw new Error('Imported runtime identity did not match preallocated site ownership.')
     }
+    await saveWorkingDomain({workingDomain,ownershipSiteId,sourceHost:importUrl.hostname.toLowerCase()})
     diagnostics.push('SITE_IMPORT_SITE_CREATE_COMPLETED')
     console.info('[site-import] SITE_IMPORT_SITE_CREATE_COMPLETED', {
       siteId: ownershipSiteId,
@@ -795,6 +819,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         importPathClassification: 'canonical_scoped',
         canonicalImportPath: SCOPED_SITE_IMPORT_CANONICAL_PATH,
         siteId: ownershipSiteId,
+        workingDomain,
         runtimeSiteId: imported.siteId,
         siteVersionId: imported.siteVersionId,
         siteVersionNo: imported.versionNo,
