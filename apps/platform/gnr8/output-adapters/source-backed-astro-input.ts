@@ -663,6 +663,7 @@ function normalizePage(input: {
         hasReplacedForms: replacedFormCount > 0 && input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1",
         replacedFormSecurityRuntime,
         elements,
+        capturedPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
       })
     ) {
       detach(script);
@@ -1340,7 +1341,7 @@ function scriptAssetName(value: string): string {
 }
 function isReplaceableStaticSiteScript(
   script: HtmlElement,
-  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; elements: HtmlElement[] },
+  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; elements: HtmlElement[]; capturedPaths: ReadonlySet<string> },
 ): boolean {
   if (attribute(script, "data-gnr8-raw-runtime-duplicate-guard") !== null) return true;
   if (attribute(script, "data-gnr8-disabled-preview-script") !== null) return true;
@@ -1369,11 +1370,20 @@ function isReplaceableStaticSiteScript(
     "touch-events.js",
   ]);
   if (staticEnhancementAssets.has(assetName)) return true;
+  const hasUnprojectedMonoModule = (name: string) => context.elements.some((element) =>
+    (attribute(element, "data-req") ?? "").split(",").includes(name));
+  if (assetName === "locale.js" && !hasUnprojectedMonoModule("locale")) return true;
+  if (["lightbox.js", "slider.js"].includes(assetName) &&
+      !["gallery", "lightbox", "slider"].some(hasUnprojectedMonoModule)) return true;
+  if (assetName === "animate.js" && !context.elements.some((element) =>
+    element.attrs.some((attr) => attr.name.startsWith("data-anim")))) return true;
   if (/google-analytics|googletagmanager|gtag\/js|monotracker/i.test(src)) return true;
   if (context.hasReplacedForms && (assetName === "form.js" || /hcaptcha\.com/i.test(src))) return true;
   if (context.replacedFormSecurityRuntime && assetName === "api.js") return true;
   if (assetName === "js.js" && context.elements.some((element) => element.tagName === "script" && /\bgtag\s*\(|\bdataLayer\b/i.test(textContent(element)))) return true;
   if (/serviceworker\.getregistrations|window\.assetsurl\s*=|\b_monoCookie\s*=|\bdataLayer\b|\bgtag\s*\(/i.test(body)) return true;
+  if (!context.capturedPaths.has("sw.js") &&
+      /^if\s*\(\s*['"]serviceWorker['"]\s+in\s+navigator\s*\)\s*\{\s*navigator\.serviceWorker\.register\(\s*['"]\/sw\.js(?:\?\d+)?['"]\s*,\s*\{\s*scope:\s*['"]\/['"]\s*\}\s*\);\s*\}$/.test(body)) return true;
   if (/createelement\s*\(\s*["']link["']\s*\)/i.test(lowerBody) && /rel\s*=\s*["']stylesheet["']/i.test(lowerBody)) return true;
   return false;
 }

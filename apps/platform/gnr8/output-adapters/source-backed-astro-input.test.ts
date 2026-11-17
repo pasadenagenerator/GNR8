@@ -974,6 +974,37 @@ test("accepted form reductions do not remove unknown functional scripts", () => 
   );
 });
 
+test("retained Mono pages discard only scripts whose controls were projected or have no targets", () => {
+  const rootHtml = `<html><body><details data-gnr8-mono-locale><summary>Language</summary><a href="#language">English</a></details>
+    <section data-gnr8-gallery><a data-gallery-image href="/uploads/logo.png"><img src="/uploads/logo.png"></a></section>
+    <script src="/assets/script/locale.js"></script><script src="/assets/script/lightbox.js"></script>
+    <script src="/assets/script/slider.js"></script><script src="/assets/script/animate.js"></script>
+    <script>if ('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js?1779352296', { scope: '/'}); }</script>
+    </body></html>`;
+  const input = fixture({ rootHtml });
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact,
+    retainedFunctions: { kind: "retained-functions-v1" },
+  });
+  const home = generated.content.pages!.find((page) => page.path === "/")!.bodyHtml;
+  assert.doesNotMatch(home, /locale\.js|lightbox\.js|slider\.js|animate\.js|serviceWorker\.register/);
+  for (const module of ["locale", "gallery", "lightbox", "slider"]) {
+    const unprojected = fixture({ rootHtml: rootHtml.replace("</body>", `<div data-req="${module}"></div></body>`) });
+    assert.throws(() => createSourceBackedAstroGenerationInput({siteVersion: unprojected.version,
+      artifact: unprojected.artifact, rawArtifact: unprojected.rawArtifact,
+      retainedFunctions: {kind: "retained-functions-v1"}}),
+    (error: unknown) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"));
+  }
+  const animated = fixture({ rootHtml: rootHtml.replace("</body>", '<div data-anim="fade"></div></body>') });
+  assert.throws(() => createSourceBackedAstroGenerationInput({siteVersion:animated.version,
+    artifact:animated.artifact,rawArtifact:animated.rawArtifact,retainedFunctions:{kind:"retained-functions-v1"}}),
+  (error:unknown)=>error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"));
+  const unknown = fixture({ rootHtml: rootHtml.replace("</body>", '<script>window.unknownFeature()</script></body>') });
+  assert.throws(() => createSourceBackedAstroGenerationInput({siteVersion:unknown.version,
+    artifact:unknown.artifact,rawArtifact:unknown.rawArtifact,retainedFunctions:{kind:"retained-functions-v1"}}),
+  (error:unknown)=>error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"));
+});
+
 test("does not remove a generic api.js without security evidence inside a replaced form", () => {
   const input = fixture({
     rootHtml: '<html><head><title>Home</title></head><body><form id="m3166"><input name="email"></form><script src="/assets/script/1a0efd5f7e4f-api.js"></script></body></html>',
