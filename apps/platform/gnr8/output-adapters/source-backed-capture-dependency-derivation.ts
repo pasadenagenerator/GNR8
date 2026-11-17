@@ -115,6 +115,31 @@ export function restoreRetainedStylesheetReferences(files: FileRow[]): {
   return { files: restoredFiles, rewrites, changed };
 }
 
+export function planRetainedThemeScriptDependencies(input:{htmlFiles:Array<{bytes:Buffer}>;sourceUrl?:string;filePaths:ReadonlySet<string>}):string[]{
+  if(!input.sourceUrl)return [];
+  const source=new URL(input.sourceUrl), urls=new Set<string>();
+  const walk=(node:DefaultTreeAdapterMap['node'])=>{
+    if('tagName'in node&&node.tagName==='script'){
+      const src=node.attrs.find(a=>a.name==='src')?.value;
+      if(src)try{const url=new URL(src,source);
+        // Fetch for byte verification only; these concatenated theme bundles
+        // are never executed. The downstream reviewed-hash gate still applies.
+        if(url.protocol==='https:'&&!url.username&&!url.password&&url.hostname.replace(/^www\./,'')===source.hostname.replace(/^www\./,'')&&
+          /^\/wp-content\/cache\/wpfc-minified\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+\.js$/.test(url.pathname)&&
+          !input.filePaths.has(src.replace(/^\//,''))&&!input.filePaths.has(computeLocalPathCandidate({resolvedUrl:url.href,assetKind:'script'})))urls.add(url.href);
+      }catch{/* Unrecognized URLs remain subject to the normal source gate. */}
+    }
+    if('childNodes'in node)node.childNodes.forEach(walk);
+  };
+  input.htmlFiles.forEach(file=>walk(parse(file.bytes.toString('utf8'))));
+  if(urls.size>16)throw Error('retained_theme_script_dependency_limit');
+  return [...urls].sort();
+}
+
+const capturePersistence = { getSiteVersion, getArtifactById, getRawImportedSiteArtifact,
+  getRawTemplateSiteArtifactFiles, createSiteVersionFromMigration, linkRuntimeSiteVersionOwnershipIfAllowed,
+  persistRawImportedSiteArtifact, createArtifact, bindArtifactToVersion };
+
 export async function ensureDependencyCompleteDerivedCapture(input: {
   parentSiteVersion: CanonicalSiteVersionSnapshot;
   parentArtifact: RuntimeArtifact;
@@ -123,6 +148,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   ownershipSiteId: string;
   actor: string;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
+  retainedFunctions?: import('@gnr8/runtime-contracts').RetainedFunctions;
   /** Internal operator acquisition boundary. The normal importer still checks
    * responses and closes the graph; this is not exposed in action payloads.
    */
@@ -130,12 +156,12 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     fetchImpl: NonNullable<Parameters<typeof captureAssetsForAdditionalHtmlPages>[0]["fetchImpl"]>;
     evidence: DependencyAcquisitionEvidence[];
   };
-}): Promise<DerivedCaptureResult> {
+}, persistence = capturePersistence): Promise<DerivedCaptureResult> {
   let parentSiteVersion = input.parentSiteVersion;
   let parentArtifact = input.parentArtifact;
   let parentRawArtifact = input.parentRawArtifact;
   let derivedSiteVersionId = input.derivedSiteVersionId;
-  let existingVersion = await getSiteVersion(derivedSiteVersionId);
+  let existingVersion = await persistence.getSiteVersion(derivedSiteVersionId);
   let resumableRawArtifact: RawImportedSiteArtifact | null = null;
   let resumableArtifact: RuntimeArtifact | null = null;
   let followedImmutableDerivedCapture = false;
@@ -148,7 +174,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       lineage.parentRawArtifactId !== parentRawArtifact.id
     ) throw new Error("astro_derived_capture_lineage_conflict");
     [resumableRawArtifact, resumableArtifact] = await Promise.all([
-      getRawImportedSiteArtifact(existingVersion.id),
+      persistence.getRawImportedSiteArtifact(existingVersion.id),
       existingVersion.artifactId ? getArtifactById(existingVersion.artifactId) : Promise.resolve(null),
     ]);
     assertDerivedCaptureGitResumeLineage({parentRawArtifact,derivedSiteVersionId:existingVersion.id,
@@ -159,7 +185,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       parentRawArtifact = resumableRawArtifact;
       followedImmutableDerivedCapture = true;
       derivedSiteVersionId = deriveDependencySuccessorSiteVersionId(existingVersion.id);
-      existingVersion = await getSiteVersion(derivedSiteVersionId);
+      existingVersion = await persistence.getSiteVersion(derivedSiteVersionId);
       resumableRawArtifact = null;
       resumableArtifact = null;
       continue;
@@ -167,7 +193,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     break;
   }
 
-  const persistedParentFiles = await getRawTemplateSiteArtifactFiles({
+  const persistedParentFiles = await persistence.getRawTemplateSiteArtifactFiles({
     siteVersionId: parentSiteVersion.id,
     artifactId: parentRawArtifact.id,
   });
@@ -187,8 +213,8 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   // feed planning, acquisition and immutable persistence.
   const restored = restoreRetainedStylesheetReferences(persistedParentFiles);
   const parentFiles = restored.files;
-  const excludedRoutes = new Set(input.acceptedFunctionalReductions?.kind === "retained-presentation-v1"
-    ? (input.acceptedFunctionalReductions.excludedRoutes ?? []).map(entry => entry.path.replace(/\/$/, "")) : []);
+  const excludedRoutes = new Set((input.retainedFunctions?.excludedRoutes ?? (input.acceptedFunctionalReductions?.kind === "retained-presentation-v1"
+    ? input.acceptedFunctionalReductions.excludedRoutes ?? [] : [])).map(entry=>entry.path.replace(/\/$/,'')));
   const servedHtmlPaths = new Set([
     parentRawArtifact.entryHtmlPath,
     ...routeMapFromProvenance(parentSiteVersion.importProvenanceSummary)
@@ -198,6 +224,9 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   // Plan dependencies only for the approved output scope. Parent rows and bytes
   // remain intact, including shared assets and the excluded historical HTML.
   const htmlFiles = parentFiles.filter((file) => servedHtmlPaths.has(file.path));
+  const missingScriptUrls = input.retainedFunctions ? planRetainedThemeScriptDependencies({htmlFiles,
+    sourceUrl:parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
+    filePaths:new Set(parentFiles.map(file=>file.path))}) : [];
   const pageUrls = new Map(routeMapFromProvenance(parentSiteVersion.importProvenanceSummary)
     .map(route => [route.rawFilePath, route.finalUrl ?? route.sourceUrl]));
   const lazyImagePlan = planRetainedFallbackImages({
@@ -266,6 +295,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     retainedStylesheetImportPlan.missingUrls.length === 0 &&
     retainedStaticDependencyPlan.missingUrls.length === 0 &&
     lazyImagePlan.length === 0 &&
+    missingScriptUrls.length === 0 &&
     !restored.changed
   ) {
     return {
@@ -313,7 +343,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     ])].sort();
     const syntheticHtml = `<!doctype html><html><head>${allStylesheetUrls
       .map((url) => `<link rel="stylesheet" href="${escapeAttribute(url)}">`)
-      .join("")}</head><body>${[...new Set(lazyImagePlan.map(entry => entry.sourceUrl))]
+      .join("")}${missingScriptUrls.map(url=>`<script src="${escapeAttribute(url)}"></script>`).join('')}</head><body>${[...new Set(lazyImagePlan.map(entry => entry.sourceUrl))]
         .map(url => `<img src="${escapeAttribute(url)}">`).join("")}</body></html>`;
     const capture = await captureAssetsForAdditionalHtmlPages({
       pages: [{
@@ -324,6 +354,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       snapshotRootDirAbs: workspace,
       existingFetchManifest: existingManifest,
       fetchImpl: input.dependencyAcquisition?.fetchImpl,
+      retainedScriptDependencyUrls: missingScriptUrls,
       trustedExternalOrigins: trustedOriginsForStylesheets([
         ...allStylesheetUrls,
         ...importOriginsFromRetainedStylesheets(parentFiles),
@@ -334,6 +365,8 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     if (capture.summary.failedRequiredAssetCount > 0) {
       throw new Error(`astro_derived_capture_dependency_fetch_failed:${capture.summary.failedRequiredResources.join(",")}`);
     }
+    for(const url of missingScriptUrls)if(!capture.manifestEntries.some(entry=>entry.assetKind==='script'&&entry.fetchStatus==='fetched'&&entry.resolvedUrl===url))
+      throw new Error('astro_derived_capture_theme_script_missing');
     const fetchedStylesheetEntries = capture.manifestEntries.filter((entry) =>
       entry.assetKind === "stylesheet" && entry.fetchStatus === "fetched" && entry.resolvedUrl && entry.localPath,
     );
@@ -480,6 +513,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       derivedFilesSha256,
       dependencyUrls: [...new Set([
         ...missingStylesheetUrls,
+        ...missingScriptUrls,
         ...lazyImagePlan.map(image => image.sourceUrl),
         ...fetchedStaticDependencyEntries.map((entry) => entry.resolvedUrl!),
       ])].sort(),
@@ -508,7 +542,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       : undefined;
     const createdVersion = existingVersion
       ? { siteVersionId: existingVersion.id }
-      : await createSiteVersionFromMigration({
+      : await persistence.createSiteVersionFromMigration({
           siteId: parentSiteVersion.siteId,
           siteVersionId: derivedSiteVersionId,
           sourceUrl: parentRawArtifact.metadata.finalUrl ?? parentRawArtifact.metadata.sourceUrl,
@@ -518,14 +552,14 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
           rendererCompatibilityVersion: parentSiteVersion.rendererCompatibilityVersion,
           createSourceHostBinding: false,
         });
-    await linkRuntimeSiteVersionOwnershipIfAllowed({
+    await persistence.linkRuntimeSiteVersionOwnershipIfAllowed({
       siteVersionId: createdVersion.siteVersionId,
       ownershipSiteId: input.ownershipSiteId,
     });
     if (resumableRawArtifact) assertFileRowsMatchManifest(derivedFiles, resumableRawArtifact);
     const rawResult = resumableRawArtifact
       ? { artifactId: resumableRawArtifact.id }
-      : await persistRawImportedSiteArtifact({
+      : await persistence.persistRawImportedSiteArtifact({
           siteId: parentRawArtifact.siteId,
           siteVersionId: createdVersion.siteVersionId,
           entryHtmlPath: parentRawArtifact.entryHtmlPath,
@@ -596,7 +630,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     if (resumableArtifact && resumableArtifact.bundleSha256 !== artifactBundleSha256) {
       throw new Error("astro_derived_capture_artifact_conflict");
     }
-    const createdArtifactId = resumableArtifact?.id ?? (await createArtifact({
+    const createdArtifactId = resumableArtifact?.id ?? (await persistence.createArtifact({
         siteId: parentArtifact.siteId,
         siteVersionId: createdVersion.siteVersionId,
         rendererCompatibilityVersion: parentArtifact.rendererCompatibilityVersion,
@@ -609,15 +643,15 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
         shadowRestricted: parentArtifact.shadowRestricted,
         artifactGovernance: parentArtifact.artifactGovernance,
       })).artifactId;
-    await bindArtifactToVersion({
+    await persistence.bindArtifactToVersion({
       siteVersionId: createdVersion.siteVersionId,
       artifactId: createdArtifactId,
       rendererCompatibilityVersion: parentArtifact.rendererCompatibilityVersion,
     });
     const [siteVersion, artifact, rawArtifact] = await Promise.all([
-      getSiteVersion(createdVersion.siteVersionId),
-      getArtifactById(createdArtifactId),
-      getRawImportedSiteArtifact(createdVersion.siteVersionId),
+      persistence.getSiteVersion(createdVersion.siteVersionId),
+      persistence.getArtifactById(createdArtifactId),
+      persistence.getRawImportedSiteArtifact(createdVersion.siteVersionId),
     ]);
     if (!siteVersion || !artifact || !rawArtifact) throw new Error("astro_derived_capture_persistence_incomplete");
     return { siteVersion, artifact, rawArtifact, derived: true };

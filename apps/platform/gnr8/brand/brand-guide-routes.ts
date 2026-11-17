@@ -9,6 +9,7 @@ import { applySavedBrand, parseBrandDecisions, type BrandSaved } from './brand-g
 import { extractBrandGuide } from './brand-guide-extraction';
 import type { RuntimeImportProvenanceSummary } from '../runtime/types';
 import {getSiteVersion,isGitBackedImportMarker} from '../runtime/runtime-store';
+import {RawImportGitCache} from '../site/raw-import-git-cache';
 
 type Context={params:Promise<{clientId:string;siteId:string}>};
 const headers={'cache-control':'private, no-store'};
@@ -39,7 +40,9 @@ export function createBrandGuideRoutes(deps=brandDependencies){
       if(result.error||!result.data)throw Error('404|Shranjeni vhod ni na voljo.');
       const artifact=result.data;
       const baseline=getEvidenceCaptureBaselineArtifactFromImportProvenanceSummary(previous as RuntimeImportProvenanceSummary|null);
-      const read=deps.reader(db);
+      // A guide reads several retained files. Share one request-local verified
+      // archive so an unavailable disposable cache does not fetch Git per file.
+      const read=deps.reader(db,false,undefined,undefined,new RawImportGitCache(db));
       const guide=applySavedBrand(await deps.extract({siteId:owner.runtimeSiteId,siteVersionId,artifactId:artifact.id,entryHtmlPath:artifact.entry_html_path,fileMap:artifact.file_map,
         computedStylePath:baseline?.persistedRefs.computedStyleRef?.uri??null,
         read:path=>read({siteId:owner.runtimeSiteId,siteVersionId,path}),

@@ -816,7 +816,7 @@ async function verifyDistHttp(
   const stylesheetPath = inspected.themeStylesheetPath;
   if (inspected.compiledStylesheetSourceSha256) {
     evidence.http.compiledStylesheets = [];
-    if (!inspected.stylesheetPaths.length)
+    if (!inspected.stylesheetPaths.length && !inspected.verifiedStylesheetReferences.length)
       throw proofError("stylesheet_verification_failed", "Compiled source produced no linked local stylesheet.", evidence);
     for (const path of inspected.stylesheetPaths) {
       const expected = inspected.manifest.files.find(file => file.path === path);

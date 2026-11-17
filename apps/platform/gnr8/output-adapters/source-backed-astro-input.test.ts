@@ -1,6 +1,7 @@
 import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
@@ -15,6 +16,71 @@ import {
 } from "./source-backed-astro-input";
 
 const SHA = "a".repeat(64);
+
+test('retained Ladja capture replay',{skip:!process.env.GNR8_LADJA_CAPTURE_DIR},async()=>{
+  const dir=process.env.GNR8_LADJA_CAPTURE_DIR!;
+  const manifest=JSON.parse(readFileSync(`${dir}/.gnr8-import-manifest.json`,'utf8')) as {files:Array<{path:string;mediaType:string;bytes:number;sha256:string}>};
+  const input=fixture({rootHtml:readFileSync(`${dir}/index.html`,'utf8')});
+  input.version.siteId='site_33f0b6c4e632be571754';
+  input.version.id='11b6ea9b-80ef-487f-bb37-d781fe91fe41';
+  input.artifact.siteId=input.version.siteId;
+  input.artifact.siteVersionId=input.version.id;
+  input.rawArtifact.siteId=input.version.siteId;
+  input.rawArtifact.siteVersionId=input.version.id;
+  input.version.pages=[page('/','Home'),page('/en','English'),page('/it','Italiano')];
+  input.version.importProvenanceSummary={multiPageDiscovery:{rawArtifactAssembly:{enabled:true,routeMap:['en','it'].map(lang=>({routePath:`/${lang}`,sourceUrl:`https://www.ladjazaba.si/${lang}`,finalUrl:`https://www.ladjazaba.si/${lang}`,rawFilePath:`pages/${lang}/index.html`,bodySha256:SHA,byteSize:1,status:'assembled'}))}}} as CanonicalSiteVersionSnapshot['importProvenanceSummary'];
+  input.artifact.htmlByPath={'/':input.artifact.htmlByPath['/']!, '/en':readFileSync(`${dir}/pages/en/index.html`,'utf8'),'/it':readFileSync(`${dir}/pages/it/index.html`,'utf8')};
+  input.rawArtifact.fileMap=Object.fromEntries(manifest.files.map(f=>[f.path,{path:f.path,mediaType:f.mediaType,sizeBytes:f.bytes,sha256:f.sha256}]));
+  input.rawArtifact.metadata.sourceUrl='https://www.ladjazaba.si/';
+  input.rawArtifact.metadata.finalUrl='https://www.ladjazaba.si/';
+  input.rawArtifact.metadata.multiPage={enabled:true,pageCount:3,routeMapRef:'importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly'};
+  const stylesheetCssByPath=Object.fromEntries(manifest.files.filter(f=>f.path.endsWith('.css')).map(f=>[f.path,readFileSync(`${dir}/${f.path}`,'utf8')]));
+  try{const generated=createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,
+    htmlByPath:input.artifact.htmlByPath as never,stylesheetCssByPath,retainedFunctions:{kind:'retained-functions-v1'}});
+    assert.deepEqual(generated.outputPaths,['/','/en','/it']);
+    const root=generated.content.pages?.find(page=>page.path==='/')?.bodyHtml??'';
+    assert.equal((root.match(/<a data-gallery-image\b/g)??[]).length,15);
+    assert.match(root,/data-gnr8-mono-locale/);
+    assert.match(root,/data-gnr8-preview-runtime="retained-gallery"/);
+    assert.doesNotMatch(root,/data-animate=/);
+    const {prepareStackiSourceProject,prepareStackiAstro7Baseline}=await import('../stacki/stacki-source-project');
+    const {createAstroStaticSiteSourceSnapshot}=await import('./astro-static-site-workspace-preparation');
+    const files=generated.sourceManifest.files.map(file=>({path:file.path,body:Buffer.from(file.contents)}));
+    const snapshot=createAstroStaticSiteSourceSnapshot(files);
+    const project=await prepareStackiSourceProject({workspace:generated.sourceManifest,assetMode:'runtime-overlay',
+      binding:{runtimeSiteId:input.version.siteId,sourceSiteVersionId:input.version.id,sourceArtifactId:input.artifact.id,
+        sourceSnapshotSha256:snapshot.aggregateSha256,requiredAssets:generated.contentManifest.requiredAssets},
+      readVerifiedAsset:async()=>{throw Error('unexpected retained asset read')}});
+    prepareStackiAstro7Baseline({files:project.files,expectedSourceSnapshotSha256:snapshot.aggregateSha256});
+  }catch(error){if(error instanceof SourceBackedAstroUnsupportedError){process.stderr.write(JSON.stringify({capabilities:error.unsupportedCapabilities,scripts:error.scriptEvidence})+'\n');}throw error;}
+});
+
+test('retained functions need a confirmed recipient only when a supported contact form exists',()=>{
+  const noForm=fixture();
+  const settings={kind:'retained-functions-v1' as const};
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:noForm.version,artifact:noForm.artifact,
+    rawArtifact:noForm.rawArtifact,retainedFunctions:settings});
+  assert.deepEqual(generated.outputPaths,['/','/about']);
+  const form='<form class="wpcf7-form" method="post" action="/contact"><input name="your-name" required placeholder="Name"><input type="email" name="your-email" required placeholder="Email"><textarea name="your-message" placeholder="Message"></textarea><input type="submit" value="Send"></form>';
+  const withForm=fixture({rootHtml:`<html><body><h1>Contact</h1>${form}</body></html>`});
+  assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:withForm.version,artifact:withForm.artifact,
+    rawArtifact:withForm.rawArtifact,retainedFunctions:settings}),/contact_recipient_unconfirmed/);
+});
+
+test('universal import emits a Lumos workspace bound to the saved guide without changing route or asset selection', () => {
+  const input = fixture();
+  const baseline = createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});
+  const proposal = createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact,
+    lumosBrand:{kind:'brand_style_guide_v1',siteVersionId:input.version.id,artifactId:input.rawArtifact.id,revision:1,
+      savedAt:'2026-11-16T00:00:00Z',savedBy:'actor',decisions:{text:{value:'#123456',confirmed:true}}}});
+  assert.deepEqual(proposal.outputPaths, baseline.outputPaths);
+  assert.deepEqual(proposal.contentManifest, baseline.contentManifest);
+  assert.deepEqual(proposal.sourceManifest.assetEvidence, baseline.sourceManifest.assetEvidence);
+  assert.equal(proposal.sourceManifest.lumosBrand?.siteVersionId,input.version.id);
+  assert.ok(proposal.verification.compiledStylesheetSource?.aggregateSha256);
+  assert.ok(proposal.sourceManifest.files.some(file=>file.path==='src/gnr8-lumos/Heading.astro'));
+  assert.ok(proposal.sourceManifest.files.filter(file=>file.path.startsWith('src/pages/')).every(file=>file.contents.includes('LumosHeading')));
+});
 
 test('retained HTTP partner links are explicit external navigation without upgrading or crawling them', () => {
   const href='http://partner.example/catalog';
@@ -751,7 +817,7 @@ test("preserves route-specific stylesheet order and applies only explicitly acce
   const userHref = `/api/gnr8/runtime/preview-assets/runtime-site/${input.version.id}/assets/user-style.css`;
 
   assert.ok(rootSource.indexOf(externalHref) < rootSource.indexOf(userHref));
-  assert.match(rootSource, /<style is:global>\.page-specific/);
+  assert.match(rootSource, /<style is:global is:inline>\.page-specific/);
   assert.doesNotMatch(rootSource, /href="\/styles\/global\.css"/);
   assert.doesNotMatch(rootSource, /infobar-wrapper|cookie-row|scrollIcon|h-captcha|hcaptcha\.com/i);
   assert.match(rootSource, /class="sticky-navigation"/);
@@ -945,6 +1011,37 @@ test("accepted form reductions do not remove unknown functional scripts", () => 
     }),
     (error) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"),
   );
+});
+
+test("retained Mono pages discard only scripts whose controls were projected or have no targets", () => {
+  const rootHtml = `<html><body><details data-gnr8-mono-locale><summary>Language</summary><a href="#language">English</a></details>
+    <section data-gnr8-gallery><a data-gallery-image href="/uploads/logo.png"><img src="/uploads/logo.png"></a></section>
+    <script src="/assets/script/locale.js"></script><script src="/assets/script/lightbox.js"></script>
+    <script src="/assets/script/slider.js"></script><script src="/assets/script/animate.js"></script>
+    <script>if ('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js?1779352296', { scope: '/'}); }</script>
+    </body></html>`;
+  const input = fixture({ rootHtml });
+  const generated = createSourceBackedAstroGenerationInput({
+    siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact,
+    retainedFunctions: { kind: "retained-functions-v1" },
+  });
+  const home = generated.content.pages!.find((page) => page.path === "/")!.bodyHtml;
+  assert.doesNotMatch(home, /locale\.js|lightbox\.js|slider\.js|animate\.js|serviceWorker\.register/);
+  for (const module of ["locale", "gallery", "lightbox", "slider"]) {
+    const unprojected = fixture({ rootHtml: rootHtml.replace("</body>", `<div data-req="${module}"></div></body>`) });
+    assert.throws(() => createSourceBackedAstroGenerationInput({siteVersion: unprojected.version,
+      artifact: unprojected.artifact, rawArtifact: unprojected.rawArtifact,
+      retainedFunctions: {kind: "retained-functions-v1"}}),
+    (error: unknown) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"));
+  }
+  const animated = fixture({ rootHtml: rootHtml.replace("</body>", '<div data-anim="fade"></div></body>') });
+  assert.throws(() => createSourceBackedAstroGenerationInput({siteVersion:animated.version,
+    artifact:animated.artifact,rawArtifact:animated.rawArtifact,retainedFunctions:{kind:"retained-functions-v1"}}),
+  (error:unknown)=>error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"));
+  const unknown = fixture({ rootHtml: rootHtml.replace("</body>", '<script>window.unknownFeature()</script></body>') });
+  assert.throws(() => createSourceBackedAstroGenerationInput({siteVersion:unknown.version,
+    artifact:unknown.artifact,rawArtifact:unknown.rawArtifact,retainedFunctions:{kind:"retained-functions-v1"}}),
+  (error:unknown)=>error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"));
 });
 
 test("does not remove a generic api.js without security evidence inside a replaced form", () => {

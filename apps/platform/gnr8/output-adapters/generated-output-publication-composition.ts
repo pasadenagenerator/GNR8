@@ -150,7 +150,7 @@ export async function readGeneratedOutputReviewModel(siteVersionId: string, comp
     publicPreparation: readPublicPreparation(context.artifact.manifest),
     state: context.siteVersion.state,
     activePublication: context.activePointerReferencesArtifact,
-    contactRecipient: ((context.artifact.manifest.generatedOutputSourceWorkspace as { acceptedFunctionalReductions?: { contact?: { recipient?: string } } } | undefined)?.acceptedFunctionalReductions?.contact?.recipient) ?? null,
+    contactRecipient: ((context.artifact.manifest.generatedOutputSourceWorkspace as {retainedFunctions?:{contact?:{recipient:string}}}|undefined)?.retainedFunctions?.contact?.recipient) ?? ((context.artifact.manifest.generatedOutputSourceWorkspace as { acceptedFunctionalReductions?: { contact?: { recipient?: string } } } | undefined)?.acceptedFunctionalReductions?.contact?.recipient) ?? null,
     artifactId: context.artifact.id,
     artifactBundleSha256: context.artifact.bundleSha256,
     candidateId: provenance.candidateId,

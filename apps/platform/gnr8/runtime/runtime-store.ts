@@ -4548,7 +4548,7 @@ export async function getRawTemplateSiteAsset(input: {
   const normalizedFilePath = normalizeRawTemplateFilePath(input.filePath);
   if (!normalizedFilePath) return null;
   const artifactId = String(input.artifactId ?? "").trim();
-  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
+  const hit = await withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
     console.info("[preview-runtime] RAW_IMPORT_ASSET_DB_COLUMN_MAPPING_USED", {
       table: "public.gnr8_runtime_raw_template_artifact_files",
       filePathColumn: "file_path",
@@ -4594,15 +4594,16 @@ export async function getRawTemplateSiteAsset(input: {
           `,
           [input.siteVersionId, normalizedFilePath],
         );
-    const hit = row.rows[0];
-    if (!hit) {
-      console.warn("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_MISSING", {
-        siteVersionId: input.siteVersionId,
-        artifactId: artifactId || null,
-        filePath: normalizedFilePath,
-      });
-      return null;
-    }
+    return row.rows[0] ?? null;
+  });
+  if (!hit) {
+    console.warn("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_MISSING", {
+      siteVersionId: input.siteVersionId,
+      artifactId: artifactId || null,
+      filePath: normalizedFilePath,
+    });
+    return null;
+  }
     console.info("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_FOUND", {
       siteVersionId: input.siteVersionId,
       artifactId: artifactId || null,
@@ -4611,7 +4612,6 @@ export async function getRawTemplateSiteAsset(input: {
       sizeBytes: Number(hit.file_size_bytes) || 0,
     });
     return verifiedRawArtifactFile(hit, input.siteVersionId);
-  });
 }
 
 export async function getRawTemplateSiteArtifactFiles(input: {
@@ -4619,7 +4619,7 @@ export async function getRawTemplateSiteArtifactFiles(input: {
   artifactId: string;
   dbClient?: RuntimeStoreDbClient;
 }): Promise<Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }>> {
-  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
+  const rows = await withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
     const result = await client.query<RawTemplateArtifactFileRow & { file_path: string }>(
       `
       select
@@ -4637,10 +4637,12 @@ export async function getRawTemplateSiteArtifactFiles(input: {
       `,
       [input.artifactId, input.siteVersionId],
     );
-    const out = [];
-    for (const row of result.rows) out.push({path: row.file_path, ...await verifiedRawArtifactFile(row, input.siteVersionId)});
-    return out;
+    return result.rows;
   });
+  const cache = new RawImportGitCache();
+  const out = [];
+  for (const row of rows) out.push({path: row.file_path, ...await verifiedRawArtifactFile(row, input.siteVersionId, cache)});
+  return out;
 }
 
 export async function persistRawImportedSiteArtifact(input: {
@@ -4664,7 +4666,10 @@ export async function persistRawImportedSiteArtifact(input: {
   if (!fileMap[entryHtmlPath]) throw new Error("RAW_IMPORT_ARTIFACT_ENTRY_HTML_MISSING");
 
   if (input.metadata.gitArchive) {
-    await new RawImportGitCache().prepare(input.metadata.gitArchive, input.siteVersionId, input.fileRows);
+    for (const row of input.fileRows) verifiedRawFileRow({
+      media_type: row.mediaType, file_size_bytes: row.sizeBytes,
+      sha256: row.sha256, content_bytes: row.bytes,
+    });
   }
 
   return withTx(async (client) => {

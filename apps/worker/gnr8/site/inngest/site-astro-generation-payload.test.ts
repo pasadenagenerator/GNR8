@@ -2,6 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {parseSiteAstroGenerationPayload} from './site-astro-generation-payload'
 const payload={actionId:'action',requestedAt:'2026-10-18T12:00:00.000Z',ownershipSiteId:'owner',runtimeSiteId:'runtime',sourceSiteVersionId:'version',sourceArtifactId:'artifact',actor:'test',strategy:'balanced'}
+test('worker retains exact Lumos guide identity and rejects foreign capture or invalid revision',()=>{
+ const lumosBrand={siteVersionId:'10000000-0000-4000-8000-000000000001',artifactId:'10000000-0000-4000-8000-000000000002',revision:3};
+ const input={...payload,sourceSiteVersionId:lumosBrand.siteVersionId,requestedAdapterId:'astro-static-site',lumosBrand};
+ assert.deepEqual(parseSiteAstroGenerationPayload(input)?.lumosBrand,lumosBrand);
+ assert.equal(parseSiteAstroGenerationPayload({...input,sourceSiteVersionId:'other'}),null);
+ assert.equal(parseSiteAstroGenerationPayload({...input,lumosBrand:{...lumosBrand,revision:0}}),null);
+ assert.equal(parseSiteAstroGenerationPayload({...input,requestedAdapterId:'html-static-artifact'}),null);
+});
 test('worker preserves exact Stacki revision and rejects scope/hash drift or replacement contact settings', () => {
   const scope = { agencyId: '10000000-0000-4000-8000-000000000001', clientId: '10000000-0000-4000-8000-000000000002',
     siteId: '10000000-0000-4000-8000-000000000003', siteVersionId: '10000000-0000-4000-8000-000000000004' };
@@ -42,3 +50,21 @@ test('worker preserves source-link scope and requires the explicit native recipi
  assert.deepEqual(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions})?.acceptedFunctionalReductions,acceptedFunctionalReductions)
  assert.equal(parseSiteAstroGenerationPayload({...payload,acceptedFunctionalReductions:{...acceptedFunctionalReductions,contact:{recipient:'approved@example.com',recipientConfirmed:false}}}),null)
 })
+
+test('preserved functions retain the confirmed recipient and only the approved route exclusion',()=>{
+ const lumosBrand={siteVersionId:'10000000-0000-4000-8000-000000000001',artifactId:'10000000-0000-4000-8000-000000000002',revision:1};
+ const retainedFunctions={kind:'retained-functions-v1',contact:{recipient:'komerciala@logatcan.si',recipientConfirmed:true},excludedRoutes:[{path:'/home',reason:'obsolete-template'}]};
+ const input={...payload,sourceSiteVersionId:lumosBrand.siteVersionId,requestedAdapterId:"astro-static-site",lumosBrand,retainedFunctions};
+ assert.deepEqual(parseSiteAstroGenerationPayload(input)?.retainedFunctions,retainedFunctions);
+ assert.equal(parseSiteAstroGenerationPayload({...input,lumosBrand:undefined}),null);
+ assert.equal(parseSiteAstroGenerationPayload({...input,retainedFunctions:{...retainedFunctions,contact:{...retainedFunctions.contact,recipientConfirmed:false}}}),null);
+ assert.equal(parseSiteAstroGenerationPayload({...input,retainedFunctions:{...retainedFunctions,excludedRoutes:[{path:'/',reason:'obsolete-template'}]}}),null);
+});
+
+test('omitting missing backgrounds is explicit, exact and does not authorize route removal',()=>{
+ const lumosBrand={siteVersionId:'10000000-0000-4000-8000-000000000001',artifactId:'10000000-0000-4000-8000-000000000002',revision:1};
+ const retainedFunctions={kind:'retained-functions-v1',contact:{recipient:'approved@example.com',recipientConfirmed:true},omittedBackgroundImages:['http://example.com/missing.png']};
+ const input={...payload,sourceSiteVersionId:lumosBrand.siteVersionId,requestedAdapterId:'astro-static-site',lumosBrand,retainedFunctions};
+ assert.deepEqual(parseSiteAstroGenerationPayload(input)?.retainedFunctions,retainedFunctions);
+ for(const urls of [['javascript:alert(1)'],['https://user:password@example.com/image.jpg'],['http://example.com/missing.png','http://example.com/missing.png']])assert.equal(parseSiteAstroGenerationPayload({...input,retainedFunctions:{...retainedFunctions,omittedBackgroundImages:urls}}),null);
+});

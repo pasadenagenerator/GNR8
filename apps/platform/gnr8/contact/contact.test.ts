@@ -66,6 +66,12 @@ test('published resolver enforces ownership, active version, explicit recipient 
   const settings={kind:'retained-presentation-v1',search:'remove',map:'address-link',tracking:'remove-bundle',contact:{recipient:site.recipient,recipientConfirmed:true},scope:'generation-action',acceptedByActor:'user:owner'}
   const resolution:any={outcome:'artifact_hit',siteResolution:'domain_match',ownershipSiteId:'owner',resolvedPath:'/kontakt',normalizedPath:'/kontakt',siteId:site.siteId,activeSiteVersionId:site.siteVersionId,artifactId:site.artifactId,domainBindingStatus:'active',hostBindingKind:null,html:converted().html,artifact:{id:site.artifactId,bundleSha256:site.artifactSha256,siteId:site.siteId,siteVersionId:site.siteVersionId,publishStage:'production',shadowRestricted:false,manifest:{generatedOutputSourceWorkspace:{acceptedFunctionalReductions:settings}}}}
   assert.deepEqual(publishedContactFromResolution(resolution,'/kontakt'),site)
+  const retainedFunctions={kind:'retained-functions-v1',contact:{recipient:'komerciala@logatcan.si',recipientConfirmed:true},excludedRoutes:[{path:'/home',reason:'obsolete-template'}],scope:'generation-action',acceptedByActor:'user:owner'};
+  const retained={...resolution,artifact:{...resolution.artifact,manifest:{generatedOutputSourceWorkspace:{retainedFunctions}}}};
+  assert.equal(publishedContactFromResolution(retained,'/kontakt')?.recipient,'komerciala@logatcan.si');
+  for(const stage of ['preview','shadow','candidate'])assert.equal(publishedContactFromResolution({...retained,artifact:{...retained.artifact,publishStage:stage}},'/kontakt'),null);
+  assert.equal(publishedContactFromResolution({...retained,hostBindingKind:'preview_host'},'/kontakt'),null);
+  assert.equal(publishedContactFromResolution({...retained,artifact:{...retained.artifact,manifest:{generatedOutputSourceWorkspace:{retainedFunctions:{...retainedFunctions,contact:{...retainedFunctions.contact,recipientConfirmed:false}}}}}},'/kontakt'),null);
   const sourceSettings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:settings.contact,scope:settings.scope,acceptedByActor:settings.acceptedByActor}
   const sourceResolution={...resolution,artifact:{...resolution.artifact,manifest:{generatedOutputSourceWorkspace:{acceptedFunctionalReductions:sourceSettings}}}}
   assert.deepEqual(publishedContactFromResolution(sourceResolution,'/kontakt'),site)

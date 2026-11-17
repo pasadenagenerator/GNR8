@@ -1802,6 +1802,7 @@ async function acquireScopedMultiPageHtml(input: {
             fs.readFileSync(input.snapshot.entryHtmlPathAbs, 'utf8'),
             ...fetchedAssetPages.map((page) => page.html),
           ],
+          seedPageUrlForCssUsage: input.snapshot.normalizedUrl,
           approvedUnusedStylesheetDependencyUrls: input.approvedUnusedCssDependencies ?? [],
         } : {}),
       })
@@ -2644,6 +2645,9 @@ function gitCaptureIncompleteReasons(
   discovery: Awaited<ReturnType<typeof buildScopedMultiPageDiscovery>>,
 ): string[] {
   const acquisition = discovery.acquisition
+  const provenUnusedCssDependencies = new Set((acquisition?.diagnostics ?? [])
+    .filter((code) => code.startsWith('MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:'))
+    .map((code) => code.slice('MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:'.length)))
   const sitemapOnlyRoutes = new Set(discovery.manifest?.routePriorityBalancing?.assignments
     .filter((assignment) => assignment.selected && assignment.source === 'sitemap')
     .map((assignment) => assignment.routePath) ?? [])
@@ -2663,7 +2667,9 @@ function gitCaptureIncompleteReasons(
     ...(failedRequiredPage ? ['page_failed_or_limited'] : []),
     ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
     ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed' &&
-      !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0))) ? ['seed_asset_missing'] : []),
+      !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0)) &&
+      !((asset.assetKind === 'image' || asset.assetKind === 'style_asset') && asset.httpStatus === 404 &&
+        Boolean(asset.resolvedUrl && provenUnusedCssDependencies.has(asset.resolvedUrl)))) ? ['seed_asset_missing'] : []),
     ...(discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
     ...(acquisition?.diagnostics.some((code) => ['MULTIPAGE_CHILD_LINK_LIMIT_REACHED', 'MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED', 'MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED'].includes(code)) ? ['child_link_limited'] : []),
   ]
@@ -3828,7 +3834,13 @@ export async function runScopedImportPipeline(input: {
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
     verifyCssUsage: gitArchiveRequired && gitArchiveSelected,
-    approvedUnusedCssDependencies: approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
+    approvedUnusedCssDependencies: [
+      ...approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
+      ...input.snapshot.fetchManifest
+        .filter((asset) => (asset.assetKind === 'image' || asset.assetKind === 'style_asset') && asset.fetchStatus === 'fetch_failed' &&
+          asset.httpStatus === 404 && Boolean(asset.resolvedUrl))
+        .map((asset) => asset.resolvedUrl!),
+    ],
   })
   let importProvenanceSummary = await buildImportProvenanceSummary({
     sourceUrl: input.sourceUrl,
@@ -3877,7 +3889,30 @@ export async function runScopedImportPipeline(input: {
     // identity retryable without a partially persisted import.
     if (gitArchiveRequired && gitArchiveSelected) {
       const incomplete = gitCaptureIncompleteReasons(input.snapshot, multiPageDiscovery)
-      if (incomplete.length > 0) throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
+      if (incomplete.length > 0) {
+        const safeAssetPath = (value: string): string => {
+          try {
+            const url = new URL(value)
+            return `${url.origin}${url.pathname}`
+          } catch {
+            return '[invalid asset URL]'
+          }
+        }
+        const failedSeedAssets = input.snapshot.fetchManifest
+          .filter((asset) => asset.fetchStatus === 'fetch_failed' &&
+            !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0)))
+          .map((asset) => ({ path: safeAssetPath(asset.resolvedUrl ?? ''), kind: asset.assetKind, status: asset.httpStatus }))
+        const failedChildAssets = (multiPageDiscovery.acquisition?.summary.failedRequiredResources ?? [])
+          .map(safeAssetPath)
+        console.error('[site-import] GITHUB_IMPORT_INCOMPLETE_CAPTURE_DETAILS', {
+          reasons: incomplete,
+          failedSeedAssets: failedSeedAssets.slice(0, 40),
+          failedSeedAssetCount: failedSeedAssets.length,
+          failedChildAssets: failedChildAssets.slice(0, 40),
+          failedChildAssetCount: failedChildAssets.length,
+        })
+        throw new Error(`GITHUB_IMPORT_INCOMPLETE_CAPTURE:${incomplete.join(',')}`)
+      }
     }
     const persistedFileRows = collectRawImportFiles(input.snapshot.snapshotRootDirAbs)
     const rawGitArchive = gitArchiveRequired && gitArchiveSelected

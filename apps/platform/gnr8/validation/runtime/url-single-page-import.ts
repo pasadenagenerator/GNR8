@@ -1346,6 +1346,7 @@ function rewriteCssUrlFunctions(input: {
   stylesheetLocalPath: string;
   baseUrl: URL;
   localPathByUrl: Map<string, string>;
+  fetchedUrls: ReadonlySet<string>;
   diagnostics: UrlImportDiagnostic[];
   referenceMode?: "relative" | "root-relative";
   retainedFilePaths?: ReadonlySet<string>;
@@ -1370,6 +1371,7 @@ function rewriteCssUrlFunctions(input: {
       diagnosticContext: { tag: "link", attribute: "href", surface: "stylesheet_url" },
     });
     if (!resolvedUrl) continue;
+    if (!input.fetchedUrls.has(resolvedUrl)) continue;
     const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
     if (!targetLocalPath) continue;
 
@@ -1399,6 +1401,7 @@ function rewriteCssUrlFunctions(input: {
       })) return full;
       let resolvedUrl: string | null = null;
       try { resolvedUrl = new URL(String(rawUrl), input.baseUrl).toString(); } catch { return full; }
+      if (!input.fetchedUrls.has(resolvedUrl)) return full;
       const targetLocalPath = input.localPathByUrl.get(resolvedUrl);
       if (!targetLocalPath) return full;
       const rewrittenUrl = input.referenceMode === "root-relative"
@@ -2871,8 +2874,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   knownUnusedStylesheetDependencyUrls?: string[];
   /** Complete HTML evidence for checking whether stylesheet selectors can match. */
   fullHtmlDocumentsForCssUsage?: string[];
-  /** Explicitly approved missing URLs; proof alone does not authorize omission. */
+  /** URL of the seed document when its retained style blocks need usage proof. */
+  seedPageUrlForCssUsage?: string;
+  /** Optional known missing URLs; a newly discovered 404 still needs CSS usage proof. */
   approvedUnusedStylesheetDependencyUrls?: string[];
+  /** Exact script URLs acquired as inert bytes for reviewed-hash validation. */
+  retainedScriptDependencyUrls?: string[];
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -2880,12 +2887,25 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const pageStates = input.pages.map((page) => {
     const document = parse(page.html);
     const refs = collectAssetRefs({ document, entryUrl: new URL(page.pageUrl), diagnostics, rawHtml: page.html })
-      .filter((ref) => ref.assetKind !== "script")
+      .filter((ref) => ref.assetKind !== "script" || (ref.resolvedUrl !== null && (input.retainedScriptDependencyUrls ?? []).includes(ref.resolvedUrl)))
       .map((ref) => ({ ...ref, pageUrl: page.pageUrl }));
     return { page, document, refs };
   });
 
   const existingManifest = input.existingFetchManifest ?? [];
+  const directRequiredIdentities = new Set(pageStates.flatMap((state) => state.refs
+    .filter((ref) => ref.resolvedUrl && !ref.key.startsWith("css:"))
+    .map((ref) => canonicalAdditionalPageAssetIdentity(ref.resolvedUrl!))));
+  if (input.seedPageUrlForCssUsage && input.fullHtmlDocumentsForCssUsage?.[0]) {
+    for (const ref of collectAssetRefs({
+      document: parse(input.fullHtmlDocumentsForCssUsage[0]),
+      entryUrl: new URL(input.seedPageUrlForCssUsage), diagnostics: [],
+    })) {
+      if (ref.resolvedUrl && !ref.key.startsWith("css:")) {
+        directRequiredIdentities.add(canonicalAdditionalPageAssetIdentity(ref.resolvedUrl));
+      }
+    }
+  }
   const localPathByUrl = new Map<string, string>();
   const outcomeByUrl = new Map<string, FetchOutcome>();
   const usedPathToUrl = new Map<string, string>();
@@ -2899,22 +2919,50 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const approvedUnusedStylesheetDependencyIdentities = new Set(
     (input.approvedUnusedStylesheetDependencyUrls ?? []).map(canonicalAdditionalPageAssetIdentity),
   );
+  const provablyUnusedCssDependencies = new Map<string, string>();
+  const requiredCssDependencyIdentities = new Set<string>();
   const markProvablyUnused = (css: string, stylesheetUrl: string): void => {
-    if (!input.fullHtmlDocumentsForCssUsage || approvedUnusedStylesheetDependencyIdentities.size === 0) return;
+    if (!input.fullHtmlDocumentsForCssUsage) return;
     try {
-      for (const dependency of findProvablyUnusedCssDependencies({
+      const unused = findProvablyUnusedCssDependencies({
         css,
         stylesheetUrl,
         htmlDocuments: input.fullHtmlDocumentsForCssUsage,
-      })) {
+      });
+      const unusedIdentities = new Set(unused.map((dependency) => canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl)));
+      for (const rawRef of extractCssUrlCandidates(css)) {
+        try {
+          const identity = canonicalAdditionalPageAssetIdentity(new URL(rawRef, stylesheetUrl).toString());
+          if (!unusedIdentities.has(identity)) {
+            requiredCssDependencyIdentities.add(identity);
+            provablyUnusedCssDependencies.delete(identity);
+            knownUnusedStylesheetDependencyIdentities.delete(identity);
+            for (const url of skippedUnusedStylesheetDependencies) {
+              if (canonicalAdditionalPageAssetIdentity(url) === identity) skippedUnusedStylesheetDependencies.delete(url);
+            }
+          }
+        } catch { /* An unresolved CSS URL cannot establish an approved identity. */ }
+      }
+      for (const dependency of unused) {
         const identity = canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl);
-        if (!approvedUnusedStylesheetDependencyIdentities.has(identity)) continue;
-        knownUnusedStylesheetDependencyIdentities.add(identity);
-        skippedUnusedStylesheetDependencies.add(dependency.resolvedUrl);
+        if (directRequiredIdentities.has(identity) || requiredCssDependencyIdentities.has(identity)) continue;
+        provablyUnusedCssDependencies.set(identity, dependency.resolvedUrl);
+        if (approvedUnusedStylesheetDependencyIdentities.has(identity)) {
+          knownUnusedStylesheetDependencyIdentities.add(identity);
+          skippedUnusedStylesheetDependencies.add(dependency.resolvedUrl);
+        }
       }
     } catch {
       // Unparseable CSS cannot prove that a dependency is unused.
     }
+  };
+  const analyzeStyleBlocks = (document: unknown, pageUrl: string): void => {
+    walkDomWithAncestors(document, (node) => {
+      if (!isElement(node) || node.tagName.toLowerCase() !== "style") return;
+      const css = ((node as { childNodes?: unknown[] }).childNodes ?? [])
+        .map((child) => String((child as { value?: unknown }).value ?? "")).join("\n");
+      if (css.trim()) markProvablyUnused(css, pageUrl);
+    });
   };
   for (const value of input.trustedExternalOrigins ?? []) {
     const origin = canonicalAdditionalPageAssetOrigin(value);
@@ -2963,11 +3011,28 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       return [entry.localPath];
     } catch { return []; }
   }));
+  // Seed capture can already own a stylesheet used by child pages. Analyze its
+  // retained bytes as well, otherwise a proven unused upstream-404 CSS image
+  // remains a required child dependency simply because the CSS was reused.
+  for (const entry of existingManifest) {
+    if (entry.assetKind !== "stylesheet" || entry.fetchStatus !== "fetched" ||
+        !entry.resolvedUrl || !entry.localPath || !retainedStylesheetPaths.has(entry.localPath)) continue;
+    try {
+      markProvablyUnused(fs.readFileSync(path.resolve(input.snapshotRootDirAbs, entry.localPath), "utf8"), entry.resolvedUrl);
+    } catch {
+      // Missing or unreadable retained CSS cannot prove an asset unused.
+    }
+  }
   const retainedDependencyUrl = (rawReference: string, stylesheetPath: string): string | null => {
     if (!retainedStylesheetPaths.has(stylesheetPath)) return null;
     const retainedPath = resolveRetainedCssDependencyPath({ stylesheetPath, rawReference, filePaths: retainedFilePaths });
     return retainedPath ? usedPathToUrl.get(retainedPath) ?? null : null;
   };
+
+  if (input.seedPageUrlForCssUsage && input.fullHtmlDocumentsForCssUsage?.[0]) {
+    analyzeStyleBlocks(parse(input.fullHtmlDocumentsForCssUsage[0]), input.seedPageUrlForCssUsage);
+  }
+  for (const state of pageStates) analyzeStyleBlocks(state.document, state.page.pageUrl);
 
   const refsByUrl = new Map<string, Array<ParsedAssetRef & { pageUrl: string }>>();
   for (const state of pageStates) {
@@ -2984,6 +3049,13 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       rows.push(ref);
       refsByUrl.set(representative, rows);
     }
+  }
+
+  // A missing URL found only in a CSS rule proven unused is not a direct page
+  // asset. Keep actual HTML image/link references required even at that URL.
+  for (const [url, refs] of refsByUrl) {
+    if (knownUnusedStylesheetDependencyIdentities.has(canonicalAdditionalPageAssetIdentity(url)) &&
+        refs.every((ref) => ref.key.startsWith("css:"))) refsByUrl.delete(url);
   }
 
   const assignLocalPath = (resolvedUrl: string, assetKind: UrlImportAssetKind): string => {
@@ -3198,6 +3270,19 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     else if (dependency) await fetchOne(resolvedUrl, dependency.assetKind, dependency.pageUrl);
   }
 
+  // Child stylesheets are discovered after the seed manifest exists. A 404
+  // dependency can only be omitted after the fetched CSS proves its selectors
+  // unused across every retained page; successful assets remain captured.
+  for (const url of [...failedRequiredResources]) {
+    const identity = canonicalAdditionalPageAssetIdentity(url);
+    if (outcomeByUrl.get(url)?.httpStatus !== 404 ||
+        directRequiredIdentities.has(identity) || requiredCssDependencyIdentities.has(identity)) continue;
+    const provenUrl = provablyUnusedCssDependencies.get(identity);
+    if (!provenUrl) continue;
+    failedRequiredResources.delete(url);
+    skippedUnusedStylesheetDependencies.add(provenUrl);
+  }
+
   for (const [representative, meta] of stylesheetDependencyUrls) {
     const localPath = localPathByUrl.get(representative);
     if (localPath) localPathByUrl.set(meta.resolvedUrl, localPath);
@@ -3207,6 +3292,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     if (localPath) localPathByUrl.set(alias, localPath);
   }
 
+  const fetchedUrls = new Set([...outcomeByUrl].filter(([, outcome]) => outcome.fetchStatus === "fetched").map(([url]) => url));
   for (const stylesheetUrl of allStylesheetUrls) {
     if (outcomeByUrl.get(stylesheetUrl)?.fetchStatus !== "fetched") continue;
     const localPath = localPathByUrl.get(stylesheetUrl);
@@ -3219,6 +3305,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         stylesheetLocalPath: localPath,
         baseUrl: new URL(stylesheetUrl),
         localPathByUrl,
+        fetchedUrls,
         diagnostics,
         retainedFilePaths: retainedStylesheetPaths.has(localPath) ? retainedFilePaths : undefined,
       });
@@ -3262,6 +3349,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       stylesheetLocalPath: "index.html",
       baseUrl: new URL(state.page.pageUrl),
       localPathByUrl,
+      fetchedUrls,
       diagnostics,
       referenceMode: "root-relative",
     });
@@ -3295,10 +3383,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
           if (typeof textNode.value === "string") textNode.value = rewriteInlineCss(textNode.value);
         }
       }
-      if (tag !== "img" && tag !== "source" && tag !== "link") return;
+      if (tag !== "img" && tag !== "source" && tag !== "link" && tag !== "script") return;
       const attrs: UrlImportAssetAttribute[] = tag === "link"
         ? ["href"]
-        : ["src", ...SRCSET_ATTRS, ...(tag === "img" ? LAZY_IMAGE_ATTR_PRIORITY : [])];
+        : tag === "script" ? ["src"] : ["src", ...SRCSET_ATTRS, ...(tag === "img" ? LAZY_IMAGE_ATTR_PRIORITY : [])];
       for (const attribute of attrs) {
         const rawValue = getAttr(node, attribute);
         if (!rawValue?.trim()) continue;
@@ -3314,6 +3402,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
           });
           if (
             !resolvedUrl ||
+            (tag === "script" && !(input.retainedScriptDependencyUrls ?? []).includes(resolvedUrl)) ||
             !isAllowedAdditionalPageAssetUrl(resolvedUrl, state.page.pageUrl, trustedExternalOrigins)
           ) continue;
           discoveredReferenceCount += 1;
@@ -5200,6 +5289,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       fetchOutcomeByUrl.set(ref.resolvedUrl, outcome);
     }
 
+    const fetchedUrls = new Set([...fetchOutcomeByUrl].filter(([, outcome]) => outcome.fetchStatus === "fetched").map(([url]) => url));
     for (const stylesheetRef of stylesheetRefs.sort((a, b) => (a.resolvedUrl ?? "").localeCompare(b.resolvedUrl ?? ""))) {
       const stylesheetUrl = stylesheetRef.resolvedUrl;
       if (!stylesheetUrl) continue;
@@ -5219,6 +5309,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
         stylesheetLocalPath,
         baseUrl: new URL(stylesheetUrl),
         localPathByUrl,
+        fetchedUrls,
         diagnostics,
       });
       if (rewrittenCss !== cssText) fs.writeFileSync(stylesheetAbsPath, rewrittenCss, "utf8");
@@ -5233,6 +5324,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       stylesheetLocalPath: "index.html",
       baseUrl: normalizedUrl,
       localPathByUrl,
+      fetchedUrls,
       diagnostics,
       referenceMode: "root-relative",
     });

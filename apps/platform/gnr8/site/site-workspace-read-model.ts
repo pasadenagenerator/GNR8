@@ -286,6 +286,7 @@ export type SiteWorkspaceReadModel = {
       latestImportCreatedAt: string | null
       latestImportUpdatedAt: string | null
       selectedWorkspaceSiteVersionId: string | null
+      savedBrandGuideSiteVersionId: string | null
       selectedWorkspaceRuntimeSiteId: string | null
       selectedWorkspaceArtifactId: string | null
       selectedWorkspaceCreatedAt: string | null
@@ -381,6 +382,7 @@ export type SiteWorkspaceReadModel = {
     rationale: string[]
   }
   preview: {
+    lumosBrand?: { siteVersionId: string; artifactId: string; revision: number } | null
     readiness: SiteWorkspacePreviewReadiness
     sourceType: SitePreviewType | null
     previewUrl: string | null
@@ -649,6 +651,11 @@ function buildRuntimeVersionVisibility(input: {
   const latestSummary = parseImportProvenanceSummary(input.latestImportRow?.import_provenance_summary ?? null)
   const latestImportSiteVersionId = toTextOrNull(input.latestImportRow?.id)
   const selectedWorkspaceSiteVersionId = toTextOrNull(input.selectedWorkspaceRow?.id)
+  const selectedSummary = input.selectedWorkspaceRow?.import_provenance_summary
+  const savedGuide = isRecord(selectedSummary) && isRecord(selectedSummary.brandStyleGuide)
+    ? selectedSummary.brandStyleGuide : null
+  const savedBrandGuideSiteVersionId = savedGuide?.kind === 'brand_style_guide_v1' &&
+    Number(savedGuide.revision) > 0 ? toTextOrNull(savedGuide.siteVersionId) : null
   const selectedMatchesLatestImport =
     latestImportSiteVersionId != null &&
     selectedWorkspaceSiteVersionId != null &&
@@ -663,6 +670,7 @@ function buildRuntimeVersionVisibility(input: {
     latestImportCreatedAt: toIsoOrNull(input.latestImportRow?.created_at),
     latestImportUpdatedAt: toIsoOrNull(input.latestImportRow?.updated_at),
     selectedWorkspaceSiteVersionId,
+    savedBrandGuideSiteVersionId,
     selectedWorkspaceRuntimeSiteId: toTextOrNull(input.selectedWorkspaceRow?.site_id),
     selectedWorkspaceArtifactId: input.selectedArtifactId,
     selectedWorkspaceCreatedAt: toIsoOrNull(input.selectedWorkspaceRow?.created_at),
@@ -3344,6 +3352,13 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       ],
     },
     preview: {
+      lumosBrand: (() => {
+        const workspace=selectedArtifactManifest?.generatedOutputSourceWorkspace as Record<string,unknown>|undefined;
+        const binding=workspace?.lumosBrand as {format?:string;siteVersionId?:unknown;artifactId?:unknown;revision?:unknown}|undefined;
+        return binding?.format==='gnr8-lumos-brand:v1' && typeof binding.siteVersionId==='string' &&
+          typeof binding.artifactId==='string' && Number.isSafeInteger(binding.revision) && Number(binding.revision)>0
+          ? {siteVersionId:binding.siteVersionId,artifactId:binding.artifactId,revision:Number(binding.revision)} : null;
+      })(),
       readiness: resolvedPreview.status,
       sourceType: resolvedPreview.sourceType,
       previewUrl,

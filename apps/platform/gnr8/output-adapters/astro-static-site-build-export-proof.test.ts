@@ -323,13 +323,14 @@ async function withWorkspace(run: (workspacePath: string) => Promise<void>): Pro
 
 test('compiled CSS is bound to retained source and every HTTP stylesheet byte', async () => {
   const { readAstroStaticSiteSourceSnapshot } = await import('./astro-static-site-workspace-preparation');
-  for (const scenario of ['valid', 'changed-source', 'changed-http', 'missing-output', 'missing-http']) {
+  for (const scenario of ['valid', 'retained-inline', 'changed-source', 'changed-http', 'missing-output', 'missing-http']) {
     await withWorkspace(async workspacePath => {
       await mkdir(join(workspacePath, 'src'));
-      await writeFile(join(workspacePath, 'src/style.css'), 'body{color:red}');
+      await writeFile(join(workspacePath, 'src/style.css'), scenario === 'retained-inline' ? '\n' : 'body{color:red}');
       const snapshot = await readAstroStaticSiteSourceSnapshot({ workspacePath, sourcePaths: ['src/style.css'] });
       const input = {
         verification: { expectedContent: [], expectedThemeToken: null,
+          ...(scenario === 'retained-inline' ? { expectedStylesheetReferences: ['/api/gnr8/runtime/preview-assets/site/version/assets/source.css'] } : {}),
           compiledStylesheetSource: { sourcePaths: ['src/style.css'], aggregateSha256: snapshot.aggregateSha256 } },
         dependencies: {
           prepareWorkspace: async () => ({ ...preparedWorkspace(workspacePath), sourceSnapshot: snapshot }),
@@ -337,6 +338,10 @@ test('compiled CSS is bound to retained source and every HTTP stylesheet byte', 
           runCommand: async (_command: string, args: string[]) => {
             if (args[0] === 'build') {
               await writeValidDist(workspacePath, { stylesheetBody: 'body{color:red}' });
+              if (scenario === 'retained-inline') {
+                await writeFile(join(workspacePath, 'dist/index.html'), '<html><head><link rel="stylesheet" href="/api/gnr8/runtime/preview-assets/site/version/assets/source.css"><style>body{font-family:Roboto}</style></head><body>Retained</body></html>');
+                await rm(join(workspacePath, 'dist/_astro/site.css'));
+              }
               if (scenario === 'changed-source') await writeFile(join(workspacePath, 'src/style.css'), 'body{color:blue}');
               if (scenario === 'missing-output') await rm(join(workspacePath, 'dist/_astro/site.css'));
             }
@@ -351,11 +356,11 @@ test('compiled CSS is bound to retained source and every HTTP stylesheet byte', 
           }) as typeof fetch,
         },
       };
-      if (scenario === 'valid') {
+      if (scenario === 'valid' || scenario === 'retained-inline') {
         const result = await runAstroBuildExportProof(input);
         assert.equal(result.sourceComparison.unchanged, true);
         assert.equal(result.export.compiledStylesheetSourceSha256, snapshot.aggregateSha256);
-        assert.equal(result.http.compiledStylesheets?.length, 1);
+        assert.equal(result.http.compiledStylesheets?.length, scenario === 'retained-inline' ? 0 : 1);
       } else await assert.rejects(runAstroBuildExportProof(input), (error: unknown) =>
         error instanceof AstroBuildExportProofError && ['stylesheet_verification_failed', 'asset_missing'].includes(error.code));
     });

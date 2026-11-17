@@ -571,3 +571,19 @@ test('recognized font stylesheet permits only its exact font-file origin',()=>{
  assert.ok(trustedOriginsForStylesheets(['https://fonts.prod.extra-cdn.com/css?family=Exo']).includes('https://font-files.prod.extra-cdn.com'));
  assert.ok(!trustedOriginsForStylesheets(['https://fonts.prod.extra-cdn.com.attacker.test/css']).includes('https://font-files.prod.extra-cdn.com'));
 });
+
+test('additional capture fetches only explicitly selected inert script dependencies',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'gnr8-retained-script-'));
+ const source='https://example.com/wp-content/cache/wpfc-minified/a/theme.js';
+ const requested:string[]=[];
+ const input={pages:[{pageUrl:'https://example.com/',bodyPath:join(root,'index.html'),html:`<!doctype html><html><head><script src="${source}"></script><script src="https://example.com/unselected.js"></script></head><body></body></html>`}],snapshotRootDirAbs:root,
+ fetchImpl:async(url:unknown)=>{requested.push(String(url));return new Response('window.retainedNeverExecuted=true;',{status:200,headers:{'content-type':'application/javascript'}})}};
+ try{
+  await captureAssetsForAdditionalHtmlPages(input);assert.deepEqual(requested,[]);
+  const result=await captureAssetsForAdditionalHtmlPages({...input,retainedScriptDependencyUrls:[source]});
+  assert.deepEqual(requested,[source]);
+  const entry=result.manifestEntries.find(entry=>entry.resolvedUrl===source)!;
+  assert.equal(entry.fetchStatus,'fetched');assert.equal(entry.assetKind,'script');
+  assert.equal(await readFile(join(root,entry.localPath!),'utf8'),'window.retainedNeverExecuted=true;');
+ }finally{await rm(root,{recursive:true,force:true})}
+});

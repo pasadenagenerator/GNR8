@@ -1,5 +1,5 @@
 import { BrandGuidePanel } from './BrandGuidePanel'
-import { stackiGithubSelected } from '@/gnr8/stacki/stacki-github-config'
+import { resolvedGitHubTarget } from '@/gnr8/stacki/stacki-github-config'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
@@ -1555,7 +1555,7 @@ export default async function SiteWorkspacePage(props: Props) {
           process.env.GNR8_STACKI_PILOT_USER_ID === currentUserAgency.user_id &&
           readModel.pipeline.runtimeSelection.selectedVersionId ? (
           <StackiEditorPanel
-            storage={stackiGithubSelected({agencyId:currentUserAgency.agency_id,clientId,siteId,
+            storage={await resolvedGitHubTarget({agencyId:currentUserAgency.agency_id,clientId,siteId,
               siteVersionId:readModel.pipeline.runtimeSelection.selectedVersionId}) ? 'GitHub' : 'GNR8'}
             candidatePreparationEnabled={process.env.GNR8_STACKI_CANDIDATES_ENABLED === '1'}
             key={readModel.pipeline.runtimeSelection.selectedVersionId}
@@ -1565,7 +1565,11 @@ export default async function SiteWorkspacePage(props: Props) {
             siteVersionId={readModel.pipeline.runtimeSelection.selectedVersionId}
           />
         ) : null}
-        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.pipeline.importVersion.latestImportSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')} /> : null}
+        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.pipeline.importVersion.savedBrandGuideSiteVersionId ?? readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
+          canPrepare={canPublish}
+          proposal={readModel.preview.lumosBrand && readModel.preview.previewUrl
+            ? {revision:readModel.preview.lumosBrand.revision,previewUrl:readModel.preview.previewUrl} : null}
+        /> : null}
         {props.activeTab === 'design' ? renderDesignContent(readModel) : null}
         {props.activeTab === 'preview' ? renderPreviewContent(readModel) : null}
         {props.activeTab === 'settings'

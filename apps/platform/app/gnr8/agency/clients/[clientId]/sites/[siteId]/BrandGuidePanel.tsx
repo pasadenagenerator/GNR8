@@ -31,9 +31,11 @@ function useRetainedFonts(guide:BrandGuide|null,body:string,heading:string,bodyW
   },[siteVersionId,fontFaces,body,heading,bodyWeight,headingWeight]); // only retained same-origin font files
   return fonts;
 }
-export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:string;siteVersionId:string|null;canEdit:boolean}){
+export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:string;siteVersionId:string|null;canEdit:boolean;canPrepare?:boolean;proposal?:{revision:number;previewUrl:string}|null}){
   const [guide,setGuide]=useState<BrandGuide|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[dirty,setDirty]=useState(false);
   const [edited,setEdited]=useState<BrandKey[]>([]),[latest,setLatest]=useState<BrandGuide|null>(null),[conflict,setConflict]=useState(false);
+  const [preserveFunctions,setPreserveFunctions]=useState(false),[recipient,setRecipient]=useState(''),[recipientConfirmed,setRecipientConfirmed]=useState(false);
+  const [excludedRoutes,setExcludedRoutes]=useState(''),[omittedBackgroundImages,setOmittedBackgroundImages]=useState('');
   const endpoint=`/api/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/${encodeURIComponent(props.siteId)}/brand-guide?agencyId=${encodeURIComponent(props.agencyId)}&siteVersionId=${encodeURIComponent(props.siteVersionId??'')}`;
   async function request(save=false,compare=false){
     setBusy(true);setMessage('');
@@ -43,6 +45,22 @@ export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:st
       if(compare){setLatest(result.guide);setMessage('Osnutek je ohranjen. Primerjajte vrednosti in izberite nadaljevanje.');return;}
       setGuide(result.guide);setDirty(false);setEdited([]);setLatest(null);setConflict(false);setMessage(save?'Vodič je shranjen.':'Vodič je odprt iz shranjenega vhoda.');
     }catch(error){setMessage(error instanceof Error?error.message:'Vodič ni na voljo.');}finally{setBusy(false);}
+  }
+  async function prepareLumos(){
+    if (!guide || dirty || busy || !guide.revision) return;
+    setBusy(true);setMessage('Pripravljam Lumos predlog iz shranjenega vodiča …');
+    try {
+      const response=await fetch('/api/gnr8/site-actions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+        agencyId:props.agencyId,siteId:props.siteId,actionType:'generate_redesign',outputAdapterId:'astro-static-site',
+        lumosBrand:{siteVersionId:guide.siteVersionId,artifactId:guide.artifactId,revision:guide.revision},
+        ...(preserveFunctions?{retainedFunctions:{kind:'retained-functions-v1',...(recipientConfirmed?{contact:{recipient,recipientConfirmed}}:{}),
+          omittedBackgroundImages:omittedBackgroundImages.split('\n').map(url=>url.trim()).filter(Boolean),
+          excludedRoutes:excludedRoutes.split('\n').map(path=>path.trim()).filter(Boolean).map(path=>({path,reason:'obsolete-template'}))}}:{}),
+      })});
+      const result=await response.json();
+      if(!response.ok||!result.ok)throw Error(result.error??result.result?.action?.resultSummary??'Priprava ni uspela.');
+      setMessage('Priprava je v čakalni vrsti. Po zaključku dejanja izberite različico »Lumos · vodič '+guide.revision+'«. Tu se prikaže njen predogled, nato jo lahko odprete v Stackiju. Predlog ni javno objavljen.');
+    }catch(error){setMessage(error instanceof Error?error.message:'Priprava ni uspela.');}finally{setBusy(false);}
   }
   const value=(key:BrandKey)=>guide?.decisions[key]?.value??guide?.proposals[key]?.value??'';
   const fonts=useRetainedFonts(guide,value('fontFamily'),value('headingFamily'),value('fontWeight'),value('headingWeight'));
@@ -56,7 +74,7 @@ export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:st
     <p style={{margin:0}}>Opaženi slog → predlog → vaša potrditev. Urejanje vodiča ne spreminja sprejetega predogleda strani.</p>
     {!guide?<button disabled={busy||!props.siteVersionId} onClick={()=>request()}>{busy?'Odpiram …':'Odpri vodič znamke'}</button>:<>
       <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
-        <button disabled={busy||!props.canEdit||!dirty||invalidEdits||conflict||!!latest} onClick={()=>request(true)}>Shrani vodič</button>
+        <button disabled={busy||!props.canEdit||(!dirty&&guide.revision>0)||invalidEdits||conflict||!!latest} onClick={()=>request(true)}>Shrani vodič</button>
         <button disabled={busy} onClick={()=>request(false,dirty)}>{dirty?'Primerjaj z zadnjo shranjeno različico':'Ponovno odpri shranjeno'}</button>
         <span>{dirty?'Neshranjene spremembe':guide.revision?`Shranjena revizija ${guide.revision}`:'Predlog še ni shranjen'}{guide.savedAt?` · ${guide.savedAt}`:''}</span>
       </div>
@@ -92,7 +110,20 @@ export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:st
         {guide.limitations.map((text,i)=><p key={i}>{text}</p>)}
         <div style={{maxHeight:400,overflow:'auto'}}>{guide.observations.map(o=><p key={o.id} style={{overflowWrap:'anywhere'}}>{o.kind==='computed'?'Izračunani slog':o.kind==='element'?'Element':'Deklaracija CSS'} · {o.route??'Pot ni potrjena'} · {o.file} · {o.selector}<br/>{o.property}: {o.value} · {o.context}</p>)}</div>
       </details>
-      <details><summary>Lumos združljivost</summary><p>Lumos for Astro 1.0.1: MIT, Astro ^7.4.2, Node ≥22.23.4. Povezava z obstoječim Astro izhodom in Stacki Save še ni preverjena. Vodič ostaja neodvisen; nobena odvisnost ni nadgrajena.</p><a href="https://github.com/lumosframework/lumos-for-astro/blob/v1.0.1/package.json" target="_blank" rel="noreferrer">Vir zahtev Lumos</a></details>
+      <section aria-label="Lumos predlog" style={{display:'grid',gap:12}}>
+        <h3>Lumos predlog iz uvoza</h3>
+        <p>Uporabi shranjeni vodič in vse strani, ki jih podpira pretvornik. Potrjene vrednosti tipografije, barv besedila in gumbov se prenesejo v predlog. Logotip, postavitev in druge vrednosti ostanejo iz uvoza; vodič je priložen urejevalni različici.</p>
+        <label><input type="checkbox" checked={preserveFunctions} disabled={busy} onChange={e=>setPreserveFunctions(e.target.checked)}/> Ohrani podprte funkcije in preseli kontaktni obrazec v GNR8. Nepodprte funkcije ustavijo pripravo.</label>
+        {preserveFunctions&&<><label>Prejemnik kontaktnega obrazca (pustite prazno, če stran nima obrazca)<input type="email" value={recipient} disabled={busy} onChange={e=>{setRecipient(e.target.value);setRecipientConfirmed(false)}}/></label>
+          <label><input type="checkbox" checked={recipientConfirmed} disabled={busy||!recipient} onChange={e=>setRecipientConfirmed(e.target.checked)}/> Potrjujem prejemnika za ta uvoz. Zasebni predogled ne pošilja sporočil.</label>
+          <label>Izrecno izločene stare demo strani (ena pot na vrstico; sicer pustite prazno)<textarea value={excludedRoutes} disabled={busy} onChange={e=>setExcludedRoutes(e.target.value)}/></label>
+          <label>Izrecno izpuščene manjkajoče slike ozadja (celoten izvorni URL na vrstico)<textarea value={omittedBackgroundImages} disabled={busy} onChange={e=>setOmittedBackgroundImages(e.target.value)}/></label></>}
+        <button disabled={busy||dirty||conflict||!!latest||!guide.revision||!props.canPrepare||(preserveFunctions&&!!recipient&&!recipientConfirmed)} onClick={prepareLumos}>Pripravi zasebni Lumos predlog</button>
+        {!guide.revision&&<p>Najprej shranite vodič znamke.</p>}
+        {props.proposal&&<><p>Izbrani predlog uporablja revizijo vodiča {props.proposal.revision}.{props.proposal.revision!==guide.revision?' Vodič je bil pozneje spremenjen; obstoječi predlog ostane ohranjen.':''}</p>
+          <iframe title="Lumos predlog strani" src={props.proposal.previewUrl} sandbox="allow-scripts" style={{width:'100%',height:640,border:'1px solid #cbd5e1'}}/>
+        </>}
+      </section>
     </>}
     <p role="status" aria-live="polite" style={{margin:0}}>{message}</p>
   </section>;

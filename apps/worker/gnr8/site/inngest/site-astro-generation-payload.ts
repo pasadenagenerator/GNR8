@@ -1,6 +1,7 @@
-import { parseAcceptedFunctionalReductions, type SiteAstroGenerationRequestedPayload } from '@gnr8/runtime-contracts'
+import { parseAcceptedFunctionalReductions, parseRetainedFunctions, type SiteAstroGenerationRequestedPayload } from '@gnr8/runtime-contracts'
 import { parseStackiScope } from '../../../../platform/gnr8/stacki/stacki-draft-contract'
 import { parseStackiCandidateSelection } from '../../../../platform/gnr8/stacki/stacki-candidate-selection'
+import { parseLumosBrandReference } from '../../../../platform/gnr8/brand/lumos-source-proposal'
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim()
@@ -40,6 +41,14 @@ export function parseSiteAstroGenerationPayload(value: unknown): SiteAstroGenera
   } else if (!stackiBaseline && record.stackiSourceArtifactSha256 !== undefined) return null
 
   if (strategy === 'stacki_astro7_baseline' && !stackiBaseline) return null
+  let lumosBrand: SiteAstroGenerationRequestedPayload['lumosBrand']
+  if (record.lumosBrand !== undefined) {
+    try { lumosBrand = parseLumosBrandReference(record.lumosBrand) } catch { return null }
+    if (stackiBaseline || stackiRevision || requestedAdapterId !== 'astro-static-site' ||
+      lumosBrand.siteVersionId !== sourceSiteVersionId) return null
+  }
+  const retainedFunctions=record.retainedFunctions===undefined?undefined:parseRetainedFunctions(record.retainedFunctions)
+  if(retainedFunctions===null || (retainedFunctions && (!lumosBrand||acceptedFunctionalReductions)))return null
 
   return {
     actionId,
@@ -52,6 +61,8 @@ export function parseSiteAstroGenerationPayload(value: unknown): SiteAstroGenera
     strategy,
     ...(requestedAdapterId ? { requestedAdapterId } : {}),
     ...(acceptedFunctionalReductions ? { acceptedFunctionalReductions } : {}),
+    ...(lumosBrand ? { lumosBrand } : {}),
+    ...(retainedFunctions ? {retainedFunctions} : {}),
     ...(stackiBaseline ? { stackiBaseline, stackiSourceArtifactSha256: record.stackiSourceArtifactSha256 } : {}),
     ...(stackiRevision ? { stackiRevision, stackiSourceArtifactSha256: record.stackiSourceArtifactSha256 } : {}),
   } as SiteAstroGenerationRequestedPayload

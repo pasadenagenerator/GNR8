@@ -1,4 +1,6 @@
 import type { AcceptedFunctionalReductions } from './accepted-functional-reductions'
+import type { RetainedFunctions } from './retained-functions'
+export { parseRetainedFunctions, type RetainedFunctions } from './retained-functions'
 export { createRetainedPresentationSettings, parseAcceptedFunctionalReductions, isContactEmail, type AcceptedFunctionalReductions } from './accepted-functional-reductions'
 export const TEMPLATE_PROCESSING_REQUESTED_EVENT = 'template/processing.requested'
 export const TEMPLATE_PROCESSING_MAX_ATTEMPTS = 3
@@ -48,6 +50,8 @@ export type SiteAstroGenerationRequestedPayload = {
   strategy: string
   requestedAdapterId?: 'astro-static-site' | 'html-static-artifact'
   acceptedFunctionalReductions?: AcceptedFunctionalReductions
+  lumosBrand?: { siteVersionId: string; artifactId: string; revision: number }
+  retainedFunctions?: RetainedFunctions
   stackiBaseline?: { agencyId: string; clientId: string; siteId: string; siteVersionId: string }
   stackiRevision?: {
     scope: { agencyId: string; clientId: string; siteId: string; siteVersionId: string }

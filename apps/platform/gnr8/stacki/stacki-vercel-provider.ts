@@ -68,14 +68,15 @@ export class VercelStackiProvider implements StackiSessionProvider {
         `const site=await readdir(root+'/site');if(site.length!==1||site[0]!=='node_modules')process.exit(1);`] });
       if (clean.exitCode !== 0) throw new Error("STACKI_RUNTIME_IMAGE_NOT_CLEAN");
       if (github) {
-        // The pinned image predates the GNR8 Git panel. Replace only its
-        // verified browser bundle in this ephemeral, GitHub-selected VM.
+        // Accept the original pinned image or the refreshed image carrying the
+        // exact shipped Git panel. Never replace an unrecognized browser bundle.
         const originalCheck = await sandbox.runCommand({ cmd: "node", args: ["--input-type=module", "-e", `
           import {readFile} from 'node:fs/promises';
           import {createHash} from 'node:crypto';
           const path=${JSON.stringify(`${root}/studio/dist/studio.js`)};
-          if(createHash('sha256').update(await readFile(path)).digest('hex')!==
-            '92442222a57a2dce89a1e84e1c66d97644ee4085acc5e61907a52fcb70a5bb12')process.exit(2);
+          if(!['92442222a57a2dce89a1e84e1c66d97644ee4085acc5e61907a52fcb70a5bb12',
+            '50b962be90f0dc8cdcd85fe9ca93abde7f8110d0eb5a7f7d6ea3636144f72291']
+            .includes(createHash('sha256').update(await readFile(path)).digest('hex')))process.exit(2);
         `] });
         if (originalCheck.exitCode !== 0) throw new StackiDraftError(503, "STACKI_RUNTIME_REFRESH_REQUIRED");
         await sandbox.writeFiles(studioAssets);

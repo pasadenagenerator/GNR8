@@ -88,11 +88,21 @@ test("captured pages preserve their source shell without adding synthetic naviga
   assert.match(page, /<img src="\/logo\.gif" alt="CHS">/);
   assert.match(page, /<footer data-source-footer>Source footer<\/footer>/);
   assert.match(page, /assets\/user-style\.css/);
-  assert.match(page, /<style is:global>\.home/);
+  assert.match(page, /<style is:global is:inline>\.home/);
   assert.doesNotMatch(page, /href="\/styles\/global\.css"/);
   assert.equal(fileMap(manifest.files).has("public/styles/global.css"), false);
   assert.doesNotMatch(page, /class="site-header"/);
   assert.doesNotMatch(page, /Construction Health Solutions/);
+});
+
+test("captured styles retain cascade order and global selectors in Astro", () => {
+  const content = chsFixture();
+  content.pages = [{ path: "/", title: "Cascade", headHtml:
+    '<style>body{color:red}</style><link rel="stylesheet" href="/reset.css"><style id="theme">body{font-family:Roboto}</style>',
+    bodyHtml: '<main><style>.nested{color:blue}</style><p class="nested">Text</p></main>' }];
+  const page = fileMap(createAstroStaticSiteProjectManifest(content).files).get("src/pages/index.astro")!;
+  assert.ok(page.includes('<style is:inline>body{color:red}</style><link rel="stylesheet" href="/reset.css"><style id="theme" is:inline>body{font-family:Roboto}</style>'));
+  assert.ok(page.includes('<style is:inline>.nested{color:blue}</style>'));
 });
 
 test("authoritative CHS source mapping preserves routes, content, contacts, footer, and mobile layout", () => {

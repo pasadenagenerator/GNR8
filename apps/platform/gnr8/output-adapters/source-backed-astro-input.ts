@@ -2,9 +2,16 @@ import {materializeRetainedStylesheetDocument} from "../../src/public-site/mater
 import { reduceRetainedPresentation, removableRetainedPresentationScript } from "./retained-presentation-reductions";
 import {projectMonoControls, projectAcceptedMediaLinks, removableMonoScript} from "./retained-mono-projection";
 import { isOwnedRetainedRuntimeScript } from "../../src/public-site/owned-retained-runtime";
+import { restoreRetainedMonoNavigation } from "../../src/public-site/retained-mono-navigation";
+import { enhanceRetainedGalleries } from "../../src/public-site/retained-gallery";
 import { CONTACT_FORM_SCRIPT } from "../../src/public-site/contact-form-runtime";
 import { replaceSupportedContactForm } from "../contact/contact-form";
 import { createHash } from "node:crypto";
+import { createLumosSourceProposal } from '../brand/lumos-source-proposal';
+import { projectRetainedFunctions, retainedSearchIndex, omitApprovedBackgroundImages } from './retained-function-projection';
+import type { RetainedFunctions } from '@gnr8/runtime-contracts';
+import type { BrandSaved } from '../brand/brand-guide';
+import { createAstroStaticSiteSourceSnapshot } from './astro-static-site-workspace-preparation';
 import { parse, parseFragment, serialize, serializeOuter } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
@@ -31,7 +38,7 @@ type HtmlElement = DefaultTreeAdapterMap["element"];
 
 export class SourceBackedAstroUnsupportedError extends Error {
   readonly code = "unsupported_capability" as const;
-  constructor(readonly unsupportedCapabilities: string[]) {
+  constructor(readonly unsupportedCapabilities: string[], readonly scriptEvidence: Array<{route:string;source:string;sha256:string}>=[]) {
     super(`unsupported_capability:${unsupportedCapabilities.join(",")}`);
     this.name = "SourceBackedAstroUnsupportedError";
   }
@@ -46,6 +53,7 @@ export type SourceBackedAstroGenerationInput = {
     expectedContent: string[];
     expectedThemeToken: string | null;
     expectedStylesheetReferences?: string[];
+    compiledStylesheetSource?: { sourcePaths: string[]; aggregateSha256: string };
   };
   contentManifest: GeneratedOutputContentManifest;
   sourceManifest: {
@@ -53,6 +61,8 @@ export type SourceBackedAstroGenerationInput = {
     adapterVersion: "gnr8-output-adapter-selection:v1";
     sourceSiteVersionId: string;
     sourceArtifactId: string;
+    lumosBrand?: ReturnType<typeof createLumosSourceProposal>['binding'];
+    retainedFunctions?: RetainedFunctions;
     files: Array<{ path: string; role: string; bytes: number; sha256: string; contents: string }>;
     assetEvidence: Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string }>;
     acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions & { limitations: string[] };
@@ -286,9 +296,11 @@ export function createSourceBackedAstroGenerationInput(input: {
   htmlByPath?: Record<string, string> & { "/": string };
   stylesheetCssByPath?: Record<string, string>;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
+  lumosBrand?: BrandSaved;
+  retainedFunctions?: RetainedFunctions;
 }): SourceBackedAstroGenerationInput {
   const sourceHtmlByPath = input.htmlByPath ?? input.artifact.htmlByPath;
-  const exclusions = input.acceptedFunctionalReductions?.kind === "retained-presentation-v1" ? input.acceptedFunctionalReductions.excludedRoutes ?? [] : [];
+  const exclusions = input.retainedFunctions?.excludedRoutes ?? (input.acceptedFunctionalReductions?.kind === "retained-presentation-v1" ? input.acceptedFunctionalReductions.excludedRoutes ?? [] : []);
   const excludedRoutes = new Set(exclusions.map(entry => canonicalRouteIdentity(entry.path)));
   if (excludedRoutes.has("/")) throw new SourceBackedAstroUnsupportedError(["root_route_exclusion_forbidden"]);
   const routes = Object.keys(sourceHtmlByPath).filter(path => !excludedRoutes.has(canonicalRouteIdentity(path))).sort((left, right) => left.localeCompare(right));
@@ -327,7 +339,7 @@ export function createSourceBackedAstroGenerationInput(input: {
   const navItems = normalizedPageNavigation[routes.indexOf("/")]!.items.filter((item) => item.label);
   const dedupedNav = [...new Map(navItems.map((item) => [`${item.label}\0${item.href}`, item])).values()].slice(0, 24);
 
-  if (unsupported.size > 0) throw new SourceBackedAstroUnsupportedError([...unsupported].sort());
+  if (unsupported.size > 0) throw new SourceBackedAstroUnsupportedError([...unsupported].sort(),pages.flatMap(page=>page.scriptEvidence));
   const rootPage = input.siteVersion.pages.find((page) => page.path === "/") ?? input.siteVersion.pages[0];
   const siteName = rootPage?.title?.trim() || sourceHost || "Generated website";
   const accent = normalizeHex(rootPage?.styleTokens?.["--color-accent"] ?? rootPage?.styleTokens?.["--color-primary"], "#2563eb");
@@ -407,7 +419,15 @@ export function createSourceBackedAstroGenerationInput(input: {
     requiredNavigation,
     requiredAssets,
   });
-  const projectManifest = createAstroStaticSiteProjectManifest(content);
+  if(input.retainedFunctions && content.pages){
+    const index=retainedSearchIndex(content.pages);
+    for(const page of content.pages)if(page.bodyHtml.includes('data-gnr8-search="v1"'))page.bodyHtml+=index;
+  }
+  const originalProject = createAstroStaticSiteProjectManifest(content);
+  const proposal = input.lumosBrand ? createLumosSourceProposal(originalProject, input.lumosBrand) : null;
+  const projectManifest = proposal ?? originalProject;
+  if(input.retainedFunctions)projectManifest.files.push({path:'src/gnr8-functions/settings.json',role:'manifest',
+    contents:JSON.stringify({sourceSiteVersionId:input.siteVersion.id,sourceArtifactId:input.rawArtifact.id,...input.retainedFunctions},null,2)+'\n'});
   return {
     content,
     capabilities: ["static_pages", ...(requiredAssets.length > 0 ? ["local_assets" as const] : [])],
@@ -417,6 +437,10 @@ export function createSourceBackedAstroGenerationInput(input: {
       expectedContent: [siteName],
       expectedThemeToken: null,
       expectedStylesheetReferences,
+      ...(proposal ? { compiledStylesheetSource: {
+        sourcePaths: proposal.files.map(file => file.path),
+        aggregateSha256: createAstroStaticSiteSourceSnapshot(proposal.files.map(file => ({ path: file.path, body: Buffer.from(file.contents) }))).aggregateSha256,
+      } } : {}),
     },
     contentManifest,
     sourceManifest: {
@@ -424,6 +448,8 @@ export function createSourceBackedAstroGenerationInput(input: {
       adapterVersion: "gnr8-output-adapter-selection:v1",
       sourceSiteVersionId: input.siteVersion.id,
       sourceArtifactId: input.artifact.id,
+      ...(proposal ? { lumosBrand: proposal.binding } : {}),
+      ...(input.retainedFunctions ? {retainedFunctions:input.retainedFunctions} : {}),
       files: projectManifest.files.map((file) => ({
         path: file.path,
         role: file.role,
@@ -472,7 +498,8 @@ function normalizePage(input: {
   html: string;
   stylesheetCssByPath?: Record<string, string>;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
-}): { path: string; title: string; headHtml: string; bodyAttributes: Record<string, string>; bodyHtml: string; unsupported: string[] } {
+  retainedFunctions?: RetainedFunctions;
+}): { path: string; title: string; headHtml: string; bodyAttributes: Record<string, string>; bodyHtml: string; unsupported: string[];scriptEvidence:Array<{route:string;source:string;sha256:string}> } {
   // Candidate previews intentionally disable scripts. Parse using the same
   // scripting mode so noscript fallbacks can be normalized before Astro
   // serializes them into a sandboxed document.
@@ -483,6 +510,12 @@ function normalizePage(input: {
   let document = parse(html, { scriptingEnabled: false }) as DefaultTreeAdapterMap["document"];
   let elements = allElements(document);
   const unsupported: string[] = [];
+  const scriptEvidence:Array<{route:string;source:string;sha256:string}>=[];
+  if(input.retainedFunctions){
+    omitApprovedBackgroundImages(document,input.retainedFunctions.omittedBackgroundImages ?? []);
+    unsupported.push(...projectRetainedFunctions(document));
+    elements=allElements(document);
+  }
   // HTML recovery may retain stray quote tokens as attribute names. They have
   // no valid serialized HTML representation and must not corrupt Astro output.
   for (const element of elements) element.attrs = element.attrs.filter(attr => !/[\s"'<>/=\u0000-\u001f\u007f]/.test(attr.name));
@@ -495,6 +528,9 @@ function normalizePage(input: {
     unsupported.push(...reduceRetainedPresentation(document));
     elements = allElements(document);
   }
+  // Resource hints are capture-time optimizations, not retained content or dependencies.
+  for (const element of elements) if (element.tagName === "link" &&
+    (attribute(element, "rel") ?? "").toLowerCase().split(/\s+/).some(value => ["dns-prefetch", "preconnect", "prefetch"].includes(value))) detach(element);
   const forms = elements.filter((element) => element.tagName === "form");
   materializeScriptAssignedStylesheets({
     document,
@@ -506,7 +542,20 @@ function normalizePage(input: {
   materializeLazyAssetAttributes(elements);
   let replacedFormCount = 0;
   let replacedFormSecurityRuntime = false;
-  if (forms.length > 0 && input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1") {
+  if(input.retainedFunctions){
+    let contacts=0;
+    for(const form of forms){
+      if(attribute(form,'data-gnr8-search')==='v1')continue;
+      if(replaceSupportedContactForm(form,input.path)){contacts++;replacedFormCount++}
+      else unsupported.push('forms');
+    }
+    if(contacts>1)unsupported.push('multiple_contact_forms');
+    if(contacts&&!input.retainedFunctions.contact)unsupported.push('contact_recipient_unconfirmed');
+    if(contacts){const body=elements.find(n=>n.tagName==='body')!;
+      for(const n of parseFragment(`<script data-gnr8-preview-runtime="contact-form">${CONTACT_FORM_SCRIPT}</script>`).childNodes){n.parentNode=body;body.childNodes.push(n)}
+    }
+    elements=allElements(document);
+  } else if (forms.length > 0 && input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1") {
     const sourcePageUrl = sourcePageUrlForRoute(
       input.rawArtifact,
       input.siteVersion.importProvenanceSummary,
@@ -592,13 +641,26 @@ function normalizePage(input: {
   // Project supported elements before classifying scripts. Unknown source code
   // remains present and is rejected below; only exact owned bytes may survive.
   preserveAnchorHrefsForRuntimeRewrite(document);
-  document = parse(rewriteRawTemplateHtmlForRuntime({
+  let projectedHtml = rewriteRawTemplateHtmlForRuntime({
     html: serialize(document), siteId: input.rawArtifact.siteId,
     siteVersionId: input.rawArtifact.siteVersionId,
     resolvedFilePath: routeSource.outcome === "selected" ? routeSource.rawFilePath : input.rawArtifact.entryHtmlPath,
     fileMapPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
-  }), { scriptingEnabled: false });
+  });
+  projectedHtml = restoreRetainedMonoNavigation(projectedHtml);
+  projectedHtml = enhanceRetainedGalleries({html: projectedHtml, siteId: input.rawArtifact.siteId,
+    siteVersionId: input.rawArtifact.siteVersionId, fileMapPaths: new Set(Object.keys(input.rawArtifact.fileMap))});
+  document = parse(projectedHtml, { scriptingEnabled: false });
   elements = allElements(document);
+  // Mono's empty animation is only a visibility transition. Materialize its
+  // final state so the captured animation initializer is no longer required.
+  for (const element of elements) if (element.attrs.some(attr => attr.name === "data-animate" && attr.value === "")) {
+    element.attrs = element.attrs.filter(attr => attr.name !== "data-animate");
+    const classes = (attribute(element, "class") ?? "").split(/\s+/).filter(Boolean);
+    for (const name of ["animated", "animationDone"]) if (!classes.includes(name)) classes.push(name);
+    element.attrs = element.attrs.filter(attr => attr.name !== "class");
+    element.attrs.push({name: "class", value: classes.join(" ")});
+  }
   for (const script of elements.filter((element) => element.tagName === "script")) {
     if (isOwnedRetainedRuntimeScript(script)) continue;
     const type = (attribute(script, "type") ?? "").trim().toLowerCase();
@@ -608,18 +670,22 @@ function normalizePage(input: {
         trackingAndChat:input.acceptedFunctionalReductions.trackingAndChat === 'remove',
         fileSha256:input.rawArtifact.fileMap[capturedScriptPath(script,input.rawArtifact) ?? '']?.sha256,
       })) ||
-      (input.acceptedFunctionalReductions?.kind === "retained-presentation-v1" && removableRetainedPresentationScript({
+      ((input.retainedFunctions || input.acceptedFunctionalReductions?.kind === "retained-presentation-v1") && removableRetainedPresentationScript({
         script, elements, resolvedScriptPath: capturedScriptPath(script,input.rawArtifact), siteId: input.rawArtifact.siteId, siteVersionId: input.rawArtifact.siteVersionId, fileMap: input.rawArtifact.fileMap, sourceUrl: input.rawArtifact.metadata.finalUrl ?? input.rawArtifact.metadata.sourceUrl,
+        retainedFunctions:!!input.retainedFunctions,
       })) ||
       isReplaceableStaticSiteScript(script, {
         hasReplacedForms: replacedFormCount > 0 && input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1",
         replacedFormSecurityRuntime,
         elements,
+        capturedPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
       })
     ) {
       detach(script);
     } else {
       unsupported.push("scripts");
+      scriptEvidence.push({route:input.path,source:capturedScriptPath(script,input.rawArtifact)??'inline',
+        sha256:createHash('sha256').update(textContent(script).trim()).digest('hex')});
     }
   }
   if (input.path !== "/" && input.rawArtifact.metadata.multiPage?.enabled && routeSource.outcome !== "selected") {
@@ -654,7 +720,7 @@ function normalizePage(input: {
   const titleElement = elements.find(element => element.tagName === "title") ?? elements.find(element => element.tagName === "h1");
   const title = input.siteVersion.pages.find((page) => page.path === input.path)?.title?.trim() ||
     (titleElement ? textContent(titleElement).trim().slice(0, 200) : "") || input.path;
-  return { path: input.path, title, headHtml, bodyAttributes, bodyHtml, unsupported };
+  return { path: input.path, title, headHtml, bodyAttributes, bodyHtml, unsupported,scriptEvidence };
 }
 
 const STATIC_MOBILE_NAVIGATION_STYLE = `<style is:global data-gnr8-static-mobile-navigation>
@@ -1290,7 +1356,7 @@ function scriptAssetName(value: string): string {
 }
 function isReplaceableStaticSiteScript(
   script: HtmlElement,
-  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; elements: HtmlElement[] },
+  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; elements: HtmlElement[]; capturedPaths: ReadonlySet<string> },
 ): boolean {
   if (attribute(script, "data-gnr8-raw-runtime-duplicate-guard") !== null) return true;
   if (attribute(script, "data-gnr8-disabled-preview-script") !== null) return true;
@@ -1319,11 +1385,20 @@ function isReplaceableStaticSiteScript(
     "touch-events.js",
   ]);
   if (staticEnhancementAssets.has(assetName)) return true;
+  const hasUnprojectedMonoModule = (name: string) => context.elements.some((element) =>
+    (attribute(element, "data-req") ?? "").split(",").includes(name));
+  if (assetName === "locale.js" && !hasUnprojectedMonoModule("locale")) return true;
+  if (["lightbox.js", "slider.js"].includes(assetName) &&
+      !["gallery", "lightbox", "slider"].some(hasUnprojectedMonoModule)) return true;
+  if (assetName === "animate.js" && !context.elements.some((element) =>
+    element.attrs.some((attr) => attr.name.startsWith("data-anim")))) return true;
   if (/google-analytics|googletagmanager|gtag\/js|monotracker/i.test(src)) return true;
   if (context.hasReplacedForms && (assetName === "form.js" || /hcaptcha\.com/i.test(src))) return true;
   if (context.replacedFormSecurityRuntime && assetName === "api.js") return true;
   if (assetName === "js.js" && context.elements.some((element) => element.tagName === "script" && /\bgtag\s*\(|\bdataLayer\b/i.test(textContent(element)))) return true;
   if (/serviceworker\.getregistrations|window\.assetsurl\s*=|\b_monoCookie\s*=|\bdataLayer\b|\bgtag\s*\(/i.test(body)) return true;
+  if (!context.capturedPaths.has("sw.js") &&
+      /^if\s*\(\s*['"]serviceWorker['"]\s+in\s+navigator\s*\)\s*\{\s*navigator\.serviceWorker\.register\(\s*['"]\/sw\.js(?:\?\d+)?['"]\s*,\s*\{\s*scope:\s*['"]\/['"]\s*\}\s*\);\s*\}$/.test(body)) return true;
   if (/createelement\s*\(\s*["']link["']\s*\)/i.test(lowerBody) && /rel\s*=\s*["']stylesheet["']/i.test(lowerBody)) return true;
   return false;
 }
@@ -1455,6 +1530,9 @@ function isFormSecurityEmbed(element: HtmlElement): boolean {
 function isStaticIframeEmbed(element: HtmlElement): boolean {
   if (element.tagName !== "iframe") return false;
   const src = attribute(element, "src") ?? "";
+  if(src==='about:blank'){
+    try{const url=new URL(attribute(element,'data-gnr8-consent-map')??'');if(url.protocol==='https:'&&url.hostname==='www.google.com'&&url.pathname==='/maps/embed'&&!url.username&&!url.password)return true}catch{}
+  }
   if(src === 'about:blank' && /^https:\/\/fast\.wistia\.com\/embed\/iframe\/[a-zA-Z0-9]+$/.test(attribute(element,'data-gnr8-video-src') ?? '') && attribute(element,'hidden') !== null) return true;
   if (!src) return false;
   try {

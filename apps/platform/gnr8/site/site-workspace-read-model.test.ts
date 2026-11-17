@@ -690,14 +690,14 @@ test('version visibility exposes latest import metadata when selected workspace 
       ownership_site_id: SITE_ID,
       state: 'DRAFT',
       version_no: 11,
-      import_provenance_summary: runtimeSummaryFixture({
+      import_provenance_summary: {...runtimeSummaryFixture({
         requestId: 'client-site-import-20260608',
         sourceMode: 'rendered_dom',
         renderedCaptureStatus: 'available',
         renderedDomQuality: 'strong',
         nodeCount: 80,
         screenshotCount: 2,
-      }),
+      }), brandStyleGuide: {kind:'brand_style_guide_v1',siteVersionId:'original-import-version',revision:1}},
       artifact_id: 'older-artifact',
       created_at: '2026-06-08T08:00:00.000Z',
       updated_at: '2026-06-08T08:01:00.000Z',
@@ -712,6 +712,7 @@ test('version visibility exposes latest import metadata when selected workspace 
   assert.equal(visibility.latestImportCreatedAt, '2026-06-09T08:00:00.000Z')
   assert.equal(visibility.latestImportUpdatedAt, '2026-06-09T08:01:00.000Z')
   assert.equal(visibility.selectedWorkspaceSiteVersionId, 'older-transformed-version')
+  assert.equal(visibility.savedBrandGuideSiteVersionId, 'original-import-version')
   assert.equal(visibility.selectedWorkspaceArtifactId, 'older-artifact')
   assert.equal(visibility.selectedMatchesLatestImport, false)
   assert.equal(visibility.selectionLabel, 'transformed_preview_selected_older_runtime')

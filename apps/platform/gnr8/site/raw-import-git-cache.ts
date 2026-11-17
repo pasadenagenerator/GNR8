@@ -9,7 +9,6 @@ import {resolvedGitHubTarget} from '../stacki/stacki-github-config';
 import {GitHubStackiStore} from '../stacki/stacki-github-store';
 
 type Ref=NonNullable<RawImportedSiteArtifactMetadata['gitArchive']>;
-type File={path:string;mediaType:string;sizeBytes:number;sha256:string;bytes:Buffer};
 type Recovery={resolveTarget:typeof resolvedGitHubTarget;
   verifyTarget:(scope:Ref['scope'] & {siteVersionId:string},
     target:NonNullable<Awaited<ReturnType<typeof resolvedGitHubTarget>>>)=>Promise<void>;
@@ -30,27 +29,34 @@ function key(ref:Ref,versionId:string,sha256:string){
   const {agencyId,clientId,siteId}=ref.scope;
   return `raw-import-cache/v1/${agencyId}/${clientId}/${siteId}/${versionId}/${ref.commit}/${sha256}`;
 }
-function storage(client:Pick<SupabaseClient,'storage'>|null,bucketName:string){
-  if(!client||!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(bucketName))invalid();
-  return client.storage;
-}
-
 /** Disposable private serving copy of bytes already verified against Git. */
 export class RawImportGitCache{
-  private bucketPromise?:Promise<ReturnType<SupabaseClient['storage']['from']>>;
+  private bucketPromise?:Promise<ReturnType<SupabaseClient['storage']['from']>|null>;
+  private archives=new Map<string,Promise<{files:Map<string,Buffer>;manifest:{files:Array<{path:string;bytes:number;sha256:string}>}}>>();
   constructor(private client:Pick<SupabaseClient,'storage'>|null=getSupabaseServiceRoleClient(),
     private bucketName=process.env[ASTRO_CANDIDATE_OBJECT_BUCKET_ENV]??'',
     private git:Recovery=recovery){}
   private async bucket(){
     this.bucketPromise??=(async()=>{
-      const service=storage(this.client,this.bucketName);
-      const info=await service.getBucket(this.bucketName);
-      if(info.error||info.data?.public!==false)invalid();
-      return service.from(this.bucketName);
+      if(!this.client||!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(this.bucketName))return null;
+      const service=this.client.storage;
+      let info:Awaited<ReturnType<typeof service.getBucket>>;
+      try{info=await service.getBucket(this.bucketName);}catch{return null;}
+      if(info.data?.public===true)invalid();
+      if(info.error||info.data?.public!==false)return null;
+      try{return service.from(this.bucketName);}catch{return null;}
     })();
     return this.bucketPromise;
   }
-  private async recover(ref:Ref,versionId:string,file:{sha256:string;sizeBytes:number}):Promise<Buffer>{
+  private async archive(ref:Ref,versionId:string){
+    const archiveKey=JSON.stringify([ref.scope,ref.repository,ref.commit,ref.manifestSha256,versionId]);
+    let pending=this.archives.get(archiveKey);
+    if(pending)return pending;
+    pending=this.loadArchive(ref,versionId);
+    this.archives.set(archiveKey,pending);
+    return pending;
+  }
+  private async loadArchive(ref:Ref,versionId:string){
     try{
       const scope={...ref.scope,siteVersionId:versionId};
       const target=await this.git.resolveTarget(scope);
@@ -70,6 +76,13 @@ export class RawImportGitCache{
       const paths=manifest.files.map(entry=>`raw-import/${versionId}/${entry.path}`);
       if(new Set(paths).size!==paths.length||archive.files.size!==paths.length+1||
         paths.some(path=>!archive.files.has(path)))invalid();
+      return {files:archive.files,manifest:{files:manifest.files}};
+    }catch{invalid();}
+  }
+  private async recover(ref:Ref,versionId:string,file:{sha256:string;sizeBytes:number}):Promise<Buffer>{
+    try{
+      const archive=await this.archive(ref,versionId);
+      const manifest=archive.manifest;
       const matches=manifest.files.filter(entry=>entry.sha256===file.sha256&&entry.bytes===file.sizeBytes);
       if(!matches.length)invalid();
       const body=archive.files.get(`raw-import/${versionId}/${matches[0]!.path}`);
@@ -81,44 +94,34 @@ export class RawImportGitCache{
     const objectKey=key(ref,versionId,file.sha256);
     if(!Number.isSafeInteger(file.sizeBytes)||file.sizeBytes<0||file.sizeBytes>128*1024*1024)invalid();
     const bucket=await this.bucket();
-    const result=await bucket.download(objectKey);
-    if(!result.data){
+    let result:Awaited<ReturnType<NonNullable<typeof bucket>['download']>>|null=null;
+    if(bucket)try{result=await bucket.download(objectKey);}catch{/* Recover from pinned Git. */}
+    if(result?.data){
+      if(result.error||result.data.size!==file.sizeBytes)invalid();
+      let cached:Buffer|null=null;
+      try{cached=Buffer.from(await result.data.arrayBuffer());}catch{/* Recover from pinned Git. */}
+      if(cached){
+        if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256)invalid();
+        return cached;
+      }
+      result=null;
+    }
+    if(!result?.data){
       const bytes=await this.recover(ref,versionId,file);
+      if(!bucket)return bytes;
       try{await bucket.upload(objectKey,bytes,{upsert:false,contentType:'application/octet-stream',cacheControl:'3600'});}
       catch{/* Exact readback reconciles an ambiguous upload. */}
-      const restored=await bucket.download(objectKey);
-      if(restored.error||!restored.data||restored.data.size!==file.sizeBytes)invalid();
-      const cached=Buffer.from(await restored.data.arrayBuffer());
+      let restored:Awaited<ReturnType<typeof bucket.download>>;
+      try{restored=await bucket.download(objectKey);}catch{return bytes;}
+      // Git is the verified source of truth. A disposable cache outage must not
+      // make a pinned, integrity-checked import unreadable.
+      if(restored.error||!restored.data)return bytes;
+      if(restored.data.size!==file.sizeBytes)invalid();
+      let cached:Buffer;
+      try{cached=Buffer.from(await restored.data.arrayBuffer());}catch{return bytes;}
       if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256)invalid();
       return cached;
     }
-    if(result.error||result.data.size!==file.sizeBytes)invalid();
-    const bytes=Buffer.from(await result.data.arrayBuffer());
-    if(bytes.length!==file.sizeBytes||hash(bytes)!==file.sha256)invalid();
-    return bytes;
-  }
-  async prepare(ref:Ref,versionId:string,files:File[]):Promise<void>{
-    const bucket=await this.bucket();
-    const seen=new Set<string>();
-    const unique:File[]=[];
-    for(const file of files){
-      const objectKey=key(ref,versionId,file.sha256);
-      if(!Buffer.isBuffer(file.bytes)||file.bytes.length!==file.sizeBytes||hash(file.bytes)!==file.sha256)invalid();
-      if(seen.has(objectKey))continue;
-      seen.add(objectKey);
-      unique.push(file);
-    }
-    for(let offset=0;offset<unique.length;offset+=8){
-      const results=await Promise.allSettled(unique.slice(offset,offset+8).map(async file=>{
-        const objectKey=key(ref,versionId,file.sha256);
-        // A failed upload may have committed. Exact readback reconciles it.
-        try{await bucket.upload(objectKey,file.bytes,{upsert:false,contentType:file.mediaType,cacheControl:'3600'});}catch{/* readback decides */}
-        const result=await bucket.download(objectKey);
-        if(result.error||!result.data||result.data.size!==file.sizeBytes)invalid();
-        const cached=Buffer.from(await result.data.arrayBuffer());
-        if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256)invalid();
-      }));
-      for(const result of results)if(result.status==='rejected')throw result.reason;
-    }
+    invalid();
   }
 }
