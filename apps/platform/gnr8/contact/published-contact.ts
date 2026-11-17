@@ -21,7 +21,7 @@ export function publishedContactFromResolution(result: PublicRuntimeArtifactReso
     if(preserved.scope!=='generation-action'||typeof preserved.acceptedByActor!=='string'||!preserved.acceptedByActor)return null
     const {scope:_scope,acceptedByActor:_actor,acceptedAt:_at,...configuration}=preserved
     const settings=parseRetainedFunctions(configuration),schema=readContactSchema(result.html)
-    if(!settings||!schema)return null
+    if(!settings?.contact||!schema)return null
     return {...schema,siteId:result.siteId,siteVersionId:result.activeSiteVersionId,pagePath:path,recipient:settings.contact.recipient,artifactId:result.artifactId,artifactSha256:result.artifact.bundleSha256}
   }
   const stored = workspace?.acceptedFunctionalReductions as Record<string,unknown> | undefined

@@ -548,6 +548,7 @@ function normalizePage(input: {
       else unsupported.push('forms');
     }
     if(contacts>1)unsupported.push('multiple_contact_forms');
+    if(contacts&&!input.retainedFunctions.contact)unsupported.push('contact_recipient_unconfirmed');
     if(contacts){const body=elements.find(n=>n.tagName==='body')!;
       for(const n of parseFragment(`<script data-gnr8-preview-runtime="contact-form">${CONTACT_FORM_SCRIPT}</script>`).childNodes){n.parentNode=body;body.childNodes.push(n)}
     }

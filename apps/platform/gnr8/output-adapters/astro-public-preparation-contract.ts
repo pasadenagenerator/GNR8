@@ -40,7 +40,7 @@ export function readPublicPreparation(manifest: Record<string, unknown>): Public
 export function publicPreparationWorkspace(source: unknown, preparation: PublicPreparation): unknown {
   const copy = structuredClone(source);
   if (!preparation.contactRecipientChange) return copy;
-  const workspace = copy as {acceptedFunctionalReductions?: {contact?: {recipient: string; recipientConfirmed: boolean}};retainedFunctions?:{contact:{recipient:string;recipientConfirmed:boolean}}} | undefined;
+  const workspace = copy as {acceptedFunctionalReductions?: {contact?: {recipient: string; recipientConfirmed: boolean}};retainedFunctions?:{contact?:{recipient:string;recipientConfirmed:boolean}}} | undefined;
   const contact = workspace?.retainedFunctions?.contact ?? workspace?.acceptedFunctionalReductions?.contact;
   if (!contact || contact.recipientConfirmed !== true || contact.recipient !== preparation.contactRecipientChange.from)
     throw new Error('public_contact_update_source_recipient_mismatch');

@@ -16,6 +16,18 @@ import {
 
 const SHA = "a".repeat(64);
 
+test('retained functions need a confirmed recipient only when a supported contact form exists',()=>{
+  const noForm=fixture();
+  const settings={kind:'retained-functions-v1' as const};
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:noForm.version,artifact:noForm.artifact,
+    rawArtifact:noForm.rawArtifact,retainedFunctions:settings});
+  assert.deepEqual(generated.outputPaths,['/','/about']);
+  const form='<form class="wpcf7-form" method="post" action="/contact"><input name="your-name" required placeholder="Name"><input type="email" name="your-email" required placeholder="Email"><textarea name="your-message" placeholder="Message"></textarea><input type="submit" value="Send"></form>';
+  const withForm=fixture({rootHtml:`<html><body><h1>Contact</h1>${form}</body></html>`});
+  assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:withForm.version,artifact:withForm.artifact,
+    rawArtifact:withForm.rawArtifact,retainedFunctions:settings}),/contact_recipient_unconfirmed/);
+});
+
 test('universal import emits a Lumos workspace bound to the saved guide without changing route or asset selection', () => {
   const input = fixture();
   const baseline = createSourceBackedAstroGenerationInput({siteVersion:input.version,artifact:input.artifact,rawArtifact:input.rawArtifact});

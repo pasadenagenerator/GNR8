@@ -1,6 +1,6 @@
 export type RetainedFunctions = {
   kind: 'retained-functions-v1'
-  contact: { recipient: string; recipientConfirmed: true }
+  contact?: { recipient: string; recipientConfirmed: true }
   omittedBackgroundImages?: string[]
   excludedRoutes?: Array<{path:string;reason:'obsolete-template'}>
 }
@@ -9,9 +9,9 @@ export function parseRetainedFunctions(value: unknown): RetainedFunctions | null
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const v=value as Record<string,unknown>, c=v.contact as Record<string,unknown>|undefined
   if (Object.keys(v).some(key=>!['contact','kind','excludedRoutes','omittedBackgroundImages'].includes(key)) || v.kind!=='retained-functions-v1' ||
-    !c || typeof c!=='object' || Array.isArray(c) || Object.keys(c).sort().join()!=='recipient,recipientConfirmed' ||
+    (c!==undefined && (!c || typeof c!=='object' || Array.isArray(c) || Object.keys(c).sort().join()!=='recipient,recipientConfirmed' ||
     c.recipientConfirmed!==true || typeof c.recipient!=='string' || c.recipient.length>254 ||
-    !/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/.test(c.recipient)) return null
+    !/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/.test(c.recipient)))) return null
   const omittedBackgroundImages:string[]=[]
   if(v.omittedBackgroundImages!==undefined){
     if(!Array.isArray(v.omittedBackgroundImages)||v.omittedBackgroundImages.length>32)return null
@@ -31,5 +31,5 @@ export function parseRetainedFunctions(value: unknown): RetainedFunctions | null
       excludedRoutes.push({path,reason:'obsolete-template'})
     }
   }
-  return {kind:v.kind,contact:{recipient:c.recipient,recipientConfirmed:true},...(excludedRoutes.length?{excludedRoutes}:{}),...(omittedBackgroundImages.length?{omittedBackgroundImages}:{})}
+  return {kind:v.kind,...(c?{contact:{recipient:c.recipient as string,recipientConfirmed:true as const}}:{}),...(excludedRoutes.length?{excludedRoutes}:{}),...(omittedBackgroundImages.length?{omittedBackgroundImages}:{})}
 }

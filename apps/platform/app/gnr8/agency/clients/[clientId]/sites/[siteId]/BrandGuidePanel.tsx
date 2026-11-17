@@ -53,7 +53,7 @@ export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:st
       const response=await fetch('/api/gnr8/site-actions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
         agencyId:props.agencyId,siteId:props.siteId,actionType:'generate_redesign',outputAdapterId:'astro-static-site',
         lumosBrand:{siteVersionId:guide.siteVersionId,artifactId:guide.artifactId,revision:guide.revision},
-        ...(preserveFunctions?{retainedFunctions:{kind:'retained-functions-v1',contact:{recipient,recipientConfirmed},
+        ...(preserveFunctions?{retainedFunctions:{kind:'retained-functions-v1',...(recipientConfirmed?{contact:{recipient,recipientConfirmed}}:{}),
           omittedBackgroundImages:omittedBackgroundImages.split('\n').map(url=>url.trim()).filter(Boolean),
           excludedRoutes:excludedRoutes.split('\n').map(path=>path.trim()).filter(Boolean).map(path=>({path,reason:'obsolete-template'}))}}:{}),
       })});
@@ -114,11 +114,11 @@ export function BrandGuidePanel(props:{agencyId:string;clientId:string;siteId:st
         <h3>Lumos predlog iz uvoza</h3>
         <p>Uporabi shranjeni vodič in vse strani, ki jih podpira pretvornik. Potrjene vrednosti tipografije, barv besedila in gumbov se prenesejo v predlog. Logotip, postavitev in druge vrednosti ostanejo iz uvoza; vodič je priložen urejevalni različici.</p>
         <label><input type="checkbox" checked={preserveFunctions} disabled={busy} onChange={e=>setPreserveFunctions(e.target.checked)}/> Ohrani podprte funkcije in preseli kontaktni obrazec v GNR8. Nepodprte funkcije ustavijo pripravo.</label>
-        {preserveFunctions&&<><label>Prejemnik kontaktnega obrazca<input type="email" value={recipient} disabled={busy} onChange={e=>{setRecipient(e.target.value);setRecipientConfirmed(false)}}/></label>
+        {preserveFunctions&&<><label>Prejemnik kontaktnega obrazca (pustite prazno, če stran nima obrazca)<input type="email" value={recipient} disabled={busy} onChange={e=>{setRecipient(e.target.value);setRecipientConfirmed(false)}}/></label>
           <label><input type="checkbox" checked={recipientConfirmed} disabled={busy||!recipient} onChange={e=>setRecipientConfirmed(e.target.checked)}/> Potrjujem prejemnika za ta uvoz. Zasebni predogled ne pošilja sporočil.</label>
           <label>Izrecno izločene stare demo strani (ena pot na vrstico; sicer pustite prazno)<textarea value={excludedRoutes} disabled={busy} onChange={e=>setExcludedRoutes(e.target.value)}/></label>
           <label>Izrecno izpuščene manjkajoče slike ozadja (celoten izvorni URL na vrstico)<textarea value={omittedBackgroundImages} disabled={busy} onChange={e=>setOmittedBackgroundImages(e.target.value)}/></label></>}
-        <button disabled={busy||dirty||conflict||!!latest||!guide.revision||!props.canPrepare||(preserveFunctions&&(!recipientConfirmed||!recipient))} onClick={prepareLumos}>Pripravi zasebni Lumos predlog</button>
+        <button disabled={busy||dirty||conflict||!!latest||!guide.revision||!props.canPrepare||(preserveFunctions&&!!recipient&&!recipientConfirmed)} onClick={prepareLumos}>Pripravi zasebni Lumos predlog</button>
         {!guide.revision&&<p>Najprej shranite vodič znamke.</p>}
         {props.proposal&&<><p>Izbrani predlog uporablja revizijo vodiča {props.proposal.revision}.{props.proposal.revision!==guide.revision?' Vodič je bil pozneje spremenjen; obstoječi predlog ostane ohranjen.':''}</p>
           <iframe title="Lumos predlog strani" src={props.proposal.previewUrl} sandbox="allow-scripts" style={{width:'100%',height:640,border:'1px solid #cbd5e1'}}/>
