@@ -4548,7 +4548,7 @@ export async function getRawTemplateSiteAsset(input: {
   const normalizedFilePath = normalizeRawTemplateFilePath(input.filePath);
   if (!normalizedFilePath) return null;
   const artifactId = String(input.artifactId ?? "").trim();
-  return withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
+  const hit = await withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
     console.info("[preview-runtime] RAW_IMPORT_ASSET_DB_COLUMN_MAPPING_USED", {
       table: "public.gnr8_runtime_raw_template_artifact_files",
       filePathColumn: "file_path",
@@ -4594,15 +4594,16 @@ export async function getRawTemplateSiteAsset(input: {
           `,
           [input.siteVersionId, normalizedFilePath],
         );
-    const hit = row.rows[0];
-    if (!hit) {
-      console.warn("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_MISSING", {
-        siteVersionId: input.siteVersionId,
-        artifactId: artifactId || null,
-        filePath: normalizedFilePath,
-      });
-      return null;
-    }
+    return row.rows[0] ?? null;
+  });
+  if (!hit) {
+    console.warn("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_MISSING", {
+      siteVersionId: input.siteVersionId,
+      artifactId: artifactId || null,
+      filePath: normalizedFilePath,
+    });
+    return null;
+  }
     console.info("[preview-runtime] RAW_IMPORT_ASSET_FILE_ROW_FOUND", {
       siteVersionId: input.siteVersionId,
       artifactId: artifactId || null,
@@ -4611,7 +4612,6 @@ export async function getRawTemplateSiteAsset(input: {
       sizeBytes: Number(hit.file_size_bytes) || 0,
     });
     return verifiedRawArtifactFile(hit, input.siteVersionId);
-  });
 }
 
 export async function getRawTemplateSiteArtifactFiles(input: {

@@ -10,6 +10,8 @@ test('getSuperadminPool reuses singleton pool instance', () => {
     const first = getSuperadminPool()
     const second = getSuperadminPool()
     assert.equal(first, second)
+    assert.equal(first.options.max, 1)
+    assert.equal(first.options.idleTimeoutMillis, 1000)
   } finally {
     process.env.DATABASE_URL = previous
   }

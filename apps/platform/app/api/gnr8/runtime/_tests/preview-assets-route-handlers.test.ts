@@ -38,6 +38,27 @@ function getParams() {
   });
 }
 
+test('Git-backed asset releases its database session before reading verified bytes', async () => {
+  let released = false;
+  const handlers = createPreviewAssetsRouteHandlers({
+    acquireRuntimeDbClient: async () => ({release: () => {released = true;}}) as never,
+    resolveDomainSiteVersionForHost: async () => ({outcome:'domain_hit', siteId:'site_1', siteVersionId:'sv_1', status:'active'}) as never,
+    getRawImportedSiteArtifact: async () => ({id:'artifact_1', artifactType:'raw_imported_site', siteId:'site_1', siteVersionId:'sv_1',
+      fileMap:{'assets/main.css':{path:'assets/main.css',mediaType:'text/css',sizeBytes:6,sha256:'abc'}},
+      metadata:{gitArchive:{repository:'owner/site'}}}) as never,
+    getRawTemplateSiteArtifact: async () => null,
+    getRawTemplateSiteAsset: async ({dbClient}) => {
+      assert.equal(released,true);
+      assert.equal(dbClient,undefined);
+      return {mediaType:'text/css',sizeBytes:6,sha256:'abc',bytes:Buffer.from('body{}')} as never;
+    },
+  });
+  const response = await handlers.GET(new Request('https://example.com/api/gnr8/runtime/preview-assets/site_1/sv_1/assets/main.css',
+    {headers:{host:'example.com'}}),{params:getParams()});
+  assert.equal(response.status,200);
+  assertRawDbLifecycleHeaders(response);
+});
+
 test("preview assets route recovers retained fonts using the same artifact's verified manifest", async () => {
   const fontPath = "assets/style_asset/0123456789ab-icons.woff";
   const sourceUrl = "https://example.com/cache/compiled/theme.css";

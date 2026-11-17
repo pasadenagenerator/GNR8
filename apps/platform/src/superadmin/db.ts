@@ -105,8 +105,10 @@ export function getSuperadminPool(): Pool {
     },
 
     // Vercel serverless optimizacija
-    max: 5,
-    idleTimeoutMillis: 30000,
+    // Serverless instances multiply this pool; Supabase session mode has a
+    // small shared client limit. Queries here are short and queue locally.
+    max: 1,
+    idleTimeoutMillis: 1000,
     connectionTimeoutMillis: 5000,
   })
 

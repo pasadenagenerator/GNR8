@@ -386,6 +386,13 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
           lookupResult: JSON.stringify(lookupCandidates),
           reasonCode: "lookup_started",
         });
+        if (artifact.artifactType === "raw_imported_site" && artifact.metadata?.gitArchive && dbClient) {
+          // Git recovery can outlast a database query. Release the session
+          // after authorization and use a short lookup for each file row.
+          dbClient.release();
+          dbClientReleaseCount += 1;
+          dbClient = null;
+        }
         let resolvedPath: string | null = null;
         let asset: Awaited<ReturnType<typeof deps.getRawTemplateSiteAsset>> | null = null;
         for (const candidate of lookupCandidates) {
@@ -396,7 +403,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
               siteVersionId,
               artifactId: artifact.id,
               filePath: candidate,
-              dbClient,
+              dbClient: dbClient ?? undefined,
             });
           } catch (error) {
             emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
@@ -433,7 +440,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
                 siteVersionId,
                 artifactId: artifact.id,
                 filePath: fallbackPath,
-                dbClient,
+                dbClient: dbClient ?? undefined,
               });
             } catch (error) {
               emitRouteDiagnostic("PREVIEW_ASSET_ROUTE_DB_LOOKUP_ERROR", {
@@ -558,7 +565,7 @@ export function createPreviewAssetsRouteHandlers(overrides: Partial<PreviewAsset
         const manifestEntry = artifact.fileMap["url-fetch-manifest.json"];
         if (isCssAsset && versionedCss && artifact.artifactType === "raw_imported_site" && manifestEntry) {
           recordDbRead();
-          const manifest = await deps.getRawTemplateSiteAsset({ siteVersionId, artifactId: artifact.id, filePath: "url-fetch-manifest.json", dbClient });
+          const manifest = await deps.getRawTemplateSiteAsset({ siteVersionId, artifactId: artifact.id, filePath: "url-fetch-manifest.json", dbClient: dbClient ?? undefined });
           if (manifest) stylesheetSourceUrl = retainedStylesheetSourceUrl({
             bytes: manifest.bytes,
             expectedSha256: manifestEntry.sha256,
