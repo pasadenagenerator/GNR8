@@ -60,6 +60,22 @@ test('Git-backed import records stale sitemap pages and missing source scripts w
   assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['seed_asset_missing'])
 })
 
+test('Git-backed import accepts a source 404 image only after CSS analysis proves it unused', () => {
+  const url = 'https://assets.example.test/css/images/old-map-icon.png'
+  const snapshot = { fetchManifest: [{
+    fetchStatus: 'fetch_failed', assetKind: 'image', httpStatus: 404, resolvedUrl: url,
+  }] } as any
+  const discovery = {
+    manifest: { skippedLinks: [] },
+    acquisition: { pages: [], summary: { failedRequiredAssetCount: 0 }, diagnostics: [] },
+  } as any
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['seed_asset_missing'])
+  discovery.acquisition.diagnostics.push(`MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:${url}`)
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+  snapshot.fetchManifest[0].httpStatus = 500
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['seed_asset_missing'])
+})
+
 function createSuccessPipelineFixture() {
   const preparedSite = {
     kind: 'prepared_site_model_v1',

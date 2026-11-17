@@ -2644,6 +2644,9 @@ function gitCaptureIncompleteReasons(
   discovery: Awaited<ReturnType<typeof buildScopedMultiPageDiscovery>>,
 ): string[] {
   const acquisition = discovery.acquisition
+  const provenUnusedCssDependencies = new Set((acquisition?.diagnostics ?? [])
+    .filter((code) => code.startsWith('MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:'))
+    .map((code) => code.slice('MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:'.length)))
   const sitemapOnlyRoutes = new Set(discovery.manifest?.routePriorityBalancing?.assignments
     .filter((assignment) => assignment.selected && assignment.source === 'sitemap')
     .map((assignment) => assignment.routePath) ?? [])
@@ -2663,7 +2666,9 @@ function gitCaptureIncompleteReasons(
     ...(failedRequiredPage ? ['page_failed_or_limited'] : []),
     ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
     ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed' &&
-      !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0))) ? ['seed_asset_missing'] : []),
+      !(asset.assetKind === 'script' && [404, 410].includes(asset.httpStatus ?? 0)) &&
+      !(asset.assetKind === 'image' && asset.httpStatus === 404 &&
+        Boolean(asset.resolvedUrl && provenUnusedCssDependencies.has(asset.resolvedUrl)))) ? ['seed_asset_missing'] : []),
     ...(discovery.manifest?.skippedLinks.some((link) => ['route_limit', 'max_links_per_page'].includes(link.skippedReason ?? '')) ? ['route_limited'] : []),
     ...(acquisition?.diagnostics.some((code) => ['MULTIPAGE_CHILD_LINK_LIMIT_REACHED', 'MULTIPAGE_CHILD_DEPTH_LIMIT_REACHED', 'MULTIPAGE_CHILD_ROUTE_LIMIT_REACHED'].includes(code)) ? ['child_link_limited'] : []),
   ]
@@ -3828,7 +3833,13 @@ export async function runScopedImportPipeline(input: {
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
     verifyCssUsage: gitArchiveRequired && gitArchiveSelected,
-    approvedUnusedCssDependencies: approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
+    approvedUnusedCssDependencies: [
+      ...approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
+      ...input.snapshot.fetchManifest
+        .filter((asset) => asset.assetKind === 'image' && asset.fetchStatus === 'fetch_failed' &&
+          asset.httpStatus === 404 && Boolean(asset.resolvedUrl))
+        .map((asset) => asset.resolvedUrl!),
+    ],
   })
   let importProvenanceSummary = await buildImportProvenanceSummary({
     sourceUrl: input.sourceUrl,
