@@ -1565,7 +1565,7 @@ export default async function SiteWorkspacePage(props: Props) {
             siteVersionId={readModel.pipeline.runtimeSelection.selectedVersionId}
           />
         ) : null}
-        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
+        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.pipeline.importVersion.savedBrandGuideSiteVersionId ?? readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
           canPrepare={canPublish}
           proposal={readModel.preview.lumosBrand && readModel.preview.previewUrl
             ? {revision:readModel.preview.lumosBrand.revision,previewUrl:readModel.preview.previewUrl} : null}
