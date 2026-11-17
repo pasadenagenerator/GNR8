@@ -17,7 +17,7 @@ import {
 
 const SHA = "a".repeat(64);
 
-test('retained Ladja capture replay',{skip:!process.env.GNR8_LADJA_CAPTURE_DIR},()=>{
+test('retained Ladja capture replay',{skip:!process.env.GNR8_LADJA_CAPTURE_DIR},async()=>{
   const dir=process.env.GNR8_LADJA_CAPTURE_DIR!;
   const manifest=JSON.parse(readFileSync(`${dir}/.gnr8-import-manifest.json`,'utf8')) as {files:Array<{path:string;mediaType:string;bytes:number;sha256:string}>};
   const input=fixture({rootHtml:readFileSync(`${dir}/index.html`,'utf8')});
@@ -43,6 +43,15 @@ test('retained Ladja capture replay',{skip:!process.env.GNR8_LADJA_CAPTURE_DIR},
     assert.match(root,/data-gnr8-mono-locale/);
     assert.match(root,/data-gnr8-preview-runtime="retained-gallery"/);
     assert.doesNotMatch(root,/data-animate=/);
+    const {prepareStackiSourceProject,prepareStackiAstro7Baseline}=await import('../stacki/stacki-source-project');
+    const {createAstroStaticSiteSourceSnapshot}=await import('./astro-static-site-workspace-preparation');
+    const files=generated.sourceManifest.files.map(file=>({path:file.path,body:Buffer.from(file.contents)}));
+    const snapshot=createAstroStaticSiteSourceSnapshot(files);
+    const project=await prepareStackiSourceProject({workspace:generated.sourceManifest,assetMode:'runtime-overlay',
+      binding:{runtimeSiteId:input.version.siteId,sourceSiteVersionId:input.version.id,sourceArtifactId:input.artifact.id,
+        sourceSnapshotSha256:snapshot.aggregateSha256,requiredAssets:generated.contentManifest.requiredAssets},
+      readVerifiedAsset:async()=>{throw Error('unexpected retained asset read')}});
+    prepareStackiAstro7Baseline({files:project.files,expectedSourceSnapshotSha256:snapshot.aggregateSha256});
   }catch(error){if(error instanceof SourceBackedAstroUnsupportedError){process.stderr.write(JSON.stringify({capabilities:error.unsupportedCapabilities,scripts:error.scriptEvidence})+'\n');}throw error;}
 });
 

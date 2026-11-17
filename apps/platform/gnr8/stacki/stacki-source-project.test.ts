@@ -5,7 +5,7 @@ import { createAstroStaticSiteProjectManifest } from "../output-adapters/astro-s
 import { astroDevServerSmokeProofFixture } from "../output-adapters/astro-static-site-dev-server-smoke-proof";
 import { createAstroStaticSiteSourceSnapshot } from "../output-adapters/astro-static-site-workspace-preparation";
 import { rewriteRawTemplateCssForRuntime } from "../../src/public-site/raw-template-runtime";
-import { prepareStackiSourceProject } from "./stacki-source-project";
+import { prepareStackiAstro7Baseline, prepareStackiSourceProject } from "./stacki-source-project";
 
 const runtimeSiteId = "runtime-site";
 const sourceSiteVersionId = "11111111-1111-4111-8111-111111111111";
@@ -103,6 +103,15 @@ test('immutable runtime dependencies do not consume editable checkpoint limits',
  const unsafe=fixture();unsafe.workspace.assetEvidence[0]!.path=prefix+'../escape';
  unsafe.binding.requiredAssets[0]!.path=prefix+'../escape';
  await assert.rejects(prepareStackiSourceProject({...unsafe,assetMode:'runtime-overlay'}),/SOURCE_PROJECT_INVALID/);
+});
+
+test('current Astro 7 source can become an editable baseline without an obsolete upgrade',async()=>{
+ const f=fixture();
+ const project=await prepareStackiSourceProject({...f,assetMode:'runtime-overlay'});
+ const baseline=prepareStackiAstro7Baseline({files:project.files,expectedSourceSnapshotSha256:f.binding.sourceSnapshotSha256});
+ assert.deepEqual(baseline.files,project.files);
+ assert.deepEqual(baseline.changedPaths,[]);
+ assert.equal(baseline.derivedFromSourceSnapshot.aggregateSha256,f.binding.sourceSnapshotSha256);
 });
 
 test('explicit Astro 7 baseline preserves every unrelated byte and binds the old source hash', async () => {

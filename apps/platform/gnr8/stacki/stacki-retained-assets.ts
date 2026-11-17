@@ -8,10 +8,10 @@ export type StackiRuntimeAsset = { name: string; body: Buffer };
 export const STACKI_RETAINED_DIRECTORY = 'node_modules/.gnr8-retained-assets';
 export function retainedAssetName(path: string) { return createHash('sha256').update(path).digest('hex'); }
 
+export const ORIGINAL_ASTRO_CONFIG = 'import { defineConfig } from "astro/config";\n\nexport default defineConfig({\n  output: "static",\n});\n';
 export function projectStackiRetainedAssets(files: StackiDraftFile[], assets: StackiSourceAsset[]): StackiDraftFile[] {
-  const original = 'import { defineConfig } from "astro/config";\n\nexport default defineConfig({\n  output: "static",\n});\n';
   const config = files.find(file => file.path === 'astro.config.mjs');
-  if (!config || Buffer.from(config.base64,'base64').toString() !== original)
+  if (!config || Buffer.from(config.base64,'base64').toString() !== ORIGINAL_ASTRO_CONFIG)
     throw new StackiDraftError(422,'STACKI_RETAINED_CONFIG_UNSUPPORTED');
   const routes = Object.fromEntries(assets.map(asset => [asset.path,{name:retainedAssetName(asset.path),mediaType:asset.mediaType}]));
   const source = `import {defineConfig} from 'astro/config';
