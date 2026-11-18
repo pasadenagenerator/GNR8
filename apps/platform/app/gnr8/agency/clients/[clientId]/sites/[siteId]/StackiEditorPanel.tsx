@@ -1,6 +1,7 @@
 "use client";
 
 import { useVariantNavigation } from "./VariantNavigation";
+import StackiAiTextPanel from "./StackiAiTextPanel";
 
 import { readStackiResponse } from "@/gnr8/stacki/stacki-response";
 
@@ -10,6 +11,7 @@ type Session = { id: string; entryUrl: string; expiresAt: number; revision: numb
 export default function StackiEditorPanel(props: {
   agencyId: string; clientId: string; siteId: string; siteVersionId: string;
   candidatePreparationEnabled?: boolean;
+  aiAvailable?: boolean;
   storage?: 'GNR8' | 'GitHub';
 }) {
   const destination = props.storage ?? 'GNR8';
@@ -272,6 +274,8 @@ export default function StackiEditorPanel(props: {
       </>}
     </div>
     {saved && <p>Izbrana shranjena revizija: {saved.revision}<br />SHA-256: {saved.sha256}<br />Priprava uporabi to revizijo. Poznejše urejanje ne spreminja že pripravljenega ali odobrenega kandidata.</p>}
+    <StackiAiTextPanel endpoint={endpoint} saved={saved} editorOpen={!!session} disabled={variantPending || busy}
+      aiAvailable={props.aiAvailable === true} onApplied={(revision, sha256) => setSaved({ revision, sha256 })} />
     {!props.candidatePreparationEnabled && <p>Priprava kandidatov iz Stacki na tem okolju še ni vključena.</p>}
     {session && <>
       <p>Do izteka: {remaining} min. Potrditev »Saved to {destination}« pomeni trajno shranjen osnutek. Zapiranje brez shranjevanja ohrani vse že potrjene različice.</p>
