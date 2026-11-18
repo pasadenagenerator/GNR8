@@ -5,9 +5,9 @@ import { isCanonicalUuid } from "../output-adapters/astro-production-candidate-r
 
 // Fixed pilot ceiling across ALL actors/sites, not a per-browser allowance.
 // Reservations are never refunded, including failed/ambiguous starts.
-// Private Preview supports regular use across imported sites, with a monthly
-// cost ceiling that resets automatically. Production retains its existing cap.
-export const STACKI_MONTHLY_STARTS = process.env.VERCEL_ENV === 'preview' ? 30 : 10;
+// Keep the same monthly ceiling in Preview and Production so prior pilot
+// sessions do not prevent an operator from completing a real editing test.
+export const STACKI_MONTHLY_STARTS = 30;
 export const STACKI_PROVIDER_TIMEOUT_MS = 20 * 60_000;
 export type StackiSession = {
   id: string; scope: StackiDraftScope; actorUserId: string; baseRevision: number; platformOrigin: string;
