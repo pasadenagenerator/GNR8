@@ -7,11 +7,12 @@ import type {
   AirshipAIProviderReadModel,
 } from "@/gnr8/single-site/airship-agent-profile-types";
 import { OpenAIKeyForm } from "./openai-key-form";
-import type { Gnr8AiUsage } from "@/gnr8/ai/usage-read-model";
+import type { Gnr8AiUsage, Gnr8StackiNativeAiUsage } from "@/gnr8/ai/usage-read-model";
 
 type Props = {
   model: AirshipAgencyAISettingsReadModel;
   usage?: Gnr8AiUsage;
+  nativeUsage?: Gnr8StackiNativeAiUsage;
 };
 
 function labelize(value: string): string {
@@ -115,7 +116,7 @@ const mutedStyle = {
   overflowWrap: "anywhere",
 } as const;
 
-export function AISettingsView({ model, usage }: Props) {
+export function AISettingsView({ model, usage, nativeUsage }: Props) {
   const activeProfile = model.selectedAirshipProfile.activeProfile;
   const connectedProviders = model.providers.filter((provider) => provider.connectionStatus === "connected").length;
 
@@ -148,6 +149,8 @@ export function AISettingsView({ model, usage }: Props) {
 
       <section style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 16 }}>
         <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>Skupna poraba AI API</h2>
+        {usage?.status === "available" && nativeUsage?.status === "available" &&
+          <p><strong>Skupna ocenjena poraba GNR8:</strong> {(usage.estimatedUsd + nativeUsage.estimatedUsd).toFixed(6)} USD</p>}
         {usage?.status === "available" ? <>
           <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
             {fact("Poskusi / pilotna meja", `${usage.attempts} / 10`)}
@@ -156,8 +159,19 @@ export function AISettingsView({ model, usage }: Props) {
             {fact("Ocenjena poraba", `${usage.estimatedUsd.toFixed(6)} USD`)}
           </dl>
           {usage.unresolved > 0 && <p>Poskusi brez potrjene porabe: {usage.unresolved}. Za njih je rezervirana zgornja meja.</p>}
-          <p style={mutedStyle}>Skupna rezervirana zgornja meja: {usage.reservedMaximumUsd.toFixed(4)} USD. Ocena uporablja javni cenik gpt-5.4-mini in vključuje vse potrjene klice GNR8 v tem pilotu. Dejansko obračunani znesek in krediti so prikazani v OpenAI.</p>
+          <p style={mutedStyle}>Rezervirana zgornja meja prvotnega pilota: {usage.reservedMaximumUsd.toFixed(4)} USD. Ocena uporablja javni cenik gpt-5.4-mini. Dejansko obračunani znesek in krediti so prikazani v OpenAI.</p>
         </> : <p>Porabe trenutno ni mogoče prebrati. AI proračun ostaja uveljavljen na strežniku.</p>}
+        <h3 style={{ fontSize: 16 }}>Stacki nativni AI · meja prvega preizkusa 5 USD</h3>
+        {nativeUsage?.status === "available" ? <>
+          <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+            {fact("AI klici", nativeUsage.attempts)}
+            {fact("Vhodni / izhodni žetoni", `${nativeUsage.inputTokens} / ${nativeUsage.outputTokens}`)}
+            {fact("Ocenjena poraba Stackija", `${nativeUsage.estimatedUsd.toFixed(6)} USD`)}
+            {fact("Preostala rezervirana meja", `${nativeUsage.remainingBudgetUsd.toFixed(2)} USD`)}
+          </dl>
+          {nativeUsage.unresolved > 0 && <p>Klici brez potrjene porabe: {nativeUsage.unresolved}. Njihova rezervacija ostane upoštevana.</p>}
+          <p style={mutedStyle}>Za vsak klic je rezerviranih 0,10 USD; skupno največ 5 USD. To je varna zgornja meja, ne dejanski račun.</p>
+        </> : <p>Podatkov o Stackijevi porabi trenutno ni mogoče prebrati.</p>}
         <a href="https://platform.openai.com/analytics/usage" target="_blank" rel="noreferrer">Odpri OpenAI porabo</a>
       </section>
 

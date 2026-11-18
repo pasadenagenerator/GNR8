@@ -27,6 +27,7 @@ export async function startStackiEditorRuntime(input: {
   /** Bundled module exporting captureStackiRuntimeFiles; requires patched Studio. */
   checkpointModule?: string;
   persistence?: { platformOrigin: string; sessionId: string; revision: number; storage?: 'gnr8' | 'github' };
+  nativeAi?: { token: string; endpoint: string };
 }) {
   if (!Number.isInteger(input.gatewayPort) || input.gatewayPort < 1 || input.gatewayPort > 65535 ||
       input.gatewayPort === input.astroPort) throw new Error("STACKI_RUNTIME_PORT_INVALID");
@@ -80,7 +81,9 @@ export async function startStackiEditorRuntime(input: {
     ], {
       cwd: workspace, stdio: ["ignore", "pipe", "pipe"],
       env: { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR,
-        NODE_ENV: "development", ASTRO_TELEMETRY_DISABLED: "1" },
+        NODE_ENV: "development", ASTRO_TELEMETRY_DISABLED: "1",
+        ...(input.nativeAi ? { AI_BASE_URL: "http://127.0.0.1:4359/v1", AI_MODEL: "gpt-5.4-mini-2026-03-17" } : {}),
+      },
     });
     const record = (bytes: Buffer) => { log = (log + bytes.toString()).slice(-40_000); };
     child.stdout?.on("data", record); child.stderr?.on("data", record);

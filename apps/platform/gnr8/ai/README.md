@@ -95,6 +95,35 @@ reported as zero. OpenAI Analytics remains the source for billed charges and
 credit application; the GNR8 estimate does not include API activity outside
 this pilot.
 
+## Native Stacki AI chat pilot
+
+The native Studio AI panel remains upstream-owned. Its existing `AI_BASE_URL` and
+`AI_MODEL` settings point at a GNR8-owned loopback proxy in the isolated editor
+runtime; the OpenAI key never enters Studio, the browser or editable site files.
+The proxy forwards only `POST /v1/chat/completions` to the authenticated GNR8
+route. The Sandbox firewall permits only that GNR8 path. A random token bound
+to the existing 20-minute Stacki session is removed from the Sandbox config
+file before Astro starts. The route checks the live session and reads the same
+encrypted project credential used by the first GNR8 AI pilot.
+
+This first real test is text-only (no image attachments). The route accepts at
+most 64,000 request bytes and 6,000 completion tokens, matching the native
+Studio output request. The separate service-role ledger reserves USD 0.10 per
+provider attempt and refuses attempts after USD 5.00 total reservations. Given
+the request byte bound, the model's uncached USD 0.75/M input and USD 4.50/M
+output prices, this reservation exceeds worst-case text-token cost per call.
+Unknown outcomes retain their reservation. The AI Settings page displays
+Stacki's attempts, tokens, estimate and remaining reserved budget alongside
+the original pilot. OpenAI Analytics remains the source for billed charges.
+
+Studio can propose source/style edits, but GNR8's candidate preparation still
+validates the saved draft against its existing restricted text, image and
+layout-style contract. Native AI proposal acceptance does not guarantee a
+candidate can be prepared or published; unsupported code or CSS remains blocked.
+The bundled GNR8 entry replaces only the verified entry in the pinned 0.1.94
+runtime snapshot at session start. A newer Stacki release requires the normal
+runtime compatibility proof before it replaces that snapshot.
+
 ## Verification on 2026-11-18
 
 - 28 focused provider, command-route, credential-route and profile tests passed.

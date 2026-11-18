@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { parseStackiScope, StackiDraftError, STACKI_DRAFT_MAX_REVISIONS, type StackiDraftScope } from "./stacki-draft-contract";
 import type { StackiStorageClient } from "./stacki-draft-store";
 import { isCanonicalUuid } from "../output-adapters/astro-production-candidate-record";
@@ -11,7 +11,7 @@ export const STACKI_MONTHLY_STARTS = process.env.VERCEL_ENV === 'preview' ? 30 :
 export const STACKI_PROVIDER_TIMEOUT_MS = 20 * 60_000;
 export type StackiSession = {
   id: string; scope: StackiDraftScope; actorUserId: string; baseRevision: number; platformOrigin: string;
-  expiresAt: number; ticket: string; month: string; slot: number;
+  expiresAt: number; ticket: string; aiToken?: string; month: string; slot: number;
 };
 export type StackiSessionReady = { entryUrl: string };
 export type StackiSessionSaved = { revision: number; sha256: string };
@@ -75,7 +75,8 @@ export class StackiSessionStore {
     for (let slot = 1; slot <= STACKI_MONTHLY_STARTS; slot++) {
       const key = `stacki-sessions/v1/${month}/${slot}.json`;
       const candidate: StackiSession = { ...input, month, slot,
-        expiresAt: Date.now() + STACKI_PROVIDER_TIMEOUT_MS, ticket: randomBytes(32).toString("base64url") };
+        expiresAt: Date.now() + STACKI_PROVIDER_TIMEOUT_MS, ticket: randomBytes(32).toString("base64url"),
+        aiToken: randomBytes(32).toString("base64url") };
       const existing = await this.read<StackiSession>(key);
       if (existing) {
         if (existing.id === input.id) { this.assertOwner(existing, input); return { session: existing, claimed: false }; }
@@ -106,6 +107,24 @@ export class StackiSessionStore {
       }
     }
     throw new StackiDraftError(404, "STACKI_SESSION_NOT_FOUND");
+  }
+  async authorizedAiSession(id: string, token: string): Promise<StackiSession> {
+    validateId(id);
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new StackiDraftError(403, "STACKI_AI_UNAUTHORIZED");
+    const previous = new Date(); previous.setUTCDate(0);
+    for (const month of [new Date().toISOString().slice(0, 7), previous.toISOString().slice(0, 7)]) {
+      for (let slot = 1; slot <= STACKI_MONTHLY_STARTS; slot++) {
+        const session = await this.read<StackiSession>(`stacki-sessions/v1/${month}/${slot}.json`);
+        if (session?.id !== id) continue;
+        const stored = session.aiToken;
+        if (!stored || stored.length !== token.length ||
+            !timingSafeEqual(Buffer.from(stored), Buffer.from(token)) ||
+            Date.now() >= session.expiresAt - 60_000 || await this.closed(session))
+          throw new StackiDraftError(403, "STACKI_AI_UNAUTHORIZED");
+        return session;
+      }
+    }
+    throw new StackiDraftError(403, "STACKI_AI_UNAUTHORIZED");
   }
   private assertOwner(session: StackiSession, owner: { scope: StackiDraftScope; actorUserId: string }) {
     if (session.actorUserId !== owner.actorUserId ||

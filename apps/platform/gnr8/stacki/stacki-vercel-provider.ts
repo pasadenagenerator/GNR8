@@ -52,7 +52,11 @@ export class VercelStackiProvider implements StackiSessionProvider {
     const sandbox = await this.sdk.create({
       name: this.name(session), source: { type: "snapshot", snapshotId: this.snapshotId },
       persistent: false, timeout: remaining, resources: { vcpus: 2 },
-      ports: [4357], networkPolicy: "deny-all", region: "iad1",
+      ports: [4357], networkPolicy: session.aiToken && process.env.GNR8_AI_EXECUTION_ENABLED === "true"
+        ? { allow: { [new URL(session.platformOrigin).hostname]: [
+          { match: { method: ["POST"], path: { exact: "/api/gnr8/stacki/native-ai/chat/completions" } }, transform: [] },
+          { response: { statusCode: 403 } },
+        ] } } : "deny-all", region: "iad1",
     });
     try {
       const manifest = await readBounded(sandbox, `${root}/runtime.json`, 16_384);
@@ -67,6 +71,21 @@ export class VercelStackiProvider implements StackiSessionProvider {
         `const names=await readdir(root);if(names.some(n=>!['runtime.json','studio','entry.mjs','capture.mjs','site'].includes(n)))process.exit(1);` +
         `const site=await readdir(root+'/site');if(site.length!==1||site[0]!=='node_modules')process.exit(1);`] });
       if (clean.exitCode !== 0) throw new Error("STACKI_RUNTIME_IMAGE_NOT_CLEAN");
+      if (session.aiToken && process.env.GNR8_AI_EXECUTION_ENABLED === "true") {
+        const entry = await readFile(join(process.cwd(), 'gnr8/stacki/stacki-native-ai-entry.mjs')).catch(() =>
+          readFile(join(process.cwd(), 'apps/platform/gnr8/stacki/stacki-native-ai-entry.mjs')));
+        if (createHash('sha256').update(entry).digest('hex') !== '4e2765d92e3330ecb014a23fc770c116953a38e11e43215a41da142cd383a6c0')
+          throw new StackiDraftError(503, 'STACKI_RUNTIME_REFRESH_REQUIRED');
+        const originalEntry = await sandbox.runCommand({ cmd: "node", args: ["--input-type=module", "-e", `
+          import {readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          const file=${JSON.stringify(`${root}/entry.mjs`)};
+          if(createHash('sha256').update(await readFile(file)).digest('hex')!==
+            '7bb928f1a638d06aa746c0eaed03f6c447b2ef86b3140928d176cfecdb9fcb60')process.exit(2);
+        `] });
+        if (originalEntry.exitCode !== 0) throw new StackiDraftError(503, 'STACKI_RUNTIME_REFRESH_REQUIRED');
+        await sandbox.writeFiles([{ path: `${root}/entry.mjs`, content: entry }]);
+      }
       if (github) {
         // Accept the original pinned image or the refreshed image carrying the
         // exact shipped Git panel. Never replace an unrecognized browser bundle.
@@ -100,6 +119,9 @@ export class VercelStackiProvider implements StackiSessionProvider {
         ...(delivery ? {assetDelivery:delivery} : {}),
         persistence: { platformOrigin: session.platformOrigin, sessionId: session.id, revision: session.baseRevision,
           storage: github ? 'github' : 'gnr8' },
+        ...(session.aiToken && process.env.GNR8_AI_EXECUTION_ENABLED === "true" ? { nativeAi: {
+          token: session.aiToken, endpoint: `${session.platformOrigin}/api/gnr8/stacki/native-ai/chat/completions`,
+        } } : {}),
       })) }]);
       await sandbox.runCommand({ cmd: "node", args: [`${root}/entry.mjs`], detached: true });
       for (let n = 0; n < 60; n++) {
