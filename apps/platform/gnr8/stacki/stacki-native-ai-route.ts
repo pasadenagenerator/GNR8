@@ -1,7 +1,7 @@
 import "server-only";
 import { GNR8_AI_MODEL } from "../ai/provider";
 
-const MAX_BODY_BYTES = 64_000;
+const MAX_BODY_BYTES = 256_000;
 const MAX_OUTPUT_TOKENS = 6_000;
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 type Input = { model: string; max_tokens: number; messages: ChatMessage[] };
@@ -75,7 +75,7 @@ export function createStackiNativeAiRoute(deps: {
       if (!Array.isArray(payload.choices) || payload.choices.length < 1) throw new Error("provider_invalid");
       const u = payload.usage;
       if (u && Number.isSafeInteger(u.prompt_tokens) && Number.isSafeInteger(u.completion_tokens) &&
-          u.prompt_tokens >= 0 && u.prompt_tokens <= 64_000 && u.completion_tokens >= 0 && u.completion_tokens <= MAX_OUTPUT_TOKENS)
+          u.prompt_tokens >= 0 && u.prompt_tokens <= 256_000 && u.completion_tokens >= 0 && u.completion_tokens <= MAX_OUTPUT_TOKENS)
         usage = { inputTokens: u.prompt_tokens, outputTokens: u.completion_tokens };
       result = Response.json(payload, { headers });
     } catch {

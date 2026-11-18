@@ -57,17 +57,19 @@ export async function readGnr8AiUsage(): Promise<Gnr8AiUsage> {
 
 export function summarizeGnr8StackiNativeAiUsage(rows: Reservation[]): Gnr8StackiNativeAiUsage {
   if (rows.length > 50 || rows.some(row =>
-    !["reserved", "completed", "uncertain"].includes(row.state) || row.reserved_micro_usd !== 100000 ||
-    (row.input_tokens !== null && (!Number.isSafeInteger(row.input_tokens) || row.input_tokens < 0 || row.input_tokens > 64000)) ||
+    !["reserved", "completed", "uncertain"].includes(row.state) || ![100000, 250000].includes(row.reserved_micro_usd) ||
+    (row.input_tokens !== null && (!Number.isSafeInteger(row.input_tokens) || row.input_tokens < 0 || row.input_tokens > 256000)) ||
     (row.output_tokens !== null && (!Number.isSafeInteger(row.output_tokens) || row.output_tokens < 0 || row.output_tokens > 6000))))
     return { status: "unavailable" };
   const completed = rows.filter(row => row.state === "completed" && row.input_tokens !== null && row.output_tokens !== null);
   const inputTokens = completed.reduce((sum, row) => sum + row.input_tokens!, 0);
   const outputTokens = completed.reduce((sum, row) => sum + row.output_tokens!, 0);
+  const reservedMaximumUsd = rows.reduce((sum, row) => sum + row.reserved_micro_usd, 0) / 1_000_000;
+  if (reservedMaximumUsd > 5) return { status: "unavailable" };
   return { status: "available", attempts: rows.length, completed: completed.length,
     unresolved: rows.length - completed.length, inputTokens, outputTokens,
     estimatedUsd: (inputTokens * 0.75 + outputTokens * 4.5) / 1_000_000,
-    reservedMaximumUsd: rows.length * 0.1, remainingBudgetUsd: (50 - rows.length) * 0.1 };
+    reservedMaximumUsd, remainingBudgetUsd: 5 - reservedMaximumUsd };
 }
 
 export async function readGnr8StackiNativeAiUsage(): Promise<Gnr8StackiNativeAiUsage> {

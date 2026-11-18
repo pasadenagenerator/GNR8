@@ -49,6 +49,12 @@ test("gate, bearer, image and large input stop before reservation or provider", 
   const g = fixture();
   assert.equal((await g.send(body, "bad")).status, 403);
   assert.equal((await g.send({ ...body, messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AA==" } }] }] })).status, 422);
-  assert.equal((await g.send({ ...body, messages: [{ role: "user", content: "x".repeat(70_000) }] })).status, 422);
+  assert.equal((await g.send({ ...body, messages: [{ role: "user", content: "x".repeat(260_000) }] })).status, 422);
   assert.equal(g.calls, 0); assert.equal(g.reservations, 0);
+});
+
+test("native Stacki accepts a page source larger than the old 64 KB limit", async () => {
+  const f = fixture();
+  assert.equal((await f.send({ ...body, messages: [{ role: "user", content: "x".repeat(107_000) }] })).status, 200);
+  assert.equal(f.calls, 1); assert.equal(f.reservations, 1);
 });

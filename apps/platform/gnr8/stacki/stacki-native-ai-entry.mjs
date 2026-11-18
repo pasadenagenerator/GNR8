@@ -8128,14 +8128,18 @@ if (config.nativeAi) {
       return;
     }
     try {
-      let body = "";
+      const chunks = [];
+      let size = 0;
       for await (const chunk of request) {
-        body += chunk.toString();
-        if (Buffer.byteLength(body) > 64e3) {
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        size += bytes.length;
+        if (size > 256e3) {
           response.writeHead(413).end();
           return;
         }
+        chunks.push(bytes);
       }
+      const body = Buffer.concat(chunks);
       const upstream = await fetch(endpoint, {
         method: "POST",
         headers: {
