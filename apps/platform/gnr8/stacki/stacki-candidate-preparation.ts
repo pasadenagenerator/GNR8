@@ -67,10 +67,9 @@ export async function prepareStackiCandidate(input: {
   };
   await authorize(selection.scope, selection.scope.siteVersionId);
   const sourceReview = await readModel(source.siteVersion.id, c, source);
-  if (sourceReview.decision.technical.status !== "PASS" || (sourceReview.publicPreparation && !input.prepareBaseline)) {
-    const reasons = sourceReview.publicPreparation ? ["public_preparation"]
-      : [...new Set(sourceReview.decision.technical.blockerReasons.map(reason => reason.code.split(":")[0]!
-        .replace(/[^a-z0-9_]/g, "")))];
+  if (sourceReview.decision.technical.status !== "PASS") {
+    const reasons = [...new Set(sourceReview.decision.technical.blockerReasons.map(reason => reason.code.split(":")[0]!
+      .replace(/[^a-z0-9_]/g, "")))];
     throw new Error(`stacki_candidate_source_not_supported:${reasons.join(",") || "technical_review"}`);
   }
   const build = readGeneratedOutputBuildEvidence(source.artifact.manifest);
@@ -222,7 +221,7 @@ export async function prepareStackiCandidate(input: {
     registeredByActorId: input.actor, producerKind: STACKI_CANDIDATE_PRODUCER, producerVersion: "v1", producerRef: inputId,
     idempotencyKey: `stacki:${identity.siteVersionId}`, correlationId: `stacki:${identity.siteVersionId}`,
   } })).record;
-  const contentManifest = createGeneratedOutputContentManifest({ scope: input.prepareBaseline ? { ...content.scope, allowedPublishStages: ["shadow"] } : content.scope, requiredNavigation: content.requiredNavigation,
+  const contentManifest = createGeneratedOutputContentManifest({ scope: { ...content.scope, allowedPublishStages: ["shadow"] }, requiredNavigation: content.requiredNavigation,
     sourceRef: `${content.sourceRef}:stacki:${checkpoint.revision}:${checkpoint.sha256}`,
     requiredContent: content.requiredContent.map(requirement => {
       const replacement = selected.changes.find(change => change.kind === "text" && change.before === requirement.value);
