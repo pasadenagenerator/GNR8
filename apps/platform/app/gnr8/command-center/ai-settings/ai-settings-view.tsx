@@ -6,6 +6,7 @@ import type {
   AirshipAIProviderConnectionStatus,
   AirshipAIProviderReadModel,
 } from "@/gnr8/single-site/airship-agent-profile-types";
+import { OpenAIKeyForm } from "./openai-key-form";
 
 type Props = {
   model: AirshipAgencyAISettingsReadModel;
@@ -128,7 +129,7 @@ export function AISettingsView({ model }: Props) {
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {badge("read only", "good")}
+            {badge("key management", "good")}
             {badge("no provider calls", "good")}
             {badge("no raw keys", "good")}
           </div>
@@ -140,6 +141,8 @@ export function AISettingsView({ model }: Props) {
           {fact("Generated", model.generatedAt)}
         </dl>
       </section>
+
+      <OpenAIKeyForm />
 
       <section style={{ border: "1px solid #dbe3ee", borderRadius: 8, background: "#fff", padding: 14, overflowX: "auto" }}>
         <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>Providers</h2>

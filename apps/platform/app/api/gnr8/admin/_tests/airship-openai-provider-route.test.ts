@@ -246,7 +246,7 @@ test("airship OpenAI provider status reads safe metadata through service-role wi
     const selectColumns = String(calls.find((call) => call.name === "select")?.args[0] ?? "");
 
     assert.equal(status.connected, true);
-    assert.equal(status.canUseAiCommands, true);
+    assert.equal(status.canUseAiCommands, false);
     assert.equal(status.maskedKey, "sk-...safe");
     assert.equal(status.lastTestStatus, "passed");
     assert.equal(pgCheckouts, 0);
@@ -547,6 +547,22 @@ test("airship OpenAI encryption roundtrips without storing raw key in ciphertext
   assert.equal(decrypted, rawKey);
   assert.equal(encrypted.encryptedSecret.includes(rawKey), false);
   assert.equal(encrypted.maskedKey, "sk-...trip");
+});
+
+test("legacy OpenAI credential remains readable after the dedicated encryption key is added", () => {
+  const previousDedicated = process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV];
+  const previousFallback = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const legacySecret = "legacy-encryption-secret-value-with-32-chars";
+  const rawKey = "sk-test-legacy-key-for-rotation";
+  const encrypted = encryptAirshipOpenAIKey(rawKey, legacySecret);
+  try {
+    process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV] = "new-dedicated-encryption-secret-with-32-chars";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = legacySecret;
+    assert.equal(decryptAirshipOpenAIKey(encrypted), rawKey);
+  } finally {
+    restoreEnv(AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV, previousDedicated);
+    restoreEnv("SUPABASE_SERVICE_ROLE_KEY", previousFallback);
+  }
 });
 
 test("airship OpenAI provider files keep secret storage narrow and RLS closed", () => {

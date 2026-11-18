@@ -7,11 +7,13 @@ import ReactDomServer from "react-dom/server";
 import { buildAirshipAgencyAISettingsReadModel } from "@/gnr8/single-site/airship-agent-profile-settings";
 
 import { AISettingsView } from "./ai-settings-view";
+import { OpenAIKeyForm } from "./openai-key-form";
 
 const { renderToStaticMarkup } = ReactDomServer;
 
 const PAGE_FILE = new URL("./page.tsx", import.meta.url);
 const VIEW_FILE = new URL("./ai-settings-view.tsx", import.meta.url);
+const KEY_FORM_FILE = new URL("./openai-key-form.tsx", import.meta.url);
 const LAYOUT_FILE = new URL("../layout.tsx", import.meta.url);
 const COMMAND_CENTER_LAYOUT_FILE = new URL("../CommandCenterLayout.tsx", import.meta.url);
 
@@ -50,7 +52,20 @@ test("Command Center AI Settings UI renders provider status and default Airship 
   assert.equal(html.includes("Groq"), true);
   assert.equal(html.includes("OpenRouter"), true);
   assert.equal(html.includes("planned"), true);
+  assert.equal(html.includes("Ključ OpenAI za GNR8"), true);
+  assert.equal(html.includes("Shrani ključ"), true);
+  assert.equal(html.includes("type=\"password\""), true);
   assert.equal(html.includes(rawKey), false);
+});
+
+test("OpenAI key form offers save without a provider test action", async () => {
+  const html = renderToStaticMarkup(<OpenAIKeyForm />);
+  const source = await readFile(KEY_FORM_FILE, "utf8");
+  assert.equal(html.includes("Test connection"), false);
+  assert.equal(html.includes("Shrani ključ"), true);
+  assert.equal(source.includes('actionMode: "save_openai"'), true);
+  assert.equal(source.includes('actionMode: "test_openai"'), false);
+  assert.equal(source.includes("localStorage"), false);
 });
 
 test("Command Center AI Settings UI shows test failed and unavailable profile states compactly", () => {
@@ -91,6 +106,7 @@ test("Command Center AI Settings route is superadmin-gated through layout and wi
   assert.equal(pageSource.indexOf("requireSuperadminUserIdForPage()") < pageSource.indexOf("readAirshipAgencyAISettings()"), true);
   assert.equal(pageSource.includes("readAirshipAgencyAISettings"), true);
   assert.equal(viewSource.includes("This is not live-site editing"), true);
+  assert.equal(viewSource.includes("<OpenAIKeyForm />"), true);
   assert.equal(commandCenterLayoutSource.includes("/gnr8/command-center/ai-settings"), true);
   assert.equal(commandCenterLayoutSource.includes("AI Settings"), true);
   assert.equal(pageSource.includes("readServerCredential"), false);
