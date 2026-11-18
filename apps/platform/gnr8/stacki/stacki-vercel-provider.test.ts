@@ -129,7 +129,8 @@ test("native AI opens only the GNR8 completion path and injects no OpenAI key", 
     } as unknown as Pick<typeof Snapshot, "get">);
     await provider.start({ ...session, aiToken: "z".repeat(43) }, files);
     assert.deepEqual((starts[0]?.networkPolicy as {allow:Record<string,unknown>}).allow["gnr8.invalid"], [
-      { match: { method: ["POST"], path: { exact: "/api/gnr8/stacki/native-ai/chat/completions" } }, transform: [] },
+      { match: { method: ["POST"], path: { exact: "/api/gnr8/stacki/native-ai/chat/completions" } },
+        transform: [{ headers: { "x-gnr8-stacki-egress": "native-ai" } }] },
       { response: { statusCode: 403 } },
     ]);
     assert(writes.some(batch => batch.some(file => file.path.endsWith("/entry.mjs"))));
