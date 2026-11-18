@@ -7,6 +7,10 @@ type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 type Input = { model: string; max_tokens: number; messages: ChatMessage[] };
 type Usage = { prompt_tokens: number; completion_tokens: number };
 
+function safeProviderField(value: unknown): string | null {
+  return typeof value === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(value) ? value : null;
+}
+
 function validInput(value: unknown): value is Input {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
@@ -70,7 +74,16 @@ export function createStackiNativeAiRoute(deps: {
         body: JSON.stringify({ model: GNR8_AI_MODEL, messages: input.messages,
           max_completion_tokens: input.max_tokens, reasoning_effort: "none", service_tier: "default", store: false }),
       });
-      if (!provider.ok) throw new Error("provider_failed");
+      if (!provider.ok) {
+        const failure = await provider.json().catch(() => null) as { error?: Record<string, unknown> } | null;
+        console.error("[gnr8.stacki.ai.provider] upstream_rejected", {
+          status: provider.status,
+          type: safeProviderField(failure?.error?.type),
+          code: safeProviderField(failure?.error?.code),
+          param: safeProviderField(failure?.error?.param),
+        });
+        throw new Error("provider_failed");
+      }
       const payload = await provider.json() as { choices?: unknown[]; usage?: Usage };
       if (!Array.isArray(payload.choices) || payload.choices.length < 1) throw new Error("provider_invalid");
       const u = payload.usage;
@@ -78,7 +91,12 @@ export function createStackiNativeAiRoute(deps: {
           u.prompt_tokens >= 0 && u.prompt_tokens <= 256_000 && u.completion_tokens >= 0 && u.completion_tokens <= MAX_OUTPUT_TOKENS)
         usage = { inputTokens: u.prompt_tokens, outputTokens: u.completion_tokens };
       result = Response.json(payload, { headers });
-    } catch {
+    } catch (error) {
+      if (!(error instanceof Error && error.message === "provider_failed"))
+        console.error("[gnr8.stacki.ai.provider] request_failed", {
+          category: error instanceof Error && ["AbortError", "TimeoutError", "TypeError"].includes(error.name)
+            ? error.name : "invalid_response",
+        });
       result = Response.json({ error: "AI provider unavailable" }, { status: 502, headers });
     }
     try { await deps.finish(reservation, usage); }
