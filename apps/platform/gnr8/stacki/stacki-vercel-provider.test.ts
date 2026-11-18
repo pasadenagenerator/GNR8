@@ -105,6 +105,44 @@ test("expired/missing snapshot fails without launching; replacing it reuses the 
   await assert.rejects(new VercelStackiProvider("snap_missing", sdk, missing).start(session, files), /STACKI_RUNTIME_REFRESH_REQUIRED/);
 });
 
+test("native AI opens only the GNR8 completion path and injects no OpenAI key", async () => {
+  const prior = process.env.GNR8_AI_EXECUTION_ENABLED;
+  process.env.GNR8_AI_EXECUTION_ENABLED = "true";
+  try {
+    const starts: Array<Record<string, unknown>> = [];
+    const writes: Array<Array<{ path: string; content: Buffer }>> = [];
+    const stub = {
+      domain: () => "https://sandbox.invalid", stop: async () => {},
+      runCommand: async () => ({ exitCode: 0 }),
+      writeFiles: async (value: Array<{ path: string; content: Buffer }>) => { writes.push(value); },
+      readFile: async ({ path }: { path: string }) => Readable.from([Buffer.from(JSON.stringify(path.endsWith("runtime.json") ? {
+        format: "gnr8-stacki-runtime:v1", platform: "linux", studio: "0.1.94", astro: "7.4.4",
+        node: "26.13.0", checkpointHook: 2, entryReopenVersion: 1, lazyAssetsVersion: 1,
+        checkpointMaxBytes: STACKI_CHECKPOINT_MAX_BYTES, siteDependenciesInstalled: true,
+        upstreamCommit: "2ed510fbaf19e120c642f96a8e3047f15bcd71ab",
+      } : { entryUrl: `https://sandbox.invalid/__gnr8/enter#${session.ticket}` }))]),
+    };
+    const provider = new VercelStackiProvider("snap_test", {
+      create: async (value: Record<string, unknown>) => { starts.push(value); return stub; },
+    } as unknown as Pick<typeof Sandbox, "create" | "get">, {
+      get: async () => ({ status: "created", expiresAt: new Date(Date.now() + 86400000) }),
+    } as unknown as Pick<typeof Snapshot, "get">);
+    await provider.start({ ...session, aiToken: "z".repeat(43) }, files);
+    assert.deepEqual((starts[0]?.networkPolicy as {allow:Record<string,unknown>}).allow["gnr8.invalid"], [
+      { match: { method: ["POST"], path: { exact: "/api/gnr8/stacki/native-ai/chat/completions" } }, transform: [] },
+      { response: { statusCode: 403 } },
+    ]);
+    assert(writes.some(batch => batch.some(file => file.path.endsWith("/entry.mjs"))));
+    const config = writes.flat().find(file => file.path.endsWith("/session.json"));
+    assert(config);
+    assert.equal(JSON.parse(config.content.toString()).nativeAi.token, "z".repeat(43));
+    assert(!JSON.stringify(starts).includes("secret-server-key"));
+  } finally {
+    if (prior === undefined) delete process.env.GNR8_AI_EXECUTION_ENABLED;
+    else process.env.GNR8_AI_EXECUTION_ENABLED = prior;
+  }
+});
+
 
 test("GitHub accepts the exact shipped browser bundle and rejects altered image code before source upload", async () => {
   const previous = {enabled:process.env.GNR8_STACKI_GITHUB_ENABLED, ids:process.env.GNR8_STACKI_GITHUB_SITE_IDS,

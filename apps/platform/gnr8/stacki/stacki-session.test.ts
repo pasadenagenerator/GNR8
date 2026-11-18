@@ -40,10 +40,13 @@ test("session lookup bounds parallel reads and shares only bucket validation, no
     assert.equal(transport.calls.filter(call => call.path.includes("/bucket/")).length, 1);
     assert.equal(transport.calls.filter(call => call.path.includes("/object/")).length, 20);
     const { session } = await store.claim({ id: randomUUID(), scope, actorUserId: actor.userId, baseRevision: 1, platformOrigin: "https://gnr8.invalid" });
+    assert.equal((await store.authorizedAiSession(session.id, session.aiToken!)).id, session.id);
+    await assert.rejects(store.authorizedAiSession(session.id, "z".repeat(43)), { code: "STACKI_AI_UNAUTHORIZED" });
     assert.equal(await store.closed(session), null);
     const other = new StackiSessionStore(transport.client, transport.bucket);
     await other.closed(session, true);
     assert.deepEqual(await store.closed(session), { closed: true }, "absent receipt is never cached");
+    await assert.rejects(store.authorizedAiSession(session.id, session.aiToken!), { code: "STACKI_AI_UNAUTHORIZED" });
     await assert.rejects(store.find(session.id, scope, randomUUID()), { code: "STACKI_SESSION_NOT_FOUND" });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
