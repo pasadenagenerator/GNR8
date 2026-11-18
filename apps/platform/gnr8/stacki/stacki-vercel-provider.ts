@@ -74,7 +74,7 @@ export class VercelStackiProvider implements StackiSessionProvider {
       if (session.aiToken && process.env.GNR8_AI_EXECUTION_ENABLED === "true") {
         const entry = await readFile(join(process.cwd(), 'gnr8/stacki/stacki-native-ai-entry.mjs')).catch(() =>
           readFile(join(process.cwd(), 'apps/platform/gnr8/stacki/stacki-native-ai-entry.mjs')));
-        if (createHash('sha256').update(entry).digest('hex') !== '4e2765d92e3330ecb014a23fc770c116953a38e11e43215a41da142cd383a6c0')
+        if (createHash('sha256').update(entry).digest('hex') !== '14672f924fd340127c9f9f8b61185b329030f2ca7d1aab8a6028d02a0d74c78a')
           throw new StackiDraftError(503, 'STACKI_RUNTIME_REFRESH_REQUIRED');
         const originalEntry = await sandbox.runCommand({ cmd: "node", args: ["--input-type=module", "-e", `
           import {readFile} from 'node:fs/promises';

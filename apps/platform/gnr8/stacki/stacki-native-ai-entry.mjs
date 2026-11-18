@@ -8072,7 +8072,6 @@ import { readFile as readFile2, writeFile as writeFile2, rename } from "node:fs/
 import { join as join3 } from "node:path";
 
 // apps/platform/gnr8/stacki/stacki-session-store.ts
-var STACKI_MONTHLY_STARTS = process.env.VERCEL_ENV === "preview" ? 30 : 10;
 var STACKI_PROVIDER_TIMEOUT_MS = 20 * 6e4;
 function validateId(id) {
   if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id))

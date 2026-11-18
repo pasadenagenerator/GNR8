@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStackiLocalStorage } from "./stacki-local-storage-transport";
 import { SupabaseStackiDraftStore, type StackiStorageClient } from "./stacki-draft-store";
-import { StackiSessionStore } from "./stacki-session-store";
+import { STACKI_MONTHLY_STARTS, StackiSessionStore } from "./stacki-session-store";
 import { createStackiSessionRoutes, type StackiSessionProvider } from "./stacki-session-routes";
 import {StackiDraftError, stackiSourceSha256, createStackiRecord} from "./stacki-draft-contract";
 import { createStackiDraftRouteHandlers } from "./stacki-draft-route-handlers";
@@ -38,7 +38,7 @@ test("session lookup bounds parallel reads and shares only bucket validation, no
     await assert.rejects(store.find(randomUUID(), scope, actor.userId), { code: "STACKI_SESSION_NOT_FOUND" });
     assert.equal(peak, 4);
     assert.equal(transport.calls.filter(call => call.path.includes("/bucket/")).length, 1);
-    assert.equal(transport.calls.filter(call => call.path.includes("/object/")).length, 20);
+    assert.equal(transport.calls.filter(call => call.path.includes("/object/")).length, STACKI_MONTHLY_STARTS * 2);
     const { session } = await store.claim({ id: randomUUID(), scope, actorUserId: actor.userId, baseRevision: 1, platformOrigin: "https://gnr8.invalid" });
     assert.equal((await store.authorizedAiSession(session.id, session.aiToken!)).id, session.id);
     await assert.rejects(store.authorizedAiSession(session.id, "z".repeat(43)), { code: "STACKI_AI_UNAUTHORIZED" });
@@ -179,13 +179,13 @@ test("immutable global allowance counts failed launches; ambiguous reservation n
   const f = await fixture();
   try {
     f.state.failStart = true;
-    for (let n = 0; n < 10; n++) {
+    for (let n = 0; n < STACKI_MONTHLY_STARTS; n++) {
       const id = randomUUID();
       assert.equal((await f.call("open", id)).status, 503);
       assert.equal((await f.call("open", id)).value.reason, "STACKI_SESSION_START_PENDING");
     }
     assert.equal((await f.call("open", randomUUID())).status, 429);
-    assert.equal(f.calls.start, 10);
+    assert.equal(f.calls.start, STACKI_MONTHLY_STARTS);
     const other = await mkdtemp(join(tmpdir(), "stacki-ambiguous-test-"));
     try {
       const transport = createStackiLocalStorage(other, { loseUploadResponse: true });
