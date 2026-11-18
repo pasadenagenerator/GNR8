@@ -10,7 +10,7 @@ import type {
 } from "@/gnr8/single-site/airship-agent-profile-types";
 
 export const AIRSHIP_AGENCY_AI_SETTINGS_VERSION = "airship-13-agency-ai-settings:v1" as const;
-const AIRSHIP_OPENAI_DEFAULT_MODEL = "gpt-5" as const;
+const AIRSHIP_OPENAI_DEFAULT_MODEL = "gpt-5.4-mini-2026-03-17" as const;
 
 type ReadSettingsDeps = {
   readOpenAIProviderStatus: () => Promise<AirshipOpenAIProviderStatus>;

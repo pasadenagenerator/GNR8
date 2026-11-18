@@ -7,7 +7,7 @@ import { getSupabaseServiceRoleClient } from "@/src/supabase/service-role-server
 import type { SingleSitePgClient } from "./single-site-state-writer-repository";
 
 export const AIRSHIP_OPENAI_BYOK_PROVIDER_VERSION = "airship-6-openai-byok-provider:v1" as const;
-export const AIRSHIP_OPENAI_DEFAULT_MODEL = "gpt-5" as const;
+export const AIRSHIP_OPENAI_DEFAULT_MODEL = "gpt-5.4-mini-2026-03-17" as const;
 export const AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV = "GNR8_AIRSHIP_BYOK_ENCRYPTION_KEY" as const;
 export const AIRSHIP_OPENAI_ENCRYPTION_FALLBACK_ENVS = ["SUPABASE_SERVICE_ROLE_KEY", "DATABASE_URL"] as const;
 
@@ -195,7 +195,7 @@ export function encryptAirshipOpenAIKey(apiKey: string, secret?: string): Pick<S
   };
 }
 
-export function decryptAirshipOpenAIKey(credential: Pick<AirshipOpenAIProviderCredential, "encryptedSecret" | "encryptionIv" | "encryptionTag">, secret?: string): string {
+function decryptWithSecret(credential: Pick<AirshipOpenAIProviderCredential, "encryptedSecret" | "encryptionIv" | "encryptionTag">, secret: string): string {
   const decipher = createDecipheriv(
     "aes-256-gcm",
     encryptionKey(secret),
@@ -206,6 +206,23 @@ export function decryptAirshipOpenAIKey(credential: Pick<AirshipOpenAIProviderCr
     decipher.update(Buffer.from(credential.encryptedSecret, "base64")),
     decipher.final(),
   ]).toString("utf8");
+}
+
+export function decryptAirshipOpenAIKey(credential: Pick<AirshipOpenAIProviderCredential, "encryptedSecret" | "encryptionIv" | "encryptionTag">, secret?: string): string {
+  if (secret !== undefined) return decryptWithSecret(credential, secret);
+  const candidates = [
+    text(process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV], 400),
+    ...AIRSHIP_OPENAI_ENCRYPTION_FALLBACK_ENVS.map((name) => text(process.env[name], 400)),
+  ].filter((value) => value.length >= 32);
+  if (candidates.length === 0) throw new Error("airship_openai_encryption_key_missing");
+  for (const candidate of new Set(candidates)) {
+    try {
+      return decryptWithSecret(credential, candidate);
+    } catch {
+      // Existing credentials can still use their original key during rotation.
+    }
+  }
+  throw new Error("airship_openai_decryption_failed");
 }
 
 async function withTransaction<T>(pool: PoolLike, fn: (client: SingleSitePgClient) => Promise<T>): Promise<T> {
@@ -479,10 +496,12 @@ export class PostgresAirshipOpenAIByokRepository implements AirshipOpenAIByokRep
 export class AirshipOpenAIByokProviderService {
   constructor(private readonly repository: AirshipOpenAIByokRepository = new PostgresAirshipOpenAIByokRepository()) {}
 
+  private executionGate(status: AirshipOpenAIProviderStatus): AirshipOpenAIProviderStatus {
+    return { ...status, canUseAiCommands: status.canUseAiCommands && process.env.GNR8_AI_EXECUTION_ENABLED === "true" };
+  }
+
   async status(): Promise<AirshipOpenAIProviderStatus> {
-    try {
-      encryptionSecretFromEnv();
-    } catch {
+    if (text(process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV], 400).length < 32) {
       return {
         provider: "openai",
         scope: "airship_editor",
@@ -503,14 +522,16 @@ export class AirshipOpenAIByokProviderService {
       const credential = this.repository.readActiveCredentialStatus
         ? await this.repository.readActiveCredentialStatus()
         : await this.repository.readActiveCredential();
-      return airshipOpenAIProviderStatusFromCredential(credential);
+      return this.executionGate(airshipOpenAIProviderStatusFromCredential(credential));
     } catch {
       return readErrorAirshipOpenAIProviderStatus();
     }
   }
 
   async save(input: { apiKey: string; model?: unknown; actorId: string }): Promise<AirshipOpenAIProviderStatus> {
-    const encrypted = encryptAirshipOpenAIKey(input.apiKey);
+    const dedicatedKey = text(process.env[AIRSHIP_OPENAI_ENCRYPTION_KEY_ENV], 400);
+    if (dedicatedKey.length < 32) throw new Error("airship_openai_encryption_key_missing");
+    const encrypted = encryptAirshipOpenAIKey(input.apiKey, dedicatedKey);
     const savedCredential = await this.repository.upsertCredential({
       ...encrypted,
       model: normalizeAirshipOpenAIModel(input.model),
@@ -528,7 +549,7 @@ export class AirshipOpenAIByokProviderService {
     ) {
       throw new Error("airship_openai_provider_readback_failed");
     }
-    return connectedAirshipOpenAIProviderStatus(readback);
+    return this.executionGate(connectedAirshipOpenAIProviderStatus(readback));
   }
 
   async revoke(actorId: string): Promise<AirshipOpenAIProviderStatus> {

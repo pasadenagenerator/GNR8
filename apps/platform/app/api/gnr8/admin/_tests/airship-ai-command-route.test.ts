@@ -118,10 +118,22 @@ test("airship AI command route returns draft-only normalized changes and no raw 
 
 test("airship AI command default OpenAI caller uses REST-safe request and output parsing", async () => {
   const previousFetch = globalThis.fetch;
+  const oldEnv = { enabled: process.env.GNR8_AI_EXECUTION_ENABLED, url: process.env.NEXT_PUBLIC_SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  process.env.GNR8_AI_EXECUTION_ENABLED = "true";
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://budget.invalid";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-only";
+  const rpcCalls: string[] = [];
   let outboundBody: Record<string, unknown> | null = null;
   globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(_url);
+    if (url.startsWith("https://budget.invalid/rest/v1/rpc/")) {
+      rpcCalls.push(url.split("/").pop()!);
+      return Response.json(url.endsWith("reserve") ? "00000000-0000-4000-8000-000000000001" : null);
+    }
+    assert.equal(url, "https://api.openai.com/v1/responses");
     outboundBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     return new Response(JSON.stringify({
+      status: "completed", usage: { input_tokens: 300, output_tokens: 100 },
       output: [
         {
           type: "message",
@@ -143,7 +155,7 @@ test("airship AI command default OpenAI caller uses REST-safe request and output
     const service = new AirshipAICommandService({
       providerService: {
         async readServerCredential() {
-          return { apiKey: "sk-test-server-only-command-key", model: "gpt-5", credentialId: "credential-command" };
+          return { apiKey: "sk-test-server-only-command-key", model: "gpt-5.4-mini-2026-03-17", credentialId: "credential-command" };
         },
         async markTestResult() {},
       },
@@ -154,11 +166,14 @@ test("airship AI command default OpenAI caller uses REST-safe request and output
       actorId: "superadmin-airship",
     });
 
-    assert.equal(outboundBody?.model, "gpt-5");
-    assert.equal(outboundBody?.store, false);
-    assert.equal(outboundBody?.max_output_tokens, 700);
+    assert.equal((outboundBody as Record<string, unknown> | null)?.model, "gpt-5.4-mini-2026-03-17");
+    assert.equal((outboundBody as Record<string, unknown> | null)?.store, false);
+    assert.equal((outboundBody as Record<string, unknown> | null)?.max_output_tokens, 1000);
     assert.equal(Object.hasOwn(outboundBody ?? {}, "temperature"), false);
     assert.deepEqual(result.changedTextFields, ["headline"]);
+    assert.deepEqual(rpcCalls, ["gnr8_ai_trial_reserve", "gnr8_ai_trial_finish"]);
+    assert.deepEqual(result.usage, { inputTokens: 300, outputTokens: 100 });
+    assert.equal(result.estimatedListCostUsd, 0.000675);
     assert.equal(result.provider, "openai");
     assert.equal(result.rawProviderPayloadsPersisted, false);
     assert.equal(result.mutationFlags.draftDataMutation, true);
@@ -166,6 +181,9 @@ test("airship AI command default OpenAI caller uses REST-safe request and output
     assert.equal(result.mutationFlags.activePointerMutation, false);
   } finally {
     globalThis.fetch = previousFetch;
+    for (const [name, value] of Object.entries({ GNR8_AI_EXECUTION_ENABLED: oldEnv.enabled, NEXT_PUBLIC_SUPABASE_URL: oldEnv.url, SUPABASE_SERVICE_ROLE_KEY: oldEnv.key })) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
   }
 });
 

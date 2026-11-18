@@ -1,8 +1,9 @@
 import "server-only";
+import type { AIResponse } from "@/gnr8/ai/provider";
+import { callGnr8OpenAI } from "@/gnr8/ai/server-gateway";
 
 import {
   AirshipOpenAIByokProviderService,
-  AIRSHIP_OPENAI_BYOK_PROVIDER_VERSION,
 } from "@/gnr8/single-site/airship-openai-byok-provider";
 import { airshipChsDraftContainsForbiddenMaverCopy } from "@/gnr8/single-site/airship-single-site-editor-readonly-projection";
 
@@ -18,6 +19,8 @@ export type AirshipHeroAICommandFields = {
 
 export type AirshipHeroAICommandResult = {
   fields: AirshipHeroAICommandFields;
+  usage?: AIResponse["usage"];
+  estimatedListCostUsd?: number;
   changedTextFields: Array<"headline" | "subheading" | "ctaLabel">;
   changedStyleFields: Array<"topPadding" | "bottomPadding" | "backgroundTint" | "ctaColor">;
   message: string;
@@ -37,7 +40,7 @@ export type AirshipHeroAICommandResult = {
   };
 };
 
-type OpenAIResponsesCaller = (input: { apiKey: string; model: string; prompt: string }) => Promise<{ status: number; outputText: string }>;
+type OpenAIResponsesCaller = (input: { apiKey: string; model: string; prompt: string }) => Promise<AIResponse>;
 
 type AirshipAICommandDeps = {
   providerService: Pick<AirshipOpenAIByokProviderService, "readServerCredential" | "markTestResult">;
@@ -146,31 +149,6 @@ function parseProviderJson(outputText: string): Record<string, unknown> | null {
   }
 }
 
-function extractOpenAIResponsesOutputText(body: { output_text?: unknown; output?: unknown }): string {
-  const sdkText = text(body.output_text, 8000);
-  if (sdkText) return sdkText;
-
-  const chunks: string[] = [];
-  const visit = (value: unknown) => {
-    if (!value || chunks.join("").length >= 8000) return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    if (typeof value !== "object") return;
-    const record = value as Record<string, unknown>;
-    if (record.type === "output_text") {
-      const chunk = text(record.text, 8000 - chunks.join("").length);
-      if (chunk) chunks.push(chunk);
-      return;
-    }
-    if (Array.isArray(record.content)) visit(record.content);
-    if (Array.isArray(record.output)) visit(record.output);
-  };
-  visit(body.output);
-  return chunks.join("\n").slice(0, 8000);
-}
-
 function buildPrompt(input: { command: string; fields: AirshipHeroAICommandFields }): string {
   return [
     "You are editing the internal Airship draft preview for CHS d.o.o. (chs.si).",
@@ -184,30 +162,23 @@ function buildPrompt(input: { command: string; fields: AirshipHeroAICommandField
   ].join("\n");
 }
 
-async function defaultOpenAIResponsesCaller(input: { apiKey: string; model: string; prompt: string }): Promise<{ status: number; outputText: string }> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${input.apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: input.model,
-      input: input.prompt,
-      store: false,
-      max_output_tokens: 700,
-      metadata: {
-        gnr8_feature: "airship_editor",
-        gnr8_provider_version: AIRSHIP_OPENAI_BYOK_PROVIDER_VERSION,
+const HERO_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["fields", "message"],
+  properties: {
+    message: { type: "string" },
+    fields: {
+      type: "object", additionalProperties: false,
+      required: ["headline", "subheading", "ctaLabel", "topPadding", "bottomPadding", "backgroundTint", "ctaColor"],
+      properties: {
+        headline: { type: "string" }, subheading: { type: "string" }, ctaLabel: { type: "string" },
+        topPadding: { type: "number" }, bottomPadding: { type: "number" },
+        backgroundTint: { type: "string" }, ctaColor: { type: "string" },
       },
-    }),
-  });
-  const body = await response.json().catch(() => ({})) as { output_text?: unknown; output?: unknown };
-  return {
-    status: response.status,
-    outputText: extractOpenAIResponsesOutputText(body),
-  };
-}
+    },
+  },
+};
+
+const defaultOpenAIResponsesCaller: OpenAIResponsesCaller = input => callGnr8OpenAI({ ...input, schema: HERO_SCHEMA });
 
 export class AirshipAICommandService {
   private readonly deps: AirshipAICommandDeps;
@@ -261,11 +232,15 @@ export class AirshipAICommandService {
     const changes = fieldChanges(fields, nextFields);
     const textMessage = changes.changedTextFields.length > 0 ? "Text changes are saved to Airship draft only." : "";
     const styleMessage = changes.changedStyleFields.length > 0 ? "Style changes are local preview only. Not live. Not published." : "";
-    return result({
+    return { ...result({
       before: fields,
       after: nextFields,
       supported: changes.changedTextFields.length > 0 || changes.changedStyleFields.length > 0,
       message: [providerMessage, textMessage, styleMessage].filter(Boolean).join(" ") || "No draft preview changes were needed.",
-    });
+    }), usage: providerResponse.usage,
+      estimatedListCostUsd: providerResponse.usage
+        ? (providerResponse.usage.inputTokens * 0.75 + providerResponse.usage.outputTokens * 4.5) / 1_000_000
+        : undefined,
+    };
   }
 }

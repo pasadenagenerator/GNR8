@@ -1,3 +1,4 @@
+import { callGnr8OpenAI } from "@/gnr8/ai/server-gateway";
 import {
   AirshipOpenAIByokProviderService,
   type AirshipOpenAIProviderStatus,
@@ -105,20 +106,8 @@ function diagnosticForOpenAITestStatus(status: number): string {
 }
 
 async function defaultTestOpenAIConnection(apiKey: string, model: string): Promise<{ ok: boolean; status: number; diagnostic: string }> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      input: "Return exactly OK.",
-      store: false,
-      max_output_tokens: 16,
-    }),
-  });
-  return { ok: response.ok, status: response.status, diagnostic: diagnosticForOpenAITestStatus(response.status) };
+  const response = await callGnr8OpenAI({ apiKey, model, prompt: "Return exactly OK." });
+  return { ok: response.status === 200, status: response.status, diagnostic: diagnosticForOpenAITestStatus(response.status) };
 }
 
 export function createAirshipOpenAIProviderRouteHandlers(deps: Partial<RouteDeps> = {}) {
