@@ -28,6 +28,7 @@ import {
   type GeneratedOutputBuildEvidence,
   type GeneratedOutputContentManifest,
 } from "./generated-output-eligibility";
+import { readGeneratedOutputContentManifest } from "./generated-output-evidence";
 import {
   GeneratedOutputPublicationBlockedError,
   classifyGeneratedOutputProvenance,
@@ -644,6 +645,10 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
   const { transitionSiteVersionState } = await import('../runtime/version-lifecycle-enforcer');
   const { renderAstroProductionCandidatePreview } = await import('./astro-production-candidate-preview-composition');
   const f = buildFixture();
+  const {version: _sourceManifestVersion,manifestSha256: _sourceManifestSha,...sourceManifestInput}=f.contentManifest;
+  f.contentManifest=createGeneratedOutputContentManifest({...sourceManifestInput,
+    scope:{...sourceManifestInput.scope,allowedPublishStages:['production']}});
+  f.buildEvidence=buildEvidenceFrom(f.record,{siteVersion:f.sourceCaptureSiteVersion,artifact:f.sourceCaptureArtifact},f.contentManifest);
   Object.assign(f.artifact.manifest,{generatedOutputBuildEvidence:f.buildEvidence,generatedOutputContentManifest:f.contentManifest});
   f.artifact.manifest.generatedOutputSourceWorkspace = { acceptedFunctionalReductions: {kind:'retained-presentation-v1', contact:{recipient:'before@example.com',recipientConfirmed:true}, search:'remove', map:'address-link', tracking:'remove-bundle'} };
   f.artifact.bundleSha256 = bundleHash(f.artifact);
@@ -715,7 +720,14 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
   let loseStackiBind=true;
   const savedInput={selection:{scope:draftScope,revision:draft.revision,sha256:draft.sha256},sourceArtifactId:f.artifact.id,sourceArtifactSha256:f.artifact.bundleSha256,actor:'99999999-9999-4999-8999-999999999999'};
   const stackiDependencies:NonNullable<Parameters<typeof prepareStackiCandidate>[1]>={
-    composition:()=>c,readModel:read,lifecycle:{transitionSiteVersionState:transition},
+    composition:()=>c,readModel:async id=>{
+      const model=await read(id);
+      return id===draftScope.siteVersionId ? {...model,publicPreparation:{version:'gnr8-astro-public-preparation:v1' as const,
+        host:'retained.example.com',expectedActivePointer:null,sourceSiteVersionId:id,
+        sourceArtifactId:f.artifact.id,sourceArtifactSha256:f.artifact.bundleSha256,
+        sourceCandidateId:CANDIDATE_ID,sourceCandidateContentSha256:f.record.candidate.contentSha256,
+        sourceTechnicalEvidenceSha256:model.decision.technical.evidenceSha256}} : model;
+    },lifecycle:{transitionSiteVersionState:transition},
     readDraft:async(scope,revision)=>{assert.deepEqual(scope,draftScope);assert.equal(revision,3);return draft;},
     loadSource:async()=>baseline,loadCaptureSource:async()=>({htmlByPath:{'/':VALID_HTML},stylesheetCssByPath:{},ownedStylesheetEvidence:[]}),
     createProducer:input=>{
@@ -756,6 +768,7 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
   await assert.rejects(prepareStackiCandidate(savedInput,stackiDependencies),/simulated Stacki write response loss/);
   const edited=await prepareStackiCandidate(savedInput,stackiDependencies);
   assert.equal(edited.model.stackiRevision?.sha256,draft.sha256);
+  assert.deepEqual(readGeneratedOutputContentManifest(artifacts.get(edited.siteVersionId)!.manifest)?.scope.allowedPublishStages,['shadow']);
   assert.equal(edited.model.decision.review.status,'MISSING');assert.equal(pointer,null);
   assert.equal((await prepareStackiCandidate(savedInput,stackiDependencies)).model.artifactId,edited.model.artifactId);
   assert.equal(buildCalls,1);
