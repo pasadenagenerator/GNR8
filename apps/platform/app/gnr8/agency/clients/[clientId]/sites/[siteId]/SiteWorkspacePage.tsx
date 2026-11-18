@@ -1555,6 +1555,7 @@ export default async function SiteWorkspacePage(props: Props) {
           process.env.GNR8_STACKI_PILOT_USER_ID === currentUserAgency.user_id &&
           readModel.pipeline.runtimeSelection.selectedVersionId ? (
           <StackiEditorPanel
+            aiAvailable={process.env.GNR8_AI_EXECUTION_ENABLED === 'true'}
             storage={await resolvedGitHubTarget({agencyId:currentUserAgency.agency_id,clientId,siteId,
               siteVersionId:readModel.pipeline.runtimeSelection.selectedVersionId}) ? 'GitHub' : 'GNR8'}
             candidatePreparationEnabled={process.env.GNR8_STACKI_CANDIDATES_ENABLED === '1'}

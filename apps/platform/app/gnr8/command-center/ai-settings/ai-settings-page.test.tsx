@@ -36,7 +36,8 @@ test("Command Center AI Settings UI renders provider status and default Airship 
       canUseAiCommands: true,
     },
   });
-  const html = renderToStaticMarkup(<AISettingsView model={model} />);
+  const html = renderToStaticMarkup(<AISettingsView model={model} usage={{ status: "available", attempts: 1, completed: 1,
+    unresolved: 0, remaining: 9, inputTokens: 10, outputTokens: 23, estimatedUsd: 0.000111, reservedMaximumUsd: 0.0075 }} />);
 
   assert.equal(html.includes("AI Settings"), true);
   assert.equal(html.includes("Agency-level configuration"), true);
@@ -55,6 +56,9 @@ test("Command Center AI Settings UI renders provider status and default Airship 
   assert.equal(html.includes("Ključ OpenAI za GNR8"), true);
   assert.equal(html.includes("Shrani ključ"), true);
   assert.equal(html.includes("type=\"password\""), true);
+  assert.equal(html.includes("Skupna poraba AI API"), true);
+  assert.equal(html.includes("0.000111 USD"), true);
+  assert.equal(html.includes("9"), true);
   assert.equal(html.includes(rawKey), false);
 });
 

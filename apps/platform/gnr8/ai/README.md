@@ -69,6 +69,32 @@ The existing draft validation, superadmin authorization, CHS identity checks
 and live-site/publish restrictions are preserved. OpenAI JSON is schema-bound;
 GNR8 still validates the result before applying draft changes.
 
+## Stacki text proposals
+
+The Stacki AI panel is owned by GNR8, beside the existing editor launcher. It
+reads and updates the authorized, revisioned Stacki draft through the same
+storage boundary as manual Save. It does not import Studio components, inspect
+its DOM or send an AI key to its isolated runtime. A user selects unique static
+text on the home page, reviews a plain-text proposal, then explicitly saves
+one new draft revision. The route rechecks scope, actor, revision and checksum;
+concurrent edits fail closed. Open Studio sessions must be saved and closed
+before applying a proposal. Publication remains a separate review action.
+
+An upstream Stacki upgrade still needs the existing Studio patch/runtime
+compatibility checks. The AI adapter itself depends only on the GNR8 draft
+contract, so it does not need to change when Studio's internal UI changes.
+Only `h1`-`h6`, `p`, `span`, `li`, `button` and `a` literal text in
+`src/pages/index.astro` is supported in this first slice. The shared pilot
+budget and `GNR8_AI_EXECUTION_ENABLED` gate apply to proposals; applying an
+already reviewed proposal makes no provider call.
+
+The superadmin AI Settings page reads the same service-role reservation ledger
+and shows shared pilot attempts, known tokens, remaining attempts and an
+uncached-list-price estimate. Unknown/uncertain usage is labeled rather than
+reported as zero. OpenAI Analytics remains the source for billed charges and
+credit application; the GNR8 estimate does not include API activity outside
+this pilot.
+
 ## Verification on 2026-11-18
 
 - 28 focused provider, command-route, credential-route and profile tests passed.
