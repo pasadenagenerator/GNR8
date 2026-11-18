@@ -17,11 +17,14 @@ if (config.nativeAi) {
     if (request.method !== "POST" || request.url !== "/v1/chat/completions" ||
         request.headers["content-type"] !== "application/json") { response.writeHead(404).end(); return; }
     try {
-      let body = "";
+      const chunks: Buffer[] = []; let size = 0;
       for await (const chunk of request) {
-        body += chunk.toString();
-        if (Buffer.byteLength(body) > 64_000) { response.writeHead(413).end(); return; }
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        size += bytes.length;
+        if (size > 256_000) { response.writeHead(413).end(); return; }
+        chunks.push(bytes);
       }
+      const body = Buffer.concat(chunks);
       const upstream = await fetch(endpoint, {
         method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${config.nativeAi.token}`,
           "x-gnr8-stacki-session": config.persistence.sessionId },

@@ -19,6 +19,18 @@ test("native Stacki usage has a separate five-dollar reservation ceiling", () =>
     reservedMaximumUsd: 0.1, remainingBudgetUsd: 4.9 });
 });
 
+test("native Stacki usage adds old and expanded reservations against the same ceiling", () => {
+  const result = summarizeGnr8StackiNativeAiUsage([
+    { state: "completed", reserved_micro_usd: 100000, input_tokens: 20, output_tokens: 30 },
+    { state: "completed", reserved_micro_usd: 250000, input_tokens: 90000, output_tokens: 600 },
+  ]);
+  assert.equal(result.status, "available");
+  if (result.status === "available") {
+    assert.equal(result.reservedMaximumUsd, 0.35);
+    assert.equal(result.remainingBudgetUsd, 4.65);
+  }
+});
+
 test("unknown usage is never presented as zero spend", () => {
   const uncertain = summarizeGnr8AiUsage([{
     state: "uncertain", reserved_micro_usd: 7500, input_tokens: null, output_tokens: null,

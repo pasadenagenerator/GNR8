@@ -170,7 +170,7 @@ export function AISettingsView({ model, usage, nativeUsage }: Props) {
             {fact("Preostala rezervirana meja", `${nativeUsage.remainingBudgetUsd.toFixed(2)} USD`)}
           </dl>
           {nativeUsage.unresolved > 0 && <p>Klici brez potrjene porabe: {nativeUsage.unresolved}. Njihova rezervacija ostane upoštevana.</p>}
-          <p style={mutedStyle}>Za vsak klic je rezerviranih 0,10 USD; skupno največ 5 USD. To je varna zgornja meja, ne dejanski račun.</p>
+          <p style={mutedStyle}>Za nov klic je rezerviranih 0,25 USD; skupno največ 5 USD. Starejši klici ohranijo svojo rezervacijo. To je varna zgornja meja, ne dejanski račun.</p>
         </> : <p>Podatkov o Stackijevi porabi trenutno ni mogoče prebrati.</p>}
         <a href="https://platform.openai.com/analytics/usage" target="_blank" rel="noreferrer">Odpri OpenAI porabo</a>
       </section>
