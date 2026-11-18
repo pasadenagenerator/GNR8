@@ -88,6 +88,13 @@ Only `h1`-`h6`, `p`, `span`, `li`, `button` and `a` literal text in
 budget and `GNR8_AI_EXECUTION_ENABLED` gate apply to proposals; applying an
 already reviewed proposal makes no provider call.
 
+The superadmin AI Settings page reads the same service-role reservation ledger
+and shows shared pilot attempts, known tokens, remaining attempts and an
+uncached-list-price estimate. Unknown/uncertain usage is labeled rather than
+reported as zero. OpenAI Analytics remains the source for billed charges and
+credit application; the GNR8 estimate does not include API activity outside
+this pilot.
+
 ## Verification on 2026-11-18
 
 - 28 focused provider, command-route, credential-route and profile tests passed.
