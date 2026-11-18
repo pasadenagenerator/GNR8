@@ -54,7 +54,8 @@ export class VercelStackiProvider implements StackiSessionProvider {
       persistent: false, timeout: remaining, resources: { vcpus: 2 },
       ports: [4357], networkPolicy: session.aiToken && process.env.GNR8_AI_EXECUTION_ENABLED === "true"
         ? { allow: { [new URL(session.platformOrigin).hostname]: [
-          { match: { method: ["POST"], path: { exact: "/api/gnr8/stacki/native-ai/chat/completions" } }, transform: [] },
+          { match: { method: ["POST"], path: { exact: "/api/gnr8/stacki/native-ai/chat/completions" } },
+            transform: [{ headers: { "x-gnr8-stacki-egress": "native-ai" } }] },
           { response: { statusCode: 403 } },
         ] } } : "deny-all", region: "iad1",
     });
