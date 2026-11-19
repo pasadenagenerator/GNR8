@@ -967,6 +967,30 @@ test('owner UI prepares, resumes, reviews and publishes the exact retained artif
   {prepareGeneratedGit:async()=>null}),/public_preparation_git_archive_required/);
   assert.equal(artifacts.size,artifactCount);
 
+  // An edited source may replace a different approved version on the same
+  // working host. Preparation retains the current pointer until owner review.
+  process.env.GNR8_GITHUB_RAW_IMPORT_ARCHIVE_ENABLED='0';
+  assert.equal((await send({...action,action:'prepare'})).status,409,
+    'the same source cannot create another public artifact for the active host');
+  const replacementSource={siteVersionId:f.siteVersion.id,artifactId:f.artifact.id,
+    artifactBundleSha256:f.artifact.bundleSha256};
+  const replacementResponse=await send({...replacementSource,action:'prepare',host:action.host});
+  assert.equal(replacementResponse.status,200,await replacementResponse.clone().text());
+  const replacement=(await replacementResponse.json()).data;
+  assert.equal(replacement.publicPreparation.version,'gnr8-astro-public-replacement:v1');
+  assert.deepEqual(replacement.publicPreparation.expectedActivePointer,
+    {siteVersionId:third.siteVersionId,artifactId:third.artifactId});
+  assert.equal(replacement.decision.technical.status,'PASS');
+  assert.equal(replacement.decision.review.status,'MISSING');
+  assert.deepEqual(pointer,{active_site_version_id:third.siteVersionId,active_artifact_id:third.artifactId});
+  const replacementSelection={siteVersionId:replacement.siteVersionId,artifactId:replacement.artifactId,
+    artifactBundleSha256:replacement.artifactBundleSha256,host:action.host};
+  assert.equal((await send({...replacementSelection,action:'publish'})).status,409);
+  assert.equal((await send({...replacementSelection,action:'approve',confirmation:'approve-exact-generated-output-artifact',
+    technicalEvaluationSha256:replacement.decision.technical.evidenceSha256})).status,200);
+  assert.equal((await send({...replacementSelection,action:'publish'})).status,200);
+  assert.deepEqual(pointer,{active_site_version_id:replacement.siteVersionId,active_artifact_id:replacement.artifactId});
+
 });
 
 // Opt-in replay through Worker -> shared service -> real preparation/producer.
