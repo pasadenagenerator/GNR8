@@ -11,7 +11,7 @@ import { readGeneratedOutputBuildEvidence, readGeneratedOutputContentManifest, r
 import { createGeneratedOutputContentManifest, evaluateGeneratedOutputTechnicalEligibility } from './generated-output-eligibility';
 import { githubArchiveRequired } from '../stacki/stacki-github-config';
 
-import { PUBLIC_PREPARATION_VERSION, PUBLIC_CONTACT_UPDATE_VERSION, PUBLIC_HOST_TRANSITION_VERSION, PUBLIC_PREPARATION_PRODUCER, publicPreparationWorkspace, readPublicPreparation, type PublicPreparation } from './astro-public-preparation-contract';
+import { PUBLIC_PREPARATION_VERSION, PUBLIC_CONTACT_UPDATE_VERSION, PUBLIC_HOST_TRANSITION_VERSION, PUBLIC_REPLACEMENT_VERSION, PUBLIC_PREPARATION_PRODUCER, publicPreparationWorkspace, readPublicPreparation, type PublicPreparation } from './astro-public-preparation-contract';
 
 /** Creates a new immutable derivative. Never approves, binds a host, or activates a pointer. */
 export async function prepareRetainedAstroPublicArtifact(input: {
@@ -48,18 +48,24 @@ export async function prepareRetainedAstroPublicArtifact(input: {
   const pointer = await c.client.from('gnr8_runtime_active_pointers').select('active_site_version_id,active_artifact_id').eq('site_id',sourceOwnership.runtimeSiteId).maybeSingle();
   if (pointer.error) throw new Error('public_preparation_pointer_unavailable');
   const activePointer = pointer.data ? {siteVersionId:pointer.data.active_site_version_id,artifactId:pointer.data.active_artifact_id} : null;
-  const hostTransition = !input.contactRecipientChange && activePointer !== null;
-  if (hostTransition) {
+  const hasActivePublication = !input.contactRecipientChange && activePointer !== null;
+  let hostTransition = false;
+  let replacement = false;
+  if (hasActivePublication) {
     const current = await c.runtimeStore.readContext(activePointer.siteVersionId);
     const currentPreparation = current?.artifact && readPublicPreparation(current.artifact.manifest);
     const currentReview = await readModel(activePointer.siteVersionId);
     if (!current?.artifact || current.artifact.id !== activePointer.artifactId || current.siteVersion.state !== 'PUBLISHED' ||
-      currentPreparation?.host === input.host || currentPreparation?.sourceSiteVersionId !== input.sourceSiteVersionId ||
-      currentPreparation?.sourceArtifactId !== input.sourceArtifactId || currentReview.decision.review.status !== 'APPROVED')
+      !currentPreparation || currentReview.decision.review.status !== 'APPROVED')
       throw new Error('public_host_transition_requires_active_public_source');
+    hostTransition = currentPreparation.host !== input.host &&
+      currentPreparation.sourceSiteVersionId === input.sourceSiteVersionId && currentPreparation.sourceArtifactId === input.sourceArtifactId;
+    replacement = currentPreparation.host === input.host &&
+      (currentPreparation.sourceSiteVersionId !== input.sourceSiteVersionId || currentPreparation.sourceArtifactId !== input.sourceArtifactId);
+    if (!hostTransition && !replacement) throw new Error('public_host_transition_requires_active_public_source');
   }
   const preparation: PublicPreparation = {
-    version:input.contactRecipientChange ? PUBLIC_CONTACT_UPDATE_VERSION : hostTransition ? PUBLIC_HOST_TRANSITION_VERSION : PUBLIC_PREPARATION_VERSION, host:input.host,
+    version:input.contactRecipientChange ? PUBLIC_CONTACT_UPDATE_VERSION : hostTransition ? PUBLIC_HOST_TRANSITION_VERSION : replacement ? PUBLIC_REPLACEMENT_VERSION : PUBLIC_PREPARATION_VERSION, host:input.host,
     expectedActivePointer:input.contactRecipientChange ? {siteVersionId:input.sourceSiteVersionId,artifactId:input.sourceArtifactId} : activePointer,
     ...(input.contactRecipientChange ? {contactRecipientChange:{...input.contactRecipientChange,requestedByActor:input.actor}} : {}),
     sourceSiteVersionId:input.sourceSiteVersionId,sourceArtifactId:source.artifact.id,
