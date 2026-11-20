@@ -82,7 +82,14 @@ assets; the earlier two-page Lumos proposal was not selected as its baseline.
 - Browser inspection opened ViroiDoc in native 1.4.8, displayed the retained page,
   Lumos component groups, Saved status, Push to GitHub and Deploy to hosting.
 - AI's original panel opens but reports no provider connected. No paid AI call,
-  GitHub push, Cloudflare deployment, provider write, or DNS change has occurred.
+  Cloudflare deployment, AI provider write, or DNS change has occurred.
+- The GNR8 Platform change is pushed as `codex/stacki-same-host-replacement`
+  and held in draft pull request #16. Ladja Žaba and Logatčan's native source is
+  pushed to separate `codex/native-stacki` branches in their private repositories.
+  CHS and ViroiDoc's native source is committed to local `codex/native-stacki`
+  branches only. Their existing Workers Builds triggers still deploy on GitHub
+  pushes, so those two branches must not be pushed until the direct native
+  publication path is ready and the triggers are disabled.
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
 Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-zaba,logatcan}`.
