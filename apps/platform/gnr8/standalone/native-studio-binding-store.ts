@@ -47,8 +47,24 @@ export async function readNativeStudioBindingForScope(
     const result = await client.from('gnr8_native_studio_bindings').select(rowColumns)
       .eq('agency_id', scope.agencyId).eq('client_id', scope.clientId)
       .eq('site_id', scope.siteId).maybeSingle();
-    if (!result.error && result.data)
-      return nativeStudioSiteFromRow(scope, result.data as Row);
+    if (!result.error && result.data) {
+      const site = nativeStudioSiteFromRow(scope, result.data as Row);
+      const [currentSite, currentRepository] = await Promise.all([
+        client.from('sites').select('domain').eq('id', scope.siteId)
+          .eq('agency_id', scope.agencyId).eq('org_id', scope.clientId).maybeSingle(),
+        client.from('gnr8_site_github_repository_bindings')
+          .select('github_owner,repository,repository_id,binding_state')
+          .eq('site_id', scope.siteId).eq('agency_id', scope.agencyId)
+          .eq('client_id', scope.clientId).maybeSingle(),
+      ]);
+      if (currentSite.error || currentRepository.error ||
+          `https://${String(currentSite.data?.domain ?? '').toLowerCase()}` !== site.studioOrigin ||
+          currentRepository.data?.binding_state !== 'bound' ||
+          `${currentRepository.data.github_owner}/${currentRepository.data.repository}` !== site.repository ||
+          Number(currentRepository.data.repository_id) !== Number(site.repositoryId))
+        throw Error('native_studio_binding_stale');
+      return site;
+    }
     if (result.error && !source) throw Error('native_studio_binding_unavailable');
   }
   return readNativeStudioBinding(scope.siteId, source);

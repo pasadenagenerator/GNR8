@@ -132,7 +132,8 @@ save/publish separation have both been exercised end to end.
 The first local implementation slice adds a service-role-only, immutable
 `gnr8_native_studio_bindings` receipt keyed by agency/client/site and tied to
 the existing bound GitHub repository and exact working domain. Site launch and
-native-source preparation read that receipt, with the old deployment-owned map
+native-source preparation read that receipt and recheck the current site domain
+and repository before using it, with the old deployment-owned map
 as a transition fallback for the four existing sites. The schema migration has
 not been applied to a hosted database, and no provider job writes these receipts
 yet. This does **not** make new sites self-provisioning. Payment/Stripe work is

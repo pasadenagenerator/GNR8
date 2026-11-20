@@ -12,13 +12,21 @@ const row = { site_id: scope.siteId, agency_id: scope.agencyId, client_id: scope
   studio_worker: `gnr8-${scope.siteId}-studio`, site_worker: `gnr8-${scope.siteId}-site`,
   draft_bucket: `gnr8-${scope.siteId}-drafts`, verified_at: new Date().toISOString() };
 
-function client(result: { data: unknown; error: unknown }) {
-  const filters: Array<[string, string]> = [];
-  const query = { eq(key: string, value: string) { filters.push([key, value]); return query; },
-    async maybeSingle() { return result; } };
-  return { from(name: string) { assert.equal(name, 'gnr8_native_studio_bindings');
-    return { select(columns: string) { assert(columns.includes('studio_origin')); return query; } }; },
-    filters };
+function client(result: { data: unknown; error: unknown }, current: {
+  domain?: string; repository?: string;
+} = {}) {
+  const filters: Array<[string, string, string]> = [];
+  return { from(name: string) {
+    assert(['gnr8_native_studio_bindings', 'sites', 'gnr8_site_github_repository_bindings'].includes(name));
+    const query = { eq(key: string, value: string) { filters.push([name, key, value]); return query; },
+      async maybeSingle() {
+        if (name === 'gnr8_native_studio_bindings') return result;
+        if (name === 'sites') return { data: { domain: current.domain ?? 'site.app.pasadenagenerator.com' }, error: null };
+        const [github_owner, repository] = (current.repository ?? 'example/site').split('/');
+        return { data: { github_owner, repository, repository_id: 123, binding_state: 'bound' }, error: null };
+      } };
+    return { select(columns: string) { if (name === 'gnr8_native_studio_bindings') assert(columns.includes('studio_origin')); return query; } };
+  }, filters };
 }
 
 test('a verified exact-scope row is the launch and preparation binding', async () => {
@@ -26,7 +34,18 @@ test('a verified exact-scope row is the launch and preparation binding', async (
   const site = await readNativeStudioBindingForScope(scope, db as any, '{}');
   assert.equal(site.repository, 'example/site');
   assert.equal(site.studioOrigin, row.studio_origin);
-  assert.deepEqual(db.filters, [['agency_id', scope.agencyId], ['client_id', scope.clientId], ['site_id', scope.siteId]]);
+  assert.deepEqual(db.filters.filter(([name]) => name === 'gnr8_native_studio_bindings'), [
+    ['gnr8_native_studio_bindings', 'agency_id', scope.agencyId],
+    ['gnr8_native_studio_bindings', 'client_id', scope.clientId],
+    ['gnr8_native_studio_bindings', 'site_id', scope.siteId],
+  ]);
+});
+
+test('a later site-domain or repository change invalidates the stored launch', async () => {
+  for (const current of [{ domain: 'different.app.pasadenagenerator.com' },
+    { repository: 'example/different' }])
+    await assert.rejects(readNativeStudioBindingForScope(scope,
+      client({ data: row, error: null }, current) as any, '{}'), /native_studio_binding_stale/);
 });
 
 test('cross-site and malformed receipts fail closed, rather than falling back to another site', async () => {
