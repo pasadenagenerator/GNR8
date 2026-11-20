@@ -151,6 +151,17 @@ and read back both the Worker and Container before it inserts a ready binding.
 No push-triggered deployment may be installed on the public site Worker, because
 native Push to GitHub must remain independent of native Publish.
 
+The next local implementation step now stores each site's two independently
+random `SESSION_SECRET` and `CONTAINER_TOKEN` values as one AES-GCM sealed,
+append-only object in the existing private per-site publication store. The
+scope is authenticated as associated data; concurrent or repeated provisioning
+reads the winning original values instead of rotating them. The master key
+`GNR8_NATIVE_STUDIO_VAULT_KEY` is a separate one-time deployment secret and is
+not configured or read in this rollout. Rotation needs an explicit migration
+plan because native Stacki encrypts saved CMS connections under `SESSION_SECRET`.
+The vault currently has no provider installer consumer; it does not enable a
+hosted Studio by itself.
+
 References: [Cloudflare GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/),
 [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/),
 [account token creation](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/create/),
