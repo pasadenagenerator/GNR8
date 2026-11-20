@@ -170,6 +170,13 @@ creating site values. This is still an offline preparation boundary: no central
 credentials have been configured, no Cloudflare secrets have been uploaded by
 this code, and no provider readback or ready receipt has occurred.
 
+The next offline provider adapter is now implemented: it patches those six
+secrets together on the exact per-site Studio Worker and reads back their names
+and `secret_text` types. It does not run until a trusted provisioner calls it.
+Cloudflare does not return the secret values on this readback, so this check
+cannot certify correct values, a functioning Container, or a working Studio.
+The provisioner must test those separately before writing the ready receipt.
+
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
 even if the general editor access setting changes. Consequently, automatically
@@ -183,7 +190,9 @@ step for a new user, separate from repeat per-site setup.
 References: [Cloudflare GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/),
 [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/),
 [account token creation](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/create/),
-[Container deployment behavior](https://developers.cloudflare.com/containers/guides/deploy/).
+[Container deployment behavior](https://developers.cloudflare.com/containers/guides/deploy/),
+[bulk Worker secrets](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/),
+[secret name readback](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/list/).
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
 Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-zaba,logatcan}`.
