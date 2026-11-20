@@ -11,6 +11,10 @@ import { configuration, prepareNativeStudio, STACKI_RELEASE_PIN } from './prepar
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = () => { throw new Error('Confirmed export or Studio binding mismatch'); };
+function preparationBindingSha256(site) {
+  const configured = configuration(site);
+  return digest(Buffer.from(JSON.stringify({ site: configured.site, files: [...configured.files], release: STACKI_RELEASE_PIN })));
+}
 export async function prepareFromConfirmedExport({ release, files, releaseFile, site }) {
   if (!release?.foundation || !/^[a-f0-9]{64}$/.test(release.foundation.confirmationSha256) ||
       !/^[a-f0-9]{64}$/.test(release.manifestSha256) || !Array.isArray(release.files) ||
@@ -102,7 +106,7 @@ async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256,
     await collect(root);
     // Runtime draft/update directories and local receipt are not Git source.
     const output = [...files.filter(file => file.path !== 'vercel.json' && file.path !== 'README.md'),
-      ...added.filter(file => file.path.startsWith('studio/') || file.path === 'cloudflare/site.wrangler.json')];
+      ...added.filter(file => file.path.startsWith('studio/') || configuration(site).files.has(file.path))];
     output.push({ path: 'README.native-studio.md', body: Buffer.from(
       `# Native Stacki site\n\nSource export: ${manifestSha256}\nStacki: ${status.version}\n` +
       `Repository: ${site.repository}\nBranch: ${site.branch}\n\n` +
@@ -128,7 +132,7 @@ export async function prepareFromStoredRelease({ store, releaseId, releaseFile, 
  */
 export async function persistPreparedStudio({ store, releaseId, releaseFile, site, getReleaseFile = () => loadPinnedRelease({ directory: join(tmpdir(), 'gnr8-pinned-stacki') }) }) {
   if (!/^[a-f0-9]{64}$/.test(releaseId)) fail();
-  const bindingSha256 = digest(Buffer.from(JSON.stringify(site)));
+  const bindingSha256 = preparationBindingSha256(site);
   const key = `releases/${releaseId}/native-studio-${bindingSha256}.json`;
   const existing = await store.read(key);
   if (existing) {
@@ -162,7 +166,7 @@ export async function persistPreparedStudio({ store, releaseId, releaseFile, sit
 export async function persistVerifiedAstroStudio({ store, exported, selection, confirmationSha256, site,
   releaseFile, getReleaseFile = () => loadPinnedRelease({ directory: join(tmpdir(), 'gnr8-pinned-stacki') }) }) {
   verifyAstroExport({ exported, selection, confirmationSha256, site });
-  const bindingSha256 = digest(Buffer.from(JSON.stringify(configuration(site).site)));
+  const bindingSha256 = preparationBindingSha256(site);
   const sourceManifestSha256 = exported.manifestSha256;
   const identitySha256 = digest(Buffer.from(JSON.stringify({
     sourceManifestSha256, confirmationSha256, bindingSha256, stackiReleaseSha256: STACKI_RELEASE_PIN.sha256,
@@ -194,7 +198,7 @@ export async function readStoredVerifiedAstroStudio({ store, sourceId, site }) {
 }
 
 async function verifyStoredStudio({ store, receipt, sourceId, site }) {
-  const bindingSha256 = digest(Buffer.from(JSON.stringify(configuration(site).site)));
+  const bindingSha256 = preparationBindingSha256(site);
   if (!receipt || receipt.format !== 'gnr8-native-studio-source:v1' ||
       receipt.identitySha256 !== sourceId || receipt.bindingSha256 !== bindingSha256 ||
       !/^[a-f0-9]{64}$/.test(receipt.sourceManifestSha256) ||
@@ -208,7 +212,7 @@ async function verifyStoredStudio({ store, receipt, sourceId, site }) {
   validatePreparedEntries(receipt.files);
   const byPath = new Map(receipt.files.map(file => [file.path, file]));
   if (!['source-manifest.json', 'package.json', 'package-lock.json',
-      'studio/src/cloudflare/site.ts', 'cloudflare/site.wrangler.json']
+      'studio/src/cloudflare/site.ts', 'wrangler.json', '.stacki/publish.json']
       .every(path => byPath.has(path)) ||
       byPath.get('source-manifest.json').sha256 !== receipt.sourceManifestSha256 ||
       receipt.files.some(file => file.path === 'vercel.json' ||

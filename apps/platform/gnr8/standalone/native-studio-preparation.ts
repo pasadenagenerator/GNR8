@@ -6,18 +6,13 @@ import { SupabasePublicationStore } from './publication-store';
 import { requireCurrentConfirmedImport } from './current-confirmed-import';
 import type { Release } from './publication-contract';
 import { persistPreparedStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
-import { configuration } from '../../../../scripts/stacki/prepare-native-studio.mjs';
+import { readNativeStudioBinding } from './native-studio-binding';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type Request={scope:Scope;releaseId:string;actor:string};
 export function configuredNativeStudioSite(siteId:string, source=process.env.GNR8_NATIVE_STUDIO_SITES){
  if(process.env.GNR8_NATIVE_STUDIO_PREPARE_ENABLED!=='1')throw Error('native_studio_disabled');
- let bindings:Record<string,unknown>;
- try{bindings=JSON.parse(source??'{}');}catch{throw Error('native_studio_binding_invalid');}
- const site=bindings?.[siteId] as Record<string,string>|undefined;
- if(!site||site.siteId!==siteId)throw Error('native_studio_binding_missing');
- try{return configuration(site).site as Record<string,string>;}
- catch{throw Error('native_studio_binding_invalid');}
+ return readNativeStudioBinding(siteId, source);
 }
 const defaults={
  client:getSupabaseServiceRoleClient,actor:requireAgencyBackgroundActor,

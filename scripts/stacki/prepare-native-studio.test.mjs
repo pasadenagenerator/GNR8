@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { configuration, prepareNativeStudio } from './prepare-native-studio.mjs';
+import { STACKI_RELEASE_PIN, configuration, prepareNativeStudio } from './prepare-native-studio.mjs';
 import { exportStandaloneProject } from '../../apps/platform/gnr8/standalone/standalone-export.ts';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -36,24 +36,36 @@ test('two sites share the pin and native gateway but have separate runtime, draf
   assert.equal(a.vars.EDITOR_ACCESS, 'repository'); assert.equal(a.containers[0].max_instances, 1);
   assert.equal(a.vars.PREVIEW_ORIGIN, 'https://preview.one.example.com');
   assert.equal(a.main, b.main);
+  assert.equal(a.vars.GITHUB_DEPLOY_WORKER, undefined);
+  assert.equal(a.vars.GITHUB_DEPLOY_ACCOUNT, undefined);
+  const publish = JSON.parse(first.files.get('.stacki/publish.json'));
+  const gateway = JSON.parse(first.files.get('wrangler.json'));
+  assert.equal(publish.hosting.provider, 'cloudflare-workers');
+  assert.equal(publish.hosting.project, gateway.name);
+  assert.equal(publish.hosting.accountId, gateway.account_id);
+  assert.equal(gateway.main, './studio/src/cloudflare/site.ts');
+  assert.equal(gateway.assets.directory, './dist');
   assert.throws(() => configuration({ ...site, token: 'do-not-store' }), /non-secret/);
   assert.throws(() => configuration({ ...site, studioOrigin: 'http://one.example.com' }), /HTTPS/);
 });
 
-test('actual standalone export -> pinned native source -> gateway, resumable without recapture or state loss', { skip: !releaseFile && 'Set STACKI_RELEASE_FILE to the retained 1.4.2 release' }, async t => {
+test('actual standalone export -> pinned native source -> gateway, resumable without recapture or state loss', { skip: !releaseFile && 'Set STACKI_RELEASE_FILE to the pinned native release' }, async t => {
   const { root, exported } = await project(t);
   const result = await prepareNativeStudio({ project: root, releaseFile, site });
-  assert.equal(result.hosted, false); assert.equal(result.version, '1.4.2');
+  assert.equal(result.hosted, false); assert.equal(result.version, STACKI_RELEASE_PIN.version);
   const native = JSON.parse(await readFile(releaseFile, 'utf8'));
   for (const file of native.files) assert.equal(await readFile(join(root, 'studio', file.path), 'utf8'), file.content);
   for (const file of exported.files) assert.deepEqual(await readFile(join(root, file.path)), file.body);
   await mkdir(join(root, 'studio/.studio-state'));
   await writeFile(join(root, 'studio/.studio-state/draft'), 'keep my draft');
   // Resume after losing a later config write; the source/capture is untouched.
-  await rm(join(root, 'cloudflare/site.wrangler.json'));
+  await rm(join(root, 'wrangler.json'));
   assert.deepEqual(await prepareNativeStudio({ project: root, releaseFile, site }), result);
   assert.equal(await readFile(join(root, 'studio/.studio-state/draft'), 'utf8'), 'keep my draft');
   const { serveSite } = await import(pathToFileURL(join(root, 'studio/src/features/deployment/siteGateway.ts')).href);
+  const { parsePublishConfig } = await import(pathToFileURL(join(root, 'studio/vendor/stacki/shared/properties/publishConfig.ts')).href);
+  const publishConfig = JSON.parse(await readFile(join(root, '.stacki/publish.json'), 'utf8'));
+  assert.equal(parsePublishConfig(publishConfig).hosting.provider, 'cloudflare-workers');
   const forwarded = [];
   const env = { ASSETS: { fetch: async request => { forwarded.push(['asset', request]); return new Response('website'); } },
     STUDIO: { fetch: async request => { forwarded.push(['studio', request]); return new Response('editor'); } }, SITE_VERSION: { tag: 'c'.repeat(40) } };
