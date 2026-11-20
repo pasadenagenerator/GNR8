@@ -109,6 +109,9 @@ The Openprovider contract says `connected` only for read-only sandbox inventory.
    delivery, Stripe flows and registrar/DNS operations. Gate actions that entail
    payment, legal acceptance or external identity consent. Do not claim that
    merely connecting every listed provider makes those functions automatic.
+   The user has explicitly deferred implementing payments/Stripe; keep its
+   requirements in this plan and do not change billing behavior during the
+   native Stacki provisioning work.
 
 ## Evidence and limits
 

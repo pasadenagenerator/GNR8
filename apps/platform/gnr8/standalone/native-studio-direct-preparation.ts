@@ -46,7 +46,7 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
   throw Error('native_studio_selection_mismatch');
  const client=deps.client();if(!client)throw Error('native_studio_store_unavailable');
  await deps.actor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});
- const site=deps.site(scope.siteId);
+ const site=await deps.site(scope);
  const authorize=async(id:string)=>{
   const owner=await deps.ownership(id);
   if(owner.agencyId!==scope.agencyId||owner.organizationId!==scope.clientId||owner.ownershipSiteId!==scope.siteId)

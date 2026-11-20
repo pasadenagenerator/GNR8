@@ -1,5 +1,5 @@
 import { BrandGuidePanel } from './BrandGuidePanel'
-import { nativeStudioUrl } from '@/gnr8/standalone/native-studio-binding'
+import { nativeStudioUrlForScope } from '@/gnr8/standalone/native-studio-binding-store'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
@@ -1508,6 +1508,9 @@ export default async function SiteWorkspacePage(props: Props) {
   const canRunTransformation = canPerformAction(currentUserAgency.role, 'run_migration')
   const canPublish = canPerformAction(currentUserAgency.role, 'publish')
   const canDeleteSite = canPerformAction(currentUserAgency.role, 'delete_site')
+  const nativeStudioLink = props.activeTab === 'design' && canPublish
+    ? await nativeStudioUrlForScope({ agencyId: currentUserAgency.agency_id, clientId, siteId })
+    : null
 
   return (
     <SiteContextLayout
@@ -1549,7 +1552,7 @@ export default async function SiteWorkspacePage(props: Props) {
           : null}
         {props.activeTab === 'structure' ? renderStructureContent(readModel) : null}
         {props.activeTab === 'design' ? (
-          <NativeStackiPanel canEdit={canPublish} url={canPublish ? nativeStudioUrl(readModel.site.id) : null} />
+          <NativeStackiPanel canEdit={canPublish} url={nativeStudioLink} />
         ) : null}
         {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.pipeline.importVersion.savedBrandGuideSiteVersionId ?? readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
           canPrepare={canPublish}

@@ -128,6 +128,16 @@ controls. Keep the per-site publication token scope narrow even though the
 provisioning credential necessarily has wider setup permissions. Do not enable
 or claim a self-service workflow until this provisioning path and the hosted
 save/publish separation have both been exercised end to end.
+
+The first local implementation slice adds a service-role-only, immutable
+`gnr8_native_studio_bindings` receipt keyed by agency/client/site and tied to
+the existing bound GitHub repository and exact working domain. Site launch and
+native-source preparation read that receipt, with the old deployment-owned map
+as a transition fallback for the four existing sites. The schema migration has
+not been applied to a hosted database, and no provider job writes these receipts
+yet. This does **not** make new sites self-provisioning. Payment/Stripe work is
+recorded as a later integration phase per the user's latest instruction; no
+payment behavior changes in this slice.
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
 Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-zaba,logatcan}`.

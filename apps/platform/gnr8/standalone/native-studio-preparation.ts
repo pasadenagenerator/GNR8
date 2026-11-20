@@ -6,13 +6,13 @@ import { SupabasePublicationStore } from './publication-store';
 import { requireCurrentConfirmedImport } from './current-confirmed-import';
 import type { Release } from './publication-contract';
 import { persistPreparedStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
-import { readNativeStudioBinding } from './native-studio-binding';
+import { readNativeStudioBindingForScope, type NativeStudioScope } from './native-studio-binding-store';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type Request={scope:Scope;releaseId:string;actor:string};
-export function configuredNativeStudioSite(siteId:string, source=process.env.GNR8_NATIVE_STUDIO_SITES){
+export async function configuredNativeStudioSite(scope:NativeStudioScope){
  if(process.env.GNR8_NATIVE_STUDIO_PREPARE_ENABLED!=='1')throw Error('native_studio_disabled');
- return readNativeStudioBinding(siteId, source);
+ return readNativeStudioBindingForScope(scope);
 }
 const defaults={
  client:getSupabaseServiceRoleClient,actor:requireAgencyBackgroundActor,
@@ -27,7 +27,7 @@ export async function runNativeStudioPreparation(request:Request,deps=defaults){
     !/^[a-f0-9]{64}$/.test(releaseId))throw Error('native_studio_request_invalid');
  const client=deps.client();if(!client)throw Error('native_studio_store_unavailable');
  await deps.actor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});
- const site=deps.site(scope.siteId);
+ const site=await deps.site(scope);
  const store=deps.store(client,scope);
  const release=await store.read<Release>(`releases/${releaseId}/release.json`);
  if(!release||release.id!==releaseId||release.input.selection.scope.agencyId!==scope.agencyId||
