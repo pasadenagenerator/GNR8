@@ -162,6 +162,24 @@ plan because native Stacki encrypts saved CMS connections under `SESSION_SECRET`
 The vault currently has no provider installer consumer; it does not enable a
 hosted Studio by itself.
 
+A trusted installer input boundary now assembles the six exact secret names
+required by the unchanged Studio Worker: the shared GitHub App private key and
+client secret, shared AI key, one scoped per-site publish token, and the two
+stable per-site values from the vault. It rejects missing credentials before
+creating site values. This is still an offline preparation boundary: no central
+credentials have been configured, no Cloudflare secrets have been uploaded by
+this code, and no provider readback or ready receipt has occurred.
+
+The upstream editor's access check calls GitHub for the signed-in user's write
+permission on the site repository. Several native routes force that same check
+even if the general editor access setting changes. Consequently, automatically
+creating the repository and installing the GitHub App does not grant every GNR8
+owner editing rights. The universal workflow must also supply an authorized
+GitHub identity with repository write access, or an upstream-supported identity
+integration; this cannot be solved by a launch link or Worker secret alone while
+keeping Stacki unchanged. One-time GitHub OAuth consent remains a provider-owned
+step for a new user, separate from repeat per-site setup.
+
 References: [Cloudflare GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/),
 [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/),
 [account token creation](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/create/),
