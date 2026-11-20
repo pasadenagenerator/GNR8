@@ -193,6 +193,19 @@ only once; an ambiguous response needs exact-name/provider reconciliation and
 possibly a token roll before a value can be sealed. No issuer or central
 token-management credential is configured yet.
 
+The local token-issuance coordinator now reserves one deterministic token name
+per site before a create request. It verifies the exact account, zone, site
+Worker, active status, and only the two required permission roles on every
+readback. A lost create response never causes another create. If the token
+appears after the in-flight window, one recovery claimant can roll its value
+and seal it; duplicate names or broader permissions fail closed. If no token
+appears after a claimed create, the operation stays pending for operator
+reconciliation because Cloudflare does not document an idempotency key for this
+token-creation endpoint. The coordinator has only a fake-provider local test:
+the concrete Cloudflare policy translator, setup credential, hosted readback,
+and retry runner are not yet implemented. It must not be wired to a customer
+site until those pieces and the full Studio health check pass.
+
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
 even if the general editor access setting changes. Consequently, automatically
