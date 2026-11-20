@@ -90,6 +90,12 @@ assets; the earlier two-page Lumos proposal was not selected as its baseline.
   branches only. Their existing Workers Builds triggers still deploy on GitHub
   pushes, so those two branches must not be pushed until the direct native
   publication path is ready and the triggers are disabled.
+- The existing `GNR8 Stacki Studios` GitHub App (`5743518`, installation
+  `181570201`) already covers all account repositories. Its existing wildcard
+  callback matches both new working hosts; no new App grant or callback edit is
+  needed. Both new sites now have the generated native publishing configuration
+  on their review branches, and their separate private R2 draft buckets exist.
+  No new site or Studio Worker has been deployed yet.
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
 Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-zaba,logatcan}`.
@@ -106,9 +112,15 @@ complete until all four hosted flows are verified.
 3. Provide the native publish API token as `PUBLISH_CLOUDFLARE_API_TOKEN`, and native
    `AI_BASE_URL`, `AI_MODEL`, optional `AI_MODELS`, and secret `AI_API_KEY`.
    AI-provider credentials and deployment tokens are not in prepared source.
-4. Provision Ladja Žaba and Logatčan's native Studio/site Workers, one bounded
-   container and private draft bucket each, GitHub App access/callbacks and secrets.
-   Their GitHub App identities are not invented from the CHS/ViroiDoc Apps. Use new stable `codex/native-stacki` branches for these two sites so the original GNR8 checkpoint branches remain intact.
+4. Provision Ladja Žaba and Logatčan's native Studio/site Workers and one
+   bounded container each. Their private draft buckets already exist. Reuse the
+   verified `GNR8 Stacki Studios` App identity and provide its Worker secrets;
+   that App's installation and wildcard callback already cover both repositories
+   and working hosts.
+   The separate Cloudflare Workers and Pages GitHub integration must be granted
+   only these two new repositories for initial Workers Builds provisioning.
+   Their stable `codex/native-stacki` branches preserve the
+   original GNR8 checkpoint branches.
 5. Route the two confirmed `*.app.pasadenagenerator.com` hosts to their Cloudflare
    site gateways and configure separate preview hosts. Their current wildcard
    routes to Vercel; changing the two exact hosts must be an explicit migration.
