@@ -138,6 +138,22 @@ not been applied to a hosted database, and no provider job writes these receipts
 yet. This does **not** make new sites self-provisioning. Payment/Stripe work is
 recorded as a later integration phase per the user's latest instruction; no
 payment behavior changes in this slice.
+
+For the next slice, the existing automatic GitHub repository reservation/binding
+at site import must be reused. Cloudflare's documented CI path can deploy a
+Worker from GitHub Actions with a centrally held API token; per-Worker secrets
+can be uploaded with the deployment. Creating future per-site API tokens by API
+requires a separate account-token-management permission. A Container deployment
+is not transactional: the Worker can become live before its image rollout
+finishes. Therefore the provisioner must reconcile exact resource identities
+and read back both the Worker and Container before it inserts a ready binding.
+No push-triggered deployment may be installed on the public site Worker, because
+native Push to GitHub must remain independent of native Publish.
+
+References: [Cloudflare GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/),
+[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/),
+[account token creation](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/create/),
+[Container deployment behavior](https://developers.cloudflare.com/containers/guides/deploy/).
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
 Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-zaba,logatcan}`.
