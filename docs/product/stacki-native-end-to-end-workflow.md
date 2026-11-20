@@ -109,9 +109,25 @@ assets; the earlier two-page Lumos proposal was not selected as its baseline.
   secret; the secret type and correct Worker placement were verified in the
   Cloudflare dashboard without reading the values. Each Studio Worker also has
   `AI_BASE_URL=https://api.openai.com/v1` and
-  `AI_MODEL=gpt-5.4-mini-2026-03-17`. `AI_API_KEY` remains pending user entry,
-  along with the new GitHub App credentials and per-Studio session/container
-  secrets required by Ladja Žaba and Logatčan.
+  `AI_MODEL=gpt-5.4-mini-2026-03-17`. `AI_API_KEY` and the new Studio credentials
+  remain unconfigured. The earlier instruction to enter them manually in each
+  Worker was withdrawn after the user clarified that provisioning must itself be
+  universal.
+
+## Universal provisioning correction
+
+The unchanged upstream Stacki runtime binds one repository, branch, draft store,
+preview host and publish target per Studio Worker. Separate site runtimes are
+therefore expected; separate manual credential setup is not the user workflow.
+The GNR8 provisioning layer must store shared GitHub App and AI credentials once
+in a protected central location, generate independent session/container secrets
+for each site, create a publish token scoped to that site's target, and install
+these values in the corresponding Worker without displaying them to site users.
+The site owner then uses only Stacki's native autosave, Push to GitHub and Publish
+controls. Keep the per-site publication token scope narrow even though the
+provisioning credential necessarily has wider setup permissions. Do not enable
+or claim a self-service workflow until this provisioning path and the hosted
+save/publish separation have both been exercised end to end.
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
 Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-zaba,logatcan}`.
@@ -125,10 +141,11 @@ complete until all four hosted flows are verified.
 2. Disable the public-site Workers Builds triggers for CHS/ViroiDoc **before**
    pushing the direct-Publish configuration. Otherwise Push to GitHub would still
    publish through the old external trigger.
-3. Provide the native publish API token as `PUBLISH_CLOUDFLARE_API_TOKEN`, and native
-   `AI_BASE_URL`, `AI_MODEL`, optional `AI_MODELS`, and secret `AI_API_KEY`.
-   AI-provider credentials and deployment tokens are not in prepared source.
-4. Configure new Studio Worker secrets and AI; the workers, bounded containers
+3. Build and exercise one-time protected credential bootstrap and automated
+   per-site Worker provisioning. Four scoped publish tokens and the public AI
+   settings are already installed; GitHub, session/container and AI secrets are
+   still pending. No credential may enter prepared source.
+4. Configure new Studio Worker secrets through provisioning; the workers, bounded containers
    and private draft buckets are deployed. Reuse the verified `GNR8 Stacki
    Studios` App identity. Both new public-site Workers exist as unbound
    placeholders. The original GNR8 checkpoint branches remain intact.
