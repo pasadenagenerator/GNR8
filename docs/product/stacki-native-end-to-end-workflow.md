@@ -206,11 +206,13 @@ token-creation endpoint. The coordinator has only a fake-provider local test:
 the concrete Cloudflare policy translator, setup credential, hosted readback,
 and retry runner are not yet implemented. It must not be wired to a customer
 site until those pieces and the full Studio health check pass.
-Cloudflare's token-details API can return the policy resource map, including
-nested resource permissions; an authorized readback of one existing scoped
-token is needed to confirm the exact Individual Worker resource encoding
-before implementing token creation. The public examples establish the zone
-resource format but do not show this Worker-specific encoding.
+The local read-only token-details client now retrieves a known account token's
+policy map from Cloudflare's documented endpoint and discards any credential
+fields and provider error bodies. It has not been called against the account:
+no central account-token read credential is configured. An authorized readback
+of one existing scoped token is needed to confirm the exact Individual Worker
+resource encoding before implementing token creation. The public examples
+establish the zone resource format but do not show this Worker-specific encoding.
 
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
@@ -229,6 +231,7 @@ References: [Cloudflare GitHub Actions](https://developers.cloudflare.com/worker
 [bulk Worker secrets](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/),
 [secret name readback](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/list/),
 [token roll](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/subresources/value/methods/update/),
+[account token details](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/get/),
 [token quota](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/reference/limits/).
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
