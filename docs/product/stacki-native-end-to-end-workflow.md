@@ -105,6 +105,13 @@ assets; the earlier two-page Lumos proposal was not selected as its baseline.
   verified. GitHub-triggered builds for all four Studio Workers are disabled
   after initial installation. Existing CHS and ViroiDoc public-site builds
   remain enabled until direct native publication is ready.
+- Each of the four Studio Workers now has a `PUBLISH_CLOUDFLARE_API_TOKEN` runtime
+  secret; the secret type and correct Worker placement were verified in the
+  Cloudflare dashboard without reading the values. Each Studio Worker also has
+  `AI_BASE_URL=https://api.openai.com/v1` and
+  `AI_MODEL=gpt-5.4-mini-2026-03-17`. `AI_API_KEY` remains pending user entry,
+  along with the new GitHub App credentials and per-Studio session/container
+  secrets required by Ladja Žaba and Logatčan.
 - Focused preparation/integrity/ownership/Lumos checks pass. The broad development typecheck reports 200 errors in unrelated tests/services and generated development types; no diagnostic points to the changed native integration files. The actual production typecheck (`tsconfig.build.json`) passes; the route export check passes for 211 routes. Across the focused release, binding, preparation, ownership, library and asset checks, 18 tests pass with no skips.
 
 Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-zaba,logatcan}`.
