@@ -106,6 +106,12 @@ export async function ensureNativeStudioPublishToken(
       // later retry reconciles it; this invocation never creates again.
       throw Error('native_studio_publish_token_pending');
     }
+    // A successful create response is not proof of least privilege. Check the
+    // provider's effective policy and token identity before sealing its value.
+    const live = exactMetadata(target, await provider.findByName(target));
+    if (!live || live.id !== created.id ||
+        !(await provider.verifyValue(target, created.id, created.value)))
+      throw Error('native_studio_publish_token_unverified');
     const token = await saveNativeStudioPublishToken(scope, store,
       { accountId, tokenId: created.id, worker: target.worker, value: created.value }, masterKey);
     return verifySaved(provider, target, token);

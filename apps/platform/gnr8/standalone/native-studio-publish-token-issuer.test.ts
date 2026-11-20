@@ -106,6 +106,16 @@ test('permission expansion prevents use of an otherwise valid saved token', asyn
     f.store, master, f.provider, () => 2000), /native_studio_publish_token_scope_mismatch/);
 });
 
+test('creation with broader provider rights never seals the returned value', async () => {
+  const f = fixture();
+  f.setExtra();
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, master, f.provider, () => 1000), /native_studio_publish_token_scope_mismatch/);
+  assert.equal(f.creates(), 1);
+  assert(!JSON.stringify([...f.saved.values()]).includes(value));
+  assert(!f.saved.has('native-studio/publish-token-v1.json'));
+});
+
 test('duplicate provider token names cannot be reconciled', async () => {
   const f = fixture();
   await ensureNativeStudioPublishToken(scope, accountId, zoneId,

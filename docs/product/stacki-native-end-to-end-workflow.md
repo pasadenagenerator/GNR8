@@ -195,8 +195,9 @@ token-management credential is configured yet.
 
 The local token-issuance coordinator now reserves one deterministic token name
 per site before a create request. It verifies the exact account, zone, site
-Worker, active status, and only the two required permission roles on every
-readback. A lost create response never causes another create. If the token
+Worker, active status, and only the two required permission roles before
+sealing a newly issued value and on every later readback. A lost create
+response never causes another create. If the token
 appears after the in-flight window, one recovery claimant can roll its value
 and seal it; duplicate names or broader permissions fail closed. If no token
 appears after a claimed create, the operation stays pending for operator
@@ -205,6 +206,11 @@ token-creation endpoint. The coordinator has only a fake-provider local test:
 the concrete Cloudflare policy translator, setup credential, hosted readback,
 and retry runner are not yet implemented. It must not be wired to a customer
 site until those pieces and the full Studio health check pass.
+Cloudflare's token-details API can return the policy resource map, including
+nested resource permissions; an authorized readback of one existing scoped
+token is needed to confirm the exact Individual Worker resource encoding
+before implementing token creation. The public examples establish the zone
+resource format but do not show this Worker-specific encoding.
 
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
