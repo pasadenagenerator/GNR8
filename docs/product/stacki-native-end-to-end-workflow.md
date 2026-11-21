@@ -260,6 +260,18 @@ binding before they can run. Credential installation cannot be inserted there:
 the new-site bootstrap must establish Workers, domain routing and Studio health,
 then write the verified binding, before source preparation or launch uses it.
 
+The local credential installer now has one central configuration entry point for
+all sites. It expects account and zone IDs, separate Cloudflare token-management,
+Worker-read and Studio-secret-install credentials, the vault key, the GitHub App
+private key and client secret, and the AI key under `GNR8_NATIVE_STUDIO_*`
+environment names. It validates every shared input before storage or provider
+access and then uses the existing per-site issuer and installer. Read-only Vercel
+inspection on 2026-11-21 found none of these central settings on the Platform
+project and no linked shared variables; older site-import GitHub tokens are
+present but cannot replace the native GitHub App credentials. This entry point
+is not yet called by a hosted provisioning job. No credential was read, created
+or installed during this inspection or local implementation.
+
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
 even if the general editor access setting changes. Consequently, automatically
