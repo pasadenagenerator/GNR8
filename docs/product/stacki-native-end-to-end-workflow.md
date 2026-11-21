@@ -229,7 +229,13 @@ private draft bucket and both empty Worker reservations under one central
 Cloudflare account configuration. It accepts only the current agency/client/site
 scope and a user ID, rechecks that user's publish permission, then verifies the
 persisted site and bound GitHub repository before provider access. A successful
-scoped site import enqueues the event only when
+reservation now returns the current scoped HTTPS origin, bound repository and
+its immutable ID alongside the reserved resource IDs. It reads the target again
+after reservation and refuses to return it if the domain or repository changed
+during provider work; the event cannot supply these values. The repository
+branch and GitHub App identifiers still require an authoritative bootstrap
+source before first deployment.
+A successful scoped site import enqueues the event only when
 `GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED=1`; the flag defaults off.
 The job requires central `GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID`,
 `GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER`, and

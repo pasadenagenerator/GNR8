@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { configuredNativeStudioResourceReservation } from './native-studio-configured-resource-reservation';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { configuredNativeStudioResourceReservation,
+  readNativeStudioBootstrapTarget, reserveConfiguredNativeStudioResources,
+} from './native-studio-configured-resource-reservation';
 
 const valid = {
   GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32),
@@ -20,4 +23,61 @@ test('resource reservation requires both central provider capabilities', () => {
     r2Manager: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER,
     workerCreator: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_WORKER_CREATOR,
   });
+});
+
+const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
+  clientId: '22222222-2222-4222-8222-222222222222',
+  siteId: '33333333-3333-4333-8333-333333333333' };
+
+function currentTarget() {
+  let domain = 'site.app.pasadenagenerator.com';
+  let state = 'bound';
+  const client = { from(name: string) {
+    const filters: Record<string, string> = {};
+    const query = { eq(key: string, value: string) { filters[key] = value; return query; },
+      async maybeSingle() {
+        assert.equal(filters.site_id ?? filters.id, scope.siteId);
+        assert.equal(filters.agency_id, scope.agencyId);
+        assert.equal(filters.client_id ?? filters.org_id, scope.clientId);
+        return { error: null, data: name === 'sites' ? { domain } : {
+          github_owner: 'pasadenagenerator', github_owner_id: 123,
+          github_owner_kind: 'User', repository: 'gnr8-site-3333',
+          repository_id: state === 'bound' ? 456 : null, binding_state: state,
+        } };
+      } };
+    return { select: () => query };
+  } } as unknown as SupabaseClient;
+  return { client, changeDomain: (value: string) => { domain = value; },
+    changeState: (value: string) => { state = value; } };
+}
+
+test('bootstrap target comes from the current scoped site and bound repository', async () => {
+  const f = currentTarget();
+  assert.deepEqual(await readNativeStudioBootstrapTarget(scope, f.client, valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID), {
+    scope, accountId: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID,
+    studioOrigin: 'https://site.app.pasadenagenerator.com',
+    repository: 'pasadenagenerator/gnr8-site-3333', repositoryId: 456,
+  });
+  f.changeState('reserved');
+  await assert.rejects(readNativeStudioBootstrapTarget(scope, f.client,
+    valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID), /site_github_binding_pending/);
+});
+
+test('reservation returns the verified target and rejects drift during provider work', async () => {
+  const f = currentTarget();
+  const draft = { bucket: `gnr8-${scope.siteId}-drafts`, bucketId: 'b'.repeat(32) };
+  const workers = { studio: { worker: `gnr8-${scope.siteId}-studio`, id: 'c'.repeat(32) },
+    publicSite: { worker: `gnr8-${scope.siteId}-site`, id: 'd'.repeat(32) } };
+  const deps = { draft: async () => draft, workers: async () => workers };
+  const result = await reserveConfiguredNativeStudioResources(scope, f.client,
+    valid, (async () => { throw Error('unexpected provider call'); }) as typeof fetch, deps);
+  assert.deepEqual(result, { draftBucket: draft, workers, target: {
+    scope, accountId: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID,
+    studioOrigin: 'https://site.app.pasadenagenerator.com',
+    repository: 'pasadenagenerator/gnr8-site-3333', repositoryId: 456,
+  } });
+  const drifting = { ...deps, draft: async () => { f.changeDomain('changed.example.com'); return draft; } };
+  await assert.rejects(reserveConfiguredNativeStudioResources(scope, f.client,
+    valid, (async () => { throw Error('unexpected provider call'); }) as typeof fetch,
+    drifting), /native_studio_bootstrap_target_changed/);
 });
