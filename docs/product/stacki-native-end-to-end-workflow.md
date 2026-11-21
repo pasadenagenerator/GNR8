@@ -190,7 +190,7 @@ This is the existing token model to reproduce, not evidence that the proposed
 API issuer already works. Cloudflare's documented account-token quota is 500,
 so one token per site has a finite capacity. Token creation can return a value
 only once; an ambiguous response needs exact-name/provider reconciliation and
-possibly a token roll before a value can be sealed. No issuer or central
+possibly a token roll before a value can be sealed. No central
 token-management credential is configured yet.
 
 The local token-issuance coordinator now reserves one deterministic token name
@@ -202,17 +202,32 @@ appears after the in-flight window, one recovery claimant can roll its value
 and seal it; duplicate names or broader permissions fail closed. If no token
 appears after a claimed create, the operation stays pending for operator
 reconciliation because Cloudflare does not document an idempotency key for this
-token-creation endpoint. The coordinator has only a fake-provider local test:
-the concrete Cloudflare policy translator, setup credential, hosted readback,
-and retry runner are not yet implemented. It must not be wired to a customer
-site until those pieces and the full Studio health check pass.
-The local read-only token-details client now retrieves a known account token's
+token-creation endpoint. The coordinator and provider adapter have local tests;
+setup credentials, hosted readback, and a retry runner are not yet configured.
+They must not be wired to a customer site until those pieces and the full
+Studio health check pass.
+The local read-only token-details client retrieves a known account token's
 policy map from Cloudflare's documented endpoint and discards any credential
 fields and provider error bodies. It has not been called against the account:
-no central account-token read credential is configured. An authorized readback
-of one existing scoped token is needed to confirm the exact Individual Worker
-resource encoding before implementing token creation. The public examples
-establish the zone resource format but do not show this Worker-specific encoding.
+no central account-token credential is configured. The Cloudflare dashboard's
+JSON Payload review of the unchanged Ladja Žaba token on 2026-11-21 confirmed
+two `allow` policies: `Workers Routes Write` on the exact zone resource
+`com.cloudflare.api.account.zone.<zone-id>`, and `Individual Workers Editor`
+on `com.cloudflare.api.account.<account-id>` with the nested resource
+`com.cloudflare.edge.worker.script.<immutable-worker-id>`. The role IDs in the
+existing token are `28f4b596e7d643029c524985477ae49a` and
+`7e79ec33834341f28dd431ab73884400`, respectively. Its JSON Payload view
+also showed no expiration or IP filter. This is a read-only dashboard finding;
+the token was not updated.
+
+The local Cloudflare provider adapter now resolves the existing public site
+Worker by name to its immutable ID, lists account tokens, checks the exact two
+provider policies on readback, creates one scoped token, verifies its value,
+and supports a guarded roll after an ambiguous create. Token management and
+Worker metadata use separate setup credentials. A mocked request test runs
+the adapter through the actual issuance coordinator and vault; it is not a
+hosted API result. The central account-token manager and Worker-read credentials
+are not configured, and the adapter is not connected to a hosted provisioner.
 
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
