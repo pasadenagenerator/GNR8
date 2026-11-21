@@ -16,6 +16,7 @@ const deploymentId = '44444444-4444-4444-8444-444444444444';
 const versionId = '55555555-5555-4555-8555-555555555555';
 const container = 'gnr8-studio-preview-container';
 const expectedTag = `gnr8-first-${'d'.repeat(64)}`;
+const expectedRepository = 'example/site';
 
 function fixture() {
   const calls: string[] = [];
@@ -35,6 +36,11 @@ function fixture() {
       { name: 'PREVIEW', type: 'durable_object_namespace', class_name: 'PreviewContainer' },
       { name: 'ASSETS', type: 'assets' },
       { name: 'STUDIO_ORIGIN', type: 'plain_text', text: `https://${domain}` },
+      { name: 'PREVIEW_ORIGIN', type: 'plain_text', text: `https://preview.${domain}` },
+      { name: 'SITE_DEPLOYMENT_URL', type: 'plain_text', text: `https://${domain}/__studio-deployment` },
+      { name: 'EDITOR_ACCESS', type: 'plain_text', text: 'repository' },
+      { name: 'EDITOR_GITHUB_IDS', type: 'plain_text', text: '' },
+      { name: 'GITHUB_REPOSITORY', type: 'plain_text', text: expectedRepository },
     ] },
     '/containers/applications': [{ id: 'container-app-id', name: container,
       account_id: accountId, scheduling_policy: 'durable_object' }],
@@ -67,7 +73,7 @@ test('reads active Worker version, current settings and Container app without wr
 test('corroborates the exact first deploy tag on the actively serving version', async () => {
   const f = fixture();
   assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,
-    accountId, workerId, domain, credential, f.transport, expectedTag), {
+    accountId, workerId, domain, credential, f.transport, expectedTag, expectedRepository), {
     state: 'verified-source-control-plane', worker, workerId, deploymentId, versionId,
     containerApplicationId: 'container-app-id',
   });
@@ -78,6 +84,22 @@ test('corroborates the exact first deploy tag on the actively serving version', 
   tagged.annotations['workers/tag'] = `gnr8-first-${'e'.repeat(64)}`;
   await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
     accountId, workerId, domain, credential, f.transport, expectedTag), /source_conflict/);
+});
+
+test('rejects wrong preview, repository or editor access configuration', async () => {
+  for (const [name, wrong] of [
+    ['PREVIEW_ORIGIN', 'https://wrong.example.com'],
+    ['GITHUB_REPOSITORY', 'another/site'],
+    ['EDITOR_ACCESS', 'public'],
+  ]) {
+    const f = fixture();
+    const settings = f.result[`/workers/scripts/${worker}/settings`] as {
+      bindings: { name: string; text?: string }[] };
+    settings.bindings.find(binding => binding.name === name)!.text = wrong;
+    await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+      accountId, workerId, domain, credential, f.transport, expectedTag, expectedRepository),
+    /binding_conflict/);
+  }
 });
 
 test('reserved Worker or delayed Container application remains pending', async () => {
@@ -129,4 +151,23 @@ test('hosted inspection requires current scoped site and bound GitHub repository
     (async () => { providerCalls++; throw Error('unexpected provider call'); }) as typeof fetch),
   /scope_unverified/);
   assert.equal(providerCalls, 0);
+});
+
+test('hosted inspection compares Worker repository with the current site binding', async () => {
+  const f = fixture();
+  const client = { from(name: string) {
+    return { select() { return { eq() { return this; }, async maybeSingle() {
+      return { error: null, data: name === 'sites' ? { domain } : {
+        github_owner: 'example', github_owner_id: 1, github_owner_kind: 'User',
+        repository: 'site', repository_id: 2, binding_state: 'bound',
+      } };
+    } }; } };
+  } } as unknown as SupabaseClient;
+  assert.equal((await inspectBoundCloudflareStudioFirstDeployment(scope, client,
+    accountId, workerId, credential, f.transport)).state, 'observed-control-plane');
+  const settings = f.result[`/workers/scripts/${worker}/settings`] as {
+    bindings: { name: string; text?: string }[] };
+  settings.bindings.find(binding => binding.name === 'GITHUB_REPOSITORY')!.text = 'foreign/site';
+  await assert.rejects(inspectBoundCloudflareStudioFirstDeployment(scope, client,
+    accountId, workerId, credential, f.transport), /binding_conflict/);
 });

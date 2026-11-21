@@ -56,7 +56,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
     throw Error('native_studio_first_deploy_untrusted_wrangler');
   const target = { scope, accountId, workerId, sourceId, site };
   const inspection = expectedTag => deps.inspect({ scope, accountId, workerId, domain,
-    token, ...(expectedTag ? { expectedTag } : {}) });
+    token, repository: site.repository, ...(expectedTag ? { expectedTag } : {}) });
   let intent = await store.read(INTENT);
   if (intent && (Object.keys(intent).sort().join() !== 'commit,identity' ||
       !/^[a-f0-9]{40,64}$/.test(intent.commit) ||

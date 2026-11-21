@@ -21,11 +21,14 @@ export async function inspectCloudflareStudioFirstDeployment(
   credential: string,
   transport: typeof fetch = fetch,
   expectedTag?: string,
+  expectedRepository?: string,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
       !HEX32.test(accountId) || !HEX32.test(workerId) || !TOKEN.test(credential) ||
       (expectedTag !== undefined && !FIRST_DEPLOY_TAG.test(expectedTag)) ||
+      (expectedRepository !== undefined &&
+        !/^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(expectedRepository)) ||
       typeof domain !== 'string' ||
       !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(domain))
     throw Error('native_studio_first_deployment_setup_invalid');
@@ -95,6 +98,11 @@ export async function inspectCloudflareStudioFirstDeployment(
   const preview = binding('PREVIEW');
   const assets = binding('ASSETS');
   const origin = binding('STUDIO_ORIGIN');
+  const plain = (name: string, expected: string) => {
+    const values = binding(name);
+    return values.length === 1 && object(values[0]) &&
+      values[0].type === 'plain_text' && values[0].text === expected;
+  };
   if (drafts.length !== 1 || !object(drafts[0]) || drafts[0].type !== 'r2_bucket' ||
       drafts[0].bucket_name !== bucket || preview.length !== 1 ||
       !object(preview[0]) || preview[0].type !== 'durable_object_namespace' ||
@@ -102,7 +110,11 @@ export async function inspectCloudflareStudioFirstDeployment(
       (preview[0].script_name !== undefined && preview[0].script_name !== worker) ||
       assets.length !== 1 || !object(assets[0]) || assets[0].type !== 'assets' ||
       origin.length !== 1 || !object(origin[0]) || origin[0].type !== 'plain_text' ||
-      origin[0].text !== `https://${domain}`)
+      origin[0].text !== `https://${domain}` ||
+      !plain('PREVIEW_ORIGIN', `https://preview.${domain}`) ||
+      !plain('SITE_DEPLOYMENT_URL', `https://${domain}/__studio-deployment`) ||
+      !plain('EDITOR_ACCESS', 'repository') || !plain('EDITOR_GITHUB_IDS', '') ||
+      (expectedRepository !== undefined && !plain('GITHUB_REPOSITORY', expectedRepository)))
     throw Error('native_studio_first_deployment_binding_conflict');
   const applications = await read(`/containers/applications?name=${encodeURIComponent(container)}`);
   if (!Array.isArray(applications))
@@ -144,5 +156,6 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
   if (site.error || !site.data || typeof site.data.domain !== 'string' || !repository)
     throw Error('native_studio_first_deployment_scope_unverified');
   return inspectCloudflareStudioFirstDeployment(scope, accountId, workerId,
-    site.data.domain, credential, transport, expectedTag);
+    site.data.domain, credential, transport, expectedTag,
+    `${repository.owner}/${repository.repository}`);
 }

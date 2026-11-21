@@ -310,6 +310,11 @@ ID and disabled public subdomains, its [actively serving deployment](https://dev
 the active version's `PreviewContainer` export, exact Worker
 [settings bindings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/),
 and the matching [Container application](https://developers.cloudflare.com/api/resources/containers/subresources/applications/methods/list/).
+It also checks the exact preview origin, public-site deployment URL and
+repository-only editor settings. The hosted wrapper compares the configured
+GitHub repository against the current scoped site binding. A login page alone
+is not a Container or editor health check; authenticated Studio status and
+preview must still be exercised before recording readiness.
 When given the expected first-deploy tag, it also reads the active version's
 [version annotation](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/get/)
 and refuses a mismatch. This links readback to the one intended deploy, but a

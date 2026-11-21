@@ -38,12 +38,13 @@ function fixture() {
       return { sourceId, commit, branch: site.branch, repository: site.repository };
     },
     inspect: async ({ scope: requested, accountId, workerId: requestedWorker,
-      domain, token: requestedToken, expectedTag }) => {
+      domain, token: requestedToken, repository, expectedTag }) => {
       assert.equal(requested, scope);
       assert.equal(accountId, site.accountId);
       assert.equal(requestedWorker, workerId);
       assert.equal(domain, 'site.app.pasadenagenerator.com');
       assert.equal(requestedToken, token);
+      assert.equal(repository, site.repository);
       if (expectedTag !== undefined) assert.match(expectedTag, tag);
       return inspection === 'pending'
         ? { state: 'pending', reason: 'no-deployment' }
