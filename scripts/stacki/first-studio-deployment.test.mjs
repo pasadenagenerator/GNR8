@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,21 +15,26 @@ const site = { siteId: scope.siteId, repository: 'example/site', branch: 'main',
 const sourceId = 'b'.repeat(64);
 const workerId = 'c'.repeat(32);
 const token = 'd'.repeat(40);
+const secrets = { AI_API_KEY: 'a'.repeat(32), CONTAINER_TOKEN: 'b'.repeat(32),
+  GITHUB_CLIENT_SECRET: 'c'.repeat(32), GITHUB_PRIVATE_KEY: 'd'.repeat(32),
+  PUBLISH_CLOUDFLARE_API_TOKEN: 'e'.repeat(40), SESSION_SECRET: 'f'.repeat(32) };
 const commit = 'e'.repeat(40);
 const tag = /^gnr8-first-[a-f0-9]{64}$/;
+const secretIdentity = createHmac('sha256', token).update(JSON.stringify(secrets)).digest('hex');
 const intendedTag = `gnr8-first-${createHash('sha256').update(JSON.stringify({
-  scope, accountId: site.accountId, workerId, sourceId, site, commit,
+  scope, accountId: site.accountId, workerId, sourceId, site, secretIdentity, commit,
 })).digest('hex')}`;
 
 function fixture() {
   const saved = new Map();
   const commands = [];
+  const deploys = [];
   let inspection = 'pending';
   const store = { read: async key => saved.get(key) ?? null,
     claim: async (key, value) => { if (saved.has(key)) return false;
       saved.set(key, value); return true; } };
   const input = { project: process.cwd(), store, sourceId,
-    site, scope, accountId: site.accountId, workerId, token };
+    site, scope, accountId: site.accountId, workerId, token, secrets };
   const deps = {
     trustedWrangler: process.execPath,
     verifySource: async ({ sourceId: received, site: target }) => {
@@ -38,7 +43,7 @@ function fixture() {
       return { sourceId, commit, branch: site.branch, repository: site.repository };
     },
     inspect: async ({ scope: requested, accountId, workerId: requestedWorker,
-      domain, token: requestedToken, repository, expectedTag }) => {
+      domain, token: requestedToken, repository, expectedTag, requireSecrets }) => {
       assert.equal(requested, scope);
       assert.equal(accountId, site.accountId);
       assert.equal(requestedWorker, workerId);
@@ -46,14 +51,18 @@ function fixture() {
       assert.equal(requestedToken, token);
       assert.equal(repository, site.repository);
       if (expectedTag !== undefined) assert.match(expectedTag, tag);
+      assert.equal(requireSecrets, expectedTag ? true : undefined);
       return inspection === 'pending'
         ? { state: 'pending', reason: 'no-deployment' }
         : { state: 'verified-source-control-plane' };
     },
-    runCommand: async command => { commands.push(command);
-      if (command.token) inspection = 'observed'; },
+    runCommand: async command => { commands.push(command); },
+    deploy: async command => { deploys.push(command);
+      assert.equal(command.token, token);
+      assert.deepEqual(command.secrets, secrets);
+      inspection = 'observed'; },
   };
-  return { input, deps, commands, saved,
+  return { input, deps, commands, deploys, saved,
     setInspection: value => { inspection = value; } };
 }
 
@@ -67,29 +76,27 @@ test('builds without deploy credential, claims intent, deploys once and reconcil
     ['npm', ['ci']], ['npm', ['ci']], ['npm', ['run', 'build']],
     ['npm', ['run', 'build']],
     ['wrangler', ['deploy', '--dry-run', '--config', 'cloudflare/wrangler.jsonc']],
-    ['wrangler', ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', intendedTag]],
   ]);
-  assert.match(f.commands.at(-1).args.at(-1), tag);
-  assert(f.commands.slice(0, -1).every(command => command.token === undefined));
-  assert.equal(f.commands.at(-1).token, token);
+  assert.deepEqual(f.deploys[0].args,
+    ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', intendedTag]);
+  assert.match(f.deploys[0].args.at(-1), tag);
+  assert(f.commands.every(command => command.token === undefined && command.secrets === undefined));
   assert.equal(f.saved.size, 1);
   assert.equal((await runFirstStudioDeployment(f.input, f.deps)).state, 'reconcile-required');
-  assert.equal(f.commands.length, 6);
+  assert.equal(f.commands.length, 5);
+  assert.equal(f.deploys.length, 1);
 });
 
 test('ambiguous deploy is not repeated even when no deployment is yet visible', async () => {
   const f = fixture();
-  f.deps.runCommand = async command => {
-    f.commands.push(command);
-    if (command.token) throw Error('lost response');
-  };
+  f.deps.deploy = async command => { f.deploys.push(command); throw Error('lost response'); };
   assert.deepEqual(await runFirstStudioDeployment(f.input, f.deps), {
     state: 'pending-review', commit, observation: 'pending',
   });
   assert.deepEqual(await runFirstStudioDeployment(f.input, f.deps), {
     state: 'pending-review', commit, observation: 'pending',
   });
-  assert.equal(f.commands.filter(command => command.token).length, 1);
+  assert.equal(f.deploys.length, 1);
 });
 
 test('unverified readback cannot be reported as reconciled or trigger another deploy', async () => {
@@ -101,7 +108,15 @@ test('unverified readback cannot be reported as reconciled or trigger another de
     state: 'pending-review', commit, observation: 'observed-control-plane',
   });
   assert.equal((await runFirstStudioDeployment(f.input, f.deps)).state, 'pending-review');
-  assert.equal(f.commands.filter(command => command.token).length, 1);
+  assert.equal(f.deploys.length, 1);
+});
+
+test('changed runtime secrets conflict with the first deploy intent', async () => {
+  const f = fixture();
+  await runFirstStudioDeployment(f.input, f.deps);
+  const changed = { ...f.input, secrets: { ...secrets, AI_API_KEY: 'z'.repeat(32) } };
+  await assert.rejects(runFirstStudioDeployment(changed, f.deps), /intent_conflict/);
+  assert.equal(f.deploys.length, 1);
 });
 
 test('preexisting deployment or failed local build cannot claim a deploy intent', async () => {
@@ -123,7 +138,7 @@ test('a build that changes the approved checkout stops before a deploy intent', 
   f.deps.verifySource = async () => ({ sourceId, branch: site.branch,
     repository: site.repository, commit: ++reads === 1 ? commit : 'f'.repeat(40) });
   await assert.rejects(runFirstStudioDeployment(f.input, f.deps), /source_unverified/);
-  assert.equal(f.commands.filter(command => command.token).length, 0);
+  assert.equal(f.deploys.length, 0);
   assert.equal(f.saved.size, 0);
 });
 
@@ -150,16 +165,17 @@ test('rejects Wrangler inside the site checkout, including an external symlink t
 
 test('real subprocess boundary excludes ambient credentials', async () => {
   const previous = process.env.GNR8_TEST_AMBIENT_SECRET;
+  const previousCloudflare = process.env.CLOUDFLARE_API_TOKEN;
   process.env.GNR8_TEST_AMBIENT_SECRET = 'must-not-leak';
+  process.env.CLOUDFLARE_API_TOKEN = token;
   try {
     await runIsolatedStudioCommand({ file: process.execPath,
       args: ['-e', 'if (process.env.GNR8_TEST_AMBIENT_SECRET || process.env.CLOUDFLARE_API_TOKEN) process.exit(1)'],
       cwd: process.cwd(), home: '/private/tmp' });
-    await runIsolatedStudioCommand({ file: process.execPath,
-      args: ['-e', `if (process.env.GNR8_TEST_AMBIENT_SECRET || process.env.CLOUDFLARE_API_TOKEN !== '${token}') process.exit(1)`],
-      cwd: process.cwd(), home: '/private/tmp', token });
   } finally {
     if (previous === undefined) delete process.env.GNR8_TEST_AMBIENT_SECRET;
     else process.env.GNR8_TEST_AMBIENT_SECRET = previous;
+    if (previousCloudflare === undefined) delete process.env.CLOUDFLARE_API_TOKEN;
+    else process.env.CLOUDFLARE_API_TOKEN = previousCloudflare;
   }
 });

@@ -38,6 +38,9 @@ function fixture() {
       { name: 'EDITOR_ACCESS', type: 'plain_text', text: 'repository' },
       { name: 'EDITOR_GITHUB_IDS', type: 'plain_text', text: '' },
       { name: 'GITHUB_REPOSITORY', type: 'plain_text', text: expectedRepository },
+      ...['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
+        'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET']
+        .map(name => ({ name, type: 'secret_text' })),
       ],
     } },
     [`/workers/workers/${worker}/versions/${versionId}`]: { id: versionId,
@@ -85,6 +88,20 @@ test('corroborates the exact first deploy tag on the actively serving version', 
   tagged.annotations['workers/tag'] = `gnr8-first-${'e'.repeat(64)}`;
   await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
     accountId, workerId, domain, credential, f.transport, expectedTag), /source_conflict/);
+});
+
+test('first deployment requires all six secrets on the active version', async () => {
+  const f = fixture();
+  assert.equal((await inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true)).state, 'verified-source-control-plane');
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { bindings: { name: string }[] } };
+  version.resources.bindings = version.resources.bindings.filter(binding =>
+    binding.name !== 'SESSION_SECRET');
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true), /secret_conflict/);
 });
 
 test('rejects wrong preview, repository or editor access configuration', async () => {

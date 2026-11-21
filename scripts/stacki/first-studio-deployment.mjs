@@ -2,7 +2,7 @@
  * No provider operation happens on import. A caller must supply a scoped
  * Cloudflare inspector and an append-only per-site intent store.
  */
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,11 +16,13 @@ const HEX32 = /^[a-f0-9]{32}$/;
 const HEX64 = /^[a-f0-9]{64}$/;
 const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
 const INTENT = 'native-studio/first-deploy-intent-v1.json';
+const SECRET_NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
+  'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-export async function runIsolatedStudioCommand({ file, args, cwd, home, token }) {
+export async function runIsolatedStudioCommand({ file, args, cwd, home }) {
   const env = { PATH: process.env.PATH ?? '', HOME: home, TMPDIR: tmpdir(), CI: '1',
-    WRANGLER_SEND_METRICS: 'false', ...(token ? { CLOUDFLARE_API_TOKEN: token } : {}) };
+    WRANGLER_SEND_METRICS: 'false' };
   await exec(file, args, { cwd, env, shell: false, timeout: 15 * 60_000,
     maxBuffer: 2 * 1024 * 1024, windowsHide: true });
 }
@@ -33,7 +35,7 @@ const defaults = { verifySource: verifyCommittedStudioSource,
  * response becomes reconciliation work; this function never retries deploy.
  */
 export async function runFirstStudioDeployment(input, deps = defaults) {
-  const { project, store, sourceId, site, scope, accountId, workerId, token } = input ?? {};
+  const { project, store, sourceId, site, scope, accountId, workerId, token, secrets } = input ?? {};
   if (!project || typeof project !== 'string' || !store ||
       typeof store.read !== 'function' || typeof store.claim !== 'function' ||
       !scope || ![scope.agencyId, scope.clientId, scope.siteId]
@@ -41,8 +43,12 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
       !site || site.siteId !== scope.siteId || site.accountId !== accountId ||
       typeof site.studioOrigin !== 'string' || !HEX64.test(sourceId) ||
       !HEX32.test(accountId) || !HEX32.test(workerId) || !TOKEN.test(token) ||
+      !secrets || typeof secrets !== 'object' || Array.isArray(secrets) ||
+      Object.keys(secrets).sort().join() !== SECRET_NAMES.join() ||
+      !SECRET_NAMES.every(name => typeof secrets[name] === 'string' && secrets[name].length >= 16) ||
       typeof deps.inspect !== 'function' ||
       typeof deps.verifySource !== 'function' || typeof deps.runCommand !== 'function' ||
+      typeof deps.deploy !== 'function' ||
       typeof deps.trustedWrangler !== 'string' || !isAbsolute(deps.trustedWrangler))
     throw Error('native_studio_first_deploy_input_invalid');
   const domain = new URL(site.studioOrigin).hostname;
@@ -54,9 +60,12 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
   if (trustedWrangler === canonicalCheckout ||
       trustedWrangler.startsWith(`${canonicalCheckout}${sep}`))
     throw Error('native_studio_first_deploy_untrusted_wrangler');
-  const target = { scope, accountId, workerId, sourceId, site };
+  const secretIdentity = createHmac('sha256', token)
+    .update(JSON.stringify(secrets)).digest('hex');
+  const target = { scope, accountId, workerId, sourceId, site, secretIdentity };
   const inspection = expectedTag => deps.inspect({ scope, accountId, workerId, domain,
-    token, repository: site.repository, ...(expectedTag ? { expectedTag } : {}) });
+    token, repository: site.repository,
+    ...(expectedTag ? { expectedTag, requireSecrets: true } : {}) });
   let intent = await store.read(INTENT);
   if (intent && (Object.keys(intent).sort().join() !== 'commit,identity' ||
       !/^[a-f0-9]{40,64}$/.test(intent.commit) ||
@@ -103,9 +112,9 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
     if (!claimed) return { state: 'pending-review', commit: checked.commit,
       observation: 'concurrent-intent' };
     try {
-      await deps.runCommand({ file: trustedWrangler,
+      await deps.deploy({ file: trustedWrangler,
         args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', expectedTag],
-        cwd: join(checkout, 'studio'), home, token });
+        cwd: join(checkout, 'studio'), token, secrets });
     } catch { /* A failed command can still have deployed. Inspect, never repeat. */ }
     let observed;
     try { observed = await inspection(expectedTag); }

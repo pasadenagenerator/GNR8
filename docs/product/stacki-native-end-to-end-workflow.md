@@ -296,8 +296,14 @@ rejected. The hosted runner must mount that executable read-only so site build
 scripts cannot replace it. It passes no Cloudflare credential to install,
 build or dry run, then claims one
 append-only per-site deployment intent before invoking the exact Studio
-`wrangler deploy` command. The command carries a deterministic Wrangler version
-tag derived from the verified source, commit and target. A lost response or
+`wrangler deploy` command through a separate trusted deployment callback. The
+build and dry-run callback cannot receive secrets or a Cloudflare credential;
+the deployment callback receives the six exact runtime secrets and must run in
+an isolated environment, with the checkout mounted read-only. It should use
+Wrangler's documented `--secrets-file` support to include the secrets in the
+first version, without a second secret-patch version. The command carries a
+deterministic Wrangler version tag derived from the verified source, commit,
+target and keyed secret identity. A lost response or
 timeout is read back against that tag on the actively serving version and never
 causes a second automatic deploy. The result remains `reconcile-required` or
 `pending-review`, never a ready binding. The orchestration has mocked command
@@ -320,6 +326,9 @@ When given the expected first-deploy tag, it also reads the active version's
 and refuses a mismatch. This links readback to the one intended deploy, but a
 tag alone cannot prove the deployed bytes. The Beta endpoint's response shape
 still needs hosted readback.
+For this combined first-deploy path, the inspector also requires all six secret
+names on that active version. Their values remain unreadable, and the isolated
+host deployment callback has not yet been implemented or connected.
 It re-reads the current scoped site and GitHub binding before Cloudflare access.
 An absent deployment or delayed application remains pending; a mismatched Worker,
 bucket, domain or split deployment fails closed. Newer unpublished settings
@@ -375,7 +384,9 @@ credentials first. This remains an offline preparation boundary: no central
 credentials have been configured, no Cloudflare secrets have been uploaded by
 this code, and no provider readback or ready receipt has occurred.
 
-The offline provider adapter patches those six secrets together on the exact
+The separate offline provider adapter remains for a Worker that needs secrets
+after its first code deployment; the combined first-deploy path above is the
+intended new-site flow. The adapter patches those six secrets together on the exact
 per-site Studio Worker. Cloudflare documents that the bulk patch creates a new
 version. The adapter now requires a different 100%-active version after the
 patch and reads the six names and `secret_text` types from that version's

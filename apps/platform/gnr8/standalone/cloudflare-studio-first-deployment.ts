@@ -7,6 +7,8 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-
 const HEX32 = /^[a-f0-9]{32}$/;
 const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
 const FIRST_DEPLOY_TAG = /^gnr8-first-[a-f0-9]{64}$/;
+const SECRET_NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
+  'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -22,6 +24,7 @@ export async function inspectCloudflareStudioFirstDeployment(
   transport: typeof fetch = fetch,
   expectedTag?: string,
   expectedRepository?: string,
+  requireSecrets = false,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
@@ -29,6 +32,7 @@ export async function inspectCloudflareStudioFirstDeployment(
       (expectedTag !== undefined && !FIRST_DEPLOY_TAG.test(expectedTag)) ||
       (expectedRepository !== undefined &&
         !/^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(expectedRepository)) ||
+      typeof requireSecrets !== 'boolean' ||
       typeof domain !== 'string' ||
       !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(domain))
     throw Error('native_studio_first_deployment_setup_invalid');
@@ -93,6 +97,10 @@ export async function inspectCloudflareStudioFirstDeployment(
     throw Error('native_studio_first_deployment_provider_invalid');
   const bindings: unknown[] = version.resources.bindings;
   const binding = (name: string) => bindings.filter(value => object(value) && value.name === name);
+  if (requireSecrets && !SECRET_NAMES.every(name => {
+    const values = binding(name);
+    return values.length === 1 && object(values[0]) && values[0].type === 'secret_text';
+  })) throw Error('native_studio_first_deployment_secret_conflict');
   const drafts = binding('DRAFTS');
   const preview = binding('PREVIEW');
   const assets = binding('ASSETS');
@@ -143,6 +151,7 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
   credential: string,
   transport: typeof fetch = fetch,
   expectedTag?: string,
+  requireSecrets = false,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)))
@@ -156,5 +165,5 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
     throw Error('native_studio_first_deployment_scope_unverified');
   return inspectCloudflareStudioFirstDeployment(scope, accountId, workerId,
     site.data.domain, credential, transport, expectedTag,
-    `${repository.owner}/${repository.repository}`);
+    `${repository.owner}/${repository.repository}`, requireSecrets);
 }

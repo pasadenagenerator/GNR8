@@ -49,11 +49,13 @@ build, push, provider request or deployment.
 a disposable Docker host. Its caller must supply a scoped Cloudflare readback
 and private per-site intent store plus a host-owned, read-only Wrangler executable
 outside the site checkout. Local or symlinked site executables are refused.
-Builds and dry run receive no Cloudflare key; the key is supplied only to the
-trusted `wrangler deploy` process. Any ambiguous
+Builds and dry run receive no Cloudflare key or runtime secrets. A separate
+trusted deployment callback must use the exact prepared source and provide all
+six secrets to the first `wrangler deploy` in an isolated environment; the
+default command runner cannot deploy. Any ambiguous
 result requires active-version tag readback and review, never an automatic second
-deploy. The tag binds the intended source and commit to the deploy attempt; it
-does not prove deployed bytes. This
+deploy. The tag binds the intended source, commit and keyed secret identity to
+the deploy attempt; it does not prove deployed bytes. This
 library is not connected to a hosted job or a ready-Studio receipt yet.
 
 ## Existing sites and upgrades
