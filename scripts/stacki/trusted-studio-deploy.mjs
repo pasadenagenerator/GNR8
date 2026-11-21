@@ -17,6 +17,8 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-
 const HEX32 = /^[a-f0-9]{32}$/;
 const HEX64 = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40,64}$/;
+const INTENT = 'native-studio/first-deploy-intent-v1.json';
+const ATTEMPT = 'native-studio/first-deploy-attempt-v1.json';
 const NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
   'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 
@@ -43,6 +45,7 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
       typeof site.repository !== 'string' || !site.repository ||
       typeof site.branch !== 'string' || !site.branch ||
       typeof site.studioOrigin !== 'string' || !store ||
+      typeof store.read !== 'function' || typeof store.claim !== 'function' ||
       typeof deps.verifySource !== 'function' || typeof deps.invoke !== 'function')
     throw Error('native_studio_trusted_deploy_input_invalid');
   let domain;
@@ -70,6 +73,13 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
   if (checked?.sourceId !== sourceId || checked.commit !== commit ||
       checked.branch !== site.branch || checked.repository !== site.repository)
     throw Error('native_studio_trusted_deploy_source_unverified');
+  const identity = expectedTag.slice('gnr8-first-'.length);
+  const intent = await store.read(INTENT);
+  if (!intent || Object.keys(intent).sort().join() !== 'commit,identity' ||
+      intent.identity !== identity || intent.commit !== commit)
+    throw Error('native_studio_trusted_deploy_intent_mismatch');
+  if (!await store.claim(ATTEMPT, { identity, commit }))
+    throw Error('native_studio_trusted_deploy_already_attempted');
   const privateHome = await mkdtemp(join(tmpdir(), 'gnr8-studio-deploy-'));
   try {
     const secretFile = join(privateHome, 'secrets.json');

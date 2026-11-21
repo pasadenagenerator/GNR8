@@ -22,19 +22,26 @@ const sourceId = 'd'.repeat(64);
 const commit = 'e'.repeat(40);
 const site = { siteId: scope.siteId, repository: 'example/site', branch: 'main',
   accountId, studioOrigin: 'https://site.app.pasadenagenerator.com' };
-const store = {};
 const secretIdentity = createHmac('sha256', token)
   .update(JSON.stringify(secrets)).digest('hex');
 const tag = `gnr8-first-${createHash('sha256').update(JSON.stringify({
   scope, accountId, workerId, sourceId, site, secretIdentity, commit,
 })).digest('hex')}`;
+const intentKey = 'native-studio/first-deploy-intent-v1.json';
+const attemptKey = 'native-studio/first-deploy-attempt-v1.json';
+const approvedStore = () => {
+  const saved = new Map([[intentKey, { identity: tag.slice('gnr8-first-'.length), commit }]]);
+  return { read: async key => saved.get(key) ?? null,
+    claim: async (key, value) => { if (saved.has(key)) return false;
+      saved.set(key, value); return true; } };
+};
 const input = { file: process.execPath, cwd: join(root, 'studio'), token, secrets,
   args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', tag],
-  scope, accountId, workerId, sourceId, site, store, commit };
+  scope, accountId, workerId, sourceId, site, commit };
 const verified = { sourceId, commit, branch: site.branch, repository: site.repository };
 const verifySource = async ({ project, store: received, sourceId: receivedId, site: receivedSite }) => {
   assert.equal(project, await realpath(root));
-  assert.equal(received, store);
+  assert.equal(typeof received.read, 'function');
   assert.equal(receivedId, sourceId);
   assert.equal(receivedSite, site);
   return verified;
@@ -43,10 +50,11 @@ const withInvoke = invoke => ({ verifySource, invoke });
 
 test('dedicated deploy receives only the exact command and a temporary private secret file', async () => {
   let secretFile;
-  await runTrustedStudioDeploy(input, withInvoke(async (file, args, options) => {
+  const approved = { ...input, store: approvedStore() };
+  await runTrustedStudioDeploy(approved, withInvoke(async (file, args, options) => {
     secretFile = args.at(-1);
     assert.equal(file, process.execPath);
-    assert.deepEqual(args.slice(0, -2), input.args);
+    assert.deepEqual(args.slice(0, -2), approved.args);
     assert.equal(args.at(-2), '--secrets-file');
     assert.deepEqual(JSON.parse(await readFile(secretFile, 'utf8')), secrets);
     assert.equal((await stat(secretFile)).mode & 0o777, 0o600);
@@ -54,6 +62,8 @@ test('dedicated deploy receives only the exact command and a temporary private s
     assert.equal(options.env.CLOUDFLARE_API_TOKEN, token);
     assert.equal(options.env.GNR8_TEST_AMBIENT_SECRET, undefined);
   }));
+  assert.deepEqual(await approved.store.read(attemptKey),
+    { identity: tag.slice('gnr8-first-'.length), commit });
   await assert.rejects(readFile(secretFile), { code: 'ENOENT' });
 });
 
@@ -71,18 +81,22 @@ test('refuses a site-owned executable before invoking a process', async () => {
   const local = join(root, 'studio', 'wrangler');
   await writeFile(local, 'untrusted');
   let calls = 0;
-  await assert.rejects(runTrustedStudioDeploy({ ...input, file: local },
+  await assert.rejects(runTrustedStudioDeploy({ ...input, file: local,
+    store: approvedStore() },
     withInvoke(async () => { calls++; })), /executable_invalid/);
   assert.equal(calls, 0);
 });
 
 test('provider failures are sanitized and the secret file is removed', async () => {
   let secretFile;
-  await assert.rejects(runTrustedStudioDeploy(input, withInvoke(async (_file, args) => {
+  const approved = { ...input, store: approvedStore() };
+  await assert.rejects(runTrustedStudioDeploy(approved, withInvoke(async (_file, args) => {
     secretFile = args.at(-1);
     throw Error('sensitive provider output');
   })), error => error instanceof Error && error.message === 'native_studio_trusted_deploy_failed');
   await assert.rejects(readFile(secretFile), { code: 'ENOENT' });
+  await assert.rejects(runTrustedStudioDeploy(approved,
+    withInvoke(async () => { throw Error('should not retry'); })), /already_attempted/);
 });
 
 test('refuses a changed source, commit, site or tag before invoking Wrangler', async () => {
@@ -95,13 +109,28 @@ test('refuses a changed source, commit, site or tag before invoking Wrangler', a
     { ...input, workerId: 'f'.repeat(32) },
   ];
   for (const candidate of changed)
-    await assert.rejects(runTrustedStudioDeploy(candidate,
+    await assert.rejects(runTrustedStudioDeploy({ ...candidate, store: approvedStore() },
       { invoke, verifySource: async () => verified }), /target_mismatch/);
-  await assert.rejects(runTrustedStudioDeploy(input,
+  await assert.rejects(runTrustedStudioDeploy({ ...input, store: approvedStore() },
     { invoke, verifySource: async () => ({ ...verified, commit: 'f'.repeat(40) }) }),
   /source_unverified/);
-  await assert.rejects(runTrustedStudioDeploy(input,
+  await assert.rejects(runTrustedStudioDeploy({ ...input, store: approvedStore() },
     { invoke, verifySource: async () => { throw Error('checkout changed'); } }),
   /source_unverified/);
   assert.equal(calls, 0);
+});
+
+test('requires the exact durable intent and refuses a second invocation', async () => {
+  const approved = { ...input, store: approvedStore() };
+  let calls = 0;
+  const deps = withInvoke(async () => { calls++; });
+  const absent = { ...input, store: { ...approvedStore(), read: async () => null } };
+  await assert.rejects(runTrustedStudioDeploy(absent, deps), /intent_mismatch/);
+  const wrong = approvedStore();
+  wrong.read = async () => ({ identity: 'f'.repeat(64), commit });
+  await assert.rejects(runTrustedStudioDeploy({ ...input, store: wrong }, deps),
+    /intent_mismatch/);
+  await runTrustedStudioDeploy(approved, deps);
+  await assert.rejects(runTrustedStudioDeploy(approved, deps), /already_attempted/);
+  assert.equal(calls, 1);
 });
