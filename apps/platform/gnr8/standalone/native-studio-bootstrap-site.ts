@@ -1,7 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { configuration } from '../../../../scripts/stacki/prepare-native-studio.mjs';
-import type { NativeStudioScope } from './native-studio-binding-store';
+import { readNativeStudioBindingForScope,
+  type NativeStudioScope } from './native-studio-binding-store';
 import { readNativeStudioBootstrapTarget } from './native-studio-configured-resource-reservation';
 
 type Environment = Record<string, string | undefined>;
@@ -36,4 +37,24 @@ export async function configuredNativeStudioBootstrapSite(
         installationId: string; clientId: string;
       };
   } catch { throw Error('native_studio_bootstrap_site_invalid'); }
+}
+
+/** Existing ready bindings retain precedence. The explicit bootstrap flag
+ * only admits a new site without a ready binding into source preparation.
+ */
+export async function configuredNativeStudioDirectSourceSite(
+  scope: NativeStudioScope, client: SupabaseClient,
+  env: Environment = process.env,
+) {
+  if (env.GNR8_NATIVE_STUDIO_PREPARE_ENABLED !== '1')
+    throw Error('native_studio_disabled');
+  if (env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED !== '1')
+    return readNativeStudioBindingForScope(scope, client, env.GNR8_NATIVE_STUDIO_SITES);
+  try {
+    return await readNativeStudioBindingForScope(scope, client, env.GNR8_NATIVE_STUDIO_SITES);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'native_studio_binding_missing')
+      throw error;
+  }
+  return configuredNativeStudioBootstrapSite(scope, client, env);
 }

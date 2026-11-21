@@ -7,6 +7,7 @@ import { fingerprint, publicationSelectionForArtifact, type Release } from '@/gn
 import { SupabaseAstroCandidateRuntimeArtifactStore } from '@/gnr8/output-adapters/astro-candidate-runtime-artifact-store';
 import { requireCurrentConfirmedSelection } from '@/gnr8/standalone/current-confirmed-import';
 import { configuredNativeStudioSite } from '@/gnr8/standalone/native-studio-preparation';
+import { configuredNativeStudioDirectSourceSite } from '@/gnr8/standalone/native-studio-bootstrap-site';
 export const runtime='nodejs';
 type Scope={agencyId:string;clientId:string;siteId:string};
 async function currentSource(scope:Scope,client:NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
@@ -36,8 +37,8 @@ export async function GET(request:Request,context:{params:Promise<{clientId:stri
   const url=new URL(request.url);
   const scope={...await context.params,agencyId:url.searchParams.get('agencyId')??''};
   await requirePublicOutputSite(scope);
-  await configuredNativeStudioSite(scope);
   const client=getSupabaseServiceRoleClient();if(!client)throw Error('native_studio_store_unavailable');
+  await configuredNativeStudioDirectSourceSite(scope,client);
   let requestId=url.searchParams.get('requestId')??'';
   if(!requestId){
    if([...url.searchParams.keys()].sort().join()!=='agencyId,artifactBundleSha256,artifactId,siteVersionId')
@@ -67,9 +68,9 @@ export async function POST(request:Request,context:{params:Promise<{clientId:str
    throw Error('native_studio_request_invalid');
   const scope={...await context.params,agencyId:body.agencyId};
   const actor=await requirePublicOutputSite(scope);
-  await configuredNativeStudioSite(scope);
   const client=getSupabaseServiceRoleClient();if(!client)throw Error('native_studio_store_unavailable');
   if(body.action==='prepare-source'){
+   await configuredNativeStudioDirectSourceSite(scope,client);
    if(Object.keys(body).sort().join()!=='action,agencyId,artifactBundleSha256,artifactId,siteVersionId'||
       ![body.siteVersionId,body.artifactId,body.artifactBundleSha256].every(value=>typeof value==='string'))
     throw Error('native_studio_request_invalid');
@@ -80,6 +81,7 @@ export async function POST(request:Request,context:{params:Promise<{clientId:str
   }
   if(Object.keys(body).sort().join()!=='agencyId,releaseId'||typeof body.releaseId!=='string'||
      !/^[a-f0-9]{64}$/.test(body.releaseId))throw Error('native_studio_request_invalid');
+  await configuredNativeStudioSite(scope);
   const store=new SupabasePublicationStore(client,process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET??'gnr8-astro-candidate-routes',scope);
   const release=await store.read<Release>(`releases/${body.releaseId}/release.json`);
   if(!release||release.id!==body.releaseId||release.input.selection.scope.siteId!==scope.siteId||

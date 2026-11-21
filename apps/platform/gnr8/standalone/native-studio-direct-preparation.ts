@@ -12,25 +12,11 @@ import { requireCompatibleStandaloneToolchain } from './publication-foundation';
 import { fingerprint, parsePublicationSelection, publicationSelectionForArtifact, type PublicationSelection } from './publication-contract';
 import { requireCurrentConfirmedSelection } from './current-confirmed-import';
 import { SupabasePublicationStore } from './publication-store';
-import { configuredNativeStudioSite } from './native-studio-preparation';
-import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
-import { readNativeStudioBindingForScope } from './native-studio-binding-store';
+import { configuredNativeStudioDirectSourceSite } from './native-studio-bootstrap-site';
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type Request={scope:Scope;input:PublicationSelection;actor:string;requestId?:string};
-export async function configuredNativeStudioDirectSourceSite(scope:Scope,client:SupabaseClient,
- env:Record<string,string|undefined>=process.env){
- if(env.GNR8_NATIVE_STUDIO_PREPARE_ENABLED!=='1')throw Error('native_studio_disabled');
- if(env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED!=='1')return configuredNativeStudioSite(scope);
- try { return await readNativeStudioBindingForScope(scope,client,env.GNR8_NATIVE_STUDIO_SITES); }
- catch(error){
-  if(!(error instanceof Error)||
-    !['native_studio_binding_missing','native_studio_binding_unavailable'].includes(error.message))
-   throw error;
- }
- return configuredNativeStudioBootstrapSite(scope,client,env);
-}
 const defaults={
  client:getSupabaseServiceRoleClient,actor:requireAgencyBackgroundActor,
  site:configuredNativeStudioDirectSourceSite,

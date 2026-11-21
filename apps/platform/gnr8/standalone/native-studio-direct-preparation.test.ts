@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configuredNativeStudioDirectSourceSite,
-  runDirectNativeStudioPreparation } from './native-studio-direct-preparation';
+import { runDirectNativeStudioPreparation } from './native-studio-direct-preparation';
+import { configuredNativeStudioDirectSourceSite } from './native-studio-bootstrap-site';
 import { publicationSelectionForArtifact } from './publication-contract';
 import { exportStandaloneProject } from './standalone-export';
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
@@ -68,11 +68,13 @@ test('a changed target during export stops before saving native source',async()=
 
 test('new-site direct preparation is gated and resolves a scoped bootstrap site',async()=>{
  let ready=false;
+ let bindingUnavailable=false;
  const client={from(name:string){const filters:Record<string,string>={};
   const query={eq(key:string,value:string){filters[key]=value;return query;},
    async maybeSingle(){assert.equal(filters.site_id??filters.id,scope.siteId);
     assert.equal(filters.agency_id,scope.agencyId);assert.equal(filters.client_id??filters.org_id,scope.clientId);
-    return {error:null,data:name==='gnr8_native_studio_bindings'?(ready?{
+    return {error:name==='gnr8_native_studio_bindings'&&bindingUnavailable?{message:'unavailable'}:null,
+     data:name==='gnr8_native_studio_bindings'?(ready?{
      site_id:scope.siteId,agency_id:scope.agencyId,client_id:scope.clientId,
      studio_origin:'https://site.app.pasadenagenerator.com',
      repository:'pasadenagenerator/gnr8-site-3333',repository_id:456,
@@ -97,6 +99,10 @@ test('new-site direct preparation is gated and resolves a scoped bootstrap site'
   {...env,GNR8_NATIVE_STUDIO_GITHUB_APP_ID:undefined});
  assert.equal(existing.branch,'retained/branch');
  ready=false;
+ bindingUnavailable=true;
+ await assert.rejects(configuredNativeStudioDirectSourceSite(scope,client,env),
+  /native_studio_binding_unavailable/);
+ bindingUnavailable=false;
  await assert.rejects(configuredNativeStudioDirectSourceSite(scope,client,
   {...env,GNR8_NATIVE_STUDIO_PREPARE_ENABLED:'0'}),/native_studio_disabled/);
  const f=fixture();

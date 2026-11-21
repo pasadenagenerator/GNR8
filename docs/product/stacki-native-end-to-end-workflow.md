@@ -276,6 +276,11 @@ from central configuration, and fixes the source branch to the retained
 persisting source bytes. With the bootstrap flag off, the existing ready-Studio
 binding remains the source. With the flag on, a valid existing ready binding
 still takes precedence; a stale binding fails rather than switching targets.
+An unavailable binding read also fails closed; the receipt migration must be
+present before enabling this path in a hosted environment.
+The existing `prepare-source` request and its status read now use this same
+bootstrap gate, so they can reach the already registered background preparation
+job for a new site. The legacy release request still requires a ready binding.
 This prepares an immutable package only; a Stacki
 launch request still cannot serve as the installer.
 The central values are `GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID`,
