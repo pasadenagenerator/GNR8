@@ -88,3 +88,51 @@ export async function installNativeStudioSecrets(
     throw Error('native_studio_secret_readback_failed');
   return { worker, secretNames: names, versionId, previousVersionId };
 }
+
+/** Read-only binding inventory for the version captured before secret upload.
+ * Complete bindings make it a recovery candidate, not a proven rollback or
+ * working native Publish. Secret values are never returned by this endpoint.
+ */
+export async function inspectNativeStudioRecoveryBindings(
+  scope: NativeStudioScope,
+  accountId: string,
+  setupToken: string,
+  previousVersionId: string | null,
+  transport: typeof fetch = fetch,
+) {
+  if (!scope || [scope.agencyId, scope.clientId, scope.siteId]
+      .some(value => typeof value !== 'string' || !uuid.test(value)) ||
+      !/^[a-f0-9]{32}$/.test(accountId) ||
+      typeof setupToken !== 'string' || setupToken.length < 16 || /\s/.test(setupToken) ||
+      (previousVersionId !== null &&
+        (typeof previousVersionId !== 'string' || !uuid.test(previousVersionId))))
+    throw Error('native_studio_recovery_inspection_invalid');
+  const worker = `gnr8-${scope.siteId}-studio`;
+  if (previousVersionId === null)
+    return { state: 'no-reference' as const, worker };
+  const response = await transport(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}` +
+      `/workers/scripts/${worker}/versions/${previousVersionId}`,
+    { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: { authorization: `Bearer ${setupToken}`, accept: 'application/json' } },
+  );
+  if (response.status === 404)
+    return { state: 'version-missing' as const, worker, versionId: previousVersionId };
+  if (!response.ok) throw Error('native_studio_recovery_inspection_failed');
+  let body: unknown;
+  try { body = await response.json(); }
+  catch { throw Error('native_studio_recovery_inspection_failed'); }
+  if (!object(body) || body.success !== true || !object(body.result) ||
+      body.result.id !== previousVersionId || !object(body.result.resources) ||
+      !Array.isArray(body.result.resources.bindings))
+    throw Error('native_studio_recovery_inspection_failed');
+  const bindings: unknown[] = body.result.resources.bindings;
+  const missingSecretNames = names.filter(name => {
+    const matches = bindings.filter(item => object(item) && item.name === name);
+    return matches.length !== 1 || !object(matches[0]) ||
+      matches[0].type !== 'secret_text';
+  });
+  return { state: missingSecretNames.length === 0
+    ? 'complete-bindings' as const : 'incomplete-bindings' as const,
+    worker, versionId: previousVersionId, missingSecretNames };
+}

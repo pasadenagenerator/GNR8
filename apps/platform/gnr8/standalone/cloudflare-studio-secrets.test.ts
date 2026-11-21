@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { installNativeStudioSecrets } from './cloudflare-studio-secrets';
+import { inspectNativeStudioRecoveryBindings,
+  installNativeStudioSecrets } from './cloudflare-studio-secrets';
 import type { NativeStudioRuntimeSecrets } from './native-studio-runtime-secrets';
 
 const scope = {
@@ -108,4 +109,66 @@ test('invalid identities fail before a provider request', async () => {
   await assert.rejects(installNativeStudioSecrets({ ...scope, agencyId: '../foreign' },
     account, token, secrets, fetcher), /native_studio_secret_install_invalid/);
   assert.equal(called, false);
+});
+
+test('read-only inspection identifies a complete previous version without exposing values', async () => {
+  let calls = 0;
+  const fetcher = (async (url: string, init: RequestInit) => {
+    calls++;
+    assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${account}` +
+      `/workers/scripts/gnr8-${scope.siteId}-studio/versions/${previousVersionId}`);
+    assert.equal(init.method, 'GET');
+    assert.equal(new Headers(init.headers).get('authorization'), `Bearer ${token}`);
+    return Response.json({ success: true, result: { id: previousVersionId,
+      resources: { bindings: metadata.map(binding =>
+        ({ ...binding, text: 'provider-private-value' })) } } });
+  }) as typeof fetch;
+  const result = await inspectNativeStudioRecoveryBindings(scope, account,
+    token, previousVersionId, fetcher);
+  assert.equal(result.state, 'complete-bindings');
+  assert.deepEqual(result.missingSecretNames, []);
+  assert.equal(calls, 1);
+  assert(!JSON.stringify(result).includes('provider-private-value'));
+});
+
+test('inspection reports missing or duplicate bindings without calling it a recovery proof', async () => {
+  const fetcher = (async () => Response.json({ success: true,
+    result: { id: previousVersionId, resources: { bindings: [
+      ...metadata.filter(binding => binding.name !== 'SESSION_SECRET'),
+      metadata[0],
+    ] } } })) as typeof fetch;
+  const result = await inspectNativeStudioRecoveryBindings(scope, account,
+    token, previousVersionId, fetcher);
+  assert.equal(result.state, 'incomplete-bindings');
+  assert.deepEqual(result.missingSecretNames, ['AI_API_KEY', 'SESSION_SECRET']);
+});
+
+test('missing recovery references and deleted versions are explicit', async () => {
+  let calls = 0;
+  const fetcher = (async () => { calls++; return new Response(null, { status: 404 }); }) as typeof fetch;
+  const noReference = await inspectNativeStudioRecoveryBindings(scope, account,
+    token, null, fetcher);
+  assert.equal(noReference.state, 'no-reference');
+  assert.equal(calls, 0);
+  const missing = await inspectNativeStudioRecoveryBindings(scope, account,
+    token, previousVersionId, fetcher);
+  assert.equal(missing.state, 'version-missing');
+  assert.equal(calls, 1);
+});
+
+test('inspection fails closed on wrong version identity and hides provider errors', async () => {
+  let calls = 0;
+  const fetcher = (async () => {
+    calls++;
+    return Response.json({ success: true, result: { id: versionId,
+      resources: { bindings: metadata }, value: 'provider-private-value' } });
+  }) as typeof fetch;
+  await assert.rejects(inspectNativeStudioRecoveryBindings(scope, account,
+    token, previousVersionId, fetcher),
+  error => error instanceof Error &&
+    error.message === 'native_studio_recovery_inspection_failed');
+  await assert.rejects(inspectNativeStudioRecoveryBindings(
+    { ...scope, siteId: '../foreign' }, account, token,
+    previousVersionId, fetcher), /native_studio_recovery_inspection_invalid/);
+  assert.equal(calls, 1);
 });

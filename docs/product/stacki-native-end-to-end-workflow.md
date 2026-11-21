@@ -474,7 +474,12 @@ cannot trigger another patch on retry. A successful active-version readback is
 saved as a separate receipt with the pre-patch active Studio version ID;
 repeated calls reuse it. Earlier receipts without that ID remain readable and
 report no recovery reference. The captured ID is not proof that the older
-version has all required bindings or can publish. Changes to the shared
+version has all required bindings or can publish. A local read-only inspector
+can now fetch that exact previous version and report missing or duplicate
+secret bindings, a missing version, or an earlier receipt with no reference.
+Complete bindings are only a recovery candidate: the old secret value, native
+Publish and rollback eligibility still require hosted verification. The inspector
+has only mocked local tests and is not wired to hosted provisioning. Changes to the shared
 secrets conflict with that first-install intent and need a separate rotation
 flow. A pending intent still needs exact-version reconciliation before the
 hosted job can continue without review.
