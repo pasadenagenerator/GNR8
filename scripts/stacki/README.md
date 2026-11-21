@@ -52,7 +52,11 @@ outside the site checkout. Local or symlinked site executables are refused.
 Builds and dry run receive no Cloudflare key or runtime secrets. A separate
 trusted deployment callback must use the exact prepared source and provide all
 six secrets to the first `wrangler deploy` in an isolated environment; the
-default command runner cannot deploy. Any ambiguous
+default command runner cannot deploy. `trusted-studio-deploy.mjs` implements
+the callback for a dedicated deployment job: it accepts only the exact Worker
+command, puts the six secrets in a private temporary file for Wrangler, strips
+ambient environment variables, sanitizes provider errors and removes the file.
+It must never run in the build job or alongside site-owned processes. Any ambiguous
 result requires active-version tag readback and review, never an automatic second
 deploy. The tag binds the intended source, commit and keyed secret identity to
 the deploy attempt; it does not prove deployed bytes. This

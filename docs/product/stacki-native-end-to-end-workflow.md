@@ -311,6 +311,15 @@ and inspector tests only. A trusted disposable Docker runner must still provide
 the scoped inspector, protected credential and private store and call it; no
 hosted job invokes it, and no provider command has been run by this path.
 
+The `runTrustedStudioDeploy` callback now implements the exact deploy command
+for a dedicated job. It checks that the executable lives outside the site
+checkout, accepts only the intended config and version tag, writes the six
+secrets to a private temporary file for Wrangler, strips ambient environment
+variables, sanitizes failures and removes the file. It does not itself isolate
+the host: the build job must end before a separate deploy job receives secrets,
+and that job must mount the verified checkout read-only. No job currently calls
+this callback in a hosted environment.
+
 A read-only first-deployment inspector now checks the reserved Worker's immutable
 ID and disabled public subdomains, its [actively serving deployment](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/),
 the active version's `PreviewContainer` export and exact
