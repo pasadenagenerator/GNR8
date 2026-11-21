@@ -36,7 +36,7 @@ export async function GET(request:Request,context:{params:Promise<{clientId:stri
   const url=new URL(request.url);
   const scope={...await context.params,agencyId:url.searchParams.get('agencyId')??''};
   await requirePublicOutputSite(scope);
-  configuredNativeStudioSite(scope.siteId);
+  await configuredNativeStudioSite(scope);
   const client=getSupabaseServiceRoleClient();if(!client)throw Error('native_studio_store_unavailable');
   let requestId=url.searchParams.get('requestId')??'';
   if(!requestId){
@@ -67,7 +67,7 @@ export async function POST(request:Request,context:{params:Promise<{clientId:str
    throw Error('native_studio_request_invalid');
   const scope={...await context.params,agencyId:body.agencyId};
   const actor=await requirePublicOutputSite(scope);
-  configuredNativeStudioSite(scope.siteId);
+  await configuredNativeStudioSite(scope);
   const client=getSupabaseServiceRoleClient();if(!client)throw Error('native_studio_store_unavailable');
   if(body.action==='prepare-source'){
    if(Object.keys(body).sort().join()!=='action,agencyId,artifactBundleSha256,artifactId,siteVersionId'||

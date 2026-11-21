@@ -161,7 +161,7 @@ test('confirmed export bytes and repository identity yield repeatable native Stu
   assert.equal(one.files.some(file => file.path === 'vercel.json'), false);
   assert(one.files.some(file => file.path === 'README.native-studio.md'));
   assert.deepEqual(one.files.find(file => file.path === 'source-manifest.json')?.body, files.find(file => file.path === 'source-manifest.json')?.body);
-  assert(one.files.some(file => file.path === 'cloudflare/site.wrangler.json'));
+  assert(one.files.some(file => file.path === 'wrangler.json'));
   assert.deepEqual(one.files.find(file => file.path === 'src/pages/index.astro')?.body, files.find(file => file.path === 'src/pages/index.astro')?.body);
   assert.equal(one.files.some(file => file.path === '.gnr8/native-studio.json'), false);
   await assert.rejects(prepareFromConfirmedExport({ release, files: files.map(file => file.path === 'src/pages/index.astro' ? { ...file, body: Buffer.from('changed') } : file), releaseFile, site }), /mismatch/);

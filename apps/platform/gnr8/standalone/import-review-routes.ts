@@ -62,7 +62,7 @@ export function createImportReviewRoutes(deps=importReviewDependencies){
     runtimeSiteId:capture.runtimeSiteId,raw:raw.data,
     provenance:previous as Parameters<typeof readSelectedImportClosure>[0]['provenance'],selectedRoutes:content.scope.outputPaths});
    let nativeStudioAvailable=false;
-   try{configuredNativeStudioSite(scope.siteId);nativeStudioAvailable=true;}
+   try{await configuredNativeStudioSite(scope);nativeStudioAvailable=true;}
    catch{nativeStudioAvailable=false;}
    const input={selection,paths:content.scope.outputPaths,unsupported:content.scope.unsupportedCapabilities,captureVersionId:capture.siteVersionId,captureArtifactId:raw.data.id,
     provenance:previous,updatedAt:version.data.updated_at,evidence:{build,content,raw:raw.data,captureEvidence,closure},closure,nativeStudioAvailable};

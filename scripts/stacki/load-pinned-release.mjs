@@ -17,8 +17,23 @@ export async function loadPinnedRelease({ directory, transport = fetch }) {
   await mkdir(directory, { recursive: true });
   const path = join(directory, `stacki-studio-${STACKI_RELEASE_PIN.version}-${STACKI_RELEASE_PIN.sha256}.json`);
   if (await verified(path)) return path;
-  const response = await transport(STACKI_RELEASE_PIN.url, { redirect: 'error', signal: AbortSignal.timeout(60_000) });
-  if (!response.ok || !response.body || response.url && response.url !== STACKI_RELEASE_PIN.url) fail();
+  // GitHub release assets redirect to its signed asset host. Check each hop
+  // ourselves so neither a redirect nor a transport can change the trust boundary.
+  const signal = AbortSignal.timeout(60_000);
+  let url = STACKI_RELEASE_PIN.url;
+  let response;
+  for (let redirects = 0; ; redirects++) {
+    response = await transport(url, { redirect: 'manual', signal });
+    if (response.url && response.url !== url) fail();
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    await response.body?.cancel();
+    if (redirects >= 3 || !response.headers.get('location')) fail();
+    const next = new URL(response.headers.get('location'), url);
+    if (next.protocol !== 'https:' || next.username || next.password || next.port || next.hash ||
+        next.hostname !== 'release-assets.githubusercontent.com') fail();
+    url = next.href;
+  }
+  if (!response.ok || !response.body) fail();
   const reader = response.body.getReader();
   const chunks = []; let total = 0;
   try {
