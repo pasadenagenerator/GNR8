@@ -553,6 +553,39 @@ that point there are two scoped tokens per existing site; this is a temporary
 migration state, not a universal steady state. No hosted token has been issued
 by the v2 path, and the existing Worker secrets remain unchanged. Do not repeat
 the withdrawn per-site user token handoff.
+
+The one-time cutover for each existing site must use its verified site ID,
+account ID, public Worker ID, old token ID, and managed v2 token ID. Before
+replacing the Studio secret, preserve the ID of an existing Studio version
+whose native Publish and required bindings have been verified with the old
+token. Confirm that this version remains eligible for rollback; a version
+with missing shared secrets or broken publishing is not a recovery point.
+The old token value cannot be read back, so merely re-enabling that token
+after its Studio secret has been replaced cannot restore publishing. If no
+verified recovery version exists, stop the cutover until one can be prepared.
+
+Confirm that the new token is active with the exact two policies, its sealed
+value verifies as that token, and the Studio secret-install receipt names the
+currently active Studio version. Record the old token's complete definition
+and status for recovery without exposing either token value. Disable only the
+old token and read back its disabled status. While it is disabled, perform
+native Publish from the unchanged Stacki Studio using a distinguishable,
+reviewed revision; verify that revision reached the intended public Worker
+and working domain. Publish while the old token remains active is not cutover
+evidence. On failure or ambiguous publication, stop, restore the verified
+older Studio version, re-enable the old token with its exact recorded
+definition, and verify native Publish again before another attempt. Do not
+delete either token or overwrite the managed vault value as an automatic
+retry. After successful cutover, check native Push to GitHub separately, then
+retire the disabled old token only in a reviewed cleanup. The recovery version
+and status changes need a tested hosted implementation before this can run;
+none exists yet. Future sites begin with a single managed token and do not
+need this migration cutover.
+
+Cloudflare API references: [update account token](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/update/),
+[verify account token](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/verify/),
+[delete account token](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/delete/),
+[Worker version rollback](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/).
 The legacy release preparation requires a ready Studio binding; the newer
 direct source path can use a guarded bootstrap target before readiness.
 Credential installation cannot be inserted into these preparation routes:
