@@ -203,6 +203,20 @@ authenticated Studio path to work before recording the ready binding. The
 first deployment must use a provisioner-held credential;
 no site owner should create or paste a key per site.
 
+Cloudflare's current [Create Worker API](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/methods/create/)
+provides a safer first resource step than uploading placeholder code: it can
+reserve the named `-studio` and `-site` Workers with both `workers.dev` and
+Preview URLs disabled, without a code deployment. The local reservation
+adapter now checks the current scoped site and bound repository, creates each
+Worker at most once under a durable per-site intent, and reads back its
+immutable ID and disabled subdomain settings. It never overwrites an existing
+Worker. Cloudflare's [first-version rule](https://developers.cloudflare.com/workers/versions-and-deployments/deployment-management/)
+still requires the subsequent real `wrangler deploy`; `versions upload` cannot
+be the first code upload. This adapter has mocked tests only and has not
+created a hosted Worker. This Cloudflare endpoint is marked Beta, so hosted
+readback must be verified before enabling automatic creation. The Container
+runner, routes and readiness check remain separate steps.
+
 After that first installation, the public site Worker may be connected to
 GitHub Builds with `versions upload`. Keep the Studio Worker build trigger
 disabled as on Logatčan unless a separately designed update path can deploy
