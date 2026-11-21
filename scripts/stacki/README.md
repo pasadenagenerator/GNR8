@@ -58,6 +58,8 @@ command, independently verifies the approved source and commit against the
 checkout and retained package, and recomputes the target-bound version tag.
 It requires the matching durable first-deploy intent and atomically claims a
 single attempt before invoking Wrangler; a second call cannot repeat the deploy.
+The existing per-site `SupabasePublicationStore` supplies the durable read/claim
+contract when a hosted runner is connected.
 It puts the six secrets in a private temporary file for Wrangler, strips
 ambient environment variables, sanitizes provider errors and removes the file.
 It must never run in the build job or alongside site-owned processes. Any ambiguous

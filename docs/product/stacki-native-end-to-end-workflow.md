@@ -317,6 +317,9 @@ checkout, independently re-reads the retained source and exact checkout commit,
 and recomputes the target-bound version tag before any provider invocation.
 It also requires the matching durable first-deploy intent and atomically claims
 the only attempt, so a repeated callback cannot issue another deploy command.
+The existing private, per-site `SupabasePublicationStore` provides this
+append-only read/claim contract; a local SDK test confirms that fresh store
+instances see the same intent and only one concurrent attempt claim succeeds.
 It accepts only the intended config and tag, writes the six
 secrets to a private temporary file for Wrangler, strips ambient environment
 variables, sanitizes failures and removes the file. It does not itself isolate
