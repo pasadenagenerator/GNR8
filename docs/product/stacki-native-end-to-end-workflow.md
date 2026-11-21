@@ -82,7 +82,7 @@ assets; the earlier two-page Lumos proposal was not selected as its baseline.
 - Browser inspection opened ViroiDoc in native 1.4.8, displayed the retained page,
   Lumos component groups, Saved status, Push to GitHub and Deploy to hosting.
 - AI's original panel opens but reports no provider connected. No paid AI call,
-  Cloudflare deployment, AI provider write, or DNS change has occurred.
+  native site publication, AI provider write, or DNS change has occurred.
 - The GNR8 Platform change is pushed as `codex/stacki-same-host-replacement`
   and held in draft pull request #16. Ladja Žaba and Logatčan's native source is
   pushed to separate `codex/native-stacki` branches in their private repositories.
@@ -100,6 +100,16 @@ assets; the earlier two-page Lumos proposal was not selected as its baseline.
   failed before installation; its corrected branch build succeeded. Both new
   public site Workers currently contain only Cloudflare's placeholder code and
   have no working-host binding. None of the two domains has migrated.
+- Read-only browser check on 2026-11-21: `/studio` on the Ladja Žaba working
+  host still renders the public website; Logatčan returns `403` from runtime
+  governance. CHS and ViroiDoc both render native Stacki's GitHub sign-in page
+  on their working hosts. The separate Ladja Žaba and Logatčan Studio Workers
+  are deployed with `ASSETS`, `DRAFTS`, and `PREVIEW` bindings and custom
+  `preview.<working-host>` domains. Their direct preview `/studio` paths show
+  a session-expired response, which does not establish successful login or
+  Container health. Both new public site Workers still have zero bindings,
+  no custom domain, and no route; they cannot serve the required same-host
+  `/studio` gateway. No provider setting or domain was changed in this check.
 - The user chose all current and future account repositories for the separate
   Cloudflare Workers and Pages GitHub integration. That access is installed and
   verified. GitHub-triggered builds for all four Studio Workers are disabled
