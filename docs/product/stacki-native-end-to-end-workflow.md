@@ -543,11 +543,16 @@ central vault has been verified. The managed v2 token path deliberately does
 not adopt or roll those manual tokens. Its local mocked-provider test confirms
 that the old token is untouched while the new value is sealed. A hosted
 provisioner must install the managed value, prove the exact active Worker
-version and native Publish, and only then retire the old token through a
-separate reviewed cleanup. Until that point there are two scoped tokens per
-existing site; this is a temporary migration state, not a universal steady
-state. No hosted token has been issued by the v2 path, and the existing Worker
-secrets remain unchanged. Do not repeat the withdrawn per-site user token handoff.
+version and native Publish. A composed local test now exercises managed token
+issuance, sealed storage, Studio secret upload and active-version name/type
+readback while the legacy token remains untouched. This cannot prove the
+Worker secret's value: native Publish can still succeed through the old token
+while both are active. Retiring the old token needs a separately reviewed
+hosted cutover and recovery check; no retirement action is implemented. Until
+that point there are two scoped tokens per existing site; this is a temporary
+migration state, not a universal steady state. No hosted token has been issued
+by the v2 path, and the existing Worker secrets remain unchanged. Do not repeat
+the withdrawn per-site user token handoff.
 The legacy release preparation requires a ready Studio binding; the newer
 direct source path can use a guarded bootstrap target before readiness.
 Credential installation cannot be inserted into these preparation routes:

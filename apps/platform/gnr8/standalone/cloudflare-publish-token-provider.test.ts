@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { CloudflarePublishTokenProvider } from './cloudflare-publish-token-provider';
 import { ensureNativeStudioPublishToken } from './native-studio-publish-token-issuer';
+import { installNativeStudioRuntimeSecrets } from './native-studio-secret-installation';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -18,6 +20,10 @@ const name = `gnr8-${scope.siteId}-native-publish-v2`;
 const worker = `gnr8-${scope.siteId}-site`;
 const routesId = '28f4b596e7d643029c524985477ae49a';
 const editorId = '7e79ec33834341f28dd431ab73884400';
+const oldVersion = '44444444-4444-4444-8444-444444444444';
+const newVersion = '55555555-5555-4555-8555-555555555555';
+const secretNames = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
+  'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 
 function fixture(extraPolicy = false, legacyPresent = false) {
   const saved = new Map<string, unknown>();
@@ -31,6 +37,8 @@ function fixture(extraPolicy = false, legacyPresent = false) {
   };
   let policies: any[] | null = null;
   let creates = 0;
+  let patches = 0;
+  let installedToken = '';
   const requests: { path: string; method: string; authorization: string }[] = [];
   const transport = (async (url: string, init: RequestInit) => {
     const path = new URL(url).pathname + new URL(url).search;
@@ -79,9 +87,26 @@ function fixture(extraPolicy = false, legacyPresent = false) {
       assert.equal(authorization, `Bearer ${value}`);
       return Response.json({ success: true, result: { id: tokenId, status: 'active' } });
     }
+    const studioPath = `/client/v4/accounts/${accountId}/workers/scripts/gnr8-${scope.siteId}-studio`;
+    if (path === `${studioPath}/deployments?per_page=1`) {
+      return Response.json({ success: true, result: { deployments: [{ versions: [{
+        version_id: patches ? newVersion : oldVersion, percentage: 100 }] }] } });
+    }
+    if (path === `${studioPath}/secrets-bulk` && method === 'PATCH') {
+      const secrets = JSON.parse(String(init.body)).secrets;
+      assert.deepEqual(Object.keys(secrets).sort(), secretNames);
+      installedToken = secrets.PUBLISH_CLOUDFLARE_API_TOKEN.text;
+      patches++;
+      return Response.json({ success: true, result: {} });
+    }
+    if (path === `${studioPath}/versions/${newVersion}`) {
+      return Response.json({ success: true, result: { id: newVersion,
+        resources: { bindings: secretNames.map(name => ({ name, type: 'secret_text' })) } } });
+    }
     throw Error('unexpected mocked Cloudflare request');
   }) as typeof fetch;
   return { store, saved, requests, creates: () => creates,
+    patches: () => patches, installedToken: () => installedToken, transport,
     provider: new CloudflarePublishTokenProvider(accountId, manager, workerReader, transport) };
 }
 
@@ -114,6 +139,33 @@ test('existing manual token remains untouched while a separate managed token is 
     f.store, 'f'.repeat(64), f.provider, () => 1000);
   assert.equal(issued.tokenId, tokenId);
   assert.equal(f.creates(), 1);
+  assert(f.requests.every(request => request.method !== 'PUT' &&
+    request.method !== 'DELETE' && !request.path.endsWith(`/${legacyTokenId}`)));
+  assert(!JSON.stringify([...f.saved.values()]).includes(value));
+});
+
+test('existing manual token survives managed issuance and active Studio secret installation', async () => {
+  const f = fixture(false, true);
+  const client = { from(table: string) {
+    const query = { eq() { return query; }, async maybeSingle() {
+      return { error: null, data: table === 'sites'
+        ? { domain: 'site.app.pasadenagenerator.com' }
+        : { github_owner: 'pasadenagenerator', repository: 'gnr8-site',
+            repository_id: 123, binding_state: 'bound' } };
+    } };
+    return { select: () => query };
+  } } as unknown as SupabaseClient;
+  const shared = { GITHUB_PRIVATE_KEY:
+      '-----BEGIN RSA PRIVATE KEY-----\nexample\n-----END RSA PRIVATE KEY-----\n',
+    GITHUB_CLIENT_SECRET: 'github-client-secret-long-enough',
+    AI_API_KEY: 'openai-api-key-long-enough' };
+  const installed = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), shared, f.provider, 'cfat_' + 'S'.repeat(45),
+    client, f.transport);
+  assert.equal(installed.versionId, newVersion);
+  assert.equal(f.installedToken(), value);
+  assert.equal(f.creates(), 1);
+  assert.equal(f.patches(), 1);
   assert(f.requests.every(request => request.method !== 'PUT' &&
     request.method !== 'DELETE' && !request.path.endsWith(`/${legacyTokenId}`)));
   assert(!JSON.stringify([...f.saved.values()]).includes(value));
