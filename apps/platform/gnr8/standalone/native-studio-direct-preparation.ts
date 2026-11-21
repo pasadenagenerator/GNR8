@@ -13,12 +13,27 @@ import { fingerprint, parsePublicationSelection, publicationSelectionForArtifact
 import { requireCurrentConfirmedSelection } from './current-confirmed-import';
 import { SupabasePublicationStore } from './publication-store';
 import { configuredNativeStudioSite } from './native-studio-preparation';
+import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
+import { readNativeStudioBindingForScope } from './native-studio-binding-store';
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type Request={scope:Scope;input:PublicationSelection;actor:string;requestId?:string};
+export async function configuredNativeStudioDirectSourceSite(scope:Scope,client:SupabaseClient,
+ env:Record<string,string|undefined>=process.env){
+ if(env.GNR8_NATIVE_STUDIO_PREPARE_ENABLED!=='1')throw Error('native_studio_disabled');
+ if(env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED!=='1')return configuredNativeStudioSite(scope);
+ try { return await readNativeStudioBindingForScope(scope,client,env.GNR8_NATIVE_STUDIO_SITES); }
+ catch(error){
+  if(!(error instanceof Error)||
+    !['native_studio_binding_missing','native_studio_binding_unavailable'].includes(error.message))
+   throw error;
+ }
+ return configuredNativeStudioBootstrapSite(scope,client,env);
+}
 const defaults={
- client:getSupabaseServiceRoleClient,actor:requireAgencyBackgroundActor,site:configuredNativeStudioSite,
+ client:getSupabaseServiceRoleClient,actor:requireAgencyBackgroundActor,
+ site:configuredNativeStudioDirectSourceSite,
  ownership:async(siteVersionId:string)=>new SupabaseAstroCandidateOwnershipResolver().resolve({siteVersionId}),
  artifactVersion:async(client:SupabaseClient,id:string)=>{
   const rows=await client.from('gnr8_runtime_artifacts').select('site_version_id').eq('id',id).limit(2);
@@ -46,7 +61,7 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
   throw Error('native_studio_selection_mismatch');
  const client=deps.client();if(!client)throw Error('native_studio_store_unavailable');
  await deps.actor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});
- const site=await deps.site(scope);
+ const site=await deps.site(scope,client);
  const authorize=async(id:string)=>{
   const owner=await deps.ownership(id);
   if(owner.agencyId!==scope.agencyId||owner.organizationId!==scope.clientId||owner.ownershipSiteId!==scope.siteId)
@@ -104,6 +119,8 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
  if(request.requestId!==undefined&&request.requestId!==requestId)throw Error('native_studio_request_stale');
  await authorize(artifactVersionId);
  await deps.actor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});
+ const latestSite=await deps.site(scope,client);
+ if(fingerprint(latestSite)!==fingerprint(site))throw Error('native_studio_site_stale');
  const store=deps.store(client,scope);
  const result=await deps.persist({store,exported,selection:input.selection,
   confirmationSha256:current.confirmationSha256,site,releaseFile:undefined});

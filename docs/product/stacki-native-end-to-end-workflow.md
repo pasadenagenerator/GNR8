@@ -267,8 +267,23 @@ credentials, invocation and health checks are still missing.
 
 The exact automatic handoff point is the scoped site-import route: it already
 reserves and verifies the private GitHub repository before starting capture.
-The native source-preparation path deliberately requires a ready Studio binding,
-so neither that path nor a Stacki launch request can serve as the installer.
+The direct native source-preparation path can now use a separate new-site
+bootstrap binding when `GNR8_NATIVE_STUDIO_PREPARE_ENABLED=1` and
+`GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED=1`. It re-reads the current scoped domain
+and bound repository, uses the shared Cloudflare account and GitHub App IDs
+from central configuration, and fixes the source branch to the retained
+`codex/native-stacki` convention. It rechecks the target after export before
+persisting source bytes. With the bootstrap flag off, the existing ready-Studio
+binding remains the source. With the flag on, a valid existing ready binding
+still takes precedence; a stale binding fails rather than switching targets.
+This prepares an immutable package only; a Stacki
+launch request still cannot serve as the installer.
+The central values are `GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID`,
+`GNR8_NATIVE_STUDIO_GITHUB_APP_ID`,
+`GNR8_NATIVE_STUDIO_GITHUB_INSTALLATION_ID`, and
+`GNR8_NATIVE_STUDIO_GITHUB_CLIENT_ID`. They are not copied from the event or
+entered per site. The later trusted Git checkout must still prove that the
+exact repository and branch contain the approved source commit.
 After the import has persisted the site and its bound repository, GNR8 must
 enqueue one background bootstrap for that scope. The job must re-read the
 current domain and repository from the authoritative tables; event payloads

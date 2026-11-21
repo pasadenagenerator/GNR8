@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runDirectNativeStudioPreparation } from './native-studio-direct-preparation';
+import { configuredNativeStudioDirectSourceSite,
+  runDirectNativeStudioPreparation } from './native-studio-direct-preparation';
 import { publicationSelectionForArtifact } from './publication-contract';
 import { exportStandaloneProject } from './standalone-export';
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
@@ -55,6 +56,60 @@ test('changed confirmation and foreign ownership stop before a source receipt',a
  const foreign=fixture();foreign.deny();
  await assert.rejects(runDirectNativeStudioPreparation({scope,input:foreign.input,actor:id(6)},foreign.deps as any),/ownership_mismatch/);
  assert.deepEqual(foreign.calls,['actor']);
+});
+test('a changed target during export stops before saving native source',async()=>{
+ const f=fixture();
+ let reads=0;
+ f.deps.site=()=>({siteId:scope.siteId,repository:++reads===1?'example/site':'example/other'});
+ await assert.rejects(runDirectNativeStudioPreparation({scope,input:f.input,actor:id(6)},f.deps as any),
+  /native_studio_site_stale/);
+ assert.equal(f.calls.includes('persist'),false);
+});
+
+test('new-site direct preparation is gated and resolves a scoped bootstrap site',async()=>{
+ let ready=false;
+ const client={from(name:string){const filters:Record<string,string>={};
+  const query={eq(key:string,value:string){filters[key]=value;return query;},
+   async maybeSingle(){assert.equal(filters.site_id??filters.id,scope.siteId);
+    assert.equal(filters.agency_id,scope.agencyId);assert.equal(filters.client_id??filters.org_id,scope.clientId);
+    return {error:null,data:name==='gnr8_native_studio_bindings'?(ready?{
+     site_id:scope.siteId,agency_id:scope.agencyId,client_id:scope.clientId,
+     studio_origin:'https://site.app.pasadenagenerator.com',
+     repository:'pasadenagenerator/gnr8-site-3333',repository_id:456,
+     branch:'retained/branch',cloudflare_account_id:'a'.repeat(32),
+     github_app_id:'456',github_installation_id:'789',github_client_id:'Iv1.example',
+     studio_worker:`gnr8-${scope.siteId}-studio`,site_worker:`gnr8-${scope.siteId}-site`,
+     draft_bucket:`gnr8-${scope.siteId}-drafts`,verified_at:new Date().toISOString(),
+    }:null)
+     :name==='sites'?{domain:'site.app.pasadenagenerator.com'}:{
+     github_owner:'pasadenagenerator',github_owner_id:123,github_owner_kind:'User',
+     repository:'gnr8-site-3333',repository_id:456,binding_state:'bound'}};}};
+  return {select:()=>query};}} as any;
+ const env={GNR8_NATIVE_STUDIO_PREPARE_ENABLED:'1',GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED:'1',
+  GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),
+  GNR8_NATIVE_STUDIO_GITHUB_APP_ID:'456',
+  GNR8_NATIVE_STUDIO_GITHUB_INSTALLATION_ID:'789',
+  GNR8_NATIVE_STUDIO_GITHUB_CLIENT_ID:'Iv1.example'};
+ assert.equal((await configuredNativeStudioDirectSourceSite(scope,client,env)).branch,
+  'codex/native-stacki');
+ ready=true;
+ const existing=await configuredNativeStudioDirectSourceSite(scope,client,
+  {...env,GNR8_NATIVE_STUDIO_GITHUB_APP_ID:undefined});
+ assert.equal(existing.branch,'retained/branch');
+ ready=false;
+ await assert.rejects(configuredNativeStudioDirectSourceSite(scope,client,
+  {...env,GNR8_NATIVE_STUDIO_PREPARE_ENABLED:'0'}),/native_studio_disabled/);
+ const f=fixture();
+ (f.deps as any).client=()=>client;
+ (f.deps as any).site=(target:typeof scope)=>configuredNativeStudioDirectSourceSite(target,client,env);
+ const persist=f.deps.persist;
+ (f.deps as any).persist=async(value:any)=>{
+  assert.equal(value.site.repository,'pasadenagenerator/gnr8-site-3333');
+  assert.equal(value.site.branch,'codex/native-stacki');
+  return persist(value);
+ };
+ assert.equal((await runDirectNativeStudioPreparation({scope,input:f.input,actor:id(6)},
+  f.deps as any)).sourceId,'d'.repeat(64));
 });
 test('direct Worker path writes and reuses exact Studio bytes from the selected Astro source',
  {skip:!process.env.STACKI_RELEASE_FILE&&'Set STACKI_RELEASE_FILE'},async()=>{
