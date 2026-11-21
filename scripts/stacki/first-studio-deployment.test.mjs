@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { runFirstStudioDeployment,
   runIsolatedStudioCommand } from './first-studio-deployment.mjs';
@@ -25,9 +28,10 @@ function fixture() {
   const store = { read: async key => saved.get(key) ?? null,
     claim: async (key, value) => { if (saved.has(key)) return false;
       saved.set(key, value); return true; } };
-  const input = { project: '/private/tmp/gnr8-test-checkout', store, sourceId,
+  const input = { project: process.cwd(), store, sourceId,
     site, scope, accountId: site.accountId, workerId, token };
   const deps = {
+    trustedWrangler: process.execPath,
     verifySource: async ({ sourceId: received, site: target }) => {
       assert.equal(received, sourceId);
       assert.equal(target, site);
@@ -57,7 +61,7 @@ test('builds without deploy credential, claims intent, deploys once and reconcil
   assert.deepEqual(await runFirstStudioDeployment(f.input, f.deps), {
     state: 'reconcile-required', commit, observation: 'verified-source-control-plane',
   });
-  assert.deepEqual(f.commands.map(command => [command.file.endsWith('/wrangler')
+  assert.deepEqual(f.commands.map(command => [command.file === process.execPath
     ? 'wrangler' : command.file, command.args]), [
     ['npm', ['ci']], ['npm', ['ci']], ['npm', ['run', 'build']],
     ['npm', ['run', 'build']],
@@ -120,6 +124,27 @@ test('a build that changes the approved checkout stops before a deploy intent', 
   await assert.rejects(runFirstStudioDeployment(f.input, f.deps), /source_unverified/);
   assert.equal(f.commands.filter(command => command.token).length, 0);
   assert.equal(f.saved.size, 0);
+});
+
+test('rejects Wrangler inside the site checkout, including an external symlink to it', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'gnr8-untrusted-wrangler-'));
+  try {
+    const project = join(root, 'site');
+    const local = join(project, 'studio', 'node_modules', '.bin', 'wrangler');
+    const alias = join(root, 'outside-wrangler');
+    await mkdir(join(project, 'studio', 'node_modules', '.bin'), { recursive: true });
+    await writeFile(local, 'untrusted');
+    await symlink(local, alias);
+    for (const trustedWrangler of [local, alias]) {
+      const f = fixture();
+      f.input.project = project;
+      f.deps.trustedWrangler = trustedWrangler;
+      await assert.rejects(runFirstStudioDeployment(f.input, f.deps),
+        /untrusted_wrangler/);
+      assert.equal(f.commands.length, 0);
+      assert.equal(f.saved.size, 0);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('real subprocess boundary excludes ambient credentials', async () => {

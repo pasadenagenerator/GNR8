@@ -4,9 +4,9 @@
  */
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { verifyCommittedStudioSource } from './prepare-git-branch.mjs';
 
@@ -42,12 +42,18 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
       typeof site.studioOrigin !== 'string' || !HEX64.test(sourceId) ||
       !HEX32.test(accountId) || !HEX32.test(workerId) || !TOKEN.test(token) ||
       typeof deps.inspect !== 'function' ||
-      typeof deps.verifySource !== 'function' || typeof deps.runCommand !== 'function')
+      typeof deps.verifySource !== 'function' || typeof deps.runCommand !== 'function' ||
+      typeof deps.trustedWrangler !== 'string' || !isAbsolute(deps.trustedWrangler))
     throw Error('native_studio_first_deploy_input_invalid');
   const domain = new URL(site.studioOrigin).hostname;
   if (`https://${domain}` !== site.studioOrigin)
     throw Error('native_studio_first_deploy_input_invalid');
   const checkout = resolve(project);
+  const canonicalCheckout = await realpath(checkout);
+  const trustedWrangler = await realpath(deps.trustedWrangler);
+  if (trustedWrangler === canonicalCheckout ||
+      trustedWrangler.startsWith(`${canonicalCheckout}${sep}`))
+    throw Error('native_studio_first_deploy_untrusted_wrangler');
   const target = { scope, accountId, workerId, sourceId, site };
   const inspection = expectedTag => deps.inspect({ scope, accountId, workerId, domain,
     token, ...(expectedTag ? { expectedTag } : {}) });
@@ -81,8 +87,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
     await studioCommand(['ci']);
     await rootCommand(['run', 'build']);
     await studioCommand(['run', 'build']);
-    const wrangler = join(checkout, 'studio', 'node_modules', '.bin', 'wrangler');
-    await deps.runCommand({ file: wrangler,
+    await deps.runCommand({ file: trustedWrangler,
       args: ['deploy', '--dry-run', '--config', 'cloudflare/wrangler.jsonc'],
       cwd: join(checkout, 'studio'), home });
     const checked = await deps.verifySource({ project: checkout, store, sourceId, site });
@@ -98,7 +103,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
     if (!claimed) return { state: 'pending-review', commit: checked.commit,
       observation: 'concurrent-intent' };
     try {
-      await deps.runCommand({ file: wrangler,
+      await deps.runCommand({ file: trustedWrangler,
         args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', expectedTag],
         cwd: join(checkout, 'studio'), home, token });
     } catch { /* A failed command can still have deployed. Inspect, never repeat. */ }

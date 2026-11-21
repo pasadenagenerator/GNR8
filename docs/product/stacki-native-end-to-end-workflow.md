@@ -289,8 +289,12 @@ must use this gate immediately before its first deployment and still reconcile
 Cloudflare resources and health afterward.
 
 The local `runFirstStudioDeployment` orchestrator now uses that gate before any
-site build and again after both native builds and a full Wrangler dry run. It
-passes no Cloudflare credential to install, build or dry run, then claims one
+site build and again after both native builds and a full Wrangler dry run. The
+runner requires a trusted Wrangler executable supplied by the host outside the
+site checkout; a local executable or a symlink back into the checkout is
+rejected. The hosted runner must mount that executable read-only so site build
+scripts cannot replace it. It passes no Cloudflare credential to install,
+build or dry run, then claims one
 append-only per-site deployment intent before invoking the exact Studio
 `wrangler deploy` command. The command carries a deterministic Wrangler version
 tag derived from the verified source, commit and target. A lost response or

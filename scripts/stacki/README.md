@@ -47,8 +47,10 @@ build, push, provider request or deployment.
 
 `first-studio-deployment.mjs` contains the one-attempt first-install runner for
 a disposable Docker host. Its caller must supply a scoped Cloudflare readback
-and private per-site intent store. Builds and dry run receive no Cloudflare key;
-the key is supplied only to the exact `wrangler deploy` process. Any ambiguous
+and private per-site intent store plus a host-owned, read-only Wrangler executable
+outside the site checkout. Local or symlinked site executables are refused.
+Builds and dry run receive no Cloudflare key; the key is supplied only to the
+trusted `wrangler deploy` process. Any ambiguous
 result requires active-version tag readback and review, never an automatic second
 deploy. The tag binds the intended source and commit to the deploy attempt; it
 does not prove deployed bytes. This
