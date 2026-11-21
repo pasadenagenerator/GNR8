@@ -16,6 +16,7 @@ import { stackiGithubSelected } from '@/gnr8/stacki/stacki-github-config'
 import { SiteGitHubRepositoryBinding } from '@/gnr8/stacki/site-github-repository-binding'
 import { SiteGitHubRepositoryProvisioner } from '@/gnr8/stacki/site-github-repository-provisioner'
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server'
+import { inngest } from '@/gnr8/inngest/client'
 import { lookupImportOwnershipSiteId } from '@/gnr8/site/site-import-ownership-lookup'
 import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
 import { deterministicId } from '@/gnr8/runtime/deterministic'
@@ -812,6 +813,19 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         computedStyleSampleCount: snapshot.renderedCapture.computedStyleSamples.length,
       },
     })
+
+    if (process.env.GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED === '1') {
+      try {
+        await inngest.send({
+          name: 'gnr8/native-studio.resources.reserve.requested',
+          data: { scope: { agencyId: actionContext.agencyId, clientId,
+            siteId: ownershipSiteId }, actor: actionContext.userId },
+        })
+        diagnostics.push('NATIVE_STUDIO_RESOURCE_RESERVATION_QUEUED')
+      } catch {
+        diagnostics.push('NATIVE_STUDIO_RESOURCE_RESERVATION_QUEUE_FAILED')
+      }
+    }
 
     return NextResponse.json(
       {

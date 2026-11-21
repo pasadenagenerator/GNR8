@@ -31,6 +31,8 @@ import {
 } from '@/gnr8/site/inngest/site-astro-generation-job'
 import { NATIVE_STUDIO_SECRET_SETUP_EVENT, NATIVE_STUDIO_SECRET_SETUP_JOB_ID,
   nativeStudioSecretSetupJob } from '@/gnr8/site/inngest/native-studio-secret-setup-job'
+import { NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT, NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,
+  nativeStudioResourceReservationJob } from '@/gnr8/site/inngest/native-studio-resource-reservation-job'
 import {
   SITE_RENDER_CAPTURE_JOB_ID,
   SITE_RENDER_CAPTURE_JOB_TRIGGER_EVENT,
@@ -77,6 +79,7 @@ test('worker non-production inngest registration preserves all existing jobs and
   assert.equal(inngestFunctions.includes(siteAstroGenerationJob), true)
   assert.equal(inngestFunctions.includes(siteRenderCaptureJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioSecretSetupJob), true)
+  assert.equal(inngestFunctions.includes(nativeStudioResourceReservationJob), true)
   assert.equal(inngestFunctions.includes(domainVerificationCheckSchedulerJob), true)
   assert.equal(inngestFunctions.includes(domainVerificationCheckJob), true)
 })
@@ -93,6 +96,8 @@ test('worker inngest registration includes required function ids and exact trigg
   assert.equal(ids.includes(DOMAIN_VERIFICATION_CHECK_JOB_ID), true)
   assert.equal(eventsById.get(NATIVE_STUDIO_SECRET_SETUP_JOB_ID),
     NATIVE_STUDIO_SECRET_SETUP_EVENT)
+  assert.equal(eventsById.get(NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID),
+    NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT)
 
   assert.equal(eventsById.get(TEMPLATE_PROCESSING_JOB_ID), 'template/processing.requested')
   assert.equal(eventsById.get(SITE_TEMPLATE_BOOTSTRAP_JOB_ID), 'site/bootstrap.requested')
@@ -101,7 +106,7 @@ test('worker inngest registration includes required function ids and exact trigg
   assert.equal(eventsById.get(DOMAIN_VERIFICATION_CHECK_JOB_ID), 'domain/verification.check')
 })
 
-test('worker production inngest registration exposes exactly the safe seven-function manifest', () => {
+test('worker production inngest registration exposes exactly the safe function manifest', () => {
   const registrations = resolveWorkerInngestFunctionRegistrations({ vercelEnvironment: 'production' })
 
   assert.deepEqual(
@@ -109,6 +114,7 @@ test('worker production inngest registration exposes exactly the safe seven-func
     [
       'native-studio-preparation-job',
       NATIVE_STUDIO_SECRET_SETUP_JOB_ID,
+      NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,
       'standalone-publication-job',
       SITE_ASTRO_GENERATION_JOB_ID,
       TEMPLATE_PROCESSING_JOB_ID,

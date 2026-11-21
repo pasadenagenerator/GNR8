@@ -217,6 +217,25 @@ created a hosted Worker. This Cloudflare endpoint is marked Beta, so hosted
 readback must be verified before enabling automatic creation. The Container
 runner, routes and readiness check remain separate steps.
 
+The guarded `gnr8/native-studio.resources.reserve.requested` job now joins the
+private draft bucket and both empty Worker reservations under one central
+Cloudflare account configuration. It accepts only the current agency/client/site
+scope and a user ID, rechecks that user's publish permission, then verifies the
+persisted site and bound GitHub repository before provider access. A successful
+scoped site import enqueues the event only when
+`GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED=1`; the flag defaults off.
+The job requires central `GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID`,
+`GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER`, and
+`GNR8_NATIVE_STUDIO_CLOUDFLARE_WORKER_CREATOR` values. Queue failure appears
+in the import diagnostics, while the completed import remains available. The
+local tests mock provider access; the flag and credentials have not been set
+in hosted environments, and no R2 bucket or Worker has been created by this
+path. Reservation is not a deployment or a ready Studio binding. Before
+enabling it, verify the Beta Worker creation and readback against an authorized
+test site and decide how a failed queue send is retried without repeating the
+import. The Container build, first deployment, secrets, routes and readiness
+checks remain to be connected.
+
 After that first installation, the public site Worker may be connected to
 GitHub Builds with `versions upload`. Keep the Studio Worker build trigger
 disabled as on Logatčan unless a separately designed update path can deploy
