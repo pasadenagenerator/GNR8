@@ -23,6 +23,24 @@ const legacySiteIds = new Set([
 ]);
 const rowColumns = 'site_id,agency_id,client_id,studio_origin,repository,repository_id,branch,cloudflare_account_id,github_app_id,github_installation_id,github_client_id,studio_worker,site_worker,draft_bucket,verified_at';
 
+async function requireCurrentSiteTarget(scope: NativeStudioScope, client: SupabaseClient,
+  site: { studioOrigin: string; repository: string; repositoryId: string }) {
+  const [currentSite, currentRepository] = await Promise.all([
+    client.from('sites').select('domain').eq('id', scope.siteId)
+      .eq('agency_id', scope.agencyId).eq('org_id', scope.clientId).maybeSingle(),
+    client.from('gnr8_site_github_repository_bindings')
+      .select('github_owner,repository,repository_id,binding_state')
+      .eq('site_id', scope.siteId).eq('agency_id', scope.agencyId)
+      .eq('client_id', scope.clientId).maybeSingle(),
+  ]);
+  if (currentSite.error || currentRepository.error ||
+      `https://${String(currentSite.data?.domain ?? '').toLowerCase()}` !== site.studioOrigin ||
+      currentRepository.data?.binding_state !== 'bound' ||
+      `${currentRepository.data.github_owner}/${currentRepository.data.repository}` !== site.repository ||
+      Number(currentRepository.data.repository_id) !== Number(site.repositoryId))
+    throw Error('native_studio_binding_stale');
+}
+
 export function nativeStudioSiteFromRow(scope: NativeStudioScope, row: Row) {
   if (!row || ![scope.siteId, scope.agencyId, scope.clientId].every(value => uuid.test(value)) ||
       row.site_id !== scope.siteId || row.agency_id !== scope.agencyId || row.client_id !== scope.clientId ||
@@ -57,26 +75,17 @@ export async function readNativeStudioBindingForScope(
       .eq('site_id', scope.siteId).maybeSingle();
     if (!result.error && result.data) {
       const site = nativeStudioSiteFromRow(scope, result.data as Row);
-      const [currentSite, currentRepository] = await Promise.all([
-        client.from('sites').select('domain').eq('id', scope.siteId)
-          .eq('agency_id', scope.agencyId).eq('org_id', scope.clientId).maybeSingle(),
-        client.from('gnr8_site_github_repository_bindings')
-          .select('github_owner,repository,repository_id,binding_state')
-          .eq('site_id', scope.siteId).eq('agency_id', scope.agencyId)
-          .eq('client_id', scope.clientId).maybeSingle(),
-      ]);
-      if (currentSite.error || currentRepository.error ||
-          `https://${String(currentSite.data?.domain ?? '').toLowerCase()}` !== site.studioOrigin ||
-          currentRepository.data?.binding_state !== 'bound' ||
-          `${currentRepository.data.github_owner}/${currentRepository.data.repository}` !== site.repository ||
-          Number(currentRepository.data.repository_id) !== Number(site.repositoryId))
-        throw Error('native_studio_binding_stale');
+      await requireCurrentSiteTarget(scope, client, site as {
+        studioOrigin: string; repository: string; repositoryId: string });
       return site;
     }
     if (result.error && !source) throw Error('native_studio_binding_unavailable');
   }
   if (!legacySiteIds.has(scope.siteId)) throw Error('native_studio_binding_missing');
-  return readNativeStudioBinding(scope.siteId, source);
+  const site = readNativeStudioBinding(scope.siteId, source);
+  if (client) await requireCurrentSiteTarget(scope, client, site as {
+    studioOrigin: string; repository: string; repositoryId: string });
+  return site;
 }
 
 export async function nativeStudioUrlForScope(scope: NativeStudioScope) {

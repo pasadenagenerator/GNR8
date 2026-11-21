@@ -13,7 +13,7 @@ const row = { site_id: scope.siteId, agency_id: scope.agencyId, client_id: scope
   draft_bucket: `gnr8-${scope.siteId}-drafts`, verified_at: new Date().toISOString() };
 
 function client(result: { data: unknown; error: unknown }, current: {
-  domain?: string; repository?: string;
+  domain?: string; repository?: string; repositoryId?: number; bindingState?: string;
 } = {}) {
   const filters: Array<[string, string, string]> = [];
   return { from(name: string) {
@@ -23,7 +23,9 @@ function client(result: { data: unknown; error: unknown }, current: {
         if (name === 'gnr8_native_studio_bindings') return result;
         if (name === 'sites') return { data: { domain: current.domain ?? 'site.app.pasadenagenerator.com' }, error: null };
         const [github_owner, repository] = (current.repository ?? 'example/site').split('/');
-        return { data: { github_owner, repository, repository_id: 123, binding_state: 'bound' }, error: null };
+        return { data: { github_owner, repository,
+          repository_id: current.repositoryId ?? 123,
+          binding_state: current.bindingState ?? 'bound' }, error: null };
       } };
     return { select(columns: string) { if (name === 'gnr8_native_studio_bindings') assert(columns.includes('studio_origin')); return query; } };
   }, filters };
@@ -72,8 +74,16 @@ test('existing deployment map remains available until per-site receipts are inst
     studioOrigin: 'https://legacy.example.com', accountId: 'a'.repeat(32),
     appId: '456', installationId: '789', clientId: 'Iv1.example' } });
   const site = await readNativeStudioBindingForScope(legacyScope,
-    client({ data: null, error: null }) as any, source);
+    client({ data: null, error: null }, { domain: 'legacy.example.com',
+      repository: 'example/legacy', repositoryId: 124 }) as any, source);
   assert.equal(site.repository, 'example/legacy');
+  for (const changed of [{ domain: 'other.example.com' },
+    { repository: 'example/other' }, { repositoryId: 999 },
+    { bindingState: 'reserved' }])
+    await assert.rejects(readNativeStudioBindingForScope(legacyScope,
+      client({ data: null, error: null }, { domain: 'legacy.example.com',
+        repository: 'example/legacy', repositoryId: 124, ...changed }) as any, source),
+    /native_studio_binding_stale/);
   await assert.rejects(readNativeStudioBindingForScope(legacyScope,
     client({ data: null, error: { message: 'unavailable' } }) as any, undefined),
   /native_studio_binding_unavailable/);
