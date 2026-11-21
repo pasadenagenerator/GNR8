@@ -110,6 +110,14 @@ assets; the earlier two-page Lumos proposal was not selected as its baseline.
   Container health. Both new public site Workers still have zero bindings,
   no custom domain, and no route; they cannot serve the required same-host
   `/studio` gateway. No provider setting or domain was changed in this check.
+- On 2026-11-21, the two local `codex/native-stacki` heads still matched their
+  remote GitHub heads (`e8839c987d1f305085e055ee7a2e68143d441645` and
+  `535bc5c1cdc42c2f7cb80abeec6a51aada5e00e6`). Wrangler's local dry run
+  packaged both public site gateways with `ASSETS` and the exact per-site
+  `STUDIO` service binding. A smoke check against each packaged Worker sent
+  `/`, `/en/` to assets and `/studio`, its OAuth callback and API path to the
+  Studio service while preserving the request. The retained build directories
+  have 428 Ladja Žaba and 78 Logatčan files. No provider deployment occurred.
 - The user chose all current and future account repositories for the separate
   Cloudflare Workers and Pages GitHub integration. That access is installed and
   verified. GitHub-triggered builds for all four Studio Workers are disabled
