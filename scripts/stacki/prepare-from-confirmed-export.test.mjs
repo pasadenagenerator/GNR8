@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, symlink, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { prepareGitBranch, commitPreparedStudio, prepareGitBranchFromSource, commitPreparedSource } from './prepare-git-branch.mjs';
+import { prepareGitBranch, commitPreparedStudio, prepareGitBranchFromSource, commitPreparedSource,
+  verifyCommittedStudioSource } from './prepare-git-branch.mjs';
 import { createHash } from 'node:crypto';
 import { exportStandaloneProject } from '../../apps/platform/gnr8/standalone/standalone-export.ts';
 import { prepareFromConfirmedExport, prepareFromVerifiedAstroExport, prepareFromStoredRelease, persistPreparedStudio, persistVerifiedAstroStudio, readStoredVerifiedAstroStudio } from './prepare-from-confirmed-export.mjs';
@@ -119,6 +120,22 @@ test('target-free stored package stages and commits only on its dedicated local 
   const committed = await commitPreparedSource({ ...request, author:{name:'Local Test',email:'local@example.com'} });
   assert.match(committed.commit,/^[a-f0-9]{40}$/);
   assert.deepEqual(await commitPreparedSource({ ...request, author:{name:'Local Test',email:'local@example.com'} }),committed);
+  const checked = await verifyCommittedStudioSource(request);
+  assert.deepEqual(checked, { sourceId, commit: committed.commit, branch: site.branch,
+    repository: site.repository, files: saved.files.length, hosted: false });
+  const page = join(root, 'src/pages/index.astro');
+  await writeFile(page, 'uncommitted edit');
+  await assert.rejects(verifyCommittedStudioSource(request), /local changes/);
+  await writeFile(page, saved.files.find(file => file.path === 'src/pages/index.astro').body);
+  git('update-index', '--assume-unchanged', 'src/pages/index.astro');
+  await writeFile(page, 'hidden local edit');
+  await assert.rejects(verifyCommittedStudioSource(request), /checkout file differs/);
+  await writeFile(page, saved.files.find(file => file.path === 'src/pages/index.astro').body);
+  git('update-index', '--no-assume-unchanged', 'src/pages/index.astro');
+  await writeFile(join(root, 'studio/unmanaged.txt'), 'unmanaged');
+  await assert.rejects(verifyCommittedStudioSource(request), /local changes/);
+  await rm(join(root, 'studio/unmanaged.txt'));
+  assert.equal((await verifyCommittedStudioSource(request)).commit, committed.commit);
   await assert.rejects(prepareGitBranchFromSource({ ...request, site:{ ...site,repository:'example/other' } }),/differs/);
   await writeFile(join(root,'.git/info/attributes'),'*.astro filter=custom\n');
   await assert.rejects(prepareGitBranchFromSource(request),/Git filters/);

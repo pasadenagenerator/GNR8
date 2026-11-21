@@ -40,6 +40,10 @@ native release and complete generated configuration. A retry cannot silently reu
 another publishing mode. `prepare-git-branch.mjs` can stage and make a local commit
 of this exact package; it does not push. The existing Vercel publication job is
 separate and must not be used to activate native Cloudflare Studio.
+Before a future first Studio deployment, `verifyCommittedStudioSource` checks
+the retained source ID against the dedicated checkout's exact branch, remote,
+clean working files and committed HEAD. It returns the commit but performs no
+build, push, provider request or deployment.
 
 ## Existing sites and upgrades
 

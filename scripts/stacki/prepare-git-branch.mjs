@@ -10,6 +10,11 @@ const git = (root, ...args) => execFileSync('git',
     '-c', 'core.hooksPath=/dev/null', ...args],
   { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_ATTR_NOSYSTEM: '1' } }).trim();
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+const gitBytes = (root, args, input) => execFileSync('git',
+  ['-C', root, '-c', 'core.fsmonitor=false', '-c', 'core.attributesFile=/dev/null',
+    '-c', 'core.hooksPath=/dev/null', ...args],
+  { input, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 96 * 1024 * 1024,
+    env: { ...process.env, GIT_ATTR_NOSYSTEM: '1' } });
 export async function prepareGitBranch({ project, store, releaseId, releaseFile, site }) {
   checkGitBinding(project, site);
   const prepared = await prepareFromStoredRelease({ store, releaseId, releaseFile, site });
@@ -28,6 +33,66 @@ function checkGitBinding(project, site) {
   const expected = site.repository.toLowerCase();
   if (!new RegExp(`^(?:https://github\\.com/|git@github\\.com:)${expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\.git)?$`, 'i').test(origin))
     throw Error('Studio checkout repository differs from the binding');
+}
+
+/** Read-only gate for a future Container-capable first-deploy runner. The
+ * committed HEAD must contain the exact verified source package; no checkout
+ * changes, filters, extra Studio files or submodules are accepted.
+ */
+export async function verifyCommittedStudioSource({ project, store, sourceId, site }) {
+  project = resolve(project);
+  if ((await lstat(project)).isSymbolicLink()) throw Error('Studio checkout contains a symbolic link');
+  checkGitBinding(project, site);
+  const prepared = await readStoredVerifiedAstroStudio({ store, sourceId, site });
+  const privateAttributes = resolve(project, git(project, 'rev-parse', '--git-path', 'info/attributes'));
+  if (await lstat(privateAttributes).then(() => true,
+    error => error.code === 'ENOENT' ? false : Promise.reject(error)))
+    throw Error('Git filters require separate review');
+  if (gitBytes(project, ['status', '--porcelain=v1', '-z', '--untracked-files=all']).length)
+    throw Error('Studio checkout has local changes');
+  const tree = gitBytes(project, ['ls-tree', '-r', '-z', 'HEAD']).toString('utf8');
+  const entries = new Map();
+  for (const row of tree.split('\0').filter(Boolean)) {
+    const match = /^(\d{6}) (blob|commit) ([a-f0-9]{40,64})\t(.+)$/.exec(row);
+    if (!match) throw Error('Studio checkout tree invalid');
+    entries.set(match[4], { mode: match[1], type: match[2] });
+  }
+  const expected = new Set(prepared.files.map(file => file.path));
+  if ([...entries].some(([path, entry]) =>
+    path === '.gitmodules' || path === '.gitattributes' ||
+    path.endsWith('/.gitattributes') || path.endsWith('/.gitmodules') ||
+    entry.type !== 'blob' ||
+    (path.startsWith('studio/') && !expected.has(path))))
+    throw Error('Studio checkout contains unmanaged Git content');
+  for (const file of prepared.files) {
+    const entry = entries.get(file.path);
+    if (!entry || !['100644', '100755'].includes(entry.mode))
+      throw Error(`Studio committed file missing: ${file.path}`);
+    await safeCheckoutPath(project, file.path);
+    if (!(await readFile(join(project, file.path))).equals(file.body))
+      throw Error(`Studio checkout file differs: ${file.path}`);
+  }
+  const input = Buffer.from(prepared.files.map(file => `HEAD:${file.path}\n`).join(''));
+  const blobs = gitBytes(project, ['cat-file', '--batch'], input);
+  let offset = 0;
+  for (const file of prepared.files) {
+    const end = blobs.indexOf(10, offset);
+    if (end < 0) throw Error('Studio committed file unreadable');
+    const header = blobs.subarray(offset, end).toString('utf8');
+    const match = /^[a-f0-9]{40,64} blob ([0-9]+)$/.exec(header);
+    if (!match) throw Error(`Studio committed file missing: ${file.path}`);
+    const length = Number(match[1]);
+    const start = end + 1;
+    if (length !== file.body.length ||
+        !blobs.subarray(start, start + length).equals(file.body) ||
+        blobs[start + length] !== 10)
+      throw Error(`Studio committed file differs: ${file.path}`);
+    offset = start + length + 1;
+  }
+  if (offset !== blobs.length) throw Error('Studio committed file response invalid');
+  return { sourceId, commit: git(project, 'rev-parse', 'HEAD'),
+    branch: site.branch, repository: site.repository, files: prepared.files.length,
+    hosted: false };
 }
 async function safeCheckoutPath(root, relative) {
   let path = root;
@@ -85,7 +150,10 @@ export async function commitPreparedStudio(input) {
   return commitPrepared(input, prepareGitBranch, input.releaseId);
 }
 export async function commitPreparedSource(input) {
-  return commitPrepared(input, prepareGitBranchFromSource, input.sourceId);
+  const committed = await commitPrepared(input, prepareGitBranchFromSource, input.sourceId);
+  const verified = await verifyCommittedStudioSource(input);
+  if (verified.commit !== committed.commit) throw Error('Studio committed source changed');
+  return committed;
 }
 async function commitPrepared(input, prepare, identity) {
   const staged = await prepare(input);

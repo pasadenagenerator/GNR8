@@ -37,7 +37,9 @@ Cloudflare Workers publishing, without `GITHUB_DEPLOY_*` auto-pipeline variables
 The immutable prepared-source identity includes the complete configuration and
 release digest, so changing publication mode cannot reuse an older receipt.
 
-The official Stacki updater installed **1.4.8** in local copies of all four sites. All 2,170 distributed native files match the verified release byte for
+The [official Stacki release](https://github.com/flowtricks/stacki-releases/releases/tag/v1.4.8)
+is still marked latest on 2026-11-21. The official updater installed **1.4.8**
+in local copies of all four sites. All 2,170 distributed native files match the verified release byte for
 byte. Only retained project/connection configuration differs. New Ladja Žaba and
 Logatčan installations use the same updater and release. Existing website source
 and assets are retained; this is not a redesign.
@@ -249,7 +251,7 @@ its Container without making a native Push to GitHub a live site publication.
 Do not create a temporary `wrangler deploy` push trigger and switch it off
 afterward: a push in that interval can activate a Worker before the publisher
 has acted. This also means the current public-Worker Builds adapter cannot
-serve as the new-site bootstrap job. The runner, its one-time credentials,
+serve as the new-site bootstrap job. The Container runner, its one-time credentials,
 hosted invocation, and reconciliation checks are still missing.
 
 The exact automatic handoff point is the scoped site-import route: it already
@@ -264,8 +266,10 @@ repository, branch, domain, or credential. The job then prepares the exact
 source, starts a Container-capable build runner, reconciles the named Cloudflare
 resources, installs the shared and per-site secrets, checks the real preview
 and authenticated editor, and only then writes the ready binding. If any step
-fails, leave the binding absent and retain a retryable diagnostic. No such
-runner or dispatch exists in the current GNR8 repository. The current Vercel
+fails, leave the binding absent and retain a retryable diagnostic. A guarded
+resource-reservation dispatch now follows import, with retry on the Design tab;
+neither deploys a Container or records readiness. No Container runner exists
+in the current GNR8 repository. The current Vercel
 Inngest preparation job only prepares source and cannot be treated as this
 bootstrap. A central
 [GitHub Actions Ubuntu 24.04 runner](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)
@@ -274,6 +278,15 @@ permission, exact target verification and per-site Cloudflare credential
 isolation must be implemented before use; a workflow
 that trusts dispatch inputs or exposes an account-wide deploy token to site
 build scripts would widen access to the whole account.
+
+The local `verifyCommittedStudioSource` gate now accepts the immutable prepared
+source ID, verified site binding and a dedicated checkout. It re-reads every
+stored source byte, checks the exact Git remote/branch, requires a clean checkout,
+rejects Git filters and extra Studio files, and compares both the committed HEAD
+and working files against the approved package. It returns the exact commit for
+a future runner but performs no build or provider action. The Container runner
+must use this gate immediately before its first deployment and still reconcile
+Cloudflare resources and health afterward.
 
 The first local bootstrap step can now create or reuse the exact
 `gnr8-<site-id>-drafts` R2 bucket through Cloudflare's
