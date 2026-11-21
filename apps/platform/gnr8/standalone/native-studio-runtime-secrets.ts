@@ -21,6 +21,15 @@ function requireSecret(value: unknown): value is string {
     !/[\u0000-\u001f\u007f]/.test(value);
 }
 
+/** Check shared inputs before any per-site provider token is created. */
+export function assertNativeStudioSharedSecrets(shared: NativeStudioSharedSecrets): void {
+  if (!shared || !requireSecret(shared.GITHUB_CLIENT_SECRET) ||
+      !requireSecret(shared.AI_API_KEY) ||
+      typeof shared.GITHUB_PRIVATE_KEY !== 'string' ||
+      !/^-----BEGIN (?:RSA |EC |)PRIVATE KEY-----\n[\s\S]+\n-----END (?:RSA |EC |)PRIVATE KEY-----\n?$/.test(shared.GITHUB_PRIVATE_KEY))
+    throw Error('native_studio_runtime_secrets_not_configured');
+}
+
 /** Builds the exact upstream secret set once the per-site publish token is saved.
  * No Cloudflare write occurs here; the installer must upload and read back the
  * secrets before marking the Studio ready.
@@ -32,11 +41,7 @@ export async function nativeStudioRuntimeSecrets(
   accountId: string,
   vaultKey: string,
 ): Promise<NativeStudioRuntimeSecrets> {
-  if (!shared || !requireSecret(shared.GITHUB_CLIENT_SECRET) ||
-      !requireSecret(shared.AI_API_KEY) ||
-      typeof shared.GITHUB_PRIVATE_KEY !== 'string' ||
-      !/^-----BEGIN (?:RSA |EC |)PRIVATE KEY-----\n[\s\S]+\n-----END (?:RSA |EC |)PRIVATE KEY-----\n?$/.test(shared.GITHUB_PRIVATE_KEY))
-    throw Error('native_studio_runtime_secrets_not_configured');
+  assertNativeStudioSharedSecrets(shared);
   const publish = await readNativeStudioPublishToken(scope, store, accountId, vaultKey);
   if (!publish) throw Error('native_studio_publish_token_missing');
   const site = await getOrCreateNativeStudioSiteSecrets(scope, store, vaultKey);

@@ -159,8 +159,8 @@ reads the winning original values instead of rotating them. The master key
 `GNR8_NATIVE_STUDIO_VAULT_KEY` is a separate one-time deployment secret and is
 not configured or read in this rollout. Rotation needs an explicit migration
 plan because native Stacki encrypts saved CMS connections under `SESSION_SECRET`.
-The vault currently has no provider installer consumer; it does not enable a
-hosted Studio by itself.
+The vault feeds the local installer step; it does not enable a hosted Studio
+by itself.
 
 A trusted installer input boundary now assembles the six exact secret names
 required by the unchanged Studio Worker: the shared GitHub App private key and
@@ -174,9 +174,13 @@ credentials first. This remains an offline preparation boundary: no central
 credentials have been configured, no Cloudflare secrets have been uploaded by
 this code, and no provider readback or ready receipt has occurred.
 
-The next offline provider adapter is now implemented: it patches those six
-secrets together on the exact per-site Studio Worker and reads back their names
-and `secret_text` types. It does not run until a trusted provisioner calls it.
+The offline provider adapter patches those six secrets together on the exact
+per-site Studio Worker and reads back their names and `secret_text` types.
+The local installer step now links exact per-site token issuance, sealed
+runtime-secret assembly, upload and name/type readback in that order. It
+validates shared and Studio setup credentials before issuing a token. A retry
+reuses the saved publish, session and Container values. It is not wired to a
+hosted provisioner, and its successful result is not a ready-site receipt.
 Cloudflare does not return the secret values on this readback, so this check
 cannot certify correct values, a functioning Container, or a working Studio.
 The provisioner must test those separately before writing the ready receipt.
