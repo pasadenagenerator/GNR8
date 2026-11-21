@@ -244,9 +244,13 @@ and bound GitHub repository. A durable create intent prevents duplicate
 creation after an ambiguous response. Readback requires the default
 jurisdiction and checks both the [managed `r2.dev` domain](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/domains/subresources/managed/methods/list/)
 and [custom domains](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/domains/subresources/custom/methods/list/)
-are disabled, so existing public draft buckets fail closed. The adapter has
-mocked provider tests only; it has no central R2 credential or hosted caller
-yet and has not created a bucket in Cloudflare.
+are disabled, so existing public draft buckets fail closed. The adapter now
+runs first in the central Studio secret installer. That installer requires one
+additional central `GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER` credential and
+stops before publish-token creation or secret upload if the bucket is missing,
+unreadable or public. The composed path has mocked provider tests only; it has
+no configured central credentials or hosted caller yet and has not created a
+bucket in Cloudflare.
 
 Creating future per-site publish tokens by API separately requires account-token
 management permission. A Container deployment
@@ -347,8 +351,8 @@ the new-site bootstrap must establish Workers, domain routing and Studio health,
 then write the verified binding, before source preparation or launch uses it.
 
 The local credential installer now has one central configuration entry point for
-all sites. It expects account and zone IDs, separate Cloudflare token-management,
-Worker-read and Studio-secret-install credentials, the vault key, the GitHub App
+all sites. It expects account and zone IDs, separate Cloudflare R2-management,
+token-management, Worker-read and Studio-secret-install credentials, the vault key, the GitHub App
 private key and client secret, and the AI key under `GNR8_NATIVE_STUDIO_*`
 environment names. It validates every shared input before storage or provider
 access and then uses the existing per-site issuer and installer. Read-only Vercel
