@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { runFirstStudioDeployment,
   runIsolatedStudioCommand } from './first-studio-deployment.mjs';
@@ -12,6 +13,10 @@ const sourceId = 'b'.repeat(64);
 const workerId = 'c'.repeat(32);
 const token = 'd'.repeat(40);
 const commit = 'e'.repeat(40);
+const tag = /^gnr8-first-[a-f0-9]{64}$/;
+const intendedTag = `gnr8-first-${createHash('sha256').update(JSON.stringify({
+  scope, accountId: site.accountId, workerId, sourceId, site, commit,
+})).digest('hex')}`;
 
 function fixture() {
   const saved = new Map();
@@ -29,15 +34,16 @@ function fixture() {
       return { sourceId, commit, branch: site.branch, repository: site.repository };
     },
     inspect: async ({ scope: requested, accountId, workerId: requestedWorker,
-      domain, token: requestedToken }) => {
+      domain, token: requestedToken, expectedTag }) => {
       assert.equal(requested, scope);
       assert.equal(accountId, site.accountId);
       assert.equal(requestedWorker, workerId);
       assert.equal(domain, 'site.app.pasadenagenerator.com');
       assert.equal(requestedToken, token);
+      if (expectedTag !== undefined) assert.match(expectedTag, tag);
       return inspection === 'pending'
         ? { state: 'pending', reason: 'no-deployment' }
-        : { state: 'observed-control-plane' };
+        : { state: 'verified-source-control-plane' };
     },
     runCommand: async command => { commands.push(command);
       if (command.token) inspection = 'observed'; },
@@ -49,15 +55,16 @@ function fixture() {
 test('builds without deploy credential, claims intent, deploys once and reconciles', async () => {
   const f = fixture();
   assert.deepEqual(await runFirstStudioDeployment(f.input, f.deps), {
-    state: 'reconcile-required', commit, observation: 'observed-control-plane',
+    state: 'reconcile-required', commit, observation: 'verified-source-control-plane',
   });
   assert.deepEqual(f.commands.map(command => [command.file.endsWith('/wrangler')
     ? 'wrangler' : command.file, command.args]), [
     ['npm', ['ci']], ['npm', ['ci']], ['npm', ['run', 'build']],
     ['npm', ['run', 'build']],
     ['wrangler', ['deploy', '--dry-run', '--config', 'cloudflare/wrangler.jsonc']],
-    ['wrangler', ['deploy', '--config', 'cloudflare/wrangler.jsonc']],
+    ['wrangler', ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', intendedTag]],
   ]);
+  assert.match(f.commands.at(-1).args.at(-1), tag);
   assert(f.commands.slice(0, -1).every(command => command.token === undefined));
   assert.equal(f.commands.at(-1).token, token);
   assert.equal(f.saved.size, 1);
@@ -77,6 +84,18 @@ test('ambiguous deploy is not repeated even when no deployment is yet visible', 
   assert.deepEqual(await runFirstStudioDeployment(f.input, f.deps), {
     state: 'pending-review', commit, observation: 'pending',
   });
+  assert.equal(f.commands.filter(command => command.token).length, 1);
+});
+
+test('unverified readback cannot be reported as reconciled or trigger another deploy', async () => {
+  const f = fixture();
+  const inspect = f.deps.inspect;
+  f.deps.inspect = async request => request.expectedTag
+    ? { state: 'observed-control-plane' } : inspect(request);
+  assert.deepEqual(await runFirstStudioDeployment(f.input, f.deps), {
+    state: 'pending-review', commit, observation: 'observed-control-plane',
+  });
+  assert.equal((await runFirstStudioDeployment(f.input, f.deps)).state, 'pending-review');
   assert.equal(f.commands.filter(command => command.token).length, 1);
 });
 

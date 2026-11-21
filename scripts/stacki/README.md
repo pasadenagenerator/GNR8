@@ -49,7 +49,9 @@ build, push, provider request or deployment.
 a disposable Docker host. Its caller must supply a scoped Cloudflare readback
 and private per-site intent store. Builds and dry run receive no Cloudflare key;
 the key is supplied only to the exact `wrangler deploy` process. Any ambiguous
-result requires readback and review, never an automatic second deploy. This
+result requires active-version tag readback and review, never an automatic second
+deploy. The tag binds the intended source and commit to the deploy attempt; it
+does not prove deployed bytes. This
 library is not connected to a hosted job or a ready-Studio receipt yet.
 
 ## Existing sites and upgrades

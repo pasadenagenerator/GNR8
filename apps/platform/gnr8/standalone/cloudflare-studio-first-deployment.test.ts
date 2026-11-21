@@ -15,6 +15,7 @@ const worker = `gnr8-${scope.siteId}-studio`;
 const deploymentId = '44444444-4444-4444-8444-444444444444';
 const versionId = '55555555-5555-4555-8555-555555555555';
 const container = 'gnr8-studio-preview-container';
+const expectedTag = `gnr8-first-${'d'.repeat(64)}`;
 
 function fixture() {
   const calls: string[] = [];
@@ -27,6 +28,8 @@ function fixture() {
       script: { handlers: ['fetch'] }, script_runtime: { migration_tag: 'v1',
         exports: { PreviewContainer: { type: 'durable-object', storage: 'sqlite', container } } },
     } },
+    [`/workers/workers/${worker}/versions/${versionId}`]: { id: versionId,
+      annotations: { 'workers/tag': expectedTag } },
     [`/workers/scripts/${worker}/settings`]: { bindings: [
       { name: 'DRAFTS', type: 'r2_bucket', bucket_name: `gnr8-${scope.siteId}-drafts` },
       { name: 'PREVIEW', type: 'durable_object_namespace', class_name: 'PreviewContainer' },
@@ -59,6 +62,22 @@ test('reads active Worker version, current settings and Container app without wr
     containerApplicationId: 'container-app-id',
   });
   assert.equal(f.calls.length, 5);
+});
+
+test('corroborates the exact first deploy tag on the actively serving version', async () => {
+  const f = fixture();
+  assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag), {
+    state: 'verified-source-control-plane', worker, workerId, deploymentId, versionId,
+    containerApplicationId: 'container-app-id',
+  });
+  assert.equal(f.calls.length, 6);
+  assert(f.calls.includes(`/workers/workers/${worker}/versions/${versionId}`));
+  const tagged = f.result[`/workers/workers/${worker}/versions/${versionId}`] as {
+    annotations: Record<string, string> };
+  tagged.annotations['workers/tag'] = `gnr8-first-${'e'.repeat(64)}`;
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag), /source_conflict/);
 });
 
 test('reserved Worker or delayed Container application remains pending', async () => {

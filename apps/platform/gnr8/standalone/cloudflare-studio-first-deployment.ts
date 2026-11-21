@@ -6,6 +6,7 @@ import { SiteGitHubRepositoryBinding } from '../stacki/site-github-repository-bi
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
 const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
+const FIRST_DEPLOY_TAG = /^gnr8-first-[a-f0-9]{64}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -19,10 +20,12 @@ export async function inspectCloudflareStudioFirstDeployment(
   domain: string,
   credential: string,
   transport: typeof fetch = fetch,
+  expectedTag?: string,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
       !HEX32.test(accountId) || !HEX32.test(workerId) || !TOKEN.test(credential) ||
+      (expectedTag !== undefined && !FIRST_DEPLOY_TAG.test(expectedTag)) ||
       typeof domain !== 'string' ||
       !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(domain))
     throw Error('native_studio_first_deployment_setup_invalid');
@@ -60,6 +63,13 @@ export async function inspectCloudflareStudioFirstDeployment(
       !UUID.test(latest.versions[0].version_id as string))
     throw Error('native_studio_first_deployment_version_conflict');
   const versionId = latest.versions[0].version_id as string;
+  if (expectedTag) {
+    const taggedVersion = await read(`/workers/workers/${worker}/versions/${versionId}`);
+    if (!object(taggedVersion) || taggedVersion.id !== versionId ||
+        !object(taggedVersion.annotations) ||
+        taggedVersion.annotations['workers/tag'] !== expectedTag)
+      throw Error('native_studio_first_deployment_source_conflict');
+  }
   const version = await read(`/workers/scripts/${worker}/versions/${versionId}`);
   if (!object(version) || version.id !== versionId || !object(version.resources) ||
       !object(version.resources.script_runtime) ||
@@ -104,7 +114,8 @@ export async function inspectCloudflareStudioFirstDeployment(
       applications[0].scheduling_policy !== 'durable_object' ||
       typeof applications[0].id !== 'string' || !applications[0].id)
     throw Error('native_studio_first_deployment_container_conflict');
-  return { state: 'observed-control-plane' as const, worker, workerId,
+  return { state: expectedTag ? 'verified-source-control-plane' as const
+    : 'observed-control-plane' as const, worker, workerId,
     deploymentId: latest.id as string, versionId,
     containerApplicationId: applications[0].id as string };
 }
@@ -120,6 +131,7 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
   workerId: string,
   credential: string,
   transport: typeof fetch = fetch,
+  expectedTag?: string,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)))
@@ -132,5 +144,5 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
   if (site.error || !site.data || typeof site.data.domain !== 'string' || !repository)
     throw Error('native_studio_first_deployment_scope_unverified');
   return inspectCloudflareStudioFirstDeployment(scope, accountId, workerId,
-    site.data.domain, credential, transport);
+    site.data.domain, credential, transport, expectedTag);
 }

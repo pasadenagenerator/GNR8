@@ -49,7 +49,8 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
     throw Error('native_studio_first_deploy_input_invalid');
   const checkout = resolve(project);
   const target = { scope, accountId, workerId, sourceId, site };
-  const inspection = () => deps.inspect({ scope, accountId, workerId, domain, token });
+  const inspection = expectedTag => deps.inspect({ scope, accountId, workerId, domain,
+    token, ...(expectedTag ? { expectedTag } : {}) });
   let intent = await store.read(INTENT);
   if (intent && (Object.keys(intent).sort().join() !== 'commit,identity' ||
       !/^[a-f0-9]{40,64}$/.test(intent.commit) ||
@@ -58,8 +59,8 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
   if (intent) {
     const checked = await deps.verifySource({ project: checkout, store, sourceId, site });
     if (checked.commit !== intent.commit) throw Error('native_studio_first_deploy_source_changed');
-    const observed = await inspection();
-    return { state: observed.state === 'observed-control-plane'
+    const observed = await inspection(`gnr8-first-${intent.identity}`);
+    return { state: observed.state === 'verified-source-control-plane'
       ? 'reconcile-required' : 'pending-review', commit: intent.commit,
       observation: observed.state };
   }
@@ -89,6 +90,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
         checked.repository !== site.repository || checked.commit !== initial.commit)
       throw Error('native_studio_first_deploy_source_unverified');
     const identity = digest({ ...target, commit: checked.commit });
+    const expectedTag = `gnr8-first-${identity}`;
     const claimed = await store.claim(INTENT, { identity, commit: checked.commit });
     intent = await store.read(INTENT);
     if (!intent || intent.identity !== identity || intent.commit !== checked.commit)
@@ -97,14 +99,14 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
       observation: 'concurrent-intent' };
     try {
       await deps.runCommand({ file: wrangler,
-        args: ['deploy', '--config', 'cloudflare/wrangler.jsonc'],
+        args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', expectedTag],
         cwd: join(checkout, 'studio'), home, token });
     } catch { /* A failed command can still have deployed. Inspect, never repeat. */ }
     let observed;
-    try { observed = await inspection(); }
+    try { observed = await inspection(expectedTag); }
     catch { return { state: 'pending-review', commit: checked.commit,
       observation: 'readback-unavailable' }; }
-    return { state: observed.state === 'observed-control-plane'
+    return { state: observed.state === 'verified-source-control-plane'
       ? 'reconcile-required' : 'pending-review', commit: checked.commit,
       observation: observed.state };
   } finally {

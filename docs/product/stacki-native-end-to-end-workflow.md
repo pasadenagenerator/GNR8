@@ -292,7 +292,9 @@ The local `runFirstStudioDeployment` orchestrator now uses that gate before any
 site build and again after both native builds and a full Wrangler dry run. It
 passes no Cloudflare credential to install, build or dry run, then claims one
 append-only per-site deployment intent before invoking the exact Studio
-`wrangler deploy` command. A lost response or timeout is read back and never
+`wrangler deploy` command. The command carries a deterministic Wrangler version
+tag derived from the verified source, commit and target. A lost response or
+timeout is read back against that tag on the actively serving version and never
 causes a second automatic deploy. The result remains `reconcile-required` or
 `pending-review`, never a ready binding. The orchestration has mocked command
 and inspector tests only. A trusted disposable Docker runner must still provide
@@ -304,6 +306,11 @@ ID and disabled public subdomains, its [actively serving deployment](https://dev
 the active version's `PreviewContainer` export, exact Worker
 [settings bindings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/),
 and the matching [Container application](https://developers.cloudflare.com/api/resources/containers/subresources/applications/methods/list/).
+When given the expected first-deploy tag, it also reads the active version's
+[version annotation](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/get/)
+and refuses a mismatch. This links readback to the one intended deploy, but a
+tag alone cannot prove the deployed bytes. The Beta endpoint's response shape
+still needs hosted readback.
 It re-reads the current scoped site and GitHub binding before Cloudflare access.
 An absent deployment or delayed application remains pending; a mismatched Worker,
 bucket, domain or split deployment fails closed. The current-settings API is not
