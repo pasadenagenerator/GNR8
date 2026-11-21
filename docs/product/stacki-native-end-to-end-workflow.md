@@ -176,6 +176,43 @@ create. It has only mocked provider tests. The user-scoped Builds credential and
 build token UUID are not configured; no hosted build connection or trigger has
 been created by this code. The Studio Worker, Container and ready binding still
 need their own provisioning and health checks.
+
+### First Studio Worker installation boundary
+
+Read-only dashboard inspection on 2026-11-21 confirmed the existing Logatčan
+Studio Worker is connected to its exact site repository on
+`codex/native-stacki`, with **Disable builds** enabled. This is a retained
+working configuration, not evidence that the new-site installer is automatic.
+Do not reuse the public site's `versions upload` build configuration for the
+Studio Worker: its `PreviewContainer` is a Cloudflare Container. Cloudflare
+states that `wrangler versions upload` cannot publish the image or roll out
+instances, and that even a successful first `wrangler deploy` activates the
+Worker before Container setup finishes. The Builds API also addresses an
+**existing** Worker by immutable tag, so it cannot by itself create the first
+Studio Worker.
+
+For a new site, a trusted provisioning runner must first create or verify the
+exact private draft R2 bucket, take the verified repository checkout, and run
+the retained native Stacki build and the Studio
+`wrangler deploy` with the site's exact `studio/cloudflare/wrangler.jsonc`.
+It must reconcile a timeout against the named Worker, its immutable tag,
+Container application, R2 bucket, and preview route before retrying. A Worker
+URL responding is insufficient: the runner must install and read back the six
+runtime secret names, then wait for the Container-backed preview route and
+authenticated Studio path to work before recording the ready binding. The
+first deployment must use a provisioner-held credential;
+no site owner should create or paste a key per site.
+
+After that first installation, the public site Worker may be connected to
+GitHub Builds with `versions upload`. Keep the Studio Worker build trigger
+disabled as on Logatčan unless a separately designed update path can deploy
+its Container without making a native Push to GitHub a live site publication.
+Do not create a temporary `wrangler deploy` push trigger and switch it off
+afterward: a push in that interval can activate a Worker before the publisher
+has acted. This also means the current public-Worker Builds adapter cannot
+serve as the new-site bootstrap job. The runner, its one-time credentials,
+hosted invocation, and reconciliation checks are still missing.
+
 Creating future per-site publish tokens by API separately requires account-token
 management permission. A Container deployment
 is not transactional: the Worker can become live before its image rollout
