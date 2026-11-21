@@ -281,6 +281,12 @@ present before enabling this path in a hosted environment.
 The existing `prepare-source` request and its status read now use this same
 bootstrap gate, so they can reach the already registered background preparation
 job for a new site. The legacy release request still requires a ready binding.
+Each manual source-preparation request now receives its own attempt ID. Its
+failure receipt is scoped to that attempt, while a successful immutable source
+receipt remains shared by the confirmed selection. While the review page stays
+open, a retry therefore reports "preparing" instead of immediately replaying
+the previous attempt's failure;
+the existing status endpoint without an attempt ID remains compatible.
 After the user confirms the selected import, the review route automatically
 queues that same source-preparation job when bootstrap is enabled and the target
 is available. It records the confirmation first; a queue failure is reported

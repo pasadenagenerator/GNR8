@@ -15,9 +15,11 @@ function Review(p:Props){
  const [functionsConfirmed,setFunctionsConfirmed]=useState(false);
  const [busy,setBusy]=useState(true),[notice,setNotice]=useState('');
  const [monitorStudio,setMonitorStudio]=useState(false),[studioNotice,setStudioNotice]=useState('');
+ const [studioAttemptId,setStudioAttemptId]=useState<string|null>(null);
  const alive=useRef(false),sequence=useRef(0);
  const endpoint=`/api/gnr8/agency/clients/${p.clientId}/sites/${p.siteId}/standalone/import-review?agencyId=${encodeURIComponent(p.agencyId)}`;
  const studioStatusQuery=new URLSearchParams({...p.selection,agencyId:p.agencyId}).toString();
+ const studioAttemptQuery=studioStatusQuery+(studioAttemptId?`&attemptId=${encodeURIComponent(studioAttemptId)}`:'');
  async function request(save=false){
   const call=++sequence.current;
   setBusy(true);setNotice('');
@@ -27,7 +29,7 @@ function Review(p:Props){
    const value=await response.json();
    if(!response.ok||!value.ok)throw Error(value.error??'Pregleda ni mogoče shraniti.');
    if(alive.current&&call===sequence.current){setModel(value.data);setRoutes(value.data.routes);setBrandConfirmed(value.data.brand.confirmed);setScopeConfirmed(false);setFunctionsConfirmed(false);setNotice(save?'Pregled je shranjen za prikazani izvor. Objava ni sprožena.':'');
-    if(!value.data.confirmedAt){setMonitorStudio(false);setStudioNotice('');}}
+    if(!value.data.confirmedAt){setMonitorStudio(false);setStudioNotice('');setStudioAttemptId(null);}}
   }catch(error){if(alive.current&&call===sequence.current)setNotice(error instanceof Error?error.message:'Pregled ni na voljo.');}
   finally{if(alive.current&&call===sequence.current)setBusy(false);}
  }
@@ -37,6 +39,7 @@ function Review(p:Props){
    const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...p.selection,action:'confirm',token:model?.token,scopeConfirmed,functionsConfirmed})});
    const value=await response.json();if(!response.ok||!value.ok)throw Error(value.error??'Potrditve ni mogoče shraniti.');
    if(alive.current&&call===sequence.current){setModel(value.data);setFunctionsConfirmed(false);
+    setStudioAttemptId(null);
     if(value.sourcePreparation==='queued'){
      setStudioNotice('Priprava zasebnega paketa Studia poteka.');setMonitorStudio(true);
     }else if(value.sourcePreparation==='queue-failed'||value.sourcePreparation==='unavailable'){
@@ -61,6 +64,7 @@ function Review(p:Props){
    const value=await response.json();
    if(!response.ok||!value.ok)throw Error('Priprave Studia ni mogoče začeti. Osvežite pregled.');
    if(alive.current&&call===sequence.current){setNotice('Priprava zasebnega paketa Studia je zahtevana. Objava ni sprožena.');
+    setStudioAttemptId(value.data.attemptId);
     setStudioNotice('Priprava zasebnega paketa Studia poteka.');setMonitorStudio(true);}
   }catch(error){if(alive.current&&call===sequence.current)setNotice(error instanceof Error?error.message:'Priprava ni na voljo.');}
   finally{if(alive.current&&call===sequence.current)setBusy(false);}
@@ -69,7 +73,7 @@ function Review(p:Props){
   const call=++sequence.current;setBusy(true);setNotice('');
   try{
    const endpoint=`/api/gnr8/agency/clients/${p.clientId}/sites/${p.siteId}/native-studio`;
-   const response=await fetch(endpoint+'?'+new URLSearchParams({...p.selection,agencyId:p.agencyId}),{cache:'no-store'});
+   const response=await fetch(endpoint+'?'+studioAttemptQuery,{cache:'no-store'});
    const value=await response.json();
    if(!response.ok||!value.ok)throw Error('Stanja priprave ni mogoče prebrati.');
    if(alive.current&&call===sequence.current){setMonitorStudio(value.data.state==='preparing-source');setStudioNotice(value.data.state==='prepared-source'
@@ -89,7 +93,7 @@ function Review(p:Props){
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined,failures=0;
   async function poll(){
    try{
-    const response=await fetch(`/api/gnr8/agency/clients/${p.clientId}/sites/${p.siteId}/native-studio?${studioStatusQuery}`,
+    const response=await fetch(`/api/gnr8/agency/clients/${p.clientId}/sites/${p.siteId}/native-studio?${studioAttemptQuery}`,
      {cache:'no-store',signal:controller.signal});
     const value=await response.json();
     if(!response.ok||!value.ok)throw Error('status_unavailable');
@@ -112,7 +116,7 @@ function Review(p:Props){
   }
   timer=setTimeout(()=>void poll(),1500);
   return()=>{controller.abort();if(timer)clearTimeout(timer);};
- },[monitorStudio,p.clientId,p.siteId,studioStatusQuery]);
+ },[monitorStudio,p.clientId,p.siteId,studioAttemptQuery]);
  function decide(path:string,key:'contentConfirmed'|'layoutConfirmed',value:boolean){setRoutes(rows=>rows.map(r=>r.path===path?{...r,[key]:value}:r));}
  return <section aria-label="Pregled vsebine in postavitve" style={{borderTop:'1px solid #cbd5e1',paddingTop:16,overflowWrap:'anywhere'}}>
   <h3>Pregled vsebine, postavitve in znamke</h3>

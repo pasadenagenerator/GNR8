@@ -5,7 +5,7 @@ export const nativeStudioPreparationJob=inngest.createFunction({id:'native-studi
   const {runDirectNativeStudioPreparation}=await import('@/gnr8/standalone/native-studio-direct-preparation');
   try{return await runDirectNativeStudioPreparation(event.data);}
   catch(error){
-   const {scope,actor,requestId}=event.data;
+   const {scope,actor,requestId,attemptId}=event.data;
    if(scope&&[scope.agencyId,scope.clientId,scope.siteId,actor].every(value=>/^[a-f0-9-]{36}$/.test(value))&&
       typeof requestId==='string'&&/^[a-f0-9]{64}$/.test(requestId)){
     try{
@@ -25,7 +25,11 @@ export const nativeStudioPreparationJob=inngest.createFunction({id:'native-studi
       const store=new SupabasePublicationStore(client,process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET??'gnr8-astro-candidate-routes',scope);
       const code=error instanceof Error&&/^native_studio_[a-z0-9_]+$/.test(error.message)
        ?error.message:'native_studio_preparation_failed';
-      await store.claim(`native-requests/${requestId}-failure.json`,{requestId,code});
+      const scopedAttempt=typeof attemptId==='string'&&
+       /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(attemptId)?attemptId:null;
+      if(attemptId!==undefined&&!scopedAttempt)throw Error('native_studio_request_invalid');
+      await store.claim(`native-requests/${requestId}${scopedAttempt?`-${scopedAttempt}`:''}-failure.json`,
+       {requestId,code,...(scopedAttempt?{attemptId:scopedAttempt}:{})});
      }
     }catch{/* A failed status write must never disguise the original failure. */}
    }
