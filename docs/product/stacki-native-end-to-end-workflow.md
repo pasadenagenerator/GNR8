@@ -313,7 +313,9 @@ hosted job invokes it, and no provider command has been run by this path.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
-checkout, accepts only the intended config and version tag, writes the six
+checkout, independently re-reads the retained source and exact checkout commit,
+and recomputes the target-bound version tag before any provider invocation.
+It accepts only the intended config and tag, writes the six
 secrets to a private temporary file for Wrangler, strips ambient environment
 variables, sanitizes failures and removes the file. It does not itself isolate
 the host: the build job must end before a separate deploy job receives secrets,

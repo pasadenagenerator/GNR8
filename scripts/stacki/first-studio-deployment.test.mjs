@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { runFirstStudioDeployment,
   runIsolatedStudioCommand } from './first-studio-deployment.mjs';
+import { runTrustedStudioDeploy } from './trusted-studio-deploy.mjs';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -60,6 +61,13 @@ function fixture() {
     deploy: async command => { deploys.push(command);
       assert.equal(command.token, token);
       assert.deepEqual(command.secrets, secrets);
+      assert.equal(command.scope, scope);
+      assert.equal(command.accountId, site.accountId);
+      assert.equal(command.workerId, workerId);
+      assert.equal(command.sourceId, sourceId);
+      assert.equal(command.site, site);
+      assert.equal(command.store, store);
+      assert.equal(command.commit, commit);
       inspection = 'observed'; },
   };
   return { input, deps, commands, deploys, saved,
@@ -85,6 +93,29 @@ test('builds without deploy credential, claims intent, deploys once and reconcil
   assert.equal((await runFirstStudioDeployment(f.input, f.deps)).state, 'reconcile-required');
   assert.equal(f.commands.length, 5);
   assert.equal(f.deploys.length, 1);
+});
+
+test('producer command passes the dedicated deploy gate before provider invocation', async () => {
+  const f = fixture();
+  const project = await mkdtemp(join(tmpdir(), 'gnr8-deploy-handoff-'));
+  await mkdir(join(project, 'studio'));
+  f.input.project = project;
+  const originalDeploy = f.deps.deploy;
+  let invoked = 0;
+  let deployError;
+  f.deps.deploy = async command => {
+    try {
+      await runTrustedStudioDeploy(command, { verifySource: f.deps.verifySource,
+        invoke: async () => { invoked++; } });
+    } catch (error) { deployError = error; throw error; }
+    await originalDeploy(command);
+  };
+  try {
+    const result = await runFirstStudioDeployment(f.input, f.deps);
+    assert.equal(deployError, undefined);
+    assert.equal(result.state, 'reconcile-required');
+    assert.equal(invoked, 1);
+  } finally { await rm(project, { recursive: true, force: true }); }
 });
 
 test('ambiguous deploy is not repeated even when no deployment is yet visible', async () => {

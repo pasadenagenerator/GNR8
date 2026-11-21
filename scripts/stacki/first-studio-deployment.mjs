@@ -114,7 +114,8 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
     try {
       await deps.deploy({ file: trustedWrangler,
         args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', expectedTag],
-        cwd: join(checkout, 'studio'), token, secrets });
+        cwd: join(checkout, 'studio'), token, secrets, scope, accountId, workerId,
+        sourceId, site, store, commit: checked.commit });
     } catch { /* A failed command can still have deployed. Inspect, never repeat. */ }
     let observed;
     try { observed = await inspection(expectedTag); }

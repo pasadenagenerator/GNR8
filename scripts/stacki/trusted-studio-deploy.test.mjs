@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash, createHmac } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { after } from 'node:test';
 import { runTrustedStudioDeploy } from './trusted-studio-deploy.mjs';
 
-const tag = `gnr8-first-${'a'.repeat(64)}`;
 const token = 'b'.repeat(40);
 const secrets = { AI_API_KEY: 'a'.repeat(32), CONTAINER_TOKEN: 'b'.repeat(32),
   GITHUB_CLIENT_SECRET: 'c'.repeat(32), GITHUB_PRIVATE_KEY: 'd'.repeat(32),
@@ -13,12 +13,37 @@ const secrets = { AI_API_KEY: 'a'.repeat(32), CONTAINER_TOKEN: 'b'.repeat(32),
 const root = await mkdtemp(join(tmpdir(), 'gnr8-trusted-deploy-test-'));
 await mkdir(join(root, 'studio'));
 after(async () => rm(root, { recursive: true, force: true }));
+const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
+  clientId: '22222222-2222-4222-8222-222222222222',
+  siteId: '33333333-3333-4333-8333-333333333333' };
+const accountId = 'a'.repeat(32);
+const workerId = 'c'.repeat(32);
+const sourceId = 'd'.repeat(64);
+const commit = 'e'.repeat(40);
+const site = { siteId: scope.siteId, repository: 'example/site', branch: 'main',
+  accountId, studioOrigin: 'https://site.app.pasadenagenerator.com' };
+const store = {};
+const secretIdentity = createHmac('sha256', token)
+  .update(JSON.stringify(secrets)).digest('hex');
+const tag = `gnr8-first-${createHash('sha256').update(JSON.stringify({
+  scope, accountId, workerId, sourceId, site, secretIdentity, commit,
+})).digest('hex')}`;
 const input = { file: process.execPath, cwd: join(root, 'studio'), token, secrets,
-  args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', tag] };
+  args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', tag],
+  scope, accountId, workerId, sourceId, site, store, commit };
+const verified = { sourceId, commit, branch: site.branch, repository: site.repository };
+const verifySource = async ({ project, store: received, sourceId: receivedId, site: receivedSite }) => {
+  assert.equal(project, await realpath(root));
+  assert.equal(received, store);
+  assert.equal(receivedId, sourceId);
+  assert.equal(receivedSite, site);
+  return verified;
+};
+const withInvoke = invoke => ({ verifySource, invoke });
 
 test('dedicated deploy receives only the exact command and a temporary private secret file', async () => {
   let secretFile;
-  await runTrustedStudioDeploy(input, async (file, args, options) => {
+  await runTrustedStudioDeploy(input, withInvoke(async (file, args, options) => {
     secretFile = args.at(-1);
     assert.equal(file, process.execPath);
     assert.deepEqual(args.slice(0, -2), input.args);
@@ -28,7 +53,7 @@ test('dedicated deploy receives only the exact command and a temporary private s
     assert.equal(options.shell, false);
     assert.equal(options.env.CLOUDFLARE_API_TOKEN, token);
     assert.equal(options.env.GNR8_TEST_AMBIENT_SECRET, undefined);
-  });
+  }));
   await assert.rejects(readFile(secretFile), { code: 'ENOENT' });
 });
 
@@ -36,9 +61,9 @@ test('refuses altered deploy arguments before invoking a process', async () => {
   let calls = 0;
   const invoke = async () => { calls++; };
   await assert.rejects(runTrustedStudioDeploy({ ...input,
-    args: [...input.args, '--name', 'foreign-worker'] }, invoke), /input_invalid/);
+    args: [...input.args, '--name', 'foreign-worker'] }, withInvoke(invoke)), /input_invalid/);
   await assert.rejects(runTrustedStudioDeploy({ ...input,
-    secrets: { ...secrets, EXTRA: 'wrong' } }, invoke), /input_invalid/);
+    secrets: { ...secrets, EXTRA: 'wrong' } }, withInvoke(invoke)), /input_invalid/);
   assert.equal(calls, 0);
 });
 
@@ -47,15 +72,36 @@ test('refuses a site-owned executable before invoking a process', async () => {
   await writeFile(local, 'untrusted');
   let calls = 0;
   await assert.rejects(runTrustedStudioDeploy({ ...input, file: local },
-    async () => { calls++; }), /executable_invalid/);
+    withInvoke(async () => { calls++; })), /executable_invalid/);
   assert.equal(calls, 0);
 });
 
 test('provider failures are sanitized and the secret file is removed', async () => {
   let secretFile;
-  await assert.rejects(runTrustedStudioDeploy(input, async (_file, args) => {
+  await assert.rejects(runTrustedStudioDeploy(input, withInvoke(async (_file, args) => {
     secretFile = args.at(-1);
     throw Error('sensitive provider output');
-  }), error => error instanceof Error && error.message === 'native_studio_trusted_deploy_failed');
+  })), error => error instanceof Error && error.message === 'native_studio_trusted_deploy_failed');
   await assert.rejects(readFile(secretFile), { code: 'ENOENT' });
+});
+
+test('refuses a changed source, commit, site or tag before invoking Wrangler', async () => {
+  let calls = 0;
+  const invoke = async () => { calls++; };
+  const changed = [
+    { ...input, commit: 'f'.repeat(40) },
+    { ...input, site: { ...site, repository: 'example/other' } },
+    { ...input, args: [...input.args.slice(0, 4), `gnr8-first-${'f'.repeat(64)}`] },
+    { ...input, workerId: 'f'.repeat(32) },
+  ];
+  for (const candidate of changed)
+    await assert.rejects(runTrustedStudioDeploy(candidate,
+      { invoke, verifySource: async () => verified }), /target_mismatch/);
+  await assert.rejects(runTrustedStudioDeploy(input,
+    { invoke, verifySource: async () => ({ ...verified, commit: 'f'.repeat(40) }) }),
+  /source_unverified/);
+  await assert.rejects(runTrustedStudioDeploy(input,
+    { invoke, verifySource: async () => { throw Error('checkout changed'); } }),
+  /source_unverified/);
+  assert.equal(calls, 0);
 });

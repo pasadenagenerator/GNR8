@@ -54,7 +54,9 @@ trusted deployment callback must use the exact prepared source and provide all
 six secrets to the first `wrangler deploy` in an isolated environment; the
 default command runner cannot deploy. `trusted-studio-deploy.mjs` implements
 the callback for a dedicated deployment job: it accepts only the exact Worker
-command, puts the six secrets in a private temporary file for Wrangler, strips
+command, independently verifies the approved source and commit against the
+checkout and retained package, and recomputes the target-bound version tag.
+It puts the six secrets in a private temporary file for Wrangler, strips
 ambient environment variables, sanitizes provider errors and removes the file.
 It must never run in the build job or alongside site-owned processes. Any ambiguous
 result requires active-version tag readback and review, never an automatic second
