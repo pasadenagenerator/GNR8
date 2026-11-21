@@ -89,10 +89,9 @@ export async function inspectCloudflareStudioFirstDeployment(
   const container = version.resources.script_runtime.exports.PreviewContainer.container;
   if (typeof container !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(container))
     throw Error('native_studio_first_deployment_container_conflict');
-  const settings = await read(`/workers/scripts/${worker}/settings`);
-  if (!object(settings) || !Array.isArray(settings.bindings))
+  if (!Array.isArray(version.resources.bindings))
     throw Error('native_studio_first_deployment_provider_invalid');
-  const bindings: unknown[] = settings.bindings;
+  const bindings: unknown[] = version.resources.bindings;
   const binding = (name: string) => bindings.filter(value => object(value) && value.name === name);
   const drafts = binding('DRAFTS');
   const preview = binding('PREVIEW');

@@ -307,8 +307,8 @@ hosted job invokes it, and no provider command has been run by this path.
 
 A read-only first-deployment inspector now checks the reserved Worker's immutable
 ID and disabled public subdomains, its [actively serving deployment](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/),
-the active version's `PreviewContainer` export, exact Worker
-[settings bindings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/),
+the active version's `PreviewContainer` export and exact
+[version-scoped bindings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/get/),
 and the matching [Container application](https://developers.cloudflare.com/api/resources/containers/subresources/applications/methods/list/).
 It also checks the exact preview origin, public-site deployment URL and
 repository-only editor settings. The hosted wrapper compares the configured
@@ -322,10 +322,9 @@ tag alone cannot prove the deployed bytes. The Beta endpoint's response shape
 still needs hosted readback.
 It re-reads the current scoped site and GitHub binding before Cloudflare access.
 An absent deployment or delayed application remains pending; a mismatched Worker,
-bucket, domain or split deployment fails closed. The current-settings API is not
-version-scoped, so this is control-plane evidence only, not proof that every
-binding belongs to the active version. Hosted readback of this API shape, preview
-health, authenticated editor access, secrets and the exact deployed source remain
+bucket, domain or split deployment fails closed. Newer unpublished settings
+cannot stand in for active-version bindings. Hosted readback of this API shape,
+preview health, authenticated editor access, secrets and the exact deployed source remain
 required before a ready binding. Tests use mocked responses; no hosted provider
 call was made.
 

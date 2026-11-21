@@ -28,10 +28,7 @@ function fixture() {
     [`/workers/scripts/${worker}/versions/${versionId}`]: { id: versionId, resources: {
       script: { handlers: ['fetch'] }, script_runtime: { migration_tag: 'v1',
         exports: { PreviewContainer: { type: 'durable-object', storage: 'sqlite', container } } },
-    } },
-    [`/workers/workers/${worker}/versions/${versionId}`]: { id: versionId,
-      annotations: { 'workers/tag': expectedTag } },
-    [`/workers/scripts/${worker}/settings`]: { bindings: [
+      bindings: [
       { name: 'DRAFTS', type: 'r2_bucket', bucket_name: `gnr8-${scope.siteId}-drafts` },
       { name: 'PREVIEW', type: 'durable_object_namespace', class_name: 'PreviewContainer' },
       { name: 'ASSETS', type: 'assets' },
@@ -41,7 +38,10 @@ function fixture() {
       { name: 'EDITOR_ACCESS', type: 'plain_text', text: 'repository' },
       { name: 'EDITOR_GITHUB_IDS', type: 'plain_text', text: '' },
       { name: 'GITHUB_REPOSITORY', type: 'plain_text', text: expectedRepository },
-    ] },
+      ],
+    } },
+    [`/workers/workers/${worker}/versions/${versionId}`]: { id: versionId,
+      annotations: { 'workers/tag': expectedTag } },
     '/containers/applications': [{ id: 'container-app-id', name: container,
       account_id: accountId, scheduling_policy: 'durable_object' }],
   };
@@ -60,14 +60,15 @@ function fixture() {
   return { calls, result, transport };
 }
 
-test('reads active Worker version, current settings and Container app without writes', async () => {
+test('reads active Worker version bindings and Container app without writes', async () => {
   const f = fixture();
   assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,
     accountId, workerId, domain, credential, f.transport), {
     state: 'observed-control-plane', worker, workerId, deploymentId, versionId,
     containerApplicationId: 'container-app-id',
   });
-  assert.equal(f.calls.length, 5);
+  assert.equal(f.calls.length, 4);
+  assert(!f.calls.includes(`/workers/scripts/${worker}/settings`));
 });
 
 test('corroborates the exact first deploy tag on the actively serving version', async () => {
@@ -77,7 +78,7 @@ test('corroborates the exact first deploy tag on the actively serving version', 
     state: 'verified-source-control-plane', worker, workerId, deploymentId, versionId,
     containerApplicationId: 'container-app-id',
   });
-  assert.equal(f.calls.length, 6);
+  assert.equal(f.calls.length, 5);
   assert(f.calls.includes(`/workers/workers/${worker}/versions/${versionId}`));
   const tagged = f.result[`/workers/workers/${worker}/versions/${versionId}`] as {
     annotations: Record<string, string> };
@@ -93,13 +94,24 @@ test('rejects wrong preview, repository or editor access configuration', async (
     ['EDITOR_ACCESS', 'public'],
   ]) {
     const f = fixture();
-    const settings = f.result[`/workers/scripts/${worker}/settings`] as {
-      bindings: { name: string; text?: string }[] };
-    settings.bindings.find(binding => binding.name === name)!.text = wrong;
+    const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+      resources: { bindings: { name: string; text?: string }[] } };
+    version.resources.bindings.find(binding => binding.name === name)!.text = wrong;
     await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
       accountId, workerId, domain, credential, f.transport, expectedTag, expectedRepository),
     /binding_conflict/);
   }
+});
+
+test('refuses an active version without bindings even if latest settings exist', async () => {
+  const f = fixture();
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { bindings?: unknown[] } };
+  f.result[`/workers/scripts/${worker}/settings`] = { bindings: version.resources.bindings };
+  delete version.resources.bindings;
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport), /provider_invalid/);
+  assert(!f.calls.includes(`/workers/scripts/${worker}/settings`));
 });
 
 test('reserved Worker or delayed Container application remains pending', async () => {
@@ -133,8 +145,9 @@ test('foreign Worker, wrong bindings and split traffic fail closed', async () =>
     accountId, workerId, domain, credential, f.transport), /version_conflict/);
   f.result[`/workers/scripts/${worker}/deployments`] = { deployments: [{ id: deploymentId,
     versions: [{ version_id: versionId, percentage: 100 }] }] };
-  const settings = f.result[`/workers/scripts/${worker}/settings`] as { bindings: Record<string, unknown>[] };
-  settings.bindings[0].bucket_name = 'another-site-drafts';
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { bindings: Record<string, unknown>[] } };
+  version.resources.bindings[0].bucket_name = 'another-site-drafts';
   await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
     accountId, workerId, domain, credential, f.transport), /binding_conflict/);
 });
@@ -165,9 +178,9 @@ test('hosted inspection compares Worker repository with the current site binding
   } } as unknown as SupabaseClient;
   assert.equal((await inspectBoundCloudflareStudioFirstDeployment(scope, client,
     accountId, workerId, credential, f.transport)).state, 'observed-control-plane');
-  const settings = f.result[`/workers/scripts/${worker}/settings`] as {
-    bindings: { name: string; text?: string }[] };
-  settings.bindings.find(binding => binding.name === 'GITHUB_REPOSITORY')!.text = 'foreign/site';
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { bindings: { name: string; text?: string }[] } };
+  version.resources.bindings.find(binding => binding.name === 'GITHUB_REPOSITORY')!.text = 'foreign/site';
   await assert.rejects(inspectBoundCloudflareStudioFirstDeployment(scope, client,
     accountId, workerId, credential, f.transport), /binding_conflict/);
 });
