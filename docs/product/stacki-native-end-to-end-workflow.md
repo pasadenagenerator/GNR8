@@ -168,6 +168,14 @@ the Worker's immutable tag, the exact repository connection and a build token.
 For the public site Worker, the push-triggered deploy command must use
 `wrangler versions upload` so a GitHub Push creates an inactive version rather
 than publishing it. Native Stacki Publish remains the live deployment action.
+The local public-Worker Builds adapter now enforces this exact command, the
+verified scoped GitHub repository, branch, immutable Worker tag and build token.
+It checks an existing configuration before any write, stores one durable create
+intent, reconciles a lost provider response and never repeats an unconfirmed
+create. It has only mocked provider tests. The user-scoped Builds credential and
+build token UUID are not configured; no hosted build connection or trigger has
+been created by this code. The Studio Worker, Container and ready binding still
+need their own provisioning and health checks.
 Creating future per-site publish tokens by API separately requires account-token
 management permission. A Container deployment
 is not transactional: the Worker can become live before its image rollout
