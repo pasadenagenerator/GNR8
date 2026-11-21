@@ -396,6 +396,15 @@ preview health, authenticated editor access, secrets and the exact deployed sour
 required before a ready binding. Tests use mocked responses; no hosted provider
 call was made.
 
+The external `verifyAuthenticatedStudioHealth` gate now checks the unchanged
+Studio's signed-in GitHub identity, Container-backed status, editor HTML and
+protected preview handoff and page. It requires a short-lived native Studio
+session from a user with repository write access; a login page cannot pass.
+It does not create a session, modify Stacki, check visual fidelity, exercise
+GitHub Push or Publish, or write a ready binding. The hosted runner still needs
+to supply a valid session and call this gate after deployment. Local tests use
+mocked HTTP responses only.
+
 The first local bootstrap step can now create or reuse the exact
 `gnr8-<site-id>-drafts` R2 bucket through Cloudflare's
 [bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/create/).
