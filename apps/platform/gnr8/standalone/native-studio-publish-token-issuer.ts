@@ -45,7 +45,9 @@ function targetFor(scope: NativeStudioScope, accountId: string, zoneId: string):
       !HEX32.test(accountId) || !HEX32.test(zoneId))
     throw Error('native_studio_publish_target_invalid');
   return { accountId, zoneId, worker: `gnr8-${scope.siteId}-site`,
-    name: `gnr8-${scope.siteId}-native-publish` };
+    // Existing manually installed tokens use the unsuffixed name. A distinct
+    // managed token can be installed before the old Worker secret is replaced.
+    name: `gnr8-${scope.siteId}-native-publish-v2` };
 }
 
 function exactMetadata(target: PublishTokenTarget, values: readonly PublishTokenMetadata[]) {

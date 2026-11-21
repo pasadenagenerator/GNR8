@@ -19,7 +19,7 @@ function object(value: unknown): value is Record<string, unknown> {
 function validate(target: PublishTokenTarget, accountId: string) {
   if (!target || target.accountId !== accountId || !HEX32.test(target.accountId) ||
       !HEX32.test(target.zoneId) || !WORKER.test(target.worker) ||
-      target.name !== `${target.worker.slice(0, -5)}-native-publish`)
+      target.name !== `${target.worker.slice(0, -5)}-native-publish-v2`)
     throw Error('native_studio_publish_provider_target_invalid');
 }
 

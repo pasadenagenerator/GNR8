@@ -498,8 +498,10 @@ only once; an ambiguous response needs exact-name/provider reconciliation and
 possibly a token roll before a value can be sealed. No central
 token-management credential is configured yet.
 
-The local token-issuance coordinator now reserves one deterministic token name
-per site before a create request. It verifies the exact account, zone, site
+The local token-issuance coordinator now reserves one deterministic managed
+token name per site, `gnr8-<site-id>-native-publish-v2`, before a create request.
+This separate name lets the four existing manual tokens remain active while a
+new narrowly scoped value is issued and sealed. It verifies the exact account, zone, site
 Worker, active status, and only the two required permission roles before
 sealing a newly issued value and on every later readback. A lost create
 response never causes another create. If the token
@@ -537,12 +539,15 @@ hosted API result. The central account-token manager and Worker-read credentials
 are not configured, and the adapter is not connected to a hosted provisioner.
 The four existing Studio Workers have scoped publish-token secret names, but
 their values cannot be read back from Worker secrets. No matching value in the
-central vault has been verified. The current issuer rejects an existing exact
-token without its own creation intent and sealed value as `unowned`; it cannot
-silently adopt the four manual tokens. Before universal provisioning, use an
-explicit identity-checked adoption or rotation path and keep the existing
-Worker secrets usable until the replacement is installed and verified. Do not
-repeat the withdrawn per-site user token handoff.
+central vault has been verified. The managed v2 token path deliberately does
+not adopt or roll those manual tokens. Its local mocked-provider test confirms
+that the old token is untouched while the new value is sealed. A hosted
+provisioner must install the managed value, prove the exact active Worker
+version and native Publish, and only then retire the old token through a
+separate reviewed cleanup. Until that point there are two scoped tokens per
+existing site; this is a temporary migration state, not a universal steady
+state. No hosted token has been issued by the v2 path, and the existing Worker
+secrets remain unchanged. Do not repeat the withdrawn per-site user token handoff.
 The legacy release preparation requires a ready Studio binding; the newer
 direct source path can use a guarded bootstrap target before readiness.
 Credential installation cannot be inserted into these preparation routes:

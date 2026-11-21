@@ -10,15 +10,16 @@ const accountId = 'a'.repeat(32);
 const zoneId = 'b'.repeat(32);
 const workerId = 'c'.repeat(32);
 const tokenId = 'd'.repeat(32);
+const legacyTokenId = 'e'.repeat(32);
 const manager = 'cfat_' + 'M'.repeat(45);
 const workerReader = 'cfat_' + 'W'.repeat(45);
 const value = 'cfat_' + 'V'.repeat(45);
-const name = `gnr8-${scope.siteId}-native-publish`;
+const name = `gnr8-${scope.siteId}-native-publish-v2`;
 const worker = `gnr8-${scope.siteId}-site`;
 const routesId = '28f4b596e7d643029c524985477ae49a';
 const editorId = '7e79ec33834341f28dd431ab73884400';
 
-function fixture(extraPolicy = false) {
+function fixture(extraPolicy = false, legacyPresent = false) {
   const saved = new Map<string, unknown>();
   const store = {
     read: async <T>(key: string) => (saved.get(key) as T) ?? null,
@@ -43,8 +44,10 @@ function fixture(extraPolicy = false) {
     if (path === `/client/v4/accounts/${accountId}/tokens?page=1&per_page=50`) {
       assert.equal(authorization, `Bearer ${manager}`);
       return Response.json({ success: true,
-        result: policies ? [{ id: tokenId, name }] : [],
-        result_info: { total_count: policies ? 1 : 0 } });
+        result: [...(legacyPresent ? [{ id: legacyTokenId,
+          name: `gnr8-${scope.siteId}-native-publish` }] : []),
+        ...(policies ? [{ id: tokenId, name }] : [])],
+        result_info: { total_count: Number(legacyPresent) + Number(Boolean(policies)) } });
     }
     if (path === `/client/v4/accounts/${accountId}/tokens` && method === 'POST') {
       assert.equal(authorization, `Bearer ${manager}`);
@@ -103,4 +106,15 @@ test('expanded Cloudflare policy blocks storage after creation', async () => {
   /native_studio_publish_token_scope_mismatch/);
   assert.equal(f.creates(), 1);
   assert(!f.saved.has('native-studio/publish-token-v1.json'));
+});
+
+test('existing manual token remains untouched while a separate managed token is sealed', async () => {
+  const f = fixture(false, true);
+  const issued = await ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000);
+  assert.equal(issued.tokenId, tokenId);
+  assert.equal(f.creates(), 1);
+  assert(f.requests.every(request => request.method !== 'PUT' &&
+    request.method !== 'DELETE' && !request.path.endsWith(`/${legacyTokenId}`)));
+  assert(!JSON.stringify([...f.saved.values()]).includes(value));
 });
