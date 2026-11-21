@@ -179,7 +179,9 @@ The offline provider adapter patches those six secrets together on the exact
 per-site Studio Worker and reads back their names and `secret_text` types.
 The local installer step now links exact per-site token issuance, sealed
 runtime-secret assembly, upload and name/type readback in that order. It
-validates shared and Studio setup credentials before issuing a token. A retry
+validates shared and Studio setup credentials and reads the exact scoped site,
+working domain and bound GitHub repository before issuing a token. A pending
+repository stops before token creation or secret upload. A retry
 reuses the saved publish, session and Container values. It is not wired to a
 hosted provisioner, and its successful result is not a ready-site receipt.
 Cloudflare does not return the secret values on this readback, so this check

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { installNativeStudioRuntimeSecrets } from './native-studio-secret-installation';
 import type { PublishTokenMetadata, PublishTokenProvider,
   PublishTokenTarget } from './native-studio-publish-token-issuer';
@@ -17,6 +18,24 @@ const shared = {
   GITHUB_CLIENT_SECRET: 'github-client-secret-long-enough',
   AI_API_KEY: 'openai-api-key-long-enough',
 };
+
+function siteClient(bound = true) {
+  return { from(name: string) {
+    const filters: Record<string, string> = {};
+    const query = { eq(key: string, value: string) { filters[key] = value; return query; },
+      async maybeSingle() {
+        assert.equal(filters.site_id ?? filters.id, scope.siteId);
+        assert.equal(filters.agency_id, scope.agencyId);
+        assert.equal(filters.client_id ?? filters.org_id, scope.clientId);
+        return { error: null, data: name === 'sites'
+          ? { domain: 'site.app.pasadenagenerator.com' }
+          : { github_owner: 'example', repository: 'site', repository_id: 123,
+              binding_state: bound ? 'bound' : 'creating' } };
+      } };
+    assert(['sites', 'gnr8_site_github_repository_bindings'].includes(name));
+    return { select: () => query };
+  } } as unknown as SupabaseClient;
+}
 
 function fixture() {
   const saved = new Map<string, unknown>();
@@ -61,7 +80,7 @@ function fixture() {
 test('one step issues, seals, installs, reads back and reuses native secrets', async () => {
   const f = fixture();
   const first = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
-    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', f.transport);
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport);
   assert.equal(first.worker, `gnr8-${scope.siteId}-studio`);
   assert.equal(f.patched().PUBLISH_CLOUDFLARE_API_TOKEN?.text, value);
   assert.equal(f.creates(), 1);
@@ -69,7 +88,7 @@ test('one step issues, seals, installs, reads back and reuses native secrets', a
   assert(!JSON.stringify([...f.saved.values()]).includes(value));
   const original = f.patched();
   const second = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
-    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', f.transport);
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport);
   assert.deepEqual(second, first);
   assert.deepEqual(f.patched(), original);
   assert.equal(f.creates(), 1);
@@ -80,11 +99,21 @@ test('missing shared or installer credential stops before token issuance', async
   const f = fixture();
   await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
     f.store, master, { ...shared, AI_API_KEY: '' }, f.provider,
-    'cloudflare-studio-setup-token', f.transport),
+    'cloudflare-studio-setup-token', siteClient(), f.transport),
   /native_studio_runtime_secrets_not_configured/);
   await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
-    f.store, master, shared, f.provider, '', f.transport),
+    f.store, master, shared, f.provider, '', siteClient(), f.transport),
   /native_studio_secret_install_invalid/);
+  assert.equal(f.creates(), 0);
+  assert.equal(f.patches(), 0);
+  assert.equal(f.saved.size, 0);
+});
+
+test('an unbound repository stops before token issuance or secret upload', async () => {
+  const f = fixture();
+  await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(false), f.transport), /native_studio_site_not_bound/);
   assert.equal(f.creates(), 0);
   assert.equal(f.patches(), 0);
   assert.equal(f.saved.size, 0);
