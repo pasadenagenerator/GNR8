@@ -30,6 +30,7 @@ function fixture() {
   let createNothing = false;
   let extraPermission = false;
   let duplicate = false;
+  let invalidRolledValue = false;
   const provider: PublishTokenProvider = {
     assertWorker: async (target) => assert.equal(target.worker, `gnr8-${scope.siteId}-site`),
     findByName: async () => live ? Array.from({ length: duplicate ? 2 : 1 }, () => ({ ...live,
@@ -49,12 +50,14 @@ function fixture() {
       currentValue = 'cfat_' + 'R'.repeat(45);
       return currentValue;
     },
-    verifyValue: async (_target, id, secret) => id === tokenId && secret === currentValue,
+    verifyValue: async (_target, id, secret) => id === tokenId && secret === currentValue &&
+      (!invalidRolledValue || rolls === 0),
   };
   return { store, saved, provider, setLost: () => { loseResponse = true; },
     setNothing: () => { createNothing = true; },
     setExtra: () => { extraPermission = true; },
     setDuplicate: () => { duplicate = true; },
+    setInvalidRolledValue: () => { invalidRolledValue = true; },
     creates: () => creates, rolls: () => rolls };
 }
 
@@ -95,6 +98,19 @@ test('missing provider token never triggers a blind second create', async () => 
     f.store, master, f.provider, () => 301001), /native_studio_publish_token_pending/);
   assert.equal(f.creates(), 1);
   assert.equal(f.rolls(), 0);
+});
+
+test('unverified rolled value is not sealed after a lost create response', async () => {
+  const f = fixture();
+  f.setLost();
+  f.setInvalidRolledValue();
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, master, f.provider, () => 1000), /native_studio_publish_token_pending/);
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, master, f.provider, () => 301001), /native_studio_publish_token_unverified/);
+  assert.equal(f.creates(), 1);
+  assert.equal(f.rolls(), 1);
+  assert(!f.saved.has('native-studio/publish-token-v1.json'));
 });
 
 test('permission expansion prevents use of an otherwise valid saved token', async () => {

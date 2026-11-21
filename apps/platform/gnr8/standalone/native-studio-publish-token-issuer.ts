@@ -123,6 +123,12 @@ export async function ensureNativeStudioPublishToken(
   if (!await store.claim(RECOVERY_KEY, { target, tokenId: existing.id }))
     throw Error('native_studio_publish_token_pending');
   const recovered = await provider.roll(target, existing.id);
+  // A roll can succeed remotely while returning a stale or unusable value.
+  // Never seal that value before Cloudflare verifies its effective identity.
+  const live = exactMetadata(target, await provider.findByName(target));
+  if (!live || live.id !== existing.id ||
+      !(await provider.verifyValue(target, existing.id, recovered)))
+    throw Error('native_studio_publish_token_unverified');
   const token = await saveNativeStudioPublishToken(scope, store,
     { accountId, tokenId: existing.id, worker: target.worker, value: recovered }, masterKey);
   return verifySaved(provider, target, token);

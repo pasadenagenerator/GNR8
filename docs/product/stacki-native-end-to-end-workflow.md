@@ -206,7 +206,9 @@ appears after the in-flight window, one recovery claimant can roll its value
 and seal it; duplicate names or broader permissions fail closed. If no token
 appears after a claimed create, the operation stays pending for operator
 reconciliation because Cloudflare does not document an idempotency key for this
-token-creation endpoint. The coordinator and provider adapter have local tests;
+token-creation endpoint. A recovered value is verified against the provider
+before it can enter the vault; an unverified roll stays pending for operator
+reconciliation. The coordinator and provider adapter have local tests;
 setup credentials, hosted readback, and a retry runner are not yet configured.
 They must not be wired to a customer site until those pieces and the full
 Studio health check pass.
@@ -232,6 +234,10 @@ Worker metadata use separate setup credentials. A mocked request test runs
 the adapter through the actual issuance coordinator and vault; it is not a
 hosted API result. The central account-token manager and Worker-read credentials
 are not configured, and the adapter is not connected to a hosted provisioner.
+The existing native-source preparation routes already require a verified Studio
+binding before they can run. Credential installation cannot be inserted there:
+the new-site bootstrap must establish Workers, domain routing and Studio health,
+then write the verified binding, before source preparation or launch uses it.
 
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
