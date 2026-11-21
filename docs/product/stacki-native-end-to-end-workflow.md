@@ -213,6 +213,29 @@ has acted. This also means the current public-Worker Builds adapter cannot
 serve as the new-site bootstrap job. The runner, its one-time credentials,
 hosted invocation, and reconciliation checks are still missing.
 
+The exact automatic handoff point is the scoped site-import route: it already
+reserves and verifies the private GitHub repository before starting capture.
+The native source-preparation path deliberately requires a ready Studio binding,
+so neither that path nor a Stacki launch request can serve as the installer.
+After the import has persisted the site and its bound repository, GNR8 must
+enqueue one background bootstrap for that scope. The job must re-read the
+current domain and repository from the authoritative tables; event payloads
+may identify the site but must not choose a Cloudflare account, Worker name,
+repository, branch, domain, or credential. The job then prepares the exact
+source, starts a Container-capable build runner, reconciles the named Cloudflare
+resources, installs the shared and per-site secrets, checks the real preview
+and authenticated editor, and only then writes the ready binding. If any step
+fails, leave the binding absent and retain a retryable diagnostic. No such
+runner or dispatch exists in the current GNR8 repository. The current Vercel
+Inngest preparation job only prepares source and cannot be treated as this
+bootstrap. A central
+[GitHub Actions Ubuntu 24.04 runner](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)
+is a candidate because its current image includes Docker. Its dispatch
+permission, exact target verification and per-site Cloudflare credential
+isolation must be implemented before use; a workflow
+that trusts dispatch inputs or exposes an account-wide deploy token to site
+build scripts would widen access to the whole account.
+
 Creating future per-site publish tokens by API separately requires account-token
 management permission. A Container deployment
 is not transactional: the Worker can become live before its image rollout
