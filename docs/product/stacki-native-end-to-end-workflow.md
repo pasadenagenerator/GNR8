@@ -352,6 +352,16 @@ Local prepared checkouts: `/private/tmp/gnr8-native-sites/{chs,viroidoc,ladja-za
 They are review artifacts, not deployed installations. The user outcome is not
 complete until all four hosted flows are verified.
 
+On 2026-11-21, the retained Logatčan checkout passed a full local
+`wrangler deploy --dry-run --config cloudflare/wrangler.jsonc`: Wrangler 4.151.1
+built the unchanged Stacki 1.4.8 Studio, its Dockerfile image and Worker bundle,
+recognized the `PreviewContainer`, `PREVIEW` and `DRAFTS` bindings, and exited
+without a Cloudflare publication. An earlier Worker-only dry run using
+`--containers-rollout=none` also passed but cannot establish image buildability.
+The full result establishes a viable local build for this retained checkout;
+it does not establish hosted credentials, a working Container rollout,
+authenticated Studio access, GitHub Push, or native Publish.
+
 ## Concrete external rollout still required
 
 1. Reconcile each branch head and newer hosted drafts before writing. Preserve
