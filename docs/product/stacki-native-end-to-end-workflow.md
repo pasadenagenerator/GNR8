@@ -535,10 +535,19 @@ Worker metadata use separate setup credentials. A mocked request test runs
 the adapter through the actual issuance coordinator and vault; it is not a
 hosted API result. The central account-token manager and Worker-read credentials
 are not configured, and the adapter is not connected to a hosted provisioner.
-The existing native-source preparation routes already require a verified Studio
-binding before they can run. Credential installation cannot be inserted there:
-the new-site bootstrap must establish Workers, domain routing and Studio health,
-then write the verified binding, before source preparation or launch uses it.
+The four existing Studio Workers have scoped publish-token secret names, but
+their values cannot be read back from Worker secrets. No matching value in the
+central vault has been verified. The current issuer rejects an existing exact
+token without its own creation intent and sealed value as `unowned`; it cannot
+silently adopt the four manual tokens. Before universal provisioning, use an
+explicit identity-checked adoption or rotation path and keep the existing
+Worker secrets usable until the replacement is installed and verified. Do not
+repeat the withdrawn per-site user token handoff.
+The legacy release preparation requires a ready Studio binding; the newer
+direct source path can use a guarded bootstrap target before readiness.
+Credential installation cannot be inserted into these preparation routes:
+the new-site bootstrap may prepare source early, but must establish Workers,
+domain routing and Studio health before it writes the verified launch binding.
 
 The local credential installer now has one central configuration entry point for
 all sites. It expects account and zone IDs, separate Cloudflare R2-management,
