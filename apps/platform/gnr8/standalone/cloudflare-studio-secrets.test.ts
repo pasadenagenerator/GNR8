@@ -36,6 +36,7 @@ test('patches only the exact Worker then confirms secret names and types', async
   assert.equal(result.worker, `gnr8-${scope.siteId}-studio`);
   assert.deepEqual(result.secretNames, Object.keys(secrets).sort());
   assert.equal(result.versionId, versionId);
+  assert.equal(result.previousVersionId, previousVersionId);
   assert.equal(calls.length, 4);
   assert.equal(calls[1].url,
     `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${result.worker}/secrets-bulk`);

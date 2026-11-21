@@ -90,6 +90,7 @@ test('one step issues, seals, installs, reads back and reuses native secrets', a
     f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport);
   assert.equal(first.worker, `gnr8-${scope.siteId}-studio`);
   assert.equal(first.versionId, versionId);
+  assert.equal(first.previousVersionId, previousVersionId);
   assert.equal(f.patched().PUBLISH_CLOUDFLARE_API_TOKEN?.text, value);
   assert.equal(f.creates(), 1);
   assert.equal(f.patches(), 1);
@@ -99,6 +100,7 @@ test('one step issues, seals, installs, reads back and reuses native secrets', a
     f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport);
   assert.deepEqual(second.secretNames, first.secretNames);
   assert.equal(second.versionId, first.versionId);
+  assert.equal(second.previousVersionId, first.previousVersionId);
   assert.deepEqual(f.patched(), original);
   assert.equal(f.creates(), 1);
   assert.equal(f.patches(), 1);
@@ -123,6 +125,22 @@ test('lost upload response leaves one durable attempt and cannot send secrets ag
   assert(!JSON.stringify([...f.saved.values()]).includes(value));
 });
 
+test('an earlier install receipt remains readable without a recovery reference', async () => {
+  const f = fixture();
+  await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(), f.transport);
+  const key = 'native-studio/secret-install-receipt-v1.json';
+  const receipt = f.saved.get(key) as Record<string, unknown>;
+  const { previousVersionId: _previousVersionId, ...earlierReceipt } = receipt;
+  f.saved.set(key, earlierReceipt);
+  const reused = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(), f.transport);
+  assert.equal(reused.previousVersionId, null);
+  assert.equal(f.patches(), 1);
+});
+
 test('changed shared secret conflicts with the first install attempt', async () => {
   const f = fixture();
   await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
@@ -142,6 +160,23 @@ test('a conflicting stored version cannot replace the verified upload result', a
     if (key === 'native-studio/secret-install-receipt-v1.json') {
       f.saved.set(key, { ...(data as object),
         versionId: '66666666-6666-4666-8666-666666666666' });
+      return false;
+    }
+    return claim(key, data);
+  };
+  await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(), f.transport), /native_studio_secret_install_receipt_conflict/);
+  assert.equal(f.patches(), 1);
+});
+
+test('a conflicting previous version cannot replace the captured recovery reference', async () => {
+  const f = fixture();
+  const claim = f.store.claim;
+  f.store.claim = async (key, data) => {
+    if (key === 'native-studio/secret-install-receipt-v1.json') {
+      f.saved.set(key, { ...(data as object),
+        previousVersionId: '66666666-6666-4666-8666-666666666666' });
       return false;
     }
     return claim(key, data);

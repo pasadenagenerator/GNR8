@@ -163,6 +163,7 @@ test('existing manual token survives managed issuance and active Studio secret i
     f.store, 'f'.repeat(64), shared, f.provider, 'cfat_' + 'S'.repeat(45),
     client, f.transport);
   assert.equal(installed.versionId, newVersion);
+  assert.equal(installed.previousVersionId, oldVersion);
   assert.equal(f.installedToken(), value);
   assert.equal(f.creates(), 1);
   assert.equal(f.patches(), 1);

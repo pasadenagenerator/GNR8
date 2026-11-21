@@ -471,7 +471,10 @@ claims a durable per-site patch intent before the provider request. Its identity
 is keyed with the private vault key, so the store contains no raw secret value
 or plain digest of one. An ambiguous response leaves the intent pending and
 cannot trigger another patch on retry. A successful active-version readback is
-saved as a separate receipt; repeated calls reuse it. Changes to the shared
+saved as a separate receipt with the pre-patch active Studio version ID;
+repeated calls reuse it. Earlier receipts without that ID remain readable and
+report no recovery reference. The captured ID is not proof that the older
+version has all required bindings or can publish. Changes to the shared
 secrets conflict with that first-install intent and need a separate rotation
 flow. A pending intent still needs exact-version reconciliation before the
 hosted job can continue without review.

@@ -50,7 +50,8 @@ export async function installNativeStudioRuntimeSecrets(
   studioSetupCredential: string,
   siteClient: SupabaseClient,
   transport: typeof fetch = fetch,
-): Promise<{ worker: string; secretNames: readonly string[]; versionId: string }> {
+): Promise<{ worker: string; secretNames: readonly string[];
+  versionId: string; previousVersionId: string | null }> {
   assertNativeStudioSharedSecrets(shared);
   if (typeof studioSetupCredential !== 'string' ||
       studioSetupCredential.length < 16 || /\s/.test(studioSetupCredential))
@@ -69,13 +70,18 @@ export async function installNativeStudioRuntimeSecrets(
     throw Error('native_studio_secret_install_intent_conflict');
   async function savedReceipt() {
     const receipt = await store.read<{ identity: string; worker: string;
-      secretNames: readonly string[]; versionId: string }>(RECEIPT);
+      secretNames: readonly string[]; versionId: string;
+      previousVersionId?: string }>(RECEIPT);
     if (!receipt) return null;
     if (receipt.identity !== identity || receipt.worker !== worker ||
         !UUID.test(receipt.versionId) ||
+        (receipt.previousVersionId !== undefined &&
+          (!UUID.test(receipt.previousVersionId) ||
+            receipt.previousVersionId === receipt.versionId)) ||
         JSON.stringify(receipt.secretNames) !== JSON.stringify(SECRET_NAMES))
       throw Error('native_studio_secret_install_receipt_conflict');
-    return { worker, secretNames: receipt.secretNames, versionId: receipt.versionId };
+    return { worker, secretNames: receipt.secretNames, versionId: receipt.versionId,
+      previousVersionId: receipt.previousVersionId ?? null };
   }
   if (intent) {
     const receipt = await savedReceipt();
@@ -92,7 +98,8 @@ export async function installNativeStudioRuntimeSecrets(
   await store.claim(RECEIPT, { identity, ...result });
   const receipt = await savedReceipt();
   if (!receipt) throw Error('native_studio_secret_install_receipt_unconfirmed');
-  if (receipt.versionId !== result.versionId)
+  if (receipt.versionId !== result.versionId ||
+      receipt.previousVersionId !== result.previousVersionId)
     throw Error('native_studio_secret_install_receipt_conflict');
   return receipt;
 }

@@ -29,7 +29,8 @@ export async function installNativeStudioSecrets(
   setupToken: string,
   secrets: NativeStudioRuntimeSecrets,
   transport: typeof fetch = fetch,
-): Promise<{ worker: string; secretNames: readonly string[]; versionId: string }> {
+): Promise<{ worker: string; secretNames: readonly string[];
+  versionId: string; previousVersionId: string }> {
   if (!validInput(scope, accountId, setupToken, secrets))
     throw Error('native_studio_secret_install_invalid');
   const worker = `gnr8-${scope.siteId}-studio`;
@@ -85,5 +86,5 @@ export async function installNativeStudioSecrets(
   if (!names.every(name => bindings.some((item: unknown) =>
         object(item) && item.name === name && item.type === 'secret_text')))
     throw Error('native_studio_secret_readback_failed');
-  return { worker, secretNames: names, versionId };
+  return { worker, secretNames: names, versionId, previousVersionId };
 }
