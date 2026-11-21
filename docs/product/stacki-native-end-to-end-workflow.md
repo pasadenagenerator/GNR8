@@ -382,8 +382,14 @@ patch and reads the six names and `secret_text` types from that version's
 bindings; a latest-version secret list is insufficient. If Cloudflare leaves
 the newly created version inactive, this step fails closed until a separate,
 exact-version activation and readback is implemented. The installer currently
-has no durable patch intent, so an ambiguous patch must not be blindly retried
-by a future hosted job.
+claims a durable per-site patch intent before the provider request. Its identity
+is keyed with the private vault key, so the store contains no raw secret value
+or plain digest of one. An ambiguous response leaves the intent pending and
+cannot trigger another patch on retry. A successful active-version readback is
+saved as a separate receipt; repeated calls reuse it. Changes to the shared
+secrets conflict with that first-install intent and need a separate rotation
+flow. A pending intent still needs exact-version reconciliation before the
+hosted job can continue without review.
 The local installer step now links exact per-site token issuance, sealed
 runtime-secret assembly, upload and name/type readback in that order. It
 validates shared and Studio setup credentials and reads the exact scoped site,

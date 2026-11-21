@@ -14,7 +14,6 @@ const tokenId = 'c'.repeat(32);
 const value = 'cfat_' + 'P'.repeat(45);
 const versionId = '44444444-4444-4444-8444-444444444444';
 const previousVersionId = '33333333-3333-4333-8333-333333333333';
-const nextVersionId = '55555555-5555-4555-8555-555555555555';
 const master = 'f'.repeat(64);
 const shared = {
   GITHUB_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nexample\n-----END RSA PRIVATE KEY-----\n',
@@ -75,8 +74,8 @@ function fixture() {
     }
     const result = url.endsWith('/deployments?per_page=1')
       ? { deployments: [{ versions: [{ version_id: patches === 0 ? previousVersionId
-        : patches === 1 ? versionId : nextVersionId, percentage: 100 }] }] }
-      : { id: patches === 1 ? versionId : nextVersionId,
+        : versionId, percentage: 100 }] }] }
+      : { id: versionId,
         resources: { bindings: Object.keys(patched)
         .map(name => ({ name, type: 'secret_text' })) } };
     return Response.json({ success: true, result });
@@ -99,10 +98,58 @@ test('one step issues, seals, installs, reads back and reuses native secrets', a
   const second = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
     f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport);
   assert.deepEqual(second.secretNames, first.secretNames);
-  assert.equal(second.versionId, nextVersionId);
+  assert.equal(second.versionId, first.versionId);
   assert.deepEqual(f.patched(), original);
   assert.equal(f.creates(), 1);
-  assert.equal(f.patches(), 2);
+  assert.equal(f.patches(), 1);
+});
+
+test('lost upload response leaves one durable attempt and cannot send secrets again', async () => {
+  const f = fixture();
+  const transport = (async (url: string, init: RequestInit) => {
+    const response = await f.transport(url, init);
+    if (init.method === 'PATCH') throw Error('lost response');
+    return response;
+  }) as typeof fetch;
+  await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(), transport), /lost response/);
+  assert.equal(f.patches(), 1);
+  await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(), transport), /native_studio_secret_install_pending_review/);
+  assert.equal(f.patches(), 1);
+  assert([...f.saved.keys()].includes('native-studio/secret-install-intent-v1.json'));
+  assert(!JSON.stringify([...f.saved.values()]).includes(value));
+});
+
+test('changed shared secret conflicts with the first install attempt', async () => {
+  const f = fixture();
+  await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(), f.transport);
+  await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, { ...shared, AI_API_KEY: 'another-openai-api-key-long-enough' },
+    f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport),
+  /native_studio_secret_install_intent_conflict/);
+  assert.equal(f.patches(), 1);
+});
+
+test('a conflicting stored version cannot replace the verified upload result', async () => {
+  const f = fixture();
+  const claim = f.store.claim;
+  f.store.claim = async (key, data) => {
+    if (key === 'native-studio/secret-install-receipt-v1.json') {
+      f.saved.set(key, { ...(data as object),
+        versionId: '66666666-6666-4666-8666-666666666666' });
+      return false;
+    }
+    return claim(key, data);
+  };
+  await assert.rejects(installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, master, shared, f.provider, 'cloudflare-studio-setup-token',
+    siteClient(), f.transport), /native_studio_secret_install_receipt_conflict/);
+  assert.equal(f.patches(), 1);
 });
 
 test('missing shared or installer credential stops before token issuance', async () => {
