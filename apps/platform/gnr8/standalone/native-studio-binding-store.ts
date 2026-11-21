@@ -13,6 +13,14 @@ type Row = {
 };
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+// The deployment map predates verified receipts for these four retained sites.
+// New sites must use the service-role receipt after provisioning succeeds.
+const legacySiteIds = new Set([
+  '2e7146cd-e516-4088-94ad-6cac90cb17f4', // Ladja Žaba
+  'fb4b6b9a-f2ba-4ffb-8240-1d988ebb916e', // Logatčan
+  '9ff5613e-1625-43f1-844e-c5c91a813d4f', // CHS
+  'dbdd5b9f-6ae1-4736-917b-20adf94838c6', // ViroiDoc
+]);
 const rowColumns = 'site_id,agency_id,client_id,studio_origin,repository,repository_id,branch,cloudflare_account_id,github_app_id,github_installation_id,github_client_id,studio_worker,site_worker,draft_bucket,verified_at';
 
 export function nativeStudioSiteFromRow(scope: NativeStudioScope, row: Row) {
@@ -67,6 +75,7 @@ export async function readNativeStudioBindingForScope(
     }
     if (result.error && !source) throw Error('native_studio_binding_unavailable');
   }
+  if (!legacySiteIds.has(scope.siteId)) throw Error('native_studio_binding_missing');
   return readNativeStudioBinding(scope.siteId, source);
 }
 

@@ -66,14 +66,26 @@ test('cross-site and malformed receipts fail closed, rather than falling back to
 });
 
 test('existing deployment map remains available until per-site receipts are installed', async () => {
-  const source = JSON.stringify({ [scope.siteId]: { siteId: scope.siteId,
+  const legacyScope = { ...scope, siteId: '2e7146cd-e516-4088-94ad-6cac90cb17f4' };
+  const source = JSON.stringify({ [legacyScope.siteId]: { siteId: legacyScope.siteId,
     repository: 'example/legacy', repositoryId: '124', branch: 'main',
     studioOrigin: 'https://legacy.example.com', accountId: 'a'.repeat(32),
     appId: '456', installationId: '789', clientId: 'Iv1.example' } });
-  const site = await readNativeStudioBindingForScope(scope,
+  const site = await readNativeStudioBindingForScope(legacyScope,
     client({ data: null, error: null }) as any, source);
   assert.equal(site.repository, 'example/legacy');
-  await assert.rejects(readNativeStudioBindingForScope(scope,
+  await assert.rejects(readNativeStudioBindingForScope(legacyScope,
     client({ data: null, error: { message: 'unavailable' } }) as any, undefined),
   /native_studio_binding_unavailable/);
+});
+
+test('a new site cannot use the deployment map in place of a verified receipt', async () => {
+  const source = JSON.stringify({ [scope.siteId]: { siteId: scope.siteId,
+    repository: 'example/new-site', repositoryId: '124', branch: 'main',
+    studioOrigin: 'https://new-site.app.pasadenagenerator.com', accountId: 'a'.repeat(32),
+    appId: '456', installationId: '789', clientId: 'Iv1.example' } });
+  await assert.rejects(readNativeStudioBindingForScope(scope,
+    client({ data: null, error: null }) as any, source), /native_studio_binding_missing/);
+  await assert.rejects(readNativeStudioBindingForScope(scope, null, source),
+    /native_studio_binding_missing/);
 });

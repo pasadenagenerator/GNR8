@@ -134,7 +134,8 @@ The first local implementation slice adds a service-role-only, immutable
 the existing bound GitHub repository and exact working domain. Site launch and
 native-source preparation read that receipt and recheck the current site domain
 and repository before using it, with the old deployment-owned map
-as a transition fallback for the four existing sites. The schema migration has
+as a transition fallback restricted to the four existing site IDs. A new site
+cannot use that map in place of the verified receipt. The schema migration has
 not been applied to a hosted database, and no provider job writes these receipts
 yet. This does **not** make new sites self-provisioning. Payment/Stripe work is
 recorded as a later integration phase per the user's latest instruction; no
