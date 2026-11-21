@@ -1,4 +1,6 @@
 import { nativeStudioPreparationJob } from '@/gnr8/site/inngest/native-studio-preparation-job'
+import { nativeStudioSecretSetupJob, NATIVE_STUDIO_SECRET_SETUP_EVENT,
+  NATIVE_STUDIO_SECRET_SETUP_JOB_ID } from '@/gnr8/site/inngest/native-studio-secret-setup-job'
 import { standalonePublicationJob } from '@/gnr8/site/inngest/standalone-publication-job'
 import {
   CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
@@ -43,6 +45,7 @@ export type WorkerInngestFunctionRegistration = {
   eventName?: string
   fn:
     | typeof nativeStudioPreparationJob
+    | typeof nativeStudioSecretSetupJob
     | typeof standalonePublicationJob
     | typeof templateProcessingJob
     | typeof siteTemplateBootstrapJob
@@ -54,6 +57,8 @@ export type WorkerInngestFunctionRegistration = {
 
 const coreWorkerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
   { id: "native-studio-preparation-job", eventName: "gnr8/native-studio.prepare.requested", fn: nativeStudioPreparationJob },
+  { id: NATIVE_STUDIO_SECRET_SETUP_JOB_ID, eventName: NATIVE_STUDIO_SECRET_SETUP_EVENT,
+    fn: nativeStudioSecretSetupJob },
   { id: "standalone-publication-job", eventName: "gnr8/standalone.prepare.requested", fn: standalonePublicationJob },
   {
     id: SITE_ASTRO_GENERATION_JOB_ID,

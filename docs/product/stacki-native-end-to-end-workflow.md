@@ -352,19 +352,24 @@ then write the verified binding, before source preparation or launch uses it.
 
 The local credential installer now has one central configuration entry point for
 all sites. It expects account and zone IDs, separate Cloudflare R2-management,
-token-management, Worker-read and Studio-secret-install credentials, the vault key, the GitHub App
-private key and client secret, and the AI key under `GNR8_NATIVE_STUDIO_*`
+token-management, Worker-read and Studio-secret-install credentials, the vault
+key, the GitHub App private key and client secret, and the AI key under `GNR8_NATIVE_STUDIO_*`
 environment names. It validates every shared input before storage or provider
 access and then uses the existing per-site issuer and installer. Read-only Vercel
 inspection on 2026-11-21 found none of these central settings on the Platform
 project and no linked shared variables; older site-import GitHub tokens are
 present but cannot replace the native GitHub App credentials. This entry point
-is not yet called by a hosted provisioning job. The separate `gnr8-worker`
+is now called by a registered `gnr8-worker` background job for sites whose
+public and Studio Workers already exist. The job accepts only scoped site IDs
+and an actor, rechecks the actor's publish right, and is disabled unless
+`GNR8_NATIVE_STUDIO_SECRET_SETUP_ENABLED=1`. It has no automatic dispatcher;
+it does not create Workers, test Studio health, or write a ready binding. The
+separate `gnr8-worker`
 Vercel project also has no `GNR8_NATIVE_STUDIO_*` settings or linked shared
 variables. The one-time credentials must be installed where the eventual
 provisioning job runs; setting them only on the Platform project would not
-configure that job. No credential was read, created
-or installed during this inspection or local implementation.
+configure that job. Local tests and a production Worker build passed; no
+credential was read, created or installed in a hosted environment.
 
 The upstream editor's access check calls GitHub for the signed-in user's write
 permission on the site repository. Several native routes force that same check
