@@ -288,6 +288,20 @@ a future runner but performs no build or provider action. The Container runner
 must use this gate immediately before its first deployment and still reconcile
 Cloudflare resources and health afterward.
 
+A read-only first-deployment inspector now checks the reserved Worker's immutable
+ID and disabled public subdomains, its [actively serving deployment](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/),
+the active version's `PreviewContainer` export, exact Worker
+[settings bindings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/),
+and the matching [Container application](https://developers.cloudflare.com/api/resources/containers/subresources/applications/methods/list/).
+It re-reads the current scoped site and GitHub binding before Cloudflare access.
+An absent deployment or delayed application remains pending; a mismatched Worker,
+bucket, domain or split deployment fails closed. The current-settings API is not
+version-scoped, so this is control-plane evidence only, not proof that every
+binding belongs to the active version. Hosted readback of this API shape, preview
+health, authenticated editor access, secrets and the exact deployed source remain
+required before a ready binding. Tests use mocked responses; no hosted provider
+call was made.
+
 The first local bootstrap step can now create or reuse the exact
 `gnr8-<site-id>-drafts` R2 bucket through Cloudflare's
 [bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/create/).
