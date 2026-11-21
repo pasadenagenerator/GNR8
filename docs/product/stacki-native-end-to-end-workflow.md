@@ -160,10 +160,16 @@ recorded as a later integration phase per the user's latest instruction; no
 payment behavior changes in this slice.
 
 For the next slice, the existing automatic GitHub repository reservation/binding
-at site import must be reused. Cloudflare's documented CI path can deploy a
-Worker from GitHub Actions with a centrally held API token; per-Worker secrets
-can be uploaded with the deployment. Creating future per-site API tokens by API
-requires a separate account-token-management permission. A Container deployment
+at site import must be reused. Cloudflare's [Workers Builds API](https://developers.cloudflare.com/workers/ci-cd/builds/api-reference/)
+can connect an existing Worker to the already authorized GitHub repository and
+start its first build. The API requires a **user-scoped** token with Workers
+Builds Configuration Edit; account-scoped tokens are rejected. It also requires
+the Worker's immutable tag, the exact repository connection and a build token.
+For the public site Worker, the push-triggered deploy command must use
+`wrangler versions upload` so a GitHub Push creates an inactive version rather
+than publishing it. Native Stacki Publish remains the live deployment action.
+Creating future per-site publish tokens by API separately requires account-token
+management permission. A Container deployment
 is not transactional: the Worker can become live before its image rollout
 finishes. Therefore the provisioner must reconcile exact resource identities
 and read back both the Worker and Container before it inserts a ready binding.
@@ -269,7 +275,11 @@ access and then uses the existing per-site issuer and installer. Read-only Verce
 inspection on 2026-11-21 found none of these central settings on the Platform
 project and no linked shared variables; older site-import GitHub tokens are
 present but cannot replace the native GitHub App credentials. This entry point
-is not yet called by a hosted provisioning job. No credential was read, created
+is not yet called by a hosted provisioning job. The separate `gnr8-worker`
+Vercel project also has no `GNR8_NATIVE_STUDIO_*` settings or linked shared
+variables. The one-time credentials must be installed where the eventual
+provisioning job runs; setting them only on the Platform project would not
+configure that job. No credential was read, created
 or installed during this inspection or local implementation.
 
 The upstream editor's access check calls GitHub for the signed-in user's write
