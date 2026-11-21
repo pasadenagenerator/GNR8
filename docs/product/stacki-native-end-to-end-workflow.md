@@ -216,8 +216,8 @@ Worker. Cloudflare's [first-version rule](https://developers.cloudflare.com/work
 still requires the subsequent real `wrangler deploy`; `versions upload` cannot
 be the first code upload. This adapter has mocked tests only and has not
 created a hosted Worker. This Cloudflare endpoint is marked Beta, so hosted
-readback must be verified before enabling automatic creation. The Container
-runner, routes and readiness check remain separate steps.
+readback must be verified before enabling automatic creation. Hosted Container
+runner wiring, routes and readiness check remain separate steps.
 
 The guarded `gnr8/native-studio.resources.reserve.requested` job now joins the
 private draft bucket and both empty Worker reservations under one central
@@ -241,8 +241,8 @@ twice while the tab remains open and is attempted again on a later visit;
 the site import is not repeated. The job's durable per-resource create intents
 make duplicate events safe. This is not a persistent background outbox: an
 unavailable queue after the tab closes still needs a later visit or an operator
-retry. The Container build, first deployment, secrets, routes and readiness
-checks remain to be connected.
+retry. The hosted Container build and first deployment, secrets, routes and
+readiness checks remain to be connected.
 
 After that first installation, the public site Worker may be connected to
 GitHub Builds with `versions upload`. Keep the Studio Worker build trigger
@@ -251,8 +251,8 @@ its Container without making a native Push to GitHub a live site publication.
 Do not create a temporary `wrangler deploy` push trigger and switch it off
 afterward: a push in that interval can activate a Worker before the publisher
 has acted. This also means the current public-Worker Builds adapter cannot
-serve as the new-site bootstrap job. The Container runner, its one-time credentials,
-hosted invocation, and reconciliation checks are still missing.
+serve as the new-site bootstrap job. The hosted Container runner, its one-time
+credentials, invocation and health checks are still missing.
 
 The exact automatic handoff point is the scoped site-import route: it already
 reserves and verifies the private GitHub repository before starting capture.
@@ -268,8 +268,8 @@ resources, installs the shared and per-site secrets, checks the real preview
 and authenticated editor, and only then writes the ready binding. If any step
 fails, leave the binding absent and retain a retryable diagnostic. A guarded
 resource-reservation dispatch now follows import, with retry on the Design tab;
-neither deploys a Container or records readiness. No Container runner exists
-in the current GNR8 repository. The current Vercel
+neither deploys a Container or records readiness. No hosted Container runner is
+connected in the current GNR8 repository. The current Vercel
 Inngest preparation job only prepares source and cannot be treated as this
 bootstrap. A central
 [GitHub Actions Ubuntu 24.04 runner](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)
@@ -287,6 +287,17 @@ and working files against the approved package. It returns the exact commit for
 a future runner but performs no build or provider action. The Container runner
 must use this gate immediately before its first deployment and still reconcile
 Cloudflare resources and health afterward.
+
+The local `runFirstStudioDeployment` orchestrator now uses that gate before any
+site build and again after both native builds and a full Wrangler dry run. It
+passes no Cloudflare credential to install, build or dry run, then claims one
+append-only per-site deployment intent before invoking the exact Studio
+`wrangler deploy` command. A lost response or timeout is read back and never
+causes a second automatic deploy. The result remains `reconcile-required` or
+`pending-review`, never a ready binding. The orchestration has mocked command
+and inspector tests only. A trusted disposable Docker runner must still provide
+the scoped inspector, protected credential and private store and call it; no
+hosted job invokes it, and no provider command has been run by this path.
 
 A read-only first-deployment inspector now checks the reserved Worker's immutable
 ID and disabled public subdomains, its [actively serving deployment](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/),

@@ -45,6 +45,13 @@ the retained source ID against the dedicated checkout's exact branch, remote,
 clean working files and committed HEAD. It returns the commit but performs no
 build, push, provider request or deployment.
 
+`first-studio-deployment.mjs` contains the one-attempt first-install runner for
+a disposable Docker host. Its caller must supply a scoped Cloudflare readback
+and private per-site intent store. Builds and dry run receive no Cloudflare key;
+the key is supplied only to the exact `wrangler deploy` process. Any ambiguous
+result requires readback and review, never an automatic second deploy. This
+library is not connected to a hosted job or a ready-Studio receipt yet.
+
 ## Existing sites and upgrades
 
 Use the official Stacki updater with the verified release JSON:
