@@ -236,6 +236,18 @@ isolation must be implemented before use; a workflow
 that trusts dispatch inputs or exposes an account-wide deploy token to site
 build scripts would widen access to the whole account.
 
+The first local bootstrap step can now create or reuse the exact
+`gnr8-<site-id>-drafts` R2 bucket through Cloudflare's
+[bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/create/).
+Before any provider call, its hosted boundary checks the current scoped site
+and bound GitHub repository. A durable create intent prevents duplicate
+creation after an ambiguous response. Readback requires the default
+jurisdiction and checks both the [managed `r2.dev` domain](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/domains/subresources/managed/methods/list/)
+and [custom domains](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/domains/subresources/custom/methods/list/)
+are disabled, so existing public draft buckets fail closed. The adapter has
+mocked provider tests only; it has no central R2 credential or hosted caller
+yet and has not created a bucket in Cloudflare.
+
 Creating future per-site publish tokens by API separately requires account-token
 management permission. A Container deployment
 is not transactional: the Worker can become live before its image rollout
