@@ -20,21 +20,28 @@ function fixture(unsupportedCapabilities=['dynamic widget']){
   buildCompletedAt:'2026-11-05T10:00:00.000Z',sourceSnapshotSha256:sha,exportSha256:sha,outputPaths:paths,assetFingerprintMapSha256:sha,contentManifestSourceRef:content.sourceRef,derivedFromEvidenceSha256:null});
  const source={artifact:{id:id(7),bundleSha256:sha,manifest:{generatedOutputSourceWorkspace:{adapterId:'astro-static-site',stackiRevision:{scope,revision:2,sha256:sha}},generatedOutputBuildEvidence:build,generatedOutputContentManifest:content}}};
  let provenance:Record<string,unknown>={capture:{retain:'all fields'}},updatedAt='2026-11-05T10:00:00.000Z',writes=0,reads=0,deny:string|null=null,conflict=false;
+ let studioAvailable=false,queueFailure=false;
+ const queued:Array<Record<string,unknown>>=[];
  let selectedClosure:ImportReviewModel['selectedClosure']=null;
  const authorized:string[]=[];
  const db={from(table:string){reads++;let update:Record<string,unknown>|null=null;const filters:Record<string,string>={};
   const q={select(){if(update){assert.equal(table,'gnr8_runtime_site_versions');assert.equal(filters.id,captureId);assert.equal(filters.site_id,'runtime');const ok=!conflict&&filters.updated_at===updatedAt;if(ok){provenance=update.import_provenance_summary as Record<string,unknown>;updatedAt=update.updated_at as string;writes++;}return Promise.resolve({data:ok?[{id:captureId}]:[],error:null});}return q;},
    eq(k:string,v:string){filters[k]=v;return q;},update(v:Record<string,unknown>){update=v;return q;},async single(){return {error:null,data:table==='gnr8_runtime_site_versions'?{import_provenance_summary:structuredClone(provenance),updated_at:updatedAt}:{id:rawId,file_map:{'index.html':{sha256:sha}},entry_html_path:'index.html'}};}};return q;
  }};
- const deps={...importReviewDependencies,authorize:async(_scope:unknown,versionId:string)=>{authorized.push(versionId);if(deny===versionId)throw Error('403|Dostop zavrnjen.');return {userId:id(8)};},readSource:async()=>{reads++;return structuredClone(source);},client:()=>db,readSelectedClosure:async()=>selectedClosure};
- const routes=createImportReviewRoutes(deps as unknown as typeof importReviewDependencies),context={params:Promise.resolve(scope)};
+ const deps={...importReviewDependencies,authorize:async(_scope:unknown,versionId:string)=>{authorized.push(versionId);if(deny===versionId)throw Error('403|Dostop zavrnjen.');return {userId:id(8)};},readSource:async()=>{reads++;return structuredClone(source);},client:()=>db,readSelectedClosure:async()=>selectedClosure,
+  studioSource:async()=>{if(!studioAvailable)throw Error('disabled');},
+  enqueueSource:async(data:Record<string,unknown>)=>{queued.push(data);if(queueFailure)throw Error('queue unavailable');}};
+ const routes=createImportReviewRoutes(deps as unknown as typeof importReviewDependencies),
+  context={params:Promise.resolve({clientId:scope.clientId,siteId:scope.siteId})};
  const selection={siteVersionId:scope.siteVersionId,artifactId:source.artifact.id,artifactBundleSha256:sha};
  const url=`https://app.test/review?agencyId=${scope.agencyId}`;
  const get=()=>routes.GET(new Request(url+'&'+new URLSearchParams(selection)),context);
  const post=(body:Record<string,unknown>,origin='https://app.test')=>routes.POST(new Request(url,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({...selection,...body})}),context);
  const read=async()=>{const r=await get();assert.equal(r.status,200,JSON.stringify(await r.clone().json()));return (await r.json()).data as ImportReviewModel;};
  const save=(m:ImportReviewModel,extra:Record<string,unknown>={})=>post({token:m.token,routes:m.routes,brandConfirmed:false,...extra});
- return {get,read,post,save,source,authorized,selection,get provenance(){return provenance;},get writes(){return writes;},get reads(){return reads;},set deny(v:string|null){deny=v;},set conflict(v:boolean){conflict=v;},setClosure(v:ImportReviewModel['selectedClosure']){selectedClosure=v;},touch(){updatedAt=new Date(Date.parse(updatedAt)+1).toISOString();}};
+ return {get,read,post,save,source,authorized,selection,queued,
+  setStudioAvailable(v:boolean){studioAvailable=v;},setQueueFailure(v:boolean){queueFailure=v;},
+  get provenance(){return provenance;},get writes(){return writes;},get reads(){return reads;},set deny(v:string|null){deny=v;},set conflict(v:boolean){conflict=v;},setClosure(v:ImportReviewModel['selectedClosure']){selectedClosure=v;},touch(){updatedAt=new Date(Date.parse(updatedAt)+1).toISOString();}};
 }
 test('selected-route evidence is visible and a changed result invalidates the old review token',async()=>{
  const f=fixture(),before=await f.read();
@@ -124,6 +131,42 @@ test('explicit selected-scope confirmation persists only after a complete curren
  f.setClosure({...confirmed.selectedClosure!,technicalEvidenceSha256:'b'.repeat(64)});
  assert.equal((await f.read()).confirmedAt,null);
  assert.equal((await f.post({action:'confirm',token:confirmed.token,scopeConfirmed:true,functionsConfirmed:true})).status,409);
+});
+test('confirmed import reports queued, failed and unavailable Studio source preparation',async()=>{
+ const previous=process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED;
+ process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED='1';
+ try{
+  for(const mode of ['queued','queue-failed','unavailable'] as const){
+   const f=fixture([]);
+   f.setStudioAvailable(mode!=='unavailable');f.setQueueFailure(mode==='queue-failed');
+   const values={logo:'logo.svg',logoPosition:'left',background:'white',text:'black',accent:'red',fontFamily:'Arial',fontSize:'16px',fontWeight:'400',lineHeight:'1.5',headingFamily:'Arial',headingSize:'32px',headingWeight:'700',headingLineHeight:'1.2',spacing:'16px',contentWidth:'1200px',border:'none',radius:'0',shadow:'none',buttonBackground:'red',buttonText:'white',buttonPadding:'16px',breakpoints:'600px, 1200px'};
+   f.provenance.brandStyleGuide={kind:'brand_style_guide_v1',siteVersionId:captureId,artifactId:rawId,
+    revision:1,savedAt:'2026-11-05T10:00:00.000Z',savedBy:id(8),
+    decisions:Object.fromEntries(Object.entries(values).map(([key,value])=>[key,{value,confirmed:true}]))};
+   f.setClosure({kind:'gnr8-selected-import-closure:v1',status:'selected_routes_verified',
+    blockers:[],selectedRoutes:paths,technicalEvidenceSha256:sha,
+    captureReviewSha256:sha,wholeSiteComplete:false});
+   const first=await f.read();
+   first.routes=first.routes.map(route=>({...route,contentConfirmed:true,layoutConfirmed:true}));
+   assert.equal((await f.save(first,{brandConfirmed:true})).status,200);
+   const current=await f.read();
+   const response=await f.post({action:'confirm',token:current.token,
+    scopeConfirmed:true,functionsConfirmed:true});
+   assert.equal(response.status,200);
+   assert.equal((await response.json()).sourcePreparation,mode);
+   assert.equal(f.queued.length,mode==='unavailable'?0:1);
+   const certificate=f.provenance.confirmedImport;
+   if(mode!=='unavailable')assert.deepEqual(f.queued[0],{
+    scope:{agencyId:scope.agencyId,clientId:scope.clientId,siteId:scope.siteId},
+    input:publicationSelectionForArtifact(scope,f.source.artifact),
+    requestId:fingerprint({input:publicationSelectionForArtifact(scope,f.source.artifact),
+     confirmationSha256:fingerprint(certificate)}),actor:id(8)});
+   assert.ok((await f.read()).confirmedAt);
+  }
+ }finally{
+  if(previous===undefined)delete process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED;
+  else process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED=previous;
+ }
 });
 test('unsupported output cannot be certified even if a closure result is supplied',async()=>{
  const f=fixture();

@@ -281,6 +281,13 @@ present before enabling this path in a hosted environment.
 The existing `prepare-source` request and its status read now use this same
 bootstrap gate, so they can reach the already registered background preparation
 job for a new site. The legacy release request still requires a ready binding.
+After the user confirms the selected import, the review route automatically
+queues that same source-preparation job when bootstrap is enabled and the target
+is available. It records the confirmation first; a queue failure is reported
+separately and the existing preparation button can retry without repeating the
+import review. An unavailable bootstrap target is also reported instead of
+silently claiming that preparation started. The Worker rechecks confirmation,
+ownership and target before storing the package.
 This prepares an immutable package only; a Stacki
 launch request still cannot serve as the installer.
 The central values are `GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID`,

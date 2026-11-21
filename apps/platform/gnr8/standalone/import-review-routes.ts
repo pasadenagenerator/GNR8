@@ -9,12 +9,17 @@ import { fingerprint, publicationSelectionForArtifact } from './publication-cont
 import { confirmSelectedImport, importReviewModel, saveImportReview } from './import-review';
 import { readSelectedImportClosure } from './read-selected-import-closure';
 import {getSiteVersion,isGitBackedImportMarker} from '../runtime/runtime-store';
-import { configuredNativeStudioSite } from './native-studio-preparation';
+import { configuredNativeStudioDirectSourceSite } from './native-studio-bootstrap-site';
+import { inngest } from '@/gnr8/inngest/client';
 
 type Context={params:Promise<{clientId:string;siteId:string}>};
 const headers={'cache-control':'private, no-store','referrer-policy':'no-referrer'};
 export const importReviewDependencies={
  authorize:requirePublicOutputVersion,client:getSupabaseServiceRoleClient,
+ studioSource:configuredNativeStudioDirectSourceSite,
+ enqueueSource:async(data:{scope:{agencyId:string;clientId:string;siteId:string};
+  input:ReturnType<typeof publicationSelectionForArtifact>;requestId:string;actor:string})=>
+  inngest.send({name:'gnr8/native-studio.prepare.requested',data:{mode:'source',...data}}),
  readSelectedClosure:async(input:Parameters<typeof readSelectedImportClosure>[0])=>{
   try{return await readSelectedImportClosure(input);}catch{return null;}
  },
@@ -62,7 +67,7 @@ export function createImportReviewRoutes(deps=importReviewDependencies){
     runtimeSiteId:capture.runtimeSiteId,raw:raw.data,
     provenance:previous as Parameters<typeof readSelectedImportClosure>[0]['provenance'],selectedRoutes:content.scope.outputPaths});
    let nativeStudioAvailable=false;
-   try{await configuredNativeStudioSite(scope);nativeStudioAvailable=true;}
+   try{await deps.studioSource(scope,db);nativeStudioAvailable=true;}
    catch{nativeStudioAvailable=false;}
    const input={selection,paths:content.scope.outputPaths,unsupported:content.scope.unsupportedCapabilities,captureVersionId:capture.siteVersionId,captureArtifactId:raw.data.id,
     provenance:previous,updatedAt:version.data.updated_at,evidence:{build,content,raw:raw.data,captureEvidence,closure},closure,nativeStudioAvailable};
@@ -79,7 +84,17 @@ export function createImportReviewRoutes(deps=importReviewDependencies){
      .eq('id',capture.siteVersionId).eq('site_id',capture.runtimeSiteId).eq('updated_at',version.data.updated_at).select('id');
     if(result.error)throw Error('503|Potrditve ni mogoče shraniti.');
     if(result.data?.length!==1)throw Error('409|Vhod se je med potrjevanjem spremenil. Osvežite pregled.');
-    return Response.json({ok:true,data:importReviewModel({...input,provenance,updatedAt})},{headers});
+    let sourcePreparation:'queued'|'queue-failed'|'unavailable'|null=null;
+    if(process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED==='1'&&!nativeStudioAvailable)
+     sourcePreparation='unavailable';
+    if(nativeStudioAvailable&&process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED==='1'){
+     const requestId=fingerprint({input:selection,confirmationSha256:fingerprint(certificate)});
+     try{await deps.enqueueSource({scope,input:selection,requestId,actor:actor.userId});
+      sourcePreparation='queued';}
+     catch{sourcePreparation='queue-failed';}
+    }
+    return Response.json({ok:true,data:importReviewModel({...input,provenance,updatedAt}),
+     sourcePreparation},{headers});
    }
    if(body.action!==undefined)throw Error('422|Neveljavna zahteva.');
    const saved=saveImportReview(model,body,actor.userId,new Date().toISOString());

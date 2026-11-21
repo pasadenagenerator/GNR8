@@ -33,7 +33,14 @@ function Review(p:Props){
   try{
    const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...p.selection,action:'confirm',token:model?.token,scopeConfirmed,functionsConfirmed})});
    const value=await response.json();if(!response.ok||!value.ok)throw Error(value.error??'Potrditve ni mogoče shraniti.');
-   if(alive.current&&call===sequence.current){setModel(value.data);setFunctionsConfirmed(false);setNotice('Izbrani uvoz je potrjen. Objava ni sprožena.');}
+   if(alive.current&&call===sequence.current){setModel(value.data);setFunctionsConfirmed(false);
+    setNotice(value.sourcePreparation==='queued'
+     ?'Izbrani uvoz je potrjen. Zasebna priprava Studia se je začela; objava ni sprožena.'
+     :value.sourcePreparation==='queue-failed'
+      ?'Izbrani uvoz je potrjen. Priprave Studia ni bilo mogoče sprožiti; uporabite gumb za ponovni poskus. Objava ni sprožena.'
+      :value.sourcePreparation==='unavailable'
+       ?'Izbrani uvoz je potrjen. Priprava Studia še ni nastavljena za to stran. Objava ni sprožena.'
+      :'Izbrani uvoz je potrjen. Objava ni sprožena.');}
   }catch(error){if(alive.current&&call===sequence.current)setNotice(error instanceof Error?error.message:'Potrditev ni na voljo.');}
   finally{if(alive.current&&call===sequence.current)setBusy(false);}
  }
