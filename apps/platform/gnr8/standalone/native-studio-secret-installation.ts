@@ -43,7 +43,7 @@ export async function installNativeStudioRuntimeSecrets(
   studioSetupCredential: string,
   siteClient: SupabaseClient,
   transport: typeof fetch = fetch,
-): Promise<{ worker: string; secretNames: readonly string[] }> {
+): Promise<{ worker: string; secretNames: readonly string[]; versionId: string }> {
   assertNativeStudioSharedSecrets(shared);
   if (typeof studioSetupCredential !== 'string' ||
       studioSetupCredential.length < 16 || /\s/.test(studioSetupCredential))

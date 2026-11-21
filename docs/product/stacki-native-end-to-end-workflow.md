@@ -376,7 +376,14 @@ credentials have been configured, no Cloudflare secrets have been uploaded by
 this code, and no provider readback or ready receipt has occurred.
 
 The offline provider adapter patches those six secrets together on the exact
-per-site Studio Worker and reads back their names and `secret_text` types.
+per-site Studio Worker. Cloudflare documents that the bulk patch creates a new
+version. The adapter now requires a different 100%-active version after the
+patch and reads the six names and `secret_text` types from that version's
+bindings; a latest-version secret list is insufficient. If Cloudflare leaves
+the newly created version inactive, this step fails closed until a separate,
+exact-version activation and readback is implemented. The installer currently
+has no durable patch intent, so an ambiguous patch must not be blindly retried
+by a future hosted job.
 The local installer step now links exact per-site token issuance, sealed
 runtime-secret assembly, upload and name/type readback in that order. It
 validates shared and Studio setup credentials and reads the exact scoped site,

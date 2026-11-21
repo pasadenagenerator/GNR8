@@ -12,6 +12,9 @@ const accountId = 'a'.repeat(32);
 const zoneId = 'b'.repeat(32);
 const tokenId = 'c'.repeat(32);
 const value = 'cfat_' + 'P'.repeat(45);
+const versionId = '44444444-4444-4444-8444-444444444444';
+const previousVersionId = '33333333-3333-4333-8333-333333333333';
+const nextVersionId = '55555555-5555-4555-8555-555555555555';
 const master = 'f'.repeat(64);
 const shared = {
   GITHUB_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nexample\n-----END RSA PRIVATE KEY-----\n',
@@ -70,8 +73,13 @@ function fixture() {
       patched = (JSON.parse(String(init.body)) as { secrets: Record<string, { text: string }> }).secrets;
       return Response.json({ success: true, result: {} });
     }
-    return Response.json({ success: true, result: Object.keys(patched)
-      .map(name => ({ name, type: 'secret_text' })) });
+    const result = url.endsWith('/deployments?per_page=1')
+      ? { deployments: [{ versions: [{ version_id: patches === 0 ? previousVersionId
+        : patches === 1 ? versionId : nextVersionId, percentage: 100 }] }] }
+      : { id: patches === 1 ? versionId : nextVersionId,
+        resources: { bindings: Object.keys(patched)
+        .map(name => ({ name, type: 'secret_text' })) } };
+    return Response.json({ success: true, result });
   }) as typeof fetch;
   return { store, saved, provider, transport,
     creates: () => creates, patches: () => patches, patched: () => patched };
@@ -82,6 +90,7 @@ test('one step issues, seals, installs, reads back and reuses native secrets', a
   const first = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
     f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport);
   assert.equal(first.worker, `gnr8-${scope.siteId}-studio`);
+  assert.equal(first.versionId, versionId);
   assert.equal(f.patched().PUBLISH_CLOUDFLARE_API_TOKEN?.text, value);
   assert.equal(f.creates(), 1);
   assert.equal(f.patches(), 1);
@@ -89,7 +98,8 @@ test('one step issues, seals, installs, reads back and reuses native secrets', a
   const original = f.patched();
   const second = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
     f.store, master, shared, f.provider, 'cloudflare-studio-setup-token', siteClient(), f.transport);
-  assert.deepEqual(second, first);
+  assert.deepEqual(second.secretNames, first.secretNames);
+  assert.equal(second.versionId, nextVersionId);
   assert.deepEqual(f.patched(), original);
   assert.equal(f.creates(), 1);
   assert.equal(f.patches(), 2);
