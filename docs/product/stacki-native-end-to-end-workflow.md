@@ -288,6 +288,11 @@ separately and the existing preparation button can retry without repeating the
 import review. An unavailable bootstrap target is also reported instead of
 silently claiming that preparation started. The Worker rechecks confirmation,
 ownership and target before storing the package.
+While the review stays open, its status is checked automatically after a queued
+request. The page reports a prepared package or a Worker failure without a
+second click; after repeated status-read failures it stops polling and keeps
+the manual status check available. A successful source receipt still does not
+mean the Studio Container has been installed or the site has been published.
 This prepares an immutable package only; a Stacki
 launch request still cannot serve as the installer.
 The central values are `GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID`,
