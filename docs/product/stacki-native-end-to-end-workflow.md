@@ -581,6 +581,17 @@ The full result establishes a viable local build for this retained checkout;
 it does not establish hosted credentials, a working Container rollout,
 authenticated Studio access, GitHub Push, or native Publish.
 
+On 2026-11-21, the retained CHS, ViroiDoc and Ladja Žaba checkouts also passed
+the full local `wrangler deploy --dry-run --config cloudflare/wrangler.jsonc`
+with Docker. Wrangler built each unchanged Studio Worker and Container image,
+reported its `PREVIEW`, `DRAFTS` and asset bindings, and exited without
+publication. The checked commits were CHS `2983c728`, ViroiDoc `80d0e850`
+and Ladja Žaba `e8839c98`; the three checkouts remained clean. Together with
+the Logatčan result above, all four retained Studio packages have local build
+evidence.
+This does not verify hosted routing, secrets, authenticated editing, GitHub
+Push or native Cloudflare Publish.
+
 ## Concrete external rollout still required
 
 1. Reconcile each branch head and newer hosted drafts before writing. Preserve
