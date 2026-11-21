@@ -232,8 +232,14 @@ local tests mock provider access; the flag and credentials have not been set
 in hosted environments, and no R2 bucket or Worker has been created by this
 path. Reservation is not a deployment or a ready Studio binding. Before
 enabling it, verify the Beta Worker creation and readback against an authorized
-test site and decide how a failed queue send is retried without repeating the
-import. The Container build, first deployment, secrets, routes and readiness
+test site. When the feature flag is enabled and a site has no ready Stacki
+binding, opening its Design tab also sends the same scoped event through a
+same-origin, publish-authorized endpoint. A failed queue request is retried
+twice while the tab remains open and is attempted again on a later visit;
+the site import is not repeated. The job's durable per-resource create intents
+make duplicate events safe. This is not a persistent background outbox: an
+unavailable queue after the tab closes still needs a later visit or an operator
+retry. The Container build, first deployment, secrets, routes and readiness
 checks remain to be connected.
 
 After that first installation, the public site Worker may be connected to
