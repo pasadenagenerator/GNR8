@@ -60,6 +60,13 @@ It requires the matching durable first-deploy intent and atomically claims a
 single attempt before invoking Wrangler; a second call cannot repeat the deploy.
 The existing per-site `SupabasePublicationStore` supplies the durable read/claim
 contract when a hosted runner is connected.
+`build-handoff.mjs` records an immutable, source/commit/Worker-bound list of
+SHA-256 hashes for only `dist/**` and `studio/dist/**` after the build job ends.
+A fresh deployment job must reconstruct and reverify the exact Git checkout,
+copy only those listed build files, and verify the receipt before receiving
+secrets. It must regenerate `studio/.studio-image/site` from the verified root
+manifests; it must never transfer the build Sandbox, its `node_modules` or its
+processes. This local handoff contract does not start either job or deploy.
 It puts the six secrets in a private temporary file for Wrangler, strips
 ambient environment variables, sanitizes provider errors and removes the file.
 It must never run in the build job or alongside site-owned processes. Any ambiguous

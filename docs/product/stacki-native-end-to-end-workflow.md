@@ -382,8 +382,15 @@ both. The build environment gets the exact pinned source and no deploy secrets;
 the deploy environment gets only the verified checkout and required build
 artifacts, with the checkout read-only and secrets supplied only at deployment.
 The source handoff must preserve the Git metadata and byte-for-byte source
-checks required by `verifyCommittedStudioSource`. No such handoff or adapter is
-implemented yet. Vercel's [Docker support](https://vercel.com/changelog/run-docker-containers-inside-vercel-sandbox)
+checks required by `verifyCommittedStudioSource`. A local `build-handoff.mjs`
+contract now stores the source, commit, scoped Worker identity and hashes of
+only `dist/**` and `studio/dist/**`. It rejects altered or extra output and
+symlinks in those directories when checked in a fresh environment. The
+deployment job must independently reconstruct the clean Git checkout, copy
+only those listed files, regenerate `studio/.studio-image/site` from verified
+root manifests and check the stored receipt before receiving credentials.
+No hosted artifact transfer or two-environment adapter is connected yet.
+Vercel's [Docker support](https://vercel.com/changelog/run-docker-containers-inside-vercel-sandbox)
 establishes runtime capability, not this credential isolation.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
