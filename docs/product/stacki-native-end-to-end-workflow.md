@@ -444,6 +444,19 @@ GitHub Push or Publish, or write a ready binding. The hosted runner still needs
 to supply a valid session and call this gate after deployment. Local tests use
 mocked HTTP responses only.
 
+The public gateway now has a separate read-only control-plane inspector. It
+rechecks the current scoped domain and bound repository, then checks the
+reserved public Worker's immutable ID, its single actively serving version,
+`ASSETS` and exact `STUDIO` service bindings, and the enabled custom domain
+attached to that public Worker. An empty Worker or unattached domain remains
+pending; a foreign Worker, split traffic, wrong Studio target or wrong domain
+fails closed. It uses Cloudflare's [active deployment](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/),
+[version bindings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/get/)
+and [Worker domains](https://developers.cloudflare.com/api/resources/workers/subresources/domains/methods/list/)
+readbacks. Mocked responses pass; the API response shape, actual routing and
+served source still require hosted verification. This inspector does not deploy
+the public Worker or write a ready binding.
+
 The first local bootstrap step can now create or reuse the exact
 `gnr8-<site-id>-drafts` R2 bucket through Cloudflare's
 [bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/create/).
