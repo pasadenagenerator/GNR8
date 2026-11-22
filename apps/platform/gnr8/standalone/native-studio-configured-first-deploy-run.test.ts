@@ -38,7 +38,8 @@ function fixture() {
       return use({ project: '/tmp/verified', store, site,
         sourceId, commit, workerId, files: 2 }); },
     prepareIntent: async () => { calls.push('intent'); return {
-      state: 'prepared', commit, tag, args }; },
+      state: saved.has('native-studio/first-deploy-intent-v1.json')
+        ? 'pending-review' : 'prepared', commit, tag, args }; },
     deploy: async () => { calls.push('deploy');
       saved.set('native-studio/first-deploy-attempt-v1.json',
         { identity, commit }); },
@@ -93,9 +94,23 @@ test('ambiguous provider response is inspected once and never repeats deploy', a
   assert.equal(f.calls.filter(call => call === 'deploy').length, 1);
 });
 
-test('existing matching intent reconciles without another deploy', async () => {
+test('matching intent without an attempt resumes the one deploy command', async () => {
   const f = fixture();
   f.saved.set('native-studio/first-deploy-intent-v1.json',
+    { identity, commit });
+  assert.deepEqual(await runConfiguredNativeStudioFirstDeploy(f.input,
+    {}, (async () => { throw Error('no provider call'); }) as typeof fetch,
+    f.deps), { state: 'reconcile-required', commit,
+      observation: 'verified-source-control-plane' });
+  assert.deepEqual(f.calls, ['checkout', 'preflight', 'credentials',
+    'intent', 'deploy', 'readback']);
+});
+
+test('existing attempt only reconciles and cannot deploy again', async () => {
+  const f = fixture();
+  f.saved.set('native-studio/first-deploy-intent-v1.json',
+    { identity, commit });
+  f.saved.set('native-studio/first-deploy-attempt-v1.json',
     { identity, commit });
   assert.deepEqual(await runConfiguredNativeStudioFirstDeploy(f.input,
     {}, (async () => { throw Error('no provider call'); }) as typeof fetch,

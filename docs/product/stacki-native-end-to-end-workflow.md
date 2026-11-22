@@ -434,7 +434,8 @@ listed output, and records the immutable source/commit/Worker receipt. A failed
 copy or receipt check removes partial output. The source verifier permits only
 untracked `dist/**` and `studio/dist/**` while checking a build handoff; it
 continues to reject other changes and retains its strict default everywhere
-else. The bridge still has no hosted caller or artifact transport.
+else. The later registered first-build job calls this bridge, but the hosted
+environment and artifact transfer have not been exercised.
 A configured, credential-free coordinator now checks the exact committed
 checkout before the Sandbox build, re-reads the scoped site afterward, records
 that Sandbox output through the bridge, and always removes its owned temporary
@@ -475,7 +476,8 @@ recorded build ref, checks its parent and tree, hashes every Git blob against
 the stored handoff, and copies only those files into the clean checkout. A
 configured adapter first checks the exact private artifact branch and bound
 repository with a read-scoped GitHub App token. Focused local tests pass; the
-hosted deployment job has not been connected to this restore path, so no
+registered deployment job reaches this restore path through the configured
+coordinator, but it remains disabled and unverified in a hosted runtime, so no
 Cloudflare publication or native Publish result is established. A pending push
 requires exact remote-head reconciliation; this coordinator does not invent a
 second commit.
@@ -485,8 +487,8 @@ that checkout only while the trusted next step uses it. It removes the checkout
 on success or failure. The configured intent preparer loads deployment
 credentials only after this verified transfer, then uses the existing
 post-build intent gate without rebuilding the site. Local focused tests cover
-ordering and cleanup. A hosted runner, Docker build and actual Cloudflare
-deploy remain unconnected.
+ordering and cleanup. The registered runner still needs host configuration,
+Docker build verification and an actual Cloudflare deployment.
 The fresh checkout now assembles `studio/.studio-image/site` from the two
 verified root npm manifests before loading deployment credentials. It checks
 the unchanged upstream Dockerfile's exact copy path and rejects an existing
@@ -508,8 +510,17 @@ The deploy job reads that receipt before loading Cloudflare credentials. Its
 final gate rechecks the build bytes and Docker context before claiming the
 one deploy attempt; a lost response leads to control-plane readback and never
 an automatic second deploy. These steps pass focused local tests with provider
-I/O mocked. Neither job is dispatched by a hosted runner yet, and no live
-Cloudflare deploy or authenticated Stacki health result is established.
+I/O mocked. The successful dry-run job now queues a separate trusted first
+deploy job when `GNR8_NATIVE_STUDIO_FIRST_DEPLOY_ENABLED=1`. Its event carries
+only scoped identities, not credentials. The job rechecks actor authorization,
+the exact artifact ref and the saved dry-run proof before the configured
+coordinator reconstructs the checkout and verifies the full proof again prior
+to loading central deployment credentials. A matching intent without an
+attempt can resume after renewed target inspection; a recorded attempt can
+only be reconciled, never redeployed. Local mocked tests cover both paths.
+The hosted runner requirements and Cloudflare readback remain unverified, so
+the flag stays off. No live Cloudflare deploy or authenticated Stacki health
+result is established.
 The public gateway now has a separate first-deploy intent gate. It reconstructs
 the verified source and build artifacts, requires the exact Studio deploy
 intent and attempt plus an active tagged Studio version with six secret names,
@@ -567,8 +578,8 @@ and refuses a mismatch. This links readback to the one intended deploy, but a
 tag alone cannot prove the deployed bytes. The Beta endpoint's response shape
 still needs hosted readback.
 For this combined first-deploy path, the inspector also requires all six secret
-names on that active version. Their values remain unreadable, and the isolated
-host deployment callback has not yet been implemented or connected.
+names on that active version. Their values remain unreadable. The isolated
+deployment callback is wired behind a disabled flag and has not run hosted.
 It re-reads the current scoped site and GitHub binding before Cloudflare access.
 An absent deployment or delayed application remains pending; a mismatched Worker,
 bucket, domain or split deployment fails closed. Newer unpublished settings

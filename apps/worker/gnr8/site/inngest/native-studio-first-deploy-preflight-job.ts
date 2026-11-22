@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inngest } from '@/gnr8/inngest/client';
+import { NATIVE_STUDIO_FIRST_DEPLOY_EVENT } from './native-studio-first-deploy-job';
 
 export const NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID =
   'native-studio-first-deploy-preflight-job';
@@ -43,6 +44,10 @@ const defaults = {
       sourceId: request.sourceId, sourceCommit: request.sourceCommit,
       workerId: request.workerId, trustedGit, trustedWrangler });
   },
+  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_DEPLOY_ENABLED === '1',
+  enqueueDeploy: async (request: Request) => {
+    await inngest.send({ name: NATIVE_STUDIO_FIRST_DEPLOY_EVENT, data: request });
+  },
 };
 
 /** Only a verified private artifact ref can start a credential-free dry run.
@@ -74,8 +79,15 @@ export async function runNativeStudioFirstDeployPreflight(request: unknown,
       artifact.artifactCommit !== artifactCommit ||
       artifact.branch !== `gnr8-build-${sourceCommit}`)
     throw Error('native_studio_first_deploy_preflight_artifact_unverified');
-  return deps.preflight({ scope, actor, sourceId, sourceCommit,
-    workerId, artifactCommit }, client);
+  const verified = { scope, actor, sourceId, sourceCommit,
+    workerId, artifactCommit };
+  const result = await deps.preflight(verified, client);
+  if (result?.sourceId !== sourceId || result.commit !== sourceCommit ||
+      result.workerId !== workerId ||
+      !Number.isSafeInteger(result.files) || result.files < 2)
+    throw Error('native_studio_first_deploy_preflight_result_unverified');
+  if (deps.chainEnabled()) await deps.enqueueDeploy(verified);
+  return result;
 }
 
 export const nativeStudioFirstDeployPreflightJob = inngest.createFunction({

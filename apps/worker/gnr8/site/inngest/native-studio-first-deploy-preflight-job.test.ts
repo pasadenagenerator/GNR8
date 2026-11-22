@@ -40,6 +40,8 @@ function fixture() {
       return { sourceId: request.sourceId, commit: request.sourceCommit,
         workerId: request.workerId, files: 10 };
     },
+    chainEnabled: () => false,
+    enqueueDeploy: async () => { calls.push('enqueue'); },
   };
   return { calls, deps };
 }
@@ -76,5 +78,29 @@ test('exact artifact receipt enters credential-free preflight once', async () =>
   assert.deepEqual(await runNativeStudioFirstDeployPreflight(request, f.deps),
     { sourceId: request.sourceId, commit: request.sourceCommit,
       workerId: request.workerId, files: 10 });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'preflight']);
+});
+
+test('verified preflight queues only scoped identities for trusted deployment', async () => {
+  const f = fixture();
+  await runNativeStudioFirstDeployPreflight(request, { ...f.deps,
+    chainEnabled: () => true,
+    enqueueDeploy: async value => {
+      assert.deepEqual(value, request);
+      f.calls.push('enqueue');
+    },
+  });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact',
+    'preflight', 'enqueue']);
+});
+
+test('failed preflight result cannot queue deployment', async () => {
+  const f = fixture();
+  await assert.rejects(runNativeStudioFirstDeployPreflight(request, {
+    ...f.deps, chainEnabled: () => true,
+    preflight: async () => { f.calls.push('preflight'); return {
+      sourceId: request.sourceId, commit: '0'.repeat(40),
+      workerId: request.workerId, files: 10 }; },
+  }), /result_unverified/);
   assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'preflight']);
 });

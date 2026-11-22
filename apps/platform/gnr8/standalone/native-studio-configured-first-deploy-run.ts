@@ -81,7 +81,14 @@ deps = defaults) {
       if (prior.identity !== expectedIdentity.identity ||
           prior.commit !== prepared.commit)
         throw Error('native_studio_configured_first_deploy_intent_unverified');
-      return observe();
+      const attempted = await prepared.store.read(ATTEMPT) as
+        { identity: string; commit: string } | null;
+      if (attempted) {
+        if (attempted.identity !== expectedIdentity.identity ||
+            attempted.commit !== prepared.commit)
+          throw Error('native_studio_configured_first_deploy_attempt_unverified');
+        return observe();
+      }
     }
     const intent = await deps.prepareIntent({ scope: checkoutInput.scope,
       client: checkoutInput.client, store: prepared.store,
@@ -91,11 +98,15 @@ deps = defaults) {
     if (intent.commit !== prepared.commit ||
         (intent.state !== 'prepared' && intent.state !== 'pending-review'))
       throw Error('native_studio_configured_first_deploy_intent_unverified');
-    if (intent.state !== 'prepared')
+    const resume = Boolean(prior) && intent.state === 'pending-review' &&
+      intent.tag === expectedIdentity.tag;
+    if (intent.state !== 'prepared' && !resume)
       return { state: 'pending-review' as const, commit: prepared.commit,
         observation: 'existing-intent' };
-    if (!Array.isArray(intent.args) || intent.args.length !== 5 ||
-        intent.args[4] !== intent.tag || intent.tag !== expectedIdentity.tag ||
+    const args = resume ? ['deploy', '--config', 'cloudflare/wrangler.jsonc',
+      '--tag', expectedIdentity.tag] : intent.args;
+    if (!Array.isArray(args) || args.length !== 5 ||
+        args[4] !== intent.tag || intent.tag !== expectedIdentity.tag ||
         !/^gnr8-first-[a-f0-9]{64}$/.test(intent.tag))
       throw Error('native_studio_configured_first_deploy_intent_unverified');
     try {
@@ -103,7 +114,7 @@ deps = defaults) {
         client: checkoutInput.client, store: prepared.store,
         project: prepared.project, sourceId: prepared.sourceId,
         commit: prepared.commit, workerId: prepared.workerId,
-        trustedWrangler, args: intent.args,
+        trustedWrangler, args,
         cloudflareCredential, secrets }, env, transport);
     } catch (error) {
       const attempt = await prepared.store.read(ATTEMPT) as
