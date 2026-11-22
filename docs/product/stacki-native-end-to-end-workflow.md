@@ -477,7 +477,22 @@ key, requests `contents:write` only for the current bound repository ID,
 checks the returned repository and permissions, and re-reads the target before
 handing the token to the job. It has only mocked local coverage and no hosted
 caller. The read-only head check accepts GitHub's longer stateless installation
-tokens. Before rollout, verify that the unchanged Stacki release also accepts
+tokens and distinguishes a missing first-push branch from a missing or wrong
+private repository. A local first-push step now verifies the retained source
+commit, claims a separate durable per-site intent, checks the exact remote
+repository ID and branch, and transfers only that commit through a fresh bare
+Git repository. The credentialed command uses a literal bound GitHub URL,
+sterile Git configuration and a temporary askpass helper; checkout-local
+`pushurl` and `insteadOf` settings cannot redirect it. Before transfer it
+requires the new commit's sole parent to match the repository's verified
+default-branch commit, so unrelated local history cannot travel with the
+source. A lost push response is
+reconciled against the remote commit, and an absent or unavailable result
+remains pending without an automatic duplicate push. This step has a local
+Git receiver test. A configured post-build entry point now verifies the
+immutable build handoff, obtains the short-lived token centrally, and connects
+the scoped remote inspector and push step. No hosted runner calls this entry
+point yet. Before rollout, verify that the unchanged Stacki release also accepts
 the actual token length: the retained 1.4.8 source caps its parsed token at
 500 characters, so a longer live token may break native Push to GitHub.
 Mocked local tests do not establish hosted readiness.

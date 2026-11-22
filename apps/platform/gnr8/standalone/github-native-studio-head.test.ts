@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inspectGitHubNativeStudioHead } from './github-native-studio-head';
+import { inspectGitHubNativeStudioBranch,
+  inspectGitHubNativeStudioHead } from './github-native-studio-head';
 
 const site = { repository: 'example/site', repositoryId: '42',
   branch: 'codex/native-stacki' };
@@ -10,7 +11,10 @@ const commit = 'b'.repeat(40);
 function fixture() {
   const calls: string[] = [];
   const result: Record<string, unknown> = {
-    '/repos/example/site': { id: 42, full_name: 'example/site', private: true },
+    '/repos/example/site': { id: 42, full_name: 'example/site', private: true,
+      default_branch: 'main' },
+    '/repos/example/site/git/ref/heads/main': {
+      ref: 'refs/heads/main', object: { type: 'commit', sha: 'c'.repeat(40) } },
     '/repos/example/site/git/ref/heads/codex/native-stacki': {
       ref: 'refs/heads/codex/native-stacki', object: { type: 'commit', sha: commit } },
   };
@@ -54,6 +58,14 @@ test('wrong repository, missing branch or non-commit ref fail closed', async () 
     /repository_conflict/);
   (f.result['/repos/example/site'] as { id: number }).id = 42;
   delete f.result['/repos/example/site/git/ref/heads/codex/native-stacki'];
+  assert.deepEqual(await inspectGitHubNativeStudioBranch(site, credential, f.transport),
+    { repositoryId: '42', branch: site.branch, commit: null });
+  assert.deepEqual(await inspectGitHubNativeStudioBranch(site, credential,
+    f.transport, true), { repositoryId: '42', branch: site.branch,
+    commit: null, baseCommit: 'c'.repeat(40) });
+  delete f.result['/repos/example/site/git/ref/heads/main'];
+  await assert.rejects(inspectGitHubNativeStudioBranch(site, credential,
+    f.transport, true), /unavailable/);
   await assert.rejects(inspectGitHubNativeStudioHead(site, credential, f.transport),
     /unavailable/);
   f.result['/repos/example/site/git/ref/heads/codex/native-stacki'] = {
