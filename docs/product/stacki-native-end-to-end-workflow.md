@@ -529,7 +529,15 @@ checks the returned repository and permissions, and re-reads the target before
 handing the token to the job. It has only mocked local coverage and no hosted
 caller. The read-only head check accepts GitHub's longer stateless installation
 tokens and distinguishes a missing first-push branch from a missing or wrong
-private repository. A local first-push step now verifies the retained source
+private repository. A local checkout adapter now uses a centrally issued
+`contents:read` installation token to fetch the private repository's default
+HEAD into a fresh trusted directory, requires its exact inspected base commit,
+rejects Git attributes, submodules and linked files before checkout, then
+prepares and verifies the source commit as that base's sole child. The token is
+removed from the Git process before any site build; the returned checkout and
+cleanup path contain no credential. A local bare-repository test covers this
+transfer and changed-base rejection. No hosted runner calls the adapter yet.
+The first-push step verifies the retained source
 commit, claims a separate durable per-site intent, checks the exact remote
 repository ID and branch, and transfers only that commit through a fresh bare
 Git repository. The credentialed command uses a literal bound GitHub URL,

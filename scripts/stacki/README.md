@@ -72,6 +72,11 @@ checkout, and record the receipt. This bridge also has no hosted caller.
 The Platform's configured build-handoff coordinator invokes that bridge after
 the scoped Sandbox build, checks the checkout and site binding, and removes its
 owned temporary output on completion or failure.
+`verified-studio-checkout.mjs` prepares a new site's first source commit from
+the exact inspected private GitHub default HEAD. It uses a short-lived read
+token only for fetch, verifies the new commit's parent and source bytes, and
+returns a credential-free checkout for the separate Sandbox build. Its caller
+must remove the returned root with `disposeVerifiedStudioCheckout`.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

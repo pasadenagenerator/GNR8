@@ -13,6 +13,7 @@
     "../../scripts/stacki/load-pinned-release.mjs",
     "../../scripts/stacki/prepare-from-confirmed-export.mjs",
     "../../scripts/stacki/prepare-git-branch.mjs",
+    "../../scripts/stacki/verified-studio-checkout.mjs",
     "../../scripts/stacki/build-handoff.mjs",
     "../../scripts/stacki/build-artifact-transfer.mjs",
     "../../scripts/stacki/first-studio-github-push.mjs",

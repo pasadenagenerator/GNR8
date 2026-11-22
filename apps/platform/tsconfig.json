@@ -39,6 +39,7 @@
     "../../scripts/stacki/load-pinned-release.mjs",
     "../../scripts/stacki/prepare-from-confirmed-export.mjs",
     "../../scripts/stacki/build-artifact-transfer.mjs",
+    "../../scripts/stacki/verified-studio-checkout.mjs",
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
