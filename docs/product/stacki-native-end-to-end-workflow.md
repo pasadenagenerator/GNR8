@@ -455,6 +455,32 @@ Do not silently treat the public login page as full editor health. A first-user
 native sign-in can satisfy this check inside Stacki once the initial Studio
 link is safely available; the handoff and readiness transition are not wired.
 
+### First native sign-in without an external confirmation
+
+The Design tab currently returns a Stacki link only from an immutable ready
+binding (or the four scoped legacy bindings). With no binding, it may enqueue
+resource reservation but exposes no guessed URL. Keep that behavior until a
+hosted installer records a separate, append-only **first-open** receipt after
+the exact source commit, Studio active version and secrets, public gateway
+active version and domain, and public login page have all been verified. The
+receipt must bind the current agency/client/site, repository ID and branch,
+working origin, both immutable Worker IDs and active version IDs. The link
+reader must recheck the current scoped site/repository and give an existing
+ready binding precedence. A reservation event, prepared-source receipt or
+site-domain string alone is not first-open evidence. No first-open receipt
+producer or link reader is connected yet.
+
+The unchanged Stacki OAuth callback returns to the site's own `/studio` and
+sets a host-only, HttpOnly session cookie. Platform runs on another host; it
+cannot read that cookie or the protected `/studio/api/status` response, and
+Stacki emits no GNR8 post-login callback. Do not mint a session using the
+central `SESSION_SECRET` or reinterpret Container instance status as owner
+access. Native sign-in remains the user's only first-use action. A future
+same-host, GNR8-owned verification path outside upstream Stacki may report
+authenticated editor/preview health to Platform, but it needs a separately
+reviewed identity and replay contract before it can write the immutable ready
+binding. Until then, first-open and fully verified readiness are distinct.
+
 The public gateway now has a separate read-only control-plane inspector. It
 rechecks the current scoped domain and bound repository, then checks the
 reserved public Worker's immutable ID, its single actively serving version,
