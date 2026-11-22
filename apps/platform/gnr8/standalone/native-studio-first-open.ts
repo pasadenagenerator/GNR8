@@ -6,6 +6,7 @@ import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-s
 import { SupabasePublicationStore, type PublicationStore } from './publication-store';
 import { inspectBoundCloudflareStudioFirstDeployment } from './cloudflare-studio-first-deployment';
 import { inspectBoundCloudflarePublicStudioGateway } from './cloudflare-public-studio-gateway';
+import { inspectGitHubNativeStudioHead } from './github-native-studio-head';
 import { verifyPublicStudioEntry } from '../../../../scripts/stacki/verify-studio-health.mjs';
 
 const KEY = 'native-studio/first-open-v1.json';
@@ -53,8 +54,7 @@ const defaults = {
   studio: inspectBoundCloudflareStudioFirstDeployment,
   gateway: inspectBoundCloudflarePublicStudioGateway,
   entry: verifyPublicStudioEntry,
-  githubHead: undefined as undefined | ((site: Site) => Promise<{
-    repositoryId: string; branch: string; commit: string }>),
+  githubHead: inspectGitHubNativeStudioHead,
 };
 
 /** Run only after an isolated first deployment and a verified Git/build handoff.
@@ -65,18 +65,19 @@ export async function recordNativeStudioFirstOpen(input: {
   scope: NativeStudioScope; client: SupabaseClient; store: Pick<PublicationStore, 'read' | 'claim'>;
   sourceId: string; commit: string; tag: string;
   studioWorkerId: string; publicWorkerId: string;
-  studioCredential: string; publicCredential: string;
+  studioCredential: string; publicCredential: string; githubCredential: string;
 }, deps = defaults) {
   const { scope, client, store, sourceId, commit, tag,
-    studioWorkerId, publicWorkerId, studioCredential, publicCredential } = input;
+    studioWorkerId, publicWorkerId, studioCredential, publicCredential,
+    githubCredential } = input;
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
       !client || !store || typeof store.read !== 'function' ||
       typeof store.claim !== 'function' || !SHA.test(sourceId) || !COMMIT.test(commit) ||
-      !TAG.test(tag) || !HEX32.test(studioWorkerId) || !HEX32.test(publicWorkerId))
+      !TAG.test(tag) || !HEX32.test(studioWorkerId) || !HEX32.test(publicWorkerId) ||
+      typeof githubCredential !== 'string' || !githubCredential)
     throw Error('native_studio_first_open_input_invalid');
   const site = await deps.site(scope, client);
-  if (!deps.githubHead) throw Error('native_studio_first_open_github_unconfigured');
   const built = await store.read<Record<string, unknown>>(HANDOFF);
   if (!object(built) || built.sourceId !== sourceId || built.commit !== commit ||
       !same(built.scope, scope) || built.workerId !== studioWorkerId ||
@@ -89,7 +90,7 @@ export async function recordNativeStudioFirstOpen(input: {
       studioCredential, fetch, tag, true),
     deps.gateway(scope, client, site.accountId, publicWorkerId, publicCredential),
     deps.entry({ studioOrigin: site.studioOrigin }),
-    deps.githubHead(site),
+    deps.githubHead(site, githubCredential),
   ]);
   if (studio.state !== 'verified-source-control-plane' ||
       studio.workerId !== studioWorkerId || !UUID.test(studio.versionId) ||

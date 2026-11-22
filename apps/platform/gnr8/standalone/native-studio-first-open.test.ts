@@ -29,7 +29,8 @@ function fixture() {
       saved.set(key, value); return true; } };
   const input = { scope, client: db, store, sourceId, commit, tag,
     studioWorkerId, publicWorkerId,
-    studioCredential: 'g'.repeat(40), publicCredential: 'h'.repeat(40) };
+    studioCredential: 'g'.repeat(40), publicCredential: 'h'.repeat(40),
+    githubCredential: 'ghs_' + 'i'.repeat(40) };
   const calls = { studio: 0, gateway: 0, entry: 0, github: 0 };
   const deps = {
     site: async () => site,
@@ -82,8 +83,8 @@ test('missing build handoff or wrong active target never creates a first-open li
 
 test('GitHub must expose the exact saved commit before first sign-in', async () => {
   const f = fixture();
-  await assert.rejects(recordNativeStudioFirstOpen(f.input,
-    { ...f.deps, githubHead: undefined } as any), /github_unconfigured/);
+  await assert.rejects(recordNativeStudioFirstOpen({ ...f.input,
+    githubCredential: '' }, f.deps as any), /input_invalid/);
   assert.deepEqual(f.calls, { studio: 0, gateway: 0, entry: 0, github: 0 });
   await assert.rejects(recordNativeStudioFirstOpen(f.input,
     { ...f.deps, githubHead: async () => ({ repositoryId: site.repositoryId,

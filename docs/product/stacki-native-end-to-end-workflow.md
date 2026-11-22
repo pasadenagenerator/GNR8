@@ -467,9 +467,12 @@ both immutable Worker IDs and active version IDs. The guarded link reader
 rechecks the current scoped target and, only with
 `GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED=1`, labels the link as a first native
 sign-in. A stale ready binding blocks this fallback; reservation and source
-preparation alone never expose a URL. The flag defaults off. The recorder has
-no hosted caller or configured GitHub-head reader, so it cannot yet produce
-a receipt in production. Mocked local tests do not establish hosted readiness.
+preparation alone never expose a URL. The flag defaults off. A read-only
+GitHub installation-token check now verifies the private repository ID and
+the exact branch head against the prepared commit. The recorder still has no
+hosted caller, no supplied short-lived GitHub installation token, and no
+connected first-deployment job; it cannot yet produce a receipt in production.
+Mocked local tests do not establish hosted readiness.
 
 The unchanged Stacki OAuth callback returns to the site's own `/studio` and
 sets a host-only, HttpOnly session cookie. Platform runs on another host; it
