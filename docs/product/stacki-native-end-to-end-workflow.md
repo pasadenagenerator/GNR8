@@ -369,7 +369,10 @@ target and keyed secret identity. A lost response or
 timeout is read back against that tag on the actively serving version and never
 causes a second automatic deploy. The result remains `reconcile-required` or
 `pending-review`, never a ready binding. The orchestration has mocked command
-and inspector tests only. A trusted disposable Docker runner must still provide
+and inspector tests only. It now also requires the exact private GitHub
+repository ID, branch and remote commit after the build and before claiming a
+deploy intent; an existing intent is checked again during reconciliation.
+A trusted disposable Docker runner must still provide
 the scoped inspector, protected credential and private store and call it; no
 hosted job invokes it, and no provider command has been run by this path.
 
@@ -396,7 +399,8 @@ establishes runtime capability, not this credential isolation.
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
 checkout, independently re-reads the retained source and exact checkout commit,
-and recomputes the target-bound version tag before any provider invocation.
+rechecks the exact GitHub head, and recomputes the target-bound version tag
+before any provider invocation.
 It also requires the matching durable first-deploy intent and atomically claims
 the only attempt, so a repeated callback cannot issue another deploy command.
 The existing private, per-site `SupabasePublicationStore` provides this
@@ -486,7 +490,8 @@ sterile Git configuration and a temporary askpass helper; checkout-local
 `pushurl` and `insteadOf` settings cannot redirect it. Before transfer it
 requires the new commit's sole parent to match the repository's verified
 default-branch commit, so unrelated local history cannot travel with the
-source. A lost push response is
+source. This parent check now runs before the append-only push intent is
+claimed, and the intent records that base commit. A lost push response is
 reconciled against the remote commit, and an absent or unavailable result
 remains pending without an automatic duplicate push. This step has a local
 Git receiver test. A configured post-build entry point now verifies the

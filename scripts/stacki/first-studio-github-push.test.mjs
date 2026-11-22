@@ -4,7 +4,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { pushVerifiedStudioCommit, runFirstStudioGitHubPush } from './first-studio-github-push.mjs';
+import { pushVerifiedStudioCommit, runFirstStudioGitHubPush,
+  verifyStudioCommitParent } from './first-studio-github-push.mjs';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -30,6 +31,7 @@ function fixture() {
   const deps = {
     verifySource: async () => ({ sourceId, repository: site.repository,
       branch: site.branch, commit }),
+    verifyParent: async args => { assert.equal(args.baseCommit, baseCommit); },
     readSite: async () => readSite,
     inspectRemote: async () => ({ repositoryId: site.repositoryId,
       branch: site.branch, commit: remote,
@@ -87,6 +89,29 @@ test('refuses wrong branch, repository identity and changed binding', async () =
     /target_changed/);
 });
 
+test('invalid commit parent cannot claim a push intent', async () => {
+  const f = fixture();
+  f.deps.verifyParent = async () => { throw Error('native_studio_github_push_parent_conflict'); };
+  await assert.rejects(runFirstStudioGitHubPush(f.input, f.deps), /parent_conflict/);
+  assert.equal(f.records.size, 0);
+  assert.equal(f.transfers(), 0);
+});
+
+test('changed remote base conflicts with an already claimed intent', async () => {
+  const f = fixture();
+  f.deps.transfer = async () => { throw Error('timeout'); };
+  assert.equal((await runFirstStudioGitHubPush(f.input, f.deps)).state,
+    'pending-review');
+  f.deps.inspectRemote = async () => ({ repositoryId: site.repositoryId,
+    branch: site.branch, commit: null, baseCommit: 'f'.repeat(40) });
+  await assert.rejects(runFirstStudioGitHubPush(f.input, f.deps),
+    /intent_conflict/);
+  f.deps.inspectRemote = async () => ({ repositoryId: site.repositoryId,
+    branch: site.branch, commit });
+  assert.equal((await runFirstStudioGitHubPush(f.input, f.deps)).state,
+    'verified');
+});
+
 test('credentialed Git command runs from fresh bare repository with literal destination', async () => {
   const root = await mkdtemp(join(tmpdir(), 'gnr8-push-test-'));
   const source = join(root, 'source');
@@ -113,10 +138,12 @@ test('credentialed Git command runs from fresh bare repository with literal dest
     // The wrapper replaces only the literal GitHub URL with a local receiver.
     // It records the actual working Git directory and never records the token.
     await writeFile(wrapper, `#!/bin/sh\nif [ "$1" = "-C" ] && [ "$7" = "push" ]; then\n  printf '%s\\n' "$2" "${'${10}'}" > '${trace}'\n  exec /usr/bin/git "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" '${receiver}' "${'${11}'}"\nfi\nexec /usr/bin/git "$@"\n`, { mode: 0o700 });
-    await assert.rejects(pushVerifiedStudioCommit({ project: source, site,
+    await assert.rejects(verifyStudioCommitParent({ project: source, site,
       commit: exact, baseCommit: 'f'.repeat(40), credential, trustedGit: wrapper }),
     /parent_conflict/);
     assert.throws(() => git('-C', receiver, 'rev-parse', `refs/heads/${site.branch}`));
+    await verifyStudioCommitParent({ project: source, site, commit: exact,
+      baseCommit: base, credential, trustedGit: wrapper });
     await pushVerifiedStudioCommit({ project: source, site, commit: exact,
       baseCommit: base,
       credential, trustedGit: wrapper });

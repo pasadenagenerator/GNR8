@@ -43,7 +43,7 @@ function observedHead(value, site) {
  * hooks, credential helpers and remote URL are controlled by the trusted job.
  */
 export async function pushVerifiedStudioCommit({ project, site, commit, baseCommit, credential,
-  trustedGit }) {
+  trustedGit, preflightOnly = false }) {
   if (typeof project !== 'string' || !project ||
       !validSite(site, { siteId: site?.siteId }) ||
       typeof commit !== 'string' || !SHA.test(commit) ||
@@ -83,6 +83,7 @@ export async function pushVerifiedStudioCommit({ project, site, commit, baseComm
     if (await run(['-C', bare, 'rev-list', '--parents', '-n', '1', commit]) !==
         `${commit} ${baseCommit}`)
       throw Error('native_studio_github_push_parent_conflict');
+    if (preflightOnly) return;
     await writeFile(askpass, '#!/bin/sh\ncase "$1" in\n  *Username*) printf x-access-token ;;\n  *Password*) printf %s "$GNR8_GITHUB_TOKEN" ;;\n  *) exit 1 ;;\nesac\n',
       { mode: 0o700, flag: 'wx' });
     const url = `https://github.com/${site.repository}.git`;
@@ -101,6 +102,10 @@ export async function pushVerifiedStudioCommit({ project, site, commit, baseComm
   finally { await rm(root, { recursive: true, force: true }); }
 }
 
+export async function verifyStudioCommitParent(input) {
+  return pushVerifiedStudioCommit({ ...input, preflightOnly: true });
+}
+
 /** A durable intent precedes the only push attempt. After an ambiguous result,
  * inspect the exact remote head; never retry by guessing whether it succeeded.
  */
@@ -115,6 +120,7 @@ export async function runFirstStudioGitHubPush(input, deps) {
       !TOKEN.test(credential) || typeof trustedGit !== 'string' ||
       !isAbsolute(trustedGit) ||
       !deps || typeof deps.verifySource !== 'function' ||
+      typeof deps.verifyParent !== 'function' ||
       typeof deps.readSite !== 'function' ||
       typeof deps.inspectRemote !== 'function' ||
       typeof deps.transfer !== 'function')
@@ -127,17 +133,27 @@ export async function runFirstStudioGitHubPush(input, deps) {
       verified.branch !== site.branch || typeof verified.commit !== 'string' ||
       !SHA.test(verified.commit))
     throw Error('native_studio_github_push_source_unverified');
-  const identity = digest({ scope, sourceId, site, commit: verified.commit });
-  const expectedIntent = { identity, commit: verified.commit };
   const existing = await store.read(INTENT);
-  if (existing && JSON.stringify(existing) !== JSON.stringify(expectedIntent))
+  if (existing && (Object.keys(existing).sort().join() !== 'baseCommit,commit,identity' ||
+      typeof existing.baseCommit !== 'string' || !SHA.test(existing.baseCommit) ||
+      existing.commit !== verified.commit ||
+      existing.identity !== digest({ scope, sourceId, site, commit: verified.commit,
+        baseCommit: existing.baseCommit })))
     throw Error('native_studio_github_push_intent_conflict');
   const before = observedHead(await deps.inspectRemote(site, credential), site);
   if (before.commit === verified.commit) return { state: 'verified', commit: verified.commit };
   if (before.commit !== null) throw Error('native_studio_github_push_branch_conflict');
   if (typeof before.baseCommit !== 'string' || !SHA.test(before.baseCommit))
     throw Error('native_studio_github_push_base_unverified');
+  const identity = digest({ scope, sourceId, site, commit: verified.commit,
+    baseCommit: before.baseCommit });
+  const expectedIntent = { identity, commit: verified.commit,
+    baseCommit: before.baseCommit };
+  if (existing && JSON.stringify(existing) !== JSON.stringify(expectedIntent))
+    throw Error('native_studio_github_push_intent_conflict');
   if (existing) return { state: 'pending-review', commit: verified.commit };
+  await deps.verifyParent({ project, site, commit: verified.commit,
+    baseCommit: before.baseCommit, credential, trustedGit });
   const claimed = await store.claim(INTENT, expectedIntent);
   const recorded = await store.read(INTENT);
   if (!recorded || JSON.stringify(recorded) !== JSON.stringify(expectedIntent))

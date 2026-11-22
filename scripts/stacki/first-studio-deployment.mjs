@@ -41,12 +41,16 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
       !scope || ![scope.agencyId, scope.clientId, scope.siteId]
         .every(value => typeof value === 'string' && UUID.test(value)) ||
       !site || site.siteId !== scope.siteId || site.accountId !== accountId ||
+      typeof site.repositoryId !== 'string' ||
+      !/^[1-9][0-9]*$/.test(site.repositoryId) ||
+      !Number.isSafeInteger(Number(site.repositoryId)) ||
       typeof site.studioOrigin !== 'string' || !HEX64.test(sourceId) ||
       !HEX32.test(accountId) || !HEX32.test(workerId) || !TOKEN.test(token) ||
       !secrets || typeof secrets !== 'object' || Array.isArray(secrets) ||
       Object.keys(secrets).sort().join() !== SECRET_NAMES.join() ||
       !SECRET_NAMES.every(name => typeof secrets[name] === 'string' && secrets[name].length >= 16) ||
       typeof deps.inspect !== 'function' ||
+      typeof deps.inspectGitHubHead !== 'function' ||
       typeof deps.verifySource !== 'function' || typeof deps.runCommand !== 'function' ||
       typeof deps.deploy !== 'function' ||
       typeof deps.trustedWrangler !== 'string' || !isAbsolute(deps.trustedWrangler))
@@ -66,6 +70,12 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
   const inspection = expectedTag => deps.inspect({ scope, accountId, workerId, domain,
     token, repository: site.repository,
     ...(expectedTag ? { expectedTag, requireSecrets: true } : {}) });
+  const requireGitHubHead = async commit => {
+    const head = await deps.inspectGitHubHead({ scope, site, commit });
+    if (!head || head.repositoryId !== site.repositoryId ||
+        head.branch !== site.branch || head.commit !== commit)
+      throw Error('native_studio_first_deploy_github_head_unverified');
+  };
   let intent = await store.read(INTENT);
   if (intent && (Object.keys(intent).sort().join() !== 'commit,identity' ||
       !/^[a-f0-9]{40,64}$/.test(intent.commit) ||
@@ -74,6 +84,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
   if (intent) {
     const checked = await deps.verifySource({ project: checkout, store, sourceId, site });
     if (checked.commit !== intent.commit) throw Error('native_studio_first_deploy_source_changed');
+    await requireGitHubHead(intent.commit);
     const observed = await inspection(`gnr8-first-${intent.identity}`);
     return { state: observed.state === 'verified-source-control-plane'
       ? 'reconcile-required' : 'pending-review', commit: intent.commit,
@@ -103,6 +114,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
     if (checked.sourceId !== sourceId || checked.branch !== site.branch ||
         checked.repository !== site.repository || checked.commit !== initial.commit)
       throw Error('native_studio_first_deploy_source_unverified');
+    await requireGitHubHead(checked.commit);
     const identity = digest({ ...target, commit: checked.commit });
     const expectedTag = `gnr8-first-${identity}`;
     const claimed = await store.claim(INTENT, { identity, commit: checked.commit });

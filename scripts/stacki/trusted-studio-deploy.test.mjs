@@ -20,7 +20,8 @@ const accountId = 'a'.repeat(32);
 const workerId = 'c'.repeat(32);
 const sourceId = 'd'.repeat(64);
 const commit = 'e'.repeat(40);
-const site = { siteId: scope.siteId, repository: 'example/site', branch: 'main',
+const site = { siteId: scope.siteId, repository: 'example/site',
+  repositoryId: '42', branch: 'main',
   accountId, studioOrigin: 'https://site.app.pasadenagenerator.com' };
 const secretIdentity = createHmac('sha256', token)
   .update(JSON.stringify(secrets)).digest('hex');
@@ -46,7 +47,9 @@ const verifySource = async ({ project, store: received, sourceId: receivedId, si
   assert.equal(receivedSite, site);
   return verified;
 };
-const withInvoke = invoke => ({ verifySource, invoke });
+const inspectGitHubHead = async () => ({ repositoryId: site.repositoryId,
+  branch: site.branch, commit });
+const withInvoke = invoke => ({ verifySource, inspectGitHubHead, invoke });
 
 test('dedicated deploy receives only the exact command and a temporary private secret file', async () => {
   let secretFile;
@@ -110,12 +113,14 @@ test('refuses a changed source, commit, site or tag before invoking Wrangler', a
   ];
   for (const candidate of changed)
     await assert.rejects(runTrustedStudioDeploy({ ...candidate, store: approvedStore() },
-      { invoke, verifySource: async () => verified }), /target_mismatch/);
+      { invoke, verifySource: async () => verified, inspectGitHubHead }), /target_mismatch/);
   await assert.rejects(runTrustedStudioDeploy({ ...input, store: approvedStore() },
-    { invoke, verifySource: async () => ({ ...verified, commit: 'f'.repeat(40) }) }),
+    { invoke, inspectGitHubHead,
+      verifySource: async () => ({ ...verified, commit: 'f'.repeat(40) }) }),
   /source_unverified/);
   await assert.rejects(runTrustedStudioDeploy({ ...input, store: approvedStore() },
-    { invoke, verifySource: async () => { throw Error('checkout changed'); } }),
+    { invoke, inspectGitHubHead,
+      verifySource: async () => { throw Error('checkout changed'); } }),
   /source_unverified/);
   assert.equal(calls, 0);
 });

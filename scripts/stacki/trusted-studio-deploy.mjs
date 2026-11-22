@@ -43,10 +43,15 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
       !HEX64.test(sourceId) || !COMMIT.test(commit) ||
       !site || site.siteId !== scope.siteId || site.accountId !== accountId ||
       typeof site.repository !== 'string' || !site.repository ||
+      typeof site.repositoryId !== 'string' ||
+      !/^[1-9][0-9]*$/.test(site.repositoryId) ||
+      !Number.isSafeInteger(Number(site.repositoryId)) ||
       typeof site.branch !== 'string' || !site.branch ||
       typeof site.studioOrigin !== 'string' || !store ||
       typeof store.read !== 'function' || typeof store.claim !== 'function' ||
-      typeof deps.verifySource !== 'function' || typeof deps.invoke !== 'function')
+      typeof deps.verifySource !== 'function' ||
+      typeof deps.inspectGitHubHead !== 'function' ||
+      typeof deps.invoke !== 'function')
     throw Error('native_studio_trusted_deploy_input_invalid');
   let domain;
   try { domain = new URL(site.studioOrigin).hostname; }
@@ -78,6 +83,10 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
   if (!intent || Object.keys(intent).sort().join() !== 'commit,identity' ||
       intent.identity !== identity || intent.commit !== commit)
     throw Error('native_studio_trusted_deploy_intent_mismatch');
+  const head = await deps.inspectGitHubHead({ scope, site, commit });
+  if (!head || head.repositoryId !== site.repositoryId ||
+      head.branch !== site.branch || head.commit !== commit)
+    throw Error('native_studio_trusted_deploy_github_head_unverified');
   if (!await store.claim(ATTEMPT, { identity, commit }))
     throw Error('native_studio_trusted_deploy_already_attempted');
   const privateHome = await mkdtemp(join(tmpdir(), 'gnr8-studio-deploy-'));

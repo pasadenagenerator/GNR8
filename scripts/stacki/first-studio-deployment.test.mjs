@@ -11,7 +11,8 @@ import { runTrustedStudioDeploy } from './trusted-studio-deploy.mjs';
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
   siteId: '33333333-3333-4333-8333-333333333333' };
-const site = { siteId: scope.siteId, repository: 'example/site', branch: 'main',
+const site = { siteId: scope.siteId, repository: 'example/site',
+  repositoryId: '42', branch: 'main',
   accountId: 'a'.repeat(32), studioOrigin: 'https://site.app.pasadenagenerator.com' };
 const sourceId = 'b'.repeat(64);
 const workerId = 'c'.repeat(32);
@@ -42,6 +43,12 @@ function fixture() {
       assert.equal(received, sourceId);
       assert.equal(target, site);
       return { sourceId, commit, branch: site.branch, repository: site.repository };
+    },
+    inspectGitHubHead: async ({ scope: requested, site: target, commit: expected }) => {
+      assert.equal(requested, scope);
+      assert.equal(target, site);
+      assert.equal(expected, commit);
+      return { repositoryId: site.repositoryId, branch: site.branch, commit };
     },
     inspect: async ({ scope: requested, accountId, workerId: requestedWorker,
       domain, token: requestedToken, repository, expectedTag, requireSecrets }) => {
@@ -106,6 +113,7 @@ test('producer command passes the dedicated deploy gate before provider invocati
   f.deps.deploy = async command => {
     try {
       await runTrustedStudioDeploy(command, { verifySource: f.deps.verifySource,
+        inspectGitHubHead: f.deps.inspectGitHubHead,
         invoke: async () => { invoked++; } });
     } catch (error) { deployError = error; throw error; }
     await originalDeploy(command);
@@ -128,6 +136,38 @@ test('ambiguous deploy is not repeated even when no deployment is yet visible', 
     state: 'pending-review', commit, observation: 'pending',
   });
   assert.equal(f.deploys.length, 1);
+});
+
+test('first deployment refuses to claim intent until GitHub has the exact source head', async () => {
+  const f = fixture();
+  f.deps.inspectGitHubHead = async () => ({ repositoryId: site.repositoryId,
+    branch: site.branch, commit: 'f'.repeat(40) });
+  await assert.rejects(runFirstStudioDeployment(f.input, f.deps),
+    /github_head_unverified/);
+  assert.equal(f.saved.size, 0);
+  assert.equal(f.deploys.length, 0);
+});
+
+test('trusted deploy gate rechecks GitHub before invoking Cloudflare', async () => {
+  const f = fixture();
+  const project = await mkdtemp(join(tmpdir(), 'gnr8-github-deploy-gate-'));
+  await mkdir(join(project, 'studio'));
+  f.input.project = project;
+  let gateError;
+  let invoked = 0;
+  f.deps.deploy = async command => {
+    try {
+      await runTrustedStudioDeploy(command, { verifySource: f.deps.verifySource,
+        inspectGitHubHead: async () => ({ repositoryId: site.repositoryId,
+          branch: site.branch, commit: 'f'.repeat(40) }),
+        invoke: async () => { invoked++; } });
+    } catch (error) { gateError = error; throw error; }
+  };
+  try {
+    await runFirstStudioDeployment(f.input, f.deps);
+    assert.match(gateError?.message ?? '', /github_head_unverified/);
+    assert.equal(invoked, 0);
+  } finally { await rm(project, { recursive: true, force: true }); }
 });
 
 test('unverified readback cannot be reported as reconciled or trigger another deploy', async () => {

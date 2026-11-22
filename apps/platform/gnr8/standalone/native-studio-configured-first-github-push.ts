@@ -2,7 +2,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyStudioBuildHandoff } from '../../../../scripts/stacki/build-handoff.mjs';
 import { pushVerifiedStudioCommit,
-  runFirstStudioGitHubPush } from '../../../../scripts/stacki/first-studio-github-push.mjs';
+  runFirstStudioGitHubPush,
+  verifyStudioCommitParent } from '../../../../scripts/stacki/first-studio-github-push.mjs';
 import { verifyCommittedStudioSource } from '../../../../scripts/stacki/prepare-git-branch.mjs';
 import { inspectGitHubNativeStudioBranch } from './github-native-studio-head';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
@@ -31,6 +32,7 @@ export async function configuredFirstStudioGitHubPush(input: {
   return runFirstStudioGitHubPush({ project, store, sourceId, site, scope,
     credential: credential.token, trustedGit }, {
       verifySource: verifyCommittedStudioSource,
+      verifyParent: verifyStudioCommitParent,
       readSite: () => configuredNativeStudioBootstrapSite(scope, client, env),
       inspectRemote: (target: typeof site, token: string) =>
         inspectGitHubNativeStudioBranch(target, token, transport, true),
