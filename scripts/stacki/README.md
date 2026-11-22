@@ -78,10 +78,16 @@ token only for fetch, verifies the new commit's parent and source bytes, and
 returns a credential-free checkout for the separate Sandbox build. Its caller
 must remove the returned root with `disposeVerifiedStudioCheckout`.
 The Platform's first-build coordinator combines that checkout with the
-credential-free Sandbox handoff, exports only verified build files, then
-confirms the first GitHub push. The build job must upload the returned artifact
-and call `disposeNativeStudioFirstBuildArtifact` after transfer; a fresh deploy
-job restores the verified bytes before receiving Cloudflare credentials.
+credential-free Sandbox handoff, confirms the source push, then pushes an
+artifact-only Git commit to a deterministic branch in the same private
+repository. The artifact commit's sole parent is the source commit; its tree
+contains only receipt-listed `dist/**` and `studio/dist/**` files. A fresh
+deploy job can now fetch and verify that exact ref. The configured fresh
+source checkout reads the durable first-push intent and exact remote branch;
+the artifact restore checks the independent build ref, its parent and tree,
+every listed Git blob and the handoff receipt before copying files into the
+clean checkout. These are local library paths; no hosted deploy job calls them
+yet, and no Cloudflare credential enters either checkout.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

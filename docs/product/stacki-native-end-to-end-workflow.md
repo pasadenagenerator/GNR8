@@ -442,14 +442,24 @@ producer-to-receipt test covers this path with hosted I/O replaced at the
 existing build and source-verification boundaries. The coordinator does not
 dispatch a hosted job or supply GitHub/Cloudflare credentials.
 A configured first-build coordinator now connects the verified private source
-checkout, reserved Studio Worker identity, isolated build handoff, output-only
-artifact export and first GitHub push. It exports before the push, stops on a
-pending or conflicting push, and removes the temporary checkout and partial
-artifact on failure. On success it returns a portable output directory for a
-fresh deploy job; it does not dispatch that job or upload the directory. A
-pending first push still requires exact remote-head reconciliation before any
-new checkout or retry; this coordinator does not invent a second commit.
-The caller must dispose the returned temporary artifact after transfer.
+checkout, reserved Studio Worker identity, isolated build handoff, first source
+push and a second, artifact-only GitHub ref. The artifact commit has the source
+commit as its sole parent and contains exactly the receipt-listed output, not a
+second editable Stacki branch. Its ref name is derived from the source commit;
+a durable intent permits only one push attempt and readback reconciles a lost
+response. On success both source and build bytes are durable in the same private
+repository, while the temporary checkout is removed. The local Git tests and
+mocked GitHub flow pass, but no hosted job has called this path. A fresh deploy
+checkout can now recover the exact source commit from the recorded first-push
+intent and private GitHub branch. The local artifact restorer fetches the
+recorded build ref, checks its parent and tree, hashes every Git blob against
+the stored handoff, and copies only those files into the clean checkout. A
+configured adapter first checks the exact private artifact branch and bound
+repository with a read-scoped GitHub App token. Focused local tests pass; the
+hosted deployment job has not been connected to this restore path, so no
+Cloudflare publication or native Publish result is established. A pending push
+requires exact remote-head reconciliation; this coordinator does not invent a
+second commit.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site

@@ -53,3 +53,40 @@ deps = defaults) {
     throw error;
   }
 }
+
+/** Recover the exact source commit in a fresh deployment job. */
+export async function configuredNativeStudioDeploymentCheckout(input: {
+  scope: NativeStudioScope; client: SupabaseClient; sourceId: string;
+  trustedGit: string;
+}, env: Environment = process.env, transport: typeof fetch = fetch,
+deps = defaults) {
+  const { scope, client, sourceId, trustedGit } = input;
+  const site = await deps.site(scope, client, env);
+  const store = deps.store(client, scope, env);
+  const intent = await store.read('native-studio/first-github-push-intent-v1.json') as
+    Record<string, unknown> | null;
+  if (!intent || typeof intent.commit !== 'string' ||
+      typeof intent.baseCommit !== 'string')
+    throw Error('native_studio_deploy_source_intent_missing');
+  const issued = await deps.token(scope, client, env, transport,
+    deps.site, Date.now(), 'read');
+  if (issued.repositoryId !== site.repositoryId)
+    throw Error('native_studio_deploy_repository_changed');
+  const head = await deps.head(site, issued.token, transport);
+  if (head.repositoryId !== site.repositoryId ||
+      head.branch !== site.branch || head.commit !== intent.commit)
+    throw Error('native_studio_deploy_source_changed');
+  if (JSON.stringify(await deps.site(scope, client, env)) !== JSON.stringify(site))
+    throw Error('native_studio_deploy_target_changed');
+  const prepared = await deps.checkout({ site, sourceId,
+    baseCommit: intent.baseCommit, existingCommit: intent.commit,
+    store, credential: issued.token, trustedGit });
+  try {
+    if (JSON.stringify(await deps.site(scope, client, env)) !== JSON.stringify(site))
+      throw Error('native_studio_deploy_target_changed');
+    return { ...prepared, site, store };
+  } catch (error) {
+    await disposeVerifiedStudioCheckout(prepared.root);
+    throw error;
+  }
+}

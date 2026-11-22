@@ -1,10 +1,7 @@
 import 'server-only';
-import { lstat, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { exportStudioBuildArtifactDirectory } from '../../../../scripts/stacki/build-artifact-transfer.mjs';
 import { disposeVerifiedStudioCheckout } from '../../../../scripts/stacki/verified-studio-checkout.mjs';
+import { configuredNativeStudioArtifactGitHubPush } from './native-studio-configured-artifact-github-push';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 import { configuredNativeStudioBuildHandoff } from './native-studio-configured-build-handoff';
 import { configuredFirstStudioGitHubPush } from './native-studio-configured-first-github-push';
@@ -22,25 +19,15 @@ const defaults = {
   checkout: configuredNativeStudioSourceCheckout,
   build: configuredNativeStudioBuildHandoff,
   push: configuredFirstStudioGitHubPush,
-  export: exportStudioBuildArtifactDirectory,
+  artifactPush: configuredNativeStudioArtifactGitHubPush,
   dispose: disposeVerifiedStudioCheckout,
   store: (client: SupabaseClient, scope: NativeStudioScope, env: Environment) =>
     new SupabasePublicationStore(client,
       env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope),
 };
 
-export async function disposeNativeStudioFirstBuildArtifact(root: string) {
-  if (!isAbsolute(root) || dirname(resolve(root)) !== resolve(tmpdir()) ||
-      !/^gnr8-first-build-artifact-[A-Za-z0-9]{6}$/.test(basename(root)))
-    throw Error('native_studio_first_build_artifact_invalid');
-  const info = await lstat(root);
-  if (!info.isDirectory() || info.isSymbolicLink())
-    throw Error('native_studio_first_build_artifact_invalid');
-  await rm(root, { recursive: true, force: true });
-}
-
-/** Trusted predeployment stage. It returns only verified build output for an
- * isolated deploy job; the source commit is already durable on GitHub.
+/** Trusted predeployment stage. Both the editable source and artifact-only
+ * build ref are durable in the exact site repository before checkout cleanup.
  */
 export async function configuredNativeStudioFirstBuild(input: {
   scope: NativeStudioScope; client: SupabaseClient; sourceId: string;
@@ -63,26 +50,23 @@ deps = defaults) {
     throw Error('native_studio_first_build_resources_unverified');
   const checkout = await deps.checkout({ scope, client, sourceId,
     trustedGit, author }, env, transport);
-  let artifactRoot: string | null = null;
   try {
     await deps.build({ scope, client, project: checkout.project,
       sourceId, commit: checkout.commit, workerId }, env);
     if (JSON.stringify(await deps.site(scope, client, env)) !== JSON.stringify(site))
       throw Error('native_studio_first_build_target_changed');
-    artifactRoot = await mkdtemp(join(tmpdir(), 'gnr8-first-build-artifact-'));
-    const artifactDir = join(artifactRoot, 'artifact');
-    await deps.export({ project: checkout.project, artifactDir, store,
-      sourceId, commit: checkout.commit, scope, site, workerId });
     const pushed = await deps.push({ scope, client, store,
       project: checkout.project, sourceId, commit: checkout.commit,
       workerId, trustedGit }, env, transport);
     if (pushed.state !== 'verified' || pushed.commit !== checkout.commit)
       throw Error('native_studio_first_build_push_pending');
-    return { artifactRoot, artifactDir, sourceId,
-      commit: checkout.commit, workerId };
-  } catch (error) {
-    if (artifactRoot) await rm(artifactRoot, { recursive: true, force: true });
-    throw error;
+    const artifact = await deps.artifactPush({ scope, client, store,
+      project: checkout.project, sourceId, sourceCommit: checkout.commit,
+      workerId, trustedGit }, env, transport);
+    if (artifact.state !== 'verified' || artifact.sourceCommit !== checkout.commit)
+      throw Error('native_studio_first_build_artifact_pending');
+    return { sourceId, commit: checkout.commit, workerId,
+      artifactBranch: artifact.branch, artifactCommit: artifact.commit };
   } finally {
     await deps.dispose(checkout.root);
   }

@@ -48,14 +48,15 @@ export async function disposeVerifiedStudioCheckout(root) {
  * temporary root and must remove it after the build handoff is complete.
  */
 export async function prepareVerifiedStudioCheckout(input, deps = defaults) {
-  const { site, sourceId, baseCommit, store, credential, trustedGit,
-    author } = input ?? {};
+  const { site, sourceId, baseCommit, existingCommit, store, credential,
+    trustedGit, author } = input ?? {};
   if (!validSite(site) || !SOURCE.test(sourceId) || !SHA.test(baseCommit) ||
+      (existingCommit !== undefined && !SHA.test(existingCommit)) ||
       !store || typeof store.read !== 'function' ||
       typeof credential !== 'string' || !TOKEN.test(credential) ||
       typeof trustedGit !== 'string' || !isAbsolute(trustedGit) ||
-      !author || typeof author.name !== 'string' ||
-      typeof author.email !== 'string')
+      (!existingCommit && (!author || typeof author.name !== 'string' ||
+      typeof author.email !== 'string')))
     throw Error('native_studio_checkout_input_invalid');
   const git = await realpath(trustedGit);
   await access(git, constants.X_OK);
@@ -81,11 +82,14 @@ export async function prepareVerifiedStudioCheckout(input, deps = defaults) {
     await writeFile(askpass, '#!/bin/sh\ncase "$1" in\n  *Username*) printf x-access-token ;;\n  *Password*) printf %s "$GNR8_GITHUB_TOKEN" ;;\n  *) exit 1 ;;\nesac\n',
       { mode: 0o700, flag: 'wx' });
     await run(['-C', project, '-c', 'credential.helper=', 'fetch', '--no-tags',
-      'origin', 'HEAD'], { ...baseEnv, GIT_ASKPASS: askpass,
+      'origin', existingCommit ? `refs/heads/${site.branch}` : 'HEAD'],
+      { ...baseEnv, GIT_ASKPASS: askpass,
       GNR8_GITHUB_TOKEN: credential });
     await rm(askpass, { force: true });
-    if (await run(['-C', project, 'rev-parse', 'FETCH_HEAD']) !== baseCommit)
-      throw Error('native_studio_checkout_base_changed');
+    if (await run(['-C', project, 'rev-parse', 'FETCH_HEAD']) !==
+        (existingCommit ?? baseCommit))
+      throw Error(existingCommit ? 'native_studio_checkout_source_changed' :
+        'native_studio_checkout_base_changed');
     const tree = await run(['-C', project, 'ls-tree', '-r', '-z', 'FETCH_HEAD']);
     for (const line of tree.split('\0').filter(Boolean)) {
       const match = /^(\d{6}) (blob|commit) [a-f0-9]{40,64}\t(.+)$/.exec(line);
@@ -98,8 +102,8 @@ export async function prepareVerifiedStudioCheckout(input, deps = defaults) {
     await run(['-C', project, 'checkout', '--quiet', '-b', site.branch,
       'FETCH_HEAD']);
     await run(['-C', project, 'remote', 'set-url', 'origin', url]);
-    const committed = await deps.commitSource({ project, store, sourceId,
-      site, author });
+    const committed = existingCommit ? { commit: existingCommit } :
+      await deps.commitSource({ project, store, sourceId, site, author });
     const checked = await deps.verifySource({ project, store, sourceId, site });
     if (committed.commit !== checked.commit || checked.sourceId !== sourceId ||
         checked.repository !== site.repository || checked.branch !== site.branch ||

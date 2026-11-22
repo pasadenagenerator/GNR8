@@ -74,3 +74,25 @@ test('changed remote base stops before preparing source', async t => {
     }), /native_studio_checkout_base_changed/);
   assert.equal(prepared, false);
 });
+
+test('fresh deployment fetches the exact existing source without committing', async t => {
+  const f = await fixture(t);
+  const seed = join(f.remote, '..', 'seed');
+  git(seed, 'checkout', '-q', '-b', site.branch);
+  await writeFile(join(seed, 'page.txt'), 'prepared source');
+  git(seed, 'add', 'page.txt');
+  git(seed, '-c', 'user.name=GNR8', '-c', 'user.email=gnr8@example.com',
+    'commit', '-q', '-m', 'prepare');
+  const existingCommit = git(seed, 'rev-parse', 'HEAD');
+  git(seed, 'push', '-q', 'origin', site.branch);
+  const result = await prepareVerifiedStudioCheckout({ site, sourceId,
+    baseCommit: f.baseCommit, existingCommit,
+    store: { read: async () => null }, credential, trustedGit }, {
+    ...f.deps,
+    commitSource: async () => { throw Error('must not create source'); },
+  });
+  assert.equal(result.commit, existingCommit);
+  assert.equal(await readFile(join(result.project, 'page.txt'), 'utf8'),
+    'prepared source');
+  await disposeVerifiedStudioCheckout(result.root);
+});
