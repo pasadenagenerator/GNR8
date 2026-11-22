@@ -579,9 +579,13 @@ rechecks the current scoped target and, only with
 sign-in. A stale ready binding blocks this fallback; reservation and source
 preparation alone never expose a URL. The flag defaults off. A read-only
 GitHub installation-token check now verifies the private repository ID and
-the exact branch head against the prepared commit. The recorder still has no
-hosted caller or connected first-deployment job; it cannot yet produce a
-receipt in production. A central, trusted token issuer is now available for
+the exact branch head against the prepared commit. The configured first-open
+adapter now resolves the resource receipt, build handoff, exact first-deploy
+intent and attempt, central Cloudflare credential, and a repository-scoped
+GitHub read token before invoking that recorder. It does not take Worker IDs,
+commit or domain from an event. It still has no hosted caller or connected
+public-gateway deployment, so it cannot yet produce a receipt in production.
+A central, trusted token issuer is available for
 that later job. It signs a short-lived GitHub App JWT with the shared private
 key, requests `contents:write` for the first push or `contents:read` for
 deployment verification, only for the current bound repository ID,

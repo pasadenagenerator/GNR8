@@ -109,6 +109,11 @@ handoff and ignored Docker image directory before claiming the attempt.
 These are callable local boundaries; the central deploy credential still needs
 trusted-host configuration, and a hosted dispatcher and live acceptance remain
 to be connected.
+The configured first-open adapter reads the scoped reservation, build and
+first-deploy receipts, obtains a central GitHub read token, then invokes the
+existing gate for active Studio, public gateway, domain and login page. It
+cannot expose a first sign-in link until both Workers pass that gate. The
+public gateway deploy and hosted caller remain unconnected.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root
