@@ -40,16 +40,21 @@ const input = { file: process.execPath, cwd: join(root, 'studio'), token, secret
   args: ['deploy', '--config', 'cloudflare/wrangler.jsonc', '--tag', tag],
   scope, accountId, workerId, sourceId, site, commit };
 const verified = { sourceId, commit, branch: site.branch, repository: site.repository };
-const verifySource = async ({ project, store: received, sourceId: receivedId, site: receivedSite }) => {
+const verifySource = async ({ project, store: received, sourceId: receivedId,
+  site: receivedSite, allowBuildOutputs }) => {
   assert.equal(project, await realpath(root));
   assert.equal(typeof received.read, 'function');
   assert.equal(receivedId, sourceId);
   assert.equal(receivedSite, site);
+  assert.equal(allowBuildOutputs, true);
   return verified;
 };
 const inspectGitHubHead = async () => ({ repositoryId: site.repositoryId,
   branch: site.branch, commit });
-const withInvoke = invoke => ({ verifySource, inspectGitHubHead, invoke });
+const verifyHandoff = async () => ({ sourceId, commit, scope, workerId });
+const verifyImage = async () => ({ files: 2 });
+const withInvoke = invoke => ({ verifySource, verifyHandoff, verifyImage,
+  inspectGitHubHead, invoke });
 
 test('dedicated deploy receives only the exact command and a temporary private secret file', async () => {
   let secretFile;
@@ -113,13 +118,14 @@ test('refuses a changed source, commit, site or tag before invoking Wrangler', a
   ];
   for (const candidate of changed)
     await assert.rejects(runTrustedStudioDeploy({ ...candidate, store: approvedStore() },
-      { invoke, verifySource: async () => verified, inspectGitHubHead }), /target_mismatch/);
+      { invoke, verifySource: async () => verified, verifyHandoff, verifyImage,
+        inspectGitHubHead }), /target_mismatch/);
   await assert.rejects(runTrustedStudioDeploy({ ...input, store: approvedStore() },
-    { invoke, inspectGitHubHead,
+    { invoke, inspectGitHubHead, verifyHandoff, verifyImage,
       verifySource: async () => ({ ...verified, commit: 'f'.repeat(40) }) }),
   /source_unverified/);
   await assert.rejects(runTrustedStudioDeploy({ ...input, store: approvedStore() },
-    { invoke, inspectGitHubHead,
+    { invoke, inspectGitHubHead, verifyHandoff, verifyImage,
       verifySource: async () => { throw Error('checkout changed'); } }),
   /source_unverified/);
   assert.equal(calls, 0);
@@ -138,4 +144,24 @@ test('requires the exact durable intent and refuses a second invocation', async 
   await runTrustedStudioDeploy(approved, deps);
   await assert.rejects(runTrustedStudioDeploy(approved, deps), /already_attempted/);
   assert.equal(calls, 1);
+});
+
+test('changed build output is refused before the one deploy attempt is claimed', async () => {
+  const store = approvedStore();
+  let invoked = false;
+  await assert.rejects(runTrustedStudioDeploy({ ...input, store }, {
+    ...withInvoke(async () => { invoked = true; }),
+    verifyHandoff: async () => { throw Error('changed artifact bytes'); },
+  }), /handoff_unverified/);
+  assert.equal(invoked, false);
+  assert.equal(await store.read(attemptKey), null);
+});
+
+test('changed Docker context is refused before the deploy attempt', async () => {
+  const store = approvedStore();
+  await assert.rejects(runTrustedStudioDeploy({ ...input, store }, {
+    ...withInvoke(async () => { throw Error('must not deploy'); }),
+    verifyImage: async () => { throw Error('stale manifest'); },
+  }), /image_unverified/);
+  assert.equal(await store.read(attemptKey), null);
 });

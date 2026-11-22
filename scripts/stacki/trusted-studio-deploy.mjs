@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { verifyCommittedStudioSource } from './prepare-git-branch.mjs';
+import { verifyStudioBuildHandoff } from './build-handoff.mjs';
+import { verifyStudioImageSite } from './materialize-studio-image-site.mjs';
 import { firstStudioDeployIdentity } from './first-studio-deploy-identity.mjs';
 
 const exec = promisify(execFile);
@@ -22,9 +24,12 @@ const ATTEMPT = 'native-studio/first-deploy-attempt-v1.json';
 const NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
   'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 
-const defaults = { verifySource: verifyCommittedStudioSource, invoke: exec };
+const defaults = { verifySource: verifyCommittedStudioSource,
+  verifyHandoff: verifyStudioBuildHandoff,
+  verifyImage: verifyStudioImageSite, invoke: exec };
 
 export async function runTrustedStudioDeploy(input, deps = defaults) {
+  deps = { ...defaults, ...deps };
   const { file, args, cwd, token, secrets, scope, accountId, workerId,
     sourceId, site, store, commit } = input ?? {};
   if (typeof file !== 'string' || !isAbsolute(file) ||
@@ -70,11 +75,25 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
   if (executable === checkout || executable.startsWith(`${checkout}${sep}`))
     throw Error('native_studio_trusted_deploy_executable_invalid');
   let checked;
-  try { checked = await deps.verifySource({ project: checkout, store, sourceId, site }); }
+  try { checked = await deps.verifySource({ project: checkout, store, sourceId,
+    site, allowBuildOutputs: true }); }
   catch { throw Error('native_studio_trusted_deploy_source_unverified'); }
   if (checked?.sourceId !== sourceId || checked.commit !== commit ||
       checked.branch !== site.branch || checked.repository !== site.repository)
     throw Error('native_studio_trusted_deploy_source_unverified');
+  let handoff;
+  try { handoff = await (deps.verifyHandoff ?? verifyStudioBuildHandoff)({
+    project: checkout, store, sourceId, commit, scope, site, workerId }); }
+  catch { throw Error('native_studio_trusted_deploy_handoff_unverified'); }
+  if (handoff?.sourceId !== sourceId || handoff.commit !== commit ||
+      handoff.workerId !== workerId ||
+      JSON.stringify(handoff.scope) !== JSON.stringify(scope))
+    throw Error('native_studio_trusted_deploy_handoff_unverified');
+  try {
+    const image = await deps.verifyImage({ project: checkout });
+    if (image?.files !== 2)
+      throw Error('native_studio_trusted_deploy_image_unverified');
+  } catch { throw Error('native_studio_trusted_deploy_image_unverified'); }
   const intent = await store.read(INTENT);
   if (!intent || Object.keys(intent).sort().join() !== 'commit,identity' ||
       intent.identity !== identity || intent.commit !== commit)

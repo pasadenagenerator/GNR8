@@ -476,6 +476,16 @@ found stale manifest copies in CHS and ViroiDoc: their source manifests were
 updated after the old ignored image directories. The fresh checkout uses the
 current verified Git commit, so those stale local copies are not transferred.
 The Docker build and hosted execution boundary still need an end-to-end check.
+The local first-deploy path now has a credential-free dry-run receipt and a
+single configured deploy call. A separate disposable preflight job can run the
+unchanged Wrangler `deploy --dry-run`, reverify the source, build handoff and
+Docker context, then claim a receipt bound to the exact artifact commit.
+The deploy job reads that receipt before loading Cloudflare credentials. Its
+final gate rechecks the build bytes and Docker context before claiming the
+one deploy attempt; a lost response leads to control-plane readback and never
+an automatic second deploy. These steps pass focused local tests with provider
+I/O mocked. Neither job is dispatched by a hosted runner yet, and no live
+Cloudflare deploy or authenticated Stacki health result is established.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site

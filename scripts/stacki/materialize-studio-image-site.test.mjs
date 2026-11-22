@@ -3,7 +3,8 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { materializeStudioImageSite } from './materialize-studio-image-site.mjs';
+import { materializeStudioImageSite,
+  verifyStudioImageSite } from './materialize-studio-image-site.mjs';
 
 const sourceId = 'a'.repeat(64), commit = 'b'.repeat(40);
 const site = { repository: 'example/site', branch: 'codex/native-stacki' };
@@ -31,6 +32,12 @@ test('Docker context gets exact verified root manifests only', async t => {
     assert.deepEqual(await readFile(join(input.project,
       'studio/.studio-image/site', name)),
     await readFile(join(input.project, name)));
+  assert.deepEqual(await verifyStudioImageSite({ project: input.project }),
+    { files: 2 });
+  await writeFile(join(input.project, 'studio/.studio-image/site/extra.txt'), 'bad');
+  await assert.rejects(verifyStudioImageSite({ project: input.project }),
+    /destination_invalid/);
+  await rm(join(input.project, 'studio/.studio-image/site/extra.txt'));
   await assert.rejects(materializeStudioImageSite(input, deps),
     /destination_conflict/);
 });

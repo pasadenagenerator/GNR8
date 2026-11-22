@@ -60,6 +60,8 @@ test('post-build intent feeds the exact trusted deploy gate without rebuilding',
       sourceId, site, store: f.input.store, commit }, {
       verifySource: async () => ({ sourceId, commit, branch: site.branch,
         repository: site.repository }),
+      verifyHandoff: f.deps.verifyHandoff,
+      verifyImage: async () => ({ files: 2 }),
       inspectGitHubHead: f.deps.inspectGitHubHead,
       invoke: async () => { invoked++; },
     });

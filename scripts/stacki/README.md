@@ -97,6 +97,14 @@ Before the credential loader runs, the bridge also creates the upstream
 Dockerfile's ignored `.studio-image/site` directory from the verified root
 `package.json` and `package-lock.json`. It rejects a pre-existing image
 directory, changed source identity and a changed Dockerfile copy path.
+`first-studio-dry-run.mjs` records an exact, append-only receipt after a
+credential-free Wrangler Docker/Worker dry run in a separate disposable job.
+The configured first-deploy call checks this receipt before loading deployment
+credentials, prepares the existing intent, invokes the trusted one-attempt gate
+and reads back the Cloudflare control plane. The final gate rechecks the build
+handoff and ignored Docker image directory before claiming the attempt.
+These are callable local boundaries; a hosted dispatcher and live acceptance
+remain to be connected.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

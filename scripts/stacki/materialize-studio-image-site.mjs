@@ -2,7 +2,7 @@
  * Dockerfile. Run after the Git artifact handoff, before deploy credentials.
  */
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { verifyCommittedStudioSource } from './prepare-git-branch.mjs';
 
@@ -24,6 +24,36 @@ async function regularBytes(path, limit) {
       throw Error('native_studio_image_manifest_changed');
     return bytes;
   } finally { await handle.close(); }
+}
+
+/** Read-only final gate for the ignored Docker context. */
+export async function verifyStudioImageSite({ project }) {
+  if (typeof project !== 'string' || !project)
+    throw Error('native_studio_image_input_invalid');
+  const studio = join(project, 'studio');
+  const image = join(studio, '.studio-image');
+  const siteDir = join(image, 'site');
+  for (const path of [studio, image, siteDir]) {
+    const info = await lstat(path);
+    if (!info.isDirectory() || info.isSymbolicLink())
+      throw Error('native_studio_image_destination_invalid');
+  }
+  if ((await readdir(image)).join() !== 'site' ||
+      (await readdir(siteDir)).sort().join() !== 'package-lock.json,package.json')
+    throw Error('native_studio_image_destination_invalid');
+  const dockerfile = await regularBytes(join(studio, 'Dockerfile'), 1024 * 1024);
+  if (!dockerfile.toString('utf8').split(/\r?\n/)
+      .some(line => /^COPY \.studio-image\/site \/opt\/site\s*$/.test(line)))
+    throw Error('native_studio_image_dockerfile_unverified');
+  for (const [name, limit] of MANIFESTS) {
+    const [source, copied] = await Promise.all([
+      regularBytes(join(project, name), limit),
+      regularBytes(join(siteDir, name), limit),
+    ]);
+    if (!copied.equals(source))
+      throw Error('native_studio_image_manifest_changed');
+  }
+  return { files: MANIFESTS.length };
 }
 
 export async function materializeStudioImageSite(input, deps = {}) {
@@ -58,13 +88,7 @@ export async function materializeStudioImageSite(input, deps = {}) {
     await mkdir(siteDir, { mode: 0o700 });
     for (const [name, bytes] of manifests)
       await writeFile(join(siteDir, name), bytes, { flag: 'wx', mode: 0o600 });
-    for (const [name, bytes] of manifests) {
-      const copied = await readFile(join(siteDir, name));
-      if (!copied.equals(bytes) ||
-          !(await regularBytes(join(project, name),
-            MANIFESTS.find(([entry]) => entry === name)[1])).equals(bytes))
-        throw Error('native_studio_image_manifest_changed');
-    }
+    await verifyStudioImageSite({ project });
     return { files: manifests.length, sourceId, commit };
   } catch (error) {
     await rm(image, { recursive: true, force: true });
