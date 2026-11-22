@@ -65,17 +65,21 @@ const defaults = {
 export async function recordNativeStudioFirstOpen(input: {
   scope: NativeStudioScope; client: SupabaseClient; store: Pick<PublicationStore, 'read' | 'claim'>;
   sourceId: string; commit: string; tag: string;
+  publicTag?: string;
   studioWorkerId: string; publicWorkerId: string;
   studioCredential: string; publicCredential: string; githubCredential: string;
 }, deps = defaults) {
-  const { scope, client, store, sourceId, commit, tag,
+  const { scope, client, store, sourceId, commit, tag, publicTag,
     studioWorkerId, publicWorkerId, studioCredential, publicCredential,
     githubCredential } = input;
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
       !client || !store || typeof store.read !== 'function' ||
       typeof store.claim !== 'function' || !SHA.test(sourceId) || !COMMIT.test(commit) ||
-      !TAG.test(tag) || !HEX32.test(studioWorkerId) || !HEX32.test(publicWorkerId) ||
+      !TAG.test(tag) ||
+      (publicTag !== undefined &&
+        !/^gnr8-public-first-[a-f0-9]{64}$/.test(publicTag)) ||
+      !HEX32.test(studioWorkerId) || !HEX32.test(publicWorkerId) ||
       typeof githubCredential !== 'string' || !githubCredential)
     throw Error('native_studio_first_open_input_invalid');
   assertNativeStudioGitHubTokenCompatible(githubCredential);
@@ -90,7 +94,8 @@ export async function recordNativeStudioFirstOpen(input: {
   const [studio, publicSite, entry, githubHead] = await Promise.all([
     deps.studio(scope, client, site.accountId, studioWorkerId,
       studioCredential, fetch, tag, true),
-    deps.gateway(scope, client, site.accountId, publicWorkerId, publicCredential),
+    deps.gateway(scope, client, site.accountId, publicWorkerId,
+      publicCredential, fetch, publicTag),
     deps.entry({ studioOrigin: site.studioOrigin }),
     deps.githubHead(site, githubCredential),
   ]);

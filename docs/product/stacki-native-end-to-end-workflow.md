@@ -498,9 +498,14 @@ intent and attempt plus an active tagged Studio version with six secret names,
 then reads the reserved public Worker and intended hostname. An already
 deployed public Worker or a hostname claimed by another Worker blocks the
 intent. It rechecks the bound site before an append-only claim. This is a
-local preflight only: the eventual public deploy job must repeat the vacancy
-and target checks immediately before attaching the domain. No public Worker
-deploy command or hosted caller is connected yet.
+local preflight. The trusted public deploy call now consumes that exact intent,
+reverifies the source, build bytes, generated root Wrangler configuration,
+GitHub head, active Studio and domain vacancy, then claims one append-only
+attempt before its exact `wrangler deploy --config wrangler.json --tag` command.
+It rejects local dotenv files before loading the Cloudflare credential. A lost
+response is reconciled against the tagged active public version, without a
+second deploy. The command has mocked local coverage; no hosted caller or live
+public Worker deployment is connected yet.
 The existing Inngest resource-reservation job now queues secret preparation
 automatically after an exact reservation when both stage flags are enabled.
 The event carries only site scope and actor; the second job rechecks authority
@@ -590,8 +595,9 @@ preparation alone never expose a URL. The flag defaults off. A read-only
 GitHub installation-token check now verifies the private repository ID and
 the exact branch head against the prepared commit. The configured first-open
 adapter now resolves the resource receipt, build handoff, exact first-deploy
-intent and attempt, central Cloudflare credential, and a repository-scoped
-GitHub read token before invoking that recorder. It does not take Worker IDs,
+intent and attempt for both Workers, central Cloudflare credential, and a
+repository-scoped GitHub read token before invoking that recorder. It checks
+the active public version's exact first-deploy tag. It does not take Worker IDs,
 commit or domain from an event. It still has no hosted caller or connected
 public-gateway deployment, so it cannot yet produce a receipt in production.
 A central, trusted token issuer is available for

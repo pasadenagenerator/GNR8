@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { firstStudioDeployIdentity } from '../../../../scripts/stacki/first-studio-deploy-identity.mjs';
+import { fingerprint } from './publication-contract';
 import { recordConfiguredNativeStudioFirstOpen } from './native-studio-configured-first-open';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
@@ -17,6 +18,10 @@ const cloudflareCredential = 'f'.repeat(40), secrets = { AI_API_KEY: 'g'.repeat(
 const { identity, tag } = firstStudioDeployIdentity({ scope,
   accountId: site.accountId, workerId: studioWorkerId, sourceId, site,
   token: cloudflareCredential, secrets, commit });
+const publicReceipt = { identity: fingerprint({ scope,
+  accountId: site.accountId, sourceId, commit, publicWorkerId,
+  studioTag: tag, domain: new URL(site.studioOrigin).hostname,
+  repository: site.repository }), commit, publicWorkerId };
 
 function fixture() {
   const calls: string[] = [];
@@ -38,6 +43,8 @@ function fixture() {
     }],
     ['native-studio/first-deploy-intent-v1.json', { identity, commit }],
     ['native-studio/first-deploy-attempt-v1.json', { identity, commit }],
+    ['native-studio/first-public-deploy-intent-v1.json', publicReceipt],
+    ['native-studio/first-public-deploy-attempt-v1.json', publicReceipt],
   ]);
   const store = { read: async <T>(key: string) => (saved.get(key) ?? null) as T | null };
   const deps = {
@@ -53,6 +60,8 @@ function fixture() {
       assert.equal(input.commit, commit);
       assert.equal(input.studioWorkerId, studioWorkerId);
       assert.equal(input.publicWorkerId, publicWorkerId);
+      assert.equal(input.publicTag,
+        `gnr8-public-first-${publicReceipt.identity}`);
       assert.equal(input.studioCredential, cloudflareCredential);
       assert.equal(input.publicCredential, cloudflareCredential);
       return { state: 'first-open-recorded' }; },
@@ -81,4 +90,12 @@ test('missing deploy attempt or changed target blocks first-open before GitHub a
   await assert.rejects(recordConfiguredNativeStudioFirstOpen(scope,
     {} as SupabaseClient, {}, fetch, changed.deps), /evidence_unverified/);
   assert.deepEqual(changed.calls, ['site']);
+});
+
+test('public gateway attempt is required before first-open', async () => {
+  const f = fixture();
+  f.saved.delete('native-studio/first-public-deploy-attempt-v1.json');
+  await assert.rejects(recordConfiguredNativeStudioFirstOpen(scope,
+    {} as SupabaseClient, {}, fetch, f.deps), /public_unverified/);
+  assert.equal(f.calls.includes('record'), false);
 });

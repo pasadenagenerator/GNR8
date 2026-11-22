@@ -95,6 +95,25 @@ test('GitHub must expose the exact saved commit before first sign-in', async () 
   assert.equal(f.saved.has('native-studio/first-open-v1.json'), false);
 });
 
+test('first-open forwards the exact public deployment tag to gateway readback', async () => {
+  const f = fixture();
+  const publicTag = `gnr8-public-first-${'9'.repeat(64)}`;
+  let received: string | undefined;
+  await recordNativeStudioFirstOpen({ ...f.input, publicTag }, {
+    ...f.deps,
+    gateway: async (_scope: any, _client: any, _account: any,
+      _worker: any, _credential: any, _transport: any, tag: string) => {
+      received = tag;
+      return { state: 'observed-control-plane' as const,
+        workerId: publicWorkerId, versionId: publicVersionId,
+        domainId: '9'.repeat(32) };
+    },
+  } as any);
+  assert.equal(received, publicTag);
+  await assert.rejects(recordNativeStudioFirstOpen({ ...f.input,
+    publicTag: 'other' }, f.deps as any), /input_invalid/);
+});
+
 test('ready binding wins; stale binding and changed receipt fail closed', async () => {
   const f = fixture();
   await recordNativeStudioFirstOpen(f.input, f.deps as any);

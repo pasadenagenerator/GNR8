@@ -110,14 +110,17 @@ These are callable local boundaries; the central deploy credential still needs
 trusted-host configuration, and a hosted dispatcher and live acceptance remain
 to be connected.
 The configured first-open adapter reads the scoped reservation, build and
-first-deploy receipts, obtains a central GitHub read token, then invokes the
+first-deploy receipts for both Workers, obtains a central GitHub read token,
+then invokes the
 existing gate for active Studio, public gateway, domain and login page. It
 cannot expose a first sign-in link until both Workers pass that gate. The
 public gateway deploy and hosted caller remain unconnected.
 The public gateway first-deploy intent separately checks the active tagged
-Studio and a vacant reserved public Worker/domain before a future trusted
-job may attach that domain. The actual public deploy job must recheck this
-state immediately before its one attempt.
+Studio and a vacant reserved public Worker/domain. The trusted public deploy
+call rechecks those identities, exact build bytes, generated root config and
+GitHub head, then invokes one tagged Wrangler deploy from a controlled
+environment. It rejects local dotenv files and never automatically repeats
+an ambiguous attempt. A hosted dispatcher and live acceptance are still needed.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

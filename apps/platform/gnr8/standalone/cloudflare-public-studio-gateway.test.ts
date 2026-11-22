@@ -13,6 +13,7 @@ const credential = 'c'.repeat(40), domain = 'site.app.pasadenagenerator.com';
 const worker = `gnr8-${scope.siteId}-site`, studio = `gnr8-${scope.siteId}-studio`;
 const deploymentId = '44444444-4444-4444-8444-444444444444';
 const versionId = '55555555-5555-4555-8555-555555555555';
+const publicTag = `gnr8-public-first-${'f'.repeat(64)}`;
 
 function fixture() {
   const calls: string[] = [];
@@ -28,6 +29,8 @@ function fixture() {
         { name: 'SITE_VERSION', type: 'json', json: { tag: '' } },
       ],
     } },
+    [`/workers/workers/${worker}/versions/${versionId}`]: {
+      id: versionId, annotations: { 'workers/tag': publicTag } },
     '/workers/domains': [{ id: 'd'.repeat(32), hostname: domain,
       service: worker, enabled: true, previews_enabled: false }],
   };
@@ -55,6 +58,17 @@ test('checks the active public Worker, exact Studio binding and routed domain', 
     domainId: 'd'.repeat(32),
   });
   assert.equal(f.calls.length, 4);
+});
+
+test('active public version must carry the exact first-deploy tag', async () => {
+  const f = fixture();
+  assert.equal((await inspectCloudflarePublicStudioGateway(scope, accountId,
+    workerId, domain, credential, f.transport, publicTag)).state,
+  'observed-control-plane');
+  const tagged = f.result[`/workers/workers/${worker}/versions/${versionId}`] as any;
+  tagged.annotations['workers/tag'] = 'other';
+  await assert.rejects(inspectCloudflarePublicStudioGateway(scope, accountId,
+    workerId, domain, credential, f.transport, publicTag), /source_conflict/);
 });
 
 test('an empty reservation or unattached domain stays pending', async () => {

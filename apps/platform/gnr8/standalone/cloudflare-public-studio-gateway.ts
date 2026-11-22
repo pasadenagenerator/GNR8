@@ -61,11 +61,14 @@ export async function inspectCloudflarePublicStudioGatewayVacancy(
 export async function inspectCloudflarePublicStudioGateway(
   scope: NativeStudioScope, accountId: string, workerId: string,
   domain: string, credential: string, transport: typeof fetch = fetch,
+  expectedTag?: string,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
     !HEX32.test(accountId) || !HEX32.test(workerId) ||
-    !DOMAIN.test(domain) || !TOKEN.test(credential))
+    !DOMAIN.test(domain) || !TOKEN.test(credential) ||
+    (expectedTag !== undefined &&
+      !/^gnr8-public-first-[a-f0-9]{64}$/.test(expectedTag)))
     throw Error('native_studio_public_gateway_setup_invalid');
   const worker = `gnr8-${scope.siteId}-site`;
   const studio = `gnr8-${scope.siteId}-studio`;
@@ -101,6 +104,13 @@ export async function inspectCloudflarePublicStudioGateway(
       !UUID.test(active.versions[0].version_id as string))
     throw Error('native_studio_public_gateway_version_conflict');
   const versionId = active.versions[0].version_id as string;
+  if (expectedTag) {
+    const tagged = await read(`/workers/workers/${worker}/versions/${versionId}`);
+    if (!object(tagged) || tagged.id !== versionId ||
+        !object(tagged.annotations) ||
+        tagged.annotations['workers/tag'] !== expectedTag)
+      throw Error('native_studio_public_gateway_source_conflict');
+  }
   const version = await read(`/workers/scripts/${worker}/versions/${versionId}`);
   if (!object(version) || version.id !== versionId || !object(version.resources) ||
       !object(version.resources.script) ||
@@ -136,10 +146,11 @@ export async function inspectCloudflarePublicStudioGateway(
 export async function inspectBoundCloudflarePublicStudioGateway(
   scope: NativeStudioScope, client: SupabaseClient, accountId: string,
   workerId: string, credential: string, transport: typeof fetch = fetch,
+  expectedTag?: string,
 ) {
   const before = await readNativeStudioBootstrapTarget(scope, client, accountId);
   const result = await inspectCloudflarePublicStudioGateway(scope, accountId, workerId,
-    new URL(before.studioOrigin).hostname, credential, transport);
+    new URL(before.studioOrigin).hostname, credential, transport, expectedTag);
   const after = await readNativeStudioBootstrapTarget(scope, client, accountId);
   if (JSON.stringify(before) !== JSON.stringify(after))
     throw Error('native_studio_public_gateway_target_changed');
