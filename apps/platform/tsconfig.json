@@ -43,6 +43,7 @@
     "../../scripts/stacki/build-artifact-git-commit.mjs",
     "../../scripts/stacki/build-artifact-github-push.mjs",
     "../../scripts/stacki/build-artifact-github-restore.mjs",
+    "../../scripts/stacki/materialize-studio-image-site.mjs",
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",

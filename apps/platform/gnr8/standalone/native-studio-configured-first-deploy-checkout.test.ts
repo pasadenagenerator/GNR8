@@ -33,6 +33,8 @@ test('fresh source and artifact are verified before trusted consumer runs', asyn
       return { root, project: join(root, 'project'), commit: sourceCommit }; },
     restore: async () => { calls.push('restore');
       return { sourceId, commit: sourceCommit, files: 2 }; },
+    materialize: async () => { calls.push('materialize');
+      return { sourceId, commit: sourceCommit, files: 2 }; },
     dispose: async (path: string) => { calls.push('dispose');
       await rm(path, { recursive: true, force: true }); },
   } as any;
@@ -43,7 +45,8 @@ test('fresh source and artifact are verified before trusted consumer runs', asyn
       return prepared.files; }, {},
     (async () => { throw Error('no provider call'); }) as typeof fetch, deps);
   assert.equal(result, 2);
-  assert.deepEqual(calls, ['site', 'checkout', 'restore', 'site', 'use', 'dispose']);
+  assert.deepEqual(calls, ['site', 'checkout', 'restore', 'materialize',
+    'site', 'use', 'dispose']);
   await assert.rejects(stat(root), { code: 'ENOENT' });
 });
 

@@ -93,6 +93,10 @@ reserved Studio Worker, disposes the checkout after its trusted consumer, and
 can claim the existing first-deploy intent after a trusted host loads its
 Cloudflare credentials. The loader is called only after artifact verification;
 no hosted runner or deployment command is connected to this bridge yet.
+Before the credential loader runs, the bridge also creates the upstream
+Dockerfile's ignored `.studio-image/site` directory from the verified root
+`package.json` and `package-lock.json`. It rejects a pre-existing image
+directory, changed source identity and a changed Dockerfile copy path.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

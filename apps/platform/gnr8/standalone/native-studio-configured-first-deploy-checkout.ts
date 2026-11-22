@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { disposeVerifiedStudioCheckout } from '../../../../scripts/stacki/verified-studio-checkout.mjs';
+import { materializeStudioImageSite } from '../../../../scripts/stacki/materialize-studio-image-site.mjs';
 import { configuredNativeStudioArtifactGitHubRestore } from './native-studio-configured-artifact-github-restore';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 import { NATIVE_STUDIO_RESOURCE_RECEIPT,
@@ -17,6 +18,7 @@ const defaults = {
   site: configuredNativeStudioBootstrapSite,
   checkout: configuredNativeStudioDeploymentCheckout,
   restore: configuredNativeStudioArtifactGitHubRestore,
+  materialize: materializeStudioImageSite,
   dispose: disposeVerifiedStudioCheckout,
   store: (client: SupabaseClient, scope: NativeStudioScope, env: Environment) =>
     new SupabasePublicationStore(client,
@@ -67,6 +69,11 @@ deps = defaults): Promise<T> {
         restored.commit !== sourceCommit ||
         !Number.isSafeInteger(restored.files) || restored.files < 2)
       throw Error('native_studio_deploy_checkout_artifact_unverified');
+    const image = await deps.materialize({ project: checkout.project, store,
+      sourceId, commit: sourceCommit, site });
+    if (image.sourceId !== sourceId || image.commit !== sourceCommit ||
+        image.files !== 2)
+      throw Error('native_studio_deploy_checkout_image_unverified');
     if (JSON.stringify(await deps.site(scope, client, env)) !== JSON.stringify(site))
       throw Error('native_studio_deploy_checkout_target_changed');
     return await use({ project: checkout.project, store, site,

@@ -17,6 +17,7 @@
     "../../scripts/stacki/build-artifact-git-commit.mjs",
     "../../scripts/stacki/build-artifact-github-push.mjs",
     "../../scripts/stacki/build-artifact-github-restore.mjs",
+    "../../scripts/stacki/materialize-studio-image-site.mjs",
     "../../scripts/stacki/build-handoff.mjs",
     "../../scripts/stacki/build-artifact-transfer.mjs",
     "../../scripts/stacki/first-studio-github-push.mjs",

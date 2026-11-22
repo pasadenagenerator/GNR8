@@ -466,8 +466,16 @@ that checkout only while the trusted next step uses it. It removes the checkout
 on success or failure. The configured intent preparer loads deployment
 credentials only after this verified transfer, then uses the existing
 post-build intent gate without rebuilding the site. Local focused tests cover
-ordering and cleanup. A hosted runner, credential loader, verified Docker
-packaging and actual Cloudflare deploy remain unconnected.
+ordering and cleanup. A hosted runner, credential loader, Docker build and
+actual Cloudflare deploy remain unconnected.
+The fresh checkout now assembles `studio/.studio-image/site` from the two
+verified root npm manifests before loading deployment credentials. It checks
+the unchanged upstream Dockerfile's exact copy path and rejects an existing
+image directory. Read-only inspection of the four retained local checkouts
+found stale manifest copies in CHS and ViroiDoc: their source manifests were
+updated after the old ignored image directories. The fresh checkout uses the
+current verified Git commit, so those stale local copies are not transferred.
+The Docker build and hosted execution boundary still need an end-to-end check.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
