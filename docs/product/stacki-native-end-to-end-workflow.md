@@ -7,6 +7,8 @@
   GitHub and Publish controls. Do not revive the GNR8 Save/Publish patch.
 - The user explicitly accepted native wording: drafts autosave; **Push to GitHub**
   commits source; **Deploy to hosting** publishes. The main Publish action can do both.
+  Prepared projects set native `defaultTarget` to `all`; choose the native
+  `hosting` target when verifying Cloudflare publication without a GitHub push.
 - Use native Cloudflare publishing. Disable automatic website deployment on GitHub
   push before enabling the separate actions; do not silently couple them again.
 - Make Lumos available through native project folders/insertion settings.
@@ -254,6 +256,14 @@ make duplicate events safe. This is not a persistent background outbox: an
 unavailable queue after the tab closes still needs a later visit or an operator
 retry. The hosted Container build and first deployment, secrets, routes and
 readiness checks remain to be connected.
+The registered `native-studio.secrets.install.requested` job has no event
+producer. Connecting it immediately after resource reservation would fail:
+the reserved Studio Worker is empty and has no active deployed version for
+the secret installer to inspect. Source preparation stores bytes and reports
+`hosted:false`; it neither deploys the Container nor writes a ready binding.
+The missing step is a trusted first-deployment runner that consumes that exact
+prepared source, builds without credentials, deploys with protected credentials,
+then verifies the active Studio and Container before any ready binding is written.
 
 After that first installation, the public site Worker may be connected to
 GitHub Builds with `versions upload`. Keep the Studio Worker build trigger
@@ -722,5 +732,16 @@ Push or native Cloudflare Publish.
 No customer live domain is part of this rollout. Native direct Publish does not
 populate the legacy GitHub-pipeline `SITE_VERSION.tag` automatically; the prepared
 empty value must never be presented as verified live Git commit evidence.
+The retained Ladja Žaba Studio passes its scoped publish secret to Wrangler as
+`CLOUDFLARE_API_TOKEN`. Native `hosting` Publish skips GitHub, and native
+`github` Push skips hosting; the primary `all` target does both. Stacki reports
+hosting success after Wrangler exits successfully, but the prepared
+`/__studio-deployment` route returns `sha: null`. For the first hosted cutover,
+record the old public Worker version, disable the old token only after a verified
+Studio recovery point, publish a distinctive reviewed change with native
+`hosting`, then verify a new active public Worker version and that exact change
+on the confirmed working domain. A success message or token last-used timestamp
+alone cannot establish which token performed the deployment. The local audit
+has not performed this hosted check.
 
 Reviewed external action inputs are saved locally in `/private/tmp/gnr8-native-sites/rollout-review.json`; the existing CHS/ViroiDoc launch bindings are in `reviewed-existing-bindings.json`. Neither file contains credentials.
