@@ -62,6 +62,10 @@ The existing per-site `SupabasePublicationStore` supplies the durable read/claim
 contract when a hosted runner is connected.
 `build-handoff.mjs` records an immutable, source/commit/Worker-bound list of
 SHA-256 hashes for only `dist/**` and `studio/dist/**` after the build job ends.
+A local `build-artifact-transfer.mjs` step exports only those listed files to
+an empty artifact directory and restores them into a fresh, clean deploy
+checkout. It rejects extra files, changed bytes and symlinks, then rechecks
+the durable handoff. This step has no upload or hosted dispatch yet.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

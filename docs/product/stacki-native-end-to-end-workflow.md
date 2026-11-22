@@ -388,8 +388,12 @@ The source handoff must preserve the Git metadata and byte-for-byte source
 checks required by `verifyCommittedStudioSource`. A local `build-handoff.mjs`
 contract now stores the source, commit, scoped Worker identity and hashes of
 only `dist/**` and `studio/dist/**`. It rejects altered or extra output and
-symlinks in those directories when checked in a fresh environment. The
-deployment job must independently reconstruct the clean Git checkout, copy
+symlinks in those directories when checked in a fresh environment. The local
+artifact-transfer step now exports only those receipt-listed files and
+restores them into a fresh checkout. It rejects extra files, changed bytes and
+symlinks in the transferred directory and removes partially restored output
+if final verification fails. It does not upload artifacts or start a hosted job.
+The deployment job must independently reconstruct the clean Git checkout, copy
 only those listed files, regenerate `studio/.studio-image/site` from verified
 root manifests and check the stored receipt before receiving credentials.
 No hosted artifact transfer or two-environment adapter is connected yet.

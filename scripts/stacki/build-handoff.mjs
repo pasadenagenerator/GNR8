@@ -25,7 +25,7 @@ function target(site) {
   return Object.fromEntries(keys.map(key => [key, site[key]]));
 }
 
-async function scan(project) {
+export async function scanStudioBuildOutputs(project) {
   const files = [];
   let total = 0;
   async function walk(relative) {
@@ -84,7 +84,7 @@ async function source(input, verifySource) {
 export async function recordStudioBuildHandoff(input, deps = {}) {
   const { checkout, identity } = await source(input,
     deps.verifySource ?? verifyCommittedStudioSource);
-  const files = await scan(checkout);
+  const files = await scanStudioBuildOutputs(checkout);
   await source(input, deps.verifySource ?? verifyCommittedStudioSource);
   const receipt = { ...identity, files };
   const prior = await input.store.read(KEY);
@@ -108,7 +108,7 @@ export async function verifyStudioBuildHandoff(input, deps = {}) {
     scope: receipt.scope, workerId: receipt.workerId,
     site: receipt.site }) !== canonical(identity) || !Array.isArray(receipt.files))
     throw Error('native_studio_build_handoff_conflict');
-  const files = await scan(checkout);
+  const files = await scanStudioBuildOutputs(checkout);
   if (canonical(files) !== canonical(receipt.files))
     throw Error('native_studio_build_handoff_changed');
   await source(input, deps.verifySource ?? verifyCommittedStudioSource);
