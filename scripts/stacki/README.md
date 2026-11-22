@@ -77,6 +77,11 @@ the exact inspected private GitHub default HEAD. It uses a short-lived read
 token only for fetch, verifies the new commit's parent and source bytes, and
 returns a credential-free checkout for the separate Sandbox build. Its caller
 must remove the returned root with `disposeVerifiedStudioCheckout`.
+The Platform's first-build coordinator combines that checkout with the
+credential-free Sandbox handoff, exports only verified build files, then
+confirms the first GitHub push. The build job must upload the returned artifact
+and call `disposeNativeStudioFirstBuildArtifact` after transfer; a fresh deploy
+job restores the verified bytes before receiving Cloudflare credentials.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

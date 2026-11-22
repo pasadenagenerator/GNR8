@@ -441,6 +441,15 @@ output directory. It refuses to delete an unexpected directory. A local
 producer-to-receipt test covers this path with hosted I/O replaced at the
 existing build and source-verification boundaries. The coordinator does not
 dispatch a hosted job or supply GitHub/Cloudflare credentials.
+A configured first-build coordinator now connects the verified private source
+checkout, reserved Studio Worker identity, isolated build handoff, output-only
+artifact export and first GitHub push. It exports before the push, stops on a
+pending or conflicting push, and removes the temporary checkout and partial
+artifact on failure. On success it returns a portable output directory for a
+fresh deploy job; it does not dispatch that job or upload the directory. A
+pending first push still requires exact remote-head reconciliation before any
+new checkout or retry; this coordinator does not invent a second commit.
+The caller must dispose the returned temporary artifact after transfer.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
