@@ -11,8 +11,45 @@ const HEX32 = /^[a-f0-9]{32}$/;
 const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
+export const NATIVE_STUDIO_RESOURCE_RECEIPT = 'native-studio/resources-reserved-v1.json';
 const reservations = { draft: ensureBoundCloudflareStudioDraftBucket,
   workers: ensureBoundCloudflareNativeWorkerReservations };
+export type NativeStudioResourceReceipt = { target: Awaited<ReturnType<typeof readNativeStudioBootstrapTarget>>;
+  draftBucket: { bucket: string; bucketId: string };
+  workers: { studio: { worker: string; id: string };
+    publicSite: { worker: string; id: string } } };
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** Preserve the provider-read identities for the next isolated job. */
+export async function recordNativeStudioResourceReceipt(receipt: NativeStudioResourceReceipt,
+  store: Pick<SupabasePublicationStore, 'read' | 'claim'>) {
+  const { target, draftBucket, workers } = receipt;
+  const siteId = target?.scope?.siteId;
+  if (!target?.scope || ![target.scope.agencyId, target.scope.clientId, siteId]
+        .every(value => typeof value === 'string' && UUID.test(value)) ||
+      !HEX32.test(target.accountId) ||
+      typeof target.repository !== 'string' || !target.repository ||
+      !Number.isSafeInteger(target.repositoryId) || target.repositoryId <= 0 ||
+      typeof target.studioOrigin !== 'string' ||
+      !target.studioOrigin.startsWith('https://') ||
+      draftBucket?.bucket !== `gnr8-${siteId}-drafts` ||
+      !HEX32.test(draftBucket.bucketId) ||
+      workers?.studio?.worker !== `gnr8-${siteId}-studio` ||
+      !HEX32.test(workers.studio.id) ||
+      workers?.publicSite?.worker !== `gnr8-${siteId}-site` ||
+      !HEX32.test(workers.publicSite.id))
+    throw Error('native_studio_resource_receipt_invalid');
+  const prior = await store.read<NativeStudioResourceReceipt>(NATIVE_STUDIO_RESOURCE_RECEIPT);
+  if (prior) {
+    if (!same(prior, receipt)) throw Error('native_studio_resource_receipt_conflict');
+    return prior;
+  }
+  await store.claim(NATIVE_STUDIO_RESOURCE_RECEIPT, receipt);
+  const saved = await store.read<NativeStudioResourceReceipt>(NATIVE_STUDIO_RESOURCE_RECEIPT);
+  if (!saved || !same(saved, receipt))
+    throw Error('native_studio_resource_receipt_conflict');
+  return saved;
+}
 
 /** Re-read the target from current scoped GNR8 rows. An event may supply only
  * scope and actor; it cannot select a domain, repository or Cloudflare account.
@@ -54,11 +91,13 @@ export async function reserveConfiguredNativeStudioResources(
   env: Environment = process.env,
   transport: typeof fetch = fetch,
   deps = reservations,
+  makeStore = (db: SupabaseClient, targetScope: NativeStudioScope,
+    bucket: string) => new SupabasePublicationStore(db, bucket, targetScope),
 ) {
   const setup = configuredNativeStudioResourceReservation(env);
   const target = await readNativeStudioBootstrapTarget(scope, client, setup.accountId);
-  const store = new SupabasePublicationStore(client,
-    env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
+  const store = makeStore(client,
+    scope, env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes');
   const draftBucket = await deps.draft(scope, client,
     setup.accountId, setup.r2Manager, store, transport);
   const workers = await deps.workers(scope, client,
@@ -66,5 +105,6 @@ export async function reserveConfiguredNativeStudioResources(
   const current = await readNativeStudioBootstrapTarget(scope, client, setup.accountId);
   if (JSON.stringify(current) !== JSON.stringify(target))
     throw Error('native_studio_bootstrap_target_changed');
+  await recordNativeStudioResourceReceipt({ target, draftBucket, workers }, store);
   return { draftBucket, workers, target };
 }

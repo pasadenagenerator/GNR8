@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { configuredNativeStudioResourceReservation,
-  readNativeStudioBootstrapTarget, reserveConfiguredNativeStudioResources,
+  NATIVE_STUDIO_RESOURCE_RECEIPT, readNativeStudioBootstrapTarget,
+  reserveConfiguredNativeStudioResources,
 } from './native-studio-configured-resource-reservation';
 
 const valid = {
@@ -69,15 +70,32 @@ test('reservation returns the verified target and rejects drift during provider 
   const workers = { studio: { worker: `gnr8-${scope.siteId}-studio`, id: 'c'.repeat(32) },
     publicSite: { worker: `gnr8-${scope.siteId}-site`, id: 'd'.repeat(32) } };
   const deps = { draft: async () => draft, workers: async () => workers };
+  const saved = new Map<string, unknown>();
+  const store = { read: async (key: string) => saved.get(key) ?? null,
+    claim: async (key: string, value: unknown) => {
+      if (saved.has(key)) return false;
+      saved.set(key, value); return true;
+    } };
+  const makeStore = () => store as any;
   const result = await reserveConfiguredNativeStudioResources(scope, f.client,
-    valid, (async () => { throw Error('unexpected provider call'); }) as typeof fetch, deps);
+    valid, (async () => { throw Error('unexpected provider call'); }) as typeof fetch,
+    deps, makeStore);
   assert.deepEqual(result, { draftBucket: draft, workers, target: {
     scope, accountId: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID,
     studioOrigin: 'https://site.app.pasadenagenerator.com',
     repository: 'pasadenagenerator/gnr8-site-3333', repositoryId: 456,
   } });
+  assert.deepEqual(saved.get(NATIVE_STUDIO_RESOURCE_RECEIPT), result);
+  assert.deepEqual(await reserveConfiguredNativeStudioResources(scope, f.client,
+    valid, (async () => { throw Error('unexpected provider call'); }) as typeof fetch,
+    deps, makeStore), result);
+  await assert.rejects(reserveConfiguredNativeStudioResources(scope, f.client,
+    valid, (async () => { throw Error('unexpected provider call'); }) as typeof fetch,
+    { ...deps, workers: async () => ({ ...workers,
+      studio: { ...workers.studio, id: 'e'.repeat(32) } }) }, makeStore),
+  /native_studio_resource_receipt_conflict/);
   const drifting = { ...deps, draft: async () => { f.changeDomain('changed.example.com'); return draft; } };
   await assert.rejects(reserveConfiguredNativeStudioResources(scope, f.client,
     valid, (async () => { throw Error('unexpected provider call'); }) as typeof fetch,
-    drifting), /native_studio_bootstrap_target_changed/);
+    drifting, makeStore), /native_studio_bootstrap_target_changed/);
 });

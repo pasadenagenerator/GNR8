@@ -14,16 +14,22 @@ const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
 const client = {} as SupabaseClient;
 const site = { siteId: scope.siteId, repository: 'example/site',
   branch: 'codex/native-stacki', studioOrigin: 'https://site.example.com',
-  accountId: 'd'.repeat(32) };
+  accountId: 'd'.repeat(32), repositoryId: '42' };
 const sourceId = 'a'.repeat(64), commit = 'b'.repeat(40);
 const workerId = 'c'.repeat(32);
 const input = { scope, client, project: '/private/tmp/checked-source',
   sourceId, commit, workerId };
+const reserved = { target: { scope, accountId: site.accountId,
+  repository: site.repository, repositoryId: 42,
+  studioOrigin: site.studioOrigin },
+  draftBucket: { bucket: `gnr8-${scope.siteId}-drafts`, bucketId: 'e'.repeat(32) },
+  workers: { studio: { worker: `gnr8-${scope.siteId}-studio`, id: workerId },
+    publicSite: { worker: `gnr8-${scope.siteId}-site`, id: 'f'.repeat(32) } } };
 
 async function fixture() {
   const artifactDir = await mkdtemp(join(tmpdir(), 'gnr8-native-build-artifact-'));
   const calls: string[] = [];
-  const store = { read: async () => null, claim: async () => true };
+  const store = { read: async () => reserved, claim: async () => true };
   const receipt = { sourceId, commit, scope, workerId, site, files: [] };
   const deps = {
     site: async () => { calls.push('site'); return site; },
@@ -57,6 +63,14 @@ test('source mismatch stops before running the Sandbox build', async () => {
   await assert.rejects(configuredNativeStudioBuildHandoff(input, {}, f.deps),
     /source_unverified/);
   assert(!f.calls.includes('build'));
+  await rm(f.artifactDir, { recursive: true, force: true });
+});
+
+test('unreserved Worker ID stops before checkout verification or build', async () => {
+  const f = await fixture();
+  await assert.rejects(configuredNativeStudioBuildHandoff({ ...input,
+    workerId: 'f'.repeat(32) }, {}, f.deps), /resources_unverified/);
+  assert.deepEqual(f.calls, ['site']);
   await rm(f.artifactDir, { recursive: true, force: true });
 });
 
@@ -102,7 +116,9 @@ test('configured build feeds its exact output into the real handoff receipt', as
     await writeFile(join(artifactDir, 'dist/index.html'), '<main>site</main>');
     await writeFile(join(artifactDir, 'studio/dist/studio.js'), 'built');
     const files = await scanStudioBuildOutputs(artifactDir);
-    const saved = new Map<string, unknown>();
+    const saved = new Map<string, unknown>([
+      ['native-studio/resources-reserved-v1.json', reserved],
+    ]);
     const store = { read: async (key: string) => saved.get(key) ?? null,
       claim: async (key: string, value: unknown) => {
         if (saved.has(key)) return false;

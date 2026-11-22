@@ -237,6 +237,12 @@ after reservation and refuses to return it if the domain or repository changed
 during provider work; the event cannot supply these values. The repository
 branch and GitHub App identifiers still require an authoritative bootstrap
 source before first deployment.
+The reservation now also saves an append-only, scoped receipt of the exact
+private bucket and both immutable Worker IDs. The later build-handoff
+coordinator requires that receipt and refuses a caller-supplied Studio Worker
+ID or changed site/repository that does not match it. This prevents a future
+job event from choosing its own deployment target; active provider state is
+still rechecked before deployment and readiness.
 A successful scoped site import enqueues the event only when
 `GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED=1`; the flag defaults off.
 The job requires central `GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID`,

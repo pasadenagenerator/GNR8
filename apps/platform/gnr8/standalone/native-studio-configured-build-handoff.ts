@@ -6,6 +6,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordStudioSandboxBuildArtifact } from '../../../../scripts/stacki/build-artifact-transfer.mjs';
 import { verifyCommittedStudioSource } from '../../../../scripts/stacki/prepare-git-branch.mjs';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
+import { NATIVE_STUDIO_RESOURCE_RECEIPT,
+  type NativeStudioResourceReceipt } from './native-studio-configured-resource-reservation';
 import { configuredNativeStudioSandboxBuild } from './native-studio-configured-sandbox-build';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { SupabasePublicationStore } from './publication-store';
@@ -38,6 +40,19 @@ export async function configuredNativeStudioBuildHandoff(input: {
     throw Error('native_studio_build_handoff_input_invalid');
   const site = await deps.site(scope, client, env);
   const store = deps.store(client, scope, env);
+  const reserved = await store.read<NativeStudioResourceReceipt>(NATIVE_STUDIO_RESOURCE_RECEIPT);
+  if (!reserved || JSON.stringify(reserved.target?.scope) !== JSON.stringify(scope) ||
+      reserved.target?.accountId !== site.accountId ||
+      reserved.target?.repository !== site.repository ||
+      String(reserved.target?.repositoryId) !== site.repositoryId ||
+      reserved.target?.studioOrigin !== site.studioOrigin ||
+      reserved.workers?.studio?.worker !== `gnr8-${scope.siteId}-studio` ||
+      reserved.workers?.studio?.id !== workerId ||
+      reserved.workers?.publicSite?.worker !== `gnr8-${scope.siteId}-site` ||
+      !HEX32.test(reserved.workers.publicSite.id) ||
+      reserved.draftBucket?.bucket !== `gnr8-${scope.siteId}-drafts` ||
+      !HEX32.test(reserved.draftBucket.bucketId))
+    throw Error('native_studio_build_handoff_resources_unverified');
   const checked = await deps.verifySource({ project, store, sourceId, site });
   if (checked.sourceId !== sourceId || checked.commit !== commit ||
       checked.repository !== site.repository || checked.branch !== site.branch)
