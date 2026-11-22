@@ -407,6 +407,20 @@ version-tag calculation. A local contract test passes its command directly to
 entry point, not a hosted dispatch or a completed production deployment.
 Vercel's [Docker support](https://vercel.com/changelog/run-docker-containers-inside-vercel-sandbox)
 establishes runtime capability, not this credential isolation.
+A local build adapter now reads the exact scoped source package through the
+trusted store, checks a centrally configured, unexpired
+`GNR8_NATIVE_STUDIO_BUILD_SNAPSHOT`, and sends only source bytes to a fresh,
+ephemeral Vercel Sandbox. The Sandbox has no supplied secrets or exposed ports;
+its network policy permits only GET/HEAD requests to the npm registry. It
+requires Node 26.13.0, rejects a snapshot containing an existing build root,
+runs fixed install/build commands, re-reads every source file after the build,
+downloads only bounded and hashed `dist/**`
+and `studio/dist/**` output, then stops. A changed site binding discards the
+downloaded artifact. The SDK and output scanner have local mocked/temporary
+filesystem tests, but no real Sandbox has been started by this path. A verified
+build snapshot, hosted dispatch, artifact upload and fresh deploy environment
+still need to be connected. Projects needing other install/build network hosts
+will fail this narrow policy until their dependencies are reviewed.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
