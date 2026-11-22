@@ -12,6 +12,10 @@ requestId: 'a'.repeat(64), sourceId: 'b'.repeat(64) };
 const result = { requestId: request.requestId, sourceId: request.sourceId,
   sourceManifestSha256: 'c'.repeat(64), studioVersion: '1.4.8', files: 42,
   hosted: false as const };
+const commit = 'd'.repeat(40);
+const built = { sourceId: request.sourceId, commit,
+  workerId: 'e'.repeat(32), artifactBranch: `gnr8-build-${commit}`,
+  artifactCommit: 'f'.repeat(40) };
 
 function fixture() {
   const calls: string[] = [];
@@ -33,7 +37,9 @@ function fixture() {
       calls.push('source');
       return result;
     },
-    build: async () => { calls.push('build'); return { commit: 'd'.repeat(40) }; },
+    build: async () => { calls.push('build'); return built; },
+    chainEnabled: () => false,
+    enqueuePreflight: async () => { calls.push('enqueue'); },
   };
   return { calls, deps };
 }
@@ -71,6 +77,30 @@ test('source result must match exact request and source identity', async () => {
 test('authorized prepared source enters build once', async () => {
   const f = fixture();
   assert.deepEqual(await runNativeStudioFirstBuild(request, f.deps),
-    { commit: 'd'.repeat(40) });
+    built);
+  assert.deepEqual(f.calls, ['client', 'authorize', 'source', 'build']);
+});
+
+test('verified build queues only scoped artifact identities for preflight', async () => {
+  const f = fixture();
+  await runNativeStudioFirstBuild(request, { ...f.deps,
+    chainEnabled: () => true,
+    enqueuePreflight: async value => {
+      assert.deepEqual(value, { scope: request.scope, actor: request.actor,
+        sourceId: request.sourceId, sourceCommit: built.commit,
+        workerId: built.workerId, artifactCommit: built.artifactCommit });
+      f.calls.push('enqueue');
+    },
+  });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'source', 'build', 'enqueue']);
+});
+
+test('invalid build result cannot queue preflight', async () => {
+  const f = fixture();
+  await assert.rejects(runNativeStudioFirstBuild(request, { ...f.deps,
+    chainEnabled: () => true,
+    build: async () => { f.calls.push('build');
+      return { ...built, artifactCommit: 'invalid' }; },
+  }), /result_unverified/);
   assert.deepEqual(f.calls, ['client', 'authorize', 'source', 'build']);
 });

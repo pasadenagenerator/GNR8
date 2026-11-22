@@ -33,6 +33,10 @@ import { NATIVE_STUDIO_SECRET_SETUP_EVENT, NATIVE_STUDIO_SECRET_SETUP_JOB_ID,
   nativeStudioSecretSetupJob } from '@/gnr8/site/inngest/native-studio-secret-setup-job'
 import { NATIVE_STUDIO_FIRST_BUILD_EVENT, NATIVE_STUDIO_FIRST_BUILD_JOB_ID,
   nativeStudioFirstBuildJob } from '@/gnr8/site/inngest/native-studio-first-build-job'
+import { NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
+  NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID,
+  nativeStudioFirstDeployPreflightJob } from
+  '@/gnr8/site/inngest/native-studio-first-deploy-preflight-job'
 import { NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT, NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,
   nativeStudioResourceReservationJob } from '@/gnr8/site/inngest/native-studio-resource-reservation-job'
 import {
@@ -82,6 +86,7 @@ test('worker non-production inngest registration preserves all existing jobs and
   assert.equal(inngestFunctions.includes(siteRenderCaptureJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioSecretSetupJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioFirstBuildJob), true)
+  assert.equal(inngestFunctions.includes(nativeStudioFirstDeployPreflightJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioResourceReservationJob), true)
   assert.equal(inngestFunctions.includes(domainVerificationCheckSchedulerJob), true)
   assert.equal(inngestFunctions.includes(domainVerificationCheckJob), true)
@@ -101,6 +106,8 @@ test('worker inngest registration includes required function ids and exact trigg
     NATIVE_STUDIO_SECRET_SETUP_EVENT)
   assert.equal(eventsById.get(NATIVE_STUDIO_FIRST_BUILD_JOB_ID),
     NATIVE_STUDIO_FIRST_BUILD_EVENT)
+  assert.equal(eventsById.get(NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID),
+    NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT)
   assert.equal(eventsById.get(NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID),
     NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT)
 
@@ -119,6 +126,7 @@ test('worker production inngest registration exposes exactly the safe function m
     [
       'native-studio-preparation-job',
       NATIVE_STUDIO_FIRST_BUILD_JOB_ID,
+      NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID,
       NATIVE_STUDIO_SECRET_SETUP_JOB_ID,
       NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,
       'standalone-publication-job',

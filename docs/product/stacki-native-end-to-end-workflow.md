@@ -460,7 +460,15 @@ requires its verified Sandbox snapshot and GitHub App configuration. These
 settings are not per-site credentials. Local tests exercise the event contract
 with provider I/O replaced; the job has not run in a hosted environment, and
 the switch must stay off until the host has the required Git executable,
-runtime duration and Sandbox access. A fresh deploy
+runtime duration and Sandbox access. A successful first build now queues a
+separate, credential-free deploy preflight when
+`GNR8_NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_ENABLED=1`. That job rechecks the
+actor and the exact private artifact receipt, restores the verified Git refs,
+then runs the existing Wrangler dry run and records its scoped proof. It needs
+centrally configured trusted Git and Wrangler executables. Local tests cover
+the queue and receipt gate, but neither the hosted preflight nor its runtime
+requirements have been verified; this switch remains off. The proof is not a
+Cloudflare publication. A fresh deploy
 checkout can now recover the exact source commit from the recorded first-push
 intent and private GitHub branch. The local artifact restorer fetches the
 recorded build ref, checks its parent and tree, hashes every Git blob against

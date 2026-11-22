@@ -1,6 +1,10 @@
 import { nativeStudioPreparationJob } from '@/gnr8/site/inngest/native-studio-preparation-job'
 import { nativeStudioFirstBuildJob, NATIVE_STUDIO_FIRST_BUILD_EVENT,
   NATIVE_STUDIO_FIRST_BUILD_JOB_ID } from '@/gnr8/site/inngest/native-studio-first-build-job'
+import { nativeStudioFirstDeployPreflightJob,
+  NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
+  NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-first-deploy-preflight-job'
 import { nativeStudioSecretSetupJob, NATIVE_STUDIO_SECRET_SETUP_EVENT,
   NATIVE_STUDIO_SECRET_SETUP_JOB_ID } from '@/gnr8/site/inngest/native-studio-secret-setup-job'
 import { nativeStudioResourceReservationJob, NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT,
@@ -50,6 +54,7 @@ export type WorkerInngestFunctionRegistration = {
   fn:
     | typeof nativeStudioPreparationJob
     | typeof nativeStudioFirstBuildJob
+    | typeof nativeStudioFirstDeployPreflightJob
     | typeof nativeStudioSecretSetupJob
     | typeof nativeStudioResourceReservationJob
     | typeof standalonePublicationJob
@@ -65,6 +70,9 @@ const coreWorkerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[
   { id: "native-studio-preparation-job", eventName: "gnr8/native-studio.prepare.requested", fn: nativeStudioPreparationJob },
   { id: NATIVE_STUDIO_FIRST_BUILD_JOB_ID, eventName: NATIVE_STUDIO_FIRST_BUILD_EVENT,
     fn: nativeStudioFirstBuildJob },
+  { id: NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID,
+    eventName: NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
+    fn: nativeStudioFirstDeployPreflightJob },
   { id: NATIVE_STUDIO_SECRET_SETUP_JOB_ID, eventName: NATIVE_STUDIO_SECRET_SETUP_EVENT,
     fn: nativeStudioSecretSetupJob },
   { id: NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,

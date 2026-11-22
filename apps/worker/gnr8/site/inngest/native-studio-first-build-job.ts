@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inngest } from '@/gnr8/inngest/client';
+import { NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT } from
+  './native-studio-first-deploy-preflight-job';
 
 export const NATIVE_STUDIO_FIRST_BUILD_JOB_ID = 'native-studio-first-build-job';
 export const NATIVE_STUDIO_FIRST_BUILD_EVENT = 'gnr8/native-studio.first-build.requested';
@@ -38,6 +40,14 @@ const defaults = {
     return configuredNativeStudioFirstBuild({ scope: request.scope, client,
       sourceId: request.sourceId, trustedGit, author: { name, email } });
   },
+  chainEnabled: () =>
+    process.env.GNR8_NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_ENABLED === '1',
+  enqueuePreflight: async (request: { scope: Scope; actor: string;
+    sourceId: string; sourceCommit: string; workerId: string;
+    artifactCommit: string }) => {
+    await inngest.send({ name: NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
+      data: request });
+  },
 };
 
 /** The event contains identities only. The original source result and actor
@@ -66,7 +76,16 @@ export async function runNativeStudioFirstBuild(request: unknown,
       typeof result.studioVersion !== 'string' || !result.studioVersion ||
       !Number.isSafeInteger(result.files) || result.files < 1 || result.hosted !== false)
     throw Error('native_studio_first_build_source_unverified');
-  return deps.build({ scope, actor, requestId, sourceId }, client);
+  const built = await deps.build({ scope, actor, requestId, sourceId }, client);
+  if (built.sourceId !== sourceId || !/^[a-f0-9]{40,64}$/.test(built.commit) ||
+      !/^[a-f0-9]{32}$/.test(built.workerId) ||
+      built.artifactBranch !== `gnr8-build-${built.commit}` ||
+      !/^[a-f0-9]{40,64}$/.test(built.artifactCommit))
+    throw Error('native_studio_first_build_result_unverified');
+  if (deps.chainEnabled()) await deps.enqueuePreflight({ scope, actor,
+    sourceId, sourceCommit: built.commit, workerId: built.workerId,
+    artifactCommit: built.artifactCommit });
+  return built;
 }
 
 export const nativeStudioFirstBuildJob = inngest.createFunction({
