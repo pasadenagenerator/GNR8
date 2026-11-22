@@ -450,7 +450,17 @@ second editable Stacki branch. Its ref name is derived from the source commit;
 a durable intent permits only one push attempt and readback reconciles a lost
 response. On success both source and build bytes are durable in the same private
 repository, while the temporary checkout is removed. The local Git tests and
-mocked GitHub flow pass, but no hosted job has called this path. A fresh deploy
+mocked GitHub flow pass. Successful direct source preparation now queues a
+scoped first-build Inngest event when the central
+`GNR8_NATIVE_STUDIO_FIRST_BUILD_ENABLED=1` switch is set. Its registered job
+rechecks the actor's publish permission and the exact durable source receipt
+before entering this coordinator. The job requires a centrally configured
+trusted Git executable and Git author; the existing build coordinator also
+requires its verified Sandbox snapshot and GitHub App configuration. These
+settings are not per-site credentials. Local tests exercise the event contract
+with provider I/O replaced; the job has not run in a hosted environment, and
+the switch must stay off until the host has the required Git executable,
+runtime duration and Sandbox access. A fresh deploy
 checkout can now recover the exact source commit from the recorded first-push
 intent and private GitHub branch. The local artifact restorer fetches the
 recorded build ref, checks its parent and tree, hashes every Git blob against

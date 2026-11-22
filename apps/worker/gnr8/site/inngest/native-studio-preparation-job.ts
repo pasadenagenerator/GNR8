@@ -1,9 +1,12 @@
 import { inngest } from '@/gnr8/inngest/client';
-export const nativeStudioPreparationJob=inngest.createFunction({id:'native-studio-preparation-job',retries:0,
+import { NATIVE_STUDIO_FIRST_BUILD_EVENT } from './native-studio-first-build-job';
+
+export const nativeStudioPreparationJob=inngest.createFunction({id:'native-studio-preparation-job',retries:1,
  concurrency:{limit:1,key:'event.data.scope.siteId'}},{event:'gnr8/native-studio.prepare.requested'},async({event})=>{
  if(event.data.mode==='source'){
   const {runDirectNativeStudioPreparation}=await import('@/gnr8/standalone/native-studio-direct-preparation');
-  try{return await runDirectNativeStudioPreparation(event.data);}
+  let prepared;
+  try{prepared=await runDirectNativeStudioPreparation(event.data);}
   catch(error){
    const {scope,actor,requestId,attemptId}=event.data;
    if(scope&&[scope.agencyId,scope.clientId,scope.siteId,actor].every(value=>/^[a-f0-9-]{36}$/.test(value))&&
@@ -35,6 +38,11 @@ export const nativeStudioPreparationJob=inngest.createFunction({id:'native-studi
    }
    throw Error('native_studio_preparation_failed');
   }
+  if(process.env.GNR8_NATIVE_STUDIO_FIRST_BUILD_ENABLED==='1')
+   await inngest.send({name:NATIVE_STUDIO_FIRST_BUILD_EVENT,
+    data:{scope:event.data.scope,actor:event.data.actor,
+     requestId:prepared.requestId,sourceId:prepared.sourceId}});
+  return prepared;
  }
  const {runNativeStudioPreparation}=await import('@/gnr8/standalone/native-studio-preparation');
  return runNativeStudioPreparation(event.data);
