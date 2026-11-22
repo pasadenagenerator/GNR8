@@ -88,6 +88,11 @@ the artifact restore checks the independent build ref, its parent and tree,
 every listed Git blob and the handoff receipt before copying files into the
 clean checkout. These are local library paths; no hosted deploy job calls them
 yet, and no Cloudflare credential enters either checkout.
+The configured first-deploy bridge ties the two restored Git refs to the
+reserved Studio Worker, disposes the checkout after its trusted consumer, and
+can claim the existing first-deploy intent after a trusted host loads its
+Cloudflare credentials. The loader is called only after artifact verification;
+no hosted runner or deployment command is connected to this bridge yet.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

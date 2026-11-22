@@ -460,6 +460,14 @@ hosted deployment job has not been connected to this restore path, so no
 Cloudflare publication or native Publish result is established. A pending push
 requires exact remote-head reconciliation; this coordinator does not invent a
 second commit.
+The configured first-deploy checkout bridge now checks the reserved Worker,
+recovers the exact source and artifact Git refs in a fresh checkout, and holds
+that checkout only while the trusted next step uses it. It removes the checkout
+on success or failure. The configured intent preparer loads deployment
+credentials only after this verified transfer, then uses the existing
+post-build intent gate without rebuilding the site. Local focused tests cover
+ordering and cleanup. A hosted runner, credential loader, verified Docker
+packaging and actual Cloudflare deploy remain unconnected.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
