@@ -8,6 +8,34 @@ type Scope = { agencyId: string; clientId: string; siteId: string };
 type Request = { scope: Scope; actor: string };
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 
+/** A secret-install event cannot skip the exact resource reservation. */
+export async function requireNativeStudioResourceReservation(
+  scope: Scope, client: SupabaseClient) {
+  const { SupabasePublicationStore } = await import(
+    '@/gnr8/standalone/publication-store');
+  const { NATIVE_STUDIO_RESOURCE_RECEIPT,
+    readNativeStudioBootstrapTarget } = await import(
+    '@/gnr8/standalone/native-studio-configured-resource-reservation');
+  const store = new SupabasePublicationStore(client,
+    process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ??
+      'gnr8-astro-candidate-routes', scope);
+  const target = await readNativeStudioBootstrapTarget(scope, client,
+    process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '');
+  const receipt = await store.read<{ target?: typeof target;
+    draftBucket?: { bucket?: string; bucketId?: string };
+    workers?: { studio?: { worker?: string; id?: string };
+      publicSite?: { worker?: string; id?: string } } }>(
+      NATIVE_STUDIO_RESOURCE_RECEIPT);
+  if (JSON.stringify(receipt?.target) !== JSON.stringify(target) ||
+      receipt?.draftBucket?.bucket !== `gnr8-${scope.siteId}-drafts` ||
+      !/^[a-f0-9]{32}$/.test(receipt?.draftBucket?.bucketId ?? '') ||
+      receipt?.workers?.studio?.worker !== `gnr8-${scope.siteId}-studio` ||
+      !/^[a-f0-9]{32}$/.test(receipt?.workers?.studio?.id ?? '') ||
+      receipt?.workers?.publicSite?.worker !== `gnr8-${scope.siteId}-site` ||
+      !/^[a-f0-9]{32}$/.test(receipt?.workers?.publicSite?.id ?? ''))
+    throw Error('native_studio_secret_setup_reservation_missing');
+}
+
 const defaults = {
   enabled: () => process.env.GNR8_NATIVE_STUDIO_SECRET_SETUP_ENABLED === '1',
   client: async () => {
@@ -19,6 +47,7 @@ const defaults = {
     await requireAgencyBackgroundActor(client,
       { userId: actor, agencyId, action: 'publish' });
   },
+  requireReservation: requireNativeStudioResourceReservation,
   install: async (scope: Scope, client: SupabaseClient) => {
     const { installConfiguredNativeStudioSecrets } = await import(
       '@/gnr8/standalone/native-studio-configured-secret-setup');
@@ -47,6 +76,7 @@ export async function runNativeStudioSecretSetup(request: unknown,
   const client = await deps.client();
   if (!client) throw Error('native_studio_secret_setup_store_unavailable');
   await deps.authorize(client, actor, scope.agencyId);
+  await deps.requireReservation(scope, client);
   return deps.install(scope, client);
 }
 

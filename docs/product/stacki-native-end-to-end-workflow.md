@@ -486,6 +486,15 @@ one deploy attempt; a lost response leads to control-plane readback and never
 an automatic second deploy. These steps pass focused local tests with provider
 I/O mocked. Neither job is dispatched by a hosted runner yet, and no live
 Cloudflare deploy or authenticated Stacki health result is established.
+The existing Inngest resource-reservation job now queues the already existing
+secret-installation job automatically after an exact reservation when both
+stage flags are enabled. The event carries only site scope and actor; the
+second job rechecks authority and provider targets. A failed reservation
+cannot enqueue secret setup. One bounded retry covers a lost queue response;
+the Cloudflare reservation and secret installer retain their append-only
+intent/readback protections. This is local job wiring, not evidence that the
+hosted environment has the required central credentials or that either job
+has run for a customer site.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site

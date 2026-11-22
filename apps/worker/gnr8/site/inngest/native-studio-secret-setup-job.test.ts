@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { runNativeStudioSecretSetup } from './native-studio-secret-setup-job';
+import { fingerprint } from '@/gnr8/standalone/publication-contract';
+import { requireNativeStudioResourceReservation,
+  runNativeStudioSecretSetup } from './native-studio-secret-setup-job';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -21,6 +23,7 @@ function fixture() {
       assert.equal(agencyId, request.scope.agencyId);
       calls.push('authorize');
     },
+    requireReservation: async () => { calls.push('reservation'); },
     install: async (scope: typeof request.scope, received: SupabaseClient) => {
       assert.deepEqual(scope, request.scope);
       assert.equal(received, client);
@@ -61,5 +64,55 @@ test('authorized event enters the central scoped installer once', async () => {
   const f = fixture();
   assert.deepEqual(await runNativeStudioSecretSetup(request, f.deps),
     { worker: `gnr8-${request.scope.siteId}-studio`, secretNames: [] });
-  assert.deepEqual(f.calls, ['enabled', 'client', 'authorize', 'install']);
+  assert.deepEqual(f.calls, ['enabled', 'client', 'authorize',
+    'reservation', 'install']);
+});
+
+test('missing resource receipt stops before any secret provider call', async () => {
+  const f = fixture();
+  await assert.rejects(runNativeStudioSecretSetup(request, {
+    ...f.deps,
+    requireReservation: async () => { f.calls.push('reservation');
+      throw Error('native_studio_secret_setup_reservation_missing'); },
+  }), /reservation_missing/);
+  assert.deepEqual(f.calls, ['enabled', 'client', 'authorize', 'reservation']);
+});
+
+test('stored reservation must still match current repository and domain', async t => {
+  const accountId = 'a'.repeat(32);
+  const previous = process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID;
+  process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID = accountId;
+  t.after(() => { if (previous === undefined)
+    delete process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID;
+    else process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID = previous; });
+  let receipt = { target: { scope: request.scope, accountId,
+    studioOrigin: 'https://site.app.pasadenagenerator.com',
+    repository: 'example/site', repositoryId: 42 },
+  draftBucket: { bucket: `gnr8-${request.scope.siteId}-drafts`,
+    bucketId: 'b'.repeat(32) },
+  workers: { studio: { worker: `gnr8-${request.scope.siteId}-studio`,
+    id: 'c'.repeat(32) },
+    publicSite: { worker: `gnr8-${request.scope.siteId}-site`,
+      id: 'd'.repeat(32) } } };
+  const client = {
+    storage: { getBucket: async () => ({ data: { public: false }, error: null }),
+      from: () => ({ download: async () => ({ data: new Blob([
+        JSON.stringify({ value: receipt, sha256: fingerprint(receipt) })]),
+        error: null }) }) },
+    from(name: string) {
+      const query = { select() { return query; }, eq() { return query; },
+        async maybeSingle() { return { error: null,
+          data: name === 'sites'
+            ? { domain: 'site.app.pasadenagenerator.com' }
+            : { github_owner: 'example', github_owner_id: 12,
+                github_owner_kind: 'User', repository: 'site',
+                repository_id: 42, binding_state: 'bound' } }; } };
+      return query;
+    },
+  } as unknown as SupabaseClient;
+  await requireNativeStudioResourceReservation(request.scope, client);
+  receipt = { ...receipt, target: { ...receipt.target,
+    repository: 'example/other' } };
+  await assert.rejects(requireNativeStudioResourceReservation(request.scope,
+    client), /reservation_missing/);
 });

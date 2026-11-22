@@ -24,6 +24,11 @@ const defaults = {
       '@/gnr8/standalone/native-studio-configured-resource-reservation');
     return reserveConfiguredNativeStudioResources(scope, client);
   },
+  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_SECRET_SETUP_ENABLED === '1',
+  enqueueSecretSetup: async (scope: Scope, actor: string) => {
+    await inngest.send({ name: 'gnr8/native-studio.secrets.install.requested',
+      data: { scope, actor } });
+  },
 };
 
 /** Event data selects only the scoped site and actor. The site, bound GitHub
@@ -45,11 +50,14 @@ export async function runNativeStudioResourceReservation(request: unknown,
   const client = await deps.client();
   if (!client) throw Error('native_studio_resource_reservation_store_unavailable');
   await deps.authorize(client, actor, scope.agencyId);
-  return deps.reserve(scope, client);
+  const reserved = await deps.reserve(scope, client);
+  if (deps.chainEnabled())
+    await deps.enqueueSecretSetup(scope, actor);
+  return reserved;
 }
 
 export const nativeStudioResourceReservationJob = inngest.createFunction({
-  id: NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID, retries: 0,
+  id: NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID, retries: 1,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT },
 async ({ event }) => runNativeStudioResourceReservation(event.data));

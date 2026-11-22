@@ -27,6 +27,8 @@ function fixture() {
       calls.push('reserve');
       return { draftBucket: { bucket: 'private' } };
     },
+    chainEnabled: () => false,
+    enqueueSecretSetup: async () => { calls.push('enqueue'); },
   };
   return { calls, deps };
 }
@@ -62,4 +64,27 @@ test('authorized event enters the central scoped reservation once', async () => 
   assert.deepEqual(await runNativeStudioResourceReservation(request, f.deps),
     { draftBucket: { bucket: 'private' } });
   assert.deepEqual(f.calls, ['enabled', 'client', 'authorize', 'reserve']);
+});
+
+test('verified reservation queues scoped secret setup when both stages are enabled', async () => {
+  const f = fixture();
+  await runNativeStudioResourceReservation(request, {
+    ...f.deps, chainEnabled: () => true,
+    enqueueSecretSetup: async (scope, actor) => {
+      assert.deepEqual(scope, request.scope);
+      assert.equal(actor, request.actor);
+      f.calls.push('enqueue');
+    },
+  });
+  assert.deepEqual(f.calls, ['enabled', 'client', 'authorize',
+    'reserve', 'enqueue']);
+});
+
+test('failed reservation cannot queue a following provider stage', async () => {
+  const f = fixture();
+  await assert.rejects(runNativeStudioResourceReservation(request, {
+    ...f.deps, chainEnabled: () => true,
+    reserve: async () => { throw Error('reservation pending'); },
+  }), /reservation pending/);
+  assert.equal(f.calls.includes('enqueue'), false);
 });
