@@ -3,8 +3,9 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { recordStudioBuildHandoff } from './build-handoff.mjs';
+import { recordStudioBuildHandoff, scanStudioBuildOutputs } from './build-handoff.mjs';
 import { exportStudioBuildArtifactDirectory,
+  recordStudioSandboxBuildArtifact,
   restoreStudioBuildArtifactDirectory } from './build-artifact-transfer.mjs';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
@@ -32,7 +33,7 @@ async function fixture() {
   const deps = { verifySource: async () => ({ sourceId, commit,
     repository: site.repository, branch: site.branch }) };
   await recordStudioBuildHandoff({ ...common, project: build }, deps);
-  return { root, build, deploy, artifactDir, common, deps,
+  return { root, build, deploy, artifactDir, common, deps, saved,
     cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
@@ -86,6 +87,60 @@ test('failed final verification removes partial restored output', async () => {
       ...f.deps, verifyHandoff: async () => { throw Error('final check failed'); },
     }), /final check failed/);
     await assert.rejects(readFile(join(f.deploy, 'dist/index.html')),
+      { code: 'ENOENT' });
+  } finally { await f.cleanup(); }
+});
+
+test('finished Sandbox output becomes a source-bound receipt for a fresh checkout', async () => {
+  const f = await fixture();
+  try {
+    await exportStudioBuildArtifactDirectory({ ...f.common,
+      project: f.build, artifactDir: f.artifactDir }, f.deps);
+    f.saved.delete('native-studio/build-handoff-v1.json');
+    const files = await scanStudioBuildOutputs(f.artifactDir);
+    const receipt = await recordStudioSandboxBuildArtifact({ ...f.common,
+      project: f.deploy, artifactDir: f.artifactDir, files }, f.deps);
+    assert.deepEqual(receipt.files, files);
+    assert.equal(receipt.sourceId, sourceId);
+    assert.deepEqual(f.saved.get('native-studio/build-handoff-v1.json'), receipt);
+    assert.equal(await readFile(join(f.deploy, 'dist/index.html'), 'utf8'),
+      '<main>site</main>');
+  } finally { await f.cleanup(); }
+});
+
+test('Sandbox bridge rejects extra output and changed bytes before receipt', async () => {
+  const f = await fixture();
+  try {
+    await exportStudioBuildArtifactDirectory({ ...f.common,
+      project: f.build, artifactDir: f.artifactDir }, f.deps);
+    const files = await scanStudioBuildOutputs(f.artifactDir);
+    const input = { ...f.common, project: f.deploy,
+      artifactDir: f.artifactDir, files };
+    await writeFile(join(f.artifactDir, 'extra.txt'), 'bad');
+    await assert.rejects(recordStudioSandboxBuildArtifact(input, f.deps),
+      /unverified/);
+    await rm(join(f.artifactDir, 'extra.txt'));
+    await writeFile(join(f.artifactDir, 'dist/index.html'), 'changed');
+    await assert.rejects(recordStudioSandboxBuildArtifact(input, f.deps),
+      /unverified/);
+    await assert.rejects(readFile(join(f.deploy, 'dist/index.html')),
+      { code: 'ENOENT' });
+  } finally { await f.cleanup(); }
+});
+
+test('Sandbox bridge removes partial output when handoff verification fails', async () => {
+  const f = await fixture();
+  try {
+    await exportStudioBuildArtifactDirectory({ ...f.common,
+      project: f.build, artifactDir: f.artifactDir }, f.deps);
+    const files = await scanStudioBuildOutputs(f.artifactDir);
+    await assert.rejects(recordStudioSandboxBuildArtifact({ ...f.common,
+      project: f.deploy, artifactDir: f.artifactDir, files }, {
+      ...f.deps, recordHandoff: async () => { throw Error('receipt unavailable'); },
+    }), /receipt unavailable/);
+    await assert.rejects(readFile(join(f.deploy, 'dist/index.html')),
+      { code: 'ENOENT' });
+    await assert.rejects(readFile(join(f.deploy, 'studio/dist/studio.js')),
       { code: 'ENOENT' });
   } finally { await f.cleanup(); }
 });

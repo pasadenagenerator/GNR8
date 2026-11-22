@@ -123,6 +123,16 @@ test('target-free stored package stages and commits only on its dedicated local 
   const checked = await verifyCommittedStudioSource(request);
   assert.deepEqual(checked, { sourceId, commit: committed.commit, branch: site.branch,
     repository: site.repository, files: saved.files.length, hosted: false });
+  await mkdir(join(root, 'dist'));
+  await writeFile(join(root, 'dist/index.html'), '<main>built</main>');
+  await assert.rejects(verifyCommittedStudioSource(request), /local changes/);
+  assert.equal((await verifyCommittedStudioSource({ ...request,
+    allowBuildOutputs: true })).commit, committed.commit);
+  await writeFile(join(root, 'outside-build.txt'), 'untracked');
+  await assert.rejects(verifyCommittedStudioSource({ ...request,
+    allowBuildOutputs: true }), /local changes/);
+  await rm(join(root, 'outside-build.txt'));
+  await rm(join(root, 'dist'), { recursive: true });
   const page = join(root, 'src/pages/index.astro');
   await writeFile(page, 'uncommitted edit');
   await assert.rejects(verifyCommittedStudioSource(request), /local changes/);

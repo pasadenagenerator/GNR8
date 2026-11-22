@@ -66,6 +66,9 @@ A local `build-artifact-transfer.mjs` step exports only those listed files to
 an empty artifact directory and restores them into a fresh, clean deploy
 checkout. It rejects extra files, changed bytes and symlinks, then rechecks
 the durable handoff. This step has no upload or hosted dispatch yet.
+The same module can take a finished Sandbox output directory, check its file
+list and committed source, install only that output into a credential-free
+checkout, and record the receipt. This bridge also has no hosted caller.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

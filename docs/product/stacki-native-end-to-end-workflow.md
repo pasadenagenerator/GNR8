@@ -421,6 +421,13 @@ filesystem tests, but no real Sandbox has been started by this path. A verified
 build snapshot, hosted dispatch, artifact upload and fresh deploy environment
 still need to be connected. Projects needing other install/build network hosts
 will fail this narrow policy until their dependencies are reviewed.
+The local Sandbox-to-handoff bridge now checks the downloaded directory against
+the Sandbox file list, verifies the clean committed source, copies only the
+listed output, and records the immutable source/commit/Worker receipt. A failed
+copy or receipt check removes partial output. The source verifier permits only
+untracked `dist/**` and `studio/dist/**` while checking a build handoff; it
+continues to reject other changes and retains its strict default everywhere
+else. The bridge still has no hosted caller or artifact transport.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site

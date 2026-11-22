@@ -15,6 +15,15 @@ const gitBytes = (root, args, input) => execFileSync('git',
     '-c', 'core.hooksPath=/dev/null', ...args],
   { input, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 96 * 1024 * 1024,
     env: { ...process.env, GIT_ATTR_NOSYSTEM: '1' } });
+export function assertStudioCheckoutClean(project, { allowBuildOutputs = false } = {}) {
+  const changes = gitBytes(project,
+    ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
+    .toString('utf8').split('\0').filter(Boolean);
+  if (changes.some(change => !allowBuildOutputs || !change.startsWith('?? ') ||
+      !(change.slice(3).startsWith('dist/') ||
+        change.slice(3).startsWith('studio/dist/'))))
+    throw Error('Studio checkout has local changes');
+}
 export async function prepareGitBranch({ project, store, releaseId, releaseFile, site }) {
   checkGitBinding(project, site);
   const prepared = await prepareFromStoredRelease({ store, releaseId, releaseFile, site });
@@ -39,7 +48,8 @@ function checkGitBinding(project, site) {
  * committed HEAD must contain the exact verified source package; no checkout
  * changes, filters, extra Studio files or submodules are accepted.
  */
-export async function verifyCommittedStudioSource({ project, store, sourceId, site }) {
+export async function verifyCommittedStudioSource({ project, store, sourceId, site,
+  allowBuildOutputs = false }) {
   project = resolve(project);
   if ((await lstat(project)).isSymbolicLink()) throw Error('Studio checkout contains a symbolic link');
   checkGitBinding(project, site);
@@ -48,8 +58,7 @@ export async function verifyCommittedStudioSource({ project, store, sourceId, si
   if (await lstat(privateAttributes).then(() => true,
     error => error.code === 'ENOENT' ? false : Promise.reject(error)))
     throw Error('Git filters require separate review');
-  if (gitBytes(project, ['status', '--porcelain=v1', '-z', '--untracked-files=all']).length)
-    throw Error('Studio checkout has local changes');
+  assertStudioCheckoutClean(project, { allowBuildOutputs });
   const tree = gitBytes(project, ['ls-tree', '-r', '-z', 'HEAD']).toString('utf8');
   const entries = new Map();
   for (const row of tree.split('\0').filter(Boolean)) {

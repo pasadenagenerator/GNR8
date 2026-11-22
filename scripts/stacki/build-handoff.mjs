@@ -72,7 +72,8 @@ async function source(input, verifySource) {
   const real = await lstat(checkout);
   if (!real.isDirectory() || real.isSymbolicLink())
     throw Error('native_studio_build_handoff_input_invalid');
-  const checked = await verifySource({ project: checkout, store, sourceId, site });
+  const checked = await verifySource({ project: checkout, store, sourceId, site,
+    allowBuildOutputs: true });
   if (checked.sourceId !== sourceId || checked.commit !== commit ||
       checked.repository !== site.repository || checked.branch !== site.branch)
     throw Error('native_studio_build_handoff_source_unverified');
