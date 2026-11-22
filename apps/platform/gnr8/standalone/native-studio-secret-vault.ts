@@ -114,7 +114,7 @@ export async function getOrCreateNativeStudioSiteSecrets(
   return siteSecrets(saved, scope, key);
 }
 
-/** Deployment reads only secrets that were already created during installation. */
+/** Deployment reads only secrets created during first-deploy preparation. */
 export async function readNativeStudioSiteSecrets(
   scope: NativeStudioScope,
   store: Pick<PublicationStore, 'read'>,

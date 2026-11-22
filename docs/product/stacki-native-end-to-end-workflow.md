@@ -262,10 +262,11 @@ make duplicate events safe. This is not a persistent background outbox: an
 unavailable queue after the tab closes still needs a later visit or an operator
 retry. The hosted Container build and first deployment, secrets, routes and
 readiness checks remain to be connected.
-The registered `native-studio.secrets.install.requested` job has no event
-producer. Connecting it immediately after resource reservation would fail:
-the reserved Studio Worker is empty and has no active deployed version for
-the secret installer to inspect. Source preparation stores bytes and reports
+The `native-studio.secrets.install.requested` event now prepares the publish
+token and sealed first-deploy secrets after resource reservation. It does not
+run the bulk secret installer: the reserved Studio Worker is empty and has no
+active deployed version. Wrangler receives the six secrets during first deploy.
+Source preparation stores bytes and reports
 `hosted:false`; it neither deploys the Container nor writes a ready binding.
 The missing step is a trusted first-deployment runner that consumes that exact
 prepared source, builds without credentials, deploys with protected credentials,
@@ -466,8 +467,8 @@ that checkout only while the trusted next step uses it. It removes the checkout
 on success or failure. The configured intent preparer loads deployment
 credentials only after this verified transfer, then uses the existing
 post-build intent gate without rebuilding the site. Local focused tests cover
-ordering and cleanup. A hosted runner, credential loader, Docker build and
-actual Cloudflare deploy remain unconnected.
+ordering and cleanup. A hosted runner, Docker build and actual Cloudflare
+deploy remain unconnected.
 The fresh checkout now assembles `studio/.studio-image/site` from the two
 verified root npm manifests before loading deployment credentials. It checks
 the unchanged upstream Dockerfile's exact copy path and rejects an existing
@@ -477,8 +478,8 @@ updated after the old ignored image directories. The fresh checkout uses the
 current verified Git commit, so those stale local copies are not transferred.
 The Docker build and hosted execution boundary still need an end-to-end check.
 The first-deploy path can now read one central Cloudflare deploy credential and
-the sealed secrets for the bound site after verifying the exact secret-install
-intent and receipt. It does not create or rotate secrets during deployment.
+the sealed secrets for the bound site after verifying the exact preparation
+receipt. It does not create or rotate secrets during deployment.
 The central credential still needs trusted-host configuration; no per-site
 credential entry is required by this local call.
 The local first-deploy path now has a credential-free dry-run receipt and a
@@ -491,13 +492,13 @@ one deploy attempt; a lost response leads to control-plane readback and never
 an automatic second deploy. These steps pass focused local tests with provider
 I/O mocked. Neither job is dispatched by a hosted runner yet, and no live
 Cloudflare deploy or authenticated Stacki health result is established.
-The existing Inngest resource-reservation job now queues the already existing
-secret-installation job automatically after an exact reservation when both
-stage flags are enabled. The event carries only site scope and actor; the
-second job rechecks authority and provider targets. A failed reservation
-cannot enqueue secret setup. One bounded retry covers a lost queue response;
-the Cloudflare reservation and secret installer retain their append-only
-intent/readback protections. This is local job wiring, not evidence that the
+The existing Inngest resource-reservation job now queues secret preparation
+automatically after an exact reservation when both stage flags are enabled.
+The event carries only site scope and actor; the second job rechecks authority
+and provider targets. A failed reservation cannot enqueue secret preparation.
+One bounded retry covers a lost queue response; the Cloudflare reservation and
+publish-token issuer retain their append-only intent/readback protections.
+This is local job wiring, not evidence that the
 hosted environment has the required central credentials or that either job
 has run for a customer site.
 

@@ -49,14 +49,15 @@ const defaults = {
   },
   requireReservation: requireNativeStudioResourceReservation,
   install: async (scope: Scope, client: SupabaseClient) => {
-    const { installConfiguredNativeStudioSecrets } = await import(
+    const { prepareConfiguredNativeStudioFirstDeploySecrets } = await import(
       '@/gnr8/standalone/native-studio-configured-secret-setup');
-    return installConfiguredNativeStudioSecrets(scope, client);
+    return prepareConfiguredNativeStudioFirstDeploySecrets(scope, client);
   },
 };
 
-/** This stage installs an existing site's private draft bucket and Worker
- * secrets. It neither creates Workers nor writes a ready-Studio binding.
+/** This stage prepares the per-site publish token and sealed first-deploy
+ * secrets. Wrangler installs them with the first Worker deployment.
+ * It neither creates Workers nor writes a ready-Studio binding.
  * Event data names only the scoped site and actor; all provider targets are
  * re-read by the trusted installer from current authoritative bindings.
  */

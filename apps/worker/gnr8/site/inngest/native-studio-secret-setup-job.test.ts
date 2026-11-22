@@ -28,7 +28,7 @@ function fixture() {
       assert.deepEqual(scope, request.scope);
       assert.equal(received, client);
       calls.push('install');
-      return { worker: `gnr8-${scope.siteId}-studio`, secretNames: [] as readonly string[] };
+      return { worker: `gnr8-${scope.siteId}-studio`, state: 'prepared' as const };
     },
   };
   return { calls, deps };
@@ -52,7 +52,7 @@ test('event payload cannot override provider target or contain extra fields', as
   assert.deepEqual(f.calls, ['enabled', 'enabled']);
 });
 
-test('revoked actor stops before bucket and secret installation', async () => {
+test('revoked actor stops before bucket and secret preparation', async () => {
   const f = fixture();
   await assert.rejects(runNativeStudioSecretSetup(request, { ...f.deps,
     authorize: async () => { f.calls.push('authorize'); throw Error('revoked'); },
@@ -60,10 +60,10 @@ test('revoked actor stops before bucket and secret installation', async () => {
   assert.deepEqual(f.calls, ['enabled', 'client', 'authorize']);
 });
 
-test('authorized event enters the central scoped installer once', async () => {
+test('authorized event enters central scoped secret preparation once', async () => {
   const f = fixture();
   assert.deepEqual(await runNativeStudioSecretSetup(request, f.deps),
-    { worker: `gnr8-${request.scope.siteId}-studio`, secretNames: [] });
+    { worker: `gnr8-${request.scope.siteId}-studio`, state: 'prepared' });
   assert.deepEqual(f.calls, ['enabled', 'client', 'authorize',
     'reservation', 'install']);
 });

@@ -93,8 +93,8 @@ reserved Studio Worker, disposes the checkout after its trusted consumer, and
 can claim the existing first-deploy intent after a trusted host loads its
 Cloudflare credentials. The configured loader reads one central
 `GNR8_NATIVE_STUDIO_CLOUDFLARE_DEPLOYER` credential and the sealed per-site
-vault only after artifact verification. It requires the matching secret-install
-intent and receipt; missing or changed Worker secrets block first deployment.
+vault only after artifact verification. It requires the matching first-deploy
+secret-preparation receipt; missing or changed secrets block first deployment.
 No hosted runner is connected to this bridge yet.
 Before the credential loader runs, the bridge also creates the upstream
 Dockerfile's ignored `.studio-image/site` directory from the verified root

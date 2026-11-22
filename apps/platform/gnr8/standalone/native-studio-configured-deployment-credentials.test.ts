@@ -21,8 +21,6 @@ const env = {
   GNR8_NATIVE_STUDIO_GITHUB_CLIENT_SECRET: 'f'.repeat(20),
   GNR8_NATIVE_STUDIO_AI_API_KEY: 'g'.repeat(20),
 };
-const names = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
-  'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 
 function vault() {
   const saved = new Map<string, unknown>();
@@ -48,15 +46,12 @@ async function installed() {
     PUBLISH_CLOUDFLARE_API_TOKEN: publish.value };
   const identity = createHmac('sha256', Buffer.from(vaultKey, 'hex'))
     .update(JSON.stringify({ scope, accountId, zoneId, runtime })).digest('hex');
-  store.saved.set('native-studio/secret-install-intent-v1.json',
+  store.saved.set('native-studio/first-deploy-secrets-prepared-v1.json',
     { accountId, worker, identity });
-  store.saved.set('native-studio/secret-install-receipt-v1.json',
-    { worker, identity, secretNames: names,
-      versionId: '44444444-4444-4444-8444-444444444444' });
   return { store, runtime };
 }
 
-test('first deploy reads the installed site secrets and central deploy credential', async () => {
+test('first deploy reads prepared site secrets and central deploy credential', async () => {
   const { store, runtime } = await installed();
   const before = store.saved.size;
   assert.deepEqual(await configuredNativeStudioDeploymentCredentials(
@@ -66,9 +61,9 @@ test('first deploy reads the installed site secrets and central deploy credentia
   assert.equal(store.saved.size, before);
 });
 
-test('missing installation, changed shared secret and foreign account fail closed', async () => {
+test('missing preparation, changed shared secret and foreign account fail closed', async () => {
   const { store } = await installed();
-  store.saved.delete('native-studio/secret-install-receipt-v1.json');
+  store.saved.delete('native-studio/first-deploy-secrets-prepared-v1.json');
   await assert.rejects(configuredNativeStudioDeploymentCredentials(
     scope, store, accountId, env), /secrets_unverified/);
   const { store: installedStore } = await installed();

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { configuredNativeStudioSecretSetup,
-  installConfiguredNativeStudioSecrets } from './native-studio-configured-secret-setup';
+import { configuredNativeStudioSecretPreparation, configuredNativeStudioSecretSetup,
+  installConfiguredNativeStudioSecrets,
+  prepareConfiguredNativeStudioFirstDeploySecrets } from './native-studio-configured-secret-setup';
 
 const environment = {
   GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32),
@@ -33,6 +34,59 @@ test('one central configuration supplies the exact installer inputs', () => {
     assert.throws(() => configuredNativeStudioSecretSetup(incomplete),
       /native_studio_(?:setup_not_configured|runtime_secrets_not_configured)/);
   }
+});
+
+test('first-deploy secret preparation needs no active-version installer credential', () => {
+  const { GNR8_NATIVE_STUDIO_CLOUDFLARE_STUDIO_INSTALLER: _installer,
+    ...beforeDeployment } = environment;
+  assert.equal(configuredNativeStudioSecretPreparation(beforeDeployment).accountId,
+    environment.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID);
+  assert.throws(() => configuredNativeStudioSecretSetup(beforeDeployment),
+    /native_studio_setup_not_configured/);
+});
+
+test('preparation claims one scoped receipt without an active Worker version', async () => {
+  const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
+    clientId: '22222222-2222-4222-8222-222222222222',
+    siteId: '33333333-3333-4333-8333-333333333333' };
+  const { GNR8_NATIVE_STUDIO_CLOUDFLARE_STUDIO_INSTALLER: _installer,
+    ...env } = environment;
+  const saved = new Map<string, unknown>();
+  const calls: string[] = [];
+  const store = {
+    read: async (key: string) => saved.get(key) ?? null,
+    claim: async (key: string, value: unknown) => {
+      if (saved.has(key)) return false;
+      saved.set(key, value); return true;
+    },
+  };
+  const runtime = { ...configuredNativeStudioSecretPreparation(env).shared,
+    SESSION_SECRET: 's'.repeat(43), CONTAINER_TOKEN: 't'.repeat(43),
+    PUBLISH_CLOUDFLARE_API_TOKEN: 'p'.repeat(40) };
+  const deps = {
+    store: () => store,
+    ensureBucket: async () => { calls.push('bucket'); },
+    provider: () => ({}),
+    ensureToken: async () => { calls.push('token'); return { value: 'p'.repeat(40) }; },
+    runtime: async () => { calls.push('runtime'); return runtime; },
+  } as any;
+  const input = [scope, {} as SupabaseClient, env,
+    (async () => { throw Error('unexpected provider request'); }) as typeof fetch,
+    deps] as const;
+  const result = await prepareConfiguredNativeStudioFirstDeploySecrets(...input);
+  assert.deepEqual(result, { worker: `gnr8-${scope.siteId}-studio`, state: 'prepared' });
+  assert.deepEqual(calls, ['bucket', 'token', 'runtime']);
+  const receipt = saved.get('native-studio/first-deploy-secrets-prepared-v1.json') as
+    { accountId: string; worker: string; identity: string };
+  assert.equal(receipt.accountId, env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID);
+  assert.match(receipt.identity, /^[a-f0-9]{64}$/);
+  assert.equal(saved.size, 1);
+  await prepareConfiguredNativeStudioFirstDeploySecrets(...input);
+  assert.equal(saved.size, 1);
+  await assert.rejects(prepareConfiguredNativeStudioFirstDeploySecrets(
+    scope, {} as SupabaseClient, env, input[3], {
+      ...deps, runtime: async () => ({ ...runtime, AI_API_KEY: 'changed-secret' }),
+    }), /native_studio_deploy_secrets_conflict/);
 });
 
 test('missing central setup fails before storage or provider access', async () => {
