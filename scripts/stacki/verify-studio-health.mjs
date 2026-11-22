@@ -15,6 +15,33 @@ function origin(value) {
   throw Error('native_studio_health_input_invalid');
 }
 
+/** Public, unauthenticated entry check. This proves the site gateway reaches
+ * native Stacki login; it does not start or certify the protected Container.
+ */
+export async function verifyPublicStudioEntry(input, transport = fetch) {
+  const studio = origin(input?.studioOrigin);
+  if (typeof transport !== 'function') throw Error('native_studio_health_input_invalid');
+  try {
+    const response = await transport(`${studio}/studio/`, { method: 'GET',
+      redirect: 'manual', headers: { accept: 'text/html' },
+      signal: AbortSignal.timeout(30_000) });
+    if (response.status !== 200 ||
+        !response.headers.get('content-type')?.toLowerCase().includes('text/html') ||
+        response.headers.get('cache-control')?.toLowerCase() !== 'no-store')
+      throw Error('native_studio_public_entry_unready');
+    const html = await response.text();
+    if (html.length > 64_000 || !html.includes('aria-label="Stacki"') ||
+        !html.includes('href="/studio/auth/login"') ||
+        !html.includes('id="login-message"'))
+      throw Error('native_studio_public_entry_unready');
+    return { state: 'public-studio-entry-healthy', studioOrigin: studio };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'native_studio_public_entry_unready')
+      throw error;
+    throw Error('native_studio_public_entry_unavailable');
+  }
+}
+
 async function readJson(transport, url, cookie) {
   const response = await transport(url, { method: 'GET', redirect: 'manual',
     headers: { cookie, accept: 'application/json' }, signal: AbortSignal.timeout(30_000) });

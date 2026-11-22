@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyAuthenticatedStudioHealth } from './verify-studio-health.mjs';
+import { verifyAuthenticatedStudioHealth,
+  verifyPublicStudioEntry } from './verify-studio-health.mjs';
 
 const studioOrigin = 'https://studio.example.com';
 const previewOrigin = 'https://preview.example.com';
@@ -9,6 +10,35 @@ const previewToken = `preview.${'b'.repeat(43)}`;
 const previewSession = `preview.${'c'.repeat(43)}`;
 const input = { studioOrigin, previewOrigin, sessionToken,
   githubId: 123, githubLogin: 'owner' };
+
+test('public entry reaches native Stacki login without an owner session', async () => {
+  const calls = [];
+  const transport = async (url, options) => {
+    calls.push({ url, options });
+    return new Response('<html><svg aria-label="Stacki"></svg><p id="login-message"></p><a href="/studio/auth/login">Sign in</a></html>',
+      { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+  };
+  assert.deepEqual(await verifyPublicStudioEntry({ studioOrigin }, transport),
+    { state: 'public-studio-entry-healthy', studioOrigin });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${studioOrigin}/studio/`);
+  assert.equal(calls[0].options.headers.cookie, undefined);
+  assert.equal(calls[0].options.redirect, 'manual');
+});
+
+test('public entry rejects redirects, foreign pages and unavailable hosts', async () => {
+  for (const response of [
+    new Response(null, { status: 302, headers: { location: 'https://other.example.com' } }),
+    new Response('<html>Login</html>', { headers: {
+      'content-type': 'text/html', 'cache-control': 'no-store' } }),
+    new Response('<html><a href="/studio/auth/login">Sign in</a></html>', { headers: {
+      'content-type': 'text/html', 'cache-control': 'public' } }),
+  ]) await assert.rejects(verifyPublicStudioEntry({ studioOrigin }, async () => response),
+    /native_studio_public_entry_unready/);
+  await assert.rejects(verifyPublicStudioEntry({ studioOrigin }, async () => {
+    throw Error('network');
+  }), /native_studio_public_entry_unavailable/);
+});
 
 function fixture(overrides = {}) {
   const seen = [];

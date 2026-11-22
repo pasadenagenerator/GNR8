@@ -443,6 +443,17 @@ It does not create a session, modify Stacki, check visual fidelity, exercise
 GitHub Push or Publish, or write a ready binding. The hosted runner still needs
 to supply a valid session and call this gate after deployment. Local tests use
 mocked HTTP responses only.
+An additional public-entry check can request `/studio/` without a session and
+verify the unchanged Stacki login page at the confirmed host. This is suitable
+for unattended route smoke testing, but it cannot prove that the protected
+Container starts or that an owner can edit. The native Worker deliberately
+checks its GitHub-backed session before forwarding editor requests to the
+Container. The current ready-binding criterion therefore still needs an
+authenticated owner session; no unattended bootstrap caller can supply one
+without adding a separate privileged identity or changing native Stacki.
+Do not silently treat the public login page as full editor health. A first-user
+native sign-in can satisfy this check inside Stacki once the initial Studio
+link is safely available; the handoff and readiness transition are not wired.
 
 The public gateway now has a separate read-only control-plane inspector. It
 rechecks the current scoped domain and bound repository, then checks the

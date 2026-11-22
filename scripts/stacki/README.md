@@ -74,6 +74,9 @@ result requires active-version tag readback and review, never an automatic secon
 deploy. The tag binds the intended source, commit and keyed secret identity to
 the deploy attempt; it does not prove deployed bytes. This
 library is not connected to a hosted job or a ready-Studio receipt yet.
+`verify-studio-health.mjs` also checks the public native login page without a
+session, so a host can smoke-test routing automatically. That check is not a
+substitute for authenticated Container/editor health.
 
 ## Existing sites and upgrades
 
