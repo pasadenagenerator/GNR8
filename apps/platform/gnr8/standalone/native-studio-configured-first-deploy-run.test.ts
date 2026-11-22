@@ -29,6 +29,11 @@ function fixture() {
       return { cloudflareCredential: token, secrets: secrets as any }; },
   };
   const deps = {
+    credentials: async (_scope: any, _store: any, accountId: string) => {
+      assert.equal(accountId, site.accountId);
+      calls.push('central-credentials');
+      return { cloudflareCredential: token, secrets: secrets as any };
+    },
     withCheckout: async (_value: any, use: any) => { calls.push('checkout');
       return use({ project: '/tmp/verified', store, site,
         sourceId, commit, workerId, files: 2 }); },
@@ -42,6 +47,17 @@ function fixture() {
   } as any;
   return { input, deps, calls, saved };
 }
+
+test('configured path loads credentials after the verified preflight', async () => {
+  const f = fixture();
+  const { loadDeploymentCredentials: _manual, ...input } = f.input;
+  assert.deepEqual(await runConfiguredNativeStudioFirstDeploy(input,
+    {}, (async () => { throw Error('no provider call'); }) as typeof fetch,
+    f.deps), { state: 'reconcile-required', commit,
+      observation: 'verified-source-control-plane' });
+  assert.deepEqual(f.calls, ['checkout', 'preflight', 'central-credentials',
+    'intent', 'deploy', 'readback']);
+});
 
 test('one verified checkout proceeds through preflight, intent, deploy and readback', async () => {
   const f = fixture();

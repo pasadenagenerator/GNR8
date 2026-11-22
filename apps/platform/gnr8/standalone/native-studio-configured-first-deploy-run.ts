@@ -6,6 +6,7 @@ import { inspectBoundCloudflareStudioFirstDeployment } from './cloudflare-studio
 import { withConfiguredNativeStudioFirstDeployCheckout } from './native-studio-configured-first-deploy-checkout';
 import { configuredFirstStudioDeployIntent } from './native-studio-configured-first-deploy-intent';
 import { configuredNativeStudioTrustedDeploy } from './native-studio-configured-trusted-deploy';
+import { configuredNativeStudioDeploymentCredentials } from './native-studio-configured-deployment-credentials';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import type { NativeStudioRuntimeSecrets } from './native-studio-runtime-secrets';
 
@@ -17,6 +18,7 @@ const defaults = {
   prepareIntent: configuredFirstStudioDeployIntent,
   deploy: configuredNativeStudioTrustedDeploy,
   inspect: inspectBoundCloudflareStudioFirstDeployment,
+  credentials: configuredNativeStudioDeploymentCredentials,
 };
 
 /** One first-deploy attempt from verified GitHub refs. The caller supplies a
@@ -30,14 +32,15 @@ export async function runConfiguredNativeStudioFirstDeploy(input: {
   verifyPreflight?: (prepared: { sourceId: string; commit: string;
     workerId: string; files: number }) => Promise<{ sourceId: string;
       commit: string; workerId: string; files: number }>;
-  loadDeploymentCredentials: () => Promise<{
+  loadDeploymentCredentials?: () => Promise<{
     cloudflareCredential: string; secrets: NativeStudioRuntimeSecrets }>;
 }, env: Environment = process.env, transport: typeof fetch = fetch,
 deps = defaults) {
   const { verifyPreflight, loadDeploymentCredentials, trustedWrangler,
     ...checkoutInput } = input ?? {};
   if (verifyPreflight !== undefined && typeof verifyPreflight !== 'function' ||
-      typeof loadDeploymentCredentials !== 'function' ||
+      (loadDeploymentCredentials !== undefined &&
+        typeof loadDeploymentCredentials !== 'function') ||
       typeof trustedWrangler !== 'string' || !trustedWrangler)
     throw Error('native_studio_configured_first_deploy_input_invalid');
   return deps.withCheckout(checkoutInput, async prepared => {
@@ -50,7 +53,10 @@ deps = defaults) {
         site: prepared.site, workerId: prepared.workerId }));
     if (JSON.stringify(proof) !== JSON.stringify(expected))
       throw Error('native_studio_configured_first_deploy_preflight_unverified');
-    const { cloudflareCredential, secrets } = await loadDeploymentCredentials();
+    const { cloudflareCredential, secrets } = await (loadDeploymentCredentials
+      ? loadDeploymentCredentials()
+      : deps.credentials(checkoutInput.scope, prepared.store,
+        prepared.site.accountId, env));
     const expectedIdentity = firstStudioDeployIdentity({ scope: checkoutInput.scope,
       accountId: prepared.site.accountId, workerId: prepared.workerId,
       sourceId: prepared.sourceId, site: prepared.site,

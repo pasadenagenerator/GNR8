@@ -476,6 +476,11 @@ found stale manifest copies in CHS and ViroiDoc: their source manifests were
 updated after the old ignored image directories. The fresh checkout uses the
 current verified Git commit, so those stale local copies are not transferred.
 The Docker build and hosted execution boundary still need an end-to-end check.
+The first-deploy path can now read one central Cloudflare deploy credential and
+the sealed secrets for the bound site after verifying the exact secret-install
+intent and receipt. It does not create or rotate secrets during deployment.
+The central credential still needs trusted-host configuration; no per-site
+credential entry is required by this local call.
 The local first-deploy path now has a credential-free dry-run receipt and a
 single configured deploy call. A separate disposable preflight job can run the
 unchanged Wrangler `deploy --dry-run`, reverify the source, build handoff and

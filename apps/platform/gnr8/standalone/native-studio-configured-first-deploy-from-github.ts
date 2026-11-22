@@ -2,12 +2,14 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { configuredFirstStudioDeployIntent } from './native-studio-configured-first-deploy-intent';
 import { withConfiguredNativeStudioFirstDeployCheckout } from './native-studio-configured-first-deploy-checkout';
+import { configuredNativeStudioDeploymentCredentials } from './native-studio-configured-deployment-credentials';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import type { NativeStudioRuntimeSecrets } from './native-studio-runtime-secrets';
 
 type Environment = Record<string, string | undefined>;
 const defaults = { withCheckout: withConfiguredNativeStudioFirstDeployCheckout,
-  prepareIntent: configuredFirstStudioDeployIntent };
+  prepareIntent: configuredFirstStudioDeployIntent,
+  credentials: configuredNativeStudioDeploymentCredentials };
 
 /** Prepare one durable first-deploy intent from the exact GitHub source and
  * artifact refs. A trusted host loads deployment secrets only after transfer.
@@ -15,15 +17,19 @@ const defaults = { withCheckout: withConfiguredNativeStudioFirstDeployCheckout,
 export async function prepareConfiguredNativeStudioFirstDeployFromGitHub(input: {
   scope: NativeStudioScope; client: SupabaseClient; sourceId: string;
   sourceCommit: string; workerId: string; trustedGit: string;
-  loadDeploymentCredentials: () => Promise<{
+  loadDeploymentCredentials?: () => Promise<{
     cloudflareCredential: string; secrets: NativeStudioRuntimeSecrets }>;
 }, env: Environment = process.env, transport: typeof fetch = fetch,
 deps = defaults) {
   const { loadDeploymentCredentials, ...checkoutInput } = input ?? {};
-  if (typeof loadDeploymentCredentials !== 'function')
+  if (loadDeploymentCredentials !== undefined &&
+      typeof loadDeploymentCredentials !== 'function')
     throw Error('native_studio_deploy_credentials_loader_missing');
   return deps.withCheckout(checkoutInput, async prepared => {
-    const { cloudflareCredential, secrets } = await loadDeploymentCredentials();
+    const { cloudflareCredential, secrets } = await (loadDeploymentCredentials
+      ? loadDeploymentCredentials()
+      : deps.credentials(checkoutInput.scope, prepared.store,
+        prepared.site.accountId, env));
     return deps.prepareIntent({ scope: checkoutInput.scope,
       client: checkoutInput.client, store: prepared.store,
       project: prepared.project, sourceId: prepared.sourceId,

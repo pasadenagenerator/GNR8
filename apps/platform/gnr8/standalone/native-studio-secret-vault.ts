@@ -114,6 +114,18 @@ export async function getOrCreateNativeStudioSiteSecrets(
   return siteSecrets(saved, scope, key);
 }
 
+/** Deployment reads only secrets that were already created during installation. */
+export async function readNativeStudioSiteSecrets(
+  scope: NativeStudioScope,
+  store: Pick<PublicationStore, 'read'>,
+  masterKey = process.env.GNR8_NATIVE_STUDIO_VAULT_KEY ?? '',
+): Promise<NativeStudioSiteSecrets | null> {
+  assertScope(scope);
+  const key = vaultKey(masterKey);
+  const saved = await store.read<Sealed>(KEY);
+  return saved ? siteSecrets(saved, scope, key) : null;
+}
+
 /** Persist a provider-issued token before installing it in the Studio Worker.
  * A conflicting retry fails closed; rotation needs an explicit migration.
  */

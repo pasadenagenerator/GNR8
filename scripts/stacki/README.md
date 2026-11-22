@@ -91,8 +91,11 @@ yet, and no Cloudflare credential enters either checkout.
 The configured first-deploy bridge ties the two restored Git refs to the
 reserved Studio Worker, disposes the checkout after its trusted consumer, and
 can claim the existing first-deploy intent after a trusted host loads its
-Cloudflare credentials. The loader is called only after artifact verification;
-no hosted runner or deployment command is connected to this bridge yet.
+Cloudflare credentials. The configured loader reads one central
+`GNR8_NATIVE_STUDIO_CLOUDFLARE_DEPLOYER` credential and the sealed per-site
+vault only after artifact verification. It requires the matching secret-install
+intent and receipt; missing or changed Worker secrets block first deployment.
+No hosted runner is connected to this bridge yet.
 Before the credential loader runs, the bridge also creates the upstream
 Dockerfile's ignored `.studio-image/site` directory from the verified root
 `package.json` and `package-lock.json`. It rejects a pre-existing image
@@ -103,8 +106,9 @@ The configured first-deploy call checks this receipt before loading deployment
 credentials, prepares the existing intent, invokes the trusted one-attempt gate
 and reads back the Cloudflare control plane. The final gate rechecks the build
 handoff and ignored Docker image directory before claiming the attempt.
-These are callable local boundaries; a hosted dispatcher and live acceptance
-remain to be connected.
+These are callable local boundaries; the central deploy credential still needs
+trusted-host configuration, and a hosted dispatcher and live acceptance remain
+to be connected.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root
