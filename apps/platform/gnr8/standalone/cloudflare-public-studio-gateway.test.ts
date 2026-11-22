@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inspectCloudflarePublicStudioGateway,
-  inspectBoundCloudflarePublicStudioGateway } from './cloudflare-public-studio-gateway';
+  inspectBoundCloudflarePublicStudioGateway,
+  inspectCloudflarePublicStudioGatewayVacancy } from './cloudflare-public-studio-gateway';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -70,6 +71,22 @@ test('an empty reservation or unattached domain stays pending', async () => {
     workerId, domain, credential, f.transport), {
     state: 'pending', reason: 'domain-unattached', worker,
   });
+});
+
+test('first public deploy requires vacant Worker and unclaimed hostname', async () => {
+  const f = fixture();
+  delete f.result[`/workers/scripts/${worker}/deployments`];
+  f.result['/workers/domains'] = [];
+  assert.deepEqual(await inspectCloudflarePublicStudioGatewayVacancy(scope,
+    accountId, workerId, domain, credential, f.transport),
+  { state: 'vacant', worker, workerId, domain });
+  f.result['/workers/domains'] = [{ hostname: domain, service: 'foreign-worker' }];
+  await assert.rejects(inspectCloudflarePublicStudioGatewayVacancy(scope,
+    accountId, workerId, domain, credential, f.transport), /domain_conflict/);
+  f.result['/workers/domains'] = [];
+  f.result[`/workers/scripts/${worker}/deployments`] = { deployments: [{ id: deploymentId }] };
+  await assert.rejects(inspectCloudflarePublicStudioGatewayVacancy(scope,
+    accountId, workerId, domain, credential, f.transport), /already_deployed/);
 });
 
 test('rejects split traffic, wrong Studio target and foreign domain', async () => {

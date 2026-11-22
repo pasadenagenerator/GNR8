@@ -10,6 +10,51 @@ const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/** Check the reserved public Worker and hostname immediately before the
+ * first domain-attaching deployment. A foreign Worker domain is a hard stop.
+ */
+export async function inspectCloudflarePublicStudioGatewayVacancy(
+  scope: NativeStudioScope, accountId: string, workerId: string,
+  domain: string, credential: string, transport: typeof fetch = fetch,
+) {
+  if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
+    .every(value => typeof value === 'string' && UUID.test(value)) ||
+      !HEX32.test(accountId) || !HEX32.test(workerId) ||
+      !DOMAIN.test(domain) || !TOKEN.test(credential))
+    throw Error('native_studio_public_gateway_setup_invalid');
+  const worker = `gnr8-${scope.siteId}-site`;
+  const root = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
+  async function read(path: string, missing = false): Promise<unknown> {
+    const response = await transport(`${root}${path}`, { method: 'GET',
+      redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: { authorization: `Bearer ${credential}`, accept: 'application/json' } });
+    if (missing && response.status === 404) return null;
+    if (!response.ok) throw Error('native_studio_public_gateway_provider_unavailable');
+    let data: unknown;
+    try { data = await response.json(); }
+    catch { throw Error('native_studio_public_gateway_provider_invalid'); }
+    if (!object(data) || data.success !== true)
+      throw Error('native_studio_public_gateway_provider_invalid');
+    return data.result;
+  }
+  const identity = await read(`/workers/workers/${worker}`);
+  if (!object(identity) || identity.name !== worker || identity.id !== workerId ||
+      !object(identity.subdomain) || identity.subdomain.enabled !== false ||
+      identity.subdomain.previews_enabled !== false)
+    throw Error('native_studio_public_gateway_worker_conflict');
+  const [deployments, domains] = await Promise.all([
+    read(`/workers/scripts/${worker}/deployments?per_page=1`, true),
+    read(`/workers/domains?hostname=${encodeURIComponent(domain)}`),
+  ]);
+  if (deployments !== null && (!object(deployments) ||
+      !Array.isArray(deployments.deployments) || deployments.deployments.length > 0))
+    throw Error('native_studio_public_gateway_already_deployed');
+  if (!Array.isArray(domains) || domains.some(item =>
+      !object(item) || item.hostname !== domain || item.service !== worker))
+    throw Error('native_studio_public_gateway_domain_conflict');
+  return { worker, workerId, domain, state: 'vacant' as const };
+}
+
 /** Read-only control-plane gate for the public Worker that serves /studio.
  * An empty reserved Worker or unattached domain is pending, never ready.
  */

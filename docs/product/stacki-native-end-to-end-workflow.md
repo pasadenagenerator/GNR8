@@ -492,6 +492,15 @@ one deploy attempt; a lost response leads to control-plane readback and never
 an automatic second deploy. These steps pass focused local tests with provider
 I/O mocked. Neither job is dispatched by a hosted runner yet, and no live
 Cloudflare deploy or authenticated Stacki health result is established.
+The public gateway now has a separate first-deploy intent gate. It reconstructs
+the verified source and build artifacts, requires the exact Studio deploy
+intent and attempt plus an active tagged Studio version with six secret names,
+then reads the reserved public Worker and intended hostname. An already
+deployed public Worker or a hostname claimed by another Worker blocks the
+intent. It rechecks the bound site before an append-only claim. This is a
+local preflight only: the eventual public deploy job must repeat the vacancy
+and target checks immediately before attaching the domain. No public Worker
+deploy command or hosted caller is connected yet.
 The existing Inngest resource-reservation job now queues secret preparation
 automatically after an exact reservation when both stage flags are enabled.
 The event carries only site scope and actor; the second job rechecks authority
