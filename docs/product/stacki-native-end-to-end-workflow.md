@@ -457,18 +457,19 @@ link is safely available; the handoff and readiness transition are not wired.
 
 ### First native sign-in without an external confirmation
 
-The Design tab currently returns a Stacki link only from an immutable ready
-binding (or the four scoped legacy bindings). With no binding, it may enqueue
-resource reservation but exposes no guessed URL. Keep that behavior until a
-hosted installer records a separate, append-only **first-open** receipt after
-the exact source commit, Studio active version and secrets, public gateway
-active version and domain, and public login page have all been verified. The
-receipt must bind the current agency/client/site, repository ID and branch,
-working origin, both immutable Worker IDs and active version IDs. The link
-reader must recheck the current scoped site/repository and give an existing
-ready binding precedence. A reservation event, prepared-source receipt or
-site-domain string alone is not first-open evidence. No first-open receipt
-producer or link reader is connected yet.
+The Design tab still gives an immutable ready binding (or one of the four
+scoped legacy bindings) precedence. A local `first-open` recorder now requires
+the verified build handoff, exact GitHub branch head, active tagged Studio
+version with secrets, active public gateway version and domain, and native
+login page before claiming a separate append-only receipt. It binds the
+agency/client/site, repository ID and branch, working origin, source commit,
+both immutable Worker IDs and active version IDs. The guarded link reader
+rechecks the current scoped target and, only with
+`GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED=1`, labels the link as a first native
+sign-in. A stale ready binding blocks this fallback; reservation and source
+preparation alone never expose a URL. The flag defaults off. The recorder has
+no hosted caller or configured GitHub-head reader, so it cannot yet produce
+a receipt in production. Mocked local tests do not establish hosted readiness.
 
 The unchanged Stacki OAuth callback returns to the site's own `/studio` and
 sets a host-only, HttpOnly session cookie. Platform runs on another host; it

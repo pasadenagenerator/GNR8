@@ -1,0 +1,114 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { recordNativeStudioFirstOpen,
+  readNativeStudioLaunchForScope } from './native-studio-first-open';
+
+const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
+  clientId: '22222222-2222-4222-8222-222222222222',
+  siteId: '33333333-3333-4333-8333-333333333333' };
+const site = { siteId: scope.siteId, repository: 'example/site', repositoryId: '42',
+  branch: 'codex/native-stacki', studioOrigin: 'https://site.app.pasadenagenerator.com',
+  accountId: 'a'.repeat(32), appId: '12', installationId: '34', clientId: 'Iv1.test' };
+const sourceId = 'b'.repeat(64), commit = 'c'.repeat(40);
+const studioWorkerId = 'd'.repeat(32), publicWorkerId = 'e'.repeat(32);
+const studioVersionId = '44444444-4444-4444-8444-444444444444';
+const publicVersionId = '55555555-5555-4555-8555-555555555555';
+const tag = `gnr8-first-${'f'.repeat(64)}`;
+const db = {} as SupabaseClient;
+
+function fixture() {
+  const saved = new Map<string, unknown>([['native-studio/build-handoff-v1.json', {
+    scope, sourceId, commit, workerId: studioWorkerId,
+    site: { siteId: site.siteId, repository: site.repository, branch: site.branch,
+      studioOrigin: site.studioOrigin, accountId: site.accountId },
+    files: [{ path: 'dist/index.html', bytes: 4, sha256: 'a'.repeat(64) }],
+  }]]);
+  const store = { read: async <T>(key: string) => (saved.get(key) ?? null) as T | null,
+    claim: async (key: string, value: unknown) => { if (saved.has(key)) return false;
+      saved.set(key, value); return true; } };
+  const input = { scope, client: db, store, sourceId, commit, tag,
+    studioWorkerId, publicWorkerId,
+    studioCredential: 'g'.repeat(40), publicCredential: 'h'.repeat(40) };
+  const calls = { studio: 0, gateway: 0, entry: 0, github: 0 };
+  const deps = {
+    site: async () => site,
+    studio: async () => { calls.studio++; return { state: 'verified-source-control-plane' as const,
+      workerId: studioWorkerId, versionId: studioVersionId }; },
+    gateway: async () => { calls.gateway++; return { state: 'observed-control-plane' as const,
+      workerId: publicWorkerId, versionId: publicVersionId, domainId: '9'.repeat(32) }; },
+    entry: async () => { calls.entry++; return { state: 'public-studio-entry-healthy' as const,
+      studioOrigin: site.studioOrigin }; },
+    githubHead: async () => { calls.github++; return { repositoryId: site.repositoryId,
+      branch: site.branch, commit }; },
+  };
+  return { saved, store, input, deps, calls };
+}
+
+test('verified first-open proof gives a labelled native link without claiming ready', async () => {
+  const f = fixture();
+  const receipt = await recordNativeStudioFirstOpen(f.input, f.deps as any);
+  assert.equal(receipt.sourceId, sourceId);
+  assert.equal(receipt.studioVersionId, studioVersionId);
+  assert.equal(receipt.publicVersionId, publicVersionId);
+  assert.deepEqual(f.calls, { studio: 1, gateway: 1, entry: 1, github: 1 });
+  const launch = await readNativeStudioLaunchForScope(scope, db,
+    { GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED: '1' }, {
+      site: f.deps.site as any, store: () => f.store,
+      ready: async () => { throw Error('native_studio_binding_missing'); },
+    });
+  assert.deepEqual(launch, { kind: 'first-open', url: `${site.studioOrigin}/studio` });
+  assert.deepEqual(await recordNativeStudioFirstOpen(f.input, f.deps as any), receipt);
+});
+
+test('missing build handoff or wrong active target never creates a first-open link', async () => {
+  const f = fixture();
+  f.saved.delete('native-studio/build-handoff-v1.json');
+  await assert.rejects(recordNativeStudioFirstOpen(f.input, f.deps as any), /source_unverified/);
+  assert.deepEqual(f.calls, { studio: 0, gateway: 0, entry: 0, github: 0 });
+  const absent = await readNativeStudioLaunchForScope(scope, db,
+    { GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED: '1' }, {
+      site: f.deps.site as any, store: () => f.store,
+      ready: async () => { throw Error('native_studio_binding_missing'); },
+    });
+  assert.equal(absent, null);
+  f.deps.gateway = async () => { f.calls.gateway++; return {
+    state: 'pending' as any, workerId: publicWorkerId,
+    versionId: publicVersionId, domainId: '9'.repeat(32) }; };
+  f.saved.set('native-studio/build-handoff-v1.json', fixture().saved.get('native-studio/build-handoff-v1.json'));
+  await assert.rejects(recordNativeStudioFirstOpen(f.input, f.deps as any), /unverified/);
+  assert.equal(f.saved.has('native-studio/first-open-v1.json'), false);
+});
+
+test('GitHub must expose the exact saved commit before first sign-in', async () => {
+  const f = fixture();
+  await assert.rejects(recordNativeStudioFirstOpen(f.input,
+    { ...f.deps, githubHead: undefined } as any), /github_unconfigured/);
+  assert.deepEqual(f.calls, { studio: 0, gateway: 0, entry: 0, github: 0 });
+  await assert.rejects(recordNativeStudioFirstOpen(f.input,
+    { ...f.deps, githubHead: async () => ({ repositoryId: site.repositoryId,
+      branch: site.branch, commit: '0'.repeat(40) }) } as any), /unverified/);
+  assert.equal(f.saved.has('native-studio/first-open-v1.json'), false);
+});
+
+test('ready binding wins; stale binding and changed receipt fail closed', async () => {
+  const f = fixture();
+  await recordNativeStudioFirstOpen(f.input, f.deps as any);
+  const dependencies = { site: f.deps.site as any, store: () => f.store,
+    ready: async () => site };
+  assert.deepEqual(await readNativeStudioLaunchForScope(scope, db,
+    { GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED: '1' }, dependencies),
+  { kind: 'ready', url: `${site.studioOrigin}/studio` });
+  assert.equal(await readNativeStudioLaunchForScope(scope, db,
+    { GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED: '1' }, {
+      ...dependencies, ready: async () => { throw Error('native_studio_binding_stale'); },
+    }), null);
+  assert.equal(await readNativeStudioLaunchForScope(scope, db, {}, {
+    ...dependencies, ready: async () => { throw Error('native_studio_binding_missing'); },
+  }), null);
+  assert.equal(await readNativeStudioLaunchForScope(scope, db,
+    { GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED: '1' }, {
+      ...dependencies, site: async () => ({ ...site, repositoryId: '43' }),
+      ready: async () => { throw Error('native_studio_binding_missing'); },
+    }), null);
+});

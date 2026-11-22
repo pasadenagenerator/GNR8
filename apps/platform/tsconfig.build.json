@@ -12,6 +12,7 @@
     "../../scripts/stacki/prepare-native-studio.mjs",
     "../../scripts/stacki/load-pinned-release.mjs",
     "../../scripts/stacki/prepare-from-confirmed-export.mjs",
+    "../../scripts/stacki/verify-studio-health.mjs",
     "app/**/*.ts",
     "app/**/*.tsx",
     ".next/types/**/*.ts",

@@ -1,5 +1,5 @@
 import { BrandGuidePanel } from './BrandGuidePanel'
-import { nativeStudioUrlForScope } from '@/gnr8/standalone/native-studio-binding-store'
+import { readNativeStudioLaunchForScope } from '@/gnr8/standalone/native-studio-first-open'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
@@ -1508,8 +1508,8 @@ export default async function SiteWorkspacePage(props: Props) {
   const canRunTransformation = canPerformAction(currentUserAgency.role, 'run_migration')
   const canPublish = canPerformAction(currentUserAgency.role, 'publish')
   const canDeleteSite = canPerformAction(currentUserAgency.role, 'delete_site')
-  const nativeStudioLink = props.activeTab === 'design' && canPublish
-    ? await nativeStudioUrlForScope({ agencyId: currentUserAgency.agency_id, clientId, siteId })
+  const nativeStudioLaunch = props.activeTab === 'design' && canPublish
+    ? await readNativeStudioLaunchForScope({ agencyId: currentUserAgency.agency_id, clientId, siteId })
     : null
 
   return (
@@ -1552,7 +1552,8 @@ export default async function SiteWorkspacePage(props: Props) {
           : null}
         {props.activeTab === 'structure' ? renderStructureContent(readModel) : null}
         {props.activeTab === 'design' ? (
-          <NativeStackiPanel canEdit={canPublish} url={nativeStudioLink}
+          <NativeStackiPanel canEdit={canPublish} url={nativeStudioLaunch?.url ?? null}
+            firstOpen={nativeStudioLaunch?.kind === 'first-open'}
             reservationEnabled={process.env.GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED === '1'}
             agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} />
         ) : null}

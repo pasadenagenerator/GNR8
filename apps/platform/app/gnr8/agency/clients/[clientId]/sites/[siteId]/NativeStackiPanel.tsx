@@ -2,10 +2,10 @@
 
 import { useEffect } from 'react';
 
-type Props = { url: string | null; canEdit: boolean; reservationEnabled: boolean;
+type Props = { url: string | null; firstOpen: boolean; canEdit: boolean; reservationEnabled: boolean;
   agencyId: string; clientId: string; siteId: string };
 
-export default function NativeStackiPanel({ url, canEdit, reservationEnabled,
+export default function NativeStackiPanel({ url, firstOpen, canEdit, reservationEnabled,
   agencyId, clientId, siteId }: Props) {
   useEffect(() => {
     if (!reservationEnabled || !canEdit || url) return;
@@ -33,7 +33,8 @@ export default function NativeStackiPanel({ url, canEdit, reservationEnabled,
     <p>Urejajte stran z gradnikom ali umetno inteligenco v Stackiju. Osnutek se shranjuje samodejno.
       V meniju Publish uporabite »Push to GitHub« za shranjevanje v GitHub ali objavo na gostovanju.</p>
     {!canEdit ? <p>Za urejanje strani potrebujete pravice lastnika ali skrbnika.</p>
-      : url ? <a href={url} target="_blank" rel="noopener noreferrer">Odpri v Stackiju</a>
+      : url ? <><a href={url} target="_blank" rel="noopener noreferrer">{firstOpen ? 'Odpri Stacki za prvo prijavo' : 'Odpri v Stackiju'}</a>
+        {firstOpen ? <p>Prijavite se v Stackiju. Po prvi prijavi je treba še potrditi delovanje urednika.</p> : null}</>
       : <p>Povezava te strani s Stackijem še ni pripravljena.</p>}
   </section>;
 }
