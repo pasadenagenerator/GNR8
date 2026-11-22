@@ -393,6 +393,14 @@ deployment job must independently reconstruct the clean Git checkout, copy
 only those listed files, regenerate `studio/.studio-image/site` from verified
 root manifests and check the stored receipt before receiving credentials.
 No hosted artifact transfer or two-environment adapter is connected yet.
+The fresh trusted job can now prepare the same first-deploy intent without
+running `npm`: it verifies that handoff, re-reads the scoped site, checks the
+exact GitHub head with a repository-only `contents:read` token, confirms that
+the reserved Cloudflare Worker has no deployment, and then claims the existing
+per-site deploy intent. The post-build preparer and final deploy gate share one
+version-tag calculation. A local contract test passes its command directly to
+`runTrustedStudioDeploy` without a second build. This is a callable local
+entry point, not a hosted dispatch or a completed production deployment.
 Vercel's [Docker support](https://vercel.com/changelog/run-docker-containers-inside-vercel-sandbox)
 establishes runtime capability, not this credential isolation.
 
@@ -477,7 +485,8 @@ the exact branch head against the prepared commit. The recorder still has no
 hosted caller or connected first-deployment job; it cannot yet produce a
 receipt in production. A central, trusted token issuer is now available for
 that later job. It signs a short-lived GitHub App JWT with the shared private
-key, requests `contents:write` only for the current bound repository ID,
+key, requests `contents:write` for the first push or `contents:read` for
+deployment verification, only for the current bound repository ID,
 checks the returned repository and permissions, and re-reads the target before
 handing the token to the job. It has only mocked local coverage and no hosted
 caller. The read-only head check accepts GitHub's longer stateless installation
@@ -499,7 +508,11 @@ immutable build handoff, obtains the short-lived token centrally, and connects
 the scoped remote inspector and push step. No hosted runner calls this entry
 point yet. Before rollout, verify that the unchanged Stacki release also accepts
 the actual token length: the retained 1.4.8 source caps its parsed token at
-500 characters, so a longer live token may break native Push to GitHub.
+500 characters, so a longer live token may break native Push to GitHub. The
+first-push adapter, deployment head check and first-open recorder now fail
+before claiming success
+when the observed token exceeds that limit; a real native Push smoke is still
+required, and a longer live token needs a compatible official Stacki update.
 Mocked local tests do not establish hosted readiness.
 
 The unchanged Stacki OAuth callback returns to the site's own `/studio` and

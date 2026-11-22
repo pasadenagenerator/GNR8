@@ -7,6 +7,7 @@ import { SupabasePublicationStore, type PublicationStore } from './publication-s
 import { inspectBoundCloudflareStudioFirstDeployment } from './cloudflare-studio-first-deployment';
 import { inspectBoundCloudflarePublicStudioGateway } from './cloudflare-public-studio-gateway';
 import { inspectGitHubNativeStudioHead } from './github-native-studio-head';
+import { assertNativeStudioGitHubTokenCompatible } from './native-studio-upstream-github-compatibility';
 import { verifyPublicStudioEntry } from '../../../../scripts/stacki/verify-studio-health.mjs';
 
 const KEY = 'native-studio/first-open-v1.json';
@@ -77,6 +78,7 @@ export async function recordNativeStudioFirstOpen(input: {
       !TAG.test(tag) || !HEX32.test(studioWorkerId) || !HEX32.test(publicWorkerId) ||
       typeof githubCredential !== 'string' || !githubCredential)
     throw Error('native_studio_first_open_input_invalid');
+  assertNativeStudioGitHubTokenCompatible(githubCredential);
   const site = await deps.site(scope, client);
   const built = await store.read<Record<string, unknown>>(HANDOFF);
   if (!object(built) || built.sourceId !== sourceId || built.commit !== commit ||

@@ -18,11 +18,11 @@ const token = 'ghs_' + 'a'.repeat(1000);
 const client = {} as SupabaseClient;
 const reader = (async () => site) as typeof configuredNativeStudioBootstrapSite;
 
-function fixture() {
+function fixture(contentsPermission: 'read' | 'write' = 'write') {
   const result: Record<string, unknown> = { token,
     expires_at: new Date(now + 3_000_000).toISOString(),
     repositories: [{ id: 42 }],
-    permissions: { contents: 'write', metadata: 'read' } };
+    permissions: { contents: contentsPermission, metadata: 'read' } };
   const calls: string[] = [];
   const transport = (async (url: string, options: RequestInit) => {
     calls.push(url);
@@ -30,7 +30,7 @@ function fixture() {
     assert.equal(options.method, 'POST');
     assert.equal(options.redirect, 'error');
     assert.deepEqual(JSON.parse(String(options.body)), {
-      repository_ids: [42], permissions: { contents: 'write' } });
+      repository_ids: [42], permissions: { contents: contentsPermission } });
     const jwt = new Headers(options.headers).get('authorization')?.replace(/^Bearer /, '') ?? '';
     const [header, payload, signature] = jwt.split('.');
     assert.deepEqual(JSON.parse(Buffer.from(header!, 'base64url').toString()),
@@ -50,6 +50,12 @@ test('mints a short-lived token for the single bound repository', async () => {
     env, f.transport, reader, now), {
     token, repositoryId: '42', expiresAt: f.result.expires_at });
   assert.equal(f.calls.length, 1);
+});
+
+test('can mint a repository-only read token for deployment verification', async () => {
+  const f = fixture('read');
+  assert.equal((await issueConfiguredNativeStudioGitHubToken(scope, client,
+    env, f.transport, reader, now, 'read')).repositoryId, '42');
 });
 
 test('rejects broad response scopes and changed site binding', async () => {

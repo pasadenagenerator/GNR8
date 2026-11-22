@@ -85,6 +85,9 @@ test('GitHub must expose the exact saved commit before first sign-in', async () 
   const f = fixture();
   await assert.rejects(recordNativeStudioFirstOpen({ ...f.input,
     githubCredential: '' }, f.deps as any), /input_invalid/);
+  await assert.rejects(recordNativeStudioFirstOpen({ ...f.input,
+    githubCredential: 'ghs_' + 'a'.repeat(501) }, f.deps as any),
+  /upstream_github_token_incompatible/);
   assert.deepEqual(f.calls, { studio: 0, gateway: 0, entry: 0, github: 0 });
   await assert.rejects(recordNativeStudioFirstOpen(f.input,
     { ...f.deps, githubHead: async () => ({ repositoryId: site.repositoryId,

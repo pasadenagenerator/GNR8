@@ -37,10 +37,12 @@ export async function issueConfiguredNativeStudioGitHubToken(
   env: Environment = process.env, transport: typeof fetch = fetch,
   readSite: SiteReader = configuredNativeStudioBootstrapSite,
   now = Date.now(),
+  contentsPermission: 'read' | 'write' = 'write',
 ): Promise<{ token: string; repositoryId: string; expiresAt: string }> {
   const site: Site = await readSite(scope, client, env);
   if (!positiveId(site.installationId) || !positiveId(site.repositoryId) ||
-      !Number.isFinite(now))
+      !Number.isFinite(now) ||
+      !['read', 'write'].includes(contentsPermission))
     throw Error('native_studio_github_token_target_invalid');
   const jwt = appJwt(site.appId, env.GNR8_NATIVE_STUDIO_GITHUB_PRIVATE_KEY ?? '', now);
   let response: Response;
@@ -53,7 +55,7 @@ export async function issueConfiguredNativeStudioGitHubToken(
           'content-type': 'application/json',
           'X-GitHub-Api-Version': '2022-11-28' },
         body: JSON.stringify({ repository_ids: [Number(site.repositoryId)],
-          permissions: { contents: 'write' } }),
+          permissions: { contents: contentsPermission } }),
       });
   } catch { throw Error('native_studio_github_token_unavailable'); }
   if (!response.ok) throw Error('native_studio_github_token_unavailable');
@@ -66,7 +68,7 @@ export async function issueConfiguredNativeStudioGitHubToken(
       !Array.isArray(value.repositories) || value.repositories.length !== 1 ||
       !object(value.repositories[0]) ||
       value.repositories[0].id !== Number(site.repositoryId) ||
-      !object(value.permissions) || value.permissions.contents !== 'write' ||
+      !object(value.permissions) || value.permissions.contents !== contentsPermission ||
       Object.entries(value.permissions).some(([name, permission]) =>
         name !== 'contents' && !(name === 'metadata' && permission === 'read')) ||
       !Number.isFinite(Date.parse(value.expires_at)) ||

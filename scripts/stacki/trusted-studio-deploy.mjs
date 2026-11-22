@@ -3,12 +3,12 @@
  * Importing this module never contacts Cloudflare.
  */
 import { execFile } from 'node:child_process';
-import { createHash, createHmac } from 'node:crypto';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { verifyCommittedStudioSource } from './prepare-git-branch.mjs';
+import { firstStudioDeployIdentity } from './first-studio-deploy-identity.mjs';
 
 const exec = promisify(execFile);
 const TAG = /^gnr8-first-[a-f0-9]{64}$/;
@@ -58,11 +58,8 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
   catch { throw Error('native_studio_trusted_deploy_input_invalid'); }
   if (`https://${domain}` !== site.studioOrigin)
     throw Error('native_studio_trusted_deploy_input_invalid');
-  const secretIdentity = createHmac('sha256', token)
-    .update(JSON.stringify(secrets)).digest('hex');
-  const target = { scope, accountId, workerId, sourceId, site, secretIdentity, commit };
-  const expectedTag = `gnr8-first-${createHash('sha256')
-    .update(JSON.stringify(target)).digest('hex')}`;
+  const { identity, tag: expectedTag } = firstStudioDeployIdentity({ scope,
+    accountId, workerId, sourceId, site, token, secrets, commit });
   if (args[4] !== expectedTag)
     throw Error('native_studio_trusted_deploy_target_mismatch');
   const studio = await realpath(cwd);
@@ -78,7 +75,6 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
   if (checked?.sourceId !== sourceId || checked.commit !== commit ||
       checked.branch !== site.branch || checked.repository !== site.repository)
     throw Error('native_studio_trusted_deploy_source_unverified');
-  const identity = expectedTag.slice('gnr8-first-'.length);
   const intent = await store.read(INTENT);
   if (!intent || Object.keys(intent).sort().join() !== 'commit,identity' ||
       intent.identity !== identity || intent.commit !== commit)

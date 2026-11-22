@@ -2,13 +2,13 @@
  * No provider operation happens on import. A caller must supply a scoped
  * Cloudflare inspector and an append-only per-site intent store.
  */
-import { createHash, createHmac } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { verifyCommittedStudioSource } from './prepare-git-branch.mjs';
+import { firstStudioDeployIdentity } from './first-studio-deploy-identity.mjs';
 
 const exec = promisify(execFile);
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -18,7 +18,6 @@ const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
 const INTENT = 'native-studio/first-deploy-intent-v1.json';
 const SECRET_NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
   'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
-const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export async function runIsolatedStudioCommand({ file, args, cwd, home }) {
   const env = { PATH: process.env.PATH ?? '', HOME: home, TMPDIR: tmpdir(), CI: '1',
@@ -64,9 +63,8 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
   if (trustedWrangler === canonicalCheckout ||
       trustedWrangler.startsWith(`${canonicalCheckout}${sep}`))
     throw Error('native_studio_first_deploy_untrusted_wrangler');
-  const secretIdentity = createHmac('sha256', token)
-    .update(JSON.stringify(secrets)).digest('hex');
-  const target = { scope, accountId, workerId, sourceId, site, secretIdentity };
+  const identityFor = commit => firstStudioDeployIdentity({ scope, accountId,
+    workerId, sourceId, site, token, secrets, commit });
   const inspection = expectedTag => deps.inspect({ scope, accountId, workerId, domain,
     token, repository: site.repository,
     ...(expectedTag ? { expectedTag, requireSecrets: true } : {}) });
@@ -79,7 +77,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
   let intent = await store.read(INTENT);
   if (intent && (Object.keys(intent).sort().join() !== 'commit,identity' ||
       !/^[a-f0-9]{40,64}$/.test(intent.commit) ||
-      intent.identity !== digest({ ...target, commit: intent.commit })))
+      intent.identity !== identityFor(intent.commit).identity))
     throw Error('native_studio_first_deploy_intent_conflict');
   if (intent) {
     const checked = await deps.verifySource({ project: checkout, store, sourceId, site });
@@ -115,8 +113,7 @@ export async function runFirstStudioDeployment(input, deps = defaults) {
         checked.repository !== site.repository || checked.commit !== initial.commit)
       throw Error('native_studio_first_deploy_source_unverified');
     await requireGitHubHead(checked.commit);
-    const identity = digest({ ...target, commit: checked.commit });
-    const expectedTag = `gnr8-first-${identity}`;
+    const { identity, tag: expectedTag } = identityFor(checked.commit);
     const claimed = await store.claim(INTENT, { identity, commit: checked.commit });
     intent = await store.read(INTENT);
     if (!intent || intent.identity !== identity || intent.commit !== checked.commit)

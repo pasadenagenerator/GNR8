@@ -15,6 +15,8 @@
     "../../scripts/stacki/prepare-git-branch.mjs",
     "../../scripts/stacki/build-handoff.mjs",
     "../../scripts/stacki/first-studio-github-push.mjs",
+    "../../scripts/stacki/first-studio-deploy-identity.mjs",
+    "../../scripts/stacki/first-studio-deploy-intent.mjs",
     "../../scripts/stacki/verify-studio-health.mjs",
     "app/**/*.ts",
     "app/**/*.tsx",

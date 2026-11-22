@@ -8,6 +8,7 @@ import { verifyCommittedStudioSource } from '../../../../scripts/stacki/prepare-
 import { inspectGitHubNativeStudioBranch } from './github-native-studio-head';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 import { issueConfiguredNativeStudioGitHubToken } from './github-native-studio-token';
+import { assertNativeStudioGitHubTokenCompatible } from './native-studio-upstream-github-compatibility';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import type { PublicationStore } from './publication-store';
 
@@ -29,6 +30,7 @@ export async function configuredFirstStudioGitHubPush(input: {
     site, scope, workerId });
   const credential = await issueConfiguredNativeStudioGitHubToken(
     scope, client, env, transport);
+  assertNativeStudioGitHubTokenCompatible(credential.token);
   return runFirstStudioGitHubPush({ project, store, sourceId, site, scope,
     credential: credential.token, trustedGit }, {
       verifySource: verifyCommittedStudioSource,
