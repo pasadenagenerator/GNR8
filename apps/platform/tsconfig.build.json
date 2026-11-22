@@ -14,6 +14,7 @@
     "../../scripts/stacki/prepare-from-confirmed-export.mjs",
     "../../scripts/stacki/prepare-git-branch.mjs",
     "../../scripts/stacki/build-handoff.mjs",
+    "../../scripts/stacki/build-artifact-transfer.mjs",
     "../../scripts/stacki/first-studio-github-push.mjs",
     "../../scripts/stacki/first-studio-deploy-identity.mjs",
     "../../scripts/stacki/first-studio-deploy-intent.mjs",

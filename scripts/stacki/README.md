@@ -69,6 +69,9 @@ the durable handoff. This step has no upload or hosted dispatch yet.
 The same module can take a finished Sandbox output directory, check its file
 list and committed source, install only that output into a credential-free
 checkout, and record the receipt. This bridge also has no hosted caller.
+The Platform's configured build-handoff coordinator invokes that bridge after
+the scoped Sandbox build, checks the checkout and site binding, and removes its
+owned temporary output on completion or failure.
 A fresh deployment job must reconstruct and reverify the exact Git checkout,
 copy only those listed build files, and verify the receipt before receiving
 secrets. It must regenerate `studio/.studio-image/site` from the verified root

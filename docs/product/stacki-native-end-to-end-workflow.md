@@ -428,6 +428,13 @@ copy or receipt check removes partial output. The source verifier permits only
 untracked `dist/**` and `studio/dist/**` while checking a build handoff; it
 continues to reject other changes and retains its strict default everywhere
 else. The bridge still has no hosted caller or artifact transport.
+A configured, credential-free coordinator now checks the exact committed
+checkout before the Sandbox build, re-reads the scoped site afterward, records
+that Sandbox output through the bridge, and always removes its owned temporary
+output directory. It refuses to delete an unexpected directory. A local
+producer-to-receipt test covers this path with hosted I/O replaced at the
+existing build and source-verification boundaries. The coordinator does not
+dispatch a hosted job or supply GitHub/Cloudflare credentials.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
