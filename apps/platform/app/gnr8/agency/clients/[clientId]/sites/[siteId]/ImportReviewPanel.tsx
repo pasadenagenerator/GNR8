@@ -77,7 +77,7 @@ function Review(p:Props){
    const value=await response.json();
    if(!response.ok||!value.ok)throw Error('Stanja priprave ni mogoče prebrati.');
    if(alive.current&&call===sequence.current){setMonitorStudio(value.data.state==='preparing-source');setStudioNotice(value.data.state==='prepared-source'
-    ?`Zasebni paket Studia je pripravljen: ${value.data.files} datotek. Objava ni sprožena.`
+    ?`Vir za Stacki je pripravljen: ${value.data.files} datotek. Studio še ni nameščen in objava ni sprožena.`
     :value.data.state==='failed-source'
      ?'Priprava paketa ni uspela. Pregled lahko osvežite in pripravo ponovno zahtevate.'
      :'Priprava zasebnega paketa še poteka.');}
@@ -100,7 +100,7 @@ function Review(p:Props){
     if(controller.signal.aborted)return;
     failures=0;
     if(value.data.state==='prepared-source'){
-     setStudioNotice(`Zasebni paket Studia je pripravljen: ${value.data.files} datotek. Objava ni sprožena.`);
+     setStudioNotice(`Vir za Stacki je pripravljen: ${value.data.files} datotek. Studio še ni nameščen in objava ni sprožena.`);
      setMonitorStudio(false);
     }else if(value.data.state==='failed-source'){
      setStudioNotice('Priprava paketa ni uspela. Uporabite gumb za ponovni poskus.');

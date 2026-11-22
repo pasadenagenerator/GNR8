@@ -264,6 +264,9 @@ the secret installer to inspect. Source preparation stores bytes and reports
 The missing step is a trusted first-deployment runner that consumes that exact
 prepared source, builds without credentials, deploys with protected credentials,
 then verifies the active Studio and Container before any ready binding is written.
+The review page now labels this state explicitly as prepared source, with Studio
+still uninstalled. It must not present a prepared-source receipt as an editor
+that the site owner can open.
 
 After that first installation, the public site Worker may be connected to
 GitHub Builds with `versions upload`. Keep the Studio Worker build trigger
@@ -369,6 +372,19 @@ causes a second automatic deploy. The result remains `reconcile-required` or
 and inspector tests only. A trusted disposable Docker runner must still provide
 the scoped inspector, protected credential and private store and call it; no
 hosted job invokes it, and no provider command has been run by this path.
+
+The existing `@vercel/sandbox` dependency can run Docker, but the current
+`VercelStackiProvider` creates editor sessions, not a deployment boundary.
+Do not build site-controlled code and later inject a Cloudflare credential into
+that same Sandbox: a process left by the build could read it. A hosted adapter
+needs separate fresh build and deploy environments, with orchestration outside
+both. The build environment gets the exact pinned source and no deploy secrets;
+the deploy environment gets only the verified checkout and required build
+artifacts, with the checkout read-only and secrets supplied only at deployment.
+The source handoff must preserve the Git metadata and byte-for-byte source
+checks required by `verifyCommittedStudioSource`. No such handoff or adapter is
+implemented yet. Vercel's [Docker support](https://vercel.com/changelog/run-docker-containers-inside-vercel-sandbox)
+establishes runtime capability, not this credential isolation.
 
 The `runTrustedStudioDeploy` callback now implements the exact deploy command
 for a dedicated job. It checks that the executable lives outside the site
