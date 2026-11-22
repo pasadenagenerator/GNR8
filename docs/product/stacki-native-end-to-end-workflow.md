@@ -484,6 +484,11 @@ identity and expected domain/repository, and report missing or duplicate
 secret and non-secret bindings, a missing version, or an earlier receipt with
 no reference. Its expected identities must come from the authoritative site
 and repository binding, never from an untrusted event.
+The bound read-only entry point now resolves those identities from scoped
+Supabase site and GitHub repository rows and reads the immutable Studio Worker
+ID before inspecting the captured version. It returns candidate metadata only;
+the version ID must still come from a trusted install receipt, and hosted
+rollback and native Publish remain unverified.
 Complete bindings are only a recovery candidate: the old secret value, native
 Publish and rollback eligibility still require hosted verification. The inspector
 has only mocked local tests and is not wired to hosted provisioning. Changes to the shared
@@ -561,10 +566,13 @@ their values cannot be read back from Worker secrets. No matching value in the
 central vault has been verified. The managed v2 token path deliberately does
 not adopt or roll those manual tokens. Its local mocked-provider test confirms
 that the old token is untouched while the new value is sealed. A hosted
-provisioner must install the managed value, prove the exact active Worker
-version and native Publish. A composed local test now exercises managed token
+cutover path must install the managed value, prove the exact active Worker
+version and native Publish. The first-install adapter now refuses to replace
+an existing publish secret, so that separate migration installer is still
+missing. A composed local test now exercises managed token
 issuance, sealed storage, Studio secret upload and active-version name/type
-readback while the legacy token remains untouched. This cannot prove the
+readback while a separate legacy account token remains untouched; its mocked
+Studio has no pre-existing publish secret. This cannot prove the
 Worker secret's value: native Publish can still succeed through the old token
 while both are active. Retiring the old token needs a separately reviewed
 hosted cutover and recovery check; no retirement action is implemented. Until
@@ -584,7 +592,7 @@ after its Studio secret has been replaced cannot restore publishing. If no
 verified recovery version exists, stop the cutover until one can be prepared.
 
 Confirm that the new token is active with the exact two policies, its sealed
-value verifies as that token, and the Studio secret-install receipt names the
+value verifies as that token, and a future migration receipt names the
 currently active Studio version. Record the old token's complete definition
 and status for recovery without exposing either token value. Disable only the
 old token and read back its disabled status. While it is disabled, perform
@@ -597,8 +605,15 @@ definition, and verify native Publish again before another attempt. Do not
 delete either token or overwrite the managed vault value as an automatic
 retry. After successful cutover, check native Push to GitHub separately, then
 retire the disabled old token only in a reviewed cleanup. The recovery version
-and status changes need a tested hosted implementation before this can run;
-none exists yet. Future sites begin with a single managed token and do not
+and status changes need hosted verification before this can run. A local
+mocked adapter can now disable the exact old account token and restore it only
+with the definition fingerprint returned by a successful disable. It preserves
+the token's policy and optional IP/time settings and requires exact status and
+definition readback. There is no provider compare-and-swap, so concurrent
+token edits must be excluded during the hosted cutover; an ambiguous update
+stops for reconciliation without automatic retry. This adapter is not wired to
+a hosted runner, and the distinct Studio secret migration/rollback path is not
+implemented. Future sites begin with a single managed token and do not
 need this migration cutover.
 
 Cloudflare API references: [update account token](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/update/),
@@ -675,6 +690,8 @@ publication. The checked commits were CHS `2983c728`, ViroiDoc `80d0e850`
 and Ladja Žaba `e8839c98`; the three checkouts remained clean. Together with
 the Logatčan result above, all four retained Studio packages have local build
 evidence.
+On 2026-11-22, all four retained local Git heads still matched the reviewed
+values and all four checkouts were clean. Hosted branch heads were not rechecked.
 This does not verify hosted routing, secrets, authenticated editing, GitHub
 Push or native Cloudflare Publish.
 
