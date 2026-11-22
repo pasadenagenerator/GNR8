@@ -75,6 +75,8 @@ function fixture() {
     const result = url.endsWith('/deployments?per_page=1')
       ? { deployments: [{ versions: [{ version_id: patches === 0 ? previousVersionId
         : versionId, percentage: 100 }] }] }
+      : url.endsWith(`/versions/${previousVersionId}`)
+        ? { id: previousVersionId, resources: { bindings: [] } }
       : { id: versionId,
         resources: { bindings: Object.keys(patched)
         .map(name => ({ name, type: 'secret_text' })) } };

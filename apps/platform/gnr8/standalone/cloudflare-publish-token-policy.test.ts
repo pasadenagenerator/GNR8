@@ -25,6 +25,22 @@ test('reads exact account token policy while discarding provider credential fiel
   assert.equal(result.policies[0]?.permissionGroups[0]?.name, 'Individual Workers Editor');
   assert.deepEqual(result.policies[0]?.resources,
     { 'opaque-resource-key': { selected: 'one-worker' } });
+  assert.equal(result.hasRestrictions, false);
+  assert(!JSON.stringify(result).includes('must-never-return'));
+});
+
+test('reports IP and time restrictions without retaining their details', async () => {
+  const transport = (async () => Response.json({ success: true, result: {
+    id: tokenId, name: 'gnr8-site-native-publish', status: 'active',
+    condition: { request_ip: { in: ['192.0.2.0/24'] } },
+    expires_on: '2030-01-01T00:00:00Z',
+    not_before: '2026-01-01T00:00:00Z',
+    policies: [], value: 'must-never-return',
+  } })) as typeof fetch;
+  const result = await readCloudflarePublishTokenDetail(accountId, tokenId,
+    setupToken, transport);
+  assert.equal(result.hasRestrictions, true);
+  assert(!JSON.stringify(result).includes('192.0.2.0/24'));
   assert(!JSON.stringify(result).includes('must-never-return'));
 });
 

@@ -460,7 +460,11 @@ this code, and no provider readback or ready receipt has occurred.
 
 The separate offline provider adapter remains for a Worker that needs secrets
 after its first code deployment; the combined first-deploy path above is the
-intended new-site flow. The adapter patches those six secrets together on the exact
+intended new-site flow. Before any patch, the adapter reads the active Studio
+version and refuses to overwrite an existing `PUBLISH_CLOUDFLARE_API_TOKEN`
+binding. The four existing Studios therefore need their separate verified
+cutover path; this first-install adapter cannot silently migrate them. The
+adapter patches those six secrets together on the exact
 per-site Studio Worker. Cloudflare documents that the bulk patch creates a new
 version. The adapter now requires a different 100%-active version after the
 patch and reads the six names and `secret_text` types from that version's
@@ -475,8 +479,11 @@ saved as a separate receipt with the pre-patch active Studio version ID;
 repeated calls reuse it. Earlier receipts without that ID remain readable and
 report no recovery reference. The captured ID is not proof that the older
 version has all required bindings or can publish. A local read-only inspector
-can now fetch that exact previous version and report missing or duplicate
-secret bindings, a missing version, or an earlier receipt with no reference.
+can now fetch that exact previous version, verify the immutable Studio Worker
+identity and expected domain/repository, and report missing or duplicate
+secret and non-secret bindings, a missing version, or an earlier receipt with
+no reference. Its expected identities must come from the authoritative site
+and repository binding, never from an untrusted event.
 Complete bindings are only a recovery candidate: the old secret value, native
 Publish and rollback eligibility still require hosted verification. The inspector
 has only mocked local tests and is not wired to hosted provisioning. Changes to the shared
@@ -545,6 +552,10 @@ Worker metadata use separate setup credentials. A mocked request test runs
 the adapter through the actual issuance coordinator and vault; it is not a
 hosted API result. The central account-token manager and Worker-read credentials
 are not configured, and the adapter is not connected to a hosted provisioner.
+The exact-policy check also rejects account tokens with IP, activation, or
+expiration restrictions before sealing or reusing them. A token verified from
+the central provisioner might otherwise be unusable in the Studio Worker;
+restriction details and token values are not retained in the policy receipt.
 The four existing Studio Workers have scoped publish-token secret names, but
 their values cannot be read back from Worker secrets. No matching value in the
 central vault has been verified. The managed v2 token path deliberately does

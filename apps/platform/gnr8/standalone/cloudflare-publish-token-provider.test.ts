@@ -25,7 +25,8 @@ const newVersion = '55555555-5555-4555-8555-555555555555';
 const secretNames = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
   'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 
-function fixture(extraPolicy = false, legacyPresent = false) {
+function fixture(extraPolicy = false, legacyPresent = false,
+  restrictions: Record<string, unknown> = {}) {
   const saved = new Map<string, unknown>();
   const store = {
     read: async <T>(key: string) => (saved.get(key) as T) ?? null,
@@ -78,6 +79,7 @@ function fixture(extraPolicy = false, legacyPresent = false) {
     if (path === `/client/v4/accounts/${accountId}/tokens/${tokenId}`) {
       assert.equal(authorization, `Bearer ${manager}`);
       return Response.json({ success: true, result: { id: tokenId, name,
+        ...restrictions,
         status: 'active', policies: policies!.map(policy => ({ ...policy,
           permission_groups: policy.permission_groups.map((group: { id: string }) =>
             ({ ...group, name: group.id === routesId ? 'Workers Routes Write' :
@@ -102,6 +104,10 @@ function fixture(extraPolicy = false, legacyPresent = false) {
     if (path === `${studioPath}/versions/${newVersion}`) {
       return Response.json({ success: true, result: { id: newVersion,
         resources: { bindings: secretNames.map(name => ({ name, type: 'secret_text' })) } } });
+    }
+    if (path === `${studioPath}/versions/${oldVersion}`) {
+      return Response.json({ success: true, result: { id: oldVersion,
+        resources: { bindings: [] } } });
     }
     throw Error('unexpected mocked Cloudflare request');
   }) as typeof fetch;
@@ -133,6 +139,31 @@ test('expanded Cloudflare policy blocks storage after creation', async () => {
   assert(!f.saved.has('native-studio/publish-token-v1.json'));
 });
 
+for (const [label, restrictions] of Object.entries({
+  ip: { condition: { request_ip: { in: ['192.0.2.0/24'] } } },
+  expiry: { expires_on: '2030-01-01T00:00:00Z' },
+  activation: { not_before: '2026-01-01T00:00:00Z' },
+})) test(`${label} restriction blocks sealing even with exact permissions`, async () => {
+  const f = fixture(false, false, restrictions);
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000),
+  /native_studio_publish_token_scope_mismatch/);
+  assert.equal(f.creates(), 1);
+  assert(!f.saved.has('native-studio/publish-token-v1.json'));
+});
+
+test('later provider restriction blocks reuse of a sealed token', async () => {
+  const restrictions: Record<string, unknown> = {};
+  const f = fixture(false, false, restrictions);
+  await ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000);
+  restrictions.condition = { request_ip: { in: ['192.0.2.0/24'] } };
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 2000),
+  /native_studio_publish_token_scope_mismatch/);
+  assert.equal(f.creates(), 1);
+});
+
 test('existing manual token remains untouched while a separate managed token is sealed', async () => {
   const f = fixture(false, true);
   const issued = await ensureNativeStudioPublishToken(scope, accountId, zoneId,
@@ -144,7 +175,7 @@ test('existing manual token remains untouched while a separate managed token is 
   assert(!JSON.stringify([...f.saved.values()]).includes(value));
 });
 
-test('existing manual token survives managed issuance and active Studio secret installation', async () => {
+test('a separate manual account token survives managed issuance on a Studio with no old secret', async () => {
   const f = fixture(false, true);
   const client = { from(table: string) {
     const query = { eq() { return query; }, async maybeSingle() {

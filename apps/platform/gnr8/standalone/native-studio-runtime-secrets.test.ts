@@ -61,13 +61,21 @@ test('saved provider token reaches only the matching Worker secret patch', async
   await saveNativeStudioPublishToken(scope, vault, publishToken, master);
   const runtime = await nativeStudioRuntimeSecrets(scope, vault, shared, accountId, master);
   let patched: unknown;
-  const transport = (async (_url: string, init: RequestInit) => {
+  const transport = (async (url: string, init: RequestInit) => {
     if (init.method === 'PATCH') {
       patched = JSON.parse(String(init.body));
       return Response.json({ success: true, result: {} });
     }
-    return Response.json({ success: true, result: Object.keys(runtime)
-      .map(name => ({ name, type: 'secret_text' })) });
+    return Response.json({ success: true, result:
+      url.endsWith('/deployments?per_page=1')
+        ? { deployments: [{ versions: [{ version_id: patched
+          ? '44444444-4444-4444-8444-444444444444'
+          : '33333333-3333-4333-8333-333333333333', percentage: 100 }] }] }
+        : { id: url.endsWith('/versions/33333333-3333-4333-8333-333333333333')
+          ? '33333333-3333-4333-8333-333333333333'
+          : '44444444-4444-4444-8444-444444444444',
+          resources: { bindings: patched ? Object.keys(runtime)
+            .map(name => ({ name, type: 'secret_text' })) : [] } } });
   }) as typeof fetch;
   const result = await installNativeStudioSecrets(scope, accountId,
     'central-cloudflare-setup-token', runtime, transport);

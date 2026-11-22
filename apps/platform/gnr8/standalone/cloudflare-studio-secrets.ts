@@ -62,6 +62,16 @@ export async function installNativeStudioSecrets(
     return deployments.deployments[0].versions[0].version_id as string;
   }
   const previousVersionId = await activeVersionId();
+  const previousVersion = await read(`/versions/${previousVersionId}`);
+  if (!object(previousVersion) || previousVersion.id !== previousVersionId ||
+      !object(previousVersion.resources) ||
+      !Array.isArray(previousVersion.resources.bindings))
+    throw Error('native_studio_secret_readback_failed');
+  // This first-install path cannot recover the value of an existing secret.
+  // Existing Studios need a separate, verified migration before replacement.
+  if (previousVersion.resources.bindings.some((item: unknown) =>
+    object(item) && item.name === 'PUBLISH_CLOUDFLARE_API_TOKEN'))
+    throw Error('native_studio_existing_publish_secret_requires_cutover');
   const patch = await transport(`${url}/secrets-bulk`, {
     method: 'PATCH', redirect: 'error', signal: AbortSignal.timeout(30_000),
     headers: { ...headers, 'content-type': 'application/json' },
@@ -98,41 +108,81 @@ export async function inspectNativeStudioRecoveryBindings(
   accountId: string,
   setupToken: string,
   previousVersionId: string | null,
+  expected: Readonly<{ workerId: string; domain: string; repository: string }>,
   transport: typeof fetch = fetch,
 ) {
   if (!scope || [scope.agencyId, scope.clientId, scope.siteId]
       .some(value => typeof value !== 'string' || !uuid.test(value)) ||
       !/^[a-f0-9]{32}$/.test(accountId) ||
       typeof setupToken !== 'string' || setupToken.length < 16 || /\s/.test(setupToken) ||
+      !expected || !/^[a-f0-9]{32}$/.test(expected.workerId) ||
+      !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(expected.domain) ||
+      !/^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(expected.repository) ||
       (previousVersionId !== null &&
         (typeof previousVersionId !== 'string' || !uuid.test(previousVersionId))))
     throw Error('native_studio_recovery_inspection_invalid');
   const worker = `gnr8-${scope.siteId}-studio`;
   if (previousVersionId === null)
     return { state: 'no-reference' as const, worker };
-  const response = await transport(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}` +
-      `/workers/scripts/${worker}/versions/${previousVersionId}`,
-    { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
-      headers: { authorization: `Bearer ${setupToken}`, accept: 'application/json' } },
-  );
-  if (response.status === 404)
-    return { state: 'version-missing' as const, worker, versionId: previousVersionId };
-  if (!response.ok) throw Error('native_studio_recovery_inspection_failed');
-  let body: unknown;
-  try { body = await response.json(); }
-  catch { throw Error('native_studio_recovery_inspection_failed'); }
-  if (!object(body) || body.success !== true || !object(body.result) ||
-      body.result.id !== previousVersionId || !object(body.result.resources) ||
-      !Array.isArray(body.result.resources.bindings))
+  async function read(path: string, allowMissing = false): Promise<unknown> {
+    const response = await transport(`https://api.cloudflare.com/client/v4` +
+      `/accounts/${accountId}${path}`, {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: { authorization: `Bearer ${setupToken}`, accept: 'application/json' },
+    });
+    if (allowMissing && response.status === 404) return null;
+    if (!response.ok) throw Error('native_studio_recovery_inspection_failed');
+    let body: unknown;
+    try { body = await response.json(); }
+    catch { throw Error('native_studio_recovery_inspection_failed'); }
+    if (!object(body) || body.success !== true)
+      throw Error('native_studio_recovery_inspection_failed');
+    return body.result;
+  }
+  const identity = await read(`/workers/workers/${worker}`);
+  if (!object(identity) || identity.name !== worker || identity.id !== expected.workerId ||
+      !object(identity.subdomain) || identity.subdomain.enabled !== false ||
+      identity.subdomain.previews_enabled !== false)
     throw Error('native_studio_recovery_inspection_failed');
-  const bindings: unknown[] = body.result.resources.bindings;
+  const version = await read(`/workers/scripts/${worker}/versions/${previousVersionId}`, true);
+  if (version === null)
+    return { state: 'version-missing' as const, worker, versionId: previousVersionId };
+  if (!object(version) || version.id !== previousVersionId ||
+      !object(version.resources) || !Array.isArray(version.resources.bindings))
+    throw Error('native_studio_recovery_inspection_failed');
+  const bindings: unknown[] = version.resources.bindings;
   const missingSecretNames = names.filter(name => {
     const matches = bindings.filter(item => object(item) && item.name === name);
     return matches.length !== 1 || !object(matches[0]) ||
       matches[0].type !== 'secret_text';
   });
-  return { state: missingSecretNames.length === 0
+  const exact = (name: string, matches: (binding: Record<string, unknown>) => boolean) => {
+    const found = bindings.filter(item => object(item) && item.name === name);
+    return found.length === 1 && object(found[0]) && matches(found[0]);
+  };
+  const required = [
+    ['DRAFTS', (item: Record<string, unknown>) => item.type === 'r2_bucket' &&
+      item.bucket_name === `gnr8-${scope.siteId}-drafts`],
+    ['PREVIEW', (item: Record<string, unknown>) =>
+      item.type === 'durable_object_namespace' && item.class_name === 'PreviewContainer' &&
+      (item.script_name === undefined || item.script_name === worker)],
+    ['ASSETS', (item: Record<string, unknown>) => item.type === 'assets'],
+    ['STUDIO_ORIGIN', (item: Record<string, unknown>) =>
+      item.type === 'plain_text' && item.text === `https://${expected.domain}`],
+    ['PREVIEW_ORIGIN', (item: Record<string, unknown>) =>
+      item.type === 'plain_text' && item.text === `https://preview.${expected.domain}`],
+    ['SITE_DEPLOYMENT_URL', (item: Record<string, unknown>) =>
+      item.type === 'plain_text' && item.text === `https://${expected.domain}/__studio-deployment`],
+    ['EDITOR_ACCESS', (item: Record<string, unknown>) =>
+      item.type === 'plain_text' && item.text === 'repository'],
+    ['EDITOR_GITHUB_IDS', (item: Record<string, unknown>) =>
+      item.type === 'plain_text' && item.text === ''],
+    ['GITHUB_REPOSITORY', (item: Record<string, unknown>) =>
+      item.type === 'plain_text' && item.text === expected.repository],
+  ] as const;
+  const missingBindingNames = required.filter(([name, match]) => !exact(name, match))
+    .map(([name]) => name);
+  return { state: missingSecretNames.length === 0 && missingBindingNames.length === 0
     ? 'complete-bindings' as const : 'incomplete-bindings' as const,
-    worker, versionId: previousVersionId, missingSecretNames };
+    worker, versionId: previousVersionId, missingSecretNames, missingBindingNames };
 }

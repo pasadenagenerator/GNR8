@@ -83,7 +83,8 @@ export class CloudflarePublishTokenProvider implements PublishTokenProvider {
     const detail = await readCloudflarePublishTokenDetail(this.accountId,
       tokenId, this.tokenManagerCredential, this.transport);
     const expected = expectedPolicies(target, workerId);
-    if (detail.name !== target.name || detail.policies.length !== 2 ||
+    if (detail.name !== target.name || detail.hasRestrictions ||
+        detail.policies.length !== 2 ||
         !expected.every(policy => detail.policies.some(actual =>
           actual.effect === policy.effect && actual.permissionGroups.length === 1 &&
           actual.permissionGroups[0]?.id === policy.permission_groups[0].id &&

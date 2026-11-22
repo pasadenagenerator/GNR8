@@ -13,6 +13,7 @@ export type CloudflarePublishTokenDetail = Readonly<{
   name: string;
   status: 'active' | 'disabled' | 'expired';
   policies: readonly CloudflarePublishTokenPolicy[];
+  hasRestrictions: boolean;
 }>;
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -60,5 +61,9 @@ export async function readCloudflarePublishTokenDetail(
     };
   });
   return { id: tokenId, name: body.result.name,
-    status: body.result.status as CloudflarePublishTokenDetail['status'], policies };
+    status: body.result.status as CloudflarePublishTokenDetail['status'], policies,
+    // A token that works from the provisioner may fail in the Studio Worker
+    // when IP or time restrictions exist. Only null/absent means unrestricted.
+    hasRestrictions: body.result.condition != null ||
+      body.result.expires_on != null || body.result.not_before != null };
 }
