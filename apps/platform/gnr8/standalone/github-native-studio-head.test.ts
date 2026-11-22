@@ -36,6 +36,17 @@ test('checks exact private repository ID and branch commit without writes', asyn
     '/repos/example/site/git/ref/heads/codex/native-stacki']);
 });
 
+test('accepts the longer stateless installation-token format', async () => {
+  const f = fixture();
+  const longToken = 'ghs_123456.' + 'a'.repeat(500) + '.' + 'b'.repeat(500);
+  const transport = (async (url: string, options: RequestInit) => {
+    assert.equal(new Headers(options.headers).get('authorization'), `Bearer ${longToken}`);
+    return f.transport(url, { ...options, headers: {
+      ...Object.fromEntries(new Headers(options.headers)), authorization: `Bearer ${credential}` } });
+  }) as typeof fetch;
+  assert.equal((await inspectGitHubNativeStudioHead(site, longToken, transport)).commit, commit);
+});
+
 test('wrong repository, missing branch or non-commit ref fail closed', async () => {
   const f = fixture();
   (f.result['/repos/example/site'] as { id: number }).id = 43;

@@ -2,7 +2,9 @@ import 'server-only';
 
 const REPOSITORY = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 const BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
-const TOKEN = /^[A-Za-z0-9_]{30,255}$/;
+// GitHub's stateless installation tokens can be JWT-sized, not 40 characters.
+export const isGitHubInstallationToken = (value: string) =>
+  /^ghs_[A-Za-z0-9._-]{20,4092}$/.test(value);
 const COMMIT = /^[a-f0-9]{40,64}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -16,7 +18,7 @@ export async function inspectGitHubNativeStudioHead(site: {
       !Number.isSafeInteger(Number(site.repositoryId)) ||
       !BRANCH.test(site.branch) || site.branch.includes('..') ||
       site.branch.split('/').some(part => !part || part.startsWith('.') || part.endsWith('.')) ||
-      !TOKEN.test(credential))
+      !isGitHubInstallationToken(credential))
     throw Error('native_studio_github_head_input_invalid');
   const [owner, repo] = site.repository.split('/');
   const root = `https://api.github.com/repos/${encodeURIComponent(owner!)}/${encodeURIComponent(repo!)}`;

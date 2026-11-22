@@ -470,8 +470,16 @@ sign-in. A stale ready binding blocks this fallback; reservation and source
 preparation alone never expose a URL. The flag defaults off. A read-only
 GitHub installation-token check now verifies the private repository ID and
 the exact branch head against the prepared commit. The recorder still has no
-hosted caller, no supplied short-lived GitHub installation token, and no
-connected first-deployment job; it cannot yet produce a receipt in production.
+hosted caller or connected first-deployment job; it cannot yet produce a
+receipt in production. A central, trusted token issuer is now available for
+that later job. It signs a short-lived GitHub App JWT with the shared private
+key, requests `contents:write` only for the current bound repository ID,
+checks the returned repository and permissions, and re-reads the target before
+handing the token to the job. It has only mocked local coverage and no hosted
+caller. The read-only head check accepts GitHub's longer stateless installation
+tokens. Before rollout, verify that the unchanged Stacki release also accepts
+the actual token length: the retained 1.4.8 source caps its parsed token at
+500 characters, so a longer live token may break native Push to GitHub.
 Mocked local tests do not establish hosted readiness.
 
 The unchanged Stacki OAuth callback returns to the site's own `/studio` and
