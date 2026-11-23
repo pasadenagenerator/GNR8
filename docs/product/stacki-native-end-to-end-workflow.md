@@ -1256,3 +1256,35 @@ repository access. Identity mapping, native role policy and hosted permission
 checks are therefore required before claiming that every GNR8 authorized owner
 can edit. The four previously prepared Workers do not receive the new AI vars
 or Stacki release merely because the preparation template changed.
+
+## Native owner access and publication boundary (2026-11-23)
+
+The new-site UI already consumes a verified `first-open` receipt. An owner
+with GNR8 publish permission sees **Odpri Stacki za prvo prijavo** on the
+Design tab, scoped to the current site and working host. This permits first
+sign-in; it does not mark the editor ready. There is no trusted writer for
+`gnr8_native_studio_bindings` after authenticated editor use. A durable ready
+binding requires evidence of the actual signed-in editor, current owner
+permission and native actions, then a protected one-time write. A public login
+page and Cloudflare control-plane readback do not supply that evidence.
+
+The unchanged Stacki 1.4.13 supports Cloudflare Access, Google, OIDC and
+passkey authentication with native `.stacki/roles.json`. Its GitHub App can
+read and push the repository for an editor without personal GitHub write
+permission. The current GNR8 template and hosted readback still require
+`EDITOR_ACCESS=repository`, so this capability is inactive. A fail-closed
+transition must map current GNR8 owner/admin membership by user ID to a
+verified identity at the chosen provider, create a site-bound roles file with
+at least one admin, and reconcile membership changes. An absent roles file
+can elevate an admitted editor in native Stacki; email domains or a broad
+authenticated setting must not replace the membership check. Native role
+caching and GitHub outage behavior need explicit revocation acceptance.
+
+Native `github` Push and native `hosting` Publish are separate in 1.4.13.
+The former does not deploy the website; the latter builds and deploys with
+the bound root `wrangler.json` without a GitHub commit. A disconnected public
+Workers Builds configuration is valid and avoids push-triggered publication;
+the optional Builds connection adapter is not required for new-site Publish.
+Existing CHS/ViroiDoc public Builds triggers still need correction before
+their native source branches are pushed. Exact hosted domain, owner login,
+AI Apply, Push and Publish acceptance remains outstanding.
