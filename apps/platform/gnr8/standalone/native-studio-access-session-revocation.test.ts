@@ -38,7 +38,7 @@ function fixture(lost = false) {
     return Response.json({ success: true, result: {} });
   }) as typeof fetch;
   const input = { scope, client: {} as SupabaseClient, store,
-    accountId: 'a'.repeat(32), appId, credential,
+    accountId: 'a'.repeat(32), zoneId: 'd'.repeat(32), appId, credential,
     actor: '44444444-4444-4444-8444-444444444444',
     previousCommit: 'b'.repeat(40),
     previousPrincipals: ['access:admin@example.com', 'access:owner@example.com'],

@@ -6,11 +6,10 @@ import type { NativeStudioScope } from './native-studio-binding-store';
 import { readNativeStudioBootstrapTarget } from './native-studio-configured-resource-reservation';
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
 import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
+import { readVerifiedNativeStudioAccessAppV2Binding } from './native-studio-access-app-reservation';
 import { inspectNativeStudioAccessPolicyReadback } from './cloudflare-studio-access-policy';
 
 const KEY = 'native-studio/access-policy-create-intent-v1.json';
-const APP_INTENT = 'native-studio/access-app-create-intent-v1.json';
-const APP_BOUND = 'native-studio/access-app-bound-v1.json';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const HEX32 = /^[a-f0-9]{32}$/;
 const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
@@ -29,6 +28,7 @@ const defaults = {
   target: readNativeStudioBootstrapTarget,
   candidates: readCurrentNativeStudioAccessCandidates,
   app: inspectCloudflareStudioAccessApp,
+  binding: readVerifiedNativeStudioAccessAppV2Binding,
 };
 
 function principalsFrom(candidates: Candidates): string[] {
@@ -83,29 +83,30 @@ async function readPolicyList(url: string, credential: string,
  */
 export async function ensureNativeStudioAccessOwnerPolicy(input: {
   scope: NativeStudioScope; client: SupabaseClient; accountId: string;
-  appId: string; credential: string;
+  zoneId: string; appId: string; credential: string;
   store: Pick<PublicationStore, 'read' | 'claim'>;
 }, transport: typeof fetch = fetch, deps = defaults) {
-  const { scope, client, accountId, appId, credential, store } = input ?? {} as typeof input;
+  const { scope, client, accountId, zoneId, appId, credential, store } = input ?? {} as typeof input;
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId].every(id =>
       typeof id === 'string' && UUID.test(id)) || !client ||
-      !HEX32.test(accountId) || !APP_ID.test(appId) || !TOKEN.test(credential) ||
+      !HEX32.test(accountId) || !HEX32.test(zoneId) ||
+      !APP_ID.test(appId) || !TOKEN.test(credential) ||
       !store || typeof store.read !== 'function' ||
       typeof store.claim !== 'function' || typeof transport !== 'function')
     throw Error('native_studio_access_policy_input_invalid');
-  const target = await deps.target(scope, client, accountId);
-  const appIntent = await store.read<Record<string, unknown>>(APP_INTENT);
-  const appBound = await store.read<Record<string, unknown>>(APP_BOUND);
-  if (!object(appIntent) || !object(appIntent.target) ||
-      !same(appIntent.target, target) || !same(appIntent.target.scope, scope) ||
-      !object(appBound) || appBound.identity !== appIntent.identity ||
-      appBound.appId !== appId)
+  const binding = await deps.binding({ scope, client, accountId, zoneId, store },
+    { target: deps.target });
+  const { target } = binding;
+  if (binding.appId !== appId)
     throw Error('native_studio_access_policy_app_unbound');
   const app = await deps.app(scope, { siteId: scope.siteId,
-    studioOrigin: target.studioOrigin, accountId }, appId, credential, transport);
+    studioOrigin: target.studioOrigin, accountId }, appId, credential, transport,
+    'studio-and-preview');
   if (app.state !== 'observed-access-app' || app.appId !== appId ||
       app.studioOrigin !== target.studioOrigin || app.accountId !== accountId ||
-      appBound.aud !== app.aud || appBound.teamDomain !== app.teamDomain)
+      binding.aud !== app.aud || binding.teamDomain !== app.teamDomain ||
+      app.protection !== 'studio-and-preview' ||
+      app.previewOrigin !== binding.previewOrigin)
     throw Error('native_studio_access_policy_app_unverified');
   const initial = principalsFrom(await deps.candidates(scope, client));
   const identity = fingerprint({ scope, target, accountId, appId, principals: initial });

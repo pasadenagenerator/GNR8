@@ -10,7 +10,9 @@ const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   siteId: '33333333-3333-4333-8333-333333333333' };
 const actor = '44444444-4444-4444-8444-444444444444';
 const accountId = 'a'.repeat(32);
+const zoneId = 'e'.repeat(32);
 const appId = '55555555-5555-4555-8555-555555555555';
+const previewOrigin = 'https://preview.site.app.pasadenagenerator.com';
 const policyId = '66666666-6666-4666-8666-666666666666';
 const previousCommit = 'b'.repeat(40);
 const credential = 'access-manager-token-value-1234567890';
@@ -24,11 +26,11 @@ const client = {} as SupabaseClient;
 function fixture(options: { lostResponse?: boolean; omitWrite?: boolean;
   externallyChanged?: boolean; memberChangeAt?: number } = {}) {
   const saved = new Map<string, unknown>([
-    ['native-studio/access-app-create-intent-v1.json',
+    ['native-studio/access-app-create-intent-v2.json',
       { identity: 'd'.repeat(64), target }],
-    ['native-studio/access-app-bound-v1.json',
+    ['native-studio/access-app-bound-v2.json',
       { identity: 'd'.repeat(64), appId, aud: 'c'.repeat(64),
-        teamDomain: 'gnr8.cloudflareaccess.com' }],
+        teamDomain: 'gnr8.cloudflareaccess.com', previewOrigin }],
     ['native-studio/access-policy-create-intent-v1.json',
       { identity: fingerprint({ scope, target, accountId, appId,
         principals: previous }), scope, target, accountId, appId, principals: previous }],
@@ -44,14 +46,27 @@ function fixture(options: { lostResponse?: boolean; omitWrite?: boolean;
   };
   const deps = {
     target: async () => target,
+    binding: async () => {
+      if (saved.has('native-studio/access-app-create-intent-v1.json') ||
+          saved.has('native-studio/access-app-bound-v1.json') ||
+          !saved.has('native-studio/access-app-create-intent-v2.json') ||
+          !saved.has('native-studio/access-app-bound-v2.json'))
+        throw Error('native_studio_access_app_v2_binding_unverified');
+      return { target, appId, aud: 'c'.repeat(64),
+        teamDomain: 'gnr8.cloudflareaccess.com', previewOrigin };
+    },
     candidates: async () => {
       if (++candidateReads >= (options.memberChangeAt ?? Infinity))
         return [{ principal: 'access:other@example.com' }];
       return desired.map(principal => ({ principal }));
     },
-    app: async () => ({ state: 'observed-access-app' as const,
+    app: async (...args: unknown[]) => {
+      assert.equal(args[5], 'studio-and-preview');
+      return { state: 'observed-access-app' as const,
       appId, accountId, studioOrigin: target.studioOrigin,
-      aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com' }),
+      aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com',
+      protection: 'studio-and-preview' as const, previewOrigin };
+    },
     actor: async () => { authorizations++; },
   };
   const transport = (async (url: string, init: RequestInit) => {
@@ -72,7 +87,7 @@ function fixture(options: { lostResponse?: boolean; omitWrite?: boolean;
         include: current.map(principal => ({ email: { email: principal.slice(7) } })) }],
       result_info: { page: 1, count: 1, total_count: 1, total_pages: 1 } });
   }) as typeof fetch;
-  const base = { scope, client, accountId, appId, credential, store };
+  const base = { scope, client, accountId, zoneId, appId, credential, store };
   const mutation = { ...base, actor, previousCommit, previousPrincipals: previous };
   return { saved, deps, transport, base, mutation,
     puts: () => puts, authorizations: () => authorizations };
@@ -117,8 +132,13 @@ test('stale members and externally changed policy stop before policy mutation', 
     foreign.transport, foreign.deps as any), /reconciliation_unowned_change/);
   assert.equal(foreign.puts(), 0);
   const unbound = fixture();
-  unbound.saved.delete('native-studio/access-app-bound-v1.json');
+  unbound.saved.delete('native-studio/access-app-bound-v2.json');
   await assert.rejects(reconcileNativeStudioAccessOwnerPolicy(unbound.mutation,
-    unbound.transport, unbound.deps as any), /reconciliation_binding_unverified/);
+    unbound.transport, unbound.deps as any), /binding_unverified/);
   assert.equal(unbound.puts(), 0);
+  const legacy = fixture();
+  legacy.saved.set('native-studio/access-app-bound-v1.json', { appId });
+  await assert.rejects(reconcileNativeStudioAccessOwnerPolicy(legacy.mutation,
+    legacy.transport, legacy.deps as any), /binding_unverified/);
+  assert.equal(legacy.puts(), 0);
 });

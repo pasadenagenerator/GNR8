@@ -11,11 +11,69 @@ import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app
 const HEX32 = /^[a-f0-9]{32}$/;
 const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
 const TOKEN = /^[A-Za-z0-9_-]{16,256}$/;
-const INTENT = 'native-studio/access-app-create-intent-v1.json';
-const BOUND = 'native-studio/access-app-bound-v1.json';
+export const ACCESS_APP_V2_INTENT = 'native-studio/access-app-create-intent-v2.json';
+export const ACCESS_APP_V2_BOUND = 'native-studio/access-app-bound-v2.json';
+const LEGACY_INTENT = 'native-studio/access-app-create-intent-v1.json';
+const LEGACY_BOUND = 'native-studio/access-app-bound-v1.json';
+const FORMAT = 'gnr8-native-studio-access-app:v2';
+const PROTECTION = 'studio-and-preview';
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+
+function v2Intent(scope: NativeStudioScope, target: Awaited<ReturnType<typeof readNativeStudioBootstrapTarget>>,
+  zoneId: string) {
+  const host = new URL(target.studioOrigin).hostname;
+  const name = `gnr8-${scope.siteId}-studio-access`;
+  const domain = `${host}/studio`;
+  const previewDomain = `preview.${host}`;
+  const previewOrigin = `https://${previewDomain}`;
+  const identity = createHash('sha256').update(JSON.stringify({
+    format: FORMAT, scope, accountId: target.accountId, zoneId,
+    studioOrigin: target.studioOrigin, repository: target.repository,
+    repositoryId: target.repositoryId, name, domain, previewDomain,
+  })).digest('hex');
+  return { intended: { format: FORMAT, identity, target, zoneId, name,
+    domain, previewDomain }, previewOrigin };
+}
+
+/** Verify the immutable dual-host app receipt against current site/repository
+ * binding. A prior single-host receipt is never silently promoted. */
+export async function readVerifiedNativeStudioAccessAppV2Binding(input: {
+  scope: NativeStudioScope; client: SupabaseClient; accountId: string;
+  zoneId: string; store: Pick<PublicationStore, 'read'>;
+}, deps: Pick<typeof defaults, 'target'> = defaults) {
+  const { scope, client, accountId, zoneId, store } = input ?? {} as typeof input;
+  if (!scope || !client || !HEX32.test(accountId) || !HEX32.test(zoneId) ||
+      !store || typeof store.read !== 'function')
+    throw Error('native_studio_access_app_v2_input_invalid');
+  const target = await deps.target(scope, client, accountId);
+  if (target.accountId !== accountId || !same(target.scope, scope) ||
+      !Number.isSafeInteger(target.repositoryId) || target.repositoryId <= 0)
+    throw Error('native_studio_access_app_v2_target_unverified');
+  const { intended, previewOrigin } = v2Intent(scope, target, zoneId);
+  const [legacyIntent, legacyBound, intent, bound] = await Promise.all([
+    store.read(LEGACY_INTENT), store.read(LEGACY_BOUND),
+    store.read(ACCESS_APP_V2_INTENT),
+    store.read<Record<string, unknown>>(ACCESS_APP_V2_BOUND),
+  ]);
+  if (legacyIntent || legacyBound)
+    throw Error('native_studio_access_app_v2_legacy_conflict');
+  if (!same(intent, intended) || !object(bound) ||
+      bound.identity !== intended.identity ||
+      typeof bound.appId !== 'string' || !APP_ID.test(bound.appId) ||
+      typeof bound.aud !== 'string' || !/^[a-f0-9]{64}$/.test(bound.aud) ||
+      typeof bound.teamDomain !== 'string' || !bound.teamDomain ||
+      bound.protection !== PROTECTION || bound.previewOrigin !== previewOrigin ||
+      !same(bound, { identity: intended.identity, appId: bound.appId,
+        aud: bound.aud, teamDomain: bound.teamDomain,
+        protection: PROTECTION, previewOrigin }))
+    throw Error('native_studio_access_app_v2_binding_unverified');
+  return { target, appId: bound.appId, aud: bound.aud as string,
+    teamDomain: bound.teamDomain as string, previewOrigin,
+    domain: intended.domain, previewDomain: intended.previewDomain,
+    name: intended.name, identity: intended.identity };
+}
 
 const defaults = {
   target: readNativeStudioBootstrapTarget,
@@ -43,20 +101,21 @@ export async function reserveNativeStudioAccessApp(input: {
       !Number.isSafeInteger(target.repositoryId) || target.repositoryId <= 0)
     throw Error('native_studio_access_app_reservation_target_unverified');
   const host = new URL(target.studioOrigin).hostname;
-  const name = `gnr8-${scope.siteId}-studio-access`;
-  const domain = `${host}/studio`;
-  const identity = createHash('sha256').update(JSON.stringify({
-    scope, accountId, zoneId, studioOrigin: target.studioOrigin,
-    repository: target.repository, repositoryId: target.repositoryId, name, domain,
-  })).digest('hex');
-  const intended = { identity, target, zoneId, name, domain };
-  const priorIntent = await store.read<typeof intended>(INTENT);
+  const { intended, previewOrigin } = v2Intent(scope, target, zoneId);
+  const { identity, name, domain, previewDomain } = intended;
+  const [legacyIntent, legacyBound, priorIntent, priorBound] = await Promise.all([
+    store.read(LEGACY_INTENT), store.read(LEGACY_BOUND),
+    store.read<typeof intended>(ACCESS_APP_V2_INTENT),
+    store.read<{ identity: string; appId: string; aud: string;
+      teamDomain: string; protection: string; previewOrigin: string }>(ACCESS_APP_V2_BOUND),
+  ]);
+  if (legacyIntent || legacyBound)
+    throw Error('native_studio_access_app_reservation_legacy_conflict');
   if (priorIntent && !same(priorIntent, intended))
     throw Error('native_studio_access_app_reservation_intent_conflict');
-  const priorBound = await store.read<{ identity: string; appId: string;
-    aud: string; teamDomain: string }>(BOUND);
   if (priorBound && (!priorIntent || priorBound.identity !== identity ||
-      !APP_ID.test(priorBound.appId)))
+      !APP_ID.test(priorBound.appId) ||
+      priorBound.protection !== PROTECTION || priorBound.previewOrigin !== previewOrigin))
     throw Error('native_studio_access_app_reservation_binding_conflict');
 
   async function inventories() {
@@ -77,8 +136,8 @@ export async function reserveNativeStudioAccessApp(input: {
   }
   const before = await inventories();
   const beforeId = exactApp(before.accountApps);
-  deps.overlap(before.accountApps, beforeId ?? null, host);
-  deps.overlap(before.zoneApps, null, host);
+  deps.overlap(before.accountApps, beforeId ?? null, host, previewDomain);
+  deps.overlap(before.zoneApps, null, host, previewDomain);
   if (priorBound && beforeId !== priorBound.appId)
     throw Error('native_studio_access_app_reservation_binding_conflict');
   if (!priorIntent && beforeId)
@@ -88,8 +147,8 @@ export async function reserveNativeStudioAccessApp(input: {
     const current = await deps.target(scope, client, accountId);
     if (!same(current, target))
       throw Error('native_studio_access_app_reservation_target_changed');
-    const won = await store.claim(INTENT, intended);
-    if (!same(await store.read<typeof intended>(INTENT), intended))
+    const won = await store.claim(ACCESS_APP_V2_INTENT, intended);
+    if (!same(await store.read<typeof intended>(ACCESS_APP_V2_INTENT), intended))
       throw Error('native_studio_access_app_reservation_intent_conflict');
     if (!won) throw Error('native_studio_access_app_reservation_pending');
     // Minimal self-hosted app remains default-deny until a separately
@@ -99,7 +158,9 @@ export async function reserveNativeStudioAccessApp(input: {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
         headers: { authorization: `Bearer ${credential}`, accept: 'application/json',
           'content-type': 'application/json' },
-        body: JSON.stringify({ type: 'self_hosted', name, domain }),
+        body: JSON.stringify({ type: 'self_hosted', name, domain,
+          destinations: [{ type: 'public', uri: `${target.studioOrigin}/studio` },
+            { type: 'public', uri: `${previewOrigin}/` }] }),
       });
     } catch { /* A lost response can follow a successful create. Read back. */ }
   }
@@ -107,12 +168,14 @@ export async function reserveNativeStudioAccessApp(input: {
   const after = await inventories();
   const appId = exactApp(after.accountApps);
   if (!appId) throw Error('native_studio_access_app_reservation_pending');
-  deps.overlap(after.accountApps, appId, host);
-  deps.overlap(after.zoneApps, null, host);
+  deps.overlap(after.accountApps, appId, host, previewDomain);
+  deps.overlap(after.zoneApps, null, host, previewDomain);
   const app = await deps.app(scope, { siteId: scope.siteId,
-    studioOrigin: target.studioOrigin, accountId }, appId, credential, transport);
+    studioOrigin: target.studioOrigin, accountId }, appId, credential, transport,
+  PROTECTION);
   if (app.state !== 'observed-access-app' || app.appId !== appId ||
-      app.studioOrigin !== target.studioOrigin || app.accountId !== accountId)
+      app.studioOrigin !== target.studioOrigin || app.accountId !== accountId ||
+      app.protection !== PROTECTION || app.previewOrigin !== previewOrigin)
     throw Error('native_studio_access_app_reservation_readback_unverified');
   if (!priorBound) {
     let body: unknown;
@@ -135,14 +198,16 @@ export async function reserveNativeStudioAccessApp(input: {
   }
   const latest = await deps.target(scope, client, accountId);
   if (!same(latest, target)) throw Error('native_studio_access_app_reservation_target_changed');
-  const bound = { identity, appId, aud: app.aud, teamDomain: app.teamDomain };
+  const bound = { identity, appId, aud: app.aud, teamDomain: app.teamDomain,
+    protection: PROTECTION, previewOrigin };
   if (priorBound && !same(priorBound, bound))
     throw Error('native_studio_access_app_reservation_binding_conflict');
   if (!priorBound) {
-    await store.claim(BOUND, bound);
-    if (!same(await store.read<typeof bound>(BOUND), bound))
+    await store.claim(ACCESS_APP_V2_BOUND, bound);
+    if (!same(await store.read<typeof bound>(ACCESS_APP_V2_BOUND), bound))
       throw Error('native_studio_access_app_reservation_binding_conflict');
   }
   return { state: 'access-app-bound' as const, target,
-    zoneId, name, domain, appId, aud: app.aud, teamDomain: app.teamDomain };
+    zoneId, name, domain, previewDomain, previewOrigin, protection: PROTECTION,
+    appId, aud: app.aud, teamDomain: app.teamDomain };
 }

@@ -8,7 +8,9 @@ const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
   siteId: '33333333-3333-4333-8333-333333333333' };
 const accountId = 'a'.repeat(32);
+const zoneId = 'e'.repeat(32);
 const appId = '44444444-4444-4444-8444-444444444444';
+const previewOrigin = 'https://preview.site.app.pasadenagenerator.com';
 const credential = 'read-token-value-1234567890';
 const target = { scope, accountId,
   studioOrigin: 'https://site.app.pasadenagenerator.com',
@@ -22,11 +24,11 @@ function fixture(options: { lostResponse?: boolean; omitWrite?: boolean;
   afterClaimChange?: boolean; afterPostChange?: boolean;
   emptyPagesZero?: boolean } = {}) {
   const saved = new Map<string, unknown>([
-    ['native-studio/access-app-create-intent-v1.json',
+    ['native-studio/access-app-create-intent-v2.json',
       { identity: 'd'.repeat(64), target }],
-    ['native-studio/access-app-bound-v1.json',
+    ['native-studio/access-app-bound-v2.json',
       { identity: 'd'.repeat(64), appId, aud: 'b'.repeat(64),
-        teamDomain: 'gnr8.cloudflareaccess.com' }],
+        teamDomain: 'gnr8.cloudflareaccess.com', previewOrigin }],
   ]);
   let principals: NativeStudioAccessCandidate[] = [owner];
   let policy = options.existingPolicy === true;
@@ -36,6 +38,15 @@ function fixture(options: { lostResponse?: boolean; omitWrite?: boolean;
     principal: 'access:other@example.com' as const };
   const deps = {
     target: async () => target,
+    binding: async () => {
+      if (saved.has('native-studio/access-app-create-intent-v1.json') ||
+          saved.has('native-studio/access-app-bound-v1.json') ||
+          !saved.has('native-studio/access-app-create-intent-v2.json') ||
+          !saved.has('native-studio/access-app-bound-v2.json'))
+        throw Error('native_studio_access_app_v2_binding_unverified');
+      return { target, appId, aud: 'b'.repeat(64),
+        teamDomain: 'gnr8.cloudflareaccess.com', previewOrigin };
+    },
     candidates: async () => {
       candidateReads++;
       if (options.beforeIntentChange && candidateReads >= 2)
@@ -46,10 +57,14 @@ function fixture(options: { lostResponse?: boolean; omitWrite?: boolean;
         principals = [other];
       return principals;
     },
-    app: async () => ({ state: 'observed-access-app' as const, appId,
+    app: async (...args: unknown[]) => {
+      assert.equal(args[5], 'studio-and-preview');
+      return { state: 'observed-access-app' as const, appId,
       studioOrigin: target.studioOrigin, accountId,
       scope, siteId: scope.siteId, aud: 'b'.repeat(64),
-      teamDomain: 'gnr8.cloudflareaccess.com' }),
+      teamDomain: 'gnr8.cloudflareaccess.com',
+      protection: 'studio-and-preview' as const, previewOrigin };
+    },
   };
   const store = {
     read: async <T>(key: string) => (saved.get(key) ?? null) as T | null,
@@ -79,7 +94,7 @@ function fixture(options: { lostResponse?: boolean; omitWrite?: boolean;
         total_count: policy ? 1 : 0,
         total_pages: policy ? 1 : options.emptyPagesZero ? 0 : 1 } });
   }) as typeof fetch;
-  const input = { scope, client, accountId, appId, credential, store };
+  const input = { scope, client, accountId, zoneId, appId, credential, store };
   return { input, deps, transport, saved, posts: () => posts };
 }
 
@@ -110,10 +125,15 @@ test('lost response reconciles once; absent policy stays pending without retry',
 
 test('does not adopt an unowned policy or create with changed members', async () => {
   const unbound = fixture();
-  unbound.saved.delete('native-studio/access-app-bound-v1.json');
+  unbound.saved.delete('native-studio/access-app-bound-v2.json');
   await assert.rejects(ensureNativeStudioAccessOwnerPolicy(unbound.input,
-    unbound.transport, unbound.deps as any), /app_unbound/);
+    unbound.transport, unbound.deps as any), /binding_unverified/);
   assert.equal(unbound.posts(), 0);
+  const legacy = fixture();
+  legacy.saved.set('native-studio/access-app-bound-v1.json', { appId });
+  await assert.rejects(ensureNativeStudioAccessOwnerPolicy(legacy.input,
+    legacy.transport, legacy.deps as any), /binding_unverified/);
+  assert.equal(legacy.posts(), 0);
   const unowned = fixture({ existingPolicy: true });
   await assert.rejects(ensureNativeStudioAccessOwnerPolicy(unowned.input,
     unowned.transport, unowned.deps as any), /native_studio_access_policy_unowned/);

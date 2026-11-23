@@ -7,6 +7,9 @@ const currentId = '11111111-1111-4111-8111-111111111111';
 const foreignId = '22222222-2222-4222-8222-222222222222';
 const current = { id: currentId, type: 'self_hosted', domain: `${host}/studio`,
   destinations: [{ type: 'public', uri: `https://${host}/studio` }] };
+const previewHost = `preview.${host}`;
+const dual = { ...current, destinations: [...current.destinations,
+  { type: 'public', uri: `https://${previewHost}/` }] };
 
 function inventory(apps: unknown[]) {
   return { success: true, result: apps, result_info: { page: 1,
@@ -22,6 +25,30 @@ test('accepts the sole exact app alongside unrelated Access applications', () =>
   assert.deepEqual(inspectNativeStudioAccessApplicationInventory(body, currentId, host),
     { state: 'observed-no-access-overlap', appId: currentId, studioHost: host,
       applicationsChecked: 3 });
+});
+
+test('dual-host inventory rejects overrides on either protected domain', () => {
+  const exact = inventory([dual, { id: foreignId, type: 'self_hosted',
+    domain: 'other.example.com/studio' }]);
+  assert.deepEqual(inspectNativeStudioAccessApplicationInventory(exact,
+    currentId, host, previewHost), {
+    state: 'observed-no-access-overlap', appId: currentId,
+    studioHost: host, previewHost, applicationsChecked: 2,
+  });
+  for (const foreign of [
+    { domain: previewHost },
+    { domain: `${previewHost}/studio` },
+    { domain: `*.${host}/other` },
+    { destinations: [{ type: 'public', uri: `https://${previewHost}/api` }] },
+  ]) assert.throws(() => inspectNativeStudioAccessApplicationInventory(
+    inventory([dual, { id: foreignId, type: 'self_hosted', ...foreign }]),
+    currentId, host, previewHost), /native_studio_access_inventory_unverified/);
+  assert.throws(() => inspectNativeStudioAccessApplicationInventory(
+    inventory([current]), currentId, host, previewHost),
+  /native_studio_access_inventory_unverified/);
+  assert.throws(() => inspectNativeStudioAccessApplicationInventory(
+    inventory([dual, { ...dual, id: foreignId }]), currentId, host, previewHost),
+  /native_studio_access_inventory_unverified/);
 });
 
 test('rejects broad, overriding and wildcard routes on the editor host', () => {

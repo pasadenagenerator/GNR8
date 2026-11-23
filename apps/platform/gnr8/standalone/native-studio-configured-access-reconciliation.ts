@@ -9,15 +9,16 @@ import { revokeBoundNativeStudioAccessSessions } from './native-studio-access-se
 import { SCHEDULED_NATIVE_STUDIO_RECONCILIATION,
   type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
 import { fingerprint } from './publication-contract';
+import { readVerifiedNativeStudioAccessAppV2Binding } from './native-studio-access-app-reservation';
 
 type Environment = Record<string, string | undefined>;
 const HEX32 = /^[a-f0-9]{32}$/;
 const TOKEN = /^[A-Za-z0-9_-]{16,256}$/;
-const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
 
 const defaults = {
   store: (client: SupabaseClient, scope: NativeStudioScope, bucket: string) =>
     new SupabasePublicationStore(client, bucket, scope),
+  binding: readVerifiedNativeStudioAccessAppV2Binding,
   inspectRoles: inspectBoundNativeStudioGitHubRoles,
   policy: reconcileNativeStudioAccessOwnerPolicy,
   revokeSessions: revokeBoundNativeStudioAccessSessions,
@@ -37,29 +38,27 @@ export async function configuredNativeStudioAccessReconciliation(input: {
 deps = defaults) {
   const { scope, client, sourceId, actor } = input;
   const accountId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
+  const zoneId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID ?? '';
   const credential = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER ?? '';
   if (env.GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED !== '1')
     throw Error('native_studio_access_reconciliation_disabled');
   if (!scope || !client || !/^[a-f0-9]{64}$/.test(sourceId) ||
-      !HEX32.test(accountId) || !TOKEN.test(credential) ||
+      !HEX32.test(accountId) || !HEX32.test(zoneId) || !TOKEN.test(credential) ||
       typeof transport !== 'function')
     throw Error('native_studio_access_reconciliation_not_configured');
   const store = deps.store(client, scope,
     env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes');
-  const bound = await store.read<{ appId?: string }>(
-    'native-studio/access-app-bound-v1.json');
-  if (!bound || typeof bound.appId !== 'string' || !APP_ID.test(bound.appId))
-    throw Error('native_studio_access_reconciliation_app_unbound');
+  const bound = await deps.binding({ scope, client, accountId, zoneId, store });
   const previous = await deps.inspectRoles({ scope, client, store, sourceId, actor },
     env, transport);
-  const policyProof = await deps.policy({ scope, client, accountId,
+  const policyProof = await deps.policy({ scope, client, accountId, zoneId,
     appId: bound.appId, credential, store, actor,
     previousCommit: previous.headCommit,
     previousPrincipals: previous.previousPrincipals }, transport);
   const removed = previous.previousPrincipals.filter(principal =>
     !policyProof.principals.includes(principal));
   const sessions = removed.length ? await deps.revokeSessions({ scope, client,
-    store, accountId, appId: bound.appId, credential, actor,
+    store, accountId, zoneId, appId: bound.appId, credential, actor,
     previousCommit: previous.headCommit,
     previousPrincipals: previous.previousPrincipals, policyProof }, transport) : null;
   const roles = await deps.writeRoles({ scope, client, store, sourceId, actor,

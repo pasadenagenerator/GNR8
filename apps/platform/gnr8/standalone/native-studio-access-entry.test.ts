@@ -10,6 +10,7 @@ const accountId = 'a'.repeat(32), zoneId = 'c'.repeat(32);
 const appId = '44444444-4444-4444-8444-444444444444';
 const credential = 'read-token-value-1234567890';
 const studioOrigin = 'https://site.app.pasadenagenerator.com';
+const previewOrigin = 'https://preview.site.app.pasadenagenerator.com';
 const target = { siteId: scope.siteId, studioOrigin, accountId,
   repository: 'example/site', repositoryId: 42 };
 const members = [{ userId: '55555555-5555-4555-8555-555555555555',
@@ -35,14 +36,17 @@ function fixture() {
     candidates: async () => currentMembers,
     app: async () => ({ state: 'observed-access-app' as const,
       scope, siteId: scope.siteId, studioOrigin, accountId, appId,
-      aud: 'b'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com' }),
+      aud: 'b'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com',
+      protection: 'studio-and-preview' as const, previewOrigin }),
     inventoryRead: async (kind: string, id: string) => {
       assert.equal(id, kind === 'accounts' ? accountId : zoneId);
       return { success: true, result: [], result_info: { page: 1, count: 0,
         total_count: 0, total_pages: 1 } };
     },
-    inventory: (_body: unknown, currentId: string | null, host: string) => {
+    inventory: (_body: unknown, currentId: string | null, host: string,
+      previewHost: string) => {
       assert.equal(host, new URL(studioOrigin).hostname);
+      assert.equal(previewHost, new URL(previewOrigin).hostname);
       assert(currentId === appId || currentId === null);
       return { state: 'observed-no-access-overlap' as const,
         appId: currentId, studioHost: host, applicationsChecked: 0 };
@@ -54,6 +58,8 @@ function fixture() {
     },
     challenge: async () => ({ state: 'access-studio-challenge-observed' as const,
       studioOrigin }),
+    previewChallenge: async () => ({ state: 'access-preview-challenge-observed' as const,
+      previewOrigin }),
   };
   return { calls, transport, deps,
     setTarget: (value: typeof target) => { currentTarget = value; },
@@ -67,8 +73,17 @@ test('combines scoped Access app, exact current policy and login challenge', asy
     state: 'observed-access-entry', scope, studioOrigin,
     repository: target.repository, appId, aud: 'b'.repeat(64),
     teamDomain: 'gnr8.cloudflareaccess.com', memberCount: 1,
+    protection: 'studio-and-preview', previewOrigin,
   });
   assert.equal(f.calls.length, 1);
+});
+
+test('rejects a preview host that does not show its own Access challenge', async () => {
+  const f = fixture();
+  await assert.rejects(inspectBoundNativeStudioAccessEntry({ scope, client,
+    accountId, zoneId, appId, credential }, f.transport, {
+      ...f.deps, previewChallenge: async () => ({ state: 'public-preview', previewOrigin }),
+    } as any), /challenge_unverified/);
 });
 
 test('rejects a changed site or membership after provider readback', async () => {

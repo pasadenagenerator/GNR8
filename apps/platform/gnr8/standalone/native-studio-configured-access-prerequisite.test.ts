@@ -9,7 +9,8 @@ const legacySiteId = '2e7146cd-e516-4088-94ad-6cac90cb17f4';
 const newSiteId = '33333333-3333-4333-8333-333333333333';
 const client = {} as SupabaseClient;
 const env = { GNR8_NATIVE_STUDIO_ACCESS_SETUP_ENABLED: '1',
-  GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32) };
+  GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32),
+  GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID: 'b'.repeat(32) };
 
 function fixture(scope: { agencyId: string; clientId: string; siteId: string }) {
   const stored = new Map<string, unknown>();
@@ -22,7 +23,8 @@ function fixture(scope: { agencyId: string; clientId: string; siteId: string }) 
       assert.deepEqual(receivedScope, scope);
       assert.equal(receivedClient, client);
       assert.equal(accountId, env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID);
-      return { scope, accountId };
+      return { scope, accountId,
+        studioOrigin: 'https://site.app.pasadenagenerator.com' };
     },
     setup: async (receivedScope: typeof scope, receivedClient: SupabaseClient,
       receivedEnv: typeof env, receivedTransport: typeof fetch) => {
@@ -35,6 +37,14 @@ function fixture(scope: { agencyId: string; clientId: string; siteId: string }) 
         appId: '4'.repeat(32), aud: 'a'.repeat(64),
         teamDomain: 'gnr8.cloudflareaccess.com', memberCount: 1 };
     },
+    binding: async () => {
+      calls.push('binding');
+      return { target: { scope, accountId: env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID,
+        studioOrigin: 'https://site.app.pasadenagenerator.com' },
+        appId: '4'.repeat(32), aud: 'a'.repeat(64),
+        teamDomain: 'gnr8.cloudflareaccess.com',
+        previewOrigin: 'https://preview.site.app.pasadenagenerator.com' };
+    },
   };
   return { stored, calls, deps };
 }
@@ -44,7 +54,7 @@ test('new site always completes Access setup before source preparation', async (
   const f = fixture(scope);
   assert.equal((await ensureConfiguredNativeStudioAccessBeforeSource(
     scope, client, env, fetch, f.deps as any)).state, 'access-setup-observed');
-  assert.deepEqual(f.calls, ['target', 'setup']);
+  assert.deepEqual(f.calls, ['target', 'setup', 'binding']);
 });
 
 test('only a retained site without any Access evidence keeps repository mode', async () => {
@@ -55,9 +65,14 @@ test('only a retained site without any Access evidence keeps repository mode', a
   { state: 'retained-repository-source', scope });
   assert.deepEqual(f.calls, []);
   f.stored.set('native-studio/access-app-create-intent-v1.json', { identity: 'started' });
+  await assert.rejects(ensureConfiguredNativeStudioAccessBeforeSource(
+    scope, client, env, fetch, f.deps as any), /legacy_conflict/);
+  assert.deepEqual(f.calls, []);
+  f.stored.delete('native-studio/access-app-create-intent-v1.json');
+  f.stored.set('native-studio/access-app-create-intent-v2.json', { identity: 'started' });
   assert.equal((await ensureConfiguredNativeStudioAccessBeforeSource(
     scope, client, env, fetch, f.deps as any)).state, 'access-setup-observed');
-  assert.deepEqual(f.calls, ['target', 'setup']);
+  assert.deepEqual(f.calls, ['target', 'setup', 'binding']);
 });
 
 test('invalid scope or incomplete setup fails before source preparation', async () => {

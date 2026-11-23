@@ -40,7 +40,7 @@ export async function configuredNativeStudioAccessSetup(
   if (app.state !== 'access-app-bound' || app.target.scope.siteId !== scope.siteId ||
       app.target.accountId !== accountId)
     throw Error('native_studio_access_setup_app_unverified');
-  const policy = await deps.policy({ scope, client, accountId,
+  const policy = await deps.policy({ scope, client, accountId, zoneId,
     appId: app.appId, credential, store }, transport);
   if (policy.state !== 'observed-exact-access-policy' ||
       policy.appId !== app.appId || policy.memberCount < 1)

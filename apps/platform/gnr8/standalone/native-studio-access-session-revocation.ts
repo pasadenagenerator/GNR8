@@ -20,7 +20,7 @@ type PolicyProof = { state: 'observed-exact-access-policy'; appId: string;
   policyId: string; principals: string[] };
 type Store = Pick<PublicationStore, 'read' | 'claim' | 'put'>;
 type Input = { scope: NativeStudioScope; client: SupabaseClient; store: Store;
-  accountId: string; appId: string; credential: string;
+  accountId: string; zoneId: string; appId: string; credential: string;
   actor: NativeStudioReconciliationActor;
   previousCommit: string; previousPrincipals: string[]; policyProof: PolicyProof };
 const defaults = { policy: inspectCurrentNativeStudioAccessOwnerPolicy,
@@ -32,12 +32,13 @@ const defaults = { policy: inspectCurrentNativeStudioAccessOwnerPolicy,
  * revoke API accepted the request, not that a preview host is protected. */
 export async function revokeBoundNativeStudioAccessSessions(input: Input,
   transport: typeof fetch = fetch, deps = defaults) {
-  const { scope, client, store, accountId, appId, credential, actor,
+  const { scope, client, store, accountId, zoneId, appId, credential, actor,
     previousCommit, previousPrincipals, policyProof } = input ?? {} as Input;
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId].every(value =>
       typeof value === 'string' && UUID.test(value)) || !client || !store ||
       typeof store.read !== 'function' || typeof store.claim !== 'function' ||
       typeof store.put !== 'function' || !HEX32.test(accountId) ||
+      !HEX32.test(zoneId) ||
       !APP_ID.test(appId) || !TOKEN.test(credential) ||
       !isNativeStudioReconciliationActor(actor) ||
       !COMMIT.test(previousCommit) || !Array.isArray(previousPrincipals) ||
@@ -51,7 +52,7 @@ export async function revokeBoundNativeStudioAccessSessions(input: Input,
     throw Error('native_studio_access_session_revoke_no_removal');
   const exact = async () => {
     await deps.actor(client, { actor, scope });
-    const current = await deps.policy({ scope, client, store, accountId,
+    const current = await deps.policy({ scope, client, store, accountId, zoneId,
       appId, credential }, transport);
     if (fingerprint(current) !== fingerprint(policyProof))
       throw Error('native_studio_access_session_revoke_policy_changed');

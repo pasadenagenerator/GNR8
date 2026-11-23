@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { verifyAuthenticatedStudioHealth,
-  verifyPublicStudioEntry, verifyAccessProtectedStudioEntry } from './verify-studio-health.mjs';
+  verifyPublicStudioEntry, verifyAccessProtectedStudioEntry,
+  verifyAccessProtectedPreviewEntry } from './verify-studio-health.mjs';
 
 const studioOrigin = 'https://studio.example.com';
 const previewOrigin = 'https://preview.example.com';
@@ -67,6 +68,43 @@ test('Access entry rejects a public page, foreign redirect or wrong login path',
       location: `https://${authDomain}/other` } }),
   ]) await assert.rejects(verifyAccessProtectedStudioEntry({ studioOrigin, authDomain },
     async () => response), /native_studio_access_entry_unready/);
+});
+
+test('Access preview entry observes a separate challenge on the exact preview host', async () => {
+  const studioOrigin = 'https://site.example.com';
+  const previewOrigin = 'https://preview.site.example.com';
+  const authDomain = 'gnr8.cloudflareaccess.com';
+  const calls = [];
+  const transport = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(null, { status: 302, headers: {
+      location: `https://${authDomain}/cdn-cgi/access/login/test`,
+    } });
+  };
+  assert.deepEqual(await verifyAccessProtectedPreviewEntry({ studioOrigin,
+    previewOrigin, authDomain }, transport),
+  { state: 'access-preview-challenge-observed', previewOrigin });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${previewOrigin}/`);
+  assert.equal(calls[0].options.redirect, 'manual');
+  assert.equal(calls[0].options.headers.cookie, undefined);
+});
+
+test('Access preview entry rejects public content, foreign redirects and wrong hosts', async () => {
+  const input = { studioOrigin: 'https://site.example.com',
+    previewOrigin: 'https://preview.site.example.com',
+    authDomain: 'gnr8.cloudflareaccess.com' };
+  for (const response of [
+    new Response('<html>Unprotected preview</html>'),
+    new Response(null, { status: 302, headers: {
+      location: 'https://other.cloudflareaccess.com/cdn-cgi/access/login/test' } }),
+    new Response(null, { status: 302, headers: {
+      location: `https://${new URL(input.previewOrigin).hostname}/other` } }),
+  ]) await assert.rejects(verifyAccessProtectedPreviewEntry(input,
+    async () => response), /native_studio_access_preview_unready/);
+  await assert.rejects(verifyAccessProtectedPreviewEntry({ ...input,
+    previewOrigin: 'https://preview.other.example.com' },
+  async () => { throw Error('unexpected_network'); }), /native_studio_health_input_invalid/);
 });
 
 function fixture(overrides = {}) {

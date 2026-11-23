@@ -14,6 +14,7 @@ const app = { id: appId, type: 'self_hosted',
   domain: 'site.app.pasadenagenerator.com/studio', aud,
   destinations: [{ type: 'public', uri: `${site.studioOrigin}/studio` }] };
 const organization = { auth_domain: 'gnr8.cloudflareaccess.com' };
+const previewOrigin = 'https://preview.site.app.pasadenagenerator.com';
 
 function fixture(application: unknown = app, org: unknown = organization) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -40,6 +41,30 @@ test('observes one exact self-hosted Studio route without policy or login claims
   assert.ok(f.calls.every(call => call.init.method === 'GET' &&
     call.init.redirect === 'error' &&
     (call.init.headers as Record<string, string>).authorization === `Bearer ${credential}`));
+});
+
+test('dual-host readback requires exactly the editor and whole preview destinations', async () => {
+  const dual = { ...app, destinations: [app.destinations[0],
+    { type: 'public', uri: `${previewOrigin}/` }] };
+  assert.deepEqual(await inspectCloudflareStudioAccessApp(scope, site, appId,
+    credential, fixture(dual).transport, 'studio-and-preview'), {
+    state: 'observed-access-app', scope, siteId: scope.siteId,
+    studioOrigin: site.studioOrigin, accountId: site.accountId, appId, aud,
+    teamDomain: organization.auth_domain,
+    protection: 'studio-and-preview', previewOrigin,
+  });
+  for (const changed of [
+    app,
+    { ...dual, destinations: [dual.destinations[0],
+      { type: 'public', uri: `${previewOrigin}/studio` }] },
+    { ...dual, destinations: [...dual.destinations,
+      { type: 'public', uri: `${previewOrigin}/other` }] },
+    { ...dual, destinations: [dual.destinations[0],
+      { type: 'public', uri: `${previewOrigin}/`, overrides: [
+        { behavior: 'public', path_pattern: '/assets/*' }] }] },
+  ]) await assert.rejects(inspectCloudflareStudioAccessApp(scope, site, appId,
+    credential, fixture(changed).transport, 'studio-and-preview'),
+  /native_studio_access_app_unverified/);
 });
 
 test('rejects wider, narrower, bypassed or foreign Access applications', async () => {

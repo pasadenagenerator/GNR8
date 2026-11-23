@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inspectNativeStudioAccessApplicationInventory } from './cloudflare-studio-access-inventory';
-import { reserveNativeStudioAccessApp } from './native-studio-access-app-reservation';
+import { ACCESS_APP_V2_BOUND, ACCESS_APP_V2_INTENT,
+  readVerifiedNativeStudioAccessAppV2Binding,
+  reserveNativeStudioAccessApp } from './native-studio-access-app-reservation';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -14,9 +16,12 @@ const target = { scope, accountId,
   studioOrigin: 'https://site.app.pasadenagenerator.com',
   repository: 'example/site', repositoryId: 42 };
 const domain = 'site.app.pasadenagenerator.com/studio';
+const previewDomain = 'preview.site.app.pasadenagenerator.com';
+const previewOrigin = `https://${previewDomain}`;
 const name = `gnr8-${scope.siteId}-studio-access`;
 const app = { id: appId, name, type: 'self_hosted', domain,
-  destinations: [{ type: 'public', uri: `${target.studioOrigin}/studio` }] };
+  destinations: [{ type: 'public', uri: `${target.studioOrigin}/studio` },
+    { type: 'public', uri: `${previewOrigin}/` }] };
 const client = {} as SupabaseClient;
 
 function inventory(result: unknown[]) {
@@ -41,13 +46,15 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
     overlap: inspectNativeStudioAccessApplicationInventory,
     app: async () => ({ state: 'observed-access-app' as const,
       appId, siteId: scope.siteId, studioOrigin: target.studioOrigin,
-      accountId, scope, aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com' }),
+      accountId, scope, aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com',
+      protection: 'studio-and-preview' as const, previewOrigin }),
   };
   const transport = (async (url: string, init: RequestInit) => {
     if (init.method === 'POST') {
       posts++;
       assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${accountId}/access/apps`);
-      assert.deepEqual(JSON.parse(String(init.body)), { type: 'self_hosted', name, domain });
+      assert.deepEqual(JSON.parse(String(init.body)), { type: 'self_hosted', name, domain,
+        destinations: app.destinations });
       if (!options.noCreate) created = true;
       if (options.lostAfterCreate) throw Error('lost response');
       return Response.json({ success: true, result: app });
@@ -102,15 +109,37 @@ test('refuses unowned apps, broad policies and changed site bindings', async () 
     changed.setTarget({ ...target, repositoryId: 43 });
     return { state: 'observed-access-app' as const,
       appId, siteId: scope.siteId, studioOrigin: target.studioOrigin,
-      accountId, scope, aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com' };
+      accountId, scope, aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com',
+      protection: 'studio-and-preview' as const, previewOrigin };
   };
   await assert.rejects(reserveNativeStudioAccessApp(changed.input,
     changed.transport, changed.deps as any), /target_changed/);
   assert.equal(changed.saved.size, 1);
   const forged = fixture({ created: true });
-  forged.saved.set('native-studio/access-app-bound-v1.json',
+  forged.saved.set('native-studio/access-app-bound-v2.json',
     { identity: 'unrelated', appId });
   await assert.rejects(reserveNativeStudioAccessApp(forged.input,
     forged.transport, forged.deps as any), /binding_conflict/);
   assert.equal(forged.posts(), 0);
+});
+
+test('v2 binding is exact and never promotes a legacy receipt', async () => {
+  const f = fixture();
+  await reserveNativeStudioAccessApp(f.input, f.transport, f.deps as any);
+  const bindingInput = { scope, client, accountId, zoneId, store: f.input.store };
+  const deps = { target: f.deps.target };
+  const bound = await readVerifiedNativeStudioAccessAppV2Binding(bindingInput, deps);
+  assert.deepEqual(bound, { target, appId, aud: 'c'.repeat(64),
+    teamDomain: 'gnr8.cloudflareaccess.com', previewOrigin, domain, previewDomain,
+    name, identity: (f.saved.get(ACCESS_APP_V2_INTENT) as { identity: string }).identity });
+  f.saved.set('native-studio/access-app-bound-v1.json', { appId });
+  await assert.rejects(readVerifiedNativeStudioAccessAppV2Binding(bindingInput, deps),
+    /legacy_conflict/);
+  await assert.rejects(reserveNativeStudioAccessApp(f.input, f.transport, f.deps as any),
+    /legacy_conflict/);
+  f.saved.delete('native-studio/access-app-bound-v1.json');
+  f.saved.set(ACCESS_APP_V2_BOUND, { ...(f.saved.get(ACCESS_APP_V2_BOUND) as object),
+    previewOrigin: 'https://other.example.com' });
+  await assert.rejects(readVerifiedNativeStudioAccessAppV2Binding(bindingInput, deps),
+    /binding_unverified/);
 });

@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { verifyAccessProtectedStudioEntry } from '../../../../scripts/stacki/verify-studio-health.mjs';
+import { verifyAccessProtectedStudioEntry,
+  verifyAccessProtectedPreviewEntry } from '../../../../scripts/stacki/verify-studio-health.mjs';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { readNativeStudioBootstrapTarget } from './native-studio-configured-resource-reservation';
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
@@ -22,6 +23,7 @@ const defaults = {
   inventory: inspectNativeStudioAccessApplicationInventory,
   policy: inspectNativeStudioAccessPolicyReadback,
   challenge: verifyAccessProtectedStudioEntry,
+  previewChallenge: verifyAccessProtectedPreviewEntry,
 };
 
 /** Observe the exact Access application, current owner policy and login
@@ -42,14 +44,20 @@ export async function inspectBoundNativeStudioAccessEntry(input: {
   const members = await deps.candidates(scope, client);
   const principals = members.map(member => member.principal);
   const app = await deps.app(scope, { siteId: scope.siteId,
-    studioOrigin: before.studioOrigin, accountId }, appId, credential, transport);
+    studioOrigin: before.studioOrigin, accountId }, appId, credential, transport,
+    'studio-and-preview');
   const host = new URL(before.studioOrigin).hostname;
+  const previewOrigin = `https://preview.${host}`;
+  if (app.protection !== 'studio-and-preview' ||
+      app.previewOrigin !== previewOrigin)
+    throw Error('native_studio_access_entry_app_unverified');
   const [accountApps, zoneApps] = await Promise.all([
     deps.inventoryRead('accounts', accountId, credential, transport),
     deps.inventoryRead('zones', zoneId, credential, transport),
   ]);
-  const accountInventory = deps.inventory(accountApps, appId, host);
-  const zoneInventory = deps.inventory(zoneApps, null, host);
+  const previewHost = new URL(previewOrigin).hostname;
+  const accountInventory = deps.inventory(accountApps, appId, host, previewHost);
+  const zoneInventory = deps.inventory(zoneApps, null, host, previewHost);
   if (accountInventory.state !== 'observed-no-access-overlap' ||
       accountInventory.appId !== appId ||
       zoneInventory.state !== 'observed-no-access-overlap' ||
@@ -70,10 +78,16 @@ export async function inspectBoundNativeStudioAccessEntry(input: {
   if (policy.state !== 'observed-exact-access-policy' ||
       policy.memberCount !== principals.length)
     throw Error('native_studio_access_entry_policy_unverified');
-  const challenge = await deps.challenge({ studioOrigin: before.studioOrigin,
-    authDomain: app.teamDomain }, transport);
+  const [challenge, previewChallenge] = await Promise.all([
+    deps.challenge({ studioOrigin: before.studioOrigin,
+      authDomain: app.teamDomain }, transport),
+    deps.previewChallenge({ studioOrigin: before.studioOrigin,
+      previewOrigin, authDomain: app.teamDomain }, transport),
+  ]);
   if (challenge.state !== 'access-studio-challenge-observed' ||
-      challenge.studioOrigin !== before.studioOrigin)
+      challenge.studioOrigin !== before.studioOrigin ||
+      previewChallenge.state !== 'access-preview-challenge-observed' ||
+      previewChallenge.previewOrigin !== previewOrigin)
     throw Error('native_studio_access_entry_challenge_unverified');
   const [after, current] = await Promise.all([
     deps.target(scope, client, accountId), deps.candidates(scope, client),
@@ -81,10 +95,12 @@ export async function inspectBoundNativeStudioAccessEntry(input: {
   if (!same(after, before) || !same(current, members) ||
       !object(app) || app.state !== 'observed-access-app' ||
       app.studioOrigin !== before.studioOrigin || app.accountId !== accountId ||
-      app.appId !== appId)
+      app.appId !== appId || app.protection !== 'studio-and-preview' ||
+      app.previewOrigin !== previewOrigin)
     throw Error('native_studio_access_entry_target_changed');
   return { state: 'observed-access-entry' as const,
     scope, studioOrigin: before.studioOrigin, repository: before.repository,
     appId, aud: app.aud, teamDomain: app.teamDomain,
+    protection: 'studio-and-preview' as const, previewOrigin,
     memberCount: policy.memberCount };
 }

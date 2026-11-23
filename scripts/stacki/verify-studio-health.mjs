@@ -74,6 +74,39 @@ export async function verifyAccessProtectedStudioEntry(input, transport = fetch)
   }
 }
 
+/** Observe the independent preview host before a native preview cookie is
+ * ever issued. A Studio Access challenge alone cannot protect that host. */
+export async function verifyAccessProtectedPreviewEntry(input, transport = fetch) {
+  const studio = origin(input?.studioOrigin);
+  const preview = origin(input?.previewOrigin);
+  const team = String(input?.authDomain ?? '').toLowerCase();
+  if (preview !== `https://preview.${new URL(studio).hostname}` ||
+      !/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(team) ||
+      typeof transport !== 'function')
+    throw Error('native_studio_health_input_invalid');
+  try {
+    const response = await transport(`${preview}/`, { method: 'GET',
+      redirect: 'manual', headers: { accept: 'text/html' },
+      signal: AbortSignal.timeout(30_000) });
+    if (response.status !== 302)
+      throw Error('native_studio_access_preview_unready');
+    let location;
+    try { location = new URL(response.headers.get('location') ?? '', preview); }
+    catch { throw Error('native_studio_access_preview_unready'); }
+    if (location.protocol !== 'https:' || location.username || location.password ||
+        ![team, new URL(preview).hostname].includes(location.hostname) ||
+        !(location.pathname === '/cdn-cgi/access/login' ||
+          location.pathname.startsWith('/cdn-cgi/access/login/')))
+      throw Error('native_studio_access_preview_unready');
+    await response.body?.cancel();
+    return { state: 'access-preview-challenge-observed', previewOrigin: preview };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'native_studio_access_preview_unready')
+      throw error;
+    throw Error('native_studio_access_preview_unavailable');
+  }
+}
+
 async function readJson(transport, url, cookie) {
   const response = await transport(url, { method: 'GET', redirect: 'manual',
     headers: { cookie, accept: 'application/json' }, signal: AbortSignal.timeout(30_000) });

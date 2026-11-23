@@ -22,7 +22,9 @@ function expectedPath(scope: NativeStudioScope, site: Target) {
   if (origin.origin !== site.studioOrigin || origin.protocol !== 'https:' ||
       !HOST.test(origin.hostname) || origin.port || origin.username || origin.password)
     throw Error('native_studio_access_app_input_invalid');
-  return { domain: `${origin.hostname}/studio`, uri: `${origin.origin}/studio` };
+  const previewOrigin = `https://preview.${origin.hostname}`;
+  return { domain: `${origin.hostname}/studio`, uri: `${origin.origin}/studio`,
+    previewOrigin, previewUri: `${previewOrigin}/` };
 }
 
 async function readJson(url: string, credential: string, transport: typeof fetch) {
@@ -47,11 +49,13 @@ async function readJson(url: string, credential: string, transport: typeof fetch
 export async function inspectCloudflareStudioAccessApp(
   scope: NativeStudioScope, site: Target, appId: string, credential: string,
   transport: typeof fetch = fetch,
+  expectedProtection: 'studio-only' | 'studio-and-preview' = 'studio-only',
 ) {
   const path = expectedPath(scope, site);
   if (typeof appId !== 'string' || !APP_ID.test(appId) ||
       typeof credential !== 'string' || credential.length < 16 ||
-      /\s/.test(credential) || typeof transport !== 'function')
+      /\s/.test(credential) || typeof transport !== 'function' ||
+      !['studio-only', 'studio-and-preview'].includes(expectedProtection))
     throw Error('native_studio_access_app_input_invalid');
   const prefix = `https://api.cloudflare.com/client/v4/accounts/${site.accountId}`;
   let app: Record<string, unknown>, organization: Record<string, unknown>;
@@ -63,22 +67,32 @@ export async function inspectCloudflareStudioAccessApp(
   } catch { throw Error('native_studio_access_app_readback_failed'); }
   const destinations = app.destinations;
   const hasDestinations = Array.isArray(destinations);
-  const destination = hasDestinations && destinations.length === 1 ? destinations[0] : null;
+  const expectedUris = expectedProtection === 'studio-and-preview' ?
+    [path.uri, path.previewUri] : [path.uri];
+  const exactDestinations = hasDestinations &&
+    destinations.length === expectedUris.length &&
+    destinations.every((destination: unknown) => object(destination) &&
+      typeof destination.uri === 'string' &&
+      (destination.type === undefined || destination.type === 'public') &&
+      (destination.overrides === undefined ||
+        Array.isArray(destination.overrides) && destination.overrides.length === 0)) &&
+    destinations.map((destination: Record<string, unknown>) => destination.uri).sort()
+      .join('\n') === [...expectedUris].sort().join('\n');
   if (app.id !== appId || app.type !== 'self_hosted' ||
       app.domain !== path.domain || !AUD.test(String(app.aud ?? '')) ||
       (app.self_hosted_domains !== undefined && app.self_hosted_domains !== null &&
         (!Array.isArray(app.self_hosted_domains) || app.self_hosted_domains.length !== 0)) ||
-      (destinations !== undefined && !hasDestinations) ||
-      (hasDestinations && (!object(destination) ||
-        destination.uri !== path.uri ||
-        (destination.type !== undefined && destination.type !== 'public') ||
-        (destination.overrides !== undefined &&
-          (!Array.isArray(destination.overrides) || destination.overrides.length !== 0)))) ||
+      (expectedProtection === 'studio-and-preview' && !exactDestinations) ||
+      (expectedProtection === 'studio-only' && destinations !== undefined &&
+        !exactDestinations) ||
       typeof organization.auth_domain !== 'string' ||
       !HOST.test(organization.auth_domain))
     throw Error('native_studio_access_app_unverified');
   return { state: 'observed-access-app' as const, scope,
     siteId: site.siteId, studioOrigin: site.studioOrigin,
     accountId: site.accountId, appId, aud: app.aud as string,
-    teamDomain: organization.auth_domain };
+    teamDomain: organization.auth_domain,
+    ...(expectedProtection === 'studio-and-preview' ?
+      { protection: 'studio-and-preview' as const,
+        previewOrigin: path.previewOrigin } : {}) };
 }

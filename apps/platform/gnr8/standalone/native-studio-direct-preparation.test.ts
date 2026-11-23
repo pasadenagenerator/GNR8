@@ -154,13 +154,18 @@ test('new-site Access source requires bound app, exact current policy and repeat
  const target={scope,accountId:site.accountId,studioOrigin:site.studioOrigin,
   repository:site.repository,repositoryId:123};
  const name=`gnr8-${scope.siteId}-studio-access`,domain='website.example.com/studio';
- const identity=createHash('sha256').update(JSON.stringify({scope,accountId:site.accountId,
+ const previewDomain='preview.website.example.com';
+ const previewOrigin=`https://${previewDomain}`;
+ const format='gnr8-native-studio-access-app:v2';
+ const identity=createHash('sha256').update(JSON.stringify({format,scope,accountId:site.accountId,
   zoneId,studioOrigin:site.studioOrigin,repository:site.repository,repositoryId:123,
-  name,domain})).digest('hex');
+  name,domain,previewDomain})).digest('hex');
  const admins=['access:owner@example.com'];
  const objects=new Map<string,unknown>([
-  ['native-studio/access-app-create-intent-v1.json',{identity,target,zoneId,name,domain}],
-  ['native-studio/access-app-bound-v1.json',{identity,appId,aud,teamDomain}],
+  ['native-studio/access-app-create-intent-v2.json',{format,identity,target,zoneId,name,
+   domain,previewDomain}],
+  ['native-studio/access-app-bound-v2.json',{identity,appId,aud,teamDomain,
+   protection:'studio-and-preview',previewOrigin}],
   ['native-studio/access-policy-create-intent-v1.json',{identity:fingerprint({scope,target,
    accountId:site.accountId,appId,principals:admins}),scope,accountId:site.accountId,
    appId,target,principals:admins}],
@@ -168,21 +173,24 @@ test('new-site Access source requires bound app, exact current policy and repeat
  const store={read:async(key:string)=>objects.get(key)??null};
  const client={} as any;
  const deps={candidates:async()=>admins.map(principal=>({principal,userId:id(6),role:'owner'})),
+  binding:async()=>({target,appId,aud,teamDomain,previewOrigin,domain,previewDomain,name,identity}),
   app:async()=>({state:'observed-access-app',appId,aud,teamDomain,
-   studioOrigin:site.studioOrigin,accountId:site.accountId}),
+   studioOrigin:site.studioOrigin,accountId:site.accountId,
+   protection:'studio-and-preview',previewOrigin}),
   transport:async()=>Response.json({success:true,result:[{decision:'allow',
    include:[{email:{email:'owner@example.com'}}]}],
    result_info:{page:1,count:1,total_count:1,total_pages:1}})};
  assert.deepEqual(await readVerifiedNativeStudioAccessForPreparation(scope,client,site,
   store as any,env,deps as any),{version:2,provider:'access',aud,teamDomain,admins});
- objects.delete('native-studio/access-app-bound-v1.json');
+ objects.delete('native-studio/access-app-bound-v2.json');
  await assert.rejects(readVerifiedNativeStudioAccessForPreparation(scope,client,site,
   store as any,env,deps as any),/access_binding_missing/);
  objects.clear();
  assert.equal(await readVerifiedNativeStudioAccessForPreparation({ ...scope,
   siteId:'2e7146cd-e516-4088-94ad-6cac90cb17f4' },client,site,
   store as any,env,deps as any),undefined);
- objects.set('native-studio/access-app-bound-v1.json',{identity,appId,aud,teamDomain});
+ objects.set('native-studio/access-app-bound-v2.json',{identity,appId,aud,teamDomain,
+  protection:'studio-and-preview',previewOrigin});
  f.deps.site=()=>site;
  const access={version:2,provider:'access',aud,teamDomain,admins};
  let reads=0;

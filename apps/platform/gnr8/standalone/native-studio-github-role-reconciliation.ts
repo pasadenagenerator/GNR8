@@ -7,6 +7,7 @@ import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-s
 import { inspectGitHubNativeStudioBranch } from './github-native-studio-head';
 import { issueConfiguredNativeStudioGitHubToken } from './github-native-studio-token';
 import { inspectCurrentNativeStudioAccessOwnerPolicy } from './native-studio-access-policy-reconciliation';
+import { readVerifiedNativeStudioAccessAppV2Binding } from './native-studio-access-app-reservation';
 import { isNativeStudioReconciliationActor,
   requireNativeStudioReconciliationAuthority,
   type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
@@ -112,6 +113,7 @@ const defaults = {
   remote: remoteRoles,
   source: readStoredVerifiedAstroStudio,
   policy: inspectCurrentNativeStudioAccessOwnerPolicy,
+  binding: readVerifiedNativeStudioAccessAppV2Binding,
   actor: requireNativeStudioReconciliationAuthority,
 };
 
@@ -175,14 +177,16 @@ export async function reconcileBoundNativeStudioGitHubRoles(input: {
     throw Error('native_studio_roles_input_invalid');
   await deps.actor(client, { actor, scope });
   const { site, access } = await boundSource(scope, client, store, sourceId, env, deps);
-  const bound = await store.read<{ appId?: string; aud?: string; teamDomain?: string }>(
-    'native-studio/access-app-bound-v1.json');
-  if (!bound || bound.appId !== policyProof.appId ||
-      bound.aud !== access.aud || bound.teamDomain !== access.teamDomain)
+  const zoneId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID ?? '';
+  const bound = await deps.binding({ scope, client, accountId: site.accountId,
+    zoneId, store });
+  if (bound.appId !== policyProof.appId ||
+      bound.aud !== access.aud || bound.teamDomain !== access.teamDomain ||
+      bound.previewOrigin !== `https://preview.${new URL(site.studioOrigin).hostname}`)
     throw Error('native_studio_roles_access_unverified');
   const credential = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER ?? '';
   const accountId = site.accountId;
-  const currentPolicy = async () => deps.policy({ scope, client, accountId,
+  const currentPolicy = async () => deps.policy({ scope, client, accountId, zoneId,
     appId: policyProof.appId, credential, store }, transport);
   const exact = async () => {
     const current = await currentPolicy();

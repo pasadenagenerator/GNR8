@@ -6,14 +6,13 @@ import { fingerprint } from './publication-contract';
 import { readNativeStudioBootstrapTarget } from './native-studio-configured-resource-reservation';
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
 import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
+import { readVerifiedNativeStudioAccessAppV2Binding } from './native-studio-access-app-reservation';
 import { inspectNativeStudioAccessPolicyReadback } from './cloudflare-studio-access-policy';
 import { isNativeStudioReconciliationActor,
   requireNativeStudioReconciliationAuthority,
   type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
 import { serializeNativeAccessRoles, validateNativeAccessRoles } from '../../../../scripts/stacki/native-access-roles.mjs';
 
-const APP_INTENT = 'native-studio/access-app-create-intent-v1.json';
-const APP_BOUND = 'native-studio/access-app-bound-v1.json';
 const POLICY_INTENT = 'native-studio/access-policy-create-intent-v1.json';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -26,13 +25,14 @@ const same = (a: unknown, b: unknown) => fingerprint(a) === fingerprint(b);
 const fail = (reason: string): never => { throw Error(`native_studio_access_reconciliation_${reason}`); };
 type Store = Pick<PublicationStore, 'read' | 'claim'>;
 type Input = { scope: NativeStudioScope; client: SupabaseClient; accountId: string;
-  appId: string; credential: string; store: Store };
+  zoneId: string; appId: string; credential: string; store: Store };
 type Mutation = Input & { actor: NativeStudioReconciliationActor;
   previousCommit: string; previousPrincipals: string[] };
 
 const defaults = { target: readNativeStudioBootstrapTarget,
   candidates: readCurrentNativeStudioAccessCandidates,
   app: inspectCloudflareStudioAccessApp,
+  binding: readVerifiedNativeStudioAccessAppV2Binding,
   actor: requireNativeStudioReconciliationAuthority };
 
 function canonical(input: unknown): string[] {
@@ -42,7 +42,8 @@ function canonical(input: unknown): string[] {
 function validate(input: Input) {
   if (!input?.scope || ![input.scope.agencyId, input.scope.clientId, input.scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
-    !input.client || !HEX32.test(input.accountId) || !APP_ID.test(input.appId) ||
+    !input.client || !HEX32.test(input.accountId) || !HEX32.test(input.zoneId) ||
+    !APP_ID.test(input.appId) ||
     !TOKEN.test(input.credential) || !input.store ||
     typeof input.store.read !== 'function' || typeof input.store.claim !== 'function')
     fail('input_invalid');
@@ -50,29 +51,26 @@ function validate(input: Input) {
 async function context(input: Input, transport: typeof fetch, deps: typeof defaults) {
   validate(input);
   if (typeof transport !== 'function') fail('input_invalid');
-  const { scope, client, accountId, appId, credential, store } = input;
-  const target = await deps.target(scope, client, accountId);
-  const [appIntent, appBound, policyIntent] = await Promise.all([
-    store.read<Record<string, unknown>>(APP_INTENT),
-    store.read<Record<string, unknown>>(APP_BOUND),
-    store.read<Record<string, unknown>>(POLICY_INTENT),
-  ]);
-  if (!object(appIntent) || !object(appIntent.target) ||
-      !same(appIntent.target, target) ||
-      !object(appBound) || appBound.identity !== appIntent.identity ||
-      appBound.appId !== appId || !object(policyIntent) ||
+  const { scope, client, accountId, zoneId, appId, credential, store } = input;
+  const binding = await deps.binding({ scope, client, accountId, zoneId, store },
+    { target: deps.target });
+  const { target } = binding;
+  const policyIntent = await store.read<Record<string, unknown>>(POLICY_INTENT);
+  if (binding.appId !== appId || !object(policyIntent) ||
       policyIntent.appId !== appId || policyIntent.accountId !== accountId ||
       !object(policyIntent.scope) || !object(policyIntent.target) ||
       !same(policyIntent.scope, scope) || !same(policyIntent.target, target) ||
       !Array.isArray(policyIntent.principals) ||
       policyIntent.identity !== fingerprint({ scope, target, accountId, appId,
         principals: canonical(policyIntent.principals) })) fail('binding_unverified');
-  const bound = appBound as Record<string, unknown>;
   const app = await deps.app(scope, { siteId: scope.siteId,
-    studioOrigin: target.studioOrigin, accountId }, appId, credential, transport);
+    studioOrigin: target.studioOrigin, accountId }, appId, credential, transport,
+    'studio-and-preview');
   if (app.state !== 'observed-access-app' || app.appId !== appId ||
       app.accountId !== accountId || app.studioOrigin !== target.studioOrigin ||
-      app.aud !== bound.aud || app.teamDomain !== bound.teamDomain)
+      app.aud !== binding.aud || app.teamDomain !== binding.teamDomain ||
+      app.protection !== 'studio-and-preview' ||
+      app.previewOrigin !== binding.previewOrigin)
     fail('app_unverified');
   const principals = canonical((await deps.candidates(scope, client)).map(item => item.principal));
   return { target, principals };

@@ -12,6 +12,7 @@ import { verifyPublicStudioEntry } from '../../../../scripts/stacki/verify-studi
 import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
 import { inspectBoundNativeStudioAccessEntry } from './native-studio-access-entry';
+import { readVerifiedNativeStudioAccessAppV2Binding } from './native-studio-access-app-reservation';
 
 const KEY = 'native-studio/first-open-v1.json';
 const HANDOFF = 'native-studio/build-handoff-v1.json';
@@ -20,9 +21,6 @@ const COMMIT = /^[a-f0-9]{40,64}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const TAG = /^gnr8-first-[a-f0-9]{64}$/;
-const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
-const APP_INTENT = 'native-studio/access-app-create-intent-v1.json';
-const APP_BOUND = 'native-studio/access-app-bound-v1.json';
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -65,6 +63,7 @@ const defaults = {
   source: readStoredVerifiedAstroStudio,
   candidates: readCurrentNativeStudioAccessCandidates,
   accessEntry: inspectBoundNativeStudioAccessEntry,
+  accessBinding: readVerifiedNativeStudioAccessAppV2Binding,
 };
 
 /** Run only after an isolated first deployment and a verified Git/build handoff.
@@ -114,25 +113,21 @@ export async function recordNativeStudioFirstOpen(input: {
     if (!HEX32.test(input.accessZoneId ?? '') ||
         typeof input.accessCredential !== 'string' || !input.accessCredential)
       throw Error('native_studio_first_open_access_unconfigured');
-    const [intent, bound, before] = await Promise.all([
-      store.read<Record<string, unknown>>(APP_INTENT),
-      store.read<Record<string, unknown>>(APP_BOUND),
+    const [bound, before] = await Promise.all([
+      deps.accessBinding({ scope, client, accountId: site.accountId,
+        zoneId: input.accessZoneId!, store }),
       deps.candidates(scope, client),
     ]);
     const expectedAdmins = before.map(member => member.principal).sort();
-    const domain = new URL(site.studioOrigin).hostname;
+    const previewOrigin = `https://preview.${new URL(site.studioOrigin).hostname}`;
     if (!object(access) || access.version !== 2 || access.provider !== 'access' ||
         !Array.isArray(access.admins) || !same(access.admins, expectedAdmins) ||
-        !object(intent) || !object(intent.target) || !same(intent.target.scope, scope) ||
-        intent.target.accountId !== site.accountId ||
-        intent.target.studioOrigin !== site.studioOrigin ||
-        intent.target.repository !== site.repository ||
-        String(intent.target.repositoryId) !== site.repositoryId ||
-        intent.zoneId !== input.accessZoneId ||
-        intent.name !== `gnr8-${scope.siteId}-studio-access` ||
-        intent.domain !== `${domain}/studio` ||
-        !object(bound) || bound.identity !== intent.identity ||
-        typeof bound.appId !== 'string' || !APP_ID.test(bound.appId) ||
+        !same(bound.target.scope, scope) ||
+        bound.target.accountId !== site.accountId ||
+        bound.target.studioOrigin !== site.studioOrigin ||
+        bound.target.repository !== site.repository ||
+        String(bound.target.repositoryId) !== site.repositoryId ||
+        bound.previewOrigin !== previewOrigin ||
         bound.aud !== access.aud || bound.teamDomain !== access.teamDomain)
       throw Error('native_studio_first_open_access_unverified');
     const entry = await deps.accessEntry({ scope, client, accountId: site.accountId,
@@ -142,6 +137,8 @@ export async function recordNativeStudioFirstOpen(input: {
     if (entry.state !== 'observed-access-entry' || entry.appId !== bound.appId ||
         entry.aud !== access.aud || entry.teamDomain !== access.teamDomain ||
         entry.studioOrigin !== site.studioOrigin ||
+        entry.protection !== 'studio-and-preview' ||
+        entry.previewOrigin !== previewOrigin ||
         entry.memberCount !== expectedAdmins.length ||
         !same(after.map(member => member.principal).sort(), expectedAdmins))
       throw Error('native_studio_first_open_access_unverified');

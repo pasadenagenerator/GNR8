@@ -1,5 +1,4 @@
 import 'server-only';
-import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServiceRoleClient } from '../../src/supabase/service-role-server';
 import { requireAgencyBackgroundActor } from '../../src/auth/agency-background-action';
@@ -19,13 +18,15 @@ import { isRetainedLegacyNativeStudioSite } from './native-studio-binding-store'
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
 import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
 import { inspectNativeStudioAccessPolicyReadback } from './cloudflare-studio-access-policy';
+import { ACCESS_APP_V2_INTENT, ACCESS_APP_V2_BOUND,
+ readVerifiedNativeStudioAccessAppV2Binding } from './native-studio-access-app-reservation';
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type Request={scope:Scope;input:PublicationSelection;actor:string;requestId?:string;attemptId?:string};
 type NativeSite=Awaited<ReturnType<typeof configuredNativeStudioDirectSourceSite>>;
-const APP_INTENT='native-studio/access-app-create-intent-v1.json';
-const APP_BOUND='native-studio/access-app-bound-v1.json';
+const LEGACY_APP_INTENT='native-studio/access-app-create-intent-v1.json';
+const LEGACY_APP_BOUND='native-studio/access-app-bound-v1.json';
 const POLICY_INTENT='native-studio/access-policy-create-intent-v1.json';
 const HEX32=/^[a-f0-9]{32}$/;
 const TOKEN=/^[A-Za-z0-9_-]{16,256}$/;
@@ -36,6 +37,7 @@ const object=(value:unknown):value is Record<string,unknown>=>
 const accessDefaults={
  candidates:readCurrentNativeStudioAccessCandidates,
  app:inspectCloudflareStudioAccessApp,
+ binding:readVerifiedNativeStudioAccessAppV2Binding,
  transport:fetch,
 };
 
@@ -47,13 +49,15 @@ export async function readVerifiedNativeStudioAccessForPreparation(
  env:Record<string,string|undefined>=process.env,
  deps=accessDefaults,
 ){
- const [appIntent,appBound,policyIntent]=await Promise.all([
-  store.read<Record<string,unknown>>(APP_INTENT),
-  store.read<Record<string,unknown>>(APP_BOUND),
+ const [legacyIntent,legacyBound,appIntent,appBound,policyIntent]=await Promise.all([
+  store.read(LEGACY_APP_INTENT),store.read(LEGACY_APP_BOUND),
+  store.read<Record<string,unknown>>(ACCESS_APP_V2_INTENT),
+  store.read<Record<string,unknown>>(ACCESS_APP_V2_BOUND),
   store.read<Record<string,unknown>>(POLICY_INTENT),
  ]);
  if(!appBound){
-  if(appIntent||policyIntent||!isRetainedLegacyNativeStudioSite(scope.siteId))
+  if(legacyIntent||legacyBound||appIntent||policyIntent||
+     !isRetainedLegacyNativeStudioSite(scope.siteId))
    throw Error('native_studio_access_binding_missing');
   return undefined;
  }
@@ -64,32 +68,30 @@ export async function readVerifiedNativeStudioAccessForPreparation(
   throw Error('native_studio_access_setup_not_configured');
  const target={scope,accountId:site.accountId,studioOrigin:site.studioOrigin,
   repository:site.repository,repositoryId:Number(site.repositoryId)};
- const domain=`${new URL(site.studioOrigin).hostname}/studio`;
- const name=`gnr8-${scope.siteId}-studio-access`;
- const identity=createHash('sha256').update(JSON.stringify({scope,
-  accountId:site.accountId,zoneId,studioOrigin:site.studioOrigin,
-  repository:site.repository,repositoryId:Number(site.repositoryId),name,domain})).digest('hex');
- if(!object(appIntent)||!object(appBound)||!object(policyIntent)||
-    !same(appIntent,{identity,target,zoneId,name,domain})||
-    appBound.identity!==identity||typeof appBound.appId!=='string'||
-    typeof appBound.aud!=='string'||typeof appBound.teamDomain!=='string')
+ const binding=await deps.binding({scope,client,accountId:site.accountId,
+  zoneId,store});
+ if(!object(policyIntent)||!same(binding.target,target)||
+    binding.appId!==appBound.appId||binding.aud!==appBound.aud||
+    binding.teamDomain!==appBound.teamDomain)
   throw Error('native_studio_access_binding_unverified');
  const candidates=await deps.candidates(scope,client);
  const admins=candidates.map(candidate=>candidate.principal);
  if(!admins.length||!same(policyIntent,{identity:fingerprint({scope,target,
-   accountId:site.accountId,appId:appBound.appId,principals:admins}),scope,
-   accountId:site.accountId,appId:appBound.appId,target,principals:admins}))
+   accountId:site.accountId,appId:binding.appId,principals:admins}),scope,
+   accountId:site.accountId,appId:binding.appId,target,principals:admins}))
   throw Error('native_studio_access_policy_stale');
  const app=await deps.app(scope,{siteId:scope.siteId,studioOrigin:site.studioOrigin,
-  accountId:site.accountId},appBound.appId,credential,deps.transport);
- if(app.state!=='observed-access-app'||app.appId!==appBound.appId||
-    app.aud!==appBound.aud||app.teamDomain!==appBound.teamDomain||
+  accountId:site.accountId},binding.appId,credential,deps.transport,'studio-and-preview');
+ if(app.state!=='observed-access-app'||app.appId!==binding.appId||
+    app.aud!==binding.aud||app.teamDomain!==binding.teamDomain||
+    app.protection!=='studio-and-preview'||
+    app.previewOrigin!==binding.previewOrigin||
     app.studioOrigin!==site.studioOrigin||app.accountId!==site.accountId)
   throw Error('native_studio_access_app_stale');
  let body:unknown;
  try{
   const response=await deps.transport(`https://api.cloudflare.com/client/v4/accounts/`+
-   `${site.accountId}/access/apps/${appBound.appId}/policies`,{
+   `${site.accountId}/access/apps/${binding.appId}/policies`,{
     method:'GET',redirect:'error',signal:AbortSignal.timeout(30_000),
     headers:{authorization:`Bearer ${credential}`,accept:'application/json'},
    });

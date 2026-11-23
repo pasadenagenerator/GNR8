@@ -25,8 +25,10 @@ const blobId = (value: Buffer) => createHash('sha1')
 
 function fixture() {
   const saved = new Map<string, unknown>([
-    ['native-studio/access-app-bound-v1.json', { appId,
-      aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com' }],
+    ['native-studio/access-app-bound-v2.json', { appId,
+      aud: 'c'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com',
+      protection: 'studio-and-preview',
+      previewOrigin: 'https://preview.site.example.com' }],
   ]);
   const store = { read: async <T>(key: string) => (saved.get(key) ?? null) as T | null,
     getBytes: async () => Buffer.alloc(0),
@@ -47,6 +49,9 @@ function fixture() {
       repositoryId: site.repositoryId, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
     remote: async () => remote,
     policy: async () => policy,
+    binding: async () => ({ appId, aud: 'c'.repeat(64),
+      teamDomain: 'gnr8.cloudflareaccess.com',
+      previewOrigin: 'https://preview.site.example.com' }),
     actor: async () => { calls.push('actor'); },
   } as any;
   const transport = (async (url: string, options: RequestInit) => {
@@ -84,7 +89,8 @@ function fixture() {
   }) as typeof fetch;
   const input = { scope, client: {} as SupabaseClient, store, sourceId, actor,
     previous, policyProof: proof };
-  const env = { GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER: 'access-manager-token-12345' };
+  const env = { GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER: 'access-manager-token-12345',
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID: 'd'.repeat(32) };
   return { saved, store, input, env, deps, transport, calls,
     setPolicy: (value: typeof proof) => { policy = value; },
     setFailPatch: (value: boolean) => { failPatch = value; },

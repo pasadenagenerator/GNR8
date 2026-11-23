@@ -18,6 +18,7 @@ const policyProof = { state: 'observed-exact-access-policy' as const,
   appId, policyId, principals: ['access:admin@example.com', 'access:owner@example.com'] };
 const env = { GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED: '1',
   GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID: 'e'.repeat(32),
+  GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID: 'd'.repeat(32),
   GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER: 'access-manager-token-value-1234567890' };
 
 test('reconciles the exact current Access policy before writing GitHub roles', async () => {
@@ -26,6 +27,7 @@ test('reconciles the exact current Access policy before writing GitHub roles', a
     claim: async () => true };
   const deps = {
     store: () => store,
+    binding: async () => ({ appId }),
     inspectRoles: async () => { calls.push('inspect'); return previous; },
     policy: async () => { calls.push('policy'); return policyProof; },
     writeRoles: async () => { calls.push('roles'); return {
@@ -44,6 +46,7 @@ test('a pending Access mutation stops before the GitHub write', async () => {
   const calls: string[] = [];
   const deps = {
     store: () => ({ read: async () => ({ appId }) }),
+    binding: async () => ({ appId }),
     inspectRoles: async () => { calls.push('inspect'); return previous; },
     policy: async () => { calls.push('policy'); throw Error('pending'); },
     writeRoles: async () => { calls.push('roles'); throw Error('unexpected'); },
@@ -61,6 +64,7 @@ test('removal revokes the bound application sessions before changing Git roles',
   const newPolicy = { ...policyProof, principals: ['access:owner@example.com'] };
   const deps = {
     store: () => ({ read: async () => ({ appId }) }),
+    binding: async () => ({ appId }),
     inspectRoles: async () => { calls.push('inspect'); return oldRoles; },
     policy: async () => { calls.push('policy'); return newPolicy; },
     revokeSessions: async () => { calls.push('revoke'); return {
@@ -90,6 +94,7 @@ test('scheduled reconciliation keeps system cause separate in an immutable resul
     store: () => ({ read: async () => ({ appId }),
       put: async (key: string, value: Record<string, unknown>) => {
         audits.push({ key, value }); return value; } }),
+    binding: async () => ({ appId }),
     inspectRoles: async (input: { actor: unknown }) => {
       assert.equal(input.actor, SCHEDULED_NATIVE_STUDIO_RECONCILIATION);
       return previous;

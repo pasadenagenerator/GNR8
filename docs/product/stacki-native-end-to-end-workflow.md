@@ -1373,45 +1373,49 @@ removed principal, the local reconciler now calls Cloudflare's
 after policy readback and before the GitHub role commit. It signs out every
 editor on that one application. A confirmed API response is stored once; an
 ambiguous response stops the transition for review without a blind retry.
-The direct `preview.<working-host>` Studio Worker domain retains a separate
-native preview session and needs its own protection before immediate
-revocation can be claimed. Only
-after the roles file and provider policy are verified should the owner login,
+For new Access v2 sites, one application now covers both `<working-host>/studio`
+and `preview.<working-host>/`; session revocation targets that application.
+The native preview session remains separate, and hosted verification must
+prove the preview route is challenged and an authenticated owner can use it
+before immediate loss of access can be claimed. Only after the roles file and
+provider policy are verified should the owner login,
 AI Apply, native Push and native Publish be accepted on a representative site.
 
 ### Cloudflare Access evidence before first sign-in
 
 The read-only Access prerequisite checks the current scoped site, a
-self-hosted application for exactly `<site host>/studio`, its audience tag and
-team domain, one complete Allow policy containing only current verified
-owner/admin email identities, and an unauthenticated Access login challenge
-on the current host. The path `/studio` inherits its children in Cloudflare
+self-hosted application with exactly two destinations, `<site host>/studio`
+and `preview.<site host>/`, its audience tag and team domain, one complete
+Allow policy containing only current verified owner/admin email identities,
+and unauthenticated Access login challenges on both hosts. The path `/studio`
+inherits its children in Cloudflare
 Access; `/studio/*` misses the parent and `/studio*` covers additional sibling
 paths ([Cloudflare path rules](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/)).
 The checks re-read the site binding and membership after provider
 readback. They do not prove an authenticated editor session or create an
 Access application. The overlap check reads every inventory page in both
 the account and its DNS zone, then rejects another application that may
-govern `/studio` or a child path. The zone ID must come from the centrally
+govern `/studio`, a child path, or the preview host. The zone ID must come from the centrally
 verified target, not an event payload. This is still prerequisite evidence,
 not owner login.
 
 The local setup path now uses one centrally configured Access manager token
-for all new sites. It records a site-bound, single-use creation intent,
-creates the exact Access application without an Allow policy, reconciles a
+for all new sites. It records a site-bound, single-use v2 creation intent,
+creates the exact two-destination Access application without an Allow policy, reconciles a
 lost response by reading complete account and zone inventories, then adds
 one exact-email owner/admin policy with a separate single-use intent. The
 result is setup evidence only. A changed membership after a policy intent
 uses the separate trusted reconciliation path; setup does not replay a stale
-policy or silently issue a second POST. The new-site Worker can invoke setup
-behind its existing feature gate. No live Access resources were created in
-this local change.
+policy or silently issue a second POST. A v1 single-destination intent or
+binding conflicts with v2 and stops the flow for explicit migration review.
+The new-site Worker can invoke setup behind its existing feature gate. No live
+Access resources were created in this local change.
 
-The existing first-open and authenticated-health checks remain specific to
-repository/GitHub login. Access mode requires a separately versioned source
-identity carrying the verified application audience, team domain and exact
-roles file; provider-aware Worker readback and authenticated owner acceptance
-must follow. Membership removal also needs provider session revocation before
-it can claim immediate loss of access, because Stacki can use cached roles
-during a GitHub outage. No existing repository-mode site is switched by these
-read-only checks.
+Access v2 source preparation, provider-aware Worker readback and first-open
+now consume the verified two-host application binding. The public first-open
+check requires login challenges on both hosts. The authenticated-health check
+still accepts only a GitHub session and cannot certify an Access owner session
+or the protected preview handoff. Hosted owner acceptance must establish those
+facts before a new site is marked ready. Membership removal uses provider
+session revocation because Stacki can use cached roles during a GitHub outage.
+No existing repository-mode site is switched by these local changes.

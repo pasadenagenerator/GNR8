@@ -51,23 +51,14 @@ function fixture() {
   return { saved, store, input, deps, calls };
 }
 
-test('Access first-open verifies source, bound app, current policy and challenge', async () => {
+test('Access first-open verifies dual-host binding, policy and both challenges', async () => {
   const f = fixture();
   const zoneId = '7'.repeat(32);
   const appId = '8'.repeat(32);
   const aud = 'a'.repeat(64);
   const teamDomain = 'gnr8.cloudflareaccess.com';
   const admins = ['access:owner@example.com'];
-  f.saved.set('native-studio/access-app-create-intent-v1.json', {
-    identity: '9'.repeat(64), zoneId,
-    name: `gnr8-${scope.siteId}-studio-access`,
-    domain: `${new URL(site.studioOrigin).hostname}/studio`,
-    target: { scope, accountId: site.accountId, studioOrigin: site.studioOrigin,
-      repository: site.repository, repositoryId: Number(site.repositoryId) },
-  });
-  f.saved.set('native-studio/access-app-bound-v1.json', {
-    identity: '9'.repeat(64), appId, aud, teamDomain,
-  });
+  const previewOrigin = `https://preview.${new URL(site.studioOrigin).hostname}`;
   const access = { version: 2, provider: 'access', aud, teamDomain, admins };
   let entryChecks = 0;
   let sourceProof: unknown;
@@ -75,9 +66,16 @@ test('Access first-open verifies source, bound app, current policy and challenge
     source: async () => ({ receipt: { format: 'gnr8-native-studio-source:v2',
       identitySha256: sourceId, access } }),
     candidates: async () => admins.map(principal => ({ principal })),
+    accessBinding: async ({ zoneId: receivedZone }: { zoneId: string }) => {
+      if (receivedZone !== zoneId) throw Error('native_studio_first_open_access_unverified');
+      return { target: { scope, accountId: site.accountId,
+      studioOrigin: site.studioOrigin, repository: site.repository,
+      repositoryId: Number(site.repositoryId) },
+      appId, aud, teamDomain, previewOrigin }; },
     accessEntry: async () => { entryChecks++;
       return { state: 'observed-access-entry' as const, appId, aud, teamDomain,
-        studioOrigin: site.studioOrigin, memberCount: 1 }; },
+        studioOrigin: site.studioOrigin, memberCount: 1,
+        protection: 'studio-and-preview' as const, previewOrigin }; },
     studio: async (...args: unknown[]) => { sourceProof = args[8];
       return { state: 'verified-source-control-plane' as const,
         workerId: studioWorkerId, versionId: studioVersionId }; },
@@ -95,6 +93,12 @@ test('Access first-open verifies source, bound app, current policy and challenge
     ...deps, candidates: async () => [{ principal: 'access:other@example.com' }],
   } as any), /access_unverified/);
   assert.equal(entryChecks, 1);
+  await assert.rejects(recordNativeStudioFirstOpen(input, {
+    ...deps, accessEntry: async () => ({ state: 'observed-access-entry' as const,
+      appId, aud, teamDomain, studioOrigin: site.studioOrigin,
+      memberCount: 1, protection: 'studio-and-preview' as const,
+      previewOrigin: 'https://preview.other.example.com' }),
+  } as any), /access_unverified/);
 });
 
 test('verified first-open proof gives a labelled native link without claiming ready', async () => {

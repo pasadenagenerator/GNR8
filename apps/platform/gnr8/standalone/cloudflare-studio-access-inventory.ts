@@ -76,9 +76,12 @@ function mayCoverStudio(route: Route, host: string): boolean {
  */
 export function inspectNativeStudioAccessApplicationInventory(
   body: unknown, currentAppId: string | null, studioHost: string,
+  previewHost?: string,
 ) {
   if ((currentAppId !== null && !APP_ID.test(currentAppId)) || !HOST.test(studioHost) ||
       studioHost.includes('*') || studioHost !== studioHost.toLowerCase() ||
+      (previewHost !== undefined && (previewHost !== `preview.${studioHost}` ||
+        !HOST.test(previewHost))) ||
       !object(body)) fail();
   const parsed = body as Record<string, unknown>;
   const result = parsed.result;
@@ -93,15 +96,26 @@ export function inspectNativeStudioAccessApplicationInventory(
         typeof item.type !== 'string') fail();
     if (item.id === currentAppId) {
       current++;
+      const routes = applicationRoutes(item);
       if (item.type !== 'self_hosted' ||
-          applicationRoutes(item).some(route =>
-            route.host !== studioHost || route.path !== '/studio')) fail();
+          (previewHost === undefined ? routes.some(route =>
+            route.host !== studioHost || route.path !== '/studio') :
+            item.domain !== `${studioHost}/studio` ||
+            !Array.isArray(item.destinations) || item.destinations.length !== 2 ||
+            routes.length !== 3 ||
+            routes.filter(route => route.host === studioHost &&
+              route.path === '/studio').length !== 2 ||
+            routes.filter(route => route.host === previewHost &&
+              route.path === '').length !== 1)) fail();
       continue;
     }
     if (item.type !== 'self_hosted') continue;
-    if (applicationRoutes(item).some(route => mayCoverStudio(route, studioHost))) fail();
+    if (applicationRoutes(item).some(route =>
+        mayCoverStudio(route, studioHost) ||
+        previewHost !== undefined && hostMayMatch(route.host, previewHost))) fail();
   }
   if (current !== (currentAppId === null ? 0 : 1)) fail();
   return { state: 'observed-no-access-overlap' as const, appId: currentAppId,
-    studioHost, applicationsChecked: result.length };
+    studioHost, applicationsChecked: result.length,
+    ...(previewHost === undefined ? {} : { previewHost }) };
 }
