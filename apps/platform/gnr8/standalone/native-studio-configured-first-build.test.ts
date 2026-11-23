@@ -72,3 +72,26 @@ test('pending first push removes checkout before artifact publication', async ()
   await assert.rejects(stat(root), { code: 'ENOENT' });
   assert.equal(artifactCalls, 0);
 });
+
+test('only an absent reservation can wait before checkout or push', async () => {
+  const calls: string[] = [];
+  const deps = {
+    site: async () => { calls.push('site'); return site; },
+    store: () => ({ read: async () => { calls.push('reservation');
+      return null; } }),
+    checkout: async () => { calls.push('checkout'); throw Error('unexpected'); },
+  } as any;
+  await assert.rejects(configuredNativeStudioFirstBuild(input, {},
+    (async () => { throw Error('no provider call'); }) as typeof fetch, deps),
+  /native_studio_first_build_resources_pending/);
+  assert.deepEqual(calls, ['site', 'reservation']);
+  const conflict = { ...deps,
+    store: () => ({ read: async () => { calls.push('reservation');
+      return { ...reserved, target: { ...reserved.target,
+        repository: 'example/other' } }; } }),
+  };
+  await assert.rejects(configuredNativeStudioFirstBuild(input, {},
+    (async () => { throw Error('no provider call'); }) as typeof fetch,
+    conflict), /native_studio_first_build_resources_unverified/);
+  assert.deepEqual(calls, ['site', 'reservation', 'site', 'reservation']);
+});

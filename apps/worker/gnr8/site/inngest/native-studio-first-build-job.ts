@@ -5,6 +5,8 @@ import { NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT } from
 
 export const NATIVE_STUDIO_FIRST_BUILD_JOB_ID = 'native-studio-first-build-job';
 export const NATIVE_STUDIO_FIRST_BUILD_EVENT = 'gnr8/native-studio.first-build.requested';
+const MAX_RESOURCE_OBSERVATIONS = 15;
+const RESOURCE_OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
 type Request = { scope: Scope; actor: string; requestId: string; sourceId: string };
@@ -92,4 +94,29 @@ export const nativeStudioFirstBuildJob = inngest.createFunction({
   id: NATIVE_STUDIO_FIRST_BUILD_JOB_ID, retries: 1,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_FIRST_BUILD_EVENT },
-async ({ event }) => runNativeStudioFirstBuild(event.data));
+async ({ event, step }) => settleNativeStudioFirstBuild(event.data, step));
+
+/** Site import may still be reserving resources after source preparation.
+ * Recheck only an absent reservation; a mismatched receipt, GitHub push or
+ * build failure is never retried by this observation loop. */
+export async function settleNativeStudioFirstBuild(
+  request: unknown,
+  steps: { run: (id: string, fn: () => Promise<unknown>) => Promise<unknown>;
+    sleep: (id: string, duration: string) => Promise<unknown> },
+  run: typeof runNativeStudioFirstBuild = runNativeStudioFirstBuild,
+) {
+  for (let index = 0; index < MAX_RESOURCE_OBSERVATIONS; index++) {
+    try {
+      return await steps.run(`first-build-resource-observe-${index}`,
+        () => run(request)) as Awaited<ReturnType<typeof runNativeStudioFirstBuild>>;
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          error.message !== 'native_studio_first_build_resources_pending' ||
+          index === MAX_RESOURCE_OBSERVATIONS - 1)
+        throw error;
+    }
+    await steps.sleep(`first-build-resource-wait-${index}`,
+      RESOURCE_OBSERVATION_INTERVAL);
+  }
+  throw Error('native_studio_first_build_resource_observation_exhausted');
+}

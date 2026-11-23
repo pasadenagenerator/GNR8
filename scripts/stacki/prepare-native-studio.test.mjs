@@ -35,6 +35,9 @@ test('two sites share the pin and native gateway but have separate runtime, draf
   assert.notEqual(a.vars.GITHUB_REPOSITORY, b.vars.GITHUB_REPOSITORY);
   assert.equal(a.vars.EDITOR_ACCESS, 'repository'); assert.equal(a.containers[0].max_instances, 1);
   assert.equal(a.vars.PREVIEW_ORIGIN, 'https://preview.one.example.com');
+  assert.equal(a.vars.AI_BASE_URL, 'https://api.openai.com/v1');
+  assert.equal(a.vars.AI_MODEL, 'gpt-5.4-mini-2026-03-17');
+  assert.equal(a.vars.AI_API_KEY, undefined);
   assert.equal(a.main, b.main);
   assert.equal(a.vars.GITHUB_DEPLOY_WORKER, undefined);
   assert.equal(a.vars.GITHUB_DEPLOY_ACCOUNT, undefined);

@@ -3,7 +3,8 @@ import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fingerprint } from '@/gnr8/standalone/publication-contract';
 import { requireNativeStudioResourceReservation,
-  runNativeStudioSecretSetup } from './native-studio-secret-setup-job';
+  runNativeStudioSecretSetup, settleNativeStudioSecretSetup } from
+  './native-studio-secret-setup-job';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -115,4 +116,59 @@ test('stored reservation must still match current repository and domain', async 
     repository: 'example/other' } };
   await assert.rejects(requireNativeStudioResourceReservation(request.scope,
     client), /reservation_missing/);
+});
+
+test('ambiguous secret setup observes one durable provider intent until it settles',
+async () => {
+  const runs: string[] = [], sleeps: string[] = [];
+  let attempts = 0;
+  const steps = {
+    run: async (id: string, fn: () => Promise<unknown>) => {
+      runs.push(id); return fn();
+    },
+    sleep: async (id: string, duration: string) => {
+      sleeps.push(`${id}:${duration}`);
+    },
+  };
+  const result = await settleNativeStudioSecretSetup(request, steps,
+    async () => {
+      attempts++;
+      if (attempts <= 2) throw Error('native_studio_draft_bucket_pending');
+      if (attempts <= 6) throw Error('native_studio_publish_token_pending');
+      return { worker: `gnr8-${request.scope.siteId}-studio`,
+        state: 'prepared' as const };
+    });
+  assert.deepEqual(result, { worker: `gnr8-${request.scope.siteId}-studio`,
+    state: 'prepared' });
+  assert.deepEqual(runs, Array.from({ length: 7 }, (_, i) =>
+    `secret-setup-observe-${i}`));
+  assert.deepEqual(sleeps, Array.from({ length: 6 }, (_, i) =>
+    `secret-setup-wait-${i}:1m`));
+});
+
+test('secret scope conflicts stop without another provider observation', async () => {
+  const runs: string[] = [], sleeps: string[] = [];
+  await assert.rejects(settleNativeStudioSecretSetup(request, {
+    run: async (id: string, fn: () => Promise<unknown>) => {
+      runs.push(id); return fn();
+    },
+    sleep: async (id: string) => { sleeps.push(id); },
+  }, async () => { throw Error('native_studio_publish_token_scope_mismatch'); }),
+  /native_studio_publish_token_scope_mismatch/);
+  assert.deepEqual(runs, ['secret-setup-observe-0']);
+  assert.deepEqual(sleeps, []);
+});
+
+test('persistent pending secret setup ends after a bounded observation window',
+async () => {
+  let observations = 0, sleeps = 0;
+  await assert.rejects(settleNativeStudioSecretSetup(request, {
+    run: async (_id: string, fn: () => Promise<unknown>) => fn(),
+    sleep: async () => { sleeps++; },
+  }, async () => {
+    observations++;
+    throw Error('native_studio_publish_token_pending');
+  }), /native_studio_publish_token_pending/);
+  assert.equal(observations, 8);
+  assert.equal(sleeps, 7);
 });

@@ -47,6 +47,7 @@ export function configuration(input) {
       vars: { STUDIO_ORIGIN: site.studioOrigin, PREVIEW_ORIGIN: previewOrigin,
         GITHUB_REPOSITORY: site.repository, GITHUB_BRANCH: site.branch, GITHUB_APP_ID: site.appId,
         GITHUB_INSTALLATION_ID: site.installationId, GITHUB_CLIENT_ID: site.clientId,
+        AI_BASE_URL: 'https://api.openai.com/v1', AI_MODEL: 'gpt-5.4-mini-2026-03-17',
         SITE_DEPLOYMENT_URL: `${site.studioOrigin}/__studio-deployment`,
         EDITOR_ACCESS: 'repository', EDITOR_GITHUB_IDS: '' },
     })],

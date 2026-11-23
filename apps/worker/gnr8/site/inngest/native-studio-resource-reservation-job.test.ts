@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { runNativeStudioResourceReservation } from './native-studio-resource-reservation-job';
+import { runNativeStudioResourceReservation,
+  settleNativeStudioResourceReservation } from './native-studio-resource-reservation-job';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -87,4 +88,45 @@ test('failed reservation cannot queue a following provider stage', async () => {
     reserve: async () => { throw Error('reservation pending'); },
   }), /reservation pending/);
   assert.equal(f.calls.includes('enqueue'), false);
+});
+
+test('pending resource readback resumes the same scoped reservation before secret setup', async () => {
+  const f = fixture();
+  let observations = 0;
+  const stepIds: string[] = [];
+  const steps = {
+    run: async (id: string, fn: () => Promise<unknown>) => {
+      stepIds.push(id);
+      return fn();
+    },
+    sleep: async (id: string, duration: string) => {
+      assert.equal(duration, '1m');
+      stepIds.push(id);
+    },
+  };
+  const result = await settleNativeStudioResourceReservation(request, steps,
+    (received) => runNativeStudioResourceReservation(received, {
+      ...f.deps, chainEnabled: () => true,
+      reserve: async () => {
+        observations++;
+        f.calls.push('reserve');
+        if (observations === 1) throw Error('native_studio_worker_reservation_pending');
+        return { draftBucket: { bucket: 'private' } };
+      },
+    }));
+  assert.deepEqual(result, { draftBucket: { bucket: 'private' } });
+  assert.deepEqual(stepIds, ['resource-reservation-observe-0',
+    'resource-reservation-wait-0', 'resource-reservation-observe-1']);
+  assert.equal(observations, 2);
+  assert.equal(f.calls.filter(call => call === 'enqueue').length, 1);
+});
+
+test('reservation conflict is terminal without another observation', async () => {
+  const ids: string[] = [];
+  await assert.rejects(settleNativeStudioResourceReservation(request, {
+    run: async (id, fn) => { ids.push(id); return fn(); },
+    sleep: async id => { ids.push(id); },
+  }, async () => { throw Error('native_studio_worker_reservation_conflict'); }),
+  /native_studio_worker_reservation_conflict/);
+  assert.deepEqual(ids, ['resource-reservation-observe-0']);
 });

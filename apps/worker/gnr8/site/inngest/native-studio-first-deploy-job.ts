@@ -19,6 +19,7 @@ type Prebuilt = { accountId: string; commit: string; digest: string;
   siteId: string; sourceId: string; workerId: string };
 type Resources = { target: { scope: Scope; accountId: string };
   workers: { studio: { id: string } } };
+type Secrets = { accountId: string; identity: string; worker: string };
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const SOURCE = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40,64}$/;
@@ -38,13 +39,14 @@ const defaults = {
     const { SupabasePublicationStore } = await import('@/gnr8/standalone/publication-store');
     const store = new SupabasePublicationStore(client,
       process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
-    const [artifact, preflight, prebuilt, resources] = await Promise.all([
+    const [artifact, preflight, prebuilt, resources, secrets] = await Promise.all([
       store.read<Artifact>('native-studio/build-artifact-github-push-v1.json'),
       store.read<Preflight>('native-studio/first-deploy-dry-run-v1.json'),
       store.read<Prebuilt>('native-studio/prebuilt-image-v1.json'),
       store.read<Resources>('native-studio/resources-reserved-v1.json'),
+      store.read<Secrets>('native-studio/first-deploy-secrets-prepared-v1.json'),
     ]);
-    return { artifact, preflight, prebuilt, resources };
+    return { artifact, preflight, prebuilt, resources, secrets };
   },
   deploy: async (request: Request, client: SupabaseClient) => {
     const { runConfiguredNativeStudioFirstDeploy } = await import(
@@ -92,7 +94,8 @@ export async function runNativeStudioFirstDeploy(request: unknown,
   const client = await deps.client();
   if (!client) throw Error('native_studio_first_deploy_store_unavailable');
   await deps.authorize(client, actor, scope.agencyId);
-  const { artifact, preflight, prebuilt, resources } = await deps.evidence(scope, client);
+  const { artifact, preflight, prebuilt, resources, secrets } =
+    await deps.evidence(scope, client);
   if (artifact?.sourceId !== sourceId || artifact.sourceCommit !== sourceCommit ||
       artifact.workerId !== workerId || artifact.artifactCommit !== artifactCommit ||
       artifact.branch !== `gnr8-build-${sourceCommit}` ||
@@ -109,6 +112,15 @@ export async function runNativeStudioFirstDeploy(request: unknown,
       resources.target.accountId !== prebuilt.accountId ||
       resources.workers?.studio?.id !== workerId)
     throw Error('native_studio_first_deploy_evidence_unverified');
+  // Source and resource identities are valid, but the independent secret
+  // setup job may still be finishing. Only an absent receipt can be observed
+  // again; an inconsistent receipt is a terminal scope or integrity failure.
+  if (!secrets) throw Error('native_studio_first_deploy_secrets_pending');
+  if (Object.keys(secrets).sort().join() !== 'accountId,identity,worker' ||
+      secrets.accountId !== prebuilt.accountId ||
+      secrets.worker !== `gnr8-${scope.siteId}-studio` ||
+      !SOURCE.test(secrets.identity))
+    throw Error('native_studio_first_deploy_secrets_unverified');
   const verified = { scope, actor, sourceId, sourceCommit,
     workerId, artifactCommit };
   const result = await deps.deploy(verified, client);
@@ -135,8 +147,18 @@ export async function settleNativeStudioFirstDeploy(
   run: typeof runNativeStudioFirstDeploy = runNativeStudioFirstDeploy,
 ) {
   for (let index = 0; index < MAX_OBSERVATIONS; index++) {
-    const result = await steps.run(`first-deploy-observe-${index}`,
-      () => run(request)) as Awaited<ReturnType<typeof runNativeStudioFirstDeploy>>;
+    let result: Awaited<ReturnType<typeof runNativeStudioFirstDeploy>>;
+    try {
+      result = await steps.run(`first-deploy-observe-${index}`,
+        () => run(request)) as Awaited<ReturnType<typeof runNativeStudioFirstDeploy>>;
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          error.message !== 'native_studio_first_deploy_secrets_pending' ||
+          index === MAX_OBSERVATIONS - 1)
+        throw error;
+      await steps.sleep(`first-deploy-wait-${index}`, OBSERVATION_INTERVAL);
+      continue;
+    }
     if (result.state !== 'pending-review' ||
         !['pending', 'readback-unavailable'].includes(result.observation) ||
         index === MAX_OBSERVATIONS - 1)

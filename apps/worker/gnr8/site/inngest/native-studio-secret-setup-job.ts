@@ -3,6 +3,8 @@ import { inngest } from '@/gnr8/inngest/client';
 
 export const NATIVE_STUDIO_SECRET_SETUP_JOB_ID = 'native-studio-secret-setup-job';
 export const NATIVE_STUDIO_SECRET_SETUP_EVENT = 'gnr8/native-studio.secrets.install.requested';
+const MAX_PENDING_OBSERVATIONS = 8;
+const PENDING_OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
 type Request = { scope: Scope; actor: string };
@@ -85,4 +87,30 @@ export const nativeStudioSecretSetupJob = inngest.createFunction({
   id: NATIVE_STUDIO_SECRET_SETUP_JOB_ID, retries: 0,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_SECRET_SETUP_EVENT },
-async ({ event }) => runNativeStudioSecretSetup(event.data));
+async ({ event, step }) => settleNativeStudioSecretSetup(event.data, step));
+
+/** A creation intent is already durable before either provider can report
+ * pending. Observe that same intent while Cloudflare catches up; all scope,
+ * authorization and provider-conflict errors remain terminal. */
+export async function settleNativeStudioSecretSetup(
+  request: unknown,
+  steps: { run: (id: string, fn: () => Promise<unknown>) => Promise<unknown>;
+    sleep: (id: string, duration: string) => Promise<unknown> },
+  run: typeof runNativeStudioSecretSetup = runNativeStudioSecretSetup,
+) {
+  for (let index = 0; index < MAX_PENDING_OBSERVATIONS; index++) {
+    try {
+      return await steps.run(`secret-setup-observe-${index}`,
+        () => run(request)) as Awaited<ReturnType<typeof runNativeStudioSecretSetup>>;
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          !['native_studio_draft_bucket_pending',
+            'native_studio_publish_token_pending'].includes(error.message) ||
+          index === MAX_PENDING_OBSERVATIONS - 1)
+        throw error;
+    }
+    await steps.sleep(`secret-setup-wait-${index}`,
+      PENDING_OBSERVATION_INTERVAL);
+  }
+  throw Error('native_studio_secret_setup_observation_exhausted');
+}

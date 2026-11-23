@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { runNativeStudioFirstBuild } from './native-studio-first-build-job';
+import { runNativeStudioFirstBuild,
+  settleNativeStudioFirstBuild } from './native-studio-first-build-job';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -103,4 +104,37 @@ test('invalid build result cannot queue preflight', async () => {
       return { ...built, artifactCommit: 'invalid' }; },
   }), /result_unverified/);
   assert.deepEqual(f.calls, ['client', 'authorize', 'source', 'build']);
+});
+
+test('source preparation waits for its separate resource reservation', async () => {
+  const calls: string[] = [];
+  let count = 0;
+  const settled = await settleNativeStudioFirstBuild(request, {
+    run: async (id: string, fn: () => Promise<unknown>) => {
+      calls.push(id); return fn(); },
+    sleep: async (id: string, duration: string) => {
+      assert.equal(duration, '1m'); calls.push(id); },
+  }, (async () => {
+    count++;
+    if (count < 3) throw Error('native_studio_first_build_resources_pending');
+    return built;
+  }) as typeof runNativeStudioFirstBuild);
+  assert.deepEqual(settled, built);
+  assert.deepEqual(calls, [
+    'first-build-resource-observe-0', 'first-build-resource-wait-0',
+    'first-build-resource-observe-1', 'first-build-resource-wait-1',
+    'first-build-resource-observe-2',
+  ]);
+});
+
+test('mismatched reservation cannot repeat the build step', async () => {
+  const calls: string[] = [];
+  await assert.rejects(settleNativeStudioFirstBuild(request, {
+    run: async (id: string, fn: () => Promise<unknown>) => {
+      calls.push(id); return fn(); },
+    sleep: async (id: string) => { calls.push(id); },
+  }, (async () => {
+    throw Error('native_studio_first_build_resources_unverified');
+  }) as typeof runNativeStudioFirstBuild), /resources_unverified/);
+  assert.deepEqual(calls, ['first-build-resource-observe-0']);
 });

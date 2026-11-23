@@ -33,6 +33,7 @@ export function configuredNativeStudioSecretPreparation(env: Environment = proce
   const tokenManager = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_TOKEN_MANAGER ?? '';
   const r2Manager = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER ?? '';
   const workerReader = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_WORKER_READER ?? '';
+  const buildsUserToken = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN ?? '';
   const vaultKey = env.GNR8_NATIVE_STUDIO_VAULT_KEY ?? '';
   const shared: NativeStudioSharedSecrets = {
     GITHUB_PRIVATE_KEY: env.GNR8_NATIVE_STUDIO_GITHUB_PRIVATE_KEY ?? '',
@@ -40,7 +41,7 @@ export function configuredNativeStudioSecretPreparation(env: Environment = proce
     AI_API_KEY: env.GNR8_NATIVE_STUDIO_AI_API_KEY ?? '',
   };
   if (!HEX32.test(accountId) || !HEX32.test(zoneId) ||
-      ![tokenManager, r2Manager, workerReader]
+      ![tokenManager, r2Manager, workerReader, buildsUserToken]
         .every(value => TOKEN.test(value)) ||
       !/^[a-f0-9]{64}$/.test(vaultKey))
     throw Error('native_studio_setup_not_configured');

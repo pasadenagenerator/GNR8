@@ -3,6 +3,8 @@ import { inngest } from '@/gnr8/inngest/client';
 
 export const NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID = 'native-studio-resource-reservation-job';
 export const NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT = 'gnr8/native-studio.resources.reserve.requested';
+const MAX_PENDING_OBSERVATIONS = 8;
+const PENDING_OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
 type Request = { scope: Scope; actor: string };
@@ -60,4 +62,30 @@ export const nativeStudioResourceReservationJob = inngest.createFunction({
   id: NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID, retries: 1,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT },
-async ({ event }) => runNativeStudioResourceReservation(event.data));
+async ({ event, step }) => settleNativeStudioResourceReservation(event.data, step));
+
+/** A durable create intent permits readback of a temporarily absent bucket or
+ * Worker. Only those two pending results are observed again; target conflicts,
+ * access failures and provider errors remain terminal. */
+export async function settleNativeStudioResourceReservation(
+  request: unknown,
+  steps: { run: (id: string, fn: () => Promise<unknown>) => Promise<unknown>;
+    sleep: (id: string, duration: string) => Promise<unknown> },
+  run: typeof runNativeStudioResourceReservation = runNativeStudioResourceReservation,
+) {
+  for (let index = 0; index < MAX_PENDING_OBSERVATIONS; index++) {
+    try {
+      return await steps.run(`resource-reservation-observe-${index}`,
+        () => run(request)) as Awaited<ReturnType<typeof runNativeStudioResourceReservation>>;
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          !['native_studio_draft_bucket_pending',
+            'native_studio_worker_reservation_pending'].includes(error.message) ||
+          index === MAX_PENDING_OBSERVATIONS - 1)
+        throw error;
+    }
+    await steps.sleep(`resource-reservation-wait-${index}`,
+      PENDING_OBSERVATION_INTERVAL);
+  }
+  throw Error('native_studio_resource_reservation_observation_exhausted');
+}

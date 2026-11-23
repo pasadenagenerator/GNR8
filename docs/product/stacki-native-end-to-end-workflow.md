@@ -1222,3 +1222,37 @@ The unchanged native Stacki 1.4.13 scanner found all 35 Lumos components and
 BaseLayout in that package. A local Node 26 build with an inserted Lumos Button
 and the bundled Inter font succeeded; the generic Astro 5-to-7.4.7 export also
 built locally. These checks do not establish hosted editor access or publication.
+
+## Activation follow-up (2026-11-23)
+
+The new-site path was traced from site import through scoped resource
+reservation, confirmed-source preparation, creation of `codex/native-stacki`
+from the repository's initialized default branch, the artifact build and
+the first Studio/public deployments. Source preparation and Cloudflare
+reservation run independently. Their ordering no longer requires an operator
+to repeat a successful step merely because the other side is still pending:
+the reservation job observes only a durable pending bucket/Worker create;
+secret preparation observes only a durable pending bucket/publish-token create;
+first build waits only for an absent resource receipt; first deploy waits only
+for an absent sealed-secret receipt. Each has bounded Inngest sleeps. A present
+receipt with the wrong site, worker, repository or account remains terminal.
+These changes have mocked provider tests and typechecks, not a hosted run.
+
+The shared Cloudflare Builds user token is now checked before bucket or
+publish-token work in secret preparation. A missing token stops that job
+without provider access; the earlier resource-reservation job has a separate
+configuration gate. Its value and the GitHub, AI, session and Container
+secrets still need one-time protected hosted configuration and readback.
+New prepared Studio configuration includes the existing approved native AI
+endpoint and model (`https://api.openai.com/v1`,
+`gpt-5.4-mini-2026-03-17`); `AI_API_KEY` remains a Worker secret. No AI call
+or per-owner usage accounting has been verified through the unchanged editor.
+
+Stacki 1.4.13's native GitHub Push and Cloudflare Publish contracts remain
+compatible with the prepared configuration. Its newer built-in non-GitHub
+authentication modes could support GNR8 owners without personal repository
+write permission, but the current prepared configuration still selects GitHub
+repository access. Identity mapping, native role policy and hosted permission
+checks are therefore required before claiming that every GNR8 authorized owner
+can edit. The four previously prepared Workers do not receive the new AI vars
+or Stacki release merely because the preparation template changed.

@@ -11,6 +11,7 @@ const environment = {
   GNR8_NATIVE_STUDIO_CLOUDFLARE_TOKEN_MANAGER: 'c'.repeat(40),
   GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER: 'g'.repeat(40),
   GNR8_NATIVE_STUDIO_CLOUDFLARE_WORKER_READER: 'd'.repeat(40),
+  GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN: 'h'.repeat(40),
   GNR8_NATIVE_STUDIO_CLOUDFLARE_STUDIO_INSTALLER: 'e'.repeat(40),
   GNR8_NATIVE_STUDIO_VAULT_KEY: 'f'.repeat(64),
   GNR8_NATIVE_STUDIO_GITHUB_PRIVATE_KEY:
@@ -89,7 +90,7 @@ test('preparation claims one scoped receipt without an active Worker version', a
     }), /native_studio_deploy_secrets_conflict/);
 });
 
-test('missing central setup fails before storage or provider access', async () => {
+test('missing shared Builds credential fails before storage or provider access', async () => {
   let calls = 0;
   const client = { from() { calls++; throw Error('unexpected storage access'); } } as unknown as SupabaseClient;
   const transport = (async () => { calls++; throw Error('unexpected provider access'); }) as typeof fetch;
@@ -97,7 +98,9 @@ test('missing central setup fails before storage or provider access', async () =
     agencyId: '11111111-1111-4111-8111-111111111111',
     clientId: '22222222-2222-4222-8222-222222222222',
     siteId: '33333333-3333-4333-8333-333333333333',
-  }, client, {}, transport), /native_studio_setup_not_configured/);
+  }, client, { ...environment,
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN: '' },
+  transport), /native_studio_setup_not_configured/);
   assert.equal(calls, 0);
 });
 

@@ -40,6 +40,10 @@ deps = defaults) {
   const site = await deps.site(scope, client, env);
   const store = deps.store(client, scope, env);
   const reserved = await store.read<NativeStudioResourceReceipt>(NATIVE_STUDIO_RESOURCE_RECEIPT);
+  // Site import and confirmed-source preparation can finish in either order.
+  // An absent reservation can be observed later without opening a checkout;
+  // a present but mismatched receipt must never be treated as temporary.
+  if (!reserved) throw Error('native_studio_first_build_resources_pending');
   const workerId = reserved?.workers?.studio?.id;
   if (!workerId || !HEX32.test(workerId) ||
       reserved.target?.scope?.siteId !== scope.siteId ||

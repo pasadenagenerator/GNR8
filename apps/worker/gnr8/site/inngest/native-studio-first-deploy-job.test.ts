@@ -21,7 +21,9 @@ prebuilt: { accountId: 'f'.repeat(32), commit: request.sourceCommit,
   digest: '1'.repeat(64), siteId: request.scope.siteId,
   sourceId: request.sourceId, workerId: request.workerId },
 resources: { target: { scope: request.scope, accountId: 'f'.repeat(32) },
-  workers: { studio: { id: request.workerId } } } };
+  workers: { studio: { id: request.workerId } } },
+secrets: { accountId: 'f'.repeat(32), identity: '2'.repeat(64),
+  worker: `gnr8-${request.scope.siteId}-studio` } };
 
 function fixture() {
   const calls: string[] = [];
@@ -123,6 +125,57 @@ test('pending Studio observation cannot queue public gateway', async () => {
       observation: 'readback-unavailable' as const }; },
   });
   assert.deepEqual(f.calls, ['client', 'authorize', 'evidence', 'deploy']);
+});
+
+test('missing secret receipt waits before any trusted deploy action', async () => {
+  const f = fixture();
+  await assert.rejects(runNativeStudioFirstDeploy(request, { ...f.deps,
+    evidence: async () => { f.calls.push('evidence'); return {
+      ...evidence, secrets: null as any }; },
+  }), /native_studio_first_deploy_secrets_pending/);
+  assert.deepEqual(f.calls, ['client', 'authorize', 'evidence']);
+  const conflict = fixture();
+  await assert.rejects(runNativeStudioFirstDeploy(request, { ...conflict.deps,
+    evidence: async () => { conflict.calls.push('evidence'); return {
+      ...evidence, secrets: { ...evidence.secrets, accountId: '0'.repeat(32) } }; },
+  }), /native_studio_first_deploy_secrets_unverified/);
+  assert.deepEqual(conflict.calls, ['client', 'authorize', 'evidence']);
+});
+
+test('missing secret receipt settles after durable waits without retrying deploy',
+async () => {
+  const steps: string[] = [];
+  let observations = 0;
+  const result = await settleNativeStudioFirstDeploy(request, {
+    run: async (id: string, fn: () => Promise<unknown>) => {
+      steps.push(id); return fn(); },
+    sleep: async (id: string, duration: string) => {
+      assert.equal(duration, '1m'); steps.push(id); },
+  }, (async () => {
+    observations++;
+    if (observations < 3)
+      throw Error('native_studio_first_deploy_secrets_pending');
+    return { state: 'reconcile-required', commit: request.sourceCommit,
+      observation: 'verified-source-control-plane' };
+  }) as typeof runNativeStudioFirstDeploy);
+  assert.equal(result.state, 'reconcile-required');
+  assert.deepEqual(steps, [
+    'first-deploy-observe-0', 'first-deploy-wait-0',
+    'first-deploy-observe-1', 'first-deploy-wait-1',
+    'first-deploy-observe-2',
+  ]);
+});
+
+test('inconsistent secret receipt is terminal without another observation',
+async () => {
+  const steps: string[] = [];
+  await assert.rejects(settleNativeStudioFirstDeploy(request, {
+    run: async (id: string, fn: () => Promise<unknown>) => {
+      steps.push(id); return fn(); },
+    sleep: async (id: string) => { steps.push(id); },
+  }, (async () => { throw Error('native_studio_first_deploy_secrets_unverified');
+  }) as typeof runNativeStudioFirstDeploy), /secrets_unverified/);
+  assert.deepEqual(steps, ['first-deploy-observe-0']);
 });
 
 test('delayed control-plane readback resumes without repeating a completed step', async () => {
