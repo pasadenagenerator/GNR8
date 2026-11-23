@@ -39,6 +39,7 @@ export async function withNativeStudioImageDrive<Receipt, Verified, Result>(inpu
   if (!input || !UUID.test(input.siteId) || !SHA.test(input.sourceId) ||
       !SNAPSHOT.test(input.buildSnapshotId) ||
       !SNAPSHOT.test(input.pushSnapshotId) ||
+      input.buildSnapshotId === input.pushSnapshotId ||
       !restricted(input.buildNetworkPolicy) ||
       !restricted(input.pushNetworkPolicy) ||
       typeof input.build !== 'function' ||

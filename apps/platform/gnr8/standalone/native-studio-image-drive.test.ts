@@ -104,3 +104,13 @@ test('an unrestricted build policy is rejected before a Drive is created', async
   }, f.sdk), /input_invalid/);
   assert.deepEqual(f.events, []);
 });
+
+test('build and push must use distinct pinned snapshots', async () => {
+  const f = fixture();
+  await assert.rejects(withNativeStudioImageDrive({ ...input,
+    pushSnapshotId: input.buildSnapshotId,
+    build: async () => ({}), verify: async () => ({}),
+    loadCredential: async () => 'token', push: async () => 'unexpected',
+  }, f.sdk), /input_invalid/);
+  assert.deepEqual(f.events, []);
+});

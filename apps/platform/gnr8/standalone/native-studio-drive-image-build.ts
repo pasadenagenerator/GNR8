@@ -4,6 +4,7 @@ import type { Sandbox } from '@vercel/sandbox';
 import { verifyStudioImageArchiveIdentity } from '../../../../scripts/stacki/studio-image-archive.mjs';
 
 const ROOT = '/vercel/sandbox/gnr8-image-source';
+const MANIFEST = '/vercel/sandbox/gnr8-image-source-manifest.json';
 const ARCHIVE = '/gnr8-image/image.tar';
 const MAX_FILES = 3000;
 const MAX_TOTAL = 512 * 1024 * 1024;
@@ -25,10 +26,15 @@ function safePath(path: unknown): path is string {
       part === '.git' || part === 'node_modules');
 }
 
-function sourceScript(files: { path: string; bytes: number; sha256: string }[]) {
+function sourceScript(manifestSha256: string) {
   return `import{createHash}from'node:crypto';import{constants}from'node:fs';
 import{lstat,open}from'node:fs/promises';import{join}from'node:path';
-const root=${JSON.stringify(ROOT)},files=${JSON.stringify(files)};
+const root=${JSON.stringify(ROOT)},manifest=${JSON.stringify(MANIFEST)};
+const m=await lstat(manifest);if(!m.isFile()||m.isSymbolicLink()||m.size>2097152)process.exit(2);
+const mf=await open(manifest,constants.O_RDONLY|constants.O_NOFOLLOW);
+let body;try{body=await mf.readFile()}finally{await mf.close()}
+if(body.length!==m.size||createHash('sha256').update(body).digest('hex')!==${JSON.stringify(manifestSha256)})process.exit(2);
+const files=JSON.parse(body.toString('utf8'));
 for(const item of files){const p=join(root,item.path),s=await lstat(p);
 if(!s.isFile()||s.isSymbolicLink()||s.size!==item.bytes)process.exit(2);
 const f=await open(p,constants.O_RDONLY|constants.O_NOFOLLOW);
@@ -94,9 +100,13 @@ export async function buildNativeStudioDriveImage(
     throw Error('native_studio_drive_image_context_invalid');
   const listed = [...files].map(([path, body]) => ({ path, bytes: body.length,
     sha256: createHash('sha256').update(body).digest('hex') }));
+  const manifestBody = Buffer.from(JSON.stringify(listed));
+  if (manifestBody.length > 2 * 1024 * 1024)
+    throw Error('native_studio_drive_image_input_invalid');
+  const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex');
   const clean = await sandbox.runCommand({ cmd: 'node',
     args: ['--input-type=module', '-e',
-      `import{lstat}from'node:fs/promises';for(const p of ${JSON.stringify([ROOT, ARCHIVE])}){try{await lstat(p);process.exit(2)}catch(e){if(e.code!=='ENOENT')throw e}}`],
+      `import{lstat}from'node:fs/promises';for(const p of ${JSON.stringify([ROOT, MANIFEST, ARCHIVE])}){try{await lstat(p);process.exit(2)}catch(e){if(e.code!=='ENOENT')throw e}}`],
     timeoutMs: 60_000, env: { CI: '1' } });
   if (clean.exitCode !== 0) throw Error('native_studio_drive_image_snapshot_dirty');
   await sandbox.writeFiles([...files].map(([path, content]) => ({
@@ -104,9 +114,10 @@ export async function buildNativeStudioDriveImage(
   })).concat([
     { path: `${ROOT}/studio/.studio-image/site/package.json`, content: packageJson },
     { path: `${ROOT}/studio/.studio-image/site/package-lock.json`, content: lock },
+    { path: MANIFEST, content: manifestBody },
   ]));
   const check = async () => command(sandbox, 'node',
-    ['--input-type=module', '-e', sourceScript(listed)], ROOT, 5 * 60_000);
+    ['--input-type=module', '-e', sourceScript(manifestSha256)], ROOT, 5 * 60_000);
   if (await check() !== 'verified')
     throw Error('native_studio_drive_image_source_changed');
   const tag = `gnr8-${input.site.siteId}-studio:${input.sourceId.slice(0, 32)}`;

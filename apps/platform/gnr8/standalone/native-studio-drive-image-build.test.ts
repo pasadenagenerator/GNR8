@@ -46,6 +46,8 @@ test('build writes verified source and exports one scoped image without credenti
     ['node', 'writeFiles', 'node', 'docker', 'docker', 'node', 'node']);
   assert.deepEqual(f.calls.filter(call => call.cmd === 'docker')
     .map(call => call.args[0]), ['build', 'save']);
+  assert.ok(f.calls.filter(call => call.cmd === 'node')
+    .every(call => call.args[2].length < 5_000));
   assert.ok(f.calls.every(call => !call.env ||
     !Object.hasOwn(call.env, 'CLOUDFLARE_API_TOKEN')));
 });
@@ -66,4 +68,17 @@ test('untrusted Docker context is rejected before any Sandbox command', async ()
       { path: 'studio/.studio-image/site/extra', body: Buffer.from('bad') }] }),
   /context_invalid/);
   assert.equal(f.calls.length, 0);
+});
+
+test('large verified source keeps every command argument bounded', async () => {
+  const f = fixture();
+  const files = [...input.files, ...Array.from({ length: 2500 }, (_, index) => ({
+    path: `studio/src/page-${index}.ts`, body: Buffer.from(`export default ${index}`),
+  }))];
+  await buildNativeStudioDriveImage(f.sandbox as any, archivePath,
+    { ...input, files });
+  assert.ok(f.calls.filter(call => call.cmd === 'node')
+    .every(call => call.args[2].length < 5_000));
+  assert.equal(f.calls.find(call => call.cmd === 'writeFiles')?.args[0],
+    String(files.length + 3));
 });
