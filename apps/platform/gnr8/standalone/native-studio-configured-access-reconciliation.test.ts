@@ -52,3 +52,33 @@ test('a pending Access mutation stops before the GitHub write', async () => {
   /pending/);
   assert.deepEqual(calls, ['inspect', 'policy']);
 });
+
+test('removal revokes the bound application sessions before changing Git roles', async () => {
+  const calls: string[] = [];
+  const oldRoles = { ...previous, previousPrincipals:
+    ['access:admin@example.com', 'access:owner@example.com'] };
+  const newPolicy = { ...policyProof, principals: ['access:owner@example.com'] };
+  const deps = {
+    store: () => ({ read: async () => ({ appId }) }),
+    inspectRoles: async () => { calls.push('inspect'); return oldRoles; },
+    policy: async () => { calls.push('policy'); return newPolicy; },
+    revokeSessions: async () => { calls.push('revoke'); return {
+      state: 'revoke-accepted' as const, appId,
+      removed: ['access:admin@example.com'] }; },
+    writeRoles: async () => { calls.push('roles'); return {
+      state: 'verified' as const, commit: 'f'.repeat(40),
+      principals: newPolicy.principals }; },
+  };
+  const result = await configuredNativeStudioAccessReconciliation({ scope,
+    client: {} as SupabaseClient, sourceId, actor }, env, fetch, deps as any);
+  assert.deepEqual(calls, ['inspect', 'policy', 'revoke', 'roles']);
+  assert.equal(result.sessions, 'revoke-accepted');
+
+  calls.length = 0;
+  await assert.rejects(configuredNativeStudioAccessReconciliation({ scope,
+    client: {} as SupabaseClient, sourceId, actor }, env, fetch, {
+      ...deps, revokeSessions: async () => { calls.push('revoke');
+        throw Error('pending-review'); },
+    } as any), /pending-review/);
+  assert.deepEqual(calls, ['inspect', 'policy', 'revoke']);
+});

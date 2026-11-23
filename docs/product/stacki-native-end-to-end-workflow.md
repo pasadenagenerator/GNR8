@@ -1355,18 +1355,24 @@ scoped build handoff. No member or Auth change emits that event yet, so
 automatic membership propagation is not operational. A route-only event would
 miss email confirmation, bans, and email changes in Supabase Auth; reliable
 convergence needs a bounded drift scan or a durable identity-change feed and
-a reviewed system actor. The trusted runner requires
+a reviewed system actor. The existing
+`gnr8_site_github_repository_bindings` registry can enumerate bound scopes
+before a ready binding exists; each candidate still needs its immutable
+handoff and Access v2 source verified before provider work. The trusted runner requires
 `GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED=1`. The candidate resolver
 excludes known unconfirmed, banned, and changing identities while requiring
 at least one confirmed admin. Native Stacki caches roles for about a minute and
 can use stale roles for up to an hour during a GitHub outage. Immediate
 revocation therefore needs an additional provider-level access cut-off or a
-documented emergency lock; the roles file alone cannot guarantee it. The
-Cloudflare [application token-revoke API](https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/applications/methods/revoke_tokens/)
-can sign out all users for one Access application, but it is not wired to this
-local reconciler yet. The direct
-`preview.<working-host>` Studio Worker domain must also be checked before
-immediate revocation can be claimed. Only
+documented emergency lock; the roles file alone cannot guarantee it. For a
+removed principal, the local reconciler now calls Cloudflare's
+[application token-revoke API](https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/applications/methods/revoke_tokens/)
+after policy readback and before the GitHub role commit. It signs out every
+editor on that one application. A confirmed API response is stored once; an
+ambiguous response stops the transition for review without a blind retry.
+The direct `preview.<working-host>` Studio Worker domain retains a separate
+native preview session and needs its own protection before immediate
+revocation can be claimed. Only
 after the roles file and provider policy are verified should the owner login,
 AI Apply, native Push and native Publish be accepted on a representative site.
 

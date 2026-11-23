@@ -5,6 +5,7 @@ import type { NativeStudioScope } from './native-studio-binding-store';
 import { inspectBoundNativeStudioGitHubRoles,
   reconcileBoundNativeStudioGitHubRoles } from './native-studio-github-role-reconciliation';
 import { reconcileNativeStudioAccessOwnerPolicy } from './native-studio-access-policy-reconciliation';
+import { revokeBoundNativeStudioAccessSessions } from './native-studio-access-session-revocation';
 
 type Environment = Record<string, string | undefined>;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -16,6 +17,7 @@ const defaults = {
     new SupabasePublicationStore(client, bucket, scope),
   inspectRoles: inspectBoundNativeStudioGitHubRoles,
   policy: reconcileNativeStudioAccessOwnerPolicy,
+  revokeSessions: revokeBoundNativeStudioAccessSessions,
   writeRoles: reconcileBoundNativeStudioGitHubRoles,
 };
 
@@ -50,9 +52,16 @@ deps = defaults) {
     appId: bound.appId, credential, store, actor,
     previousCommit: previous.headCommit,
     previousPrincipals: previous.previousPrincipals }, transport);
+  const removed = previous.previousPrincipals.filter(principal =>
+    !policyProof.principals.includes(principal));
+  const sessions = removed.length ? await deps.revokeSessions({ scope, client,
+    store, accountId, appId: bound.appId, credential, actor,
+    previousCommit: previous.headCommit,
+    previousPrincipals: previous.previousPrincipals, policyProof }, transport) : null;
   const roles = await deps.writeRoles({ scope, client, store, sourceId, actor,
     previous, policyProof }, env, transport);
   return { state: roles.state, scope, sourceId,
     accessAppId: bound.appId, policyId: policyProof.policyId,
-    commit: roles.commit, principals: policyProof.principals };
+    commit: roles.commit, principals: policyProof.principals,
+    sessions: sessions?.state ?? 'unchanged' };
 }
