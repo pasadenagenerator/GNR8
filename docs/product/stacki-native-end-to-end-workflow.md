@@ -639,8 +639,15 @@ adapter now resolves the resource receipt, build handoff, exact first-deploy
 intent and attempt for both Workers, central Cloudflare credential, and a
 repository-scoped GitHub read token before invoking that recorder. It checks
 the active public version's exact first-deploy tag. It does not take Worker IDs,
-commit or domain from an event. It still has no hosted caller; the new public
-gateway job remains disabled, so it cannot yet produce a receipt in production.
+commit or domain from an event. An observed public-gateway result now queues a
+scoped first-open job when `GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED=1`. The job
+rechecks actor authorization and the exact durable source handoff before the
+adapter independently checks GitHub, both Cloudflare versions and the public
+Stacki login page. The existing Design tab reads the resulting receipt and
+shows a labelled first native sign-in link; it does not label the editor ready.
+Local mocked tests cover this handoff. Pending public readback does not queue
+it, and the flag remains off until the hosted path is verified, so no new
+receipt has been produced in production.
 A central, trusted token issuer is available for
 that later job. It signs a short-lived GitHub App JWT with the shared private
 key, requests `contents:write` for the first push or `contents:read` for

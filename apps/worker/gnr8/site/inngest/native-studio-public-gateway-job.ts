@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inngest } from '@/gnr8/inngest/client';
+import { NATIVE_STUDIO_FIRST_OPEN_EVENT } from './native-studio-first-open-job';
 
 export const NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID = 'native-studio-public-gateway-job';
 export const NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT =
@@ -59,6 +60,11 @@ const defaults = {
     }
     return runConfiguredNativeStudioPublicDeploy({ ...input, trustedWrangler });
   },
+  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED === '1',
+  enqueueFirstOpen: async (request: { scope: Scope; actor: string;
+    sourceId: string; sourceCommit: string }) => {
+    await inngest.send({ name: NATIVE_STUDIO_FIRST_OPEN_EVENT, data: request });
+  },
 };
 
 /** The event cannot select the public Worker or domain. Both are re-read from
@@ -89,8 +95,14 @@ export async function runNativeStudioPublicGateway(request: unknown,
       artifact.workerId !== workerId || artifact.artifactCommit !== artifactCommit ||
       artifact.branch !== `gnr8-build-${sourceCommit}`)
     throw Error('native_studio_public_gateway_artifact_unverified');
-  return deps.publish({ scope, actor, sourceId, sourceCommit,
+  const result = await deps.publish({ scope, actor, sourceId, sourceCommit,
     workerId, artifactCommit }, client);
+  if (result.commit !== sourceCommit)
+    throw Error('native_studio_public_gateway_result_unverified');
+  if (deps.chainEnabled() && result.state === 'first-open-required' &&
+      result.observation === 'observed-control-plane')
+    await deps.enqueueFirstOpen({ scope, actor, sourceId, sourceCommit });
+  return result;
 }
 
 export const nativeStudioPublicGatewayJob = inngest.createFunction({

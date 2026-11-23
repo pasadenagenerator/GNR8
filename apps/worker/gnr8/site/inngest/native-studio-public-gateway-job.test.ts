@@ -37,8 +37,11 @@ function fixture() {
       assert.deepEqual(received, request);
       calls.push('publish');
       return { state: 'first-open-required' as const,
-        commit: request.sourceCommit };
+        commit: request.sourceCommit,
+        observation: 'observed-control-plane' as const };
     },
+    chainEnabled: () => false,
+    enqueueFirstOpen: async () => { calls.push('enqueue'); },
   };
   return { calls, deps };
 }
@@ -71,6 +74,32 @@ test('revoked actor or mismatched artifact prevents public intent and deploy', a
 test('exact scoped artifact enters guarded public gateway once', async () => {
   const f = fixture();
   assert.deepEqual(await runNativeStudioPublicGateway(request, f.deps),
-    { state: 'first-open-required', commit: request.sourceCommit });
+    { state: 'first-open-required', commit: request.sourceCommit,
+      observation: 'observed-control-plane' });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'publish']);
+});
+
+test('observed public version queues only scoped first-open identities', async () => {
+  const f = fixture();
+  await runNativeStudioPublicGateway(request, { ...f.deps,
+    chainEnabled: () => true,
+    enqueueFirstOpen: async value => {
+      assert.deepEqual(value, { scope: request.scope, actor: request.actor,
+        sourceId: request.sourceId, sourceCommit: request.sourceCommit });
+      f.calls.push('enqueue');
+    },
+  });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact',
+    'publish', 'enqueue']);
+});
+
+test('pending public readback cannot expose first-open link', async () => {
+  const f = fixture();
+  await runNativeStudioPublicGateway(request, { ...f.deps,
+    chainEnabled: () => true,
+    publish: async () => { f.calls.push('publish'); return {
+      state: 'pending-review' as const, commit: request.sourceCommit,
+      observation: 'readback-unavailable' as const }; },
+  });
   assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'publish']);
 });
