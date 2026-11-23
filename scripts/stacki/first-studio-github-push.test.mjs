@@ -97,6 +97,25 @@ test('invalid commit parent cannot claim a push intent', async () => {
   assert.equal(f.transfers(), 0);
 });
 
+test('Access role freshness blocks intent and is rechecked before transfer', async () => {
+  const stale = fixture();
+  stale.deps.verifyAccess = async () => { throw Error('native_access_roles_snapshot_stale'); };
+  await assert.rejects(runFirstStudioGitHubPush(stale.input, stale.deps),
+    /native_access_roles_snapshot_stale/);
+  assert.equal(stale.records.size, 0);
+  assert.equal(stale.transfers(), 0);
+
+  const changed = fixture();
+  let reads = 0;
+  changed.deps.verifyAccess = async () => {
+    if (++reads === 2) throw Error('native_access_roles_snapshot_stale');
+  };
+  await assert.rejects(runFirstStudioGitHubPush(changed.input, changed.deps),
+    /native_access_roles_snapshot_stale/);
+  assert.equal(reads, 2);
+  assert.equal(changed.transfers(), 0);
+});
+
 test('changed remote base conflicts with an already claimed intent', async () => {
   const f = fixture();
   f.deps.transfer = async () => { throw Error('timeout'); };

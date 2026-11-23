@@ -123,7 +123,8 @@ export async function runFirstStudioGitHubPush(input, deps) {
       typeof deps.verifyParent !== 'function' ||
       typeof deps.readSite !== 'function' ||
       typeof deps.inspectRemote !== 'function' ||
-      typeof deps.transfer !== 'function')
+      typeof deps.transfer !== 'function' ||
+      (deps.verifyAccess !== undefined && typeof deps.verifyAccess !== 'function'))
     throw Error('native_studio_github_push_input_invalid');
   const current = await deps.readSite(scope);
   if (JSON.stringify(current) !== JSON.stringify(site))
@@ -154,6 +155,7 @@ export async function runFirstStudioGitHubPush(input, deps) {
   if (existing) return { state: 'pending-review', commit: verified.commit };
   await deps.verifyParent({ project, site, commit: verified.commit,
     baseCommit: before.baseCommit, credential, trustedGit });
+  if (deps.verifyAccess) await deps.verifyAccess();
   const claimed = await store.claim(INTENT, expectedIntent);
   const recorded = await store.read(INTENT);
   if (!recorded || JSON.stringify(recorded) !== JSON.stringify(expectedIntent))
@@ -162,6 +164,7 @@ export async function runFirstStudioGitHubPush(input, deps) {
   const rebound = await deps.readSite(scope);
   if (JSON.stringify(rebound) !== JSON.stringify(site))
     throw Error('native_studio_github_push_target_changed');
+  if (deps.verifyAccess) await deps.verifyAccess();
   try { await deps.transfer({ project, site, commit: verified.commit,
     baseCommit: before.baseCommit,
     credential, trustedGit }); }
