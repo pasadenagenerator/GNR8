@@ -1013,6 +1013,22 @@ environment. Vercel documents [Docker inside Sandbox](https://vercel.com/changel
 but that capability has not been connected to this deployment job. The
 registered Inngest route itself is not evidence of a Docker daemon.
 
+There is also a credential-boundary blocker in the current first-deploy path.
+The credential-free Wrangler dry run builds the unchanged Studio Dockerfile,
+but the later `runTrustedStudioDeploy` invokes Wrangler again with the
+Cloudflare token and six Studio secrets while its container `image` still
+points to `../Dockerfile`. Wrangler therefore builds the image again in the
+credentialed process. This does not satisfy the intended separation between
+site-controlled builds and deployment credentials. Cloudflare supports a
+[pre-built image reference](https://developers.cloudflare.com/containers/guides/image-management/)
+for this container configuration, with no Docker build at deploy time. The
+next implementation slice must build the image without credentials, transfer
+only the immutable image into a fresh trusted context, push it to a registry,
+and deploy a verified image reference. The generated Stacki source stays
+unchanged; any deploy-only configuration must be derived and checked outside
+the editable source. The existing local dry-run result does not prove this
+new boundary, and all related feature switches stay off.
+
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required
 Docker capability, a verified build snapshot, separate build/deploy credential
