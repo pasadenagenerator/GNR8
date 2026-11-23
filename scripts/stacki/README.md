@@ -105,8 +105,12 @@ credential-free Wrangler Docker/Worker dry run in a separate disposable job.
 The configured first-deploy call checks this receipt before loading deployment
 credentials, prepares the existing intent, invokes the trusted one-attempt gate
 and reads back the Cloudflare control plane. The final gate rechecks the build
-handoff and ignored Docker image directory before claiming the attempt.
-These are callable local boundaries; the central deploy credential still needs
+handoff and ignored Docker image directory, then requires a scoped prebuilt
+image receipt before claiming the attempt. It derives a disposable Wrangler
+config with the image digest and removes it afterward. The image build,
+registry push and receipt producer are not yet connected, so hosted first
+deployment remains disabled. These are callable local boundaries; the central
+deploy credential still needs
 trusted-host configuration, and a hosted dispatcher and live acceptance remain
 to be connected.
 The configured first-open adapter reads the scoped reservation, build and

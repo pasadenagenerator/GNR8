@@ -1,5 +1,5 @@
-/** Run only in a dedicated deploy job with the verified checkout mounted
- * read-only. The build job must have ended before this process receives keys.
+/** Run only in a dedicated deploy job after the credential-free image build
+ * has ended. This gate derives a temporary config in the verified checkout.
  * Importing this module never contacts Cloudflare.
  */
 import { execFile } from 'node:child_process';
@@ -11,6 +11,7 @@ import { verifyCommittedStudioSource } from './prepare-git-branch.mjs';
 import { verifyStudioBuildHandoff } from './build-handoff.mjs';
 import { verifyStudioImageSite } from './materialize-studio-image-site.mjs';
 import { firstStudioDeployIdentity } from './first-studio-deploy-identity.mjs';
+import { preparePrebuiltStudioDeployConfig } from './prebuilt-studio-deploy-config.mjs';
 
 const exec = promisify(execFile);
 const TAG = /^gnr8-first-[a-f0-9]{64}$/;
@@ -26,7 +27,8 @@ const NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
 
 const defaults = { verifySource: verifyCommittedStudioSource,
   verifyHandoff: verifyStudioBuildHandoff,
-  verifyImage: verifyStudioImageSite, invoke: exec };
+  verifyImage: verifyStudioImageSite,
+  prepareConfig: preparePrebuiltStudioDeployConfig, invoke: exec };
 
 export async function runTrustedStudioDeploy(input, deps = defaults) {
   deps = { ...defaults, ...deps };
@@ -102,14 +104,21 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
   if (!head || head.repositoryId !== site.repositoryId ||
       head.branch !== site.branch || head.commit !== commit)
     throw Error('native_studio_trusted_deploy_github_head_unverified');
-  if (!await store.claim(ATTEMPT, { identity, commit }))
-    throw Error('native_studio_trusted_deploy_already_attempted');
-  const privateHome = await mkdtemp(join(tmpdir(), 'gnr8-studio-deploy-'));
+  const deployConfig = await deps.prepareConfig({ studio, store, sourceId,
+    commit, workerId, site });
+  if (!deployConfig || !/^cloudflare\/\.gnr8-deploy-[a-f0-9-]+\.jsonc$/.test(
+    deployConfig.relative) || typeof deployConfig.cleanup !== 'function')
+    throw Error('native_studio_trusted_deploy_config_invalid');
+  let privateHome;
   try {
+    privateHome = await mkdtemp(join(tmpdir(), 'gnr8-studio-deploy-'));
+    if (!await store.claim(ATTEMPT, { identity, commit }))
+      throw Error('native_studio_trusted_deploy_already_attempted');
     const secretFile = join(privateHome, 'secrets.json');
     await writeFile(secretFile, JSON.stringify(secrets), { flag: 'wx', mode: 0o600 });
     try {
-      await deps.invoke(executable, [...args, '--secrets-file', secretFile], {
+      await deps.invoke(executable, [args[0], args[1], deployConfig.relative,
+        ...args.slice(3), '--secrets-file', secretFile], {
         cwd: studio, shell: false, windowsHide: true, timeout: 15 * 60_000,
         maxBuffer: 2 * 1024 * 1024,
         env: { PATH: process.env.PATH ?? '', HOME: privateHome, TMPDIR: tmpdir(),
@@ -117,6 +126,7 @@ export async function runTrustedStudioDeploy(input, deps = defaults) {
       });
     } catch { throw Error('native_studio_trusted_deploy_failed'); }
   } finally {
-    await rm(privateHome, { recursive: true, force: true });
+    if (privateHome) await rm(privateHome, { recursive: true, force: true });
+    await deployConfig.cleanup();
   }
 }

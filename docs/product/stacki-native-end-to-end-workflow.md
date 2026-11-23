@@ -1022,12 +1022,15 @@ credentialed process. This does not satisfy the intended separation between
 site-controlled builds and deployment credentials. Cloudflare supports a
 [pre-built image reference](https://developers.cloudflare.com/containers/guides/image-management/)
 for this container configuration, with no Docker build at deploy time. The
-next implementation slice must build the image without credentials, transfer
-only the immutable image into a fresh trusted context, push it to a registry,
-and deploy a verified image reference. The generated Stacki source stays
-unchanged; any deploy-only configuration must be derived and checked outside
-the editable source. The existing local dry-run result does not prove this
-new boundary, and all related feature switches stay off.
+trusted deploy gate now requires a private, scoped receipt that binds the
+image digest to the source commit, Worker and site. It derives a temporary
+deploy configuration that changes only the container image to a Cloudflare
+Registry digest reference, then removes that configuration after the attempt.
+Missing or mismatched receipts stop before the one deployment attempt is
+claimed. The committed Stacki configuration remains unchanged. A separate
+credential-free image builder, immutable artifact transfer, registry push and
+receipt producer are still needed before this gate can run; the previous local
+dry-run result does not establish them. All related feature switches stay off.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

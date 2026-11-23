@@ -62,6 +62,8 @@ test('post-build intent feeds the exact trusted deploy gate without rebuilding',
         repository: site.repository }),
       verifyHandoff: f.deps.verifyHandoff,
       verifyImage: async () => ({ files: 2 }),
+      prepareConfig: async () => ({ relative: 'cloudflare/.gnr8-deploy-1234.jsonc',
+        cleanup: async () => {} }),
       inspectGitHubHead: f.deps.inspectGitHubHead,
       invoke: async () => { invoked++; },
     });

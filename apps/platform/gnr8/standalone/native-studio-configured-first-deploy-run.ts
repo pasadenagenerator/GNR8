@@ -23,9 +23,9 @@ const defaults = {
 
 /** One first-deploy attempt from verified GitHub refs. The caller supplies a
  * trusted credential-free preflight result from a separate build environment.
- * This function does not invoke npm directly. The downstream Wrangler deploy
- * still builds the Dockerfile image after credentials are loaded; the hosted
- * runner must remain disabled until that build is moved to a separate context.
+ * This function does not invoke npm directly. The downstream trusted gate now
+ * requires an immutable prebuilt image receipt. The hosted runner stays off
+ * until a separate credential-free image build and registry push supplies it.
  */
 export async function runConfiguredNativeStudioFirstDeploy(input: {
   scope: NativeStudioScope; client: SupabaseClient; sourceId: string;

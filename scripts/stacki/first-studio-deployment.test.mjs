@@ -113,6 +113,10 @@ test('producer command passes the dedicated deploy gate before provider invocati
   f.deps.deploy = async command => {
     try {
       await runTrustedStudioDeploy(command, { verifySource: f.deps.verifySource,
+        verifyHandoff: async () => ({ sourceId, commit, scope, workerId }),
+        verifyImage: async () => ({ files: 2 }),
+        prepareConfig: async () => ({ relative: 'cloudflare/.gnr8-deploy-1234.jsonc',
+          cleanup: async () => {} }),
         inspectGitHubHead: f.deps.inspectGitHubHead,
         invoke: async () => { invoked++; } });
     } catch (error) { deployError = error; throw error; }
@@ -158,6 +162,10 @@ test('trusted deploy gate rechecks GitHub before invoking Cloudflare', async () 
   f.deps.deploy = async command => {
     try {
       await runTrustedStudioDeploy(command, { verifySource: f.deps.verifySource,
+        verifyHandoff: async () => ({ sourceId, commit, scope, workerId }),
+        verifyImage: async () => ({ files: 2 }),
+        prepareConfig: async () => ({ relative: 'cloudflare/.gnr8-deploy-1234.jsonc',
+          cleanup: async () => {} }),
         inspectGitHubHead: async () => ({ repositoryId: site.repositoryId,
           branch: site.branch, commit: 'f'.repeat(40) }),
         invoke: async () => { invoked++; } });
