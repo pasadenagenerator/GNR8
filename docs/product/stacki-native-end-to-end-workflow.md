@@ -1350,18 +1350,19 @@ branch HEAD, updates only the bound site's sole Cloudflare Access owner
 policy, then writes `.stacki/roles.json` with a site-scoped GitHub App token
 and a non-forced branch update. Both writes have immutable intents and
 provider readback; an ambiguous write can remain `pending-review`. Its entry
-point now has a gated Worker event handler that derives the source ID from the
-scoped build handoff. No member or Auth change emits that event yet, so
-automatic membership propagation is not operational. A route-only event would
-miss email confirmation, bans, and email changes in Supabase Auth; reliable
-convergence needs a bounded drift scan or a durable identity-change feed and
-a reviewed system actor. The existing
-`gnr8_site_github_repository_bindings` registry now has a bounded, read-only
-inventory helper for bound scopes before a ready binding exists. It verifies
-each immutable handoff and source receipt and lists only Access v2 sites.
-The inventory does not grant system authority for provider writes. The
-trusted runner requires
-`GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED=1`. The candidate resolver
+point has a gated Worker event handler that derives the source ID from the
+scoped build handoff. No member or Auth change emits that human event. The
+separate, payload-free production cron scans bound site scopes every 15 minutes
+and lists only fully verified Access v2 sources. It uses an in-process system
+authority that cannot arrive in an Inngest event payload. Each provider writer
+rechecks the current site and confirmed owner/admin candidates. The scan
+pages through the existing `gnr8_site_github_repository_bindings` registry,
+reports invalid sites separately, and fails visibly if its 1,000-site cap is
+exceeded. The trusted runner requires both
+`GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED=1` and
+`GNR8_NATIVE_STUDIO_ACCESS_SCHEDULED_ENABLED=1`. This local path remains
+inactive until the updated Worker is deployed and those shared settings are
+enabled; it has not been exercised against hosted providers. The candidate resolver
 excludes known unconfirmed, banned, and changing identities while requiring
 at least one confirmed admin. Native Stacki caches roles for about a minute and
 can use stale roles for up to an hour during a GitHub outage. Immediate

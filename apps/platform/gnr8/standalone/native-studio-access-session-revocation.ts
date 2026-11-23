@@ -4,7 +4,9 @@ import type { PublicationStore } from './publication-store';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { fingerprint } from './publication-contract';
 import { inspectCurrentNativeStudioAccessOwnerPolicy } from './native-studio-access-policy-reconciliation';
-import { requireAgencyBackgroundActor } from '../../src/auth/agency-background-action';
+import { isNativeStudioReconciliationActor,
+  requireNativeStudioReconciliationAuthority,
+  type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -18,10 +20,11 @@ type PolicyProof = { state: 'observed-exact-access-policy'; appId: string;
   policyId: string; principals: string[] };
 type Store = Pick<PublicationStore, 'read' | 'claim' | 'put'>;
 type Input = { scope: NativeStudioScope; client: SupabaseClient; store: Store;
-  accountId: string; appId: string; credential: string; actor: string;
+  accountId: string; appId: string; credential: string;
+  actor: NativeStudioReconciliationActor;
   previousCommit: string; previousPrincipals: string[]; policyProof: PolicyProof };
 const defaults = { policy: inspectCurrentNativeStudioAccessOwnerPolicy,
-  actor: requireAgencyBackgroundActor };
+  actor: requireNativeStudioReconciliationAuthority };
 
 /** A removal signs out every user of this one bound Access application.
  * Cloudflare offers no token-level readback, so an ambiguous POST is never
@@ -35,7 +38,8 @@ export async function revokeBoundNativeStudioAccessSessions(input: Input,
       typeof value === 'string' && UUID.test(value)) || !client || !store ||
       typeof store.read !== 'function' || typeof store.claim !== 'function' ||
       typeof store.put !== 'function' || !HEX32.test(accountId) ||
-      !APP_ID.test(appId) || !TOKEN.test(credential) || !UUID.test(actor) ||
+      !APP_ID.test(appId) || !TOKEN.test(credential) ||
+      !isNativeStudioReconciliationActor(actor) ||
       !COMMIT.test(previousCommit) || !Array.isArray(previousPrincipals) ||
       !policyProof || policyProof.state !== 'observed-exact-access-policy' ||
       policyProof.appId !== appId || !UUID.test(policyProof.policyId) ||
@@ -46,8 +50,7 @@ export async function revokeBoundNativeStudioAccessSessions(input: Input,
   if (!removed.length)
     throw Error('native_studio_access_session_revoke_no_removal');
   const exact = async () => {
-    await deps.actor(client, { userId: actor, agencyId: scope.agencyId,
-      action: 'publish' });
+    await deps.actor(client, { actor, scope });
     const current = await deps.policy({ scope, client, store, accountId,
       appId, credential }, transport);
     if (fingerprint(current) !== fingerprint(policyProof))

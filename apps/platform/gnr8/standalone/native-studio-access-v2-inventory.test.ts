@@ -82,23 +82,36 @@ test('pages by bound site ID and includes only fully checked Access v2 sources',
   const first = await listVerifiedNativeStudioAccessV2Scopes({ client: f.client,
     limit: 2 }, {}, f.deps as any);
   assert.deepEqual(first, { entries: [{ scope: { agencyId, clientId,
-    siteId: sites[0] }, sourceId }], nextCursor: sites[1] });
+    siteId: sites[0] }, sourceId }], errors: [], nextCursor: sites[1] });
   const second = await listVerifiedNativeStudioAccessV2Scopes({ client: f.client,
     cursor: first.nextCursor!, limit: 2 }, {}, f.deps as any);
-  assert.deepEqual(second, { entries: [], nextCursor: null });
+  assert.deepEqual(second, { entries: [], errors: [], nextCursor: null });
   assert.deepEqual(f.verified, [sites[0], sites[1]]);
   assert.deepEqual(f.requests, [{ after: null, limit: 3 },
     { after: sites[1], limit: 3 }]);
 });
 
-test('source or current repository mismatch blocks the page', async () => {
+test('source or current repository mismatch is reported without starving later sites', async () => {
   const source = fixture({ v2Sites: [sites[0]], corruptSource: sites[0] });
-  await assert.rejects(listVerifiedNativeStudioAccessV2Scopes({ client: source.client,
-    limit: 1 }, {}, source.deps as any), /source_invalid/);
+  assert.deepEqual(await listVerifiedNativeStudioAccessV2Scopes({ client: source.client,
+    limit: 1 }, {}, source.deps as any), { entries: [],
+    errors: [{ siteId: sites[0], code: 'source_invalid' }], nextCursor: sites[0] });
   assert.deepEqual(source.verified, []);
-  const target = fixture({ v2Sites: [sites[0]], corruptSite: sites[0] });
-  await assert.rejects(listVerifiedNativeStudioAccessV2Scopes({ client: target.client,
-    limit: 1 }, {}, target.deps as any), /target_changed/);
+  const target = fixture({ v2Sites: [sites[0], sites[1]], corruptSite: sites[0] });
+  assert.deepEqual(await listVerifiedNativeStudioAccessV2Scopes({ client: target.client,
+    limit: 2 }, {}, target.deps as any), { entries: [{ scope: { agencyId,
+      clientId, siteId: sites[1] }, sourceId }],
+    errors: [{ siteId: sites[0], code: 'target_invalid' }], nextCursor: sites[1] });
+});
+
+test('a retained site without a handoff does not block later Access v2 sites', async () => {
+  const f = fixture({ v2Sites: [sites[1]], corruptSite: sites[0] });
+  const result = await listVerifiedNativeStudioAccessV2Scopes({ client: f.client,
+    limit: 3 }, {}, f.deps as any);
+  assert.deepEqual(result.entries, [{ scope: { agencyId, clientId,
+    siteId: sites[1] }, sourceId }]);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.nextCursor, null);
 });
 
 test('rejects invalid pagination input before querying storage', async () => {

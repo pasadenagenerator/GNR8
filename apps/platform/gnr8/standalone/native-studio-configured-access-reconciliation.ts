@@ -6,6 +6,9 @@ import { inspectBoundNativeStudioGitHubRoles,
   reconcileBoundNativeStudioGitHubRoles } from './native-studio-github-role-reconciliation';
 import { reconcileNativeStudioAccessOwnerPolicy } from './native-studio-access-policy-reconciliation';
 import { revokeBoundNativeStudioAccessSessions } from './native-studio-access-session-revocation';
+import { SCHEDULED_NATIVE_STUDIO_RECONCILIATION,
+  type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
+import { fingerprint } from './publication-contract';
 
 type Environment = Record<string, string | undefined>;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -28,7 +31,8 @@ const defaults = {
  * handler or proof that existing Access sessions have been revoked.
  */
 export async function configuredNativeStudioAccessReconciliation(input: {
-  scope: NativeStudioScope; client: SupabaseClient; sourceId: string; actor: string;
+  scope: NativeStudioScope; client: SupabaseClient; sourceId: string;
+  actor: NativeStudioReconciliationActor;
 }, env: Environment = process.env, transport: typeof fetch = fetch,
 deps = defaults) {
   const { scope, client, sourceId, actor } = input;
@@ -60,8 +64,21 @@ deps = defaults) {
     previousPrincipals: previous.previousPrincipals, policyProof }, transport) : null;
   const roles = await deps.writeRoles({ scope, client, store, sourceId, actor,
     previous, policyProof }, env, transport);
-  return { state: roles.state, scope, sourceId,
+  const actorType = actor === SCHEDULED_NATIVE_STUDIO_RECONCILIATION ?
+    'system' as const : 'human' as const;
+  const result = { state: roles.state, scope, sourceId,
     accessAppId: bound.appId, policyId: policyProof.policyId,
     commit: roles.commit, principals: policyProof.principals,
-    sessions: sessions?.state ?? 'unchanged' };
+    sessions: sessions?.state ?? 'unchanged', actorType,
+    removedCount: removed.length };
+  if (actorType === 'system') {
+    const audit = { actorType, cause: 'scheduled-access-drift', scope,
+      sourceId, appId: bound.appId, policyId: policyProof.policyId,
+      commit: roles.commit, state: roles.state, sessions: result.sessions,
+      principalCount: policyProof.principals.length,
+      removedCount: removed.length };
+    const identity = fingerprint(audit);
+    await store.put(`native-studio/access-system-result-${identity}.json`, audit);
+  }
+  return result;
 }

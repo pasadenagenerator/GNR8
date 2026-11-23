@@ -7,7 +7,9 @@ import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-s
 import { inspectGitHubNativeStudioBranch } from './github-native-studio-head';
 import { issueConfiguredNativeStudioGitHubToken } from './github-native-studio-token';
 import { inspectCurrentNativeStudioAccessOwnerPolicy } from './native-studio-access-policy-reconciliation';
-import { requireAgencyBackgroundActor } from '../../src/auth/agency-background-action';
+import { isNativeStudioReconciliationActor,
+  requireNativeStudioReconciliationAuthority,
+  type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import type { PublicationStore } from './publication-store';
 
@@ -110,7 +112,7 @@ const defaults = {
   remote: remoteRoles,
   source: readStoredVerifiedAstroStudio,
   policy: inspectCurrentNativeStudioAccessOwnerPolicy,
-  actor: requireAgencyBackgroundActor,
+  actor: requireNativeStudioReconciliationAuthority,
 };
 
 async function boundSource(scope: NativeStudioScope, client: SupabaseClient,
@@ -130,16 +132,16 @@ async function boundSource(scope: NativeStudioScope, client: SupabaseClient,
  * A richer file edited inside Stacki is left untouched for separate review. */
 export async function inspectBoundNativeStudioGitHubRoles(input: {
   scope: NativeStudioScope; client: SupabaseClient; store: Store; sourceId: string;
-  actor: string;
+  actor: NativeStudioReconciliationActor;
 }, env: Environment = process.env, transport: typeof fetch = fetch, deps = defaults) {
   const { scope, client, store, sourceId, actor } = input ?? {} as typeof input;
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId].every(value =>
         typeof value === 'string' && UUID.test(value)) || !SHA256.test(sourceId) ||
       !client || !store || typeof store.read !== 'function' ||
       typeof store.getBytes !== 'function' || typeof store.claim !== 'function' ||
-      typeof actor !== 'string' || !UUID.test(actor))
+      !isNativeStudioReconciliationActor(actor))
     throw Error('native_studio_roles_input_invalid');
-  await deps.actor(client, { userId: actor, agencyId: scope.agencyId, action: 'publish' });
+  await deps.actor(client, { actor, scope });
   const { site } = await boundSource(scope, client, store, sourceId, env, deps);
   const issued = await deps.token(scope, client, env, transport,
     deps.site, Date.now(), 'read');
@@ -156,21 +158,22 @@ export async function inspectBoundNativeStudioGitHubRoles(input: {
  * An ambiguous ref update is never repeated for the same durable intent. */
 export async function reconcileBoundNativeStudioGitHubRoles(input: {
   scope: NativeStudioScope; client: SupabaseClient; store: Store; sourceId: string;
-  actor: string; previous: NativeStudioGitHubRoles; policyProof: PolicyProof;
+  actor: NativeStudioReconciliationActor;
+  previous: NativeStudioGitHubRoles; policyProof: PolicyProof;
 }, env: Environment = process.env, transport: typeof fetch = fetch, deps = defaults) {
   const { scope, client, store, sourceId, actor, previous, policyProof } = input ?? {} as typeof input;
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId].every(value =>
         typeof value === 'string' && UUID.test(value)) || !SHA256.test(sourceId) ||
       !client || !store || typeof store.read !== 'function' ||
       typeof store.getBytes !== 'function' || typeof store.claim !== 'function' ||
-      typeof actor !== 'string' || !UUID.test(actor) ||
+      !isNativeStudioReconciliationActor(actor) ||
       !previous || previous.sourceId !== sourceId ||
       !SHA1.test(previous.headCommit) || !SHA1.test(previous.treeSha) ||
       !SHA1.test(previous.roleBlobSha) ||
       !policyProof || policyProof.state !== 'observed-exact-access-policy' ||
       !APP_ID.test(policyProof.appId) || typeof policyProof.policyId !== 'string')
     throw Error('native_studio_roles_input_invalid');
-  await deps.actor(client, { userId: actor, agencyId: scope.agencyId, action: 'publish' });
+  await deps.actor(client, { actor, scope });
   const { site, access } = await boundSource(scope, client, store, sourceId, env, deps);
   const bound = await store.read<{ appId?: string; aud?: string; teamDomain?: string }>(
     'native-studio/access-app-bound-v1.json');

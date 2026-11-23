@@ -54,51 +54,66 @@ export async function listVerifiedNativeStudioAccessV2Scopes(input: {
   const rows = listed.data as Row[];
   let prior = normalizedCursor ?? '';
   for (const row of rows) {
-    if (!row || ![row.site_id, row.agency_id, row.client_id].every(value =>
-        typeof value === 'string' && UUID.test(value)) ||
-        row.site_id <= prior || row.binding_state !== 'bound' ||
-        !OWNER.test(row.github_owner) || !REPO.test(row.repository) ||
-        !(typeof row.repository_id === 'number' &&
-            Number.isSafeInteger(row.repository_id) && row.repository_id > 0 ||
-          typeof row.repository_id === 'string' &&
-            /^[1-9][0-9]*$/.test(row.repository_id) &&
-            Number.isSafeInteger(Number(row.repository_id))))
+    if (!row || typeof row.site_id !== 'string' || !UUID.test(row.site_id) ||
+        row.site_id <= prior)
       throw Error('native_studio_access_inventory_row_invalid');
     prior = row.site_id;
   }
   const page = rows.slice(0, limit);
   const entries: Array<{ scope: NativeStudioScope; sourceId: string }> = [];
+  const errors: Array<{ siteId: string; code: string }> = [];
   for (const row of page) {
+    if (![row.agency_id, row.client_id].every(value =>
+        typeof value === 'string' && UUID.test(value)) ||
+        row.binding_state !== 'bound' || !OWNER.test(row.github_owner) ||
+        !REPO.test(row.repository) ||
+        !(typeof row.repository_id === 'number' &&
+            Number.isSafeInteger(row.repository_id) && row.repository_id > 0 ||
+          typeof row.repository_id === 'string' &&
+            /^[1-9][0-9]*$/.test(row.repository_id) &&
+            Number.isSafeInteger(Number(row.repository_id)))) {
+      errors.push({ siteId: row.site_id, code: 'row_invalid' });
+      continue;
+    }
     const scope = { agencyId: row.agency_id,
       clientId: row.client_id, siteId: row.site_id };
-    const site: Site = await deps.site(scope, client, env);
-    if (site.siteId !== scope.siteId ||
-        site.repository !== `${row.github_owner}/${row.repository}` ||
-        site.repositoryId !== String(row.repository_id))
-      throw Error('native_studio_access_inventory_target_changed');
-    const store: Store = deps.store(client, scope, env);
-    const handoff = await store.read<Handoff>('native-studio/build-handoff-v1.json');
-    if (!handoff) continue;
-    const expectedSite = { siteId: site.siteId, repository: site.repository,
-      branch: site.branch, studioOrigin: site.studioOrigin,
-      accountId: site.accountId };
-    if (!same(handoff.scope, scope) || !SHA.test(handoff.sourceId) ||
-        !COMMIT.test(handoff.commit) || !HEX32.test(handoff.workerId) ||
-        !Array.isArray(handoff.files) || handoff.files.length === 0 ||
-        !same(handoff.site, expectedSite))
-      throw Error('native_studio_access_inventory_handoff_invalid');
-    const receipt = await store.read<{ format?: string; identitySha256?: string }>(
-      `native-sources/${handoff.sourceId}.json`);
-    if (!receipt || receipt.identitySha256 !== handoff.sourceId ||
-        !['gnr8-native-studio-source:v1', 'gnr8-native-studio-source:v2']
-          .includes(receipt.format ?? ''))
-      throw Error('native_studio_access_inventory_source_invalid');
-    const verified = await deps.source({ store, sourceId: handoff.sourceId, site });
-    if (verified.receipt.format !== receipt.format ||
-        verified.receipt.identitySha256 !== handoff.sourceId)
-      throw Error('native_studio_access_inventory_source_invalid');
-    if (receipt.format === 'gnr8-native-studio-source:v1') continue;
-    entries.push({ scope, sourceId: handoff.sourceId });
+    let code = 'handoff_invalid';
+    try {
+      const store: Store = deps.store(client, scope, env);
+      const handoff = await store.read<Handoff>('native-studio/build-handoff-v1.json');
+      if (!handoff) continue;
+      code = 'target_invalid';
+      const site: Site = await deps.site(scope, client, env);
+      if (site.siteId !== scope.siteId ||
+          site.repository !== `${row.github_owner}/${row.repository}` ||
+          site.repositoryId !== String(row.repository_id))
+        throw Error('target_changed');
+      code = 'handoff_invalid';
+      const expectedSite = { siteId: site.siteId, repository: site.repository,
+        branch: site.branch, studioOrigin: site.studioOrigin,
+        accountId: site.accountId };
+      if (!same(handoff.scope, scope) || !SHA.test(handoff.sourceId) ||
+          !COMMIT.test(handoff.commit) || !HEX32.test(handoff.workerId) ||
+          !Array.isArray(handoff.files) || handoff.files.length === 0 ||
+          !same(handoff.site, expectedSite))
+        throw Error('handoff_invalid');
+      code = 'source_invalid';
+      const receipt = await store.read<{ format?: string; identitySha256?: string }>(
+        `native-sources/${handoff.sourceId}.json`);
+      if (!receipt || receipt.identitySha256 !== handoff.sourceId ||
+          !['gnr8-native-studio-source:v1', 'gnr8-native-studio-source:v2']
+            .includes(receipt.format ?? ''))
+        throw Error('source_invalid');
+      const verified = await deps.source({ store, sourceId: handoff.sourceId, site });
+      if (verified.receipt.format !== receipt.format ||
+          verified.receipt.identitySha256 !== handoff.sourceId)
+        throw Error('source_invalid');
+      if (receipt.format === 'gnr8-native-studio-source:v2')
+        entries.push({ scope, sourceId: handoff.sourceId });
+    } catch {
+      errors.push({ siteId: row.site_id, code });
+    }
   }
-  return { entries, nextCursor: rows.length > limit ? page[page.length - 1].site_id : null };
+  return { entries, errors,
+    nextCursor: rows.length > limit ? page[page.length - 1].site_id : null };
 }

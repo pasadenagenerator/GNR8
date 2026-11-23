@@ -24,6 +24,8 @@ import { nativeStudioAccessReconciliationJob,
   NATIVE_STUDIO_ACCESS_RECONCILIATION_EVENT,
   NATIVE_STUDIO_ACCESS_RECONCILIATION_JOB_ID } from
   '@/gnr8/site/inngest/native-studio-access-reconciliation-job'
+import { nativeStudioAccessScheduledJob, NATIVE_STUDIO_ACCESS_SCHEDULED_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-access-scheduled-job'
 import { nativeStudioSecretSetupJob, NATIVE_STUDIO_SECRET_SETUP_EVENT,
   NATIVE_STUDIO_SECRET_SETUP_JOB_ID } from '@/gnr8/site/inngest/native-studio-secret-setup-job'
 import { nativeStudioResourceReservationJob, NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT,
@@ -80,6 +82,7 @@ export type WorkerInngestFunctionRegistration = {
     | typeof nativeStudioPublicGatewayJob
     | typeof nativeStudioFirstOpenJob
     | typeof nativeStudioAccessReconciliationJob
+    | typeof nativeStudioAccessScheduledJob
     | typeof nativeStudioSecretSetupJob
     | typeof nativeStudioResourceReservationJob
     | typeof standalonePublicationJob
@@ -116,6 +119,8 @@ const coreWorkerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[
   { id: NATIVE_STUDIO_ACCESS_RECONCILIATION_JOB_ID,
     eventName: NATIVE_STUDIO_ACCESS_RECONCILIATION_EVENT,
     fn: nativeStudioAccessReconciliationJob },
+  { id: NATIVE_STUDIO_ACCESS_SCHEDULED_JOB_ID,
+    fn: nativeStudioAccessScheduledJob },
   { id: NATIVE_STUDIO_SECRET_SETUP_JOB_ID, eventName: NATIVE_STUDIO_SECRET_SETUP_EVENT,
     fn: nativeStudioSecretSetupJob },
   { id: NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,

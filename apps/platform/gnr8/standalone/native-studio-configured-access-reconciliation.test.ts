@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { configuredNativeStudioAccessReconciliation } from './native-studio-configured-access-reconciliation';
+import { SCHEDULED_NATIVE_STUDIO_RECONCILIATION } from './native-studio-reconciliation-authority';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -81,4 +82,37 @@ test('removal revokes the bound application sessions before changing Git roles',
         throw Error('pending-review'); },
     } as any), /pending-review/);
   assert.deepEqual(calls, ['inspect', 'policy', 'revoke']);
+});
+
+test('scheduled reconciliation keeps system cause separate in an immutable result', async () => {
+  const audits: Array<{ key: string; value: Record<string, unknown> }> = [];
+  const deps = {
+    store: () => ({ read: async () => ({ appId }),
+      put: async (key: string, value: Record<string, unknown>) => {
+        audits.push({ key, value }); return value; } }),
+    inspectRoles: async (input: { actor: unknown }) => {
+      assert.equal(input.actor, SCHEDULED_NATIVE_STUDIO_RECONCILIATION);
+      return previous;
+    },
+    policy: async (input: { actor: unknown }) => {
+      assert.equal(input.actor, SCHEDULED_NATIVE_STUDIO_RECONCILIATION);
+      return policyProof;
+    },
+    writeRoles: async (input: { actor: unknown }) => {
+      assert.equal(input.actor, SCHEDULED_NATIVE_STUDIO_RECONCILIATION);
+      return { state: 'verified' as const, commit: 'f'.repeat(40),
+        principals: policyProof.principals };
+    },
+  };
+  const result = await configuredNativeStudioAccessReconciliation({ scope,
+    client: {} as SupabaseClient, sourceId,
+    actor: SCHEDULED_NATIVE_STUDIO_RECONCILIATION }, env, fetch, deps as any);
+  assert.equal(result.actorType, 'system');
+  assert.equal(audits.length, 1);
+  assert.match(audits[0].key, /^native-studio\/access-system-result-[a-f0-9]{64}\.json$/);
+  assert.equal(audits[0].value.actorType, 'system');
+  assert.equal(audits[0].value.cause, 'scheduled-access-drift');
+  assert.equal(audits[0].value.principalCount, 2);
+  assert.equal(audits[0].value.removedCount, 0);
+  assert.equal(JSON.stringify(audits[0]).includes('example.com'), false);
 });

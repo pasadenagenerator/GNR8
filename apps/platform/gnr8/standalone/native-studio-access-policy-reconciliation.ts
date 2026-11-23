@@ -7,7 +7,9 @@ import { readNativeStudioBootstrapTarget } from './native-studio-configured-reso
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
 import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
 import { inspectNativeStudioAccessPolicyReadback } from './cloudflare-studio-access-policy';
-import { requireAgencyBackgroundActor } from '../../src/auth/agency-background-action';
+import { isNativeStudioReconciliationActor,
+  requireNativeStudioReconciliationAuthority,
+  type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
 import { serializeNativeAccessRoles, validateNativeAccessRoles } from '../../../../scripts/stacki/native-access-roles.mjs';
 
 const APP_INTENT = 'native-studio/access-app-create-intent-v1.json';
@@ -25,12 +27,13 @@ const fail = (reason: string): never => { throw Error(`native_studio_access_reco
 type Store = Pick<PublicationStore, 'read' | 'claim'>;
 type Input = { scope: NativeStudioScope; client: SupabaseClient; accountId: string;
   appId: string; credential: string; store: Store };
-type Mutation = Input & { actor: string; previousCommit: string; previousPrincipals: string[] };
+type Mutation = Input & { actor: NativeStudioReconciliationActor;
+  previousCommit: string; previousPrincipals: string[] };
 
 const defaults = { target: readNativeStudioBootstrapTarget,
   candidates: readCurrentNativeStudioAccessCandidates,
   app: inspectCloudflareStudioAccessApp,
-  actor: requireAgencyBackgroundActor };
+  actor: requireNativeStudioReconciliationAuthority };
 
 function canonical(input: unknown): string[] {
   try { return validateNativeAccessRoles(serializeNativeAccessRoles(input)); }
@@ -128,11 +131,11 @@ export async function inspectCurrentNativeStudioAccessOwnerPolicy(input: Input,
 export async function reconcileNativeStudioAccessOwnerPolicy(input: Mutation,
   transport: typeof fetch = fetch, deps = defaults) {
   validate(input);
-  if (!UUID.test(input.actor) || !COMMIT.test(input.previousCommit))
+  if (!isNativeStudioReconciliationActor(input.actor) ||
+      !COMMIT.test(input.previousCommit))
     fail('input_invalid');
   const previous = canonical(input.previousPrincipals);
-  await deps.actor(input.client, { userId: input.actor,
-    agencyId: input.scope.agencyId, action: 'publish' });
+  await deps.actor(input.client, { actor: input.actor, scope: input.scope });
   const { target, principals } = await context(input, transport, deps);
   const { body, policyId, url } = await policyList(input, transport);
   if (same(previous, principals)) {
@@ -166,8 +169,7 @@ export async function reconcileNativeStudioAccessOwnerPolicy(input: Mutation,
   const before = await policyList(input, transport);
   if (before.policyId !== policyId || !matches(before.body, previous))
     fail('policy_conflict');
-  await deps.actor(input.client, { userId: input.actor,
-    agencyId: input.scope.agencyId, action: 'publish' });
+  await deps.actor(input.client, { actor: input.actor, scope: input.scope });
   await fresh(input, target, principals, deps);
   const include = principals.map(principal => ({ email: { email: principal.slice(7) } }));
   try {

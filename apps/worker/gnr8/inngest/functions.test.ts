@@ -51,6 +51,9 @@ import { NATIVE_STUDIO_ACCESS_RECONCILIATION_EVENT,
   NATIVE_STUDIO_ACCESS_RECONCILIATION_JOB_ID,
   nativeStudioAccessReconciliationJob } from
   '@/gnr8/site/inngest/native-studio-access-reconciliation-job'
+import { NATIVE_STUDIO_ACCESS_SCHEDULED_JOB_ID,
+  nativeStudioAccessScheduledJob } from
+  '@/gnr8/site/inngest/native-studio-access-scheduled-job'
 import { NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT, NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,
   nativeStudioResourceReservationJob } from '@/gnr8/site/inngest/native-studio-resource-reservation-job'
 import {
@@ -107,6 +110,7 @@ test('worker non-production inngest registration preserves all existing jobs and
   assert.equal(inngestFunctions.includes(nativeStudioPublicGatewayJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioFirstOpenJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioAccessReconciliationJob), true)
+  assert.equal(inngestFunctions.includes(nativeStudioAccessScheduledJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioResourceReservationJob), true)
   assert.equal(inngestFunctions.includes(domainVerificationCheckSchedulerJob), true)
   assert.equal(inngestFunctions.includes(domainVerificationCheckJob), true)
@@ -138,6 +142,7 @@ test('worker inngest registration includes required function ids and exact trigg
     NATIVE_STUDIO_FIRST_OPEN_EVENT)
   assert.equal(eventsById.get(NATIVE_STUDIO_ACCESS_RECONCILIATION_JOB_ID),
     NATIVE_STUDIO_ACCESS_RECONCILIATION_EVENT)
+  assert.equal(eventsById.get(NATIVE_STUDIO_ACCESS_SCHEDULED_JOB_ID), undefined)
   assert.equal(eventsById.get(NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID),
     NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT)
 
@@ -163,6 +168,7 @@ test('worker production inngest registration exposes exactly the safe function m
       NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID,
       NATIVE_STUDIO_FIRST_OPEN_JOB_ID,
       NATIVE_STUDIO_ACCESS_RECONCILIATION_JOB_ID,
+      NATIVE_STUDIO_ACCESS_SCHEDULED_JOB_ID,
       NATIVE_STUDIO_SECRET_SETUP_JOB_ID,
       NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,
       'standalone-publication-job',
