@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, symlink, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, symlink, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { prepareGitBranch, commitPreparedStudio, prepareGitBranchFromSource, commitPreparedSource,
@@ -105,7 +105,7 @@ test('target-free Studio source persists once and binds export, confirmation and
 });
 
 test('Access source binds verified roles and Worker settings without changing legacy source',
-  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE' }, async () => {
+  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE' }, async t => {
     const { release, exported } = await fixture();
     const objects = new Map(), bytes = new Map();
     const store = {
@@ -131,6 +131,20 @@ test('Access source binds verified roles and Worker settings without changing le
     assert.deepEqual(JSON.parse(files.get('.stacki/roles.json')).roles[0].members, first.receipt.access.admins);
     assert.equal(JSON.parse(files.get('studio/cloudflare/wrangler.jsonc')).vars.ACCESS_AUD, access.aud);
     assert.equal((await readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site })).reused, true);
+    const root = await mkdtemp(join(tmpdir(), 'gnr8-access-source-git-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q', '-b', site.branch);
+    git('config', 'user.name', 'Local Test');
+    git('config', 'user.email', 'local@example.com');
+    git('remote', 'add', 'origin', 'https://github.com/example/website.git');
+    git('commit', '-q', '--allow-empty', '-m', 'Initialize');
+    const staged = { project: root, store, sourceId: first.receipt.identitySha256, site };
+    await prepareGitBranchFromSource(staged);
+    assert.deepEqual(JSON.parse(await readFile(join(root, '.stacki/roles.json')))
+      .roles[0].members, first.receipt.access.admins);
+    await commitPreparedSource({ ...staged, author: { name: 'Local Test', email: 'local@example.com' } });
+    assert.equal((await verifyCommittedStudioSource(staged)).sourceId, first.receipt.identitySha256);
     const key = `native-sources/${first.receipt.identitySha256}.json`;
     const original = objects.get(key);
     objects.set(key, { ...original, access: { ...original.access, aud: 'c'.repeat(64) } });
