@@ -15,7 +15,10 @@ const evidence = { artifact: { sourceId: request.sourceId,
   artifactCommit: request.artifactCommit,
   branch: `gnr8-build-${request.sourceCommit}` },
 preflight: { identity: 'e'.repeat(64), sourceId: request.sourceId,
-  commit: request.sourceCommit, workerId: request.workerId, files: 10 } };
+  commit: request.sourceCommit, workerId: request.workerId, files: 10 },
+prebuilt: { accountId: 'f'.repeat(32), commit: request.sourceCommit,
+  digest: '1'.repeat(64), siteId: request.scope.siteId,
+  sourceId: request.sourceId, workerId: request.workerId } };
 
 function fixture() {
   const calls: string[] = [];
@@ -71,6 +74,12 @@ test('revoked actor or mismatched proof prevents deployment', async () => {
       ...evidence, preflight: { ...evidence.preflight, commit: '0'.repeat(40) } }; },
   }), /evidence_unverified/);
   assert.deepEqual(mismatched.calls, ['client', 'authorize', 'evidence']);
+  const missingImage = fixture();
+  await assert.rejects(runNativeStudioFirstDeploy(request, { ...missingImage.deps,
+    evidence: async () => { missingImage.calls.push('evidence');
+      return { ...evidence, prebuilt: null as any }; },
+  }), /evidence_unverified/);
+  assert.deepEqual(missingImage.calls, ['client', 'authorize', 'evidence']);
 });
 
 test('exact scoped proof enters one trusted deploy coordinator', async () => {

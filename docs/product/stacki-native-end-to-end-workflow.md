@@ -1084,14 +1084,27 @@ commands replaced. They are not yet connected to a hosted job or to each
 other through the Drive coordinator and private receipt writer. No verified
 Docker snapshots or network allowlists have been configured. First deployment
 remains disabled until that hosted path and one scoped end-to-end run pass.
+The first-deploy Worker job now requires the exact scoped prebuilt-image
+receipt before it calls the coordinator that loads deploy secrets. A two-stage
+Drive adapter is also available locally: the first invocation claims a
+private, site-scoped attempt before creating a Drive, stops the builder, then
+records the Drive identity and producer archive receipt. A second invocation
+reads that record from the private store, opens the existing Drive with
+`Drive.get`, mounts a read-only snapshot, rehashes the archive and verifies
+the source handoff before loading the Cloudflare credential. It stops the
+receiver and deletes the Drive afterward. A failed or ambiguous build retains
+its attempt record and cannot silently start a new Drive. Mocked tests cover
+the two-invocation ordering; the Worker has not called these stages yet.
 The source file list is stored as a bounded, hashed Sandbox manifest rather
 than embedded in a command argument; a large prepared source therefore does
 not exceed the Linux single-argument limit. The Worker Inngest route currently
 allows 800 seconds per invocation, whereas this synchronous Drive adapter can
-spend up to 20 minutes building and another 20 minutes pushing. It must be
-split into independently resumable build and push stages before a Worker job
-can call it. The current preflight job still dispatches first deployment
-directly, so no image job is registered or enabled yet.
+spend up to 20 minutes building and another 20 minutes pushing. The new
+two-invocation boundary alone does not resolve the 800-second limit for each
+Docker command. Detached Sandbox command polling or a verified longer Worker
+duration is still needed before job wiring. The current preflight job still
+dispatches first deployment directly, so no image job is registered or
+enabled yet.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

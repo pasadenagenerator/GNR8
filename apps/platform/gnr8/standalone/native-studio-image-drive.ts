@@ -7,7 +7,7 @@ const SHA = /^[a-f0-9]{64}$/;
 const SNAPSHOT = /^snap_[A-Za-z0-9]+$/;
 const MOUNT = '/gnr8-image';
 
-function restricted(policy: NetworkPolicy): boolean {
+export function restrictedNativeStudioImageNetwork(policy: NetworkPolicy): boolean {
   if (policy === 'deny-all') return true;
   if (!policy || policy === 'allow-all' || typeof policy !== 'object' ||
       policy.subnets?.allow?.length) return false;
@@ -40,8 +40,8 @@ export async function withNativeStudioImageDrive<Receipt, Verified, Result>(inpu
       !SNAPSHOT.test(input.buildSnapshotId) ||
       !SNAPSHOT.test(input.pushSnapshotId) ||
       input.buildSnapshotId === input.pushSnapshotId ||
-      !restricted(input.buildNetworkPolicy) ||
-      !restricted(input.pushNetworkPolicy) ||
+      !restrictedNativeStudioImageNetwork(input.buildNetworkPolicy) ||
+      !restrictedNativeStudioImageNetwork(input.pushNetworkPolicy) ||
       typeof input.build !== 'function' ||
       typeof input.verify !== 'function' ||
       typeof input.loadCredential !== 'function' ||
