@@ -27,6 +27,7 @@ const BUILD_INTENT = 'native-studio/image-build-command-intent-v1.json';
 const SAVE_INTENT = 'native-studio/image-save-command-intent-v1.json';
 const MOUNT = '/gnr8-image';
 const MAX_SIZE = 12 * 1024 * 1024 * 1024;
+const DOCKER_HOST = 'unix:///var/run/docker.sock';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA = /^[a-f0-9]{64}$/;
@@ -60,7 +61,41 @@ const defaults = {
   inspect: inspectNativeStudioDriveImageArchive,
   startCommand: startNativeStudioImageCommand,
   pollCommand: pollNativeStudioImageCommand,
+  ensureDocker: ensureNativeStudioDockerDaemon,
 };
+
+/** A snapshot restores installed files, not a running dockerd process. Start
+ * only a Unix-socket daemon, before staging site-controlled source or loading
+ * any Cloudflare credential. A lost start is terminal for this attempt. */
+export async function ensureNativeStudioDockerDaemon(
+  sandbox: Pick<Sandbox, 'runCommand'>, dockerPath: string,
+  pause: (ms: number) => Promise<void> = ms =>
+    new Promise(resolve => setTimeout(resolve, ms)),
+) {
+  if (dockerPath !== 'docker' &&
+      (!/^\/(?:usr|opt)\/[A-Za-z0-9_+./-]+$/.test(dockerPath) ||
+        dockerPath.includes('..')))
+    throw Error('native_studio_docker_daemon_unconfigured');
+  const ready = async () => {
+    const result = await sandbox.runCommand({ cmd: dockerPath,
+      args: ['info', '--format', '{{.ServerVersion}}'], timeoutMs: 5_000,
+      env: { CI: '1', DOCKER_HOST } });
+    return result.exitCode === 0;
+  };
+  try { if (await ready()) return; }
+  catch { /* A read-only probe may be retried after starting dockerd. */ }
+  try {
+    await sandbox.runCommand({ cmd: 'dockerd',
+      args: [`--host=${DOCKER_HOST}`],
+      sudo: true, detached: true, env: { CI: '1' } });
+  } catch { throw Error('native_studio_docker_daemon_unavailable'); }
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try { if (await ready()) return; }
+    catch { /* Bound the readiness wait; never accept an unknown daemon. */ }
+    if (attempt < 19) await pause(1_000);
+  }
+  throw Error('native_studio_docker_daemon_unavailable');
+}
 
 function sandboxName(attempt: NativeStudioImageDriveAttempt) {
   const suffix = attempt.driveName.slice(-36);
@@ -200,6 +235,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
     if (!ID.test(sessionId) ||
         !attestedBuilder(input, builder, attempt, sessionId))
       return { state: 'pending-review' };
+    await steps.ensureDocker(builder, 'docker');
     await steps.stage(builder, NATIVE_STUDIO_IMAGE_ARCHIVE_PATH, input);
     const session: Session = { attempt, driveId: drive.driveId,
       projectId: drive.projectId, sandboxName: name, sessionId,
@@ -212,7 +248,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
       command: { cmd: 'docker', args: ['build', '--platform', 'linux/amd64',
         '--file', 'Dockerfile', '--tag', source.tag, '.'],
       cwd: `${NATIVE_STUDIO_IMAGE_SOURCE_ROOT}/studio`,
-      env: { CI: '1' }, timeoutMs: 20 * 60_000 } });
+      env: { CI: '1', DOCKER_HOST }, timeoutMs: 20 * 60_000 } });
     return { state: 'running' };
   }
   if (!validAttempt(input, stored.attempt) ||
@@ -282,6 +318,6 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
     command: { cmd: 'docker', args: ['save', '--output',
       NATIVE_STUDIO_IMAGE_ARCHIVE_PATH, stored.tag],
     cwd: `${NATIVE_STUDIO_IMAGE_SOURCE_ROOT}/studio`,
-    env: { CI: '1' }, timeoutMs: 10 * 60_000 } });
+    env: { CI: '1', DOCKER_HOST }, timeoutMs: 10 * 60_000 } });
   return { state: 'running' };
 }

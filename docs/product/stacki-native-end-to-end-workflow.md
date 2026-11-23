@@ -1306,6 +1306,18 @@ Only after those readbacks pass should the Worker stage switches be enabled in
 pipeline order. The setup stage creates each site's publish and native session
 secrets automatically; owners should not be asked to enter a key per new site.
 
+One-time credential inventory on 2026-11-23: Cloudflare shows four active
+single-site Publish tokens and one older user build token. The four cannot
+reserve resources, create Access apps or issue future site tokens; the older
+token's exact Builds/Access/token-manager permissions and stored secret value
+are unverified. OpenAI shows two active GNR8 project keys, but their secret
+values are not present in the inspected Vercel project variables. Vercel shows
+five existing snapshots, none yet attested for the three native first-build
+and image roles. Reuse a credential or snapshot only after its current scope,
+stored value and required runtime contents are verified. The image jobs now
+start and check a local Docker daemon in each attested Sandbox, since snapshots
+do not preserve a running daemon.
+
 ## Native owner access and publication boundary (2026-11-23)
 
 The new-site UI already consumes a verified `first-open` receipt. An owner

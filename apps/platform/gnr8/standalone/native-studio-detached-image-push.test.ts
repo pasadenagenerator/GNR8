@@ -27,6 +27,7 @@ function fixture() {
   let stopFails = false;
   let configExists = false;
   let failLoadVerifiedClaimOnce = false;
+  let failDocker = false;
   const sandboxName = `gnr8-push-${driveName}`;
   const policy = { allow: ['api.cloudflare.com', 'registry.cloudflare.com'] };
   const store = { read: async (key: string) => records.get(key) ?? null,
@@ -95,8 +96,12 @@ function fixture() {
     recordArchive: async () => { events.push('record-archive');
       await store.claim('native-studio/image-archive-v1.json', receipt);
       return receipt; },
+    ensureDocker: async (_sandbox: unknown, path: string) => {
+      assert.equal(path, '/usr/bin/docker'); events.push('docker-ready');
+      if (failDocker) throw Error('daemon unavailable'); },
     start: async (value: any) => {
       events.push(`start:${value.phase}`);
+      assert.equal(value.command.env.DOCKER_HOST, 'unix:///var/run/docker.sock');
       if (value.phase === 'push')
         assert.equal(value.command.env.CLOUDFLARE_API_TOKEN, 'g'.repeat(48));
       else assert.equal(value.command.env.CLOUDFLARE_API_TOKEN, undefined);
@@ -112,6 +117,7 @@ function fixture() {
     setCreateFails: () => { createFails = true; },
     setArchiveFails: () => { archiveFails = true; },
     setStopFails: () => { stopFails = true; },
+    setDockerFails: () => { failDocker = true; },
     setLoadVerifiedClaimFailure: () => {
       failLoadVerifiedClaimOnce = true; } };
 }
@@ -126,12 +132,24 @@ test('receiver verifies archive before detached load and token-bearing push', as
   assert.equal(done.state, 'complete');
   if (done.state === 'complete') assert.equal(done.prebuilt.digest, 'f'.repeat(64));
   assert.equal(f.getCredentialLoads(), 1);
+  assert.equal(f.events.indexOf('docker-ready') < f.events.indexOf('verify-archive'), true);
   assert.equal(f.events.indexOf('verify-archive') < f.events.indexOf('start:load'), true);
   assert.equal(f.events.indexOf('record-archive') < f.events.indexOf('credential'), true);
   assert.equal(f.events.indexOf('start:load') < f.events.indexOf('start:push'), true);
   assert.equal(f.events.indexOf('stop') < f.events.indexOf('delete-drive'), true);
   assert.equal(f.records.has('native-studio/prebuilt-image-v1.json'), true);
   assert.equal(done.state === 'complete' && done.cleanupState, 'complete');
+});
+
+test('receiver does not verify archive or load a credential without Docker', async () => {
+  const f = fixture(); f.setDockerFails();
+  const advance = () => advanceNativeStudioDetachedImagePush(
+    f.input, f.sdk, f.steps);
+  await assert.rejects(advance(), /daemon unavailable/);
+  assert.equal(f.events.includes('verify-archive'), false);
+  assert.equal(f.events.includes('credential'), false);
+  assert.equal(f.records.has('native-studio/image-push-receiver-started-v1.json'), false);
+  assert.deepEqual(await advance(), { state: 'pending-review' });
 });
 
 test('remaining Sandbox time gates the next long command', async () => {

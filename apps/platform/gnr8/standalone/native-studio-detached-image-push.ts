@@ -9,10 +9,12 @@ import { readNativeStudioImageDriveTransfer,
   type NativeStudioImageDriveTransfer } from './native-studio-image-drive-handoff';
 import { pollNativeStudioImageCommand,
   startNativeStudioImageCommand } from './native-studio-image-detached-command';
+import { ensureNativeStudioDockerDaemon } from './native-studio-detached-image-build';
 
 const ARCHIVE_PATH = '/gnr8-image/image.tar';
 const MOUNT = '/gnr8-image';
 const MAX_SIZE = 12 * 1024 * 1024 * 1024;
+const DOCKER_HOST = 'unix:///var/run/docker.sock';
 const RECEIVER_INTENT = 'native-studio/image-push-receiver-intent-v1.json';
 const RECEIVER_STARTED = 'native-studio/image-push-receiver-started-v1.json';
 const RECEIVER_VERIFIED = 'native-studio/image-push-receiver-verified-v1.json';
@@ -55,6 +57,7 @@ const defaults = {
   recordArchive: recordStudioImageArchiveHandoff,
   start: startNativeStudioImageCommand,
   poll: pollNativeStudioImageCommand,
+  ensureDocker: ensureNativeStudioDockerDaemon,
 };
 
 function validate(input: Input) {
@@ -172,7 +175,7 @@ async function claimExact<T>(input: Input, key: string, expected: T) {
 async function shortCommand(sandbox: Sandbox, cmd: string,
   args: string[], timeoutMs = 60_000) {
   const result = await sandbox.runCommand({ cmd, args, timeoutMs,
-    env: { CI: '1', WRANGLER_SEND_METRICS: 'false' } });
+    env: { CI: '1', WRANGLER_SEND_METRICS: 'false', DOCKER_HOST } });
   if (result.exitCode !== 0)
     throw Error('native_studio_detached_image_push_command_failed');
   return (await result.stdout()).trim();
@@ -291,6 +294,7 @@ export async function advanceNativeStudioDetachedImagePush(input: Input,
     const started: Started = { intent,
       sessionId: receiver.currentSession().sessionId };
     attestSandbox(receiver, input, started);
+    await steps.ensureDocker(receiver, input.dockerPath);
     await claimExact(input, RECEIVER_STARTED, started);
     return { state: 'running' };
   }
@@ -328,7 +332,7 @@ export async function advanceNativeStudioDetachedImagePush(input: Input,
     timeFor(receiver, 10 * 60_000);
     await steps.start({ ...loadIdentity, sandbox: receiver,
       command: { cmd: input.dockerPath, args: ['load', '--input', ARCHIVE_PATH],
-        timeoutMs: 10 * 60_000, env: { CI: '1' } } });
+        timeoutMs: 10 * 60_000, env: { CI: '1', DOCKER_HOST } } });
     return { state: 'running' };
   }
   const loaded = { intent, archiveSha256: transfer.receipt.archive.sha256,
@@ -359,7 +363,7 @@ export async function advanceNativeStudioDetachedImagePush(input: Input,
           '--path-to-docker', input.dockerPath, '--config',
           '/vercel/sandbox/gnr8-image-push/wrangler.jsonc'],
         timeoutMs: 20 * 60_000,
-        env: { CI: '1', WRANGLER_SEND_METRICS: 'false',
+        env: { CI: '1', WRANGLER_SEND_METRICS: 'false', DOCKER_HOST,
           CLOUDFLARE_API_TOKEN: credential } } });
     return { state: 'running' };
   }

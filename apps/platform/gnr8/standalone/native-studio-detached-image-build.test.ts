@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { advanceNativeStudioDetachedImageBuild } from './native-studio-detached-image-build';
+import { advanceNativeStudioDetachedImageBuild,
+  ensureNativeStudioDockerDaemon } from './native-studio-detached-image-build';
 import { claimNativeStudioImageDriveAttempt,
   readNativeStudioImageDriveTransfer,
   recordNativeStudioImageDriveTransfer } from './native-studio-image-drive-handoff';
@@ -24,7 +25,7 @@ function fixture() {
   const calls: string[] = [];
   const exits = new Map<string, number | null>();
   let running = true, mounted = false, nextCommand = 0;
-  let failStart = false, failStop = false;
+  let failStart = false, failStop = false, failDocker = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
       if (records.has(key)) return false;
@@ -38,6 +39,7 @@ function fixture() {
   const session = { sessionId: 'sess_123',
     runCommand: async (command: any) => {
       calls.push(`start:${command.args[0]}`);
+      assert.equal(command.env.DOCKER_HOST, 'unix:///var/run/docker.sock');
       if (failStart) throw Error('connection lost');
       const cmdId = `cmd_${++nextCommand}`;
       exits.set(cmdId, null); return { cmdId };
@@ -80,6 +82,9 @@ function fixture() {
     stage: async () => { calls.push('stage'); },
     verifySource: async () => { calls.push('verify-source'); },
     inspect: async () => { calls.push('inspect'); return inspectedReceipt; },
+    ensureDocker: async (_sandbox: unknown, path: string) => {
+      assert.equal(path, 'docker'); calls.push('docker-ready');
+      if (failDocker) throw Error('daemon unavailable'); },
     startCommand: startNativeStudioImageCommand,
     pollCommand: pollNativeStudioImageCommand };
   const advance = () => advanceNativeStudioDetachedImageBuild(
@@ -87,6 +92,7 @@ function fixture() {
   return { input, records, calls, exits, advance, sandbox,
     failStart: () => { failStart = true; },
     failStop: () => { failStop = true; },
+    failDocker: () => { failDocker = true; },
     resumeStop: () => { failStop = false; },
     changeArchive: () => { inspectedReceipt = { ...receipt,
       archive: { ...receipt.archive, sha256: 'f'.repeat(64) } }; }, receipt };
@@ -107,9 +113,42 @@ test('build and save cross invocations without repeating external effects', asyn
   assert.equal(f.calls.filter(v => v === 'drive-create').length, 1);
   assert.equal(f.calls.filter(v => v === 'sandbox-create').length, 1);
   assert.equal(f.calls.filter(v => v === 'start:build').length, 1);
+  assert.equal(f.calls.indexOf('docker-ready') < f.calls.indexOf('stage'), true);
   assert.equal(f.calls.filter(v => v === 'start:save').length, 1);
   assert.equal(f.calls.filter(v => v === 'stop').length, 1);
   assert.equal(f.calls.indexOf('verify-source') < f.calls.indexOf('inspect'), true);
+});
+
+test('Docker failure stops before staging the site source', async () => {
+  const f = fixture(); f.failDocker();
+  await assert.rejects(f.advance(), /daemon unavailable/);
+  assert.equal(f.calls.includes('stage'), false);
+  assert.equal(f.calls.some(v => v.startsWith('start:')), false);
+  assert.deepEqual(await f.advance(), { state: 'pending-review' });
+});
+
+test('Docker daemon starts once from the trusted snapshot and is checked before use', async () => {
+  const calls: string[] = [];
+  let probes = 0;
+  const sandbox = { runCommand: async (command: any) => {
+    calls.push(`${command.cmd}:${command.args[0]}`);
+    if (command.cmd === 'docker') {
+      assert.equal(command.env.DOCKER_HOST, 'unix:///var/run/docker.sock');
+      return { exitCode: ++probes >= 3 ? 0 : 1 };
+    }
+    assert.equal(command.cmd, 'dockerd');
+    assert.equal(command.args[0], '--host=unix:///var/run/docker.sock');
+    assert.equal(command.sudo, true);
+    assert.equal(command.detached, true);
+    assert.equal(command.env.CLOUDFLARE_API_TOKEN, undefined);
+    return { cmdId: 'daemon' };
+  } };
+  await ensureNativeStudioDockerDaemon(sandbox as any, 'docker', async () => {});
+  assert.deepEqual(calls, ['docker:info', 'dockerd:--host=unix:///var/run/docker.sock',
+    'docker:info', 'docker:info']);
+  calls.length = 0;
+  await ensureNativeStudioDockerDaemon(sandbox as any, 'docker', async () => {});
+  assert.deepEqual(calls, ['docker:info']);
 });
 
 test('ambiguous detached start blocks retry without another Sandbox', async () => {
