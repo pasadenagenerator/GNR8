@@ -1288,3 +1288,37 @@ the optional Builds connection adapter is not required for new-site Publish.
 Existing CHS/ViroiDoc public Builds triggers still need correction before
 their native source branches are pushed. Exact hosted domain, owner login,
 AI Apply, Push and Publish acceptance remains outstanding.
+
+### Owner access cutover contract
+
+The agency membership is the GNR8 authority for ordinary users: only a
+current `owner` or `admin` has the `publish` action. The existing agency
+member list is not an identity bridge to Stacki. It labels a user active
+after a prior sign-in even when the email is not confirmed, and its email is
+intended for display. Do not serialize that list directly into native roles.
+First select one native Stacki identity provider and prove a stable provider
+principal for each eligible Supabase user. Reject invited, unconfirmed or
+banned users and identity conflicts. The GitHub App remains the repository
+credential, so an editor does not need a personal GitHub grant.
+
+Before any site switches to `EDITOR_ACCESS=roles`, commit a site-specific
+`.stacki/roles.json` on the exact Stacki source branch. Its restrictive
+shape is `version: 1`, `defaultRole: "client"`, an `admin` role with at least
+one verified provider principal, and a `client` role. An omitted default role
+means admin in Stacki. Confirm the current scoped membership and provider
+identity immediately before the first source push; the prepared derivative is
+immutable and can otherwise contain a revoked user's earlier snapshot. Fail
+closed if the role file, admin, provider settings or current check is absent.
+Then update the generated Studio settings and hosted readback together, while
+keeping existing repository-mode sites on their current verified path until
+an explicit site-specific migration succeeds.
+
+Membership changes need a protected reconciler that writes the current native
+role file through the bound GitHub App to the bound branch, checks the target
+and current membership again at write time, and treats a failed write as an
+unresolved access change. Native Stacki caches roles for about a minute and
+can use stale roles for up to an hour during a GitHub outage. Immediate
+revocation therefore needs an additional provider-level access cut-off or a
+documented emergency lock; the roles file alone cannot guarantee it. Only
+after the roles file and provider policy are verified should the owner login,
+AI Apply, native Push and native Publish be accepted on a representative site.
