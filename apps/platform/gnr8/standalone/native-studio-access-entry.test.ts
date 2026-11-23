@@ -6,7 +6,7 @@ import { inspectBoundNativeStudioAccessEntry } from './native-studio-access-entr
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
   siteId: '33333333-3333-4333-8333-333333333333' };
-const accountId = 'a'.repeat(32);
+const accountId = 'a'.repeat(32), zoneId = 'c'.repeat(32);
 const appId = '44444444-4444-4444-8444-444444444444';
 const credential = 'read-token-value-1234567890';
 const studioOrigin = 'https://site.app.pasadenagenerator.com';
@@ -36,6 +36,17 @@ function fixture() {
     app: async () => ({ state: 'observed-access-app' as const,
       scope, siteId: scope.siteId, studioOrigin, accountId, appId,
       aud: 'b'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com' }),
+    inventoryRead: async (kind: string, id: string) => {
+      assert.equal(id, kind === 'accounts' ? accountId : zoneId);
+      return { success: true, result: [], result_info: { page: 1, count: 0,
+        total_count: 0, total_pages: 1 } };
+    },
+    inventory: (_body: unknown, currentId: string | null, host: string) => {
+      assert.equal(host, new URL(studioOrigin).hostname);
+      assert(currentId === appId || currentId === null);
+      return { state: 'observed-no-access-overlap' as const,
+        appId: currentId, studioHost: host, applicationsChecked: 0 };
+    },
     policy: (body: unknown, principals: readonly string[]) => {
       assert.deepEqual(principals, ['access:owner@example.com']);
       assert.equal((body as { success: boolean }).success, true);
@@ -52,7 +63,7 @@ function fixture() {
 test('combines scoped Access app, exact current policy and login challenge', async () => {
   const f = fixture();
   assert.deepEqual(await inspectBoundNativeStudioAccessEntry({ scope, client,
-    accountId, appId, credential }, f.transport, f.deps as any), {
+    accountId, zoneId, appId, credential }, f.transport, f.deps as any), {
     state: 'observed-access-entry', scope, studioOrigin,
     repository: target.repository, appId, aud: 'b'.repeat(64),
     teamDomain: 'gnr8.cloudflareaccess.com', memberCount: 1,
@@ -67,7 +78,7 @@ test('rejects a changed site or membership after provider readback', async () =>
     return { state: 'access-studio-challenge-observed' as const, studioOrigin };
   };
   await assert.rejects(inspectBoundNativeStudioAccessEntry({ scope, client,
-    accountId, appId, credential }, changedSite.transport,
+    accountId, zoneId, appId, credential }, changedSite.transport,
   changedSite.deps as any), /target_changed/);
   const changedMember = fixture();
   changedMember.deps.challenge = async () => {
@@ -75,6 +86,6 @@ test('rejects a changed site or membership after provider readback', async () =>
     return { state: 'access-studio-challenge-observed' as const, studioOrigin };
   };
   await assert.rejects(inspectBoundNativeStudioAccessEntry({ scope, client,
-    accountId, appId, credential }, changedMember.transport,
+    accountId, zoneId, appId, credential }, changedMember.transport,
   changedMember.deps as any), /target_changed/);
 });

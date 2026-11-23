@@ -6,8 +6,11 @@ import { readNativeStudioBootstrapTarget } from './native-studio-configured-reso
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
 import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
 import { inspectNativeStudioAccessPolicyReadback } from './cloudflare-studio-access-policy';
+import { readCompleteCloudflareAccessAppInventory } from './cloudflare-studio-access-inventory-readback';
+import { inspectNativeStudioAccessApplicationInventory } from './cloudflare-studio-access-inventory';
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const HEX32 = /^[a-f0-9]{32}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -15,20 +18,23 @@ const defaults = {
   target: readNativeStudioBootstrapTarget,
   candidates: readCurrentNativeStudioAccessCandidates,
   app: inspectCloudflareStudioAccessApp,
+  inventoryRead: readCompleteCloudflareAccessAppInventory,
+  inventory: inspectNativeStudioAccessApplicationInventory,
   policy: inspectNativeStudioAccessPolicyReadback,
   challenge: verifyAccessProtectedStudioEntry,
 };
 
 /** Observe the exact Access application, current owner policy and login
  * challenge for a bound site. This is a first-open prerequisite, not an
- * authenticated editor session or a ready binding. No provider mutation.
+ * authenticated editor session or a ready binding. Pass the zone ID only
+ * from central configuration, never from an event payload. No provider mutation.
  */
 export async function inspectBoundNativeStudioAccessEntry(input: {
-  scope: NativeStudioScope; client: SupabaseClient; accountId: string;
+  scope: NativeStudioScope; client: SupabaseClient; accountId: string; zoneId: string;
   appId: string; credential: string;
 }, transport: typeof fetch = fetch, deps = defaults) {
-  const { scope, client, accountId, appId, credential } = input ?? {} as typeof input;
-  if (!scope || !client || typeof accountId !== 'string' ||
+  const { scope, client, accountId, zoneId, appId, credential } = input ?? {} as typeof input;
+  if (!scope || !client || !HEX32.test(accountId) || !HEX32.test(zoneId) ||
       typeof appId !== 'string' || typeof credential !== 'string' ||
       typeof transport !== 'function')
     throw Error('native_studio_access_entry_input_invalid');
@@ -37,6 +43,18 @@ export async function inspectBoundNativeStudioAccessEntry(input: {
   const principals = members.map(member => member.principal);
   const app = await deps.app(scope, { siteId: scope.siteId,
     studioOrigin: before.studioOrigin, accountId }, appId, credential, transport);
+  const host = new URL(before.studioOrigin).hostname;
+  const [accountApps, zoneApps] = await Promise.all([
+    deps.inventoryRead('accounts', accountId, credential, transport),
+    deps.inventoryRead('zones', zoneId, credential, transport),
+  ]);
+  const accountInventory = deps.inventory(accountApps, appId, host);
+  const zoneInventory = deps.inventory(zoneApps, null, host);
+  if (accountInventory.state !== 'observed-no-access-overlap' ||
+      accountInventory.appId !== appId ||
+      zoneInventory.state !== 'observed-no-access-overlap' ||
+      zoneInventory.appId !== null)
+    throw Error('native_studio_access_entry_inventory_unverified');
   let response: Response;
   try {
     response = await transport(

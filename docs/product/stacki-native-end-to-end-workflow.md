@@ -1334,8 +1334,11 @@ Access; `/studio/*` misses the parent and `/studio*` covers additional sibling
 paths ([Cloudflare path rules](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/)).
 The checks re-read the site binding and membership after provider
 readback. They do not prove an authenticated editor session or create an
-Access application. A more-specific overlapping application must also be
-excluded before this evidence can become a first-open gate.
+Access application. The overlap check reads every inventory page in both
+the account and its DNS zone, then rejects another application that may
+govern `/studio` or a child path. The zone ID must come from the centrally
+verified target, not an event payload. This is still prerequisite evidence,
+not owner login.
 
 The existing first-open and authenticated-health checks remain specific to
 repository/GitHub login. Access mode requires a separately versioned source
