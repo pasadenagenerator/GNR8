@@ -42,7 +42,8 @@ function fixture() {
       return use({ store, site, sourceId, commit: sourceCommit, workerId }); },
     credentials: async () => { calls.push('credentials');
       return { cloudflareCredential: token, secrets }; },
-    studio: async () => { calls.push('studio');
+    studio: async (...args: unknown[]) => { calls.push('studio');
+      assert.deepEqual(args[8], { store, sourceId, site });
       return { state: 'verified-source-control-plane', workerId }; },
     vacancy: async () => { calls.push('vacancy');
       return { state: 'vacant', workerId: publicWorkerId,

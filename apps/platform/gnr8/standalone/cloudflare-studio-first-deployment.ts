@@ -2,6 +2,9 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { SiteGitHubRepositoryBinding } from '../stacki/site-github-repository-binding';
+import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
+import type { PublicationStore } from './publication-store';
+import type { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -11,6 +14,10 @@ const SECRET_NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
   'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+type AccessBinding = { version: 2; provider: 'access'; aud: string;
+  teamDomain: string; admins: string[] };
+type SourceProof = { store: Pick<PublicationStore, 'read' | 'getBytes'>;
+  sourceId: string; site: Awaited<ReturnType<typeof configuredNativeStudioBootstrapSite>> };
 
 /** Read only control-plane evidence for the first real Studio deployment.
  * A reserved Worker alone is pending, not an installed or ready Studio.
@@ -25,6 +32,7 @@ export async function inspectCloudflareStudioFirstDeployment(
   expectedTag?: string,
   expectedRepository?: string,
   requireSecrets = false,
+  expectedAccess?: AccessBinding,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
@@ -32,6 +40,12 @@ export async function inspectCloudflareStudioFirstDeployment(
       (expectedTag !== undefined && !FIRST_DEPLOY_TAG.test(expectedTag)) ||
       (expectedRepository !== undefined &&
         !/^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(expectedRepository)) ||
+      (expectedAccess !== undefined && (expectedAccess.version !== 2 ||
+        expectedAccess.provider !== 'access' ||
+        !/^[a-f0-9]{64}$/.test(expectedAccess.aud) ||
+        !/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(expectedAccess.teamDomain) ||
+        !Array.isArray(expectedAccess.admins) ||
+        !expectedAccess.admins.length)) ||
       typeof requireSecrets !== 'boolean' ||
       typeof domain !== 'string' ||
       !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(domain))
@@ -120,7 +134,15 @@ export async function inspectCloudflareStudioFirstDeployment(
       origin[0].text !== `https://${domain}` ||
       !plain('PREVIEW_ORIGIN', `https://preview.${domain}`) ||
       !plain('SITE_DEPLOYMENT_URL', `https://${domain}/__studio-deployment`) ||
-      !plain('EDITOR_ACCESS', 'repository') || !plain('EDITOR_GITHUB_IDS', '') ||
+      !plain('EDITOR_ACCESS', expectedAccess ? 'roles' : 'repository') ||
+      !plain('EDITOR_GITHUB_IDS', '') ||
+      (expectedAccess === undefined &&
+        ['AUTH_PROVIDER', 'ACCESS_TEAM_DOMAIN', 'ACCESS_AUD', 'AUTH_BOOTSTRAP_ADMIN']
+          .some(name => binding(name).length !== 0)) ||
+      (expectedAccess !== undefined && (!plain('AUTH_PROVIDER', 'access') ||
+        !plain('ACCESS_TEAM_DOMAIN', expectedAccess.teamDomain) ||
+        !plain('ACCESS_AUD', expectedAccess.aud) ||
+        !plain('AUTH_BOOTSTRAP_ADMIN', expectedAccess.admins[0]))) ||
       (expectedRepository !== undefined && !plain('GITHUB_REPOSITORY', expectedRepository)))
     throw Error('native_studio_first_deployment_binding_conflict');
   const applications = await read(`/containers/applications?name=${encodeURIComponent(container)}`);
@@ -152,6 +174,7 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
   transport: typeof fetch = fetch,
   expectedTag?: string,
   requireSecrets = false,
+  sourceProof?: SourceProof,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)))
@@ -163,7 +186,24 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
   ]);
   if (site.error || !site.data || typeof site.data.domain !== 'string' || !repository)
     throw Error('native_studio_first_deployment_scope_unverified');
+  let expectedAccess: AccessBinding | undefined;
+  if (sourceProof !== undefined) {
+    if (!sourceProof || !sourceProof.store ||
+        typeof sourceProof.store.read !== 'function' ||
+        typeof sourceProof.store.getBytes !== 'function' ||
+        sourceProof.site?.siteId !== scope.siteId ||
+        sourceProof.site.accountId !== accountId ||
+        sourceProof.site.studioOrigin !== `https://${site.data.domain}` ||
+        sourceProof.site.repository !== `${repository.owner}/${repository.repository}` ||
+        sourceProof.site.repositoryId !== String(repository.repositoryId))
+      throw Error('native_studio_first_deployment_source_unverified');
+    let saved;
+    try { saved = await readStoredVerifiedAstroStudio(sourceProof); }
+    catch { throw Error('native_studio_first_deployment_source_unverified'); }
+    expectedAccess = saved.receipt.format === 'gnr8-native-studio-source:v2'
+      ? saved.receipt.access as AccessBinding : undefined;
+  }
   return inspectCloudflareStudioFirstDeployment(scope, accountId, workerId,
     site.data.domain, credential, transport, expectedTag,
-    `${repository.owner}/${repository.repository}`, requireSecrets);
+    `${repository.owner}/${repository.repository}`, requireSecrets, expectedAccess);
 }

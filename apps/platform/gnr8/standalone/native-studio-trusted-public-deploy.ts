@@ -41,7 +41,7 @@ const defaults = { site: configuredNativeStudioBootstrapSite,
  */
 export async function runTrustedNativeStudioPublicDeploy(input: {
   scope: NativeStudioScope; client: SupabaseClient;
-  store: Pick<PublicationStore, 'read' | 'claim'>;
+  store: Pick<PublicationStore, 'read' | 'claim' | 'getBytes'>;
   project: string; sourceId: string; commit: string;
   studioWorkerId: string; publicWorkerId: string;
   studioTag: string; trustedWrangler: string; cloudflareCredential: string;
@@ -107,7 +107,8 @@ deps = defaults) {
   const [head, active, vacant] = await Promise.all([
     deps.head(scope, client, env, transport),
     deps.studio(scope, client, site.accountId, studioWorkerId,
-      cloudflareCredential, transport, studioTag, true),
+      cloudflareCredential, transport, studioTag, true,
+      { store, sourceId, site }),
     deps.vacancy(scope, site.accountId, publicWorkerId, domain,
       cloudflareCredential, transport),
   ]);

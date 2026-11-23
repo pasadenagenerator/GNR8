@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServiceRoleClient } from '../../src/supabase/service-role-server';
 import { requireAgencyBackgroundActor } from '../../src/auth/agency-background-action';
@@ -13,10 +14,92 @@ import { fingerprint, parsePublicationSelection, publicationSelectionForArtifact
 import { requireCurrentConfirmedSelection } from './current-confirmed-import';
 import { SupabasePublicationStore } from './publication-store';
 import { configuredNativeStudioDirectSourceSite } from './native-studio-bootstrap-site';
+import { isRetainedLegacyNativeStudioSite } from './native-studio-binding-store';
+import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
+import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
+import { inspectNativeStudioAccessPolicyReadback } from './cloudflare-studio-access-policy';
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type Request={scope:Scope;input:PublicationSelection;actor:string;requestId?:string};
+type NativeSite=Awaited<ReturnType<typeof configuredNativeStudioDirectSourceSite>>;
+const APP_INTENT='native-studio/access-app-create-intent-v1.json';
+const APP_BOUND='native-studio/access-app-bound-v1.json';
+const POLICY_INTENT='native-studio/access-policy-create-intent-v1.json';
+const HEX32=/^[a-f0-9]{32}$/;
+const TOKEN=/^[A-Za-z0-9_-]{16,256}$/;
+const same=(a:unknown,b:unknown)=>a===undefined||b===undefined?a===b:fingerprint(a)===fingerprint(b);
+const object=(value:unknown):value is Record<string,unknown>=>
+ value!==null&&typeof value==='object'&&!Array.isArray(value);
+
+const accessDefaults={
+ candidates:readCurrentNativeStudioAccessCandidates,
+ app:inspectCloudflareStudioAccessApp,
+ transport:fetch,
+};
+
+/** Read current GNR8 members and exact Cloudflare app/policy before producing
+ * source bytes. Only the four retained sites may continue without Access. */
+export async function readVerifiedNativeStudioAccessForPreparation(
+ scope:Scope,client:SupabaseClient,site:NativeSite,
+ store:Pick<SupabasePublicationStore,'read'>,
+ env:Record<string,string|undefined>=process.env,
+ deps=accessDefaults,
+){
+ const [appIntent,appBound,policyIntent]=await Promise.all([
+  store.read<Record<string,unknown>>(APP_INTENT),
+  store.read<Record<string,unknown>>(APP_BOUND),
+  store.read<Record<string,unknown>>(POLICY_INTENT),
+ ]);
+ if(!appBound){
+  if(appIntent||policyIntent||!isRetainedLegacyNativeStudioSite(scope.siteId))
+   throw Error('native_studio_access_binding_missing');
+  return undefined;
+ }
+ const credential=env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER??'';
+ const zoneId=env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID??'';
+ if(env.GNR8_NATIVE_STUDIO_ACCESS_SETUP_ENABLED!=='1'||
+    !TOKEN.test(credential)||!HEX32.test(zoneId))
+  throw Error('native_studio_access_setup_not_configured');
+ const target={scope,accountId:site.accountId,studioOrigin:site.studioOrigin,
+  repository:site.repository,repositoryId:Number(site.repositoryId)};
+ const domain=`${new URL(site.studioOrigin).hostname}/studio`;
+ const name=`gnr8-${scope.siteId}-studio-access`;
+ const identity=createHash('sha256').update(JSON.stringify({scope,
+  accountId:site.accountId,zoneId,studioOrigin:site.studioOrigin,
+  repository:site.repository,repositoryId:Number(site.repositoryId),name,domain})).digest('hex');
+ if(!object(appIntent)||!object(appBound)||!object(policyIntent)||
+    !same(appIntent,{identity,target,zoneId,name,domain})||
+    appBound.identity!==identity||typeof appBound.appId!=='string'||
+    typeof appBound.aud!=='string'||typeof appBound.teamDomain!=='string')
+  throw Error('native_studio_access_binding_unverified');
+ const candidates=await deps.candidates(scope,client);
+ const admins=candidates.map(candidate=>candidate.principal);
+ if(!admins.length||!same(policyIntent,{identity:fingerprint({scope,target,
+   accountId:site.accountId,appId:appBound.appId,principals:admins}),scope,
+   accountId:site.accountId,appId:appBound.appId,target,principals:admins}))
+  throw Error('native_studio_access_policy_stale');
+ const app=await deps.app(scope,{siteId:scope.siteId,studioOrigin:site.studioOrigin,
+  accountId:site.accountId},appBound.appId,credential,deps.transport);
+ if(app.state!=='observed-access-app'||app.appId!==appBound.appId||
+    app.aud!==appBound.aud||app.teamDomain!==appBound.teamDomain||
+    app.studioOrigin!==site.studioOrigin||app.accountId!==site.accountId)
+  throw Error('native_studio_access_app_stale');
+ let body:unknown;
+ try{
+  const response=await deps.transport(`https://api.cloudflare.com/client/v4/accounts/`+
+   `${site.accountId}/access/apps/${appBound.appId}/policies`,{
+    method:'GET',redirect:'error',signal:AbortSignal.timeout(30_000),
+    headers:{authorization:`Bearer ${credential}`,accept:'application/json'},
+   });
+  if(!response.ok)throw Error();
+  body=await response.json();
+ }catch{throw Error('native_studio_access_policy_unavailable');}
+ inspectNativeStudioAccessPolicyReadback(body,admins);
+ return {version:2 as const,provider:'access' as const,
+  aud:app.aud,teamDomain:app.teamDomain,admins};
+}
+
 const defaults={
  client:getSupabaseServiceRoleClient,actor:requireAgencyBackgroundActor,
  site:configuredNativeStudioDirectSourceSite,
@@ -31,6 +114,7 @@ const defaults={
  revision:async(client:SupabaseClient,bucket:string,scope:PublicationSelection['selection']['scope'],revision:number)=>
   (await resolvedGitHubStackiStore(scope)??new SupabaseStackiDraftStore(client,bucket)).revision(scope,revision),
  export:exportStandaloneProject,persist:persistVerifiedAstroStudio,
+ access:readVerifiedNativeStudioAccessForPreparation,
  record:async(store:SupabasePublicationStore,key:string,value:unknown)=>store.put(key,value),
  store:(client:SupabaseClient,scope:Scope)=>new SupabasePublicationStore(client,process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET??'gnr8-astro-candidate-routes',scope),
 };
@@ -48,6 +132,8 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
  const client=deps.client();if(!client)throw Error('native_studio_store_unavailable');
  await deps.actor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});
  const site=await deps.site(scope,client);
+ const store=deps.store(client,scope);
+ const access=await deps.access(scope,client,site,store);
  const authorize=async(id:string)=>{
   const owner=await deps.ownership(id);
   if(owner.agencyId!==scope.agencyId||owner.organizationId!==scope.clientId||owner.ownershipSiteId!==scope.siteId)
@@ -101,15 +187,17 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
  const fresh=await deps.confirm(client,input);
  if(fresh.confirmationSha256!==current.confirmationSha256||
     fresh.artifactVersionId!==artifactVersionId)throw Error('native_studio_confirmation_stale');
- const requestId=fingerprint({input,confirmationSha256:current.confirmationSha256});
+ const requestId=fingerprint({input,confirmationSha256:current.confirmationSha256,
+  ...(access?{access}: {})});
  if(request.requestId!==undefined&&request.requestId!==requestId)throw Error('native_studio_request_stale');
  await authorize(artifactVersionId);
  await deps.actor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});
  const latestSite=await deps.site(scope,client);
  if(fingerprint(latestSite)!==fingerprint(site))throw Error('native_studio_site_stale');
- const store=deps.store(client,scope);
+ const freshAccess=await deps.access(scope,client,site,store);
+ if(!same(freshAccess,access))throw Error('native_studio_access_stale');
  const result=await deps.persist({store,exported,selection:input.selection,
-  confirmationSha256:current.confirmationSha256,site,releaseFile:undefined});
+  confirmationSha256:current.confirmationSha256,site,access,releaseFile:undefined});
  const summary={requestId,sourceId:result.receipt.identitySha256,sourceManifestSha256:result.receipt.sourceManifestSha256,
   studioVersion:result.receipt.version,files:result.receipt.files.length,hosted:false};
  await deps.record(store,`native-requests/${requestId}-result.json`,summary);

@@ -1271,9 +1271,13 @@ page and Cloudflare control-plane readback do not supply that evidence.
 The unchanged Stacki 1.4.13 supports Cloudflare Access, Google, OIDC and
 passkey authentication with native `.stacki/roles.json`. Its GitHub App can
 read and push the repository for an editor without personal GitHub write
-permission. The current GNR8 template and hosted readback still require
-`EDITOR_ACCESS=repository`, so this capability is inactive. A fail-closed
-transition must map current GNR8 owner/admin membership by user ID to a
+permission. The local source generator now creates an Access v2 derivative
+with native roles and exact Worker settings, while the four retained sites
+keep repository-mode derivatives. Local preparation, deploy readback, public
+deploy and first-open paths consume the verified source receipt. This is not
+active for new hosted sites until Access setup is called by the production
+orchestrator and its central configuration is enabled. A fail-closed
+transition maps current GNR8 owner/admin membership by user ID to a
 verified identity at the chosen provider, create a site-bound roles file with
 at least one admin, and reconcile membership changes. An absent roles file
 can elevate an admitted editor in native Stacki; email domains or a broad

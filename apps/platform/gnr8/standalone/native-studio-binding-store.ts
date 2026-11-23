@@ -21,6 +21,7 @@ const legacySiteIds = new Set([
   '9ff5613e-1625-43f1-844e-c5c91a813d4f', // CHS
   'dbdd5b9f-6ae1-4736-917b-20adf94838c6', // ViroiDoc
 ]);
+export const isRetainedLegacyNativeStudioSite = (siteId: string) => legacySiteIds.has(siteId);
 const rowColumns = 'site_id,agency_id,client_id,studio_origin,repository,repository_id,branch,cloudflare_account_id,github_app_id,github_installation_id,github_client_id,studio_worker,site_worker,draft_bucket,verified_at';
 
 async function requireCurrentSiteTarget(scope: NativeStudioScope, client: SupabaseClient,

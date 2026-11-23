@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runDirectNativeStudioPreparation } from './native-studio-direct-preparation';
+import { readVerifiedNativeStudioAccessForPreparation, runDirectNativeStudioPreparation } from './native-studio-direct-preparation';
 import { configuredNativeStudioDirectSourceSite } from './native-studio-bootstrap-site';
-import { publicationSelectionForArtifact } from './publication-contract';
+import { fingerprint, publicationSelectionForArtifact } from './publication-contract';
 import { exportStandaloneProject } from './standalone-export';
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 import { createHash } from 'node:crypto';
@@ -29,7 +29,7 @@ function fixture(){
   source:async()=>context,
   revision:async()=>{throw Error('unexpected revision');},
   loadSource:async()=>baseline,planAssets:async()=>({entries:[],read:async()=>[]}),
-  export:exportStandaloneProject,store:()=>({}),
+  export:exportStandaloneProject,store:()=>({}),access:async()=>undefined,
   record:async()=>{calls.push('record');},
   persist:async(value:{exported:{manifestSha256:string};confirmationSha256:string})=>{
    calls.push('persist');
@@ -114,8 +114,11 @@ test('new-site direct preparation is gated and resolves a scoped bootstrap site'
   assert.equal(value.site.branch,'codex/native-stacki');
   return persist(value);
  };
- assert.equal((await runDirectNativeStudioPreparation({scope,input:f.input,actor:id(6)},
-  f.deps as any)).sourceId,'d'.repeat(64));
+ const prepared=await runDirectNativeStudioPreparation({scope,input:f.input,actor:id(6)},
+  f.deps as any);
+ assert.equal(prepared.sourceId,'d'.repeat(64));
+ assert.equal(prepared.requestId,fingerprint({input:f.input,
+  confirmationSha256:'c'.repeat(64)}));
 });
 test('direct Worker path writes and reuses exact Studio bytes from the selected Astro source',
  {skip:!process.env.STACKI_RELEASE_FILE&&'Set STACKI_RELEASE_FILE'},async()=>{
@@ -135,4 +138,67 @@ test('direct Worker path writes and reuses exact Studio bytes from the selected 
  assert.equal(first.hosted,false);assert.equal(first.reused,false);assert.equal(second.reused,true);
  assert.equal(first.sourceId,second.sourceId);assert.equal(objects.size,2);
  assert([...bytes.values()].some(body=>body.includes('Confirmed source')));
+});
+
+test('new-site Access source requires bound app, exact current policy and repeated freshness',async()=>{
+ const f=fixture();
+ const site={siteId:scope.siteId,repository:'example/website',repositoryId:'123',branch:'main',
+  studioOrigin:'https://website.example.com',accountId:'a'.repeat(32),appId:'456',
+  installationId:'789',clientId:'Iv1.example'};
+ const appId='44444444-4444-4444-8444-444444444444';
+ const aud='b'.repeat(64),teamDomain='gnr8.cloudflareaccess.com';
+ const credential='access-manager-token-value-1234567890',zoneId='c'.repeat(32);
+ const env={GNR8_NATIVE_STUDIO_ACCESS_SETUP_ENABLED:'1',
+  GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER:credential,
+  GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID:zoneId};
+ const target={scope,accountId:site.accountId,studioOrigin:site.studioOrigin,
+  repository:site.repository,repositoryId:123};
+ const name=`gnr8-${scope.siteId}-studio-access`,domain='website.example.com/studio';
+ const identity=createHash('sha256').update(JSON.stringify({scope,accountId:site.accountId,
+  zoneId,studioOrigin:site.studioOrigin,repository:site.repository,repositoryId:123,
+  name,domain})).digest('hex');
+ const admins=['access:owner@example.com'];
+ const objects=new Map<string,unknown>([
+  ['native-studio/access-app-create-intent-v1.json',{identity,target,zoneId,name,domain}],
+  ['native-studio/access-app-bound-v1.json',{identity,appId,aud,teamDomain}],
+  ['native-studio/access-policy-create-intent-v1.json',{identity:fingerprint({scope,target,
+   accountId:site.accountId,appId,principals:admins}),scope,accountId:site.accountId,
+   appId,target,principals:admins}],
+ ]);
+ const store={read:async(key:string)=>objects.get(key)??null};
+ const client={} as any;
+ const deps={candidates:async()=>admins.map(principal=>({principal,userId:id(6),role:'owner'})),
+  app:async()=>({state:'observed-access-app',appId,aud,teamDomain,
+   studioOrigin:site.studioOrigin,accountId:site.accountId}),
+  transport:async()=>Response.json({success:true,result:[{decision:'allow',
+   include:[{email:{email:'owner@example.com'}}]}],
+   result_info:{page:1,count:1,total_count:1,total_pages:1}})};
+ assert.deepEqual(await readVerifiedNativeStudioAccessForPreparation(scope,client,site,
+  store as any,env,deps as any),{version:2,provider:'access',aud,teamDomain,admins});
+ objects.delete('native-studio/access-app-bound-v1.json');
+ await assert.rejects(readVerifiedNativeStudioAccessForPreparation(scope,client,site,
+  store as any,env,deps as any),/access_binding_missing/);
+ objects.clear();
+ assert.equal(await readVerifiedNativeStudioAccessForPreparation({ ...scope,
+  siteId:'2e7146cd-e516-4088-94ad-6cac90cb17f4' },client,site,
+  store as any,env,deps as any),undefined);
+ objects.set('native-studio/access-app-bound-v1.json',{identity,appId,aud,teamDomain});
+ f.deps.site=()=>site;
+ const access={version:2,provider:'access',aud,teamDomain,admins};
+ let reads=0;
+ (f.deps as any).access=async()=>{reads++;return reads===1?access:{...access,aud:'d'.repeat(64)};};
+ await assert.rejects(runDirectNativeStudioPreparation({scope,input:f.input,actor:id(6)},
+  f.deps as any),/native_studio_access_stale/);
+ assert.equal(f.calls.includes('persist'),false);
+ (f.deps as any).access=async()=>access;
+ const persist=f.deps.persist;
+ (f.deps as any).persist=async(value:any)=>{
+  assert.deepEqual(value.access,access);
+  return persist(value);
+ };
+ const prepared=await runDirectNativeStudioPreparation({scope,input:f.input,actor:id(6)},
+  f.deps as any);
+ assert.equal(prepared.sourceId,'d'.repeat(64));
+ assert.equal(prepared.requestId,fingerprint({input:f.input,
+  confirmationSha256:'c'.repeat(64),access}));
 });

@@ -9,6 +9,9 @@ import { inspectBoundCloudflarePublicStudioGateway } from './cloudflare-public-s
 import { inspectGitHubNativeStudioHead } from './github-native-studio-head';
 import { assertNativeStudioGitHubTokenCompatible } from './native-studio-upstream-github-compatibility';
 import { verifyPublicStudioEntry } from '../../../../scripts/stacki/verify-studio-health.mjs';
+import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
+import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
+import { inspectBoundNativeStudioAccessEntry } from './native-studio-access-entry';
 
 const KEY = 'native-studio/first-open-v1.json';
 const HANDOFF = 'native-studio/build-handoff-v1.json';
@@ -17,6 +20,9 @@ const COMMIT = /^[a-f0-9]{40,64}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const TAG = /^gnr8-first-[a-f0-9]{64}$/;
+const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
+const APP_INTENT = 'native-studio/access-app-create-intent-v1.json';
+const APP_BOUND = 'native-studio/access-app-bound-v1.json';
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -56,6 +62,9 @@ const defaults = {
   gateway: inspectBoundCloudflarePublicStudioGateway,
   entry: verifyPublicStudioEntry,
   githubHead: inspectGitHubNativeStudioHead,
+  source: readStoredVerifiedAstroStudio,
+  candidates: readCurrentNativeStudioAccessCandidates,
+  accessEntry: inspectBoundNativeStudioAccessEntry,
 };
 
 /** Run only after an isolated first deployment and a verified Git/build handoff.
@@ -63,11 +72,12 @@ const defaults = {
  * the final ready binding. No provider mutation occurs here.
  */
 export async function recordNativeStudioFirstOpen(input: {
-  scope: NativeStudioScope; client: SupabaseClient; store: Pick<PublicationStore, 'read' | 'claim'>;
+  scope: NativeStudioScope; client: SupabaseClient; store: Pick<PublicationStore, 'read' | 'claim' | 'getBytes'>;
   sourceId: string; commit: string; tag: string;
   publicTag?: string;
   studioWorkerId: string; publicWorkerId: string;
   studioCredential: string; publicCredential: string; githubCredential: string;
+  accessZoneId?: string; accessCredential?: string;
 }, deps = defaults) {
   const { scope, client, store, sourceId, commit, tag, publicTag,
     studioWorkerId, publicWorkerId, studioCredential, publicCredential,
@@ -91,12 +101,58 @@ export async function recordNativeStudioFirstOpen(input: {
         branch: site.branch, studioOrigin: site.studioOrigin, accountId: site.accountId }) ||
       !Array.isArray(built.files) || !built.files.length)
     throw Error('native_studio_first_open_source_unverified');
+  const source = await deps.source({ store, sourceId, site });
+  if (source.receipt.identitySha256 !== sourceId ||
+      !['gnr8-native-studio-source:v1', 'gnr8-native-studio-source:v2']
+        .includes(source.receipt.format))
+    throw Error('native_studio_first_open_source_unverified');
+  const access = source.receipt.format === 'gnr8-native-studio-source:v2'
+    ? source.receipt.access : null;
+  if (source.receipt.format === 'gnr8-native-studio-source:v2' && !object(access))
+    throw Error('native_studio_first_open_source_unverified');
+  if (access) {
+    if (!HEX32.test(input.accessZoneId ?? '') ||
+        typeof input.accessCredential !== 'string' || !input.accessCredential)
+      throw Error('native_studio_first_open_access_unconfigured');
+    const [intent, bound, before] = await Promise.all([
+      store.read<Record<string, unknown>>(APP_INTENT),
+      store.read<Record<string, unknown>>(APP_BOUND),
+      deps.candidates(scope, client),
+    ]);
+    const expectedAdmins = before.map(member => member.principal).sort();
+    const domain = new URL(site.studioOrigin).hostname;
+    if (!object(access) || access.version !== 2 || access.provider !== 'access' ||
+        !Array.isArray(access.admins) || !same(access.admins, expectedAdmins) ||
+        !object(intent) || !object(intent.target) || !same(intent.target.scope, scope) ||
+        intent.target.accountId !== site.accountId ||
+        intent.target.studioOrigin !== site.studioOrigin ||
+        intent.target.repository !== site.repository ||
+        String(intent.target.repositoryId) !== site.repositoryId ||
+        intent.zoneId !== input.accessZoneId ||
+        intent.name !== `gnr8-${scope.siteId}-studio-access` ||
+        intent.domain !== `${domain}/studio` ||
+        !object(bound) || bound.identity !== intent.identity ||
+        typeof bound.appId !== 'string' || !APP_ID.test(bound.appId) ||
+        bound.aud !== access.aud || bound.teamDomain !== access.teamDomain)
+      throw Error('native_studio_first_open_access_unverified');
+    const entry = await deps.accessEntry({ scope, client, accountId: site.accountId,
+      zoneId: input.accessZoneId!, appId: bound.appId,
+      credential: input.accessCredential! });
+    const after = await deps.candidates(scope, client);
+    if (entry.state !== 'observed-access-entry' || entry.appId !== bound.appId ||
+        entry.aud !== access.aud || entry.teamDomain !== access.teamDomain ||
+        entry.studioOrigin !== site.studioOrigin ||
+        entry.memberCount !== expectedAdmins.length ||
+        !same(after.map(member => member.principal).sort(), expectedAdmins))
+      throw Error('native_studio_first_open_access_unverified');
+  }
   const [studio, publicSite, entry, githubHead] = await Promise.all([
     deps.studio(scope, client, site.accountId, studioWorkerId,
-      studioCredential, fetch, tag, true),
+      studioCredential, fetch, tag, true, { store, sourceId, site }),
     deps.gateway(scope, client, site.accountId, publicWorkerId,
       publicCredential, fetch, publicTag),
-    deps.entry({ studioOrigin: site.studioOrigin }),
+    access ? Promise.resolve({ state: 'access-studio-challenge-observed' as const,
+      studioOrigin: site.studioOrigin }) : deps.entry({ studioOrigin: site.studioOrigin }),
     deps.githubHead(site, githubCredential),
   ]);
   if (studio.state !== 'verified-source-control-plane' ||
@@ -104,7 +160,7 @@ export async function recordNativeStudioFirstOpen(input: {
       publicSite.state !== 'observed-control-plane' ||
       publicSite.workerId !== publicWorkerId || !UUID.test(publicSite.versionId) ||
       !HEX32.test(publicSite.domainId) ||
-      entry.state !== 'public-studio-entry-healthy' ||
+      entry.state !== (access ? 'access-studio-challenge-observed' : 'public-studio-entry-healthy') ||
       entry.studioOrigin !== site.studioOrigin ||
       githubHead.repositoryId !== site.repositoryId ||
       githubHead.branch !== site.branch || githubHead.commit !== commit)

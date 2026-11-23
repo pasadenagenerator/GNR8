@@ -15,7 +15,7 @@ type Environment = Record<string, string | undefined>;
  */
 export async function configuredFirstStudioDeployIntent(input: {
   scope: NativeStudioScope; client: SupabaseClient;
-  store: Pick<PublicationStore, 'read' | 'claim'>;
+  store: Pick<PublicationStore, 'read' | 'claim' | 'getBytes'>;
   project: string; sourceId: string; commit: string; workerId: string;
   cloudflareCredential: string; secrets: NativeStudioRuntimeSecrets;
 }, env: Environment = process.env, transport: typeof fetch = fetch) {
@@ -29,6 +29,7 @@ export async function configuredFirstStudioDeployIntent(input: {
       inspectGitHubHead: () => inspectConfiguredNativeStudioGitHubHead(
         scope, client, env, transport),
       inspectCloudflare: () => inspectBoundCloudflareStudioFirstDeployment(
-        scope, client, site.accountId, workerId, cloudflareCredential, transport),
+        scope, client, site.accountId, workerId, cloudflareCredential, transport,
+        undefined, false, { store, sourceId, site }),
     });
 }

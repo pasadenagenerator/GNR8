@@ -41,6 +41,7 @@ async function fixture() {
   ]);
   const store = {
     read: async <T>(key: string) => (saved.get(key) ?? null) as T | null,
+    getBytes: async (_hash: string) => Buffer.alloc(0),
     claim: async (key: string, value: unknown) => {
       if (saved.has(key)) return false;
       saved.set(key, value); return true;
@@ -55,8 +56,10 @@ async function fixture() {
       workerId: studioWorkerId }),
     head: async () => ({ repositoryId: site.repositoryId,
       branch: site.branch, commit }),
-    studio: async () => ({ state: 'verified-source-control-plane',
-      workerId: studioWorkerId }),
+    studio: async (...args: unknown[]) => {
+      assert.deepEqual(args[8], { store, sourceId, site });
+      return { state: 'verified-source-control-plane', workerId: studioWorkerId };
+    },
     vacancy: async () => { calls.push('vacancy'); return {
       state: 'vacant', workerId: publicWorkerId, domain }; },
     invoke: async (_file: string, args: string[], options: any) => {

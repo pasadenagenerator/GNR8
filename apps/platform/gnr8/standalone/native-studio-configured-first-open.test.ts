@@ -64,6 +64,8 @@ function fixture() {
         `gnr8-public-first-${publicReceipt.identity}`);
       assert.equal(input.studioCredential, cloudflareCredential);
       assert.equal(input.publicCredential, cloudflareCredential);
+      assert.equal(input.accessZoneId, '7'.repeat(32));
+      assert.equal(input.accessCredential, 'access-manager-token');
       return { state: 'first-open-recorded' }; },
   } as any;
   return { calls, saved, deps };
@@ -72,7 +74,9 @@ function fixture() {
 test('configured handoff supplies the first-open recorder from scoped receipts', async () => {
   const f = fixture();
   assert.deepEqual(await recordConfiguredNativeStudioFirstOpen(scope,
-    {} as SupabaseClient, {}, (async () => { throw Error('no provider call'); }) as typeof fetch,
+    {} as SupabaseClient, { GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID: '7'.repeat(32),
+      GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER: 'access-manager-token' },
+    (async () => { throw Error('no provider call'); }) as typeof fetch,
     f.deps), { state: 'first-open-recorded' });
   assert.deepEqual(f.calls, ['site', 'credentials', 'github-token', 'site', 'record']);
 });

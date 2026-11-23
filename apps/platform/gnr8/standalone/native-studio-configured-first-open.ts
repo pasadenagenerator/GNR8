@@ -111,5 +111,7 @@ export async function recordConfiguredNativeStudioFirstOpen(
     studioWorkerId: studioWorkerId!, publicWorkerId: publicWorkerId!,
     studioCredential: cloudflareCredential,
     publicCredential: cloudflareCredential,
-    githubCredential: github.token });
+    githubCredential: github.token,
+    accessZoneId: env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID,
+    accessCredential: env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER });
 }

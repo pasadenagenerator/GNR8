@@ -195,9 +195,46 @@ test('hosted inspection compares Worker repository with the current site binding
   } } as unknown as SupabaseClient;
   assert.equal((await inspectBoundCloudflareStudioFirstDeployment(scope, client,
     accountId, workerId, credential, f.transport)).state, 'observed-control-plane');
+  await assert.rejects(inspectBoundCloudflareStudioFirstDeployment(scope, client,
+    accountId, workerId, credential, f.transport, undefined, false, {
+      store: { read: async () => null, getBytes: async () => Buffer.alloc(0) } as any,
+      sourceId: 'a'.repeat(64),
+      site: { siteId: scope.siteId, accountId, studioOrigin: `https://${domain}`,
+        repository: 'foreign/site', repositoryId: '2' } as any,
+    }), /source_unverified/);
   const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
     resources: { bindings: { name: string; text?: string }[] } };
   version.resources.bindings.find(binding => binding.name === 'GITHUB_REPOSITORY')!.text = 'foreign/site';
   await assert.rejects(inspectBoundCloudflareStudioFirstDeployment(scope, client,
     accountId, workerId, credential, f.transport), /binding_conflict/);
+});
+
+test('Access source expects its exact native Worker authentication bindings', async () => {
+  const f = fixture();
+  const access = { version: 2 as const, provider: 'access' as const,
+    aud: 'e'.repeat(64), teamDomain: 'gnr8.cloudflareaccess.com',
+    admins: ['access:admin@example.com'] };
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { bindings: { name: string; type: string; text?: string }[] } };
+  const bindings = version.resources.bindings;
+  bindings.find(item => item.name === 'EDITOR_ACCESS')!.text = 'roles';
+  bindings.push(...[
+    ['AUTH_PROVIDER', 'access'], ['ACCESS_TEAM_DOMAIN', access.teamDomain],
+    ['ACCESS_AUD', access.aud], ['AUTH_BOOTSTRAP_ADMIN', access.admins[0]],
+  ].map(([name, text]) => ({ name, type: 'plain_text', text })));
+  assert.equal((await inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true, access)).state, 'verified-source-control-plane');
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true), /binding_conflict/);
+  bindings.find(item => item.name === 'EDITOR_ACCESS')!.text = 'repository';
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true), /binding_conflict/);
+  bindings.find(item => item.name === 'EDITOR_ACCESS')!.text = 'roles';
+  bindings.find(item => item.name === 'ACCESS_AUD')!.text = 'f'.repeat(64);
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true, access), /binding_conflict/);
 });

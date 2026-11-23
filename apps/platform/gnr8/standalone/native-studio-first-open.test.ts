@@ -25,6 +25,7 @@ function fixture() {
     files: [{ path: 'dist/index.html', bytes: 4, sha256: 'a'.repeat(64) }],
   }]]);
   const store = { read: async <T>(key: string) => (saved.get(key) ?? null) as T | null,
+    getBytes: async () => Buffer.alloc(0),
     claim: async (key: string, value: unknown) => { if (saved.has(key)) return false;
       saved.set(key, value); return true; } };
   const input = { scope, client: db, store, sourceId, commit, tag,
@@ -34,6 +35,10 @@ function fixture() {
   const calls = { studio: 0, gateway: 0, entry: 0, github: 0 };
   const deps = {
     site: async () => site,
+    source: async () => ({ receipt: { format: 'gnr8-native-studio-source:v1',
+      identitySha256: sourceId } }),
+    candidates: async () => [],
+    accessEntry: async () => { throw Error('unexpected_access_entry'); },
     studio: async () => { calls.studio++; return { state: 'verified-source-control-plane' as const,
       workerId: studioWorkerId, versionId: studioVersionId }; },
     gateway: async () => { calls.gateway++; return { state: 'observed-control-plane' as const,
@@ -45,6 +50,52 @@ function fixture() {
   };
   return { saved, store, input, deps, calls };
 }
+
+test('Access first-open verifies source, bound app, current policy and challenge', async () => {
+  const f = fixture();
+  const zoneId = '7'.repeat(32);
+  const appId = '8'.repeat(32);
+  const aud = 'a'.repeat(64);
+  const teamDomain = 'gnr8.cloudflareaccess.com';
+  const admins = ['access:owner@example.com'];
+  f.saved.set('native-studio/access-app-create-intent-v1.json', {
+    identity: '9'.repeat(64), zoneId,
+    name: `gnr8-${scope.siteId}-studio-access`,
+    domain: `${new URL(site.studioOrigin).hostname}/studio`,
+    target: { scope, accountId: site.accountId, studioOrigin: site.studioOrigin,
+      repository: site.repository, repositoryId: Number(site.repositoryId) },
+  });
+  f.saved.set('native-studio/access-app-bound-v1.json', {
+    identity: '9'.repeat(64), appId, aud, teamDomain,
+  });
+  const access = { version: 2, provider: 'access', aud, teamDomain, admins };
+  let entryChecks = 0;
+  let sourceProof: unknown;
+  const deps = { ...f.deps,
+    source: async () => ({ receipt: { format: 'gnr8-native-studio-source:v2',
+      identitySha256: sourceId, access } }),
+    candidates: async () => admins.map(principal => ({ principal })),
+    accessEntry: async () => { entryChecks++;
+      return { state: 'observed-access-entry' as const, appId, aud, teamDomain,
+        studioOrigin: site.studioOrigin, memberCount: 1 }; },
+    studio: async (...args: unknown[]) => { sourceProof = args[8];
+      return { state: 'verified-source-control-plane' as const,
+        workerId: studioWorkerId, versionId: studioVersionId }; },
+  };
+  const input = { ...f.input, accessZoneId: zoneId,
+    accessCredential: 'manager-token-' + 'a'.repeat(30) };
+  await recordNativeStudioFirstOpen(input, deps as any);
+  assert.equal(entryChecks, 1);
+  assert.equal(f.calls.entry, 0);
+  assert.deepEqual(sourceProof, { store: f.store, sourceId, site });
+  await assert.rejects(recordNativeStudioFirstOpen({ ...input, accessZoneId: '0'.repeat(32) },
+    deps as any), /access_unverified/);
+  assert.equal(entryChecks, 1);
+  await assert.rejects(recordNativeStudioFirstOpen(input, {
+    ...deps, candidates: async () => [{ principal: 'access:other@example.com' }],
+  } as any), /access_unverified/);
+  assert.equal(entryChecks, 1);
+});
 
 test('verified first-open proof gives a labelled native link without claiming ready', async () => {
   const f = fixture();
