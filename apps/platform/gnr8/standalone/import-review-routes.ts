@@ -1,4 +1,5 @@
 import 'server-only';
+import { randomUUID } from 'node:crypto';
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server';
 import { parseAgencyActionContextError } from '@/app/api/gnr8/agency/_lib/agency-action-access';
 import { requirePublicOutputVersion } from '../output-adapters/public-output-access';
@@ -18,7 +19,7 @@ export const importReviewDependencies={
  authorize:requirePublicOutputVersion,client:getSupabaseServiceRoleClient,
  studioSource:configuredNativeStudioDirectSourceSite,
  enqueueSource:async(data:{scope:{agencyId:string;clientId:string;siteId:string};
-  input:ReturnType<typeof publicationSelectionForArtifact>;requestId:string;actor:string})=>
+  input:ReturnType<typeof publicationSelectionForArtifact>;requestId:string;attemptId:string;actor:string})=>
   inngest.send({name:'gnr8/native-studio.prepare.requested',data:{mode:'source',...data}}),
  readSelectedClosure:async(input:Parameters<typeof readSelectedImportClosure>[0])=>{
   try{return await readSelectedImportClosure(input);}catch{return null;}
@@ -85,16 +86,18 @@ export function createImportReviewRoutes(deps=importReviewDependencies){
     if(result.error)throw Error('503|Potrditve ni mogoče shraniti.');
     if(result.data?.length!==1)throw Error('409|Vhod se je med potrjevanjem spremenil. Osvežite pregled.');
     let sourcePreparation:'queued'|'queue-failed'|'unavailable'|null=null;
+    let sourceAttemptId:string|null=null;
     if(process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED==='1'&&!nativeStudioAvailable)
      sourcePreparation='unavailable';
     if(nativeStudioAvailable&&process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED==='1'){
      const requestId=fingerprint({input:selection,confirmationSha256:fingerprint(certificate)});
-     try{await deps.enqueueSource({scope,input:selection,requestId,actor:actor.userId});
-      sourcePreparation='queued';}
+     const attemptId=randomUUID();
+     try{await deps.enqueueSource({scope,input:selection,requestId,attemptId,actor:actor.userId});
+      sourcePreparation='queued';sourceAttemptId=attemptId;}
      catch{sourcePreparation='queue-failed';}
     }
     return Response.json({ok:true,data:importReviewModel({...input,provenance,updatedAt}),
-     sourcePreparation},{headers});
+     sourcePreparation,sourceAttemptId},{headers});
    }
    if(body.action!==undefined)throw Error('422|Neveljavna zahteva.');
    const saved=saveImportReview(model,body,actor.userId,new Date().toISOString());

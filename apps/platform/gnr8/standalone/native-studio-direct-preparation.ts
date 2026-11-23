@@ -14,6 +14,7 @@ import { fingerprint, parsePublicationSelection, publicationSelectionForArtifact
 import { requireCurrentConfirmedSelection } from './current-confirmed-import';
 import { SupabasePublicationStore } from './publication-store';
 import { configuredNativeStudioDirectSourceSite } from './native-studio-bootstrap-site';
+import { nativeStudioSourceResultKey } from './native-studio-source-status';
 import { isRetainedLegacyNativeStudioSite } from './native-studio-binding-store';
 import { readCurrentNativeStudioAccessCandidates } from './native-studio-access-candidates';
 import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
@@ -21,7 +22,7 @@ import { inspectNativeStudioAccessPolicyReadback } from './cloudflare-studio-acc
 import { persistVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
-type Request={scope:Scope;input:PublicationSelection;actor:string;requestId?:string};
+type Request={scope:Scope;input:PublicationSelection;actor:string;requestId?:string;attemptId?:string};
 type NativeSite=Awaited<ReturnType<typeof configuredNativeStudioDirectSourceSite>>;
 const APP_INTENT='native-studio/access-app-create-intent-v1.json';
 const APP_BOUND='native-studio/access-app-bound-v1.json';
@@ -125,6 +126,9 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
  const {scope,actor}=request??{} as Request;
  if(!scope||![scope.agencyId,scope.clientId,scope.siteId,actor].every(v=>/^[a-f0-9-]{36}$/.test(v)))
   throw Error('native_studio_request_invalid');
+ const attemptId=request.attemptId??null;
+ if(attemptId!==null&&!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(attemptId))
+  throw Error('native_studio_request_invalid');
  const input=parsePublicationSelection(request.input);
  const selected=input.selection.scope;
  if(selected.agencyId!==scope.agencyId||selected.clientId!==scope.clientId||selected.siteId!==scope.siteId)
@@ -187,8 +191,7 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
  const fresh=await deps.confirm(client,input);
  if(fresh.confirmationSha256!==current.confirmationSha256||
     fresh.artifactVersionId!==artifactVersionId)throw Error('native_studio_confirmation_stale');
- const requestId=fingerprint({input,confirmationSha256:current.confirmationSha256,
-  ...(access?{access}: {})});
+ const requestId=fingerprint({input,confirmationSha256:current.confirmationSha256});
  if(request.requestId!==undefined&&request.requestId!==requestId)throw Error('native_studio_request_stale');
  await authorize(artifactVersionId);
  await deps.actor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});
@@ -198,8 +201,8 @@ export async function runDirectNativeStudioPreparation(request:Request,deps=defa
  if(!same(freshAccess,access))throw Error('native_studio_access_stale');
  const result=await deps.persist({store,exported,selection:input.selection,
   confirmationSha256:current.confirmationSha256,site,access,releaseFile:undefined});
- const summary={requestId,sourceId:result.receipt.identitySha256,sourceManifestSha256:result.receipt.sourceManifestSha256,
+ const summary={requestId,...(attemptId?{attemptId}:{}),sourceId:result.receipt.identitySha256,sourceManifestSha256:result.receipt.sourceManifestSha256,
   studioVersion:result.receipt.version,files:result.receipt.files.length,hosted:false};
- await deps.record(store,`native-requests/${requestId}-result.json`,summary);
+ await deps.record(store,nativeStudioSourceResultKey(requestId,attemptId),summary);
  return {...summary,reused:result.reused};
 }

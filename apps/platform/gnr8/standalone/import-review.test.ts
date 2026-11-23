@@ -153,14 +153,21 @@ test('confirmed import reports queued, failed and unavailable Studio source prep
    const response=await f.post({action:'confirm',token:current.token,
     scopeConfirmed:true,functionsConfirmed:true});
    assert.equal(response.status,200);
-   assert.equal((await response.json()).sourcePreparation,mode);
+   const responseBody=await response.json();
+   assert.equal(responseBody.sourcePreparation,mode);
+   assert.equal(mode==='queued',typeof responseBody.sourceAttemptId==='string');
    assert.equal(f.queued.length,mode==='unavailable'?0:1);
    const certificate=f.provenance.confirmedImport;
-   if(mode!=='unavailable')assert.deepEqual(f.queued[0],{
+   if(mode!=='unavailable'){
+    const queued=f.queued[0];
+    assert.match(queued.attemptId as string,/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+    if(mode==='queued')assert.equal(responseBody.sourceAttemptId,queued.attemptId);
+    assert.deepEqual({...queued,attemptId:undefined},{
     scope:{agencyId:scope.agencyId,clientId:scope.clientId,siteId:scope.siteId},
     input:publicationSelectionForArtifact(scope,f.source.artifact),
     requestId:fingerprint({input:publicationSelectionForArtifact(scope,f.source.artifact),
-     confirmationSha256:fingerprint(certificate)}),actor:id(8)});
+     confirmationSha256:fingerprint(certificate)}),actor:id(8),attemptId:undefined});
+   }
    assert.ok((await f.read()).confirmedAt);
   }
  }finally{

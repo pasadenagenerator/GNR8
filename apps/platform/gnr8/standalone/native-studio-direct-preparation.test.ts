@@ -200,5 +200,12 @@ test('new-site Access source requires bound app, exact current policy and repeat
   f.deps as any);
  assert.equal(prepared.sourceId,'d'.repeat(64));
  assert.equal(prepared.requestId,fingerprint({input:f.input,
-  confirmationSha256:'c'.repeat(64),access}));
+  confirmationSha256:'c'.repeat(64)}));
+ const attemptId='77777777-7777-4777-8777-777777777777';
+ let recordedKey='';
+ (f.deps as any).record=async(_store:unknown,key:string)=>{recordedKey=key;};
+ const attempted=await runDirectNativeStudioPreparation({scope,input:f.input,
+  actor:id(6),requestId:prepared.requestId,attemptId},f.deps as any);
+ assert.equal(attempted.attemptId,attemptId);
+ assert.equal(recordedKey,`native-requests/${prepared.requestId}-${attemptId}-result.json`);
 });

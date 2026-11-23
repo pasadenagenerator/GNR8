@@ -455,7 +455,8 @@ mocked GitHub flow pass. Successful direct source preparation now queues a
 scoped first-build Inngest event when the central
 `GNR8_NATIVE_STUDIO_FIRST_BUILD_ENABLED=1` switch is set. Its registered job
 rechecks the actor's publish permission and the exact durable source receipt
-before entering this coordinator. The job requires a centrally configured
+for the current attempt before entering this coordinator. An older result
+cannot satisfy a new preparation. The job requires a centrally configured
 trusted Git executable and Git author; the existing build coordinator also
 requires its verified Sandbox snapshot and GitHub App configuration. These
 settings are not per-site credentials. Local tests exercise the event contract
@@ -1275,8 +1276,10 @@ permission. The local source generator now creates an Access v2 derivative
 with native roles and exact Worker settings, while the four retained sites
 keep repository-mode derivatives. Local preparation, deploy readback, public
 deploy and first-open paths consume the verified source receipt. This is not
-active for new hosted sites until Access setup is called by the production
-orchestrator and its central configuration is enabled. A fail-closed
+active for new hosted sites until the updated Worker is deployed, its central
+Access configuration is enabled, and the hosted path is verified. The Worker
+now rechecks the actor, selected source and current confirmation before
+calling the idempotent Access setup. A fail-closed
 transition maps current GNR8 owner/admin membership by user ID to a
 verified identity at the chosen provider, create a site-bound roles file with
 at least one admin, and reconcile membership changes. An absent roles file

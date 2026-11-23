@@ -39,7 +39,7 @@ function Review(p:Props){
    const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...p.selection,action:'confirm',token:model?.token,scopeConfirmed,functionsConfirmed})});
    const value=await response.json();if(!response.ok||!value.ok)throw Error(value.error??'Potrditve ni mogoče shraniti.');
    if(alive.current&&call===sequence.current){setModel(value.data);setFunctionsConfirmed(false);
-    setStudioAttemptId(null);
+    setStudioAttemptId(typeof value.sourceAttemptId==='string'?value.sourceAttemptId:null);
     if(value.sourcePreparation==='queued'){
      setStudioNotice('Priprava zasebnega paketa Studia poteka.');setMonitorStudio(true);
     }else if(value.sourcePreparation==='queue-failed'||value.sourcePreparation==='unavailable'){

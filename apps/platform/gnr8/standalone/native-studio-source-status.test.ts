@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nativeStudioSourceFailureKey, readNativeStudioSourceStatus } from './native-studio-source-status';
+import { nativeStudioSourceFailureKey, nativeStudioSourceResultKey,
+ readNativeStudioSourceStatus } from './native-studio-source-status';
 
 const requestId='a'.repeat(64);
 const first='11111111-1111-4111-8111-111111111111';
@@ -19,7 +20,16 @@ test('a new preparation attempt does not inherit an earlier failure',async()=>{
  values.set(`native-requests/${requestId}-result.json`,{requestId,sourceId:'b'.repeat(64),
   sourceManifestSha256:'c'.repeat(64),studioVersion:'1.4.8',files:42,hosted:false});
  assert.equal((await readNativeStudioSourceStatus(store,requestId,retry)).state,
+  'failed-source');
+ values.set(nativeStudioSourceResultKey(requestId,retry),{requestId,attemptId:retry,
+  sourceId:'d'.repeat(64),sourceManifestSha256:'c'.repeat(64),
+  studioVersion:'1.4.13',files:42,hosted:false});
+ assert.equal((await readNativeStudioSourceStatus(store,requestId,retry)).state,
   'prepared-source');
+ const legacy=await readNativeStudioSourceStatus(store,requestId);
+ assert.equal(legacy.state,'prepared-source');
+ if(legacy.state!=='prepared-source')throw Error('expected prepared source');
+ assert.equal(legacy.sourceId,'b'.repeat(64));
 });
 
 test('legacy status remains readable and foreign or malformed attempts fail closed',async()=>{

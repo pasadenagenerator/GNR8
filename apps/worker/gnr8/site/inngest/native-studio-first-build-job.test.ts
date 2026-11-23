@@ -31,10 +31,11 @@ function fixture() {
       calls.push('authorize');
     },
     sourceResult: async (scope: typeof request.scope, received: SupabaseClient,
-      requestId: string) => {
+      requestId: string, attemptId?: string) => {
       assert.deepEqual(scope, request.scope);
       assert.equal(received, client);
       assert.equal(requestId, request.requestId);
+      assert.equal(attemptId, undefined);
       calls.push('source');
       return result;
     },
@@ -80,6 +81,28 @@ test('authorized prepared source enters build once', async () => {
   assert.deepEqual(await runNativeStudioFirstBuild(request, f.deps),
     built);
   assert.deepEqual(f.calls, ['client', 'authorize', 'source', 'build']);
+});
+
+test('attempt-scoped source result cannot reuse an earlier preparation', async () => {
+  const f = fixture();
+  const attemptId = '55555555-5555-4555-8555-555555555555';
+  const attempted = { ...request, attemptId };
+  await assert.rejects(runNativeStudioFirstBuild(attempted, {
+    ...f.deps, sourceResult: async (_scope, _client, _requestId, receivedAttempt) => {
+      assert.equal(receivedAttempt, attemptId);
+      f.calls.push('source');
+      return result;
+    },
+  }), /source_unverified/);
+  assert.deepEqual(f.calls, ['client', 'authorize', 'source']);
+  const accepted = fixture();
+  assert.deepEqual(await runNativeStudioFirstBuild(attempted, {
+    ...accepted.deps, sourceResult: async (_scope, _client, _requestId, receivedAttempt) => {
+      assert.equal(receivedAttempt, attemptId);
+      accepted.calls.push('source');
+      return { ...result, attemptId };
+    },
+  }), built);
 });
 
 test('verified build queues only scoped artifact identities for preflight', async () => {
