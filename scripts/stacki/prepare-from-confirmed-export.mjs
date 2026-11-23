@@ -53,9 +53,10 @@ async function prepareNativeAstroConfig(project, site) {
   if (!EXPORTED_ASTRO_CONFIGS.has(await readFile(path, 'utf8'))) fail();
   await writeFile(path, nativeAstroConfig(site));
 }
-function preparationBindingSha256(site) {
-  const configured = configuration(site);
-  return digest(Buffer.from(JSON.stringify({ site: configured.site, files: [...configured.files],
+function preparationBindingSha256(site, access) {
+  const configured = configuration(site, access);
+  return digest(Buffer.from(JSON.stringify({ site: configured.site,
+    ...(configured.access ? { access: configured.access } : {}), files: [...configured.files],
     release: STACKI_RELEASE_PIN, lumosSourceSha256: LUMOS_PIN.sourceSha256,
     astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN })));
 }
@@ -73,10 +74,10 @@ export async function prepareFromConfirmedExport({ release, files, releaseFile, 
 
 /** Local export boundary for a currently confirmed Astro source. The caller
  * must recheck the current capture/Brand certificate before passing the export. */
-export async function prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, releaseFile, site }) {
+export async function prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, releaseFile, site, access }) {
   const expectedFiles = verifyAstroExport({ exported, selection, confirmationSha256, site });
   return prepareVerifiedAstroFiles({ files: exported.files, expectedFiles,
-    manifestSha256: exported.manifestSha256, selection, confirmationSha256, releaseFile, site });
+    manifestSha256: exported.manifestSha256, selection, confirmationSha256, releaseFile, site, access });
 }
 
 function verifyAstroExport({ exported, selection, confirmationSha256, site }) {
@@ -109,7 +110,7 @@ function verifyAstroExport({ exported, selection, confirmationSha256, site }) {
   return expectedFiles;
 }
 
-async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256, selection, confirmationSha256, releaseFile, site }) {
+async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256, selection, confirmationSha256, releaseFile, site, access }) {
   const expected = new Map();
   for (const item of expectedFiles) {
     if (!item || typeof item.path !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256) ||
@@ -138,7 +139,7 @@ async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256,
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, file.body, { flag: 'wx' });
     }
-    const status = await prepareNativeStudio({ project: root, releaseFile, site });
+    const status = await prepareNativeStudio({ project: root, releaseFile, site, access });
     await prepareNativeAstroToolchain({ project: root });
     await prepareLumosLibrary({ project: root, upstream: await pinnedLumosSource() });
     await prepareNativeAstroConfig(root, site);
@@ -159,7 +160,7 @@ async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256,
       ...added.filter(file => file.path.startsWith('studio/') ||
         file.path.startsWith('src/lumos/') ||
         file.path === '.gnr8/lumos-library.json' ||
-        NATIVE_OVERRIDES.has(file.path) || configuration(site).files.has(file.path))];
+        NATIVE_OVERRIDES.has(file.path) || configuration(site, access).files.has(file.path))];
     output.push({ path: 'README.native-studio.md', body: Buffer.from(
       `# Native Stacki site\n\nSource export: ${manifestSha256}\nStacki: ${status.version}\nLumos: ${LUMOS_PIN.version}\n` +
       `Repository: ${site.repository}\nBranch: ${site.branch}\n\n` +
@@ -219,10 +220,11 @@ export async function persistPreparedStudio({ store, releaseId, releaseFile, sit
 
 /** Target-free immutable derivative. The caller must first verify current
  * capture/Brand/technical acceptance and pass its confirmation SHA. */
-export async function persistVerifiedAstroStudio({ store, exported, selection, confirmationSha256, site,
+export async function persistVerifiedAstroStudio({ store, exported, selection, confirmationSha256, site, access,
   releaseFile, getReleaseFile = () => loadPinnedRelease({ directory: join(tmpdir(), 'gnr8-pinned-stacki') }) }) {
   verifyAstroExport({ exported, selection, confirmationSha256, site });
-  const bindingSha256 = preparationBindingSha256(site);
+  const configured = configuration(site, access);
+  const bindingSha256 = preparationBindingSha256(site, configured.access);
   const sourceManifestSha256 = exported.manifestSha256;
   const identitySha256 = digest(Buffer.from(JSON.stringify({
     sourceManifestSha256, confirmationSha256, bindingSha256,
@@ -239,14 +241,17 @@ export async function persistVerifiedAstroStudio({ store, exported, selection, c
     return stored;
   }
   const prepared = await prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, site,
+    access: configured.access,
     releaseFile: releaseFile ?? await getReleaseFile() });
   const files = prepared.files.map(file => ({ path: file.path, sha256: digest(file.body), bytes: file.body.length }));
   validatePreparedEntries(files);
   for (const file of prepared.files) await store.putBytes(digest(file.body), file.body);
-  const receipt = { format: 'gnr8-native-studio-source:v1', identitySha256, bindingSha256,
+  const receipt = { format: configured.access ? 'gnr8-native-studio-source:v2' : 'gnr8-native-studio-source:v1',
+    identitySha256, bindingSha256,
     sourceManifestSha256, confirmationSha256, version: prepared.status.version,
     lumosSourceSha256: LUMOS_PIN.sourceSha256,
-    astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN, files };
+    astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
+    ...(configured.access ? { access: configured.access } : {}), files };
   if (!isDeepStrictEqual(await store.put(key, receipt), receipt)) fail();
   return { receipt, files: prepared.files, reused: false };
 }
@@ -259,8 +264,15 @@ export async function readStoredVerifiedAstroStudio({ store, sourceId, site }) {
 }
 
 async function verifyStoredStudio({ store, receipt, sourceId, site }) {
-  const bindingSha256 = preparationBindingSha256(site);
-  if (!receipt || receipt.format !== 'gnr8-native-studio-source:v1' ||
+  if (!receipt || !['gnr8-native-studio-source:v1', 'gnr8-native-studio-source:v2'].includes(receipt.format)) fail();
+  const access = receipt.format === 'gnr8-native-studio-source:v2' ? receipt.access : undefined;
+  let configured;
+  try { configured = configuration(site, access); } catch { fail(); }
+  if ((receipt.format === 'gnr8-native-studio-source:v2' && !configured.access) ||
+      (receipt.format === 'gnr8-native-studio-source:v1' && receipt.access !== undefined) ||
+      (configured.access && !isDeepStrictEqual(receipt.access, configured.access))) fail();
+  const bindingSha256 = preparationBindingSha256(site, access);
+  if (
       receipt.identitySha256 !== sourceId || receipt.bindingSha256 !== bindingSha256 ||
       receipt.lumosSourceSha256 !== LUMOS_PIN.sourceSha256 ||
       !isDeepStrictEqual(receipt.astroToolchain, NATIVE_ASTRO_TOOLCHAIN_PIN) ||
@@ -277,6 +289,8 @@ async function verifyStoredStudio({ store, receipt, sourceId, site }) {
   validatePreparedEntries(receipt.files);
   const byPath = new Map(receipt.files.map(file => [file.path, file]));
   if (!REQUIRED_NATIVE_PATHS.every(path => byPath.has(path)) ||
+      (configured.access && !['.stacki/roles.json', 'studio/cloudflare/wrangler.jsonc']
+        .every(path => byPath.has(path))) ||
       byPath.get('source-manifest.json').sha256 !== receipt.sourceManifestSha256 ||
       byPath.get('package.json').sha256 !== NATIVE_ASTRO_TOOLCHAIN_PIN.packageSha256 ||
       byPath.get('package-lock.json').sha256 !== NATIVE_ASTRO_TOOLCHAIN_PIN.lockSha256 ||
@@ -289,6 +303,8 @@ async function verifyStoredStudio({ store, receipt, sourceId, site }) {
     if (!Buffer.isBuffer(body) || body.length !== file.bytes || digest(body) !== file.sha256) fail();
     files.push({ path: file.path, body });
   }
+  if (configured.access && [...configured.files].some(([path, expected]) =>
+    !files.some(file => file.path === path && file.body.equals(Buffer.from(expected))))) fail();
   let lumosReceipt;
   try { lumosReceipt = JSON.parse(files.find(file =>
     file.path === '.gnr8/lumos-library.json').body.toString('utf8')); }

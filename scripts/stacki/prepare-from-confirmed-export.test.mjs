@@ -104,6 +104,43 @@ test('target-free Studio source persists once and binds export, confirmation and
   assert.equal(objects.size, 3);
 });
 
+test('Access source binds verified roles and Worker settings without changing legacy source',
+  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE' }, async () => {
+    const { release, exported } = await fixture();
+    const objects = new Map(), bytes = new Map();
+    const store = {
+      read: async key => objects.get(key) ?? null,
+      getBytes: async hash => bytes.get(hash),
+      putBytes: async (hash, body) => { bytes.set(hash, body); },
+      put: async (key, value) => { objects.set(key, value); return value; },
+    };
+    const request = { store, exported, selection: release.input.selection,
+      confirmationSha256: release.foundation.confirmationSha256, site, releaseFile };
+    const legacy = await persistVerifiedAstroStudio(request);
+    const access = { version: 2, provider: 'access', aud: 'b'.repeat(64),
+      teamDomain: 'gnr8.cloudflareaccess.com',
+      admins: ['access:owner@example.com', 'access:admin@example.com'] };
+    const first = await persistVerifiedAstroStudio({ ...request, access });
+    const again = await persistVerifiedAstroStudio({ ...request, access: {
+      ...access, admins: [...access.admins].reverse() } });
+    assert.equal(first.receipt.format, 'gnr8-native-studio-source:v2');
+    assert.equal(again.reused, true);
+    assert.notEqual(first.receipt.identitySha256, legacy.receipt.identitySha256);
+    assert.deepEqual(first.receipt.access.admins, ['access:admin@example.com', 'access:owner@example.com']);
+    const files = new Map(first.files.map(file => [file.path, file.body]));
+    assert.deepEqual(JSON.parse(files.get('.stacki/roles.json')).roles[0].members, first.receipt.access.admins);
+    assert.equal(JSON.parse(files.get('studio/cloudflare/wrangler.jsonc')).vars.ACCESS_AUD, access.aud);
+    assert.equal((await readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site })).reused, true);
+    const key = `native-sources/${first.receipt.identitySha256}.json`;
+    const original = objects.get(key);
+    objects.set(key, { ...original, access: { ...original.access, aud: 'c'.repeat(64) } });
+    await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site }), /mismatch/);
+    objects.set(key, original);
+    const roles = first.receipt.files.find(file => file.path === '.stacki/roles.json');
+    bytes.set(roles.sha256, Buffer.from('{}'));
+    await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site }), /mismatch/);
+  });
+
 test('target-free stored package stages and commits only on its dedicated local branch',
  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE' }, async t => {
   const { release, exported } = await fixture();

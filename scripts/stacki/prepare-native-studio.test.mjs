@@ -10,6 +10,9 @@ import { exportStandaloneProject } from '../../apps/platform/gnr8/standalone/sta
 const id = '11111111-1111-4111-8111-111111111111';
 const site = { siteId: id, repository: 'example/site-one', repositoryId: '123', branch: 'astro/confirmed',
   studioOrigin: 'https://one.example.com', accountId: 'a'.repeat(32), appId: '456', installationId: '789', clientId: 'Iv1.example' };
+const access = { version: 2, provider: 'access', aud: 'b'.repeat(64),
+  teamDomain: 'gnr8.cloudflareaccess.com',
+  admins: ['access:owner@example.com', 'access:admin@example.com'] };
 const releaseFile = process.env.STACKI_RELEASE_FILE;
 async function project(t) {
   const root = await mkdtemp(join(tmpdir(), 'gnr8-native-studio-test-'));
@@ -51,6 +54,52 @@ test('two sites share the pin and native gateway but have separate runtime, draf
   assert.throws(() => configuration({ ...site, token: 'do-not-store' }), /non-secret/);
   assert.throws(() => configuration({ ...site, studioOrigin: 'http://one.example.com' }), /HTTPS/);
 });
+
+test('Access v2 adds exact native auth and roles without changing legacy files', () => {
+  const legacy = configuration(site);
+  const configured = configuration(site, access);
+  assert.deepEqual(configuration(site, undefined), legacy);
+  assert.deepEqual(configured.site, legacy.site);
+  assert.deepEqual([...configured.files.keys()], [...legacy.files.keys(), '.stacki/roles.json']);
+  for (const [path, content] of legacy.files) {
+    if (path !== 'studio/cloudflare/wrangler.jsonc')
+      assert.equal(configured.files.get(path), content);
+  }
+  assert.equal(legacy.files.has('.stacki/roles.json'), false);
+  const vars = JSON.parse(configured.files.get('studio/cloudflare/wrangler.jsonc')).vars;
+  assert.deepEqual({ provider: vars.AUTH_PROVIDER, access: vars.EDITOR_ACCESS,
+    teamDomain: vars.ACCESS_TEAM_DOMAIN, aud: vars.ACCESS_AUD,
+    bootstrapAdmin: vars.AUTH_BOOTSTRAP_ADMIN }, {
+    provider: 'access', access: 'roles', teamDomain: access.teamDomain,
+    aud: access.aud, bootstrapAdmin: 'access:admin@example.com',
+  });
+  assert.deepEqual(JSON.parse(configured.files.get('.stacki/roles.json')), {
+    version: 1, defaultRole: 'client', roles: [
+      { id: 'admin', members: ['access:admin@example.com', 'access:owner@example.com'] },
+      { id: 'client', members: [] },
+    ],
+  });
+  assert.deepEqual(configured.access.admins,
+    ['access:admin@example.com', 'access:owner@example.com']);
+  for (const invalid of [
+    { ...access, aud: '' }, { ...access, teamDomain: 'other.example.com' },
+    { ...access, admins: [] }, { ...access, admins: ['access:Owner@example.com'] },
+    { ...access, extra: true }, null,
+  ]) assert.throws(() => configuration(site, invalid), /Invalid verified Access binding/);
+});
+
+test('prepared Access source has a distinct immutable v2 receipt',
+  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE to the pinned native release' }, async t => {
+    const { root } = await project(t);
+    await prepareNativeStudio({ project: root, releaseFile, site, access });
+    const receipt = JSON.parse(await readFile(join(root, '.gnr8/native-studio.json'), 'utf8'));
+    assert.equal(receipt.format, 'gnr8-native-studio:v2');
+    assert.deepEqual(receipt.access.admins,
+      ['access:admin@example.com', 'access:owner@example.com']);
+    assert.equal(JSON.parse(await readFile(join(root, '.stacki/roles.json'), 'utf8'))
+      .defaultRole, 'client');
+    await assert.rejects(prepareNativeStudio({ project: root, releaseFile, site }), /differs/);
+  });
 
 test('actual standalone export -> pinned native source -> gateway, resumable without recapture or state loss', { skip: !releaseFile && 'Set STACKI_RELEASE_FILE to the pinned native release' }, async t => {
   const { root, exported } = await project(t);

@@ -6,6 +6,7 @@ import { link, lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/pro
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { STACKI_RELEASE_PIN } from './release-pin.mjs';
+import { serializeNativeAccessRoles, validateNativeAccessRoles } from './native-access-roles.mjs';
 
 export { STACKI_RELEASE_PIN };
 const pin = STACKI_RELEASE_PIN;
@@ -29,12 +30,30 @@ function binding(input) {
   return Object.fromEntries(keys.map(key => [key, input[key]]));
 }
 
-export function configuration(input) {
+function accessBinding(input) {
+  if (input === undefined) return null;
+  if (!input || typeof input !== 'object' || Array.isArray(input) ||
+      Object.keys(input).sort().join() !== 'admins,aud,provider,teamDomain,version' ||
+      input.version !== 2 || input.provider !== 'access' ||
+      typeof input.aud !== 'string' || !/^[a-f0-9]{64}$/.test(input.aud) ||
+      typeof input.teamDomain !== 'string' ||
+      !/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(input.teamDomain))
+    fail('Invalid verified Access binding');
+  let roles;
+  try { roles = serializeNativeAccessRoles(input.admins); }
+  catch { fail('Invalid verified Access binding'); }
+  const admins = validateNativeAccessRoles(roles);
+  return { version: 2, provider: 'access', aud: input.aud,
+    teamDomain: input.teamDomain, admins, roles };
+}
+
+export function configuration(input, accessInput) {
   const site = binding(input);
+  const access = accessBinding(accessInput);
   const name = `gnr8-${site.siteId}`;
   const previewOrigin = `https://preview.${new URL(site.studioOrigin).hostname}`;
   const common = { compatibility_date: '2026-10-16', workers_dev: false, preview_urls: false, observability: { enabled: false } };
-  return { site, files: new Map([
+  const files = new Map([
     ['studio/cloudflare/wrangler.jsonc', json({
       $schema: '../node_modules/wrangler/config-schema.json', ...common,
       account_id: site.accountId, name: `${name}-studio`, main: '../src/cloudflare/worker.ts', compatibility_flags: ['nodejs_compat'],
@@ -49,7 +68,10 @@ export function configuration(input) {
         GITHUB_INSTALLATION_ID: site.installationId, GITHUB_CLIENT_ID: site.clientId,
         AI_BASE_URL: 'https://api.openai.com/v1', AI_MODEL: 'gpt-5.4-mini-2026-03-17',
         SITE_DEPLOYMENT_URL: `${site.studioOrigin}/__studio-deployment`,
-        EDITOR_ACCESS: 'repository', EDITOR_GITHUB_IDS: '' },
+        ...(access ? { AUTH_PROVIDER: 'access', ACCESS_TEAM_DOMAIN: access.teamDomain,
+          ACCESS_AUD: access.aud, AUTH_BOOTSTRAP_ADMIN: access.admins[0],
+          EDITOR_ACCESS: 'roles', EDITOR_GITHUB_IDS: '' } :
+          { EDITOR_ACCESS: 'repository', EDITOR_GITHUB_IDS: '' }) },
     })],
     ['wrangler.json', json({ ...common, account_id: site.accountId,
       name: `${name}-site`, main: './studio/src/cloudflare/site.ts',
@@ -63,7 +85,10 @@ export function configuration(input) {
       buildScript: 'build', beforePublish: [], afterPublish: [],
       publishedSite: { hosting: { provider: 'cloudflare-workers', accountId: site.accountId, project: `${name}-site` }, url: site.studioOrigin, source: 'manual' },
     })],
-  ]) };
+    ...(access ? [['.stacki/roles.json', access.roles]] : []),
+  ]);
+  return access ? { site, access: { version: 2, provider: 'access', aud: access.aud,
+    teamDomain: access.teamDomain, admins: access.admins }, files } : { site, files };
 }
 
 async function safePath(root, relative) {
@@ -92,10 +117,10 @@ async function writeMissing(root, path, content) {
   } finally { await rm(temporary, { force: true }); }
 }
 
-export async function prepareNativeStudio({ project, releaseFile, site: input }) {
+export async function prepareNativeStudio({ project, releaseFile, site: input, access: accessInput }) {
   project = resolve(project);
   if (!(await stat(project))?.isDirectory() || (await stat(project)).isSymbolicLink()) fail('Project must be a real directory');
-  const { site, files } = configuration(input);
+  const { site, access, files } = configuration(input, accessInput);
   // Accept only the one retained release, never execute code from a release file.
   if ((await lstat(releaseFile)).size > 32_000_000) fail('Release too large');
   const bytes = await readFile(releaseFile);
@@ -114,7 +139,9 @@ export async function prepareNativeStudio({ project, releaseFile, site: input })
   // readiness for a Vercel contact export or silently lose its behavior.
   if (await stat(join(project, 'api')) || await stat(join(project, 'functions'))) fail('Server routes need a separate hosting integration');
   const receipt = '.gnr8/native-studio.json';
-  const expected = json({ format: 'gnr8-native-studio:v1', release: pin, site });
+  const expected = access
+    ? json({ format: 'gnr8-native-studio:v2', release: pin, site, access })
+    : json({ format: 'gnr8-native-studio:v1', release: pin, site });
   const managed = await sameOrMissing(project, receipt, expected);
   const studio = await safePath(project, 'studio');
   if (await stat(studio)) {
