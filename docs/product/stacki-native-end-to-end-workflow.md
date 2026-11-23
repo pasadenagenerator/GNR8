@@ -1028,9 +1028,20 @@ deploy configuration that changes only the container image to a Cloudflare
 Registry digest reference, then removes that configuration after the attempt.
 Missing or mismatched receipts stop before the one deployment attempt is
 claimed. The committed Stacki configuration remains unchanged. A separate
-credential-free image builder, immutable artifact transfer, registry push and
-receipt producer are still needed before this gate can run; the previous local
-dry-run result does not establish them. All related feature switches stay off.
+hosted credential-free image builder, immutable artifact transfer, registry
+push and receipt producer are still needed before this gate can run; the
+previous local dry-run result does not establish them. All related feature
+switches stay off.
+
+A local credential-free image archive boundary now verifies the exact source
+handoff and Docker context, invokes a trusted Docker executable with a stripped
+environment, exports one image tar, then checks source and context again. Its
+receipt binds the archive hash and size to the site, source commit and Worker.
+The receiving side can verify the tar bytes against that receipt without
+running the image. Mocked local tests cover the command and integrity checks;
+no Docker build or transfer was performed by this new path. The hosted build
+job, archive transport, registry push and scoped registry-digest receipt are
+still unconnected. The deploy switch remains off.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

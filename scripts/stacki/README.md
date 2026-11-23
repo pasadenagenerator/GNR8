@@ -113,6 +113,10 @@ deployment remains disabled. These are callable local boundaries; the central
 deploy credential still needs
 trusted-host configuration, and a hosted dispatcher and live acceptance remain
 to be connected.
+`studio-image-archive.mjs` adds the credential-free local Docker build and tar
+export boundary. It hashes the bounded archive and checks the scoped source
+handoff before and after the build. The archive transport and Cloudflare
+Registry push are still separate, unconnected steps.
 The configured first-open adapter reads the scoped reservation, build and
 first-deploy receipts for both Workers, obtains a central GitHub read token,
 then invokes the
