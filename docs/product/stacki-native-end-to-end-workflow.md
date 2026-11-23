@@ -1345,10 +1345,15 @@ Then update the generated Studio settings and hosted readback together, while
 keeping existing repository-mode sites on their current verified path until
 an explicit site-specific migration succeeds.
 
-Membership changes need a protected reconciler that writes the current native
-role file through the bound GitHub App to the bound branch, checks the target
-and current membership again at write time, and treats a failed write as an
-unresolved access change. Native Stacki caches roles for about a minute and
+The local trusted membership reconciler now reads the generated role file and
+branch HEAD, updates only the bound site's sole Cloudflare Access owner
+policy, then writes `.stacki/roles.json` with a site-scoped GitHub App token
+and a non-forced branch update. Both writes have immutable intents and
+provider readback; an ambiguous write can remain `pending-review`. Its entry
+point is not yet connected to member changes or a durable event, so automatic
+membership propagation is not yet operational. It requires
+`GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED=1` in the trusted runner. Native
+Stacki caches roles for about a minute and
 can use stale roles for up to an hour during a GitHub outage. Immediate
 revocation therefore needs an additional provider-level access cut-off or a
 documented emergency lock; the roles file alone cannot guarantee it. Only
@@ -1378,9 +1383,10 @@ creates the exact Access application without an Allow policy, reconciles a
 lost response by reading complete account and zone inventories, then adds
 one exact-email owner/admin policy with a separate single-use intent. The
 result is setup evidence only. A changed membership after a policy intent
-requires a later reconciliation path; the setup must not replay a stale
-policy or silently issue a second POST. This setup is not yet invoked by the
-new-site bootstrap and no live Access resources were created here.
+uses the separate trusted reconciliation path; setup does not replay a stale
+policy or silently issue a second POST. The new-site Worker can invoke setup
+behind its existing feature gate. No live Access resources were created in
+this local change.
 
 The existing first-open and authenticated-health checks remain specific to
 repository/GitHub login. Access mode requires a separately versioned source
