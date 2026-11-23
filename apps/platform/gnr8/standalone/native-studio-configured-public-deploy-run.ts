@@ -2,6 +2,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { firstStudioDeployIdentity } from '../../../../scripts/stacki/first-studio-deploy-identity.mjs';
 import { inspectBoundCloudflarePublicStudioGateway } from './cloudflare-public-studio-gateway';
+import { inspectCloudflareSiteBuildPublicationSeparation } from
+  './cloudflare-site-build-configuration';
 import { NATIVE_STUDIO_RESOURCE_RECEIPT,
   type NativeStudioResourceReceipt } from './native-studio-configured-resource-reservation';
 import { configuredNativeStudioDeploymentCredentials } from './native-studio-configured-deployment-credentials';
@@ -17,7 +19,8 @@ const HEX32 = /^[a-f0-9]{32}$/;
 const defaults = { withCheckout: withConfiguredNativeStudioFirstDeployCheckout,
   credentials: configuredNativeStudioDeploymentCredentials,
   deploy: runTrustedNativeStudioPublicDeploy,
-  inspect: inspectBoundCloudflarePublicStudioGateway };
+  inspect: inspectBoundCloudflarePublicStudioGateway,
+  buildSeparation: inspectCloudflareSiteBuildPublicationSeparation };
 
 /** Consume a separately prepared public intent in one trusted deployment job.
  * Reconcile an ambiguous response from the tagged active version, never retry.
@@ -78,6 +81,15 @@ deps = defaults) {
         throw Error('native_studio_public_deploy_attempt_conflict');
       return observe();
     }
+    const buildsUserCredential =
+      env.GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN ?? '';
+    if (!/^[A-Za-z0-9_-]{40,80}$/.test(buildsUserCredential))
+      throw Error('native_studio_public_deploy_build_separation_unconfigured');
+    await deps.buildSeparation({ scope: checkoutInput.scope,
+      accountId: prepared.site.accountId,
+      repository: prepared.site.repository,
+      repositoryId: prepared.site.repositoryId,
+      branch: prepared.site.branch }, buildsUserCredential, transport);
     try {
       await deps.deploy({ scope: checkoutInput.scope, client: checkoutInput.client,
         store: prepared.store, project: prepared.project,

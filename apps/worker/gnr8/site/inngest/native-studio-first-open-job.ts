@@ -3,6 +3,8 @@ import { inngest } from '@/gnr8/inngest/client';
 
 export const NATIVE_STUDIO_FIRST_OPEN_JOB_ID = 'native-studio-first-open-job';
 export const NATIVE_STUDIO_FIRST_OPEN_EVENT = 'gnr8/native-studio.first-open.requested';
+const MAX_ENTRY_OBSERVATIONS = 15;
+const ENTRY_OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
 type Request = { scope: Scope; actor: string; sourceId: string; sourceCommit: string };
@@ -69,4 +71,27 @@ export const nativeStudioFirstOpenJob = inngest.createFunction({
   id: NATIVE_STUDIO_FIRST_OPEN_JOB_ID, retries: 1,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_FIRST_OPEN_EVENT },
-async ({ event }) => runNativeStudioFirstOpen(event.data));
+async ({ event, step }) => settleNativeStudioFirstOpen(event.data, step));
+
+/** A temporary DNS/network failure at the public Stacki entry may clear
+ * after the public gateway is active. Wrong content or identity is terminal. */
+export async function settleNativeStudioFirstOpen(
+  request: unknown,
+  steps: { run: (id: string, fn: () => Promise<unknown>) => Promise<unknown>;
+    sleep: (id: string, duration: string) => Promise<unknown> },
+  run: typeof runNativeStudioFirstOpen = runNativeStudioFirstOpen,
+) {
+  for (let index = 0; index < MAX_ENTRY_OBSERVATIONS; index++) {
+    try {
+      return await steps.run(`first-open-entry-${index}`,
+        () => run(request)) as Awaited<ReturnType<typeof runNativeStudioFirstOpen>>;
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          error.message !== 'native_studio_public_entry_unavailable' ||
+          index === MAX_ENTRY_OBSERVATIONS - 1)
+        throw error;
+    }
+    await steps.sleep(`first-open-wait-${index}`, ENTRY_OBSERVATION_INTERVAL);
+  }
+  throw Error('native_studio_first_open_entry_observation_exhausted');
+}

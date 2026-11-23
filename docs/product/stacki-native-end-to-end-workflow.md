@@ -39,8 +39,8 @@ Cloudflare Workers publishing, without `GITHUB_DEPLOY_*` auto-pipeline variables
 The immutable prepared-source identity includes the complete configuration and
 release digest, so changing publication mode cannot reuse an older receipt.
 
-The [official Stacki release](https://github.com/flowtricks/stacki-releases/releases/tag/v1.4.8)
-is still marked latest on 2026-11-21. The official updater installed **1.4.8**
+The [official Stacki 1.4.8 release](https://github.com/flowtricks/stacki-releases/releases/tag/v1.4.8)
+was marked latest on 2026-11-21. The official updater installed **1.4.8**
 in local copies of all four sites. All 2,170 distributed native files match the verified release byte for
 byte. Only retained project/connection configuration differs. New Ladja Žaba and
 Logatčan installations use the same updater and release. Existing website source
@@ -1171,3 +1171,40 @@ alone cannot establish which token performed the deployment. The local audit
 has not performed this hosted check.
 
 Reviewed external action inputs are saved locally in `/private/tmp/gnr8-native-sites/rollout-review.json`; the existing CHS/ViroiDoc launch bindings are in `reviewed-existing-bindings.json`. Neither file contains credentials.
+
+## Local integration update (2026-11-23)
+
+The preparation pin for future packages now targets the verified
+[upstream Stacki 1.4.13 release](https://github.com/flowtricks/stacki-releases/releases/tag/v1.4.13).
+Its 31,590,085-byte asset matches the published SHA-256 and passes the native
+release format, path, GitHub token parser and Cloudflare Publish configuration
+checks. This changes the prepared-source identity. The four previously
+prepared sites and their hosted Workers remain at their earlier versions until
+their own reviewed source upgrades; a local pin is not a hosted upgrade.
+
+The public gateway job now observes a previously accepted deployment up to
+15 times at one-minute intervals when Cloudflare's control plane is pending or
+temporarily unavailable. It keeps the same deployment intent and does not
+submit another deployment. Once the gateway is observed, the first-open job
+likewise allows temporary DNS or network unavailability of `/studio` to clear.
+Wrong content, wrong identity, and binding conflicts still stop immediately.
+These are local reconciliation changes; the hosted first-open and owner login
+remain unverified.
+
+Before a *new* public gateway deployment, the runner now reads its Workers
+Builds configuration. A disconnected build is acceptable; a connected build
+must belong to the exact repository and branch and use
+`npx wrangler versions upload`, which cannot activate a new website version.
+Any other build configuration blocks the cutover. This read-only check requires
+one centrally held user-scoped
+`GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN`; it is not a per-site owner
+credential. CHS and ViroiDoc's existing public build triggers still need
+hosted inspection and correction before their native branches are pushed.
+
+The pinned Lumos source is still 1.0.4, but its inclusion in the four manually
+prepared sites does not establish automatic inclusion for newly prepared
+sites. The universal preparation path currently invokes native Stacki
+preparation without the separate Lumos adapter, and its output filter omits
+`src/lumos` and the Lumos receipt. A new site's Lumos builder palette must not
+be called ready until the verified source is included in that automatic path
+and the generated Astro version meets Lumos's 7.4.7 prerequisite.

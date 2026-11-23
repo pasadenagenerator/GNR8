@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { runNativeStudioFirstOpen } from './native-studio-first-open-job';
+import { runNativeStudioFirstOpen,
+  settleNativeStudioFirstOpen } from './native-studio-first-open-job';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -70,4 +71,38 @@ test('exact handoff enters configured first-open recorder', async () => {
   const f = fixture();
   assert.deepEqual(await runNativeStudioFirstOpen(request, f.deps), receipt);
   assert.deepEqual(f.calls, ['client', 'authorize', 'handoff', 'record']);
+});
+
+test('temporary public entry network failure resumes and records one first-open', async () => {
+  const calls: string[] = [];
+  let count = 0;
+  const steps = {
+    run: async (_id: string, fn: () => Promise<unknown>) => {
+      calls.push('run'); return fn(); },
+    sleep: async (_id: string, duration: string) => {
+      assert.equal(duration, '1m'); calls.push('sleep'); },
+  };
+  const result = await settleNativeStudioFirstOpen(request, steps,
+    (async () => { count++;
+      if (count < 3) throw Error('native_studio_public_entry_unavailable');
+      return { scope: request.scope, sourceId: request.sourceId,
+        commit: request.sourceCommit };
+    }) as typeof runNativeStudioFirstOpen);
+  assert.equal(result.sourceId, request.sourceId);
+  assert.deepEqual(calls, ['run', 'sleep', 'run', 'sleep', 'run']);
+});
+
+test('wrong public entry content is terminal without another read', async () => {
+  const calls: string[] = [];
+  const steps = {
+    run: async (_id: string, fn: () => Promise<unknown>) => {
+      calls.push('run'); return fn(); },
+    sleep: async () => { calls.push('sleep'); },
+  };
+  const wrongEntry = async () => {
+    throw Error('native_studio_public_entry_unready');
+  };
+  await assert.rejects(settleNativeStudioFirstOpen(request, steps,
+    wrongEntry as typeof runNativeStudioFirstOpen), /public_entry_unready/);
+  assert.deepEqual(calls, ['run']);
 });

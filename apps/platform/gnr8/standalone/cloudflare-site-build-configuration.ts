@@ -63,6 +63,63 @@ function exactConfiguration(value: unknown, desired: ReturnType<typeof expected>
     Object.entries(desired.production_settings).every(([key, match]) => settings[key] === match);
 }
 
+/** Read-only cutover gate. A GitHub push may create an inactive version, but
+ * it must never publish the public Worker without native Stacki Publish. */
+export async function inspectCloudflareSiteBuildPublicationSeparation(target: {
+  scope: NativeStudioScope; accountId: string; repository: string;
+  repositoryId: string; branch: string;
+}, userCredential: string, transport: typeof fetch = fetch): Promise<{
+  state: 'disconnected' | 'version-only'; worker: string; tag: string }> {
+  const { scope } = target ?? {} as typeof target;
+  if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
+    .every(value => typeof value === 'string' && UUID.test(value)) ||
+    !HEX32.test(target.accountId) ||
+    !/^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(target.repository) ||
+    !/^[1-9][0-9]*$/.test(target.repositoryId) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(target.branch) ||
+    target.branch.includes('..') || !TOKEN.test(userCredential))
+    throw Error('native_studio_site_build_separation_input_invalid');
+  const worker = `gnr8-${scope.siteId}-site`;
+  const root = `https://api.cloudflare.com/client/v4/accounts/${target.accountId}`;
+  async function read(path: string, missing = false) {
+    const response = await transport(`${root}${path}`, {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: { authorization: `Bearer ${userCredential}`,
+        accept: 'application/json' },
+    });
+    if (missing && response.status === 404) return null;
+    if (!response.ok) throw Error('native_studio_site_build_separation_unavailable');
+    let body: unknown;
+    try { body = await response.json(); }
+    catch { throw Error('native_studio_site_build_separation_unavailable'); }
+    if (!object(body) || body.success !== true)
+      throw Error('native_studio_site_build_separation_unavailable');
+    return body.result;
+  }
+  const scripts = await read('/workers/scripts');
+  if (!Array.isArray(scripts))
+    throw Error('native_studio_site_build_separation_unverified');
+  const matches = scripts.filter(item => object(item) && item.id === worker);
+  if (matches.length !== 1 || !HEX32.test(matches[0].tag as string))
+    throw Error('native_studio_site_build_separation_unverified');
+  const tag = matches[0].tag as string;
+  const config = await read(`/builds/workers/${tag}`, true);
+  if (config === null) return { state: 'disconnected', worker, tag };
+  if (!object(config) || config.script_tag !== tag ||
+      config.previews_enabled !== false ||
+      !object(config.git_repository) ||
+      config.git_repository.provider_type !== 'github' ||
+      config.git_repository.repo_id !== target.repositoryId ||
+      config.git_repository.repo_name !== target.repository.split('/')[1] ||
+      config.git_repository.provider_account_name !== target.repository.split('/')[0] ||
+      config.git_repository.branch !== target.branch ||
+      !object(config.production_settings) ||
+      config.production_settings.build_command !== 'npm run build' ||
+      config.production_settings.deploy_command !== 'npx wrangler versions upload')
+    throw Error('native_studio_site_build_separation_conflict');
+  return { state: 'version-only', worker, tag };
+}
+
 /** Connects an already created public Worker to its exact repository. Pushes
  * upload an inactive version; native Stacki Publish remains the live action.
  * A durable intent prevents repeating an ambiguous provider create.

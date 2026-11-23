@@ -6,7 +6,7 @@ accepted these exact native controls. No generated EditorHeader patch is used.
 
 ## Pinned release and new projects
 
-`release-pin.mjs` pins Stacki 1.4.8 and its verified SHA-256. The downloader checks
+`release-pin.mjs` pins Stacki 1.4.13 and its verified SHA-256. The downloader checks
 bounded GitHub-to-release-assets redirects and verifies the entire payload before
 caching. There are no requests on module import.
 
@@ -223,7 +223,7 @@ native direct hosting success alone is not proof of that endpoint's Git identity
 ## Validation
 
 ```sh
-STACKI_RELEASE_FILE=/path/to/stacki-studio-1.4.8.json \
+STACKI_RELEASE_FILE=/path/to/stacki-studio-1.4.13.json \
 LUMOS_SOURCE_DIRECTORY=/path/to/lumos-for-astro \
 NODE_OPTIONS=--conditions=react-server TSX_TSCONFIG_PATH=apps/platform/tsconfig.json \
 node --import tsx --test scripts/stacki/*.test.mjs

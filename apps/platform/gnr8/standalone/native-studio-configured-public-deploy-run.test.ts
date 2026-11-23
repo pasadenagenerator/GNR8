@@ -15,6 +15,7 @@ const site = { siteId: scope.siteId, accountId: 'e'.repeat(32),
   repository: 'example/site', repositoryId: '42', branch: 'codex/native-stacki',
   studioOrigin: 'https://site.app.pasadenagenerator.com' };
 const token = 'f'.repeat(40), secrets = { AI_API_KEY: 'g'.repeat(20) };
+const env = { GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN: 'h'.repeat(40) };
 const studioTag = firstStudioDeployIdentity({ scope,
   accountId: site.accountId, workerId, sourceId, site,
   token, secrets, commit }).tag;
@@ -39,6 +40,12 @@ function fixture() {
         sourceId, commit, workerId }); },
     credentials: async () => { calls.push('credentials');
       return { cloudflareCredential: token, secrets }; },
+    buildSeparation: async (target: any, credential: string) => {
+      assert.equal(target.repository, site.repository);
+      assert.equal(target.repositoryId, site.repositoryId);
+      assert.equal(credential, env.GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN);
+      calls.push('build-separation');
+      return { state: 'disconnected' }; },
     deploy: async () => { calls.push('deploy');
       saved.set('native-studio/first-public-deploy-attempt-v1.json', receipt); },
     inspect: async () => { calls.push('readback');
@@ -53,11 +60,12 @@ function fixture() {
 test('configured public deploy reads exact intent and returns first-open handoff', async () => {
   const f = fixture();
   assert.deepEqual(await runConfiguredNativeStudioPublicDeploy(f.input,
-    {}, fetch, f.deps), { state: 'first-open-required', commit,
+    env, fetch, f.deps), { state: 'first-open-required', commit,
     observation: 'observed-control-plane' });
-  assert.deepEqual(f.calls, ['checkout', 'credentials', 'deploy', 'readback']);
+  assert.deepEqual(f.calls, ['checkout', 'credentials', 'build-separation',
+    'deploy', 'readback']);
   assert.deepEqual(await runConfiguredNativeStudioPublicDeploy(f.input,
-    {}, fetch, f.deps), { state: 'first-open-required', commit,
+    env, fetch, f.deps), { state: 'first-open-required', commit,
     observation: 'observed-control-plane' });
   assert.equal(f.calls.filter(call => call === 'deploy').length, 1);
 });
@@ -68,10 +76,24 @@ test('lost deploy response reconciles once; foreign intent cannot deploy', async
     f.saved.set('native-studio/first-public-deploy-attempt-v1.json', receipt);
     throw Error('lost provider response'); };
   assert.equal((await runConfiguredNativeStudioPublicDeploy(f.input,
-    {}, fetch, f.deps)).state, 'first-open-required');
+    env, fetch, f.deps)).state, 'first-open-required');
   const wrong = fixture();
   wrong.saved.set(PUBLIC_INTENT, { ...receipt, identity: '0'.repeat(64) });
   await assert.rejects(runConfiguredNativeStudioPublicDeploy(wrong.input,
-    {}, fetch, wrong.deps), /intent_unverified/);
+    env, fetch, wrong.deps), /intent_unverified/);
   assert.equal(wrong.calls.includes('deploy'), false);
+});
+
+test('unsafe or unconfigured Workers Builds blocks the first public deploy', async () => {
+  const absent = fixture();
+  await assert.rejects(runConfiguredNativeStudioPublicDeploy(absent.input,
+    {}, fetch, absent.deps), /build_separation_unconfigured/);
+  assert.equal(absent.calls.includes('deploy'), false);
+  const unsafe = fixture();
+  unsafe.deps.buildSeparation = async () => {
+    unsafe.calls.push('build-separation');
+    throw Error('native_studio_site_build_separation_conflict'); };
+  await assert.rejects(runConfiguredNativeStudioPublicDeploy(unsafe.input,
+    env, fetch, unsafe.deps), /separation_conflict/);
+  assert.equal(unsafe.calls.includes('deploy'), false);
 });

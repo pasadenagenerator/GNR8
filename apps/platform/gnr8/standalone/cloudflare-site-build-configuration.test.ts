@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ensureCloudflareSiteBuildConfiguration,
+  inspectCloudflareSiteBuildPublicationSeparation,
   ensureBoundCloudflareSiteBuildConfiguration,
   type SiteBuildTarget } from './cloudflare-site-build-configuration';
 
@@ -128,4 +129,45 @@ test('production boundary reads the exact bound repository before Cloudflare acc
     credential, reader, (async () => { providerCalls++; throw Error('unexpected'); }) as typeof fetch),
   /native_studio_site_build_scope_unverified/);
   assert.equal(providerCalls, 0);
+});
+
+test('public cutover accepts only absent or version-only scoped Builds', async () => {
+  const site = { scope: target.scope, accountId: target.accountId,
+    repository: `${target.githubOwner}/${target.repository}`,
+    repositoryId: String(target.repositoryId), branch: target.branch };
+  const expected = { script_tag: tag, previews_enabled: false,
+    git_repository: { provider_type: 'github',
+      repo_id: String(target.repositoryId), repo_name: target.repository,
+      provider_account_name: target.githubOwner, branch: target.branch },
+    production_settings: { build_command: 'npm run build',
+      deploy_command: 'npx wrangler versions upload' } };
+  let config: unknown = null;
+  let reads = 0;
+  const transport = (async (url: string, options: RequestInit) => {
+    reads++;
+    assert.equal(options.method, 'GET');
+    assert.equal(new Headers(options.headers).get('authorization'),
+      `Bearer ${credential}`);
+    if (new URL(url).pathname.endsWith('/workers/scripts'))
+      return Response.json({ success: true, result: [
+        { id: `gnr8-${target.scope.siteId}-site`, tag },
+      ] });
+    assert(new URL(url).pathname.endsWith(`/builds/workers/${tag}`));
+    return config === null ? new Response(null, { status: 404 }) :
+      Response.json({ success: true, result: config });
+  }) as typeof fetch;
+  assert.equal((await inspectCloudflareSiteBuildPublicationSeparation(site,
+    credential, transport)).state, 'disconnected');
+  config = expected;
+  assert.equal((await inspectCloudflareSiteBuildPublicationSeparation(site,
+    credential, transport)).state, 'version-only');
+  config = { ...expected, production_settings: {
+    ...expected.production_settings, deploy_command: 'npx wrangler deploy' } };
+  await assert.rejects(inspectCloudflareSiteBuildPublicationSeparation(site,
+    credential, transport), /separation_conflict/);
+  config = { ...expected, git_repository: {
+    ...expected.git_repository, repo_id: '999' } };
+  await assert.rejects(inspectCloudflareSiteBuildPublicationSeparation(site,
+    credential, transport), /separation_conflict/);
+  assert.equal(reads, 8);
 });

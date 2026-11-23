@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { runNativeStudioPublicGateway } from './native-studio-public-gateway-job';
+import { runNativeStudioPublicGateway,
+  settleNativeStudioPublicGateway } from './native-studio-public-gateway-job';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -102,4 +103,38 @@ test('pending public readback cannot expose first-open link', async () => {
       observation: 'readback-unavailable' as const }; },
   });
   assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'publish']);
+});
+
+test('delayed public readback resumes before first-open handoff', async () => {
+  let observations = 0;
+  const calls: string[] = [];
+  const steps = {
+    run: async (_id: string, fn: () => Promise<unknown>) => {
+      calls.push('run'); return fn(); },
+    sleep: async (_id: string, duration: string) => {
+      assert.equal(duration, '1m'); calls.push('sleep'); },
+  };
+  const result = await settleNativeStudioPublicGateway(request, steps,
+    (async () => { observations++; return observations < 3 ? {
+      state: 'pending-review', commit: request.sourceCommit,
+      observation: 'pending' } : {
+      state: 'first-open-required', commit: request.sourceCommit,
+      observation: 'observed-control-plane' };
+    }) as typeof runNativeStudioPublicGateway);
+  assert.equal(result.state, 'first-open-required');
+  assert.deepEqual(calls, ['run', 'sleep', 'run', 'sleep', 'run']);
+});
+
+test('ambiguous public intent does not trigger repeated observation', async () => {
+  const calls: string[] = [];
+  const steps = {
+    run: async (_id: string, fn: () => Promise<unknown>) => {
+      calls.push('run'); return fn(); },
+    sleep: async () => { calls.push('sleep'); },
+  };
+  const result = await settleNativeStudioPublicGateway(request, steps,
+    (async () => ({ state: 'pending-review', commit: request.sourceCommit,
+      observation: 'existing-intent' })) as typeof runNativeStudioPublicGateway);
+  assert.equal(result.observation, 'existing-intent');
+  assert.deepEqual(calls, ['run']);
 });

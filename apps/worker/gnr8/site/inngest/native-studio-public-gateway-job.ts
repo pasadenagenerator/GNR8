@@ -1,10 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
 import { inngest } from '@/gnr8/inngest/client';
 import { NATIVE_STUDIO_FIRST_OPEN_EVENT } from './native-studio-first-open-job';
 
 export const NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID = 'native-studio-public-gateway-job';
 export const NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT =
   'gnr8/native-studio.public-gateway.requested';
+const MAX_OBSERVATIONS = 15;
+const OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
 type Request = { scope: Scope; actor: string; sourceId: string;
@@ -63,7 +66,12 @@ const defaults = {
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED === '1',
   enqueueFirstOpen: async (request: { scope: Scope; actor: string;
     sourceId: string; sourceCommit: string }) => {
-    await inngest.send({ name: NATIVE_STUDIO_FIRST_OPEN_EVENT, data: request });
+    const identity = [request.scope.agencyId, request.scope.clientId,
+      request.scope.siteId, request.sourceId, request.sourceCommit];
+    const id = `gnr8-native-studio-first-open-${createHash('sha256')
+      .update(JSON.stringify(identity)).digest('hex')}`;
+    await inngest.send({ id, name: NATIVE_STUDIO_FIRST_OPEN_EVENT,
+      data: request });
   },
 };
 
@@ -109,4 +117,24 @@ export const nativeStudioPublicGatewayJob = inngest.createFunction({
   id: NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID, retries: 1,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT },
-async ({ event }) => runNativeStudioPublicGateway(event.data));
+async ({ event, step }) => settleNativeStudioPublicGateway(event.data, step));
+
+/** Observe an accepted public deploy as the Cloudflare control plane catches
+ * up. The scoped attempt prevents a second deployment on later observations. */
+export async function settleNativeStudioPublicGateway(
+  request: unknown,
+  steps: { run: (id: string, fn: () => Promise<unknown>) => Promise<unknown>;
+    sleep: (id: string, duration: string) => Promise<unknown> },
+  run: typeof runNativeStudioPublicGateway = runNativeStudioPublicGateway,
+) {
+  for (let index = 0; index < MAX_OBSERVATIONS; index++) {
+    const result = await steps.run(`public-gateway-observe-${index}`,
+      () => run(request)) as Awaited<ReturnType<typeof runNativeStudioPublicGateway>>;
+    if (result.state !== 'pending-review' ||
+        !['pending', 'readback-unavailable'].includes(result.observation) ||
+        index === MAX_OBSERVATIONS - 1)
+      return result;
+    await steps.sleep(`public-gateway-wait-${index}`, OBSERVATION_INTERVAL);
+  }
+  throw Error('native_studio_public_gateway_observation_exhausted');
+}
