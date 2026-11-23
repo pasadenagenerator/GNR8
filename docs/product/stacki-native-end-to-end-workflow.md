@@ -1099,24 +1099,24 @@ the two-invocation ordering; no hosted Worker has called these stages yet.
 The source file list is stored as a bounded, hashed Sandbox manifest rather
 than embedded in a command argument; a large prepared source therefore does
 not exceed the Linux single-argument limit. The Worker Inngest route currently
-allows 800 seconds per invocation, whereas the synchronous Drive build and
-push callbacks can each exceed that limit. Configured adapters and two
-registered Worker jobs now connect verified preflight to image build, image
-push and first deployment through scoped private receipts. Each job checks
-the source, artifact and target account before handing off; an exact completed
-receipt can resume a failed enqueue without repeating a build or registry
-push. All image switches remain off. This local connection does not resolve
-the hosted execution limit, and no image has been built or pushed through it.
-The SDK 3.8 detached-command boundary is now locally implemented. It claims a
-private per-command intent before starting Docker or Wrangler, records the
-command and session IDs after start, and polls only the same active session.
-It reads that session directly, preventing the SDK from auto-resuming a
-stopped Sandbox during a poll. An ambiguous start remains pending review and
-cannot launch a second command. This helper is not yet connected to the
-build/save/load/push callbacks or Worker jobs. A safe hosted path must split
-each long Docker command into one start and later polls while preserving the
-Sandbox and Drive until its receipt is complete. The Vercel plan's Sandbox
-duration and the stage budget also need verification before enabling the jobs.
+allows 800 seconds per invocation. The configured adapters and registered
+Worker jobs now use the detached Sandbox command lifecycle. A build, save,
+load or push command is started once, with its scoped intent and session ID
+stored privately; later Inngest steps poll that same session after durable
+two-minute sleeps. A completed transfer or prebuilt receipt can resume a lost
+next-event acknowledgement without repeating a build or registry push. Each
+advance rechecks the artifact, source and target account. The source manifest,
+Drive archive and registry digest are verified at their respective handoffs.
+An ambiguous start, replaced session or changed target stops for review.
+The Worker permits 50 advances per image stage, and each invocation remains
+bounded. The build Sandbox requires a configured 60–90-minute session; push
+requires 50–60 minutes. Before a long command starts, the adapter checks the
+session's actual remaining time. These local tests use mocked Sandbox, Docker,
+Wrangler and Inngest boundaries. No hosted Sandbox, Drive, image build or
+registry push has been exercised through this path, and all image switches
+remain off. [Vercel's Sandbox duration guide](https://vercel.com/kb/guide/vercel-sandbox-duration-and-persistence)
+lists a 45-minute limit on Hobby and longer sessions on Pro or Enterprise;
+the actual GNR8 project plan and snapshot setup still need verification.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

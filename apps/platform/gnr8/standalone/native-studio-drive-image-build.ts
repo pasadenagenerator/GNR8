@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Sandbox } from '@vercel/sandbox';
 import { verifyStudioImageArchiveIdentity } from '../../../../scripts/stacki/studio-image-archive.mjs';
+import type { NativeStudioImageArchiveReceipt } from './native-studio-image-drive-handoff';
 
 const ROOT = '/vercel/sandbox/gnr8-image-source';
 const MANIFEST = '/vercel/sandbox/gnr8-image-source-manifest.json';
@@ -14,10 +15,13 @@ const COMMIT = /^[a-f0-9]{40,64}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 
-type File = { path: string; body: Buffer };
+export type NativeStudioDriveImageFile = { path: string; body: Buffer };
 type Scope = { agencyId: string; clientId: string; siteId: string };
-type Input = { sourceId: string; commit: string; workerId: string;
-  scope: Scope; site: { siteId: string; accountId: string }; files: File[] };
+export type NativeStudioDriveImageInput = { sourceId: string; commit: string; workerId: string;
+  scope: Scope; site: { siteId: string; accountId: string }; files: NativeStudioDriveImageFile[] };
+type Input = NativeStudioDriveImageInput;
+export const NATIVE_STUDIO_IMAGE_ARCHIVE_PATH = ARCHIVE;
+export const NATIVE_STUDIO_IMAGE_SOURCE_ROOT = ROOT;
 
 function safePath(path: unknown): path is string {
   return typeof path === 'string' && path.length <= 300 &&
@@ -64,10 +68,7 @@ async function command(sandbox: Pick<Sandbox, 'runCommand'>,
   return (await result.stdout()).trim();
 }
 
-/** Build the pinned Stacki source in a credential-free Docker Sandbox. The
- * only output crossing the VM boundary is a scoped archive identity. */
-export async function buildNativeStudioDriveImage(
-  sandbox: Pick<Sandbox, 'runCommand' | 'writeFiles'>,
+export function describeNativeStudioDriveImageSource(
   archivePath: string, input: Input,
 ) {
   if (archivePath !== ARCHIVE || !input || !SHA.test(input.sourceId) ||
@@ -104,6 +105,17 @@ export async function buildNativeStudioDriveImage(
   if (manifestBody.length > 2 * 1024 * 1024)
     throw Error('native_studio_drive_image_input_invalid');
   const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex');
+  const tag = `gnr8-${input.site.siteId}-studio:${input.sourceId.slice(0, 32)}`;
+  return { files, packageJson, lock, manifestBody, manifestSha256, tag };
+}
+
+/** Stage exact source bytes in the credential-free Docker Sandbox. */
+export async function stageNativeStudioDriveImageSource(
+  sandbox: Pick<Sandbox, 'runCommand' | 'writeFiles'>,
+  archivePath: string, input: Input,
+) {
+  const { files, packageJson, lock, manifestBody, manifestSha256, tag } =
+    describeNativeStudioDriveImageSource(archivePath, input);
   const clean = await sandbox.runCommand({ cmd: 'node',
     args: ['--input-type=module', '-e',
       `import{lstat}from'node:fs/promises';for(const p of ${JSON.stringify([ROOT, MANIFEST, ARCHIVE])}){try{await lstat(p);process.exit(2)}catch(e){if(e.code!=='ENOENT')throw e}}`],
@@ -120,16 +132,29 @@ export async function buildNativeStudioDriveImage(
     ['--input-type=module', '-e', sourceScript(manifestSha256)], ROOT, 5 * 60_000);
   if (await check() !== 'verified')
     throw Error('native_studio_drive_image_source_changed');
-  const tag = `gnr8-${input.site.siteId}-studio:${input.sourceId.slice(0, 32)}`;
-  await command(sandbox, 'docker', ['build', '--platform', 'linux/amd64',
-    '--file', 'Dockerfile', '--tag', tag, '.'], `${ROOT}/studio`, 20 * 60_000);
-  await command(sandbox, 'docker', ['save', '--output', ARCHIVE, tag],
-    `${ROOT}/studio`, 10 * 60_000);
-  if (await check() !== 'verified')
+  return { manifestSha256, tag };
+}
+
+export async function verifyNativeStudioDriveImageSource(
+  sandbox: Pick<Sandbox, 'runCommand'>, manifestSha256: string,
+) {
+  if (!SHA.test(manifestSha256))
     throw Error('native_studio_drive_image_source_changed');
+  const result = await command(sandbox, 'node',
+    ['--input-type=module', '-e', sourceScript(manifestSha256)], ROOT,
+    5 * 60_000);
+  if (result !== 'verified')
+    throw Error('native_studio_drive_image_source_changed');
+}
+
+export async function inspectNativeStudioDriveImageArchive(
+  sandbox: Pick<Sandbox, 'runCommand'>, archivePath: string,
+  input: Omit<Input, 'files'>,
+): Promise<NativeStudioImageArchiveReceipt> {
+  if (archivePath !== ARCHIVE) throw Error('native_studio_drive_image_archive_invalid');
   const output = await command(sandbox, 'node',
     ['--input-type=module', '-e', archiveScript], ROOT, 10 * 60_000);
-  let archive: unknown;
+  let archive: { bytes: number; sha256: string };
   try { archive = JSON.parse(output); }
   catch { throw Error('native_studio_drive_image_archive_invalid'); }
   const receipt = { sourceId: input.sourceId, commit: input.commit,
@@ -137,4 +162,20 @@ export async function buildNativeStudioDriveImage(
     siteId: input.site.siteId, accountId: input.site.accountId, archive };
   verifyStudioImageArchiveIdentity({ ...input, archivePath, receipt });
   return receipt;
+}
+
+/** Build the pinned Stacki source in a credential-free Docker Sandbox. The
+ * only output crossing the VM boundary is a scoped archive identity. */
+export async function buildNativeStudioDriveImage(
+  sandbox: Pick<Sandbox, 'runCommand' | 'writeFiles'>,
+  archivePath: string, input: Input,
+) {
+  const { tag, manifestSha256 } = await stageNativeStudioDriveImageSource(
+    sandbox, archivePath, input);
+  await command(sandbox, 'docker', ['build', '--platform', 'linux/amd64',
+    '--file', 'Dockerfile', '--tag', tag, '.'], `${ROOT}/studio`, 20 * 60_000);
+  await command(sandbox, 'docker', ['save', '--output', ARCHIVE, tag],
+    `${ROOT}/studio`, 10 * 60_000);
+  await verifyNativeStudioDriveImageSource(sandbox, manifestSha256);
+  return inspectNativeStudioDriveImageArchive(sandbox, archivePath, input);
 }

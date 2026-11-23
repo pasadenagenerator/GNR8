@@ -3,8 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { Snapshot } from '@vercel/sandbox';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { withConfiguredNativeStudioFirstDeployCheckout } from './native-studio-configured-first-deploy-checkout';
-import { pushNativeStudioImageDrivePhase } from './native-studio-image-drive-phase';
-import { pushNativeStudioDriveImage } from './native-studio-drive-image-push';
+import { advanceNativeStudioDetachedImagePush } from './native-studio-detached-image-push';
 
 type Environment = Record<string, string | undefined>;
 type Request = { scope: NativeStudioScope; client: SupabaseClient;
@@ -18,8 +17,7 @@ const HOST = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
 const defaults = {
   snapshot: Snapshot.get,
   withCheckout: withConfiguredNativeStudioFirstDeployCheckout,
-  phase: pushNativeStudioImageDrivePhase,
-  push: pushNativeStudioDriveImage,
+  advance: advanceNativeStudioDetachedImagePush,
 };
 
 function networkHosts(value: string | undefined) {
@@ -46,13 +44,17 @@ export async function configuredNativeStudioImagePush(request: Request,
   const accountId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
   const dockerPath = env.GNR8_NATIVE_STUDIO_IMAGE_DOCKER_PATH ?? '';
   const wranglerPath = env.GNR8_NATIVE_STUDIO_IMAGE_WRANGLER_PATH ?? '';
+  const sandboxTimeoutMs = Number(
+    env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_SANDBOX_TIMEOUT_MS);
   if (env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_ENABLED !== '1' ||
       !request?.client || !request.scope ||
       !SNAPSHOT.test(buildSnapshotId) ||
       !SNAPSHOT.test(pushSnapshotId) ||
       buildSnapshotId === pushSnapshotId || !HEX32.test(accountId) ||
       !EXECUTABLE.test(dockerPath) || dockerPath.includes('..') ||
-      !EXECUTABLE.test(wranglerPath) || wranglerPath.includes('..'))
+      !EXECUTABLE.test(wranglerPath) || wranglerPath.includes('..') ||
+      !Number.isSafeInteger(sandboxTimeoutMs) ||
+      sandboxTimeoutMs < 50 * 60_000 || sandboxTimeoutMs > 60 * 60_000)
     throw Error('native_studio_image_push_not_configured');
   const pushNetworkPolicy = { allow: networkHosts(
     env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_NETWORK_HOSTS) };
@@ -61,9 +63,9 @@ export async function configuredNativeStudioImagePush(request: Request,
     deps.snapshot({ snapshotId: pushSnapshotId }),
   ]);
   for (const snapshot of [buildSnapshot, pushSnapshot]) {
-    if (snapshot.status !== 'created' ||
+  if (snapshot.status !== 'created' ||
         (snapshot.expiresAt &&
-          snapshot.expiresAt.getTime() <= Date.now() + 30 * 60_000))
+          snapshot.expiresAt.getTime() <= Date.now() + 2 * 60 * 60_000))
       throw Error('native_studio_image_push_snapshot_unavailable');
   }
   return deps.withCheckout(request, async prepared => {
@@ -72,21 +74,17 @@ export async function configuredNativeStudioImagePush(request: Request,
         prepared.commit !== request.sourceCommit ||
         prepared.workerId !== request.workerId)
       throw Error('native_studio_image_push_target_changed');
-    return deps.phase({ scope: request.scope, site: prepared.site,
+    return deps.advance({ scope: request.scope, site: prepared.site,
       store: prepared.store, project: prepared.project,
       sourceId: prepared.sourceId, commit: prepared.commit,
       workerId: prepared.workerId, buildSnapshotId, pushSnapshotId,
-      pushNetworkPolicy,
+      pushNetworkPolicy, sandboxTimeoutMs, dockerPath, wranglerPath,
       loadCredential: async () => {
         const token = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_DEPLOYER ?? '';
         if (!TOKEN.test(token))
           throw Error('native_studio_image_push_credential_unavailable');
         return token;
       },
-      push: (sandbox, archivePath, receipt, credential) =>
-        deps.push(sandbox, { archivePath, receipt, store: prepared.store,
-          cloudflareCredential: credential, dockerPath, wranglerPath,
-          site: prepared.site }),
     });
   }, env, transport);
 }

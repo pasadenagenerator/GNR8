@@ -2,12 +2,10 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Snapshot, type NetworkPolicy } from '@vercel/sandbox';
 import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
-import { buildNativeStudioDriveImage } from './native-studio-drive-image-build';
-import { buildNativeStudioImageDrivePhase } from './native-studio-image-drive-phase';
+import { advanceNativeStudioDetachedImageBuild } from './native-studio-detached-image-build';
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
 import { withConfiguredNativeStudioFirstDeployCheckout } from './native-studio-configured-first-deploy-checkout';
 import type { NativeStudioScope } from './native-studio-binding-store';
-import type { NativeStudioImageArchiveReceipt } from './native-studio-image-drive-handoff';
 
 type Environment = Record<string, string | undefined>;
 const SNAPSHOT = /^snap_[A-Za-z0-9]+$/;
@@ -16,8 +14,7 @@ const defaults = {
   withCheckout: withConfiguredNativeStudioFirstDeployCheckout,
   source: readStoredVerifiedAstroStudio,
   snapshot: Snapshot.get,
-  phase: buildNativeStudioImageDrivePhase,
-  build: buildNativeStudioDriveImage,
+  advance: advanceNativeStudioDetachedImageBuild,
 };
 
 function networkPolicy(raw: string | undefined): NetworkPolicy {
@@ -41,9 +38,13 @@ export async function configuredNativeStudioImageBuild(input: {
 deps = defaults) {
   const buildSnapshotId = env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT ?? '';
   const pushSnapshotId = env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_SNAPSHOT ?? '';
+  const sandboxTimeoutMs = Number(
+    env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_SANDBOX_TIMEOUT_MS);
   if (env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED !== '1' ||
       !input?.client || !SNAPSHOT.test(buildSnapshotId) ||
-      !SNAPSHOT.test(pushSnapshotId) || buildSnapshotId === pushSnapshotId)
+      !SNAPSHOT.test(pushSnapshotId) || buildSnapshotId === pushSnapshotId ||
+      !Number.isSafeInteger(sandboxTimeoutMs) ||
+      sandboxTimeoutMs < 60 * 60_000 || sandboxTimeoutMs > 90 * 60_000)
     throw Error('native_studio_image_build_not_configured');
   const buildNetworkPolicy = networkPolicy(
     env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS);
@@ -61,15 +62,11 @@ deps = defaults) {
       throw Error('native_studio_image_build_checkout_unverified');
     const source = await deps.source({ store: prepared.store,
       sourceId: prepared.sourceId, site: prepared.site });
-    return deps.phase({ scope: input.scope, site: prepared.site,
+    return deps.advance({ scope: input.scope, site: prepared.site,
       sourceId: prepared.sourceId, commit: prepared.commit,
       workerId: prepared.workerId, store: prepared.store,
       buildSnapshotId, pushSnapshotId, buildNetworkPolicy,
-      build: (sandbox, archivePath) => deps.build(sandbox, archivePath, {
-        scope: input.scope, site: prepared.site,
-        sourceId: prepared.sourceId, commit: prepared.commit,
-        workerId: prepared.workerId, files: source.files,
-      }) as Promise<NativeStudioImageArchiveReceipt>,
+      sandboxTimeoutMs, files: source.files,
     });
   }, env, transport);
 }

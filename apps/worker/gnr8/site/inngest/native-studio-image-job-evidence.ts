@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export type Scope = { agencyId: string; clientId: string; siteId: string };
 export type Request = { scope: Scope; actor: string; sourceId: string;
   sourceCommit: string; workerId: string; artifactCommit: string };
@@ -11,6 +13,14 @@ const HEX32 = /^[a-f0-9]{32}$/;
 const SNAPSHOT = /^snap_[A-Za-z0-9]+$/;
 const DRIVE = /^[A-Za-z0-9_-]{1,128}$/;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+export function imageNextEventId(stage: 'push' | 'deploy', request: Request): string {
+  const identity = [request.scope.agencyId, request.scope.clientId,
+    request.scope.siteId, request.sourceId, request.sourceCommit,
+    request.workerId, request.artifactCommit];
+  return `gnr8-native-studio-image-${stage}-${createHash('sha256')
+    .update(JSON.stringify(identity)).digest('hex')}`;
+}
 
 export function imageRequest(value: unknown): Request {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -50,20 +60,9 @@ export function verifyTransfer(request: Request, evidence: Evidence,
   const { transfer, attempt } = evidence;
   const claimed = transfer?.attempt;
   const receipt = transfer?.receipt;
-  const prefix = `gnr8-img-${request.scope.siteId}-${request.sourceId.slice(0, 8)}-`;
+  try { verifyImageAttempt(request, attempt, accountId); }
+  catch { throw Error('native_studio_image_transfer_unverified'); }
   if (!claimed || !same(claimed, attempt) ||
-      claimed.sourceId !== request.sourceId ||
-      claimed.commit !== request.sourceCommit ||
-      claimed.workerId !== request.workerId ||
-      !same(claimed.scope, request.scope) ||
-      claimed.siteId !== request.scope.siteId ||
-      claimed.accountId !== accountId ||
-      typeof claimed.driveName !== 'string' ||
-      !claimed.driveName.startsWith(prefix) ||
-      !UUID.test(claimed.driveName.slice(prefix.length)) ||
-      !SNAPSHOT.test(claimed.buildSnapshotId) ||
-      !SNAPSHOT.test(claimed.pushSnapshotId) ||
-      claimed.buildSnapshotId === claimed.pushSnapshotId ||
       !DRIVE.test(transfer.driveId) || !DRIVE.test(transfer.projectId) ||
       transfer.region !== 'iad1' ||
       receipt?.sourceId !== request.sourceId ||
@@ -77,6 +76,25 @@ export function verifyTransfer(request: Request, evidence: Evidence,
     throw Error('native_studio_image_transfer_unverified');
 }
 
+export function verifyImageAttempt(request: Request, claimed: any,
+  accountId: string): void {
+  const prefix = `gnr8-img-${request.scope.siteId}-${request.sourceId.slice(0, 8)}-`;
+  if (!claimed ||
+      claimed.sourceId !== request.sourceId ||
+      claimed.commit !== request.sourceCommit ||
+      claimed.workerId !== request.workerId ||
+      !same(claimed.scope, request.scope) ||
+      claimed.siteId !== request.scope.siteId ||
+      claimed.accountId !== accountId ||
+      typeof claimed.driveName !== 'string' ||
+      !claimed.driveName.startsWith(prefix) ||
+      !UUID.test(claimed.driveName.slice(prefix.length)) ||
+      !SNAPSHOT.test(claimed.buildSnapshotId) ||
+      !SNAPSHOT.test(claimed.pushSnapshotId) ||
+      claimed.buildSnapshotId === claimed.pushSnapshotId)
+    throw Error('native_studio_image_attempt_unverified');
+}
+
 export function verifyPrebuilt(request: Request, prebuilt: any,
   accountId: string): void {
   if (!prebuilt || Object.keys(prebuilt).sort().join() !==
@@ -87,4 +105,16 @@ export function verifyPrebuilt(request: Request, prebuilt: any,
       prebuilt.commit !== request.sourceCommit ||
       prebuilt.workerId !== request.workerId || !SHA.test(prebuilt.digest))
     throw Error('native_studio_image_prebuilt_unverified');
+}
+
+export function verifyImagePushAttempt(request: Request, evidence: Evidence): void {
+  const attempt = evidence.pushAttempt;
+  if (!attempt) return;
+  if (Object.keys(attempt).sort().join() !==
+      'archiveSha256,commit,sourceId,workerId' ||
+      attempt.sourceId !== request.sourceId ||
+      attempt.commit !== request.sourceCommit ||
+      attempt.workerId !== request.workerId ||
+      attempt.archiveSha256 !== evidence.transfer?.receipt?.archive?.sha256)
+    throw Error('native_studio_image_push_attempt_unverified');
 }

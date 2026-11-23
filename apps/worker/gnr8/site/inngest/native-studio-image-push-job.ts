@@ -1,11 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inngest } from '@/gnr8/inngest/client';
 import { NATIVE_STUDIO_FIRST_DEPLOY_EVENT } from './native-studio-first-deploy-job';
-import { imageRequest, verifyBaseEvidence, verifyTransfer, verifyPrebuilt,
+import { imageNextEventId, imageRequest, verifyBaseEvidence,
+  verifyTransfer, verifyPrebuilt, verifyImagePushAttempt,
   type Scope, type Request } from './native-studio-image-job-evidence';
 
 export const NATIVE_STUDIO_IMAGE_PUSH_JOB_ID = 'native-studio-image-push-job';
 export const NATIVE_STUDIO_IMAGE_PUSH_EVENT = 'gnr8/native-studio.image-push.requested';
+const MAX_ADVANCES = 50;
+const POLL_INTERVAL = '2m';
+type Progress = { state: 'running' | 'complete' | 'pending-review';
+  prebuilt?: any; cleanupState?: 'complete' | 'pending-review' };
 
 const defaults = {
   enabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_ENABLED === '1',
@@ -44,7 +49,8 @@ const defaults = {
   },
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_DEPLOY_ENABLED === '1',
   enqueueDeploy: async (request: Request) => {
-    await inngest.send({ name: NATIVE_STUDIO_FIRST_DEPLOY_EVENT, data: request });
+    await inngest.send({ id: imageNextEventId('deploy', request),
+      name: NATIVE_STUDIO_FIRST_DEPLOY_EVENT, data: request });
   },
 };
 
@@ -58,28 +64,50 @@ export async function runNativeStudioImagePush(value: unknown,
   const evidence = await deps.evidence(request.scope, client);
   const accountId = verifyBaseEvidence(request, evidence);
   verifyTransfer(request, evidence, accountId);
+  verifyImagePushAttempt(request, evidence);
   // A completed receipt is safe to resume after an enqueue failure. An
   // attempt without that receipt must never cause a second external push.
   if (evidence.prebuilt) {
     verifyPrebuilt(request, evidence.prebuilt, accountId);
     if (deps.chainEnabled()) await deps.enqueueDeploy(request);
-    return evidence.prebuilt;
+    return { state: 'complete' as const, prebuilt: evidence.prebuilt };
   }
-  if (evidence.pushAttempt) throw Error('native_studio_image_push_pending_review');
-  const prebuilt = await deps.push(request, client);
-  verifyPrebuilt(request, prebuilt, accountId);
+  const progress = await deps.push(request, client) as Progress;
+  if (!progress || !['running', 'complete', 'pending-review'].includes(progress.state) ||
+      (progress.cleanupState !== undefined &&
+        !['complete', 'pending-review'].includes(progress.cleanupState)))
+    throw Error('native_studio_image_push_progress_unverified');
   const refreshed = await deps.evidence(request.scope, client);
   if (verifyBaseEvidence(request, refreshed) !== accountId)
     throw Error('native_studio_image_push_target_changed');
   verifyTransfer(request, refreshed, accountId);
-  if (JSON.stringify(refreshed.prebuilt) !== JSON.stringify(prebuilt))
+  verifyImagePushAttempt(request, refreshed);
+  if (progress.state === 'pending-review')
+    return { state: 'pending-review' as const };
+  if (progress.state === 'running') {
+    if (refreshed.prebuilt)
+      throw Error('native_studio_image_push_progress_unverified');
+    return { state: 'running' as const };
+  }
+  verifyPrebuilt(request, progress.prebuilt, accountId);
+  if (JSON.stringify(refreshed.prebuilt) !== JSON.stringify(progress.prebuilt))
     throw Error('native_studio_image_push_receipt_unverified');
   if (deps.chainEnabled()) await deps.enqueueDeploy(request);
-  return prebuilt;
+  return { state: 'complete' as const, prebuilt: progress.prebuilt,
+    ...(progress.cleanupState ? { cleanupState: progress.cleanupState } : {}) };
 }
 
 export const nativeStudioImagePushJob = inngest.createFunction({
   id: NATIVE_STUDIO_IMAGE_PUSH_JOB_ID, retries: 1,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_IMAGE_PUSH_EVENT },
-async ({ event }) => runNativeStudioImagePush(event.data));
+async ({ event, step }) => {
+  for (let index = 0; index < MAX_ADVANCES; index++) {
+    const result = await step.run(`image-push-advance-${index}`,
+      () => runNativeStudioImagePush(event.data));
+    if (result.state !== 'running') return result;
+    if (index < MAX_ADVANCES - 1)
+      await step.sleep(`image-push-poll-${index}`, POLL_INTERVAL);
+  }
+  return { state: 'pending-review' as const, reason: 'poll-budget-exhausted' };
+});

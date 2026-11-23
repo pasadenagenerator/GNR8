@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runNativeStudioImageBuild } from './native-studio-image-build-job';
 import { runNativeStudioImagePush } from './native-studio-image-push-job';
+import { imageNextEventId } from './native-studio-image-job-evidence';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -44,7 +45,7 @@ function buildFixture() {
     authorize: async () => { calls.push('authorize'); },
     evidence: async () => { calls.push('evidence'); return evidence; },
     build: async () => { calls.push('build'); evidence = { ...evidence,
-      attempt, transfer }; return transfer; },
+      attempt, transfer }; return { state: 'complete' as const, transfer }; },
     chainEnabled: () => true,
     enqueuePush: async (value: typeof request) => {
       assert.deepEqual(value, request); calls.push('enqueue'); },
@@ -63,7 +64,7 @@ function pushFixture() {
     authorize: async () => { calls.push('authorize'); },
     evidence: async () => { calls.push('evidence'); return evidence; },
     push: async () => { calls.push('push'); evidence = { ...evidence,
-      prebuilt }; return prebuilt; },
+      prebuilt }; return { state: 'complete' as const, prebuilt }; },
     chainEnabled: () => true,
     enqueueDeploy: async (value: typeof request) => {
       assert.deepEqual(value, request); calls.push('enqueue'); },
@@ -83,7 +84,8 @@ test('image build rejects forged event before storage and revoked actor before e
 
 test('image build verifies scoped evidence and transfers before queueing push', async () => {
   const f = buildFixture();
-  assert.deepEqual(await runNativeStudioImageBuild(request, f.deps), transfer);
+  assert.deepEqual(await runNativeStudioImageBuild(request, f.deps),
+    { state: 'complete', transfer });
   assert.deepEqual(f.calls, ['client', 'authorize', 'evidence', 'build',
     'evidence', 'enqueue']);
   const wrong = buildFixture();
@@ -98,17 +100,22 @@ test('image build verifies scoped evidence and transfers before queueing push', 
 test('image build resumes exact transfer without rebuilding and stops ambiguous attempt', async () => {
   const resumed = buildFixture();
   resumed.setEvidence({ ...base, attempt, transfer });
-  assert.deepEqual(await runNativeStudioImageBuild(request, resumed.deps), transfer);
+  assert.deepEqual(await runNativeStudioImageBuild(request, resumed.deps),
+    { state: 'complete', transfer });
   assert.deepEqual(resumed.calls, ['client', 'authorize', 'evidence', 'enqueue']);
   const pending = buildFixture();
   pending.setEvidence({ ...base, attempt, transfer: null });
-  await assert.rejects(runNativeStudioImageBuild(request, pending.deps), /pending_review/);
-  assert.equal(pending.calls.includes('build'), false);
+  pending.deps.build = async () => { pending.calls.push('build');
+    return { state: 'pending-review' as const, transfer } };
+  assert.deepEqual(await runNativeStudioImageBuild(request, pending.deps),
+    { state: 'pending-review' });
+  assert.equal(pending.calls.includes('enqueue'), false);
 });
 
 test('image push verifies transfer before provider and prebuilt before deploy', async () => {
   const f = pushFixture();
-  assert.deepEqual(await runNativeStudioImagePush(request, f.deps), prebuilt);
+  assert.deepEqual(await runNativeStudioImagePush(request, f.deps),
+    { state: 'complete', prebuilt });
   assert.deepEqual(f.calls, ['client', 'authorize', 'evidence', 'push',
     'evidence', 'enqueue']);
   const wrong = pushFixture();
@@ -124,14 +131,25 @@ test('image push resumes exact prebuilt and never repeats ambiguous external pus
   resumed.setEvidence({ ...base, attempt, transfer, prebuilt,
     pushAttempt: { sourceId: request.sourceId, commit: request.sourceCommit,
       workerId: request.workerId, archiveSha256: transfer.receipt.archive.sha256 } });
-  assert.deepEqual(await runNativeStudioImagePush(request, resumed.deps), prebuilt);
+  assert.deepEqual(await runNativeStudioImagePush(request, resumed.deps),
+    { state: 'complete', prebuilt });
   assert.deepEqual(resumed.calls, ['client', 'authorize', 'evidence', 'enqueue']);
   const pending = pushFixture();
   pending.setEvidence({ ...base, attempt, transfer, prebuilt: null,
+    pushAttempt: { sourceId: request.sourceId,
+      commit: request.sourceCommit, workerId: request.workerId,
+      archiveSha256: transfer.receipt.archive.sha256 } });
+  pending.deps.push = async () => { pending.calls.push('push');
+    return { state: 'pending-review' as const, prebuilt }; };
+  assert.deepEqual(await runNativeStudioImagePush(request, pending.deps),
+    { state: 'pending-review' });
+  assert.equal(pending.calls.includes('enqueue'), false);
+  const forged = pushFixture();
+  forged.setEvidence({ ...base, attempt, transfer, prebuilt: null,
     pushAttempt: { sourceId: request.sourceId } });
-  await assert.rejects(runNativeStudioImagePush(request, pending.deps),
-    /pending_review/);
-  assert.equal(pending.calls.includes('push'), false);
+  await assert.rejects(runNativeStudioImagePush(request, forged.deps),
+    /push_attempt_unverified/);
+  assert.equal(forged.calls.includes('push'), false);
 });
 
 test('target account change during image work blocks the next stage', async () => {
@@ -141,7 +159,7 @@ test('target account change during image work blocks the next stage', async () =
   build.deps.build = async () => {
     build.calls.push('build');
     build.setEvidence({ ...base, resources: changed, attempt, transfer });
-    return transfer;
+    return { state: 'complete' as const, transfer };
   };
   await assert.rejects(runNativeStudioImageBuild(request, build.deps),
     /target_changed/);
@@ -152,9 +170,52 @@ test('target account change during image work blocks the next stage', async () =
     push.calls.push('push');
     push.setEvidence({ ...base, resources: changed, attempt, transfer,
       prebuilt, pushAttempt: null });
-    return prebuilt;
+    return { state: 'complete' as const, prebuilt };
   };
   await assert.rejects(runNativeStudioImagePush(request, push.deps),
     /target_changed/);
   assert.equal(push.calls.includes('enqueue'), false);
+});
+
+test('running stages retain scoped evidence and do not queue the next stage', async () => {
+  const build = buildFixture();
+  build.deps.build = async () => {
+    build.calls.push('build'); build.setEvidence({ ...base, attempt,
+      transfer: null });
+    return { state: 'running' as const, transfer };
+  };
+  assert.deepEqual(await runNativeStudioImageBuild(request, build.deps),
+    { state: 'running' });
+  assert.equal(build.calls.includes('enqueue'), false);
+
+  const push = pushFixture();
+  push.deps.push = async () => { push.calls.push('push');
+    return { state: 'running' as const, prebuilt }; };
+  assert.deepEqual(await runNativeStudioImagePush(request, push.deps),
+    { state: 'running' });
+  assert.equal(push.calls.includes('enqueue'), false);
+});
+
+test('next-stage event ids are stable for the exact scoped operation', () => {
+  assert.equal(imageNextEventId('push', request),
+    imageNextEventId('push', { ...request }));
+  assert.notEqual(imageNextEventId('push', request),
+    imageNextEventId('deploy', request));
+  assert.notEqual(imageNextEventId('push', request),
+    imageNextEventId('push', { ...request, sourceCommit: 'f'.repeat(40) }));
+});
+
+test('verified prebuilt continues deployment while reporting pending cleanup', async () => {
+  const f = pushFixture();
+  f.deps.push = async () => { f.calls.push('push');
+    f.setEvidence({ ...base, attempt, transfer, prebuilt,
+      pushAttempt: { sourceId: request.sourceId,
+        commit: request.sourceCommit, workerId: request.workerId,
+        archiveSha256: transfer.receipt.archive.sha256 } });
+    return { state: 'complete' as const, prebuilt,
+      cleanupState: 'pending-review' as const };
+  };
+  assert.deepEqual(await runNativeStudioImagePush(request, f.deps),
+    { state: 'complete', prebuilt, cleanupState: 'pending-review' });
+  assert.equal(f.calls.includes('enqueue'), true);
 });

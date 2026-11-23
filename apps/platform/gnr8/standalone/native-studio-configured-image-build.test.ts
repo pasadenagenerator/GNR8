@@ -17,6 +17,7 @@ const input = { scope, client: {} as SupabaseClient, sourceId,
 const env = { GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED: '1',
   GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT: 'snap_build',
   GNR8_NATIVE_STUDIO_IMAGE_PUSH_SNAPSHOT: 'snap_push',
+  GNR8_NATIVE_STUDIO_IMAGE_BUILD_SANDBOX_TIMEOUT_MS: String(60 * 60_000),
   GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS:
     'registry-1.docker.io,auth.docker.io,production.cloudfront.docker.com' };
 
@@ -24,9 +25,7 @@ function fixture() {
   const events: string[] = [];
   const store = { read: async () => null, claim: async () => true };
   const files = [{ path: 'studio/Dockerfile', body: Buffer.from('trusted') }];
-  const receipt = { sourceId, commit: sourceCommit, workerId, scope,
-    siteId: scope.siteId, accountId,
-    archive: { bytes: 17, sha256: 'e'.repeat(64) } };
+  const progress = { state: 'running' };
   const deps = {
     snapshot: async ({ snapshotId }: { snapshotId: string }) => {
       events.push(`snapshot:${snapshotId}`); return { status: 'created' }; },
@@ -40,8 +39,8 @@ function fixture() {
       assert.equal(id, sourceId); assert.equal(target, site);
       return { files };
     },
-    phase: async (value: any) => {
-      events.push('phase');
+    advance: async (value: any) => {
+      events.push('advance');
       assert.deepEqual(value.buildNetworkPolicy, {
         allow: ['registry-1.docker.io', 'auth.docker.io',
           'production.cloudfront.docker.com'] });
@@ -49,26 +48,22 @@ function fixture() {
       assert.equal(value.commit, sourceCommit);
       assert.equal(value.buildSnapshotId, 'snap_build');
       assert.equal(value.pushSnapshotId, 'snap_push');
-      return value.build({} as any, '/gnr8-image/image.tar');
-    },
-    build: async (_sandbox: any, archivePath: string, value: any) => {
-      events.push('build');
-      assert.equal(archivePath, '/gnr8-image/image.tar');
       assert.equal(value.files, files);
       assert.equal(value.commit, sourceCommit);
-      return receipt;
+      assert.equal(value.sandboxTimeoutMs, 60 * 60_000);
+      return progress;
     },
   } as any;
-  return { deps, events, receipt };
+  return { deps, events, progress };
 }
 
 test('only verified stored source bytes reach the isolated build phase', async () => {
   const f = fixture();
   assert.equal(await configuredNativeStudioImageBuild(input, env,
     (async () => { throw Error('provider call'); }) as typeof fetch, f.deps),
-  f.receipt);
+  f.progress);
   assert.deepEqual(f.events, ['snapshot:snap_build', 'snapshot:snap_push',
-    'checkout', 'source', 'phase', 'build']);
+    'checkout', 'source', 'advance']);
 });
 
 test('unconfigured switch or unsafe network fails before any checkout', async () => {
