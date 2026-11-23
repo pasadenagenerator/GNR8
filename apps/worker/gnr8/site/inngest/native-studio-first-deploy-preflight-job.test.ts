@@ -41,7 +41,7 @@ function fixture() {
         workerId: request.workerId, files: 10 };
     },
     chainEnabled: () => false,
-    enqueueDeploy: async () => { calls.push('enqueue'); },
+    enqueueBuild: async () => { calls.push('enqueue'); },
   };
   return { calls, deps };
 }
@@ -81,11 +81,11 @@ test('exact artifact receipt enters credential-free preflight once', async () =>
   assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'preflight']);
 });
 
-test('verified preflight queues only scoped identities for trusted deployment', async () => {
+test('verified preflight queues only scoped identities for image build', async () => {
   const f = fixture();
   await runNativeStudioFirstDeployPreflight(request, { ...f.deps,
     chainEnabled: () => true,
-    enqueueDeploy: async value => {
+    enqueueBuild: async value => {
       assert.deepEqual(value, request);
       f.calls.push('enqueue');
     },

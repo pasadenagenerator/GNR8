@@ -1080,8 +1080,8 @@ the scoped archive hash and size. A separate receiving callback loads and
 checks the image without credentials, claims one private push attempt, passes
 the Cloudflare token only to Wrangler's push command, and records the exact
 registry digest afterward. Both callbacks are locally tested with Sandbox
-commands replaced. They are not yet connected to a hosted job or to each
-other through the Drive coordinator and private receipt writer. No verified
+commands replaced. They are now connected to registered, disabled Worker jobs
+through the Drive coordinator and private receipt writer. No verified
 Docker snapshots or network allowlists have been configured. First deployment
 remains disabled until that hosted path and one scoped end-to-end run pass.
 The first-deploy Worker job now requires the exact scoped prebuilt-image
@@ -1095,25 +1095,28 @@ reads that record from the private store, opens the existing Drive with
 the source handoff before loading the Cloudflare credential. It stops the
 receiver and deletes the Drive afterward. A failed or ambiguous build retains
 its attempt record and cannot silently start a new Drive. Mocked tests cover
-the two-invocation ordering; the Worker has not called these stages yet.
+the two-invocation ordering; no hosted Worker has called these stages yet.
 The source file list is stored as a bounded, hashed Sandbox manifest rather
 than embedded in a command argument; a large prepared source therefore does
 not exceed the Linux single-argument limit. The Worker Inngest route currently
-allows 800 seconds per invocation, whereas this synchronous Drive adapter can
-spend up to 20 minutes building and another 20 minutes pushing. The new
-two-invocation boundary alone does not resolve the 800-second limit for each
-Docker command. Detached Sandbox command polling or a verified longer Worker
-duration is still needed before job wiring. The current preflight job still
-dispatches first deployment directly, so no image job is registered or
-enabled yet.
+allows 800 seconds per invocation, whereas the synchronous Drive build and
+push callbacks can each exceed that limit. Configured adapters and two
+registered Worker jobs now connect verified preflight to image build, image
+push and first deployment through scoped private receipts. Each job checks
+the source, artifact and target account before handing off; an exact completed
+receipt can resume a failed enqueue without repeating a build or registry
+push. All image switches remain off. This local connection does not resolve
+the hosted execution limit, and no image has been built or pushed through it.
 The SDK 3.8 detached-command boundary is now locally implemented. It claims a
 private per-command intent before starting Docker or Wrangler, records the
 command and session IDs after start, and polls only the same active session.
 It reads that session directly, preventing the SDK from auto-resuming a
 stopped Sandbox during a poll. An ambiguous start remains pending review and
 cannot launch a second command. This helper is not yet connected to the
-build/save/load/push callbacks or Worker jobs. The current 30-minute Sandbox
-timeout also needs a verified stage budget before those commands are wired.
+build/save/load/push callbacks or Worker jobs. A safe hosted path must split
+each long Docker command into one start and later polls while preserving the
+Sandbox and Drive until its receipt is complete. The Vercel plan's Sandbox
+duration and the stage budget also need verification before enabling the jobs.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

@@ -8,6 +8,12 @@ import { nativeStudioFirstDeployPreflightJob,
 import { nativeStudioFirstDeployJob, NATIVE_STUDIO_FIRST_DEPLOY_EVENT,
   NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID } from
   '@/gnr8/site/inngest/native-studio-first-deploy-job'
+import { nativeStudioImageBuildJob, NATIVE_STUDIO_IMAGE_BUILD_EVENT,
+  NATIVE_STUDIO_IMAGE_BUILD_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-image-build-job'
+import { nativeStudioImagePushJob, NATIVE_STUDIO_IMAGE_PUSH_EVENT,
+  NATIVE_STUDIO_IMAGE_PUSH_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-image-push-job'
 import { nativeStudioPublicGatewayJob, NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT,
   NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID } from
   '@/gnr8/site/inngest/native-studio-public-gateway-job'
@@ -64,6 +70,8 @@ export type WorkerInngestFunctionRegistration = {
     | typeof nativeStudioPreparationJob
     | typeof nativeStudioFirstBuildJob
     | typeof nativeStudioFirstDeployPreflightJob
+    | typeof nativeStudioImageBuildJob
+    | typeof nativeStudioImagePushJob
     | typeof nativeStudioFirstDeployJob
     | typeof nativeStudioPublicGatewayJob
     | typeof nativeStudioFirstOpenJob
@@ -85,6 +93,12 @@ const coreWorkerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[
   { id: NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID,
     eventName: NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
     fn: nativeStudioFirstDeployPreflightJob },
+  { id: NATIVE_STUDIO_IMAGE_BUILD_JOB_ID,
+    eventName: NATIVE_STUDIO_IMAGE_BUILD_EVENT,
+    fn: nativeStudioImageBuildJob },
+  { id: NATIVE_STUDIO_IMAGE_PUSH_JOB_ID,
+    eventName: NATIVE_STUDIO_IMAGE_PUSH_EVENT,
+    fn: nativeStudioImagePushJob },
   { id: NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID,
     eventName: NATIVE_STUDIO_FIRST_DEPLOY_EVENT,
     fn: nativeStudioFirstDeployJob },

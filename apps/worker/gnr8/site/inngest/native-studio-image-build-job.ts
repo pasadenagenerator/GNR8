@@ -1,0 +1,81 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { inngest } from '@/gnr8/inngest/client';
+import { NATIVE_STUDIO_IMAGE_PUSH_EVENT } from './native-studio-image-push-job';
+import { imageRequest, verifyBaseEvidence, verifyTransfer,
+  type Scope, type Request } from './native-studio-image-job-evidence';
+
+export const NATIVE_STUDIO_IMAGE_BUILD_JOB_ID = 'native-studio-image-build-job';
+export const NATIVE_STUDIO_IMAGE_BUILD_EVENT = 'gnr8/native-studio.image-build.requested';
+
+const defaults = {
+  enabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED === '1',
+  client: async () => {
+    const { getSupabaseServiceRoleClient } = await import('@/src/supabase/service-role-server');
+    return getSupabaseServiceRoleClient();
+  },
+  authorize: async (client: SupabaseClient, actor: string, agencyId: string) => {
+    const { requireAgencyBackgroundActor } = await import('@/src/auth/agency-background-action');
+    await requireAgencyBackgroundActor(client, { userId: actor, agencyId, action: 'publish' });
+  },
+  evidence: async (scope: Scope, client: SupabaseClient) => {
+    const { SupabasePublicationStore } = await import('@/gnr8/standalone/publication-store');
+    const store = new SupabasePublicationStore(client,
+      process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
+    const [artifact, preflight, resources, transfer, attempt] = await Promise.all([
+      store.read<any>('native-studio/build-artifact-github-push-v1.json'),
+      store.read<any>('native-studio/first-deploy-dry-run-v1.json'),
+      store.read<any>('native-studio/resources-reserved-v1.json'),
+      store.read<any>('native-studio/image-drive-transfer-v1.json'),
+      store.read<any>('native-studio/image-drive-attempt-v1.json'),
+    ]);
+    return { artifact, preflight, resources, transfer, attempt };
+  },
+  build: async (request: Request, client: SupabaseClient) => {
+    const { configuredNativeStudioImageBuild } = await import(
+      '@/gnr8/standalone/native-studio-configured-image-build');
+    const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
+    if (!trustedGit.startsWith('/')) throw Error('native_studio_image_build_runner_unconfigured');
+    return configuredNativeStudioImageBuild({ scope: request.scope, client,
+      sourceId: request.sourceId, sourceCommit: request.sourceCommit,
+      workerId: request.workerId, trustedGit });
+  },
+  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_ENABLED === '1',
+  enqueuePush: async (request: Request) => {
+    await inngest.send({ name: NATIVE_STUDIO_IMAGE_PUSH_EVENT, data: request });
+  },
+};
+
+export async function runNativeStudioImageBuild(value: unknown,
+  deps: typeof defaults = defaults) {
+  if (!deps.enabled()) throw Error('native_studio_image_build_disabled');
+  const request = imageRequest(value);
+  const client = await deps.client();
+  if (!client) throw Error('native_studio_image_build_store_unavailable');
+  await deps.authorize(client, request.actor, request.scope.agencyId);
+  const evidence = await deps.evidence(request.scope, client);
+  const accountId = verifyBaseEvidence(request, evidence);
+  // A complete scoped transfer may resume a failed enqueue without rebuilding.
+  if (evidence.transfer) {
+    verifyTransfer(request, evidence, accountId);
+    if (deps.chainEnabled()) await deps.enqueuePush(request);
+    return evidence.transfer;
+  }
+  // An attempt without a complete transfer is ambiguous.
+  if (evidence.attempt)
+    throw Error('native_studio_image_build_pending_review');
+  const transfer = await deps.build(request, client);
+  const refreshed = await deps.evidence(request.scope, client);
+  if (verifyBaseEvidence(request, refreshed) !== accountId)
+    throw Error('native_studio_image_build_target_changed');
+  verifyTransfer(request, { ...refreshed, transfer }, accountId);
+  if (JSON.stringify(refreshed.transfer) !== JSON.stringify(transfer))
+    throw Error('native_studio_image_build_transfer_unverified');
+  if (deps.chainEnabled()) await deps.enqueuePush(request);
+  return transfer;
+}
+
+export const nativeStudioImageBuildJob = inngest.createFunction({
+  id: NATIVE_STUDIO_IMAGE_BUILD_JOB_ID, retries: 1,
+  concurrency: { limit: 1, key: 'event.data.scope.siteId' },
+}, { event: NATIVE_STUDIO_IMAGE_BUILD_EVENT },
+async ({ event }) => runNativeStudioImageBuild(event.data));

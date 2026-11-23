@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inngest } from '@/gnr8/inngest/client';
-import { NATIVE_STUDIO_FIRST_DEPLOY_EVENT } from './native-studio-first-deploy-job';
+import { NATIVE_STUDIO_IMAGE_BUILD_EVENT } from './native-studio-image-build-job';
 
 export const NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID =
   'native-studio-first-deploy-preflight-job';
@@ -44,9 +44,9 @@ const defaults = {
       sourceId: request.sourceId, sourceCommit: request.sourceCommit,
       workerId: request.workerId, trustedGit, trustedWrangler });
   },
-  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_DEPLOY_ENABLED === '1',
-  enqueueDeploy: async (request: Request) => {
-    await inngest.send({ name: NATIVE_STUDIO_FIRST_DEPLOY_EVENT, data: request });
+  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED === '1',
+  enqueueBuild: async (request: Request) => {
+    await inngest.send({ name: NATIVE_STUDIO_IMAGE_BUILD_EVENT, data: request });
   },
 };
 
@@ -86,7 +86,7 @@ export async function runNativeStudioFirstDeployPreflight(request: unknown,
       result.workerId !== workerId ||
       !Number.isSafeInteger(result.files) || result.files < 2)
     throw Error('native_studio_first_deploy_preflight_result_unverified');
-  if (deps.chainEnabled()) await deps.enqueueDeploy(verified);
+  if (deps.chainEnabled()) await deps.enqueueBuild(verified);
   return result;
 }
 

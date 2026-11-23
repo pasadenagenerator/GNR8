@@ -39,6 +39,10 @@ import { NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
   '@/gnr8/site/inngest/native-studio-first-deploy-preflight-job'
 import { NATIVE_STUDIO_FIRST_DEPLOY_EVENT, NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID,
   nativeStudioFirstDeployJob } from '@/gnr8/site/inngest/native-studio-first-deploy-job'
+import { NATIVE_STUDIO_IMAGE_BUILD_EVENT, NATIVE_STUDIO_IMAGE_BUILD_JOB_ID,
+  nativeStudioImageBuildJob } from '@/gnr8/site/inngest/native-studio-image-build-job'
+import { NATIVE_STUDIO_IMAGE_PUSH_EVENT, NATIVE_STUDIO_IMAGE_PUSH_JOB_ID,
+  nativeStudioImagePushJob } from '@/gnr8/site/inngest/native-studio-image-push-job'
 import { NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT, NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID,
   nativeStudioPublicGatewayJob } from '@/gnr8/site/inngest/native-studio-public-gateway-job'
 import { NATIVE_STUDIO_FIRST_OPEN_EVENT, NATIVE_STUDIO_FIRST_OPEN_JOB_ID,
@@ -93,6 +97,8 @@ test('worker non-production inngest registration preserves all existing jobs and
   assert.equal(inngestFunctions.includes(nativeStudioSecretSetupJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioFirstBuildJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioFirstDeployPreflightJob), true)
+  assert.equal(inngestFunctions.includes(nativeStudioImageBuildJob), true)
+  assert.equal(inngestFunctions.includes(nativeStudioImagePushJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioFirstDeployJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioPublicGatewayJob), true)
   assert.equal(inngestFunctions.includes(nativeStudioFirstOpenJob), true)
@@ -117,6 +123,8 @@ test('worker inngest registration includes required function ids and exact trigg
     NATIVE_STUDIO_FIRST_BUILD_EVENT)
   assert.equal(eventsById.get(NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID),
     NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT)
+  assert.equal(eventsById.get(NATIVE_STUDIO_IMAGE_BUILD_JOB_ID), NATIVE_STUDIO_IMAGE_BUILD_EVENT)
+  assert.equal(eventsById.get(NATIVE_STUDIO_IMAGE_PUSH_JOB_ID), NATIVE_STUDIO_IMAGE_PUSH_EVENT)
   assert.equal(eventsById.get(NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID),
     NATIVE_STUDIO_FIRST_DEPLOY_EVENT)
   assert.equal(eventsById.get(NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID),
@@ -142,6 +150,8 @@ test('worker production inngest registration exposes exactly the safe function m
       'native-studio-preparation-job',
       NATIVE_STUDIO_FIRST_BUILD_JOB_ID,
       NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID,
+      NATIVE_STUDIO_IMAGE_BUILD_JOB_ID,
+      NATIVE_STUDIO_IMAGE_PUSH_JOB_ID,
       NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID,
       NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID,
       NATIVE_STUDIO_FIRST_OPEN_JOB_ID,
