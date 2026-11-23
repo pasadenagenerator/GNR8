@@ -1356,9 +1356,11 @@ automatic membership propagation is not operational. A route-only event would
 miss email confirmation, bans, and email changes in Supabase Auth; reliable
 convergence needs a bounded drift scan or a durable identity-change feed and
 a reviewed system actor. The existing
-`gnr8_site_github_repository_bindings` registry can enumerate bound scopes
-before a ready binding exists; each candidate still needs its immutable
-handoff and Access v2 source verified before provider work. The trusted runner requires
+`gnr8_site_github_repository_bindings` registry now has a bounded, read-only
+inventory helper for bound scopes before a ready binding exists. It verifies
+each immutable handoff and source receipt and lists only Access v2 sites.
+The inventory does not grant system authority for provider writes. The
+trusted runner requires
 `GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED=1`. The candidate resolver
 excludes known unconfirmed, banned, and changing identities while requiring
 at least one confirmed admin. Native Stacki caches roles for about a minute and
