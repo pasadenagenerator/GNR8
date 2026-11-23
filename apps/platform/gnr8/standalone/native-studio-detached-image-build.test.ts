@@ -44,6 +44,11 @@ function fixture() {
     },
     getCommand: async (cmdId: string) => ({ exitCode: exits.get(cmdId) ?? null }) };
   const sandbox = { name: '', get status() { return running ? 'running' : 'stopped'; },
+    sourceSnapshotId: input.buildSnapshotId, region: 'iad1',
+    persistent: false, timeout: input.sandboxTimeoutMs,
+    get mounts() { return { '/gnr8-image': {
+      drive: drive.name, mode: 'read-write' } }; },
+    networkPolicy: input.buildNetworkPolicy,
     expiresAt: new Date(Date.now() + 60 * 60_000),
     currentSession: () => session,
     stop: async () => { calls.push('stop');
@@ -136,6 +141,20 @@ test('remaining Sandbox time blocks save before another long command', async () 
   f.sandbox.expiresAt = new Date(Date.now() + 5 * 60_000);
   await assert.rejects(f.advance(), /time_insufficient/);
   assert.equal(f.calls.filter(v => v === 'start:save').length, 0);
+});
+
+test('wrong snapshot or network policy cannot stage or resume the builder', async () => {
+  const wrongSnapshot = fixture();
+  wrongSnapshot.sandbox.sourceSnapshotId = 'snap_foreign';
+  assert.deepEqual(await wrongSnapshot.advance(), { state: 'pending-review' });
+  assert.equal(wrongSnapshot.calls.includes('stage'), false);
+  assert.equal(wrongSnapshot.calls.some(v => v.startsWith('start:')), false);
+
+  const changedNetwork = fixture();
+  await changedNetwork.advance();
+  changedNetwork.sandbox.networkPolicy = { allow: ['foreign.example.com'] };
+  assert.deepEqual(await changedNetwork.advance(), { state: 'pending-review' });
+  assert.equal(changedNetwork.calls.filter(v => v === 'start:save').length, 0);
 });
 
 test('claimed receipt is rehashed after an uncertain Sandbox stop', async () => {

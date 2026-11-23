@@ -251,8 +251,29 @@ export async function advanceNativeStudioDetachedImagePush(input: Input,
     if (!exactPrebuilt(input, alreadyPushed))
       return { state: 'pending-review' };
     const done = { intent, digest: alreadyPushed.digest };
-    const cleanupState = await readExact(input, CLEANUP_DONE, done) ?
-      'complete' : 'pending-review';
+    if (await readExact(input, CLEANUP_DONE, done))
+      return { state: 'complete', prebuilt: alreadyPushed,
+        cleanupState: 'complete' };
+    let cleanupState: 'complete' | 'pending-review' = 'pending-review';
+    // A crash after the registry receipt but before cleanup intent leaves a
+    // safe, still-live receiver. Claim the one cleanup attempt on resumption.
+    if (!await input.store.read(CLEANUP_INTENT)) {
+      const existingReceiver = await input.store.read(RECEIVER_INTENT);
+      const started = await input.store.read(RECEIVER_STARTED) as Started | null;
+      if (same(existingReceiver, intent) && started &&
+          same(started.intent, intent)) {
+        try {
+          const drive = await driveFor(input, transfer, dependencies);
+          const receiver = await dependencies.sandbox.get({
+            name: intent.sandboxName, resume: false });
+          attestSandbox(receiver, input, started);
+          cleanupState = await cleanup(input, intent, alreadyPushed,
+            receiver, drive);
+        } catch {
+          cleanupState = 'pending-review';
+        }
+      }
+    }
     return { state: 'complete', prebuilt: alreadyPushed, cleanupState };
   }
   const existingIntent = await input.store.read(RECEIVER_INTENT);

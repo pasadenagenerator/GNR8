@@ -58,22 +58,25 @@ export async function configuredNativeStudioImagePush(request: Request,
     throw Error('native_studio_image_push_not_configured');
   const pushNetworkPolicy = { allow: networkHosts(
     env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_NETWORK_HOSTS) };
-  const [buildSnapshot, pushSnapshot] = await Promise.all([
-    deps.snapshot({ snapshotId: buildSnapshotId }),
-    deps.snapshot({ snapshotId: pushSnapshotId }),
-  ]);
-  for (const snapshot of [buildSnapshot, pushSnapshot]) {
-  if (snapshot.status !== 'created' ||
-        (snapshot.expiresAt &&
-          snapshot.expiresAt.getTime() <= Date.now() + 2 * 60 * 60_000))
-      throw Error('native_studio_image_push_snapshot_unavailable');
-  }
   return deps.withCheckout(request, async prepared => {
     if (prepared.site.accountId !== accountId ||
         prepared.sourceId !== request.sourceId ||
         prepared.commit !== request.sourceCommit ||
         prepared.workerId !== request.workerId)
       throw Error('native_studio_image_push_target_changed');
+    if (!await prepared.store.read('native-studio/image-push-receiver-intent-v1.json') &&
+        !await prepared.store.read('native-studio/prebuilt-image-v1.json')) {
+      const [buildSnapshot, pushSnapshot] = await Promise.all([
+        deps.snapshot({ snapshotId: buildSnapshotId }),
+        deps.snapshot({ snapshotId: pushSnapshotId }),
+      ]);
+      for (const snapshot of [buildSnapshot, pushSnapshot]) {
+        if (snapshot.status !== 'created' ||
+            (snapshot.expiresAt && snapshot.expiresAt.getTime() <=
+              Date.now() + 2 * 60 * 60_000))
+          throw Error('native_studio_image_push_snapshot_unavailable');
+      }
+    }
     return deps.advance({ scope: request.scope, site: prepared.site,
       store: prepared.store, project: prepared.project,
       sourceId: prepared.sourceId, commit: prepared.commit,

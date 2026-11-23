@@ -88,6 +88,21 @@ function commandIdentity(input: Input, session: Session, phase: 'build' | 'save'
     sandboxName: session.sandboxName, phase, store: input.store };
 }
 
+function attestedBuilder(input: Input, builder: Sandbox,
+  attempt: NativeStudioImageDriveAttempt, expectedSessionId: string): boolean {
+  const mount = builder.mounts?.[MOUNT];
+  const expiresAt = builder.expiresAt;
+  return builder.name === sandboxName(attempt) &&
+    builder.status === 'running' &&
+    builder.currentSession().sessionId === expectedSessionId &&
+    builder.sourceSnapshotId === input.buildSnapshotId &&
+    builder.region === 'iad1' && builder.persistent === false &&
+    builder.timeout === input.sandboxTimeoutMs &&
+    mount?.drive === attempt.driveName && mount.mode === 'read-write' &&
+    same(builder.networkPolicy, input.buildNetworkPolicy) &&
+    expiresAt instanceof Date && expiresAt.getTime() > Date.now();
+}
+
 function exactSource(input: Input, session: Session) {
   const source = describeNativeStudioDriveImageSource(
     NATIVE_STUDIO_IMAGE_ARCHIVE_PATH, { ...input, files: input.files });
@@ -120,7 +135,7 @@ async function finish(input: Input, session: Session,
       !['running', 'stopped'].includes(builder.status))
     return { state: 'pending-review' };
   if (builder.status === 'running') {
-    if (builder.currentSession().sessionId !== session.sessionId)
+    if (!attestedBuilder(input, builder, session.attempt, session.sessionId))
       return { state: 'pending-review' };
     if (!verifiedNow) {
       // A crash may leave a writable mounted Drive after the private receipt
@@ -182,8 +197,9 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
       region: 'iad1', persistent: false, timeout: input.sandboxTimeoutMs,
       resources: { vcpus: 2 }, ports: [] });
     const sessionId = builder.currentSession().sessionId;
-    if (builder.name !== name || builder.status !== 'running' ||
-        !ID.test(sessionId)) return { state: 'pending-review' };
+    if (!ID.test(sessionId) ||
+        !attestedBuilder(input, builder, attempt, sessionId))
+      return { state: 'pending-review' };
     await steps.stage(builder, NATIVE_STUDIO_IMAGE_ARCHIVE_PATH, input);
     const session: Session = { attempt, driveId: drive.driveId,
       projectId: drive.projectId, sandboxName: name, sessionId,
@@ -230,8 +246,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   }
   const builder = await dependencies.sandbox.get({ name: stored.sandboxName,
     resume: false });
-  if (builder.name !== stored.sandboxName || builder.status !== 'running' ||
-      builder.currentSession().sessionId !== stored.sessionId)
+  if (!attestedBuilder(input, builder, attempt, stored.sessionId))
     return { state: 'pending-review' };
   if (await input.store.read(SAVE_INTENT)) {
     const poll = await steps.pollCommand(commandIdentity(input, stored, 'save'),

@@ -163,6 +163,24 @@ test('ambiguous cleanup preserves the prebuilt receipt without repeating side ef
   assert.equal(f.records.has('native-studio/image-push-cleanup-done-v1.json'), false);
 });
 
+test('receipt written before cleanup resumes one exact cleanup attempt', async () => {
+  const f = fixture();
+  const advance = () => advanceNativeStudioDetachedImagePush(
+    f.input, f.sdk, f.steps);
+  for (let i = 0; i < 5; i++) await advance();
+  f.records.set('native-studio/prebuilt-image-v1.json', {
+    sourceId, commit, workerId, siteId: scope.siteId,
+    accountId, digest: 'f'.repeat(64),
+  });
+  const done = await advance();
+  assert.equal(done.state === 'complete' && done.cleanupState, 'complete');
+  assert.equal(f.events.filter(value => value === 'stop').length, 1);
+  assert.equal(f.events.filter(value => value === 'delete-drive').length, 1);
+  const repeated = await advance();
+  assert.equal(repeated.state === 'complete' && repeated.cleanupState, 'complete');
+  assert.equal(f.events.filter(value => value === 'stop').length, 1);
+});
+
 test('exact config write can recover before its private completion claim', async () => {
   const f = fixture();
   const advance = () => advanceNativeStudioDetachedImagePush(

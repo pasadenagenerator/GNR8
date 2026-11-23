@@ -1117,15 +1117,21 @@ registry push has been exercised through this path, and all image switches
 remain off. [Vercel's Sandbox duration guide](https://vercel.com/kb/guide/vercel-sandbox-duration-and-persistence)
 lists a 45-minute limit on Hobby and longer sessions on Pro or Enterprise;
 the actual GNR8 project plan and snapshot setup still need verification.
+The local production Worker bundle contains both image jobs and their detached
+Platform modules. Review of the assembled path also added full build Sandbox
+attestation, checks snapshot lifetime only before creating a new Sandbox, and
+resumes a single cleanup attempt if the prebuilt receipt was written before
+cleanup began. All three cases have focused local regression tests.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required
 Docker capability, a verified build snapshot, separate build/deploy credential
 contexts and enough execution time. Then verify one exact scoped site through
 source preparation, GitHub push, both Cloudflare deployments, first-open link,
-native sign-in, GitHub-only Push and native Cloudflare Publish. A pending
-control-plane readback currently stops the automatic chain; a bounded
-reconciliation trigger is still needed for delayed provider propagation.
+native sign-in, GitHub-only Push and native Cloudflare Publish. The first
+Studio deployment job now makes up to 15 spaced observations when the
+Cloudflare control plane is temporarily pending or unavailable; an ambiguous
+intent remains terminal. This local reconciliation has not been hosted-tested.
 
 1. Reconcile each branch head and newer hosted drafts before writing. Preserve
    existing CHS/ViroiDoc Worker names, R2 buckets, GitHub Apps, secrets and domains.

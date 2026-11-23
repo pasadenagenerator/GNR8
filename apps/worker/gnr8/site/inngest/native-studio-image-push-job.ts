@@ -12,6 +12,17 @@ const POLL_INTERVAL = '2m';
 type Progress = { state: 'running' | 'complete' | 'pending-review';
   prebuilt?: any; cleanupState?: 'complete' | 'pending-review' };
 
+async function configuredPush(request: Request, client: SupabaseClient) {
+  const { configuredNativeStudioImagePush } = await import(
+    '@/gnr8/standalone/native-studio-configured-image-push');
+  const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
+  if (!trustedGit.startsWith('/'))
+    throw Error('native_studio_image_push_runner_unconfigured');
+  return configuredNativeStudioImagePush({ scope: request.scope, client,
+    sourceId: request.sourceId, sourceCommit: request.sourceCommit,
+    workerId: request.workerId, trustedGit });
+}
+
 const defaults = {
   enabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_ENABLED === '1',
   client: async () => {
@@ -38,15 +49,8 @@ const defaults = {
       ]);
     return { artifact, preflight, resources, transfer, attempt, prebuilt, pushAttempt };
   },
-  push: async (request: Request, client: SupabaseClient) => {
-    const { configuredNativeStudioImagePush } = await import(
-      '@/gnr8/standalone/native-studio-configured-image-push');
-    const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-    if (!trustedGit.startsWith('/')) throw Error('native_studio_image_push_runner_unconfigured');
-    return configuredNativeStudioImagePush({ scope: request.scope, client,
-      sourceId: request.sourceId, sourceCommit: request.sourceCommit,
-      workerId: request.workerId, trustedGit });
-  },
+  push: configuredPush,
+  reconcileCleanup: configuredPush,
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_DEPLOY_ENABLED === '1',
   enqueueDeploy: async (request: Request) => {
     await inngest.send({ id: imageNextEventId('deploy', request),
@@ -69,8 +73,19 @@ export async function runNativeStudioImagePush(value: unknown,
   // attempt without that receipt must never cause a second external push.
   if (evidence.prebuilt) {
     verifyPrebuilt(request, evidence.prebuilt, accountId);
+    let cleanupState: 'complete' | 'pending-review' = 'pending-review';
+    try {
+      const cleanup = await deps.reconcileCleanup(request, client) as Progress;
+      if (cleanup?.state === 'complete' &&
+          JSON.stringify(cleanup.prebuilt) === JSON.stringify(evidence.prebuilt) &&
+          cleanup.cleanupState === 'complete')
+        cleanupState = 'complete';
+    } catch {
+      // A verified registry receipt can proceed while cleanup is reviewed.
+    }
     if (deps.chainEnabled()) await deps.enqueueDeploy(request);
-    return { state: 'complete' as const, prebuilt: evidence.prebuilt };
+    return { state: 'complete' as const, prebuilt: evidence.prebuilt,
+      cleanupState };
   }
   const progress = await deps.push(request, client) as Progress;
   if (!progress || !['running', 'complete', 'pending-review'].includes(progress.state) ||

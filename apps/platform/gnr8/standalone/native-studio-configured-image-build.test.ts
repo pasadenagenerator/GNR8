@@ -23,7 +23,9 @@ const env = { GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED: '1',
 
 function fixture() {
   const events: string[] = [];
-  const store = { read: async () => null, claim: async () => true };
+  const records = new Map<string, unknown>();
+  const store = { read: async (key: string) => records.get(key) ?? null,
+    claim: async () => true };
   const files = [{ path: 'studio/Dockerfile', body: Buffer.from('trusted') }];
   const progress = { state: 'running' };
   const deps = {
@@ -54,7 +56,7 @@ function fixture() {
       return progress;
     },
   } as any;
-  return { deps, events, progress };
+  return { deps, events, progress, records };
 }
 
 test('only verified stored source bytes reach the isolated build phase', async () => {
@@ -62,8 +64,8 @@ test('only verified stored source bytes reach the isolated build phase', async (
   assert.equal(await configuredNativeStudioImageBuild(input, env,
     (async () => { throw Error('provider call'); }) as typeof fetch, f.deps),
   f.progress);
-  assert.deepEqual(f.events, ['snapshot:snap_build', 'snapshot:snap_push',
-    'checkout', 'source', 'advance']);
+  assert.deepEqual(f.events, ['checkout', 'snapshot:snap_build',
+    'snapshot:snap_push', 'source', 'advance']);
 });
 
 test('unconfigured switch or unsafe network fails before any checkout', async () => {
@@ -91,4 +93,13 @@ test('expired snapshot or mismatched checkout blocks source read', async () => {
   await assert.rejects(configuredNativeStudioImageBuild(input, env, fetch,
     changed.deps), /checkout_unverified/);
   assert.equal(changed.events.includes('source'), false);
+});
+
+test('an existing private attempt resumes without a new snapshot TTL gate', async () => {
+  const f = fixture();
+  f.records.set('native-studio/image-drive-attempt-v1.json', { scoped: true });
+  f.deps.snapshot = async () => { throw Error('snapshot expired'); };
+  assert.deepEqual(await configuredNativeStudioImageBuild(input, env, fetch,
+    f.deps), f.progress);
+  assert.deepEqual(f.events, ['checkout', 'source', 'advance']);
 });

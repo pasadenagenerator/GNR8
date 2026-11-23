@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
 import { inngest } from '@/gnr8/inngest/client';
 import { NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT } from './native-studio-public-gateway-job';
 
 export const NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID = 'native-studio-first-deploy-job';
 export const NATIVE_STUDIO_FIRST_DEPLOY_EVENT = 'gnr8/native-studio.first-deploy.requested';
+const MAX_OBSERVATIONS = 15;
+const OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
 type Request = { scope: Scope; actor: string; sourceId: string;
@@ -56,7 +59,13 @@ const defaults = {
   },
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_PUBLIC_GATEWAY_ENABLED === '1',
   enqueuePublicGateway: async (request: Request) => {
-    await inngest.send({ name: NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT, data: request });
+    const identity = [request.scope.agencyId, request.scope.clientId,
+      request.scope.siteId, request.sourceId, request.sourceCommit,
+      request.workerId, request.artifactCommit];
+    const id = `gnr8-native-studio-gateway-${createHash('sha256')
+      .update(JSON.stringify(identity)).digest('hex')}`;
+    await inngest.send({ id, name: NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT,
+      data: request });
   },
 };
 
@@ -115,4 +124,24 @@ export const nativeStudioFirstDeployJob = inngest.createFunction({
   id: NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID, retries: 1,
   concurrency: { limit: 1, key: 'event.data.scope.siteId' },
 }, { event: NATIVE_STUDIO_FIRST_DEPLOY_EVENT },
-async ({ event }) => runNativeStudioFirstDeploy(event.data));
+async ({ event, step }) => settleNativeStudioFirstDeploy(event.data, step));
+
+/** A completed deploy attempt is observed again without repeating the
+ * external write. Only transient control-plane lag gets another readback. */
+export async function settleNativeStudioFirstDeploy(
+  request: unknown,
+  steps: { run: (id: string, fn: () => Promise<unknown>) => Promise<unknown>;
+    sleep: (id: string, duration: string) => Promise<unknown> },
+  run: typeof runNativeStudioFirstDeploy = runNativeStudioFirstDeploy,
+) {
+  for (let index = 0; index < MAX_OBSERVATIONS; index++) {
+    const result = await steps.run(`first-deploy-observe-${index}`,
+      () => run(request)) as Awaited<ReturnType<typeof runNativeStudioFirstDeploy>>;
+    if (result.state !== 'pending-review' ||
+        !['pending', 'readback-unavailable'].includes(result.observation) ||
+        index === MAX_OBSERVATIONS - 1)
+      return result;
+    await steps.sleep(`first-deploy-wait-${index}`, OBSERVATION_INTERVAL);
+  }
+  throw Error('native_studio_first_deploy_observation_exhausted');
+}

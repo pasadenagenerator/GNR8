@@ -48,18 +48,22 @@ deps = defaults) {
     throw Error('native_studio_image_build_not_configured');
   const buildNetworkPolicy = networkPolicy(
     env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS);
-  const snapshots = await Promise.all([buildSnapshotId, pushSnapshotId]
-    .map(snapshotId => deps.snapshot({ snapshotId })));
-  if (snapshots.some(snapshot => snapshot.status !== 'created' ||
-      (snapshot.expiresAt &&
-        snapshot.expiresAt.getTime() <= Date.now() + 2 * 60 * 60_000)))
-    throw Error('native_studio_image_build_snapshot_unavailable');
   return deps.withCheckout(input, async prepared => {
     if (prepared.sourceId !== input.sourceId ||
         prepared.commit !== input.sourceCommit ||
         prepared.workerId !== input.workerId ||
         prepared.site.siteId !== input.scope.siteId)
       throw Error('native_studio_image_build_checkout_unverified');
+    // Snapshot availability matters when creating a Sandbox. A live attempt
+    // is resumed from its private identity and attested session instead.
+    if (!await prepared.store.read('native-studio/image-drive-attempt-v1.json')) {
+      const snapshots = await Promise.all([buildSnapshotId, pushSnapshotId]
+        .map(snapshotId => deps.snapshot({ snapshotId })));
+      if (snapshots.some(snapshot => snapshot.status !== 'created' ||
+          (snapshot.expiresAt && snapshot.expiresAt.getTime() <=
+            Date.now() + 2 * 60 * 60_000)))
+        throw Error('native_studio_image_build_snapshot_unavailable');
+    }
     const source = await deps.source({ store: prepared.store,
       sourceId: prepared.sourceId, site: prepared.site });
     return deps.advance({ scope: input.scope, site: prepared.site,

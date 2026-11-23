@@ -65,6 +65,9 @@ function pushFixture() {
     evidence: async () => { calls.push('evidence'); return evidence; },
     push: async () => { calls.push('push'); evidence = { ...evidence,
       prebuilt }; return { state: 'complete' as const, prebuilt }; },
+    reconcileCleanup: async () => { calls.push('cleanup');
+      return { state: 'complete' as const, prebuilt,
+        cleanupState: 'complete' as const }; },
     chainEnabled: () => true,
     enqueueDeploy: async (value: typeof request) => {
       assert.deepEqual(value, request); calls.push('enqueue'); },
@@ -132,8 +135,9 @@ test('image push resumes exact prebuilt and never repeats ambiguous external pus
     pushAttempt: { sourceId: request.sourceId, commit: request.sourceCommit,
       workerId: request.workerId, archiveSha256: transfer.receipt.archive.sha256 } });
   assert.deepEqual(await runNativeStudioImagePush(request, resumed.deps),
-    { state: 'complete', prebuilt });
-  assert.deepEqual(resumed.calls, ['client', 'authorize', 'evidence', 'enqueue']);
+    { state: 'complete', prebuilt, cleanupState: 'complete' });
+  assert.deepEqual(resumed.calls,
+    ['client', 'authorize', 'evidence', 'cleanup', 'enqueue']);
   const pending = pushFixture();
   pending.setEvidence({ ...base, attempt, transfer, prebuilt: null,
     pushAttempt: { sourceId: request.sourceId,
@@ -217,5 +221,19 @@ test('verified prebuilt continues deployment while reporting pending cleanup', a
   };
   assert.deepEqual(await runNativeStudioImagePush(request, f.deps),
     { state: 'complete', prebuilt, cleanupState: 'pending-review' });
+  assert.equal(f.calls.includes('enqueue'), true);
+});
+
+test('cleanup reconciliation failure does not repeat registry push', async () => {
+  const f = pushFixture();
+  f.setEvidence({ ...base, attempt, transfer, prebuilt,
+    pushAttempt: { sourceId: request.sourceId,
+      commit: request.sourceCommit, workerId: request.workerId,
+      archiveSha256: transfer.receipt.archive.sha256 } });
+  f.deps.reconcileCleanup = async () => {
+    f.calls.push('cleanup'); throw Error('cleanup unavailable'); };
+  assert.deepEqual(await runNativeStudioImagePush(request, f.deps),
+    { state: 'complete', prebuilt, cleanupState: 'pending-review' });
+  assert.equal(f.calls.includes('push'), false);
   assert.equal(f.calls.includes('enqueue'), true);
 });

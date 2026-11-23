@@ -26,7 +26,9 @@ const configured = {
 
 function fixture() {
   const calls: string[] = [];
-  const store = { read: async () => null, claim: async () => true };
+  const records = new Map<string, unknown>();
+  const store = { read: async (key: string) => records.get(key) ?? null,
+    claim: async () => true };
   const deps = {
     snapshot: async ({ snapshotId }: { snapshotId: string }) => {
       calls.push(`snapshot:${snapshotId}`);
@@ -55,7 +57,7 @@ function fixture() {
       return { state: 'running' };
     },
   };
-  return { calls, deps };
+  return { calls, deps, records };
 }
 
 test('configured push uses verified checkout and central token only after phase gate', async () => {
@@ -64,8 +66,8 @@ test('configured push uses verified checkout and central token only after phase 
     (async () => { throw Error('no provider call'); }) as typeof fetch,
     f.deps as any);
   assert.deepEqual(result, { state: 'running' });
-  assert.deepEqual(f.calls, ['snapshot:snap_build', 'snapshot:snap_push',
-    'checkout', 'advance', 'credential']);
+  assert.deepEqual(f.calls, ['checkout', 'snapshot:snap_build',
+    'snapshot:snap_push', 'advance', 'credential']);
 });
 
 test('missing setup stops before checkout or token access', async () => {
@@ -85,4 +87,14 @@ test('foreign Cloudflare account stops before Drive phase', async () => {
     ...configured, GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID: 'f'.repeat(32),
   }, fetch, f.deps as any), /target_changed/);
   assert.equal(f.calls.includes('advance'), false);
+});
+
+test('an existing receiver bypasses the new snapshot TTL gate', async () => {
+  const f = fixture();
+  f.records.set('native-studio/image-push-receiver-intent-v1.json',
+    { scoped: true });
+  f.deps.snapshot = async () => { throw Error('snapshot expired'); };
+  assert.deepEqual(await configuredNativeStudioImagePush(request, configured,
+    fetch, f.deps as any), { state: 'running' });
+  assert.deepEqual(f.calls, ['checkout', 'advance', 'credential']);
 });

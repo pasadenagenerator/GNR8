@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { runNativeStudioFirstDeploy } from './native-studio-first-deploy-job';
+import { runNativeStudioFirstDeploy,
+  settleNativeStudioFirstDeploy } from './native-studio-first-deploy-job';
 
 const request = { scope: {
   agencyId: '11111111-1111-4111-8111-111111111111',
@@ -122,4 +123,38 @@ test('pending Studio observation cannot queue public gateway', async () => {
       observation: 'readback-unavailable' as const }; },
   });
   assert.deepEqual(f.calls, ['client', 'authorize', 'evidence', 'deploy']);
+});
+
+test('delayed control-plane readback resumes without repeating a completed step', async () => {
+  const calls: string[] = [];
+  let count = 0;
+  const steps = {
+    run: async (_id: string, fn: () => Promise<unknown>) => {
+      calls.push('run'); return fn(); },
+    sleep: async (_id: string, duration: string) => {
+      assert.equal(duration, '1m'); calls.push('sleep'); },
+  };
+  const result = await settleNativeStudioFirstDeploy(request, steps,
+    (async () => { count++; return count < 3 ? {
+      state: 'pending-review', commit: request.sourceCommit,
+      observation: 'pending' } : {
+      state: 'reconcile-required', commit: request.sourceCommit,
+      observation: 'verified-source-control-plane' };
+    }) as typeof runNativeStudioFirstDeploy);
+  assert.equal(result.state, 'reconcile-required');
+  assert.deepEqual(calls, ['run', 'sleep', 'run', 'sleep', 'run']);
+});
+
+test('uncertain intent is terminal and does not start another observation', async () => {
+  const calls: string[] = [];
+  const steps = {
+    run: async (_id: string, fn: () => Promise<unknown>) => {
+      calls.push('run'); return fn(); },
+    sleep: async () => { calls.push('sleep'); },
+  };
+  const result = await settleNativeStudioFirstDeploy(request, steps,
+    (async () => ({ state: 'pending-review', commit: request.sourceCommit,
+      observation: 'existing-intent' })) as typeof runNativeStudioFirstDeploy);
+  assert.equal(result.observation, 'existing-intent');
+  assert.deepEqual(calls, ['run']);
 });
