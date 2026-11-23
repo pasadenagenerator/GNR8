@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inngest } from '@/gnr8/inngest/client';
+import { NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT } from './native-studio-public-gateway-job';
 
 export const NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID = 'native-studio-first-deploy-job';
 export const NATIVE_STUDIO_FIRST_DEPLOY_EVENT = 'gnr8/native-studio.first-deploy.requested';
@@ -47,6 +48,10 @@ const defaults = {
       sourceId: request.sourceId, sourceCommit: request.sourceCommit,
       workerId: request.workerId, trustedGit, trustedWrangler });
   },
+  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_PUBLIC_GATEWAY_ENABLED === '1',
+  enqueuePublicGateway: async (request: Request) => {
+    await inngest.send({ name: NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT, data: request });
+  },
 };
 
 /** The separate trusted job receives identities only. It checks the scoped
@@ -80,8 +85,15 @@ export async function runNativeStudioFirstDeploy(request: unknown,
       preflight.workerId !== workerId || !SOURCE.test(preflight.identity) ||
       !Number.isSafeInteger(preflight.files) || preflight.files < 2)
     throw Error('native_studio_first_deploy_evidence_unverified');
-  return deps.deploy({ scope, actor, sourceId, sourceCommit,
-    workerId, artifactCommit }, client);
+  const verified = { scope, actor, sourceId, sourceCommit,
+    workerId, artifactCommit };
+  const result = await deps.deploy(verified, client);
+  if (result.commit !== sourceCommit)
+    throw Error('native_studio_first_deploy_result_unverified');
+  if (deps.chainEnabled() && result.state === 'reconcile-required' &&
+      result.observation === 'verified-source-control-plane')
+    await deps.enqueuePublicGateway(verified);
+  return result;
 }
 
 export const nativeStudioFirstDeployJob = inngest.createFunction({

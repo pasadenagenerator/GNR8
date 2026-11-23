@@ -533,8 +533,20 @@ GitHub head, active Studio and domain vacancy, then claims one append-only
 attempt before its exact `wrangler deploy --config wrangler.json --tag` command.
 It rejects local dotenv files before loading the Cloudflare credential. A lost
 response is reconciled against the tagged active public version, without a
-second deploy. The command has mocked local coverage; no hosted caller or live
-public Worker deployment is connected yet.
+second deploy. A confirmed active Studio result now queues one scoped public
+gateway job when `GNR8_NATIVE_STUDIO_PUBLIC_GATEWAY_ENABLED=1`. The job
+rechecks actor authorization and the exact private build artifact, prepares
+the public intent only after verifying the live Studio version and vacant
+bound hostname, then invokes the existing one-attempt public deployment gate.
+Its event cannot select a Worker, domain or credential. Local mocked tests
+cover the job boundary and the underlying intent/deploy gates. On a retry after
+a recorded public attempt, it skips the vacancy-only intent preparer and lets
+the existing deploy coordinator verify the exact intent and read back the
+active version; it cannot issue a second deploy. A pending Studio readback does
+not queue it; that
+state still needs later reconciliation. The flag remains off until the hosted
+runner, central credentials and Cloudflare readback are verified. No live
+public Worker deployment has occurred through this path.
 The existing Inngest resource-reservation job now queues secret preparation
 automatically after an exact reservation when both stage flags are enabled.
 The event carries only site scope and actor; the second job rechecks authority
@@ -627,8 +639,8 @@ adapter now resolves the resource receipt, build handoff, exact first-deploy
 intent and attempt for both Workers, central Cloudflare credential, and a
 repository-scoped GitHub read token before invoking that recorder. It checks
 the active public version's exact first-deploy tag. It does not take Worker IDs,
-commit or domain from an event. It still has no hosted caller or connected
-public-gateway deployment, so it cannot yet produce a receipt in production.
+commit or domain from an event. It still has no hosted caller; the new public
+gateway job remains disabled, so it cannot yet produce a receipt in production.
 A central, trusted token issuer is available for
 that later job. It signs a short-lived GitHub App JWT with the shared private
 key, requests `contents:write` for the first push or `contents:read` for

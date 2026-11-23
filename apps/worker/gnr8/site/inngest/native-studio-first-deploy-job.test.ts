@@ -39,8 +39,11 @@ function fixture() {
       assert.deepEqual(received, request);
       calls.push('deploy');
       return { state: 'reconcile-required' as const,
-        commit: request.sourceCommit };
+        commit: request.sourceCommit,
+        observation: 'verified-source-control-plane' as const };
     },
+    chainEnabled: () => false,
+    enqueuePublicGateway: async () => { calls.push('enqueue'); },
   };
   return { calls, deps };
 }
@@ -73,6 +76,31 @@ test('revoked actor or mismatched proof prevents deployment', async () => {
 test('exact scoped proof enters one trusted deploy coordinator', async () => {
   const f = fixture();
   assert.deepEqual(await runNativeStudioFirstDeploy(request, f.deps),
-    { state: 'reconcile-required', commit: request.sourceCommit });
+    { state: 'reconcile-required', commit: request.sourceCommit,
+      observation: 'verified-source-control-plane' });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'evidence', 'deploy']);
+});
+
+test('verified active Studio queues only scoped public gateway identities', async () => {
+  const f = fixture();
+  await runNativeStudioFirstDeploy(request, { ...f.deps,
+    chainEnabled: () => true,
+    enqueuePublicGateway: async value => {
+      assert.deepEqual(value, request);
+      f.calls.push('enqueue');
+    },
+  });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'evidence',
+    'deploy', 'enqueue']);
+});
+
+test('pending Studio observation cannot queue public gateway', async () => {
+  const f = fixture();
+  await runNativeStudioFirstDeploy(request, { ...f.deps,
+    chainEnabled: () => true,
+    deploy: async () => { f.calls.push('deploy'); return {
+      state: 'pending-review' as const, commit: request.sourceCommit,
+      observation: 'readback-unavailable' as const }; },
+  });
   assert.deepEqual(f.calls, ['client', 'authorize', 'evidence', 'deploy']);
 });
