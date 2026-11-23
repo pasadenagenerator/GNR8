@@ -1085,7 +1085,8 @@ other through the Drive coordinator and private receipt writer. No verified
 Docker snapshots or network allowlists have been configured. First deployment
 remains disabled until that hosted path and one scoped end-to-end run pass.
 The first-deploy Worker job now requires the exact scoped prebuilt-image
-receipt before it calls the coordinator that loads deploy secrets. A two-stage
+receipt and its match to the reserved Cloudflare account before it calls the
+coordinator that loads deploy secrets. A two-stage
 Drive adapter is also available locally: the first invocation claims a
 private, site-scoped attempt before creating a Drive, stops the builder, then
 records the Drive identity and producer archive receipt. A second invocation
@@ -1105,6 +1106,14 @@ Docker command. Detached Sandbox command polling or a verified longer Worker
 duration is still needed before job wiring. The current preflight job still
 dispatches first deployment directly, so no image job is registered or
 enabled yet.
+The SDK 3.8 detached-command boundary is now locally implemented. It claims a
+private per-command intent before starting Docker or Wrangler, records the
+command and session IDs after start, and polls only the same active session.
+It reads that session directly, preventing the SDK from auto-resuming a
+stopped Sandbox during a poll. An ambiguous start remains pending review and
+cannot launch a second command. This helper is not yet connected to the
+build/save/load/push callbacks or Worker jobs. The current 30-minute Sandbox
+timeout also needs a verified stage budget before those commands are wired.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

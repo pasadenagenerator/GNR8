@@ -18,7 +18,9 @@ preflight: { identity: 'e'.repeat(64), sourceId: request.sourceId,
   commit: request.sourceCommit, workerId: request.workerId, files: 10 },
 prebuilt: { accountId: 'f'.repeat(32), commit: request.sourceCommit,
   digest: '1'.repeat(64), siteId: request.scope.siteId,
-  sourceId: request.sourceId, workerId: request.workerId } };
+  sourceId: request.sourceId, workerId: request.workerId },
+resources: { target: { scope: request.scope, accountId: 'f'.repeat(32) },
+  workers: { studio: { id: request.workerId } } } };
 
 function fixture() {
   const calls: string[] = [];
@@ -80,6 +82,14 @@ test('revoked actor or mismatched proof prevents deployment', async () => {
       return { ...evidence, prebuilt: null as any }; },
   }), /evidence_unverified/);
   assert.deepEqual(missingImage.calls, ['client', 'authorize', 'evidence']);
+  const foreignAccount = fixture();
+  await assert.rejects(runNativeStudioFirstDeploy(request, {
+    ...foreignAccount.deps,
+    evidence: async () => { foreignAccount.calls.push('evidence');
+      return { ...evidence, prebuilt: { ...evidence.prebuilt,
+        accountId: '9'.repeat(32) } }; },
+  }), /evidence_unverified/);
+  assert.deepEqual(foreignAccount.calls, ['client', 'authorize', 'evidence']);
 });
 
 test('exact scoped proof enters one trusted deploy coordinator', async () => {

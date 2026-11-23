@@ -14,6 +14,8 @@ type Preflight = { identity: string; sourceId: string; commit: string;
   workerId: string; files: number };
 type Prebuilt = { accountId: string; commit: string; digest: string;
   siteId: string; sourceId: string; workerId: string };
+type Resources = { target: { scope: Scope; accountId: string };
+  workers: { studio: { id: string } } };
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const SOURCE = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40,64}$/;
@@ -33,12 +35,13 @@ const defaults = {
     const { SupabasePublicationStore } = await import('@/gnr8/standalone/publication-store');
     const store = new SupabasePublicationStore(client,
       process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
-    const [artifact, preflight, prebuilt] = await Promise.all([
+    const [artifact, preflight, prebuilt, resources] = await Promise.all([
       store.read<Artifact>('native-studio/build-artifact-github-push-v1.json'),
       store.read<Preflight>('native-studio/first-deploy-dry-run-v1.json'),
       store.read<Prebuilt>('native-studio/prebuilt-image-v1.json'),
+      store.read<Resources>('native-studio/resources-reserved-v1.json'),
     ]);
-    return { artifact, preflight, prebuilt };
+    return { artifact, preflight, prebuilt, resources };
   },
   deploy: async (request: Request, client: SupabaseClient) => {
     const { runConfiguredNativeStudioFirstDeploy } = await import(
@@ -80,7 +83,7 @@ export async function runNativeStudioFirstDeploy(request: unknown,
   const client = await deps.client();
   if (!client) throw Error('native_studio_first_deploy_store_unavailable');
   await deps.authorize(client, actor, scope.agencyId);
-  const { artifact, preflight, prebuilt } = await deps.evidence(scope, client);
+  const { artifact, preflight, prebuilt, resources } = await deps.evidence(scope, client);
   if (artifact?.sourceId !== sourceId || artifact.sourceCommit !== sourceCommit ||
       artifact.workerId !== workerId || artifact.artifactCommit !== artifactCommit ||
       artifact.branch !== `gnr8-build-${sourceCommit}` ||
@@ -91,7 +94,11 @@ export async function runNativeStudioFirstDeploy(request: unknown,
         'accountId,commit,digest,siteId,sourceId,workerId' ||
       !WORKER.test(prebuilt.accountId) || !SOURCE.test(prebuilt.digest) ||
       prebuilt.siteId !== scope.siteId || prebuilt.sourceId !== sourceId ||
-      prebuilt.commit !== sourceCommit || prebuilt.workerId !== workerId)
+      prebuilt.commit !== sourceCommit || prebuilt.workerId !== workerId ||
+      !resources || JSON.stringify(resources.target?.scope) !==
+        JSON.stringify(scope) ||
+      resources.target.accountId !== prebuilt.accountId ||
+      resources.workers?.studio?.id !== workerId)
     throw Error('native_studio_first_deploy_evidence_unverified');
   const verified = { scope, actor, sourceId, sourceCommit,
     workerId, artifactCommit };
