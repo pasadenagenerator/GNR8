@@ -1340,6 +1340,16 @@ govern `/studio` or a child path. The zone ID must come from the centrally
 verified target, not an event payload. This is still prerequisite evidence,
 not owner login.
 
+The local setup path now uses one centrally configured Access manager token
+for all new sites. It records a site-bound, single-use creation intent,
+creates the exact Access application without an Allow policy, reconciles a
+lost response by reading complete account and zone inventories, then adds
+one exact-email owner/admin policy with a separate single-use intent. The
+result is setup evidence only. A changed membership after a policy intent
+requires a later reconciliation path; the setup must not replay a stale
+policy or silently issue a second POST. This setup is not yet invoked by the
+new-site bootstrap and no live Access resources were created here.
+
 The existing first-open and authenticated-health checks remain specific to
 repository/GitHub login. Access mode requires a separately versioned source
 identity carrying the verified application audience, team domain and exact
