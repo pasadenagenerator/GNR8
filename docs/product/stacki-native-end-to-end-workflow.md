@@ -1064,15 +1064,19 @@ configured or exercised for this path. The deploy switch
 remains off.
 
 The local Vercel Drive adapter now creates a per-attempt Drive, attaches it to
-a fresh build Sandbox, stops that Sandbox before loading the Cloudflare
-credential, then attaches a read-only Drive snapshot to a separate push
-Sandbox. It requires explicit restricted network policies and two pinned
-Sandbox snapshots, and deletes the temporary Drive after both Sandboxes stop.
-Mocked SDK tests prove this ordering and cleanup; no Drive or Sandbox has been
+a fresh build Sandbox, stops that Sandbox, then attaches a read-only Drive
+snapshot to a separate push Sandbox. The receiver must rehash and size-check
+the archive on that snapshot before the Cloudflare credential loader runs.
+The trusted receipt writer accepts that remote verification result while also
+rechecking the scoped source handoff and Docker context. A mismatch prevents
+the credential load or private receipt claim. The adapter requires explicit
+restricted network policies and two pinned Sandbox snapshots, and deletes
+the temporary Drive after both Sandboxes stop. Mocked SDK and receiver tests
+prove ordering, integrity checks and cleanup; no Drive or Sandbox has been
 created through this adapter yet. The archive-producing and registry-pushing
-commands are not wired into these two callbacks, and no verified Docker
-snapshots or network allowlists have been configured. First deployment remains
-disabled until that hosted path and one scoped end-to-end run pass.
+commands are not wired into these callbacks, and no verified Docker snapshots
+or network allowlists have been configured. First deployment remains disabled
+until that hosted path and one scoped end-to-end run pass.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

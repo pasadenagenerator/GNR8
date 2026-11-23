@@ -107,3 +107,30 @@ test('trusted receiver refuses a changed source before recording an archive', as
   }), /source_unverified/);
   assert.equal(saved.size, 0);
 });
+
+test('remote archive must be rehashed before its receipt is claimed', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'gnr8-image-drive-receive-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const project = join(root, 'project');
+  await mkdir(project);
+  const archivePath = '/gnr8-image/image.tar';
+  const receipt = { sourceId, commit, workerId, scope,
+    siteId: site.siteId, accountId: site.accountId,
+    archive: { bytes: 17, sha256: 'a'.repeat(64) } };
+  const saved = new Map();
+  const store = { read: async key => saved.get(key) ?? null,
+    claim: async (key, value) => { saved.set(key, value); return true; } };
+  const input = { project, archivePath, receipt, store,
+    sourceId, commit, workerId, scope, site };
+  const deps = {
+    verifyHandoff: async () => ({ sourceId, commit, workerId, scope }),
+    verifyImage: async () => ({ files: 2 }),
+    verifyArchive: async () => { throw Error('remote digest mismatch'); },
+  };
+  await assert.rejects(recordStudioImageArchiveHandoff(input, deps),
+    /remote digest mismatch/);
+  assert.equal(saved.size, 0);
+  deps.verifyArchive = async () => receipt;
+  assert.equal(await recordStudioImageArchiveHandoff(input, deps), receipt);
+  assert.equal(saved.size, 1);
+});

@@ -25,13 +25,15 @@ const sdk: Sdk = { drive: Drive, sandbox: Sandbox };
  * not called until the build VM has stopped; the receiving VM mounts a
  * point-in-time read-only snapshot of the Drive.
  */
-export async function withNativeStudioImageDrive<Receipt, Result>(input: {
+export async function withNativeStudioImageDrive<Receipt, Verified, Result>(input: {
   siteId: string; sourceId: string;
   buildSnapshotId: string; pushSnapshotId: string;
   buildNetworkPolicy: NetworkPolicy; pushNetworkPolicy: NetworkPolicy;
   build: (sandbox: Sandbox, archivePath: string) => Promise<Receipt>;
+  verify: (sandbox: Sandbox, archivePath: string,
+    receipt: Receipt) => Promise<Verified>;
   loadCredential: () => Promise<string>;
-  push: (sandbox: Sandbox, archivePath: string, receipt: Receipt,
+  push: (sandbox: Sandbox, archivePath: string, verified: Verified,
     credential: string) => Promise<Result>;
 }, dependencies: Sdk = sdk): Promise<Result> {
   if (!input || !UUID.test(input.siteId) || !SHA.test(input.sourceId) ||
@@ -40,6 +42,7 @@ export async function withNativeStudioImageDrive<Receipt, Result>(input: {
       !restricted(input.buildNetworkPolicy) ||
       !restricted(input.pushNetworkPolicy) ||
       typeof input.build !== 'function' ||
+      typeof input.verify !== 'function' ||
       typeof input.loadCredential !== 'function' ||
       typeof input.push !== 'function')
     throw Error('native_studio_image_drive_input_invalid');
@@ -61,9 +64,6 @@ export async function withNativeStudioImageDrive<Receipt, Result>(input: {
     const receipt = await input.build(builder, `${MOUNT}/image.tar`);
     await builder.stop();
     builder = undefined;
-    const credential = await input.loadCredential();
-    if (typeof credential !== 'string' || !credential)
-      throw Error('native_studio_image_drive_credential_unavailable');
     receiver = await dependencies.sandbox.create({
       name: `gnr8-image-push-${input.siteId.slice(0, 8)}`,
       source: { type: 'snapshot', snapshotId: input.pushSnapshotId },
@@ -72,7 +72,11 @@ export async function withNativeStudioImageDrive<Receipt, Result>(input: {
       region: 'iad1', persistent: false, timeout: 30 * 60_000,
       resources: { vcpus: 2 }, ports: [],
     });
-    return await input.push(receiver, `${MOUNT}/image.tar`, receipt, credential);
+    const verified = await input.verify(receiver, `${MOUNT}/image.tar`, receipt);
+    const credential = await input.loadCredential();
+    if (typeof credential !== 'string' || !credential)
+      throw Error('native_studio_image_drive_credential_unavailable');
+    return await input.push(receiver, `${MOUNT}/image.tar`, verified, credential);
   } finally {
     try { if (receiver) await receiver.stop(); }
     finally {

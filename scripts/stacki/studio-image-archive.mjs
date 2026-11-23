@@ -54,7 +54,7 @@ function identity(input) {
     siteId: site.siteId, accountId: site.accountId };
 }
 
-export async function verifyStudioImageArchive(input) {
+export function verifyStudioImageArchiveIdentity(input) {
   const expected = identity(input);
   const { archivePath, receipt } = input;
   if (typeof archivePath !== 'string' || !isAbsolute(archivePath) ||
@@ -67,7 +67,12 @@ export async function verifyStudioImageArchive(input) {
       !Number.isSafeInteger(receipt.archive.bytes) ||
       receipt.archive.bytes < 1 || receipt.archive.bytes > MAX_ARCHIVE)
     throw Error('native_studio_image_archive_receipt_invalid');
-  if (!same(await archiveDigest(archivePath), receipt.archive))
+  return receipt;
+}
+
+export async function verifyStudioImageArchive(input) {
+  const receipt = verifyStudioImageArchiveIdentity(input);
+  if (!same(await archiveDigest(input.archivePath), receipt.archive))
     throw Error('native_studio_image_archive_changed');
   return receipt;
 }
@@ -81,7 +86,10 @@ export async function recordStudioImageArchiveHandoff(input, deps = {}) {
       !store || typeof store.read !== 'function' ||
       typeof store.claim !== 'function')
     throw Error('native_studio_image_archive_input_invalid');
-  await verifyStudioImageArchive(input);
+  verifyStudioImageArchiveIdentity(input);
+  const verified = await (deps.verifyArchive ?? verifyStudioImageArchive)(input);
+  if (!same(verified, receipt))
+    throw Error('native_studio_image_archive_changed');
   const handoff = await (deps.verifyHandoff ?? verifyStudioBuildHandoff)(input);
   const image = await (deps.verifyImage ?? verifyStudioImageSite)({ project });
   if (handoff?.sourceId !== sourceId || handoff.commit !== commit ||
