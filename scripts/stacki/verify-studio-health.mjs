@@ -42,6 +42,38 @@ export async function verifyPublicStudioEntry(input, transport = fetch) {
   }
 }
 
+/** Observe an unauthenticated Cloudflare Access challenge for the protected
+ * editor route. This is only network evidence; the exact Access application,
+ * audience and policy must be verified through the control plane separately.
+ */
+export async function verifyAccessProtectedStudioEntry(input, transport = fetch) {
+  const studio = origin(input?.studioOrigin);
+  const team = String(input?.authDomain ?? '').toLowerCase();
+  if (!/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(team) ||
+      typeof transport !== 'function')
+    throw Error('native_studio_health_input_invalid');
+  try {
+    const response = await transport(`${studio}/studio/`, { method: 'GET',
+      redirect: 'manual', headers: { accept: 'text/html' },
+      signal: AbortSignal.timeout(30_000) });
+    if (response.status !== 302) throw Error('native_studio_access_entry_unready');
+    let location;
+    try { location = new URL(response.headers.get('location') ?? '', studio); }
+    catch { throw Error('native_studio_access_entry_unready'); }
+    if (location.protocol !== 'https:' || location.username || location.password ||
+        ![team, new URL(studio).hostname].includes(location.hostname) ||
+        !(location.pathname === '/cdn-cgi/access/login' ||
+          location.pathname.startsWith('/cdn-cgi/access/login/')))
+      throw Error('native_studio_access_entry_unready');
+    await response.body?.cancel();
+    return { state: 'access-studio-challenge-observed', studioOrigin: studio };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'native_studio_access_entry_unready')
+      throw error;
+    throw Error('native_studio_access_entry_unavailable');
+  }
+}
+
 async function readJson(transport, url, cookie) {
   const response = await transport(url, { method: 'GET', redirect: 'manual',
     headers: { cookie, accept: 'application/json' }, signal: AbortSignal.timeout(30_000) });

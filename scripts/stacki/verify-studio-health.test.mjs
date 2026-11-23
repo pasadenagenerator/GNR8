@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { verifyAuthenticatedStudioHealth,
-  verifyPublicStudioEntry } from './verify-studio-health.mjs';
+  verifyPublicStudioEntry, verifyAccessProtectedStudioEntry } from './verify-studio-health.mjs';
 
 const studioOrigin = 'https://studio.example.com';
 const previewOrigin = 'https://preview.example.com';
@@ -38,6 +38,35 @@ test('public entry rejects redirects, foreign pages and unavailable hosts', asyn
   await assert.rejects(verifyPublicStudioEntry({ studioOrigin }, async () => {
     throw Error('network');
   }), /native_studio_public_entry_unavailable/);
+});
+
+test('Access entry observes only a challenge at the bound editor host', async () => {
+  const authDomain = 'gnr8.cloudflareaccess.com';
+  const calls = [];
+  const transport = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(null, { status: 302, headers: {
+      location: `https://${authDomain}/cdn-cgi/access/login/test`,
+    } });
+  };
+  assert.deepEqual(await verifyAccessProtectedStudioEntry({ studioOrigin, authDomain }, transport),
+    { state: 'access-studio-challenge-observed', studioOrigin });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${studioOrigin}/studio/`);
+  assert.equal(calls[0].options.redirect, 'manual');
+  assert.equal(calls[0].options.headers.cookie, undefined);
+});
+
+test('Access entry rejects a public page, foreign redirect or wrong login path', async () => {
+  const authDomain = 'gnr8.cloudflareaccess.com';
+  for (const response of [
+    new Response('<html>public</html>'),
+    new Response(null, { status: 302, headers: {
+      location: 'https://other.cloudflareaccess.com/cdn-cgi/access/login/test' } }),
+    new Response(null, { status: 302, headers: {
+      location: `https://${authDomain}/other` } }),
+  ]) await assert.rejects(verifyAccessProtectedStudioEntry({ studioOrigin, authDomain },
+    async () => response), /native_studio_access_entry_unready/);
 });
 
 function fixture(overrides = {}) {

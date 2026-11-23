@@ -39,6 +39,7 @@
     "../../scripts/stacki/native-access-roles.mjs",
     "../../scripts/stacki/native-access-role-freshness.mjs",
     "../../scripts/stacki/first-studio-github-push.mjs",
+    "../../scripts/stacki/verify-studio-health.mjs",
     "../../scripts/stacki/load-pinned-release.mjs",
     "../../scripts/stacki/prepare-from-confirmed-export.mjs",
     "../../scripts/stacki/build-artifact-transfer.mjs",

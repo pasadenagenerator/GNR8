@@ -1322,3 +1322,26 @@ revocation therefore needs an additional provider-level access cut-off or a
 documented emergency lock; the roles file alone cannot guarantee it. Only
 after the roles file and provider policy are verified should the owner login,
 AI Apply, native Push and native Publish be accepted on a representative site.
+
+### Cloudflare Access evidence before first sign-in
+
+The read-only Access prerequisite checks the current scoped site, a
+self-hosted application for exactly `<site host>/studio`, its audience tag and
+team domain, one complete Allow policy containing only current verified
+owner/admin email identities, and an unauthenticated Access login challenge
+on the current host. The path `/studio` inherits its children in Cloudflare
+Access; `/studio/*` misses the parent and `/studio*` covers additional sibling
+paths ([Cloudflare path rules](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/)).
+The checks re-read the site binding and membership after provider
+readback. They do not prove an authenticated editor session or create an
+Access application. A more-specific overlapping application must also be
+excluded before this evidence can become a first-open gate.
+
+The existing first-open and authenticated-health checks remain specific to
+repository/GitHub login. Access mode requires a separately versioned source
+identity carrying the verified application audience, team domain and exact
+roles file; provider-aware Worker readback and authenticated owner acceptance
+must follow. Membership removal also needs provider session revocation before
+it can claim immediate loss of access, because Stacki can use cached roles
+during a GitHub outage. No existing repository-mode site is switched by these
+read-only checks.
