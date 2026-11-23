@@ -47,9 +47,14 @@ export async function exportStandaloneProject(input:StandaloneExportInput|Stored
  if(!sourcePackage)throw Error('standalone_toolchain_unverified');
  let sourceToolchain:{dependencies?:{astro?:string};engines?:{node?:string}};
  try{sourceToolchain=JSON.parse(sourcePackage.body.toString('utf8'));}catch{throw Error('standalone_toolchain_unverified');}
- const astro7=sourceToolchain.dependencies?.astro==='7.4.4'&&sourceToolchain.engines?.node==='26.13.0';
- if(!astro7&&sourceToolchain.dependencies?.astro!=='5.18.2')throw Error('standalone_toolchain_transform_unsupported');
- const nodeMajor=astro7?'26':'22';
+ const sourceAstro=sourceToolchain.dependencies?.astro;
+ if(sourceAstro!=='5.18.2'&&
+   !(['7.4.4','7.4.7'].includes(sourceAstro??'')&&
+     ['26.x','26.13.0'].includes(sourceToolchain.engines?.node??'')))
+  throw Error('standalone_toolchain_transform_unsupported');
+ // Existing Astro 5/7 captures share one reviewed Astro 7.4.7 output toolchain.
+ const astro7=true;
+ const nodeMajor='26';
  const templateRoot=[join(process.cwd(),'gnr8/standalone/templates'),join(process.cwd(),'apps/platform/gnr8/standalone/templates'),join(process.cwd(),'../platform/gnr8/standalone/templates')].find(p=>existsSync(join(p,'contact-runtime.mjs')));
  if(!templateRoot)throw Error('standalone_templates_not_packaged');
  const templates=await Promise.all(['package.json','package-lock.json','optimize.mjs'].map(async name=>({name,body:await readFile(join(templateRoot,astro7&&name!=='optimize.mjs'?name.replace('.json','.astro7.json'):name))})));

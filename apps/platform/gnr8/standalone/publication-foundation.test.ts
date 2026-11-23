@@ -33,9 +33,11 @@ test('build must cover every route and bind the unchanged exported source',()=>{
  assert.equal(requireFoundationBuild(files,['/','/about'],proof).sourceSha256,hash);
  for(const changed of [{...proof,build:{completed:false}},{...proof,sourceComparison:{...proof.sourceComparison,finalAggregateSha256:'b'.repeat(64)}},{...proof,export:{...proof.export,files:[{path:'index.html'}]}}])assert.throws(()=>requireFoundationBuild(files,['/','/about'],changed),/standalone_build_/);
 });
-test('Astro 7 cannot be silently exported as Astro 5, nor can an unpinned legacy range claim exact equivalence',()=>{
- const pkg=(astro:string)=>[{path:'package.json',body:Buffer.from(JSON.stringify({dependencies:{astro}}))}];
- assert.throws(()=>requireCompatibleStandaloneToolchain(pkg('7.4.4'),pkg('5.18.2')),/transform_unsupported/);
- assert.throws(()=>requireCompatibleStandaloneToolchain(pkg('^5.0.0'),pkg('5.18.2')),/transform_unsupported/);
- assert.doesNotThrow(()=>requireCompatibleStandaloneToolchain(pkg('5.18.2'),pkg('5.18.2')));
+test('only reviewed older Astro sources may migrate to the pinned Astro 7 output',()=>{
+ const pkg=(astro:string,node?:string)=>[{path:'package.json',body:Buffer.from(JSON.stringify({dependencies:{astro},engines:{node}}))}];
+ for(const source of ['5.18.2','7.4.4','7.4.7'])
+  assert.doesNotThrow(()=>requireCompatibleStandaloneToolchain(pkg(source),pkg('7.4.7','26.x')));
+ for(const source of ['^5.0.0','7.4.6'])
+  assert.throws(()=>requireCompatibleStandaloneToolchain(pkg(source),pkg('7.4.7','26.x')),/transform_unsupported/);
+ assert.throws(()=>requireCompatibleStandaloneToolchain(pkg('7.4.4'),pkg('5.18.2','22.x')),/transform_unsupported/);
 });

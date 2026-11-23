@@ -1,6 +1,7 @@
 /** Local-only Git preparation for one dedicated website repository. */
 import { execFileSync } from 'node:child_process';
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstatSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { prepareFromStoredRelease, readStoredVerifiedAstroStudio } from './prepare-from-confirmed-export.mjs';
@@ -16,6 +17,15 @@ const gitBytes = (root, args, input) => execFileSync('git',
   { input, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 96 * 1024 * 1024,
     env: { ...process.env, GIT_ATTR_NOSYSTEM: '1' } });
 export function assertStudioCheckoutClean(project, { allowBuildOutputs = false } = {}) {
+  // Generated projects ignore dist/, so Git status alone cannot distinguish a
+  // clean source checkout from one with local build output before the build.
+  for (const path of ['dist', 'studio/dist']) {
+    let output;
+    try { output = lstatSync(join(project, path)); }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+    if (!allowBuildOutputs || !output.isDirectory() || output.isSymbolicLink())
+      throw Error('Studio checkout has local changes');
+  }
   const changes = gitBytes(project,
     ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
     .toString('utf8').split('\0').filter(Boolean);

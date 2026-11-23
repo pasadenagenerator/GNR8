@@ -176,6 +176,11 @@ Review and deploy each native update after preserving current drafts.
 
 ## Lumos library
 
+New verified native Studio sources include the vendored, digest-pinned Lumos
+1.0.4 library automatically. Preparation upgrades the native derivative to
+Astro 7.4.7 and sets its exact site origin and local Inter font. The following
+offline adapter remains for separately reviewed existing project checkouts:
+
 ```sh
 node scripts/stacki/prepare-lumos-library.mjs PROJECT VERIFIED_LUMOS_CHECKOUT
 ```
@@ -186,9 +191,10 @@ loads required Lumos styles when used, and merges native folder/insertion/style
 settings. It preserves existing page source and component defaults. Edited library
 files stop a repeat; upgrades require a reviewed migration rather than overwriting
 customer edits. Lumos pages and sample navigation are not installed as site routes.
-Configure Astro >=7.4.7, supported Node >=22.23.4, `site` and the local Inter font as
-specified in the result before using BaseLayout. These are site settings, not edits
-to Stacki. Existing designs need not import Lumos styles until they use its components.
+For a separately adapted existing checkout, configure Astro >=7.4.7,
+supported Node >=22.23.4, `site` and the local Inter font as specified in the
+result before using BaseLayout. These are site settings, not edits to Stacki.
+Existing designs need not import Lumos styles until they use its components.
 
 ## Retained sandbox-source migration
 

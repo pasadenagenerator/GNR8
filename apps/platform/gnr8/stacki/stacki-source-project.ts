@@ -108,7 +108,7 @@ function invalid(): never { throw new StackiDraftError(422, "STACKI_SOURCE_PROJE
 /** Explicit preparation of a NEW baseline, never an edit to a saved checkpoint.
  * The caller must independently verify the retained source and persist the new
  * source identity/provenance before treating it as a candidate baseline.
- * This intentionally supports only the old GNR8-generated dependency manifest.
+ * This intentionally supports only the reviewed GNR8-generated manifests.
  */
 export function prepareStackiAstro7Baseline(input: {
   files: StackiDraftFile[];
@@ -137,25 +137,34 @@ export function prepareStackiAstro7Baseline(input: {
     return Object.keys(value).length === Object.keys(expected).length && Object.entries(expected).every(([key, item]) => value[key] === item);
   };
   const currentAstro7 = Object.keys(pkg).sort().join(',') === 'dependencies,engines,name,private,scripts,type,version' &&
-    exact(pkg.engines, {node:'26.x'}) && exact(pkg.dependencies, {astro:'7.4.4'});
+    exact(pkg.engines, {node:'26.13.0'}) && exact(pkg.dependencies, {astro:'7.4.7'});
+  const generatedAstro7 = Object.keys(pkg).sort().join(',') === 'dependencies,engines,name,private,scripts,type,version' &&
+    exact(pkg.engines, {node:'26.x'}) && exact(pkg.dependencies, {astro:'7.4.7'});
+  const olderAstro7 = Object.keys(pkg).sort().join(',') === 'dependencies,engines,name,private,scripts,type,version' &&
+    (exact(pkg.engines, {node:'26.x'}) || exact(pkg.engines, {node:'26.13.0'})) &&
+    exact(pkg.dependencies, {astro:'7.4.4'});
   const legacyAstro5 = Object.keys(pkg).sort().join(',') === 'dependencies,name,private,scripts,type,version' &&
     exact(pkg.dependencies, {astro:'^5.0.0'});
-  if ((!currentAstro7 && !legacyAstro5) ||
+  if ((!currentAstro7 && !generatedAstro7 && !olderAstro7 && !legacyAstro5) ||
       typeof pkg.name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(pkg.name) || pkg.version !== '0.0.0' || pkg.private !== true || pkg.type !== 'module' ||
       !exact(pkg.scripts, {
         dev: 'astro dev --host 127.0.0.1 --port 4321', build: 'astro build', preview: 'astro preview --host 127.0.0.1 --port 4321',
       })) invalid();
   const marker = "export default defineConfig({output:'static',vite:{plugins:[{";
-  if (!config.includes("name:'gnr8-retained-assets-v1',apply:'serve'") || config.split(marker).length !== 2) invalid();
-  if (currentAstro7) return {files,sourceSnapshot:previous,derivedFromSourceSnapshot:original,
-    preparationVersion:'gnr8-stacki-astro7-baseline:v1' as const,changedPaths:[] as string[]};
+  const compatibleMarker = "export default defineConfig({output:'static',vite:{build:{cssMinify:false},plugins:[{";
+  const originalConfig = config.split(marker).length === 2;
+  const compatibleConfigPresent = config.split(compatibleMarker).length === 2;
+  if (!config.includes("name:'gnr8-retained-assets-v1',apply:'serve'") ||
+      originalConfig === compatibleConfigPresent) invalid();
+  if (currentAstro7 && compatibleConfigPresent) return {files,sourceSnapshot:previous,derivedFromSourceSnapshot:original,
+    preparationVersion:'gnr8-stacki-astro7-baseline:v2' as const,changedPaths:[] as string[]};
   // Preserve legacy retained CSS verbatim. Astro 7's LightningCSS minifier
   // rejects old IE syntax; this changes build configuration, never CSS/code
   // permissions on a saved checkpoint. It belongs only in the NEW baseline.
-  const compatibleConfig = config.replace(marker, "export default defineConfig({output:'static',vite:{build:{cssMinify:false},plugins:[{");
+  const compatibleConfig = originalConfig ? config.replace(marker, compatibleMarker) : config;
   const next = files.map(file => file.path === 'package.json' ? {
-    path: file.path, base64: Buffer.from(JSON.stringify({ ...pkg, engines: { node: '26.13.0' }, dependencies: { astro: '7.4.4' } }, null, 2) + '\n').toString('base64'),
+    path: file.path, base64: Buffer.from(JSON.stringify({ ...pkg, engines: { node: '26.13.0' }, dependencies: { astro: '7.4.7' } }, null, 2) + '\n').toString('base64'),
   } : file.path === 'astro.config.mjs' ? { path: file.path, base64: Buffer.from(compatibleConfig).toString('base64') } : { ...file });
   return { files: next, sourceSnapshot: snapshot(next), derivedFromSourceSnapshot: original,
-    preparationVersion: 'gnr8-stacki-astro5-to-7-baseline:v1' as const, changedPaths: ['package.json', 'astro.config.mjs'] as const };
+    preparationVersion: 'gnr8-stacki-astro-to-7.4.7-baseline:v2' as const, changedPaths: ['package.json', 'astro.config.mjs'] as const };
 }

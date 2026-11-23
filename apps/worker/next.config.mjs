@@ -38,7 +38,11 @@ const nextConfig = {
     ],
   },
   outputFileTracingIncludes: {
-    '/api/inngest': ['./node_modules/pnpm/**', './node_modules/npm/**', './toolchains/node-26.13.0-linux-x64/**', '../platform/gnr8/standalone/templates/**'],
+    '/api/inngest': ['./node_modules/pnpm/**', './node_modules/npm/**', './toolchains/node-26.13.0-linux-x64/**',
+      '../platform/gnr8/standalone/templates/**',
+      '../../scripts/stacki/native-astro-7.4.7-package.json',
+      '../../scripts/stacki/native-astro-7.4.7-package-lock.json',
+      '../../scripts/stacki/vendor/lumos-1.0.4/**'],
   },
 }
 

@@ -35,6 +35,16 @@ test('verified Astro export prepares the same offline Studio without a Vercel re
   assert.deepEqual(direct, legacy);
   assert.equal(direct.status.hosted, false);
   assert.equal(direct.confirmationSha256, release.foundation.confirmationSha256);
+  const native = new Map(direct.files.map(file => [file.path, file.body]));
+  assert.equal(JSON.parse(native.get('package.json')).dependencies.astro, '7.4.7');
+  assert.equal(JSON.parse(native.get('package-lock.json')).packages['node_modules/astro'].version, '7.4.7');
+  assert.match(native.get('astro.config.mjs').toString(), /site: "https:\/\/website\.example\.com"/);
+  assert.match(native.get('astro.config.mjs').toString(), /cssVariable: '--font-inter'/);
+  assert.equal(native.get('src/pages/index.astro').toString(), '<h1>Approved import</h1>');
+  assert(native.has('src/lumos/components/Button.astro'));
+  assert(native.has('src/lumos/assets/fonts/inter-regular.woff2'));
+  assert(native.has('.stacki/components.json'));
+  assert.equal(JSON.parse(native.get('.gnr8/lumos-library.json')).upstream.version, '1.0.4');
   await assert.rejects(prepareFromVerifiedAstroExport({
     exported: { ...exported, files: files.map(file => file.path === 'src/pages/index.astro' ?
       { ...file, body: Buffer.from('altered') } : file) },
@@ -71,6 +81,8 @@ test('target-free Studio source persists once and binds export, confirmation and
   assert.equal(objects.size, 1);
   assert.equal(first.receipt.confirmationSha256, request.confirmationSha256);
   assert.equal(first.receipt.sourceManifestSha256, exported.manifestSha256);
+  assert.match(first.receipt.lumosSourceSha256, /^[a-f0-9]{64}$/);
+  assert.equal(first.receipt.astroToolchain.version, '7.4.7');
   assert.equal(first.receipt.files.some(file => file.path === 'vercel.json'), false);
   const different = await persistVerifiedAstroStudio({ ...request, confirmationSha256: 'd'.repeat(64) });
   assert.notEqual(different.receipt.identitySha256, first.receipt.identitySha256);

@@ -1201,10 +1201,24 @@ one centrally held user-scoped
 credential. CHS and ViroiDoc's existing public build triggers still need
 hosted inspection and correction before their native branches are pushed.
 
-The pinned Lumos source is still 1.0.4, but its inclusion in the four manually
-prepared sites does not establish automatic inclusion for newly prepared
-sites. The universal preparation path currently invokes native Stacki
-preparation without the separate Lumos adapter, and its output filter omits
-`src/lumos` and the Lumos receipt. A new site's Lumos builder palette must not
-be called ready until the verified source is included in that automatic path
-and the generated Astro version meets Lumos's 7.4.7 prerequisite.
+The user's 2026-11-23 decision sets one Astro version, **7.4.7**, for older
+inputs and new GNR8 source. The active generator and standalone export now
+produce that version; the exporter still recognizes the reviewed Astro 5.18.2
+and 7.4.4 inputs and gives them the shared 7.4.7 output. The four retained
+site checkouts already use 7.4.7. The old Stacki 0.1.94 runtime retains a
+separate 7.4.4 pin; the current site workspace opens `NativeStackiPanel`, and
+that retained runtime is reserved for review during the native-only cutover.
+
+The native source preparation now includes the pinned Lumos 1.0.4 source and
+native folder, insertion and style settings automatically. It upgrades a
+reviewed older Astro export to a digest-pinned 7.4.7 package and lock, then
+sets the exact site origin and local Inter font required by Lumos. Its source
+identity and readback receipt bind the Stacki, Lumos and Astro pins. The
+prepared-source bounds are 10,000 files and 256 MB, and the downstream Drive
+image source accepts 8,000 files while retaining its 512 MB bound. A local
+Astro 5 source replay produced a 2,945-file, 31.15 MB native package; hosted
+preparation, credential setup, first-open and native Publish remain unverified.
+The unchanged native Stacki 1.4.13 scanner found all 35 Lumos components and
+BaseLayout in that package. A local Node 26 build with an inserted Lumos Button
+and the bundled Inter font succeeded; the generic Astro 5-to-7.4.7 export also
+built locally. These checks do not establish hosted editor access or publication.

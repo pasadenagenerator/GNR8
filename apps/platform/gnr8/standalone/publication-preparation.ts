@@ -117,7 +117,7 @@ export async function prepareStandaloneRelease(input:PublicationSelection,target
  const stackiFiles=(checkpoint?.files??baseline).filter(f=>!f.path.startsWith('.studio-state/')).map(f=>({path:f.path,body:Buffer.from(f.base64,'base64')}));
  requireCompatibleStandaloneToolchain(stackiFiles,generated.files);
  const exportedPackage=JSON.parse(generated.files.find(f=>f.path==='package.json')!.body.toString());
- const nodeVersion:'22.x'|'26.x'=exportedPackage.dependencies?.astro==='7.4.4'&&exportedPackage.engines?.node==='26.x'?'26.x':exportedPackage.dependencies?.astro==='5.18.2'&&['22.x','>=22 <23'].includes(exportedPackage.engines?.node)?'22.x':(()=>{throw Error('standalone_toolchain_unverified');})();
+ const nodeVersion:'22.x'|'26.x'=exportedPackage.dependencies?.astro==='7.4.7'&&exportedPackage.engines?.node==='26.x'?'26.x':(()=>{throw Error('standalone_toolchain_unverified');})();
  requireApprovedManifest(target,generated.manifestSha256);
  const id=fingerprint({input,target,manifestSha256:generated.manifestSha256,confirmation});
  const release:Release={id,input,target,manifestSha256:generated.manifestSha256,routes:generated.manifest.routes,contactRequired:generated.contactRequired,foundation:{...confirmation,stackiSourceSha256:createAstroStaticSiteSourceSnapshot(stackiFiles).aggregateSha256,assetPlanSha256:plan.identity,transformIdentity:generated.manifest.transformIdentity,nodeVersion},files:[...generated.manifest.files,{path:'source-manifest.json',sha256:generated.manifestSha256,bytes:generated.files.find(f=>f.path==='source-manifest.json')!.body.length}]};

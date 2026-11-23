@@ -11,6 +11,8 @@
     "../../scripts/stacki/release-pin.mjs",
     "../../scripts/stacki/prepare-native-studio.mjs",
     "../../scripts/stacki/load-pinned-release.mjs",
+    "../../scripts/stacki/native-astro-toolchain.mjs",
+    "../../scripts/stacki/prepare-lumos-library.mjs",
     "../../scripts/stacki/prepare-from-confirmed-export.mjs",
     "../../scripts/stacki/prepare-git-branch.mjs",
     "../../scripts/stacki/verified-studio-checkout.mjs",

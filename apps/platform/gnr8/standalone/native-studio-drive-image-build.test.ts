@@ -72,7 +72,7 @@ test('untrusted Docker context is rejected before any Sandbox command', async ()
 
 test('large verified source keeps every command argument bounded', async () => {
   const f = fixture();
-  const files = [...input.files, ...Array.from({ length: 2500 }, (_, index) => ({
+  const files = [...input.files, ...Array.from({ length: 6000 }, (_, index) => ({
     path: `studio/src/page-${index}.ts`, body: Buffer.from(`export default ${index}`),
   }))];
   await buildNativeStudioDriveImage(f.sandbox as any, archivePath,

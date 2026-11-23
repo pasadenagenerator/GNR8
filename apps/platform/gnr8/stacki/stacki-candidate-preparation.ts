@@ -20,7 +20,7 @@ import { isAstroObjectBackedResolvedRecord, persistedAstroObjectBackedRecordFrom
 import { measureAstroProductionCandidateRecordBytes } from "../output-adapters/astro-production-candidate-record";
 
 export function stackiCandidateIdentity(selection: StackiCandidateSelection, sourceArtifactSha256: string, preparation?: "astro7") {
-  const seed = stableStringify({ producer: `${STACKI_CANDIDATE_PRODUCER}:v1`, selection, sourceArtifactSha256, ...(preparation ? { preparation: "gnr8-stacki-astro5-to-7-baseline:v1" } : {}) });
+  const seed = stableStringify({ producer: `${STACKI_CANDIDATE_PRODUCER}:v1`, selection, sourceArtifactSha256, ...(preparation ? { preparation: "gnr8-stacki-astro-to-7.4.7-baseline:v2" } : {}) });
   return { siteVersionId: deterministicUuid(seed + ":version"), candidateId: createAstroProductionCandidateId(deterministicUuid(seed + ":candidate")),
     artifactId: deterministicUuid(seed + ":artifact"), variantId: deterministicUuid(seed + ":variant") };
 }
@@ -79,7 +79,7 @@ export async function prepareStackiCandidate(input: {
   const editLineage = { ...selection, sourceArtifactId: input.sourceArtifactId, sourceArtifactSha256: input.sourceArtifactSha256,
     canonicalRelation: "source-edited-canonical-not-synchronized:v1" };
   const lineageKey = input.prepareBaseline ? 'sourcePreparation' : 'stackiRevision';
-  const lineage = input.prepareBaseline ? { format: 'gnr8-stacki-astro5-to-7-baseline:v1', sourceScope: selection.scope,
+  const lineage = input.prepareBaseline ? { format: 'gnr8-stacki-astro-to-7.4.7-baseline:v2', sourceScope: selection.scope,
     sourceArtifactId: input.sourceArtifactId, sourceArtifactSha256: input.sourceArtifactSha256,
     sourceSnapshotSha256: build.sourceSnapshotSha256 } : editLineage;
   let existing = await c.runtimeStore.readContext(identity.siteVersionId);
