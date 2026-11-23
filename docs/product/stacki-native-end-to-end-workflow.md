@@ -1283,6 +1283,29 @@ identity. The first-build and image stages also require their configured
 Sandbox and artifact-transfer environment. These are shared runtime settings,
 not approvals for each future site.
 
+Hosted dashboard readback on 2026-11-23 found the PR #16 Platform and Worker
+Preview deployments READY at `ad43477a`; both Production projects still serve
+the `main` deployment from `ba5f71d`. The Worker project environment list has
+no `GNR8_NATIVE_STUDIO_*` entries and no linked shared variables. The Platform
+project list likewise has no `GNR8_NATIVE_STUDIO_*` entries. Therefore neither
+the READY Preview label nor the local Worker build establishes an executable
+new-site path. Configure and read back the protected central settings and
+trusted image runners before enabling the stage switches, then exercise one
+new fifth site through first-open in the hosted Preview. The four retained
+sites do not prove automatic Access v2 provisioning.
+
+For that first fifth-site run, Platform needs the central Cloudflare account
+ID and GitHub App identity plus its resource, bootstrap, preparation and
+first-open switches. Worker additionally needs centrally stored Cloudflare
+resource, Access, token, Builds and deploy credentials; GitHub App private key
+and client secret; OpenAI and vault keys; trusted Git/Wrangler paths and Git
+author; and three distinct, unexpired Vercel Sandbox snapshots for source
+build, Docker image build and Docker image push. The two image snapshots need
+their separate network allowlists, timeouts and trusted Docker/Wrangler paths.
+Only after those readbacks pass should the Worker stage switches be enabled in
+pipeline order. The setup stage creates each site's publish and native session
+secrets automatically; owners should not be asked to enter a key per new site.
+
 ## Native owner access and publication boundary (2026-11-23)
 
 The new-site UI already consumes a verified `first-open` receipt. An owner
