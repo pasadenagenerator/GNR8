@@ -17,6 +17,7 @@ const COMMIT = /^[a-f0-9]{40,64}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const MAX_ARCHIVE = 8 * 1024 * 1024 * 1024;
+const ARCHIVE = 'native-studio/image-archive-v1.json';
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 async function archiveDigest(path) {
@@ -68,6 +69,31 @@ export async function verifyStudioImageArchive(input) {
     throw Error('native_studio_image_archive_receipt_invalid');
   if (!same(await archiveDigest(archivePath), receipt.archive))
     throw Error('native_studio_image_archive_changed');
+  return receipt;
+}
+
+/** Trusted receiving job records the transferred bytes only after rechecking
+ * the exact source/build handoff. The private store is outside the build VM.
+ */
+export async function recordStudioImageArchiveHandoff(input, deps = {}) {
+  const { project, store, receipt, sourceId, commit, workerId, scope } = input ?? {};
+  if (typeof project !== 'string' || !isAbsolute(project) ||
+      !store || typeof store.read !== 'function' ||
+      typeof store.claim !== 'function')
+    throw Error('native_studio_image_archive_input_invalid');
+  await verifyStudioImageArchive(input);
+  const handoff = await (deps.verifyHandoff ?? verifyStudioBuildHandoff)(input);
+  const image = await (deps.verifyImage ?? verifyStudioImageSite)({ project });
+  if (handoff?.sourceId !== sourceId || handoff.commit !== commit ||
+      handoff.workerId !== workerId || !same(handoff.scope, scope) ||
+      image?.files !== 2)
+    throw Error('native_studio_image_archive_source_unverified');
+  const prior = await store.read(ARCHIVE);
+  if (prior && !same(prior, receipt))
+    throw Error('native_studio_image_archive_receipt_conflict');
+  if (!prior) await store.claim(ARCHIVE, receipt);
+  if (!same(await store.read(ARCHIVE), receipt))
+    throw Error('native_studio_image_archive_receipt_conflict');
   return receipt;
 }
 

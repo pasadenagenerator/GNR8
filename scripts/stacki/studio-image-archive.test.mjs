@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { buildStudioImageArchive,
+  recordStudioImageArchiveHandoff,
   verifyStudioImageArchive } from './studio-image-archive.mjs';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
@@ -80,4 +82,28 @@ test('source change during build removes the exported archive', async t => {
     },
   }), /source_changed/);
   await assert.rejects(readFile(join(outputDir, 'image.tar')), { code: 'ENOENT' });
+});
+
+test('trusted receiver refuses a changed source before recording an archive', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'gnr8-image-receive-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const project = join(root, 'project');
+  await mkdir(project);
+  const archivePath = join(root, 'image.tar');
+  await writeFile(archivePath, 'image-archive');
+  const bytes = Buffer.from('image-archive');
+  const receipt = { sourceId, commit, workerId, scope,
+    siteId: site.siteId, accountId: site.accountId,
+    archive: { bytes: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex') } };
+  const saved = new Map();
+  const store = { read: async key => saved.get(key) ?? null,
+    claim: async (key, value) => { saved.set(key, value); return true; } };
+  await assert.rejects(recordStudioImageArchiveHandoff({ project, archivePath,
+    receipt, store, sourceId, commit, workerId, scope, site }, {
+    verifyHandoff: async () => ({ sourceId, commit: 'f'.repeat(40),
+      workerId, scope }),
+    verifyImage: async () => ({ files: 2 }),
+  }), /source_unverified/);
+  assert.equal(saved.size, 0);
 });

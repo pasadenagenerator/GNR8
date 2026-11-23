@@ -1052,7 +1052,16 @@ the prebuilt-image receipt required by first deployment. A lost or failed push
 is not retried blindly. Focused tests replace Docker and Wrangler calls; no
 registry push or live Docker load has been performed by this path. The hosted
 transfer and trusted-runner wiring still need to supply the private archive
-receipt and both executables. The deploy switch remains off.
+receipt and both executables. A local trusted receiver now records that receipt
+only after checking the archive bytes, source/build handoff and Docker context.
+One local producer-to-receiver-to-deploy-config test passes with Docker and
+Wrangler replaced at their command boundaries. The hosted archive transport
+remains unconnected; the installed Sandbox SDK supports Vercel Drives, which
+can move a large archive between isolated Sandboxes. Read-only inspection of
+the `gnr8-worker` Vercel project's Drives page on 2026-11-23 showed the
+feature available and no project Drive yet. No Drive or Docker runner has been
+configured or exercised for this path. The deploy switch
+remains off.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required

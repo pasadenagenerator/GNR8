@@ -120,8 +120,10 @@ Registry push are still separate, unconnected steps.
 `push-studio-image-archive.mjs` verifies a privately recorded archive receipt,
 loads only those bytes before supplying Cloudflare credentials, checks the
 image architecture, then makes one registry push attempt and records its exact
-digest. It has no hosted caller; the archive transport and private receipt
-writer still need to be connected.
+digest. The trusted receiver in `studio-image-archive.mjs` records the archive
+receipt after rechecking its bytes and the source handoff. A local integration
+test connects these stages through the deploy-only config. The hosted archive
+transport and trusted-runner caller remain unconnected.
 The configured first-open adapter reads the scoped reservation, build and
 first-deploy receipts for both Workers, obtains a central GitHub read token,
 then invokes the
