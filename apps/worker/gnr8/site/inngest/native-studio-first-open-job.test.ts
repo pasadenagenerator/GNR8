@@ -92,6 +92,29 @@ test('temporary public entry network failure resumes and records one first-open'
   assert.deepEqual(calls, ['run', 'sleep', 'run', 'sleep', 'run']);
 });
 
+test('temporary Access challenge network failure uses the same bounded wait', async () => {
+  const calls: string[] = [];
+  let count = 0;
+  const steps = {
+    run: async (_id: string, fn: () => Promise<unknown>) => {
+      calls.push('run'); return fn(); },
+    sleep: async (_id: string, duration: string) => {
+      assert.equal(duration, '1m'); calls.push('sleep'); },
+  };
+  await settleNativeStudioFirstOpen(request, steps,
+    (async () => {
+      if (++count === 1) throw Error('native_studio_access_entry_unavailable');
+      return { scope: request.scope, sourceId: request.sourceId,
+        commit: request.sourceCommit };
+    }) as typeof runNativeStudioFirstOpen);
+  assert.deepEqual(calls, ['run', 'sleep', 'run']);
+  calls.length = 0;
+  await assert.rejects(settleNativeStudioFirstOpen(request, steps,
+    (async () => { throw Error('native_studio_access_entry_unready'); }) as
+      typeof runNativeStudioFirstOpen), /access_entry_unready/);
+  assert.deepEqual(calls, ['run']);
+});
+
 test('wrong public entry content is terminal without another read', async () => {
   const calls: string[] = [];
   const steps = {

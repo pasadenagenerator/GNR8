@@ -87,7 +87,8 @@ export async function settleNativeStudioFirstOpen(
         () => run(request)) as Awaited<ReturnType<typeof runNativeStudioFirstOpen>>;
     } catch (error) {
       if (!(error instanceof Error) ||
-          error.message !== 'native_studio_public_entry_unavailable' ||
+          !['native_studio_public_entry_unavailable',
+            'native_studio_access_entry_unavailable'].includes(error.message) ||
           index === MAX_ENTRY_OBSERVATIONS - 1)
         throw error;
     }

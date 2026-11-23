@@ -1252,11 +1252,36 @@ or per-owner usage accounting has been verified through the unchanged editor.
 Stacki 1.4.13's native GitHub Push and Cloudflare Publish contracts remain
 compatible with the prepared configuration. Its newer built-in non-GitHub
 authentication modes could support GNR8 owners without personal repository
-write permission, but the current prepared configuration still selects GitHub
-repository access. Identity mapping, native role policy and hosted permission
-checks are therefore required before claiming that every GNR8 authorized owner
-can edit. The four previously prepared Workers do not receive the new AI vars
-or Stacki release merely because the preparation template changed.
+write permission. The four retained sites still use repository mode; a new
+Access v2 source requires the verified per-site application and exact current
+owner policy. Hosted permission checks remain required before claiming that
+every GNR8 authorized owner can edit. The four previously prepared Workers
+do not receive the new AI vars or Stacki release merely because the
+preparation template changed.
+
+### Hosted activation gates
+
+The registered pipeline has separate switches at each stage. The repository
+does not establish that any switch or protected credential is configured in
+the hosted Platform and Worker environments; enable them only after checking
+the target runtime and its stored receipts.
+
+| Stage | Required switch |
+| --- | --- |
+| Resource reservation and secret preparation | `GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED=1` in Platform and Worker; `GNR8_NATIVE_STUDIO_SECRET_SETUP_ENABLED=1` in Worker |
+| Confirmed source and Access setup | `GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED=1` and `GNR8_NATIVE_STUDIO_PREPARE_ENABLED=1` in Platform and Worker; `GNR8_NATIVE_STUDIO_ACCESS_SETUP_ENABLED=1` in Worker for new sites |
+| First source build and preflight | `GNR8_NATIVE_STUDIO_FIRST_BUILD_ENABLED=1`; `GNR8_NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_ENABLED=1` in Worker |
+| Container image | `GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED=1`; `GNR8_NATIVE_STUDIO_IMAGE_PUSH_ENABLED=1` in Worker |
+| Studio and public domain deployment | `GNR8_NATIVE_STUDIO_FIRST_DEPLOY_ENABLED=1`; `GNR8_NATIVE_STUDIO_PUBLIC_GATEWAY_ENABLED=1` in Worker |
+| First sign-in link | `GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED=1` in Worker and Platform |
+
+Central credentials and runner paths are checked at their existing stage
+boundaries. They include the Cloudflare account and zone IDs, scoped resource,
+Access, token, registry and deploy credentials, the vault key, GitHub App and
+OpenAI secrets, and the trusted Git/Wrangler executables with Git author
+identity. The first-build and image stages also require their configured
+Sandbox and artifact-transfer environment. These are shared runtime settings,
+not approvals for each future site.
 
 ## Native owner access and publication boundary (2026-11-23)
 
