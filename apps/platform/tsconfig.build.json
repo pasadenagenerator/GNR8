@@ -18,6 +18,7 @@
     "../../scripts/stacki/build-artifact-github-push.mjs",
     "../../scripts/stacki/build-artifact-github-restore.mjs",
     "../../scripts/stacki/materialize-studio-image-site.mjs",
+    "../../scripts/stacki/studio-image-archive.mjs",
     "../../scripts/stacki/trusted-studio-deploy.mjs",
     "../../scripts/stacki/prebuilt-studio-deploy-config.mjs",
     "../../scripts/stacki/first-studio-deploy-identity.mjs",

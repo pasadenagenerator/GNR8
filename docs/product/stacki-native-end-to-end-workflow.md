@@ -1073,10 +1073,17 @@ the credential load or private receipt claim. The adapter requires explicit
 restricted network policies and two pinned Sandbox snapshots, and deletes
 the temporary Drive after both Sandboxes stop. Mocked SDK and receiver tests
 prove ordering, integrity checks and cleanup; no Drive or Sandbox has been
-created through this adapter yet. The archive-producing and registry-pushing
-commands are not wired into these callbacks, and no verified Docker snapshots
-or network allowlists have been configured. First deployment remains disabled
-until that hosted path and one scoped end-to-end run pass.
+created through this adapter yet. A build callback now writes the verified
+Stacki source and the two required root manifests into the credential-free
+Sandbox, verifies source bytes before and after Docker build/save, and returns
+the scoped archive hash and size. A separate receiving callback loads and
+checks the image without credentials, claims one private push attempt, passes
+the Cloudflare token only to Wrangler's push command, and records the exact
+registry digest afterward. Both callbacks are locally tested with Sandbox
+commands replaced. They are not yet connected to a hosted job or to each
+other through the Drive coordinator and private receipt writer. No verified
+Docker snapshots or network allowlists have been configured. First deployment
+remains disabled until that hosted path and one scoped end-to-end run pass.
 
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required
