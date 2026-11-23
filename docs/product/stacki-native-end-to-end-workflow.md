@@ -1239,6 +1239,13 @@ for an absent sealed-secret receipt. Each has bounded Inngest sleeps. A present
 receipt with the wrong site, worker, repository or account remains terminal.
 These changes have mocked provider tests and typechecks, not a hosted run.
 
+A single approved account token can now be configured as the protected shared
+`GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_TOKEN` in both Platform and Worker.
+Resource reservation, Access setup, R2, account token issuance, Studio
+installation and deploy use it when their specific role credential is absent.
+A specific role credential still takes precedence. Cloudflare Workers Builds
+requires its separate user-scoped token and never uses the account token.
+
 The shared Cloudflare Builds user token is now checked before bucket or
 publish-token work in secret preparation. A missing token stops that job
 without provider access; the earlier resource-reservation job has a separate

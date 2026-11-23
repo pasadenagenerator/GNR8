@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NativeStudioScope } from './native-studio-binding-store';
@@ -10,7 +11,7 @@ import { installNativeStudioRuntimeSecrets } from './native-studio-secret-instal
 import { assertNativeStudioSharedSecrets,
   nativeStudioRuntimeSecrets, type NativeStudioSharedSecrets } from './native-studio-runtime-secrets';
 
-type Environment = NodeJS.ProcessEnv;
+type Environment = Readonly<Record<string, string | undefined>>;
 const HEX32 = /^[a-f0-9]{32}$/;
 const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
 const preparationDeps = {
@@ -30,9 +31,9 @@ const preparationDeps = {
 export function configuredNativeStudioSecretPreparation(env: Environment = process.env) {
   const accountId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
   const zoneId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID ?? '';
-  const tokenManager = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_TOKEN_MANAGER ?? '';
-  const r2Manager = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER ?? '';
-  const workerReader = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_WORKER_READER ?? '';
+  const tokenManager = configuredNativeStudioCloudflareCredential(env, 'TOKEN_MANAGER');
+  const r2Manager = configuredNativeStudioCloudflareCredential(env, 'R2_MANAGER');
+  const workerReader = configuredNativeStudioCloudflareCredential(env, 'WORKER_READER');
   const buildsUserToken = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN ?? '';
   const vaultKey = env.GNR8_NATIVE_STUDIO_VAULT_KEY ?? '';
   const shared: NativeStudioSharedSecrets = {
@@ -52,7 +53,7 @@ export function configuredNativeStudioSecretPreparation(env: Environment = proce
 
 export function configuredNativeStudioSecretSetup(env: Environment = process.env) {
   const prepared = configuredNativeStudioSecretPreparation(env);
-  const studioInstaller = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_STUDIO_INSTALLER ?? '';
+  const studioInstaller = configuredNativeStudioCloudflareCredential(env, 'STUDIO_INSTALLER');
   if (!TOKEN.test(studioInstaller)) throw Error('native_studio_setup_not_configured');
   return { ...prepared, studioInstaller };
 }

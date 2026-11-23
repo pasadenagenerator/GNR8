@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { SupabasePublicationStore } from './publication-store';
@@ -27,7 +28,7 @@ export async function configuredNativeStudioAccessSetup(
 ) {
   const accountId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
   const zoneId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID ?? '';
-  const credential = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER ?? '';
+  const credential = configuredNativeStudioCloudflareCredential(env, 'ACCESS_MANAGER');
   if (env.GNR8_NATIVE_STUDIO_ACCESS_SETUP_ENABLED !== '1')
     throw Error('native_studio_access_setup_disabled');
   if (!client || !HEX32.test(accountId) || !HEX32.test(zoneId) ||

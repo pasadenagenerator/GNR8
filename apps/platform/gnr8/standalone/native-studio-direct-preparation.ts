@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServiceRoleClient } from '../../src/supabase/service-role-server';
 import { requireAgencyBackgroundActor } from '../../src/auth/agency-background-action';
@@ -61,7 +62,7 @@ export async function readVerifiedNativeStudioAccessForPreparation(
    throw Error('native_studio_access_binding_missing');
   return undefined;
  }
- const credential=env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER??'';
+ const credential=configuredNativeStudioCloudflareCredential(env, 'ACCESS_MANAGER');
  const zoneId=env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID??'';
  if(env.GNR8_NATIVE_STUDIO_ACCESS_SETUP_ENABLED!=='1'||
     !TOKEN.test(credential)||!HEX32.test(zoneId))

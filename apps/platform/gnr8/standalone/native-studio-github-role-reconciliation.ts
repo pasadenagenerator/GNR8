@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { serializeNativeAccessRoles, validateNativeAccessRoles } from '../../../../scripts/stacki/native-access-roles.mjs';
@@ -184,7 +185,7 @@ export async function reconcileBoundNativeStudioGitHubRoles(input: {
       bound.aud !== access.aud || bound.teamDomain !== access.teamDomain ||
       bound.previewOrigin !== `https://preview.${new URL(site.studioOrigin).hostname}`)
     throw Error('native_studio_roles_access_unverified');
-  const credential = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER ?? '';
+  const credential = configuredNativeStudioCloudflareCredential(env, 'ACCESS_MANAGER');
   const accountId = site.accountId;
   const currentPolicy = async () => deps.policy({ scope, client, accountId, zoneId,
     appId: policyProof.appId, credential, store }, transport);

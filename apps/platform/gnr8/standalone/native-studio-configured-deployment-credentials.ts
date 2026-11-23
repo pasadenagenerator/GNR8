@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import { createHmac } from 'node:crypto';
 import type { PublicationStore } from './publication-store';
 import type { NativeStudioScope } from './native-studio-binding-store';
@@ -21,7 +22,7 @@ export async function configuredNativeStudioDeploymentCredentials(
   const configuredAccount = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
   const zoneId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID ?? '';
   const vaultKey = env.GNR8_NATIVE_STUDIO_VAULT_KEY ?? '';
-  const cloudflareCredential = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_DEPLOYER ?? '';
+  const cloudflareCredential = configuredNativeStudioCloudflareCredential(env, 'DEPLOYER');
   const shared: NativeStudioSharedSecrets = {
     GITHUB_PRIVATE_KEY: env.GNR8_NATIVE_STUDIO_GITHUB_PRIVATE_KEY ?? '',
     GITHUB_CLIENT_SECRET: env.GNR8_NATIVE_STUDIO_GITHUB_CLIENT_SECRET ?? '',

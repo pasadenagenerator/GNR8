@@ -61,6 +61,16 @@ test('first deploy reads prepared site secrets and central deploy credential', a
   assert.equal(store.saved.size, before);
 });
 
+test('first deploy accepts the central account token without a deployer alias', async () => {
+  const { store, runtime } = await installed();
+  const central = 'z'.repeat(40);
+  assert.deepEqual(await configuredNativeStudioDeploymentCredentials(
+    scope, store, accountId, { ...env,
+      GNR8_NATIVE_STUDIO_CLOUDFLARE_DEPLOYER: '',
+      GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_TOKEN: central }),
+  { cloudflareCredential: central, secrets: runtime });
+});
+
 test('missing preparation, changed shared secret and foreign account fail closed', async () => {
   const { store } = await installed();
   store.saved.delete('native-studio/first-deploy-secrets-prepared-v1.json');

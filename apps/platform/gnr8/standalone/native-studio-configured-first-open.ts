@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { firstStudioDeployIdentity } from '../../../../scripts/stacki/first-studio-deploy-identity.mjs';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
@@ -113,5 +114,5 @@ export async function recordConfiguredNativeStudioFirstOpen(
     publicCredential: cloudflareCredential,
     githubCredential: github.token,
     accessZoneId: env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID,
-    accessCredential: env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER });
+    accessCredential: configuredNativeStudioCloudflareCredential(env, 'ACCESS_MANAGER') });
 }

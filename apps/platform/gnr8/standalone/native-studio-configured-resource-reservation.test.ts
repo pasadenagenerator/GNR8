@@ -26,6 +26,19 @@ test('resource reservation requires both central provider capabilities', () => {
   });
 });
 
+test('one approved account token can back both reservation roles', () => {
+  const central = 'z'.repeat(40);
+  const env = { GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID,
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_TOKEN: central };
+  assert.deepEqual(configuredNativeStudioResourceReservation(env), {
+    accountId: env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID,
+    r2Manager: central, workerCreator: central,
+  });
+  assert.equal(configuredNativeStudioResourceReservation({ ...env,
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER }).r2Manager,
+  valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER);
+});
+
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
   siteId: '33333333-3333-4333-8333-333333333333' };

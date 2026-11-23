@@ -37,6 +37,22 @@ test('one central configuration supplies the exact installer inputs', () => {
   }
 });
 
+test('one account token supplies provider roles but never substitutes the Builds user token', () => {
+  const central = 'z'.repeat(40);
+  const env = { ...environment, GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_TOKEN: central,
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_TOKEN_MANAGER: '',
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER: '',
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_WORKER_READER: '',
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_STUDIO_INSTALLER: '' };
+  const configured = configuredNativeStudioSecretSetup(env);
+  assert.equal(configured.tokenManager, central);
+  assert.equal(configured.r2Manager, central);
+  assert.equal(configured.workerReader, central);
+  assert.equal(configured.studioInstaller, central);
+  assert.throws(() => configuredNativeStudioSecretSetup({ ...env,
+    GNR8_NATIVE_STUDIO_CLOUDFLARE_BUILDS_USER_TOKEN: '' }), /native_studio_setup_not_configured/);
+});
+
 test('first-deploy secret preparation needs no active-version installer credential', () => {
   const { GNR8_NATIVE_STUDIO_CLOUDFLARE_STUDIO_INSTALLER: _installer,
     ...beforeDeployment } = environment;

@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Snapshot } from '@vercel/sandbox';
 import type { NativeStudioScope } from './native-studio-binding-store';
@@ -83,7 +84,7 @@ export async function configuredNativeStudioImagePush(request: Request,
       workerId: prepared.workerId, buildSnapshotId, pushSnapshotId,
       pushNetworkPolicy, sandboxTimeoutMs, dockerPath, wranglerPath,
       loadCredential: async () => {
-        const token = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_DEPLOYER ?? '';
+        const token = configuredNativeStudioCloudflareCredential(env, 'DEPLOYER');
         if (!TOKEN.test(token))
           throw Error('native_studio_image_push_credential_unavailable');
         return token;

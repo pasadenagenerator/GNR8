@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { SupabasePublicationStore } from './publication-store';
@@ -75,8 +76,8 @@ export async function readNativeStudioBootstrapTarget(scope: NativeStudioScope,
 
 export function configuredNativeStudioResourceReservation(env: Environment = process.env) {
   const accountId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
-  const r2Manager = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_R2_MANAGER ?? '';
-  const workerCreator = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_WORKER_CREATOR ?? '';
+  const r2Manager = configuredNativeStudioCloudflareCredential(env, 'R2_MANAGER');
+  const workerCreator = configuredNativeStudioCloudflareCredential(env, 'WORKER_CREATOR');
   if (!HEX32.test(accountId) || !TOKEN.test(r2Manager) || !TOKEN.test(workerCreator))
     throw Error('native_studio_resource_reservation_not_configured');
   return { accountId, r2Manager, workerCreator };

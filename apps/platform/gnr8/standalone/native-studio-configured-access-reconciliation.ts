@@ -1,4 +1,5 @@
 import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabasePublicationStore } from './publication-store';
 import type { NativeStudioScope } from './native-studio-binding-store';
@@ -39,7 +40,7 @@ deps = defaults) {
   const { scope, client, sourceId, actor } = input;
   const accountId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
   const zoneId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID ?? '';
-  const credential = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCESS_MANAGER ?? '';
+  const credential = configuredNativeStudioCloudflareCredential(env, 'ACCESS_MANAGER');
   if (env.GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED !== '1')
     throw Error('native_studio_access_reconciliation_disabled');
   if (!scope || !client || !/^[a-f0-9]{64}$/.test(sourceId) ||
