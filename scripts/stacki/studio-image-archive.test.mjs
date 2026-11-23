@@ -34,6 +34,7 @@ test('credential-free build exports a scoped archive; altered bytes are refused'
   };
   const result = await buildStudioImageArchive(input, deps);
   assert.deepEqual(commands.map(args => args[0]), ['build', 'save']);
+  assert.deepEqual(commands[0].slice(0, 3), ['build', '--platform', 'linux/amd64']);
   assert.equal(result.receipt.siteId, site.siteId);
   assert.equal(result.receipt.accountId, site.accountId);
   await verifyStudioImageArchive({ ...input,

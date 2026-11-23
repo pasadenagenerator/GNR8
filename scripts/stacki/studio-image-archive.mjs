@@ -101,7 +101,8 @@ export async function buildStudioImageArchive(input, deps = {}) {
     HOME: outputDir, TMPDIR: tmpdir(), CI: '1' };
   const invoke = deps.invoke ?? exec;
   try {
-    await invoke(docker, ['build', '--file', 'Dockerfile', '--tag', tag, '.'],
+    await invoke(docker, ['build', '--platform', 'linux/amd64',
+      '--file', 'Dockerfile', '--tag', tag, '.'],
       { cwd: join(checkout, 'studio'), shell: false, windowsHide: true,
         timeout: 20 * 60_000, maxBuffer: 2 * 1024 * 1024, env });
     await invoke(docker, ['save', '--output', archivePath, tag],

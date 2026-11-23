@@ -117,6 +117,11 @@ to be connected.
 export boundary. It hashes the bounded archive and checks the scoped source
 handoff before and after the build. The archive transport and Cloudflare
 Registry push are still separate, unconnected steps.
+`push-studio-image-archive.mjs` verifies a privately recorded archive receipt,
+loads only those bytes before supplying Cloudflare credentials, checks the
+image architecture, then makes one registry push attempt and records its exact
+digest. It has no hosted caller; the archive transport and private receipt
+writer still need to be connected.
 The configured first-open adapter reads the scoped reservation, build and
 first-deploy receipts for both Workers, obtains a central GitHub read token,
 then invokes the

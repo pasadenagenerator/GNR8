@@ -1043,6 +1043,17 @@ no Docker build or transfer was performed by this new path. The hosted build
 job, archive transport, registry push and scoped registry-digest receipt are
 still unconnected. The deploy switch remains off.
 
+A local receiving gate now checks the transferred archive against its private
+scoped receipt, loads it into Docker without Cloudflare credentials, verifies
+the required `linux/amd64` architecture, then makes one Wrangler
+`containers push` attempt with the central Cloudflare credential. It reads the
+exact account/repository digest from Docker after a successful push and claims
+the prebuilt-image receipt required by first deployment. A lost or failed push
+is not retried blindly. Focused tests replace Docker and Wrangler calls; no
+registry push or live Docker load has been performed by this path. The hosted
+transfer and trusted-runner wiring still need to supply the private archive
+receipt and both executables. The deploy switch remains off.
+
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required
 Docker capability, a verified build snapshot, separate build/deploy credential
