@@ -124,6 +124,11 @@ digest. The trusted receiver in `studio-image-archive.mjs` records the archive
 receipt after rechecking its bytes and the source handoff. A local integration
 test connects these stages through the deploy-only config. The hosted archive
 transport and trusted-runner caller remain unconnected.
+The Platform `native-studio-image-drive.ts` adapter provides two separate
+Sandbox sessions with a write mount in the credential-free build session and a
+read-only Drive snapshot in the credentialed push session. It loads credentials
+only after stopping the builder and deletes the temporary Drive afterward.
+The fixed build/push commands and hosted job wiring remain to be connected.
 The configured first-open adapter reads the scoped reservation, build and
 first-deploy receipts for both Workers, obtains a central GitHub read token,
 then invokes the

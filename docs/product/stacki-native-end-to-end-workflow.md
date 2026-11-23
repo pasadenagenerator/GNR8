@@ -1063,6 +1063,17 @@ feature available and no project Drive yet. No Drive or Docker runner has been
 configured or exercised for this path. The deploy switch
 remains off.
 
+The local Vercel Drive adapter now creates a per-attempt Drive, attaches it to
+a fresh build Sandbox, stops that Sandbox before loading the Cloudflare
+credential, then attaches a read-only Drive snapshot to a separate push
+Sandbox. It requires explicit restricted network policies and two pinned
+Sandbox snapshots, and deletes the temporary Drive after both Sandboxes stop.
+Mocked SDK tests prove this ordering and cleanup; no Drive or Sandbox has been
+created through this adapter yet. The archive-producing and registry-pushing
+commands are not wired into these two callbacks, and no verified Docker
+snapshots or network allowlists have been configured. First deployment remains
+disabled until that hosted path and one scoped end-to-end run pass.
+
 Keep all new build, preflight, Studio deploy, public gateway and first-open
 switches off until a trusted runner has pinned executables, the required
 Docker capability, a verified build snapshot, separate build/deploy credential
