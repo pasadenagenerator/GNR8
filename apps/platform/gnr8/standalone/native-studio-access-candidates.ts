@@ -62,14 +62,21 @@ export async function readCurrentNativeStudioAccessCandidates(
     const pendingEmailChange = String((user as unknown as Record<string, unknown>)
       .email_change ?? '').trim();
     const email = String(user.email ?? '').trim().toLowerCase();
+    if (user.banned_until && !Number.isFinite(bannedUntil))
+      throw Error('native_studio_access_identity_unverified');
+    // A known ineligible member must be removed from the effective policy.
+    // Failing the whole scan here would preserve access for a banned admin and
+    // let an unconfirmed invitation block unrelated revocations.
     if (!Number.isFinite(confirmedAt) || confirmedAt > now ||
-        (user.banned_until && (!Number.isFinite(bannedUntil) || bannedUntil > now)) ||
-        pendingEmailChange || !EMAIL.test(email) || seenEmails.has(email))
+        (user.banned_until && bannedUntil > now) || pendingEmailChange)
+      continue;
+    if (!EMAIL.test(email) || seenEmails.has(email))
       throw Error('native_studio_access_identity_unverified');
     seenEmails.add(email);
     candidates.push({ userId: member.user_id, principal: `access:${email}`,
       role: member.role as 'owner' | 'admin' });
   }
 
+  if (!candidates.length) throw Error('native_studio_access_admin_missing');
   return candidates.sort((a, b) => a.principal.localeCompare(b.principal));
 }

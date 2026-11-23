@@ -1350,13 +1350,23 @@ branch HEAD, updates only the bound site's sole Cloudflare Access owner
 policy, then writes `.stacki/roles.json` with a site-scoped GitHub App token
 and a non-forced branch update. Both writes have immutable intents and
 provider readback; an ambiguous write can remain `pending-review`. Its entry
-point is not yet connected to member changes or a durable event, so automatic
-membership propagation is not yet operational. It requires
-`GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED=1` in the trusted runner. Native
-Stacki caches roles for about a minute and
+point now has a gated Worker event handler that derives the source ID from the
+scoped build handoff. No member or Auth change emits that event yet, so
+automatic membership propagation is not operational. A route-only event would
+miss email confirmation, bans, and email changes in Supabase Auth; reliable
+convergence needs a bounded drift scan or a durable identity-change feed and
+a reviewed system actor. The trusted runner requires
+`GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED=1`. The candidate resolver
+excludes known unconfirmed, banned, and changing identities while requiring
+at least one confirmed admin. Native Stacki caches roles for about a minute and
 can use stale roles for up to an hour during a GitHub outage. Immediate
 revocation therefore needs an additional provider-level access cut-off or a
-documented emergency lock; the roles file alone cannot guarantee it. Only
+documented emergency lock; the roles file alone cannot guarantee it. The
+Cloudflare [application token-revoke API](https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/applications/methods/revoke_tokens/)
+can sign out all users for one Access application, but it is not wired to this
+local reconciler yet. The direct
+`preview.<working-host>` Studio Worker domain must also be checked before
+immediate revocation can be claimed. Only
 after the roles file and provider policy are verified should the owner login,
 AI Apply, native Push and native Publish be accepted on a representative site.
 

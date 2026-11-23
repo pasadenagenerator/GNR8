@@ -67,14 +67,31 @@ test('rejects a changed site scope or an unavailable site before reading identit
   }
 });
 
-test('rejects unconfirmed, banned, changing and conflicting identities', async () => {
-  const base = { id: ownerId, email: 'owner@example.com',
+test('excludes known ineligible admins while retaining confirmed owners', async () => {
+  const owner = { id: ownerId, email: 'owner@example.com',
+    email_confirmed_at: '2026-11-20T00:00:00Z' };
+  const admin = { id: adminId, email: 'admin@example.com',
     email_confirmed_at: '2026-11-20T00:00:00Z' };
   for (const changed of [
     { email_confirmed_at: null, last_sign_in_at: '2026-11-22T00:00:00Z' },
+    { email_confirmed_at: null, email: '' },
+    { email_confirmed_at: null, email: 'OWNER@example.com' },
     { banned_until: '2026-11-24T00:00:00Z' },
-    { banned_until: 'invalid' },
     { email_change: 'new@example.com' },
+  ]) {
+    const f = fixture({ users: { [ownerId]: owner,
+      [adminId]: { ...admin, ...changed } } });
+    assert.deepEqual(await readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps), [
+      { userId: ownerId, principal: 'access:owner@example.com', role: 'owner' },
+    ]);
+  }
+});
+
+test('rejects invalid identities and requires one eligible administrator', async () => {
+  const base = { id: ownerId, email: 'owner@example.com',
+    email_confirmed_at: '2026-11-20T00:00:00Z' };
+  for (const changed of [
+    { banned_until: 'invalid' },
     { email: 'bad address' },
     { id: adminId },
   ]) {
@@ -91,6 +108,16 @@ test('rejects unconfirmed, banned, changing and conflicting identities', async (
   const repeated = fixture({ members: [member(ownerId, 'owner'), member(ownerId, 'admin')] });
   await assert.rejects(readCurrentNativeStudioAccessCandidates(scope,
     repeated.client, repeated.deps), /native_studio_access_identity_conflict/);
+  for (const changed of [
+    { email_confirmed_at: null },
+    { banned_until: '2026-11-24T00:00:00Z' },
+    { email_change: 'new@example.com' },
+  ]) {
+    const onlyOwner = fixture({ members: [member(ownerId, 'owner')],
+      users: { [ownerId]: { ...base, ...changed } } });
+    await assert.rejects(readCurrentNativeStudioAccessCandidates(scope,
+      onlyOwner.client, onlyOwner.deps), /native_studio_access_admin_missing/);
+  }
 });
 
 test('requires at least one eligible administrator and does not grant ordinary members', async () => {
