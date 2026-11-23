@@ -998,6 +998,30 @@ Push or native Cloudflare Publish.
 
 ## Concrete external rollout still required
 
+### Trusted-runner audit — 2026-11-23
+
+The local `apps/worker` production build passes and its `/api/inngest` bundle
+contains all six registered first-build through first-open functions, including
+the Vercel Sandbox SDK code. This proves packaging in the local build only.
+The route declares Node.js and `maxDuration = 800`; the local build ran on
+Node 22, while the Worker package requests Node 26. Neither fact proves the
+deployed runtime or its available system executables. The Worker package does
+not install Wrangler, and no configured trusted Git/Wrangler paths or verified
+build snapshot are established by this repository. The configured first
+deployment needs a Docker-backed Wrangler Container build in a distinct trusted
+environment. Vercel documents [Docker inside Sandbox](https://vercel.com/changelog/run-docker-containers-inside-vercel-sandbox),
+but that capability has not been connected to this deployment job. The
+registered Inngest route itself is not evidence of a Docker daemon.
+
+Keep all new build, preflight, Studio deploy, public gateway and first-open
+switches off until a trusted runner has pinned executables, the required
+Docker capability, a verified build snapshot, separate build/deploy credential
+contexts and enough execution time. Then verify one exact scoped site through
+source preparation, GitHub push, both Cloudflare deployments, first-open link,
+native sign-in, GitHub-only Push and native Cloudflare Publish. A pending
+control-plane readback currently stops the automatic chain; a bounded
+reconciliation trigger is still needed for delayed provider propagation.
+
 1. Reconcile each branch head and newer hosted drafts before writing. Preserve
    existing CHS/ViroiDoc Worker names, R2 buckets, GitHub Apps, secrets and domains.
 2. Disable the public-site Workers Builds triggers for CHS/ViroiDoc **before**
