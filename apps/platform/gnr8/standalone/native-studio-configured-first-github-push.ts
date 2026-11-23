@@ -50,7 +50,7 @@ export async function configuredFirstStudioGitHubPush(input: {
   const verifyAccess = access ? async () => {
     const candidates = await readCurrentNativeStudioAccessCandidates(scope, client);
     const principals = candidates.map(candidate => candidate.principal);
-    if (!principals.includes(vars.AUTH_BOOTSTRAP_ADMIN as string))
+    if (!principals.some(principal => principal === vars.AUTH_BOOTSTRAP_ADMIN))
       throw Error('native_studio_push_auth_config_invalid');
     await verifyNativeAccessRoleFreshness({ project, principals });
     // The workspace check alone cannot bind the role file to the exact commit.
