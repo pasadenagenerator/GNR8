@@ -10,6 +10,11 @@ import { describeNativeStudioDriveImageSource,
 import { pollNativeStudioImageCommand,
   startNativeStudioImageCommand } from './native-studio-image-detached-command';
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
+import { NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
+  NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
+  recordNativeStudioWorkerBundle,
+  verifyNativeStudioWorkerBundleReceipt } from './native-studio-worker-bundle';
+import type { PublicationStore } from './publication-store';
 import { claimNativeStudioImageDriveAttempt,
   readNativeStudioImageDriveTransfer,
   recordNativeStudioImageDriveTransfer,
@@ -36,7 +41,9 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA = /^[a-f0-9]{64}$/;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-type Input = NativeStudioImageDriveIdentity & {
+type Input = Omit<NativeStudioImageDriveIdentity, 'store'> & {
+  store: NativeStudioImageDriveIdentity['store'] &
+    Pick<PublicationStore, 'putBytes' | 'getBytes'>;
   files: NativeStudioDriveImageFile[];
   buildNetworkPolicy: NetworkPolicy;
   sandboxTimeoutMs: number;
@@ -65,6 +72,8 @@ const defaults = {
   startCommand: startNativeStudioImageCommand,
   pollCommand: pollNativeStudioImageCommand,
   ensureDocker: ensureNativeStudioDockerDaemon,
+  recordBundle: recordNativeStudioWorkerBundle,
+  verifyBundle: verifyNativeStudioWorkerBundleReceipt,
 };
 
 /** A snapshot restores installed files, not a running dockerd process. Start
@@ -135,6 +144,14 @@ function preflightProof(input: Input, session: Session) {
     manifestSha256: session.manifestSha256 };
 }
 
+function bundleIdentity(input: Input, session: Session) {
+  return { scope: input.scope, site: input.site, sourceId: input.sourceId,
+    commit: input.commit, workerId: input.workerId,
+    buildSnapshotId: input.buildSnapshotId,
+    sandboxName: session.sandboxName, sessionId: session.sessionId,
+    store: input.store };
+}
+
 async function requirePreflightProof(input: Input, session: Session) {
   if (!same(await input.store.read(NATIVE_STUDIO_IMAGE_PREFLIGHT_PROOF),
     preflightProof(input, session)))
@@ -183,6 +200,7 @@ async function finish(input: Input, session: Session,
   receipt: NativeStudioImageArchiveReceipt, dependencies: Sdk,
   steps: typeof defaults, verifiedNow = false): Promise<DetachedImageBuildResult> {
   await requirePreflightProof(input, session);
+  await steps.verifyBundle(bundleIdentity(input, session));
   const builder = await dependencies.sandbox.get({ name: session.sandboxName,
     resume: false });
   if (builder.name !== session.sandboxName ||
@@ -231,6 +249,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
         session.manifestSha256 !== source.manifestSha256)
       return { state: 'pending-review' };
     await requirePreflightProof(input, session);
+    await steps.verifyBundle(bundleIdentity(input, session));
     return { state: 'complete', transfer: await steps.readTransfer(input) };
   }
   const existingAttempt = await input.store.read(ATTEMPT);
@@ -310,6 +329,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
     return { state: 'pending-review' };
   if (await input.store.read(SAVE_INTENT)) {
     await requirePreflightProof(input, stored);
+    await steps.verifyBundle(bundleIdentity(input, stored));
     const poll = await steps.pollCommand(commandIdentity(input, stored, 'save'),
       dependencies.sandbox);
     if (poll.state !== 'succeeded')
@@ -344,12 +364,18 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
     await steps.startCommand({ ...commandIdentity(input, stored, 'preflight'),
       sandbox: builder,
       command: { cmd: '/usr/local/bin/wrangler',
-        args: ['deploy', '--dry-run', '--config', 'cloudflare/wrangler.jsonc'],
+        args: ['deploy', '--dry-run', '--outdir',
+          NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
+          '--metafile', NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
+          '--config', 'cloudflare/wrangler.jsonc'],
         cwd: `${NATIVE_STUDIO_IMAGE_SOURCE_ROOT}/studio`,
         env: { CI: '1', DOCKER_HOST, WRANGLER_SEND_METRICS: 'false' },
         timeoutMs: 15 * 60_000 } });
     return { state: 'running' };
   }
+  await steps.recordBundle({ ...bundleIdentity(input, stored),
+    sandboxTimeoutMs: input.sandboxTimeoutMs,
+    networkPolicy: input.buildNetworkPolicy, sandbox: builder });
   await claimExact(input.store, NATIVE_STUDIO_IMAGE_PREFLIGHT_PROOF,
     preflightProof(input, stored));
   requireRemainingTime(builder, 12 * 60_000);

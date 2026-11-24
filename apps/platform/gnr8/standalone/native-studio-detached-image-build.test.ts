@@ -22,15 +22,20 @@ const files = [
 
 function fixture() {
   const records = new Map<string, unknown>();
+  const storedBytes = new Map<string, Buffer>();
   const calls: string[] = [];
   const exits = new Map<string, number | null>();
   let running = true, mounted = false, nextCommand = 0;
-  let failStart = false, failStop = false, failDocker = false;
+  let failStart = false, failStop = false, failDocker = false,
+    failBundle = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
       if (records.has(key)) return false;
       records.set(key, value); return true;
-    } };
+    },
+    putBytes: async (key: string, value: Buffer) => {
+      storedBytes.set(key, Buffer.from(value)); },
+    getBytes: async (key: string) => storedBytes.get(key) ?? Buffer.alloc(0) };
   const input = { scope, site: { siteId: scope.siteId, accountId },
     sourceId, commit, workerId, store, files,
     buildSnapshotId: 'snap_build', pushSnapshotId: 'snap_push',
@@ -40,6 +45,13 @@ function fixture() {
     runCommand: async (command: any) => {
       calls.push(`start:${command.args[0]}`);
       assert.equal(command.env.DOCKER_HOST, 'unix:///var/run/docker.sock');
+      if (command.cmd === '/usr/local/bin/wrangler') {
+        assert.deepEqual(command.args, ['deploy', '--dry-run', '--outdir',
+          '/vercel/sandbox/gnr8-worker-bundle', '--metafile',
+          '/vercel/sandbox/gnr8-worker-bundle-meta.json', '--config',
+          'cloudflare/wrangler.jsonc']);
+        assert.equal(command.env.CLOUDFLARE_API_TOKEN, undefined);
+      }
       if (failStart) throw Error('connection lost');
       const cmdId = `cmd_${++nextCommand}`;
       exits.set(cmdId, null); return { cmdId };
@@ -85,6 +97,9 @@ function fixture() {
     ensureDocker: async (_sandbox: unknown, path: string) => {
       assert.equal(path, 'docker'); calls.push('docker-ready');
       if (failDocker) throw Error('daemon unavailable'); },
+    recordBundle: async () => { calls.push('bundle-record');
+      if (failBundle) throw Error('bundle invalid'); },
+    verifyBundle: async () => { calls.push('bundle-verify'); },
     startCommand: startNativeStudioImageCommand,
     pollCommand: pollNativeStudioImageCommand };
   const advance = () => advanceNativeStudioDetachedImageBuild(
@@ -93,6 +108,7 @@ function fixture() {
     failStart: () => { failStart = true; },
     failStop: () => { failStop = true; },
     failDocker: () => { failDocker = true; },
+    failBundle: () => { failBundle = true; },
     resumeStop: () => { failStop = false; },
     changeArchive: () => { inspectedReceipt = { ...receipt,
       archive: { ...receipt.archive, sha256: 'f'.repeat(64) } }; }, receipt };
@@ -120,8 +136,19 @@ test('build and save cross invocations without repeating external effects', asyn
   assert.equal(f.calls.indexOf('docker-ready') < f.calls.indexOf('stage'), true);
   assert.equal(f.calls.filter(v => v === 'start:save').length, 1);
   assert.equal(f.calls.indexOf('start:deploy') < f.calls.indexOf('start:save'), true);
+  assert.equal(f.calls.indexOf('bundle-record') < f.calls.indexOf('start:save'), true);
   assert.equal(f.calls.filter(v => v === 'stop').length, 1);
   assert.equal(f.calls.indexOf('verify-source') < f.calls.indexOf('inspect'), true);
+});
+
+test('invalid bundled Worker blocks image save and transfer', async () => {
+  const f = fixture();
+  await f.advance(); f.exits.set('cmd_1', 0);
+  await f.advance(); f.exits.set('cmd_2', 0);
+  f.failBundle();
+  await assert.rejects(f.advance(), /bundle invalid/);
+  assert.equal(f.calls.includes('start:save'), false);
+  assert.equal(f.records.has('native-studio/image-drive-transfer-v1.json'), false);
 });
 
 test('Docker failure stops before staging the site source', async () => {
