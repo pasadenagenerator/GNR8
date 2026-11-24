@@ -1003,6 +1003,19 @@ Push or native Cloudflare Publish.
 
 ### Trusted-runner audit — 2026-11-23
 
+Follow-up on 2026-11-24: all five hosted stages from first build through
+public gateway still resolve `GNR8_NATIVE_STUDIO_TRUSTED_GIT` in the Vercel
+Worker; the two deployment stages also resolve
+`GNR8_NATIVE_STUDIO_TRUSTED_WRANGLER` there. The verified Sandbox snapshots do
+not place either executable in that Worker. The first build additionally holds
+one temporary Git checkout across four synchronous npm install/build commands
+inside a Sandbox, whose allowed aggregate time can exceed the Worker's
+configured 800-second request limit. Setting executable paths or enabling the
+stage switches is therefore insufficient evidence for a hosted run. The next
+execution boundary must give each stage a durable, scoped handoff and perform
+Git and deployment commands in a trusted runner, while retaining the existing
+single-attempt receipts and keeping site-controlled builds credential-free.
+
 The local `apps/worker` production build passes and its `/api/inngest` bundle
 contains all six registered first-build through first-open functions, including
 the Vercel Sandbox SDK code. This proves packaging in the local build only.
