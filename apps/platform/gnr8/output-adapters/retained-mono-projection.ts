@@ -47,6 +47,20 @@ export function removableMonoScript(input:{script:Element; fileSha256?:string; t
 export function projectMonoControls(document:DefaultTreeAdapterMap['document'],removeTrackingAndChat:boolean,sourcePageUrl:string|null):void {
  let controls=false;
  for(const node of elements(document)) {
+   if(node.tagName==='iframe' && hasClass(node,'monovideobg') && attr(node,'data-videotype')==='youtube' &&
+     attr(node,'data-req').split(',').includes('videobg') && attr(node,'data-req').split(',').includes('ext-//www.youtube.com/iframe_api')) {
+     try {
+       const url=new URL(attr(node,'src'));
+       if(url.protocol==='https:' && url.hostname==='www.youtube.com' && /^\/embed\/[a-zA-Z0-9_-]+$/.test(url.pathname) && !url.username && !url.password) {
+         url.searchParams.set('controls','1');
+         url.searchParams.delete('enablejsapi');
+         url.searchParams.delete('playerapiid');
+         set(node,'src',url.toString());
+         set(node,'data-gnr8-video-projected','youtube-static-v1');
+         node.attrs=node.attrs.filter(a=>a.name!=='data-req');
+       }
+     } catch { /* Unknown video input keeps its runtime requirement and blocks generation. */ }
+   }
    if(sourcePageUrl && node.tagName==='div' && hasClass(node,'typeform-widget') && /^https:\/\/[a-z0-9-]+\.typeform\.com\/to\/[a-zA-Z0-9]+$/.test(attr(node,'data-url'))) {
      const label=attr(node,'data-text')||'Odpri izvirni obrazec / Open original form';
      const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');

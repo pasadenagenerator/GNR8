@@ -475,7 +475,7 @@ export function createSourceBackedAstroGenerationInput(input: {
               : "Uncaptured routes and all contact forms open the corresponding original page; generated pages do not send submissions.",
             ...(input.acceptedFunctionalReductions.trackingAndChat === 'remove' ? ['Recognized tracking, its consent controls and Facebook chat are omitted.'] : []),
             ...(input.acceptedFunctionalReductions.sourceMediaLinks?.length ? ['Explicitly selected large animations are displayed as labelled links to the original media, not embedded.'] : []),
-            'Recognized announcements and Wistia video use owned controls. Source parallax initialization is static; the original service worker is not installed on the generated host.',
+            'Recognized announcements and Wistia video use owned controls. Recognized YouTube backgrounds remain playable with native controls. Source parallax initialization is static; the original service worker is not installed on the generated host.',
           ] : [
             `Legacy contact forms were replaced with disclosed mailto links to ${input.acceptedFunctionalReductions.contactEmail}.`,
             "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
@@ -686,6 +686,7 @@ function normalizePage(input: {
           input.acceptedFunctionalReductions?.kind === "retained-source-links-v1"
         ),
         replacedFormSecurityRuntime,
+        sourceLinked: input.acceptedFunctionalReductions?.kind === "retained-source-links-v1",
         elements,
         capturedPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
       })
@@ -1368,7 +1369,7 @@ function scriptAssetName(value: string): string {
 }
 function isReplaceableStaticSiteScript(
   script: HtmlElement,
-  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; elements: HtmlElement[]; capturedPaths: ReadonlySet<string> },
+  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; sourceLinked: boolean; elements: HtmlElement[]; capturedPaths: ReadonlySet<string> },
 ): boolean {
   if (attribute(script, "data-gnr8-raw-runtime-duplicate-guard") !== null) return true;
   if (attribute(script, "data-gnr8-disabled-preview-script") !== null) return true;
@@ -1408,8 +1409,11 @@ function isReplaceableStaticSiteScript(
   if (context.hasReplacedForms && (assetName === "form.js" || /hcaptcha\.com/i.test(src))) return true;
   if (context.replacedFormSecurityRuntime && assetName === "api.js") return true;
   if (assetName === "js.js" && context.elements.some((element) => element.tagName === "script" && /\bgtag\s*\(|\bdataLayer\b/i.test(textContent(element)))) return true;
+  const projectedYouTube = context.sourceLinked && context.elements.some((element) => element.tagName === "iframe" && attribute(element,"data-gnr8-video-projected") === "youtube-static-v1") &&
+    !context.elements.some((element) => (attribute(element,"data-req") ?? "").split(",").some(value => value === "videobg" || value === "ext-//www.youtube.com/iframe_api"));
+  if (projectedYouTube && ["videobg.js", "iframe_api", "www-widgetapi.js"].includes(assetName)) return true;
   if (/serviceworker\.getregistrations|window\.assetsurl\s*=|\b_monoCookie\s*=|\bdataLayer\b|\bgtag\s*\(/i.test(body)) return true;
-  if (!context.capturedPaths.has("sw.js") &&
+  if ((context.sourceLinked || !context.capturedPaths.has("sw.js")) &&
       /^if\s*\(\s*['"]serviceWorker['"]\s+in\s+navigator\s*\)\s*\{\s*navigator\.serviceWorker\.register\(\s*['"]\/sw\.js(?:\?\d+)?['"]\s*,\s*\{\s*scope:\s*['"]\/['"]\s*\}\s*\);\s*\}$/.test(body)) return true;
   if (/createelement\s*\(\s*["']link["']\s*\)/i.test(lowerBody) && /rel\s*=\s*["']stylesheet["']/i.test(lowerBody)) return true;
   return false;

@@ -1306,6 +1306,19 @@ test('source-only scope keeps every form at its original page without inventing 
  assert.doesNotMatch(root,/data-gnr8-contact="v1"/);
 })
 
+test('source-linked Mono YouTube background stays playable without copying its runtime onto Astro',()=>{
+ const iframe='<iframe class="monovideobg" data-videotype="youtube" data-req="videobg,ext-//www.youtube.com/iframe_api" src="https://www.youtube.com/embed/gC6SF4WfdkM?controls=0&amp;enablejsapi=1&amp;playerapiid=player_r4795" title="air15"></iframe>';
+ const f=fixture({rootHtml:`<html><body>${iframe}<script src="/assets/videobg.js"></script><script src="//www.youtube.com/iframe_api"></script><script src="/assets/www-widgetapi.js"></script></body></html>`});
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'} as const;
+ const generated=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:settings});
+ const root=generated.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/data-gnr8-video-projected="youtube-static-v1"/);
+ assert.match(root,/controls=1/);
+ assert.doesNotMatch(root,/enablejsapi|playerapiid|videobg\.js|iframe_api|www-widgetapi\.js/);
+ const unknown=fixture({rootHtml:`<html><body>${iframe}<script src="/assets/unknown.js"></script></body></html>`});
+ assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:unknown.version,rawArtifact:unknown.rawArtifact,artifact:unknown.artifact,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError);
+})
+
 test('explicit tracking/chat omission preserves announcement and click-to-load video with owned controls',()=>{
  const f=fixture({rootHtml:'<html><body><div class="fb-customerchat"></div><div class="engagement promomessage" style="display:block"><a class="closeBtn" href="#"></a><p>Retained announcement</p><a href="/about">Details</a></div><div><iframe src="about:blank" data-src-original="//fast.wistia.com/embed/iframe/fixture123" class="hidden"></iframe></div><script src="/analytics.js"></script></body></html>'});
  f.rawArtifact.fileMap['analytics.js']={path:'analytics.js',mediaType:'application/javascript',sizeBytes:1,sha256:'f1a61277e3f902f50ab42015d8b07218db9b7601bb0967e54a52bfdcb4fa7e81'};
