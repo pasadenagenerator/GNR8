@@ -20,19 +20,20 @@ const client = {} as SupabaseClient;
 test('coordinator reads scoped source and passes only its bytes to the build', async () => {
   const calls: string[] = [];
   const files = [{ path: 'package.json', body: Buffer.from('{}') }];
+  const store = { read: async () => null, claim: async () => true };
   const deps = {
     snapshot: async ({ snapshotId }: {snapshotId:string}) => {
       assert.equal(snapshotId, env.GNR8_NATIVE_STUDIO_BUILD_SNAPSHOT);
       calls.push('snapshot'); return { status: 'created' }; },
     site: async () => { calls.push('site'); return site; },
-    store: () => ({ read: async () => null }),
+    store: () => store,
     source: async ({ sourceId: id, site: target }: {sourceId:string;site:typeof site}) => {
       assert.equal(id, sourceId); assert.equal(target, site);
       calls.push('source'); return { files }; },
-    build: async (input: {siteId:string;sourceId:string;snapshotId:string;files:typeof files}) => {
+    build: async (input: {siteId:string;sourceId:string;snapshotId:string;files:typeof files;store:typeof store}) => {
       assert.deepEqual(input, { siteId: scope.siteId, sourceId,
-        snapshotId: env.GNR8_NATIVE_STUDIO_BUILD_SNAPSHOT, files });
-      calls.push('build'); return { artifactDir: '/private/tmp/fake', files: [], sourceId }; },
+        snapshotId: env.GNR8_NATIVE_STUDIO_BUILD_SNAPSHOT, files, store });
+      calls.push('build'); return { state: 'complete', artifactDir: '/private/tmp/fake', files: [], sourceId }; },
   } as any;
   await configuredNativeStudioSandboxBuild(scope, client, sourceId, env, deps);
   assert.deepEqual(calls, ['snapshot', 'site', 'source', 'build', 'site']);
@@ -46,7 +47,7 @@ test('changed authoritative binding discards the untrusted build artifact', asyn
     site: async () => ++reads === 1 ? site : { ...site, repositoryId: '43' },
     store: () => ({}),
     source: async () => ({ files: [] }),
-    build: async () => ({ artifactDir, files: [], sourceId }),
+    build: async () => ({ state: 'complete', artifactDir, files: [], sourceId }),
   } as any;
   await assert.rejects(configuredNativeStudioSandboxBuild(scope, client,
     sourceId, env, deps), /target_changed/);
@@ -60,7 +61,7 @@ test('failed target re-read also discards the untrusted build artifact', async (
     snapshot: async () => ({ status: 'created' }),
     site: async () => { if (++reads === 1) return site; throw Error('store unavailable'); },
     store: () => ({}), source: async () => ({ files: [] }),
-    build: async () => ({ artifactDir, files: [], sourceId }),
+    build: async () => ({ state: 'complete', artifactDir, files: [], sourceId }),
   } as any;
   await assert.rejects(configuredNativeStudioSandboxBuild(scope, client,
     sourceId, env, deps), /target_unavailable/);

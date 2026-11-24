@@ -58,6 +58,7 @@ export async function configuredNativeStudioBuildHandoff(input: {
       checked.repository !== site.repository || checked.branch !== site.branch)
     throw Error('native_studio_build_handoff_source_unverified');
   const built = await deps.build(scope, client, sourceId, env);
+  if (built.state !== 'complete') return built;
   const artifactDir = resolve(built.artifactDir);
   const artifactInfo = await lstat(artifactDir);
   if (dirname(artifactDir) !== resolve(tmpdir()) ||

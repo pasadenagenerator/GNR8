@@ -6,6 +6,7 @@ import { NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT } from
 export const NATIVE_STUDIO_FIRST_BUILD_JOB_ID = 'native-studio-first-build-job';
 export const NATIVE_STUDIO_FIRST_BUILD_EVENT = 'gnr8/native-studio.first-build.requested';
 const MAX_RESOURCE_OBSERVATIONS = 15;
+const MAX_BUILD_OBSERVATIONS = 60;
 const RESOURCE_OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
@@ -86,6 +87,9 @@ export async function runNativeStudioFirstBuild(request: unknown,
       !Number.isSafeInteger(result.files) || result.files < 1 || result.hosted !== false)
     throw Error('native_studio_first_build_source_unverified');
   const built = await deps.build({ scope, actor, requestId, sourceId }, client);
+  if ('state' in built &&
+      (built.state === 'running' || built.state === 'pending-review'))
+    return { state: built.state };
   if (built.sourceId !== sourceId || !/^[a-f0-9]{40,64}$/.test(built.commit) ||
       !/^[a-f0-9]{32}$/.test(built.workerId) ||
       built.artifactBranch !== `gnr8-build-${built.commit}` ||
@@ -112,18 +116,21 @@ export async function settleNativeStudioFirstBuild(
     sleep: (id: string, duration: string) => Promise<unknown> },
   run: typeof runNativeStudioFirstBuild = runNativeStudioFirstBuild,
 ) {
-  for (let index = 0; index < MAX_RESOURCE_OBSERVATIONS; index++) {
+  let resourceObservations = 0;
+  for (let index = 0; index < MAX_BUILD_OBSERVATIONS; index++) {
     try {
-      return await steps.run(`first-build-resource-observe-${index}`,
+      const result = await steps.run(`first-build-resource-observe-${index}`,
         () => run(request)) as Awaited<ReturnType<typeof runNativeStudioFirstBuild>>;
+      if (!('state' in result) || result.state !== 'running') return result;
     } catch (error) {
       if (!(error instanceof Error) ||
           error.message !== 'native_studio_first_build_resources_pending' ||
-          index === MAX_RESOURCE_OBSERVATIONS - 1)
+          ++resourceObservations >= MAX_RESOURCE_OBSERVATIONS)
         throw error;
     }
+    if (index === MAX_BUILD_OBSERVATIONS - 1) break;
     await steps.sleep(`first-build-resource-wait-${index}`,
       RESOURCE_OBSERVATION_INTERVAL);
   }
-  throw Error('native_studio_first_build_resource_observation_exhausted');
+  throw Error('native_studio_first_build_observation_exhausted');
 }

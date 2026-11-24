@@ -34,7 +34,7 @@ test('first build sequences verified checkout, source push and artifact ref', as
     checkout: async () => { calls.push('checkout'); return { root, project, commit }; },
     build: async (value: any) => {
       calls.push('build'); assert.equal(value.workerId, workerId);
-      assert.equal(value.project, project); },
+      assert.equal(value.project, project); return {}; },
     push: async (value: any) => {
       calls.push('push'); assert.equal(value.commit, commit);
       return { state: 'verified', commit }; },
@@ -71,6 +71,24 @@ test('pending first push removes checkout before artifact publication', async ()
   /push_pending/);
   await assert.rejects(stat(root), { code: 'ENOENT' });
   assert.equal(artifactCalls, 0);
+});
+
+test('running source build releases checkout without GitHub writes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'gnr8-source-checkout-'));
+  const calls: string[] = [];
+  const deps = {
+    site: async () => site, store: () => ({ read: async () => reserved }),
+    checkout: async () => ({ root, project: join(root, 'project'), commit }),
+    build: async () => ({ state: 'running' }),
+    push: async () => { calls.push('push'); },
+    artifactPush: async () => { calls.push('artifactPush'); },
+    dispose: async (path: string) => rm(path, { recursive: true, force: true }),
+  } as any;
+  assert.deepEqual(await configuredNativeStudioFirstBuild(input, {},
+    (async () => { throw Error('no provider call'); }) as typeof fetch, deps),
+  { state: 'running' });
+  assert.deepEqual(calls, []);
+  await assert.rejects(stat(root), { code: 'ENOENT' });
 });
 
 test('only an absent reservation can wait before checkout or push', async () => {

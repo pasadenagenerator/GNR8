@@ -16,6 +16,18 @@ test('handoff admits only untracked generated output in a real Git checkout', as
   git('add', 'package.json');
   git('-c', 'user.name=Test', '-c', 'user.email=test@example.com',
     'commit', '-q', '-m', 'source');
+  const trustedGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+  const previous = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT;
+  try {
+    process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT = 'relative/git';
+    assert.throws(() => assertStudioCheckoutClean(root), /trusted Git executable invalid/);
+    assert.doesNotThrow(() => assertStudioCheckoutClean(root, { trustedGit }));
+    assert.throws(() => assertStudioCheckoutClean(root,
+      { trustedGit: 'relative/git' }), /trusted Git executable invalid/);
+  } finally {
+    if (previous === undefined) delete process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT;
+    else process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT = previous;
+  }
   assert.doesNotThrow(() => assertStudioCheckoutClean(root));
   await mkdir(join(root, 'studio/dist'), { recursive: true });
   await mkdir(join(root, 'dist'));

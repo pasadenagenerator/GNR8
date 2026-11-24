@@ -37,7 +37,7 @@ async function fixture() {
     verifySource: async () => { calls.push('verify'); return {
       sourceId, commit, repository: site.repository, branch: site.branch }; },
     build: async () => { calls.push('build'); return {
-      artifactDir, sourceId, files: [] }; },
+      state: 'complete', artifactDir, sourceId, files: [] }; },
     record: async (value: any) => {
       calls.push('record');
       assert.deepEqual(value, { project: input.project, artifactDir,
@@ -63,6 +63,15 @@ test('source mismatch stops before running the Sandbox build', async () => {
   await assert.rejects(configuredNativeStudioBuildHandoff(input, {}, f.deps),
     /source_unverified/);
   assert(!f.calls.includes('build'));
+  await rm(f.artifactDir, { recursive: true, force: true });
+});
+
+test('running detached build returns before artifact transfer', async () => {
+  const f = await fixture();
+  f.deps.build = async () => ({ state: 'running' });
+  assert.deepEqual(await configuredNativeStudioBuildHandoff(input, {}, f.deps),
+    { state: 'running' });
+  assert.deepEqual(f.calls, ['site', 'verify']);
   await rm(f.artifactDir, { recursive: true, force: true });
 });
 
@@ -96,7 +105,7 @@ test('failed receipt write removes output for a safe retry', async () => {
 test('unexpected build directory is never removed', async () => {
   const f = await fixture();
   const protectedDir = await mkdtemp(join(tmpdir(), 'gnr8-protected-'));
-  f.deps.build = async () => ({ artifactDir: protectedDir,
+  f.deps.build = async () => ({ state: 'complete', artifactDir: protectedDir,
     sourceId, files: [] });
   await assert.rejects(configuredNativeStudioBuildHandoff(input, {}, f.deps),
     /artifact_invalid/);
@@ -127,7 +136,7 @@ test('configured build feeds its exact output into the real handoff receipt', as
     const verifySource = async () => ({ sourceId, commit,
       repository: site.repository, branch: site.branch });
     const deps = { site: async () => site, store: () => store, verifySource,
-      build: async () => ({ artifactDir, sourceId, files }),
+      build: async () => ({ state: 'complete', artifactDir, sourceId, files }),
       record: (value: any) => recordStudioSandboxBuildArtifact(value,
         { verifySource }),
     } as any;

@@ -2,21 +2,31 @@
 import { execFileSync } from 'node:child_process';
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { lstatSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { prepareFromStoredRelease, readStoredVerifiedAstroStudio } from './prepare-from-confirmed-export.mjs';
 
-const git = (root, ...args) => execFileSync('git',
+function gitExecutable(trustedGit) {
+  if (trustedGit !== undefined &&
+      (typeof trustedGit !== 'string' || !isAbsolute(trustedGit)))
+    throw Error('Studio trusted Git executable invalid');
+  const executable = trustedGit ?? process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT;
+  if (executable !== undefined && !isAbsolute(executable))
+    throw Error('Studio trusted Git executable invalid');
+  return executable ?? 'git';
+}
+const git = (root, trustedGit, ...args) => execFileSync(gitExecutable(trustedGit),
   ['-C', root, '-c', 'core.fsmonitor=false', '-c', 'core.attributesFile=/dev/null',
     '-c', 'core.hooksPath=/dev/null', ...args],
   { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_ATTR_NOSYSTEM: '1' } }).trim();
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
-const gitBytes = (root, args, input) => execFileSync('git',
+const gitBytes = (root, trustedGit, args, input) => execFileSync(gitExecutable(trustedGit),
   ['-C', root, '-c', 'core.fsmonitor=false', '-c', 'core.attributesFile=/dev/null',
     '-c', 'core.hooksPath=/dev/null', ...args],
   { input, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 96 * 1024 * 1024,
     env: { ...process.env, GIT_ATTR_NOSYSTEM: '1' } });
-export function assertStudioCheckoutClean(project, { allowBuildOutputs = false } = {}) {
+export function assertStudioCheckoutClean(project,
+  { allowBuildOutputs = false, trustedGit } = {}) {
   // Generated projects ignore dist/, so Git status alone cannot distinguish a
   // clean source checkout from one with local build output before the build.
   for (const path of ['dist', 'studio/dist']) {
@@ -26,7 +36,7 @@ export function assertStudioCheckoutClean(project, { allowBuildOutputs = false }
     if (!allowBuildOutputs || !output.isDirectory() || output.isSymbolicLink())
       throw Error('Studio checkout has local changes');
   }
-  const changes = gitBytes(project,
+  const changes = gitBytes(project, trustedGit,
     ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
     .toString('utf8').split('\0').filter(Boolean);
   if (changes.some(change => !allowBuildOutputs || !change.startsWith('?? ') ||
@@ -34,21 +44,25 @@ export function assertStudioCheckoutClean(project, { allowBuildOutputs = false }
         change.slice(3).startsWith('studio/dist/'))))
     throw Error('Studio checkout has local changes');
 }
-export async function prepareGitBranch({ project, store, releaseId, releaseFile, site }) {
-  checkGitBinding(project, site);
+export async function prepareGitBranch({ project, store, releaseId, releaseFile, site,
+  trustedGit }) {
+  checkGitBinding(project, site, trustedGit);
   const prepared = await prepareFromStoredRelease({ store, releaseId, releaseFile, site });
-  return stagePreparedFiles({ project, site, prepared, identity: { releaseId } });
+  return stagePreparedFiles({ project, site, prepared, identity: { releaseId },
+    trustedGit });
 }
-export async function prepareGitBranchFromSource({ project, store, sourceId, site }) {
-  checkGitBinding(project, site);
+export async function prepareGitBranchFromSource({ project, store, sourceId, site,
+  trustedGit }) {
+  checkGitBinding(project, site, trustedGit);
   const prepared = await readStoredVerifiedAstroStudio({ store, sourceId, site });
-  return stagePreparedFiles({ project, site, prepared, identity: { sourceId } });
+  return stagePreparedFiles({ project, site, prepared, identity: { sourceId },
+    trustedGit });
 }
-function checkGitBinding(project, site) {
+function checkGitBinding(project, site, trustedGit) {
   project = resolve(project);
-  const branch = git(project, 'branch', '--show-current');
+  const branch = git(project, trustedGit, 'branch', '--show-current');
   if (branch !== site.branch) throw Error('Studio branch differs from the connected branch');
-  const origin = git(project, 'remote', 'get-url', 'origin');
+  const origin = git(project, trustedGit, 'remote', 'get-url', 'origin');
   const expected = site.repository.toLowerCase();
   if (!new RegExp(`^(?:https://github\\.com/|git@github\\.com:)${expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\.git)?$`, 'i').test(origin))
     throw Error('Studio checkout repository differs from the binding');
@@ -59,17 +73,19 @@ function checkGitBinding(project, site) {
  * changes, filters, extra Studio files or submodules are accepted.
  */
 export async function verifyCommittedStudioSource({ project, store, sourceId, site,
-  allowBuildOutputs = false }) {
+  allowBuildOutputs = false, trustedGit = undefined }) {
   project = resolve(project);
   if ((await lstat(project)).isSymbolicLink()) throw Error('Studio checkout contains a symbolic link');
-  checkGitBinding(project, site);
+  checkGitBinding(project, site, trustedGit);
   const prepared = await readStoredVerifiedAstroStudio({ store, sourceId, site });
-  const privateAttributes = resolve(project, git(project, 'rev-parse', '--git-path', 'info/attributes'));
+  const privateAttributes = resolve(project, git(project, trustedGit,
+    'rev-parse', '--git-path', 'info/attributes'));
   if (await lstat(privateAttributes).then(() => true,
     error => error.code === 'ENOENT' ? false : Promise.reject(error)))
     throw Error('Git filters require separate review');
-  assertStudioCheckoutClean(project, { allowBuildOutputs });
-  const tree = gitBytes(project, ['ls-tree', '-r', '-z', 'HEAD']).toString('utf8');
+  assertStudioCheckoutClean(project, { allowBuildOutputs, trustedGit });
+  const tree = gitBytes(project, trustedGit,
+    ['ls-tree', '-r', '-z', 'HEAD']).toString('utf8');
   const entries = new Map();
   for (const row of tree.split('\0').filter(Boolean)) {
     const match = /^(\d{6}) (blob|commit) ([a-f0-9]{40,64})\t(.+)$/.exec(row);
@@ -92,7 +108,7 @@ export async function verifyCommittedStudioSource({ project, store, sourceId, si
       throw Error(`Studio checkout file differs: ${file.path}`);
   }
   const input = Buffer.from(prepared.files.map(file => `HEAD:${file.path}\n`).join(''));
-  const blobs = gitBytes(project, ['cat-file', '--batch'], input);
+  const blobs = gitBytes(project, trustedGit, ['cat-file', '--batch'], input);
   let offset = 0;
   for (const file of prepared.files) {
     const end = blobs.indexOf(10, offset);
@@ -109,7 +125,7 @@ export async function verifyCommittedStudioSource({ project, store, sourceId, si
     offset = start + length + 1;
   }
   if (offset !== blobs.length) throw Error('Studio committed file response invalid');
-  return { sourceId, commit: git(project, 'rev-parse', 'HEAD'),
+  return { sourceId, commit: git(project, trustedGit, 'rev-parse', 'HEAD'),
     branch: site.branch, repository: site.repository, files: prepared.files.length,
     hosted: false };
 }
@@ -121,17 +137,17 @@ async function safeCheckoutPath(root, relative) {
     if (stat?.isSymbolicLink()) throw Error('Studio checkout contains a symbolic link');
   }
 }
-async function stagePreparedFiles({ project, site, prepared, identity }) {
+async function stagePreparedFiles({ project, site, prepared, identity, trustedGit }) {
   project = resolve(project);
   if ((await lstat(project)).isSymbolicLink()) throw Error('Studio checkout contains a symbolic link');
-  checkGitBinding(project, site);
-  const privateAttributes=resolve(project,git(project,'rev-parse','--git-path','info/attributes'));
+  checkGitBinding(project, site, trustedGit);
+  const privateAttributes=resolve(project,git(project,trustedGit,'rev-parse','--git-path','info/attributes'));
   if(await lstat(privateAttributes).then(()=>true,error=>error.code==='ENOENT'?false:Promise.reject(error)))
     throw Error('Git filters require separate review');
-  const tracked = new Set(git(project, 'ls-files').split('\n').filter(Boolean));
+  const tracked = new Set(git(project, trustedGit, 'ls-files').split('\n').filter(Boolean));
   const expectedFiles = new Set(prepared.files.map(file => file.path));
   if ([...tracked].some(path => path === '.gitattributes' || path.endsWith('/.gitattributes'))) throw Error('Git filters require separate review');
-  for (const line of git(project, 'status', '--porcelain', '-z').split('\0').filter(Boolean)) {
+  for (const line of git(project, trustedGit, 'status', '--porcelain', '-z').split('\0').filter(Boolean)) {
     if (!/^A  /.test(line) || !expectedFiles.has(line.slice(3))) throw Error('Studio checkout has local changes');
   }
   const unexpected = [...tracked].filter(path => path.startsWith('studio/') && !expectedFiles.has(path));
@@ -150,15 +166,15 @@ async function stagePreparedFiles({ project, site, prepared, identity }) {
       await writeFile(path, file.body, { flag: 'wx' });
     }
   }
-  git(project, 'add', '--', ...prepared.files.map(file => file.path));
-  const staged = git(project, 'diff', '--cached', '--name-only');
+  git(project, trustedGit, 'add', '--', ...prepared.files.map(file => file.path));
+  const staged = git(project, trustedGit, 'diff', '--cached', '--name-only');
   const stagedFiles = staged ? staged.split('\n') : [];
   if (stagedFiles.some(path => !expectedFiles.has(path)) ||
       (stagedFiles.length !== prepared.files.length && !(stagedFiles.length === 0 &&
         [...expectedFiles].every(path => tracked.has(path)))))
     throw Error('Studio staged files incomplete');
   return { branch: site.branch, repository: site.repository, ...identity, stagedFiles,
-    committed: stagedFiles.length === 0, commit: stagedFiles.length === 0 ? git(project, 'rev-parse', 'HEAD') : null,
+    committed: stagedFiles.length === 0, commit: stagedFiles.length === 0 ? git(project, trustedGit, 'rev-parse', 'HEAD') : null,
     pushed: false };
 }
 
@@ -181,7 +197,7 @@ async function commitPrepared(input, prepare, identity) {
   if (!author || !/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,79}$/.test(author.name) ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(author.email)) throw Error('Studio commit author invalid');
   const project = resolve(input.project);
-  git(project, '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
+  git(project, input.trustedGit, '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
     '-c', `user.name=${author.name}`, '-c', `user.email=${author.email}`,
     'commit', '-m', `Prepare native Stacki Studio for ${identity}`, '--', ...staged.stagedFiles);
   const result = await prepare(input);

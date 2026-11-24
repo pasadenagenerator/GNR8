@@ -103,8 +103,9 @@ export async function prepareVerifiedStudioCheckout(input, deps = defaults) {
       'FETCH_HEAD']);
     await run(['-C', project, 'remote', 'set-url', 'origin', url]);
     const committed = existingCommit ? { commit: existingCommit } :
-      await deps.commitSource({ project, store, sourceId, site, author });
-    const checked = await deps.verifySource({ project, store, sourceId, site });
+      await deps.commitSource({ project, store, sourceId, site, author, trustedGit: git });
+    const checked = await deps.verifySource({ project, store, sourceId, site,
+      trustedGit: git });
     if (committed.commit !== checked.commit || checked.sourceId !== sourceId ||
         checked.repository !== site.repository || checked.branch !== site.branch ||
         (await run(['-C', project, 'rev-list', '--parents', '-n', '1',

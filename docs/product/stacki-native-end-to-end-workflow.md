@@ -462,7 +462,14 @@ requires its verified Sandbox snapshot and GitHub App configuration. These
 settings are not per-site credentials. Local tests exercise the event contract
 with provider I/O replaced; the job has not run in a hosted environment, and
 the switch must stay off until the host has the required Git executable,
-runtime duration and Sandbox access. A successful first build now queues a
+runtime duration and Sandbox access. The source build now starts at most one
+long npm command per Worker invocation. A persistent, time-limited Sandbox
+retains its verified output for a retry after Worker interruption; the final
+handoff still checks source and output hashes before GitHub writes. Local
+focused tests cover resumed output and ambiguous command starts. The Git
+preparation and verification helpers now use the validated trusted executable
+when configured, instead of an implicit PATH lookup. A successful first build
+now queues a
 separate, credential-free deploy preflight when
 `GNR8_NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_ENABLED=1`. That job rechecks the
 actor and the exact private artifact receipt, then queues the isolated image
@@ -1008,10 +1015,11 @@ public gateway still resolve `GNR8_NATIVE_STUDIO_TRUSTED_GIT` in the Vercel
 Worker; the two deployment stages also resolve
 `GNR8_NATIVE_STUDIO_TRUSTED_WRANGLER` there. The verified Sandbox snapshots do
 not place either executable in that Worker. The first build additionally holds
-one temporary Git checkout across four synchronous npm install/build commands
-inside a Sandbox, whose allowed aggregate time can exceed the Worker's
-configured 800-second request limit. Setting executable paths or enabling the
-stage switches is therefore insufficient evidence for a hosted run. The next
+one temporary Git checkout during each Worker invocation. Its four long npm
+commands now advance separately in a persistent Sandbox, so their aggregate
+duration no longer occupies one Worker request. Setting executable paths or
+enabling the stage switches is still insufficient evidence for a hosted run.
+The next
 execution boundary must give each stage a durable, scoped handoff and perform
 Git and deployment commands in a trusted runner, while retaining the existing
 single-attempt receipts and keeping site-controlled builds credential-free.

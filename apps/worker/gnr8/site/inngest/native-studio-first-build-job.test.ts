@@ -83,6 +83,24 @@ test('authorized prepared source enters build once', async () => {
   assert.deepEqual(f.calls, ['client', 'authorize', 'source', 'build']);
 });
 
+test('running build waits across invocations and queues only after completion', async () => {
+  const f = fixture();
+  let polls = 0;
+  const result = await settleNativeStudioFirstBuild(request, {
+    run: async (_id, fn) => fn(),
+    sleep: async () => undefined,
+  }, (async () => {
+    polls++;
+    return polls < 3 ? { state: 'running' } : built;
+  }) as typeof runNativeStudioFirstBuild);
+  assert.deepEqual(result, built);
+  assert.equal(polls, 3);
+  assert.deepEqual(await runNativeStudioFirstBuild(request, {
+    ...f.deps, build: async () => ({ state: 'pending-review' }) as any,
+  }), { state: 'pending-review' });
+  assert(!f.calls.includes('enqueue'));
+});
+
 test('attempt-scoped source result cannot reuse an earlier preparation', async () => {
   const f = fixture();
   const attemptId = '55555555-5555-4555-8555-555555555555';

@@ -55,8 +55,11 @@ deps = defaults) {
   const checkout = await deps.checkout({ scope, client, sourceId,
     trustedGit, author }, env, transport);
   try {
-    await deps.build({ scope, client, project: checkout.project,
+    const built = await deps.build({ scope, client, project: checkout.project,
       sourceId, commit: checkout.commit, workerId }, env);
+    if (!built || typeof built !== 'object')
+      throw Error('native_studio_first_build_handoff_invalid');
+    if ('state' in built && built.state !== 'complete') return built;
     if (JSON.stringify(await deps.site(scope, client, env)) !== JSON.stringify(site))
       throw Error('native_studio_first_build_target_changed');
     const pushed = await deps.push({ scope, client, store,

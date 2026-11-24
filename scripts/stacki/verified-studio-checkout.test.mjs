@@ -30,7 +30,8 @@ async function fixture(t) {
   git(seed, 'push', '-q', 'origin', 'main');
   let preparedCommit;
   const deps = { fetchUrl: () => remote,
-    commitSource: async ({ project }) => {
+    commitSource: async ({ project, trustedGit: passedGit }) => {
+      assert.equal(passedGit, trustedGit);
       await writeFile(join(project, 'page.txt'), 'prepared source');
       git(project, 'add', 'page.txt');
       git(project, '-c', 'user.name=GNR8', '-c',
@@ -38,7 +39,8 @@ async function fixture(t) {
       preparedCommit = git(project, 'rev-parse', 'HEAD');
       return { commit: preparedCommit };
     },
-    verifySource: async ({ project }) => {
+    verifySource: async ({ project, trustedGit: passedGit }) => {
+      assert.equal(passedGit, trustedGit);
       assert.equal(git(project, 'remote', 'get-url', 'origin'),
         `https://github.com/${site.repository}.git`);
       assert.equal(git(project, 'branch', '--show-current'), site.branch);

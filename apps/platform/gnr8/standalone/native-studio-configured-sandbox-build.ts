@@ -6,7 +6,7 @@ import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepar
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { SupabasePublicationStore } from './publication-store';
-import { runNativeStudioSandboxBuild } from './native-studio-sandbox-build';
+import { advanceNativeStudioDetachedSourceBuild } from './native-studio-detached-source-build';
 
 type Environment = Record<string, string | undefined>;
 const SHA = /^[a-f0-9]{64}$/;
@@ -14,7 +14,7 @@ const defaults = {
   site: configuredNativeStudioBootstrapSite,
   snapshot: Snapshot.get,
   source: readStoredVerifiedAstroStudio,
-  build: runNativeStudioSandboxBuild,
+  build: advanceNativeStudioDetachedSourceBuild,
   store: (client: SupabaseClient, scope: NativeStudioScope, env: Environment) =>
     new SupabasePublicationStore(client,
       env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope),
@@ -39,15 +39,17 @@ export async function configuredNativeStudioSandboxBuild(
   const store = deps.store(client, scope, env);
   const prepared = await deps.source({ store, sourceId, site });
   const result = await deps.build({ siteId: scope.siteId, sourceId,
-    snapshotId, files: prepared.files });
+    snapshotId, files: prepared.files, store });
   let current;
   try { current = await deps.site(scope, client, env); }
   catch {
-    await rm(result.artifactDir, { recursive: true, force: true });
+    if (result.state === 'complete')
+      await rm(result.artifactDir, { recursive: true, force: true });
     throw Error('native_studio_sandbox_build_target_unavailable');
   }
   if (JSON.stringify(current) !== JSON.stringify(site)) {
-    await rm(result.artifactDir, { recursive: true, force: true });
+    if (result.state === 'complete')
+      await rm(result.artifactDir, { recursive: true, force: true });
     throw Error('native_studio_sandbox_build_target_changed');
   }
   return result;
