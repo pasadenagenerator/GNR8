@@ -23,14 +23,17 @@ export async function readCompleteCloudflareAccessAppInventory(
   for (let page = 1; page <= (totalPages ?? 1); page++) {
     const url = `https://api.cloudflare.com/client/v4/${scope}/${id}` +
       `/access/apps?page=${page}&per_page=${PAGE_SIZE}`;
-    let body: unknown;
+    let response: Response;
     try {
-      const response = await transport(url, { method: 'GET', redirect: 'error',
+      response = await transport(url, { method: 'GET', redirect: 'error',
         signal: AbortSignal.timeout(30_000),
         headers: { authorization: `Bearer ${credential}`, accept: 'application/json' } });
-      if (!response.ok) throw Error();
-      body = await response.json();
-    } catch { throw Error('native_studio_access_inventory_unavailable'); }
+    } catch { throw Error(`native_studio_access_inventory_${scope}_transport_unavailable`); }
+    if (!response.ok)
+      throw Error(`native_studio_access_inventory_${scope}_http_${response.status}`);
+    let body: unknown;
+    try { body = await response.json(); }
+    catch { throw Error(`native_studio_access_inventory_${scope}_response_unavailable`); }
     if (!object(body) || body.success !== true || !Array.isArray(body.result) ||
         !object(body.result_info))
       throw Error('native_studio_access_inventory_unverified');
