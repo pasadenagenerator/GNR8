@@ -112,13 +112,17 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
       importProvenanceSummary: input.siteVersion.importProvenanceSummary,
       routeMapServingEnabled: true,
     });
-    if (routeSource.outcome !== "selected") {
+    const singlePageRoot = path === "/" && routeSource.outcome === "disabled" &&
+      !input.rawArtifact.metadata.multiPage?.enabled;
+    if (routeSource.outcome !== "selected" && !singlePageRoot) {
       throw new SourceBackedAstroUnsupportedError([`source_route_lineage_missing:${path}`]);
     }
+    const rawFilePath = routeSource.outcome === "selected"
+      ? routeSource.rawFilePath : input.rawArtifact.entryHtmlPath;
     const asset = await input.getRawAsset({
       siteVersionId: input.siteVersion.id,
       artifactId: input.rawArtifact.id,
-      filePath: routeSource.rawFilePath,
+      filePath: rawFilePath,
     });
     if (!asset || asset.bytes.byteLength === 0) {
       throw new SourceBackedAstroUnsupportedError([`source_route_asset_missing:${path}`]);
@@ -126,7 +130,7 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
     if (!/text\/html|application\/xhtml\+xml/i.test(asset.mediaType)) {
       throw new SourceBackedAstroUnsupportedError([`source_route_asset_invalid_mime:${path}`]);
     }
-    const expected = input.rawArtifact.fileMap[routeSource.rawFilePath];
+    const expected = input.rawArtifact.fileMap[rawFilePath];
     if (!expected || expected.sha256 !== asset.sha256 || expected.sizeBytes !== asset.sizeBytes) {
       throw new SourceBackedAstroUnsupportedError([`source_route_asset_identity_mismatch:${path}`]);
     }

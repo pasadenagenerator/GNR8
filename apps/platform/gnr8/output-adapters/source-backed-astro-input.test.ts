@@ -357,6 +357,27 @@ test("loads every captured route from the owned raw artifact when the runtime ar
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro"));
 });
 
+test("loads a single-page imported root from its verified entry HTML without a multi-page route map", async () => {
+  const input = fixture({ rootHtml: "<html><body><h1>Example Domain</h1></body></html>" });
+  input.version.pages = [page("/", "Home")];
+  input.version.importProvenanceSummary = {};
+  input.rawArtifact.metadata.multiPage = undefined;
+  const entry = input.rawArtifact.fileMap["index.html"]!;
+  const getRawAsset = async ({ filePath }: { filePath: string }) => filePath === "index.html"
+    ? { mediaType: entry.mediaType, sizeBytes: entry.sizeBytes, sha256: entry.sha256,
+      bytes: Buffer.from(input.artifact.htmlByPath["/"]!) } : null;
+  const htmlByPath = await loadSourceBackedAstroHtmlByPath({
+    siteVersion: input.version, rawArtifact: input.rawArtifact, getRawAsset,
+  });
+  assert.deepEqual(htmlByPath, { "/": input.artifact.htmlByPath["/"] });
+
+  input.rawArtifact.metadata.multiPage = { enabled: true, pageCount: 1,
+    routeMapRef: "importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly" };
+  await assert.rejects(() => loadSourceBackedAstroHtmlByPath({
+    siteVersion: input.version, rawArtifact: input.rawArtifact, getRawAsset,
+  }), /source_route_lineage_missing:\//);
+});
+
 test("fails explicitly when any required captured route bytes are unavailable", async () => {
   const input = fixture();
   await assert.rejects(
