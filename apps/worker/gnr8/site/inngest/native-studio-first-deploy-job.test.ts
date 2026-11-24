@@ -166,6 +166,40 @@ async () => {
   ]);
 });
 
+test('detached deploy is polled until completion across durable waits', async () => {
+  const steps: string[] = [];
+  let calls = 0;
+  const result = await settleNativeStudioFirstDeploy(request, {
+    run: async (id, fn) => { steps.push(id); return fn(); },
+    sleep: async (id, duration) => {
+      assert.equal(duration, '1m'); steps.push(id); },
+  }, (async () => {
+    calls++;
+    return calls < 3 ? { state: 'running', commit: request.sourceCommit } :
+      { state: 'reconcile-required', commit: request.sourceCommit,
+        observation: 'verified-source-control-plane' };
+  }) as typeof runNativeStudioFirstDeploy);
+  assert.equal(result.state, 'reconcile-required');
+  assert.deepEqual(steps, [
+    'first-deploy-observe-0', 'first-deploy-wait-0',
+    'first-deploy-observe-1', 'first-deploy-wait-1',
+    'first-deploy-observe-2',
+  ]);
+});
+
+test('long-running deploy ends in review without reporting completion', async () => {
+  let calls = 0, waits = 0;
+  const result = await settleNativeStudioFirstDeploy(request, {
+    run: async (_id, fn) => { calls++; return fn(); },
+    sleep: async () => { waits++; },
+  }, (async () => ({ state: 'running',
+    commit: request.sourceCommit })) as typeof runNativeStudioFirstDeploy);
+  assert.deepEqual(result, { state: 'pending-review',
+    commit: request.sourceCommit, observation: 'execution-timeout' });
+  assert.equal(calls, 30);
+  assert.equal(waits, 29);
+});
+
 test('inconsistent secret receipt is terminal without another observation',
 async () => {
   const steps: string[] = [];

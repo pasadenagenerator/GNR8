@@ -21,12 +21,14 @@ const fail = () => { throw Error('native_studio_deploy_package_unverified'); };
 
 type Staged = { deploymentRoot: string; studio: string; bundleRoot: string;
   config: { relative: string; entry: string; image: string } };
-type Input = { staged: Staged; siteId: string; accountId: string;
+export type NativeStudioDeploySandboxAttestation = {
+  siteId: string; accountId: string;
   sourceId: string; snapshotId: string; sessionId: string;
   networkPolicy: NetworkPolicy; sandboxTimeoutMs: number;
   sandbox: Pick<Sandbox, 'name' | 'status' | 'sourceSnapshotId' |
     'region' | 'persistent' | 'timeout' | 'networkPolicy' | 'mounts' |
     'expiresAt' | 'currentSession' | 'runCommand' | 'writeFiles'> };
+type Input = NativeStudioDeploySandboxAttestation & { staged: Staged };
 type Listed = { path: string; bytes: number; sha256: string };
 
 function safePath(value: unknown): value is string {
@@ -37,7 +39,7 @@ function safePath(value: unknown): value is string {
       part !== 'node_modules');
 }
 
-function attest(input: Input) {
+function attest(input: NativeStudioDeploySandboxAttestation) {
   const sandbox = input.sandbox;
   if (!UUID.test(input.siteId) || !/^[a-f0-9]{32}$/.test(input.accountId) ||
       !SHA.test(input.sourceId) || !SNAPSHOT.test(input.snapshotId) ||
@@ -140,11 +142,12 @@ async function localFiles(input: Input) {
   return { files, configPath, remoteEntry, remoteConfig };
 }
 
-const remoteVerify = `import{lstat,readdir,readFile}from'node:fs/promises';
+function remoteVerify(expectedSha256: string) { return `import{lstat,readdir,readFile}from'node:fs/promises';
 import{join}from'node:path';import{createHash}from'node:crypto';
 const root=${JSON.stringify(NATIVE_STUDIO_DEPLOY_PACKAGE_ROOT)},manifest=${JSON.stringify(MANIFEST)};
 const m=await lstat(manifest);if(!m.isFile()||m.isSymbolicLink()||m.size>4194304)process.exit(2);
-const expected=JSON.parse(await readFile(manifest));
+const mb=await readFile(manifest);if(createHash('sha256').update(mb).digest('hex')!==${JSON.stringify(expectedSha256)})process.exit(2);
+const expected=JSON.parse(mb);
 const actual=[];let total=0;
 async function walk(path){const full=path?join(root,path):root,s=await lstat(full);
 if(s.isSymbolicLink())process.exit(2);
@@ -157,7 +160,22 @@ const body=await readFile(full);if(body.length!==s.size)process.exit(2);
 actual.push({path,bytes:body.length,sha256:createHash('sha256').update(body).digest('hex')})}
 await walk('');actual.sort((a,b)=>a.path.localeCompare(b.path));
 if(JSON.stringify(actual)!==JSON.stringify(expected))process.exit(2);
-console.log('verified')`;
+console.log('verified')`; }
+
+/** Rehash the entire remote package on every invocation before credentials. */
+export async function verifyNativeStudioDeployPackageInSandbox(
+  input: NativeStudioDeploySandboxAttestation & { manifestSha256: string },
+) {
+  attest(input);
+  if (!SHA.test(input.manifestSha256)) fail();
+  const verified = await input.sandbox.runCommand({ cmd: 'node',
+    args: ['--input-type=module', '-e', remoteVerify(input.manifestSha256)],
+    cwd: NATIVE_STUDIO_DEPLOY_PACKAGE_ROOT, timeoutMs: 5 * 60_000,
+    env: { CI: '1' } });
+  if (verified.exitCode !== 0 || (await verified.stdout()).trim() !== 'verified')
+    fail();
+  attest(input);
+}
 
 /** Transfer only an already verified, credential-free package. Never invoke
  * Wrangler or load a Cloudflare credential in this step. */
@@ -183,13 +201,8 @@ export async function stageNativeStudioDeployPackageInSandbox(input: Input) {
   }
   await input.sandbox.writeFiles([{ path: MANIFEST, content: manifest }]);
   attest(input);
-  const verified = await input.sandbox.runCommand({ cmd: 'node',
-    args: ['--input-type=module', '-e', remoteVerify],
-    cwd: NATIVE_STUDIO_DEPLOY_PACKAGE_ROOT, timeoutMs: 5 * 60_000,
-    env: { CI: '1' } });
-  if (verified.exitCode !== 0 || (await verified.stdout()).trim() !== 'verified')
-    fail();
-  attest(input);
+  await verifyNativeStudioDeployPackageInSandbox({ ...input,
+    manifestSha256: hash(manifest) });
   return { root: NATIVE_STUDIO_DEPLOY_PACKAGE_ROOT,
     studio: `${NATIVE_STUDIO_DEPLOY_PACKAGE_ROOT}/studio`,
     config: input.staged.config.relative,

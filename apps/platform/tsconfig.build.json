@@ -23,6 +23,8 @@
     "../../scripts/stacki/studio-image-archive.mjs",
     "../../scripts/stacki/trusted-studio-deploy.mjs",
     "../../scripts/stacki/prebuilt-studio-deploy-config.mjs",
+    "../../scripts/stacki/prebundled-studio-deploy-config.mjs",
+    "../../scripts/stacki/stage-prebundled-studio-deploy.mjs",
     "../../scripts/stacki/first-studio-deploy-identity.mjs",
     "../../scripts/stacki/first-studio-dry-run.mjs",
     "../../scripts/stacki/build-handoff.mjs",

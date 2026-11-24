@@ -5,7 +5,7 @@ import { NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT } from './native-studio-public-gatew
 
 export const NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID = 'native-studio-first-deploy-job';
 export const NATIVE_STUDIO_FIRST_DEPLOY_EVENT = 'gnr8/native-studio.first-deploy.requested';
-const MAX_OBSERVATIONS = 15;
+const MAX_OBSERVATIONS = 30;
 const OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
@@ -20,6 +20,8 @@ type Prebuilt = { accountId: string; commit: string; digest: string;
 type Resources = { target: { scope: Scope; accountId: string };
   workers: { studio: { id: string } } };
 type Secrets = { accountId: string; identity: string; worker: string };
+type DeployProgress = { state: 'running' | 'pending-review' |
+  'reconcile-required'; commit: string; observation?: string };
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const SOURCE = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40,64}$/;
@@ -49,15 +51,14 @@ const defaults = {
     return { artifact, preflight, prebuilt, resources, secrets };
   },
   deploy: async (request: Request, client: SupabaseClient) => {
-    const { runConfiguredNativeStudioFirstDeploy } = await import(
-      '@/gnr8/standalone/native-studio-configured-first-deploy-run');
+    const { configuredNativeStudioDetachedDeploy } = await import(
+      '@/gnr8/standalone/native-studio-configured-detached-deploy');
     const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-    const trustedWrangler = process.env.GNR8_NATIVE_STUDIO_TRUSTED_WRANGLER ?? '';
-    if (!trustedGit.startsWith('/') || !trustedWrangler.startsWith('/'))
+    if (!trustedGit.startsWith('/'))
       throw Error('native_studio_first_deploy_runner_unconfigured');
-    return runConfiguredNativeStudioFirstDeploy({ scope: request.scope, client,
+    return configuredNativeStudioDetachedDeploy({ scope: request.scope, client,
       sourceId: request.sourceId, sourceCommit: request.sourceCommit,
-      workerId: request.workerId, trustedGit, trustedWrangler });
+      workerId: request.workerId, trustedGit });
   },
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_PUBLIC_GATEWAY_ENABLED === '1',
   enqueuePublicGateway: async (request: Request) => {
@@ -74,7 +75,7 @@ const defaults = {
 /** The separate trusted job receives identities only. It checks the scoped
  * artifact, dry-run and registry image before opening deploy secrets. */
 export async function runNativeStudioFirstDeploy(request: unknown,
-  deps: typeof defaults = defaults) {
+  deps: typeof defaults = defaults): Promise<DeployProgress> {
   if (!deps.enabled()) throw Error('native_studio_first_deploy_disabled');
   if (!request || typeof request !== 'object' || Array.isArray(request) ||
       Object.keys(request).sort().join() !==
@@ -159,9 +160,13 @@ export async function settleNativeStudioFirstDeploy(
       await steps.sleep(`first-deploy-wait-${index}`, OBSERVATION_INTERVAL);
       continue;
     }
-    if (result.state !== 'pending-review' ||
-        !['pending', 'readback-unavailable'].includes(result.observation) ||
-        index === MAX_OBSERVATIONS - 1)
+    const continuing = result.state === 'running' ||
+      (result.state === 'pending-review' &&
+        ['pending', 'readback-unavailable'].includes(result.observation ?? ''));
+    if (result.state === 'running' && index === MAX_OBSERVATIONS - 1)
+      return { state: 'pending-review', commit: result.commit,
+        observation: 'execution-timeout' };
+    if (!continuing || index === MAX_OBSERVATIONS - 1)
       return result;
     await steps.sleep(`first-deploy-wait-${index}`, OBSERVATION_INTERVAL);
   }
