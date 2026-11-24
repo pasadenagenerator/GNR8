@@ -55,6 +55,44 @@ test('retained Ladja capture replay',{skip:!process.env.GNR8_LADJA_CAPTURE_DIR},
   }catch(error){if(error instanceof SourceBackedAstroUnsupportedError){process.stderr.write(JSON.stringify({capabilities:error.unsupportedCapabilities,scripts:error.scriptEvidence})+'\n');}throw error;}
 });
 
+test('retained Aris capture replays into the Stacki Astro 7 source boundary',{skip:!process.env.GNR8_ARIS_CAPTURE_DIR},async()=>{
+  const dir=process.env.GNR8_ARIS_CAPTURE_DIR!;
+  const saved=JSON.parse(readFileSync(`${dir}/local-replay.json`,'utf8')) as {version:CanonicalSiteVersionSnapshot;raw:RawImportedSiteArtifact};
+  const root=`${dir}/raw-import/${saved.version.id}`;
+  const getRawAsset=async({filePath}:{filePath:string})=>{
+    const file=saved.raw.fileMap[filePath];
+    if(!file)return null;
+    const bytes=readFileSync(`${root}/${filePath}`);
+    const sha256=createHash('sha256').update(bytes).digest('hex');
+    assert.equal(sha256,file.sha256,filePath);
+    assert.equal(bytes.length,file.sizeBytes,filePath);
+    return {bytes,mediaType:file.mediaType,sha256,sizeBytes:bytes.length};
+  };
+  const source=await loadSourceBackedAstroGenerationSource({siteVersion:saved.version,rawArtifact:saved.raw,getRawAsset} as never);
+  const artifact={id:saved.version.artifactId,siteId:saved.version.siteId,siteVersionId:saved.version.id,bundleSha256:'0'.repeat(64)} as RuntimeArtifact;
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:saved.version,rawArtifact:saved.raw,artifact,
+    ...source,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'}});
+  assert.deepEqual(generated.outputPaths,['/','/apple','/canton']);
+  const rootPage=generated.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+  assert.match(rootPage,/data-gnr8-rowgroup="auto-v1"/);
+  assert.match(rootPage,/data-gnr8-video-projected="youtube-static-v1"/);
+  assert.doesNotMatch(rootPage,/b3798041fcff-rowgroup\.js|efd0e6abc2d9-iframe_api\.js/);
+  const {prepareStackiSourceProject,prepareStackiAstro7Baseline}=await import('../stacki/stacki-source-project');
+  const {createAstroStaticSiteSourceSnapshot}=await import('./astro-static-site-workspace-preparation');
+  const files=generated.sourceManifest.files.map(file=>({path:file.path,body:Buffer.from(file.contents)}));
+  const snapshot=createAstroStaticSiteSourceSnapshot(files);
+  const project=await prepareStackiSourceProject({workspace:generated.sourceManifest,assetMode:'runtime-overlay',
+    binding:{runtimeSiteId:saved.version.siteId,sourceSiteVersionId:saved.version.id,sourceArtifactId:artifact.id,
+      sourceSnapshotSha256:snapshot.aggregateSha256,requiredAssets:generated.contentManifest.requiredAssets},
+    readVerifiedAsset:async()=>{throw Error('unexpected retained asset read')}});
+  const baseline=prepareStackiAstro7Baseline({files:project.files,expectedSourceSnapshotSha256:snapshot.aggregateSha256});
+  if(process.env.GNR8_ARIS_BUILD_ROOT){
+    const {prepareAstroStaticSiteSourceWorkspace}=await import('./astro-static-site-workspace-preparation');
+    const workspace=await prepareAstroStaticSiteSourceWorkspace({files:baseline.files.map(file=>({path:file.path,body:Buffer.from(file.base64,'base64')})),workspaceRoot:process.env.GNR8_ARIS_BUILD_ROOT});
+    process.stderr.write(`ARIS_LOCAL_WORKSPACE=${workspace.workspacePath}\n`);
+  }
+});
+
 test('retained functions need a confirmed recipient only when a supported contact form exists',()=>{
   const noForm=fixture();
   const settings={kind:'retained-functions-v1' as const};
@@ -1308,13 +1346,16 @@ test('source-only scope keeps every form at its original page without inventing 
 
 test('source-linked Mono YouTube background stays playable without copying its runtime onto Astro',()=>{
  const iframe='<iframe class="monovideobg" data-videotype="youtube" data-req="videobg,ext-//www.youtube.com/iframe_api" src="https://www.youtube.com/embed/gC6SF4WfdkM?controls=0&amp;enablejsapi=1&amp;playerapiid=player_r4795" title="air15"></iframe>';
- const f=fixture({rootHtml:`<html><body>${iframe}<script src="/assets/videobg.js"></script><script src="//www.youtube.com/iframe_api"></script><script src="/assets/www-widgetapi.js"></script></body></html>`});
+ const f=fixture({rootHtml:`<html><body>${iframe}<script src="/assets/videobg.js"></script><script src="//www.youtube.com/iframe_api"></script><script src="/assets/efd0e6abc2d9-iframe_api.js"></script><script src="/assets/www-widgetapi.js"></script></body></html>`});
+ f.rawArtifact.fileMap['assets/efd0e6abc2d9-iframe_api.js']={path:'assets/efd0e6abc2d9-iframe_api.js',mediaType:'application/javascript',sizeBytes:993,sha256:'a357639d2e67513615763390a305b30d143111c3074a8b120ff19d423d336ca6'};
  const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'} as const;
  const generated=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:settings});
  const root=generated.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
  assert.match(root,/data-gnr8-video-projected="youtube-static-v1"/);
  assert.match(root,/controls=1/);
  assert.doesNotMatch(root,/enablejsapi|playerapiid|videobg\.js|iframe_api|www-widgetapi\.js/);
+ f.rawArtifact.fileMap['assets/efd0e6abc2d9-iframe_api.js']!.sha256='b'.repeat(64);
+ assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError);
  const unknown=fixture({rootHtml:`<html><body>${iframe}<script src="/assets/unknown.js"></script></body></html>`});
  assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:unknown.version,rawArtifact:unknown.rawArtifact,artifact:unknown.artifact,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError);
 })

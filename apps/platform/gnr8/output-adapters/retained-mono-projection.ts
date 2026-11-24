@@ -41,12 +41,25 @@ export function removableMonoScript(input:{script:Element; fileSha256?:string; t
    const announcements=input.elements.filter(n=>hasClass(n,'engagement'));
    return announcements.length>0&&announcements.every(n=>attr(n,'data-gnr8-announcement')==='v1');
  }
+ // Audited Mono rowgroup program: its two-slide auto rotation is now owned.
+ if(input.fileSha256==='88fcc063e6f39c08a2ca8e73b7289fabad9d34f0b003bcd9c690d35262d4199e') {
+   const groups=input.elements.filter(n=>attr(n,'data-gnr8-rowgroup')==='auto-v1');
+   return groups.length>0&&!input.elements.some(n=>attr(n,'data-req').split(',').includes('rowgroup'));
+ }
  return false;
 }
 
 export function projectMonoControls(document:DefaultTreeAdapterMap['document'],removeTrackingAndChat:boolean,sourcePageUrl:string|null):void {
  let controls=false;
  for(const node of elements(document)) {
+   if(node.tagName==='div' && hasClass(node,'rowGroup') && attr(node,'data-req')==='rowgroup' &&
+      /^auto=true(?:;|$)/.test(attr(node,'data-rowgroupsettings')) &&
+      node.childNodes.filter(n=>'tagName' in n).length===2 &&
+      node.childNodes.filter(n=>'tagName' in n).every(n=>n.tagName==='div'&&hasClass(n,'row'))) {
+     set(node,'data-gnr8-rowgroup','auto-v1');
+     node.attrs=node.attrs.filter(a=>a.name!=='data-req');
+     controls=true;
+   }
    if(node.tagName==='iframe' && hasClass(node,'monovideobg') && attr(node,'data-videotype')==='youtube' &&
      attr(node,'data-req').split(',').includes('videobg') && attr(node,'data-req').split(',').includes('ext-//www.youtube.com/iframe_api')) {
      try {
