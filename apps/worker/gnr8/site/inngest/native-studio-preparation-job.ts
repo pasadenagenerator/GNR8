@@ -23,8 +23,8 @@ export async function authorizeNativeStudioSourceEventBeforeAccess(data: any,
    await requireAgencyBackgroundActor(client,{userId:actor,agencyId:scope.agencyId,action:'publish'});},
   ownership: async(siteVersionId)=>{const {SupabaseAstroCandidateOwnershipResolver}=await import('@/gnr8/output-adapters/astro-production-candidate-ownership-resolver');
    return new SupabaseAstroCandidateOwnershipResolver().resolve({siteVersionId});},
-  confirmed: async(client,input)=>{const {requireCurrentConfirmedSelection}=await import('@/gnr8/standalone/current-confirmed-import');
-   return requireCurrentConfirmedSelection(client,input);},
+  confirmed: async(client,input)=>{const {requireCurrentStudioSourceSelection}=await import('@/gnr8/standalone/current-confirmed-import');
+   return requireCurrentStudioSourceSelection(client,input);},
   parse: parsePublicationSelection,
   fingerprint,
   };

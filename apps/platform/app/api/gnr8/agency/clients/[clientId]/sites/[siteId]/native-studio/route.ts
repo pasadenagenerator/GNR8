@@ -6,7 +6,7 @@ import { readBoundedJson, requireSameOriginJson } from '@/gnr8/stacki/stacki-dra
 import { inngest } from '@/gnr8/inngest/client';
 import { fingerprint, publicationSelectionForArtifact, type Release } from '@/gnr8/standalone/publication-contract';
 import { SupabaseAstroCandidateRuntimeArtifactStore } from '@/gnr8/output-adapters/astro-candidate-runtime-artifact-store';
-import { requireCurrentConfirmedSelection } from '@/gnr8/standalone/current-confirmed-import';
+import { requireCurrentStudioSourceSelection } from '@/gnr8/standalone/current-confirmed-import';
 import { configuredNativeStudioSite } from '@/gnr8/standalone/native-studio-preparation';
 import { configuredNativeStudioDirectSourceSite } from '@/gnr8/standalone/native-studio-bootstrap-site';
 import { readNativeStudioSourceStatus } from '@/gnr8/standalone/native-studio-source-status';
@@ -27,7 +27,7 @@ async function currentSource(scope:Scope,client:NonNullable<ReturnType<typeof ge
   throw Error('native_studio_selection_mismatch');
  await requirePublicOutputVersion(scope,selected.siteVersionId);
  let current;
- try{current=await requireCurrentConfirmedSelection(client,input);}
+ try{current=await requireCurrentStudioSourceSelection(client,input);}
  catch{throw Error('native_studio_confirmation_stale');}
  await requirePublicOutputVersion(scope,current.artifactVersionId);
  await requirePublicOutputVersion(scope,current.captureVersionId);

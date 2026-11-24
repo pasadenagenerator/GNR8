@@ -72,7 +72,16 @@ export default async function GeneratedOutputReviewPage(props: { params: Promise
           ) : null}
           <p><Link href={candidatePreview("/")} target="_blank" rel="noreferrer">Open exact candidate in a new tab</Link></p>
           {approved ? (
-            <p style={{ padding: 12, background: "#dcfce7", border: "1px solid #86efac", borderRadius: 8 }}>This exact artifact is approved and ready for the normal Publish step after domain readiness.</p>
+            <>
+              <p style={{ padding: 12, background: "#dcfce7", border: "1px solid #86efac", borderRadius: 8 }}>This exact artifact is approved and ready for the normal Publish step after domain readiness.</p>
+              {process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED==='1' ? <GeneratedOutputReviewAction
+                approved publicHost={model.publicPreparation?.host} siteVersionId={model.siteVersionId}
+                artifactId={model.artifactId} artifactBundleSha256={model.artifactBundleSha256}
+                candidateId={model.candidateId} candidateContentSha256={model.candidateContentSha256}
+                contentManifestSha256={model.contentManifestSha256}
+                technicalEvaluationSha256={model.decision.technical.evidenceSha256}
+                disabled={!technicalPass} /> : null}
+            </>
           ) : (
             <GeneratedOutputReviewAction
               publicHost={model.publicPreparation?.host}

@@ -63,6 +63,29 @@ test("review route derives reviewer from auth and forwards the exact artifact-bo
   });
 });
 
+test('approved candidate queues exact Studio source preparation when enabled',async()=>{
+ const previous=process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED;
+ process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED='1';
+ const queued:unknown[]=[];
+ const review=createGeneratedOutputReviewRecord({reviewId:'generated-output-review-2',decision:'APPROVED',
+  policyVersion:'gnr8-generated-output-eligibility:v1',artifactId:ARTIFACT_ID,artifactBundleSha256:'a'.repeat(64),
+  candidateId:CANDIDATE_ID,candidateContentSha256:'b'.repeat(64),contentManifestSha256:'c'.repeat(64),
+  technicalEvaluationSha256:'d'.repeat(64),reviewerActorId:'reviewer-from-auth',reviewedAt:'2026-11-24T12:00:00.000Z'});
+ try{
+  const handlers=createGeneratedOutputReviewRouteHandlers({requireActor:async()=> 'reviewer-from-auth',enabled:()=>true,
+   approve:async()=>({status:'approved',review,decision:{activation:'READY_FOR_TARGET_READINESS'} as never}),
+   enqueueStudioSource:async value=>{queued.push(value);}});
+  const response=await handlers.POST(request(),{params:Promise.resolve({siteVersionId:VERSION_ID})});
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).sourcePreparation,'queued');
+  assert.deepEqual(queued,[{siteVersionId:VERSION_ID,actor:'reviewer-from-auth',artifactId:ARTIFACT_ID,
+   artifactBundleSha256:'a'.repeat(64),confirmationSha256:review.reviewSha256}]);
+ }finally{
+  if(previous===undefined)delete process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED;
+  else process.env.GNR8_NATIVE_STUDIO_BOOTSTRAP_ENABLED=previous;
+ }
+});
+
 function request(): Request {
   return new Request("https://preview.example.test/api/gnr8/admin/generated-output-review/target/approve", {
     method: "POST",

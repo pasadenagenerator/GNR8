@@ -11,7 +11,7 @@ import { loadStackiSource, planStackiRuntimeAssets } from '../stacki/stacki-sour
 import { exportStandaloneProject } from './standalone-export';
 import { requireCompatibleStandaloneToolchain } from './publication-foundation';
 import { fingerprint, parsePublicationSelection, publicationSelectionForArtifact, type PublicationSelection } from './publication-contract';
-import { requireCurrentConfirmedSelection } from './current-confirmed-import';
+import { requireCurrentStudioSourceSelection } from './current-confirmed-import';
 import { SupabasePublicationStore } from './publication-store';
 import { configuredNativeStudioDirectSourceSite } from './native-studio-bootstrap-site';
 import { nativeStudioSourceResultKey } from './native-studio-source-status';
@@ -114,7 +114,7 @@ const defaults={
   return rows.data[0]!.site_version_id as string;
  },
  source:async(client:SupabaseClient,id:string)=>new SupabaseAstroCandidateRuntimeArtifactStore(client).readSourceContext(id),
- confirm:requireCurrentConfirmedSelection,loadSource:loadStackiSource,planAssets:planStackiRuntimeAssets,
+ confirm:requireCurrentStudioSourceSelection,loadSource:loadStackiSource,planAssets:planStackiRuntimeAssets,
  revision:async(client:SupabaseClient,bucket:string,scope:PublicationSelection['selection']['scope'],revision:number)=>
   (await resolvedGitHubStackiStore(scope)??new SupabaseStackiDraftStore(client,bucket)).revision(scope,revision),
  export:exportStandaloneProject,persist:persistVerifiedAstroStudio,

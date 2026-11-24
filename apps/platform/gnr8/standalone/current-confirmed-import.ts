@@ -3,9 +3,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseAstroCandidateRuntimeArtifactStore } from '../output-adapters/astro-candidate-runtime-artifact-store';
 import { validateGeneratedOutputBuildEvidence, validateGeneratedOutputContentManifest } from '../output-adapters/generated-output-eligibility';
 import { getSiteVersion, isGitBackedImportMarker } from '../runtime/runtime-store';
-import { fingerprint, publicationSelectionForArtifact, type PublicationSelection, type Release } from './publication-contract';
+import { fingerprint, publicationSelectionForArtifact, type PublicationSelection, type Release, type StoredSourceSelection } from './publication-contract';
 import { requireConfirmedImport } from './publication-foundation';
 import { requireCurrentSelectedImportClosure } from './read-selected-import-closure';
+import { readGeneratedOutputReviewModel, readLatestReview, type GeneratedOutputReviewModel } from '../output-adapters/generated-output-publication-composition';
+import type { GeneratedOutputReviewRecord } from '../output-adapters/generated-output-eligibility';
 
 /** Revalidate the mutable acceptance, not merely the saved release certificate. */
 export async function requireCurrentConfirmedSelection(client:SupabaseClient,input:PublicationSelection){
@@ -49,6 +51,48 @@ export async function requireCurrentConfirmedSelection(client:SupabaseClient,inp
  } catch { throw Error('native_studio_confirmation_stale'); }
  return {...current,artifactVersionId,captureVersionId:capture.siteVersionId,
   routes:content.scope.outputPaths,manifest};
+}
+
+/** A reviewed generated artifact may seed Studio without certifying that the
+ * original site's capture was complete. The review is bound to the exact
+ * artifact, candidate, manifest and technical evaluation. */
+export function requireReviewedGeneratedStudioSource(input:PublicationSelection,
+ model:GeneratedOutputReviewModel,review:GeneratedOutputReviewRecord|null){
+ const scope=input.selection.scope;
+ if(!isGeneratedSource(input)||scope.siteVersionId!==model.siteVersionId||
+  model.artifactId!==input.artifactId||model.artifactBundleSha256!==input.artifactSha256||
+  model.decision.technical.status!=='PASS'||model.decision.review.status!=='APPROVED'||
+  !review||review.decision!=='APPROVED'||review.artifactId!==model.artifactId||
+  review.artifactBundleSha256!==model.artifactBundleSha256||review.candidateId!==model.candidateId||
+  review.candidateContentSha256!==model.candidateContentSha256||
+  review.contentManifestSha256!==model.contentManifestSha256||
+  review.technicalEvaluationSha256!==model.decision.technical.evidenceSha256||
+  !model.outputPaths.length||new Set(model.outputPaths).size!==model.outputPaths.length)
+  throw Error('native_studio_confirmation_stale');
+ return {confirmationSha256:review.reviewSha256,artifactVersionId:model.siteVersionId,
+  captureVersionId:model.sourceCapture.siteVersionId,routes:model.outputPaths};
+}
+
+/** Studio source preparation accepts either the existing complete-import
+ * certificate or an exact generated-output approval. Public release of an
+ * imported source keeps the stricter complete-import contract above. */
+export async function requireCurrentStudioSourceSelection(client:SupabaseClient,input:PublicationSelection,deps={
+ source:(db:SupabaseClient,id:string)=>new SupabaseAstroCandidateRuntimeArtifactStore(db).readSourceContext(id),
+ model:readGeneratedOutputReviewModel,
+ review:readLatestReview,
+}){
+ if(!isGeneratedSource(input))return requireCurrentConfirmedSelection(client,input);
+ const siteVersionId=input.selection.scope.siteVersionId;
+ const context=await deps.source(client,siteVersionId);
+ if(!context||context.artifact.id!==input.artifactId||context.artifact.bundleSha256!==input.artifactSha256||
+  fingerprint(publicationSelectionForArtifact(input.selection.scope,context.artifact))!==fingerprint(input))
+  throw Error('native_studio_source_stale');
+ const model=await deps.model(siteVersionId);
+ const review=await deps.review(client,siteVersionId);
+ return {...requireReviewedGeneratedStudioSource(input,model,review),manifest:context.artifact.manifest};
+}
+function isGeneratedSource(input:PublicationSelection):input is PublicationSelection&{selection:StoredSourceSelection}{
+ return 'kind' in input.selection&&input.selection.kind==='generated-source';
 }
 export async function requireCurrentConfirmedImport(client:SupabaseClient,release:Release){
  const current=await requireCurrentConfirmedSelection(client,release.input);
