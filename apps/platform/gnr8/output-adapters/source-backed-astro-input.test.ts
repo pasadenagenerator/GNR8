@@ -588,6 +588,12 @@ test("uncaptured required routes and executable source behavior return explicit 
   );
 });
 
+test("uncaptured source PDF remains a working document link without treating it as a page", () => {
+  const input = fixture({ rootHtml: '<html><head><title>Home</title></head><body><a href="/uploads/CYPXw3ui/ARIS-GLSSLO.pdf?download=1#page=2">Document</a></body></html>' });
+  const result = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
+  assert.deepEqual(result.content.navItems, [{ label: "Document", href: "https://example.com/uploads/CYPXw3ui/ARIS-GLSSLO.pdf?download=1#page=2" }]);
+});
+
 test("preserves page-limit omissions as disclosed source links while other uncaptured routes still fail", () => {
   const input = fixture({
     rootHtml: '<html><head><title>Home</title></head><body><a href="/about">About</a><a href="/older-article">Older article</a></body></html>',
@@ -1282,6 +1288,22 @@ test('accepted source links preserve captured routes and source URL queries whil
  assert.equal(result.outputPaths.length,2)
  f.artifact.htmlByPath['/']+='<script>unknownRuntime()</script>'
  assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError)
+})
+
+test('accepted source form link removes the obsolete form runtime after replacing a complex form',()=>{
+ const f=fixture({rootHtml:'<html><body><form><input type="checkbox" name="newsletter"><button>Send</button></form><script src="/assets/form.js"></script></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}}});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/Open original form/);
+ assert.doesNotMatch(root,/<form|form\.js/);
+})
+
+test('source-only scope keeps every form at its original page without inventing a contact recipient',()=>{
+ const f=fixture({rootHtml:'<html><body><form><input name="name" required><input type="email" name="email"><textarea name="message"></textarea><button>Send</button></form></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'}});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/Open original form/);
+ assert.doesNotMatch(root,/data-gnr8-contact="v1"/);
 })
 
 test('explicit tracking/chat omission preserves announcement and click-to-load video with owned controls',()=>{

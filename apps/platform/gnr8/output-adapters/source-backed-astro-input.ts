@@ -470,7 +470,9 @@ export function createSourceBackedAstroGenerationInput(input: {
               ? "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Only supported ordinary contact forms are replaced by GNR8 forms. Sending requires server-side delivery and durable submission configuration; previews cannot send."
               : "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Contact forms remain unsupported.",
           ] : input.acceptedFunctionalReductions.kind === "retained-source-links-v1" ? [
-            "Uncaptured routes and unsupported forms open the corresponding original page. Supported ordinary contact forms use the explicitly confirmed GNR8 recipient; previews cannot send.",
+            input.acceptedFunctionalReductions.contact
+              ? "Uncaptured routes and unsupported forms open the corresponding original page. Supported ordinary contact forms use the explicitly confirmed GNR8 recipient; previews cannot send."
+              : "Uncaptured routes and all contact forms open the corresponding original page; generated pages do not send submissions.",
             ...(input.acceptedFunctionalReductions.trackingAndChat === 'remove' ? ['Recognized tracking, its consent controls and Facebook chat are omitted.'] : []),
             ...(input.acceptedFunctionalReductions.sourceMediaLinks?.length ? ['Explicitly selected large animations are displayed as labelled links to the original media, not embedded.'] : []),
             'Recognized announcements and Wistia video use owned controls. Source parallax initialization is static; the original service worker is not installed on the generated host.',
@@ -581,7 +583,7 @@ function normalizePage(input: {
   } else if (input.acceptedFunctionalReductions?.kind === "retained-source-links-v1") {
     let nativeForms = 0;
     for (const form of forms) {
-      if (forms.length === 1 && replaceSupportedContactForm(form,input.path)) {
+      if (input.acceptedFunctionalReductions.contact && forms.length === 1 && replaceSupportedContactForm(form,input.path)) {
         nativeForms++;
       } else {
         const sourceUrl = sourcePageUrlForRoute(input.rawArtifact,input.siteVersion.importProvenanceSummary,input.path);
@@ -679,7 +681,10 @@ function normalizePage(input: {
         retainedFunctions:!!input.retainedFunctions,
       })) ||
       isReplaceableStaticSiteScript(script, {
-        hasReplacedForms: replacedFormCount > 0 && input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1",
+        hasReplacedForms: replacedFormCount > 0 && (
+          input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1" ||
+          input.acceptedFunctionalReductions?.kind === "retained-source-links-v1"
+        ),
         replacedFormSecurityRuntime,
         elements,
         capturedPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
@@ -985,7 +990,7 @@ function normalizeNavigationTarget(
     const route = normalizedPath === "/" ? "/" : normalizedPath;
     const localHost = url.hostname.replace(/^www\./, "") === sourceHost;
     if (!localHost) return /^https?:$/.test(url.protocol) ? url.toString() : "";
-    if (isFeedResourcePath(route)) return url.protocol === "https:" ? url.toString() : "";
+    if (isFeedResourcePath(route) || isSourceDocumentPath(route)) return url.protocol === "https:" ? url.toString() : "";
     const routeIdentity = canonicalRouteIdentity(route);
     const capturedRoute = knownRoutes.get(routeIdentity);
     if (!capturedRoute) {
@@ -1203,6 +1208,9 @@ function normalizeAstroOutputRoutePath(value: string): string {
 }
 function isFeedResourcePath(value: string): boolean {
   return /(?:\.rss|\.atom)$/i.test(value);
+}
+function isSourceDocumentPath(value: string): boolean {
+  return /\.pdf$/i.test(value);
 }
 function materializeLazyAssetAttributes(elements: HtmlElement[]): void {
   for (const element of elements) {

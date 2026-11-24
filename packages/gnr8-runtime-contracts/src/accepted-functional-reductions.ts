@@ -17,7 +17,7 @@ export type AcceptedFunctionalReductions = {
   complexForms: 'source-page'
   trackingAndChat?: 'remove'
   sourceMediaLinks?: string[]
-  contact: { recipient: string; recipientConfirmed: true }
+  contact?: { recipient: string; recipientConfirmed: true }
   sourceWidgetRemovals?: never
 }
 
@@ -34,7 +34,7 @@ export function parseAcceptedFunctionalReductions(value: unknown): AcceptedFunct
     if (Object.keys(input).some(key => !['kind','uncapturedRoutes','complexForms','contact','trackingAndChat','sourceMediaLinks'].includes(key)) ||
       input.uncapturedRoutes !== 'source' || input.complexForms !== 'source-page' ||
       (input.trackingAndChat !== undefined && input.trackingAndChat !== 'remove') ||
-      !input.contact || typeof input.contact !== 'object' || Array.isArray(input.contact)) return null
+      (input.contact !== undefined && (typeof input.contact !== 'object' || input.contact === null || Array.isArray(input.contact)))) return null
     if (input.sourceMediaLinks !== undefined && (!Array.isArray(input.sourceMediaLinks) ||
       input.sourceMediaLinks.length > 16 || new Set(input.sourceMediaLinks).size !== input.sourceMediaLinks.length ||
       !input.sourceMediaLinks.every(value => {
@@ -42,10 +42,10 @@ export function parseAcceptedFunctionalReductions(value: unknown): AcceptedFunct
         try { const url = new URL(value); return url.href === value && url.protocol === 'https:' &&
           !url.username && !url.password && !url.hash && /\.gif$/i.test(url.pathname) } catch { return false }
       }))) return null
-    const contact = input.contact as Record<string,unknown>
-    if (Object.keys(contact).some(key => !['recipient','recipientConfirmed'].includes(key)) ||
-      contact.recipientConfirmed !== true || !isContactEmail(contact.recipient)) return null
-    return {kind:input.kind,uncapturedRoutes:'source',complexForms:'source-page',...(input.trackingAndChat === 'remove' ? {trackingAndChat:'remove' as const} : {}),...(input.sourceMediaLinks !== undefined ? {sourceMediaLinks:input.sourceMediaLinks as string[]} : {}),contact:{recipient:contact.recipient,recipientConfirmed:true}}
+    const contact = input.contact as Record<string,unknown> | undefined
+    if (contact && (Object.keys(contact).some(key => !['recipient','recipientConfirmed'].includes(key)) ||
+      contact.recipientConfirmed !== true || !isContactEmail(contact.recipient))) return null
+    return {kind:input.kind,uncapturedRoutes:'source',complexForms:'source-page',...(input.trackingAndChat === 'remove' ? {trackingAndChat:'remove' as const} : {}),...(input.sourceMediaLinks !== undefined ? {sourceMediaLinks:input.sourceMediaLinks as string[]} : {}),...(contact ? {contact:{recipient:contact.recipient as string,recipientConfirmed:true as const}} : {})}
   }
   if (input.kind === 'retained-presentation-v1') {
     if (Object.keys(input).some(key => !['kind', 'search', 'map', 'tracking', 'excludedRoutes', 'contact'].includes(key))) return null

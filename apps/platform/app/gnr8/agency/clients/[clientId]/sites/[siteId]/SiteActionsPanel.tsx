@@ -184,7 +184,7 @@ export default function SiteActionsPanel(props: Props) {
       if (!confirmed) return
     }
 
-    const presentationSettings = sourceLinks ? parseAcceptedFunctionalReductions({kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',sourceMediaLinks:sourceMediaLinks.split('\n').map(value => value.trim()).filter(Boolean),...(removeTrackingAndChat ? {trackingAndChat:'remove'} : {}),contact:{recipient,recipientConfirmed:recipientConfirmed && Boolean(suggestions)}}) : presentation ? createRetainedPresentationSettings({
+    const presentationSettings = sourceLinks ? parseAcceptedFunctionalReductions({kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',sourceMediaLinks:sourceMediaLinks.split('\n').map(value => value.trim()).filter(Boolean),...(removeTrackingAndChat ? {trackingAndChat:'remove'} : {}),...(nativeContact ? {contact:{recipient,recipientConfirmed:recipientConfirmed && Boolean(suggestions)}} : {})}) : presentation ? createRetainedPresentationSettings({
       excludedPaths, nativeContact, recipient, recipientConfirmed: recipientConfirmed && Boolean(suggestions),
     }) : undefined
     if (type === 'generate_redesign' && outputAdapterId === 'default' && (presentation || sourceLinks) && !presentationSettings) {
@@ -352,8 +352,8 @@ export default function SiteActionsPanel(props: Props) {
                 For this candidate: remove recognized search; replace maps with their address and OpenStreetMap link; remove the recognized tracking and consent bundle together.
               </label>
               <label>
-                <input type='checkbox' checked={sourceLinks} disabled={!canRunMigration} onChange={event => {setSourceLinks(event.target.checked); setRecipientConfirmed(false); if(event.target.checked){setPresentation(false);setAcceptLegacyFormReductions(false);setNativeContact(true)}}} />
-                Keep captured pages; link omitted routes and complex forms to the original site. Use GNR8 for supported ordinary contact forms with the recipient confirmed below. Unknown scripts still block generation.
+                <input type='checkbox' checked={sourceLinks} disabled={!canRunMigration} onChange={event => {setSourceLinks(event.target.checked); setRecipientConfirmed(false); if(event.target.checked){setPresentation(false);setAcceptLegacyFormReductions(false);setNativeContact(false)}}} />
+                Keep captured pages; link omitted routes and forms to the original site. You can opt into GNR8 for supported ordinary contact forms below. Unknown scripts still block generation.
               </label>
               {sourceLinks ? <label><input type='checkbox' checked={removeTrackingAndChat} disabled={!canRunMigration} onChange={event => setRemoveTrackingAndChat(event.target.checked)} /> Omit recognized tracking and Facebook chat from this candidate. Keep native contact, page content and video controls.</label> : null}
               {sourceLinks ? <label>Original animation links (optional, one exact HTTPS GIF URL per line). Only listed images from this source site become clearly labelled links; other images remain included.
@@ -364,7 +364,7 @@ export default function SiteActionsPanel(props: Props) {
                   <textarea value={excludedPaths} disabled={!canRunMigration} onChange={event => setExcludedPaths(event.target.value)} rows={4} style={{display:'block',width:'100%'}} />
                 </label> : null}
                 <p>Captured files remain stored. Unknown scripts and unsupported forms block generation.</p>
-                <label><input type='checkbox' checked={nativeContact} disabled={!canRunMigration || sourceLinks} onChange={event => setNativeContact(event.target.checked)} /> Replace supported ordinary contact forms with GNR8 forms, preserving their layout and required fields.</label>
+                <label><input type='checkbox' checked={nativeContact} disabled={!canRunMigration} onChange={event => setNativeContact(event.target.checked)} /> Replace supported ordinary contact forms with GNR8 forms, preserving their layout and required fields.</label>
                 {nativeContact ? <>
                   <p>One confirmed recipient applies to all supported contact forms on this site. Public contact addresses are suggestions, not proof of the original form’s server recipient.</p>
                   {suggestionError ? <p role="alert">{suggestionError}</p> : !suggestions ? <p>Loading retained import evidence…</p> : suggestions.suggestions.length ? <div>

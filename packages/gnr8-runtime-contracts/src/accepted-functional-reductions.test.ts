@@ -31,10 +31,12 @@ test('native contact requires exact recipient confirmation and rejects hidden de
  for(const value of [{...contact,recipientConfirmed:false},{...contact,recipient:'a@b.com\r\nBcc: c@d.com'},{...contact,recipient:['a@b.com']},{...contact,siteId:'foreign'},{...contact,recipient:'a'.repeat(255)+'@example.com'}]) assert.equal(parseAcceptedFunctionalReductions({...base,contact:value}),null)
 })
 
-test('source links require an explicit scope and confirmed contact without authorizing bundled removals',()=>{
+test('source links require an explicit scope; native contact requires a confirmed recipient',()=>{
  const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}}
  assert.deepEqual(parseAcceptedFunctionalReductions(settings),settings)
- for(const value of [{...settings,contact:undefined},{...settings,contact:{...settings.contact,recipientConfirmed:false}},{...settings,tracking:'remove-bundle'},{...settings,excludedRoutes:[]},{...settings,uncapturedRoutes:'drop'},{...settings,complexForms:'drop'}]) assert.equal(parseAcceptedFunctionalReductions(value),null)
+ const sourceOnly={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'}
+ assert.deepEqual(parseAcceptedFunctionalReductions(sourceOnly),sourceOnly)
+ for(const value of [{...settings,contact:{...settings.contact,recipientConfirmed:false}},{...settings,tracking:'remove-bundle'},{...settings,excludedRoutes:[]},{...settings,uncapturedRoutes:'drop'},{...settings,complexForms:'drop'}]) assert.equal(parseAcceptedFunctionalReductions(value),null)
 })
 
 test('source tracking/chat omission is a separate explicit opt-in',()=>{
