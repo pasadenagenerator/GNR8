@@ -219,16 +219,8 @@ test("normal source input preserves captured routes, navigation, owned asset ide
     sha256: SHA,
   });
   assert.equal(generated.sourceManifest.files.some((file) => file.path === "public/styles/global.css"), false);
-  assert.equal(generated.verification.unstyledSource, true);
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("<h1>About</h1>")));
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("/uploads/about.png")));
-});
-
-test("captured inline styling does not claim an unstyled source", () => {
-  const input = fixture({ rootHtml: '<html><head><style>h1{color:red}</style></head><body><h1>Home</h1></body></html>' });
-  const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version,
-    artifact: input.artifact, rawArtifact: input.rawArtifact });
-  assert.equal(generated.verification.unstyledSource, undefined);
 });
 
 test("normalizes rendered navigation with the same targets used by governance evidence", () => {

@@ -53,7 +53,6 @@ export type SourceBackedAstroGenerationInput = {
     expectedContent: string[];
     expectedThemeToken: string | null;
     expectedStylesheetReferences?: string[];
-    unstyledSource?: boolean;
     compiledStylesheetSource?: { sourcePaths: string[]; aggregateSha256: string };
   };
   contentManifest: GeneratedOutputContentManifest;
@@ -395,8 +394,6 @@ export function createSourceBackedAstroGenerationInput(input: {
       .map((match) => htmlAttributeFromMarkup(match[0], "href"))
       .filter(Boolean),
   ))].sort();
-  const unstyledSource = expectedStylesheetReferences.length === 0 &&
-    !/<style\b|\bstyle\s*=/i.test(generatedHtml);
   const referencedOwnedAssetUrls = [...new Set([
     ...extractOwnedAssetUrls(generatedHtml),
     ...extractStylesheetDependencyAssetUrls({
@@ -444,7 +441,6 @@ export function createSourceBackedAstroGenerationInput(input: {
       expectedContent: [siteName],
       expectedThemeToken: null,
       expectedStylesheetReferences,
-      ...(unstyledSource ? { unstyledSource: true } : {}),
       ...(proposal ? { compiledStylesheetSource: {
         sourcePaths: proposal.files.map(file => file.path),
         aggregateSha256: createAstroStaticSiteSourceSnapshot(proposal.files.map(file => ({ path: file.path, body: Buffer.from(file.contents) }))).aggregateSha256,
