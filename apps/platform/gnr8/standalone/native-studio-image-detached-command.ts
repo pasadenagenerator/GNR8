@@ -8,7 +8,7 @@ const WORKER = /^[a-f0-9]{32}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{1,127}$/;
-const PHASES = ['build', 'preflight', 'save', 'load', 'push'] as const;
+const PHASES = ['build', 'preflight', 'public-preflight', 'save', 'load', 'push'] as const;
 type Phase = typeof PHASES[number];
 type Store = { read: (key: string) => Promise<unknown>;
   claim: (key: string, value: unknown) => Promise<boolean> };

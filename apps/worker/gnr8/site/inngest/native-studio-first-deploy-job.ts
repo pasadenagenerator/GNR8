@@ -51,14 +51,11 @@ const defaults = {
     return { artifact, preflight, prebuilt, resources, secrets };
   },
   deploy: async (request: Request, client: SupabaseClient) => {
-    const { configuredNativeStudioDetachedDeploy } = await import(
-      '@/gnr8/standalone/native-studio-configured-detached-deploy');
-    const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-    if (!trustedGit.startsWith('/'))
-      throw Error('native_studio_first_deploy_runner_unconfigured');
-    return configuredNativeStudioDetachedDeploy({ scope: request.scope, client,
+    const { configuredNativeStudioStoredDetachedDeploy } = await import(
+      '@/gnr8/standalone/native-studio-stored-detached-deploy');
+    return configuredNativeStudioStoredDetachedDeploy({ scope: request.scope, client,
       sourceId: request.sourceId, sourceCommit: request.sourceCommit,
-      workerId: request.workerId, trustedGit });
+      workerId: request.workerId });
   },
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_PUBLIC_GATEWAY_ENABLED === '1',
   enqueuePublicGateway: async (request: Request) => {

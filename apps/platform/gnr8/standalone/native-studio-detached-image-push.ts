@@ -1,6 +1,6 @@
 import 'server-only';
 import { Drive, Sandbox, type NetworkPolicy } from '@vercel/sandbox';
-import { recordStudioImageArchiveHandoff,
+import { recordStudioImageArchiveHandoffFromStored,
   verifyStudioImageArchiveIdentity } from '../../../../scripts/stacki/studio-image-archive.mjs';
 import { verifyNativeStudioDriveArchive } from './native-studio-drive-archive-verify';
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
@@ -33,7 +33,7 @@ const EXECUTABLE = /^\/(?:usr|opt)\/[A-Za-z0-9_+./-]+$/;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 type Input = NativeStudioImageDriveIdentity & {
-  project: string; pushNetworkPolicy: NetworkPolicy;
+  project?: string; pushNetworkPolicy: NetworkPolicy;
   dockerPath: string; wranglerPath: string; sandboxTimeoutMs: number;
   loadCredential: () => Promise<string>;
 };
@@ -54,15 +54,14 @@ const sdk: Sdk = { drive: Drive, sandbox: Sandbox };
 const defaults = {
   transfer: readNativeStudioImageDriveTransfer,
   verifyArchive: verifyNativeStudioDriveArchive,
-  recordArchive: recordStudioImageArchiveHandoff,
+  recordArchive: recordStudioImageArchiveHandoffFromStored,
   start: startNativeStudioImageCommand,
   poll: pollNativeStudioImageCommand,
   ensureDocker: ensureNativeStudioDockerDaemon,
 };
 
 function validate(input: Input) {
-  if (!input || typeof input.project !== 'string' ||
-      !input.project.startsWith('/') ||
+  if (!input ||
       !restrictedNativeStudioImageNetwork(input.pushNetworkPolicy) ||
       !EXECUTABLE.test(input.dockerPath) || input.dockerPath.includes('..') ||
       !EXECUTABLE.test(input.wranglerPath) || input.wranglerPath.includes('..') ||
@@ -313,7 +312,7 @@ export async function advanceNativeStudioDetachedImagePush(input: Input,
       transfer.receipt);
     if (!same(receipt, transfer.receipt))
       throw Error('native_studio_detached_image_push_archive_unverified');
-    const recorded = await steps.recordArchive({ project: input.project,
+    const recorded = await steps.recordArchive({
       store: input.store, sourceId: input.sourceId, commit: input.commit,
       workerId: input.workerId, scope: input.scope, site: input.site,
       archivePath: ARCHIVE_PATH, receipt }, {

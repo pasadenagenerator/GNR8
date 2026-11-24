@@ -125,6 +125,27 @@ test('delayed public readback resumes before first-open handoff', async () => {
   assert.deepEqual(calls, ['run', 'sleep', 'run', 'sleep', 'run']);
 });
 
+test('detached public deploy is polled and an overlong run needs review', async () => {
+  let observations = 0;
+  const steps = { run: async (_id: string, fn: () => Promise<unknown>) => fn(),
+    sleep: async (_id: string, duration: string) => {
+      assert.equal(duration, '1m'); } };
+  const result = await settleNativeStudioPublicGateway(request, steps,
+    (async () => (++observations < 3 ? { state: 'running',
+      commit: request.sourceCommit } : { state: 'first-open-required',
+      commit: request.sourceCommit,
+      observation: 'observed-control-plane' })) as typeof runNativeStudioPublicGateway);
+  assert.equal(result.state, 'first-open-required');
+  assert.equal(observations, 3);
+  observations = 0;
+  const timeout = await settleNativeStudioPublicGateway(request, steps,
+    (async () => { observations++; return { state: 'running',
+      commit: request.sourceCommit }; }) as typeof runNativeStudioPublicGateway);
+  assert.deepEqual(timeout, { state: 'pending-review',
+    commit: request.sourceCommit, observation: 'execution-timeout' });
+  assert.equal(observations, 30);
+});
+
 test('ambiguous public intent does not trigger repeated observation', async () => {
   const calls: string[] = [];
   const steps = {

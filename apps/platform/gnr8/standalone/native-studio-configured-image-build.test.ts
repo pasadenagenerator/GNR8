@@ -13,7 +13,7 @@ const site = { siteId: scope.siteId, accountId,
   branch: 'codex/native-stacki', studioOrigin: 'https://site.example.com',
   appId: '456', installationId: '789', clientId: 'Iv1.example' };
 const input = { scope, client: {} as SupabaseClient, sourceId,
-  sourceCommit, workerId, trustedGit: '/usr/bin/git' };
+  sourceCommit, workerId };
 const env = { GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED: '1',
   GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT: 'snap_build',
   GNR8_NATIVE_STUDIO_IMAGE_PUSH_SNAPSHOT: 'snap_push',
@@ -24,26 +24,30 @@ const env = { GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED: '1',
 function fixture() {
   const events: string[] = [];
   const records = new Map<string, unknown>();
+  records.set('native-studio/resources-reserved-v1.json', {
+    target: { accountId, repository: site.repository,
+      repositoryId: site.repositoryId, studioOrigin: site.studioOrigin },
+    workers: { studio: { id: workerId }, publicSite: {
+      id: 'e'.repeat(32), worker: `gnr8-${scope.siteId}-site` } } });
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async () => true };
   const files = [{ path: 'studio/Dockerfile', body: Buffer.from('trusted') }];
   const progress = { state: 'running' };
   const deps = {
+    site: async () => { events.push('site'); return site; },
+    store: () => store,
     snapshot: async ({ snapshotId }: { snapshotId: string }) => {
       events.push(`snapshot:${snapshotId}`); return { status: 'created' }; },
-    withCheckout: async (_request: typeof input, use: (value: any) => Promise<any>) => {
-      events.push('checkout');
-      return use({ project: '/verified/checkout', store, site,
-        sourceId, commit: sourceCommit, workerId, files: 2 });
-    },
     source: async ({ store: actual, sourceId: id, site: target }: any) => {
       events.push('source'); assert.equal(actual, store);
       assert.equal(id, sourceId); assert.equal(target, site);
       return { files };
     },
+    restoreOutputs: async () => ({ artifactDir: '/tmp', files: [],
+      cleanup: async () => {} }),
     recordPreflight: async (value: any) => {
       events.push('record-preflight');
-      assert.equal(value.project, '/verified/checkout');
+      assert.equal(value.project, undefined);
       assert.equal(value.store, store);
       assert.equal(value.sourceId, sourceId);
       assert.equal(value.commit, sourceCommit);
@@ -59,7 +63,8 @@ function fixture() {
       assert.equal(value.commit, sourceCommit);
       assert.equal(value.buildSnapshotId, 'snap_build');
       assert.equal(value.pushSnapshotId, 'snap_push');
-      assert.equal(value.files, files);
+      assert.deepEqual(value.files, files);
+      assert.equal(value.publicWorkerId, 'e'.repeat(32));
       assert.equal(value.commit, sourceCommit);
       assert.equal(value.sandboxTimeoutMs, 60 * 60_000);
       return progress;
@@ -73,7 +78,7 @@ test('only verified stored source bytes reach the isolated build phase', async (
   assert.equal(await configuredNativeStudioImageBuild(input, env,
     (async () => { throw Error('provider call'); }) as typeof fetch, f.deps),
   f.progress);
-  assert.deepEqual(f.events, ['checkout', 'snapshot:snap_build',
+  assert.deepEqual(f.events, ['site', 'snapshot:snap_build',
     'snapshot:snap_push', 'source', 'advance']);
 });
 
@@ -82,11 +87,11 @@ test('completed isolated image build records preflight before returning success'
   f.progress.state = 'complete';
   assert.equal(await configuredNativeStudioImageBuild(input, env, fetch,
     f.deps), f.progress);
-  assert.deepEqual(f.events, ['checkout', 'snapshot:snap_build',
+  assert.deepEqual(f.events, ['site', 'snapshot:snap_build',
     'snapshot:snap_push', 'source', 'advance', 'record-preflight']);
 });
 
-test('unconfigured switch or unsafe network fails before any checkout', async () => {
+test('unconfigured switch or unsafe network fails before site read', async () => {
   const f = fixture();
   await assert.rejects(configuredNativeStudioImageBuild(input,
     { ...env, GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED: '0' },
@@ -97,20 +102,18 @@ test('unconfigured switch or unsafe network fails before any checkout', async ()
   assert.deepEqual(f.events, []);
 });
 
-test('expired snapshot or mismatched checkout blocks source read', async () => {
+test('expired snapshot or mismatched reservation blocks source read', async () => {
   const expired = fixture();
   expired.deps.snapshot = async () => ({ status: 'created', expiresAt: new Date(0) });
   await assert.rejects(configuredNativeStudioImageBuild(input, env, fetch,
     expired.deps), /snapshot_unavailable/);
   assert.equal(expired.events.includes('source'), false);
   const changed = fixture();
-  changed.deps.withCheckout = async (_request: typeof input,
-    use: (value: any) => Promise<any>) => use({
-      sourceId, commit: 'f'.repeat(40), workerId, site,
-      store: { read: async () => null, claim: async () => true }, files: 2 });
+  changed.records.set('native-studio/resources-reserved-v1.json', {
+    target: { accountId: 'f'.repeat(32) }, workers: { publicSite: {
+      id: 'e'.repeat(32), worker: `gnr8-${scope.siteId}-site` } } });
   await assert.rejects(configuredNativeStudioImageBuild(input, env, fetch,
-    changed.deps), /checkout_unverified/);
-  assert.equal(changed.events.includes('source'), false);
+    changed.deps), /public_target_unverified/);
 });
 
 test('an existing private attempt resumes without a new snapshot TTL gate', async () => {
@@ -119,5 +122,5 @@ test('an existing private attempt resumes without a new snapshot TTL gate', asyn
   f.deps.snapshot = async () => { throw Error('snapshot expired'); };
   assert.deepEqual(await configuredNativeStudioImageBuild(input, env, fetch,
     f.deps), f.progress);
-  assert.deepEqual(f.events, ['checkout', 'source', 'advance']);
+  assert.deepEqual(f.events, ['site', 'source', 'advance']);
 });

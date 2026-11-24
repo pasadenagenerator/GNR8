@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { prepareFirstStudioDeployIntentFromHandoff } from '../../../../scripts/stacki/first-studio-deploy-intent.mjs';
+import { verifyStoredFirstDeployHandoff } from '../../../../scripts/stacki/verify-stored-first-deploy.mjs';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 import { inspectConfiguredNativeStudioGitHubHead } from './native-studio-configured-github-head';
 import { inspectBoundCloudflareStudioFirstDeployment } from './cloudflare-studio-first-deployment';
@@ -25,6 +26,8 @@ export async function configuredFirstStudioDeployIntent(input: {
   return prepareFirstStudioDeployIntentFromHandoff({ project, store, sourceId,
     commit, scope, site, accountId: site.accountId, workerId,
     token: cloudflareCredential, secrets }, {
+      verifyHandoff: async () => (await verifyStoredFirstDeployHandoff({
+        store, scope, site, sourceId, commit, workerId })).handoff,
       readSite: () => configuredNativeStudioBootstrapSite(scope, client, env),
       inspectGitHubHead: () => inspectConfiguredNativeStudioGitHubHead(
         scope, client, env, transport),

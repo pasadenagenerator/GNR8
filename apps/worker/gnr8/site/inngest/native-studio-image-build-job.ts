@@ -37,11 +37,9 @@ const defaults = {
   build: async (request: Request, client: SupabaseClient) => {
     const { configuredNativeStudioImageBuild } = await import(
       '@/gnr8/standalone/native-studio-configured-image-build');
-    const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-    if (!trustedGit.startsWith('/')) throw Error('native_studio_image_build_runner_unconfigured');
     return configuredNativeStudioImageBuild({ scope: request.scope, client,
       sourceId: request.sourceId, sourceCommit: request.sourceCommit,
-      workerId: request.workerId, trustedGit });
+      workerId: request.workerId });
   },
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_ENABLED === '1',
   enqueuePush: async (request: Request) => {

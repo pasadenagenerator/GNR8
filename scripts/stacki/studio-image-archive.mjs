@@ -105,6 +105,58 @@ export async function recordStudioImageArchiveHandoff(input, deps = {}) {
   return receipt;
 }
 
+/** Record the verified receiver archive against immutable source and build
+ * receipts. The image receiver never needs a host Git checkout. */
+export async function recordStudioImageArchiveHandoffFromStored(input, deps = {}) {
+  const { store, receipt, sourceId, commit, workerId, scope, site } = input ?? {};
+  if (!store || typeof store.read !== 'function' ||
+      typeof store.claim !== 'function')
+    throw Error('native_studio_image_archive_input_invalid');
+  verifyStudioImageArchiveIdentity(input);
+  const verified = await (deps.verifyArchive ?? verifyStudioImageArchive)(input);
+  if (!same(verified, receipt))
+    throw Error('native_studio_image_archive_changed');
+  const [sourcePush, handoff, outputBytes, artifact] = await Promise.all([
+    store.read('native-studio/first-github-push-intent-v1.json'),
+    store.read('native-studio/build-handoff-v1.json'),
+    store.read('native-studio/build-output-bytes-v1.json'),
+    store.read('native-studio/build-artifact-github-push-v1.json'),
+  ]);
+  const boundSite = { siteId: site.siteId, repository: site.repository,
+    branch: site.branch, studioOrigin: site.studioOrigin,
+    accountId: site.accountId };
+  const byteSite = { siteId: site.siteId, accountId: site.accountId,
+    repository: site.repository, branch: site.branch,
+    studioOrigin: site.studioOrigin };
+  const fileList = outputBytes?.files?.map(file => ({ path: file.path,
+    bytes: file.bytes, sha256: file.sha256 }));
+  if (!sourcePush || sourcePush.commit !== commit ||
+      !COMMIT.test(sourcePush.baseCommit) ||
+      sourcePush.identity !== createHash('sha256').update(JSON.stringify({
+        scope, sourceId, site, commit, baseCommit: sourcePush.baseCommit,
+      })).digest('hex') ||
+      !handoff || handoff.sourceId !== sourceId ||
+      handoff.commit !== commit || handoff.workerId !== workerId ||
+      !same(handoff.scope, scope) || !same(handoff.site, boundSite) ||
+      !Array.isArray(handoff.files) || handoff.files.length < 2 ||
+      !outputBytes || outputBytes.sourceId !== sourceId ||
+      outputBytes.commit !== commit || outputBytes.workerId !== workerId ||
+      !same(outputBytes.scope, scope) || !same(outputBytes.site, byteSite) ||
+      !same(handoff.files, fileList) ||
+      !artifact || artifact.sourceId !== sourceId ||
+      artifact.sourceCommit !== commit || artifact.workerId !== workerId ||
+      artifact.branch !== `gnr8-build-${commit}` ||
+      !COMMIT.test(artifact.artifactCommit))
+    throw Error('native_studio_image_archive_source_unverified');
+  const prior = await store.read(ARCHIVE);
+  if (prior && !same(prior, receipt))
+    throw Error('native_studio_image_archive_receipt_conflict');
+  if (!prior) await store.claim(ARCHIVE, receipt);
+  if (!same(await store.read(ARCHIVE), receipt))
+    throw Error('native_studio_image_archive_receipt_conflict');
+  return receipt;
+}
+
 export async function buildStudioImageArchive(input, deps = {}) {
   const expected = identity(input);
   const { project, outputDir, trustedDocker, store, site } = input;

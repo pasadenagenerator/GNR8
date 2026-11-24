@@ -5,9 +5,14 @@ import test from 'node:test';
 import { NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
   NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
   NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT,
+  NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE,
+  NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR,
+  NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_RECEIPT,
   nativeStudioWorkerBundleScanScript,
   recordNativeStudioWorkerBundle,
-  verifyNativeStudioWorkerBundleReceipt } from './native-studio-worker-bundle';
+  recordNativeStudioPublicWorkerBundle,
+  verifyNativeStudioWorkerBundleReceipt,
+  verifyNativeStudioPublicWorkerBundleReceipt } from './native-studio-worker-bundle';
 
 const hash = (value: Buffer) => createHash('sha256').update(value).digest('hex');
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
@@ -17,12 +22,18 @@ const sourceId = 'a'.repeat(64), commit = 'b'.repeat(40),
   workerId = 'c'.repeat(32), accountId = 'd'.repeat(32);
 const name = 'gnr8-image-build-44444444-4444-4444-8444-444444444444';
 
-function fixture(body = Buffer.from('export default {fetch(){return Response.ok()}}')) {
+function fixture(body = Buffer.from('export default {fetch(){return Response.ok()}}'),
+  kind: 'studio' | 'public' = 'studio') {
+  const outdir = kind === 'public' ? NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR :
+    NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR;
+  const metaPath = kind === 'public' ? NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE :
+    NATIVE_STUDIO_WORKER_BUNDLE_METAFILE;
   const receipts = new Map<string, unknown>();
   const bytes = new Map<string, Buffer>();
   const output = new Map([['worker.js', body]]);
   let metadata = { outputs: { 'worker.js': {
-    entryPoint: 'src/cloudflare/worker.ts' } } } as any;
+    entryPoint: kind === 'public' ? 'studio/src/cloudflare/site.ts' :
+      'src/cloudflare/worker.ts' } } } as any;
   let scanFiles = [...output].map(([path, value]) => ({ path,
     bytes: value.length, sha256: hash(value) }));
   const store = { read: async (key: string) => receipts.get(key) ?? null,
@@ -44,8 +55,10 @@ function fixture(body = Buffer.from('export default {fetch(){return Response.ok(
     timeout: 90 * 60_000, networkPolicy,
     currentSession: () => ({ sessionId: 'session_1' }),
     runCommand: async ({ args, cwd }: { args: string[]; cwd: string }) => {
-      assert.equal(cwd, NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR);
-      assert.equal(args[2], nativeStudioWorkerBundleScanScript);
+      assert.equal(cwd, outdir);
+      if (kind === 'studio')
+        assert.equal(args[2], nativeStudioWorkerBundleScanScript);
+      else assert.equal(args[2].includes(outdir), true);
       const metaBody = Buffer.from(JSON.stringify(metadata));
       return { exitCode: 0, stdout: async () => JSON.stringify({
         files: scanFiles,
@@ -53,9 +66,9 @@ function fixture(body = Buffer.from('export default {fetch(){return Response.ok(
       }) };
     },
     readFile: async ({ path }: { path: string }) => {
-      const value = path === NATIVE_STUDIO_WORKER_BUNDLE_METAFILE
+      const value = path === metaPath
         ? Buffer.from(JSON.stringify(metadata))
-        : output.get(path.slice(NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR.length + 1));
+        : output.get(path.slice(outdir.length + 1));
       return value ? Readable.from([value]) : null;
     },
   };
@@ -79,6 +92,19 @@ test('records exact metafile entry and content-addressed bundle bytes', async ()
     receipt);
   await assert.rejects(verifyNativeStudioWorkerBundleReceipt({ ...f.input,
     workerId: 'e'.repeat(32) }), /receipt_unverified/);
+});
+
+test('records separate scoped public Worker bundle from site entry', async () => {
+  const f = fixture(undefined, 'public');
+  const receipt = await recordNativeStudioPublicWorkerBundle(f.input as any);
+  assert.equal(receipt.entryPath, 'worker.js');
+  assert.deepEqual(f.receipts.get(NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_RECEIPT),
+    receipt);
+  assert.equal(f.receipts.has(NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT), false);
+  assert.deepEqual(await verifyNativeStudioPublicWorkerBundleReceipt(f.input),
+    receipt);
+  await assert.rejects(verifyNativeStudioWorkerBundleReceipt(f.input),
+    /receipt_unverified/);
 });
 
 test('chunks output above private object limit and detects damaged storage', async () => {

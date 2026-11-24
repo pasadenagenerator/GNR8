@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordStudioSandboxBuildArtifact } from '../../../../scripts/stacki/build-artifact-transfer.mjs';
+import { recordNativeStudioBuildOutputBytes } from '../../../../scripts/stacki/build-output-bytes.mjs';
 import { verifyCommittedStudioSource } from '../../../../scripts/stacki/prepare-git-branch.mjs';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 import { NATIVE_STUDIO_RESOURCE_RECEIPT,
@@ -21,6 +22,7 @@ const defaults = {
   build: configuredNativeStudioSandboxBuild,
   verifySource: verifyCommittedStudioSource,
   record: recordStudioSandboxBuildArtifact,
+  recordBytes: recordNativeStudioBuildOutputBytes,
   store: (client: SupabaseClient, scope: NativeStudioScope, env: Environment) =>
     new SupabasePublicationStore(client,
       env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope),
@@ -71,8 +73,11 @@ export async function configuredNativeStudioBuildHandoff(input: {
       throw Error('native_studio_build_handoff_target_changed');
     if (built.sourceId !== sourceId)
       throw Error('native_studio_build_handoff_source_unverified');
-    return await deps.record({ project, artifactDir,
+    const handoff = await deps.record({ project, artifactDir,
       files: built.files, store, sourceId, commit, scope, site, workerId });
+    await deps.recordBytes({ artifactDir, files: built.files,
+      store, sourceId, commit, scope, site, workerId });
+    return handoff;
   } finally {
     await rm(artifactDir, { recursive: true, force: true });
   }

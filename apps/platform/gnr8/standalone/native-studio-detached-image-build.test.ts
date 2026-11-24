@@ -12,7 +12,8 @@ const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
   siteId: '33333333-3333-4333-8333-333333333333' };
 const sourceId = 'a'.repeat(64), commit = 'b'.repeat(40),
-  workerId = 'c'.repeat(32), accountId = 'd'.repeat(32);
+  workerId = 'c'.repeat(32), accountId = 'd'.repeat(32),
+  publicWorkerId = 'e'.repeat(32);
 const files = [
   { path: 'studio/Dockerfile', body: Buffer.from('COPY .studio-image/site /opt/site\n') },
   { path: 'package.json', body: Buffer.from('{}') },
@@ -37,7 +38,7 @@ function fixture() {
       storedBytes.set(key, Buffer.from(value)); },
     getBytes: async (key: string) => storedBytes.get(key) ?? Buffer.alloc(0) };
   const input = { scope, site: { siteId: scope.siteId, accountId },
-    sourceId, commit, workerId, store, files,
+    sourceId, commit, workerId, publicWorkerId, store, files,
     buildSnapshotId: 'snap_build', pushSnapshotId: 'snap_push',
     buildNetworkPolicy: { allow: ['registry-1.docker.io'] },
     sandboxTimeoutMs: 60 * 60_000 };
@@ -46,10 +47,15 @@ function fixture() {
       calls.push(`start:${command.args[0]}`);
       assert.equal(command.env.DOCKER_HOST, 'unix:///var/run/docker.sock');
       if (command.cmd === '/usr/local/bin/wrangler') {
-        assert.deepEqual(command.args, ['deploy', '--dry-run', '--outdir',
-          '/vercel/sandbox/gnr8-worker-bundle', '--metafile',
-          '/vercel/sandbox/gnr8-worker-bundle-meta.json', '--config',
-          'cloudflare/wrangler.jsonc']);
+        assert.deepEqual(command.args, command.cwd.endsWith('/studio') ?
+          ['deploy', '--dry-run', '--outdir',
+            '/vercel/sandbox/gnr8-worker-bundle', '--metafile',
+            '/vercel/sandbox/gnr8-worker-bundle-meta.json', '--config',
+            'cloudflare/wrangler.jsonc'] :
+          ['deploy', '--dry-run', '--outdir',
+            '/vercel/sandbox/gnr8-public-worker-bundle', '--metafile',
+            '/vercel/sandbox/gnr8-public-worker-bundle-meta.json', '--config',
+            'wrangler.json']);
         assert.equal(command.env.CLOUDFLARE_API_TOKEN, undefined);
       }
       if (failStart) throw Error('connection lost');
@@ -100,6 +106,12 @@ function fixture() {
     recordBundle: async () => { calls.push('bundle-record');
       if (failBundle) throw Error('bundle invalid'); },
     verifyBundle: async () => { calls.push('bundle-verify'); },
+    recordPublicBundle: async (value: any) => {
+      assert.equal(value.workerId, publicWorkerId);
+      calls.push('public-bundle-record'); },
+    verifyPublicBundle: async (value: any) => {
+      assert.equal(value.workerId, publicWorkerId);
+      calls.push('public-bundle-verify'); },
     startCommand: startNativeStudioImageCommand,
     pollCommand: pollNativeStudioImageCommand };
   const advance = () => advanceNativeStudioDetachedImageBuild(
@@ -126,17 +138,21 @@ test('build and save cross invocations without repeating external effects', asyn
   assert.deepEqual(await f.advance(), { state: 'running' });
   f.exits.set('cmd_3', 0);
   assert.deepEqual(await f.advance(), { state: 'running' });
+  assert.deepEqual(await f.advance(), { state: 'running' });
+  f.exits.set('cmd_4', 0);
+  assert.deepEqual(await f.advance(), { state: 'running' });
   const done = await f.advance();
   assert.equal(done.state, 'complete');
   assert.deepEqual(await f.advance(), done);
   assert.equal(f.calls.filter(v => v === 'drive-create').length, 1);
   assert.equal(f.calls.filter(v => v === 'sandbox-create').length, 1);
   assert.equal(f.calls.filter(v => v === 'start:build').length, 1);
-  assert.equal(f.calls.filter(v => v === 'start:deploy').length, 1);
+  assert.equal(f.calls.filter(v => v === 'start:deploy').length, 2);
   assert.equal(f.calls.indexOf('docker-ready') < f.calls.indexOf('stage'), true);
   assert.equal(f.calls.filter(v => v === 'start:save').length, 1);
   assert.equal(f.calls.indexOf('start:deploy') < f.calls.indexOf('start:save'), true);
   assert.equal(f.calls.indexOf('bundle-record') < f.calls.indexOf('start:save'), true);
+  assert.equal(f.calls.indexOf('public-bundle-record') < f.calls.indexOf('start:save'), true);
   assert.equal(f.calls.filter(v => v === 'stop').length, 1);
   assert.equal(f.calls.indexOf('verify-source') < f.calls.indexOf('inspect'), true);
 });
@@ -248,7 +264,10 @@ test('claimed receipt is rehashed after an uncertain Sandbox stop', async () => 
   await f.advance();
   f.exits.set('cmd_3', 0);
   await f.advance();
+  await f.advance();
+  f.exits.set('cmd_4', 0);
   f.failStop();
+  await f.advance();
   await assert.rejects(f.advance(), /stop uncertain/);
   f.resumeStop(); f.changeArchive();
   assert.deepEqual(await f.advance(), { state: 'pending-review' });

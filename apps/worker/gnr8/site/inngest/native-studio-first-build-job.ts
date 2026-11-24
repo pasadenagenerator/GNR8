@@ -37,15 +37,15 @@ const defaults = {
       `${attemptId ? `-${attemptId}` : ''}-result.json`);
   },
   build: async (request: Request, client: SupabaseClient) => {
-    const { configuredNativeStudioFirstBuild } = await import(
-      '@/gnr8/standalone/native-studio-configured-first-build');
-    const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-    const name = process.env.GNR8_NATIVE_STUDIO_GIT_AUTHOR_NAME ?? '';
-    const email = process.env.GNR8_NATIVE_STUDIO_GIT_AUTHOR_EMAIL ?? '';
-    if (!trustedGit.startsWith('/') || !name.trim() || !/^[^\s@]+@[^\s@]+$/.test(email))
+    const { configuredNativeStudioFirstBuildGitData } = await import(
+      '@/gnr8/standalone/native-studio-configured-first-build-git-data');
+    const name = process.env.GNR8_NATIVE_STUDIO_GIT_AUTHOR_NAME ?? 'GNR8 Build';
+    const email = process.env.GNR8_NATIVE_STUDIO_GIT_AUTHOR_EMAIL ??
+      'build@pasadenagenerator.com';
+    if (!name.trim() || !/^[^\s@]+@[^\s@]+$/.test(email))
       throw Error('native_studio_first_build_runner_unconfigured');
-    return configuredNativeStudioFirstBuild({ scope: request.scope, client,
-      sourceId: request.sourceId, trustedGit, author: { name, email } });
+    return configuredNativeStudioFirstBuildGitData({ scope: request.scope,
+      client, sourceId: request.sourceId, author: { name, email } });
   },
   chainEnabled: () =>
     process.env.GNR8_NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_ENABLED === '1',
@@ -87,9 +87,11 @@ export async function runNativeStudioFirstBuild(request: unknown,
       !Number.isSafeInteger(result.files) || result.files < 1 || result.hosted !== false)
     throw Error('native_studio_first_build_source_unverified');
   const built = await deps.build({ scope, actor, requestId, sourceId }, client);
-  if ('state' in built &&
-      (built.state === 'running' || built.state === 'pending-review'))
-    return { state: built.state };
+  if ('state' in built) {
+    if (built.state === 'running' || built.state === 'pending-review')
+      return { state: built.state };
+    throw Error('native_studio_first_build_result_unverified');
+  }
   if (built.sourceId !== sourceId || !/^[a-f0-9]{40,64}$/.test(built.commit) ||
       !/^[a-f0-9]{32}$/.test(built.workerId) ||
       built.artifactBranch !== `gnr8-build-${built.commit}` ||

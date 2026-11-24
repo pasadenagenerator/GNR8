@@ -9,6 +9,26 @@ export const NATIVE_STUDIO_WORKER_BUNDLE_METAFILE =
   '/vercel/sandbox/gnr8-worker-bundle-meta.json';
 export const NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT =
   'native-studio/worker-bundle-v1.json';
+export const NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR =
+  '/vercel/sandbox/gnr8-public-worker-bundle';
+export const NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE =
+  '/vercel/sandbox/gnr8-public-worker-bundle-meta.json';
+export const NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_RECEIPT =
+  'native-studio/public-worker-bundle-v1.json';
+type BundleConfig = { outdir: string; metafile: string; receipt: string;
+  entryPoints: readonly string[] };
+const STUDIO: BundleConfig = { outdir: NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
+  metafile: NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
+  receipt: NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT,
+  entryPoints: ['src/cloudflare/worker.ts',
+    'studio/src/cloudflare/worker.ts',
+    '/vercel/sandbox/gnr8-image-source/studio/src/cloudflare/worker.ts'] };
+const PUBLIC: BundleConfig = { outdir: NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR,
+  metafile: NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE,
+  receipt: NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_RECEIPT,
+  entryPoints: ['studio/src/cloudflare/site.ts',
+    './studio/src/cloudflare/site.ts',
+    '/vercel/sandbox/gnr8-image-source/studio/src/cloudflare/site.ts'] };
 const MAX_FILES = 256;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 128 * 1024 * 1024;
@@ -60,12 +80,12 @@ function safePath(value: unknown): value is string {
 
 /** The script is read-only and uses a fixed output directory. Its independent
  * lstat and size checks reject symlinks and oversized files before transfer. */
-export const nativeStudioWorkerBundleScanScript = `
+function bundleScanScript(config: BundleConfig) { return `
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-const root = ${JSON.stringify(NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR)};
-const metaPath = ${JSON.stringify(NATIVE_STUDIO_WORKER_BUNDLE_METAFILE)};
+const root = ${JSON.stringify(config.outdir)};
+const metaPath = ${JSON.stringify(config.metafile)};
 const files = []; let total = 0;
 async function walk(relative) {
   const path = relative ? join(root, relative) : root;
@@ -95,7 +115,8 @@ if (!metaInfo.isFile() || metaInfo.isSymbolicLink() ||
 const metaBody = await readFile(metaPath);
 if (metaBody.length !== metaInfo.size) throw Error('changed');
 console.log(JSON.stringify({ files, metafile: { bytes: metaBody.length,
-  sha256: createHash('sha256').update(metaBody).digest('hex') } }));`;
+  sha256: createHash('sha256').update(metaBody).digest('hex') } }));`; }
+export const nativeStudioWorkerBundleScanScript = bundleScanScript(STUDIO);
 
 function validateIdentity(input: NativeStudioWorkerBundleIdentity) {
   if (!input || !input.scope ||
@@ -160,7 +181,8 @@ function scannedFiles(value: unknown): ScannedFile[] {
   return files;
 }
 
-function entryFromMetafile(raw: Buffer, files: ScannedFile[]): string {
+function entryFromMetafile(raw: Buffer, files: ScannedFile[],
+  config: BundleConfig): string {
   let metafile: unknown;
   try { metafile = JSON.parse(raw.toString()); }
   catch { throw Error('native_studio_worker_bundle_metafile_invalid'); }
@@ -171,10 +193,10 @@ function entryFromMetafile(raw: Buffer, files: ScannedFile[]): string {
     throw Error('native_studio_worker_bundle_metafile_invalid');
   const outputFiles = Object.keys(outputs).map(path => {
     const roots = isAbsolute(path) ? ['/'] :
-      [NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
+      [config.outdir,
         '/vercel/sandbox', '/vercel/sandbox/gnr8-image-source/studio'];
     const candidates = roots.map(root => relative(
-      NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR, resolve(root, path)))
+      config.outdir, resolve(root, path)))
       .filter(candidate => safePath(candidate) &&
         files.some(file => file.path === candidate));
     if (candidates.length !== 1)
@@ -191,9 +213,7 @@ function entryFromMetafile(raw: Buffer, files: ScannedFile[]): string {
     throw Error('native_studio_worker_bundle_entry_unverified');
   const [outputPath, output] = entries[0];
   const source = (output as { entryPoint: string }).entryPoint.replaceAll('\\', '/');
-  if (source !== 'src/cloudflare/worker.ts' &&
-      source !== 'studio/src/cloudflare/worker.ts' &&
-      source !== '/vercel/sandbox/gnr8-image-source/studio/src/cloudflare/worker.ts')
+  if (!config.entryPoints.includes(source))
     throw Error('native_studio_worker_bundle_entry_unverified');
   const entryPath = outputFiles[Object.keys(outputs).indexOf(outputPath)];
   if (!safePath(entryPath) || !entryPath.endsWith('.js') ||
@@ -223,12 +243,12 @@ async function readBounded(sandbox: NativeStudioWorkerBundleInput['sandbox'],
 
 /** Persist only verified bundle bytes while the credential-free builder is
  * still attested and running. The receipt can be reused after its Sandbox stops. */
-export async function recordNativeStudioWorkerBundle(
-  input: NativeStudioWorkerBundleInput): Promise<NativeStudioWorkerBundleReceipt> {
+async function recordBundle(input: NativeStudioWorkerBundleInput,
+  config: BundleConfig): Promise<NativeStudioWorkerBundleReceipt> {
   validateInput(input);
   const scan = await input.sandbox.runCommand({ cmd: 'node',
-    args: ['--input-type=module', '-e', nativeStudioWorkerBundleScanScript],
-    cwd: NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR, timeoutMs: 60_000,
+    args: ['--input-type=module', '-e', bundleScanScript(config)],
+    cwd: config.outdir, timeoutMs: 60_000,
     env: { CI: '1' } });
   if (scan.exitCode !== 0)
     throw Error('native_studio_worker_bundle_scan_failed');
@@ -251,16 +271,16 @@ export async function recordNativeStudioWorkerBundle(
       metaScan.bytes > 1024 * 1024 || !SHA.test(metaScan.sha256))
     throw Error('native_studio_worker_bundle_manifest_invalid');
   const metafile = await readBounded(input.sandbox,
-    NATIVE_STUDIO_WORKER_BUNDLE_METAFILE, metaScan.bytes);
+    config.metafile, metaScan.bytes);
   if (hash(metafile) !== metaScan.sha256)
     throw Error('native_studio_worker_bundle_metafile_changed');
-  const entryPath = entryFromMetafile(metafile, files);
+  const entryPath = entryFromMetafile(metafile, files, config);
   const metafileSha256 = hash(metafile);
   await input.store.putBytes!(metafileSha256, metafile);
   const stored: NativeStudioWorkerBundleReceipt['files'] = [];
   for (const file of files) {
     const body = await readBounded(input.sandbox,
-      `${NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR}/${file.path}`, file.bytes);
+      `${config.outdir}/${file.path}`, file.bytes);
     if (hash(body) !== file.sha256)
       throw Error('native_studio_worker_bundle_file_changed');
     const chunks: Chunk[] = [];
@@ -283,27 +303,36 @@ export async function recordNativeStudioWorkerBundle(
     entryPath, files: stored,
   };
   const prior = await input.store.read(
-    NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT) as NativeStudioWorkerBundleReceipt | null;
+    config.receipt) as NativeStudioWorkerBundleReceipt | null;
   if (prior && !same(prior, receipt))
     throw Error('native_studio_worker_bundle_receipt_conflict');
-  if (!prior) await input.store.claim!(NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT,
+  if (!prior) await input.store.claim!(config.receipt,
     receipt);
-  if (!same(await input.store.read(NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT),
+  if (!same(await input.store.read(config.receipt),
     receipt))
     throw Error('native_studio_worker_bundle_receipt_conflict');
-  await verifyNativeStudioWorkerBundleReceipt(input);
+  await verifyBundleReceipt(input, config);
   return receipt;
+}
+
+export async function recordNativeStudioWorkerBundle(
+  input: NativeStudioWorkerBundleInput): Promise<NativeStudioWorkerBundleReceipt> {
+  return recordBundle(input, STUDIO);
+}
+export async function recordNativeStudioPublicWorkerBundle(
+  input: NativeStudioWorkerBundleInput): Promise<NativeStudioWorkerBundleReceipt> {
+  return recordBundle(input, PUBLIC);
 }
 
 /** Verify the private receipt and every stored chunk without starting a
  * Sandbox. Call before image transfer and before a deploy consumes it. */
-export async function verifyNativeStudioWorkerBundleReceipt(
-  input: NativeStudioWorkerBundleIdentity): Promise<NativeStudioWorkerBundleReceipt> {
+async function verifyBundleReceipt(input: NativeStudioWorkerBundleIdentity,
+  config: BundleConfig): Promise<NativeStudioWorkerBundleReceipt> {
   validateIdentity(input);
   if (typeof input.store.getBytes !== 'function')
     throw Error('native_studio_worker_bundle_storage_unavailable');
   const receipt = await input.store.read(
-    NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT) as NativeStudioWorkerBundleReceipt | null;
+    config.receipt) as NativeStudioWorkerBundleReceipt | null;
   if (!receipt || !same(receipt.scope, input.scope) ||
       receipt.siteId !== input.site.siteId ||
       receipt.accountId !== input.site.accountId ||
@@ -326,7 +355,7 @@ export async function verifyNativeStudioWorkerBundleReceipt(
   const meta = await input.store.getBytes(receipt.metafileSha256);
   if (!Buffer.isBuffer(meta) || !meta.length || meta.length > 1024 * 1024 ||
       hash(meta) !== receipt.metafileSha256 ||
-      entryFromMetafile(meta, files) !== receipt.entryPath)
+      entryFromMetafile(meta, files, config) !== receipt.entryPath)
     throw Error('native_studio_worker_bundle_receipt_unverified');
   for (const file of receipt.files) {
     if (!Array.isArray(file.chunks) || !file.chunks.length ||
@@ -352,4 +381,13 @@ export async function verifyNativeStudioWorkerBundleReceipt(
       throw Error('native_studio_worker_bundle_storage_unverified');
   }
   return receipt;
+}
+
+export async function verifyNativeStudioWorkerBundleReceipt(
+  input: NativeStudioWorkerBundleIdentity): Promise<NativeStudioWorkerBundleReceipt> {
+  return verifyBundleReceipt(input, STUDIO);
+}
+export async function verifyNativeStudioPublicWorkerBundleReceipt(
+  input: NativeStudioWorkerBundleIdentity): Promise<NativeStudioWorkerBundleReceipt> {
+  return verifyBundleReceipt(input, PUBLIC);
 }

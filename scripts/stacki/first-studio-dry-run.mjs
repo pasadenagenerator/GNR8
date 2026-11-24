@@ -108,6 +108,61 @@ export async function recordStudioFirstDeployDryRunFromImage(input, deps = {}) {
     workerId: receipt.workerId, files: receipt.files };
 }
 
+/** Accept the same attested Sandbox proof using private build receipts.
+ * No host checkout or image materialization is needed. */
+export async function recordStudioFirstDeployDryRunFromStoredImage(input) {
+  const { store, sourceId, commit, workerId, site, scope,
+    buildSnapshotId } = input ?? {};
+  if (!store || typeof store.read !== 'function' ||
+      typeof store.claim !== 'function' ||
+      !/^snap_[A-Za-z0-9]+$/.test(buildSnapshotId) ||
+      !SOURCE.test(sourceId) || !SHA.test(commit) || !HEX32.test(workerId) ||
+      site?.siteId !== scope?.siteId) throw Error('native_studio_dry_run_input_invalid');
+  const [proof, transfer, session, handoff, artifact] = await Promise.all([
+    store.read('native-studio/image-preflight-proof-v1.json'),
+    store.read('native-studio/image-drive-transfer-v1.json'),
+    store.read('native-studio/image-build-session-v1.json'),
+    store.read('native-studio/build-handoff-v1.json'),
+    store.read('native-studio/build-artifact-github-push-v1.json'),
+  ]);
+  if (!proof || proof.sourceId !== sourceId || proof.commit !== commit ||
+      proof.workerId !== workerId || proof.siteId !== site.siteId ||
+      proof.accountId !== site.accountId ||
+      proof.buildSnapshotId !== buildSnapshotId ||
+      !SOURCE.test(proof.manifestSha256) ||
+      session?.sandboxName !== proof.sandboxName ||
+      session?.sessionId !== proof.sessionId ||
+      session?.manifestSha256 !== proof.manifestSha256 ||
+      !same(session.attempt, transfer?.attempt) ||
+      transfer?.receipt?.sourceId !== sourceId ||
+      transfer.receipt.commit !== commit ||
+      transfer.receipt.workerId !== workerId ||
+      transfer.receipt.siteId !== site.siteId ||
+      transfer.receipt.accountId !== site.accountId ||
+      !SOURCE.test(transfer.receipt.archive?.sha256) ||
+      handoff?.sourceId !== sourceId || handoff.commit !== commit ||
+      handoff.workerId !== workerId || !same(handoff.scope, scope) ||
+      !same(handoff.site, { siteId: site.siteId,
+        repository: site.repository, branch: site.branch,
+        studioOrigin: site.studioOrigin, accountId: site.accountId }) ||
+      !Array.isArray(handoff.files) || handoff.files.length < 2 ||
+      artifact?.sourceId !== sourceId || artifact.sourceCommit !== commit ||
+      artifact.workerId !== workerId ||
+      artifact.branch !== `gnr8-build-${commit}` ||
+      !SHA.test(artifact.artifactCommit))
+    throw Error('native_studio_dry_run_image_proof_unverified');
+  const receipt = { identity: hash({ sourceId, commit, scope, site, workerId,
+    files: handoff.files, artifactCommit: artifact.artifactCommit }),
+    sourceId, commit, workerId, files: handoff.files.length };
+  const prior = await store.read(KEY);
+  if (prior && !same(prior, receipt))
+    throw Error('native_studio_dry_run_receipt_conflict');
+  if (!prior) await store.claim(KEY, receipt);
+  if (!same(await store.read(KEY), receipt))
+    throw Error('native_studio_dry_run_receipt_conflict');
+  return { sourceId, commit, workerId, files: handoff.files.length };
+}
+
 export async function recordStudioFirstDeployDryRun(input, deps = {}) {
   const { project, store, trustedWrangler } = input ?? {};
   if (!store || typeof store.claim !== 'function' ||

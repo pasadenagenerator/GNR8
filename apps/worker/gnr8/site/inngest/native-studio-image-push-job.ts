@@ -13,14 +13,11 @@ type Progress = { state: 'running' | 'complete' | 'pending-review';
   prebuilt?: any; cleanupState?: 'complete' | 'pending-review' };
 
 async function configuredPush(request: Request, client: SupabaseClient) {
-  const { configuredNativeStudioImagePush } = await import(
-    '@/gnr8/standalone/native-studio-configured-image-push');
-  const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-  if (!trustedGit.startsWith('/'))
-    throw Error('native_studio_image_push_runner_unconfigured');
-  return configuredNativeStudioImagePush({ scope: request.scope, client,
+  const { configuredNativeStudioImagePushStored } = await import(
+    '@/gnr8/standalone/native-studio-configured-image-push-stored');
+  return configuredNativeStudioImagePushStored({ scope: request.scope, client,
     sourceId: request.sourceId, sourceCommit: request.sourceCommit,
-    workerId: request.workerId, trustedGit });
+    workerId: request.workerId });
 }
 
 const defaults = {

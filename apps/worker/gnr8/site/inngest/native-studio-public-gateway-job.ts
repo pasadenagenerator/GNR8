@@ -6,7 +6,7 @@ import { NATIVE_STUDIO_FIRST_OPEN_EVENT } from './native-studio-first-open-job';
 export const NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID = 'native-studio-public-gateway-job';
 export const NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT =
   'gnr8/native-studio.public-gateway.requested';
-const MAX_OBSERVATIONS = 15;
+const MAX_OBSERVATIONS = 30;
 const OBSERVATION_INTERVAL = '1m';
 
 type Scope = { agencyId: string; clientId: string; siteId: string };
@@ -14,6 +14,8 @@ type Request = { scope: Scope; actor: string; sourceId: string;
   sourceCommit: string; workerId: string; artifactCommit: string };
 type Artifact = { sourceId: string; sourceCommit: string; workerId: string;
   artifactCommit: string; branch: string };
+type PublicProgress = { state: 'running' | 'pending-review' |
+  'first-open-required'; commit: string; observation?: string };
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const SOURCE = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40,64}$/;
@@ -36,32 +38,11 @@ const defaults = {
     return store.read<Artifact>('native-studio/build-artifact-github-push-v1.json');
   },
   publish: async (request: Request, client: SupabaseClient) => {
-    const [{ prepareConfiguredNativeStudioPublicDeployIntent },
-      { runConfiguredNativeStudioPublicDeploy },
-      { SupabasePublicationStore }] = await Promise.all([
-      import('@/gnr8/standalone/native-studio-configured-public-deploy-intent'),
-      import('@/gnr8/standalone/native-studio-configured-public-deploy-run'),
-      import('@/gnr8/standalone/publication-store'),
-    ]);
-    const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-    const trustedWrangler = process.env.GNR8_NATIVE_STUDIO_TRUSTED_WRANGLER ?? '';
-    if (!trustedGit.startsWith('/') || !trustedWrangler.startsWith('/'))
-      throw Error('native_studio_public_gateway_runner_unconfigured');
-    const input = { scope: request.scope, client,
+    const { configuredNativeStudioStoredPublicDeploy } = await import(
+      '@/gnr8/standalone/native-studio-stored-public-deploy');
+    return configuredNativeStudioStoredPublicDeploy({ scope: request.scope, client,
       sourceId: request.sourceId, sourceCommit: request.sourceCommit,
-      workerId: request.workerId, trustedGit };
-    const store = new SupabasePublicationStore(client,
-      process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes',
-      request.scope);
-    const priorAttempt = await store.read('native-studio/first-public-deploy-attempt-v1.json');
-    if (!priorAttempt) {
-      const intent = await prepareConfiguredNativeStudioPublicDeployIntent(input);
-      if (intent.state !== 'prepared' || intent.sourceId !== request.sourceId ||
-          intent.commit !== request.sourceCommit || !WORKER.test(intent.publicWorkerId) ||
-          !/^gnr8-first-[a-f0-9]{64}$/.test(intent.studioTag))
-        throw Error('native_studio_public_gateway_intent_unverified');
-    }
-    return runConfiguredNativeStudioPublicDeploy({ ...input, trustedWrangler });
+      workerId: request.workerId });
   },
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED === '1',
   enqueueFirstOpen: async (request: { scope: Scope; actor: string;
@@ -78,7 +59,7 @@ const defaults = {
 /** The event cannot select the public Worker or domain. Both are re-read from
  * the scoped reservation and checked against the live Studio and vacancy. */
 export async function runNativeStudioPublicGateway(request: unknown,
-  deps: typeof defaults = defaults) {
+  deps: typeof defaults = defaults): Promise<PublicProgress> {
   if (!deps.enabled()) throw Error('native_studio_public_gateway_disabled');
   if (!request || typeof request !== 'object' || Array.isArray(request) ||
       Object.keys(request).sort().join() !==
@@ -130,9 +111,13 @@ export async function settleNativeStudioPublicGateway(
   for (let index = 0; index < MAX_OBSERVATIONS; index++) {
     const result = await steps.run(`public-gateway-observe-${index}`,
       () => run(request)) as Awaited<ReturnType<typeof runNativeStudioPublicGateway>>;
-    if (result.state !== 'pending-review' ||
-        !['pending', 'readback-unavailable'].includes(result.observation) ||
-        index === MAX_OBSERVATIONS - 1)
+    const continuing = result.state === 'running' ||
+      (result.state === 'pending-review' &&
+        ['pending', 'readback-unavailable'].includes(result.observation ?? ''));
+    if (result.state === 'running' && index === MAX_OBSERVATIONS - 1)
+      return { state: 'pending-review', commit: result.commit,
+        observation: 'execution-timeout' };
+    if (!continuing || index === MAX_OBSERVATIONS - 1)
       return result;
     await steps.sleep(`public-gateway-wait-${index}`, OBSERVATION_INTERVAL);
   }

@@ -12,8 +12,12 @@ import { pollNativeStudioImageCommand,
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
 import { NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
   NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
+  NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE,
+  NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR,
   recordNativeStudioWorkerBundle,
-  verifyNativeStudioWorkerBundleReceipt } from './native-studio-worker-bundle';
+  recordNativeStudioPublicWorkerBundle,
+  verifyNativeStudioWorkerBundleReceipt,
+  verifyNativeStudioPublicWorkerBundleReceipt } from './native-studio-worker-bundle';
 import type { PublicationStore } from './publication-store';
 import { claimNativeStudioImageDriveAttempt,
   readNativeStudioImageDriveTransfer,
@@ -30,6 +34,8 @@ const ATTEMPT = 'native-studio/image-drive-attempt-v1.json';
 const TRANSFER = 'native-studio/image-drive-transfer-v1.json';
 const BUILD_INTENT = 'native-studio/image-build-command-intent-v1.json';
 const PREFLIGHT_INTENT = 'native-studio/image-preflight-command-intent-v1.json';
+const PUBLIC_PREFLIGHT_INTENT =
+  'native-studio/image-public-preflight-command-intent-v1.json';
 export const NATIVE_STUDIO_IMAGE_PREFLIGHT_PROOF =
   'native-studio/image-preflight-proof-v1.json';
 const SAVE_INTENT = 'native-studio/image-save-command-intent-v1.json';
@@ -39,9 +45,11 @@ const DOCKER_HOST = 'unix:///var/run/docker.sock';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA = /^[a-f0-9]{64}$/;
+const HEX32 = /^[a-f0-9]{32}$/;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 type Input = Omit<NativeStudioImageDriveIdentity, 'store'> & {
+  publicWorkerId: string;
   store: NativeStudioImageDriveIdentity['store'] &
     Pick<PublicationStore, 'putBytes' | 'getBytes'>;
   files: NativeStudioDriveImageFile[];
@@ -51,6 +59,7 @@ type Input = Omit<NativeStudioImageDriveIdentity, 'store'> & {
 type Session = { attempt: NativeStudioImageDriveAttempt;
   driveId: string; projectId: string; sandboxName: string;
   sessionId: string; manifestSha256: string; tag: string;
+  publicWorkerId: string;
   sandboxTimeoutMs: number };
 type SourceVerified = { sourceId: string; commit: string;
   workerId: string; driveName: string; manifestSha256: string };
@@ -74,6 +83,8 @@ const defaults = {
   ensureDocker: ensureNativeStudioDockerDaemon,
   recordBundle: recordNativeStudioWorkerBundle,
   verifyBundle: verifyNativeStudioWorkerBundleReceipt,
+  recordPublicBundle: recordNativeStudioPublicWorkerBundle,
+  verifyPublicBundle: verifyNativeStudioPublicWorkerBundleReceipt,
 };
 
 /** A snapshot restores installed files, not a running dockerd process. Start
@@ -129,7 +140,7 @@ function validAttempt(input: Input, value: unknown): value is NativeStudioImageD
 }
 
 function commandIdentity(input: Input, session: Session,
-  phase: 'build' | 'preflight' | 'save') {
+  phase: 'build' | 'preflight' | 'public-preflight' | 'save') {
   return { sourceId: input.sourceId, commit: input.commit,
     workerId: input.workerId, siteId: input.site.siteId,
     driveName: session.attempt.driveName,
@@ -150,6 +161,10 @@ function bundleIdentity(input: Input, session: Session) {
     buildSnapshotId: input.buildSnapshotId,
     sandboxName: session.sandboxName, sessionId: session.sessionId,
     store: input.store };
+}
+
+function publicBundleIdentity(input: Input, session: Session) {
+  return { ...bundleIdentity(input, session), workerId: input.publicWorkerId };
 }
 
 async function requirePreflightProof(input: Input, session: Session) {
@@ -201,6 +216,7 @@ async function finish(input: Input, session: Session,
   steps: typeof defaults, verifiedNow = false): Promise<DetachedImageBuildResult> {
   await requirePreflightProof(input, session);
   await steps.verifyBundle(bundleIdentity(input, session));
+  await steps.verifyPublicBundle(publicBundleIdentity(input, session));
   const builder = await dependencies.sandbox.get({ name: session.sandboxName,
     resume: false });
   if (builder.name !== session.sandboxName ||
@@ -237,6 +253,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   dependencies: Sdk = sdk, steps: typeof defaults = defaults):
   Promise<DetachedImageBuildResult> {
   if (!input || !restrictedNativeStudioImageNetwork(input.buildNetworkPolicy) ||
+      !HEX32.test(input.publicWorkerId) ||
       !Number.isSafeInteger(input.sandboxTimeoutMs) ||
       input.sandboxTimeoutMs < 60 * 60_000 ||
       input.sandboxTimeoutMs > 90 * 60_000)
@@ -250,6 +267,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
       return { state: 'pending-review' };
     await requirePreflightProof(input, session);
     await steps.verifyBundle(bundleIdentity(input, session));
+    await steps.verifyPublicBundle(publicBundleIdentity(input, session));
     return { state: 'complete', transfer: await steps.readTransfer(input) };
   }
   const existingAttempt = await input.store.read(ATTEMPT);
@@ -283,6 +301,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
     const session: Session = { attempt, driveId: drive.driveId,
       projectId: drive.projectId, sandboxName: name, sessionId,
       manifestSha256: source.manifestSha256, tag: source.tag,
+      publicWorkerId: input.publicWorkerId,
       sandboxTimeoutMs: input.sandboxTimeoutMs };
     await claimExact(input.store, SESSION, session);
     requireRemainingTime(builder, 47 * 60_000);
@@ -297,6 +316,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   if (!validAttempt(input, stored.attempt) ||
       !same(stored.attempt, attempt) ||
       stored.sandboxName !== sandboxName(attempt) ||
+      stored.publicWorkerId !== input.publicWorkerId ||
       !ID.test(stored.driveId) || !ID.test(stored.projectId) ||
       !ID.test(stored.sessionId) ||
       stored.sandboxTimeoutMs !== input.sandboxTimeoutMs ||
@@ -330,6 +350,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   if (await input.store.read(SAVE_INTENT)) {
     await requirePreflightProof(input, stored);
     await steps.verifyBundle(bundleIdentity(input, stored));
+    await steps.verifyPublicBundle(publicBundleIdentity(input, stored));
     const poll = await steps.pollCommand(commandIdentity(input, stored, 'save'),
       dependencies.sandbox);
     if (poll.state !== 'succeeded')
@@ -352,15 +373,16 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   }
   if (!await input.store.read(BUILD_INTENT))
     return { state: 'pending-review' };
-  const phase = await input.store.read(PREFLIGHT_INTENT)
-    ? 'preflight' : 'build';
+  const phase = await input.store.read(PUBLIC_PREFLIGHT_INTENT)
+    ? 'public-preflight' : await input.store.read(PREFLIGHT_INTENT)
+      ? 'preflight' : 'build';
   const poll = await steps.pollCommand(commandIdentity(input, stored, phase),
     dependencies.sandbox);
   if (poll.state !== 'succeeded')
     return { state: poll.state === 'running' ? 'running' : 'pending-review' };
   await steps.verifySource(builder, stored.manifestSha256);
   if (phase === 'build') {
-    requireRemainingTime(builder, 27 * 60_000);
+    requireRemainingTime(builder, 42 * 60_000);
     await steps.startCommand({ ...commandIdentity(input, stored, 'preflight'),
       sandbox: builder,
       command: { cmd: '/usr/local/bin/wrangler',
@@ -373,9 +395,28 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
         timeoutMs: 15 * 60_000 } });
     return { state: 'running' };
   }
-  await steps.recordBundle({ ...bundleIdentity(input, stored),
+  if (phase === 'preflight') {
+    await steps.recordBundle({ ...bundleIdentity(input, stored),
+      sandboxTimeoutMs: input.sandboxTimeoutMs,
+      networkPolicy: input.buildNetworkPolicy, sandbox: builder });
+    requireRemainingTime(builder, 27 * 60_000);
+    await steps.startCommand({
+      ...commandIdentity(input, stored, 'public-preflight'),
+      sandbox: builder,
+      command: { cmd: '/usr/local/bin/wrangler',
+        args: ['deploy', '--dry-run', '--outdir',
+          NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR,
+          '--metafile', NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE,
+          '--config', 'wrangler.json'],
+        cwd: NATIVE_STUDIO_IMAGE_SOURCE_ROOT,
+        env: { CI: '1', DOCKER_HOST, WRANGLER_SEND_METRICS: 'false' },
+        timeoutMs: 15 * 60_000 } });
+    return { state: 'running' };
+  }
+  await steps.recordPublicBundle({ ...publicBundleIdentity(input, stored),
     sandboxTimeoutMs: input.sandboxTimeoutMs,
     networkPolicy: input.buildNetworkPolicy, sandbox: builder });
+  await steps.verifyBundle(bundleIdentity(input, stored));
   await claimExact(input.store, NATIVE_STUDIO_IMAGE_PREFLIGHT_PROOF,
     preflightProof(input, stored));
   requireRemainingTime(builder, 12 * 60_000);

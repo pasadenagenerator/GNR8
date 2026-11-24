@@ -38,3 +38,16 @@ export async function verifyNativeAccessRoleFreshness({ project, principals }) {
   } catch { invalid(); }
   finally { await handle?.close(); }
 }
+
+/** The first Git Data push has no checkout. Its committed role bytes were
+ * verified against the immutable source before this current-authority check. */
+export function verifyNativeAccessRoleBytesFreshness({ rolesBytes, principals }) {
+  if (!Buffer.isBuffer(rolesBytes) || rolesBytes.length > 262_144 ||
+      !Array.isArray(principals)) invalid();
+  try {
+    const source = new TextDecoder('utf-8', { fatal: true }).decode(rolesBytes);
+    validateNativeAccessRoles(source);
+    if (source !== serializeNativeAccessRoles(principals)) invalid();
+    return { state: 'current', principals: [...principals].sort() };
+  } catch { invalid(); }
+}

@@ -1,20 +1,30 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { Snapshot, type NetworkPolicy } from '@vercel/sandbox';
+import { restoreNativeStudioBuildOutputBytes } from '../../../../scripts/stacki/build-output-bytes.mjs';
 import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
-import { recordStudioFirstDeployDryRunFromImage } from '../../../../scripts/stacki/first-studio-dry-run.mjs';
+import { recordStudioFirstDeployDryRunFromStoredImage } from '../../../../scripts/stacki/first-studio-dry-run.mjs';
 import { advanceNativeStudioDetachedImageBuild } from './native-studio-detached-image-build';
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
-import { withConfiguredNativeStudioFirstDeployCheckout } from './native-studio-configured-first-deploy-checkout';
+import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
+import { SupabasePublicationStore } from './publication-store';
+import { NATIVE_STUDIO_RESOURCE_RECEIPT,
+  type NativeStudioResourceReceipt } from './native-studio-configured-resource-reservation';
 import type { NativeStudioScope } from './native-studio-binding-store';
 
 type Environment = Record<string, string | undefined>;
 const SNAPSHOT = /^snap_[A-Za-z0-9]+$/;
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 const defaults = {
-  withCheckout: withConfiguredNativeStudioFirstDeployCheckout,
+  site: configuredNativeStudioBootstrapSite,
+  store: (client: SupabaseClient, scope: NativeStudioScope, env: Environment) =>
+    new SupabasePublicationStore(client,
+      env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope),
   source: readStoredVerifiedAstroStudio,
-  recordPreflight: recordStudioFirstDeployDryRunFromImage,
+  restoreOutputs: restoreNativeStudioBuildOutputBytes,
+  recordPreflight: recordStudioFirstDeployDryRunFromStoredImage,
   snapshot: Snapshot.get,
   advance: advanceNativeStudioDetachedImageBuild,
 };
@@ -35,7 +45,7 @@ function networkPolicy(raw: string | undefined): NetworkPolicy {
  * commit. The build Sandbox receives no credential or service-role store. */
 export async function configuredNativeStudioImageBuild(input: {
   scope: NativeStudioScope; client: SupabaseClient; sourceId: string;
-  sourceCommit: string; workerId: string; trustedGit: string;
+  sourceCommit: string; workerId: string;
 }, env: Environment = process.env, transport: typeof fetch = fetch,
 deps = defaults) {
   const buildSnapshotId = env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT ?? '';
@@ -50,12 +60,10 @@ deps = defaults) {
     throw Error('native_studio_image_build_not_configured');
   const buildNetworkPolicy = networkPolicy(
     env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS);
-  return deps.withCheckout(input, async prepared => {
-    if (prepared.sourceId !== input.sourceId ||
-        prepared.commit !== input.sourceCommit ||
-        prepared.workerId !== input.workerId ||
-        prepared.site.siteId !== input.scope.siteId)
-      throw Error('native_studio_image_build_checkout_unverified');
+  const site = await deps.site(input.scope, input.client, env);
+  const store = deps.store(input.client, input.scope, env);
+  const prepared = { site, store, sourceId: input.sourceId,
+    commit: input.sourceCommit, workerId: input.workerId };
     // Snapshot availability matters when creating a Sandbox. A live attempt
     // is resumed from its private identity and attested session instead.
     if (!await prepared.store.read('native-studio/image-drive-attempt-v1.json')) {
@@ -68,18 +76,41 @@ deps = defaults) {
     }
     const source = await deps.source({ store: prepared.store,
       sourceId: prepared.sourceId, site: prepared.site });
-    const progress = await deps.advance({ scope: input.scope, site: prepared.site,
-      sourceId: prepared.sourceId, commit: prepared.commit,
-      workerId: prepared.workerId, store: prepared.store,
-      buildSnapshotId, pushSnapshotId, buildNetworkPolicy,
-      sandboxTimeoutMs, files: source.files,
-    });
-    if (progress.state === 'complete') {
-      await deps.recordPreflight({ project: prepared.project,
+    const reservation = await prepared.store.read<NativeStudioResourceReceipt>(
+      NATIVE_STUDIO_RESOURCE_RECEIPT);
+    const publicWorkerId = reservation?.workers?.publicSite?.id;
+    if (!/^[a-f0-9]{32}$/.test(publicWorkerId ?? '') ||
+        reservation?.workers?.publicSite?.worker !==
+          `gnr8-${input.scope.siteId}-site` ||
+        reservation?.target?.accountId !== prepared.site.accountId ||
+        reservation?.workers?.studio?.id !== input.workerId ||
+        reservation?.target?.repository !== site.repository ||
+        String(reservation?.target?.repositoryId) !== site.repositoryId ||
+        reservation?.target?.studioOrigin !== site.studioOrigin)
+      throw Error('native_studio_image_build_public_target_unverified');
+    const outputs = await deps.restoreOutputs({ store: prepared.store,
+      scope: input.scope, site: prepared.site, sourceId: prepared.sourceId,
+      commit: prepared.commit, workerId: prepared.workerId });
+    let progress;
+    try {
+      const dist = await Promise.all(outputs.files.filter(file =>
+        file.path.startsWith('dist/')).map(async file => ({
+          path: file.path,
+          body: await readFile(join(outputs.artifactDir, file.path)),
+        })));
+      progress = await deps.advance({ scope: input.scope, site: prepared.site,
+        sourceId: prepared.sourceId, commit: prepared.commit,
+        workerId: prepared.workerId, publicWorkerId: publicWorkerId!,
+        store: prepared.store, buildSnapshotId, pushSnapshotId,
+        buildNetworkPolicy, sandboxTimeoutMs,
+        files: [...source.files, ...dist],
+      });
+      if (progress.state === 'complete') {
+        await deps.recordPreflight({
         store: prepared.store, sourceId: prepared.sourceId,
         commit: prepared.commit, scope: input.scope,
         site: prepared.site, workerId: prepared.workerId, buildSnapshotId });
-    }
-    return progress;
-  }, env, transport);
+      }
+      return progress;
+    } finally { await outputs.cleanup(); }
 }
