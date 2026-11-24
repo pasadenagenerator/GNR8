@@ -97,16 +97,16 @@ test("source-backed export verifies exact captured stylesheet references without
   });
 });
 
-test("unstyled captured source permits an export without a linked stylesheet only when explicitly declared", async () => {
+test("captured source without linked CSS permits an export without a local stylesheet only when explicitly declared", async () => {
   await withWorkspace(async (workspacePath) => {
     await mkdir(join(workspacePath, "dist"), { recursive: true });
     await writeFile(join(workspacePath, "dist", "index.html"),
       "<!doctype html><html><head><title>Plain source</title></head><body><h1>Plain source</h1></body></html>");
     const verification = { expectedContent: ["Plain source"], expectedThemeToken: null };
     await assertValidationError(inspectAstroStaticExport(workspacePath, verification), "stylesheet_verification_failed");
-    const inspected = await inspectAstroStaticExport(workspacePath, { ...verification, unstyledSource: true });
+    const inspected = await inspectAstroStaticExport(workspacePath, { ...verification, noLinkedStylesheetSource: true });
     assert.deepEqual(inspected.stylesheetPaths, []);
-    assert.equal(inspected.unstyledSource, true);
+    assert.equal(inspected.noLinkedStylesheetSource, true);
   });
 });
 

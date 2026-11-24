@@ -2,6 +2,9 @@ import { RETAINED_HERO_SCRIPT } from "../../src/public-site/retained-hero-slider
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
@@ -14,6 +17,7 @@ import {
   loadSourceBackedAstroHtmlByPath,
   SourceBackedAstroUnsupportedError,
 } from "./source-backed-astro-input";
+import { inspectAstroStaticExport } from "./astro-static-site-build-export-proof";
 
 const SHA = "a".repeat(64);
 
@@ -219,16 +223,33 @@ test("normal source input preserves captured routes, navigation, owned asset ide
     sha256: SHA,
   });
   assert.equal(generated.sourceManifest.files.some((file) => file.path === "public/styles/global.css"), false);
-  assert.equal(generated.verification.unstyledSource, true);
+  assert.equal(generated.verification.noLinkedStylesheetSource, true);
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("<h1>About</h1>")));
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro" && file.contents.includes("/uploads/about.png")));
 });
 
-test("captured inline styling does not claim an unstyled source", () => {
+test("captured inline styling does not imply a linked stylesheet", () => {
   const input = fixture({ rootHtml: '<html><head><style>h1{color:red}</style></head><body><h1>Home</h1></body></html>' });
   const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version,
     artifact: input.artifact, rawArtifact: input.rawArtifact });
-  assert.equal(generated.verification.unstyledSource, undefined);
+  assert.equal(generated.verification.noLinkedStylesheetSource, true);
+});
+
+test("inline-only captured CSS reaches the real export verifier without a local stylesheet", async () => {
+  const input = fixture({ rootHtml: '<html><head><style>h1{color:red}</style></head><body><h1>Home</h1></body></html>' });
+  const generated = createSourceBackedAstroGenerationInput({ siteVersion: input.version,
+    artifact: input.artifact, rawArtifact: input.rawArtifact });
+  const workspacePath = await realpath(await mkdtemp(join(tmpdir(), 'gnr8-inline-css-proof-')));
+  try {
+    await mkdir(join(workspacePath, 'dist'));
+    await writeFile(join(workspacePath, 'dist', 'index.html'),
+      '<html><head><title>Home</title><style>h1{color:red}</style></head><body><h1>Home</h1></body></html>');
+    const inspected = await inspectAstroStaticExport(workspacePath, generated.verification);
+    assert.equal(inspected.noLinkedStylesheetSource, true);
+    assert.deepEqual(inspected.stylesheetPaths, []);
+  } finally {
+    await rm(workspacePath, { recursive: true, force: true });
+  }
 });
 
 test("normalizes rendered navigation with the same targets used by governance evidence", () => {

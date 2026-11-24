@@ -75,7 +75,7 @@ export interface InspectedAstroStaticExport {
   verifiedContent: string[];
   verifiedThemeToken: string | null;
   verifiedStylesheetReferences: string[];
-  unstyledSource?: boolean;
+  noLinkedStylesheetSource?: boolean;
   /** Build output bound to the independently selected immutable source. */
   compiledStylesheetSourceSha256?: string;
 }
@@ -84,7 +84,7 @@ export interface AstroStaticExportVerification {
   expectedContent: string[];
   expectedThemeToken: string | null;
   expectedStylesheetReferences?: string[];
-  unstyledSource?: boolean;
+  noLinkedStylesheetSource?: boolean;
   compiledStylesheetSource?: { sourcePaths: string[]; aggregateSha256: string };
 }
 
@@ -492,7 +492,7 @@ export async function inspectAstroStaticExport(
       `Built HTML is missing ${missingExpectedStylesheetReferences.length} expected source stylesheet reference(s).`,
     );
   }
-  if (stylesheetPaths.length === 0 && expectedStylesheetReferences.length === 0 && !verification.unstyledSource) {
+  if (stylesheetPaths.length === 0 && expectedStylesheetReferences.length === 0 && !verification.noLinkedStylesheetSource) {
     throw new AstroStaticExportValidationError("stylesheet_verification_failed", "Built HTML has no local stylesheet.");
   }
 
@@ -526,7 +526,7 @@ export async function inspectAstroStaticExport(
     verifiedContent,
     verifiedThemeToken: expectedThemeToken,
     verifiedStylesheetReferences: expectedStylesheetReferences,
-    ...(verification.unstyledSource ? { unstyledSource: true } : {}),
+    ...(verification.noLinkedStylesheetSource ? { noLinkedStylesheetSource: true } : {}),
     ...(compiledStylesheetSourceSha256 ? { compiledStylesheetSourceSha256 } : {}),
   };
 }
@@ -834,7 +834,7 @@ async function verifyDistHttp(
     }
   }
   if (!stylesheetPath || !inspected.verifiedThemeToken) {
-    if (inspected.verifiedStylesheetReferences.length === 0 && !inspected.compiledStylesheetSourceSha256 && !inspected.unstyledSource) {
+    if (inspected.verifiedStylesheetReferences.length === 0 && !inspected.compiledStylesheetSourceSha256 && !inspected.noLinkedStylesheetSource) {
       throw proofError("stylesheet_verification_failed", "No verified stylesheet evidence is available for HTTP verification.", evidence);
     }
     return;
