@@ -97,6 +97,19 @@ test("source-backed export verifies exact captured stylesheet references without
   });
 });
 
+test("unstyled captured source permits an export without a linked stylesheet only when explicitly declared", async () => {
+  await withWorkspace(async (workspacePath) => {
+    await mkdir(join(workspacePath, "dist"), { recursive: true });
+    await writeFile(join(workspacePath, "dist", "index.html"),
+      "<!doctype html><html><head><title>Plain source</title></head><body><h1>Plain source</h1></body></html>");
+    const verification = { expectedContent: ["Plain source"], expectedThemeToken: null };
+    await assertValidationError(inspectAstroStaticExport(workspacePath, verification), "stylesheet_verification_failed");
+    const inspected = await inspectAstroStaticExport(workspacePath, { ...verification, unstyledSource: true });
+    assert.deepEqual(inspected.stylesheetPaths, []);
+    assert.equal(inspected.unstyledSource, true);
+  });
+});
+
 test("source-backed export treats HTML-entity serialization as the same stylesheet reference", async () => {
   await withWorkspace(async (workspacePath) => {
     const serializedHref = "https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,700&display=swap&subset=latin-ext";
