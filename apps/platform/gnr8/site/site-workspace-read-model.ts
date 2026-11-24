@@ -22,6 +22,7 @@ import {
   type ReconstructionReadinessProjection,
 } from '@/gnr8/site/evidence-capture-baseline-read-model'
 import { getSupabasePageReadClient } from '@/src/auth/supabase-page-read-client'
+import { readGeneratedOutputBuildEvidence } from '@/gnr8/output-adapters/generated-output-evidence'
 import {getSiteVersion,isGitBackedImportMarker} from '@/gnr8/runtime/runtime-store'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -383,6 +384,7 @@ export type SiteWorkspaceReadModel = {
   }
   preview: {
     lumosBrand?: { siteVersionId: string; artifactId: string; revision: number } | null
+    selectedCaptureSiteVersionId?: string | null
     readiness: SiteWorkspacePreviewReadiness
     sourceType: SitePreviewType | null
     previewUrl: string | null
@@ -3352,6 +3354,9 @@ export async function getSiteWorkspaceReadModelForPage(input: {
       ],
     },
     preview: {
+      selectedCaptureSiteVersionId: selectedArtifactManifest
+        ? readGeneratedOutputBuildEvidence(selectedArtifactManifest)?.sourceCapture.siteVersionId ?? null
+        : null,
       lumosBrand: (() => {
         const workspace=selectedArtifactManifest?.generatedOutputSourceWorkspace as Record<string,unknown>|undefined;
         const binding=workspace?.lumosBrand as {format?:string;siteVersionId?:unknown;artifactId?:unknown;revision?:unknown}|undefined;

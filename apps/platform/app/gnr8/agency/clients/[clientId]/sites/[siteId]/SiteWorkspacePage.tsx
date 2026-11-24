@@ -1557,7 +1557,7 @@ export default async function SiteWorkspacePage(props: Props) {
             reservationEnabled={process.env.GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED === '1'}
             agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} />
         ) : null}
-        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.pipeline.importVersion.savedBrandGuideSiteVersionId ?? readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
+        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.preview.selectedCaptureSiteVersionId ?? readModel.pipeline.importVersion.savedBrandGuideSiteVersionId ?? readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
           canPrepare={canPublish}
           proposal={readModel.preview.lumosBrand && readModel.preview.previewUrl
             ? {revision:readModel.preview.lumosBrand.revision,previewUrl:readModel.preview.previewUrl} : null}
