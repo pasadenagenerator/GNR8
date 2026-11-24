@@ -68,9 +68,16 @@ export function projectMonoControls(document:DefaultTreeAdapterMap['document'],r
          url.searchParams.set('controls','1');
          url.searchParams.delete('enablejsapi');
          url.searchParams.delete('playerapiid');
-         set(node,'src',url.toString());
-         set(node,'data-gnr8-video-projected','youtube-static-v1');
-         node.attrs=node.attrs.filter(a=>a.name!=='data-req');
+         const wrapper=node.parentNode;
+         if(!wrapper || !('tagName' in wrapper) || wrapper.tagName!=='div' ||
+            !hasClass(wrapper,'rowvideobg') || elements(wrapper).filter(child=>child.tagName==='iframe').length!==1)continue;
+         const title=attr(node,'title')||'Video';
+         const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+         set(wrapper,'data-gnr8-video-projected','youtube-click-v1');
+         set(wrapper,'style',`${attr(wrapper,'style') ? `${attr(wrapper,'style').replace(/;?$/, ';')}` : ''}position:relative`);
+         detach(node);
+         append(wrapper,`<button type="button" data-gnr8-play-youtube data-gnr8-youtube-src="${escape(url.toString())}" data-gnr8-youtube-title="${escape(title)}" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;padding:12px 20px;border:2px solid white;border-radius:6px;background:#111c;color:white;cursor:pointer">Predvajaj video / Play video</button>`);
+         controls=true;
        }
      } catch { /* Unknown video input keeps its runtime requirement and blocks generation. */ }
    }
