@@ -465,12 +465,13 @@ the switch must stay off until the host has the required Git executable,
 runtime duration and Sandbox access. A successful first build now queues a
 separate, credential-free deploy preflight when
 `GNR8_NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_ENABLED=1`. That job rechecks the
-actor and the exact private artifact receipt, restores the verified Git refs,
-then runs the existing Wrangler dry run and records its scoped proof. It needs
-centrally configured trusted Git and Wrangler executables. Local tests cover
-the queue and receipt gate, but neither the hosted preflight nor its runtime
-requirements have been verified; this switch remains off. The proof is not a
-Cloudflare publication. A fresh deploy
+actor and the exact private artifact receipt, then queues the isolated image
+build. That Sandbox builds the unchanged Dockerfile, runs the credential-free
+Wrangler dry run, and saves the verified image archive. Only after the private
+Drive transfer does the coordinator record a proof bound to the exact source,
+artifact, site, Sandbox session, and build snapshot. Local tests cover the
+queue, resume, and receipt gates. The hosted path has not yet been exercised;
+this switch remains off. The proof is not a Cloudflare publication. A fresh deploy
 checkout can now recover the exact source commit from the recorded first-push
 intent and private GitHub branch. The local artifact restorer fetches the
 recorded build ref, checks its parent and tree, hashes every Git blob against
@@ -504,9 +505,10 @@ receipt. It does not create or rotate secrets during deployment.
 The central credential still needs trusted-host configuration; no per-site
 credential entry is required by this local call.
 The local first-deploy path now has a credential-free dry-run receipt and a
-single configured deploy call. A separate disposable preflight job can run the
-unchanged Wrangler `deploy --dry-run`, reverify the source, build handoff and
-Docker context, then claim a receipt bound to the exact artifact commit.
+single configured deploy call. The isolated image builder runs the unchanged
+Wrangler `deploy --dry-run`, reverifies the source, build handoff and Docker
+context, then claims a receipt bound to the exact artifact commit after its
+private image transfer.
 The deploy job reads that receipt before loading Cloudflare credentials. Its
 final gate rechecks the build bytes and Docker context before claiming the
 one deploy attempt; a lost response leads to control-plane readback and never

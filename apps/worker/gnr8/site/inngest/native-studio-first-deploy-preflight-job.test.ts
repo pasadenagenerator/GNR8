@@ -34,12 +34,6 @@ function fixture() {
       calls.push('artifact');
       return artifact;
     },
-    preflight: async (received: typeof request) => {
-      assert.deepEqual(received, request);
-      calls.push('preflight');
-      return { sourceId: request.sourceId, commit: request.sourceCommit,
-        workerId: request.workerId, files: 10 };
-    },
     chainEnabled: () => false,
     enqueueBuild: async () => { calls.push('enqueue'); },
   };
@@ -73,12 +67,12 @@ test('revoked actor and mismatched artifact prevent preflight', async () => {
   assert.deepEqual(mismatched.calls, ['client', 'authorize', 'artifact']);
 });
 
-test('exact artifact receipt enters credential-free preflight once', async () => {
+test('exact artifact receipt enters credential-free image build gate', async () => {
   const f = fixture();
   assert.deepEqual(await runNativeStudioFirstDeployPreflight(request, f.deps),
     { sourceId: request.sourceId, commit: request.sourceCommit,
-      workerId: request.workerId, files: 10 });
-  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'preflight']);
+      workerId: request.workerId, artifactCommit: request.artifactCommit });
+  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact']);
 });
 
 test('verified preflight queues only scoped identities for image build', async () => {
@@ -90,17 +84,14 @@ test('verified preflight queues only scoped identities for image build', async (
       f.calls.push('enqueue');
     },
   });
-  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact',
-    'preflight', 'enqueue']);
+  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'enqueue']);
 });
 
-test('failed preflight result cannot queue deployment', async () => {
+test('failed image-build enqueue does not claim a dry-run receipt', async () => {
   const f = fixture();
   await assert.rejects(runNativeStudioFirstDeployPreflight(request, {
     ...f.deps, chainEnabled: () => true,
-    preflight: async () => { f.calls.push('preflight'); return {
-      sourceId: request.sourceId, commit: '0'.repeat(40),
-      workerId: request.workerId, files: 10 }; },
-  }), /result_unverified/);
-  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact', 'preflight']);
+    enqueueBuild: async () => { throw Error('enqueue unavailable'); },
+  }), /enqueue unavailable/);
+  assert.deepEqual(f.calls, ['client', 'authorize', 'artifact']);
 });

@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Snapshot, type NetworkPolicy } from '@vercel/sandbox';
 import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
+import { recordStudioFirstDeployDryRunFromImage } from '../../../../scripts/stacki/first-studio-dry-run.mjs';
 import { advanceNativeStudioDetachedImageBuild } from './native-studio-detached-image-build';
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
 import { withConfiguredNativeStudioFirstDeployCheckout } from './native-studio-configured-first-deploy-checkout';
@@ -13,6 +14,7 @@ const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0
 const defaults = {
   withCheckout: withConfiguredNativeStudioFirstDeployCheckout,
   source: readStoredVerifiedAstroStudio,
+  recordPreflight: recordStudioFirstDeployDryRunFromImage,
   snapshot: Snapshot.get,
   advance: advanceNativeStudioDetachedImageBuild,
 };
@@ -66,11 +68,18 @@ deps = defaults) {
     }
     const source = await deps.source({ store: prepared.store,
       sourceId: prepared.sourceId, site: prepared.site });
-    return deps.advance({ scope: input.scope, site: prepared.site,
+    const progress = await deps.advance({ scope: input.scope, site: prepared.site,
       sourceId: prepared.sourceId, commit: prepared.commit,
       workerId: prepared.workerId, store: prepared.store,
       buildSnapshotId, pushSnapshotId, buildNetworkPolicy,
       sandboxTimeoutMs, files: source.files,
     });
+    if (progress.state === 'complete') {
+      await deps.recordPreflight({ project: prepared.project,
+        store: prepared.store, sourceId: prepared.sourceId,
+        commit: prepared.commit, scope: input.scope,
+        site: prepared.site, workerId: prepared.workerId, buildSnapshotId });
+    }
+    return progress;
   }, env, transport);
 }

@@ -33,25 +33,15 @@ const defaults = {
       process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
     return store.read<ArtifactReceipt>('native-studio/build-artifact-github-push-v1.json');
   },
-  preflight: async (request: Request, client: SupabaseClient) => {
-    const { configuredNativeStudioFirstDeployDryRun } = await import(
-      '@/gnr8/standalone/native-studio-configured-first-deploy-dry-run');
-    const trustedGit = process.env.GNR8_NATIVE_STUDIO_TRUSTED_GIT ?? '';
-    const trustedWrangler = process.env.GNR8_NATIVE_STUDIO_TRUSTED_WRANGLER ?? '';
-    if (!trustedGit.startsWith('/') || !trustedWrangler.startsWith('/'))
-      throw Error('native_studio_first_deploy_preflight_runner_unconfigured');
-    return configuredNativeStudioFirstDeployDryRun({ scope: request.scope, client,
-      sourceId: request.sourceId, sourceCommit: request.sourceCommit,
-      workerId: request.workerId, trustedGit, trustedWrangler });
-  },
   chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED === '1',
   enqueueBuild: async (request: Request) => {
     await inngest.send({ name: NATIVE_STUDIO_IMAGE_BUILD_EVENT, data: request });
   },
 };
 
-/** Only a verified private artifact ref can start a credential-free dry run.
- * All site and build bytes are recovered and checked by the preflight stage. */
+/** Only a verified private artifact ref can start the credential-free image
+ * builder. Its attested Sandbox performs Wrangler's dry run before it records
+ * the private preflight receipt and hands the image to the push stage. */
 export async function runNativeStudioFirstDeployPreflight(request: unknown,
   deps: typeof defaults = defaults) {
   if (!deps.enabled()) throw Error('native_studio_first_deploy_preflight_disabled');
@@ -81,13 +71,8 @@ export async function runNativeStudioFirstDeployPreflight(request: unknown,
     throw Error('native_studio_first_deploy_preflight_artifact_unverified');
   const verified = { scope, actor, sourceId, sourceCommit,
     workerId, artifactCommit };
-  const result = await deps.preflight(verified, client);
-  if (result?.sourceId !== sourceId || result.commit !== sourceCommit ||
-      result.workerId !== workerId ||
-      !Number.isSafeInteger(result.files) || result.files < 2)
-    throw Error('native_studio_first_deploy_preflight_result_unverified');
   if (deps.chainEnabled()) await deps.enqueueBuild(verified);
-  return result;
+  return { sourceId, commit: sourceCommit, workerId, artifactCommit };
 }
 
 export const nativeStudioFirstDeployPreflightJob = inngest.createFunction({

@@ -24,6 +24,9 @@ const RECEIPT = 'native-studio/image-build-receipt-v1.json';
 const ATTEMPT = 'native-studio/image-drive-attempt-v1.json';
 const TRANSFER = 'native-studio/image-drive-transfer-v1.json';
 const BUILD_INTENT = 'native-studio/image-build-command-intent-v1.json';
+const PREFLIGHT_INTENT = 'native-studio/image-preflight-command-intent-v1.json';
+export const NATIVE_STUDIO_IMAGE_PREFLIGHT_PROOF =
+  'native-studio/image-preflight-proof-v1.json';
 const SAVE_INTENT = 'native-studio/image-save-command-intent-v1.json';
 const MOUNT = '/gnr8-image';
 const MAX_SIZE = 12 * 1024 * 1024 * 1024;
@@ -116,11 +119,26 @@ function validAttempt(input: Input, value: unknown): value is NativeStudioImageD
     UUID.test(attempt.driveName.slice(-36));
 }
 
-function commandIdentity(input: Input, session: Session, phase: 'build' | 'save') {
+function commandIdentity(input: Input, session: Session,
+  phase: 'build' | 'preflight' | 'save') {
   return { sourceId: input.sourceId, commit: input.commit,
     workerId: input.workerId, siteId: input.site.siteId,
     driveName: session.attempt.driveName,
     sandboxName: session.sandboxName, phase, store: input.store };
+}
+
+function preflightProof(input: Input, session: Session) {
+  return { sourceId: input.sourceId, commit: input.commit,
+    workerId: input.workerId, siteId: input.site.siteId,
+    accountId: input.site.accountId, buildSnapshotId: input.buildSnapshotId,
+    sandboxName: session.sandboxName, sessionId: session.sessionId,
+    manifestSha256: session.manifestSha256 };
+}
+
+async function requirePreflightProof(input: Input, session: Session) {
+  if (!same(await input.store.read(NATIVE_STUDIO_IMAGE_PREFLIGHT_PROOF),
+    preflightProof(input, session)))
+    throw Error('native_studio_image_preflight_unverified');
 }
 
 function attestedBuilder(input: Input, builder: Sandbox,
@@ -164,6 +182,7 @@ function requireRemainingTime(sandbox: Sandbox, minimumMs: number) {
 async function finish(input: Input, session: Session,
   receipt: NativeStudioImageArchiveReceipt, dependencies: Sdk,
   steps: typeof defaults, verifiedNow = false): Promise<DetachedImageBuildResult> {
+  await requirePreflightProof(input, session);
   const builder = await dependencies.sandbox.get({ name: session.sandboxName,
     resume: false });
   if (builder.name !== session.sandboxName ||
@@ -207,6 +226,11 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   const source = describeNativeStudioDriveImageSource(
     NATIVE_STUDIO_IMAGE_ARCHIVE_PATH, { ...input, files: input.files });
   if (await input.store.read(TRANSFER)) {
+    const session = await input.store.read(SESSION) as Session | null;
+    if (!session || !validAttempt(input, session.attempt) ||
+        session.manifestSha256 !== source.manifestSha256)
+      return { state: 'pending-review' };
+    await requirePreflightProof(input, session);
     return { state: 'complete', transfer: await steps.readTransfer(input) };
   }
   const existingAttempt = await input.store.read(ATTEMPT);
@@ -285,6 +309,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   if (!attestedBuilder(input, builder, attempt, stored.sessionId))
     return { state: 'pending-review' };
   if (await input.store.read(SAVE_INTENT)) {
+    await requirePreflightProof(input, stored);
     const poll = await steps.pollCommand(commandIdentity(input, stored, 'save'),
       dependencies.sandbox);
     if (poll.state !== 'succeeded')
@@ -307,12 +332,27 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   }
   if (!await input.store.read(BUILD_INTENT))
     return { state: 'pending-review' };
-  const poll = await steps.pollCommand(commandIdentity(input, stored, 'build'),
+  const phase = await input.store.read(PREFLIGHT_INTENT)
+    ? 'preflight' : 'build';
+  const poll = await steps.pollCommand(commandIdentity(input, stored, phase),
     dependencies.sandbox);
   if (poll.state !== 'succeeded')
     return { state: poll.state === 'running' ? 'running' : 'pending-review' };
   await steps.verifySource(builder, stored.manifestSha256);
-  requireRemainingTime(builder, 27 * 60_000);
+  if (phase === 'build') {
+    requireRemainingTime(builder, 27 * 60_000);
+    await steps.startCommand({ ...commandIdentity(input, stored, 'preflight'),
+      sandbox: builder,
+      command: { cmd: '/usr/local/bin/wrangler',
+        args: ['deploy', '--dry-run', '--config', 'cloudflare/wrangler.jsonc'],
+        cwd: `${NATIVE_STUDIO_IMAGE_SOURCE_ROOT}/studio`,
+        env: { CI: '1', DOCKER_HOST, WRANGLER_SEND_METRICS: 'false' },
+        timeoutMs: 15 * 60_000 } });
+    return { state: 'running' };
+  }
+  await claimExact(input.store, NATIVE_STUDIO_IMAGE_PREFLIGHT_PROOF,
+    preflightProof(input, stored));
+  requireRemainingTime(builder, 12 * 60_000);
   await steps.startCommand({ ...commandIdentity(input, stored, 'save'),
     sandbox: builder,
     command: { cmd: 'docker', args: ['save', '--output',

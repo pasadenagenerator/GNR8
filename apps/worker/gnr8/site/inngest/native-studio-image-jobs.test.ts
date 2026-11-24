@@ -37,7 +37,8 @@ resources: { target: { scope: request.scope, accountId },
 
 function buildFixture() {
   const calls: string[] = [];
-  let evidence: any = { ...base, attempt: null, transfer: null };
+  let evidence: any = { ...base, preflight: null,
+    attempt: null, transfer: null };
   const client = {} as SupabaseClient;
   const deps = {
     enabled: () => true,
@@ -45,7 +46,8 @@ function buildFixture() {
     authorize: async () => { calls.push('authorize'); },
     evidence: async () => { calls.push('evidence'); return evidence; },
     build: async () => { calls.push('build'); evidence = { ...evidence,
-      attempt, transfer }; return { state: 'complete' as const, transfer }; },
+      preflight: base.preflight, attempt, transfer };
+      return { state: 'complete' as const, transfer }; },
     chainEnabled: () => true,
     enqueuePush: async (value: typeof request) => {
       assert.deepEqual(value, request); calls.push('enqueue'); },
@@ -100,12 +102,13 @@ test('image build verifies scoped evidence and transfers before queueing push', 
   assert.equal(wrong.calls.includes('enqueue'), false);
 });
 
-test('image build resumes exact transfer without rebuilding and stops ambiguous attempt', async () => {
+test('image build resumes exact transfer and records missing preflight before push', async () => {
   const resumed = buildFixture();
-  resumed.setEvidence({ ...base, attempt, transfer });
+  resumed.setEvidence({ ...base, preflight: null, attempt, transfer });
   assert.deepEqual(await runNativeStudioImageBuild(request, resumed.deps),
     { state: 'complete', transfer });
-  assert.deepEqual(resumed.calls, ['client', 'authorize', 'evidence', 'enqueue']);
+  assert.deepEqual(resumed.calls, ['client', 'authorize', 'evidence',
+    'build', 'evidence', 'enqueue']);
   const pending = buildFixture();
   pending.setEvidence({ ...base, attempt, transfer: null });
   pending.deps.build = async () => { pending.calls.push('build');

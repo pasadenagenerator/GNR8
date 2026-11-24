@@ -41,6 +41,15 @@ function fixture() {
       assert.equal(id, sourceId); assert.equal(target, site);
       return { files };
     },
+    recordPreflight: async (value: any) => {
+      events.push('record-preflight');
+      assert.equal(value.project, '/verified/checkout');
+      assert.equal(value.store, store);
+      assert.equal(value.sourceId, sourceId);
+      assert.equal(value.commit, sourceCommit);
+      assert.equal(value.buildSnapshotId, 'snap_build');
+      assert.equal(value.cloudflareCredential, undefined);
+    },
     advance: async (value: any) => {
       events.push('advance');
       assert.deepEqual(value.buildNetworkPolicy, {
@@ -66,6 +75,15 @@ test('only verified stored source bytes reach the isolated build phase', async (
   f.progress);
   assert.deepEqual(f.events, ['checkout', 'snapshot:snap_build',
     'snapshot:snap_push', 'source', 'advance']);
+});
+
+test('completed isolated image build records preflight before returning success', async () => {
+  const f = fixture();
+  f.progress.state = 'complete';
+  assert.equal(await configuredNativeStudioImageBuild(input, env, fetch,
+    f.deps), f.progress);
+  assert.deepEqual(f.events, ['checkout', 'snapshot:snap_build',
+    'snapshot:snap_push', 'source', 'advance', 'record-preflight']);
 });
 
 test('unconfigured switch or unsafe network fails before any checkout', async () => {

@@ -39,16 +39,18 @@ export function imageRequest(value: unknown): Request {
   return request;
 }
 
-export function verifyBaseEvidence(request: Request, evidence: Evidence): string {
+export function verifyBaseEvidence(request: Request, evidence: Evidence,
+  requirePreflight = true): string {
   const { scope, sourceId, sourceCommit, workerId, artifactCommit } = request;
   const { artifact, preflight, resources } = evidence;
   const accountId = resources?.target?.accountId;
   if (artifact?.sourceId !== sourceId || artifact.sourceCommit !== sourceCommit ||
       artifact.workerId !== workerId || artifact.artifactCommit !== artifactCommit ||
       artifact.branch !== `gnr8-build-${sourceCommit}` ||
-      preflight?.sourceId !== sourceId || preflight.commit !== sourceCommit ||
-      preflight.workerId !== workerId || !SHA.test(preflight.identity) ||
-      !Number.isSafeInteger(preflight.files) || preflight.files < 2 ||
+      (requirePreflight && (preflight?.sourceId !== sourceId ||
+        preflight.commit !== sourceCommit ||
+        preflight.workerId !== workerId || !SHA.test(preflight.identity) ||
+        !Number.isSafeInteger(preflight.files) || preflight.files < 2)) ||
       !resources || !same(resources.target?.scope, scope) ||
       !HEX32.test(accountId) || resources.workers?.studio?.id !== workerId)
     throw Error('native_studio_image_evidence_unverified');

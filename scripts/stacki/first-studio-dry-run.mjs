@@ -54,6 +54,60 @@ export async function verifyStudioFirstDeployDryRun(input, deps = {}) {
     workerId: receipt.workerId, files: receipt.files };
 }
 
+/** Accept a credential-free Wrangler dry run only after the attested Docker
+ * builder has stopped and its archive has crossed the private Drive boundary.
+ * No host executable or deployment credential is used by this receipt writer.
+ */
+export async function recordStudioFirstDeployDryRunFromImage(input, deps = {}) {
+  const { store, sourceId, commit, workerId, site, buildSnapshotId } = input ?? {};
+  if (!store || typeof store.claim !== 'function' ||
+      !/^snap_[A-Za-z0-9]+$/.test(buildSnapshotId))
+    throw Error('native_studio_dry_run_input_invalid');
+  const [proof, transfer, session] = await Promise.all([
+    store.read('native-studio/image-preflight-proof-v1.json'),
+    store.read('native-studio/image-drive-transfer-v1.json'),
+    store.read('native-studio/image-build-session-v1.json'),
+  ]);
+  if (!proof || Object.keys(proof).sort().join() !==
+      'accountId,buildSnapshotId,commit,manifestSha256,sandboxName,sessionId,siteId,sourceId,workerId' ||
+      proof.sourceId !== sourceId || proof.commit !== commit ||
+      proof.workerId !== workerId || proof.siteId !== site?.siteId ||
+      proof.accountId !== site?.accountId ||
+      proof.buildSnapshotId !== buildSnapshotId ||
+      !SOURCE.test(proof.manifestSha256) ||
+      typeof proof.sandboxName !== 'string' ||
+      !/^gnr8-image-build-[a-f0-9-]{36}$/.test(proof.sandboxName) ||
+      typeof proof.sessionId !== 'string' || !proof.sessionId ||
+      session?.sandboxName !== proof.sandboxName ||
+      session.sessionId !== proof.sessionId ||
+      session.manifestSha256 !== proof.manifestSha256 ||
+      !same(session.attempt, transfer?.attempt) ||
+      transfer?.attempt?.sourceId !== sourceId ||
+      transfer.attempt.commit !== commit ||
+      transfer.attempt.workerId !== workerId ||
+      transfer.attempt.siteId !== site.siteId ||
+      transfer.attempt.accountId !== site.accountId ||
+      transfer.attempt.buildSnapshotId !== buildSnapshotId ||
+      transfer.receipt?.sourceId !== sourceId ||
+      transfer.receipt.commit !== commit ||
+      transfer.receipt.workerId !== workerId ||
+      transfer.receipt.siteId !== site.siteId ||
+      transfer.receipt.accountId !== site.accountId ||
+      !SOURCE.test(transfer.receipt.archive?.sha256))
+    throw Error('native_studio_dry_run_image_proof_unverified');
+  const receipt = await expected(input,
+    deps.verifyHandoff ?? verifyStudioBuildHandoff,
+    deps.verifyImage ?? verifyStudioImageSite);
+  const prior = await store.read(KEY);
+  if (prior && !same(prior, receipt))
+    throw Error('native_studio_dry_run_receipt_conflict');
+  if (!prior) await store.claim(KEY, receipt);
+  if (!same(await store.read(KEY), receipt))
+    throw Error('native_studio_dry_run_receipt_conflict');
+  return { sourceId: receipt.sourceId, commit: receipt.commit,
+    workerId: receipt.workerId, files: receipt.files };
+}
+
 export async function recordStudioFirstDeployDryRun(input, deps = {}) {
   const { project, store, trustedWrangler } = input ?? {};
   if (!store || typeof store.claim !== 'function' ||

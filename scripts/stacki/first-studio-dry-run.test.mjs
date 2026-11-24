@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { recordStudioFirstDeployDryRun,
+  recordStudioFirstDeployDryRunFromImage,
   verifyStudioFirstDeployDryRun } from './first-studio-dry-run.mjs';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
@@ -67,4 +68,37 @@ test('failed dry run does not record success', async t => {
     ...f.deps, run: async () => { throw Error('Docker failed'); },
   }), /native_studio_dry_run_failed/);
   assert.equal(f.records.has('native-studio/first-deploy-dry-run-v1.json'), false);
+});
+
+test('attested image builder dry run records the original scoped receipt', async t => {
+  const f = await fixture(t);
+  const buildSnapshotId = 'snap_Build1';
+  const sandboxName = 'gnr8-image-build-55555555-5555-4555-8555-555555555555';
+  const attempt = { sourceId, commit, workerId, siteId: site.siteId,
+    accountId: site.accountId, buildSnapshotId };
+  const session = { attempt, sandboxName, sessionId: 'sess_1',
+    manifestSha256: 'f'.repeat(64) };
+  const proof = { sourceId, commit, workerId, siteId: site.siteId,
+    accountId: site.accountId, buildSnapshotId, sandboxName,
+    sessionId: session.sessionId, manifestSha256: session.manifestSha256 };
+  const transfer = { attempt, receipt: { sourceId, commit, workerId,
+    siteId: site.siteId, accountId: site.accountId,
+    archive: { sha256: 'a'.repeat(64) } } };
+  const input = { ...f.input, buildSnapshotId };
+  await assert.rejects(recordStudioFirstDeployDryRunFromImage(input, f.deps),
+    /image_proof_unverified/);
+  f.records.set('native-studio/image-build-session-v1.json', session);
+  f.records.set('native-studio/image-preflight-proof-v1.json', proof);
+  f.records.set('native-studio/image-drive-transfer-v1.json', transfer);
+  const expected = { sourceId, commit, workerId, files: 2 };
+  assert.deepEqual(await recordStudioFirstDeployDryRunFromImage(input, f.deps),
+    expected);
+  assert.deepEqual(await verifyStudioFirstDeployDryRun(input, f.deps), expected);
+  assert.deepEqual(await recordStudioFirstDeployDryRunFromImage(input, f.deps),
+    expected);
+  assert.equal(f.calls(), 0);
+  f.records.set('native-studio/image-preflight-proof-v1.json',
+    { ...proof, workerId: '0'.repeat(32) });
+  await assert.rejects(recordStudioFirstDeployDryRunFromImage(input, f.deps),
+    /image_proof_unverified/);
 });

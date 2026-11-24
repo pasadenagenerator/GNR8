@@ -58,13 +58,11 @@ export async function runNativeStudioImageBuild(value: unknown,
   if (!client) throw Error('native_studio_image_build_store_unavailable');
   await deps.authorize(client, request.actor, request.scope.agencyId);
   const evidence = await deps.evidence(request.scope, client);
-  const accountId = verifyBaseEvidence(request, evidence);
-  // A complete scoped transfer may resume a failed enqueue without rebuilding.
-  if (evidence.transfer) {
-    verifyTransfer(request, evidence, accountId);
-    if (deps.chainEnabled()) await deps.enqueuePush(request);
-    return { state: 'complete' as const, transfer: evidence.transfer };
-  }
+  const accountId = verifyBaseEvidence(request, evidence, false);
+  if (evidence.preflight) verifyBaseEvidence(request, evidence);
+  // A complete transfer may still need its attested preflight receipt recorded
+  // after an interrupted response. The configured builder resumes read-only.
+  if (evidence.transfer) verifyTransfer(request, evidence, accountId);
   if (evidence.attempt) verifyImageAttempt(request, evidence.attempt, accountId);
   // The detached Platform lifecycle, rather than this event, decides whether
   // an existing attempt is safely pollable or needs review.
@@ -72,8 +70,9 @@ export async function runNativeStudioImageBuild(value: unknown,
   if (!progress || !['running', 'complete', 'pending-review'].includes(progress.state))
     throw Error('native_studio_image_build_progress_unverified');
   const refreshed = await deps.evidence(request.scope, client);
-  if (verifyBaseEvidence(request, refreshed) !== accountId)
+  if (verifyBaseEvidence(request, refreshed, false) !== accountId)
     throw Error('native_studio_image_build_target_changed');
+  if (refreshed.preflight) verifyBaseEvidence(request, refreshed);
   if (progress.state === 'pending-review')
     return { state: 'pending-review' as const };
   if (progress.state === 'running') {
@@ -83,6 +82,8 @@ export async function runNativeStudioImageBuild(value: unknown,
     return { state: 'running' as const };
   }
   verifyTransfer(request, { ...refreshed, transfer: progress.transfer }, accountId);
+  if (verifyBaseEvidence(request, refreshed) !== accountId)
+    throw Error('native_studio_image_build_preflight_unverified');
   if (JSON.stringify(refreshed.transfer) !== JSON.stringify(progress.transfer))
     throw Error('native_studio_image_build_transfer_unverified');
   if (deps.chainEnabled()) await deps.enqueuePush(request);

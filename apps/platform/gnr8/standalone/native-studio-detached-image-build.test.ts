@@ -107,14 +107,19 @@ test('build and save cross invocations without repeating external effects', asyn
   assert.deepEqual(await f.advance(), { state: 'running' });
   f.exits.set('cmd_2', 0);
   assert.deepEqual(await f.advance(), { state: 'running' });
+  assert.deepEqual(await f.advance(), { state: 'running' });
+  f.exits.set('cmd_3', 0);
+  assert.deepEqual(await f.advance(), { state: 'running' });
   const done = await f.advance();
   assert.equal(done.state, 'complete');
   assert.deepEqual(await f.advance(), done);
   assert.equal(f.calls.filter(v => v === 'drive-create').length, 1);
   assert.equal(f.calls.filter(v => v === 'sandbox-create').length, 1);
   assert.equal(f.calls.filter(v => v === 'start:build').length, 1);
+  assert.equal(f.calls.filter(v => v === 'start:deploy').length, 1);
   assert.equal(f.calls.indexOf('docker-ready') < f.calls.indexOf('stage'), true);
   assert.equal(f.calls.filter(v => v === 'start:save').length, 1);
+  assert.equal(f.calls.indexOf('start:deploy') < f.calls.indexOf('start:save'), true);
   assert.equal(f.calls.filter(v => v === 'stop').length, 1);
   assert.equal(f.calls.indexOf('verify-source') < f.calls.indexOf('inspect'), true);
 });
@@ -125,6 +130,18 @@ test('Docker failure stops before staging the site source', async () => {
   assert.equal(f.calls.includes('stage'), false);
   assert.equal(f.calls.some(v => v.startsWith('start:')), false);
   assert.deepEqual(await f.advance(), { state: 'pending-review' });
+});
+
+test('failed Wrangler dry run cannot save or transfer an image', async () => {
+  const f = fixture();
+  await f.advance();
+  f.exits.set('cmd_1', 0);
+  await f.advance();
+  f.exits.set('cmd_2', 1);
+  assert.deepEqual(await f.advance(), { state: 'pending-review' });
+  assert.equal(f.calls.filter(v => v === 'start:save').length, 0);
+  assert.equal(f.records.has('native-studio/image-preflight-proof-v1.json'), false);
+  assert.equal(f.records.has('native-studio/image-drive-transfer-v1.json'), false);
 });
 
 test('Docker daemon starts once from the trusted snapshot and is checked before use', async () => {
@@ -179,6 +196,7 @@ test('remaining Sandbox time blocks save before another long command', async () 
   f.exits.set('cmd_1', 0);
   f.sandbox.expiresAt = new Date(Date.now() + 5 * 60_000);
   await assert.rejects(f.advance(), /time_insufficient/);
+  assert.equal(f.calls.filter(v => v === 'start:deploy').length, 0);
   assert.equal(f.calls.filter(v => v === 'start:save').length, 0);
 });
 
@@ -200,6 +218,8 @@ test('claimed receipt is rehashed after an uncertain Sandbox stop', async () => 
   const f = fixture();
   await f.advance(); f.exits.set('cmd_1', 0);
   await f.advance(); f.exits.set('cmd_2', 0);
+  await f.advance();
+  f.exits.set('cmd_3', 0);
   await f.advance();
   f.failStop();
   await assert.rejects(f.advance(), /stop uncertain/);
