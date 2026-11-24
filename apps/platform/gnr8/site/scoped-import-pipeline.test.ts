@@ -36,6 +36,14 @@ test('Git-backed import rejects the retained CHS failure modes before archiving'
   assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
 })
 
+test('Git-backed single-page import accepts its seed capture without multi-page acquisition', () => {
+  const snapshot = { fetchManifest: [{ fetchStatus: 'fetched' }] } as any
+  const discovery = { summary: { enabled: false }, manifest: null, acquisition: null } as any
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+  discovery.summary.enabled = true
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['html_acquisition_missing'])
+})
+
 test('Git-backed import records stale sitemap pages and missing source scripts without blocking capture', () => {
   const snapshot = { fetchManifest: [
     { fetchStatus: 'fetch_failed', assetKind: 'script', httpStatus: 404 },

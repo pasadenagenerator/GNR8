@@ -2663,7 +2663,7 @@ function gitCaptureIncompleteReasons(
       sitemapOnlyRoutes.has(page.normalizedRoutePath ?? ''))
   })
   return [
-    ...(!acquisition ? ['html_acquisition_missing'] : []),
+    ...(!acquisition && discovery.summary.enabled ? ['html_acquisition_missing'] : []),
     ...(failedRequiredPage ? ['page_failed_or_limited'] : []),
     ...(Number(acquisition?.summary.failedRequiredAssetCount ?? 0) > 0 ? ['required_child_asset_missing'] : []),
     ...(snapshot.fetchManifest.some((asset) => asset.fetchStatus === 'fetch_failed' &&
