@@ -51,10 +51,18 @@ function exactFiles(files, prefix = '') {
   }
   return [...files].sort((a, b) => a.path.localeCompare(b.path));
 }
-function client(site, credential, transport) {
+function client(site, credential, transport, delay = ms => new Promise(resolve => setTimeout(resolve, ms))) {
   const [owner, name] = site.repository.split('/');
   const root = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+  let nextMutationAt = 0;
   return async (method, path, body, allow404 = false) => {
+    // GitHub's secondary limit recommends at least one second between
+    // content-generating REST calls. Large imported sites create many blobs.
+    if (method !== 'GET') {
+      const wait = nextMutationAt - Date.now();
+      if (wait > 0) await delay(wait);
+      nextMutationAt = Date.now() + 1100;
+    }
     const response = await transport(`${root}${path}`, {
       method, redirect: 'error', signal: AbortSignal.timeout(60_000),
       headers: { authorization: `Bearer ${credential}`,
@@ -67,7 +75,13 @@ function client(site, credential, transport) {
       .map(value => value.trim()).includes('repo'))
       throw Error('native_studio_git_data_credential_too_broad');
     if (allow404 && response.status === 404) return null;
-    if (!response.ok) throw Error('native_studio_git_data_unavailable');
+    if (!response.ok) {
+      const operation = path.startsWith('/git/blobs') ? 'blob' :
+        path.startsWith('/git/trees') ? 'tree' :
+        path.startsWith('/git/commits') ? 'commit' :
+        path.startsWith('/git/refs') ? 'ref' : 'request';
+      throw Error(`native_studio_git_data_${operation}_${response.status}`);
+    }
     const value = await response.json().catch(() => null);
     if (!value || typeof value !== 'object' || Array.isArray(value))
       throw Error('native_studio_git_data_response_invalid');
@@ -171,7 +185,7 @@ export async function prepareNativeStudioGitDataSource(input) {
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(author?.email))
     throw Error('native_studio_git_data_input_invalid');
   const files = exactFiles(input.files);
-  const api = client(site, credential, transport);
+  const api = client(site, credential, transport, input.delay);
   const base = await commitTree(api, baseCommit);
   const baseEntries = await treeEntries(api, base.tree.sha);
   const expected = new Map(files.map(file => [file.path, file]));
@@ -226,7 +240,7 @@ export async function prepareNativeStudioGitDataArtifact(input) {
       files.some(file => !file.path.startsWith('dist/') &&
         !file.path.startsWith('studio/dist/')))
     throw Error('native_studio_git_data_files_invalid');
-  const api = client(site, credential, transport);
+  const api = client(site, credential, transport, input.delay);
   await commitTree(api, sourceCommit);
   const prior = await store.read(ARTIFACT_INTENT);
   if (prior) {
@@ -271,7 +285,7 @@ export async function publishNativeStudioGitDataRef(input) {
     throw Error('native_studio_git_data_remote_unverified');
   if (before.commit === commit) return { state: 'verified', commit };
   if (before.commit !== null) throw Error('native_studio_git_data_branch_conflict');
-  const api = client(site, credential, transport);
+  const api = client(site, credential, transport, input.delay);
   try {
     await api('POST', '/git/refs', { ref: `refs/heads/${site.branch}`, sha: commit });
   } catch { /* A lost response may follow a successful ref creation. */ }

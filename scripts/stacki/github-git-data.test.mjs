@@ -72,18 +72,22 @@ function fixture() {
 
 test('creates exact source and artifact child commits, then verified refs', async () => {
   const f = fixture();
+  const waits = [];
+  const delay = async ms => { waits.push(ms); };
   const files = [{ path: 'studio/index.js', body: Buffer.from('export default 1;') },
-    { path: 'package.json', body: Buffer.from('{"name":"site"}') }];
+    { path: 'package.json', body: Buffer.from('{"name":"site"}') },
+    { path: 'studio/assets/icon.bin', body: Buffer.from([0xff, 0xfe]) }];
   const source = await prepareNativeStudioGitDataSource({ site,
     store: f.store, sourceId, baseCommit, author: { name: 'GNR8',
-      email: 'gnr8@example.com' }, credential, transport: f.transport,
+      email: 'gnr8@example.com' }, credential, transport: f.transport, delay,
     files });
+  assert(waits.length >= 2 && waits.every(ms => ms > 0));
   assert.equal(source.baseCommit, baseCommit);
   assert.deepEqual(f.commits.get(source.commit).parents,
     [{ sha: baseCommit }]);
   const again = await prepareNativeStudioGitDataSource({ site,
     store: f.store, sourceId, baseCommit, author: { name: 'GNR8',
-      email: 'gnr8@example.com' }, credential, transport: f.transport,
+      email: 'gnr8@example.com' }, credential, transport: f.transport, delay,
     files });
   assert.deepEqual(again, source);
   assert.deepEqual(await publishNativeStudioGitDataRef({ site,
@@ -92,7 +96,7 @@ test('creates exact source and artifact child commits, then verified refs', asyn
   { state: 'verified', commit: source.commit });
   const artifact = await prepareNativeStudioGitDataArtifact({ site,
     store: f.store, sourceId, sourceCommit: source.commit, workerId,
-    credential, transport: f.transport, files: [
+    credential, transport: f.transport, delay, files: [
       { path: 'dist/index.html', body: Buffer.from('<html/>') },
       { path: 'studio/dist/app.js', body: Buffer.from('app()') },
     ] });
