@@ -293,14 +293,28 @@ export async function advanceNativeStudioDetachedImagePush(input: Input,
     const started: Started = { intent,
       sessionId: receiver.currentSession().sessionId };
     attestSandbox(receiver, input, started);
-    await steps.ensureDocker(receiver, input.dockerPath);
+    await steps.ensureDocker(receiver, input.dockerPath, undefined,
+      { requireBuildx: false });
     await claimExact(input, RECEIVER_STARTED, started);
     return { state: 'running' };
   }
   if (!same(existingIntent, intent)) return { state: 'pending-review' };
   const started = await input.store.read(RECEIVER_STARTED) as Started | null;
-  if (!started || !same(started.intent, intent))
-    return { state: 'pending-review' };
+  if (!started) {
+    // A failed daemon check can leave a fully identified receiver without a
+    // started receipt. Reuse that exact receiver; never create another one.
+    await driveFor(input, transfer, dependencies);
+    const receiver = await dependencies.sandbox.get({ name: intent.sandboxName,
+      resume: false });
+    const resumed: Started = { intent,
+      sessionId: receiver.currentSession().sessionId };
+    attestSandbox(receiver, input, resumed);
+    await steps.ensureDocker(receiver, input.dockerPath, undefined,
+      { requireBuildx: false });
+    await claimExact(input, RECEIVER_STARTED, resumed);
+    return { state: 'running' };
+  }
+  if (!same(started.intent, intent)) return { state: 'pending-review' };
   const drive = await driveFor(input, transfer, dependencies);
   const receiver = await dependencies.sandbox.get({ name: intent.sandboxName,
     resume: false });

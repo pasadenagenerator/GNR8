@@ -97,6 +97,7 @@ export async function ensureNativeStudioDockerDaemon(
   sandbox: Pick<Sandbox, 'runCommand'>, dockerPath: string,
   pause: (ms: number) => Promise<void> = ms =>
     new Promise(resolve => setTimeout(resolve, ms)),
+  options: { requireBuildx?: boolean } = {},
 ) {
   if (dockerPath !== 'docker' &&
       (!/^\/(?:usr|opt)\/[A-Za-z0-9_+./-]+$/.test(dockerPath) ||
@@ -120,7 +121,10 @@ export async function ensureNativeStudioDockerDaemon(
   let daemonReady = false;
   try { daemonReady = await ready(); }
   catch { /* A read-only probe may be retried after starting dockerd. */ }
-  if (daemonReady) { await requireBuildx(); return; }
+  if (daemonReady) {
+    if (options.requireBuildx !== false) await requireBuildx();
+    return;
+  }
   try {
     await sandbox.runCommand({ cmd: 'dockerd',
       args: [`--host=${DOCKER_HOST}`],
@@ -130,7 +134,10 @@ export async function ensureNativeStudioDockerDaemon(
     daemonReady = false;
     try { daemonReady = await ready(); }
     catch { /* Bound the readiness wait; never accept an unknown daemon. */ }
-    if (daemonReady) { await requireBuildx(); return; }
+    if (daemonReady) {
+      if (options.requireBuildx !== false) await requireBuildx();
+      return;
+    }
     if (attempt < 19) await pause(1_000);
   }
   throw Error('native_studio_docker_daemon_unavailable');

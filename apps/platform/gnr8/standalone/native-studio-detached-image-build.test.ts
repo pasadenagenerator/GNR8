@@ -251,6 +251,17 @@ test('missing Buildx fails before source staging or image build', async () => {
   assert.deepEqual(calls, ['info', 'buildx']);
 });
 
+test('push receiver needs Docker but does not require Buildx', async () => {
+  const calls: string[] = [];
+  const sandbox = { runCommand: async (command: any) => {
+    calls.push(command.args[0]);
+    return { exitCode: command.args[0] === 'info' ? 0 : 1 };
+  } };
+  await ensureNativeStudioDockerDaemon(sandbox as any, '/usr/bin/docker',
+    async () => {}, { requireBuildx: false });
+  assert.deepEqual(calls, ['info']);
+});
+
 test('ambiguous detached start blocks retry without another Sandbox', async () => {
   const f = fixture(); f.failStart();
   await assert.rejects(f.advance(), /connection lost/);

@@ -23,6 +23,7 @@ function fixture() {
   const records = new Map<string, unknown>();
   let credentialLoads = 0;
   let createFails = false;
+  let getFails = false;
   let archiveFails = false;
   let stopFails = false;
   let configExists = false;
@@ -76,6 +77,7 @@ function fixture() {
       if (createFails) throw Error('connection lost');
       return sandbox; },
     get: async ({ resume }: any) => { assert.equal(resume, false);
+      if (getFails) throw Error('receiver missing');
       events.push('get-receiver'); return sandbox; },
   } } as any;
   const input = { sourceId, commit, workerId, scope,
@@ -115,9 +117,11 @@ function fixture() {
   return { input, sdk, steps, records, events, sandbox,
     getCredentialLoads: () => credentialLoads,
     setCreateFails: () => { createFails = true; },
+    setGetFails: () => { getFails = true; },
     setArchiveFails: () => { archiveFails = true; },
     setStopFails: () => { stopFails = true; },
     setDockerFails: () => { failDocker = true; },
+    clearDockerFails: () => { failDocker = false; },
     setLoadVerifiedClaimFailure: () => {
       failLoadVerifiedClaimOnce = true; } };
 }
@@ -141,7 +145,7 @@ test('receiver verifies archive before detached load and token-bearing push', as
   assert.equal(done.state === 'complete' && done.cleanupState, 'complete');
 });
 
-test('receiver does not verify archive or load a credential without Docker', async () => {
+test('receiver resumes the exact existing Sandbox after Docker setup fails', async () => {
   const f = fixture(); f.setDockerFails();
   const advance = () => advanceNativeStudioDetachedImagePush(
     f.input, f.sdk, f.steps);
@@ -149,7 +153,13 @@ test('receiver does not verify archive or load a credential without Docker', asy
   assert.equal(f.events.includes('verify-archive'), false);
   assert.equal(f.events.includes('credential'), false);
   assert.equal(f.records.has('native-studio/image-push-receiver-started-v1.json'), false);
-  assert.deepEqual(await advance(), { state: 'pending-review' });
+  f.clearDockerFails();
+  assert.deepEqual(await advance(), { state: 'running' });
+  assert.equal(f.events.filter(value => value === 'create-receiver').length, 1);
+  assert.equal(f.events.filter(value => value === 'get-receiver').length, 1);
+  assert.equal(f.events.includes('verify-archive'), false);
+  assert.equal(f.events.includes('credential'), false);
+  assert.equal(f.records.has('native-studio/image-push-receiver-started-v1.json'), true);
 });
 
 test('remaining Sandbox time gates the next long command', async () => {
@@ -215,13 +225,25 @@ test('exact config write can recover before its private completion claim', async
   assert.equal(done.state, 'complete');
 });
 
-test('ambiguous receiver creation never starts a second Sandbox', async () => {
+test('ambiguous receiver creation resumes only the exact existing Sandbox', async () => {
   const f = fixture();
   f.setCreateFails();
   await assert.rejects(advanceNativeStudioDetachedImagePush(
     f.input, f.sdk, f.steps), /connection lost/);
   assert.deepEqual(await advanceNativeStudioDetachedImagePush(
-    f.input, f.sdk, f.steps), { state: 'pending-review' });
+    f.input, f.sdk, f.steps), { state: 'running' });
+  assert.equal(f.events.filter(value => value === 'create-receiver').length, 1);
+  assert.equal(f.getCredentialLoads(), 0);
+});
+
+test('missing ambiguous receiver never creates a replacement', async () => {
+  const f = fixture();
+  f.setCreateFails();
+  await assert.rejects(advanceNativeStudioDetachedImagePush(
+    f.input, f.sdk, f.steps), /connection lost/);
+  f.setGetFails();
+  await assert.rejects(advanceNativeStudioDetachedImagePush(
+    f.input, f.sdk, f.steps), /receiver missing/);
   assert.equal(f.events.filter(value => value === 'create-receiver').length, 1);
   assert.equal(f.getCredentialLoads(), 0);
 });
