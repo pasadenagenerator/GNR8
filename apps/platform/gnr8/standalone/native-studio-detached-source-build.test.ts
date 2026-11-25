@@ -46,14 +46,11 @@ function fixture() {
     },
     getCommand: async (cmdId: string) => ({ exitCode: exits.get(cmdId) ?? null }),
   });
-  const sandbox = { name: `gnr8-source-build-${hash(Buffer.from(`v2:${source.siteId}:${source.sourceId}`)).slice(0,32)}`,
+  const sandbox = { name: `gnr8-source-build-${hash(Buffer.from(`v3:${source.siteId}:${source.sourceId}`)).slice(0,32)}`,
     get status() { return running ? 'running' : 'stopped'; },
     sourceSnapshotId: source.snapshotId, region: 'iad1', persistent: true,
     timeout: 60 * 60_000,
-    networkPolicy: { allow: { 'registry.npmjs.org': [
-      { match: { method: ['GET', 'HEAD'] }, transform: [] },
-      { response: { statusCode: 403 } },
-    ] } },
+    networkPolicy: { allow: { 'registry.npmjs.org': [] } },
     expiresAt: new Date(Date.now() + 60 * 60_000),
     currentSession,
     runCommand: async (command: { args: string[] }) => ({ exitCode: 0,
@@ -103,6 +100,8 @@ test('accepts the SDK-normalized single-host policy but rejects broader egress',
   const allowed = fixture();
   Object.assign(allowed.sandbox, { networkPolicy: { allow: ['registry.npmjs.org'] } });
   assert.deepEqual(await allowed.advance(), { state: 'running' });
+  assert.deepEqual((allowed.attempts[0] as { networkPolicy: unknown }).networkPolicy,
+    { allow: { 'registry.npmjs.org': [] } });
   const broad = fixture();
   Object.assign(broad.sandbox, { networkPolicy: {
     allow: ['registry.npmjs.org', 'example.com'] } });
@@ -145,7 +144,7 @@ test('failed detached command cannot advance or claim completion', async () => {
   f.exits.set('cmd_1', 1);
   assert.deepEqual(await f.advance(), { state: 'pending-review' });
   assert.equal(f.starts.length, 1);
-  assert.equal(f.records.has('native-studio/source-build-complete-v2.json'), false);
+  assert.equal(f.records.has('native-studio/source-build-complete-v3.json'), false);
 });
 
 test('lost command start cannot duplicate Sandbox or npm invocation', async () => {
@@ -161,7 +160,7 @@ test('session claimed before the first command can start once after recovery', a
   f.interruptAfterSource();
   await assert.rejects(f.advance(), /time_insufficient/);
   assert.equal(f.starts.length, 0);
-  assert.equal(f.records.has('native-studio/source-build-session-v2.json'), true);
+  assert.equal(f.records.has('native-studio/source-build-session-v3.json'), true);
   f.sandbox.expiresAt = new Date(Date.now() + 60 * 60_000);
   assert.deepEqual(await f.advance(), { state: 'running' });
   assert.deepEqual(f.starts, ['npm:ci']);

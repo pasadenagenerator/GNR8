@@ -8,10 +8,9 @@ import { nativeStudioBuildManifestScript } from './native-studio-sandbox-build';
 
 const ROOT = '/vercel/sandbox/gnr8-native-build';
 const MANIFEST = '/vercel/sandbox/gnr8-native-build-manifest.json';
-// v1 could claim a session before the first command, then permanently strand
-// that session when its time budget ran out. A new operation generation reuses
-// the immutable prepared source without reusing that expired Sandbox.
-const GENERATION = 'v2';
+// Each operation generation reuses the immutable prepared source without
+// reusing a failed Sandbox or an ambiguous command receipt.
+const GENERATION = 'v3';
 const ATTEMPT = `native-studio/source-build-attempt-${GENERATION}.json`;
 const SESSION = `native-studio/source-build-session-${GENERATION}.json`;
 const COMPLETE = `native-studio/source-build-complete-${GENERATION}.json`;
@@ -89,16 +88,14 @@ function describe(input: NativeStudioDetachedSourceBuildInput): Attempt {
 }
 
 function networkPolicy() {
-  return { allow: { 'registry.npmjs.org': [
-    { match: { method: ['GET', 'HEAD'] }, transform: [] },
-    { response: { statusCode: 403 } },
-  ] } };
+  // The v2 request matcher rejected ordinary npm tarball GETs with 403.
+  // Empty rules allow the registry host while denying every other host.
+  return { allow: { 'registry.npmjs.org': [] } };
 }
 
 function attestedNetworkPolicy(value: Sandbox['networkPolicy']): boolean {
   if (same(value, networkPolicy())) return true;
-  // SDK 3.8 reports custom policies through the legacy response shape and
-  // retains the allowlisted domains but omits request-level response rules.
+  // SDK 3.8 normalizes a custom single-host policy to the legacy array shape.
   // Accept only the same sole egress host and no subnet or extra rule fields.
   return same(value, { allow: ['registry.npmjs.org'] });
 }
