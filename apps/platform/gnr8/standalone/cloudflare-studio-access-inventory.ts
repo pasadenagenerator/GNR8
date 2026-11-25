@@ -7,7 +7,9 @@ const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab]
 const HOST = /^(?:[a-z0-9*](?:[a-z0-9*-]*[a-z0-9*])?\.)+[a-z]{2,}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-function fail(): never { throw Error('native_studio_access_inventory_unverified'); }
+function fail(reason = 'shape'): never {
+  throw Error(`native_studio_access_inventory_unverified_${reason}`);
+}
 
 type Route = { host: string; path: string };
 
@@ -30,7 +32,7 @@ function applicationRoutes(app: Record<string, unknown>): Route[] {
   if (app.domain !== undefined) routes.push(routeFromDomain(app.domain));
   let legacy: Route[] | null = null;
   if (app.self_hosted_domains !== undefined && app.self_hosted_domains !== null) {
-    if (!Array.isArray(app.self_hosted_domains)) fail();
+    if (!Array.isArray(app.self_hosted_domains)) fail('legacy_shape');
     legacy = app.self_hosted_domains.map(routeFromDomain);
   }
   const destinations: Route[] = [];
@@ -45,7 +47,7 @@ function applicationRoutes(app: Record<string, unknown>): Route[] {
   }
   if (legacy?.length && destinations.length &&
       JSON.stringify(legacy.map(route => JSON.stringify(route)).sort()) !==
-      JSON.stringify(destinations.map(route => JSON.stringify(route)).sort())) fail();
+      JSON.stringify(destinations.map(route => JSON.stringify(route)).sort())) fail('legacy_mismatch');
   routes.push(...(destinations.length ? destinations : legacy ?? []));
   if (!routes.length) fail();
   return routes;
@@ -91,7 +93,7 @@ export function inspectNativeStudioAccessApplicationInventory(
   if (parsed.success !== true || !Array.isArray(result) || !object(info) ||
       info.page !== 1 || info.count !== result.length ||
       info.total_count !== result.length ||
-      (info.total_pages !== undefined && info.total_pages !== 1)) fail();
+      (info.total_pages !== undefined && info.total_pages !== 1)) fail('envelope');
   let current = 0;
   for (const item of result) {
     if (!object(item) || typeof item.id !== 'string' || !APP_ID.test(item.id) ||
@@ -108,15 +110,15 @@ export function inspectNativeStudioAccessApplicationInventory(
             routes.filter(route => route.host === studioHost &&
               route.path === '/studio').length !== 2 ||
             routes.filter(route => route.host === previewHost &&
-              route.path === '').length !== 1)) fail();
+              route.path === '').length !== 1)) fail('current_app');
       continue;
     }
     if (item.type !== 'self_hosted') continue;
     if (applicationRoutes(item).some(route =>
         mayCoverStudio(route, studioHost) ||
-        previewHost !== undefined && hostMayMatch(route.host, previewHost))) fail();
+        previewHost !== undefined && hostMayMatch(route.host, previewHost))) fail('overlap');
   }
-  if (current !== (currentAppId === null ? 0 : 1)) fail();
+  if (current !== (currentAppId === null ? 0 : 1)) fail('current_count');
   return { state: 'observed-no-access-overlap' as const, appId: currentAppId,
     studioHost, applicationsChecked: result.length,
     ...(previewHost === undefined ? {} : { previewHost }) };

@@ -114,6 +114,16 @@ test('repairs a prior rejected URI request after complete inventory readback', a
   assert.equal(f.posts(), 2);
 });
 
+test('identifies the failing inventory stage without provider details', async () => {
+  const f = fixture({ created: true });
+  f.deps.overlap = (() => {
+    throw Error('native_studio_access_inventory_unverified_current_app');
+  }) as typeof f.deps.overlap;
+  await assert.rejects(reserveNativeStudioAccessApp(f.input, f.transport,
+    f.deps as any), /native_studio_access_inventory_unverified_current_app_before_accounts/);
+  assert.equal(f.posts(), 0);
+});
+
 test('refuses unowned apps, broad policies and changed site bindings', async () => {
   const unowned = fixture({ created: true });
   await assert.rejects(reserveNativeStudioAccessApp(unowned.input,

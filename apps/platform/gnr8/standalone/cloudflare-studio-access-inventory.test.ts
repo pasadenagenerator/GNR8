@@ -46,7 +46,7 @@ test('dual-host inventory rejects overrides on either protected domain', () => {
     currentId, host, previewHost), /native_studio_access_inventory_unverified/);
   assert.throws(() => inspectNativeStudioAccessApplicationInventory(
     inventory([current]), currentId, host, previewHost),
-  /native_studio_access_inventory_unverified/);
+  /native_studio_access_inventory_unverified_current_app/);
   assert.throws(() => inspectNativeStudioAccessApplicationInventory(
     inventory([dual, { ...dual, id: foreignId }]), currentId, host, previewHost),
   /native_studio_access_inventory_unverified/);

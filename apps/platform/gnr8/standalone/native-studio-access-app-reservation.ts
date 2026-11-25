@@ -119,12 +119,31 @@ export async function reserveNativeStudioAccessApp(input: {
       priorBound.protection !== PROTECTION || priorBound.previewOrigin !== previewOrigin))
     throw Error('native_studio_access_app_reservation_binding_conflict');
 
-  async function inventories() {
+  async function inventories(stage: 'before' | 'after') {
+    async function read(kind: 'accounts' | 'zones', id: string) {
+      try { return await deps.inventory(kind, id, credential, transport); }
+      catch (error) {
+        if (error instanceof Error &&
+            error.message === 'native_studio_access_inventory_unverified')
+          throw Error(`native_studio_access_inventory_unverified_${stage}_${kind}_read`);
+        throw error;
+      }
+    }
     const [accountApps, zoneApps] = await Promise.all([
-      deps.inventory('accounts', accountId, credential, transport),
-      deps.inventory('zones', zoneId, credential, transport),
+      read('accounts', accountId), read('zones', zoneId),
     ]);
     return { accountApps, zoneApps };
+  }
+  function overlap(body: Awaited<ReturnType<typeof inventories>>['accountApps'],
+    appId: string | null, stage: 'before_accounts' | 'before_zones' |
+      'after_accounts' | 'after_zones') {
+    try { return deps.overlap(body, appId, host, previewDomain); }
+    catch (error) {
+      if (error instanceof Error &&
+          error.message.startsWith('native_studio_access_inventory_unverified'))
+        throw Error(`${error.message}_${stage}`);
+      throw error;
+    }
   }
   function exactApp(accountApps: Awaited<ReturnType<typeof inventories>>['accountApps']) {
     const entries = accountApps.result.filter(item => object(item) &&
@@ -135,10 +154,10 @@ export async function reserveNativeStudioAccessApp(input: {
       throw Error('native_studio_access_app_reservation_ambiguous');
     return entries.length === 1 ? (entries[0] as Record<string, unknown>).id as string : null;
   }
-  const before = await inventories();
+  const before = await inventories('before');
   const beforeId = exactApp(before.accountApps);
-  deps.overlap(before.accountApps, beforeId ?? null, host, previewDomain);
-  deps.overlap(before.zoneApps, null, host, previewDomain);
+  overlap(before.accountApps, beforeId ?? null, 'before_accounts');
+  overlap(before.zoneApps, null, 'before_zones');
   if (priorBound && beforeId !== priorBound.appId)
     throw Error('native_studio_access_app_reservation_binding_conflict');
   if (!priorIntent && beforeId)
@@ -170,11 +189,11 @@ export async function reserveNativeStudioAccessApp(input: {
     } catch { /* A lost response can follow a successful create. Read back. */ }
   }
 
-  const after = await inventories();
+  const after = await inventories('after');
   const appId = exactApp(after.accountApps);
   if (!appId) throw Error('native_studio_access_app_reservation_pending');
-  deps.overlap(after.accountApps, appId, host, previewDomain);
-  deps.overlap(after.zoneApps, null, host, previewDomain);
+  overlap(after.accountApps, appId, 'after_accounts');
+  overlap(after.zoneApps, null, 'after_zones');
   const app = await deps.app(scope, { siteId: scope.siteId,
     studioOrigin: target.studioOrigin, accountId }, appId, credential, transport,
   PROTECTION);
