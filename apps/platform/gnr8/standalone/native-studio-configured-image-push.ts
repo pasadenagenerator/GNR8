@@ -5,6 +5,7 @@ import { Snapshot } from '@vercel/sandbox';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { withConfiguredNativeStudioFirstDeployCheckout } from './native-studio-configured-first-deploy-checkout';
 import { advanceNativeStudioDetachedImagePush } from './native-studio-detached-image-push';
+import { nativeStudioImageRecoveryStore } from './native-studio-image-recovery';
 
 type Environment = Record<string, string | undefined>;
 type Request = { scope: NativeStudioScope; client: SupabaseClient;
@@ -65,8 +66,12 @@ export async function configuredNativeStudioImagePush(request: Request,
         prepared.commit !== request.sourceCommit ||
         prepared.workerId !== request.workerId)
       throw Error('native_studio_image_push_target_changed');
-    if (!await prepared.store.read('native-studio/image-push-receiver-intent-v1.json') &&
-        !await prepared.store.read('native-studio/prebuilt-image-v1.json')) {
+    const store = await nativeStudioImageRecoveryStore(prepared.store, {
+      scope: request.scope, site: prepared.site, sourceId: prepared.sourceId,
+      commit: prepared.commit, workerId: prepared.workerId, buildSnapshotId,
+    });
+    if (!await store.read('native-studio/image-push-receiver-intent-v1.json') &&
+        !await store.read('native-studio/prebuilt-image-v1.json')) {
       const [buildSnapshot, pushSnapshot] = await Promise.all([
         deps.snapshot({ snapshotId: buildSnapshotId }),
         deps.snapshot({ snapshotId: pushSnapshotId }),
@@ -79,7 +84,7 @@ export async function configuredNativeStudioImagePush(request: Request,
       }
     }
     return deps.advance({ scope: request.scope, site: prepared.site,
-      store: prepared.store, project: prepared.project,
+      store, project: prepared.project,
       sourceId: prepared.sourceId, commit: prepared.commit,
       workerId: prepared.workerId, buildSnapshotId, pushSnapshotId,
       pushNetworkPolicy, sandboxTimeoutMs, dockerPath, wranglerPath,

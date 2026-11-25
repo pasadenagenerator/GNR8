@@ -8,6 +8,7 @@ import { NATIVE_STUDIO_RESOURCE_RECEIPT,
 import { inspectGitHubNativeStudioBranch } from './github-native-studio-head';
 import { issueConfiguredNativeStudioGitHubToken } from './github-native-studio-token';
 import { advanceNativeStudioDetachedImagePush } from './native-studio-detached-image-push';
+import { nativeStudioImageRecoveryStore } from './native-studio-image-recovery';
 import { SupabasePublicationStore } from './publication-store';
 import type { NativeStudioScope } from './native-studio-binding-store';
 
@@ -67,7 +68,11 @@ deps = defaults) {
   const pushNetworkPolicy = { allow: networkHosts(
     env.GNR8_NATIVE_STUDIO_IMAGE_PUSH_NETWORK_HOSTS) };
   const site = await deps.site(request.scope, request.client, env);
-  const store = deps.store(request.client, request.scope, env);
+  const store = await nativeStudioImageRecoveryStore(
+    deps.store(request.client, request.scope, env), {
+      scope: request.scope, site, sourceId: request.sourceId,
+      commit: request.sourceCommit, workerId: request.workerId, buildSnapshotId,
+    });
   const [reserved, sourcePush, handoff, artifact] = await Promise.all([
     store.read<NativeStudioResourceReceipt>(NATIVE_STUDIO_RESOURCE_RECEIPT),
     store.read<{ commit: string }>('native-studio/first-github-push-intent-v1.json'),

@@ -7,6 +7,7 @@ import { restoreNativeStudioBuildOutputBytes } from '../../../../scripts/stacki/
 import { readStoredVerifiedAstroStudio } from '../../../../scripts/stacki/prepare-from-confirmed-export.mjs';
 import { recordStudioFirstDeployDryRunFromStoredImage } from '../../../../scripts/stacki/first-studio-dry-run.mjs';
 import { advanceNativeStudioDetachedImageBuild } from './native-studio-detached-image-build';
+import { nativeStudioImageRecoveryStore } from './native-studio-image-recovery';
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
 import { configuredNativeStudioBootstrapSite } from './native-studio-bootstrap-site';
 import { SupabasePublicationStore } from './publication-store';
@@ -61,18 +62,25 @@ deps = defaults) {
   const buildNetworkPolicy = networkPolicy(
     env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS);
   const site = await deps.site(input.scope, input.client, env);
-  const store = deps.store(input.client, input.scope, env);
+  const validateSnapshots = async () => {
+    const snapshots = await Promise.all([buildSnapshotId, pushSnapshotId]
+      .map(snapshotId => deps.snapshot({ snapshotId })));
+    if (snapshots.some(snapshot => snapshot.status !== 'created' ||
+        (snapshot.expiresAt && snapshot.expiresAt.getTime() <=
+          Date.now() + 2 * 60 * 60_000)))
+      throw Error('native_studio_image_build_snapshot_unavailable');
+  };
+  const store = await nativeStudioImageRecoveryStore(
+    deps.store(input.client, input.scope, env), {
+      scope: input.scope, site, sourceId: input.sourceId,
+      commit: input.sourceCommit, workerId: input.workerId, buildSnapshotId,
+    }, { allowCreate: true, validateNewSnapshot: validateSnapshots });
   const prepared = { site, store, sourceId: input.sourceId,
     commit: input.sourceCommit, workerId: input.workerId };
     // Snapshot availability matters when creating a Sandbox. A live attempt
     // is resumed from its private identity and attested session instead.
     if (!await prepared.store.read('native-studio/image-drive-attempt-v2.json')) {
-      const snapshots = await Promise.all([buildSnapshotId, pushSnapshotId]
-        .map(snapshotId => deps.snapshot({ snapshotId })));
-      if (snapshots.some(snapshot => snapshot.status !== 'created' ||
-          (snapshot.expiresAt && snapshot.expiresAt.getTime() <=
-            Date.now() + 2 * 60 * 60_000)))
-        throw Error('native_studio_image_build_snapshot_unavailable');
+      await validateSnapshots();
     }
     const source = await deps.source({ store: prepared.store,
       sourceId: prepared.sourceId, site: prepared.site });

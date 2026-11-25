@@ -3,7 +3,7 @@ import { inngest } from '@/gnr8/inngest/client';
 import { NATIVE_STUDIO_FIRST_DEPLOY_EVENT } from './native-studio-first-deploy-job';
 import { imageNextEventId, imageRequest, verifyBaseEvidence,
   verifyTransfer, verifyPrebuilt, verifyImagePushAttempt,
-  type Scope, type Request } from './native-studio-image-job-evidence';
+  type Request } from './native-studio-image-job-evidence';
 
 export const NATIVE_STUDIO_IMAGE_PUSH_JOB_ID = 'native-studio-image-push-job';
 export const NATIVE_STUDIO_IMAGE_PUSH_EVENT = 'gnr8/native-studio.image-push.requested';
@@ -30,15 +30,27 @@ const defaults = {
     const { requireAgencyBackgroundActor } = await import('@/src/auth/agency-background-action');
     await requireAgencyBackgroundActor(client, { userId: actor, agencyId, action: 'publish' });
   },
-  evidence: async (scope: Scope, client: SupabaseClient) => {
+  evidence: async (request: Request, client: SupabaseClient) => {
     const { SupabasePublicationStore } = await import('@/gnr8/standalone/publication-store');
-    const store = new SupabasePublicationStore(client,
-      process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
-    const [artifact, preflight, resources, transfer, attempt, prebuilt, pushAttempt] =
+    const { nativeStudioImageRecoveryStore } = await import(
+      '@/gnr8/standalone/native-studio-image-recovery');
+    const base = new SupabasePublicationStore(client,
+      process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', request.scope);
+    const [artifact, resources] = await Promise.all([
+      base.read<any>('native-studio/build-artifact-github-push-v1.json'),
+      base.read<any>('native-studio/resources-reserved-v1.json'),
+    ]);
+    const store = await nativeStudioImageRecoveryStore(base, {
+      scope: request.scope,
+      site: { siteId: request.scope.siteId,
+        accountId: resources?.target?.accountId },
+      sourceId: request.sourceId, commit: request.sourceCommit,
+      workerId: request.workerId,
+      buildSnapshotId: process.env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT ?? '',
+    });
+    const [preflight, transfer, attempt, prebuilt, pushAttempt] =
       await Promise.all([
-        store.read<any>('native-studio/build-artifact-github-push-v1.json'),
         store.read<any>('native-studio/first-deploy-dry-run-v1.json'),
-        store.read<any>('native-studio/resources-reserved-v1.json'),
         store.read<any>('native-studio/image-drive-transfer-v1.json'),
         store.read<any>('native-studio/image-drive-attempt-v2.json'),
         store.read<any>('native-studio/prebuilt-image-v1.json'),
@@ -62,7 +74,7 @@ export async function runNativeStudioImagePush(value: unknown,
   const client = await deps.client();
   if (!client) throw Error('native_studio_image_push_store_unavailable');
   await deps.authorize(client, request.actor, request.scope.agencyId);
-  const evidence = await deps.evidence(request.scope, client);
+  const evidence = await deps.evidence(request, client);
   const accountId = verifyBaseEvidence(request, evidence);
   verifyTransfer(request, evidence, accountId);
   verifyImagePushAttempt(request, evidence);
@@ -89,7 +101,7 @@ export async function runNativeStudioImagePush(value: unknown,
       (progress.cleanupState !== undefined &&
         !['complete', 'pending-review'].includes(progress.cleanupState)))
     throw Error('native_studio_image_push_progress_unverified');
-  const refreshed = await deps.evidence(request.scope, client);
+  const refreshed = await deps.evidence(request, client);
   if (verifyBaseEvidence(request, refreshed) !== accountId)
     throw Error('native_studio_image_push_target_changed');
   verifyTransfer(request, refreshed, accountId);

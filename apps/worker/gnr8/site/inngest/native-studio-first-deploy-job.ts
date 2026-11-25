@@ -37,16 +37,28 @@ const defaults = {
     const { requireAgencyBackgroundActor } = await import('@/src/auth/agency-background-action');
     await requireAgencyBackgroundActor(client, { userId: actor, agencyId, action: 'publish' });
   },
-  evidence: async (scope: Scope, client: SupabaseClient) => {
+  evidence: async (scope: Scope, client: SupabaseClient, request: Request) => {
     const { SupabasePublicationStore } = await import('@/gnr8/standalone/publication-store');
-    const store = new SupabasePublicationStore(client,
-      process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
-    const [artifact, preflight, prebuilt, resources, secrets] = await Promise.all([
-      store.read<Artifact>('native-studio/build-artifact-github-push-v1.json'),
+    const { nativeStudioImageRecoveryStore } = await import(
+      '@/gnr8/standalone/native-studio-image-recovery');
+    const base = new SupabasePublicationStore(client,
+      process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', request.scope);
+    const [artifact, resources, secrets] = await Promise.all([
+      base.read<Artifact>('native-studio/build-artifact-github-push-v1.json'),
+      base.read<Resources>('native-studio/resources-reserved-v1.json'),
+      base.read<Secrets>('native-studio/first-deploy-secrets-prepared-v1.json'),
+    ]);
+    const store = await nativeStudioImageRecoveryStore(base, {
+      scope: request.scope,
+      site: { siteId: request.scope.siteId,
+        accountId: resources?.target?.accountId ?? '' },
+      sourceId: request.sourceId, commit: request.sourceCommit,
+      workerId: request.workerId,
+      buildSnapshotId: process.env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT ?? '',
+    });
+    const [preflight, prebuilt] = await Promise.all([
       store.read<Preflight>('native-studio/first-deploy-dry-run-v1.json'),
       store.read<Prebuilt>('native-studio/prebuilt-image-v1.json'),
-      store.read<Resources>('native-studio/resources-reserved-v1.json'),
-      store.read<Secrets>('native-studio/first-deploy-secrets-prepared-v1.json'),
     ]);
     return { artifact, preflight, prebuilt, resources, secrets };
   },
@@ -93,7 +105,7 @@ export async function runNativeStudioFirstDeploy(request: unknown,
   if (!client) throw Error('native_studio_first_deploy_store_unavailable');
   await deps.authorize(client, actor, scope.agencyId);
   const { artifact, preflight, prebuilt, resources, secrets } =
-    await deps.evidence(scope, client);
+    await deps.evidence(scope, client, request as Request);
   if (artifact?.sourceId !== sourceId || artifact.sourceCommit !== sourceCommit ||
       artifact.workerId !== workerId || artifact.artifactCommit !== artifactCommit ||
       artifact.branch !== `gnr8-build-${sourceCommit}` ||
