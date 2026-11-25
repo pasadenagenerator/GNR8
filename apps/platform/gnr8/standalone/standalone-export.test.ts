@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import postcss from 'postcss';
-import {preserveMonoContactEmailStyles} from './standalone-export';
+import {materializeDeferredStylesheetLinks,preserveMonoContactEmailStyles,rejectUnsupportedFunctions} from './standalone-export';
+
+test('exact retained CSS load shim becomes an ordinary stylesheet while other events remain blocked',()=>{
+ const css=`/_assets/${'a'.repeat(64)}/${'b'.repeat(64)}.css?gnr8css=2`;
+ const link=`<link rel="stylesheet" href="${css}" media="print" onload="this.onload=null;this.media='all'" onerror="this.onerror=null;this.media='all'">`;
+ const normalized=materializeDeferredStylesheetLinks(link);
+ assert.equal(normalized,`<link rel="stylesheet" href="${css}" media="all">`);
+ assert.doesNotThrow(()=>rejectUnsupportedFunctions(normalized));
+ for(const other of [link.replace('onload=', 'onclick='),
+   link.replace(css,'https://foreign.example/style.css'),
+   link.replace('onerror=', 'onmouseover=')]){
+  assert.equal(materializeDeferredStylesheetLinks(other),other);
+  assert.throws(()=>rejectUnsupportedFunctions(other),/standalone_unsupported_dynamic_feature/);
+ }
+});
 
 test('projected Mono email retains captured text-field styling and focus cascade without affecting login or other forms',()=>{
  const css='.form input[type="text"],.form input[type="password"],.login input[type="text"]{height:37px;padding:10px;border:1px solid #ccc;background-color:#f8f8f8}.form input[type=text]:focus{border-color:blue}@media(max-width:600px){.form input[type=\'text\']{font-size:14px}}';

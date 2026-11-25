@@ -87,6 +87,31 @@ test('retained Aris capture replays into the Stacki Astro 7 source boundary',{sk
       sourceSnapshotSha256:snapshot.aggregateSha256,requiredAssets:generated.contentManifest.requiredAssets},
     readVerifiedAsset:async()=>{throw Error('unexpected retained asset read')}});
   const baseline=prepareStackiAstro7Baseline({files:project.files,expectedSourceSnapshotSha256:snapshot.aggregateSha256});
+  const {exportStandaloneProject}=await import('../standalone/standalone-export');
+  const {rewriteRawTemplateCssForRuntime}=await import('../../src/public-site/raw-template-runtime');
+  const {retainedStylesheetSourceUrl}=await import('../validation/runtime/retained-css-dependency-path');
+  const prefix=`/api/gnr8/runtime/preview-assets/${saved.version.siteId}/${saved.version.id}/`;
+  const manifestPath='url-fetch-manifest.json';
+  const manifest=saved.raw.fileMap[manifestPath];
+  const manifestBytes=manifest?readFileSync(`${root}/${manifestPath}`):null;
+  const assets=(project.runtimeAssets??[]).map(asset=>{
+    const filePath=decodeURIComponent(asset.path.slice(prefix.length));
+    const bytes=readFileSync(`${root}/${filePath}`);
+    const css=asset.mediaType.split(';')[0]==='text/css'||filePath.endsWith('.css');
+    const sourceUrl=css&&manifest&&manifestBytes?retainedStylesheetSourceUrl({bytes:manifestBytes,
+      expectedSha256:manifest.sha256,expectedSizeBytes:manifest.sizeBytes,stylesheetPath:filePath}):null;
+    return {path:asset.path,sourceSha256:asset.sha256,mediaType:asset.mediaType,
+      body:css?Buffer.from(rewriteRawTemplateCssForRuntime({css:bytes.toString('utf8'),
+        siteId:saved.version.siteId,siteVersionId:saved.version.id,assetFilePath:filePath,
+        stylesheetSourceUrl:sourceUrl,versionCssUrls:true,
+        fileMapPaths:new Set(Object.keys(saved.raw.fileMap))})):bytes};
+  });
+  const exported=await exportStandaloneProject({baseline:baseline.files,
+    selection:{kind:'generated-source',scope:{agencyId:'11111111-1111-4111-8111-111111111111',
+      clientId:'22222222-2222-4222-8222-222222222222',siteId:'33333333-3333-4333-8333-333333333333',
+      siteVersionId:'44444444-4444-4444-8444-444444444444'},sha256:'a'.repeat(64)},
+    sourceArtifact:{id:'55555555-5555-4555-8555-555555555555',sha256:'b'.repeat(64)},assets});
+  assert.deepEqual(exported.manifest.routes,['/','/apple','/canton']);
   if(process.env.GNR8_ARIS_BUILD_ROOT){
     const {prepareAstroStaticSiteSourceWorkspace}=await import('./astro-static-site-workspace-preparation');
     const workspace=await prepareAstroStaticSiteSourceWorkspace({files:baseline.files.map(file=>({path:file.path,body:Buffer.from(file.base64,'base64')})),workspaceRoot:process.env.GNR8_ARIS_BUILD_ROOT});
