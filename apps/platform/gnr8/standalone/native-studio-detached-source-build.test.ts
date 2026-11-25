@@ -76,10 +76,23 @@ function fixture() {
   const advance = () => advanceNativeStudioDetachedSourceBuild(input,
     sdk as any);
   return { input, records, exits, starts, attempts, sandbox, advance,
+    setRunning: (value: boolean) => { running = value; },
     failStart: () => { failStart = true; },
     changeOutput: () => { served.set('dist/index.html', Buffer.from('changed')); },
     changeSource: () => { sourceFiles.set('package.json', Buffer.from('changed')); } };
 }
+
+test('reclaims a created Sandbox after it becomes ready without creating another', async () => {
+  const f = fixture();
+  f.setRunning(false);
+  assert.deepEqual(await f.advance(), { state: 'pending-review' });
+  assert.equal(f.attempts.length, 1);
+  assert.equal(f.starts.length, 0);
+  f.setRunning(true);
+  assert.deepEqual(await f.advance(), { state: 'running' });
+  assert.equal(f.attempts.length, 1);
+  assert.deepEqual(f.starts, ['npm:ci']);
+});
 
 test('five bounded commands produce recoverable verified output', async () => {
   const f = fixture();

@@ -274,18 +274,11 @@ export async function advanceNativeStudioDetachedSourceBuild(
   const prior = await input.store.read(ATTEMPT);
   if (prior && !same(prior, expected))
     return { state: 'pending-review' };
-  if (!prior) {
-    await claimExact(input.store, ATTEMPT, expected);
-    const sandbox = await sdk.create({ name: expected.sandboxName,
-      source: { type: 'snapshot', snapshotId: input.snapshotId },
-      persistent: true, timeout: TIMEOUT, resources: { vcpus: 2 },
-      snapshotExpiration: RETENTION,
-      keepLastSnapshots: { count: 1, expiration: RETENTION },
-      ports: [], region: 'iad1', networkPolicy: networkPolicy() });
+  const initialize = async (sandbox: Sandbox) => {
     const sessionId = sandbox.currentSession().sessionId;
     const session: Session = { ...expected, sessionId };
     if (!ID.test(sessionId) || !attested(sandbox, session))
-      return { state: 'pending-review' };
+      return { state: 'pending-review' as const };
     const version = await sandbox.runCommand({ cmd: 'node',
       args: ['--version'], timeoutMs: 30_000 });
     if (version.exitCode !== 0 || (await version.stdout()).trim() !== 'v26.13.0')
@@ -302,10 +295,28 @@ export async function advanceNativeStudioDetachedSourceBuild(
     await claimExact(input.store, SESSION, session);
     requireTime(sandbox, 45 * 60_000);
     await start(input, session, phases[0], sandbox);
-    return { state: 'running' };
+    return { state: 'running' as const };
+  };
+  if (!prior) {
+    await claimExact(input.store, ATTEMPT, expected);
+    const sandbox = await sdk.create({ name: expected.sandboxName,
+      source: { type: 'snapshot', snapshotId: input.snapshotId },
+      persistent: true, timeout: TIMEOUT, resources: { vcpus: 2 },
+      snapshotExpiration: RETENTION,
+      keepLastSnapshots: { count: 1, expiration: RETENTION },
+      ports: [], region: 'iad1', networkPolicy: networkPolicy() });
+    return initialize(sandbox);
   }
   const session = await input.store.read(SESSION) as Session | null;
-  if (!session || !same({ siteId: session.siteId,
+  if (!session) {
+    // A newly created Sandbox can be reported before it is fully running.
+    // Reclaim only the exact named, empty Sandbox; never create another one.
+    let sandbox: Sandbox;
+    try { sandbox = await sdk.get({ name: expected.sandboxName, resume: false }); }
+    catch { return { state: 'pending-review' }; }
+    return initialize(sandbox);
+  }
+  if (!same({ siteId: session.siteId,
     sourceId: session.sourceId, snapshotId: session.snapshotId,
     inputSha256: session.inputSha256, sandboxName: session.sandboxName },
   expected) || !ID.test(session.sessionId))
