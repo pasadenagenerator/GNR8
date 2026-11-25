@@ -94,6 +94,17 @@ test('reclaims a created Sandbox after it becomes ready without creating another
   assert.deepEqual(f.starts, ['npm:ci']);
 });
 
+test('accepts the SDK-normalized single-host policy but rejects broader egress', async () => {
+  const allowed = fixture();
+  Object.assign(allowed.sandbox, { networkPolicy: { allow: ['registry.npmjs.org'] } });
+  assert.deepEqual(await allowed.advance(), { state: 'running' });
+  const broad = fixture();
+  Object.assign(broad.sandbox, { networkPolicy: {
+    allow: ['registry.npmjs.org', 'example.com'] } });
+  assert.deepEqual(await broad.advance(), { state: 'pending-review' });
+  assert.equal(broad.starts.length, 0);
+});
+
 test('five bounded commands produce recoverable verified output', async () => {
   const f = fixture();
   for (let index = 0; index < 5; index++) {

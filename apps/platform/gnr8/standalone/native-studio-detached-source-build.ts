@@ -87,6 +87,14 @@ function networkPolicy() {
   ] } };
 }
 
+function attestedNetworkPolicy(value: Sandbox['networkPolicy']): boolean {
+  if (same(value, networkPolicy())) return true;
+  // SDK 3.8 reports custom policies through the legacy response shape and
+  // retains the allowlisted domains but omits request-level response rules.
+  // Accept only the same sole egress host and no subnet or extra rule fields.
+  return same(value, { allow: ['registry.npmjs.org'] });
+}
+
 function attested(sandbox: Sandbox, session: Session): boolean {
   return sandbox.name === session.sandboxName &&
     sandbox.status === 'running' &&
@@ -94,7 +102,7 @@ function attested(sandbox: Sandbox, session: Session): boolean {
     sandbox.sourceSnapshotId === session.snapshotId &&
     sandbox.region === 'iad1' && sandbox.persistent === true &&
     sandbox.timeout === TIMEOUT &&
-    same(sandbox.networkPolicy, networkPolicy()) &&
+    attestedNetworkPolicy(sandbox.networkPolicy) &&
     sandbox.expiresAt instanceof Date &&
     sandbox.expiresAt.getTime() > Date.now();
 }
