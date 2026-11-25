@@ -48,7 +48,7 @@ export async function withNativeStudioImageDrive<Receipt, Verified, Result>(inpu
       typeof input.push !== 'function')
     throw Error('native_studio_image_drive_input_invalid');
   const drive = await dependencies.drive.getOrCreate({
-    name: `gnr8-img-${input.siteId}-${input.sourceId.slice(0, 8)}-${randomUUID()}`,
+    name: `gnr8-img-${input.siteId.slice(0, 8)}-${input.sourceId.slice(0, 8)}-${randomUUID()}`,
     region: 'iad1', maxSize: 12 * 1024 * 1024 * 1024,
   });
   let builder: Sandbox | undefined;

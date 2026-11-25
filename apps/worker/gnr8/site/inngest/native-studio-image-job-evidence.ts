@@ -80,7 +80,7 @@ export function verifyTransfer(request: Request, evidence: Evidence,
 
 export function verifyImageAttempt(request: Request, claimed: any,
   accountId: string): void {
-  const prefix = `gnr8-img-${request.scope.siteId}-${request.sourceId.slice(0, 8)}-`;
+  const prefix = `gnr8-img-${request.scope.siteId.slice(0, 8)}-${request.sourceId.slice(0, 8)}-`;
   if (!claimed ||
       claimed.sourceId !== request.sourceId ||
       claimed.commit !== request.sourceCommit ||
@@ -89,6 +89,7 @@ export function verifyImageAttempt(request: Request, claimed: any,
       claimed.siteId !== request.scope.siteId ||
       claimed.accountId !== accountId ||
       typeof claimed.driveName !== 'string' ||
+      claimed.driveName.length > 64 ||
       !claimed.driveName.startsWith(prefix) ||
       !UUID.test(claimed.driveName.slice(prefix.length)) ||
       !SNAPSHOT.test(claimed.buildSnapshotId) ||

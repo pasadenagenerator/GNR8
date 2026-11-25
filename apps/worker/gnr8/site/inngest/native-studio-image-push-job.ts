@@ -40,7 +40,7 @@ const defaults = {
         store.read<any>('native-studio/first-deploy-dry-run-v1.json'),
         store.read<any>('native-studio/resources-reserved-v1.json'),
         store.read<any>('native-studio/image-drive-transfer-v1.json'),
-        store.read<any>('native-studio/image-drive-attempt-v1.json'),
+        store.read<any>('native-studio/image-drive-attempt-v2.json'),
         store.read<any>('native-studio/prebuilt-image-v1.json'),
         store.read<any>('native-studio/image-push-attempt-v1.json'),
       ]);

@@ -118,7 +118,7 @@ test('expired snapshot or mismatched reservation blocks source read', async () =
 
 test('an existing private attempt resumes without a new snapshot TTL gate', async () => {
   const f = fixture();
-  f.records.set('native-studio/image-drive-attempt-v1.json', { scoped: true });
+  f.records.set('native-studio/image-drive-attempt-v2.json', { scoped: true });
   f.deps.snapshot = async () => { throw Error('snapshot expired'); };
   assert.deepEqual(await configuredNativeStudioImageBuild(input, env, fetch,
     f.deps), f.progress);

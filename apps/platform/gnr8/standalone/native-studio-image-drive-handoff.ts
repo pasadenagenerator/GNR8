@@ -2,7 +2,8 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { verifyStudioImageArchiveIdentity } from '../../../../scripts/stacki/studio-image-archive.mjs';
 
-const ATTEMPT = 'native-studio/image-drive-attempt-v1.json';
+const ATTEMPT = 'native-studio/image-drive-attempt-v2.json';
+const LEGACY_ATTEMPT = 'native-studio/image-drive-attempt-v1.json';
 const TRANSFER = 'native-studio/image-drive-transfer-v1.json';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const SHA = /^[a-f0-9]{64}$/;
@@ -59,9 +60,26 @@ function expected(input: Identity, driveName: string): Attempt {
 }
 
 function validName(input: Identity, name: string): boolean {
-  const prefix = `gnr8-img-${input.site.siteId}-${input.sourceId.slice(0, 8)}-`;
-  return typeof name === 'string' && name.startsWith(prefix) &&
+  const prefix = `gnr8-img-${input.site.siteId.slice(0, 8)}-${input.sourceId.slice(0, 8)}-`;
+  return typeof name === 'string' && name.length <= 64 && name.startsWith(prefix) &&
     UUID.test(name.slice(prefix.length));
+}
+
+async function legacyRejectedBeforeCreation(input: Identity): Promise<boolean> {
+  const legacy = await input.store.read(LEGACY_ATTEMPT) as Attempt | null;
+  if (!legacy) return true;
+  const prefix = `gnr8-img-${input.site.siteId}-${input.sourceId.slice(0, 8)}-`;
+  if (typeof legacy.driveName !== 'string' ||
+      legacy.driveName !== `${prefix}${legacy.driveName.slice(-36)}` ||
+      !UUID.test(legacy.driveName.slice(-36)) ||
+      legacy.driveName.length <= 64 ||
+      !same(legacy, expected(input, legacy.driveName))) return false;
+  const [session, transfer, command] = await Promise.all([
+    input.store.read('native-studio/image-build-session-v1.json'),
+    input.store.read(TRANSFER),
+    input.store.read('native-studio/image-build-command-intent-v1.json'),
+  ]);
+  return !session && !transfer && !command;
 }
 
 /** Claim a unique, scoped Drive name before creating external resources.
@@ -69,9 +87,11 @@ function validName(input: Identity, name: string): boolean {
 export async function claimNativeStudioImageDriveAttempt(input: Identity,
   id: () => string = randomUUID): Promise<Attempt> {
   validate(input);
+  if (!await legacyRejectedBeforeCreation(input))
+    throw Error('native_studio_image_drive_attempt_pending_review');
   if (await input.store.read(ATTEMPT))
     throw Error('native_studio_image_drive_attempt_pending_review');
-  const driveName = `gnr8-img-${input.site.siteId}-${input.sourceId.slice(0, 8)}-${id()}`;
+  const driveName = `gnr8-img-${input.site.siteId.slice(0, 8)}-${input.sourceId.slice(0, 8)}-${id()}`;
   if (!validName(input, driveName))
     throw Error('native_studio_image_drive_handoff_input_invalid');
   const attempt = expected(input, driveName);

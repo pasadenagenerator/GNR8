@@ -16,7 +16,7 @@ const accountId = 'e'.repeat(32);
 const attempt = { sourceId: request.sourceId, commit: request.sourceCommit,
   workerId: request.workerId, scope: request.scope,
   siteId: request.scope.siteId, accountId,
-  driveName: `gnr8-img-${request.scope.siteId}-${request.sourceId.slice(0, 8)}-55555555-5555-4555-8555-555555555555`,
+  driveName: `gnr8-img-${request.scope.siteId.slice(0, 8)}-${request.sourceId.slice(0, 8)}-55555555-5555-4555-8555-555555555555`,
   buildSnapshotId: 'snap_Build1', pushSnapshotId: 'snap_Push1' };
 const transfer = { attempt, driveId: 'drive_1', projectId: 'project_1',
   region: 'iad1' as const, receipt: { sourceId: request.sourceId,

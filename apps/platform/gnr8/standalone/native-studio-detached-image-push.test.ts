@@ -8,7 +8,7 @@ const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   siteId: '33333333-3333-4333-8333-333333333333' };
 const sourceId = 'a'.repeat(64), commit = 'b'.repeat(40),
   workerId = 'c'.repeat(32), accountId = 'd'.repeat(32);
-const driveName = `gnr8-img-${scope.siteId}-${sourceId.slice(0, 8)}-55555555-5555-4555-8555-555555555555`;
+const driveName = `gnr8-img-${scope.siteId.slice(0, 8)}-${sourceId.slice(0, 8)}-55555555-5555-4555-8555-555555555555`;
 const receipt = { sourceId, commit, workerId, scope,
   siteId: scope.siteId, accountId,
   archive: { bytes: 1024, sha256: 'e'.repeat(64) } };

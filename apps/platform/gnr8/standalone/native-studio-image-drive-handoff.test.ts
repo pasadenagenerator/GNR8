@@ -27,7 +27,8 @@ test('scoped private attempt binds one Drive and one producer receipt', async ()
   const f = fixture();
   const attempt = await claimNativeStudioImageDriveAttempt(f.input, () => uuid);
   assert.equal(attempt.driveName,
-    `gnr8-img-${scope.siteId}-${base.sourceId.slice(0, 8)}-${uuid}`);
+    `gnr8-img-${scope.siteId.slice(0, 8)}-${base.sourceId.slice(0, 8)}-${uuid}`);
+  assert(attempt.driveName.length <= 64);
   const receipt = { sourceId: base.sourceId, commit: base.commit,
     workerId: base.workerId, scope, siteId: scope.siteId,
     accountId: base.site.accountId,
@@ -74,7 +75,26 @@ test('receiver rejects a transfer for a different commit or missing attempt', as
       projectId: 'prj_abc', region: 'iad1' }, receipt });
   await assert.rejects(readNativeStudioImageDriveTransfer({ ...f.input,
     commit: 'f'.repeat(40) }), /transfer_unverified/);
-  f.records.delete('native-studio/image-drive-attempt-v1.json');
+  f.records.delete('native-studio/image-drive-attempt-v2.json');
   await assert.rejects(readNativeStudioImageDriveTransfer(f.input),
     /transfer_unverified/);
+});
+
+test('replaces only the legacy overlong name rejected before resource creation', async () => {
+  const f = fixture();
+  const legacy = { sourceId: base.sourceId, commit: base.commit,
+    workerId: base.workerId, scope, siteId: scope.siteId,
+    accountId: base.site.accountId,
+    driveName: `gnr8-img-${scope.siteId}-${base.sourceId.slice(0, 8)}-${uuid}`,
+    buildSnapshotId: base.buildSnapshotId,
+    pushSnapshotId: base.pushSnapshotId };
+  f.records.set('native-studio/image-drive-attempt-v1.json', legacy);
+  const attempt = await claimNativeStudioImageDriveAttempt(f.input, () => uuid);
+  assert(attempt.driveName.length <= 64);
+  assert.deepEqual(f.records.get('native-studio/image-drive-attempt-v1.json'), legacy);
+  const blocked = fixture();
+  blocked.records.set('native-studio/image-drive-attempt-v1.json', legacy);
+  blocked.records.set('native-studio/image-build-session-v1.json', { started: true });
+  await assert.rejects(claimNativeStudioImageDriveAttempt(blocked.input, () => uuid),
+    /pending_review/);
 });

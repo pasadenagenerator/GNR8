@@ -30,7 +30,7 @@ import { claimNativeStudioImageDriveAttempt,
 const SESSION = 'native-studio/image-build-session-v1.json';
 const SOURCE_VERIFIED = 'native-studio/image-build-source-verified-v1.json';
 const RECEIPT = 'native-studio/image-build-receipt-v1.json';
-const ATTEMPT = 'native-studio/image-drive-attempt-v1.json';
+const ATTEMPT = 'native-studio/image-drive-attempt-v2.json';
 const TRANSFER = 'native-studio/image-drive-transfer-v1.json';
 const BUILD_INTENT = 'native-studio/image-build-command-intent-v1.json';
 const PREFLIGHT_INTENT = 'native-studio/image-preflight-command-intent-v1.json';
@@ -135,7 +135,8 @@ function validAttempt(input: Input, value: unknown): value is NativeStudioImageD
     attempt.buildSnapshotId === input.buildSnapshotId &&
     attempt.pushSnapshotId === input.pushSnapshotId &&
     typeof attempt.driveName === 'string' &&
-    attempt.driveName === `gnr8-img-${input.site.siteId}-${input.sourceId.slice(0, 8)}-${attempt.driveName.slice(-36)}` &&
+    attempt.driveName === `gnr8-img-${input.site.siteId.slice(0, 8)}-${input.sourceId.slice(0, 8)}-${attempt.driveName.slice(-36)}` &&
+    attempt.driveName.length <= 64 &&
     UUID.test(attempt.driveName.slice(-36));
 }
 

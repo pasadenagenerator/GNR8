@@ -66,7 +66,7 @@ deps = defaults) {
     commit: input.sourceCommit, workerId: input.workerId };
     // Snapshot availability matters when creating a Sandbox. A live attempt
     // is resumed from its private identity and attested session instead.
-    if (!await prepared.store.read('native-studio/image-drive-attempt-v1.json')) {
+    if (!await prepared.store.read('native-studio/image-drive-attempt-v2.json')) {
       const snapshots = await Promise.all([buildSnapshotId, pushSnapshotId]
         .map(snapshotId => deps.snapshot({ snapshotId })));
       if (snapshots.some(snapshot => snapshot.status !== 'created' ||

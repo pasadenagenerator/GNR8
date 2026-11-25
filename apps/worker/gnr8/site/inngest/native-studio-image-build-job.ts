@@ -30,7 +30,7 @@ const defaults = {
       store.read<any>('native-studio/first-deploy-dry-run-v1.json'),
       store.read<any>('native-studio/resources-reserved-v1.json'),
       store.read<any>('native-studio/image-drive-transfer-v1.json'),
-      store.read<any>('native-studio/image-drive-attempt-v1.json'),
+      store.read<any>('native-studio/image-drive-attempt-v2.json'),
     ]);
     return { artifact, preflight, resources, transfer, attempt };
   },
