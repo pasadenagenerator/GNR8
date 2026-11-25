@@ -8,6 +8,9 @@ import { nativeStudioBuildManifestScript } from './native-studio-sandbox-build';
 
 const ROOT = '/vercel/sandbox/gnr8-native-build';
 const MANIFEST = '/vercel/sandbox/gnr8-native-build-manifest.json';
+const AUTH_SLOT = 'studio/src/cloudflare/builtInProviderSlot.ts';
+const GITHUB_SLOT = "\n\nexport const builtInProviderSlot: BuiltInSlot = { id: 'github', create: undefined };\n";
+const ACCESS_SLOT = "\nimport { createAccessProvider } from '../features/auth/providers/access';\n\nexport const builtInProviderSlot: BuiltInSlot = { id: 'access', create: createAccessProvider };\n";
 // Each operation generation reuses the immutable prepared source without
 // reusing a failed Sandbox or an ambiguous command receipt.
 const GENERATION = 'v3';
@@ -141,16 +144,38 @@ async function readBounded(sandbox: Sandbox, path: string,
   return Buffer.concat(chunks);
 }
 
-async function verifySource(sandbox: Sandbox, files: File[]) {
+function expectedBuiltInSlot(files: File[]): Buffer | null {
+  const config = files.find(file => file.path ===
+    'studio/cloudflare/wrangler.jsonc');
+  const slot = files.find(file => file.path === AUTH_SLOT);
+  if (!config || !slot) return null;
+  let provider: unknown;
+  try { provider = JSON.parse(config.body.toString('utf8')).vars?.AUTH_PROVIDER; }
+  catch { throw Error('native_studio_detached_source_input_invalid'); }
+  if (provider !== 'access') return null;
+  const original = slot.body.toString('utf8');
+  if (!original.endsWith(GITHUB_SLOT) ||
+      original.indexOf(GITHUB_SLOT) !== original.lastIndexOf(GITHUB_SLOT))
+    throw Error('native_studio_detached_source_auth_slot_unrecognized');
+  return Buffer.from(original.slice(0, -GITHUB_SLOT.length) + ACCESS_SLOT);
+}
+
+async function verifySource(sandbox: Sandbox, files: File[],
+  afterStudioBuild = false) {
+  // Native Stacki generates its built-in provider slot during npm run build.
+  // Accept only the exact access slot selected by the verified site config.
+  const generatedSlot = afterStudioBuild ? expectedBuiltInSlot(files) : null;
   // A prepared import can contain thousands of files. Keep verification
   // complete while bounding concurrent Sandbox reads and request duration.
   const workers = Array.from({ length: Math.min(8, files.length) },
     async (_, worker) => {
       for (let index = worker; index < files.length; index += 8) {
         const file = files[index];
+        const expected = file.path === AUTH_SLOT && generatedSlot
+          ? generatedSlot : file.body;
         const current = await readBounded(sandbox, `${ROOT}/${file.path}`,
-          file.body.length);
-        if (!current.equals(file.body))
+          expected.length);
+        if (!current.equals(expected))
           throw Error('native_studio_detached_source_changed');
       }
     });
@@ -249,7 +274,7 @@ async function poll(input: NativeStudioDetachedSourceBuildInput,
 async function extract(input: NativeStudioDetachedSourceBuildInput,
   session: Session, sandbox: Sandbox,
   completed?: Complete): Promise<NativeStudioDetachedSourceBuildResult> {
-  await verifySource(sandbox, input.files);
+  await verifySource(sandbox, input.files, true);
   const manifest = await readBounded(sandbox, MANIFEST, 8 * 1024 * 1024);
   const listed = outputs(JSON.parse(manifest.toString()));
   const proof: Complete = { session, files: listed,
@@ -358,7 +383,7 @@ export async function advanceNativeStudioDetachedSourceBuild(
     const phase = phases[index];
     const key = keys(phase);
     if (!await input.store.read(key.intent)) {
-      await verifySource(sandbox, input.files);
+      await verifySource(sandbox, input.files, phase === 'scan');
       requireTime(sandbox, index === 0 ? 45 * 60_000 :
         (phases.length - index) * 11 * 60_000);
       await start(input, session, phase, sandbox);
