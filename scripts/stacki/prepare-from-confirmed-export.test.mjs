@@ -27,7 +27,7 @@ test('prepared immutable bytes are deduplicated and stored with bounded overlap'
   files.push({body:files[0].body});
   await persistPreparedFileBytes(store,files);
   assert.equal(seen.length,25);
-  assert(maxActive>1&&maxActive<=8);
+  assert(maxActive>8&&maxActive<=16);
 });
 async function fixture() {
   const baseline = [

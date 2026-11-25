@@ -27,7 +27,7 @@ export async function persistPreparedFileBytes(store, files) {
   const entries = [...unique];
   let cursor = 0;
   let failure;
-  await Promise.all(Array.from({ length: Math.min(8, entries.length) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(16, entries.length) }, async () => {
     while (!failure && cursor < entries.length) {
       const [hash, body] = entries[cursor++];
       try { await store.putBytes(hash, body); }

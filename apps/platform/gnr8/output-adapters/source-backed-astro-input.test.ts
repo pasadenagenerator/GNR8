@@ -112,6 +112,14 @@ test('retained Aris capture replays into the Stacki Astro 7 source boundary',{sk
       siteVersionId:'44444444-4444-4444-8444-444444444444'},sha256:'a'.repeat(64)},
     sourceArtifact:{id:'55555555-5555-4555-8555-555555555555',sha256:'b'.repeat(64)},assets});
   assert.deepEqual(exported.manifest.routes,['/','/apple','/canton']);
+  if(process.env.STACKI_RELEASE_FILE){
+    const {prepareFromVerifiedAstroExport}=await import('../../../../scripts/stacki/prepare-from-confirmed-export.mjs');
+    const native=await prepareFromVerifiedAstroExport({exported,selection:exported.manifest.selection,
+      confirmationSha256:'c'.repeat(64),releaseFile:process.env.STACKI_RELEASE_FILE,
+      site:{siteId:'33333333-3333-4333-8333-333333333333',repository:'example/website',repositoryId:'123',branch:'main',studioOrigin:'https://website.example.com',accountId:'a'.repeat(32),appId:'456',installationId:'789',clientId:'Iv1.example'}});
+    assert(native.files.some(file=>file.path==='studio/scripts/workspace.ts'));
+    assert(native.files.some(file=>file.path==='src/lumos/components/Button.astro'));
+  }
   if(process.env.GNR8_ARIS_BUILD_ROOT){
     const {prepareAstroStaticSiteSourceWorkspace}=await import('./astro-static-site-workspace-preparation');
     const workspace=await prepareAstroStaticSiteSourceWorkspace({files:baseline.files.map(file=>({path:file.path,body:Buffer.from(file.base64,'base64')})),workspaceRoot:process.env.GNR8_ARIS_BUILD_ROOT});
