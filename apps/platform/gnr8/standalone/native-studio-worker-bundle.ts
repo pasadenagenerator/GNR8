@@ -206,8 +206,11 @@ function entryFromMetafile(raw: Buffer, files: ScannedFile[],
       throw Error('native_studio_worker_bundle_metafile_invalid');
     return candidates[0];
   });
-  if (new Set(outputFiles).size !== files.length ||
-      files.some(file => !outputFiles.includes(file.path)))
+  // Wrangler adds a short README beside the executable bundle. It is not
+  // represented in esbuild's metafile, but is still scanned and stored.
+  const bundleFiles = files.filter(file => file.path !== 'README.md');
+  if (new Set(outputFiles).size !== bundleFiles.length ||
+      bundleFiles.some(file => !outputFiles.includes(file.path)))
     throw Error('native_studio_worker_bundle_metafile_invalid');
   const entries = Object.entries(outputs).filter(([, value]) =>
     value && typeof value === 'object' && !Array.isArray(value) &&

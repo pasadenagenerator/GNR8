@@ -110,6 +110,8 @@ test('records separate scoped public Worker bundle from site entry', async () =>
 test('accepts Wrangler output paths relative to the Studio config directory', async () => {
   const f = fixture();
   const sourceMap = Buffer.from('{}');
+  const readme = Buffer.from('Wrangler generated worker bundle');
+  f.output.set('README.md', readme);
   f.output.set('worker.js.map', sourceMap);
   f.setScan([...f.output].map(([path, body]) => ({ path,
     bytes: body.length, sha256: hash(body) })));
@@ -120,7 +122,8 @@ test('accepts Wrangler output paths relative to the Studio config directory', as
   } });
   const receipt = await recordNativeStudioWorkerBundle(f.input as any);
   assert.equal(receipt.entryPath, 'worker.js');
-  assert.equal(receipt.files.length, 2);
+  assert.equal(receipt.files.length, 3);
+  assert.equal(receipt.files.some(file => file.path === 'README.md'), true);
 });
 
 test('accepts Wrangler output paths relative to the public config directory', async () => {
