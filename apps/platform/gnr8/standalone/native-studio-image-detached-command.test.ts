@@ -15,6 +15,7 @@ function fixture() {
   let sessionId = 'sess_123';
   let status = 'running';
   let exitCode: number | null = null;
+  let waitExitCode: number | null = null;
   let startedAt = Date.now();
   let killFails = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
@@ -32,6 +33,11 @@ function fixture() {
     getCommand: async (id: string) => {
       events.push('get-command'); assert.equal(id, 'cmd_123');
       return { exitCode, startedAt,
+        wait: async () => {
+          events.push('wait');
+          if (waitExitCode !== null) return { exitCode: waitExitCode };
+          throw Object.assign(new Error('still running'), { name: 'TimeoutError' });
+        },
         kill: async (signal: string) => {
           events.push(`kill:${signal}`);
           if (killFails) throw Error('command not found');
@@ -51,6 +57,7 @@ function fixture() {
     setSession: (value: string) => { sessionId = value; },
     setStatus: (value: string) => { status = value; },
     setExit: (value: number | null) => { exitCode = value; },
+    setWaitExit: (value: number | null) => { waitExitCode = value; },
     setStartedAt: (value: number) => { startedAt = value; },
     setKillFails: (value: boolean) => { killFails = value; } };
 }
@@ -80,6 +87,18 @@ test('claim precedes detached start; later polls never start another command', a
     command: { cmd: 'docker', args: ['build', '.'], timeoutMs: 60_000 },
   }), /pending_review/);
   assert.equal(f.events.filter(event => event === 'run').length, 1);
+});
+
+test('bounded wait accepts finished command when list still reports null', async () => {
+  const f = fixture();
+  const input = { ...base, store: f.store };
+  await startNativeStudioImageCommand({ ...input, sandbox: f.sandbox as any,
+    command: { cmd: 'docker', args: ['build', '.'], timeoutMs: 20 * 60_000 } });
+  f.setWaitExit(0);
+  assert.deepEqual(await pollNativeStudioImageCommand(input, f.sdk),
+    { state: 'succeeded', exitCode: 0 });
+  assert.equal(f.events.filter(event => event === 'run').length, 1);
+  assert.equal(f.events.filter(event => event === 'wait').length, 1);
 });
 
 test('stopped or replaced session is never resumed by the poller', async () => {

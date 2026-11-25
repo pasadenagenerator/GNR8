@@ -131,6 +131,20 @@ export async function pollNativeStudioImageCommand(input: Identity,
         startedAt < Date.UTC(2020, 0, 1) ||
         startedAt > Date.now() + 30_000)
       return { state: 'pending-review' };
+    // Vercel can return a stale null exitCode from getCommand even after the
+    // detached command has finished. The wait endpoint resolves the exact
+    // recorded command; bound it so an active build never holds this request.
+    try {
+      const finished = await command.wait({ signal: AbortSignal.timeout(3_000) });
+      if (sandbox.status !== 'running' ||
+          sandbox.currentSession().sessionId !== intent.sessionId)
+        return { state: 'pending-review' };
+      if (finished.exitCode === 0) return { state: 'succeeded', exitCode: 0 };
+      return { state: 'pending-review', exitCode: finished.exitCode };
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          !['TimeoutError', 'AbortError'].includes(error.name)) throw error;
+    }
     if (Date.now() - startedAt >= PHASE_LIMIT_MS[input.phase]) {
       // A detached command may already have disappeared while the provider
       // still reports a null exit code. Its kill can fail in that case; the
