@@ -105,16 +105,29 @@ export async function ensureNativeStudioDockerDaemon(
       env: { CI: '1', DOCKER_HOST } });
     return result.exitCode === 0;
   };
-  try { if (await ready()) return; }
+  const requireBuildx = async () => {
+    try {
+      const result = await sandbox.runCommand({ cmd: dockerPath,
+        args: ['buildx', 'version'], timeoutMs: 5_000,
+        env: { CI: '1', DOCKER_HOST } });
+      if (result.exitCode === 0) return;
+    } catch { /* A missing plugin or failed probe has the same outcome. */ }
+    throw Error('native_studio_docker_buildx_unavailable');
+  };
+  let daemonReady = false;
+  try { daemonReady = await ready(); }
   catch { /* A read-only probe may be retried after starting dockerd. */ }
+  if (daemonReady) { await requireBuildx(); return; }
   try {
     await sandbox.runCommand({ cmd: 'dockerd',
       args: [`--host=${DOCKER_HOST}`],
       sudo: true, detached: true, env: { CI: '1' } });
   } catch { throw Error('native_studio_docker_daemon_unavailable'); }
   for (let attempt = 0; attempt < 20; attempt++) {
-    try { if (await ready()) return; }
+    daemonReady = false;
+    try { daemonReady = await ready(); }
     catch { /* Bound the readiness wait; never accept an unknown daemon. */ }
+    if (daemonReady) { await requireBuildx(); return; }
     if (attempt < 19) await pause(1_000);
   }
   throw Error('native_studio_docker_daemon_unavailable');

@@ -198,7 +198,8 @@ test('Docker daemon starts once from the trusted snapshot and is checked before 
     calls.push(`${command.cmd}:${command.args[0]}`);
     if (command.cmd === 'docker') {
       assert.equal(command.env.DOCKER_HOST, 'unix:///var/run/docker.sock');
-      return { exitCode: ++probes >= 3 ? 0 : 1 };
+      return { exitCode: command.args[0] === 'buildx' ? 0 :
+        ++probes >= 3 ? 0 : 1 };
     }
     assert.equal(command.cmd, 'dockerd');
     assert.equal(command.args[0], '--host=unix:///var/run/docker.sock');
@@ -209,10 +210,22 @@ test('Docker daemon starts once from the trusted snapshot and is checked before 
   } };
   await ensureNativeStudioDockerDaemon(sandbox as any, 'docker', async () => {});
   assert.deepEqual(calls, ['docker:info', 'dockerd:--host=unix:///var/run/docker.sock',
-    'docker:info', 'docker:info']);
+    'docker:info', 'docker:info', 'docker:buildx']);
   calls.length = 0;
   await ensureNativeStudioDockerDaemon(sandbox as any, 'docker', async () => {});
-  assert.deepEqual(calls, ['docker:info']);
+  assert.deepEqual(calls, ['docker:info', 'docker:buildx']);
+});
+
+test('missing Buildx fails before source staging or image build', async () => {
+  const calls: string[] = [];
+  const sandbox = { runCommand: async (command: any) => {
+    calls.push(command.args[0]);
+    return { exitCode: command.args[0] === 'info' ? 0 : 1 };
+  } };
+  await assert.rejects(
+    ensureNativeStudioDockerDaemon(sandbox as any, 'docker'),
+    /native_studio_docker_buildx_unavailable/);
+  assert.deepEqual(calls, ['info', 'buildx']);
 });
 
 test('ambiguous detached start blocks retry without another Sandbox', async () => {
