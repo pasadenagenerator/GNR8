@@ -58,7 +58,7 @@ function fixture(withAccessSlot = false) {
       wait: async () => ({ exitCode: exits.get(cmdId) ?? null }),
     }),
   });
-  const sandbox = { name: `gnr8-source-build-${hash(Buffer.from(`v3:${source.siteId}:${source.sourceId}`)).slice(0,32)}`,
+  const sandbox = { name: `gnr8-source-build-${hash(Buffer.from(`v4:${source.siteId}:${source.sourceId}`)).slice(0,32)}`,
     get status() { return running ? 'running' : 'stopped'; },
     sourceSnapshotId: source.snapshotId, region: 'iad1', persistent: true,
     timeout: 60 * 60_000,
@@ -161,7 +161,7 @@ test('failed detached command cannot advance or claim completion', async () => {
   f.exits.set('cmd_1', 1);
   assert.deepEqual(await f.advance(), { state: 'pending-review' });
   assert.equal(f.starts.length, 1);
-  assert.equal(f.records.has('native-studio/source-build-complete-v3.json'), false);
+  assert.equal(f.records.has('native-studio/source-build-complete-v4.json'), false);
 });
 
 test('lost command start cannot duplicate Sandbox or npm invocation', async () => {
@@ -177,7 +177,7 @@ test('session claimed before the first command can start once after recovery', a
   f.interruptAfterSource();
   await assert.rejects(f.advance(), /time_insufficient/);
   assert.equal(f.starts.length, 0);
-  assert.equal(f.records.has('native-studio/source-build-session-v3.json'), true);
+  assert.equal(f.records.has('native-studio/source-build-session-v4.json'), true);
   f.sandbox.expiresAt = new Date(Date.now() + 60 * 60_000);
   assert.deepEqual(await f.advance(), { state: 'running' });
   assert.deepEqual(f.starts, ['npm:ci']);

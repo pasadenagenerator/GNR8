@@ -13,7 +13,7 @@ const GITHUB_SLOT = "\n\nexport const builtInProviderSlot: BuiltInSlot = { id: '
 const ACCESS_SLOT = "\nimport { createAccessProvider } from '../features/auth/providers/access';\n\nexport const builtInProviderSlot: BuiltInSlot = { id: 'access', create: createAccessProvider };\n";
 // Each operation generation reuses the immutable prepared source without
 // reusing a failed Sandbox or an ambiguous command receipt.
-const GENERATION = 'v3';
+const GENERATION = 'v4';
 const ATTEMPT = `native-studio/source-build-attempt-${GENERATION}.json`;
 const SESSION = `native-studio/source-build-session-${GENERATION}.json`;
 const COMPLETE = `native-studio/source-build-complete-${GENERATION}.json`;
