@@ -15,6 +15,8 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = () => { throw new Error('Confirmed export or Studio binding mismatch'); };
 const MAX_PREPARED_FILES = 10_000;
 const MAX_PREPARED_BYTES = 256_000_000;
+const PREPARED_PACK_BYTES = 8_000_000;
+const PREPARED_PACK_HEADER = Buffer.from('GNR8P1\n');
 /** Store immutable verified bytes with bounded overlap. A partial write is
  * safe to resume because every object is addressed by its content hash. */
 export async function persistPreparedFileBytes(store, files) {
@@ -35,6 +37,56 @@ export async function persistPreparedFileBytes(store, files) {
     }
   }));
   if (failure) throw failure;
+}
+function packPreparedFiles(files) {
+  const packs = [];
+  const bodies = [];
+  let first = 0;
+  let parts = [PREPARED_PACK_HEADER];
+  let size = PREPARED_PACK_HEADER.length;
+  function flush(end) {
+    if (end === first) return;
+    const body = Buffer.concat(parts, size);
+    packs.push({ sha256: digest(body), bytes: body.length, first, count: end - first });
+    bodies.push({ body });
+    first = end;
+    parts = [PREPARED_PACK_HEADER];
+    size = PREPARED_PACK_HEADER.length;
+  }
+  for (let index = 0; index < files.length; index++) {
+    if (size + files[index].body.length > PREPARED_PACK_BYTES && index > first) flush(index);
+    parts.push(files[index].body);
+    size += files[index].body.length;
+  }
+  flush(files.length);
+  return { packs, bodies };
+}
+async function readPackedFiles(store, entries, packs) {
+  if (!Array.isArray(packs) || !packs.length || packs.length > MAX_PREPARED_FILES) fail();
+  const files = [];
+  for (const pack of packs) {
+    if (!pack || !/^[a-f0-9]{64}$/.test(pack.sha256) ||
+        !Number.isSafeInteger(pack.bytes) || pack.bytes < PREPARED_PACK_HEADER.length ||
+        pack.bytes > 12 * 1024 * 1024 || pack.first !== files.length ||
+        !Number.isSafeInteger(pack.count) || pack.count < 1 ||
+        pack.first + pack.count > entries.length ||
+        PREPARED_PACK_HEADER.length + entries.slice(pack.first, pack.first + pack.count)
+          .reduce((n, entry) => n + entry.bytes, 0) !== pack.bytes) fail();
+    const body = await store.getBytes(pack.sha256);
+    if (!Buffer.isBuffer(body) || body.length !== pack.bytes ||
+        digest(body) !== pack.sha256 ||
+        !body.subarray(0, PREPARED_PACK_HEADER.length).equals(PREPARED_PACK_HEADER)) fail();
+    let offset = PREPARED_PACK_HEADER.length;
+    for (const entry of entries.slice(pack.first, pack.first + pack.count)) {
+      const fileBody = body.subarray(offset, offset + entry.bytes);
+      if (digest(fileBody) !== entry.sha256) fail();
+      files.push({ path: entry.path, body: fileBody });
+      offset += entry.bytes;
+    }
+    if (offset !== body.length) fail();
+  }
+  if (files.length !== entries.length) fail();
+  return files;
 }
 async function pinnedLumosSource() {
   for (const prefix of ['scripts/stacki', '../scripts/stacki', '../../scripts/stacki']) {
@@ -269,7 +321,8 @@ export async function persistVerifiedAstroStudio({ store, exported, selection, c
   } catch { throw Error('native_studio_source_persist_prepare_failed'); }
   const files = prepared.files.map(file => ({ path: file.path, sha256: digest(file.body), bytes: file.body.length }));
   validatePreparedEntries(files);
-  try { await persistPreparedFileBytes(store, prepared.files); }
+  const packed = packPreparedFiles(prepared.files);
+  try { await persistPreparedFileBytes(store, packed.bodies); }
   catch (error) {
     const code = error instanceof Error && /^(?:standalone_store_unavailable|standalone_file_invalid|standalone_file_unavailable|standalone_file_integrity|standalone_file_write_unconfirmed)$/.test(error.message)
       ? error.message.slice('standalone_'.length) : 'bytes_failed';
@@ -280,7 +333,7 @@ export async function persistVerifiedAstroStudio({ store, exported, selection, c
     sourceManifestSha256, confirmationSha256, version: prepared.status.version,
     lumosSourceSha256: LUMOS_PIN.sourceSha256,
     astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
-    ...(configured.access ? { access: configured.access } : {}), files };
+    ...(configured.access ? { access: configured.access } : {}), files, packs: packed.packs };
   try { if (!isDeepStrictEqual(await store.put(key, receipt), receipt)) fail(); }
   catch { throw Error('native_studio_source_persist_receipt_failed'); }
   return { receipt, files: prepared.files, reused: false };
@@ -327,8 +380,8 @@ async function verifyStoredStudio({ store, receipt, sourceId, site }) {
       byPath.get('astro.config.mjs')?.sha256 !== digest(nativeAstroConfig(site)) ||
       receipt.files.some(file => file.path === 'vercel.json' ||
         file.path.startsWith('api/') || file.path.startsWith('functions/'))) fail();
-  const files = [];
-  for (const file of receipt.files) {
+  const files = receipt.packs === undefined ? [] : await readPackedFiles(store, receipt.files, receipt.packs);
+  if (receipt.packs === undefined) for (const file of receipt.files) {
     const body = await store.getBytes(file.sha256);
     if (!Buffer.isBuffer(body) || body.length !== file.bytes || digest(body) !== file.sha256) fail();
     files.push({ path: file.path, body });

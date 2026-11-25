@@ -113,12 +113,23 @@ test('retained Aris capture replays into the Stacki Astro 7 source boundary',{sk
     sourceArtifact:{id:'55555555-5555-4555-8555-555555555555',sha256:'b'.repeat(64)},assets});
   assert.deepEqual(exported.manifest.routes,['/','/apple','/canton']);
   if(process.env.STACKI_RELEASE_FILE){
-    const {prepareFromVerifiedAstroExport}=await import('../../../../scripts/stacki/prepare-from-confirmed-export.mjs');
-    const native=await prepareFromVerifiedAstroExport({exported,selection:exported.manifest.selection,
-      confirmationSha256:'c'.repeat(64),releaseFile:process.env.STACKI_RELEASE_FILE,
-      site:{siteId:'33333333-3333-4333-8333-333333333333',repository:'example/website',repositoryId:'123',branch:'main',studioOrigin:'https://website.example.com',accountId:'a'.repeat(32),appId:'456',installationId:'789',clientId:'Iv1.example'}});
+    const {persistVerifiedAstroStudio,readStoredVerifiedAstroStudio}=await import('../../../../scripts/stacki/prepare-from-confirmed-export.mjs');
+    const receipts=new Map<string,unknown>(),bytes=new Map<string,Buffer>();
+    const store={read:async (key:string)=>receipts.get(key)??null,
+      put:async(key:string,value:unknown)=>{receipts.set(key,value);return value;},
+      putBytes:async(hash:string,body:Buffer)=>{bytes.set(hash,body);},
+      getBytes:async (hash:string)=>bytes.get(hash)};
+    const nativeSite={siteId:'33333333-3333-4333-8333-333333333333',repository:'example/website',
+      repositoryId:'123',branch:'main',studioOrigin:'https://website.example.com',accountId:'a'.repeat(32),
+      appId:'456',installationId:'789',clientId:'Iv1.example'};
+    const native=await persistVerifiedAstroStudio({store,exported,selection:exported.manifest.selection,
+      confirmationSha256:'c'.repeat(64),releaseFile:process.env.STACKI_RELEASE_FILE,site:nativeSite});
     assert(native.files.some(file=>file.path==='studio/scripts/workspace.ts'));
     assert(native.files.some(file=>file.path==='src/lumos/components/Button.astro'));
+    assert(native.receipt.packs.length<12);
+    assert.equal(bytes.size,native.receipt.packs.length);
+    assert.deepEqual((await readStoredVerifiedAstroStudio({store,sourceId:native.receipt.identitySha256,
+      site:nativeSite})).files,native.files);
   }
   if(process.env.GNR8_ARIS_BUILD_ROOT){
     const {prepareAstroStaticSiteSourceWorkspace}=await import('./astro-static-site-workspace-preparation');

@@ -98,6 +98,8 @@ test('target-free Studio source persists once and binds export, confirmation and
   assert.match(first.receipt.lumosSourceSha256, /^[a-f0-9]{64}$/);
   assert.equal(first.receipt.astroToolchain.version, '7.4.7');
   assert.equal(first.receipt.files.some(file => file.path === 'vercel.json'), false);
+  assert(first.receipt.packs.length > 0);
+  assert(first.receipt.packs.every(pack => pack.bytes <= 12 * 1024 * 1024));
   const different = await persistVerifiedAstroStudio({ ...request, confirmationSha256: 'd'.repeat(64) });
   assert.notEqual(different.receipt.identitySha256, first.receipt.identitySha256);
   assert.equal(objects.size, 2);
@@ -112,8 +114,13 @@ test('target-free Studio source persists once and binds export, confirmation and
   objects.set(key, { ...original, files: [{ path: '.git/config', sha256: sha(Buffer.from('bad')), bytes: 3 }] });
   await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId:first.receipt.identitySha256, site }), /mismatch/);
   objects.set(key, original);
-  const file = first.receipt.files.find(item => item.path === 'src/pages/index.astro');
-  bytes.set(file.sha256, Buffer.from('tampered'));
+  const legacy = { ...original };
+  delete legacy.packs;
+  for (const file of first.files) bytes.set(sha(file.body), file.body);
+  objects.set(key, legacy);
+  assert.deepEqual((await readStoredVerifiedAstroStudio({ store, sourceId:first.receipt.identitySha256, site })).files, first.files);
+  objects.set(key, original);
+  bytes.set(first.receipt.packs[0].sha256, Buffer.from('tampered'));
   await assert.rejects(persistVerifiedAstroStudio(request), /mismatch/);
   assert.equal(objects.size, 3);
 });
@@ -164,8 +171,7 @@ test('Access source binds verified roles and Worker settings without changing le
     objects.set(key, { ...original, access: { ...original.access, aud: 'c'.repeat(64) } });
     await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site }), /mismatch/);
     objects.set(key, original);
-    const roles = first.receipt.files.find(file => file.path === '.stacki/roles.json');
-    bytes.set(roles.sha256, Buffer.from('{}'));
+    bytes.set(first.receipt.packs[0].sha256, Buffer.from('{}'));
     await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site }), /mismatch/);
   });
 
