@@ -80,7 +80,19 @@ function client(site, credential, transport, delay = ms => new Promise(resolve =
         path.startsWith('/git/trees') ? 'tree' :
         path.startsWith('/git/commits') ? 'commit' :
         path.startsWith('/git/refs') ? 'ref' : 'request';
-      throw Error(`native_studio_git_data_${operation}_${response.status}`);
+      let reason = '';
+      if (operation === 'blob' && response.status === 422) {
+        const failure = await response.json().catch(() => null);
+        const message = typeof failure?.message === 'string' ?
+          failure.message.toLowerCase() : '';
+        const codes = Array.isArray(failure?.errors) ? failure.errors
+          .map(error => typeof error?.code === 'string' ? error.code.toLowerCase() : '') : [];
+        reason = /spam|abuse|rate limit/.test(message) ? '_limited' :
+          /too.large|size|too_big/.test(`${message} ${codes.join(' ')}`) ? '_oversize' :
+          /empty/.test(`${message} ${codes.join(' ')}`) ? '_empty' :
+          codes.includes('invalid') ? '_invalid' : '_unknown';
+      }
+      throw Error(`native_studio_git_data_${operation}_${response.status}${reason}`);
     }
     const value = await response.json().catch(() => null);
     if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -132,8 +144,16 @@ async function treeForFiles(api, baseTree, files, baseEntries = new Map()) {
         Buffer.byteLength(content) <= 256 * 1024) {
       entry = { path: file.path, mode, type: 'blob', content };
     } else {
-      const blob = await api('POST', '/git/blobs', {
-        content: file.body.toString('base64'), encoding: 'base64' });
+      let blob;
+      try {
+        blob = await api('POST', '/git/blobs', {
+          content: file.body.toString('base64'), encoding: 'base64' });
+      } catch (error) {
+        if (error instanceof Error &&
+            error.message.startsWith('native_studio_git_data_blob_422'))
+          throw Error(`${error.message}_bytes_${file.body.length}`);
+        throw error;
+      }
       if (blob.sha !== gitBlob(file.body))
         throw Error('native_studio_git_data_blob_unverified');
       entry = { path: file.path, mode, type: 'blob', sha: blob.sha };

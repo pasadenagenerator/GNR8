@@ -119,3 +119,20 @@ test('rejects a changed base file before creating source commit', async () => {
   }), /base_conflict/);
   assert.equal(f.commits.size, 1);
 });
+
+test('classifies a rejected artifact blob without exposing GitHub response data', async () => {
+  const f = fixture();
+  const transport = async (url, options) => {
+    if (new URL(url).pathname.endsWith('/git/blobs'))
+      return { ok: false, status: 422, headers: { get: () => null },
+        json: async () => ({ message: 'Content is too large',
+          errors: [{ code: 'too_big', secret: 'never-log-this' }] }) };
+    return f.transport(url, options);
+  };
+  await assert.rejects(prepareNativeStudioGitDataArtifact({ site,
+    store: f.store, sourceId, sourceCommit: baseCommit, workerId,
+    credential, transport, delay: async () => {}, files: [
+      { path: 'dist/image.bin', body: Buffer.from([0xff]) },
+      { path: 'studio/dist/app.js', body: Buffer.from('app()') },
+    ] }), error => error.message === 'native_studio_git_data_blob_422_oversize_bytes_1');
+});
