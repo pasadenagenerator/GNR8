@@ -63,18 +63,23 @@ export async function issueConfiguredNativeStudioGitHubToken(
   try { value = await response.json(); }
   catch { throw Error('native_studio_github_token_invalid'); }
   if (!object(value) || typeof value.token !== 'string' ||
-      !isGitHubInstallationToken(value.token) ||
-      typeof value.expires_at !== 'string' ||
-      !Array.isArray(value.repositories) || value.repositories.length !== 1 ||
-      !object(value.repositories[0]) ||
-      value.repositories[0].id !== Number(site.repositoryId) ||
-      !object(value.permissions) || value.permissions.contents !== contentsPermission ||
-      Object.entries(value.permissions).some(([name, permission]) =>
-        name !== 'contents' && !(name === 'metadata' && permission === 'read')) ||
+      !isGitHubInstallationToken(value.token))
+    throw Error('native_studio_github_token_invalid');
+  if (typeof value.expires_at !== 'string' ||
       !Number.isFinite(Date.parse(value.expires_at)) ||
       Date.parse(value.expires_at) <= now ||
-      Date.parse(value.expires_at) > now + 60 * 60 * 1000)
-    throw Error('native_studio_github_token_invalid');
+      // `now` precedes the site read and GitHub request. The expiry is based
+      // on GitHub's later creation time, so allow bounded request latency.
+      Date.parse(value.expires_at) > now + 62 * 60 * 1000)
+    throw Error('native_studio_github_token_expiry_invalid');
+  if (!Array.isArray(value.repositories) || value.repositories.length !== 1 ||
+      !object(value.repositories[0]) ||
+      value.repositories[0].id !== Number(site.repositoryId))
+    throw Error('native_studio_github_token_repository_invalid');
+  if (!object(value.permissions) || value.permissions.contents !== contentsPermission ||
+      Object.entries(value.permissions).some(([name, permission]) =>
+        name !== 'contents' && !(name === 'metadata' && permission === 'read')))
+    throw Error('native_studio_github_token_permissions_invalid');
   const current = await readSite(scope, client, env);
   if (JSON.stringify(current) !== JSON.stringify(site))
     throw Error('native_studio_github_token_target_changed');

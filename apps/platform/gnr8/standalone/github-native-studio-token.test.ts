@@ -62,17 +62,27 @@ test('rejects broad response scopes and changed site binding', async () => {
   const f = fixture();
   f.result.repositories = [{ id: 42 }, { id: 43 }];
   await assert.rejects(issueConfiguredNativeStudioGitHubToken(scope, client,
-    env, f.transport, reader, now), /token_invalid/);
+    env, f.transport, reader, now), /token_repository_invalid/);
   f.result.repositories = [{ id: 42 }];
   f.result.permissions = { contents: 'write', administration: 'write' };
   await assert.rejects(issueConfiguredNativeStudioGitHubToken(scope, client,
-    env, f.transport, reader, now), /token_invalid/);
+    env, f.transport, reader, now), /token_permissions_invalid/);
   f.result.permissions = { contents: 'write', metadata: 'read' };
   let reads = 0;
   const changedReader = (async () => (++reads === 1 ? site :
     { ...site, repositoryId: '43' })) as typeof configuredNativeStudioBootstrapSite;
   await assert.rejects(issueConfiguredNativeStudioGitHubToken(scope, client,
     env, f.transport, changedReader, now), /target_changed/);
+});
+
+test('accepts a token created shortly after the request starts', async () => {
+  const f = fixture();
+  f.result.expires_at = new Date(now + 60 * 60 * 1000 + 30_000).toISOString();
+  assert.equal((await issueConfiguredNativeStudioGitHubToken(scope, client,
+    env, f.transport, reader, now)).repositoryId, '42');
+  f.result.expires_at = new Date(now + 63 * 60 * 1000).toISOString();
+  await assert.rejects(issueConfiguredNativeStudioGitHubToken(scope, client,
+    env, f.transport, reader, now), /token_expiry_invalid/);
 });
 
 test('fails before provider call when central key is absent', async () => {
