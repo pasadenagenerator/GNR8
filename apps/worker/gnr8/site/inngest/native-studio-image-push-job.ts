@@ -7,8 +7,8 @@ import { imageNextEventId, imageRequest, verifyBaseEvidence,
 
 export const NATIVE_STUDIO_IMAGE_PUSH_JOB_ID = 'native-studio-image-push-job';
 export const NATIVE_STUDIO_IMAGE_PUSH_EVENT = 'gnr8/native-studio.image-push.requested';
-const MAX_ADVANCES = 50;
-const POLL_INTERVAL = '2m';
+const MAX_ADVANCES = 160;
+const POLL_INTERVAL = '15s';
 type Progress = { state: 'running' | 'complete' | 'pending-review';
   prebuilt?: any; cleanupState?: 'complete' | 'pending-review' };
 

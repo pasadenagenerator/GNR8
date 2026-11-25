@@ -29,6 +29,7 @@ function fixture() {
   let configExists = false;
   let failLoadVerifiedClaimOnce = false;
   let failDocker = false;
+  let loseExtensionResponse = false;
   const sandboxName = `gnr8-push-${driveName}`;
   const policy = { allow: ['api.cloudflare.com', 'registry.cloudflare.com'] };
   const store = { read: async (key: string) => records.get(key) ?? null,
@@ -49,6 +50,15 @@ function fixture() {
     mounts: { '/gnr8-image': { drive: driveName, mode: 'snapshot' } },
     networkPolicy: policy,
     currentSession: () => ({ sessionId: 'sess_123' }),
+    extendTimeout: async (duration: number) => {
+      events.push('extend-receiver');
+      sandbox.timeout += duration;
+      sandbox.expiresAt = new Date(sandbox.expiresAt.getTime() + duration);
+      if (loseExtensionResponse) {
+        loseExtensionResponse = false;
+        throw Error('extension response lost');
+      }
+    },
     runCommand: async (command: any) => {
       events.push(`command:${command.args[0]}`);
       if (command.args[0] === 'image' &&
@@ -123,7 +133,8 @@ function fixture() {
     setDockerFails: () => { failDocker = true; },
     clearDockerFails: () => { failDocker = false; },
     setLoadVerifiedClaimFailure: () => {
-      failLoadVerifiedClaimOnce = true; } };
+      failLoadVerifiedClaimOnce = true; },
+    setExtensionResponseLoss: () => { loseExtensionResponse = true; } };
 }
 
 test('receiver verifies archive before detached load and token-bearing push', async () => {
@@ -171,6 +182,31 @@ test('remaining Sandbox time gates the next long command', async () => {
   f.sandbox.expiresAt = new Date(Date.now() + 5 * 60_000);
   await assert.rejects(advance(), /time_insufficient/);
   assert.equal(f.events.includes('start:load'), false);
+});
+
+test('aging receiver extends once before the token-bearing push', async () => {
+  const f = fixture();
+  const advance = () => advanceNativeStudioDetachedImagePush(
+    f.input, f.sdk, f.steps);
+  for (let i = 0; i < 4; i++) await advance();
+  f.sandbox.expiresAt = new Date(Date.now() + 16 * 60_000);
+  assert.deepEqual(await advance(), { state: 'running' });
+  assert.equal(f.events.filter(value => value === 'extend-receiver').length, 1);
+  assert.equal(f.events.includes('start:push'), true);
+  assert.equal(f.records.has('native-studio/image-push-receiver-extension-done-v1.json'), true);
+});
+
+test('lost extension response reconciles without extending twice', async () => {
+  const f = fixture();
+  const advance = () => advanceNativeStudioDetachedImagePush(
+    f.input, f.sdk, f.steps);
+  for (let i = 0; i < 4; i++) await advance();
+  f.sandbox.expiresAt = new Date(Date.now() + 16 * 60_000);
+  f.setExtensionResponseLoss();
+  await assert.rejects(advance(), /extension response lost/);
+  assert.deepEqual(await advance(), { state: 'running' });
+  assert.equal(f.events.filter(value => value === 'extend-receiver').length, 1);
+  assert.equal(f.events.filter(value => value === 'start:push').length, 1);
 });
 
 test('ambiguous cleanup preserves the prebuilt receipt without repeating side effects', async () => {

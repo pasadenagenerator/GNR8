@@ -18,6 +18,9 @@ const DOCKER_HOST = 'unix:///var/run/docker.sock';
 const RECEIVER_INTENT = 'native-studio/image-push-receiver-intent-v1.json';
 const RECEIVER_STARTED = 'native-studio/image-push-receiver-started-v1.json';
 const RECEIVER_VERIFIED = 'native-studio/image-push-receiver-verified-v1.json';
+const RECEIVER_EXTENSION_INTENT = 'native-studio/image-push-receiver-extension-intent-v1.json';
+const RECEIVER_EXTENSION_DONE = 'native-studio/image-push-receiver-extension-done-v1.json';
+const RECEIVER_EXTENSION_MS = 30 * 60_000;
 const CONFIG_INTENT = 'native-studio/image-push-config-intent-v1.json';
 const LOAD_VERIFIED = 'native-studio/image-load-verified-v1.json';
 const CLEANUP_INTENT = 'native-studio/image-push-cleanup-intent-v1.json';
@@ -99,7 +102,7 @@ function attestSandbox(sandbox: Sandbox, input: Input, started: Started) {
       sandbox.region !== 'iad1' || sandbox.persistent !== false ||
       sandbox.sourceSnapshotId !== input.pushSnapshotId ||
       typeof sandbox.timeout !== 'number' || sandbox.timeout <= 0 ||
-      sandbox.timeout > input.sandboxTimeoutMs ||
+      sandbox.timeout > input.sandboxTimeoutMs + RECEIVER_EXTENSION_MS ||
       mount?.drive !== started.intent.driveName ||
       mount.mode !== 'snapshot' ||
       !same(sandbox.networkPolicy, input.pushNetworkPolicy))
@@ -113,6 +116,39 @@ function timeFor(sandbox: Sandbox, commandMs: number) {
       !Number.isFinite(remainingMs) ||
       remainingMs < commandMs + 2 * 60_000)
     throw Error('native_studio_detached_image_push_time_insufficient');
+}
+
+async function timeForPush(input: Input, sandbox: Sandbox, intent: Intent,
+  sessionId: string) {
+  const expiresAt = sandbox.expiresAt?.getTime();
+  const remainingMs = typeof expiresAt === 'number' ?
+    expiresAt - Date.now() : NaN;
+  const existing = await input.store.read(RECEIVER_EXTENSION_INTENT) as
+    { intent: Intent; sessionId: string; expiresAt: string;
+      durationMs: number } | null;
+  if (existing && (!same(existing.intent, intent) ||
+      existing.sessionId !== sessionId ||
+      existing.durationMs !== RECEIVER_EXTENSION_MS ||
+      !Number.isFinite(Date.parse(existing.expiresAt))))
+    throw Error('native_studio_detached_image_push_pending_review');
+  if (!existing && Number.isFinite(remainingMs) &&
+      remainingMs >= 22 * 60_000) return;
+  const extension = existing ?? { intent, sessionId,
+    expiresAt: sandbox.expiresAt?.toISOString() ?? '',
+    durationMs: RECEIVER_EXTENSION_MS };
+  if (!Number.isFinite(Date.parse(extension.expiresAt)))
+    throw Error('native_studio_detached_image_push_time_insufficient');
+  if (!existing) {
+    await claimExact(input, RECEIVER_EXTENSION_INTENT, extension);
+    await sandbox.extendTimeout(RECEIVER_EXTENSION_MS);
+  }
+  const extended = sandbox.expiresAt?.getTime();
+  if (!Number.isFinite(extended) ||
+      extended! < Date.parse(extension.expiresAt) + RECEIVER_EXTENSION_MS - 60_000)
+    throw Error('native_studio_detached_image_push_pending_review');
+  if (!await readExact(input, RECEIVER_EXTENSION_DONE, extension))
+    await claimExact(input, RECEIVER_EXTENSION_DONE, extension);
+  timeFor(sandbox, 20 * 60_000);
 }
 
 function exactPrebuilt(input: Input, value: unknown): value is Prebuilt {
@@ -364,7 +400,7 @@ export async function advanceNativeStudioDetachedImagePush(input: Input,
     archiveSha256: transfer.receipt.archive.sha256 };
   if (!pushIntent) {
     if (await input.store.read(ATTEMPT)) return { state: 'pending-review' };
-    timeFor(receiver, 20 * 60_000);
+    await timeForPush(input, receiver, intent, started.sessionId);
     const credential = await input.loadCredential();
     if (!TOKEN.test(credential))
       throw Error('native_studio_detached_image_push_credential_unavailable');
