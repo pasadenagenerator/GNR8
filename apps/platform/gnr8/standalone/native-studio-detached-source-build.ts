@@ -43,6 +43,10 @@ export type NativeStudioDetachedSourceBuildResult =
   | { state: 'complete'; artifactDir: string; files: Output[]; sourceId: string };
 type Sdk = Pick<typeof Sandbox, 'create' | 'get'>;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const pending = (reason: string) => {
+  console.warn(`native_studio_detached_source_pending_review:${reason}`);
+  return { state: 'pending-review' as const };
+};
 const hash = (value: Buffer | string) =>
   createHash('sha256').update(value).digest('hex');
 
@@ -216,11 +220,11 @@ async function poll(input: NativeStudioDetachedSourceBuildInput,
   if (!same(intent, { ...session, phase,
     commandSha256: hash(JSON.stringify(command(phase))) }) ||
       !started || !same(started.intent, intent) || !ID.test(started.cmdId))
-    return 'pending-review';
+    return pending('command_receipt').state;
   const result = await sandbox.currentSession().getCommand(started.cmdId);
-  if (!attested(sandbox, session)) return 'pending-review';
+  if (!attested(sandbox, session)) return pending('command_attestation').state;
   if (result.exitCode === null) return 'running';
-  return result.exitCode === 0 ? 'succeeded' : 'pending-review';
+  return result.exitCode === 0 ? 'succeeded' : pending('command_exit').state;
 }
 
 async function extract(input: NativeStudioDetachedSourceBuildInput,
@@ -269,24 +273,24 @@ export async function advanceNativeStudioDetachedSourceBuild(
       expected) || !ID.test(completed.session.sessionId) ||
       !SHA.test(completed.manifestSha256) ||
       !Array.isArray(completed.files))
-      return { state: 'pending-review' };
+      return pending('completed_receipt');
     const sandbox = await sdk.get({ name: expected.sandboxName,
       resume: true });
     if (sandbox.name !== expected.sandboxName ||
         sandbox.status !== 'running' || sandbox.persistent !== true ||
         sandbox.region !== 'iad1' || sandbox.timeout !== TIMEOUT ||
-        !same(sandbox.networkPolicy, networkPolicy()))
-      return { state: 'pending-review' };
+        !attestedNetworkPolicy(sandbox.networkPolicy))
+      return pending('completed_sandbox');
     return extract(input, completed.session, sandbox, completed);
   }
   const prior = await input.store.read(ATTEMPT);
   if (prior && !same(prior, expected))
-    return { state: 'pending-review' };
+    return pending('attempt_receipt');
   const initialize = async (sandbox: Sandbox) => {
     const sessionId = sandbox.currentSession().sessionId;
     const session: Session = { ...expected, sessionId };
     if (!ID.test(sessionId) || !attested(sandbox, session))
-      return { state: 'pending-review' as const };
+      return pending('initial_attestation');
     const version = await sandbox.runCommand({ cmd: 'node',
       args: ['--version'], timeoutMs: 30_000 });
     if (version.exitCode !== 0 || (await version.stdout()).trim() !== 'v26.13.0')
@@ -321,21 +325,21 @@ export async function advanceNativeStudioDetachedSourceBuild(
     // Reclaim only the exact named, empty Sandbox; never create another one.
     let sandbox: Sandbox;
     try { sandbox = await sdk.get({ name: expected.sandboxName, resume: false }); }
-    catch { return { state: 'pending-review' }; }
+    catch { return pending('sandbox_lookup'); }
     return initialize(sandbox);
   }
   if (!same({ siteId: session.siteId,
     sourceId: session.sourceId, snapshotId: session.snapshotId,
     inputSha256: session.inputSha256, sandboxName: session.sandboxName },
   expected) || !ID.test(session.sessionId))
-    return { state: 'pending-review' };
+    return pending('session_receipt');
   const sandbox = await sdk.get({ name: session.sandboxName, resume: false });
-  if (!attested(sandbox, session)) return { state: 'pending-review' };
+  if (!attested(sandbox, session)) return pending('session_attestation');
   for (let index = 0; index < phases.length; index++) {
     const phase = phases[index];
     const key = keys(phase);
     if (!await input.store.read(key.intent)) {
-      if (index === 0) return { state: 'pending-review' };
+      if (index === 0) return pending('first_command_intent');
       await verifySource(sandbox, input.files);
       requireTime(sandbox, (phases.length - index) * 11 * 60_000);
       await start(input, session, phase, sandbox);
