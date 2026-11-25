@@ -45,7 +45,8 @@ test('observes one exact self-hosted Studio route without policy or login claims
 
 test('dual-host readback requires exactly the editor and whole preview destinations', async () => {
   const dual = { ...app, destinations: [app.destinations[0],
-    { type: 'public', uri: 'preview.site.app.pasadenagenerator.com' }] };
+    { type: 'public', uri: 'preview.site.app.pasadenagenerator.com' }],
+    self_hosted_domains: [app.destinations[0].uri, 'preview.site.app.pasadenagenerator.com'] };
   assert.deepEqual(await inspectCloudflareStudioAccessApp(scope, site, appId,
     credential, fixture(dual).transport, 'studio-and-preview'), {
     state: 'observed-access-app', scope, siteId: scope.siteId,
@@ -57,6 +58,7 @@ test('dual-host readback requires exactly the editor and whole preview destinati
     app,
     { ...dual, destinations: [dual.destinations[0],
       { type: 'public', uri: 'preview.site.app.pasadenagenerator.com/studio' }] },
+    { ...dual, self_hosted_domains: [app.destinations[0].uri, 'site.app.pasadenagenerator.com'] },
     { ...dual, destinations: [...dual.destinations,
       { type: 'public', uri: 'preview.site.app.pasadenagenerator.com/other' }] },
     { ...dual, destinations: [dual.destinations[0],

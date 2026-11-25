@@ -9,7 +9,8 @@ const current = { id: currentId, type: 'self_hosted', domain: `${host}/studio`,
   destinations: [{ type: 'public', uri: `${host}/studio` }] };
 const previewHost = `preview.${host}`;
 const dual = { ...current, destinations: [...current.destinations,
-  { type: 'public', uri: previewHost }] };
+  { type: 'public', uri: previewHost }],
+  self_hosted_domains: [`${host}/studio`, previewHost] };
 
 function inventory(apps: unknown[]) {
   return { success: true, result: apps, result_info: { page: 1,
@@ -49,6 +50,9 @@ test('dual-host inventory rejects overrides on either protected domain', () => {
   assert.throws(() => inspectNativeStudioAccessApplicationInventory(
     inventory([dual, { ...dual, id: foreignId }]), currentId, host, previewHost),
   /native_studio_access_inventory_unverified/);
+  assert.throws(() => inspectNativeStudioAccessApplicationInventory(
+    inventory([{ ...dual, self_hosted_domains: [`${host}/studio`, host] }]),
+    currentId, host, previewHost), /native_studio_access_inventory_unverified/);
 });
 
 test('rejects broad, overriding and wildcard routes on the editor host', () => {

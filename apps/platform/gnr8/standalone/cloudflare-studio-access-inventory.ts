@@ -18,7 +18,7 @@ function routeFromDomain(value: unknown): Route {
   const host = (slash < 0 ? value : value.slice(0, slash)).toLowerCase();
   const path = slash < 0 ? '' : value.slice(slash);
   if (!HOST.test(host) || (path && !/^\/[A-Za-z0-9_./*-]*$/.test(path))) fail();
-  return { host, path };
+  return { host, path: path === '/' ? '' : path };
 }
 
 function routeFromUri(value: unknown): Route {
@@ -26,19 +26,27 @@ function routeFromUri(value: unknown): Route {
 }
 
 function applicationRoutes(app: Record<string, unknown>): Route[] {
-  if (app.self_hosted_domains !== undefined && app.self_hosted_domains !== null &&
-      (!Array.isArray(app.self_hosted_domains) || app.self_hosted_domains.length)) fail();
   const routes: Route[] = [];
   if (app.domain !== undefined) routes.push(routeFromDomain(app.domain));
+  let legacy: Route[] | null = null;
+  if (app.self_hosted_domains !== undefined && app.self_hosted_domains !== null) {
+    if (!Array.isArray(app.self_hosted_domains)) fail();
+    legacy = app.self_hosted_domains.map(routeFromDomain);
+  }
+  const destinations: Route[] = [];
   if (app.destinations !== undefined) {
     if (!Array.isArray(app.destinations) || !app.destinations.length) fail();
     for (const item of app.destinations) {
       if (!object(item) || (item.type !== undefined && item.type !== 'public') ||
           (item.overrides !== undefined &&
             (!Array.isArray(item.overrides) || item.overrides.length))) fail();
-      routes.push(routeFromUri(item.uri));
+      destinations.push(routeFromUri(item.uri));
     }
   }
+  if (legacy?.length && destinations.length &&
+      JSON.stringify(legacy.map(route => JSON.stringify(route)).sort()) !==
+      JSON.stringify(destinations.map(route => JSON.stringify(route)).sort())) fail();
+  routes.push(...(destinations.length ? destinations : legacy ?? []));
   if (!routes.length) fail();
   return routes;
 }

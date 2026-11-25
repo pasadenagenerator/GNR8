@@ -76,12 +76,16 @@ export async function inspectCloudflareStudioAccessApp(
       (destination.type === undefined || destination.type === 'public') &&
       (destination.overrides === undefined ||
         Array.isArray(destination.overrides) && destination.overrides.length === 0)) &&
-    destinations.map((destination: Record<string, unknown>) => destination.uri).sort()
+    destinations.map((destination: Record<string, unknown>) => destination.uri.replace(/\/$/, '')).sort()
       .join('\n') === [...expectedUris].sort().join('\n');
+  const legacy = app.self_hosted_domains;
+  const exactLegacy = legacy === undefined || legacy === null ||
+    Array.isArray(legacy) && legacy.every((uri: unknown) => typeof uri === 'string') &&
+    legacy.map((uri: string) => uri.replace(/\/$/, '')).sort().join('\n') ===
+    [...expectedUris].sort().join('\n');
   if (app.id !== appId || app.type !== 'self_hosted' ||
       app.domain !== path.domain || !AUD.test(String(app.aud ?? '')) ||
-      (app.self_hosted_domains !== undefined && app.self_hosted_domains !== null &&
-        (!Array.isArray(app.self_hosted_domains) || app.self_hosted_domains.length !== 0)) ||
+      !exactLegacy ||
       (expectedProtection === 'studio-and-preview' && !exactDestinations) ||
       (expectedProtection === 'studio-only' && destinations !== undefined &&
         !exactDestinations) ||
