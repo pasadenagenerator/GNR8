@@ -224,8 +224,19 @@ async function poll(input: NativeStudioDetachedSourceBuildInput,
     return pending('command_receipt').state;
   const result = await sandbox.currentSession().getCommand(started.cmdId);
   if (!attested(sandbox, session)) return pending('command_attestation').state;
-  if (result.exitCode === null) return 'running';
-  return result.exitCode === 0 ? 'succeeded' : pending('command_exit').state;
+  let exitCode = result.exitCode;
+  if (exitCode === null) {
+    // The SDK can return a detached Command without its final exit code even
+    // after npm has exited. wait() resolves the authoritative finished state.
+    const signal = AbortSignal.timeout(5_000);
+    try { exitCode = (await result.wait({ signal })).exitCode; }
+    catch (error) {
+      if (signal.aborted) return 'running';
+      throw error;
+    }
+  }
+  if (exitCode === null) return 'running';
+  return exitCode === 0 ? 'succeeded' : pending('command_exit').state;
 }
 
 async function extract(input: NativeStudioDetachedSourceBuildInput,

@@ -27,7 +27,7 @@ function fixture() {
     Buffer.from(file.body)]));
   const served = new Map(output);
   let running = true, sessionId = 'sess_1', next = 0, failStart = false;
-  let interruptAfterSource = false;
+  let interruptAfterSource = false, sdkNeedsWait = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
       if (records.has(key)) return false;
@@ -44,7 +44,10 @@ function fixture() {
       exits.set(cmdId, null);
       return { cmdId };
     },
-    getCommand: async (cmdId: string) => ({ exitCode: exits.get(cmdId) ?? null }),
+    getCommand: async (cmdId: string) => ({
+      exitCode: sdkNeedsWait ? null : exits.get(cmdId) ?? null,
+      wait: async () => ({ exitCode: exits.get(cmdId) ?? null }),
+    }),
   });
   const sandbox = { name: `gnr8-source-build-${hash(Buffer.from(`v3:${source.siteId}:${source.sourceId}`)).slice(0,32)}`,
     get status() { return running ? 'running' : 'stopped'; },
@@ -80,6 +83,7 @@ function fixture() {
     setRunning: (value: boolean) => { running = value; },
     failStart: () => { failStart = true; },
     interruptAfterSource: () => { interruptAfterSource = true; },
+    requireSdkWait: () => { sdkNeedsWait = true; },
     changeOutput: () => { served.set('dist/index.html', Buffer.from('changed')); },
     changeSource: () => { sourceFiles.set('package.json', Buffer.from('changed')); } };
 }
@@ -165,6 +169,15 @@ test('session claimed before the first command can start once after recovery', a
   assert.deepEqual(await f.advance(), { state: 'running' });
   assert.deepEqual(f.starts, ['npm:ci']);
   assert.equal(f.attempts.length, 1);
+});
+
+test('uses SDK wait to recognize a detached command that already finished', async () => {
+  const f = fixture();
+  await f.advance();
+  f.exits.set('cmd_1', 0);
+  f.requireSdkWait();
+  assert.deepEqual(await f.advance(), { state: 'running' });
+  assert.deepEqual(f.starts, ['npm:ci', 'npm:ci']);
 });
 
 test('changed source after a completed command stops the next stage', async () => {
