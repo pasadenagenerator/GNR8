@@ -6,6 +6,7 @@ import type { NativeStudioImageDriveAttempt } from './native-studio-image-drive-
 const RECOVERY = 'native-studio/image-recovery-v1.json';
 const NETWORK_RECOVERY = 'native-studio/image-recovery-v2.json';
 const UNRESTRICTED_RECOVERY = 'native-studio/image-recovery-v3.json';
+const LAYOUT_RECOVERY = 'native-studio/image-recovery-v4.json';
 const OLD_ATTEMPT = 'native-studio/image-drive-attempt-v2.json';
 const OLD_SESSION = 'native-studio/image-build-session-v1.json';
 const OLD_STARTED = 'native-studio/image-build-command-started-v1.json';
@@ -41,18 +42,23 @@ type UnrestrictedRecovery = Identity & {
   oldAttempt: NativeStudioImageDriveAttempt; oldSandboxName: string;
   oldSessionId: string; oldCommandId: string;
   buildNetworkPolicy: 'allow-all' };
+type LayoutRecovery = Identity & {
+  previousGeneration: 'v1' | 'v2' | 'v3';
+  oldAttempt: NativeStudioImageDriveAttempt; oldSandboxName: string;
+  oldSessionId: string; oldCommandId: string;
+  distLayout: 'studio-and-public-v1' };
 type Store = Pick<PublicationStore, 'read' | 'claim' | 'put' | 'getBytes' | 'putBytes'>;
 
-function mapped(key: string, generation: 'v1' | 'v2' | 'v3'): string {
+function mapped(key: string, generation: 'v1' | 'v2' | 'v3' | 'v4'): string {
   return key !== RECOVERY && key !== NETWORK_RECOVERY &&
-    key !== UNRESTRICTED_RECOVERY &&
+    key !== UNRESTRICTED_RECOVERY && key !== LAYOUT_RECOVERY &&
     (key.startsWith('native-studio/image-') ||
     key === 'native-studio/prebuilt-image-v1.json' ||
     key === 'native-studio/first-deploy-dry-run-v1.json')
     ? `native-studio/recovery-${generation}/${key.slice('native-studio/'.length)}` : key;
 }
 
-function isolated(store: Store, generation: 'v1' | 'v2' | 'v3'): Store {
+function isolated(store: Store, generation: 'v1' | 'v2' | 'v3' | 'v4'): Store {
   return { read: <T>(key: string) => store.read<T>(mapped(key, generation)),
     claim: (key, value) => store.claim(mapped(key, generation), value),
     put: <T>(key: string, value: T) => store.put<T>(mapped(key, generation), value),
@@ -265,8 +271,7 @@ export async function nativeStudioImageRecoveryStore<T extends Store>(
       }
     }
   }
-  if (!unrestricted) return previous as T;
-  if (unrestricted.sourceId !== identity.sourceId ||
+  if (unrestricted && (unrestricted.sourceId !== identity.sourceId ||
       unrestricted.commit !== identity.commit ||
       unrestricted.workerId !== identity.workerId ||
       !same(unrestricted.scope, identity.scope) ||
@@ -276,7 +281,81 @@ export async function nativeStudioImageRecoveryStore<T extends Store>(
       unrestricted.previousGeneration !== previousGeneration ||
       !same(unrestricted.oldAttempt, previousAttempt) ||
       unrestricted.buildNetworkPolicy !== 'allow-all' ||
-      (options.buildNetworkPolicy && options.buildNetworkPolicy !== 'allow-all'))
+      (options.buildNetworkPolicy && options.buildNetworkPolicy !== 'allow-all')))
     throw Error('native_studio_image_recovery_unverified');
-  return isolated(store, 'v3') as T;
+  const layoutPreviousGeneration = unrestricted ? 'v3' : previousGeneration;
+  const active = unrestricted ? isolated(store, 'v3') : previous;
+  const activeAttempt = await active.read<NativeStudioImageDriveAttempt>(OLD_ATTEMPT);
+  let layout = await store.read<LayoutRecovery>(LAYOUT_RECOVERY);
+  if (!layout && options.allowCreate && activeAttempt &&
+      activeAttempt.sourceId === identity.sourceId &&
+      activeAttempt.commit === identity.commit &&
+      activeAttempt.workerId === identity.workerId &&
+      same(activeAttempt.scope, identity.scope) &&
+      activeAttempt.siteId === identity.site.siteId &&
+      activeAttempt.accountId === identity.site.accountId &&
+      activeAttempt.buildSnapshotId === identity.buildSnapshotId) {
+    const [session, started, preflightStarted, transfer, receipt,
+      prebuilt, publicPreflight, save, proof, sourceVerified] = await Promise.all([
+      active.read<OldSession>(OLD_SESSION),
+      active.read<OldStarted>(OLD_STARTED),
+      active.read<OldStarted>('native-studio/image-preflight-command-started-v1.json'),
+      active.read(OLD_TRANSFER), active.read(OLD_RECEIPT),
+      active.read(OLD_PREBUILT), active.read(OLD_PUBLIC_PREFLIGHT),
+      active.read(OLD_SAVE), active.read(OLD_PROOF),
+      active.read(OLD_SOURCE_VERIFIED),
+    ]);
+    if (session && started && preflightStarted && !transfer && !receipt &&
+        !prebuilt && !publicPreflight && !save && !proof && !sourceVerified) {
+      const sandbox = await (options.sandbox ?? Sandbox).get({
+        name: session.sandboxName, resume: false });
+      if (sandbox.status === 'stopped' &&
+          sandbox.sourceSnapshotId === identity.buildSnapshotId &&
+          sandbox.currentSession().sessionId === session.sessionId &&
+          same(session.attempt, activeAttempt) &&
+          started.intent.sourceId === identity.sourceId &&
+          started.intent.commit === identity.commit &&
+          started.intent.workerId === identity.workerId &&
+          started.intent.siteId === identity.site.siteId &&
+          started.intent.driveName === activeAttempt.driveName &&
+          started.intent.sandboxName === session.sandboxName &&
+          started.intent.sessionId === session.sessionId &&
+          started.intent.phase === 'build' &&
+          preflightStarted.intent.sourceId === identity.sourceId &&
+          preflightStarted.intent.commit === identity.commit &&
+          preflightStarted.intent.workerId === identity.workerId &&
+          preflightStarted.intent.siteId === identity.site.siteId &&
+          preflightStarted.intent.driveName === activeAttempt.driveName &&
+          preflightStarted.intent.sandboxName === session.sandboxName &&
+          preflightStarted.intent.sessionId === session.sessionId &&
+          preflightStarted.intent.phase === 'preflight' &&
+          ID.test(preflightStarted.cmdId)) {
+        const candidate: LayoutRecovery = { ...identity,
+          site: { siteId: identity.site.siteId,
+            accountId: identity.site.accountId },
+          previousGeneration: layoutPreviousGeneration,
+          oldAttempt: activeAttempt, oldSandboxName: session.sandboxName,
+          oldSessionId: session.sessionId,
+          oldCommandId: preflightStarted.cmdId,
+          distLayout: 'studio-and-public-v1' };
+        await store.claim(LAYOUT_RECOVERY, candidate);
+        layout = await store.read<LayoutRecovery>(LAYOUT_RECOVERY);
+        if (!same(layout, candidate))
+          throw Error('native_studio_image_recovery_pending_review');
+      }
+    }
+  }
+  if (!layout) return active as T;
+  if (layout.sourceId !== identity.sourceId ||
+      layout.commit !== identity.commit ||
+      layout.workerId !== identity.workerId ||
+      !same(layout.scope, identity.scope) ||
+      !same(layout.site, { siteId: identity.site.siteId,
+        accountId: identity.site.accountId }) ||
+      layout.buildSnapshotId !== identity.buildSnapshotId ||
+      layout.previousGeneration !== layoutPreviousGeneration ||
+      !same(layout.oldAttempt, activeAttempt) ||
+      layout.distLayout !== 'studio-and-public-v1')
+    throw Error('native_studio_image_recovery_unverified');
+  return isolated(store, 'v4') as T;
 }

@@ -106,11 +106,12 @@ deps = defaults) {
       commit: prepared.commit, workerId: prepared.workerId });
     let progress;
     try {
-      const dist = await Promise.all(outputs.files.filter(file =>
-        file.path.startsWith('dist/')).map(async file => ({
-          path: file.path,
-          body: await readFile(join(outputs.artifactDir, file.path)),
-        })));
+      const dist = (await Promise.all(outputs.files.filter(file =>
+        file.path.startsWith('dist/')).map(async file => {
+          const body = await readFile(join(outputs.artifactDir, file.path));
+          return [{ path: file.path, body },
+            { path: `studio/${file.path}`, body }];
+        }))).flat();
       progress = await deps.advance({ scope: input.scope, site: prepared.site,
         sourceId: prepared.sourceId, commit: prepared.commit,
         workerId: prepared.workerId, publicWorkerId: publicWorkerId!,

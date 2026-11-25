@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { configuredNativeStudioImageBuild } from './native-studio-configured-image-build';
 
@@ -119,6 +122,24 @@ test('credential-free unrestricted image build is limited to Preview', async () 
     { ...env, VERCEL_ENV: 'preview',
       GNR8_NATIVE_STUDIO_IMAGE_BUILD_EGRESS_MODE: 'preview-unrestricted' },
     fetch, preview.deps), preview.progress);
+});
+
+test('one verified bundle is staged at both Studio and public Worker paths', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'gnr8-image-dist-'));
+  try {
+    await mkdir(join(temp, 'dist'));
+    await writeFile(join(temp, 'dist', 'worker.mjs'), 'verified bundle');
+    const f = fixture();
+    f.deps.restoreOutputs = async () => ({ artifactDir: temp,
+      files: [{ path: 'dist/worker.mjs' }], cleanup: async () => {} });
+    f.deps.advance = async (value: any) => {
+      assert.deepEqual(value.files.filter((file: { path: string }) =>
+        file.path.endsWith('dist/worker.mjs')).map((file: { path: string }) =>
+        file.path).sort(), ['dist/worker.mjs', 'studio/dist/worker.mjs']);
+      return f.progress;
+    };
+    await configuredNativeStudioImageBuild(input, env, fetch, f.deps);
+  } finally { await rm(temp, { recursive: true, force: true }); }
 });
 
 test('expired snapshot or mismatched reservation blocks source read', async () => {

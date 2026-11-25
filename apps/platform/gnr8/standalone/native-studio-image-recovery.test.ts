@@ -168,3 +168,46 @@ test('Preview can supersede a stopped restricted build without changing source',
   assert.equal(await (await nativeStudioImageRecoveryStore(f.store, identity))
     .read('native-studio/image-drive-attempt-v2.json'), null);
 });
+
+test('stopped failed Studio preflight restarts from the same source with both dist paths', async () => {
+  const f = fixture();
+  f.records.clear();
+  const attempt = { ...oldAttempt, buildSnapshotId: identity.buildSnapshotId };
+  const sessionId = 'sess_v3';
+  f.records.set('native-studio/recovery-v3/image-drive-attempt-v2.json', attempt);
+  f.records.set('native-studio/recovery-v3/image-build-session-v1.json',
+    { attempt, sandboxName, sessionId });
+  const intent = { sourceId: identity.sourceId, commit: identity.commit,
+    workerId: identity.workerId, siteId: scope.siteId, driveName,
+    sandboxName, sessionId };
+  f.records.set('native-studio/recovery-v3/image-build-command-started-v1.json',
+    { intent: { ...intent, phase: 'build' }, cmdId: 'cmd_build' });
+  f.records.set('native-studio/recovery-v3/image-preflight-command-started-v1.json',
+    { intent: { ...intent, phase: 'preflight' }, cmdId: 'cmd_preflight' });
+  f.records.set('native-studio/image-recovery-v3.json', { ...identity,
+    previousGeneration: 'v2', oldAttempt: attempt,
+    oldSandboxName: sandboxName, oldSessionId: sessionId,
+    oldCommandId: 'cmd_prior', buildNetworkPolicy: 'allow-all' });
+  f.records.set('native-studio/image-recovery-v2.json', { ...identity,
+    oldAttempt: attempt, oldSandboxName: sandboxName,
+    oldSessionId: sessionId, oldCommandId: 'cmd_prior',
+    buildNetworkPolicy: { allow: ['registry-1.docker.io'] } });
+  f.records.set('native-studio/recovery-v2/image-drive-attempt-v2.json', attempt);
+  f.records.set('native-studio/recovery-v1/image-drive-attempt-v2.json', attempt);
+  f.records.set('native-studio/image-recovery-v1.json', { ...identity,
+    oldAttempt, oldSandboxName: sandboxName,
+    oldSessionId: sessionId, oldCommandId: 'cmd_prior' });
+  f.records.set('native-studio/image-drive-attempt-v2.json', oldAttempt);
+  const sandbox = { get: async () => ({ name: sandboxName,
+    status: 'stopped', sourceSnapshotId: identity.buildSnapshotId,
+    currentSession: () => ({ sessionId }) }) };
+  const current = await nativeStudioImageRecoveryStore(f.store, identity,
+    { allowCreate: true, sandbox: sandbox as any,
+      buildNetworkPolicy: 'allow-all' });
+  assert.equal((await current.read('native-studio/image-drive-attempt-v2.json')), null);
+  assert.equal((f.records.get('native-studio/image-recovery-v4.json') as any)
+    ?.oldCommandId, 'cmd_preflight');
+  await current.claim('native-studio/image-drive-attempt-v2.json', attempt);
+  assert.deepEqual(await (await nativeStudioImageRecoveryStore(f.store, identity))
+    .read('native-studio/image-drive-attempt-v2.json'), attempt);
+});
