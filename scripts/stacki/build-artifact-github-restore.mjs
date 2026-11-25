@@ -9,6 +9,8 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { restoreStudioBuildArtifactDirectory } from './build-artifact-transfer.mjs';
+import { restoreNativeStudioBuildOutputBytes } from './build-output-bytes.mjs';
+import { isNativeStudioGitExcludedOutput } from './github-git-data.mjs';
 
 const exec = promisify(execFile);
 const SHA = /^[a-f0-9]{40,64}$/;
@@ -74,8 +76,12 @@ export async function restoreStudioBuildArtifactGit(input, deps = {}) {
       throw Error('native_studio_build_git_restore_commit_changed');
     const listed = (await run(['ls-tree', '-r', '-z', found])).toString('utf8')
       .split('\0').filter(Boolean);
-    const expected = new Map(receipt.files.map(file => [file.path, file]));
-    if (expected.size !== receipt.files.length || listed.length !== expected.size ||
+    const included = receipt.files.filter(file =>
+      !isNativeStudioGitExcludedOutput(file));
+    const omitted = receipt.files.filter(isNativeStudioGitExcludedOutput);
+    const expected = new Map(included.map(file => [file.path, file]));
+    if (expected.size + omitted.length !== receipt.files.length ||
+        listed.length !== expected.size ||
         listed.length > 20_000)
       throw Error('native_studio_build_git_restore_tree_invalid');
     await mkdir(artifactDir);
@@ -102,6 +108,21 @@ export async function restoreStudioBuildArtifactGit(input, deps = {}) {
       expected.delete(file.path);
     }
     if (expected.size) throw Error('native_studio_build_git_restore_tree_invalid');
+    if (omitted.length) {
+      const output = await restoreNativeStudioBuildOutputBytes({ store, scope,
+        site, sourceId, commit: sourceCommit, workerId });
+      try {
+        for (const file of omitted) {
+          const bytes = await readFile(join(output.artifactDir, file.path));
+          if (bytes.length !== file.bytes ||
+              createHash('sha256').update(bytes).digest('hex') !== file.sha256)
+            throw Error('native_studio_build_git_restore_blob_changed');
+          const destination = join(artifactDir, file.path);
+          await mkdir(dirname(destination), { recursive: true });
+          await writeFile(destination, bytes, { flag: 'wx', mode: 0o600 });
+        }
+      } finally { await output.cleanup(); }
+    }
     return await (deps.restore ?? restoreStudioBuildArtifactDirectory)({
       project, artifactDir, store, scope, site, sourceId,
       commit: sourceCommit, workerId });

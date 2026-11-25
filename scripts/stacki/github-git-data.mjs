@@ -15,6 +15,12 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const SOURCE_INTENT = 'native-studio/git-data-source-v1.json';
 const ARTIFACT_INTENT = 'native-studio/git-data-artifact-v1.json';
 
+// The Studio source map is retained in the verified byte handoff, but GitHub's
+// blob endpoint rejects the large generated map. It is restored from that
+// handoff after the artifact ref has been verified.
+export const isNativeStudioGitExcludedOutput = file =>
+  file?.path === 'studio/dist/studio.js.map';
+
 function validSite(site) {
   return site && REPOSITORY.test(site.repository) &&
     /^[1-9][0-9]*$/.test(site.repositoryId) &&
@@ -123,7 +129,8 @@ async function treeEntries(api, tree) {
   }
   return entries;
 }
-async function treeForFiles(api, baseTree, files, baseEntries = new Map()) {
+async function treeForFiles(api, baseTree, files, baseEntries = new Map(),
+  knownBlobs = new Set()) {
   let current = baseTree;
   let batch = [], weight = 0;
   const submit = async () => {
@@ -144,19 +151,25 @@ async function treeForFiles(api, baseTree, files, baseEntries = new Map()) {
         Buffer.byteLength(content) <= 256 * 1024) {
       entry = { path: file.path, mode, type: 'blob', content };
     } else {
-      let blob;
-      try {
-        blob = await api('POST', '/git/blobs', {
-          content: file.body.toString('base64'), encoding: 'base64' });
-      } catch (error) {
-        if (error instanceof Error &&
-            error.message.startsWith('native_studio_git_data_blob_422'))
-          throw Error(`${error.message}_bytes_${file.body.length}`);
-        throw error;
+      const sha = gitBlob(file.body);
+      if (knownBlobs.has(sha)) {
+        entry = { path: file.path, mode, type: 'blob', sha };
+      } else {
+        let blob;
+        try {
+          blob = await api('POST', '/git/blobs', {
+            content: file.body.toString('base64'), encoding: 'base64' });
+        } catch (error) {
+          if (error instanceof Error &&
+              error.message.startsWith('native_studio_git_data_blob_422'))
+            throw Error(`${error.message}_bytes_${file.body.length}`);
+          throw error;
+        }
+        if (blob.sha !== sha)
+          throw Error('native_studio_git_data_blob_unverified');
+        knownBlobs.add(sha);
+        entry = { path: file.path, mode, type: 'blob', sha };
       }
-      if (blob.sha !== gitBlob(file.body))
-        throw Error('native_studio_git_data_blob_unverified');
-      entry = { path: file.path, mode, type: 'blob', sha: blob.sha };
     }
     const size = Buffer.byteLength(JSON.stringify(entry));
     if (batch.length >= 80 || weight + size > 750_000) await submit();
@@ -254,14 +267,16 @@ export async function prepareNativeStudioGitDataArtifact(input) {
   if (!SOURCE.test(sourceId) || !SHA.test(sourceCommit) ||
       !/^[a-f0-9]{32}$/.test(workerId))
     throw Error('native_studio_git_data_input_invalid');
-  const files = exactFiles(input.files);
+  const files = exactFiles(input.files).filter(file =>
+    !isNativeStudioGitExcludedOutput(file));
   if (!files.some(file => file.path.startsWith('dist/')) ||
       !files.some(file => file.path.startsWith('studio/dist/')) ||
       files.some(file => !file.path.startsWith('dist/') &&
         !file.path.startsWith('studio/dist/')))
     throw Error('native_studio_git_data_files_invalid');
   const api = client(site, credential, transport, input.delay);
-  await commitTree(api, sourceCommit);
+  const source = await commitTree(api, sourceCommit);
+  const sourceEntries = await treeEntries(api, source.tree.sha);
   const prior = await store.read(ARTIFACT_INTENT);
   if (prior) {
     if (prior.sourceId !== sourceId || prior.sourceCommit !== sourceCommit ||
@@ -275,7 +290,8 @@ export async function prepareNativeStudioGitDataArtifact(input) {
     await verifyFiles(api, prior.tree, files, new Map(), true);
     return prior;
   }
-  const tree = await treeForFiles(api, null, files);
+  const tree = await treeForFiles(api, null, files, new Map(),
+    new Set([...sourceEntries.values()].map(entry => entry.sha)));
   await verifyFiles(api, tree, files, new Map(), true);
   const committed = await api('POST', '/git/commits', {
     message: `Native Studio build ${sourceId}`, tree,

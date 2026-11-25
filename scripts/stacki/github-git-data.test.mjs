@@ -26,6 +26,7 @@ function fixture() {
     path: 'README.md', type: 'blob', mode: '100644',
     sha: blobSha(Buffer.from('base')) }]])]]);
   const refs = new Map();
+  let blobPosts = 0;
   let next = 1;
   const transport = async (url, options) => {
     const path = new URL(url).pathname.replace('/repos/example/site', '');
@@ -38,6 +39,7 @@ function fixture() {
       result = { sha: id, truncated: false,
         tree: [...(trees.get(id)?.values() ?? [])] };
     } else if (options.method === 'POST' && path === '/git/blobs') {
+      blobPosts++;
       const bytes = Buffer.from(body.content, 'base64');
       result = { sha: blobSha(bytes) }; status = 201;
     } else if (options.method === 'POST' && path === '/git/trees') {
@@ -67,7 +69,8 @@ function fixture() {
   const head = async current => ({ repositoryId: current.repositoryId,
     branch: current.branch, commit: refs.get(`refs/heads/${current.branch}`) ?? null,
     baseCommit });
-  return { store, transport, head, refs, commits, trees };
+  return { store, transport, head, refs, commits, trees,
+    blobPosts: () => blobPosts };
 }
 
 test('creates exact source and artifact child commits, then verified refs', async () => {
@@ -99,11 +102,14 @@ test('creates exact source and artifact child commits, then verified refs', asyn
     credential, transport: f.transport, delay, files: [
       { path: 'dist/index.html', body: Buffer.from('<html/>') },
       { path: 'studio/dist/app.js', body: Buffer.from('app()') },
+      { path: 'studio/dist/icon.bin', body: Buffer.from([0xff, 0xfe]) },
+      { path: 'studio/dist/studio.js.map', body: Buffer.from('{"version":3}') },
     ] });
+  assert.equal(f.blobPosts(), 1);
   assert.deepEqual(f.commits.get(artifact.commit).parents,
     [{ sha: source.commit }]);
   assert.deepEqual([...f.trees.get(artifact.tree).keys()].sort(),
-    ['dist/index.html', 'studio/dist/app.js']);
+    ['dist/index.html', 'studio/dist/app.js', 'studio/dist/icon.bin']);
   assert.deepEqual(await publishNativeStudioGitDataRef({
     site: { ...site, branch: artifact.branch }, commit: artifact.commit,
     credential, transport: f.transport, inspectHead: f.head,
