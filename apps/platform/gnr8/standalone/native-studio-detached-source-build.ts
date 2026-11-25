@@ -8,9 +8,13 @@ import { nativeStudioBuildManifestScript } from './native-studio-sandbox-build';
 
 const ROOT = '/vercel/sandbox/gnr8-native-build';
 const MANIFEST = '/vercel/sandbox/gnr8-native-build-manifest.json';
-const ATTEMPT = 'native-studio/source-build-attempt-v1.json';
-const SESSION = 'native-studio/source-build-session-v1.json';
-const COMPLETE = 'native-studio/source-build-complete-v1.json';
+// v1 could claim a session before the first command, then permanently strand
+// that session when its time budget ran out. A new operation generation reuses
+// the immutable prepared source without reusing that expired Sandbox.
+const GENERATION = 'v2';
+const ATTEMPT = `native-studio/source-build-attempt-${GENERATION}.json`;
+const SESSION = `native-studio/source-build-session-${GENERATION}.json`;
+const COMPLETE = `native-studio/source-build-complete-${GENERATION}.json`;
 const MAX_FILES = 20_000;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 512 * 1024 * 1024;
@@ -81,7 +85,7 @@ function describe(input: NativeStudioDetachedSourceBuildInput): Attempt {
   }
   return { siteId: input.siteId, sourceId: input.sourceId,
     snapshotId: input.snapshotId, inputSha256: fingerprint.digest('hex'),
-    sandboxName: `gnr8-source-build-${hash(`${input.siteId}:${input.sourceId}`).slice(0,32)}` };
+    sandboxName: `gnr8-source-build-${hash(`${GENERATION}:${input.siteId}:${input.sourceId}`).slice(0,32)}` };
 }
 
 function networkPolicy() {
@@ -192,8 +196,8 @@ function command(phase: Phase) {
 }
 
 function keys(phase: Phase) {
-  return { intent: `native-studio/source-build-${phase}-intent-v1.json`,
-    started: `native-studio/source-build-${phase}-started-v1.json` };
+  return { intent: `native-studio/source-build-${phase}-intent-${GENERATION}.json`,
+    started: `native-studio/source-build-${phase}-started-${GENERATION}.json` };
 }
 
 async function start(input: NativeStudioDetachedSourceBuildInput,
@@ -339,9 +343,9 @@ export async function advanceNativeStudioDetachedSourceBuild(
     const phase = phases[index];
     const key = keys(phase);
     if (!await input.store.read(key.intent)) {
-      if (index === 0) return pending('first_command_intent');
       await verifySource(sandbox, input.files);
-      requireTime(sandbox, (phases.length - index) * 11 * 60_000);
+      requireTime(sandbox, index === 0 ? 45 * 60_000 :
+        (phases.length - index) * 11 * 60_000);
       await start(input, session, phase, sandbox);
       return { state: 'running' };
     }

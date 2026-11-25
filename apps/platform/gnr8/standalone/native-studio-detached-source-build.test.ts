@@ -27,6 +27,7 @@ function fixture() {
     Buffer.from(file.body)]));
   const served = new Map(output);
   let running = true, sessionId = 'sess_1', next = 0, failStart = false;
+  let interruptAfterSource = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
       if (records.has(key)) return false;
@@ -45,7 +46,7 @@ function fixture() {
     },
     getCommand: async (cmdId: string) => ({ exitCode: exits.get(cmdId) ?? null }),
   });
-  const sandbox = { name: `gnr8-source-build-${hash(Buffer.from(`${source.siteId}:${source.sourceId}`)).slice(0,32)}`,
+  const sandbox = { name: `gnr8-source-build-${hash(Buffer.from(`v2:${source.siteId}:${source.sourceId}`)).slice(0,32)}`,
     get status() { return running ? 'running' : 'stopped'; },
     sourceSnapshotId: source.snapshotId, region: 'iad1', persistent: true,
     timeout: 60 * 60_000,
@@ -57,7 +58,10 @@ function fixture() {
     currentSession,
     runCommand: async (command: { args: string[] }) => ({ exitCode: 0,
       stdout: async () => command.args[0] === '--version' ? 'v26.13.0\n' : '' }),
-    writeFiles: async () => {},
+    writeFiles: async () => {
+      if (interruptAfterSource)
+        sandbox.expiresAt = new Date(Date.now() + 40 * 60_000);
+    },
     readFile: async ({ path }: { path: string }) => {
       const relative = path.replace('/vercel/sandbox/gnr8-native-build/', '');
       const body = path.endsWith('-manifest.json')
@@ -78,6 +82,7 @@ function fixture() {
   return { input, records, exits, starts, attempts, sandbox, advance,
     setRunning: (value: boolean) => { running = value; },
     failStart: () => { failStart = true; },
+    interruptAfterSource: () => { interruptAfterSource = true; },
     changeOutput: () => { served.set('dist/index.html', Buffer.from('changed')); },
     changeSource: () => { sourceFiles.set('package.json', Buffer.from('changed')); } };
 }
@@ -140,7 +145,7 @@ test('failed detached command cannot advance or claim completion', async () => {
   f.exits.set('cmd_1', 1);
   assert.deepEqual(await f.advance(), { state: 'pending-review' });
   assert.equal(f.starts.length, 1);
-  assert.equal(f.records.has('native-studio/source-build-complete-v1.json'), false);
+  assert.equal(f.records.has('native-studio/source-build-complete-v2.json'), false);
 });
 
 test('lost command start cannot duplicate Sandbox or npm invocation', async () => {
@@ -149,6 +154,18 @@ test('lost command start cannot duplicate Sandbox or npm invocation', async () =
   assert.deepEqual(await f.advance(), { state: 'pending-review' });
   assert.equal(f.attempts.length, 1);
   assert.equal(f.starts.length, 1);
+});
+
+test('session claimed before the first command can start once after recovery', async () => {
+  const f = fixture();
+  f.interruptAfterSource();
+  await assert.rejects(f.advance(), /time_insufficient/);
+  assert.equal(f.starts.length, 0);
+  assert.equal(f.records.has('native-studio/source-build-session-v2.json'), true);
+  f.sandbox.expiresAt = new Date(Date.now() + 60 * 60_000);
+  assert.deepEqual(await f.advance(), { state: 'running' });
+  assert.deepEqual(f.starts, ['npm:ci']);
+  assert.equal(f.attempts.length, 1);
 });
 
 test('changed source after a completed command stops the next stage', async () => {
