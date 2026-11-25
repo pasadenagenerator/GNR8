@@ -6,10 +6,10 @@ const host = 'site.app.pasadenagenerator.com';
 const currentId = '11111111-1111-4111-8111-111111111111';
 const foreignId = '22222222-2222-4222-8222-222222222222';
 const current = { id: currentId, type: 'self_hosted', domain: `${host}/studio`,
-  destinations: [{ type: 'public', uri: `https://${host}/studio` }] };
+  destinations: [{ type: 'public', uri: `${host}/studio` }] };
 const previewHost = `preview.${host}`;
 const dual = { ...current, destinations: [...current.destinations,
-  { type: 'public', uri: `https://${previewHost}/` }] };
+  { type: 'public', uri: previewHost }] };
 
 function inventory(apps: unknown[]) {
   return { success: true, result: apps, result_info: { page: 1,
@@ -39,7 +39,7 @@ test('dual-host inventory rejects overrides on either protected domain', () => {
     { domain: previewHost },
     { domain: `${previewHost}/studio` },
     { domain: `*.${host}/other` },
-    { destinations: [{ type: 'public', uri: `https://${previewHost}/api` }] },
+    { destinations: [{ type: 'public', uri: `${previewHost}/api` }] },
   ]) assert.throws(() => inspectNativeStudioAccessApplicationInventory(
     inventory([dual, { id: foreignId, type: 'self_hosted', ...foreign }]),
     currentId, host, previewHost), /native_studio_access_inventory_unverified/);
@@ -60,7 +60,7 @@ test('rejects broad, overriding and wildcard routes on the editor host', () => {
   }
   assert.throws(() => inspectNativeStudioAccessApplicationInventory(
     inventory([current, { id: foreignId, type: 'self_hosted',
-      destinations: [{ type: 'public', uri: `https://${host}/studio/admin` }] }]),
+      destinations: [{ type: 'public', uri: `${host}/studio/admin` }] }]),
     currentId, host), /native_studio_access_inventory_unverified/);
 });
 

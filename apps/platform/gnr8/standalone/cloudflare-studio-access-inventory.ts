@@ -22,13 +22,7 @@ function routeFromDomain(value: unknown): Route {
 }
 
 function routeFromUri(value: unknown): Route {
-  if (typeof value !== 'string') fail();
-  let uri: URL;
-  try { uri = new URL(value); } catch { fail(); }
-  if (uri.protocol !== 'https:' || uri.port || uri.username || uri.password ||
-      uri.search || uri.hash || uri.origin + uri.pathname !== value ||
-      !HOST.test(uri.hostname) || /%/.test(uri.pathname)) fail();
-  return { host: uri.hostname.toLowerCase(), path: uri.pathname === '/' ? '' : uri.pathname };
+  return routeFromDomain(value);
 }
 
 function applicationRoutes(app: Record<string, unknown>): Route[] {

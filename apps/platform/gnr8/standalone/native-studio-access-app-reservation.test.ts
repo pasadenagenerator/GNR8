@@ -20,8 +20,8 @@ const previewDomain = 'preview.site.app.pasadenagenerator.com';
 const previewOrigin = `https://${previewDomain}`;
 const name = `gnr8-${scope.siteId}-studio-access`;
 const app = { id: appId, name, type: 'self_hosted', domain,
-  destinations: [{ type: 'public', uri: `${target.studioOrigin}/studio` },
-    { type: 'public', uri: `${previewOrigin}/` }] };
+  destinations: [{ type: 'public', uri: domain },
+    { type: 'public', uri: previewDomain }] };
 const client = {} as SupabaseClient;
 
 function inventory(result: unknown[]) {
@@ -33,6 +33,7 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
   noCreate?: boolean; broadPolicy?: boolean } = {}) {
   const saved = new Map<string, unknown>();
   let created = options.created ?? false;
+  let canCreate = !options.noCreate;
   let posts = 0;
   let current = target;
   const store = { read: async (key: string) => saved.get(key) ?? null,
@@ -55,7 +56,7 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
       assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${accountId}/access/apps`);
       assert.deepEqual(JSON.parse(String(init.body)), { type: 'self_hosted', name, domain,
         destinations: app.destinations });
-      if (!options.noCreate) created = true;
+      if (canCreate) created = true;
       if (options.lostAfterCreate) throw Error('lost response');
       return Response.json({ success: true, result: app });
     }
@@ -68,6 +69,7 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
   }) as typeof fetch;
   const input = { scope, client, accountId, zoneId, credential, store: store as any };
   return { input, transport, deps, saved, posts: () => posts,
+    enableCreate: () => { canCreate = true; },
     setTarget: (value: typeof target) => { current = value; } };
 }
 
@@ -82,7 +84,7 @@ test('creates a default-deny app once and re-verifies its bound receipt', async 
   assert.equal(f.posts(), 1);
 });
 
-test('reconciles a lost create response without a second POST', async () => {
+test('reconciles a lost response and permits one guarded URI repair', async () => {
   const f = fixture({ lostAfterCreate: true });
   assert.equal((await reserveNativeStudioAccessApp(f.input, f.transport,
     f.deps as any)).appId, appId);
@@ -92,7 +94,24 @@ test('reconciles a lost create response without a second POST', async () => {
     pending.transport, pending.deps as any), /reservation_pending/);
   await assert.rejects(reserveNativeStudioAccessApp(pending.input,
     pending.transport, pending.deps as any), /reservation_pending/);
-  assert.equal(pending.posts(), 1);
+  assert.equal(pending.posts(), 2);
+  await assert.rejects(reserveNativeStudioAccessApp(pending.input,
+    pending.transport, pending.deps as any), /reservation_pending/);
+  assert.equal(pending.posts(), 2);
+});
+
+test('repairs a prior rejected URI request after complete inventory readback', async () => {
+  const f = fixture({ noCreate: true });
+  await assert.rejects(reserveNativeStudioAccessApp(f.input, f.transport,
+    f.deps as any), /reservation_pending/);
+  assert.equal(f.posts(), 1);
+  f.enableCreate();
+  assert.equal((await reserveNativeStudioAccessApp(f.input, f.transport,
+    f.deps as any)).state, 'access-app-bound');
+  assert.equal(f.posts(), 2);
+  assert.equal((await reserveNativeStudioAccessApp(f.input, f.transport,
+    f.deps as any)).state, 'access-app-bound');
+  assert.equal(f.posts(), 2);
 });
 
 test('refuses unowned apps, broad policies and changed site bindings', async () => {

@@ -23,8 +23,8 @@ function expectedPath(scope: NativeStudioScope, site: Target) {
       !HOST.test(origin.hostname) || origin.port || origin.username || origin.password)
     throw Error('native_studio_access_app_input_invalid');
   const previewOrigin = `https://preview.${origin.hostname}`;
-  return { domain: `${origin.hostname}/studio`, uri: `${origin.origin}/studio`,
-    previewOrigin, previewUri: `${previewOrigin}/` };
+  return { domain: `${origin.hostname}/studio`, uri: `${origin.hostname}/studio`,
+    previewOrigin, previewUri: `preview.${origin.hostname}` };
 }
 
 async function readJson(url: string, credential: string, transport: typeof fetch) {

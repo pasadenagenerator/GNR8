@@ -13,6 +13,7 @@ const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab]
 const TOKEN = /^[A-Za-z0-9_-]{16,256}$/;
 export const ACCESS_APP_V2_INTENT = 'native-studio/access-app-create-intent-v2.json';
 export const ACCESS_APP_V2_BOUND = 'native-studio/access-app-bound-v2.json';
+const URI_REPAIR_INTENT = 'native-studio/access-app-public-uri-repair-v1.json';
 const LEGACY_INTENT = 'native-studio/access-app-create-intent-v1.json';
 const LEGACY_BOUND = 'native-studio/access-app-bound-v1.json';
 const FORMAT = 'gnr8-native-studio-access-app:v2';
@@ -143,12 +144,16 @@ export async function reserveNativeStudioAccessApp(input: {
   if (!priorIntent && beforeId)
     throw Error('native_studio_access_app_reservation_unowned');
 
-  if (!priorIntent) {
+  if (!priorIntent || !beforeId && !priorBound) {
     const current = await deps.target(scope, client, accountId);
     if (!same(current, target))
       throw Error('native_studio_access_app_reservation_target_changed');
-    const won = await store.claim(ACCESS_APP_V2_INTENT, intended);
+    const repair = { identity, domain, previewDomain, format: 'public-uri-without-scheme' };
+    const won = priorIntent ? await store.claim(URI_REPAIR_INTENT, repair) :
+      await store.claim(ACCESS_APP_V2_INTENT, intended);
     if (!same(await store.read<typeof intended>(ACCESS_APP_V2_INTENT), intended))
+      throw Error('native_studio_access_app_reservation_intent_conflict');
+    if (priorIntent && !same(await store.read(URI_REPAIR_INTENT), repair))
       throw Error('native_studio_access_app_reservation_intent_conflict');
     if (!won) throw Error('native_studio_access_app_reservation_pending');
     // Minimal self-hosted app remains default-deny until a separately
@@ -159,8 +164,8 @@ export async function reserveNativeStudioAccessApp(input: {
         headers: { authorization: `Bearer ${credential}`, accept: 'application/json',
           'content-type': 'application/json' },
         body: JSON.stringify({ type: 'self_hosted', name, domain,
-          destinations: [{ type: 'public', uri: `${target.studioOrigin}/studio` },
-            { type: 'public', uri: `${previewOrigin}/` }] }),
+          destinations: [{ type: 'public', uri: domain },
+            { type: 'public', uri: previewDomain }] }),
       });
     } catch { /* A lost response can follow a successful create. Read back. */ }
   }

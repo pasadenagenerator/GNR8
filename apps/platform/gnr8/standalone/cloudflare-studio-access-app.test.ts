@@ -12,7 +12,7 @@ const appId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', aud = 'c'.repeat(64);
 const credential = 'read-token-value-1234567890';
 const app = { id: appId, type: 'self_hosted',
   domain: 'site.app.pasadenagenerator.com/studio', aud,
-  destinations: [{ type: 'public', uri: `${site.studioOrigin}/studio` }] };
+  destinations: [{ type: 'public', uri: 'site.app.pasadenagenerator.com/studio' }] };
 const organization = { auth_domain: 'gnr8.cloudflareaccess.com' };
 const previewOrigin = 'https://preview.site.app.pasadenagenerator.com';
 
@@ -45,7 +45,7 @@ test('observes one exact self-hosted Studio route without policy or login claims
 
 test('dual-host readback requires exactly the editor and whole preview destinations', async () => {
   const dual = { ...app, destinations: [app.destinations[0],
-    { type: 'public', uri: `${previewOrigin}/` }] };
+    { type: 'public', uri: 'preview.site.app.pasadenagenerator.com' }] };
   assert.deepEqual(await inspectCloudflareStudioAccessApp(scope, site, appId,
     credential, fixture(dual).transport, 'studio-and-preview'), {
     state: 'observed-access-app', scope, siteId: scope.siteId,
@@ -56,11 +56,11 @@ test('dual-host readback requires exactly the editor and whole preview destinati
   for (const changed of [
     app,
     { ...dual, destinations: [dual.destinations[0],
-      { type: 'public', uri: `${previewOrigin}/studio` }] },
+      { type: 'public', uri: 'preview.site.app.pasadenagenerator.com/studio' }] },
     { ...dual, destinations: [...dual.destinations,
-      { type: 'public', uri: `${previewOrigin}/other` }] },
+      { type: 'public', uri: 'preview.site.app.pasadenagenerator.com/other' }] },
     { ...dual, destinations: [dual.destinations[0],
-      { type: 'public', uri: `${previewOrigin}/`, overrides: [
+      { type: 'public', uri: 'preview.site.app.pasadenagenerator.com', overrides: [
         { behavior: 'public', path_pattern: '/assets/*' }] }] },
   ]) await assert.rejects(inspectCloudflareStudioAccessApp(scope, site, appId,
     credential, fixture(changed).transport, 'studio-and-preview'),
