@@ -142,12 +142,19 @@ async function readBounded(sandbox: Sandbox, path: string,
 }
 
 async function verifySource(sandbox: Sandbox, files: File[]) {
-  for (const file of files) {
-    const current = await readBounded(sandbox, `${ROOT}/${file.path}`,
-      file.body.length);
-    if (!current.equals(file.body))
-      throw Error('native_studio_detached_source_changed');
-  }
+  // A prepared import can contain thousands of files. Keep verification
+  // complete while bounding concurrent Sandbox reads and request duration.
+  const workers = Array.from({ length: Math.min(8, files.length) },
+    async (_, worker) => {
+      for (let index = worker; index < files.length; index += 8) {
+        const file = files[index];
+        const current = await readBounded(sandbox, `${ROOT}/${file.path}`,
+          file.body.length);
+        if (!current.equals(file.body))
+          throw Error('native_studio_detached_source_changed');
+      }
+    });
+  await Promise.all(workers);
 }
 
 function outputs(value: unknown): Output[] {
