@@ -5,6 +5,7 @@ import { describeNativeStudioDriveImageSource,
   NATIVE_STUDIO_IMAGE_ARCHIVE_PATH,
   NATIVE_STUDIO_IMAGE_SOURCE_ROOT,
   stageNativeStudioDriveImageSource,
+  stageNativeStudioWorkerDependencies,
   verifyNativeStudioDriveImageSource,
   type NativeStudioDriveImageFile } from './native-studio-drive-image-build';
 import { pollNativeStudioImageCommand,
@@ -77,6 +78,7 @@ const defaults = {
   readTransfer: readNativeStudioImageDriveTransfer,
   recordTransfer: recordNativeStudioImageDriveTransfer,
   stage: stageNativeStudioDriveImageSource,
+  stageWorkerDependencies: stageNativeStudioWorkerDependencies,
   verifySource: verifyNativeStudioDriveImageSource,
   inspect: inspectNativeStudioDriveImageArchive,
   startCommand: startNativeStudioImageCommand,
@@ -402,6 +404,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   await steps.verifySource(builder, stored.manifestSha256);
   if (phase === 'build') {
     requireRemainingTime(builder, 42 * 60_000);
+    await steps.stageWorkerDependencies(builder, stored.tag);
     await steps.startCommand({ ...commandIdentity(input, stored, 'preflight'),
       sandbox: builder,
       command: { cmd: '/usr/local/bin/wrangler',

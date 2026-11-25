@@ -7,6 +7,7 @@ const RECOVERY = 'native-studio/image-recovery-v1.json';
 const NETWORK_RECOVERY = 'native-studio/image-recovery-v2.json';
 const UNRESTRICTED_RECOVERY = 'native-studio/image-recovery-v3.json';
 const LAYOUT_RECOVERY = 'native-studio/image-recovery-v4.json';
+const DEPENDENCY_RECOVERY = 'native-studio/image-recovery-v5.json';
 const OLD_ATTEMPT = 'native-studio/image-drive-attempt-v2.json';
 const OLD_SESSION = 'native-studio/image-build-session-v1.json';
 const OLD_STARTED = 'native-studio/image-build-command-started-v1.json';
@@ -47,18 +48,24 @@ type LayoutRecovery = Identity & {
   oldAttempt: NativeStudioImageDriveAttempt; oldSandboxName: string;
   oldSessionId: string; oldCommandId: string;
   distLayout: 'studio-and-public-v1' };
+type DependencyRecovery = Identity & {
+  previousGeneration: 'v4';
+  oldAttempt: NativeStudioImageDriveAttempt; oldSandboxName: string;
+  oldSessionId: string; oldCommandId: string;
+  dependencySource: 'verified-image-v1' };
 type Store = Pick<PublicationStore, 'read' | 'claim' | 'put' | 'getBytes' | 'putBytes'>;
 
-function mapped(key: string, generation: 'v1' | 'v2' | 'v3' | 'v4'): string {
+function mapped(key: string, generation: 'v1' | 'v2' | 'v3' | 'v4' | 'v5'): string {
   return key !== RECOVERY && key !== NETWORK_RECOVERY &&
     key !== UNRESTRICTED_RECOVERY && key !== LAYOUT_RECOVERY &&
+    key !== DEPENDENCY_RECOVERY &&
     (key.startsWith('native-studio/image-') ||
     key === 'native-studio/prebuilt-image-v1.json' ||
     key === 'native-studio/first-deploy-dry-run-v1.json')
     ? `native-studio/recovery-${generation}/${key.slice('native-studio/'.length)}` : key;
 }
 
-function isolated(store: Store, generation: 'v1' | 'v2' | 'v3' | 'v4'): Store {
+function isolated(store: Store, generation: 'v1' | 'v2' | 'v3' | 'v4' | 'v5'): Store {
   return { read: <T>(key: string) => store.read<T>(mapped(key, generation)),
     claim: (key, value) => store.claim(mapped(key, generation), value),
     put: <T>(key: string, value: T) => store.put<T>(mapped(key, generation), value),
@@ -357,5 +364,77 @@ export async function nativeStudioImageRecoveryStore<T extends Store>(
       !same(layout.oldAttempt, activeAttempt) ||
       layout.distLayout !== 'studio-and-public-v1')
     throw Error('native_studio_image_recovery_unverified');
-  return isolated(store, 'v4') as T;
+  const fourth = isolated(store, 'v4');
+  const fourthAttempt = await fourth.read<NativeStudioImageDriveAttempt>(OLD_ATTEMPT);
+  let dependency = await store.read<DependencyRecovery>(DEPENDENCY_RECOVERY);
+  if (!dependency && options.allowCreate && fourthAttempt &&
+      fourthAttempt.sourceId === identity.sourceId &&
+      fourthAttempt.commit === identity.commit &&
+      fourthAttempt.workerId === identity.workerId &&
+      same(fourthAttempt.scope, identity.scope) &&
+      fourthAttempt.siteId === identity.site.siteId &&
+      fourthAttempt.accountId === identity.site.accountId &&
+      fourthAttempt.buildSnapshotId === identity.buildSnapshotId) {
+    const [session, started, preflightStarted, transfer, receipt,
+      prebuilt, publicPreflight, save, proof, sourceVerified] = await Promise.all([
+      fourth.read<OldSession>(OLD_SESSION), fourth.read<OldStarted>(OLD_STARTED),
+      fourth.read<OldStarted>('native-studio/image-preflight-command-started-v1.json'),
+      fourth.read(OLD_TRANSFER), fourth.read(OLD_RECEIPT),
+      fourth.read(OLD_PREBUILT), fourth.read(OLD_PUBLIC_PREFLIGHT),
+      fourth.read(OLD_SAVE), fourth.read(OLD_PROOF),
+      fourth.read(OLD_SOURCE_VERIFIED),
+    ]);
+    if (session && started && preflightStarted && !transfer && !receipt &&
+        !prebuilt && !publicPreflight && !save && !proof && !sourceVerified) {
+      const sandbox = await (options.sandbox ?? Sandbox).get({
+        name: session.sandboxName, resume: false });
+      if (sandbox.status === 'stopped' &&
+          sandbox.sourceSnapshotId === identity.buildSnapshotId &&
+          sandbox.currentSession().sessionId === session.sessionId &&
+          same(session.attempt, fourthAttempt) &&
+          started.intent.sourceId === identity.sourceId &&
+          started.intent.commit === identity.commit &&
+          started.intent.workerId === identity.workerId &&
+          started.intent.siteId === identity.site.siteId &&
+          started.intent.driveName === fourthAttempt.driveName &&
+          started.intent.sandboxName === session.sandboxName &&
+          started.intent.sessionId === session.sessionId &&
+          started.intent.phase === 'build' &&
+          preflightStarted.intent.sourceId === identity.sourceId &&
+          preflightStarted.intent.commit === identity.commit &&
+          preflightStarted.intent.workerId === identity.workerId &&
+          preflightStarted.intent.siteId === identity.site.siteId &&
+          preflightStarted.intent.driveName === fourthAttempt.driveName &&
+          preflightStarted.intent.sandboxName === session.sandboxName &&
+          preflightStarted.intent.sessionId === session.sessionId &&
+          preflightStarted.intent.phase === 'preflight' &&
+          ID.test(preflightStarted.cmdId)) {
+        const candidate: DependencyRecovery = { ...identity,
+          site: { siteId: identity.site.siteId,
+            accountId: identity.site.accountId },
+          previousGeneration: 'v4', oldAttempt: fourthAttempt,
+          oldSandboxName: session.sandboxName,
+          oldSessionId: session.sessionId,
+          oldCommandId: preflightStarted.cmdId,
+          dependencySource: 'verified-image-v1' };
+        await store.claim(DEPENDENCY_RECOVERY, candidate);
+        dependency = await store.read<DependencyRecovery>(DEPENDENCY_RECOVERY);
+        if (!same(dependency, candidate))
+          throw Error('native_studio_image_recovery_pending_review');
+      }
+    }
+  }
+  if (!dependency) return fourth as T;
+  if (dependency.sourceId !== identity.sourceId ||
+      dependency.commit !== identity.commit ||
+      dependency.workerId !== identity.workerId ||
+      !same(dependency.scope, identity.scope) ||
+      !same(dependency.site, { siteId: identity.site.siteId,
+        accountId: identity.site.accountId }) ||
+      dependency.buildSnapshotId !== identity.buildSnapshotId ||
+      dependency.previousGeneration !== 'v4' ||
+      !same(dependency.oldAttempt, fourthAttempt) ||
+      dependency.dependencySource !== 'verified-image-v1')
+    throw Error('native_studio_image_recovery_unverified');
+  return isolated(store, 'v5') as T;
 }

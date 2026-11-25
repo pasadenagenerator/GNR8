@@ -7,6 +7,7 @@ import { claimNativeStudioImageDriveAttempt,
   recordNativeStudioImageDriveTransfer } from './native-studio-image-drive-handoff';
 import { pollNativeStudioImageCommand,
   startNativeStudioImageCommand } from './native-studio-image-detached-command';
+import { stageNativeStudioWorkerDependencies } from './native-studio-drive-image-build';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -65,6 +66,11 @@ function fixture() {
     getCommand: async (cmdId: string) => ({
       exitCode: exits.get(cmdId) ?? null,
       startedAt: Date.now(),
+      wait: async () => {
+        const exitCode = exits.get(cmdId);
+        if (exitCode === null) throw new DOMException('still running', 'TimeoutError');
+        return { exitCode };
+      },
       kill: async () => { exits.set(cmdId, 137); },
     }) };
   const sandbox = { name: '', get status() { return running ? 'running' : 'stopped'; },
@@ -102,6 +108,7 @@ function fixture() {
     readTransfer: readNativeStudioImageDriveTransfer,
     recordTransfer: recordNativeStudioImageDriveTransfer,
     stage: async () => { calls.push('stage'); },
+    stageWorkerDependencies: async () => { calls.push('stage-dependencies'); },
     verifySource: async () => { calls.push('verify-source'); },
     inspect: async () => { calls.push('inspect'); return inspectedReceipt; },
     ensureDocker: async (_sandbox: unknown, path: string) => {
@@ -155,10 +162,26 @@ test('build and save cross invocations without repeating external effects', asyn
   assert.equal(f.calls.indexOf('docker-ready') < f.calls.indexOf('stage'), true);
   assert.equal(f.calls.filter(v => v === 'start:save').length, 1);
   assert.equal(f.calls.indexOf('start:deploy') < f.calls.indexOf('start:save'), true);
+  assert.equal(f.calls.indexOf('stage-dependencies') < f.calls.indexOf('start:deploy'), true);
   assert.equal(f.calls.indexOf('bundle-record') < f.calls.indexOf('start:save'), true);
   assert.equal(f.calls.indexOf('public-bundle-record') < f.calls.indexOf('start:save'), true);
   assert.equal(f.calls.filter(v => v === 'stop').length, 1);
   assert.equal(f.calls.indexOf('verify-source') < f.calls.indexOf('inspect'), true);
+});
+
+test('source-bundle dependencies come from the verified image without credentials', async () => {
+  const tag = `gnr8-${scope.siteId}-studio:${sourceId.slice(0, 32)}`;
+  let called = false;
+  await stageNativeStudioWorkerDependencies({ runCommand: async (command: any) => {
+    called = true;
+    assert.equal(command.cmd, 'sh');
+    assert.equal(command.env.GNR8_IMAGE_TAG, tag);
+    assert.equal(command.env.CLOUDFLARE_API_TOKEN, undefined);
+    assert.match(command.args[1], /docker cp/);
+    assert.match(command.args[1], /@cloudflare\/containers/);
+    return { exitCode: 0 };
+  } } as any, tag);
+  assert.equal(called, true);
 });
 
 test('invalid bundled Worker blocks image save and transfer', async () => {

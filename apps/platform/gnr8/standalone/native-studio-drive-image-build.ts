@@ -149,6 +149,27 @@ export async function verifyNativeStudioDriveImageSource(
     throw Error('native_studio_drive_image_source_changed');
 }
 
+/** The verified image already contains the exact runtime dependencies from
+ * the pinned lockfile. Reuse them for Wrangler's source-bundle preflights. */
+export async function stageNativeStudioWorkerDependencies(
+  sandbox: Pick<Sandbox, 'runCommand'>, tag: string,
+) {
+  if (!/^gnr8-[a-f0-9-]{36}-studio:[a-f0-9]{32}$/.test(tag))
+    throw Error('native_studio_image_tag_invalid');
+  const result = await sandbox.runCommand({ cmd: 'sh', args: ['-ec',
+    `set -eu
+id="$(docker create --entrypoint /bin/true "$GNR8_IMAGE_TAG")"
+trap 'docker rm -f "$id" >/dev/null 2>&1 || true' EXIT
+mkdir -p "${ROOT}/studio/node_modules"
+docker cp "$id:/opt/studio/node_modules/." "${ROOT}/studio/node_modules/"
+test -f "${ROOT}/studio/node_modules/@cloudflare/containers/package.json"`],
+    cwd: ROOT, timeoutMs: 5 * 60_000,
+    env: { CI: '1', DOCKER_HOST: 'unix:///var/run/docker.sock',
+      GNR8_IMAGE_TAG: tag } });
+  if (result.exitCode !== 0)
+    throw Error('native_studio_image_dependencies_unavailable');
+}
+
 export async function inspectNativeStudioDriveImageArchive(
   sandbox: Pick<Sandbox, 'runCommand'>, archivePath: string,
   input: Omit<Input, 'files'>,
