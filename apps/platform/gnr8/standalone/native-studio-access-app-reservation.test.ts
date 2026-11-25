@@ -30,7 +30,8 @@ function inventory(result: unknown[]) {
 }
 
 function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
-  noCreate?: boolean; broadPolicy?: boolean } = {}) {
+  noCreate?: boolean; broadPolicy?: boolean; zoneMirrorsAccount?: boolean;
+  zoneOverlap?: boolean } = {}) {
   const saved = new Map<string, unknown>();
   let created = options.created ?? false;
   let canCreate = !options.noCreate;
@@ -43,7 +44,9 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
     } };
   const deps = {
     target: async () => current,
-    inventory: async (kind: string) => inventory(kind === 'accounts' && created ? [app] : []),
+    inventory: async (kind: string) => inventory(kind === 'accounts' && created ? [app] :
+      kind === 'zones' && options.zoneMirrorsAccount && created ? [app] :
+      kind === 'zones' && options.zoneOverlap ? [{ ...app, id: 'd'.repeat(32) }] : []),
     overlap: inspectNativeStudioAccessApplicationInventory,
     app: async () => ({ state: 'observed-access-app' as const,
       appId, siteId: scope.siteId, studioOrigin: target.studioOrigin,
@@ -112,6 +115,21 @@ test('repairs a prior rejected URI request after complete inventory readback', a
   assert.equal((await reserveNativeStudioAccessApp(f.input, f.transport,
     f.deps as any)).state, 'access-app-bound');
   assert.equal(f.posts(), 2);
+});
+
+test('accepts the exact account app mirrored in the zone inventory', async () => {
+  const f = fixture({ created: true, zoneMirrorsAccount: true });
+  f.saved.set(ACCESS_APP_V2_INTENT, (await (async () => {
+    const source = fixture({ zoneMirrorsAccount: true });
+    await reserveNativeStudioAccessApp(source.input, source.transport, source.deps as any);
+    return source.saved.get(ACCESS_APP_V2_INTENT);
+  })()));
+  const result = await reserveNativeStudioAccessApp(f.input, f.transport, f.deps as any);
+  assert.equal(result.appId, appId);
+  assert.equal(f.posts(), 0);
+  const foreign = fixture({ zoneOverlap: true });
+  await assert.rejects(reserveNativeStudioAccessApp(foreign.input,
+    foreign.transport, foreign.deps as any), /native_studio_access_inventory_unverified_overlap_before_zones/);
 });
 
 test('identifies the failing inventory stage without provider details', async () => {

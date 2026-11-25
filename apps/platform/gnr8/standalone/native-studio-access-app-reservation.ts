@@ -145,6 +145,11 @@ export async function reserveNativeStudioAccessApp(input: {
       throw error;
     }
   }
+  function mirroredZoneAppId(body: Awaited<ReturnType<typeof inventories>>['zoneApps'],
+    accountAppId: string | null) {
+    return accountAppId && body.result.some(item => object(item) &&
+      item.id === accountAppId) ? accountAppId : null;
+  }
   function exactApp(accountApps: Awaited<ReturnType<typeof inventories>>['accountApps']) {
     const entries = accountApps.result.filter(item => object(item) &&
       item.type === 'self_hosted' && item.name === name && item.domain === domain);
@@ -157,7 +162,7 @@ export async function reserveNativeStudioAccessApp(input: {
   const before = await inventories('before');
   const beforeId = exactApp(before.accountApps);
   overlap(before.accountApps, beforeId ?? null, 'before_accounts');
-  overlap(before.zoneApps, null, 'before_zones');
+  overlap(before.zoneApps, mirroredZoneAppId(before.zoneApps, beforeId), 'before_zones');
   if (priorBound && beforeId !== priorBound.appId)
     throw Error('native_studio_access_app_reservation_binding_conflict');
   if (!priorIntent && beforeId)
@@ -193,7 +198,7 @@ export async function reserveNativeStudioAccessApp(input: {
   const appId = exactApp(after.accountApps);
   if (!appId) throw Error('native_studio_access_app_reservation_pending');
   overlap(after.accountApps, appId, 'after_accounts');
-  overlap(after.zoneApps, null, 'after_zones');
+  overlap(after.zoneApps, mirroredZoneAppId(after.zoneApps, appId), 'after_zones');
   const app = await deps.app(scope, { siteId: scope.siteId,
     studioOrigin: target.studioOrigin, accountId }, appId, credential, transport,
   PROTECTION);
