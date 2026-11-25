@@ -37,6 +37,15 @@ test('rejects incomplete pages and provider errors without repeating writes', as
   await assert.rejects(readCompleteCloudflareAccessAppInventory(
     'accounts', id, credential, forbidden),
     /native_studio_access_inventory_accounts_http_403/);
+  const coded = (async () => Response.json({ success: false,
+    errors: [{ code: 9109, message: 'secret provider detail' }] },
+  { status: 403 })) as typeof fetch;
+  await assert.rejects(readCompleteCloudflareAccessAppInventory(
+    'zones', id, credential, coded), error => {
+    assert.equal((error as Error).message,
+      'native_studio_access_inventory_zones_http_403_cf_9109');
+    return true;
+  });
 });
 
 test('accepts an empty zone inventory with zero reported pages', async () => {

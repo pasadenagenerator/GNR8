@@ -29,8 +29,19 @@ export async function readCompleteCloudflareAccessAppInventory(
         signal: AbortSignal.timeout(30_000),
         headers: { authorization: `Bearer ${credential}`, accept: 'application/json' } });
     } catch { throw Error(`native_studio_access_inventory_${scope}_transport_unavailable`); }
-    if (!response.ok)
-      throw Error(`native_studio_access_inventory_${scope}_http_${response.status}`);
+    if (!response.ok) {
+      let providerCode = '';
+      try {
+        const failure: unknown = await response.json();
+        if (object(failure) && Array.isArray(failure.errors)) {
+          const first = failure.errors[0];
+          if (object(first) && Number.isSafeInteger(first.code) &&
+              (first.code as number) >= 0)
+            providerCode = `_cf_${first.code}`;
+        }
+      } catch { /* Preserve the HTTP status when no JSON error is available. */ }
+      throw Error(`native_studio_access_inventory_${scope}_http_${response.status}${providerCode}`);
+    }
     let body: unknown;
     try { body = await response.json(); }
     catch { throw Error(`native_studio_access_inventory_${scope}_response_unavailable`); }
