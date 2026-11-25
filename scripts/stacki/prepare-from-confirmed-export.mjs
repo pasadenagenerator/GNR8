@@ -261,19 +261,28 @@ export async function persistVerifiedAstroStudio({ store, exported, selection, c
         stored.receipt.confirmationSha256 !== confirmationSha256) fail();
     return stored;
   }
-  const prepared = await prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, site,
-    access: configured.access,
-    releaseFile: releaseFile ?? await getReleaseFile() });
+  let prepared;
+  try {
+    prepared = await prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, site,
+      access: configured.access,
+      releaseFile: releaseFile ?? await getReleaseFile() });
+  } catch { throw Error('native_studio_source_persist_prepare_failed'); }
   const files = prepared.files.map(file => ({ path: file.path, sha256: digest(file.body), bytes: file.body.length }));
   validatePreparedEntries(files);
-  await persistPreparedFileBytes(store, prepared.files);
+  try { await persistPreparedFileBytes(store, prepared.files); }
+  catch (error) {
+    const code = error instanceof Error && /^(?:standalone_store_unavailable|standalone_file_invalid|standalone_file_unavailable|standalone_file_integrity|standalone_file_write_unconfirmed)$/.test(error.message)
+      ? error.message.slice('standalone_'.length) : 'bytes_failed';
+    throw Error(`native_studio_source_persist_${code}`);
+  }
   const receipt = { format: configured.access ? 'gnr8-native-studio-source:v2' : 'gnr8-native-studio-source:v1',
     identitySha256, bindingSha256,
     sourceManifestSha256, confirmationSha256, version: prepared.status.version,
     lumosSourceSha256: LUMOS_PIN.sourceSha256,
     astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
     ...(configured.access ? { access: configured.access } : {}), files };
-  if (!isDeepStrictEqual(await store.put(key, receipt), receipt)) fail();
+  try { if (!isDeepStrictEqual(await store.put(key, receipt), receipt)) fail(); }
+  catch { throw Error('native_studio_source_persist_receipt_failed'); }
   return { receipt, files: prepared.files, reused: false };
 }
 
