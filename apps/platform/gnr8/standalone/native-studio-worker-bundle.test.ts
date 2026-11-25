@@ -107,6 +107,32 @@ test('records separate scoped public Worker bundle from site entry', async () =>
     /receipt_unverified/);
 });
 
+test('accepts Wrangler output paths relative to the Studio config directory', async () => {
+  const f = fixture();
+  const sourceMap = Buffer.from('{}');
+  f.output.set('worker.js.map', sourceMap);
+  f.setScan([...f.output].map(([path, body]) => ({ path,
+    bytes: body.length, sha256: hash(body) })));
+  f.setMetadata({ outputs: {
+    '../../../gnr8-worker-bundle/worker.js.map': {},
+    '../../../gnr8-worker-bundle/worker.js': {
+      entryPoint: '../src/cloudflare/worker.ts' },
+  } });
+  const receipt = await recordNativeStudioWorkerBundle(f.input as any);
+  assert.equal(receipt.entryPath, 'worker.js');
+  assert.equal(receipt.files.length, 2);
+});
+
+test('accepts Wrangler output paths relative to the public config directory', async () => {
+  const f = fixture(undefined, 'public');
+  f.setMetadata({ outputs: {
+    '../gnr8-public-worker-bundle/worker.js': {
+      entryPoint: 'studio/src/cloudflare/site.ts' },
+  } });
+  const receipt = await recordNativeStudioPublicWorkerBundle(f.input as any);
+  assert.equal(receipt.entryPath, 'worker.js');
+});
+
 test('chunks output above private object limit and detects damaged storage', async () => {
   const f = fixture(Buffer.alloc(13 * 1024 * 1024, 65));
   const receipt = await recordNativeStudioWorkerBundle(f.input as any);

@@ -225,4 +225,19 @@ test('stopped failed Studio preflight restarts from the same source with both di
   await next.claim('native-studio/image-drive-attempt-v2.json', attempt);
   assert.deepEqual(await (await nativeStudioImageRecoveryStore(f.store, identity))
     .read('native-studio/image-drive-attempt-v2.json'), attempt);
+  f.records.set('native-studio/recovery-v5/image-build-session-v1.json',
+    { attempt, sandboxName, sessionId });
+  f.records.set('native-studio/recovery-v5/image-build-command-started-v1.json',
+    { intent: { ...intent, phase: 'build' }, cmdId: 'cmd_build_v5' });
+  f.records.set('native-studio/recovery-v5/image-preflight-command-started-v1.json',
+    { intent: { ...intent, phase: 'preflight' }, cmdId: 'cmd_preflight_v5' });
+  const metafileRecovery = await nativeStudioImageRecoveryStore(f.store, identity,
+    { allowCreate: true, sandbox: sandbox as any,
+      buildNetworkPolicy: 'allow-all' });
+  assert.equal(await metafileRecovery.read('native-studio/image-drive-attempt-v2.json'), null);
+  assert.equal((f.records.get('native-studio/image-recovery-v6.json') as any)
+    ?.oldCommandId, 'cmd_preflight_v5');
+  await metafileRecovery.claim('native-studio/image-drive-attempt-v2.json', attempt);
+  assert.deepEqual(await (await nativeStudioImageRecoveryStore(f.store, identity))
+    .read('native-studio/image-drive-attempt-v2.json'), attempt);
 });

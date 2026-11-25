@@ -21,6 +21,7 @@ const STUDIO: BundleConfig = { outdir: NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
   metafile: NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
   receipt: NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT,
   entryPoints: ['src/cloudflare/worker.ts',
+    '../src/cloudflare/worker.ts',
     'studio/src/cloudflare/worker.ts',
     '/vercel/sandbox/gnr8-image-source/studio/src/cloudflare/worker.ts'] };
 const PUBLIC: BundleConfig = { outdir: NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR,
@@ -194,11 +195,13 @@ function entryFromMetafile(raw: Buffer, files: ScannedFile[],
   const outputFiles = Object.keys(outputs).map(path => {
     const roots = isAbsolute(path) ? ['/'] :
       [config.outdir,
-        '/vercel/sandbox', '/vercel/sandbox/gnr8-image-source/studio'];
-    const candidates = roots.map(root => relative(
+        '/vercel/sandbox', '/vercel/sandbox/gnr8-image-source',
+        '/vercel/sandbox/gnr8-image-source/studio',
+        '/vercel/sandbox/gnr8-image-source/studio/cloudflare'];
+    const candidates = [...new Set(roots.map(root => relative(
       config.outdir, resolve(root, path)))
       .filter(candidate => safePath(candidate) &&
-        files.some(file => file.path === candidate));
+        files.some(file => file.path === candidate)))];
     if (candidates.length !== 1)
       throw Error('native_studio_worker_bundle_metafile_invalid');
     return candidates[0];
