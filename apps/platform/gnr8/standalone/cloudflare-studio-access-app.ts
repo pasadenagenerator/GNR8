@@ -76,7 +76,7 @@ export async function inspectCloudflareStudioAccessApp(
       (destination.type === undefined || destination.type === 'public') &&
       (destination.overrides === undefined ||
         Array.isArray(destination.overrides) && destination.overrides.length === 0)) &&
-    destinations.map((destination: Record<string, unknown>) => destination.uri.replace(/\/$/, '')).sort()
+    destinations.map((destination: Record<string, unknown>) => (destination.uri as string).replace(/\/$/, '')).sort()
       .join('\n') === [...expectedUris].sort().join('\n');
   const legacy = app.self_hosted_domains;
   const exactLegacy = legacy === undefined || legacy === null ||
