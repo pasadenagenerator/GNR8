@@ -15,6 +15,27 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = () => { throw new Error('Confirmed export or Studio binding mismatch'); };
 const MAX_PREPARED_FILES = 10_000;
 const MAX_PREPARED_BYTES = 256_000_000;
+/** Store immutable verified bytes with bounded overlap. A partial write is
+ * safe to resume because every object is addressed by its content hash. */
+export async function persistPreparedFileBytes(store, files) {
+  const unique = new Map();
+  for (const file of files) {
+    const hash = digest(file.body);
+    if (unique.has(hash) && !unique.get(hash).equals(file.body)) fail();
+    unique.set(hash, file.body);
+  }
+  const entries = [...unique];
+  let cursor = 0;
+  let failure;
+  await Promise.all(Array.from({ length: Math.min(8, entries.length) }, async () => {
+    while (!failure && cursor < entries.length) {
+      const [hash, body] = entries[cursor++];
+      try { await store.putBytes(hash, body); }
+      catch (error) { failure ??= error; }
+    }
+  }));
+  if (failure) throw failure;
+}
 async function pinnedLumosSource() {
   for (const prefix of ['scripts/stacki', '../scripts/stacki', '../../scripts/stacki']) {
     const path = resolve(process.cwd(), prefix, 'vendor/lumos-1.0.4');
@@ -210,7 +231,7 @@ export async function persistPreparedStudio({ store, releaseId, releaseFile, sit
   const files = prepared.files.map(file => ({ path: file.path, sha256: digest(file.body), bytes: file.body.length }));
   if (files.length > MAX_PREPARED_FILES ||
       files.reduce((total, file) => total + file.bytes, 0) > MAX_PREPARED_BYTES) fail();
-  for (const file of prepared.files) await store.putBytes(digest(file.body), file.body);
+  await persistPreparedFileBytes(store, prepared.files);
   const receipt = { format: 'gnr8-native-studio-derivative:v1', releaseId, bindingSha256,
     lumosSourceSha256: LUMOS_PIN.sourceSha256, astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
     sourceManifestSha256: prepared.sourceManifestSha256, version: prepared.status.version, files };
@@ -245,7 +266,7 @@ export async function persistVerifiedAstroStudio({ store, exported, selection, c
     releaseFile: releaseFile ?? await getReleaseFile() });
   const files = prepared.files.map(file => ({ path: file.path, sha256: digest(file.body), bytes: file.body.length }));
   validatePreparedEntries(files);
-  for (const file of prepared.files) await store.putBytes(digest(file.body), file.body);
+  await persistPreparedFileBytes(store, prepared.files);
   const receipt = { format: configured.access ? 'gnr8-native-studio-source:v2' : 'gnr8-native-studio-source:v1',
     identitySha256, bindingSha256,
     sourceManifestSha256, confirmationSha256, version: prepared.status.version,

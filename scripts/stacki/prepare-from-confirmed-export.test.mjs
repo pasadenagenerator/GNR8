@@ -8,13 +8,27 @@ import { prepareGitBranch, commitPreparedStudio, prepareGitBranchFromSource, com
   verifyCommittedStudioSource } from './prepare-git-branch.mjs';
 import { createHash } from 'node:crypto';
 import { exportStandaloneProject } from '../../apps/platform/gnr8/standalone/standalone-export.ts';
-import { prepareFromConfirmedExport, prepareFromVerifiedAstroExport, prepareFromStoredRelease, persistPreparedStudio, persistVerifiedAstroStudio, readStoredVerifiedAstroStudio } from './prepare-from-confirmed-export.mjs';
+import { prepareFromConfirmedExport, prepareFromVerifiedAstroExport, prepareFromStoredRelease, persistPreparedFileBytes, persistPreparedStudio, persistVerifiedAstroStudio, readStoredVerifiedAstroStudio } from './prepare-from-confirmed-export.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const id = '11111111-1111-4111-8111-111111111111';
 const scope = { agencyId: id, clientId: id, siteId: id, siteVersionId: id };
 const site = { siteId: id, repository: 'example/website', repositoryId: '123', branch: 'main',
   studioOrigin: 'https://website.example.com', accountId: 'a'.repeat(32), appId: '456', installationId: '789', clientId: 'Iv1.example' };
 const releaseFile = process.env.STACKI_RELEASE_FILE;
+test('prepared immutable bytes are deduplicated and stored with bounded overlap',async()=>{
+  let active=0,maxActive=0;
+  const seen=[];
+  const store={putBytes:async(hash,body)=>{
+    active++;maxActive=Math.max(maxActive,active);
+    await new Promise(resolve=>setTimeout(resolve,1));
+    seen.push(hash);assert.equal(hash,sha(body));active--;
+  }};
+  const files=Array.from({length:25},(_,index)=>({body:Buffer.from(`file-${index}`)}));
+  files.push({body:files[0].body});
+  await persistPreparedFileBytes(store,files);
+  assert.equal(seen.length,25);
+  assert(maxActive>1&&maxActive<=8);
+});
 async function fixture() {
   const baseline = [
     { path: 'package.json', base64: Buffer.from('{"dependencies":{"astro":"5.18.2"}}').toString('base64') },
