@@ -45,9 +45,7 @@ function fixture() {
 
 test('stopped failed builder gets a separate immutable image namespace', async () => {
   const f = fixture();
-  const current = await nativeStudioImageRecoveryStore(f.store, {
-    ...identity, site: { ...identity.site, repository: 'example/site' },
-  },
+  const current = await nativeStudioImageRecoveryStore(f.store, identity,
     { allowCreate: true, sandbox: f.sandbox as any });
   assert.deepEqual(await current.read('native-studio/image-drive-attempt-v2.json'), null);
   await current.claim('native-studio/image-drive-attempt-v2.json',
@@ -135,4 +133,38 @@ test('a stopped image build can resume for every site when its network allowlist
   assert.deepEqual(await (await nativeStudioImageRecoveryStore(f.store, identity))
     .read('native-studio/image-drive-attempt-v2.json'),
     await current.read('native-studio/image-drive-attempt-v2.json'));
+});
+
+test('Preview can supersede a stopped restricted build without changing source', async () => {
+  const f = fixture();
+  await nativeStudioImageRecoveryStore(f.store, identity,
+    { allowCreate: true, sandbox: f.sandbox as any });
+  const policy = { allow: ['registry-1.docker.io'] };
+  const v2Attempt = { ...oldAttempt, buildSnapshotId: identity.buildSnapshotId,
+    driveName: 'gnr8-img-33333333-aaaaaaaa-66666666-6666-4666-8666-666666666666' };
+  const v2Name = 'gnr8-image-build-66666666-6666-4666-8666-666666666666';
+  f.records.set('native-studio/image-recovery-v2.json', { ...identity,
+    oldAttempt: { ...oldAttempt, buildSnapshotId: identity.buildSnapshotId },
+    oldSandboxName: 'unused', oldSessionId: 'unused', oldCommandId: 'unused',
+    buildNetworkPolicy: policy });
+  f.records.set('native-studio/recovery-v1/image-drive-attempt-v2.json',
+    { ...oldAttempt, buildSnapshotId: identity.buildSnapshotId });
+  f.records.set('native-studio/recovery-v2/image-drive-attempt-v2.json', v2Attempt);
+  f.records.set('native-studio/recovery-v2/image-build-session-v1.json',
+    { attempt: v2Attempt, sandboxName: v2Name, sessionId: 'sess_v2' });
+  f.records.set('native-studio/recovery-v2/image-build-command-started-v1.json',
+    { intent: { sourceId: identity.sourceId, commit: identity.commit,
+      workerId: identity.workerId, siteId: scope.siteId,
+      driveName: v2Attempt.driveName, sandboxName: v2Name,
+      sessionId: 'sess_v2', phase: 'build' }, cmdId: 'cmd_v2' });
+  const sandbox = { get: async () => ({ name: v2Name, status: 'stopped',
+    sourceSnapshotId: identity.buildSnapshotId,
+    currentSession: () => ({ sessionId: 'sess_v2' }), networkPolicy: policy }) };
+  const current = await nativeStudioImageRecoveryStore(f.store, identity,
+    { allowCreate: true, sandbox: sandbox as any,
+      buildNetworkPolicy: 'allow-all' });
+  assert.equal(await current.read('native-studio/image-drive-attempt-v2.json'), null);
+  assert.equal(f.records.has('native-studio/image-recovery-v3.json'), true);
+  assert.equal(await (await nativeStudioImageRecoveryStore(f.store, identity))
+    .read('native-studio/image-drive-attempt-v2.json'), null);
 });

@@ -102,6 +102,25 @@ test('unconfigured switch or unsafe network fails before site read', async () =>
   assert.deepEqual(f.events, []);
 });
 
+test('credential-free unrestricted image build is limited to Preview', async () => {
+  const blocked = fixture();
+  await assert.rejects(configuredNativeStudioImageBuild(input,
+    { ...env, VERCEL_ENV: 'production',
+      GNR8_NATIVE_STUDIO_IMAGE_BUILD_EGRESS_MODE: 'preview-unrestricted' },
+    fetch, blocked.deps), /network_unconfigured/);
+  assert.deepEqual(blocked.events, []);
+  const preview = fixture();
+  preview.deps.advance = async (value: any) => {
+    assert.equal(value.buildNetworkPolicy, 'allow-all');
+    assert.equal(value.allowUnrestrictedBuildNetwork, true);
+    return preview.progress;
+  };
+  assert.equal(await configuredNativeStudioImageBuild(input,
+    { ...env, VERCEL_ENV: 'preview',
+      GNR8_NATIVE_STUDIO_IMAGE_BUILD_EGRESS_MODE: 'preview-unrestricted' },
+    fetch, preview.deps), preview.progress);
+});
+
 test('expired snapshot or mismatched reservation blocks source read', async () => {
   const expired = fixture();
   expired.deps.snapshot = async () => ({ status: 'created', expiresAt: new Date(0) });

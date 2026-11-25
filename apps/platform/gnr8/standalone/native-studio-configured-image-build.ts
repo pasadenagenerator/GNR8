@@ -59,8 +59,12 @@ deps = defaults) {
       !Number.isSafeInteger(sandboxTimeoutMs) ||
       sandboxTimeoutMs < 60 * 60_000 || sandboxTimeoutMs > 90 * 60_000)
     throw Error('native_studio_image_build_not_configured');
-  const buildNetworkPolicy = networkPolicy(
-    env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS);
+  const previewUnrestrictedBuild =
+    env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_EGRESS_MODE === 'preview-unrestricted';
+  if (previewUnrestrictedBuild && env.VERCEL_ENV !== 'preview')
+    throw Error('native_studio_image_build_network_unconfigured');
+  const buildNetworkPolicy: NetworkPolicy = previewUnrestrictedBuild
+    ? 'allow-all' : networkPolicy(env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS);
   const site = await deps.site(input.scope, input.client, env);
   const validateSnapshots = async () => {
     const snapshots = await Promise.all([buildSnapshotId, pushSnapshotId]
@@ -75,7 +79,7 @@ deps = defaults) {
       scope: input.scope, site, sourceId: input.sourceId,
       commit: input.sourceCommit, workerId: input.workerId, buildSnapshotId,
     }, { allowCreate: true, validateNewSnapshot: validateSnapshots,
-      buildNetworkPolicy: buildNetworkPolicy as { allow: string[] } });
+      buildNetworkPolicy });
   const prepared = { site, store, sourceId: input.sourceId,
     commit: input.sourceCommit, workerId: input.workerId };
     // Snapshot availability matters when creating a Sandbox. A live attempt
@@ -111,7 +115,8 @@ deps = defaults) {
         sourceId: prepared.sourceId, commit: prepared.commit,
         workerId: prepared.workerId, publicWorkerId: publicWorkerId!,
         store: prepared.store, buildSnapshotId, pushSnapshotId,
-        buildNetworkPolicy, sandboxTimeoutMs,
+        buildNetworkPolicy, allowUnrestrictedBuildNetwork: previewUnrestrictedBuild,
+        sandboxTimeoutMs,
         files: [...source.files, ...dist],
       });
       if (progress.state === 'complete') {

@@ -54,6 +54,7 @@ type Input = Omit<NativeStudioImageDriveIdentity, 'store'> & {
     Pick<PublicationStore, 'putBytes' | 'getBytes'>;
   files: NativeStudioDriveImageFile[];
   buildNetworkPolicy: NetworkPolicy;
+  allowUnrestrictedBuildNetwork?: boolean;
   sandboxTimeoutMs: number;
 };
 type Session = { attempt: NativeStudioImageDriveAttempt;
@@ -266,7 +267,9 @@ async function finish(input: Input, session: Session,
 export async function advanceNativeStudioDetachedImageBuild(input: Input,
   dependencies: Sdk = sdk, steps: typeof defaults = defaults):
   Promise<DetachedImageBuildResult> {
-  if (!input || !restrictedNativeStudioImageNetwork(input.buildNetworkPolicy) ||
+  if (!input || !(restrictedNativeStudioImageNetwork(input.buildNetworkPolicy) ||
+      (input.allowUnrestrictedBuildNetwork === true &&
+        input.buildNetworkPolicy === 'allow-all')) ||
       !HEX32.test(input.publicWorkerId) ||
       !Number.isSafeInteger(input.sandboxTimeoutMs) ||
       input.sandboxTimeoutMs < 60 * 60_000 ||
