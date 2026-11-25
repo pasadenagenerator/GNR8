@@ -229,8 +229,13 @@ export async function advanceNativeStudioDetachedDeploy(input: Input,
     let command: { exitCode: number | null };
     try { command = await sandbox.currentSession().getCommand(started.cmdId); }
     catch { return observe(input, credentials, tag); }
-    if (command.exitCode === null)
-      return { state: 'running', commit: input.commit };
+    if (command.exitCode === null) {
+      // Wrangler can keep its process alive after Cloudflare has committed the
+      // tagged release. The control-plane identity is authoritative here.
+      const observed = await observe(input, credentials, tag);
+      return observed.state === 'reconcile-required' ? observed :
+        { state: 'running', commit: input.commit };
+    }
     const observed = await observe(input, credentials, tag);
     try { await sandbox.stop(); }
     catch { /* A later readback can reconcile an ambiguous cleanup. */ }

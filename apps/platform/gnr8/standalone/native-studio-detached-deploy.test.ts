@@ -118,6 +118,16 @@ test('stages without credentials, starts once, and handles delayed readback', as
     observation: 'verified-source-control-plane' });
 });
 
+test('verified Cloudflare release proceeds while Wrangler process is alive', async () => {
+  const f = fixture();
+  await f.advance(); await f.advance();
+  f.inspected('verified-source-control-plane');
+  assert.deepEqual(await f.advance(), { state: 'reconcile-required', commit,
+    observation: 'verified-source-control-plane' });
+  assert.equal(f.calls.filter(value => value === 'wrangler-start').length, 1);
+  assert.equal(f.calls.filter(value => value === 'stop').length, 0);
+});
+
 test('changed remote package blocks credentials and Cloudflare attempt', async () => {
   const f = fixture();
   await f.advance(); f.failRemote();
